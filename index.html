@@ -5,7 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Route and Cost Calculator with Log</title>
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ&amp;libraries=places&amp;callback=initMap" async="" defer=""></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&amp;libraries=places&amp;callback=initMap"
+        async="" defer=""></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -330,7 +331,7 @@
 
 
         <button onclick="calculateRoute()">Calculate</button>
-        <button onclick="logEntryAndDisplay()">Calculate and Log</button>
+        <button onclick="logLastResult()">Log</button>
 
         <div id="results" class="hidden">
             <p>Total Mileage: <span id="total-mileage"></span> miles</p>
@@ -578,411 +579,106 @@
             }
         }
 
-        async function calculateRoute() {
-            const start = document.getElementById('start-address').value;
-            const end = document.getElementById('end-address').value;
-            const mpg = parseFloat(document.getElementById('mpg').value);
-            const gasPrice = parseFloat(document.getElementById('gas-price').value);
-            const hoursWorked = parseFloat(document.getElementById('hours-worked').value) || 0;
-            const maintenanceCost = parseFloat(document.getElementById('maintenance-cost').value) || 0;
-            const suppliesCost = parseFloat(document.getElementById('supplies-cost').value) || 0;
+async function calculateRoute() {
+        const start = document.getElementById('start-address').value;
+        const end = document.getElementById('end-address').value;
+        const mpg = parseFloat(document.getElementById('mpg').value);
+        const gasPrice = parseFloat(document.getElementById('gas-price').value);
+        const hoursWorked = parseFloat(document.getElementById('hours-worked').value) || 0;
+        const maintenanceCost = parseFloat(document.getElementById('maintenance-cost').value) || 0;
+        const suppliesCost = parseFloat(document.getElementById('supplies-cost').value) || 0;
 
-            const destinations = Array.from(document.querySelectorAll('#destinations-container input[type="text"]'))
-                .map(input => input.value);
-            const earnings = Array.from(document.querySelectorAll('#destinations-container input[type="number"]'))
-                .map(input => parseFloat(input.value));
+        const destinations = Array.from(document.querySelectorAll('#destinations-container input[type="text"]'))
+            .map(input => input.value);
+        const earnings = Array.from(document.querySelectorAll('#destinations-container input[type="number"]'))
+            .map(input => parseFloat(input.value));
 
-            if (!start || !end || isNaN(mpg) || isNaN(gasPrice) || destinations.some(dest => !dest) || earnings.some(
-                    isNaN)) {
-                alert("Please fill in all fields with valid numbers.");
-                return null;
-            }
+        if (!start || !end || isNaN(mpg) || isNaN(gasPrice) || destinations.some(dest => !dest) || earnings.some(isNaN)) {
+            alert("Please fill in all fields with valid numbers.");
+            return null;
+        }
 
-            const waypoints = destinations.map(dest => ({
-                location: dest,
-                stopover: true
-            }));
+        const waypoints = destinations.map(dest => ({
+            location: dest,
+            stopover: true
+        }));
 
-            const request = {
-                origin: start,
-                destination: end,
-                waypoints: waypoints,
-                optimizeWaypoints: false,
-                travelMode: google.maps.TravelMode.DRIVING
+        const request = {
+            origin: start,
+            destination: end,
+            waypoints: waypoints,
+            optimizeWaypoints: false,
+            travelMode: google.maps.TravelMode.DRIVING
+        };
+
+        try {
+            const result = await directionsService.route(request);
+            directionsRenderer.setDirections(result);
+
+            let totalDistance = 0;
+            let totalDuration = 0;
+            result.routes[0].legs.forEach(leg => {
+                totalDistance += leg.distance.value;
+                totalDuration += leg.duration.value;
+            });
+
+            const fuelCost = (totalDistance / 1609.34) / mpg * gasPrice;
+            const totalEarnings = earnings.reduce((sum, earning) => sum + earning, 0);
+            const netProfit = totalEarnings - fuelCost - maintenanceCost - suppliesCost;
+            const totalHours = totalDuration / 3600 + hoursWorked;
+            const profitPerHour = totalHours > 0 ? netProfit / totalHours : 0;
+
+            document.getElementById('total-mileage').textContent = (totalDistance / 1609.34).toFixed(2);
+            document.getElementById('total-time').textContent = formatDuration(totalDuration);
+            document.getElementById('total-earnings').textContent = totalEarnings.toFixed(2);
+            document.getElementById('fuel-cost').textContent = fuelCost.toFixed(2);
+            document.getElementById('maintenance-cost-result').textContent = maintenanceCost.toFixed(2);
+            document.getElementById('supplies-cost-result').textContent = suppliesCost.toFixed(2);
+            document.getElementById('net-profit').textContent = netProfit.toFixed(2);
+            document.getElementById('profit-per-hour').textContent = profitPerHour.toFixed(2);
+
+            document.getElementById('results').classList.remove('hidden');
+            document.getElementById('map').classList.remove('hidden');
+
+            lastCalculationResult = {
+                date: new Date().toLocaleDateString(),
+                startAddress: start,
+                destinations: destinations.map((dest, index) => ({
+                    address: dest,
+                    earning: earnings[index]
+                })),
+                endAddress: end,
+                totalEarnings: totalEarnings,
+                fuelCost: fuelCost,
+                maintenanceCost: maintenanceCost,
+                suppliesCost: suppliesCost,
+                netProfit: netProfit,
+                totalMileage: (totalDistance / 1609.34).toFixed(2),
+                totalTime: formatDuration(totalDuration),
+                hoursWorked: hoursWorked,
+                profitPerHour: profitPerHour
             };
 
-            try {
-                const result = await directionsService.route(request);
-                directionsRenderer.setDirections(result);
+            return lastCalculationResult;
 
-                let totalDistance = 0;
-                let totalDuration = 0;
-                result.routes[0].legs.forEach(leg => {
-                    totalDistance += leg.distance.value;
-                    totalDuration += leg.duration.value;
-                });
-
-                const fuelCost = (totalDistance / 1609.34) / mpg * gasPrice; // Convert meters to miles
-                const totalEarnings = earnings.reduce((sum, earning) => sum + earning, 0);
-                const netProfit = totalEarnings - fuelCost - maintenanceCost - suppliesCost;
-                const totalHours = totalDuration / 3600 + hoursWorked;
-                const profitPerHour = totalHours > 0 ? netProfit / totalHours : 0;
-
-                document.getElementById('total-mileage').textContent = (totalDistance / 1609.34).toFixed(2);
-                document.getElementById('total-time').textContent = formatDuration(totalDuration);
-                document.getElementById('total-earnings').textContent = totalEarnings.toFixed(2);
-                document.getElementById('fuel-cost').textContent = fuelCost.toFixed(2);
-                document.getElementById('maintenance-cost-result').textContent = maintenanceCost.toFixed(2);
-                document.getElementById('supplies-cost-result').textContent = suppliesCost.toFixed(2);
-                document.getElementById('net-profit').textContent = netProfit.toFixed(2);
-                document.getElementById('profit-per-hour').textContent = profitPerHour.toFixed(2);
-
-                document.getElementById('results').classList.remove('hidden');
-                document.getElementById('map').classList.remove('hidden');
-                return {
-                    date: new Date().toLocaleDateString(),
-                    startAddress: start,
-                    destinations: destinations.map((dest, index) => ({
-                        address: dest,
-                        earning: earnings[index]
-                    })),
-                    endAddress: end,
-                    totalEarnings: totalEarnings,
-                    fuelCost: fuelCost,
-                    maintenanceCost: maintenanceCost,
-                    suppliesCost: suppliesCost,
-                    netProfit: netProfit,
-                    totalMileage: (totalDistance / 1609.34).toFixed(2),
-                    totalTime: formatDuration(totalDuration),
-                    hoursWorked: hoursWorked,
-                    profitPerHour: profitPerHour
-                };
-
-            } catch (error) {
-                console.error("Error calculating route:", error);
-                alert("Could not calculate route. Please check the addresses and try again.");
-                return null;
-            }
+        } catch (error) {
+            console.error("Error calculating route:", error);
+            alert("Could not calculate route. Please check the addresses and try again.");
+            return null;
         }
+    }
 
-        async function logEntryAndDisplay() {
-            const calculationResult = await calculateRoute();
-            if (calculationResult) {
-                logEntry(calculationResult);
-                displayLog();
-                populateDayOptions();
-            }
-        }
-
-        function logEntry(entry) {
-            logEntries.push(entry);
-            saveLog();
-        }
-
-        function saveLog() {
-            localStorage.setItem('logEntries', JSON.stringify(logEntries));
-        }
-
-        function loadLog() {
-            const storedLog = localStorage.getItem('logEntries');
-            return storedLog ? JSON.parse(storedLog) : [];
-        }
-
-        function formatDuration(duration) {
-            const hours = Math.floor(duration / 3600);
-            const minutes = Math.floor((duration % 3600) / 60);
-            return `${hours} hours ${minutes} minutes`;
-        }
-
-        function displayLog(filterDay = 'all') {
-            const logList = document.getElementById('log-list');
-            logList.innerHTML = '';
-
-            const filteredEntries = filterDay === 'all' ? logEntries :
-                logEntries.filter(entry => entry.date === filterDay);
-
-            filteredEntries.forEach((entry, index) => {
-                const li = document.createElement('li');
-                li.innerHTML = `
-                    <div class="log-item-details">
-                        <strong>${entry.date}</strong><br>
-                        Start: ${entry.startAddress}, End: ${entry.endAddress}, Earnings: $<span class="math-inline">\{entry\.totalEarnings\.toFixed\(2\)\}
-</div\>
-<div class\="log\-actions"\>
-<button class\="edit\-btn" onclick\="openEditForm\(</span>{index})">Edit</button>
-                        <button class="delete-btn" onclick="deleteLogEntry(${index})">Delete</button>
-                    </div>
-                `;
-                logList.appendChild(li);
-            });
-        }
-
-        function populateDayOptions() {
-            const select = document.getElementById('organize-by-day');
-            select.innerHTML = '<option value="all">All</option>';
-            const days = [...new Set(logEntries.map(entry => entry.date))];
-            days.sort().forEach(day => {
-                const option = document.createElement('option');
-                option.value = day;
-                option.textContent = day;
-                select.appendChild(option);
-            });
-        }
-
-        function deleteLogEntry(index) {
-            if (confirm("Are you sure you want to delete this log entry?")) {
-                logEntries.splice(index, 1);
-                saveLog();
-                displayLog(document.getElementById('organize-by-day').value);
-                populateDayOptions();
-            }
-        }
-
-        function openEditForm(index) {
-            editingIndex = index;
-            const entry = logEntries[index];
-
-            document.getElementById('edit-date').value = entry.date;
-            document.getElementById('edit-start-address').value = entry.startAddress;
-            document.getElementById('edit-end-address').value = entry.endAddress;
-            document.getElementById('edit-total-earnings').value = entry.totalEarnings;
-            document.getElementById('edit-fuel-cost').value = entry.fuelCost;
-            document.getElementById('edit-maintenance-cost').value = entry.maintenanceCost;
-            document.getElementById('edit-supplies-cost').value = entry.suppliesCost;
-            document.getElementById('edit-total-mileage').value = entry.totalMileage;
-            document.getElementById('edit-total-time').value = entry.totalTime;
-            document.getElementById('edit-hours-worked').value = entry.hoursWorked;
-
-            const editDestinationsContainer = document.getElementById('edit-destinations-container');
-            editDestinationsContainer.innerHTML = '';
-            entry.destinations.forEach((dest, i) => {
-                const destDiv = document.createElement('div');
-                destDiv.innerHTML = `
-                    <label for="edit-destination-${i + 1}">Destination <span class="math-inline">\{i \+ 1\}</label\>
-<input type\="text" id\="edit\-destination\-</span>{i + 1}" value="<span class="math-inline">\{dest\.address\}"\>
-<label for\="edit\-earnings\-</span>{i + 1}">Earnings</label>
-                    <input type="number" id="edit-earnings-<span class="math-inline">\{i \+ 1\}" value\="</span>{dest.earning}">
-                    <button type="button" onclick="deleteEditDestination(this)">Delete</button>
-                `;
-                editDestinationsContainer.appendChild(destDiv);
-            });
-
-            document.getElementById('edit-index').value = index;
-            document.getElementById('edit-form-container').style.display = 'block';
-            document.getElementById('overlay').style.display = 'block';
-        }
-
-        function addEditDestination() {
-            const container = document.getElementById('edit-destinations-container');
-            const destCount = container.querySelectorAll('input[type="text"]').length + 1;
-
-            const newDestDiv = document.createElement('div');
-            newDestDiv.innerHTML = `
-                <label for="edit-destination-${destCount}">Destination <span class="math-inline">\{destCount\}</label\>
-<input type\="text" id\="edit\-destination\-</span>{destCount}">
-                <label for="edit-earnings-<span class="math-inline">\{destCount\}"\>Earnings</label\>
-<input type\="number" id\="edit\-earnings\-</span>{destCount}">
-                <button type="button" onclick="deleteEditDestination(this)">Delete</button>
-            `;
-            container.appendChild(newDestDiv);
-        }
-
-        function deleteEditDestination(btn) {
-            btn.parentNode.remove();
-        }
-
-        function saveEditedLogEntry() {
-            if (editingIndex === -1) return;
-
-            const entry = logEntries[editingIndex];
-            entry.date = document.getElementById('edit-date').value;
-            entry.startAddress = document.getElementById('edit-start-address').value;
-            entry.endAddress = document.getElementById('edit-end-address').value;
-            entry.totalEarnings = parseFloat(document.getElementById('edit-total-earnings').value);
-            entry.fuelCost = parseFloat(document.getElementById('edit-fuel-cost').value);
-            entry.maintenanceCost = parseFloat(document.getElementById('edit-maintenance-cost').value);
-            entry.suppliesCost = parseFloat(document.getElementById('edit-supplies-cost').value);
-            entry.totalMileage = parseFloat(document.getElementById('edit-total-mileage').value);
-            entry.totalTime = document.getElementById('edit-total-time').value;
-            entry.hoursWorked = parseFloat(document.getElementById('edit-hours-worked').value);
-
-            entry.destinations = [];
-            const destInputs = document.querySelectorAll('#edit-destinations-container input[type="text"]');
-            const earningInputs = document.querySelectorAll('#edit-destinations-container input[type="number"]');
-            destInputs.forEach((input, i) => {
-                entry.destinations.push({
-                    address: input.value,
-                    earning: parseFloat(earningInputs[i].value)
-                });
-            });
-
-            saveLog();
-            displayLog(document.getElementById('organize-by-day').value);
-            closeEditForm();
+    function logLastResult() {
+        if (lastCalculationResult) {
+            logEntry(lastCalculationResult);
+            displayLog();
             populateDayOptions();
+            alert("Entry logged successfully!");
+        } else {
+            alert("Please calculate first before logging.");
         }
-
-        function closeEditForm() {
-            document.getElementById('edit-form-container').style.display = 'none';
-            document.getElementById('overlay').style.display = 'none';
-            editingIndex = -1;
-        }
-
-        function exportToCSV() {
-            let csvContent = "data:text/csv;charset=utf-8,";
-            csvContent += "Date,Start Address,";
-
-            // Add destination headers dynamically based on the maximum number of destinations
-            let maxDestinations = 0;
-            logEntries.forEach(entry => {
-                if (entry.destinations.length > maxDestinations) {
-                    maxDestinations = entry.destinations.length;
-                }
-            });
-
-            for (let i = 1; i <= maxDestinations; i++) {
-                csvContent +=
-                    `Destination ${i} Address,Destination ${i} Earnings,`;
-            }
-            csvContent +=
-                "End Address,Total Earnings,Fuel Cost,Maintenance Cost,Supplies Cost,Net Profit,Total Mileage,Total Time,Hours Worked,Profit per Hour\r\n";
-
-            logEntries.forEach(entry => {
-                csvContent += `<span class="math-inline">\{entry\.date\},"</span>{entry.startAddress}",`;
-                for (let i = 0; i < maxDestinations; i++) {
-                    if (i < entry.destinations.length) {
-                        csvContent += `"<span class="math-inline">\{entry\.destinations\[i\]\.address\}",</span>{entry.destinations[i].earning},`;
-                    } else {
-                        csvContent += ',,'; // Add empty columns if nodestination
-                }
-                csvContent +=
-                    `"${entry.endAddress}",${entry.totalEarnings},${entry.fuelCost},${entry.maintenanceCost},${entry.suppliesCost},${entry.netProfit},${entry.totalMileage},"${entry.totalTime}",${entry.hoursWorked},${entry.profitPerHour}\r\n`;
-            });
-
-            const encodedUri = encodeURI(csvContent);
-            const link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
-            link.setAttribute("download", "profit_log.csv");
-            document.body.appendChild(link); // Required for Firefox
-
-            link.click();
-        }
-
-        function exportToPDF() {
-            const {
-                jsPDF
-            } = window.jspdf;
-            const doc = new jsPDF();
-
-            const tableColumn = ["Date", "Start", ...Array.from({
-                length: 10
-            }, (_, i) => `Dest ${i + 1}`), "End", "Earnings", "Fuel", "Maint", "Supplies", "Profit", "Mileage", "Time", "Hours", "Profit/Hour"];
-            const tableRows = [];
-
-            logEntries.forEach(entry => {
-                const row = [entry.date, entry.startAddress, ...entry.destinations.map(dest => `${dest.address} ($${dest.earning})`), entry.endAddress, entry.totalEarnings, entry.fuelCost, entry.maintenanceCost, entry.suppliesCost, entry.netProfit, entry.totalMileage, entry.totalTime, entry.hoursWorked, entry.profitPerHour];
-                tableRows.push(row);
-            });
-
-            doc.autoTable({
-                head: [tableColumn],
-                body: tableRows,
-                startY: 20,
-                styles: {
-                    fontSize: 8,
-                    cellWidth: 'auto',
-                    overflow: 'linebreak'
-                }
-            });
-
-            doc.save('profit_log.pdf');
-        }
-
-        async function importLog() {
-            const fileInput = document.getElementById('import-file');
-            const file = fileInput.files[0];
-
-            if (file) {
-                const reader = new FileReader();
-
-                reader.onload = function (event) {
-                    const csvText = event.target.result;
-                    const lines = csvText.split('\n').filter(line => line.trim() !== ''); // Split into lines and remove empty lines
-                    const newLogEntries = [];
-
-                    lines.slice(1).forEach(line => { // Skip the header row
-                        const values = line.split(',');
-                        if (values.length >= 12) { // Basic check for minimum columns
-                            try {
-                                const date = values[0];
-                                const startAddress = values[1].replace(/^"(.*)"$/, '$1'); // Remove quotes
-                                const endAddress = values[maxDestinations * 2 + 2].replace(/^"(.*)"$/, '$1'); // Adjusted index
-                                const totalEarnings = parseFloat(values[maxDestinations * 2 + 3]); // Adjusted index
-                                const fuelCost = parseFloat(values[maxDestinations * 2 + 4]); // Adjusted index
-                                const maintenanceCost = parseFloat(values[maxDestinations * 2 + 5]); // Adjusted index
-                                const suppliesCost = parseFloat(values[maxDestinations * 2 + 6]); // Adjusted index
-                                const netProfit = parseFloat(values[maxDestinations * 2 + 7]); // Adjusted index
-                                const totalMileage = parseFloat(values[maxDestinations * 2 + 8]); // Adjusted index
-                                const totalTimeString = values[maxDestinations * 2 + 9].replace(/^"(.*)"$/, '$1');
-                                const hoursWorked = parseFloat(values[maxDestinations * 2 + 10]);
-                                const profitPerHour = parseFloat(values[maxDestinations * 2 + 11]);
-
-                                const destinations = [];
-                                for (let i = 0; i < maxDestinations; i++) {
-                                    const address = values[2 + (i * 2)].replace(/^"(.*)"$/, '$1'); // Adjusted index
-                                    const earning = parseFloat(values[3 + (i * 2)]); // Adjusted index
-                                    if (address && !isNaN(earning)) {
-                                        destinations.push({
-                                            address: address,
-                                            earning: earning
-                                        });
-                                    }
-                                }
-
-                                if (isNaN(totalEarnings) || isNaN(fuelCost) || isNaN(maintenanceCost) || isNaN(suppliesCost) || isNaN(netProfit) || isNaN(totalMileage) || isNaN(hoursWorked) || isNaN(profitPerHour)) {
-                                    throw new Error("Invalid numeric value");
-                                }
-
-                                newLogEntries.push({
-                                    date: date,
-                                    startAddress: startAddress,
-                                    endAddress: endAddress,
-                                    totalEarnings: totalEarnings,
-                                    fuelCost: fuelCost,
-                                    maintenanceCost: maintenanceCost,
-                                    suppliesCost: suppliesCost,
-                                    netProfit: netProfit,
-                                    totalMileage: totalMileage,
-                                    totalTime: totalTimeString.replace(/:/g, ' hours ').replace(/:/g, ' minutes ').replace(/ seconds$/, '').trim(),
-                                    destinations: destinations,
-                                    hoursWorked: hoursWorked,
-                                    profitPerHour: profitPerHour
-                                });
-                            } catch (error) {
-                                console.error("Error parsing CSV line:", line, error);
-                            }
-                        } else {
-                            console.warn("Skipping invalid CSV line (wrong number of columns):", line, values ? values.length : 0);
-                        }
-                    });
-
-                    logEntries = [...logEntries, ...newLogEntries];
-                    saveLog();
-                    displayLog(document.getElementById('organize-by-day').value);
-                    populateDayOptions();
-                    alert('Log imported successfully!');
-                };
-
-                reader.onerror = function () {
-                    alert('Error reading the file.');
-                };
-
-                reader.readAsText(file);
-            } else {
-                alert('Please select a CSV file to import.');
-            }
-        }
-    </script>
+    }
+</script>
 </body>
 
 </html>
