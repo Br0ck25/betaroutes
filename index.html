@@ -473,9 +473,16 @@ document.addEventListener('DOMContentLoaded', () => {
         let directionsService;
         let directionsRenderer;
         let autocompleteStart, autocompleteEnd;
-        let logEntries = loadLog();
         let editingIndex = -1;
 	let originalMileage = null;
+let logEntries = [];
+
+document.addEventListener('DOMContentLoaded', async () => {
+  logEntries = await loadLog();
+  displayLog();         // ✅ Show the logs on page
+  populateDayOptions(); // ✅ Restore the dropdown
+});
+
 
 function initMap() {
             map = new google.maps.Map(document.getElementById("map"), {
@@ -805,19 +812,24 @@ function moveDestinationDown(button) {
 
 
 
-        function logEntry(data) {
+ function logEntry(data) {
             logEntries.unshift(data);
             saveLog();
         }
 
-        function saveLog() {
-            localStorage.setItem('routeLog', JSON.stringify(logEntries));
-        }
+async function saveLog() {
+  await fetch("https://betaroutes.jamesbrock25.workers.dev/logs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(logEntries)
+  });
+}
 
-        function loadLog() {
-            const storedLog = localStorage.getItem('routeLog');
-            return storedLog ? JSON.parse(storedLog) : [];
-        }
+
+async function loadLog() {
+  const response = await fetch("https://betaroutes.jamesbrock25.workers.dev/logs");
+  return await response.json();
+}
 
 function displayLog(filterDay = 'all') {
     const logList = document.getElementById('log-list');
@@ -1499,3 +1511,4 @@ function importLog() {
     </script>
 </body>
 </html>
+
