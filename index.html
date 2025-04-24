@@ -818,12 +818,25 @@ function moveDestinationDown(button) {
         }
 
 async function saveLog() {
-  await fetch("https://betaroutes.jamesbrock25.workers.dev/logs", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(logEntries)
-  });
+  console.log("⏳ Saving to KV…", logEntries);
+  try {
+    const response = await fetch("https://betaroutes.jamesbrock25.workers.dev/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(logEntries)
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error("❌ Failed to save to KV:", response.status, text);
+    } else {
+      console.log("✅ Saved to KV");
+    }
+  } catch (err) {
+    console.error("❌ Error during saveLog:", err);
+  }
 }
+
 
 
 async function loadLog() {
