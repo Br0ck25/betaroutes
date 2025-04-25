@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title></title>
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ&amp;libraries=places&amp;callback=initMap" async="" defer=""></script>
+
     <style>
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -383,6 +383,7 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
         </div>
 
 <div id="map" class="hidden"></div>
+<div id="detailed-results" style="margin-top: 20px;"></div>
 <div id="mileage-display" style="text-align: center; font-weight: bold; margin-top: 10px;"></div>
 <div id="optimized-mileage-display" style="text-align: center; font-weight: bold; margin-top: 10px;"></div>
     </div>
@@ -468,9 +469,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-        // Replace with your actual Google Maps API key
-        const GOOGLE_MAPS_API_KEY = 'YOUR_GOOGLE_MAPS_API_KEY';
-        document.querySelector('script[src*="maps.googleapis.com"]').src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&callback=initMap`;
+const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
+if (existingScript) {
+    existingScript.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&callback=initMap`;
+}
+
 
         let map;
         let directionsService;
@@ -532,6 +535,9 @@ document.getElementById("end-address").addEventListener("change", resetOriginalM
             displayLog();
             populateDayOptions();
         }
+
+window.initMap = initMap;
+
 
         function initAutocompleteDestination(inputElement) {
             const autocomplete = new google.maps.places.Autocomplete(inputElement, { types:['geocode'] });
@@ -642,16 +648,36 @@ function updateUI(data) {
         document.getElementById('profit-per-hour').textContent = data.profitPerHour;
         document.getElementById('results').classList.remove('hidden');
 
-if (originalMileage === null) {
-    originalMileage = data.totalMileage;
-    document.getElementById('mileage-display').textContent = "Original Route: " + originalMileage + " miles";
-} else {
-    // Do not overwrite originalMileage!
-    document.getElementById('mileage-display').textContent = "Original Route: " + originalMileage + " miles";
-}
+        if (originalMileage === null) {
+            originalMileage = data.totalMileage;
+            document.getElementById('mileage-display').textContent = "Original Route: " + originalMileage + " miles";
+        } else {
+            document.getElementById('mileage-display').textContent = "Original Route: " + originalMileage + " miles";
+        }
 
+        // ✅ Add the new detailed display below the map
+        const detailedResultsHTML = `
+            <h3>Route Details</h3>
+            <p><strong>Date:</strong> ${data.date}</p>
+            <p><strong>Start Address:</strong> ${data.startTime}</p>
+            <p><strong>Destinations:</strong><br>${data.destinations.map(d => `- ${d}`).join('<br>')}</p>
+            <p><strong>End Address:</strong> ${data.endTime}</p>
+            <p><strong>Earnings per Stop:</strong> ${data.earnings.map(e => `$${parseFloat(e).toFixed(2)}`).join(', ')}</p>
+            <p><strong>Total Mileage:</strong> ${data.totalMileage} miles</p>
+            <p><strong>Total Drive Time:</strong> ${data.totalTime}</p>
+            <p><strong>Total Earnings:</strong> $${data.totalEarnings}</p>
+            <p><strong>Fuel Cost:</strong> $${data.fuelCost}</p>
+            <p><strong>Maintenance:</strong> $${data.maintenanceCost}</p>
+            <p><strong>Supplies:</strong> $${data.suppliesCost}</p>
+            <p><strong>Hours Worked:</strong> ${data.hoursWorked ?? '0'} hours</p>
+            <p><strong>Net Profit:</strong> $${data.netProfit}</p>
+            <p><strong>Profit per Hour:</strong> $${data.profitPerHour}</p>
+        `;
+        document.getElementById('detailed-results').innerHTML = detailedResultsHTML;
     }
 }
+
+
 
 function resetOriginalMileageDisplay() {
     originalMileage = null;
@@ -739,6 +765,33 @@ async function optimizeRoute() {
 
             document.getElementById('optimized-mileage-display').textContent = "Optimized Route: " + optimizedMileage.toFixed(2) + " miles";
             document.getElementById('total-time').textContent = formatDuration(totalDuration);
+
+const optimizedData = {
+    date: document.getElementById('log-date').value || new Date().toLocaleDateString(),
+    startTime: startAddress,
+    endTime: endAddress,
+    destinations: Array.from(document.querySelectorAll('input[id^="destination-"]')).map(input => input.value),
+    earnings: Array.from(document.querySelectorAll('input[id^="earnings-"]')).map(input => parseFloat(input.value) || 0),
+    totalMileage: optimizedMileage.toFixed(2),
+    totalTime: formatDuration(totalDuration),
+    totalEarnings: (Array.from(document.querySelectorAll('input[id^="earnings-"]')).reduce((sum, i) => sum + (parseFloat(i.value) || 0), 0)).toFixed(2),
+    fuelCost: ((optimizedMileage / parseFloat(document.getElementById('mpg').value || 1)) * parseFloat(document.getElementById('gas-price').value || 0)).toFixed(2),
+    maintenanceCost: parseFloat(document.getElementById('maintenance-cost').value || 0).toFixed(2),
+    suppliesCost: parseFloat(document.getElementById('supplies-cost').value || 0).toFixed(2),
+    hoursWorked: parseFloat(document.getElementById('hours-worked').value || 0),
+    netProfit: '0', // to be calculated next
+    profitPerHour: '0.00'
+};
+
+// Recalculate net profit and profit per hour
+const netProfitBeforeOptional = optimizedData.totalEarnings - optimizedData.fuelCost;
+optimizedData.netProfit = (netProfitBeforeOptional - optimizedData.maintenanceCost - optimizedData.suppliesCost).toFixed(2);
+const totalHoursSpent = optimizedData.hoursWorked + (totalDuration / 3600);
+optimizedData.profitPerHour = totalHoursSpent > 0 ? (optimizedData.netProfit / totalHoursSpent).toFixed(2) : '0.00';
+
+// ✅ Update UI below the map
+updateUI(optimizedData);
+
 
         } else if (status === 'OK') {
             // fallback if optimization fails
@@ -941,6 +994,7 @@ function viewLogEntry(index) {
         <p><strong>Fuel Cost:</strong> $${entry.fuelCost}</p>
         <p><strong>Maintenance:</strong> $${entry.maintenanceCost}</p>
         <p><strong>Supplies:</strong> $${entry.suppliesCost}</p>
+	<p><strong>Hours Worked:</strong> ${entry.hoursWorked ?? '0'} hours</p>
         <p><strong>Net Profit:</strong> $${entry.netProfit}</p>
         <p><strong>Profit per Hour:</strong> $${entry.profitPerHour}</p>
         <button onclick="this.closest('.custom-view-overlay').remove()">Close</button>
@@ -1526,6 +1580,15 @@ function importLog() {
         alert('Please select a CSV file to import.');
     }
 }
+
+  document.addEventListener('DOMContentLoaded', () => {
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ&libraries=places&callback=initMap`;
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+  });
+
     </script>
 </body>
 </html>
