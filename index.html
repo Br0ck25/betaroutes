@@ -1534,14 +1534,19 @@ function importLog() {
   });
 
   loader.load().then(() => {
-    initMap(); // Call your existing initMap function
-  }).catch(e => {
-    console.error("Google Maps failed to load:", e);
+    if (typeof window.initMap === 'function') {
+      window.initMap();
+    } else {
+      console.error("initMap function not found.");
+    }
+  }).catch((e) => {
+    console.error("Maps API failed to load:", e);
   });
 </script>
 
+
 <script type="module">
-  import { Loader } from "https://unpkg.com/@googlemaps/js-api-loader@1.15.0/dist/index.min.js";
+  import { Loader } from "https://unpkg.com/@googlemaps/js-api-loader@1.15.0/dist/index.umd.min.js";
 
   const loader = new Loader({
     apiKey: "AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ",
