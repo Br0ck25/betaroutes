@@ -524,45 +524,6 @@ async function submitResetPassword() {
   }
 }
 
-function showDeleteModal() {
-  document.getElementById('delete-account-modal').style.display = 'flex';
-}
-
-function closeDeleteModal() {
-  document.getElementById('delete-account-modal').style.display = 'none';
-}
-
-async function submitDeleteAccount() {
-  const password = document.getElementById('delete-password').value.trim();
-  const username = localStorage.getItem("username");
-  const token = localStorage.getItem("token");
-
-  if (!username || !token || !password) {
-    alert("Missing credentials.");
-    return;
-  }
-
-  const res = await fetch("https://betaroutes.jamesbrock25.workers.dev/api/delete-account", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: token
-    },
-    body: JSON.stringify({ username, password })
-  });
-
-  if (res.ok) {
-    alert("✅ Your account has been deleted.");
-    localStorage.removeItem("username");
-    localStorage.removeItem("token");
-    location.reload();
-  } else {
-    const msg = await res.text();
-    alert("❌ " + msg);
-  }
-}
-
-
     <script>
 
 function closeAuthModal() {
@@ -1899,6 +1860,44 @@ async function submitResetPassword() {
   if (res.ok) {
     alert("✅ Password reset successfully. You can now sign in.");
     closeResetModal();
+  } else {
+    const msg = await res.text();
+    alert("❌ " + msg);
+  }
+}
+
+function showDeleteModal() {
+  document.getElementById('delete-account-modal').style.display = 'flex';
+}
+
+function closeDeleteModal() {
+  document.getElementById('delete-account-modal').style.display = 'none';
+}
+
+async function submitDeleteAccount() {
+  const password = document.getElementById('delete-password').value.trim();
+  const username = localStorage.getItem("username");
+  const token = localStorage.getItem("token");
+
+  if (!username || !token || !password) {
+    alert("Missing credentials.");
+    return;
+  }
+
+  const res = await fetch("https://betaroutes.jamesbrock25.workers.dev/api/delete-account", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: token
+    },
+    body: JSON.stringify({ username, password })
+  });
+
+  if (res.ok) {
+    alert("✅ Your account has been deleted.");
+    localStorage.removeItem("username");
+    localStorage.removeItem("token");
+    location.reload();
   } else {
     const msg = await res.text();
     alert("❌ " + msg);
