@@ -863,19 +863,19 @@ function findGasStationsAlongRoute() {
 
   const sampledPoints = path.filter((_, index) => index % 10 === 0);
 
-  const service = new google.maps.places.PlacesService(document.createElement('div')); // ✅ dummy div
+  const service = new google.maps.places.PlacesService(document.createElement('div')); // dummy div
 
   sampledPoints.forEach((point, idx) => {
-    if (!point || !point.lat || !point.lng) {
+    if (!point) {
       console.warn(`Skipped invalid point at index ${idx}`);
       return;
     }
 
-    const location = new google.maps.LatLng(point.lat(), point.lng());
+    const location = point; // ✅ Use the point directly!
 
     service.nearbySearch({
       location: location,
-      radius: 2000,
+      radius: 2000, // 2 km
       type: ['gas_station']
     }, (results, status) => {
       if (status === google.maps.places.PlacesServiceStatus.OK && results.length > 0) {
@@ -883,12 +883,13 @@ function findGasStationsAlongRoute() {
           console.log(`✅ Gas Station near route:`, gasStation.name, gasStation.vicinity);
           alert(`Gas Station: ${gasStation.name}\nAddress: ${gasStation.vicinity}`);
         });
-      } else {
-        console.warn(`No gas stations found near sampled point ${idx}`);
+      } else if (status !== google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
+        console.error(`NearbySearch error: ${status}`);
       }
     });
   });
 }
+
 
 
 
