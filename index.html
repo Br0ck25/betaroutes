@@ -4,7 +4,11 @@
     <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title></title>
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ&amp;libraries=places&amp;callback=initMap" async="" defer=""></script>
+<script
+  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ&libraries=places&callback=initMap"
+  async defer>
+</script>
+
     <style>
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -467,10 +471,6 @@ document.addEventListener('DOMContentLoaded', () => {
         dateInput.value = today;
     }
 });
-
-        // Replace with your actual Google Maps API key
-        const GOOGLE_MAPS_API_KEY = 'YOUR_GOOGLE_MAPS_API_KEY';
-        document.querySelector('script[src*="maps.googleapis.com"]').src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&callback=initMap`;
 
         let map;
         let directionsService;
@@ -1527,6 +1527,23 @@ function importLog() {
     }
 }
     </script>
+
+<script type="module">
+  import { Loader } from "https://unpkg.com/@googlemaps/js-api-loader@1.15.0/dist/index.min.js";
+
+  const loader = new Loader({
+    apiKey: "AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ",
+    version: "weekly",
+    libraries: ["places"]
+  });
+
+  loader.load().then(() => {
+    initMap(); // Call your existing initMap function
+  }).catch(e => {
+    console.error("Google Maps failed to load:", e);
+  });
+</script>
+
 </body>
 </html>
 
