@@ -848,7 +848,7 @@ function calculateDetourTime(gasStationLocation, nextDestination, callback) {
             });
         }
 
-function findGasStationsAlongRoute() {
+async function findGasStationsAlongRoute() {
   if (!directionsRenderer || !directionsRenderer.getDirections()) {
     alert("Please calculate a route first.");
     return;
@@ -862,35 +862,33 @@ function findGasStationsAlongRoute() {
   }
 
   const sampledPoints = path.filter((_, index) => index % 10 === 0);
-
   const service = new google.maps.places.PlacesService(document.createElement('div')); // Dummy DIV
 
-  sampledPoints.forEach((point, idx) => {
-    if (!point) {
-      console.warn(`Skipped invalid point at index ${idx}`);
-      return;
-    }
+  for (const point of sampledPoints) {
+    if (!point) continue;
 
-    // ✅ Always create a real LatLng object
     const lat = typeof point.lat === 'function' ? point.lat() : point.lat;
     const lng = typeof point.lng === 'function' ? point.lng() : point.lng;
     const location = new google.maps.LatLng(lat, lng);
 
-    service.nearbySearch({
-      location: location,
-      radius: 2000,
-      type: ['gas_station']
-    }, (results, status) => {
-      if (status === google.maps.places.PlacesServiceStatus.OK && results.length > 0) {
-        results.forEach(gasStation => {
-          console.log(`✅ Gas Station near route:`, gasStation.name, gasStation.vicinity);
-          alert(`Gas Station: ${gasStation.name}\nAddress: ${gasStation.vicinity}`);
-        });
-      } else if (status !== google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
-        console.error(`NearbySearch error: ${status}`);
-      }
+    await new Promise((resolve) => {
+      service.nearbySearch({
+        location: location,
+        radius: 2000,
+        type: ['gas_station']
+      }, (results, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK && results.length > 0) {
+          results.forEach(gasStation => {
+            console.log(`✅ Gas Station near route:`, gasStation.name, gasStation.vicinity);
+            alert(`Gas Station: ${gasStation.name}\nAddress: ${gasStation.vicinity}`);
+          });
+        } else if (status !== google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
+          console.error(`NearbySearch error: ${status}`);
+        }
+        setTimeout(resolve, 300); // Delay before next call
+      });
     });
-  });
+  }
 }
 
 
