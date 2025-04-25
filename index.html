@@ -580,20 +580,24 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
 function openInGoogleMaps() {
   const start = encodeURIComponent(document.getElementById('start-address').value.trim());
   const end = encodeURIComponent(document.getElementById('end-address').value.trim());
-  const destinations = Array.from(document.querySelectorAll('input[id^="destination-"]'))
-    .map(input => encodeURIComponent(input.value.trim()))
+
+  const allDestinations = Array.from(document.querySelectorAll('input[id^="destination-"]'))
+    .map(input => input.value.trim())
     .filter(dest => dest.length > 0);
 
-  let url = `https://www.google.com/maps/dir/?api=1&origin=${start}&destination=${end}&waypoints=${destinations.join('|')}`;
+  // 🛑 Don't duplicate end address inside destinations
+  const destinations = allDestinations.filter(dest => dest !== document.getElementById('end-address').value.trim());
+
+  // ✅ Now build the URL
+  let url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(start)}&destination=${encodeURIComponent(end)}`;
 
   if (destinations.length > 0) {
-    url += destinations.join('/') + '/';
+    url += `&waypoints=${destinations.map(encodeURIComponent).join('|')}`;
   }
-
-  url += `${end}`;
 
   window.open(url, '_blank');
 }
+
 
 
 function saveUserInputsToLocalStorage({ mpg, gasPrice, startAddress, endAddress }) {
