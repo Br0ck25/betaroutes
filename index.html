@@ -762,7 +762,7 @@ if (startTimeInput && endTimeInput) {
   const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
   hoursWorked = actualWorkedMinutes / 60;
 
-  // Also update the Hours Worked input on the page!
+hoursWorked = parseFloat(hoursWorked.toFixed(2));
   document.getElementById('hours-worked').value = hoursWorked.toFixed(2);
 }
 
@@ -823,7 +823,7 @@ if (startTimeInput && endTimeInput) {
   let driveMinutes = totalDuration / 60; // NOW we have drive time from Google
 
   const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
-  hoursWorked = actualWorkedMinutes / 60;
+  hoursWorked = parseFloat((actualWorkedMinutes / 60).toFixed(2));
 
   // ✅ Also auto-update the Hours Worked input
   document.getElementById('hours-worked').value = hoursWorked.toFixed(2);
@@ -2168,10 +2168,10 @@ function handleTimeChange() {
 
     let totalWorkedMinutes = endTotalMinutes - startTotalMinutes;
     let driveMinutes = typeof totalDuration === 'number' ? totalDuration / 60 : 0;
-    const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
-    const hoursWorked = actualWorkedMinutes / 60;
+const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
+const hoursWorked = parseFloat((actualWorkedMinutes / 60).toFixed(2));
+hoursWorkedInput.value = hoursWorked.toFixed(2);
 
-    hoursWorkedInput.value = hoursWorked.toFixed(2);
     hoursWorkedInput.readOnly = true; // 🛡️ make it readonly!
     hoursWorkedInput.style.backgroundColor = "#f0f0f0"; // light gray to indicate readonly
   } else {
