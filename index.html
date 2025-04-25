@@ -484,15 +484,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   populateDayOptions(); // ✅ Restore the dropdown
 });
 
-
-  window.initMap = function () {
-    map = new google.maps.Map(document.getElementById("map"), {
-      zoom: 10,
-      center: { lat: 37.7749, lng: -122.4194 },
-      mapTypeControl: false,
-      streetViewControl: false
-    });
-
             directionsService = new google.maps.DirectionsService();
             directionsRenderer = new google.maps.DirectionsRenderer({
                 map: map,
