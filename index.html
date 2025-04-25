@@ -343,6 +343,7 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
 <div id="logout-message" style="display: none; text-align: center; margin-bottom: 20px;">
   ✅ You’re signed in as <span id="username-display"></span>.
   <button onclick="logout()" style="margin-left: 10px;">Log Out</button>
+  <button onclick="showPasswordModal()" style="margin-left: 10px;">Change Password</button>
 </div>
 
 
@@ -1761,6 +1762,42 @@ function logout() {
   location.reload(); // ✅ this clears state and reinitializes
 }
 
+function showPasswordModal() {
+  document.getElementById('change-password-modal').style.display = 'flex';
+}
+
+function closePasswordModal() {
+  document.getElementById('change-password-modal').style.display = 'none';
+}
+
+async function submitPasswordChange() {
+  const current = document.getElementById("current-password").value.trim();
+  const next = document.getElementById("new-password").value.trim();
+  const confirm = document.getElementById("confirm-password").value.trim();
+
+  if (!current || !next || !confirm) return alert("Please fill out all fields.");
+  if (next !== confirm) return alert("New passwords do not match.");
+
+  const token = localStorage.getItem("token");
+  const username = localStorage.getItem("username");
+
+  if (!token || !username) return alert("You must be signed in.");
+
+  const res = await fetch("https://betaroutes.jamesbrock25.workers.dev/api/change-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: token },
+    body: JSON.stringify({ username, currentPassword: current, newPassword: next })
+  });
+
+  if (res.ok) {
+    alert("✅ Password changed successfully.");
+    closePasswordModal();
+  } else {
+    const msg = await res.text();
+    alert("❌ " + msg);
+  }
+}
+
 
 
     </script>
@@ -1790,6 +1827,26 @@ function logout() {
     </p>
   </div>
 </div>
+
+<div id="change-password-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 2000;">
+  <div onclick="event.stopPropagation()" style="background: white; padding: 30px; border-radius: 10px; width: 300px;">
+    <h3>Change Password</h3>
+
+    <input type="password" id="current-password" placeholder="Current password"
+      style="width: 100%; margin-bottom: 10px; box-sizing: border-box; padding: 10px; font-size: 16px; line-height: 1.4;" />
+
+    <input type="password" id="new-password" placeholder="New password"
+      style="width: 100%; margin-bottom: 10px; box-sizing: border-box; padding: 10px; font-size: 16px; line-height: 1.4;" />
+
+    <input type="password" id="confirm-password" placeholder="Confirm new password"
+      style="width: 100%; margin-bottom: 10px; box-sizing: border-box; padding: 10px; font-size: 16px; line-height: 1.4;" />
+
+    <button onclick="submitPasswordChange()" style="width: 100%; padding: 10px; font-size: 16px;">Submit</button>
+    <button onclick="closePasswordModal()" style="width: 100%; margin-top: 10px; background: #ccc; padding: 10px; font-size: 16px;">Cancel</button>
+  </div>
+</div>
+
+
 
 </body>
 
