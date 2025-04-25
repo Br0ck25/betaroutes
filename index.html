@@ -1566,6 +1566,51 @@ function importLog() {
     console.error("Maps API failed to load:", e);
   });
 </script>
+
+	<script>
+  window.initMap = function () {
+    map = new google.maps.Map(document.getElementById("map"), {
+      zoom: 10,
+      center: { lat: 37.7749, lng: -122.4194 },
+      mapTypeControl: false,
+      streetViewControl: false
+    });
+
+    directionsService = new google.maps.DirectionsService();
+    directionsRenderer = new google.maps.DirectionsRenderer({
+      map: map,
+      suppressMarkers: false
+    });
+
+    autocompleteStart = new google.maps.places.Autocomplete(
+      document.getElementById("start-address"), { types: ['geocode'] }
+    );
+
+    autocompleteEnd = new google.maps.places.Autocomplete(
+      document.getElementById("end-address"), { types: ['geocode'] }
+    );
+
+    document.getElementById("start-address").addEventListener("change", resetOriginalMileageDisplay);
+    document.getElementById("end-address").addEventListener("change", resetOriginalMileageDisplay);
+
+    // Optionally: reinitialize destination autocomplete if needed
+    document.querySelectorAll('#destinations-container .destination input[type="text"]').forEach(initAutocompleteDestination);
+
+    // Load previously saved settings or logs if needed
+    const savedMpg = localStorage.getItem('mpg');
+    const savedGasPrice = localStorage.getItem('gasPrice');
+    const savedStartAddress = localStorage.getItem('startAddress');
+    const savedEndAddress = localStorage.getItem('endAddress');
+
+    if (savedMpg) document.getElementById('mpg').value = savedMpg;
+    if (savedGasPrice) document.getElementById('gas-price').value = savedGasPrice;
+    if (savedStartAddress) document.getElementById('start-address').value = savedStartAddress;
+    if (savedEndAddress) document.getElementById('end-address').value = savedEndAddress;
+
+    // Restore dropdown options
+    populateDayOptions();
+  };
+</script>
 </body>
 </html>
 
