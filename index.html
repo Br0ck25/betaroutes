@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title></title>
+	<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ&callback=initMap&libraries=places" async defer></script>
+
 
     <style>
 body {
@@ -483,12 +485,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 
-window.initMap = function () {
+  window.initMap = function () {
     map = new google.maps.Map(document.getElementById("map"), {
-        zoom: 10,
-        center: { lat: 37.7749, lng: -122.4194 },
-        mapTypeControl: false,
-        streetViewControl: false
+      zoom: 10,
+      center: { lat: 37.7749, lng: -122.4194 },
+      mapTypeControl: false,
+      streetViewControl: false
     });
 
             directionsService = new google.maps.DirectionsService();
