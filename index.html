@@ -1707,6 +1707,7 @@ localStorage.setItem("token", data.token);
 document.getElementById('auth-modal').style.display = 'none';
 showConfirmationMessage(`✅ ${isSignup ? 'Account created' : 'Signed in'} successfully!`);
 updateAuthUI();
+location.reload(); // ✅ This will reload and auto-fetch logs using the token
 loadLog();
   } else {
     alert("❌ " + (await res.text()));
@@ -1731,9 +1732,9 @@ function logout() {
   localStorage.removeItem("token");
   localStorage.removeItem("username");
   showConfirmationMessage("👋 Logged out successfully.");
-  updateAuthUI();
-  displayLog(); // reset display
+  location.reload(); // ✅ this clears state and reinitializes
 }
+
 
 
     </script>
