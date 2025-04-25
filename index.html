@@ -489,6 +489,39 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
         <input type="hidden" id="edit-index">
     </div>
 
+function showResetModal() {
+  document.getElementById('reset-password-modal').style.display = 'flex';
+}
+
+function closeResetModal() {
+  document.getElementById('reset-password-modal').style.display = 'none';
+}
+
+async function submitResetPassword() {
+  const username = document.getElementById('reset-username').value.trim();
+  const resetKey = document.getElementById('reset-key').value.trim();
+  const newPassword = document.getElementById('reset-new-password').value.trim();
+
+  if (!username || !resetKey || !newPassword) {
+    alert("Please fill out all fields.");
+    return;
+  }
+
+  const res = await fetch("https://betaroutes.jamesbrock25.workers.dev/api/reset-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, resetKey, newPassword })
+  });
+
+  if (res.ok) {
+    alert("✅ Password reset successfully. You can now sign in.");
+    closeResetModal();
+  } else {
+    const msg = await res.text();
+    alert("❌ " + msg);
+  }
+}
+
     <script>
 
 function closeAuthModal() {
@@ -1823,8 +1856,9 @@ async function submitPasswordChange() {
     <button onclick="submitAuth()" style="width: 100%;">Submit</button>
     <button onclick="closeAuthModal()" style="width: 100%; margin-top: 10px; background-color: #ccc; color: #333;">Cancel</button>
     <p style="text-align: center; margin-top: 10px;">
-      <a href="#" onclick="toggleAuthMode()">Switch to <span id="auth-switch-label">Sign Up</span></a>
-    </p>
+  <a href="#" onclick="toggleAuthMode()">Switch to <span id="auth-switch-label">Sign Up</span></a><br>
+  <a href="#" onclick="showResetModal()" style="font-size: 0.9em; color: #0d6efd;">Forgot Password?</a>
+</p>
   </div>
 </div>
 
@@ -1846,6 +1880,16 @@ async function submitPasswordChange() {
   </div>
 </div>
 
+<div id="reset-password-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 2000;">
+  <div onclick="event.stopPropagation()" style="background: white; padding: 30px; border-radius: 10px; width: 300px;">
+    <h3>Reset Password</h3>
+    <input type="text" id="reset-username" placeholder="Username" style="width: 100%; margin-bottom: 10px; padding: 10px;" />
+    <input type="text" id="reset-key" placeholder="Reset Key (shown at signup)" style="width: 100%; margin-bottom: 10px; padding: 10px;" />
+    <input type="password" id="reset-new-password" placeholder="New Password" style="width: 100%; margin-bottom: 10px; padding: 10px;" />
+    <button onclick="submitResetPassword()" style="width: 100%;">Submit</button>
+    <button onclick="closeResetModal()" style="width: 100%; margin-top: 10px; background: #ccc;">Cancel</button>
+  </div>
+</div>
 
 
 </body>
