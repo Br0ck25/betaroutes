@@ -465,6 +465,7 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
         <button onclick="optimizeRoute()">Optimize Route</button>
         <button onclick="calculateRoute()">Calculate Route</button>
         <button onclick="logResults()">Log Route</button>
+        <button onclick="openInGoogleMaps()">Open Route in Google Maps</button>
 	<div id="confirmation-message" style="display: none; color: green; font-weight: bold; margin-top: 10px;"></div>
 
 
@@ -575,6 +576,25 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
     </div>
 
 <script>
+
+function openInGoogleMaps() {
+  const start = encodeURIComponent(document.getElementById('start-address').value.trim());
+  const end = encodeURIComponent(document.getElementById('end-address').value.trim());
+  const destinations = Array.from(document.querySelectorAll('input[id^="destination-"]'))
+    .map(input => encodeURIComponent(input.value.trim()))
+    .filter(dest => dest.length > 0);
+
+  let url = `https://www.google.com/maps/dir/?api=1&origin=${start}&destination=${end}&waypoints=${destinations.join('|')}`;
+
+  if (destinations.length > 0) {
+    url += destinations.join('/') + '/';
+  }
+
+  url += `${end}`;
+
+  window.open(url, '_blank');
+}
+
 
 function saveUserInputsToLocalStorage({ mpg, gasPrice, startAddress, endAddress }) {
   localStorage.setItem('mpg', mpg);
