@@ -344,6 +344,8 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
   ✅ You’re signed in as <span id="username-display"></span>.
   <button onclick="logout()" style="margin-left: 10px;">Log Out</button>
   <button onclick="showPasswordModal()" style="margin-left: 10px;">Change Password</button>
+  <button onclick="showDeleteModal()" style="margin-left: 10px; color: red;">Delete Account</button>
+
 </div>
 
 
@@ -521,6 +523,45 @@ async function submitResetPassword() {
     alert("❌ " + msg);
   }
 }
+
+function showDeleteModal() {
+  document.getElementById('delete-account-modal').style.display = 'flex';
+}
+
+function closeDeleteModal() {
+  document.getElementById('delete-account-modal').style.display = 'none';
+}
+
+async function submitDeleteAccount() {
+  const password = document.getElementById('delete-password').value.trim();
+  const username = localStorage.getItem("username");
+  const token = localStorage.getItem("token");
+
+  if (!username || !token || !password) {
+    alert("Missing credentials.");
+    return;
+  }
+
+  const res = await fetch("https://betaroutes.jamesbrock25.workers.dev/api/delete-account", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: token
+    },
+    body: JSON.stringify({ username, password })
+  });
+
+  if (res.ok) {
+    alert("✅ Your account has been deleted.");
+    localStorage.removeItem("username");
+    localStorage.removeItem("token");
+    location.reload();
+  } else {
+    const msg = await res.text();
+    alert("❌ " + msg);
+  }
+}
+
 
     <script>
 
@@ -1831,6 +1872,38 @@ async function submitPasswordChange() {
   }
 }
 
+function showResetModal() {
+  document.getElementById('reset-password-modal').style.display = 'flex';
+}
+
+function closeResetModal() {
+  document.getElementById('reset-password-modal').style.display = 'none';
+}
+
+async function submitResetPassword() {
+  const username = document.getElementById('reset-username').value.trim();
+  const resetKey = document.getElementById('reset-key').value.trim();
+  const newPassword = document.getElementById('reset-new-password').value.trim();
+
+  if (!username || !resetKey || !newPassword) {
+    alert("Please fill out all fields.");
+    return;
+  }
+
+  const res = await fetch("https://betaroutes.jamesbrock25.workers.dev/api/reset-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, resetKey, newPassword })
+  });
+
+  if (res.ok) {
+    alert("✅ Password reset successfully. You can now sign in.");
+    closeResetModal();
+  } else {
+    const msg = await res.text();
+    alert("❌ " + msg);
+  }
+}
 
 
     </script>
@@ -1888,6 +1961,16 @@ async function submitPasswordChange() {
     <input type="password" id="reset-new-password" placeholder="New Password" style="width: 100%; margin-bottom: 10px; padding: 10px;" />
     <button onclick="submitResetPassword()" style="width: 100%;">Submit</button>
     <button onclick="closeResetModal()" style="width: 100%; margin-top: 10px; background: #ccc;">Cancel</button>
+  </div>
+</div>
+
+<div id="delete-account-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 2000;">
+  <div onclick="event.stopPropagation()" style="background: white; padding: 30px; border-radius: 10px; width: 300px;">
+    <h3>Delete Account</h3>
+    <p style="font-size: 14px; color: red;">⚠️ This action is permanent.</p>
+    <input type="password" id="delete-password" placeholder="Confirm password" style="width: 100%; margin-bottom: 10px; padding: 10px;" />
+    <button onclick="submitDeleteAccount()" style="width: 100%; background: red; color: white;">Delete My Account</button>
+    <button onclick="closeDeleteModal()" style="width: 100%; margin-top: 10px; background: #ccc;">Cancel</button>
   </div>
 </div>
 
