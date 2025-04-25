@@ -342,11 +342,18 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
 
 <div id="logout-message" style="display: none; text-align: center; margin-bottom: 20px;">
   ✅ You’re signed in as <span id="username-display"></span>.
-  <button onclick="logout()" style="width: 100%; padding: 10px;">Log Out</button>
-  <button onclick="showPasswordModal()" style="width: 100%; padding: 10px;">Change Password</button>
-  <button onclick="showDeleteModal()" style="width: 100%; padding: 10px; color: red;">Delete Account</button>
-
+  
+  <div style="display: inline-block; position: relative;">
+    <button onclick="toggleMenu()" style="margin-left: 10px; font-size: 20px;">☰</button>
+    
+    <div id="account-menu" style="display: none; position: absolute; right: 0; background: white; border: 1px solid #ccc; border-radius: 6px; margin-top: 5px; text-align: left; z-index: 999;">
+      <button onclick="logout()" style="width: 100%; padding: 10px; border: none; background: none;">Log Out</button>
+      <button onclick="showPasswordModal()" style="width: 100%; padding: 10px; border: none; background: none;">Change Password</button>
+      <button onclick="showDeleteModal()" style="width: 100%; padding: 10px; border: none; background: none; color: red;">Delete Account</button>
+    </div>
+  </div>
 </div>
+
 
 
 
@@ -492,6 +499,21 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
     </div>
 
     <script>
+
+function toggleMenu() {
+  const menu = document.getElementById('account-menu');
+  menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
+}
+
+// Optional: Close menu if user clicks outside it
+document.addEventListener('click', function (event) {
+  const menu = document.getElementById('account-menu');
+  const button = event.target.closest('button');
+  if (!menu.contains(event.target) && (!button || button.onclick !== toggleMenu)) {
+    menu.style.display = 'none';
+  }
+});
+
 
 function closeAuthModal() {
   document.getElementById('auth-modal').style.display = 'none';
