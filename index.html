@@ -5,7 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title></title>
 
-    <style>
+<style>
+  @media (max-width: 600px) {
+    #account-menu {
+      right: 10px;
+      min-width: 160px;
+      font-size: 16px;
+    }
+
+    #logout-message button {
+      font-size: 16px !important;
+      padding: 10px;
+    }
+  }
 
 #account-menu {
     display: none;
@@ -359,13 +371,13 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
 </div>
 
 
-<div id="logout-message" style="display: none; margin: 20px auto; text-align: center; max-width: 300px;">
+<div id="logout-message" style="display: none; margin: 20px auto; max-width: 100%; text-align: center;">
   ✅ You’re signed in as <span id="username-display"></span>
 
-  <div style="position: relative; display: inline-block;">
-    <button onclick="toggleMenu()" style="margin-top: 10px; font-size: 20px;">☰</button>
+  <div style="display: flex; justify-content: center; position: relative; margin-top: 10px;">
+    <button onclick="toggleMenu()" style="font-size: 24px; padding: 8px 12px;">☰</button>
 
-    <div id="account-menu" style="
+    <div id="account-menu" class="" style="
       display: none;
       position: absolute;
       top: 100%;
@@ -384,6 +396,7 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
     </div>
   </div>
 </div>
+
 
 
 
