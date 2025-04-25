@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title></title>
-	<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ&callback=initMap&libraries=places" async defer></script>
-
-
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ&amp;libraries=places&amp;callback=initMap" async="" defer=""></script>
     <style>
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -470,6 +468,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+        // Replace with your actual Google Maps API key
+        const GOOGLE_MAPS_API_KEY = 'YOUR_GOOGLE_MAPS_API_KEY';
+        document.querySelector('script[src*="maps.googleapis.com"]').src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&callback=initMap`;
+
         let map;
         let directionsService;
         let directionsRenderer;
@@ -483,6 +485,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   displayLog();         // ✅ Show the logs on page
   populateDayOptions(); // ✅ Restore the dropdown
 });
+
+
+function initMap() {
+            map = new google.maps.Map(document.getElementById("map"), {
+                zoom: 10,
+                center: { lat: 37.7749, lng: -122.4194 },
+                mapTypeControl: false,
+                streetViewControl: false
+            });
 
             directionsService = new google.maps.DirectionsService();
             directionsRenderer = new google.maps.DirectionsRenderer({
@@ -1516,95 +1527,5 @@ function importLog() {
     }
 }
     </script>
-
-<script type="module">
-  import { Loader } from "https://unpkg.com/@googlemaps/js-api-loader@1.15.0/dist/index.umd.min.js";
-
-  const loader = new Loader({
-    apiKey: "AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ",
-    version: "weekly",
-    libraries: ["places"]
-  });
-
-  loader.load().then(() => {
-    if (typeof window.initMap === 'function') {
-      window.initMap();
-    } else {
-      console.error("initMap function not found.");
-    }
-  }).catch((e) => {
-    console.error("Maps API failed to load:", e);
-  });
-</script>
-
-
-<script type="module">
-  import { Loader } from "https://unpkg.com/@googlemaps/js-api-loader@1.15.0/dist/index.umd.min.js";
-
-  const loader = new Loader({
-    apiKey: "AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ",
-    version: "weekly",
-    libraries: ["places"]
-  });
-
-  loader.load().then(() => {
-    if (typeof window.initMap === 'function') {
-      window.initMap();
-    } else {
-      console.error("initMap function not found.");
-    }
-  }).catch((e) => {
-    console.error("Maps API failed to load:", e);
-  });
-</script>
-
-	<script>
-  window.initMap = function () {
-    map = new google.maps.Map(document.getElementById("map"), {
-      zoom: 10,
-      center: { lat: 37.7749, lng: -122.4194 },
-      mapTypeControl: false,
-      streetViewControl: false
-    });
-
-    directionsService = new google.maps.DirectionsService();
-    directionsRenderer = new google.maps.DirectionsRenderer({
-      map: map,
-      suppressMarkers: false
-    });
-
-    autocompleteStart = new google.maps.places.Autocomplete(
-      document.getElementById("start-address"), { types: ['geocode'] }
-    );
-
-    autocompleteEnd = new google.maps.places.Autocomplete(
-      document.getElementById("end-address"), { types: ['geocode'] }
-    );
-
-    document.getElementById("start-address").addEventListener("change", resetOriginalMileageDisplay);
-    document.getElementById("end-address").addEventListener("change", resetOriginalMileageDisplay);
-
-    // Optionally: reinitialize destination autocomplete if needed
-    document.querySelectorAll('#destinations-container .destination input[type="text"]').forEach(initAutocompleteDestination);
-
-    // Load previously saved settings or logs if needed
-    const savedMpg = localStorage.getItem('mpg');
-    const savedGasPrice = localStorage.getItem('gasPrice');
-    const savedStartAddress = localStorage.getItem('startAddress');
-    const savedEndAddress = localStorage.getItem('endAddress');
-
-    if (savedMpg) document.getElementById('mpg').value = savedMpg;
-    if (savedGasPrice) document.getElementById('gas-price').value = savedGasPrice;
-    if (savedStartAddress) document.getElementById('start-address').value = savedStartAddress;
-    if (savedEndAddress) document.getElementById('end-address').value = savedEndAddress;
-
-    // Restore dropdown options
-    populateDayOptions();
-  };
-</script>
 </body>
 </html>
-
-</body>
-</html>
-
