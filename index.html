@@ -1575,6 +1575,14 @@ function exportToCSV() {
         }
 
 function importLog() {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+        alert("❌ You must be signed in to import a CSV file.");
+        showLogin(); // Optional: show login modal
+        return;
+    }
+
     const fileInput = document.getElementById('import-file');
     const file = fileInput.files[0];
 
@@ -1676,9 +1684,13 @@ function showSignup() {
 
 function toggleAuthMode() {
   isSignup = !isSignup;
-  showSignup();
-  if (!isSignup) showLogin();
+  if (isSignup) {
+    showSignup();
+  } else {
+    showLogin();
+  }
 }
+
 
 async function submitAuth() {
   const username = document.getElementById('auth-username').value.trim();
