@@ -3,7 +3,24 @@
 <head>
     <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title></title>
+<title>Route and Cost Calculator with Log - Plan, Optimize, and Track Your Trips</title>
+
+<meta name="description" content="Easily calculate driving routes, optimize stops, track trip costs, and log your earnings. Save your routes securely and export your trip logs.">
+
+<!-- Open Graph (for social sharing) -->
+<meta property="og:title" content="Route and Cost Calculator with Log">
+<meta property="og:description" content="Plan routes, calculate costs, optimize trips, and track your earnings with our smart route logging tool.">
+<meta property="og:url" content="https://yourdomain.com/">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://yourdomain.com/logo.png"> <!-- optional: if you have a logo or image -->
+<meta property="og:site_name" content="Route and Cost Calculator">
+
+<link rel="icon" href="/logo-512.png" sizes="512x512" type="image/png">
+<link rel="apple-touch-icon" href="/logo-512.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Route Calculator">
+<meta name="theme-color" content="#ffffff"> <!-- pick your site background color -->
+
 
 <style>
 
@@ -623,7 +640,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         let map;
         let directionsService;
         let directionsRenderer;
-	let lastRouteRequest = null;
         let autocompleteStart, autocompleteEnd;
         let editingIndex = -1;
 	let originalMileage = null;
@@ -690,52 +706,45 @@ window.initMap = initMap;
 
 
         function initAutocompleteDestination(inputElement) {
-    const autocomplete = new google.maps.places.Autocomplete(inputElement, {
-      types: ['geocode'],
-      fields: ['place_id', 'geometry', 'name']  // <-- ✨ Optimization here
-    });
-}
+            const autocomplete = new google.maps.places.Autocomplete(inputElement, { types:['geocode'] });
+        }
 
 
 async function calculateRoute() {
-  const calculationRequest = await generateRouteRequest(); // new helper
-  if (JSON.stringify(calculationRequest) === JSON.stringify(lastRouteRequest)) {
-    console.log("🧠 Skipping recalculation - inputs didn't change");
-    return;
-  }
+            const calculationResult = await calculateRouteData(); // Call the data calculation function
+            if (calculationResult) {
+                updateUI(calculationResult);
+		showConfirmationMessage('✅ Route calculated successfully!');
+            }
+        }
 
-  lastRouteRequest = calculationRequest;
+        async function calculateRouteData() {
+            const startAddress = document.getElementById('start-address').value;
+            const endAddress = document.getElementById('end-address').value;
+            const mpg = parseFloat(document.getElementById('mpg').value);
+            const gasPrice = parseFloat(document.getElementById('gas-price').value);
+            const hoursWorked = parseFloat(document.getElementById('hours-worked').value) || 0;
+            const maintenanceCost = parseFloat(document.getElementById('maintenance-cost').value) || 0;
+            const suppliesCost = parseFloat(document.getElementById('supplies-cost').value) || 0;
 
-  const calculationResult = await calculateRouteData(calculationRequest);
-  if (calculationResult) {
-    updateUI(calculationResult);
-    showConfirmationMessage('✅ Route calculated successfully!');
-  }
-}
+            saveUserInputsToLocalStorage({ mpg, gasPrice, startAddress, endAddress });
 
-async function generateRouteRequest() {
-    const startAddress = document.getElementById('start-address').value.trim();
-    const endAddress = document.getElementById('end-address').value.trim();
-    const destInputs = document.querySelectorAll('input[id^="destination-"]');
-    const destinations = Array.from(destInputs).map(input => input.value.trim());
+            const destInputs = document.querySelectorAll('input[id^="destination-"]');
+            const earningsInputs = document.querySelectorAll('input[id^="earnings-"]');
+            const destinations = Array.from(destInputs).map(input => ({
+                location: input.value,
+                stopover: true
+            }));
+    const earnings = Array.from(earningsInputs).map(input => parseFloat(input.value) || 0);
+    const totalEarnings = earnings.reduce((sum, val) => sum + val, 0);
 
-    return {
-        origin: startAddress,
-        destination: endAddress,
-        waypoints: destinations.map(location => ({ location, stopover: true })),
-        travelMode: 'DRIVING'
-    };
-}
-
-        async function calculateRouteData(request) {
-	const { origin, destination, waypoints } = request;
-	const startAddress = origin;
-	const endAddress = destination;
-	const destinations = waypoints;
-
-
-            
-            
+            const waypoints = destinations;
+            const request = {
+                origin: startAddress,
+                destination: endAddress,
+                waypoints: waypoints,
+                travelMode: 'DRIVING'
+            };
 
             return new Promise((resolve, reject) => {
                 directionsService.route(request, (response, status) => {
