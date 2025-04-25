@@ -684,6 +684,9 @@ function initMap() {
             autocompleteEnd = new google.maps.places.Autocomplete(document.getElementById("end-address"), { types: ['geocode'] });
 document.getElementById("start-address").addEventListener("change", resetOriginalMileageDisplay);
 document.getElementById("end-address").addEventListener("change", resetOriginalMileageDisplay);
+document.getElementById('start-time').addEventListener('change', handleTimeChange);
+document.getElementById('end-time').addEventListener('change', handleTimeChange);
+
 
 
             autocompleteStart.addListener("place_changed", function () {
@@ -799,6 +802,33 @@ if (startTimeInput && endTimeInput) {
                             totalMileage += leg.distance.value / 1609.34;
                             totalDuration += leg.duration.value;
                         });
+
+const startTimeInput = document.getElementById('start-time').value;
+const endTimeInput = document.getElementById('end-time').value;
+let hoursWorked = parseFloat(document.getElementById('hours-worked').value) || 0;
+
+if (startTimeInput && endTimeInput) {
+  const [startHours, startMinutes] = startTimeInput.split(':').map(Number);
+  const [endHours, endMinutes] = endTimeInput.split(':').map(Number);
+
+  let startTotalMinutes = startHours * 60 + startMinutes;
+  let endTotalMinutes = endHours * 60 + endMinutes;
+
+  if (endTotalMinutes < startTotalMinutes) {
+    // Overnight shift
+    endTotalMinutes += 24 * 60;
+  }
+
+  let totalWorkedMinutes = endTotalMinutes - startTotalMinutes;
+  let driveMinutes = totalDuration / 60; // NOW we have drive time from Google
+
+  const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
+  hoursWorked = actualWorkedMinutes / 60;
+
+  // ✅ Also auto-update the Hours Worked input
+  document.getElementById('hours-worked').value = hoursWorked.toFixed(2);
+}
+
 
     const fuelCost = (totalMileage / mpg) * gasPrice;
     const netProfitBeforeOptional = totalEarnings - fuelCost;
@@ -2105,6 +2135,40 @@ function openLogEntryInGoogleMaps(index) {
 
   window.open(url, '_blank');
 }
+
+function handleTimeChange() {
+  const startTimeInput = document.getElementById('start-time').value;
+  const endTimeInput = document.getElementById('end-time').value;
+
+  if (startTimeInput && endTimeInput) {
+    const [startHours, startMinutes] = startTimeInput.split(':').map(Number);
+    const [endHours, endMinutes] = endTimeInput.split(':').map(Number);
+
+    let startTotalMinutes = startHours * 60 + startMinutes;
+    let endTotalMinutes = endHours * 60 + endMinutes;
+
+    if (endTotalMinutes < startTotalMinutes) {
+      // Overnight shift
+      endTotalMinutes += 24 * 60;
+    }
+
+    let totalWorkedMinutes = endTotalMinutes - startTotalMinutes;
+
+    let driveMinutes = 0;
+    if (typeof totalDuration === 'number') {
+      driveMinutes = totalDuration / 60; // Driving time in minutes
+    }
+
+    const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
+    const hoursWorked = actualWorkedMinutes / 60;
+
+    document.getElementById('hours-worked').value = hoursWorked.toFixed(2);
+  } else {
+    // if either start or end time is missing, clear the Hours Worked field
+    document.getElementById('hours-worked').value = '';
+  }
+}
+
 
 
     </script>
