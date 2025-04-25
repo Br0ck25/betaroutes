@@ -4,10 +4,6 @@
     <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title></title>
-<script
-  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ&libraries=places&callback=initMap"
-  async defer>
-</script>
 
     <style>
 body {
@@ -487,13 +483,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 
-function initMap() {
-            map = new google.maps.Map(document.getElementById("map"), {
-                zoom: 10,
-                center: { lat: 37.7749, lng: -122.4194 },
-                mapTypeControl: false,
-                streetViewControl: false
-            });
+window.initMap = function () {
+    map = new google.maps.Map(document.getElementById("map"), {
+        zoom: 10,
+        center: { lat: 37.7749, lng: -122.4194 },
+        mapTypeControl: false,
+        streetViewControl: false
+    });
 
             directionsService = new google.maps.DirectionsService();
             directionsRenderer = new google.maps.DirectionsRenderer({
@@ -1529,7 +1525,7 @@ function importLog() {
     </script>
 
 <script type="module">
-  import { Loader } from "https://unpkg.com/@googlemaps/js-api-loader@1.15.0/dist/index.min.js";
+  import { Loader } from "https://unpkg.com/@googlemaps/js-api-loader@1.15.0/dist/index.umd.min.js";
 
   const loader = new Loader({
     apiKey: "AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ",
@@ -1543,6 +1539,28 @@ function importLog() {
     console.error("Google Maps failed to load:", e);
   });
 </script>
+
+<script type="module">
+  import { Loader } from "https://unpkg.com/@googlemaps/js-api-loader@1.15.0/dist/index.min.js";
+
+  const loader = new Loader({
+    apiKey: "AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ",
+    version: "weekly",
+    libraries: ["places"]
+  });
+
+  loader.load().then(() => {
+    if (typeof window.initMap === 'function') {
+      window.initMap();
+    } else {
+      console.error("initMap function not found.");
+    }
+  }).catch((e) => {
+    console.error("Maps API failed to load:", e);
+  });
+</script>
+</body>
+</html>
 
 </body>
 </html>
