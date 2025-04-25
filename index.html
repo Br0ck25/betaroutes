@@ -106,7 +106,7 @@ body {
             color: #555;
         }
 
-input[type="text"], input[type="number"], input[type="date"], button, select {
+input[type="text"], input[type="number"], input[type="date"], input[type="time"], button, select {
 
             width: 100%;
             padding: 10px;
@@ -450,9 +450,17 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
 
         <label for="gas-price">Fuel Price per Gallon</label>
         <input type="number" id="gas-price" placeholder="Enter fuel price per gallon" required>
+	
+	<label for="start-time">Start Time (Optional)</label>
+	<input type="time" id="start-time" placeholder="Enter start time">
+
+	<label for="end-time">End Time (Optional)</label>
+	<input type="time" id="end-time" placeholder="Enter end time">
+
 
         <label for="hours-worked">Hours Worked (Optional)</label>
-        <input type="number" id="hours-worked" placeholder="Enter total hours worked">
+        <input type="number" id="hours-worked" placeholder="Auto-filled if times are entered">
+
 
         <div class="optional-costs">
             <h3>Optional Daily Costs</h3>
@@ -725,7 +733,36 @@ async function calculateRoute() {
             const endAddress = document.getElementById('end-address').value;
             const mpg = parseFloat(document.getElementById('mpg').value);
             const gasPrice = parseFloat(document.getElementById('gas-price').value);
-            const hoursWorked = parseFloat(document.getElementById('hours-worked').value) || 0;
+            const startTimeInput = document.getElementById('start-time').value;
+const endTimeInput = document.getElementById('end-time').value;
+let hoursWorked = parseFloat(document.getElementById('hours-worked').value) || 0;
+
+if (startTimeInput && endTimeInput) {
+  const [startHours, startMinutes] = startTimeInput.split(':').map(Number);
+  const [endHours, endMinutes] = endTimeInput.split(':').map(Number);
+
+  let startTotalMinutes = startHours * 60 + startMinutes;
+  let endTotalMinutes = endHours * 60 + endMinutes;
+
+  if (endTotalMinutes < startTotalMinutes) {
+    // Handle overnight shift (e.g., 10PM to 2AM next day)
+    endTotalMinutes += 24 * 60;
+  }
+
+  let totalWorkedMinutes = endTotalMinutes - startTotalMinutes;
+  let driveMinutes = 0;
+
+  if (typeof totalDuration === 'number') {
+    driveMinutes = totalDuration / 60;
+  }
+
+  const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
+  hoursWorked = actualWorkedMinutes / 60;
+
+  // Also update the Hours Worked input on the page!
+  document.getElementById('hours-worked').value = hoursWorked.toFixed(2);
+}
+
             const maintenanceCost = parseFloat(document.getElementById('maintenance-cost').value) || 0;
             const suppliesCost = parseFloat(document.getElementById('supplies-cost').value) || 0;
 
@@ -742,11 +779,12 @@ async function calculateRoute() {
 
             const waypoints = destinations;
             const request = {
-                origin: startAddress,
-                destination: endAddress,
-                waypoints: waypoints,
-                travelMode: 'DRIVING'
-            };
+    origin: startAddress,
+    destination: endAddress || destinations[destinations.length - 1]?.location || startAddress,
+    waypoints: waypoints,
+    travelMode: 'DRIVING'
+};
+
 
             return new Promise((resolve, reject) => {
                 directionsService.route(request, (response, status) => {
@@ -836,17 +874,19 @@ document.getElementById('mileage-display').textContent = "Original Route: " + or
 
 function openInGoogleMaps() {
   const start = encodeURIComponent(document.getElementById('start-address').value.trim());
-  const end = encodeURIComponent(document.getElementById('end-address').value.trim());
+  const endAddressInput = document.getElementById('end-address').value.trim();
 
   const allDestinations = Array.from(document.querySelectorAll('input[id^="destination-"]'))
     .map(input => input.value.trim())
     .filter(dest => dest.length > 0);
 
+  const end = encodeURIComponent(endAddressInput || allDestinations[allDestinations.length - 1] || start);
+
   // 🛑 Don't duplicate end address inside destinations
-  const destinations = allDestinations.filter(dest => dest !== document.getElementById('end-address').value.trim());
+  const destinations = allDestinations.filter(dest => dest !== endAddressInput);
 
   // ✅ Now build the URL
-  let url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(start)}&destination=${encodeURIComponent(end)}`;
+  let url = `https://www.google.com/maps/dir/?api=1&origin=${start}&destination=${end}`;
 
   if (destinations.length > 0) {
     url += `&waypoints=${destinations.map(encodeURIComponent).join('|')}`;
@@ -854,6 +894,7 @@ function openInGoogleMaps() {
 
   window.open(url, '_blank');
 }
+
 
 
 
