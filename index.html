@@ -465,6 +465,7 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
         <button onclick="optimizeRoute()">Optimize Route</button>
         <button onclick="calculateRoute()">Calculate Route</button>
         <button onclick="logResults()">Log Route</button>
+	<button onclick="findGasStationsNearRoute()">Find Gas Stations Along Route</button>
         <button onclick="openInGoogleMaps()">Open Route in Google Maps</button>
 	<div id="confirmation-message" style="display: none; color: green; font-weight: bold; margin-top: 10px;"></div>
 
@@ -742,6 +743,37 @@ async function calculateRoute() {
             }
         }
 
+// Helper to filter gas stations near highways
+function filterGasStations(stations) {
+  return stations.filter(station => {
+    const vicinity = station.vicinity.toLowerCase();
+    return vicinity.includes('highway') || 
+           vicinity.includes('interstate') || 
+           vicinity.includes('route') || 
+           vicinity.includes('hwy') || 
+           vicinity.includes('i-');
+  });
+}
+
+// Helper to calculate detour time
+function calculateDetourTime(gasStationLocation, nextDestination, callback) {
+  const request = {
+    origin: currentLocation,
+    destination: nextDestination,
+    waypoints: [{ location: gasStationLocation, stopover: true }],
+    travelMode: 'DRIVING'
+  };
+
+  directionsService.route(request, (result, status) => {
+    if (status === 'OK') {
+      const totalSeconds = result.routes[0].legs.reduce((acc, leg) => acc + leg.duration.value, 0);
+      const detourMinutes = totalSeconds / 60;
+      callback(detourMinutes);
+    }
+  });
+}
+
+
         async function calculateRouteData() {
             const startAddress = document.getElementById('start-address').value;
             const endAddress = document.getElementById('end-address').value;
@@ -815,6 +847,41 @@ async function calculateRoute() {
                 });
             });
         }
+
+function findGasStationsNearRoute() {
+  if (!currentLocation || !nextDestination) {
+    alert("Please start navigating first.");
+    return;
+  }
+
+  const service = new google.maps.places.PlacesService(map);
+
+  service.nearbySearch({
+    location: currentLocation,
+    radius: 10000,
+    type: ['gas_station'],
+    rankBy: google.maps.places.RankBy.DISTANCE
+  }, results => {
+    if (!results || results.length === 0) {
+      alert("No gas stations found nearby.");
+      return;
+    }
+
+    const topStations = results.slice(0, 20);
+    const filteredStations = filterGasStations(topStations);
+
+    filteredStations.forEach(station => {
+      calculateDetourTime(station.geometry.location, nextDestination, (detourMinutes) => {
+        if (detourMinutes <= 5) {
+          console.log(`✅ Gas station within detour limit: ${station.name}, Detour: ${detourMinutes.toFixed(1)} mins`);
+          // 🚀 You can now display this info to user in a list or modal
+          alert(`Gas station: ${station.name}\nDetour time: ${detourMinutes.toFixed(1)} minutes`);
+        }
+      });
+    });
+  });
+}
+
 
 function updateUI(data) {
     if (data) {
