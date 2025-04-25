@@ -320,6 +320,13 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
     </head>
 <body>
 
+<div id="auth-message" style="text-align: center; margin-bottom: 20px;">
+  To log your route you need to 
+  <a href="#" onclick="showLogin()">Sign in</a> or 
+  <a href="#" onclick="showSignup()">create an account</a>.
+</div>
+
+
 <div class="container">
   <div style="text-align: center;">
     <img src="/logo.png" alt="Logo" style="max-width: 250px; margin-bottom: 10px;">
@@ -368,8 +375,10 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
             <input type="number" id="supplies-cost" placeholder="Enter supplies cost for the day">
         </div>
         <button onclick="optimizeRoute()">Optimize Route</button>
-        <button onclick="calculateRoute()">Calculate</button>
-        <button onclick="logResults()">Log</button>
+        <button onclick="calculateRoute()">Calculate Route</button>
+        <button onclick="logResults()">Log Route</button>
+	<div id="confirmation-message" style="display: none; color: green; font-weight: bold; margin-top: 10px;"></div>
+
 
         <div id="results" class="hidden">
             <p>Total Mileage: <span id="total-mileage"></span> miles</p>
@@ -460,6 +469,11 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
     </div>
 
     <script>
+
+function closeAuthModal() {
+  document.getElementById('auth-modal').style.display = 'none';
+}
+
 // Auto-fill the date input with today's date
 document.addEventListener('DOMContentLoaded', () => {
     const dateInput = document.getElementById('log-date');
@@ -488,6 +502,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   displayLog();         // ✅ Show the logs on page
   populateDayOptions(); // ✅ Restore the dropdown
 });
+
+function showConfirmationMessage(message) {
+    const confirmation = document.getElementById('confirmation-message');
+    confirmation.textContent = message;
+    confirmation.style.display = 'block';
+    setTimeout(() => {
+        confirmation.style.display = 'none';
+    }, 3000);
+}
 
 
 function initMap() {
@@ -555,7 +578,8 @@ window.initMap = initMap;
 async function calculateRoute() {
             const calculationResult = await calculateRouteData(); // Call the data calculation function
             if (calculationResult) {
-                updateUI(calculationResult); // Update the UI with the results
+                updateUI(calculationResult);
+		showConfirmationMessage('✅ Route calculated successfully!');
             }
         }
 
@@ -690,14 +714,27 @@ function resetOriginalMileageDisplay() {
 
 
 async function logResults() {
-    const calculationResult = await calculateRouteData(); // Wait for the promise to resolve
-    if (calculationResult) {
-        logEntry(calculationResult);
-        displayLog();
-        populateDayOptions();
-	updateUI(calculationResult);
-    }
+  const token = localStorage.getItem("token");
+
+  if (!token) {
+    alert("❌ You must sign in to log your route.");
+    showLogin(); // show sign-in modal
+    return;
+  }
+
+  const calculationResult = await calculateRouteData();
+  if (calculationResult) {
+    logEntry(calculationResult);
+    displayLog();
+    populateDayOptions();
+    updateUI(calculationResult);
+
+    showConfirmationMessage('✅ Route logged successfully!');
+  }
 }
+
+
+
 
 async function optimizeRoute() {
     if (originalMileage === null) {
@@ -791,6 +828,8 @@ optimizedData.profitPerHour = totalHoursSpent > 0 ? (optimizedData.netProfit / t
 
 // ✅ Update UI below the map
 updateUI(optimizedData);
+showConfirmationMessage('✅ Route optimized successfully!');
+
 
 
         } else if (status === 'OK') {
@@ -874,11 +913,24 @@ function moveDestinationDown(button) {
         }
 
 async function saveLog() {
+  const token = localStorage.getItem("token");
+
+  if (!token) {
+    console.error("❌ No token found. User must be signed in to save.");
+    alert("You must be signed in to save your route logs.");
+    showLogin(); // Optional: open login modal automatically
+    return;
+  }
+
   console.log("⏳ Saving to KV…", logEntries);
+
   try {
-    const response = await fetch("https://betaroutes.jamesbrock25.workers.dev/logs", {
+    const response = await fetch("https://betaroutes..jamesbrock25.workers.dev/logs", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": token
+      },
       body: JSON.stringify(logEntries)
     });
 
@@ -892,6 +944,7 @@ async function saveLog() {
     console.error("❌ Error during saveLog:", err);
   }
 }
+
 
 
 
@@ -1589,6 +1642,86 @@ function importLog() {
       document.head.appendChild(script);
   });
 
+let isSignup = false;
+
+function showLogin() {
+  isSignup = false;
+  document.getElementById('auth-title').textContent = 'Sign In';
+  document.getElementById('auth-switch-label').textContent = 'Sign Up';
+  document.getElementById('auth-modal').style.display = 'flex';
+}
+
+function showSignup() {
+  isSignup = true;
+  document.getElementById('auth-title').textContent = 'Create Account';
+  document.getElementById('auth-switch-label').textContent = 'Sign In';
+  document.getElementById('auth-modal').style.display = 'flex';
+}
+
+function toggleAuthMode() {
+  isSignup = !isSignup;
+  showSignup();
+  if (!isSignup) showLogin();
+}
+
+async function submitAuth() {
+  const username = document.getElementById('auth-username').value.trim();
+  const password = document.getElementById('auth-password').value.trim();
+
+  if (!username || !password) {
+    alert("Username and password required.");
+    return;
+  }
+
+  const endpoint = isSignup ? "/api/signup" : "/api/login";
+
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password })
+  });
+
+  if (res.ok) {
+    const data = await res.json();
+    localStorage.setItem("username", username);
+    localStorage.setItem("token", data.token);
+    document.getElementById('auth-modal').style.display = 'none';
+    showConfirmationMessage(`✅ ${isSignup ? 'Account created' : 'Signed in'} successfully!`);
+    loadLog(); // auto-load their log
+  } else {
+    alert("❌ " + (await res.text()));
+  }
+}
+
+
     </script>
+
+<div id="auth-modal" onclick="closeAuthModal()" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 2000;">
+  <div onclick="event.stopPropagation()" style="background: white; padding: 30px; border-radius: 10px; width: 300px;">
+    <h3 id="auth-title">Sign In</h3>
+<input
+  type="text"
+  id="auth-username"
+  placeholder="Username"
+  style="width: 100%; margin-bottom: 10px; box-sizing: border-box; padding: 10px; font-size: 16px; line-height: 1.4;"
+/>
+
+<input
+  type="password"
+  id="auth-password"
+  placeholder="Password"
+  style="width: 100%; margin-bottom: 10px; box-sizing: border-box; padding: 10px; font-size: 16px; line-height: 1.4;"
+/>
+
+
+    <button onclick="submitAuth()" style="width: 100%;">Submit</button>
+    <button onclick="closeAuthModal()" style="width: 100%; margin-top: 10px; background-color: #ccc; color: #333;">Cancel</button>
+    <p style="text-align: center; margin-top: 10px;">
+      <a href="#" onclick="toggleAuthMode()">Switch to <span id="auth-switch-label">Sign Up</span></a>
+    </p>
+  </div>
+</div>
+
 </body>
+
 </html>
