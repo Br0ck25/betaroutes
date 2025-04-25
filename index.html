@@ -491,39 +491,6 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
         <input type="hidden" id="edit-index">
     </div>
 
-function showResetModal() {
-  document.getElementById('reset-password-modal').style.display = 'flex';
-}
-
-function closeResetModal() {
-  document.getElementById('reset-password-modal').style.display = 'none';
-}
-
-async function submitResetPassword() {
-  const username = document.getElementById('reset-username').value.trim();
-  const resetKey = document.getElementById('reset-key').value.trim();
-  const newPassword = document.getElementById('reset-new-password').value.trim();
-
-  if (!username || !resetKey || !newPassword) {
-    alert("Please fill out all fields.");
-    return;
-  }
-
-  const res = await fetch("https://betaroutes.jamesbrock25.workers.dev/api/reset-password", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, resetKey, newPassword })
-  });
-
-  if (res.ok) {
-    alert("✅ Password reset successfully. You can now sign in.");
-    closeResetModal();
-  } else {
-    const msg = await res.text();
-    alert("❌ " + msg);
-  }
-}
-
     <script>
 
 function closeAuthModal() {
@@ -1762,14 +1729,22 @@ const endpoint = isSignup
     body: JSON.stringify({ username, password })
   });
 
-  if (res.ok) {
-    const data = await res.json();
-localStorage.setItem("username", username);
-localStorage.setItem("token", data.token);
-document.getElementById('auth-modal').style.display = 'none';
-showConfirmationMessage(`✅ ${isSignup ? 'Account created' : 'Signed in'} successfully!`);
-updateAuthUI();
-location.reload(); // ✅ This will reload and auto-fetch logs using the token
+if (res.ok) {
+  const data = await res.json();
+  localStorage.setItem("username", username);
+  localStorage.setItem("token", data.token);
+  document.getElementById('auth-modal').style.display = 'none';
+  showConfirmationMessage(`✅ ${isSignup ? 'Account created' : 'Signed in'} successfully!`);
+  updateAuthUI();
+
+  // ✅ Show reset key if this was a signup
+  if (isSignup && data.resetKey) {
+    alert(`🔐 Your reset key is:\n\n${data.resetKey}\n\nSave this key somewhere safe. You'll need it to reset your password.`);
+  }
+
+  // ✅ THEN reload the page after user has seen the key
+  location.reload();
+
 loadLog();
   } else {
     alert("❌ " + (await res.text()));
