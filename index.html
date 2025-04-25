@@ -830,7 +830,7 @@ if (startTimeInput && endTimeInput) {
 }
 
 
-    const fuelCost = (totalMileage / mpg) * gasPrice;
+    const fuelCost = (mpg && gasPrice) ? (totalMileage / mpg) * gasPrice : 0;
     const netProfitBeforeOptional = totalEarnings - fuelCost;
     const netProfit = netProfitBeforeOptional - maintenanceCost - suppliesCost;
     const totalHoursSpent = hoursWorked + (totalDuration / 3600);
