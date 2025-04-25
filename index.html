@@ -465,8 +465,7 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
         <button onclick="optimizeRoute()">Optimize Route</button>
         <button onclick="calculateRoute()">Calculate Route</button>
         <button onclick="logResults()">Log Route</button>
-	<button onclick="findGasStationsAlongRoute()">Find Gas Stations Along the Route</button>
-        <button onclick="openInGoogleMaps()">Open Route in Google Maps</button>
+	<button onclick="openInGoogleMaps()">Open Route in Google Maps</button>
 	<div id="confirmation-message" style="display: none; color: green; font-weight: bold; margin-top: 10px;"></div>
 
 
@@ -577,29 +576,6 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
     </div>
 
 <script>
-
-function openInGoogleMaps() {
-  const start = encodeURIComponent(document.getElementById('start-address').value.trim());
-  const end = encodeURIComponent(document.getElementById('end-address').value.trim());
-
-  const allDestinations = Array.from(document.querySelectorAll('input[id^="destination-"]'))
-    .map(input => input.value.trim())
-    .filter(dest => dest.length > 0);
-
-  // 🛑 Don't duplicate end address inside destinations
-  const destinations = allDestinations.filter(dest => dest !== document.getElementById('end-address').value.trim());
-
-  // ✅ Now build the URL
-  let url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(start)}&destination=${encodeURIComponent(end)}`;
-
-  if (destinations.length > 0) {
-    url += `&waypoints=${destinations.map(encodeURIComponent).join('|')}`;
-  }
-
-  window.open(url, '_blank');
-}
-
-
 
 function saveUserInputsToLocalStorage({ mpg, gasPrice, startAddress, endAddress }) {
   localStorage.setItem('mpg', mpg);
@@ -743,37 +719,6 @@ async function calculateRoute() {
             }
         }
 
-// Helper to filter gas stations near highways
-function filterGasStations(stations) {
-  return stations.filter(station => {
-    const vicinity = station.vicinity.toLowerCase();
-    return vicinity.includes('highway') || 
-           vicinity.includes('interstate') || 
-           vicinity.includes('route') || 
-           vicinity.includes('hwy') || 
-           vicinity.includes('i-');
-  });
-}
-
-// Helper to calculate detour time
-function calculateDetourTime(gasStationLocation, nextDestination, callback) {
-  const request = {
-    origin: currentLocation,
-    destination: nextDestination,
-    waypoints: [{ location: gasStationLocation, stopover: true }],
-    travelMode: 'DRIVING'
-  };
-
-  directionsService.route(request, (result, status) => {
-    if (status === 'OK') {
-      const totalSeconds = result.routes[0].legs.reduce((acc, leg) => acc + leg.duration.value, 0);
-      const detourMinutes = totalSeconds / 60;
-      callback(detourMinutes);
-    }
-  });
-}
-
-
         async function calculateRouteData() {
             const startAddress = document.getElementById('start-address').value;
             const endAddress = document.getElementById('end-address').value;
@@ -848,55 +793,6 @@ function calculateDetourTime(gasStationLocation, nextDestination, callback) {
             });
         }
 
-async function findGasStationsAlongRoute() {
-  if (!directionsRenderer || !directionsRenderer.getDirections()) {
-    alert("Please calculate a route first.");
-    return;
-  }
-
-  const path = directionsRenderer.getDirections().routes[0].overview_path;
-
-  if (!path || path.length === 0) {
-    alert("No route path found.");
-    return;
-  }
-
-  const sampledPoints = path.filter((_, index) => index % 10 === 0);
-  const service = new google.maps.places.PlacesService(document.createElement('div')); // Dummy DIV
-
-  for (const point of sampledPoints) {
-    if (!point) continue;
-
-    const lat = typeof point.lat === 'function' ? point.lat() : point.lat;
-    const lng = typeof point.lng === 'function' ? point.lng() : point.lng;
-    const location = new google.maps.LatLng(lat, lng);
-
-    await new Promise((resolve) => {
-      service.nearbySearch({
-        location: location,
-        radius: 2000,
-        type: ['gas_station']
-      }, (results, status) => {
-        if (status === google.maps.places.PlacesServiceStatus.OK && results.length > 0) {
-          results.forEach(gasStation => {
-            console.log(`✅ Gas Station near route:`, gasStation.name, gasStation.vicinity);
-            alert(`Gas Station: ${gasStation.name}\nAddress: ${gasStation.vicinity}`);
-          });
-        } else if (status !== google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
-          console.error(`NearbySearch error: ${status}`);
-        }
-        setTimeout(resolve, 300); // Delay before next call
-      });
-    });
-  }
-}
-
-
-
-
-
-
-
 function updateUI(data) {
     if (data) {
         document.getElementById('total-mileage').textContent = data.totalMileage;
@@ -935,6 +831,27 @@ document.getElementById('mileage-display').textContent = "Original Route: " + or
         `;
         document.getElementById('detailed-results').innerHTML = detailedResultsHTML;
     }
+}
+
+function openInGoogleMaps() {
+  const start = encodeURIComponent(document.getElementById('start-address').value.trim());
+  const end = encodeURIComponent(document.getElementById('end-address').value.trim());
+
+  const allDestinations = Array.from(document.querySelectorAll('input[id^="destination-"]'))
+    .map(input => input.value.trim())
+    .filter(dest => dest.length > 0);
+
+  // 🛑 Don't duplicate end address inside destinations
+  const destinations = allDestinations.filter(dest => dest !== document.getElementById('end-address').value.trim());
+
+  // ✅ Now build the URL
+  let url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(start)}&destination=${encodeURIComponent(end)}`;
+
+  if (destinations.length > 0) {
+    url += `&waypoints=${destinations.map(encodeURIComponent).join('|')}`;
+  }
+
+  window.open(url, '_blank');
 }
 
 
