@@ -479,11 +479,29 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
         <div id="log-header">
             <h2>Log</h2>
             <div>
-                <label for="organize-by-day">Organize by Day:</label>
-                <select id="organize-by-day" onchange="displayLog(this.value)">
-                    <option value="all">All</option>
-                </select>
-            </div>
+  <label for="filter-year">Year:</label>
+  <select id="filter-year" onchange="filterByDate()">
+    <option value="">All</option>
+  </select>
+
+  <label for="filter-month" style="margin-left: 10px;">Month:</label>
+  <select id="filter-month" onchange="filterByDate()">
+    <option value="">All</option>
+    <option value="01">January</option>
+    <option value="02">February</option>
+    <option value="03">March</option>
+    <option value="04">April</option>
+    <option value="05">May</option>
+    <option value="06">June</option>
+    <option value="07">July</option>
+    <option value="08">August</option>
+    <option value="09">September</option>
+    <option value="10">October</option>
+    <option value="11">November</option>
+    <option value="12">December</option>
+  </select>
+</div>
+
         </div>
         <ul id="log-list">
         </ul>
@@ -610,7 +628,7 @@ let logEntries = [];
 document.addEventListener('DOMContentLoaded', async () => {
   logEntries = await loadLog();
   displayLog();         // ✅ Show the logs on page
-  populateDayOptions(); // ✅ Restore the dropdown
+  populateYearOptions();  // ✅ Populate the year dropdown too
 });
 
 function showConfirmationMessage(message) {
@@ -666,7 +684,7 @@ document.getElementById("end-address").addEventListener("change", resetOriginalM
             document.querySelectorAll('#destinations-container .destination input[type="text"]').forEach(initAutocompleteDestination);
 
             displayLog();
-            populateDayOptions();
+            
         }
 
 window.initMap = initMap;
@@ -681,7 +699,7 @@ window.initMap = initMap;
             if (calculationResult) {
                 logEntry(calculationResult);
                 displayLog();
-                populateDayOptions();
+                
             }
         }
 
@@ -745,7 +763,7 @@ async function calculateRoute() {
     const profitPerHour = totalHoursSpent > 0 ? netProfit / totalHoursSpent : 0;
 
                         resolve({
-                            date: document.getElementById('log-date').value || new Date().toLocaleDateString(),
+                            date: document.getElementById('log-date').value || new Date().toISOString().split('T')[0],
                             startTime: startAddress,
                             endTime: endAddress,
                             destinations: destinations.map(d => d.location),
@@ -835,9 +853,10 @@ async function logResults() {
   const calculationResult = await calculateRouteData();
   if (calculationResult) {
     logEntry(calculationResult);
-    displayLog();
-    populateDayOptions();
-    updateUI(calculationResult);
+displayLog();
+populateYearOptions(); // ✅ add this
+updateUI(calculationResult);
+
 
     showConfirmationMessage('✅ Route logged successfully!');
   }
@@ -1071,58 +1090,56 @@ async function loadLog() {
 }
 
 
-function displayLog(filterDay = 'all') {
-    const logList = document.getElementById('log-list');
-    const organizedLog = organizeLogByDay();
-    logList.innerHTML = '';
+function displayLog(filterFn = () => true) {
+  const logList = document.getElementById('log-list');
+  const organizedLog = organizeLogByDay();
+  logList.innerHTML = '';
 
-const sortedDays = Object.keys(organizedLog).sort((a, b) => new Date(b) - new Date(a));
-for (const day of sortedDays) {
-        if (filterDay === 'all' || filterDay === day) {
-            const dayHeading = document.createElement('h3');
-            dayHeading.textContent = day;
-            logList.appendChild(dayHeading);
+  const sortedDays = Object.keys(organizedLog).sort((a, b) => new Date(b) - new Date(a));
+  for (const day of sortedDays) {
+    if (organizedLog[day].some(entry => filterFn(entry.date))) {
+      const dayHeading = document.createElement('h3');
+      dayHeading.textContent = day;
+      logList.appendChild(dayHeading);
 
-const entries = organizedLog[day].slice().sort((a, b) => new Date(b.date) - new Date(a.date));
-for (const entry of entries) {
+      const entries = organizedLog[day].slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+      for (const entry of entries.filter(e => filterFn(e.date))) {
+        if (entry) {
+          const index = logEntries.findIndex(e => JSON.stringify(e) === JSON.stringify(entry));
+          const listItem = document.createElement('li');
+          const destinations = Array.isArray(entry.destinations) ? entry.destinations.join(', ') : '';
 
-                //  Check if entry is defined
-                if (entry) {
-                    const index = logEntries.findIndex(e => JSON.stringify(e) === JSON.stringify(entry));
-                    const listItem = document.createElement('li');
-                    // Safely access entry.destinations and use an empty string as a fallback
-                    const destinations = Array.isArray(entry.destinations) ? entry.destinations.join(', ') : '';
-
-    listItem.innerHTML = `
-        <div class="log-item-details">
-            <strong>Date:</strong> ${entry.date}<br>
-            <strong>Start:</strong> ${entry.startTime}<br>
-            <strong>Destinations:</strong> ${destinations}<br>
-            <strong>End:</strong> ${entry.endTime}<br>
-            <strong>Earnings:</strong> $${entry.totalEarnings || 0}<br>
-            <strong>Fuel Consumption Cost:</strong> $${entry.fuelCost}<br>
-            <strong>Maintenance:</strong> $${entry.maintenanceCost}<br>
-            <strong>Supplies:</strong> $${entry.suppliesCost}<br>
-            <strong>Net Profit:</strong> $${entry.netProfit || 0}
-        </div>
-        <div class="log-actions">
-            <button class="edit-btn" onclick="openEditForm(${index})">Edit</button>
-            <button onclick="viewLogEntry(${index})">View Details</button>
-            <button onclick="deleteLogEntry(${index})">Delete</button>
-        </div>
-    `;
-                    logList.appendChild(listItem);
-                }
-            }
+          listItem.innerHTML = `
+            <div class="log-item-details">
+              <strong>Date:</strong> ${entry.date}<br>
+              <strong>Start:</strong> ${entry.startTime}<br>
+              <strong>Destinations:</strong> ${destinations}<br>
+              <strong>End:</strong> ${entry.endTime}<br>
+              <strong>Earnings:</strong> $${entry.totalEarnings || 0}<br>
+              <strong>Fuel Consumption Cost:</strong> $${entry.fuelCost}<br>
+              <strong>Maintenance:</strong> $${entry.maintenanceCost}<br>
+              <strong>Supplies:</strong> $${entry.suppliesCost}<br>
+              <strong>Net Profit:</strong> $${entry.netProfit || 0}
+            </div>
+            <div class="log-actions">
+              <button class="edit-btn" onclick="openEditForm(${index})">Edit</button>
+              <button onclick="viewLogEntry(${index})">View Details</button>
+              <button onclick="deleteLogEntry(${index})">Delete</button>
+            </div>
+          `;
+          logList.appendChild(listItem);
         }
+      }
     }
+  }
 
-    if (logList.innerHTML === '') {
-        const emptyMessage = document.createElement('li');
-        emptyMessage.textContent = filterDay === 'all' ? 'No log entries yet.' : `No entries for ${filterDay}.`;
-        logList.appendChild(emptyMessage);
-    }
+  if (logList.innerHTML === '') {
+    const emptyMessage = document.createElement('li');
+    emptyMessage.textContent = 'No log entries found for selected filter.';
+    logList.appendChild(emptyMessage);
+  }
 }
+
 
 function viewLogEntry(index) {
     const entry = logEntries[index];
@@ -1180,8 +1197,7 @@ function viewLogEntry(index) {
             if (confirm('Are you sure you want to delete this log entry?')) {
                 logEntries.splice(index, 1);
                 saveLog();
-                displayLog(document.getElementById('organize-by-day').value);
-                populateDayOptions();
+                filterByDate();
             }
         }
 
@@ -1195,19 +1211,22 @@ function viewLogEntry(index) {
             }, {});
         }
 
-        function populateDayOptions() {
-            const organizeByDaySelect = document.getElementById('organize-by-day');
-            const currentFilter = organizeByDaySelect.value;
-            const days = Object.keys(organizeLogByDay());
-            organizeByDaySelect.innerHTML = '<option value="all">All</option>';
-            days.forEach(day => {
-                const option = document.createElement('option');
-                option.value = day;
-                option.textContent = day;
-                organizeByDaySelect.appendChild(option);
-            });
-            organizeByDaySelect.value = currentFilter; // Restore the previous filter
-        }
+
+
+function populateYearOptions() {
+  const yearSelect = document.getElementById('filter-year');
+  console.log("✅ logEntries seen by populateYearOptions:", logEntries.map(e => e.date));
+  const years = Array.from(new Set(logEntries.map(e => e.date.split('-')[0])));
+console.log("✅ Extracted years:", years);
+  yearSelect.innerHTML = '<option value="">All</option>';
+  years.sort((a, b) => b - a).forEach(y => {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y;
+    yearSelect.appendChild(opt);
+  });
+}
+
 
 function closeEditForm() {
     console.log("closeEditForm function called");
@@ -1588,7 +1607,7 @@ function saveEditedLogEntry() {
     entry.profitPerHour = totalHoursSpent > 0 ? (entry.netProfit / totalHoursSpent).toFixed(2) : '0.00';
 
     saveLog();
-    displayLog(document.getElementById('organize-by-day').value);
+    filterByDate();
     closeEditForm();
 }
 
@@ -1745,8 +1764,8 @@ function importLog() {
 
             logEntries = [...logEntries, ...newLogEntries];
             saveLog();
-            displayLog(document.getElementById('organize-by-day').value);
-            populateDayOptions();
+            filterByDate();
+            populateYearOptions();
             alert('Log imported successfully!');
         };
 
@@ -1973,6 +1992,17 @@ window.toggleMenu = function () {
   menu.classList.toggle("show");
 };
 
+function filterByDate() {
+  const year = document.getElementById('filter-year').value;
+  const month = document.getElementById('filter-month').value;
+
+  displayLog((entryDate) => {
+    const [yyyy, mm] = entryDate.split('-');
+    const matchesYear = !year || yyyy === year;
+    const matchesMonth = !month || mm === month;
+    return matchesYear && matchesMonth;
+  });
+}
 
 
     </script>
