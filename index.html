@@ -1264,6 +1264,19 @@ function viewLogEntry(index) {
     const earnings = Array.isArray(entry.earnings)
         ? entry.earnings.map(e => `$${parseFloat(e).toFixed(2)}`).join(', ')
         : '$0.00';
+const formattedHoursWorked = entry.hoursWorked
+  ? `${parseFloat(entry.hoursWorked).toFixed(2)} ${parseFloat(entry.hoursWorked) === 1 ? 'hour' : 'hours'}`
+  : '0.00 hours';
+
+const formattedNetProfit = formatCurrency(entry.netProfit);
+const formattedProfitPerHour = formatCurrency(entry.profitPerHour);
+const formattedTotalEarnings = formatCurrency(entry.totalEarnings);
+const formattedFuelCost = formatCurrency(entry.fuelCost);
+const formattedMaintenanceCost = formatCurrency(entry.maintenanceCost);
+const formattedSuppliesCost = formatCurrency(entry.suppliesCost);
+
+
+
 
 modal.innerHTML = `
   <h3>Log Entry Details</h3>
@@ -1278,9 +1291,10 @@ modal.innerHTML = `
   <p><strong>Fuel Cost:</strong> $${entry.fuelCost}</p>
   <p><strong>Maintenance:</strong> $${entry.maintenanceCost}</p>
   <p><strong>Supplies:</strong> $${entry.suppliesCost}</p>
-  <p><strong>Hours Worked:</strong> ${entry.hoursWorked ?? '0'} hours</p>
-  <p><strong>Net Profit:</strong> $${entry.netProfit}</p>
-  <p><strong>Profit per Hour:</strong> $${entry.profitPerHour}</p>
+  <p><strong>Hours Worked:</strong> ${formattedHoursWorked}</p>
+  <p><strong>Net Profit:</strong> ${formattedNetProfit}</p>
+  <p><strong>Profit per Hour:</strong> ${formattedProfitPerHour}</p>
+
 
   <button onclick="openLogEntryInGoogleMaps(${index})" style="background-color: #0d6efd; margin-top: 10px;">Open in Google Maps</button>
   <button onclick="this.closest('.custom-view-overlay').remove()" style="background-color: #dc3545; margin-top: 10px;">Close</button>
@@ -2139,6 +2153,7 @@ function openLogEntryInGoogleMaps(index) {
 function handleTimeChange() {
   const startTimeInput = document.getElementById('start-time').value;
   const endTimeInput = document.getElementById('end-time').value;
+  const hoursWorkedInput = document.getElementById('hours-worked');
 
   if (startTimeInput && endTimeInput) {
     const [startHours, startMinutes] = startTimeInput.split(':').map(Number);
@@ -2148,25 +2163,27 @@ function handleTimeChange() {
     let endTotalMinutes = endHours * 60 + endMinutes;
 
     if (endTotalMinutes < startTotalMinutes) {
-      // Overnight shift
-      endTotalMinutes += 24 * 60;
+      endTotalMinutes += 24 * 60; // Overnight shift
     }
 
     let totalWorkedMinutes = endTotalMinutes - startTotalMinutes;
-
-    let driveMinutes = 0;
-    if (typeof totalDuration === 'number') {
-      driveMinutes = totalDuration / 60; // Driving time in minutes
-    }
-
+    let driveMinutes = typeof totalDuration === 'number' ? totalDuration / 60 : 0;
     const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
     const hoursWorked = actualWorkedMinutes / 60;
 
-    document.getElementById('hours-worked').value = hoursWorked.toFixed(2);
+    hoursWorkedInput.value = hoursWorked.toFixed(2);
+    hoursWorkedInput.readOnly = true; // 🛡️ make it readonly!
+    hoursWorkedInput.style.backgroundColor = "#f0f0f0"; // light gray to indicate readonly
   } else {
-    // if either start or end time is missing, clear the Hours Worked field
-    document.getElementById('hours-worked').value = '';
+    hoursWorkedInput.value = '';
+    hoursWorkedInput.readOnly = false; // ✅ make it editable again
+    hoursWorkedInput.style.backgroundColor = ""; // restore original background
   }
+}
+
+function formatCurrency(value) {
+  if (isNaN(value)) return '$0.00';
+  return `$${parseFloat(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 
