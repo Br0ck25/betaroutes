@@ -6,6 +6,25 @@
     <title></title>
 
     <style>
+
+#account-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    z-index: 9999;
+    min-width: 180px;
+    padding: 5px 0;
+  }
+
+  #account-menu.show {
+    display: block !important;
+  }
+
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background-color: #f4f4f9;
@@ -340,19 +359,35 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
 </div>
 
 
-<div id="logout-message" style="display: none; text-align: center; margin-bottom: 20px;">
-  ✅ You’re signed in as <span id="username-display"></span>.
-  
-  <div style="display: inline-block; position: relative;">
-    <button onclick="toggleMenu()" style="margin-left: 10px; font-size: 20px;">☰</button>
-    
-    <div id="account-menu" style="display: none; position: absolute; right: 0; background: white; border: 1px solid #ccc; border-radius: 6px; margin-top: 5px; text-align: left; z-index: 999;">
-      <button onclick="logout()" style="width: 100%; padding: 10px; border: none; background: none;">Log Out</button>
-      <button onclick="showPasswordModal()" style="width: 100%; padding: 10px; border: none; background: none;">Change Password</button>
-      <button onclick="showDeleteModal()" style="width: 100%; padding: 10px; border: none; background: none; color: red;">Delete Account</button>
+<div id="logout-message" style="display: none; margin: 20px auto; text-align: center; max-width: 300px;">
+  ✅ You’re signed in as <span id="username-display"></span>
+
+  <div style="position: relative; display: inline-block;">
+    <button onclick="toggleMenu()" style="margin-top: 10px; font-size: 20px;">☰</button>
+
+    <div id="account-menu" style="
+      display: none;
+      position: absolute;
+      top: 100%;
+      right: 0;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      z-index: 9999;
+      min-width: 180px;
+      padding: 5px 0;
+    ">
+      <button onclick="logout()" style="width: 100%; padding: 10px; background: none; border: none; color: black; text-align: left;">Log Out</button>
+      <button onclick="showPasswordModal()" style="width: 100%; padding: 10px; background: none; border: none; color: black; text-align: left;">Change Password</button>
+      <button onclick="showDeleteModal()" style="width: 100%; padding: 10px; background: none; border: none; color: red; text-align: left;">Delete Account</button>
     </div>
   </div>
 </div>
+
+
+
+
 
 
 
@@ -498,12 +533,7 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
         <input type="hidden" id="edit-index">
     </div>
 
-    <script>
-
-function toggleMenu() {
-  const menu = document.getElementById('account-menu');
-  menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
-}
+<script>
 
 // Optional: Close menu if user clicks outside it
 document.addEventListener('click', function (event) {
@@ -1900,6 +1930,16 @@ async function submitDeleteAccount() {
     alert("❌ " + msg);
   }
 }
+
+window.toggleMenu = function () {
+  console.log("toggleMenu() triggered!");
+
+  const menu = document.getElementById('account-menu');
+  if (!menu) return console.warn('Menu not found');
+
+  menu.classList.toggle("show");
+};
+
 
 
     </script>
