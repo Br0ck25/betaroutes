@@ -853,11 +853,6 @@ function findGasStationsAlongRoute() {
     alert("Please calculate a route first.");
     return;
   }
-  
-  if (!map) {
-    alert("Map not initialized yet!");
-    return;
-  }
 
   const path = directionsRenderer.getDirections().routes[0].overview_path;
 
@@ -868,7 +863,7 @@ function findGasStationsAlongRoute() {
 
   const sampledPoints = path.filter((_, index) => index % 10 === 0);
 
-  const service = new google.maps.places.PlacesService(map);
+  const service = new google.maps.places.PlacesService(document.createElement('div')); // ✅ dummy div
 
   sampledPoints.forEach((point, idx) => {
     if (!point || !point.lat || !point.lng) {
@@ -894,6 +889,7 @@ function findGasStationsAlongRoute() {
     });
   });
 }
+
 
 
 
