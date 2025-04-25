@@ -390,9 +390,9 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
       min-width: 180px;
       padding: 5px 0;
     ">
-      <button onclick="logout()" style="width: 100%; padding: 10px; background: none; border: none; color: black; text-align: left;">Log Out</button>
-      <button onclick="showPasswordModal()" style="width: 100%; padding: 10px; background: none; border: none; color: black; text-align: left;">Change Password</button>
-      <button onclick="showDeleteModal()" style="width: 100%; padding: 10px; background: none; border: none; color: red; text-align: left;">Delete Account</button>
+      <button onclick="closeMenu(); logout()" style="width: 100%; padding: 10px; background: none; border: none; color: black; text-align: left;">Log Out</button>
+      <button onclick="closeMenu(); showPasswordModal()" style="width: 100%; padding: 10px; background: none; border: none; color: black; text-align: left;">Change Password</button>
+      <button onclick="closeMenu(); showDeleteModal()" style="width: 100%; padding: 10px; background: none; border: none; color: red; text-align: left;">Delete Account</button>
     </div>
   </div>
 </div>
@@ -547,6 +547,26 @@ input[type="text"], input[type="number"], input[type="date"], button, select {
     </div>
 
 <script>
+
+document.addEventListener('click', function(event) {
+  const menu = document.getElementById('account-menu');
+  const button = event.target.closest('button');
+  const isToggle = button && button.innerText === '☰';
+
+  if (menu && !menu.contains(event.target) && !isToggle) {
+    closeMenu();
+  }
+});
+
+
+function closeMenu() {
+  const menu = document.getElementById('account-menu');
+  if (menu) {
+    menu.classList.remove('show');
+    menu.style.display = 'none';
+  }
+}
+
 
 // Optional: Close menu if user clicks outside it
 document.addEventListener('click', function (event) {
