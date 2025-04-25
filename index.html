@@ -854,32 +854,42 @@ function findGasStationsAlongRoute() {
     return;
   }
 
-  const path = directionsRenderer.getDirections().routes[0].overview_path; // Path points
+  const path = directionsRenderer.getDirections().routes[0].overview_path;
 
-  // Sample every Nth point (adjust sampling rate for speed vs accuracy)
-  const sampledPoints = path.filter((_, index) => index % 10 === 0);
+  if (!path || path.length === 0) {
+    alert("No route path found.");
+    return;
+  }
+
+  const sampledPoints = path.filter((_, index) => index % 10 === 0); // sample every 10th point
 
   const service = new google.maps.places.PlacesService(map);
-  
+
   sampledPoints.forEach((point, idx) => {
+    if (!point || !point.lat || !point.lng) {
+      console.warn(`Skipped invalid point at index ${idx}`);
+      return;
+    }
+
+    const location = new google.maps.LatLng(point.lat(), point.lng());
+
     service.nearbySearch({
-      location: point,
-      radius: 2000, // 2km around the route
+      location: location,
+      radius: 2000,
       type: ['gas_station']
     }, (results, status) => {
-      if (status === google.maps.places.PlacesServiceStatus.OK) {
+      if (status === google.maps.places.PlacesServiceStatus.OK && results.length > 0) {
         results.forEach(gasStation => {
           console.log(`✅ Gas Station near route:`, gasStation.name, gasStation.vicinity);
-
-          // Example: pop up each one as an alert
           alert(`Gas Station: ${gasStation.name}\nAddress: ${gasStation.vicinity}`);
-          
-          // TODO: (Optional) Only show unique ones by name or location.
         });
+      } else {
+        console.warn(`No gas stations found near sampled point ${idx}`);
       }
     });
   });
 }
+
 
 
 
