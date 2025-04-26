@@ -64,10 +64,25 @@
   transform: scale(1.02);
 }
 
-/* (Optional) Highlight while dragging */
+/* Slightly fade other items when dragging */
 .sortable-ghost {
   opacity: 0.5;
 }
+
+/* The item you are dragging */
+.sortable-chosen {
+  background: #e0f7fa; /* light blue */
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+  transform: scale(1.03); /* slightly bigger */
+  transition: all 0.2s ease;
+}
+
+/* While dragging, even more visible */
+.sortable-drag {
+  opacity: 1;
+  transform: rotate(2deg) scale(1.05);
+}
+
 
 
       .sortable-container .destination:active {
@@ -1004,14 +1019,18 @@
         );
 
         new Sortable(destinationsContainer, {
-          animation: 150,
-          handle: ".drag-handle", // ✅ Only drag using the ☰ handle
-          ghostClass: "sortable-ghost", // Optional: adds a ghost class while dragging
-          onEnd: (event) => {
-            console.log("Moved from", event.oldIndex, "to", event.newIndex);
-            resetOriginalMileageDisplay();
-          },
-        });
+  animation: 200, // smoother animation
+  handle: ".drag-handle",
+  ghostClass: "sortable-ghost",
+  chosenClass: "sortable-chosen", // Highlight the dragged item
+  dragClass: "sortable-drag", // When actually dragging
+  onEnd: (event) => {
+    console.log("Moved from", event.oldIndex, "to", event.newIndex);
+    resetOriginalMileageDisplay();
+    renumberDestinations(); // We'll add this too (optional)
+  },
+});
+
 
         const script = document.createElement("script");
         script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ&libraries=places&callback=initMap`;
