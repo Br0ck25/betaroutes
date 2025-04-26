@@ -879,6 +879,7 @@
       }
 
       function initMap() {
+        window.googleMapsReady = true;
         map = new google.maps.Map(document.getElementById("map"), {
           zoom: 10,
           center: { lat: 37.7749, lng: -122.4194 },
@@ -2154,19 +2155,19 @@
             }
 
             if (
+              window.googleMapsReady &&
               typeof google !== "undefined" &&
               google.maps &&
               google.maps.places
             ) {
-              // ✅ Google Maps API ready, setup autocomplete immediately
               setupEditAutocomplete();
             } else {
-              // 🕒 Google Maps not ready yet — wait for it
               console.warn("Waiting for Google Maps API...");
 
               let retryCount = 0;
               const retryInterval = setInterval(() => {
                 if (
+                  window.googleMapsReady &&
                   typeof google !== "undefined" &&
                   google.maps &&
                   google.maps.places
@@ -2179,14 +2180,14 @@
                 } else {
                   retryCount++;
                   if (retryCount >= 20) {
-                    // 20 retries x 200ms = 4 seconds max
+                    // 4 seconds max
                     console.error(
                       "❌ Google Maps API failed to load after waiting."
                     );
                     clearInterval(retryInterval);
                   }
                 }
-              }, 200); // Retry every 200ms
+              }, 200);
             }
           }, 0);
 
