@@ -2130,65 +2130,27 @@
           updateEditTotalEarnings();
 
           setTimeout(() => {
-            function setupEditAutocomplete() {
-              document
-                .querySelectorAll(
-                  '#edit-destinations-container input[id^="edit-destination-"]'
-                )
-                .forEach((input) => {
-                  const autocomplete = new google.maps.places.Autocomplete(
-                    input,
-                    { types: ["geocode"] }
-                  );
+            document
+              .querySelectorAll(
+                '#edit-destinations-container input[id^="edit-destination-"]'
+              )
+              .forEach((input) => {
+                const autocomplete = new google.maps.places.Autocomplete(
+                  input,
+                  { types: ["geocode"] }
+                );
 
-                  initAutocompleteDestination(input);
+                initAutocompleteDestination(input);
 
-                  autocomplete.addListener("place_changed", () => {
-                    const place = autocomplete.getPlace();
-                    if (place && place.geometry) {
-                      recalculateEditMileageAndCosts();
-                    } else {
-                      console.warn("Invalid place selected for destination.");
-                    }
-                  });
-                });
-            }
-
-            if (
-              window.googleMapsReady &&
-              typeof google !== "undefined" &&
-              google.maps &&
-              google.maps.places
-            ) {
-              setupEditAutocomplete();
-            } else {
-              console.warn("Waiting for Google Maps API...");
-
-              let retryCount = 0;
-              const retryInterval = setInterval(() => {
-                if (
-                  window.googleMapsReady &&
-                  typeof google !== "undefined" &&
-                  google.maps &&
-                  google.maps.places
-                ) {
-                  console.log(
-                    "✅ Google Maps API loaded. Setting up Edit autocomplete!"
-                  );
-                  clearInterval(retryInterval);
-                  setupEditAutocomplete();
-                } else {
-                  retryCount++;
-                  if (retryCount >= 20) {
-                    // 4 seconds max
-                    console.error(
-                      "❌ Google Maps API failed to load after waiting."
-                    );
-                    clearInterval(retryInterval);
+                autocomplete.addListener("place_changed", () => {
+                  const place = autocomplete.getPlace();
+                  if (place && place.geometry) {
+                    recalculateEditMileageAndCosts();
+                  } else {
+                    console.warn("Invalid place selected for destination.");
                   }
-                }
-              }, 200);
-            }
+                });
+              });
           }, 0);
 
           document.getElementById("edit-form-container").style.display =
