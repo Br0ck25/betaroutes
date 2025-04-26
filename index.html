@@ -35,6 +35,14 @@
     <!-- pick your site background color -->
 
     <style>
+      .dragging {
+        opacity: 0.5;
+        background-color: #f0f0f0;
+      }
+      .drag-handle {
+        cursor: grab;
+      }
+
       body,
       html,
       #log-container {
@@ -796,7 +804,26 @@
 
     <div id="overlay" class="hidden"></div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+
     <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        const destinationsContainer = document.getElementById(
+          "destinations-container"
+        );
+
+        if (destinationsContainer) {
+          Sortable.create(destinationsContainer, {
+            animation: 150,
+            handle: ".drag-handle", // Allow dragging by a handle (optional, more UX-friendly)
+            ghostClass: "dragging", // Adds class while dragging
+            onEnd: function (evt) {
+              resetOriginalMileageDisplay(); // Recalculate route when destination order changes
+            },
+          });
+        }
+      });
+
       function toggleManageLogMenu() {
         const menu = document.getElementById("manage-log-menu");
         const body = document.body;
@@ -1517,23 +1544,17 @@
       }
 
       function addDestination() {
-        const newDestinationIndex =
-          document.querySelectorAll("#destinations-container .destination")
-            .length + 1;
-        const container = document.getElementById("destinations-container");
-        const newDestinationDiv = document.createElement("div");
-        newDestinationDiv.classList.add("destination");
         newDestinationDiv.innerHTML = `
-    <label for="destination-${newDestinationIndex}">Destination ${newDestinationIndex}</label>
-    <input type="text" id="destination-${newDestinationIndex}" placeholder="Enter destination address" required>
-    <label for="earnings-${newDestinationIndex}">Earnings for Destination ${newDestinationIndex}</label>
-    <input type="number" id="earnings-${newDestinationIndex}" placeholder="Enter earnings for destination" required>
-    <div class="destination-actions">
-        <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
-        <button class="move-btn" onclick="moveDestinationUp(this)">Move Up</button>
-        <button class="move-btn" onclick="moveDestinationDown(this)">Move Down</button>
-    </div>
+  <div class="drag-handle" style="cursor: grab; font-size: 20px; margin-bottom: 5px;">&#x2630;</div>
+  <label for="destination-${newDestinationIndex}">Destination ${newDestinationIndex}</label>
+  <input type="text" id="destination-${newDestinationIndex}" placeholder="Enter destination address" required>
+  <label for="earnings-${newDestinationIndex}">Earnings for Destination ${newDestinationIndex}</label>
+  <input type="number" id="earnings-${newDestinationIndex}" placeholder="Enter earnings for destination" required>
+  <div class="destination-actions">
+    <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
+  </div>
 `;
+
         container.appendChild(newDestinationDiv);
         initAutocompleteDestination(
           newDestinationDiv.querySelector('input[type="text"]')
