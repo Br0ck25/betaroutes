@@ -37,30 +37,38 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.14.0/Sortable.min.js"></script>
 
     <style>
-      .drag-handle {
-        font-size: 22px;
-        cursor: grab;
-        padding: 8px;
-        margin-right: 10px;
-        display: inline-block;
-        user-select: none; /* prevent text selection when dragging */
-      }
 
-      .destination {
-        display: flex;
-        align-items: center;
-        padding: 10px;
-        margin-bottom: 10px;
-        background-color: #fff;
-        border: 1px dashed #ccc; /* subtle dashed border to show movable */
-        border-radius: 6px;
-      }
 
-      .destination:active {
-        cursor: grabbing;
-        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-        transform: scale(1.02);
-      }
+.drag-handle {
+  font-size: 22px;
+  cursor: grab;
+  padding: 8px;
+  margin-right: 10px;
+  user-select: none;
+}
+
+.destination {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  margin-bottom: 10px;
+  background-color: #fff;
+  border: 1px dashed #ccc;
+  border-radius: 6px;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.destination:active {
+  cursor: grabbing;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+  transform: scale(1.02);
+}
+
+/* (Optional) Highlight while dragging */
+.sortable-ghost {
+  opacity: 0.5;
+}
+
 
       .sortable-container .destination:active {
         cursor: grabbing;
