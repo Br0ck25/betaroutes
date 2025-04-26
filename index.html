@@ -35,6 +35,14 @@
     <!-- pick your site background color -->
 
     <style>
+      .dragging {
+        opacity: 0.5;
+        background-color: #f0f0f0;
+      }
+      .drag-handle {
+        cursor: grab;
+      }
+
       body,
       html,
       #log-container {
@@ -796,7 +804,26 @@
 
     <div id="overlay" class="hidden"></div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+
     <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        const destinationsContainer = document.getElementById(
+          "destinations-container"
+        );
+
+        if (destinationsContainer) {
+          Sortable.create(destinationsContainer, {
+            animation: 150,
+            handle: ".drag-handle", // Allow dragging by a handle (optional, more UX-friendly)
+            ghostClass: "dragging", // Adds class while dragging
+            onEnd: function (evt) {
+              resetOriginalMileageDisplay(); // Recalculate route when destination order changes
+            },
+          });
+        }
+      });
+
       function toggleManageLogMenu() {
         const menu = document.getElementById("manage-log-menu");
         const body = document.body;
@@ -1517,23 +1544,17 @@
       }
 
       function addDestination() {
-        const newDestinationIndex =
-          document.querySelectorAll("#destinations-container .destination")
-            .length + 1;
-        const container = document.getElementById("destinations-container");
-        const newDestinationDiv = document.createElement("div");
-        newDestinationDiv.classList.add("destination");
         newDestinationDiv.innerHTML = `
-    <label for="destination-${newDestinationIndex}">Destination ${newDestinationIndex}</label>
-    <input type="text" id="destination-${newDestinationIndex}" placeholder="Enter destination address" required>
-    <label for="earnings-${newDestinationIndex}">Earnings for Destination ${newDestinationIndex}</label>
-    <input type="number" id="earnings-${newDestinationIndex}" placeholder="Enter earnings for destination" required>
-    <div class="destination-actions">
-        <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
-        <button class="move-btn" onclick="moveDestinationUp(this)">Move Up</button>
-        <button class="move-btn" onclick="moveDestinationDown(this)">Move Down</button>
-    </div>
+  <div class="drag-handle" style="cursor: grab; font-size: 20px; margin-bottom: 5px;">&#x2630;</div>
+  <label for="destination-${newDestinationIndex}">Destination ${newDestinationIndex}</label>
+  <input type="text" id="destination-${newDestinationIndex}" placeholder="Enter destination address" required>
+  <label for="earnings-${newDestinationIndex}">Earnings for Destination ${newDestinationIndex}</label>
+  <input type="number" id="earnings-${newDestinationIndex}" placeholder="Enter earnings for destination" required>
+  <div class="destination-actions">
+    <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
+  </div>
 `;
+
         container.appendChild(newDestinationDiv);
         initAutocompleteDestination(
           newDestinationDiv.querySelector('input[type="text"]')
@@ -3008,81 +3029,6 @@
         const displayHours = hours % 12 || 12; // 0 becomes 12
         return `${displayHours}:${minutes.toString().padStart(2, "0")} ${ampm}`;
       }
-
-      function saveFormProgress() {
-        const formProgress = {
-          date: document.getElementById("log-date")?.value || "",
-          startAddress: document.getElementById("start-address")?.value || "",
-          endAddress: document.getElementById("end-address")?.value || "",
-          destinations: Array.from(
-            document.querySelectorAll(
-              '#destinations-container input[id^="destination-"]'
-            )
-          ).map((input) => input.value),
-          earnings: Array.from(
-            document.querySelectorAll(
-              '#destinations-container input[id^="earnings-"]'
-            )
-          ).map((input) => input.value),
-          mpg: document.getElementById("mpg")?.value || "",
-          gasPrice: document.getElementById("gas-price")?.value || "",
-          startTime: document.getElementById("start-time")?.value || "",
-          endTime: document.getElementById("end-time")?.value || "",
-          hoursWorked: document.getElementById("hours-worked")?.value || "",
-          maintenanceCost:
-            document.getElementById("maintenance-cost")?.value || "",
-          suppliesCost: document.getElementById("supplies-cost")?.value || "",
-        };
-
-        localStorage.setItem("formProgress", JSON.stringify(formProgress));
-      }
-
-      function loadFormProgress() {
-        const saved = localStorage.getItem("formProgress");
-        if (!saved) return;
-
-        const formProgress = JSON.parse(saved);
-
-        if (confirm("🚧 You have unsaved trip data. Restore it?")) {
-          document.getElementById("log-date").value = formProgress.date || "";
-          document.getElementById("start-address").value =
-            formProgress.startAddress || "";
-          document.getElementById("end-address").value =
-            formProgress.endAddress || "";
-          document.getElementById("mpg").value = formProgress.mpg || "";
-          document.getElementById("gas-price").value =
-            formProgress.gasPrice || "";
-          document.getElementById("start-time").value =
-            formProgress.startTime || "";
-          document.getElementById("end-time").value =
-            formProgress.endTime || "";
-          document.getElementById("hours-worked").value =
-            formProgress.hoursWorked || "";
-          document.getElementById("maintenance-cost").value =
-            formProgress.maintenanceCost || "";
-          document.getElementById("supplies-cost").value =
-            formProgress.suppliesCost || "";
-
-          // Restore destinations
-          const destinationsContainer = document.getElementById(
-            "destinations-container"
-          );
-          destinationsContainer.innerHTML = ""; // Clear existing destinations
-
-          if (formProgress.destinations?.length) {
-            formProgress.destinations.forEach((destination, index) => {
-              addDestination(); // adds new destination div
-              document.getElementById(`destination-${index + 1}`).value =
-                destination || "";
-              document.getElementById(`earnings-${index + 1}`).value =
-                formProgress.earnings[index] || "";
-            });
-          }
-        }
-      }
-
-      setInterval(saveFormProgress, 5000);
-      document.addEventListener("DOMContentLoaded", loadFormProgress);
     </script>
 
     <div
