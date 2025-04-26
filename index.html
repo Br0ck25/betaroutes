@@ -760,6 +760,16 @@
       <label for="edit-date">Date</label>
       <input type="text" id="edit-date" />
 
+      <div class="edit-form-group">
+        <label for="edit-start-time">Start Time</label>
+        <input type="time" id="edit-start-time" />
+      </div>
+
+      <div class="edit-form-group">
+        <label for="edit-end-time">End Time</label>
+        <input type="time" id="edit-end-time" />
+      </div>
+
       <label for="edit-start-address">Start Address</label>
       <input type="text" id="edit-start-address" />
 
@@ -2026,6 +2036,8 @@
         setInputValue("edit-date", entry.date);
         setInputValue("edit-start-address", entry.startTime);
         setInputValue("edit-end-address", entry.endTime);
+        setInputValue("edit-start-time", entry.startClock ?? "");
+        setInputValue("edit-end-time", entry.endClock ?? "");
         setInputValue("edit-total-earnings", entry.totalEarnings);
         setInputValue("edit-fuel-cost", entry.fuelCost);
         setInputValue("edit-maintenance-cost", entry.maintenanceCost);
@@ -2070,6 +2082,16 @@
         if (editFormContainer && overlay) {
           editFormContainer.style.display = "block";
           overlay.style.display = "block";
+          const startTimeInput = document.getElementById("edit-start-time");
+          const endTimeInput = document.getElementById("edit-end-time");
+
+          if (startTimeInput && endTimeInput) {
+            startTimeInput.addEventListener(
+              "change",
+              recalculateEditHoursWorked
+            );
+            endTimeInput.addEventListener("change", recalculateEditHoursWorked);
+          }
         }
 
         // ✅ Setup Autocomplete after a tiny delay
@@ -2110,6 +2132,10 @@
 
         const entry = logEntries[editingIndex];
         entry.date = document.getElementById("edit-date").value;
+        entry.startClock =
+          document.getElementById("edit-start-time")?.value || "";
+        entry.endClock = document.getElementById("edit-end-time")?.value || "";
+
         entry.startTime = document.getElementById("edit-start-address").value;
         entry.endTime = document.getElementById("edit-end-address").value;
 
@@ -2796,6 +2822,30 @@
       2
     )}</span>
   `;
+      }
+
+      function recalculateEditHoursWorked() {
+        const startTime = document.getElementById("edit-start-time")?.value;
+        const endTime = document.getElementById("edit-end-time")?.value;
+        const hoursWorkedInput = document.getElementById("edit-hours-worked");
+
+        if (startTime && endTime && hoursWorkedInput) {
+          const [startHours, startMinutes] = startTime.split(":").map(Number);
+          const [endHours, endMinutes] = endTime.split(":").map(Number);
+
+          let start = startHours * 60 + startMinutes;
+          let end = endHours * 60 + endMinutes;
+
+          if (end < start) {
+            // Assume the work ended next day
+            end += 24 * 60;
+          }
+
+          const workedMinutes = end - start;
+          const workedHours = workedMinutes / 60;
+
+          hoursWorkedInput.value = workedHours.toFixed(2);
+        }
       }
     </script>
 
