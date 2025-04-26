@@ -2129,11 +2129,7 @@
           updateEditTotalEarnings();
 
           setTimeout(() => {
-            if (
-              typeof google !== "undefined" &&
-              google.maps &&
-              google.maps.places
-            ) {
+            function setupEditAutocomplete() {
               document
                 .querySelectorAll(
                   '#edit-destinations-container input[id^="edit-destination-"]'
@@ -2155,10 +2151,42 @@
                     }
                   });
                 });
+            }
+
+            if (
+              typeof google !== "undefined" &&
+              google.maps &&
+              google.maps.places
+            ) {
+              // ✅ Google Maps API ready, setup autocomplete immediately
+              setupEditAutocomplete();
             } else {
-              console.warn(
-                "Google Maps API not loaded yet, skipping autocomplete setup."
-              );
+              // 🕒 Google Maps not ready yet — wait for it
+              console.warn("Waiting for Google Maps API...");
+
+              let retryCount = 0;
+              const retryInterval = setInterval(() => {
+                if (
+                  typeof google !== "undefined" &&
+                  google.maps &&
+                  google.maps.places
+                ) {
+                  console.log(
+                    "✅ Google Maps API loaded. Setting up Edit autocomplete!"
+                  );
+                  clearInterval(retryInterval);
+                  setupEditAutocomplete();
+                } else {
+                  retryCount++;
+                  if (retryCount >= 20) {
+                    // 20 retries x 200ms = 4 seconds max
+                    console.error(
+                      "❌ Google Maps API failed to load after waiting."
+                    );
+                    clearInterval(retryInterval);
+                  }
+                }
+              }, 200); // Retry every 200ms
             }
           }, 0);
 
