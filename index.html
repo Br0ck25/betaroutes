@@ -10,9 +10,9 @@
 <!-- Open Graph (for social sharing) -->
 <meta property="og:title" content="Route and Cost Calculator with Log">
 <meta property="og:description" content="Plan routes, calculate costs, optimize trips, and track your earnings with our smart route logging tool.">
-<meta property="og:url" content="https://yourdomain.com/">
+<meta property="og:url" content="https://gorouteyourself.com/">
 <meta property="og:type" content="website">
-<meta property="og:image" content="https://yourdomain.com/logo.png"> <!-- optional: if you have a logo or image -->
+<meta property="og:image" content="https://gorouteyourself.com/logo.png"> <!-- optional: if you have a logo or image -->
 <meta property="og:site_name" content="Route and Cost Calculator">
 
 <link rel="icon" href="/logo-512.png" sizes="512x512" type="image/png">
@@ -496,6 +496,9 @@ input[type="text"], input[type="number"], input[type="date"], input[type="time"]
 
     <div id="log-container">
         <div id="log-header">
+<div id="log-summary" style="text-align: center; margin-bottom: 15px; font-weight: bold; font-size: 18px;">
+  <!-- Net profit and profit per hour will show here -->
+</div>
             <h2>Log</h2>
             <div>
   <label for="filter-year">Year:</label>
@@ -1228,6 +1231,10 @@ function displayLog(filterFn = () => true) {
       }
     }
   }
+
+  updateLogSummary(filterFn); // ⬅️ Moved OUTSIDE the for-loop
+}
+
 
   if (logList.innerHTML === '') {
     const emptyMessage = document.createElement('li');
@@ -2185,6 +2192,42 @@ function formatCurrency(value) {
   if (isNaN(value)) return '$0.00';
   return `$${parseFloat(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+
+function updateLogSummary(filterFn) {
+  const summaryDiv = document.getElementById('log-summary');
+
+  // Filter the relevant entries
+  const filteredEntries = logEntries.filter(entry => {
+    return filterFn(entry.date);
+  });
+
+  if (filteredEntries.length === 0) {
+    summaryDiv.innerHTML = 'No data available for selected filter.';
+    return;
+  }
+
+  // Calculate total Net Profit and Profit Per Hour
+  let totalNetProfit = 0;
+  let totalProfitPerHour = 0;
+  let validProfitPerHourEntries = 0;
+
+  filteredEntries.forEach(entry => {
+    totalNetProfit += parseFloat(entry.netProfit) || 0;
+
+    if (!isNaN(parseFloat(entry.profitPerHour))) {
+      totalProfitPerHour += parseFloat(entry.profitPerHour);
+      validProfitPerHourEntries++;
+    }
+  });
+
+  const averageProfitPerHour = validProfitPerHourEntries > 0 ? (totalProfitPerHour / validProfitPerHourEntries) : 0;
+
+  summaryDiv.innerHTML = `
+    Logs Net Profit: <span style="color: green;">$${totalNetProfit.toFixed(2)}</span><br>
+    Logs Average Profit Per Hour: <span style="color: blue;">$${averageProfitPerHour.toFixed(2)}</span>
+  `;
+}
+
 
 
 
