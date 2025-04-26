@@ -2904,46 +2904,48 @@ function toggleManageLogMenu() {
       }
 
       function updateLogSummary(filterFn) {
-        const summaryDiv = document.getElementById("log-summary");
+  const summaryDiv = document.getElementById("log-summary");
 
-        // Filter the relevant entries
-        const filteredEntries = logEntries.filter((entry) => {
-          return filterFn(entry.date);
-        });
+  // Filter the relevant entries
+  const filteredEntries = logEntries.filter((entry) => {
+    return filterFn(entry.date);
+  });
 
-        if (filteredEntries.length === 0) {
-          summaryDiv.innerHTML = "No data available for selected filter.";
-          return;
-        }
+  if (filteredEntries.length === 0) {
+    summaryDiv.innerHTML = "No data available for selected filter.";
+    return;
+  }
 
-        // Calculate total Net Profit and Profit Per Hour
-        let totalNetProfit = 0;
-        let totalProfitPerHour = 0;
-        let validProfitPerHourEntries = 0;
+  // Calculate total Net Profit and Profit Per Hour
+  let totalNetProfit = 0;
+  let totalProfitPerHour = 0;
+  let validProfitPerHourEntries = 0;
 
-        filteredEntries.forEach((entry) => {
-          totalNetProfit += parseFloat(entry.netProfit) || 0;
+  filteredEntries.forEach((entry) => {
+    totalNetProfit += parseFloat(entry.netProfit) || 0;
 
-          if (!isNaN(parseFloat(entry.profitPerHour))) {
-            totalProfitPerHour += parseFloat(entry.profitPerHour);
-            validProfitPerHourEntries++;
-          }
-        });
+    if (!isNaN(parseFloat(entry.profitPerHour))) {
+      totalProfitPerHour += parseFloat(entry.profitPerHour);
+      validProfitPerHourEntries++;
+    }
+  });
 
-        const averageProfitPerHour =
-          validProfitPerHourEntries > 0
-            ? totalProfitPerHour / validProfitPerHourEntries
-            : 0;
+  const averageProfitPerHour =
+    validProfitPerHourEntries > 0
+      ? totalProfitPerHour / validProfitPerHourEntries
+      : 0;
 
-        summaryDiv.innerHTML = `
-    Logs Net Profit: <span style="color: green;">$${totalNetProfit.toFixed(
-      2
-    )}</span><br>
-    Logs Average Profit Per Hour: <span style="color: blue;">$${averageProfitPerHour.toFixed(
-      2
-    )}</span>
+  // ✅ Set the Net Profit and Profit Per Hour text ABOVE h2 (inside log-summary div)
+  summaryDiv.innerHTML = `
+    <div style="margin-bottom: 10px;">
+      Logs Net Profit: <span style="color: green;">$${totalNetProfit.toFixed(2)}</span>
+    </div>
+    <div>
+      Logs Average Profit Per Hour: <span style="color: blue;">$${averageProfitPerHour.toFixed(2)}</span>
+    </div>
   `;
-      }
+}
+
 
       function recalculateEditHoursWorked() {
         const startTime = document.getElementById("edit-start-time")?.value;
