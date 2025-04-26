@@ -496,10 +496,10 @@ input[type="text"], input[type="number"], input[type="date"], input[type="time"]
 
     <div id="log-container">
         <div id="log-header">
+            <h2>Log</h2>
 <div id="log-summary" style="text-align: center; margin-bottom: 15px; font-weight: bold; font-size: 18px;">
   <!-- Net profit and profit per hour will show here -->
 </div>
-            <h2>Log</h2>
             <div>
   <label for="filter-year">Year:</label>
   <select id="filter-year" onchange="filterByDate()">
@@ -1232,16 +1232,16 @@ function displayLog(filterFn = () => true) {
     }
   }
 
-  updateLogSummary(filterFn); // ⬅️ Moved OUTSIDE the for-loop
-}
-
-
+  // ✅ INSERT THIS CHECK here:
   if (logList.innerHTML === '') {
     const emptyMessage = document.createElement('li');
     emptyMessage.textContent = 'No log entries found for selected filter.';
     logList.appendChild(emptyMessage);
   }
+
+  updateLogSummary(filterFn); // ✅ Now finally call the summary update
 }
+
 
 
 function viewLogEntry(index) {
