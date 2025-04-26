@@ -2129,28 +2129,37 @@
           updateEditTotalEarnings();
 
           setTimeout(() => {
-            document
-              .querySelectorAll(
-                '#edit-destinations-container input[id^="edit-destination-"]'
-              )
-              .forEach((input) => {
-                const autocomplete = new google.maps.places.Autocomplete(
-                  input,
-                  { types: ["geocode"] }
-                );
+            if (
+              typeof google !== "undefined" &&
+              google.maps &&
+              google.maps.places
+            ) {
+              document
+                .querySelectorAll(
+                  '#edit-destinations-container input[id^="edit-destination-"]'
+                )
+                .forEach((input) => {
+                  const autocomplete = new google.maps.places.Autocomplete(
+                    input,
+                    { types: ["geocode"] }
+                  );
 
-                // Optional, safe to keep
-                initAutocompleteDestination(input);
+                  initAutocompleteDestination(input);
 
-                autocomplete.addListener("place_changed", () => {
-                  const place = autocomplete.getPlace();
-                  if (place && place.geometry) {
-                    recalculateEditMileageAndCosts();
-                  } else {
-                    console.warn("Invalid place selected for destination.");
-                  }
+                  autocomplete.addListener("place_changed", () => {
+                    const place = autocomplete.getPlace();
+                    if (place && place.geometry) {
+                      recalculateEditMileageAndCosts();
+                    } else {
+                      console.warn("Invalid place selected for destination.");
+                    }
+                  });
                 });
-              });
+            } else {
+              console.warn(
+                "Google Maps API not loaded yet, skipping autocomplete setup."
+              );
+            }
           }, 0);
 
           document.getElementById("edit-form-container").style.display =
