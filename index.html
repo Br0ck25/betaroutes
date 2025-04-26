@@ -2011,55 +2011,63 @@
           return;
         }
 
-        function showEditForm() {
-          const editFormContainer = document.getElementById(
-            "edit-form-container"
-          );
-          const overlay = document.getElementById("overlay");
+        const editFormContainer = document.getElementById(
+          "edit-form-container"
+        );
+        const overlay = document.getElementById("overlay");
 
-          // ✅ Populate all form fields from log entry (your existing logic)
-          document.getElementById("edit-date").value = entry.date;
-          document.getElementById("edit-start-address").value = entry.startTime;
-          document.getElementById("edit-end-address").value = entry.endTime;
+        // ✅ Populate all form fields
+        document.getElementById("edit-date").value = entry.date;
+        document.getElementById("edit-start-address").value = entry.startTime;
+        document.getElementById("edit-end-address").value = entry.endTime;
 
-          const destinationsContainer = document.getElementById(
-            "edit-destinations-container"
-          );
-          destinationsContainer.innerHTML = "";
+        const destinationsContainer = document.getElementById(
+          "edit-destinations-container"
+        );
+        destinationsContainer.innerHTML = "";
 
-          entry.destinations.forEach((destination, i) => {
-            const destDiv = document.createElement("div");
-            destDiv.className = "destination";
-            destDiv.innerHTML = `
-        <label for="edit-destination-${i}">Destination ${i + 1}</label>
-        <input type="text" id="edit-destination-${i}" value="${destination}">
-      `;
-            destinationsContainer.appendChild(destDiv);
-          });
+        entry.destinations.forEach((destination, i) => {
+          const destDiv = document.createElement("div");
+          destDiv.className = "destination";
+          destDiv.innerHTML = `
+      <label for="edit-destination-${i + 1}">Destination ${i + 1}</label>
+      <input type="text" id="edit-destination-${i + 1}" value="${destination}">
+      <label for="edit-earnings-${i + 1}">Earnings for Destination ${
+            i + 1
+          }</label>
+      <input type="number" id="edit-earnings-${i + 1}" value="${
+            entry.earnings[i] || 0
+          }">
+      <div class="destination-actions">
+        <button type="button" class="delete-btn" onclick="deleteEditDestination(this)">Delete</button>
+        <button type="button" class="move-btn" onclick="moveEditDestinationUp(this)">Move Up</button>
+        <button type="button" class="move-btn" onclick="moveEditDestinationDown(this)">Move Down</button>
+      </div>
+    `;
+          destinationsContainer.appendChild(destDiv);
+        });
 
-          document.getElementById("edit-total-earnings").value =
-            entry.totalEarnings;
-          document.getElementById("edit-fuel-cost").value = entry.fuelCost;
-          document.getElementById("edit-maintenance-cost").value =
-            entry.maintenanceCost;
-          document.getElementById("edit-supplies-cost").value =
-            entry.suppliesCost;
-          document.getElementById("edit-total-mileage").value =
-            entry.totalMileage;
-          document.getElementById("edit-total-time").value = entry.totalTime;
-          document.getElementById("edit-hours-worked").value =
-            entry.hoursWorked;
-          document.getElementById("edit-mpg").value = entry.mpg;
-          document.getElementById("edit-gas-price").value = entry.gasPrice;
+        document.getElementById("edit-total-earnings").value =
+          entry.totalEarnings;
+        document.getElementById("edit-fuel-cost").value = entry.fuelCost;
+        document.getElementById("edit-maintenance-cost").value =
+          entry.maintenanceCost;
+        document.getElementById("edit-supplies-cost").value =
+          entry.suppliesCost;
+        document.getElementById("edit-total-mileage").value =
+          entry.totalMileage;
+        document.getElementById("edit-total-time").value = entry.totalTime;
+        document.getElementById("edit-hours-worked").value =
+          entry.hoursWorked ?? "";
+        document.getElementById("edit-mpg").value = entry.mpg ?? "";
+        document.getElementById("edit-gas-price").value = entry.gasPrice ?? "";
 
-          // ✅ Show Edit form now
-          editFormContainer.style.display = "block";
-          overlay.style.display = "block";
+        // ✅ Show Edit form
+        editFormContainer.style.display = "block";
+        overlay.style.display = "block";
 
-          setupEditAutocomplete();
-        }
-
-        function setupEditAutocomplete() {
+        // ✅ Setup Autocomplete for all destination inputs
+        setTimeout(() => {
           document
             .querySelectorAll(
               '#edit-destinations-container input[id^="edit-destination-"]'
@@ -2075,46 +2083,12 @@
                 const place = autocomplete.getPlace();
                 if (place && place.geometry) {
                   recalculateEditMileageAndCosts();
+                } else {
+                  console.warn("Invalid place selected for destination.");
                 }
               });
             });
-        }
-
-        // ✅ If Google Maps already loaded
-        if (
-          typeof google !== "undefined" &&
-          google.maps &&
-          google.maps.places
-        ) {
-          showEditForm();
-        } else {
-          console.warn(
-            "Waiting for Google Maps to load before opening Edit form..."
-          );
-
-          // Retry until Google is loaded
-          let retryCount = 0;
-          const retryInterval = setInterval(() => {
-            if (
-              typeof google !== "undefined" &&
-              google.maps &&
-              google.maps.places
-            ) {
-              console.log("✅ Google Maps loaded, now opening Edit form.");
-              clearInterval(retryInterval);
-              showEditForm();
-            } else {
-              retryCount++;
-              if (retryCount >= 20) {
-                // 4 seconds
-                clearInterval(retryInterval);
-                alert(
-                  "❌ Google Maps failed to load. Please refresh the page."
-                );
-              }
-            }
-          }, 200);
-        }
+        }, 0);
       }
 
       function saveEditedLogEntry() {
