@@ -238,15 +238,28 @@
         margin-right: 10px;
       }
 
+      .log-actions {
+        display: flex;
+        flex-direction: column; /* 🆕 Stack buttons vertically */
+        gap: 5px; /* 🆕 Space between buttons */
+        min-width: 100px; /* 🆕 Keep actions a reasonable size */
+        align-items: stretch; /* 🆕 Stretch buttons to same width */
+      }
+
       .log-actions button {
         background-color: #007bff;
         color: white;
         border: none;
-        padding: 5px 10px;
+        padding: 8px 0; /* 🆕 Vertically thicker buttons */
         border-radius: 5px;
         cursor: pointer;
         font-size: 14px;
-        margin-left: 5px;
+        text-align: center; /* Center button text */
+        width: 100%; /* 🆕 Make each button full width of container */
+      }
+
+      button {
+        white-space: nowrap;
       }
 
       .log-actions button:hover {
@@ -840,20 +853,12 @@
           dateInput.value = today;
         }
 
-        // Update login/logout button visibility
         updateAuthUI();
 
-        // Load and display logs
         logEntries = await loadLog();
         displayLog();
-        populateYearOptions();
-
-        // Inject Google Maps script
-        const script = document.createElement("script");
-        script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ&libraries=places&callback=initMap`;
-        script.async = true;
-        script.defer = true;
-        document.head.appendChild(script);
+        populateYearOptions(); // ✅ Rebuild years
+        populateMonthOptions(); // 🆕 ✅ Rebuild months correctly based on logs
       });
 
       let map;
