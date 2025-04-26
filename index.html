@@ -685,34 +685,41 @@
                 margin-bottom: 10px;
               "
             >
-              <!-- ✅ Keep the Log title here -->
-              <h2 style="margin: 0;">Log</h2>
         
               <!-- ✅ Keep the filters next to the Log title -->
-              <div>
-                <label for="filter-year">Year:</label>
-                <select id="filter-year" onchange="filterByDate()">
-                  <option value="">All</option>
-                </select>
-        
-                <label for="filter-month" style="margin-left: 10px;">Month:</label>
-                <select id="filter-month" onchange="filterByDate()">
-                  <option value="">All</option>
-                  <option value="01">January</option>
-                  <option value="02">February</option>
-                  <option value="03">March</option>
-                  <option value="04">April</option>
-                  <option value="05">May</option>
-                  <option value="06">June</option>
-                  <option value="07">July</option>
-                  <option value="08">August</option>
-                  <option value="09">September</option>
-                  <option value="10">October</option>
-                  <option value="11">November</option>
-                  <option value="12">December</option>
-                </select>
+              <div id="log-title-bar" style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 10px;">
+                <h2 style="margin: 0;">Log</h2>
+              
+                <!-- ✅ Replace your old filter div with this -->
+                <div style="display: flex; gap: 20px; align-items: center;">
+                  <div style="display: flex; flex-direction: column; align-items: center;">
+                    <label for="filter-year">Year:</label>
+                    <select id="filter-year" onchange="filterByDate()">
+                      <option value="">All</option>
+                    </select>
+                  </div>
+              
+                  <div style="display: flex; flex-direction: column; align-items: center;">
+                    <label for="filter-month">Month:</label>
+                    <select id="filter-month" onchange="filterByDate()">
+                      <option value="">All</option>
+                      <option value="01">January</option>
+                      <option value="02">February</option>
+                      <option value="03">March</option>
+                      <option value="04">April</option>
+                      <option value="05">May</option>
+                      <option value="06">June</option>
+                      <option value="07">July</option>
+                      <option value="08">August</option>
+                      <option value="09">September</option>
+                      <option value="10">October</option>
+                      <option value="11">November</option>
+                      <option value="12">December</option>
+                    </select>
+                  </div>
+                </div>
               </div>
-            </div>
+              
         
           </div>
         
