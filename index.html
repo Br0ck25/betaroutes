@@ -1633,12 +1633,17 @@
           allEntries.push(...organizedLog[day]);
         }
 
-        const filteredEntries = allEntries.filter((entry) =>
+        // ✅ NEW: Sort by date newest first
+        const sortedEntries = allEntries.sort((a, b) => {
+          return new Date(b.date) - new Date(a.date);
+        });
+
+        const filteredEntries = sortedEntries.filter((entry) =>
           filterFn(entry.date)
         );
         const totalPages = Math.ceil(filteredEntries.length / logsPerPage);
 
-        // Get the entries for this page
+        // Get entries for this page
         const start = (currentPage - 1) * logsPerPage;
         const end = start + logsPerPage;
         const pageEntries = filteredEntries.slice(start, end);
