@@ -35,6 +35,11 @@
     <!-- pick your site background color -->
 
     <style>
+      body,
+      html,
+      #log-container {
+        overflow: visible !important;
+      }
       .modal-box {
         background: white;
         padding: 30px;
@@ -648,6 +653,7 @@
       ></div>
     </div>
 
+    <!-- This is your ONE and ONLY log-container -->
     <div id="log-container">
       <div id="log-header">
         <h2>Log</h2>
@@ -686,14 +692,11 @@
           </select>
         </div>
       </div>
+
       <ul id="log-list"></ul>
     </div>
 
-    <div id="log-container">
-      <div id="log-header">...</div>
-      <ul id="log-list"></ul>
-    </div>
-
+    <!-- Then AFTER log-container ends, manage-log-container starts -->
     <div
       id="manage-log-container"
       style="text-align: center; margin-top: 20px; position: relative"
@@ -705,50 +708,58 @@
         Manage Log ▼
       </button>
       <div
-        id="manage-log-menu"
+      <div
+      id="manage-log-menu"
+      style="
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: white;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+        z-index: 9999;
+        min-width: 160px;
+        margin-top: 5px;
+        text-align: center; /* 🆕 Add this line */
+      "
+    >
+      <button
+        onclick="triggerImportFile()"
         style="
-          display: none;
-          position: absolute;
-          top: 100%;
-          left: 50%;
-          transform: translateX(-50%);
-          background: white;
-          border: 1px solid #ccc;
-          border-radius: 6px;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-          z-index: 9999;
-          min-width: 160px;
-          margin-top: 5px;
+          width: auto; /* 🆕 Change */
+          min-width: 120px; /* 🆕 New */
+          padding: 10px;
+          background: none;
+          border: none;
+          text-align: center; /* 🆕 Change */
+          color: black;
+          display: inline-block; /* 🆕 New */
+          margin: 5px 0; /* 🆕 Add some vertical margin */
         "
       >
-        <button
-          onclick="triggerImportFile()"
-          style="
-            width: 100%;
-            padding: 10px;
-            background: none;
-            border: none;
-            text-align: left;
-            color: black;
-          "
-        >
-          Import CSV
-        </button>
-        <button
-          onclick="exportToCSV()"
-          style="
-            width: 100%;
-            padding: 10px;
-            background: none;
-            border: none;
-            text-align: left;
-            color: black;
-          "
-        >
-          Export CSV
-        </button>
-      </div>
+        Import CSV
+      </button>
+      <button
+        onclick="exportToCSV()"
+        style="
+          width: auto; /* 🆕 Change */
+          min-width: 120px; /* 🆕 New */
+          padding: 10px;
+          background: none;
+          border: none;
+          text-align: center; /* 🆕 Change */
+          color: black;
+          display: inline-block; /* 🆕 New */
+          margin: 5px 0; /* 🆕 Add some vertical margin */
+        "
+      >
+        Export CSV
+      </button>
     </div>
+    
 
     <input
       type="file"
@@ -759,6 +770,19 @@
     />
 
     <div id="overlay" class="hidden"></div>
+
+    <script>
+      function toggleManageLogMenu() {
+        const menu = document.getElementById("manage-log-menu");
+        if (!menu) return;
+
+        if (menu.style.display === "none" || menu.style.display === "") {
+          menu.style.display = "block";
+        } else {
+          menu.style.display = "none";
+        }
+      }
+    </script>
 
     <div id="edit-form-container" class="edit-form-container hidden">
       <h3>Edit Log Entry</h3>
@@ -953,18 +977,26 @@
           }
         });
 
-        const savedMpg = localStorage.getItem("mpg");
-        const savedGasPrice = localStorage.getItem("gasPrice");
+        const savedMpg = parseFloat(localStorage.getItem("mpg"));
+        const savedGasPrice = parseFloat(localStorage.getItem("gasPrice"));
         const savedStartAddress = localStorage.getItem("startAddress");
         const savedEndAddress = localStorage.getItem("endAddress");
 
-        if (savedMpg) document.getElementById("mpg").value = savedMpg;
-        if (savedGasPrice)
+        if (!isNaN(savedMpg)) {
+          document.getElementById("mpg").value = savedMpg;
+        }
+
+        if (!isNaN(savedGasPrice)) {
           document.getElementById("gas-price").value = savedGasPrice;
-        if (savedStartAddress)
+        }
+
+        if (savedStartAddress && typeof savedStartAddress === "string") {
           document.getElementById("start-address").value = savedStartAddress;
-        if (savedEndAddress)
+        }
+
+        if (savedEndAddress && typeof savedEndAddress === "string") {
           document.getElementById("end-address").value = savedEndAddress;
+        }
 
         // Initialize autocomplete for the initial destination
         document
@@ -2774,17 +2806,20 @@
         });
       }
 
-      function toggleManageLogMenu() {
-        const menu = document.getElementById("manage-log-menu");
-        menu.style.display = menu.style.display === "block" ? "none" : "block";
-      }
-
       // Hide Manage Log menu when clicking outside
       document.addEventListener("click", function (event) {
-        const menu = document.getElementById("manage-log-menu");
-        const button = event.target.closest("button");
-        if (!button || button.textContent !== "Manage Log ▼") {
-          if (menu) menu.style.display = "none";
+        const manageButton = document.querySelector(
+          "#manage-log-container button"
+        );
+        const manageMenu = document.getElementById("manage-log-menu");
+
+        // If click outside both the menu AND the button
+        if (
+          manageMenu &&
+          !manageMenu.contains(event.target) &&
+          !manageButton.contains(event.target)
+        ) {
+          manageMenu.style.display = "none";
         }
       });
 
