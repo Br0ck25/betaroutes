@@ -1489,6 +1489,8 @@
       }
 
       function logEntry(data) {
+        data.startClock = document.getElementById("start-time").value || "";
+        data.endClock = document.getElementById("end-time").value || "";
         logEntries.unshift(data);
         saveLog();
       }
@@ -1648,8 +1650,10 @@
 
         modal.innerHTML = `
   <h3>Log Entry Details</h3>
-  <p><strong>Date:</strong> ${entry.date}</p>
-  <p><strong>Start Address:</strong> ${entry.startTime}</p>
+<p><strong>Date:</strong> ${entry.date}</p>
+<p><strong>Start Time:</strong> ${entry.startClock || "N/A"}</p>
+<p><strong>End Time:</strong> ${entry.endClock || "N/A"}</p>
+<p><strong>Start Address:</strong> ${entry.startTime}</p>
   <p><strong>Destinations:</strong><br>${destinations}</p>
   <p><strong>End Address:</strong> ${entry.endTime}</p>
   <p><strong>Earnings per Stop:</strong> ${earnings}</p>
