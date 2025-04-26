@@ -784,6 +784,12 @@
         Recalculate Mileage
       </button>
 
+      <label for="edit-mpg">Miles Per Gallon (MPG)</label>
+      <input type="number" id="edit-mpg" placeholder="Enter MPG" />
+
+      <label for="edit-gas-price">Gas Price Per Gallon</label>
+      <input type="number" id="edit-gas-price" placeholder="Enter Gas Price" />
+
       <label for="edit-total-earnings">Total Earnings</label>
       <input type="number" id="edit-total-earnings" />
 
@@ -1651,8 +1657,8 @@
         modal.innerHTML = `
   <h3>Log Entry Details</h3>
 <p><strong>Date:</strong> ${entry.date}</p>
-<p><strong>Start Time:</strong> ${entry.startClock || "N/A"}</p>
-<p><strong>End Time:</strong> ${entry.endClock || "N/A"}</p>
+<p><strong>Start Time:</strong> ${formatTimeToAmPm(entry.startClock)}</p>
+<p><strong>End Time:</strong> ${formatTimeToAmPm(entry.endClock)}</p>
 <p><strong>Start Address:</strong> ${entry.startTime}</p>
   <p><strong>Destinations:</strong><br>${destinations}</p>
   <p><strong>End Address:</strong> ${entry.endTime}</p>
@@ -2850,6 +2856,14 @@
 
           hoursWorkedInput.value = workedHours.toFixed(2);
         }
+      }
+
+      function formatTimeToAmPm(timeStr) {
+        if (!timeStr) return "N/A";
+        const [hours, minutes] = timeStr.split(":").map(Number);
+        const ampm = hours >= 12 ? "PM" : "AM";
+        const displayHours = hours % 12 || 12; // 0 becomes 12
+        return `${displayHours}:${minutes.toString().padStart(2, "0")} ${ampm}`;
       }
     </script>
 
