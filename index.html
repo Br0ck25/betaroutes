@@ -859,6 +859,12 @@
         displayLog();
         populateYearOptions(); // ✅ Rebuild years
         populateMonthOptions(); // 🆕 ✅ Rebuild months correctly based on logs
+
+        const script = document.createElement("script");
+        script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ&libraries=places&callback=initMap`;
+        script.async = true;
+        script.defer = true;
+        document.head.appendChild(script);
       });
 
       let map;
