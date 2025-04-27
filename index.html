@@ -3673,16 +3673,17 @@ toggleButton.textContent = "More Details";
   bottom: 0;
   left: 0;
   right: 0;
-  height: 65px; /* ✅ Lock the height */
+  height: 75px; /* 🆙 Taller bar */
   width: 100%;
   background: white;
   box-shadow: 0 -2px 6px rgba(0,0,0,0.1);
-  z-index: 999;
-  padding: 8px 10px;
+  z-index: 9999;
+  padding: 10px 15px;
   display: flex;
   justify-content: center;
   align-items: center;
-  overflow-x: auto;
+  pointer-events: auto;
+  overflow: hidden; /* 🛡️ prevent moving */
 ">
   <div style="
     display: flex;
@@ -3690,12 +3691,13 @@ toggleButton.textContent = "More Details";
     max-width: 900px;
     justify-content: space-between;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
+    padding: 0;
   ">
     <button onclick="optimizeRoute()" style="
-      flex: 1;
-      padding: 6px;
-      font-size: 12px;
+      width: 22%;
+      height: 50px;
+      font-size: 14px;
       border-radius: 6px;
       background: none;
       border: 1px solid #ccc;
@@ -3705,9 +3707,9 @@ toggleButton.textContent = "More Details";
     ">Optimize</button>
 
     <button onclick="calculateRoute()" style="
-      flex: 1;
-      padding: 6px;
-      font-size: 12px;
+      width: 22%;
+      height: 50px;
+      font-size: 14px;
       border-radius: 6px;
       background: none;
       border: 1px solid #ccc;
@@ -3717,9 +3719,9 @@ toggleButton.textContent = "More Details";
     ">Calculate</button>
 
     <button onclick="logResults()" style="
-      flex: 1;
-      padding: 6px;
-      font-size: 12px;
+      width: 22%;
+      height: 50px;
+      font-size: 14px;
       border-radius: 6px;
       background: none;
       border: 1px solid #ccc;
@@ -3729,9 +3731,9 @@ toggleButton.textContent = "More Details";
     ">Log</button>
 
     <button onclick="openInGoogleMaps()" style="
-      flex: 1;
-      padding: 6px;
-      font-size: 12px;
+      width: 22%;
+      height: 50px;
+      font-size: 14px;
       border-radius: 6px;
       background: none;
       border: 1px solid #ccc;
@@ -3741,6 +3743,7 @@ toggleButton.textContent = "More Details";
     ">Google Maps</button>
   </div>
 </div>
+
 
 
 
