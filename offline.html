@@ -19,6 +19,36 @@
       overflow-x: hidden;
     }
 
+    #auth-message {
+      background-color: #fff3cd;
+      color: #856404;
+      border: 1px solid #ffeeba;
+      border-radius: 6px;
+      padding: 15px 20px;
+      text-align: center;
+      font-size: 16px;
+      max-width: 600px;
+      margin: 80px auto 20px auto;
+      position: relative;
+      z-index: 500;
+    }
+
+    #offline-banner {
+      display: none;
+      background-color: #fffae6;
+      color: #856404;
+      padding: 10px;
+      margin: 10px auto;
+      text-align: center;
+      font-weight: bold;
+      font-size: 16px;
+      border-bottom: 2px solid #ffd700;
+      width: 100%;
+      max-width: 900px;
+      position: relative;
+      z-index: 400;
+    }
+
     #top-bar {
       display: flex;
       align-items: center;
@@ -35,7 +65,7 @@
       margin: 0 auto;
       border-radius: 0;
       box-shadow: none;
-      transition: none;
+      transition: box-shadow 0.3s;
     }
 
     #top-bar img {
@@ -47,7 +77,7 @@
     #log-container {
       background: white;
       padding: 20px;
-      margin-top: 140px;
+      margin-top: 180px;
       max-width: 900px;
       width: 90%;
       border-radius: 8px;
@@ -74,43 +104,16 @@
 </head>
 <body>
 
-<!-- Sign In Message -->
-<div id="auth-message" style="
-  background-color: #fff3cd;
-  color: #856404;
-  border: 1px solid #ffeeba;
-  border-radius: 6px;
-  padding: 15px 20px;
-  text-align: center;
-  font-size: 16px;
-  max-width: 600px;
-  margin: 80px auto 20px auto;
-  position: relative;
-  z-index: 500;
-">
+<div id="auth-message">
   🚧 To log your route, you need to
   <a href="#" style="color: #0d6efd; font-weight: bold; text-decoration: none;">Sign in</a>
   or
   <a href="#" style="color: #0d6efd; font-weight: bold; text-decoration: none;">Create an account</a>.
 </div>
 
-<!-- Offline Mode Banner -->
-<div id="offline-banner" style="
-  display: none;
-  background-color: #fffae6;
-  color: #856404;
-  padding: 10px;
-  text-align: center;
-  font-weight: bold;
-  font-size: 16px;
-  border-bottom: 2px solid #ffd700;
-  position: sticky;
-  top: 0;
-  z-index: 5000;
-">
-  🛜 Offline Mode: Showing cached routes.
+<div id="offline-banner">
+  🛠️ Offline Mode: Showing cached routes.
 </div>
-
 
 <div id="top-bar">
   <img id="logo-image" src="/logo.png" alt="Logo" onclick="scrollToTop()" />
@@ -154,7 +157,31 @@ function loadOfflineLogs() {
   });
 }
 
-document.addEventListener("DOMContentLoaded", loadOfflineLogs);
+function updateOfflineBanner() {
+  const banner = document.getElementById("offline-banner");
+  if (navigator.onLine) {
+    banner.style.display = "none";
+  } else {
+    banner.style.display = "block";
+  }
+}
+
+window.addEventListener("online", updateOfflineBanner);
+window.addEventListener("offline", updateOfflineBanner);
+
+document.addEventListener("DOMContentLoaded", () => {
+  loadOfflineLogs();
+  updateOfflineBanner();
+});
+
+window.addEventListener('scroll', function() {
+  const topBar = document.getElementById('top-bar');
+  if (window.scrollY > 10) {
+    topBar.style.boxShadow = '0 2px 6px rgba(0,0,0,0.1)';
+  } else {
+    topBar.style.boxShadow = 'none';
+  }
+});
 </script>
 
 </body>
