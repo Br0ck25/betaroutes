@@ -620,7 +620,7 @@ img {
     </div>
   
     <!-- Centered Logo -->
-    <img id="logo-image" src="/logo.png" alt="Logo" style="height: 50px; max-height: 50px;">
+    <img id="logo-image" src="/logo.png" alt="Logo" style="height: 50px; max-height: 50px; cursor: pointer;" onclick="scrollToTop()">
   
     <!-- Right Spacer for Username -->
     <div style="position: absolute; right: 22px; display: flex; align-items: center; height: 100%;">
@@ -1020,6 +1020,13 @@ transition: opacity 0.3s ease;
     <div id="overlay" class="hidden"></div>
 
     <script>
+
+
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+
 
 let map;
 let directionsService;
