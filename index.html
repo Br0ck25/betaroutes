@@ -37,6 +37,33 @@
     <style>
 
 @media (max-width: 600px) {
+  #top-bar {
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1); /* 🆕 soft shadow */
+    background: white; /* ✅ ensures shadow shows cleanly */
+    padding: 5px 10px;  /* slight padding around top bar */
+    border-radius: 8px; /* optional: slightly round corners */
+    margin-top: 5px;
+    margin-bottom: 10px;
+    gap: 8px;
+  }
+
+  #hamburger-button {
+    font-size: 24px;
+    padding: 4px 8px;
+  }
+
+  #username-display {
+    font-size: 14px;
+    padding: 4px 8px;
+  }
+
+  #logo-image {
+    height: 40px;
+  }
+}
+
+
+@media (max-width: 600px) {
   #hamburger-button {
     font-size: 24px;         /* smaller hamburger icon */
     padding: 4px 8px;        /* less vertical padding */
