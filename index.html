@@ -1,10 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-
-    <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#ffffff">
-
     <meta charset="UTF-8" />
     <meta
       name="viewport"
@@ -39,36 +35,6 @@
     <!-- pick your site background color -->
 
     <style>
-
-@media (max-width: 600px) {
-  #top-bar {
-    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-    background: white;
-    padding: 5px 10px;
-    border-radius: 0; /* Remove rounding for sticky header look */
-    margin-top: 0;
-    margin-bottom: 0;
-    gap: 8px;
-    position: sticky; /* 🆕 make sticky */
-    top: 0;            /* stick to the very top */
-    z-index: 10000;    /* make sure it stays above content */
-  }
-
-  #hamburger-button {
-    font-size: 24px;
-    padding: 4px 8px;
-  }
-
-  #username-display {
-    font-size: 14px;
-    padding: 4px 8px;
-  }
-
-  #logo-image {
-    height: 40px;
-  }
-}
-
 
 @media (max-width: 600px) {
   #top-bar {
@@ -617,23 +583,6 @@ img {
 
 <!-- ✅ Hamburger + Logo + Username together side-by-side -->
 <div id="top-bar" style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 10px; margin-bottom: 20px;">
-  <!-- 🆕 Install App Button (Hidden by Default) -->
-<button id="install-button" style="
-display: none;
-padding: 10px 20px;
-margin: 20px auto;
-background-color: #007bff;
-color: white;
-border: none;
-border-radius: 8px;
-cursor: pointer;
-font-size: 16px;
-font-weight: bold;
-display: block;
-">
-Install App
-</button>
-
   <button id="hamburger-button" onclick="toggleMenu()" style="
     background: none;
     border: none;
@@ -3425,48 +3374,6 @@ toggleButton.textContent = "More Details";
   }
 }
 
-  // 1. Service worker registration ✅
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", function () {
-      navigator.serviceWorker.register("/service-worker.js").then(
-        function (registration) {
-          console.log(
-            "✅ Service Worker registered with scope:",
-            registration.scope
-          );
-        },
-        function (err) {
-          console.error("❌ Service Worker registration failed:", err);
-        }
-      );
-    });
-  }
-
-  // 2. Install prompt handler ✅
-  let deferredPrompt;
-
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-
-    const installButton = document.getElementById('install-button');
-    if (installButton) {
-      installButton.style.display = 'block';
-
-      installButton.addEventListener('click', () => {
-        installButton.style.display = 'none';
-        deferredPrompt.prompt();
-        deferredPrompt.userChoice.then((choiceResult) => {
-          if (choiceResult.outcome === 'accepted') {
-            console.log('✅ User accepted install');
-          } else {
-            console.log('❌ User dismissed install');
-          }
-          deferredPrompt = null;
-        });
-      });
-    }
-  });
 
 
     </script>
