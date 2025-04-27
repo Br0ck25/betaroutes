@@ -36,6 +36,32 @@
 
     <style>
 
+#account-menu button.close-button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  font-weight: bold;
+  color: black;
+  cursor: pointer;
+  margin: 10px;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+#account-menu button.close-button:hover {
+  transform: scale(1.2);
+}
+
+
+#hamburger-button:hover {
+  background-color: #e0e0e0;
+}
+
+#username-display:hover {
+  background-color: #e0e0e0;
+}
+
+
 #hamburger-button {
   display: none; /* hidden by default */
 }
@@ -49,20 +75,22 @@ img {
 #account-menu {
   position: fixed;
   top: 0;
-  left: -250px; /* Hidden to the left */
+  left: -275px;
   width: 250px;
   height: 100%;
   background-color: white;
   box-shadow: 2px 0 5px rgba(0,0,0,0.5);
   z-index: 10000;
-  padding-top: 60px; /* Push content down a little */
-  transition: left 0.3s ease; /* Animate left position */
-  overflow-y: auto; /* Scroll if menu gets long */
+  padding: 20px 10px;
+  transition: left 0.3s ease;
+  overflow-y: auto;
+  font-size: 16px; /* 🆕 Smaller text */
 }
 
 #account-menu.show {
-  left: 0; /* Slide in */
+  left: 0;
 }
+
 
 
 
@@ -511,11 +539,18 @@ img {
 <!-- 🔒 Only signed-in specific things -->
 <div id="logout-message" style="display: none; margin: 20px auto; max-width: 100%;">
   <div id="account-menu">
+<!-- 🆕 Clean, top-right exit button -->
+<div style="display: flex; justify-content: flex-end;">
+  <button onclick="closeMenu()" class="close-button">✕</button>
+</div>
+
+
+  
+    <!-- 🔻 Then your menu items -->
     <button onclick="closeMenu(); logout()" style="width: 100%; padding: 10px; background: none; border: none; color: black; text-align: left;">Log Out</button>
     <button onclick="closeMenu(); showPasswordModal()" style="width: 100%; padding: 10px; background: none; border: none; color: black; text-align: left;">Change Password</button>
     <button onclick="closeMenu(); showDeleteModal()" style="width: 100%; padding: 10px; background: none; border: none; color: red; text-align: left;">Delete Account</button>
   </div>
-</div>
 
 
 
