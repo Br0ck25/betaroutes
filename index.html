@@ -834,7 +834,10 @@ transition: opacity 0.3s ease;
           placeholder="Enter supplies cost for the day"
         />
       </div>
-
+      <button onclick="optimizeRoute()">Optimize Route</button>
+      <button onclick="calculateRoute()">Calculate Route</button>
+      <button onclick="logResults()">Log Route</button>
+      <button onclick="openInGoogleMaps()">Open Route in Google Maps</button>
       <div
         id="confirmation-message"
         style="display: none; color: green; font-weight: bold; margin-top: 10px"
@@ -1551,6 +1554,45 @@ document.addEventListener("DOMContentLoaded", () => {
           waypoints: waypoints,
           travelMode: "DRIVING",
         };
+
+        // 🛜 If offline, simulate basic route calculation
+if (!navigator.onLine) {
+  alert("⚠️ Offline: Skipping live directions. Using defaults.");
+
+  const totalEarnings = Array.from(document.querySelectorAll('input[id^="earnings-"]'))
+    .map((input) => parseFloat(input.value) || 0)
+    .reduce((sum, val) => sum + val, 0);
+
+  const maintenanceCost = parseFloat(document.getElementById("maintenance-cost").value) || 0;
+  const suppliesCost = parseFloat(document.getElementById("supplies-cost").value) || 0;
+  const mpg = parseFloat(document.getElementById("mpg").value) || 1;
+  const gasPrice = parseFloat(document.getElementById("gas-price").value) || 0;
+
+  const fuelCost = 0; // 🛜 Can't calculate fuel cost without mileage
+
+  const netProfitBeforeOptional = totalEarnings - fuelCost;
+  const netProfit = netProfitBeforeOptional - maintenanceCost - suppliesCost;
+
+  resolve({
+    date: document.getElementById("log-date").value || new Date().toISOString().split("T")[0],
+    startTime: document.getElementById("start-address").value,
+    endTime: document.getElementById("end-address").value,
+    destinations: Array.from(document.querySelectorAll('input[id^="destination-"]')).map(input => input.value),
+    earnings: Array.from(document.querySelectorAll('input[id^="earnings-"]')).map(input => parseFloat(input.value) || 0),
+    totalMileage: "0.00",
+    totalTime: "0 minutes",
+    totalEarnings: totalEarnings.toFixed(2),
+    fuelCost: fuelCost.toFixed(2),
+    maintenanceCost: maintenanceCost.toFixed(2),
+    suppliesCost: suppliesCost.toFixed(2),
+    netProfit: netProfit.toFixed(2),
+    profitPerHour: "0.00",
+    hoursWorked: parseFloat(document.getElementById("hours-worked").value) || 0,
+  });
+  
+  return; // ✅ Exit early — don't call directionsService.route when offline!
+}
+
 
         return new Promise((resolve, reject) => {
           directionsService.route(request, (response, status) => {
@@ -3664,92 +3706,14 @@ toggleButton.textContent = "More Details";
         });
       }
 
+      window.addEventListener('scroll', function() {
+  const topBar = document.getElementById('top-bar');
+  if (window.scrollY > 10) {
+    topBar.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.1)';
+  } else {
+    topBar.style.boxShadow = 'none';
+  }
+});
     </script>
-
-    
-<!-- Sticky Bottom Bar -->
-<div id="bottom-bar" style="
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 75px; /* 🆙 Taller bar */
-  width: 100%;
-  background: white;
-  box-shadow: 0 -2px 6px rgba(0,0,0,0.1);
-  z-index: 9999;
-  padding: 10px 15px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  pointer-events: auto;
-  overflow: hidden; /* 🛡️ prevent moving */
-">
-  <div style="
-    display: flex;
-    width: 100%;
-    max-width: 900px;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-    padding: 0;
-  ">
-    <button onclick="optimizeRoute()" style="
-      width: 22%;
-      height: 50px;
-      font-size: 14px;
-      border-radius: 6px;
-      background: none;
-      border: 1px solid #ccc;
-      color: black;
-      white-space: nowrap;
-      cursor: pointer;
-    ">Optimize</button>
-
-    <button onclick="calculateRoute()" style="
-      width: 22%;
-      height: 50px;
-      font-size: 14px;
-      border-radius: 6px;
-      background: none;
-      border: 1px solid #ccc;
-      color: black;
-      white-space: nowrap;
-      cursor: pointer;
-    ">Calculate</button>
-
-    <button onclick="logResults()" style="
-      width: 22%;
-      height: 50px;
-      font-size: 14px;
-      border-radius: 6px;
-      background: none;
-      border: 1px solid #ccc;
-      color: black;
-      white-space: nowrap;
-      cursor: pointer;
-    ">Log</button>
-
-    <button onclick="openInGoogleMaps()" style="
-      width: 22%;
-      height: 50px;
-      font-size: 14px;
-      border-radius: 6px;
-      background: none;
-      border: 1px solid #ccc;
-      color: black;
-      white-space: nowrap;
-      cursor: pointer;
-    ">Google Maps</button>
-  </div>
-</div>
-
-
-
-
-
-
-
-</body>
+  </body>
 </html>
-
