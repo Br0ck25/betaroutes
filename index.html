@@ -582,23 +582,27 @@ img {
     </div>
 
     <div id="top-bar" style="
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 1000;
-    background: white;
-    padding: 25px 0; /* 🆙 Taller top bar */
-    width: 100%;
-    max-width: 900px;
-    margin: 0 auto;
-    border-radius: 0;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-    transition: box-shadow 0.3s ease;
-  ">
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: white;
+  padding: 25px 0;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  transition: box-shadow 0.3s ease;
+">
+
   
   
   
@@ -624,7 +628,7 @@ img {
     </div>
   
     <!-- Centered Logo -->
-    <img id="logo-image" src="/logo.png" alt="Logo" style="height: 50px; max-height: 50px; cursor: pointer;" onclick="scrollToTop()">
+    <img id="logo-image" src="/logo.png" alt="Logo" style="height: 50px; max-height: 70px; cursor: pointer;" onclick="scrollToTop()">
   
     <!-- Right Spacer for Username -->
     <div style="position: absolute; right: 22px; display: flex; align-items: center; height: 100%;">
@@ -746,7 +750,7 @@ transition: opacity 0.3s ease;
       </div>
     </div>
 
-    <div class="container" style="margin-top: 50px;">
+    <div class="container" style="margin-top: 55px;">
 
 
       <label for="log-date">Date</label>
