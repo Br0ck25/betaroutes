@@ -497,11 +497,16 @@ img {
     </div>
 
 <!-- ✅ Hamburger + Logo + Username together side-by-side -->
-<div style="display: flex; align-items: center; justify-content: center; margin-top: 10px; margin-bottom: 20px;">
-  <button id="hamburger-button" onclick="toggleMenu()" style="background: none; border: none; font-size: 32px; cursor: pointer; color: black; margin-right: 10px;">☰</button>
+<div style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 10px; margin-bottom: 20px;">
+  <button id="hamburger-button" onclick="toggleMenu()" style="background: white; border: 2px solid black; border-radius: 8px; padding: 8px 12px; font-size: 28px; cursor: pointer; color: black; transition: all 0.3s;">
+    ☰
+  </button>
+  
   <img src="/logo.png" alt="Logo" style="height: 50px; max-height: 50px;">
-  <span id="username-display" style="font-size: 20px; font-weight: bold; margin-left: 10px; color: black;"></span>
+  
+  <span id="username-display" style="font-size: 18px; font-weight: bold; padding: 6px 12px; background: #f0f0f0; border-radius: 10px; color: #333; transition: all 0.3s;"></span>
 </div>
+
 
 <!-- 🔒 Only signed-in specific things -->
 <div id="logout-message" style="display: none; margin: 20px auto; max-width: 100%;">
