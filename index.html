@@ -1173,6 +1173,13 @@ const logsPerPage = 10;
     console.warn("🛜 Offline: Saving log locally.");
     localStorage.setItem("pendingLogs", JSON.stringify(logEntries));
     localStorage.setItem("cachedLogs", JSON.stringify(logEntries)); // ✅ Update visible logs too
+
+    // 🆕 Immediately update the visible log list
+    logEntries = JSON.parse(localStorage.getItem("cachedLogs") || "[]");
+    displayLog();
+    populateYearOptions();
+    populateMonthOptions();
+
     alert("⚠️ Offline: Route saved locally. Will sync when back online.");
     return;
   }
@@ -1201,9 +1208,9 @@ const logsPerPage = 10;
     console.error("❌ Save failed. Saving offline:", err);
     localStorage.setItem("pendingLogs", JSON.stringify(logEntries)); // ✅ Save pending
     localStorage.setItem("cachedLogs", JSON.stringify(logEntries)); // ✅ Update visible logs too
-    alert("⚠️ Offline mode: Your changes are saved locally. We'll sync them next time you're online.");
   }
 }
+
 
 
 async function syncPendingLogs() {
@@ -1230,10 +1237,14 @@ async function syncPendingLogs() {
       console.log("✅ Pending logs synced successfully!");
       localStorage.removeItem("pendingLogs");
 
-      // 🆕 Important: Update cachedLogs after successful sync
+      // 🆕 Update cached logs and reload UI
       const freshLogs = await loadLog();
       localStorage.setItem("cachedLogs", JSON.stringify(freshLogs));
+
+      logEntries = freshLogs; // 🆕 Very important — update the global variable
       displayLog();
+      populateYearOptions(); // 🆕 Repopulate Year filter
+      populateMonthOptions(); // 🆕 Repopulate Month filter
     } else {
       console.error("❌ Failed to sync pending logs:", await response.text());
     }
@@ -1241,6 +1252,7 @@ async function syncPendingLogs() {
     console.error("❌ Error syncing pending logs:", err);
   }
 }
+
 
 async function loadLog() {
   const token = localStorage.getItem("token");
