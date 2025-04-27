@@ -593,33 +593,43 @@ img {
   margin-bottom: 20px;
 ">
 
-  <button id="hamburger-button" onclick="toggleMenu()" style="
-    position: absolute;
-    left: 10px;
-    background: none;
-    border: none;
-    font-size: 28px;
-    cursor: pointer;
-    color: black;
-    padding: 6px 10px;
-    border-radius: 8px;
-    transition: background-color 0.3s;
-  ">☰</button>
+  <!-- Left Spacer for Hamburger -->
+  <div style="position: absolute; left: 10px; display: flex; align-items: center; height: 100%;">
+    <button id="hamburger-button" onclick="toggleMenu()" style="
+      background: none;
+      border: none;
+      font-size: 28px;
+      cursor: pointer;
+      color: black;
+      padding: 6px 10px;
+      border-radius: 8px;
+      transition: background-color 0.3s;
+      width: 50px; /* Force consistent space */
+      height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    ">☰</button>
+  </div>
 
+  <!-- Centered Logo -->
   <img id="logo-image" src="/logo.png" alt="Logo" style="height: 50px; max-height: 50px;">
 
-  <span id="username-display" style="
-    position: absolute;
-    right: 10px;
-    font-size: 16px;
-    font-weight: bold;
-    background: none;
-    padding: 6px 10px;
-    border-radius: 8px;
-    color: black;
-    transition: background-color 0.3s;
-  "></span>
+  <!-- Right Spacer for Username -->
+  <div style="position: absolute; right: 10px; display: flex; align-items: center; height: 100%;">
+    <span id="username-display" style="
+      font-size: 16px;
+      font-weight: bold;
+      background: none;
+      padding: 6px 10px;
+      border-radius: 8px;
+      color: black;
+      transition: background-color 0.3s;
+    "></span>
+  </div>
+
 </div>
+
 
 
 
