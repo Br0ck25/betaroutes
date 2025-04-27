@@ -35,6 +35,17 @@
     <!-- pick your site background color -->
 
     <style>
+
+#hamburger-button {
+  display: none; /* hidden by default */
+}
+
+
+img {
+  display: block;
+  margin: 0 auto;
+}
+
 #account-menu {
   position: fixed;
   top: 0;
@@ -485,17 +496,14 @@
       >.
     </div>
 
-<!-- ✅ Logo always visible for everyone -->
+<!-- ✅ Logo + Hamburger together side-by-side -->
 <div style="display: flex; align-items: center; justify-content: center; margin-top: 10px; margin-bottom: 20px;">
+  <button id="hamburger-button" onclick="toggleMenu()" style="background: none; border: none; font-size: 32px; cursor: pointer; color: black; margin-right: 10px;">☰</button>
   <img src="/logo.png" alt="Logo" style="height: 50px; max-height: 50px;">
 </div>
 
-<!-- 🔒 Only hamburger and menu hidden/shown based on sign-in -->
-<div id="logout-message" style="display: none; margin: 20px auto; max-width: 100%;">
-  <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 10px;">
-    <button onclick="toggleMenu()" style="background: none; border: none; font-size: 32px; cursor: pointer; color: black; margin-right: 10px;">☰</button>
-  </div>
-
+<!-- 🔒 Only signed-in specific things -->
+<div id="logout-message" style="display: none; margin: 20px auto; max-width: 100%; text-align: center;">
   ✅ You’re signed in as <span id="username-display"></span>
 
   <div id="account-menu">
@@ -504,6 +512,7 @@
     <button onclick="closeMenu(); showDeleteModal()" style="width: 100%; padding: 10px; background: none; border: none; color: red; text-align: left;">Delete Account</button>
   </div>
 </div>
+
 
 
 
@@ -2785,18 +2794,22 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       function updateAuthUI() {
-        const token = localStorage.getItem("token");
-        const username = localStorage.getItem("username");
+  const token = localStorage.getItem("token");
+  const username = localStorage.getItem("username");
+  const hamburgerButton = document.getElementById("hamburger-button");
 
-        if (token && username) {
-          document.getElementById("auth-message").style.display = "none";
-          document.getElementById("logout-message").style.display = "block";
-          document.getElementById("username-display").textContent = username;
-        } else {
-          document.getElementById("auth-message").style.display = "block";
-          document.getElementById("logout-message").style.display = "none";
-        }
-      }
+  if (token && username) {
+    document.getElementById("auth-message").style.display = "none";
+    document.getElementById("logout-message").style.display = "block";
+    document.getElementById("username-display").textContent = username;
+    if (hamburgerButton) hamburgerButton.style.display = "inline-block"; // ✅ Show ☰
+  } else {
+    document.getElementById("auth-message").style.display = "block";
+    document.getElementById("logout-message").style.display = "none";
+    if (hamburgerButton) hamburgerButton.style.display = "none"; // ✅ Hide ☰
+  }
+}
+
 
       function logout() {
         localStorage.removeItem("token");
