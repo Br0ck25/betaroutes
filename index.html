@@ -35,25 +35,24 @@
     <!-- pick your site background color -->
 
     <style>
-
 #account-menu {
-  display: none;
   position: fixed;
   top: 0;
-  left: -250px; /* start hidden outside screen */
+  left: -250px; /* Hidden to the left */
   width: 250px;
   height: 100%;
   background-color: white;
   box-shadow: 2px 0 5px rgba(0,0,0,0.5);
   z-index: 10000;
-  padding-top: 60px; /* spacing below hamburger */
-  transition: left 0.3s ease;
+  padding-top: 60px; /* Push content down a little */
+  transition: left 0.3s ease; /* Animate left position */
+  overflow-y: auto; /* Scroll if menu gets long */
 }
 
 #account-menu.show {
-  display: block;
-  left: 0; /* slide in */
+  left: 0; /* Slide in */
 }
+
 
 
       body,
@@ -86,26 +85,6 @@
   object-fit: contain;
 }
 
-
-
-
-      #account-menu {
-        display: none;
-        position: absolute;
-        top: 100%;
-        right: 0;
-        background: white;
-        border: 1px solid #ccc;
-        border-radius: 6px;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-        z-index: 9999;
-        min-width: 180px;
-        padding: 5px 0;
-      }
-
-      #account-menu.show {
-        display: block !important;
-      }
 
       body {
         font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -2963,6 +2942,7 @@ document.addEventListener("DOMContentLoaded", () => {
     menu.classList.add("show");
   }
 };
+
 
 
       function filterByDate() {
