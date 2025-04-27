@@ -3673,71 +3673,76 @@ toggleButton.textContent = "More Details";
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 999;
+  width: 100%; /* 🆕 full width */
   background: white;
   box-shadow: 0 -2px 6px rgba(0,0,0,0.1);
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  gap: 5px;
-  padding: 12px 8px 16px 8px; /* 🆕 More bottom padding */
-  flex-wrap: nowrap;
-  max-width: 900px;
-  margin: 0 auto;
+  z-index: 999;
+  padding: 12px 8px 16px 8px; /* Top, Left, Bottom, Right */
   overflow-x: auto;
 ">
-  <button onclick="optimizeRoute()" style="
-    flex: 1;
-    min-width: 80px;
-    padding: 10px;
-    font-size: 14px;
-    border-radius: 6px;
-    background: none;
-    border: 1px solid #ccc;
-    color: black;
-    white-space: nowrap;
-    cursor: pointer;
-  ">Optimize</button>
+  <div style="
+    max-width: 900px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: nowrap;
+  ">
+    <button onclick="optimizeRoute()" style="
+      flex: 1;
+      min-width: 80px;
+      padding: 10px;
+      font-size: 14px;
+      border-radius: 6px;
+      background: none;
+      border: 1px solid #ccc;
+      color: black;
+      white-space: nowrap;
+      cursor: pointer;
+    ">Optimize</button>
 
-  <button onclick="calculateRoute()" style="
-    flex: 1;
-    min-width: 80px;
-    padding: 10px;
-    font-size: 14px;
-    border-radius: 6px;
-    background: none;
-    border: 1px solid #ccc;
-    color: black;
-    white-space: nowrap;
-    cursor: pointer;
-  ">Calculate</button>
+    <button onclick="calculateRoute()" style="
+      flex: 1;
+      min-width: 80px;
+      padding: 10px;
+      font-size: 14px;
+      border-radius: 6px;
+      background: none;
+      border: 1px solid #ccc;
+      color: black;
+      white-space: nowrap;
+      cursor: pointer;
+    ">Calculate</button>
 
-  <button onclick="logResults()" style="
-    flex: 1;
-    min-width: 80px;
-    padding: 10px;
-    font-size: 14px;
-    border-radius: 6px;
-    background: none;
-    border: 1px solid #ccc;
-    color: black;
-    white-space: nowrap;
-    cursor: pointer;
-  ">Log</button>
+    <button onclick="logResults()" style="
+      flex: 1;
+      min-width: 80px;
+      padding: 10px;
+      font-size: 14px;
+      border-radius: 6px;
+      background: none;
+      border: 1px solid #ccc;
+      color: black;
+      white-space: nowrap;
+      cursor: pointer;
+    ">Log</button>
 
-  <button onclick="openInGoogleMaps()" style="
-    flex: 1;
-    min-width: 80px;
-    padding: 10px;
-    font-size: 14px;
-    border-radius: 6px;
-    background: none;
-    border: 1px solid #ccc;
-    color: black;
-    white-space: nowrap;
-    cursor: pointer;
-  ">Google Maps</button>
+    <button onclick="openInGoogleMaps()" style="
+      flex: 1;
+      min-width: 80px;
+      padding: 10px;
+      font-size: 14px;
+      border-radius: 6px;
+      background: none;
+      border: 1px solid #ccc;
+      color: black;
+      white-space: nowrap;
+      cursor: pointer;
+    ">Google Maps</button>
+  </div>
 </div>
+
 
 
 
