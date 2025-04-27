@@ -3673,27 +3673,29 @@ toggleButton.textContent = "More Details";
   bottom: 0;
   left: 0;
   right: 0;
-  width: 100%; /* 🆕 full width */
+  height: 65px; /* ✅ Lock the height */
+  width: 100%;
   background: white;
   box-shadow: 0 -2px 6px rgba(0,0,0,0.1);
   z-index: 999;
-  padding: 12px 8px 16px 8px; /* Top, Left, Bottom, Right */
+  padding: 8px 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   overflow-x: auto;
 ">
   <div style="
-    max-width: 900px;
-    margin: 0 auto;
     display: flex;
-    justify-content: space-around;
+    width: 100%;
+    max-width: 900px;
+    justify-content: space-between;
     align-items: center;
-    gap: 5px;
-    flex-wrap: nowrap;
+    gap: 6px;
   ">
     <button onclick="optimizeRoute()" style="
       flex: 1;
-      min-width: 80px;
-      padding: 10px;
-      font-size: 14px;
+      padding: 6px;
+      font-size: 12px;
       border-radius: 6px;
       background: none;
       border: 1px solid #ccc;
@@ -3704,9 +3706,8 @@ toggleButton.textContent = "More Details";
 
     <button onclick="calculateRoute()" style="
       flex: 1;
-      min-width: 80px;
-      padding: 10px;
-      font-size: 14px;
+      padding: 6px;
+      font-size: 12px;
       border-radius: 6px;
       background: none;
       border: 1px solid #ccc;
@@ -3717,9 +3718,8 @@ toggleButton.textContent = "More Details";
 
     <button onclick="logResults()" style="
       flex: 1;
-      min-width: 80px;
-      padding: 10px;
-      font-size: 14px;
+      padding: 6px;
+      font-size: 12px;
       border-radius: 6px;
       background: none;
       border: 1px solid #ccc;
@@ -3730,9 +3730,8 @@ toggleButton.textContent = "More Details";
 
     <button onclick="openInGoogleMaps()" style="
       flex: 1;
-      min-width: 80px;
-      padding: 10px;
-      font-size: 14px;
+      padding: 6px;
+      font-size: 12px;
       border-radius: 6px;
       background: none;
       border: 1px solid #ccc;
@@ -3742,6 +3741,7 @@ toggleButton.textContent = "More Details";
     ">Google Maps</button>
   </div>
 </div>
+
 
 
 
