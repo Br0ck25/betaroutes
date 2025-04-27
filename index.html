@@ -1216,11 +1216,31 @@ const logsPerPage = 10;
 
 
 async function syncPendingLogs() {
-  const pending = localStorage.getItem("pendingLogs");
-  if (!pending) return;
+  const pendingString = localStorage.getItem("pendingLogs");
+  if (!pendingString) return;
 
   const token = localStorage.getItem("token");
   if (!token) return;
+
+  const pending = JSON.parse(pendingString);
+  if (!Array.isArray(pending) || pending.length === 0) return;
+
+  const updatedLogs = [];
+
+  for (const log of pending) {
+    try {
+      // If miles or time missing, recalculate
+      if (!log.totalMileage || !log.totalTime) {
+        const { totalMileage, totalTime } = await calculateMileageAndTime(log.startTime, log.endTime, log.destinations || []);
+        log.totalMileage = totalMileage;
+        log.totalTime = totalTime;
+      }
+      updatedLogs.push(log);
+    } catch (error) {
+      console.error("❌ Failed to calculate route for pending log:", error);
+      updatedLogs.push(log); // Even if failed, push original log so it doesn't get stuck forever
+    }
+  }
 
   try {
     const response = await fetch(
@@ -1231,22 +1251,23 @@ async function syncPendingLogs() {
           "Content-Type": "application/json",
           Authorization: token,
         },
-        body: pending,
+        body: JSON.stringify(updatedLogs),
       }
     );
 
     if (response.ok) {
-      console.log("✅ Pending logs synced successfully!");
+      console.log("✅ Pending logs synced successfully with updated mileage!");
+
       localStorage.removeItem("pendingLogs");
 
-      // 🆕 Update cached logs and reload UI
+      // 🆕 Refresh fresh logs and UI
       const freshLogs = await loadLog();
       localStorage.setItem("cachedLogs", JSON.stringify(freshLogs));
 
-      logEntries = freshLogs; // 🆕 Very important — update the global variable
+      logEntries = freshLogs;
       displayLog();
-      populateYearOptions(); // 🆕 Repopulate Year filter
-      populateMonthOptions(); // 🆕 Repopulate Month filter
+      populateYearOptions();
+      populateMonthOptions();
     } else {
       console.error("❌ Failed to sync pending logs:", await response.text());
     }
@@ -1254,6 +1275,46 @@ async function syncPendingLogs() {
     console.error("❌ Error syncing pending logs:", err);
   }
 }
+
+
+async function calculateMileageAndTime(startAddress, endAddress, destinations = []) {
+  return new Promise((resolve, reject) => {
+    if (!window.google || !window.google.maps) {
+      reject("Google Maps not loaded yet.");
+      return;
+    }
+
+    const directionsService = new google.maps.DirectionsService();
+    const waypoints = destinations.map(dest => ({ location: dest, stopover: true }));
+
+    const request = {
+      origin: startAddress,
+      destination: endAddress || startAddress, // fallback if end is missing
+      waypoints: waypoints,
+      travelMode: "DRIVING"
+    };
+
+    directionsService.route(request, (response, status) => {
+      if (status === "OK" && response.routes.length > 0) {
+        let totalMileage = 0;
+        let totalDuration = 0;
+
+        response.routes[0].legs.forEach((leg) => {
+          totalMileage += leg.distance.value / 1609.34; // meters to miles
+          totalDuration += leg.duration.value;           // seconds
+        });
+
+        resolve({
+          totalMileage: totalMileage.toFixed(2),
+          totalTime: formatDuration(totalDuration)
+        });
+      } else {
+        reject("Directions request failed: " + status);
+      }
+    });
+  });
+}
+
 
 
 async function loadLog() {
