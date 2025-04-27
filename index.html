@@ -834,10 +834,7 @@ transition: opacity 0.3s ease;
           placeholder="Enter supplies cost for the day"
         />
       </div>
-      <button onclick="optimizeRoute()">Optimize Route</button>
-      <button onclick="calculateRoute()">Calculate Route</button>
-      <button onclick="logResults()">Log Route</button>
-      <button onclick="openInGoogleMaps()">Open Route in Google Maps</button>
+
       <div
         id="confirmation-message"
         style="display: none; color: green; font-weight: bold; margin-top: 10px"
@@ -3667,14 +3664,72 @@ toggleButton.textContent = "More Details";
         });
       }
 
-      window.addEventListener('scroll', function() {
-  const topBar = document.getElementById('top-bar');
-  if (window.scrollY > 10) {
-    topBar.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.1)';
-  } else {
-    topBar.style.boxShadow = 'none';
-  }
-});
     </script>
-  </body>
+
+    
+<!-- Sticky Bottom Bar -->
+<div id="bottom-bar" style="
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 999;
+  background: white;
+  box-shadow: 0 -2px 6px rgba(0,0,0,0.1);
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 15px;
+  flex-wrap: wrap;
+  max-width: 870px;
+  margin: 0 auto;
+">
+  <button onclick="optimizeRoute()" style="
+    flex: 1;
+    padding: 12px;
+    font-size: 16px;
+    border-radius: 6px;
+    background: none;
+    border: 1px solid #ccc;
+    color: black;
+    cursor: pointer;
+  ">Optimize Route</button>
+  
+  <button onclick="calculateRoute()" style="
+    flex: 1;
+    padding: 12px;
+    font-size: 16px;
+    border-radius: 6px;
+    background: none;
+    border: 1px solid #ccc;
+    color: black;
+    cursor: pointer;
+  ">Calculate Route</button>
+  
+  <button onclick="logResults()" style="
+    flex: 1;
+    padding: 12px;
+    font-size: 16px;
+    border-radius: 6px;
+    background: none;
+    border: 1px solid #ccc;
+    color: black;
+    cursor: pointer;
+  ">Log Route</button>
+  
+  <button onclick="openInGoogleMaps()" style="
+    flex: 1;
+    padding: 12px;
+    font-size: 16px;
+    border-radius: 6px;
+    background: none;
+    border: 1px solid #ccc;
+    color: black;
+    cursor: pointer;
+  ">Open in Google Maps</button>
+</div>
+
+
+</body>
 </html>
+
