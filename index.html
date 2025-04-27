@@ -35,6 +35,27 @@
     <!-- pick your site background color -->
 
     <style>
+
+#account-menu {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: -250px; /* start hidden outside screen */
+  width: 250px;
+  height: 100%;
+  background-color: white;
+  box-shadow: 2px 0 5px rgba(0,0,0,0.5);
+  z-index: 10000;
+  padding-top: 60px; /* spacing below hamburger */
+  transition: left 0.3s ease;
+}
+
+#account-menu.show {
+  display: block;
+  left: 0; /* slide in */
+}
+
+
       body,
       html,
       #log-container {
@@ -487,7 +508,7 @@
 
 <div id="logout-message" style="display: none; margin: 20px auto; max-width: 100%;">
   <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 10px;">
-    <button onclick="toggleMenu()" style="background: none; border: none; font-size: 28px; cursor: pointer; margin-right: 10px;">☰</button>
+    <button onclick="toggleMenu()" style="background: none; border: none; font-size: 32px; cursor: pointer; color: black; margin-right: 10px;">☰</button>
     <img src="/logo.png" alt="Logo" style="height: 50px; max-height: 50px;">
   </div>
 
@@ -2931,13 +2952,18 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       window.toggleMenu = function () {
-        console.log("toggleMenu() triggered!");
+  console.log("toggleMenu() triggered!");
 
-        const menu = document.getElementById("account-menu");
-        if (!menu) return console.warn("Menu not found");
+  const menu = document.getElementById("account-menu");
+  if (!menu) return console.warn("Menu not found");
 
-        menu.classList.toggle("show");
-      };
+  if (menu.classList.contains("show")) {
+    menu.classList.remove("show");
+  } else {
+    menu.classList.add("show");
+  }
+};
+
 
       function filterByDate() {
         const year = document.getElementById("filter-year").value;
