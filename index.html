@@ -3677,57 +3677,68 @@ toggleButton.textContent = "More Details";
   background: white;
   box-shadow: 0 -2px 6px rgba(0,0,0,0.1);
   display: flex;
-  justify-content: center;
-  gap: 10px;
-  padding: 10px 15px;
-  flex-wrap: wrap;
-  max-width: 870px;
+  justify-content: space-around;
+  align-items: center;
+  gap: 5px;
+  padding: 8px;
+  flex-wrap: nowrap;
+  max-width: 900px;
   margin: 0 auto;
+  overflow-x: auto;
 ">
   <button onclick="optimizeRoute()" style="
     flex: 1;
-    padding: 12px;
-    font-size: 16px;
+    min-width: 80px;
+    padding: 8px;
+    font-size: 14px;
     border-radius: 6px;
     background: none;
     border: 1px solid #ccc;
     color: black;
+    white-space: nowrap;
     cursor: pointer;
-  ">Optimize Route</button>
-  
+  ">Optimize</button>
+
   <button onclick="calculateRoute()" style="
     flex: 1;
-    padding: 12px;
-    font-size: 16px;
+    min-width: 80px;
+    padding: 8px;
+    font-size: 14px;
     border-radius: 6px;
     background: none;
     border: 1px solid #ccc;
     color: black;
+    white-space: nowrap;
     cursor: pointer;
-  ">Calculate Route</button>
-  
+  ">Calculate</button>
+
   <button onclick="logResults()" style="
     flex: 1;
-    padding: 12px;
-    font-size: 16px;
+    min-width: 80px;
+    padding: 8px;
+    font-size: 14px;
     border-radius: 6px;
     background: none;
     border: 1px solid #ccc;
     color: black;
+    white-space: nowrap;
     cursor: pointer;
-  ">Log Route</button>
-  
+  ">Log</button>
+
   <button onclick="openInGoogleMaps()" style="
     flex: 1;
-    padding: 12px;
-    font-size: 16px;
+    min-width: 80px;
+    padding: 8px;
+    font-size: 14px;
     border-radius: 6px;
     background: none;
     border: 1px solid #ccc;
     color: black;
+    white-space: nowrap;
     cursor: pointer;
-  ">Open in Google Maps</button>
+  ">Google Maps</button>
 </div>
+
 
 
 </body>
