@@ -34,62 +34,7 @@
     <meta name="theme-color" content="#ffffff" />
     <!-- pick your site background color -->
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.14.0/Sortable.min.js"></script>
-
     <style>
-
-
-.drag-handle {
-  font-size: 22px;
-  cursor: grab;
-  padding: 8px;
-  margin-right: 10px;
-  user-select: none;
-}
-
-.destination {
-  display: flex;
-  align-items: center;
-  padding: 10px;
-  margin-bottom: 10px;
-  background-color: #fff;
-  border: 1px dashed #ccc;
-  border-radius: 6px;
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
-}
-
-.destination:active {
-  cursor: grabbing;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-  transform: scale(1.02);
-}
-
-/* Slightly fade other items when dragging */
-.sortable-ghost {
-  opacity: 0.5;
-}
-
-/* The item you are dragging */
-.sortable-chosen {
-  background: #e0f7fa; /* light blue */
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
-  transform: scale(1.03); /* slightly bigger */
-  transition: all 0.2s ease;
-}
-
-/* While dragging, even more visible */
-.sortable-drag {
-  opacity: 1;
-  transform: rotate(2deg) scale(1.05);
-}
-
-
-
-      .sortable-container .destination:active {
-        cursor: grabbing;
-        background-color: #f0f0f0; /* Change background color when item is being dragged */
-      }
-
       body,
       html,
       #log-container {
@@ -463,18 +408,22 @@
         background-color: #c82333;
       }
 
-      /* Make destinations look draggable */
-      .destination {
-        cursor: grab;
-        transition: box-shadow 0.2s ease, transform 0.2s ease;
-      }
+      #log-list .hidden {
+  display: none;
+}
 
-      /* While dragging */
-      .destination:active {
-        cursor: grabbing;
-        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-        transform: scale(1.02);
-      }
+#log-list div[id^="details-"] {
+  transition: all 0.3s ease;
+  padding-top: 5px;
+}
+
+#log-list div[id^="details-"] {
+  margin-left: 20px;
+  padding-top: 5px;
+  transition: all 0.3s ease;
+}
+
+
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
@@ -602,10 +551,8 @@
         required
       />
 
-      <div id="destinations-container" class="sortable-container">
-        <div class="destination" draggable="true">
-          <div class="drag-handle">☰</div>
-      
+      <div id="destinations-container">
+        <div class="destination">
           <label for="destination-1">Destination 1</label>
           <input
             type="text"
@@ -624,246 +571,237 @@
             <button class="delete-btn" onclick="deleteDestination(this)">
               Delete
             </button>
+            <button class="move-btn" onclick="moveDestinationUp(this)">
+              Move Up
+            </button>
+            <button class="move-btn" onclick="moveDestinationDown(this)">
+              Move Down
+            </button>
           </div>
         </div>
       </div>
-      
-      <!-- 🆕 Now OUTSIDE of destinations-container -->
-      <button onclick="addDestination()">Add Destination</button>
-      
-        <label for="end-address">End Address</label>
-        <input
-          type="text"
-          id="end-address"
-          placeholder="Enter end address"
-          required
-        />
 
-        <label for="mpg">Miles per Gallon (MPG)</label>
+              <button onclick="addDestination()">Add Destination</button>
+      <label for="end-address">End Address</label>
+      <input
+        type="text"
+        id="end-address"
+        placeholder="Enter end address"
+        required
+      />
+
+      <label for="mpg">Miles per Gallon (MPG)</label>
+      <input
+        type="number"
+        id="mpg"
+        placeholder="Enter miles per gallon"
+        required
+      />
+
+      <label for="gas-price">Fuel Price per Gallon</label>
+      <input
+        type="number"
+        id="gas-price"
+        placeholder="Enter fuel price per gallon"
+        required
+      />
+
+      <label for="start-time">Start Time (Optional)</label>
+      <input type="time" id="start-time" placeholder="Enter start time" />
+
+      <label for="end-time">End Time (Optional)</label>
+      <input type="time" id="end-time" placeholder="Enter end time" />
+
+      <label for="hours-worked">Hours Worked (Optional)</label>
+      <input
+        type="number"
+        id="hours-worked"
+        placeholder="Auto-filled if times are entered"
+      />
+
+      <div class="optional-costs">
+        <h3>Optional Daily Costs</h3>
+        <label for="maintenance-cost"
+          >Vehicle Maintenance Cost (Optional)</label
+        >
         <input
           type="number"
-          id="mpg"
-          placeholder="Enter miles per gallon"
-          required
+          id="maintenance-cost"
+          placeholder="Enter maintenance cost for the day"
         />
 
-        <label for="gas-price">Fuel Price per Gallon</label>
+        <label for="supplies-cost">Supplies Cost (Optional)</label>
         <input
           type="number"
-          id="gas-price"
-          placeholder="Enter fuel price per gallon"
-          required
+          id="supplies-cost"
+          placeholder="Enter supplies cost for the day"
         />
+      </div>
+      <button onclick="optimizeRoute()">Optimize Route</button>
+      <button onclick="calculateRoute()">Calculate Route</button>
+      <button onclick="logResults()">Log Route</button>
+      <button onclick="openInGoogleMaps()">Open Route in Google Maps</button>
+      <div
+        id="confirmation-message"
+        style="display: none; color: green; font-weight: bold; margin-top: 10px"
+      ></div>
 
-        <label for="start-time">Start Time (Optional)</label>
-        <input type="time" id="start-time" placeholder="Enter start time" />
+      <div id="results" class="hidden">
+        <p>Total Mileage: <span id="total-mileage"></span> miles</p>
+        <p>Total Drive Time: <span id="total-time"></span></p>
+        <p>Total Earnings: $<span id="total-earnings"></span></p>
+        <p>Fuel Consumption Cost: $<span id="fuel-cost"></span></p>
+        <p>Maintenance Cost: $<span id="maintenance-cost-result"></span></p>
+        <p>Supplies Cost: $<span id="supplies-cost-result"></span></p>
+        <p>Net Profit: $<span id="net-profit"></span></p>
+        <p>
+          Net Profit per Hour (including drive time): $<span
+            id="profit-per-hour"
+          ></span>
+        </p>
+      </div>
 
-        <label for="end-time">End Time (Optional)</label>
-        <input type="time" id="end-time" placeholder="Enter end time" />
+      <div id="map" class="hidden"></div>
+      <div id="detailed-results" style="margin-top: 20px"></div>
+      <div
+        id="mileage-display"
+        style="text-align: center; font-weight: bold; margin-top: 10px"
+      ></div>
+      <div
+        id="optimized-mileage-display"
+        style="text-align: center; font-weight: bold; margin-top: 10px"
+      ></div>
+    </div>
 
-        <label for="hours-worked">Hours Worked (Optional)</label>
-        <input
-          type="number"
-          id="hours-worked"
-          placeholder="Auto-filled if times are entered"
-        />
-
-        <div class="optional-costs">
-          <h3>Optional Daily Costs</h3>
-          <label for="maintenance-cost"
-            >Vehicle Maintenance Cost (Optional)</label
-          >
-          <input
-            type="number"
-            id="maintenance-cost"
-            placeholder="Enter maintenance cost for the day"
-          />
-
-          <label for="supplies-cost">Supplies Cost (Optional)</label>
-          <input
-            type="number"
-            id="supplies-cost"
-            placeholder="Enter supplies cost for the day"
-          />
-        </div>
-        <button onclick="optimizeRoute()">Optimize Route</button>
-        <button onclick="calculateRoute()">Calculate Route</button>
-        <button onclick="logResults()">Log Route</button>
-        <button onclick="openInGoogleMaps()">Open Route in Google Maps</button>
+    <div id="log-container">
+      <div id="log-header">
+        <!-- Net Profit / Profit per Hour Summary (always centered at top) -->
         <div
-          id="confirmation-message"
+          id="log-summary"
           style="
-            display: none;
-            color: green;
+            text-align: center;
+            margin-bottom: 15px;
             font-weight: bold;
-            margin-top: 10px;
+            font-size: 18px;
           "
-        ></div>
-
-        <div id="results" class="hidden">
-          <p>Total Mileage: <span id="total-mileage"></span> miles</p>
-          <p>Total Drive Time: <span id="total-time"></span></p>
-          <p>Total Earnings: $<span id="total-earnings"></span></p>
-          <p>Fuel Consumption Cost: $<span id="fuel-cost"></span></p>
-          <p>Maintenance Cost: $<span id="maintenance-cost-result"></span></p>
-          <p>Supplies Cost: $<span id="supplies-cost-result"></span></p>
-          <p>Net Profit: $<span id="net-profit"></span></p>
-          <p>
-            Net Profit per Hour (including drive time): $<span
-              id="profit-per-hour"
-            ></span>
-          </p>
+        >
+          <!-- Net profit and profit per hour will show here -->
         </div>
 
-        <div id="map" class="hidden"></div>
-        <div id="detailed-results" style="margin-top: 20px"></div>
+        <!-- ✅ Keep the filters next to the Log title -->
         <div
-          id="mileage-display"
-          style="text-align: center; font-weight: bold; margin-top: 10px"
-        ></div>
-        <div
-          id="optimized-mileage-display"
-          style="text-align: center; font-weight: bold; margin-top: 10px"
-        ></div>
-      </div>
+          id="log-title-bar"
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            margin-bottom: 10px;
+          "
+        >
+          <h2 style="margin: 0">Log</h2>
 
-      <div id="log-container">
-        <div id="log-header">
-          <!-- Net Profit / Profit per Hour Summary (always centered at top) -->
-          <div
-            id="log-summary"
-            style="
-              text-align: center;
-              margin-bottom: 15px;
-              font-weight: bold;
-              font-size: 18px;
-            "
-          >
-            <!-- Net profit and profit per hour will show here -->
-          </div>
+          <!-- ✅ Replace your old filter div with this -->
+          <div style="display: flex; gap: 20px; align-items: center">
+            <div
+              style="display: flex; flex-direction: column; align-items: center"
+            >
+              <label for="filter-year">Year:</label>
+              <select id="filter-year" onchange="filterByDate()">
+                <option value="">All</option>
+              </select>
+            </div>
 
-          <!-- ✅ Keep the filters next to the Log title -->
-          <div
-            id="log-title-bar"
-            style="
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              width: 100%;
-              margin-bottom: 10px;
-            "
-          >
-            <h2 style="margin: 0">Log</h2>
-
-            <!-- ✅ Replace your old filter div with this -->
-            <div style="display: flex; gap: 20px; align-items: center">
-              <div
-                style="
-                  display: flex;
-                  flex-direction: column;
-                  align-items: center;
-                "
-              >
-                <label for="filter-year">Year:</label>
-                <select id="filter-year" onchange="filterByDate()">
-                  <option value="">All</option>
-                </select>
-              </div>
-
-              <div
-                style="
-                  display: flex;
-                  flex-direction: column;
-                  align-items: center;
-                "
-              >
-                <label for="filter-month">Month:</label>
-                <select id="filter-month" onchange="filterByDate()">
-                  <option value="">All</option>
-                  <option value="01">January</option>
-                  <option value="02">February</option>
-                  <option value="03">March</option>
-                  <option value="04">April</option>
-                  <option value="05">May</option>
-                  <option value="06">June</option>
-                  <option value="07">July</option>
-                  <option value="08">August</option>
-                  <option value="09">September</option>
-                  <option value="10">October</option>
-                  <option value="11">November</option>
-                  <option value="12">December</option>
-                </select>
-              </div>
+            <div
+              style="display: flex; flex-direction: column; align-items: center"
+            >
+              <label for="filter-month">Month:</label>
+              <select id="filter-month" onchange="filterByDate()">
+                <option value="">All</option>
+                <option value="01">January</option>
+                <option value="02">February</option>
+                <option value="03">March</option>
+                <option value="04">April</option>
+                <option value="05">May</option>
+                <option value="06">June</option>
+                <option value="07">July</option>
+                <option value="08">August</option>
+                <option value="09">September</option>
+                <option value="10">October</option>
+                <option value="11">November</option>
+                <option value="12">December</option>
+              </select>
             </div>
           </div>
         </div>
-
-        <ul id="log-list"></ul>
       </div>
 
-      <!-- Then AFTER log-container ends, manage-log-container starts -->
+      <ul id="log-list"></ul>
+    </div>
+
+    <!-- Then AFTER log-container ends, manage-log-container starts -->
+    <div
+      id="manage-log-container"
+      style="text-align: center; margin-top: 20px; position: relative"
+    >
+      <button
+        onclick="toggleManageLogMenu()"
+        style="padding: 10px 15px; font-size: 16px"
+      >
+        Manage Log ▼
+      </button>
       <div
-        id="manage-log-container"
-        style="text-align: center; margin-top: 20px; position: relative"
+        <div
+        id="manage-log-menu"
+        style="
+          display: none;
+          position: absolute;
+          top: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          background: white;
+          border: 1px solid #ccc;
+          border-radius: 6px;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+          z-index: 9999;
+          min-width: 160px;
+          margin-top: 5px;
+          text-align: center; /* 🆕 Add this line */
+        "
       >
         <button
-          onclick="toggleManageLogMenu()"
-          style="padding: 10px 15px; font-size: 16px"
-        >
-          Manage Log ▼
-        </button>
-        <div
-          <div
-          id="manage-log-menu"
+          onclick="triggerImportFile()"
           style="
-            display: none;
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: white;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-            z-index: 9999;
-            min-width: 160px;
-            margin-top: 5px;
-            text-align: center; /* 🆕 Add this line */
+            width: auto; /* 🆕 Change */
+            min-width: 120px; /* 🆕 New */
+            padding: 10px;
+            background: none;
+            border: none;
+            text-align: center; /* 🆕 Change */
+            color: black;
+            display: inline-block; /* 🆕 New */
+            margin: 5px 0; /* 🆕 Add some vertical margin */
           "
         >
-          <button
-            onclick="triggerImportFile()"
-            style="
-              width: auto; /* 🆕 Change */
-              min-width: 120px; /* 🆕 New */
-              padding: 10px;
-              background: none;
-              border: none;
-              text-align: center; /* 🆕 Change */
-              color: black;
-              display: inline-block; /* 🆕 New */
-              margin: 5px 0; /* 🆕 Add some vertical margin */
-            "
-          >
-            Import CSV
-          </button>
-          <button
-            onclick="exportToCSV()"
-            style="
-              width: auto; /* 🆕 Change */
-              min-width: 120px; /* 🆕 New */
-              padding: 10px;
-              background: none;
-              border: none;
-              text-align: center; /* 🆕 Change */
-              color: black;
-              display: inline-block; /* 🆕 New */
-              margin: 5px 0; /* 🆕 Add some vertical margin */
-            "
-          >
-            Export CSV
-          </button>
-        </div>
+          Import CSV
+        </button>
+        <button
+          onclick="exportToCSV()"
+          style="
+            width: auto; /* 🆕 Change */
+            min-width: 120px; /* 🆕 New */
+            padding: 10px;
+            background: none;
+            border: none;
+            text-align: center; /* 🆕 Change */
+            color: black;
+            display: inline-block; /* 🆕 New */
+            margin: 5px 0; /* 🆕 Add some vertical margin */
+          "
+        >
+          Export CSV
+        </button>
+      </div>
       </div>
     </div>
 
@@ -897,7 +835,8 @@
     <div id="edit-form-container" class="edit-form-container hidden">
       <h3>Edit Log Entry</h3>
       <label for="edit-date">Date</label>
-      <input type="text" id="edit-date" />
+      <input type="date" id="edit-date" />
+      
 
       <div class="edit-form-group">
         <label for="edit-start-time">Start Time</label>
@@ -1014,23 +953,6 @@
         displayLog();
         populateYearOptions(); // ✅ Rebuild years
         populateMonthOptions(); // 🆕 ✅ Rebuild months correctly based on logs
-        const destinationsContainer = document.getElementById(
-          "destinations-container"
-        );
-
-        new Sortable(destinationsContainer, {
-  animation: 200, // smoother animation
-  handle: ".drag-handle",
-  ghostClass: "sortable-ghost",
-  chosenClass: "sortable-chosen", // Highlight the dragged item
-  dragClass: "sortable-drag", // When actually dragging
-  onEnd: (event) => {
-    console.log("Moved from", event.oldIndex, "to", event.newIndex);
-    resetOriginalMileageDisplay();
-    renumberDestinations(); // We'll add this too (optional)
-  },
-});
-
 
         const script = document.createElement("script");
         script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ&libraries=places&callback=initMap`;
@@ -1615,25 +1537,23 @@
       }
 
       function addDestination() {
-        const container = document.getElementById("destinations-container");
         const newDestinationIndex =
-          container.querySelectorAll(".destination").length + 1;
-
+          document.querySelectorAll("#destinations-container .destination")
+            .length + 1;
+        const container = document.getElementById("destinations-container");
         const newDestinationDiv = document.createElement("div");
         newDestinationDiv.classList.add("destination");
-        newDestinationDiv.setAttribute("draggable", "true"); // make draggable!
-
         newDestinationDiv.innerHTML = `
-    <div class="drag-handle">☰</div>
     <label for="destination-${newDestinationIndex}">Destination ${newDestinationIndex}</label>
     <input type="text" id="destination-${newDestinationIndex}" placeholder="Enter destination address" required>
     <label for="earnings-${newDestinationIndex}">Earnings for Destination ${newDestinationIndex}</label>
     <input type="number" id="earnings-${newDestinationIndex}" placeholder="Enter earnings for destination" required>
     <div class="destination-actions">
-      <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
+        <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
+        <button class="move-btn" onclick="moveDestinationUp(this)">Move Up</button>
+        <button class="move-btn" onclick="moveDestinationDown(this)">Move Down</button>
     </div>
-  `;
-
+`;
         container.appendChild(newDestinationDiv);
         initAutocompleteDestination(
           newDestinationDiv.querySelector('input[type="text"]')
@@ -1723,73 +1643,70 @@
       }
 
       function displayLog(filterFn = () => true) {
-        const logList = document.getElementById("log-list");
-        const organizedLog = organizeLogByDay();
-        logList.innerHTML = "";
+  const logList = document.getElementById("log-list");
+  const organizedLog = organizeLogByDay();
+  logList.innerHTML = "";
 
-        // Flatten all entries into one array
-        const allEntries = [];
-        for (const day in organizedLog) {
-          allEntries.push(...organizedLog[day]);
-        }
+  const allEntries = [];
+  for (const day in organizedLog) {
+    allEntries.push(...organizedLog[day]);
+  }
 
-        // ✅ NEW: Sort by date newest first
-        const sortedEntries = allEntries.sort((a, b) => {
-          return new Date(b.date) - new Date(a.date);
-        });
+  const sortedEntries = allEntries.sort((a, b) => {
+    return new Date(b.date) - new Date(a.date);
+  });
 
-        const filteredEntries = sortedEntries.filter((entry) =>
-          filterFn(entry.date)
+  const filteredEntries = sortedEntries.filter((entry) =>
+    filterFn(entry.date)
+  );
+  const totalPages = Math.ceil(filteredEntries.length / logsPerPage);
+
+  const start = (currentPage - 1) * logsPerPage;
+  const end = start + logsPerPage;
+  const pageEntries = filteredEntries.slice(start, end);
+
+  if (pageEntries.length === 0) {
+    const emptyMessage = document.createElement("li");
+    emptyMessage.textContent = "No log entries found for selected filter.";
+    logList.appendChild(emptyMessage);
+  } else {
+    pageEntries.forEach((entry, index) => {
+      if (entry) {
+        const realIndex = logEntries.findIndex(
+          (e) => JSON.stringify(e) === JSON.stringify(entry)
         );
-        const totalPages = Math.ceil(filteredEntries.length / logsPerPage);
+        const listItem = document.createElement("li");
+        const destinations = Array.isArray(entry.destinations)
+  ? entry.destinations.map((d) => `- ${d}`).join("<br>")
+  : "";
 
-        // Get entries for this page
-        const start = (currentPage - 1) * logsPerPage;
-        const end = start + logsPerPage;
-        const pageEntries = filteredEntries.slice(start, end);
 
-        if (pageEntries.length === 0) {
-          const emptyMessage = document.createElement("li");
-          emptyMessage.textContent =
-            "No log entries found for selected filter.";
-          logList.appendChild(emptyMessage);
-        } else {
-          pageEntries.forEach((entry, index) => {
-            if (entry) {
-              const realIndex = logEntries.findIndex(
-                (e) => JSON.stringify(e) === JSON.stringify(entry)
-              );
-              const listItem = document.createElement("li");
-              const destinations = Array.isArray(entry.destinations)
-                ? entry.destinations.join(", ")
-                : "";
+  listItem.innerHTML = `
+  <div class="log-item-details" id="log-entry-${realIndex}">
+    <div id="summary-${realIndex}">
+      <strong>Date:</strong> ${entry.date}<br>
+      <div><strong>Destinations:</strong></div>
+      <div style="margin-left: 15px;">${destinations}</div>
+      <strong>Net Profit:</strong> $${parseFloat(entry.netProfit || 0).toFixed(2)}
+    </div>
+    <div id="details-${realIndex}" class="hidden" style="margin-top:10px;"></div>
+  </div>
+  <div class="log-actions">
+    <button onclick="toggleLogEntryDetails(${realIndex})" id="toggle-button-${realIndex}">More Details</button>
+    <button class="edit-btn" onclick="openEditForm(${realIndex})">Edit</button>
+    <button onclick="deleteLogEntry(${realIndex})">Delete</button>
+  </div>
+`;
 
-              listItem.innerHTML = `
-          <div class="log-item-details">
-            <strong>Date:</strong> ${entry.date}<br>
-            <strong>Start:</strong> ${entry.startTime}<br>
-            <strong>Destinations:</strong> ${destinations}<br>
-            <strong>End:</strong> ${entry.endTime}<br>
-            <strong>Earnings:</strong> $${entry.totalEarnings || 0}<br>
-            <strong>Fuel Consumption Cost:</strong> $${entry.fuelCost}<br>
-            <strong>Maintenance:</strong> $${entry.maintenanceCost}<br>
-            <strong>Supplies:</strong> $${entry.suppliesCost}<br>
-            <strong>Net Profit:</strong> $${entry.netProfit || 0}
-          </div>
-          <div class="log-actions">
-            <button class="edit-btn" onclick="openEditForm(${realIndex})">Edit</button>
-            <button onclick="viewLogEntry(${realIndex})">View Details</button>
-            <button onclick="deleteLogEntry(${realIndex})">Delete</button>
-          </div>
-        `;
-              logList.appendChild(listItem);
-            }
-          });
-        }
-
-        renderPaginationButtons(totalPages);
-        updateLogSummary(filterFn);
+        logList.appendChild(listItem);
       }
+    });
+  }
+
+  renderPaginationButtons(totalPages);
+  updateLogSummary(filterFn);
+}
+
 
       function renderPaginationButtons(totalPages) {
         let paginationContainer = document.getElementById(
@@ -1859,74 +1776,6 @@
         } else {
           alert("Invalid page number.");
         }
-      }
-
-      function viewLogEntry(index) {
-        const entry = logEntries[index];
-        if (!entry) {
-          console.warn("Invalid log entry index:", index);
-          return;
-        }
-
-        // 🔁 Remove any existing modal first
-        const existingOverlay = document.querySelector(".custom-view-overlay");
-        if (existingOverlay) existingOverlay.remove();
-
-        // ✅ Create overlay
-        const overlay = document.createElement("div");
-        overlay.className = "custom-view-overlay";
-
-        // ✅ Create modal
-        const modal = document.createElement("div");
-        modal.className = "custom-view-modal";
-
-        // 🔧 Sanitize and format content
-        const destinations = entry.destinations?.length
-          ? entry.destinations.map((d) => `- ${d}`).join("<br>")
-          : "None";
-
-        const earnings = Array.isArray(entry.earnings)
-          ? entry.earnings.map((e) => `$${parseFloat(e).toFixed(2)}`).join(", ")
-          : "$0.00";
-        const formattedHoursWorked = entry.hoursWorked
-          ? `${parseFloat(entry.hoursWorked).toFixed(2)} ${
-              parseFloat(entry.hoursWorked) === 1 ? "hour" : "hours"
-            }`
-          : "0.00 hours";
-
-        const formattedNetProfit = formatCurrency(entry.netProfit);
-        const formattedProfitPerHour = formatCurrency(entry.profitPerHour);
-        const formattedTotalEarnings = formatCurrency(entry.totalEarnings);
-        const formattedFuelCost = formatCurrency(entry.fuelCost);
-        const formattedMaintenanceCost = formatCurrency(entry.maintenanceCost);
-        const formattedSuppliesCost = formatCurrency(entry.suppliesCost);
-
-        modal.innerHTML = `
-  <h3>Log Entry Details</h3>
-<p><strong>Date:</strong> ${entry.date}</p>
-<p><strong>Start Time:</strong> ${formatTimeToAmPm(entry.startClock)}</p>
-<p><strong>End Time:</strong> ${formatTimeToAmPm(entry.endClock)}</p>
-<p><strong>Start Address:</strong> ${entry.startTime}</p>
-  <p><strong>Destinations:</strong><br>${destinations}</p>
-  <p><strong>End Address:</strong> ${entry.endTime}</p>
-  <p><strong>Earnings per Stop:</strong> ${earnings}</p>
-  <p><strong>Total Mileage:</strong> ${entry.totalMileage} miles</p>
-  <p><strong>Total Drive Time:</strong> ${entry.totalTime}</p>
-  <p><strong>Total Earnings:</strong> $${entry.totalEarnings}</p>
-  <p><strong>Fuel Cost:</strong> $${entry.fuelCost}</p>
-  <p><strong>Maintenance:</strong> $${entry.maintenanceCost}</p>
-  <p><strong>Supplies:</strong> $${entry.suppliesCost}</p>
-  <p><strong>Hours Worked:</strong> ${formattedHoursWorked}</p>
-  <p><strong>Net Profit:</strong> ${formattedNetProfit}</p>
-  <p><strong>Profit per Hour:</strong> ${formattedProfitPerHour}</p>
-
-
-  <button onclick="openLogEntryInGoogleMaps(${index})" style="background-color: #0d6efd; margin-top: 10px;">Open in Google Maps</button>
-  <button onclick="this.closest('.custom-view-overlay').remove()" style="background-color: #dc3545; margin-top: 10px;">Close</button>
-`;
-
-        overlay.appendChild(modal);
-        document.body.appendChild(overlay);
       }
 
       function deleteLogEntry(index) {
@@ -3122,6 +2971,65 @@
         const displayHours = hours % 12 || 12; // 0 becomes 12
         return `${displayHours}:${minutes.toString().padStart(2, "0")} ${ampm}`;
       }
+
+      function toggleLogEntryDetails(index) {
+  const entry = logEntries[index];
+  const detailsDiv = document.getElementById(`details-${index}`);
+  const toggleButton = document.getElementById(`toggle-button-${index}`);
+  const summaryDiv = document.getElementById(`summary-${index}`);
+
+  if (!detailsDiv || !entry || !toggleButton || !summaryDiv) return;
+
+  if (detailsDiv.classList.contains("hidden")) {
+    // Expand
+    const destinations = entry.destinations?.length
+      ? entry.destinations.map((d) => `- ${d}`).join("<br>")
+      : "None";
+
+    const earnings = Array.isArray(entry.earnings)
+      ? entry.earnings.map((e) => `$${parseFloat(e).toFixed(2)}`).join(", ")
+      : "$0.00";
+
+    const formattedHoursWorked = entry.hoursWorked
+      ? `${parseFloat(entry.hoursWorked).toFixed(2)} hours`
+      : "0.00 hours";
+
+      detailsDiv.innerHTML = `
+  <div><strong>Date:</strong> ${entry.date}</div>
+  <div><strong>Start Time:</strong> ${formatTimeToAmPm(entry.startClock)}</div>
+  <div><strong>End Time:</strong> ${formatTimeToAmPm(entry.endClock)}</div>
+  <div><strong>Start Address:</strong> ${entry.startTime}</div>
+  
+  <div><strong>Destinations:</strong></div> <!-- first separate div -->
+  <div style="margin-left: 15px;">${destinations}</div> <!-- second div for addresses -->
+
+  <div><strong>End Address:</strong> ${entry.endTime}</div>
+  <div><strong>Earnings per Stop:</strong> ${earnings}</div>
+  <div><strong>Total Mileage:</strong> ${entry.totalMileage} miles</div>
+  <div><strong>Total Drive Time:</strong> ${entry.totalTime}</div>
+  <div><strong>Total Earnings:</strong> $${entry.totalEarnings}</div>
+  <div><strong>Fuel Cost:</strong> $${entry.fuelCost}</div>
+  <div><strong>Maintenance:</strong> $${entry.maintenanceCost}</div>
+  <div><strong>Supplies:</strong> $${entry.suppliesCost}</div>
+  <div><strong>Hours Worked:</strong> ${formattedHoursWorked}</div>
+  <div><strong>Net Profit:</strong> $${entry.netProfit}</div>
+  <div><strong>Profit per Hour:</strong> $${entry.profitPerHour}</div>
+`;
+
+
+    detailsDiv.classList.remove("hidden");
+    summaryDiv.classList.add("hidden"); // 🔥 Hide only the summary
+    toggleButton.textContent = "Less Details";
+  } else {
+    // Collapse
+    detailsDiv.classList.add("hidden");
+    summaryDiv.classList.remove("hidden"); // 🔥 Show the summary
+toggleButton.textContent = "More Details";
+  }
+}
+
+
+
     </script>
 
     <div
