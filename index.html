@@ -816,6 +816,13 @@
     <div id="overlay" class="hidden"></div>
 
     <script>
+
+function formatDateToMMDDYYYY(dateStr) {
+  if (!dateStr) return "";
+  const [year, month, day] = dateStr.split("-");
+  return `${month}/${day}/${year}`;
+}
+
       function toggleManageLogMenu() {
         const menu = document.getElementById("manage-log-menu");
         const body = document.body;
@@ -1684,7 +1691,8 @@
   listItem.innerHTML = `
   <div class="log-item-details" id="log-entry-${realIndex}">
     <div id="summary-${realIndex}">
-      <strong>Date:</strong> ${entry.date}<br>
+      <strong>Date:</strong> ${formatDateToMMDDYYYY(entry.date)}<br>
+
       <div><strong>Destinations:</strong></div>
       <div style="margin-left: 15px;">${destinations}</div>
       <strong>Net Profit:</strong> $${parseFloat(entry.netProfit || 0).toFixed(2)}
@@ -2995,7 +3003,8 @@
       : "0.00 hours";
 
       detailsDiv.innerHTML = `
-  <div><strong>Date:</strong> ${entry.date}</div>
+  <div><strong>Date:</strong> ${formatDateToMMDDYYYY(entry.date)}</div>
+
   <div><strong>Start Time:</strong> ${formatTimeToAmPm(entry.startClock)}</div>
   <div><strong>End Time:</strong> ${formatTimeToAmPm(entry.endClock)}</div>
   <div><strong>Start Address:</strong> ${entry.startTime}</div>
