@@ -485,10 +485,15 @@
       >.
     </div>
 
+<!-- ✅ Logo always visible for everyone -->
+<div style="display: flex; align-items: center; justify-content: center; margin-top: 10px; margin-bottom: 20px;">
+  <img src="/logo.png" alt="Logo" style="height: 50px; max-height: 50px;">
+</div>
+
+<!-- 🔒 Only hamburger and menu hidden/shown based on sign-in -->
 <div id="logout-message" style="display: none; margin: 20px auto; max-width: 100%;">
   <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 10px;">
     <button onclick="toggleMenu()" style="background: none; border: none; font-size: 32px; cursor: pointer; color: black; margin-right: 10px;">☰</button>
-    <img src="/logo.png" alt="Logo" style="height: 50px; max-height: 50px;">
   </div>
 
   ✅ You’re signed in as <span id="username-display"></span>
@@ -499,6 +504,7 @@
     <button onclick="closeMenu(); showDeleteModal()" style="width: 100%; padding: 10px; background: none; border: none; color: red; text-align: left;">Delete Account</button>
   </div>
 </div>
+
 
 
         <div id="account-menu">
@@ -946,12 +952,13 @@ const logsPerPage = 10;
       });
 
       function closeMenu() {
-        const menu = document.getElementById("account-menu");
-        if (menu) {
-          menu.classList.remove("show");
-          menu.style.display = "none";
-        }
-      }
+  const menu = document.getElementById("account-menu");
+  if (menu) {
+    menu.classList.remove("show");
+  }
+}
+
+
 
       function closeAuthModal() {
         document.getElementById("auth-modal").style.display = "none";
