@@ -582,8 +582,20 @@ img {
     </div>
 
 <!-- ✅ Hamburger + Logo + Username together side-by-side -->
-<div id="top-bar" style="display: flex; align-items: center; justify-content: space-between; width: 100%; max-width: 900px; padding: 0 20px; margin-top: 10px; margin-bottom: 20px;">
+<div id="top-bar" style="
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 100%;
+  max-width: 900px;
+  margin-top: 10px;
+  margin-bottom: 20px;
+">
+
   <button id="hamburger-button" onclick="toggleMenu()" style="
+    position: absolute;
+    left: 10px;
     background: none;
     border: none;
     font-size: 28px;
@@ -597,6 +609,8 @@ img {
   <img id="logo-image" src="/logo.png" alt="Logo" style="height: 50px; max-height: 50px;">
 
   <span id="username-display" style="
+    position: absolute;
+    right: 10px;
     font-size: 16px;
     font-weight: bold;
     background: none;
@@ -606,6 +620,7 @@ img {
     transition: background-color 0.3s;
   "></span>
 </div>
+
 
 
 
