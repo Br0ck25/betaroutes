@@ -50,15 +50,21 @@
 
 
 
-        #logout-message button {
+      #logout-message button {
   background: none;
   border: none;
   font-size: 28px;
   cursor: pointer;
+  margin-right: 10px;
 }
 #logout-message button:hover {
   opacity: 0.7;
 }
+#logout-message img {
+  height: 50px;
+  object-fit: contain;
+}
+
 
 
 
@@ -540,13 +546,6 @@
     </div>
 
     <div class="container">
-      <div style="text-align: center">
-        <img
-          src="/logo.png"
-          alt="Logo"
-          style="max-width: 250px; margin-bottom: 10px"
-        />
-      </div>
 
       <label for="log-date">Date</label>
       <input type="date" id="log-date" required />
