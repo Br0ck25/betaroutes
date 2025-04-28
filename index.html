@@ -1569,12 +1569,15 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     if (!navigator.onLine) {
-        console.warn("🛜 Offline: Saving route data locally.");
-        pendingLogs.push(routeData);
-        localStorage.setItem("pendingLogs", JSON.stringify(pendingLogs));
-        alert("⚠️ Offline: Route data saved locally. Route details will be calculated and saved when you're back online.");
-        return null; // Indicate that route calculation was skipped
-    }
+    console.warn("🛜 Offline: Saving route data locally.");
+    console.log("🛜 Offline - Route data:", routeData); // ADD THIS
+    pendingLogs.push(routeData);
+    console.log("🛜 Offline - pendingLogs:", pendingLogs); // ADD THIS
+    localStorage.setItem("pendingLogs", JSON.stringify(pendingLogs));
+    console.log("🛜 Offline - localStorage after set:", localStorage.getItem("pendingLogs")); // ADD THIS
+    alert("⚠️ Offline: Route data saved locally...");
+    return null;
+}
 
     try {
         const directionsService = new google.maps.DirectionsService();
