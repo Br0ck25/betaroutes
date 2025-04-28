@@ -1547,14 +1547,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
 
-      async function calculateRoute() {
-        const calculationResult = await calculateRouteData(); // Call the data calculation function
-        if (calculationResult) {
-          updateUI(calculationResult);
-          showConfirmationMessage("✅ Route calculated successfully!");
-        }
-      }
-
       async function calculateRouteData() {
   return new Promise((resolve, reject) => {
     const startAddress = document.getElementById("start-address").value;
@@ -1614,8 +1606,10 @@ document.addEventListener("DOMContentLoaded", () => {
       travelMode: "DRIVING",
     };
 
-    // 🛜 Handle offline mode
-    if (!navigator.onLine) {
+    // 🛜 Check if offline OR Google Maps not available
+    if (!navigator.onLine || typeof google === "undefined" || typeof google.maps === "undefined") {
+      console.warn("🛜 Offline OR Google Maps not loaded. Skipping directions.");
+
       alert("⚠️ Offline: Skipping live directions. Using defaults.");
       showConfirmationMessage("✅ Saved offline! Will sync when back online.");
 
@@ -1635,54 +1629,55 @@ document.addEventListener("DOMContentLoaded", () => {
         profitPerHour: "0.00",
         hoursWorked: parseFloat(document.getElementById("hours-worked").value) || 0,
       });
-      return; // ✅ Exit early
-    } else {
-      // 🌐 Online mode
-      directionsService.route(request, (response, status) => {
-        if (status === "OK") {
-          directionsRenderer.setDirections(response);
-          document.getElementById("map").classList.remove("hidden");
-
-          let totalMileage = 0;
-          let totalDuration = 0;
-
-          response.routes[0].legs.forEach((leg) => {
-            totalMileage += leg.distance.value / 1609.34;
-            totalDuration += leg.duration.value;
-          });
-
-          const fuelCost = mpg && gasPrice ? (totalMileage / mpg) * gasPrice : 0;
-          const netProfitBeforeOptional = totalEarnings - fuelCost;
-          const netProfit = netProfitBeforeOptional - maintenanceCost - suppliesCost;
-          const totalHoursSpent = hoursWorked + totalDuration / 3600;
-          const profitPerHour = totalHoursSpent > 0 ? netProfit / totalHoursSpent : 0;
-
-          resolve({
-            date: document.getElementById("log-date").value || new Date().toISOString().split("T")[0],
-            startTime: startAddress,
-            endTime: endAddress,
-            destinations: destinations.map(d => d.location),
-            earnings: earnings,
-            totalMileage: totalMileage.toFixed(2),
-            totalTime: formatDuration(totalDuration),
-            totalEarnings: totalEarnings.toFixed(2),
-            fuelCost: fuelCost.toFixed(2),
-            maintenanceCost: maintenanceCost.toFixed(2),
-            suppliesCost: suppliesCost.toFixed(2),
-            netProfit: netProfit.toFixed(2),
-            profitPerHour: profitPerHour.toFixed(2),
-            hoursWorked: parseFloat(document.getElementById("hours-worked").value) || 0,
-          });
-        } else {
-          alert("Directions request failed due to " + status);
-          document.getElementById("map").classList.add("hidden");
-          document.getElementById("results").classList.add("hidden");
-          resolve(null); // fallback
-        }
-      });
+      return;
     }
+
+    // 🌐 Now we are sure Google Maps is loaded and online
+    directionsService.route(request, (response, status) => {
+      if (status === "OK") {
+        directionsRenderer.setDirections(response);
+        document.getElementById("map").classList.remove("hidden");
+
+        let totalMileage = 0;
+        let totalDuration = 0;
+
+        response.routes[0].legs.forEach((leg) => {
+          totalMileage += leg.distance.value / 1609.34;
+          totalDuration += leg.duration.value;
+        });
+
+        const fuelCost = mpg && gasPrice ? (totalMileage / mpg) * gasPrice : 0;
+        const netProfitBeforeOptional = totalEarnings - fuelCost;
+        const netProfit = netProfitBeforeOptional - maintenanceCost - suppliesCost;
+        const totalHoursSpent = hoursWorked + totalDuration / 3600;
+        const profitPerHour = totalHoursSpent > 0 ? netProfit / totalHoursSpent : 0;
+
+        resolve({
+          date: document.getElementById("log-date").value || new Date().toISOString().split("T")[0],
+          startTime: startAddress,
+          endTime: endAddress,
+          destinations: destinations.map(d => d.location),
+          earnings: earnings,
+          totalMileage: totalMileage.toFixed(2),
+          totalTime: formatDuration(totalDuration),
+          totalEarnings: totalEarnings.toFixed(2),
+          fuelCost: fuelCost.toFixed(2),
+          maintenanceCost: maintenanceCost.toFixed(2),
+          suppliesCost: suppliesCost.toFixed(2),
+          netProfit: netProfit.toFixed(2),
+          profitPerHour: profitPerHour.toFixed(2),
+          hoursWorked: parseFloat(document.getElementById("hours-worked").value) || 0,
+        });
+      } else {
+        alert("Directions request failed due to " + status);
+        document.getElementById("map").classList.add("hidden");
+        document.getElementById("results").classList.add("hidden");
+        resolve(null); // fallback
+      }
+    });
   });
 }
+
 
 
 
