@@ -533,11 +533,7 @@ img {
   </head>
   <body>
 
-  
-
-
-<!-- Sticky Offline Banner -->
-<div id="offline-banner" style="
+    <div id="offline-banner" style="
   display: none;
   background-color: #fffae6;
   color: #856404;
@@ -553,84 +549,63 @@ img {
   🛜 Offline Mode: Showing cached routes.
 </div>
 
-<!-- Fixed Top Bar -->
-<div id="top-bar" style="
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  background: white;
-  padding: 25px 0;
-  width: 100%;
-  max-width: 900px;
-  margin: 0 auto;
-  border-radius: 0;
-  box-shadow: none;
-  transition: none;
-">
-  <!-- Left Spacer (Hamburger) -->
-  <div style="position: absolute; left: 12px; display: flex; align-items: center; height: 100%;">
-    <button id="hamburger-button" onclick="toggleMenu()" style="
-      background: none;
-      border: none;
-      font-size: 28px;
-      cursor: pointer;
-      color: black;
-      padding: 6px 10px;
-      border-radius: 8px;
-      transition: background-color 0.3s;
-      width: 50px;
-      height: 50px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    ">☰</button>
-  </div>
+    <div
+      id="auth-message"
+      style="
+        background-color: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeeba;
+        border-radius: 6px;
+        padding: 15px 20px;
+        margin-bottom: 20px;
+        text-align: center;
+        max-width: 600px;
+        margin-left: auto;
+        margin-right: auto;
+        font-size: 16px;
+      "
+    >
+      🚧 To log your route, you need to
+      <a
+        href="#"
+        onclick="showLogin()"
+        style="color: #0d6efd; font-weight: bold; text-decoration: none"
+        >Sign in</a
+      >
+      or
+      <a
+        href="#"
+        onclick="showSignup()"
+        style="color: #0d6efd; font-weight: bold; text-decoration: none"
+        >Create an account</a
+      >.
+    </div>
 
-  <!-- Centered Logo -->
-  <img id="logo-image" src="/logo.png" alt="Logo" style="height: 50px; max-height: 70px; cursor: pointer;" onclick="scrollToTop()">
+<!-- ✅ Hamburger + Logo + Username together side-by-side -->
+<div id="top-bar" style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 10px; margin-bottom: 20px;">
+  <button id="hamburger-button" onclick="toggleMenu()" style="
+    background: none;
+    border: none;
+    font-size: 28px;
+    cursor: pointer;
+    color: black;
+    padding: 6px 10px;
+    border-radius: 8px;
+    transition: background-color 0.3s;
+  ">☰</button>
 
-  <!-- Right Spacer (Username) -->
-  <div style="position: absolute; right: 22px; display: flex; align-items: center; height: 100%;">
-    <span id="username-display" style="
-      font-size: 16px;
-      font-weight: bold;
-      background: none;
-      padding: 6px 10px;
-      border-radius: 8px;
-      color: black;
-      transition: background-color 0.3s;
-    "></span>
-  </div>
+  <img id="logo-image" src="/logo.png" alt="Logo" style="height: 50px; max-height: 50px;">
+
+  <span id="username-display" style="
+    font-size: 16px;
+    font-weight: bold;
+    background: none;
+    padding: 6px 10px;
+    border-radius: 8px;
+    color: black;
+    transition: background-color 0.3s;
+  "></span>
 </div>
-
-<!-- Scrollable Auth Message (Sign In Banner) -->
-<div id="auth-message" style="
-  background-color: #fff3cd;
-  color: #856404;
-  border: 1px solid #ffeeba;
-  border-radius: 6px;
-  padding: 15px 20px;
-  text-align: center;
-  font-size: 16px;
-  max-width: 600px;
-  margin: 80px auto 20px auto;
-  position: relative;
-  z-index: 500;
-">
-  🚧 To log your route, you need to
-  <a href="#" onclick="showLogin()" style="color: #0d6efd; font-weight: bold; text-decoration: none;">Sign in</a>
-  or
-  <a href="#" onclick="showSignup()" style="color: #0d6efd; font-weight: bold; text-decoration: none;">Create an account</a>.
-</div>
-
-  
-
-
 
 
 
@@ -734,8 +709,7 @@ transition: opacity 0.3s ease;
       </div>
     </div>
 
-    <div class="container" style="margin-top: 15px;">
-
+    <div class="container">
 
       <label for="log-date">Date</label>
       <input type="date" id="log-date" required />
@@ -1014,13 +988,6 @@ transition: opacity 0.3s ease;
 
     <script>
 
-
-function scrollToTop() {
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-
-
 let map;
 let directionsService;
 let directionsRenderer;
@@ -1173,13 +1140,6 @@ const logsPerPage = 10;
     console.warn("🛜 Offline: Saving log locally.");
     localStorage.setItem("pendingLogs", JSON.stringify(logEntries));
     localStorage.setItem("cachedLogs", JSON.stringify(logEntries)); // ✅ Update visible logs too
-
-    // 🆕 Immediately update the visible log list
-    logEntries = JSON.parse(localStorage.getItem("cachedLogs") || "[]");
-    displayLog();
-    populateYearOptions();
-    populateMonthOptions();
-
     alert("⚠️ Offline: Route saved locally. Will sync when back online.");
     return;
   }
@@ -1208,9 +1168,9 @@ const logsPerPage = 10;
     console.error("❌ Save failed. Saving offline:", err);
     localStorage.setItem("pendingLogs", JSON.stringify(logEntries)); // ✅ Save pending
     localStorage.setItem("cachedLogs", JSON.stringify(logEntries)); // ✅ Update visible logs too
+    alert("⚠️ Offline mode: Your changes are saved locally. We'll sync them next time you're online.");
   }
 }
-
 
 
 async function syncPendingLogs() {
@@ -1237,14 +1197,10 @@ async function syncPendingLogs() {
       console.log("✅ Pending logs synced successfully!");
       localStorage.removeItem("pendingLogs");
 
-      // 🆕 Update cached logs and reload UI
+      // 🆕 Important: Update cachedLogs after successful sync
       const freshLogs = await loadLog();
       localStorage.setItem("cachedLogs", JSON.stringify(freshLogs));
-
-      logEntries = freshLogs; // 🆕 Very important — update the global variable
       displayLog();
-      populateYearOptions(); // 🆕 Repopulate Year filter
-      populateMonthOptions(); // 🆕 Repopulate Month filter
     } else {
       console.error("❌ Failed to sync pending logs:", await response.text());
     }
@@ -1252,7 +1208,6 @@ async function syncPendingLogs() {
     console.error("❌ Error syncing pending logs:", err);
   }
 }
-
 
 async function loadLog() {
   const token = localStorage.getItem("token");
@@ -1566,45 +1521,6 @@ document.addEventListener("DOMContentLoaded", () => {
           waypoints: waypoints,
           travelMode: "DRIVING",
         };
-
-        // 🛜 If offline, simulate basic route calculation
-if (!navigator.onLine) {
-  alert("⚠️ Offline: Skipping live directions. Using defaults.");
-
-  const totalEarnings = Array.from(document.querySelectorAll('input[id^="earnings-"]'))
-    .map((input) => parseFloat(input.value) || 0)
-    .reduce((sum, val) => sum + val, 0);
-
-  const maintenanceCost = parseFloat(document.getElementById("maintenance-cost").value) || 0;
-  const suppliesCost = parseFloat(document.getElementById("supplies-cost").value) || 0;
-  const mpg = parseFloat(document.getElementById("mpg").value) || 1;
-  const gasPrice = parseFloat(document.getElementById("gas-price").value) || 0;
-
-  const fuelCost = 0; // 🛜 Can't calculate fuel cost without mileage
-
-  const netProfitBeforeOptional = totalEarnings - fuelCost;
-  const netProfit = netProfitBeforeOptional - maintenanceCost - suppliesCost;
-
-  resolve({
-    date: document.getElementById("log-date").value || new Date().toISOString().split("T")[0],
-    startTime: document.getElementById("start-address").value,
-    endTime: document.getElementById("end-address").value,
-    destinations: Array.from(document.querySelectorAll('input[id^="destination-"]')).map(input => input.value),
-    earnings: Array.from(document.querySelectorAll('input[id^="earnings-"]')).map(input => parseFloat(input.value) || 0),
-    totalMileage: "0.00",
-    totalTime: "0 minutes",
-    totalEarnings: totalEarnings.toFixed(2),
-    fuelCost: fuelCost.toFixed(2),
-    maintenanceCost: maintenanceCost.toFixed(2),
-    suppliesCost: suppliesCost.toFixed(2),
-    netProfit: netProfit.toFixed(2),
-    profitPerHour: "0.00",
-    hoursWorked: parseFloat(document.getElementById("hours-worked").value) || 0,
-  });
-  
-  return; // ✅ Exit early — don't call directionsService.route when offline!
-}
-
 
         return new Promise((resolve, reject) => {
           directionsService.route(request, (response, status) => {
@@ -3717,15 +3633,6 @@ toggleButton.textContent = "More Details";
           );
         });
       }
-
-      window.addEventListener('scroll', function() {
-  const topBar = document.getElementById('top-bar');
-  if (window.scrollY > 10) {
-    topBar.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.1)';
-  } else {
-    topBar.style.boxShadow = 'none';
-  }
-});
     </script>
   </body>
 </html>
