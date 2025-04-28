@@ -1021,7 +1021,8 @@ function scrollToTop() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-
+//  ========== GLOBAL VARIABLES (Add this at the top of your script) ==========
+let pendingLogs = JSON.parse(localStorage.getItem("pendingLogs") || "[]"); // Load pending logs
 
 let map;
 let directionsService;
@@ -1216,64 +1217,55 @@ const logsPerPage = 10;
 
 
 async function syncPendingLogs() {
-  const pendingString = localStorage.getItem("pendingLogs");
-  if (!pendingString) return;
-
-  const token = localStorage.getItem("token");
-  if (!token) return;
-
-  const pending = JSON.parse(pendingString);
-  if (!Array.isArray(pending) || pending.length === 0) return;
-
-  const updatedLogs = [];
-
-  for (const log of pending) {
-    try {
-      // If miles or time missing, recalculate
-      if (!log.totalMileage || !log.totalTime) {
-        const { totalMileage, totalTime } = await calculateMileageAndTime(log.startTime, log.endTime, log.destinations || []);
-        log.totalMileage = totalMileage;
-        log.totalTime = totalTime;
-      }
-      updatedLogs.push(log);
-    } catch (error) {
-      console.error("❌ Failed to calculate route for pending log:", error);
-      updatedLogs.push(log); // Even if failed, push original log so it doesn't get stuck forever
+    if (!navigator.onLine) {
+        console.warn("🛜 Offline: Cannot sync logs while offline.");
+        return;
     }
-  }
 
-  try {
-    const response = await fetch(
-      "https://logs.gorouteyourself.com/logs",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: token,
-        },
-        body: JSON.stringify(updatedLogs),
-      }
-    );
-
-    if (response.ok) {
-      console.log("✅ Pending logs synced successfully with updated mileage!");
-
-      localStorage.removeItem("pendingLogs");
-
-      // 🆕 Refresh fresh logs and UI
-      const freshLogs = await loadLog();
-      localStorage.setItem("cachedLogs", JSON.stringify(freshLogs));
-
-      logEntries = freshLogs;
-      displayLog();
-      populateYearOptions();
-      populateMonthOptions();
-    } else {
-      console.error("❌ Failed to sync pending logs:", await response.text());
+    if (pendingLogs.length === 0) {
+        console.log("✅ No pending logs to sync.");
+        return;
     }
-  } catch (err) {
-    console.error("❌ Error syncing pending logs:", err);
-  }
+
+    console.log("⏳ Syncing pending logs...");
+
+    const syncedLogs = [];
+    for (const log of pendingLogs) {
+        try {
+            const routeDetails = await calculateRouteData(
+                log.logDate,
+                log.startAddress,
+                log.destinations,
+                log.endAddress,
+                log.mpg,
+                log.gasPrice,
+                log.startTime,
+                log.endTime,
+                log.hoursWorked,
+                log.maintenanceCost,
+                log.suppliesCost
+            );
+
+            if (routeDetails) {
+                syncedLogs.push(routeDetails);
+            } else {
+                syncedLogs.push(log); // Push the original log if route calculation failed
+                console.warn("⚠️  Failed to calculate route details for a pending log. Keeping original data.");
+            }
+        } catch (error) {
+            console.error("❌ Error processing pending log:", error);
+            syncedLogs.push(log); // Keep the original log on error
+        }
+    }
+
+    if (syncedLogs.length > 0) {
+        logEntries.push(...syncedLogs); // Add synced logs to main log
+        await saveLog(); // Save to localStorage and/or server
+        pendingLogs = []; // Clear pending logs
+        localStorage.removeItem("pendingLogs");
+        displayLog();
+        alert("✅ Pending logs synced successfully!");
+    }
 }
 
 
@@ -1561,118 +1553,82 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
 
-      async function calculateRouteData() {
-  return new Promise((resolve, reject) => {
-
-    // 🛜 1. IMMEDIATELY check offline status at the very top
-    if (!navigator.onLine || typeof google === "undefined" || typeof google.maps === "undefined") {
-      console.warn("🛜 Offline or Google Maps not loaded. Skipping directions.");
-
-      alert("⚠️ Offline: Skipping live directions. Using defaults.");
-      showConfirmationMessage("✅ Saved offline! Will sync when back online.");
-
-      const startAddress = document.getElementById("start-address").value;
-      const endAddress = document.getElementById("end-address").value;
-      const maintenanceCost = parseFloat(document.getElementById("maintenance-cost").value) || 0;
-      const suppliesCost = parseFloat(document.getElementById("supplies-cost").value) || 0;
-      const earningsInputs = document.querySelectorAll('input[id^="earnings-"]');
-      const destInputs = document.querySelectorAll('input[id^="destination-"]');
-      const earnings = Array.from(earningsInputs).map((input) => parseFloat(input.value) || 0);
-      const totalEarnings = earnings.reduce((sum, val) => sum + val, 0);
-
-      resolve({
-        date: document.getElementById("log-date").value || new Date().toISOString().split("T")[0],
-        startTime: startAddress,
-        endTime: endAddress,
-        destinations: Array.from(destInputs).map(input => input.value),
-        earnings: earnings,
-        totalMileage: "0.00",
-        totalTime: "0 minutes",
-        totalEarnings: totalEarnings.toFixed(2),
-        fuelCost: "0.00",
-        maintenanceCost: maintenanceCost.toFixed(2),
-        suppliesCost: suppliesCost.toFixed(2),
-        netProfit: (totalEarnings - maintenanceCost - suppliesCost).toFixed(2),
-        profitPerHour: "0.00",
-        hoursWorked: parseFloat(document.getElementById("hours-worked").value) || 0,
-      });
-      return; // ✅ Exit early immediately if offline
-    }
-
-    // 🌐 2. ONLY if online, continue with real directionsService.route(request)
-    
-    const startAddress = document.getElementById("start-address").value;
-    const endAddress = document.getElementById("end-address").value;
-    const mpg = parseFloat(document.getElementById("mpg").value);
-    const gasPrice = parseFloat(document.getElementById("gas-price").value);
-    const maintenanceCost = parseFloat(document.getElementById("maintenance-cost").value) || 0;
-    const suppliesCost = parseFloat(document.getElementById("supplies-cost").value) || 0;
-    const destInputs = document.querySelectorAll('input[id^="destination-"]');
-    const earningsInputs = document.querySelectorAll('input[id^="earnings-"]');
-    const destinations = Array.from(destInputs).map((input) => ({
-      location: input.value,
-      stopover: true,
-    }));
-    const earnings = Array.from(earningsInputs).map((input) => parseFloat(input.value) || 0);
-    const totalEarnings = earnings.reduce((sum, val) => sum + val, 0);
-
-    saveUserInputsToLocalStorage({
-      mpg,
-      gasPrice,
-      startAddress,
-      endAddress,
-    });
-
-    const request = {
-      origin: startAddress,
-      destination: endAddress || destinations[destinations.length - 1]?.location || startAddress,
-      waypoints: destinations,
-      travelMode: "DRIVING",
+      async function calculateRouteData(logDate, startAddress, destinations, endAddress, mpg, gasPrice, startTime, endTime, hoursWorked, maintenanceCost, suppliesCost) {
+    const routeData = {
+        logDate: logDate,
+        startAddress: startAddress,
+        destinations: destinations,
+        endAddress: endAddress,
+        mpg: mpg,
+        gasPrice: gasPrice,
+        startTime: startTime,
+        endTime: endTime,
+        hoursWorked: hoursWorked,
+        maintenanceCost: maintenanceCost,
+        suppliesCost: suppliesCost,
     };
 
-    directionsService.route(request, (response, status) => {
-      if (status === "OK") {
-        directionsRenderer.setDirections(response);
-        document.getElementById("map").classList.remove("hidden");
+    if (!navigator.onLine) {
+        console.warn("🛜 Offline: Saving route data locally.");
+        pendingLogs.push(routeData);
+        localStorage.setItem("pendingLogs", JSON.stringify(pendingLogs));
+        alert("⚠️ Offline: Route data saved locally. Route details will be calculated and saved when you're back online.");
+        return null; // Indicate that route calculation was skipped
+    }
 
-        let totalMileage = 0;
-        let totalDuration = 0;
+    try {
+        const directionsService = new google.maps.DirectionsService();
+        const waypoints = destinations.map(dest => ({
+            location: dest.address,
+            stopover: true
+        }));
 
-        response.routes[0].legs.forEach((leg) => {
-          totalMileage += leg.distance.value / 1609.34;
-          totalDuration += leg.duration.value;
-        });
+        const request = {
+            origin: startAddress,
+            destination: endAddress,
+            waypoints: waypoints,
+            travelMode: google.maps.TravelMode.DRIVING
+        };
 
-        const fuelCost = mpg && gasPrice ? (totalMileage / mpg) * gasPrice : 0;
-        const netProfitBeforeOptional = totalEarnings - fuelCost;
-        const netProfit = netProfitBeforeOptional - maintenanceCost - suppliesCost;
-        const totalHoursSpent = totalDuration / 3600;
-        const profitPerHour = totalHoursSpent > 0 ? netProfit / totalHoursSpent : 0;
+        const result = await directionsService.route(request);
+        if (result.routes && result.routes.length > 0) {
+            let totalMileage = 0;
+            let totalTime = 0;
 
-        resolve({
-          date: document.getElementById("log-date").value || new Date().toISOString().split("T")[0],
-          startTime: startAddress,
-          endTime: endAddress,
-          destinations: destinations.map(d => d.location),
-          earnings: earnings,
-          totalMileage: totalMileage.toFixed(2),
-          totalTime: formatDuration(totalDuration),
-          totalEarnings: totalEarnings.toFixed(2),
-          fuelCost: fuelCost.toFixed(2),
-          maintenanceCost: maintenanceCost.toFixed(2),
-          suppliesCost: suppliesCost.toFixed(2),
-          netProfit: netProfit.toFixed(2),
-          profitPerHour: profitPerHour.toFixed(2),
-          hoursWorked: parseFloat(document.getElementById("hours-worked").value) || 0,
-        });
-      } else {
-        alert("Directions request failed due to " + status);
-        document.getElementById("map").classList.add("hidden");
-        document.getElementById("results").classList.add("hidden");
-        resolve(null); // fallback
-      }
-    });
-  });
+            for (const leg of result.routes[0].legs) {
+                totalMileage += leg.distance.value * 0.000621371; // meters to miles
+                totalTime += leg.duration.value / 60; // seconds to minutes
+            }
+
+            const totalEarnings = destinations.reduce((sum, dest) => sum + parseFloat(dest.earnings), 0);
+            const fuelCost = (totalMileage / mpg) * gasPrice;
+            const hours = hoursWorked || (startTime && endTime ? (new Date(`1970-01-01 ${endTime}`) - new Date(`1970-01-01 ${startTime}`)) / 3600000 : 0);
+            const maintenanceCostValue = maintenanceCost || 0;
+            const suppliesCostValue = suppliesCost || 0;
+            const netProfit = totalEarnings - fuelCost - maintenanceCostValue - suppliesCostValue;
+            const profitPerHour = hours > 0 ? netProfit / hours : 0;
+
+            return {
+                ...routeData, // Include original data
+                totalMileage: totalMileage.toFixed(2),
+                totalTime: formatTime(totalTime),
+                totalEarnings: totalEarnings.toFixed(2),
+                fuelCost: fuelCost.toFixed(2),
+                maintenanceCost: maintenanceCostValue.toFixed(2),
+                suppliesCost: suppliesCostValue.toFixed(2),
+                netProfit: netProfit.toFixed(2),
+                profitPerHour: profitPerHour.toFixed2
+            };
+        } else {
+            console.error("❌ Directions request failed:", result);
+            alert("❌ Could not calculate route. Please check addresses and try again.");
+            return null;
+        }
+    } catch (error) {
+        console.error("❌ Error calculating route:", error);
+        alert("❌ Error calculating route. Please try again.");
+        return null;
+    }
 }
 
 
@@ -1776,32 +1732,31 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       async function logResults() {
-  const token = localStorage.getItem("token");
+    const logDate = document.getElementById('log-date').value;
+    const startAddress = document.getElementById('start-address').value;
+    const endAddress = document.getElementById('end-address').value;
+    const mpg = parseFloat(document.getElementById('mpg').value);
+    const gasPrice = parseFloat(document.getElementById('gas-price').value);
+    const startTime = document.getElementById('start-time').value;
+    const endTime = document.getElementById('end-time').value;
+    const hoursWorked = parseFloat(document.getElementById('hours-worked').value);
+    const maintenanceCost = parseFloat(document.getElementById('maintenance-cost').value);
+    const suppliesCost = parseFloat(document.getElementById('supplies-cost').value);
 
-  if (!token) {
-    alert("❌ You must sign in to log your route.");
-    showLogin(); // show sign-in modal
-    return;
-  }
+    const destinations = Array.from(document.querySelectorAll('#destinations-container .destination')).map(destDiv => ({
+        address: destDiv.querySelector('input[placeholder="Enter destination address"]').value,
+        earnings: parseFloat(destDiv.querySelector('input[placeholder="Enter earnings for destination"]').value)
+    }));
 
-  const calculationResult = await calculateRouteData();
+    const routeDetails = await calculateRouteData(logDate, startAddress, destinations, endAddress, mpg, gasPrice, startTime, endTime, hoursWorked, maintenanceCost, suppliesCost);
 
-  if (calculationResult) {
-    currentPage = 1;
-    logEntry(calculationResult);
-
-    if (navigator.onLine) {
-      // 🌐 Online - full save
-      displayLog();
-      populateYearOptions();
-      updateUI(calculationResult);
-      showConfirmationMessage("✅ Route logged successfully!");
-    } else {
-      // 🛜 Offline - limited save
-      displayLog(); // optional: or just refresh list view
-      showConfirmationMessage("🛜 Saved offline! Will sync mileage later.");
+    if (routeDetails) {
+        logEntries.push(routeDetails);
+        await saveLog(); // Save to localStorage or server
+        clearForm();
+        displayLog();
+        alert("✅ Route logged successfully!");
     }
-  }
 }
 
 
@@ -3746,6 +3701,29 @@ window.addEventListener("online", () => {
     topBar.style.boxShadow = 'none';
   }
 });
+
+window.addEventListener('online', () => {
+    console.log("✅ Online. Attempting to sync pending logs.");
+    document.getElementById('offline-banner').style.display = 'none';
+    syncPendingLogs();
+});
+
+window.addEventListener('offline', () => {
+    console.warn("🛜 Offline. App is running in offline mode.");
+    document.getElementById('offline-banner').style.display = 'block';
+});
+
+//  ==========  MODIFIED window.onload ==========
+window.onload = () => {
+    loadLog(); // Load existing logs
+    syncPendingLogs(); // Try to sync any pending logs on load
+    populateYearOptions();
+    populateMonthOptions();
+
+    if (!navigator.onLine) {
+        document.getElementById('offline-banner').style.display = 'block';
+    }
+};
     </script>
   </body>
 </html>
