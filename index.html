@@ -3474,6 +3474,13 @@ function isOnlineOrWarn() {
 }
 
 
+// 🛜 Auto sync pending logs when user comes back online
+window.addEventListener("online", () => {
+  console.log("🌐 Online event detected. Syncing pending logs...");
+  syncPendingLogs();
+});
+
+
 
     </script>
 
