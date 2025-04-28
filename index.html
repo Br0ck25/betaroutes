@@ -1730,6 +1730,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       async function logResults() {
+    console.log("🚀 logResults() called");
+
     const logDate = document.getElementById('log-date').value;
     const startAddress = document.getElementById('start-address').value;
     const endAddress = document.getElementById('end-address').value;
@@ -1746,39 +1748,58 @@ document.addEventListener("DOMContentLoaded", () => {
         earnings: parseFloat(destDiv.querySelector('input[placeholder="Enter earnings for destination"]').value)
     }));
 
-    console.log("🚀 Calling calculateRouteData...");  //  Add this
+    if (!navigator.onLine) {
+        console.warn("🛜 Offline: Saving route data locally.");
+        await calculateRouteData(
+            logDate,
+            startAddress,
+            destinations,
+            endAddress,
+            mpg,
+            gasPrice,
+            startTime,
+            endTime,
+            hoursWorked,
+            maintenanceCost,
+            suppliesCost
+        );
+        console.log("🚀 Offline save completed in calculateRouteData.");
+        clearForm();
+        displayLog();
+        alert("⚠️ Offline: Route data saved locally. Will sync when you're back online.");
+        return;
+    }
 
-const routeDetails = await calculateRouteData(
-    logDate,
-    startAddress,
-    destinations,
-    endAddress,
-    mpg,
-    gasPrice,
-    startTime,
-    endTime,
-    hoursWorked,
-    maintenanceCost,
-    suppliesCost
-);
+    console.log("🚀 Calling calculateRouteData...");
 
-console.log("🚀 calculateRouteData returned:", routeDetails);  //  Add this
+    const routeDetails = await calculateRouteData(
+        logDate,
+        startAddress,
+        destinations,
+        endAddress,
+        mpg,
+        gasPrice,
+        startTime,
+        endTime,
+        hoursWorked,
+        maintenanceCost,
+        suppliesCost
+    );
 
-if (routeDetails) {
-    console.log("🚀 Route details are valid. Saving...");  //  Add this
-    logEntries.push(routeDetails);
-    await saveLog();
-    clearForm();
-    displayLog();
-    alert("✅ Route logged successfully!");
-} else if (!navigator.onLine) {
-    console.log("🚀 Offline. Route data saved locally in calculateRouteData.");  //  Add this
-    //  Do nothing here, the offline save was already handled in calculateRouteData
-} else {
-    console.log("🚀 routeDetails is null, but online.  Something went wrong with the API call.");  //  Add this
-}
+    console.log("🚀 calculateRouteData returned:", routeDetails);
 
-console.log("🚀 logResults() finished");  //  Add this
+    if (routeDetails) {
+        console.log("🚀 Route details are valid. Saving...");
+        logEntries.push(routeDetails);
+        await saveLog();
+        clearForm();
+        displayLog();
+        alert("✅ Route logged successfully!");
+    } else {
+        console.log("🚀 routeDetails is null, but online. Something went wrong with the API call.");
+    }
+
+    console.log("🚀 logResults() finished");
 }
 
 
