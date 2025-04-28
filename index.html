@@ -1614,8 +1614,8 @@ document.addEventListener("DOMContentLoaded", () => {
       travelMode: "DRIVING",
     };
 
+    // 🛜 Handle offline mode
     if (!navigator.onLine) {
-      // 🛜 Handle offline mode
       alert("⚠️ Offline: Skipping live directions. Using defaults.");
       showConfirmationMessage("✅ Saved offline! Will sync when back online.");
 
@@ -1635,13 +1635,9 @@ document.addEventListener("DOMContentLoaded", () => {
         profitPerHour: "0.00",
         hoursWorked: parseFloat(document.getElementById("hours-worked").value) || 0,
       });
-      return;
+      return; // ✅ Exit early
     } else {
-      if (!navigator.onLine) {
-  console.warn("🛜 Offline - not calling Google Maps API");
-  return;
-}
-
+      // 🌐 Online mode
       directionsService.route(request, (response, status) => {
         if (status === "OK") {
           directionsRenderer.setDirections(response);
@@ -1687,6 +1683,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 }
+
 
 
 
