@@ -1730,7 +1730,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       async function logResults() {
-    console.log("🚀 logResults() called");
+    console.log("🚀🚀🚀 logResults() called - START");
+    console.log("🚀🚀🚀 navigator.onLine at start of logResults():", navigator.onLine);
 
     const logDate = document.getElementById('log-date').value;
     const startAddress = document.getElementById('start-address').value;
@@ -1767,12 +1768,14 @@ document.addEventListener("DOMContentLoaded", () => {
         clearForm();
         displayLog();
         alert("⚠️ Offline: Route data saved locally. Will sync when you're back online.");
+        console.log("🚀🚀🚀 logResults() exiting - OFFLINE");
         return;
     }
 
-    //  <---  EXTRA CHECK:  Make absolutely sure we're online before proceeding
+    //  <---  ULTIMATE CHECK:  Make absolutely sure we're online before proceeding
     if (navigator.onLine) {
-        console.log("🚀 Calling calculateRouteData...");
+        console.log("🚀🚀🚀 Online check passed. Calling calculateRouteData...");
+        console.log("🚀🚀🚀 navigator.onLine before calculateRouteData():", navigator.onLine);
 
         const routeDetails = await calculateRouteData(
             logDate,
@@ -1788,7 +1791,8 @@ document.addEventListener("DOMContentLoaded", () => {
             suppliesCost
         );
 
-        console.log("🚀 calculateRouteData returned:", routeDetails);
+        console.log("🚀🚀🚀 calculateRouteData returned:", routeDetails);
+        console.log("🚀🚀🚀 navigator.onLine after calculateRouteData():", navigator.onLine);
 
         if (routeDetails) {
             console.log("🚀 Route details are valid. Saving...");
@@ -1801,10 +1805,13 @@ document.addEventListener("DOMContentLoaded", () => {
             console.log("🚀 routeDetails is null, but online. Something went wrong with the API call.");
         }
 
-        console.log("🚀 logResults() finished");
+        console.log("🚀🚀🚀 logResults() finished - ONLINE");
     } else {
-        console.warn("🛜 Offline again!  Aborting online route calculation.");
+        console.warn("🛜 Offline again! Aborting online route calculation.");
+        console.log("🚀🚀🚀 logResults() exiting - OFFLINE (again)");
     }
+
+    console.log("🚀🚀🚀 logResults() called - END");  //  Final end log
 }
 
 
