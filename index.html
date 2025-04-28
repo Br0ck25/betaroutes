@@ -847,9 +847,11 @@ transition: opacity 0.3s ease;
         <p>Mileage: <span id="total-mileage"></span> miles</p>
         <p>Drive Time: <span id="total-time"></span></p>
         <p>Total Earnings: $<span id="total-earnings"></span></p>
-        <p>Fuel Consumption Cost: $<span id="fuel-cost"></span></p>
+        <p>Fuel Cost: $<span id="fuel-cost"></span></p>
         <p>Maintenance Cost: $<span id="maintenance-cost-result"></span></p>
         <p>Supplies Cost: $<span id="supplies-cost-result"></span></p>
+        <p>Total Hours: <span id="total-hours"></span></p> 
+
         <p>Net Profit: $<span id="net-profit"></span></p>
         <p>
           Net Profit per Hour (including drive time): $<span
@@ -1080,13 +1082,13 @@ const logsPerPage = 10;
       <label for="edit-mpg">Miles Per Gallon (MPG)</label>
       <input type="number" id="edit-mpg" placeholder="Enter MPG" />
 
-      <label for="edit-gas-price">Gas Price Per Gallon</label>
+      <label for="edit-gas-price">Fuel Price Per Gallon</label>
       <input type="number" id="edit-gas-price" placeholder="Enter Gas Price" />
 
       <label for="edit-total-earnings">Total Earnings</label>
       <input type="number" id="edit-total-earnings" />
 
-      <label for="edit-fuel-cost">Fuel Consumption Cost</label>
+      <label for="edit-fuel-cost">Fuel Cost</label>
       <input type="number" id="edit-fuel-cost" />
 
       <label for="edit-maintenance-cost">Maintenance Cost</label>
@@ -1098,20 +1100,15 @@ const logsPerPage = 10;
       <label for="edit-total-mileage">Mileage</label>
       <input type="number" id="edit-total-mileage" />
 
-      <label>Drive Time</label>
-      <div style="display: flex; gap: 10px;">
-        <input type="number" id="edit-drive-hours" min="0" placeholder="Hours" style="width: 100px;">
-        <input type="number" id="edit-drive-minutes" min="0" max="59" placeholder="Minutes" style="width: 100px;">
-      </div>
-      
-      
+      <label for="edit-total-time">Drive Time</label>
+      <input
+        type="text"
+        id="edit-total-time"
+        placeholder="e.g., 1 hour 30 minutes"
+      />
 
       <label for="edit-hours-worked">Hours Worked (Optional)</label>
       <input type="number" id="edit-hours-worked" />
-
-      <label for="edit-total-hours">Total Hours (Auto)</label>
-<input type="number" id="edit-total-hours" readonly style="background-color: #f0f0f0;" />
-
 
       <button type="button" class="save-btn" onclick="saveEditedLogEntry()">
         Save
@@ -1332,6 +1329,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   updateOfflineBanner();
   window.addEventListener("online", updateOfflineBanner);
   window.addEventListener("offline", updateOfflineBanner);
+
+  document.getElementById("hours-worked").addEventListener("input", () => {
+  const hoursWorked = parseFloat(document.getElementById("hours-worked").value) || 0;
+  const driveTimeInHours = convertTimeToHours(document.getElementById("total-time").textContent);
+  const totalHours = (hoursWorked + driveTimeInHours).toFixed(2);
+  document.getElementById("total-hours").textContent = totalHours;
+});
+
 });
 
 
@@ -1663,6 +1668,9 @@ document.addEventListener("DOMContentLoaded", () => {
           document.getElementById("profit-per-hour").textContent =
             data.profitPerHour;
           document.getElementById("results").classList.remove("hidden");
+          const driveTimeInHours = convertTimeToHours(data.totalTime);
+const totalHours = (parseFloat(data.hoursWorked || 0) + driveTimeInHours).toFixed(2);
+document.getElementById("total-hours").textContent = totalHours;
 
           if (originalMileage === null) {
             originalMileage = data.totalMileage;
@@ -2508,23 +2516,10 @@ document.addEventListener("DOMContentLoaded", () => {
         setInputValue("edit-maintenance-cost", entry.maintenanceCost);
         setInputValue("edit-supplies-cost", entry.suppliesCost);
         setInputValue("edit-total-mileage", entry.totalMileage);
+        setInputValue("edit-total-time", entry.totalTime);
         setInputValue("edit-hours-worked", entry.hoursWorked);
         setInputValue("edit-mpg", entry.mpg);
         setInputValue("edit-gas-price", entry.gasPrice);
-        const driveHoursInput = document.getElementById("edit-drive-hours");
-const driveMinutesInput = document.getElementById("edit-drive-minutes");
-
-if (driveHoursInput && driveMinutesInput && entry.totalTime) {
-  const hoursMatch = entry.totalTime.match(/(\d+)\s*hour/);
-  const minutesMatch = entry.totalTime.match(/(\d+)\s*minute/);
-
-  const driveHours = hoursMatch ? parseInt(hoursMatch[1], 10) : 0;
-  const driveMinutes = minutesMatch ? parseInt(minutesMatch[1], 10) : 0;
-
-  driveHoursInput.value = driveHours;
-  driveMinutesInput.value = driveMinutes;
-}
-
 
         const destinationsContainer = document.getElementById(
           "edit-destinations-container"
@@ -2558,40 +2553,19 @@ if (driveHoursInput && driveMinutesInput && entry.totalTime) {
 
         // ✅ Show Edit form
         if (editFormContainer && overlay) {
-  editFormContainer.style.display = "block";
-  overlay.style.display = "block";
+          editFormContainer.style.display = "block";
+          overlay.style.display = "block";
+          const startTimeInput = document.getElementById("edit-start-time");
+          const endTimeInput = document.getElementById("edit-end-time");
 
-  const startTimeInput = document.getElementById("edit-start-time");
-  const endTimeInput = document.getElementById("edit-end-time");
-  const totalTimeInput = document.getElementById("edit-total-time");
-  const hoursWorkedInput = document.getElementById("edit-hours-worked");
-
-  if (startTimeInput) {
-    startTimeInput.addEventListener("change", () => {
-      recalculateEditHoursWorked();
-      recalculateEditTotalHours();
-    });
-  }
-
-  if (endTimeInput) {
-    endTimeInput.addEventListener("change", () => {
-      recalculateEditHoursWorked();
-      recalculateEditTotalHours();
-    });
-  }
-
-  if (totalTimeInput) {
-    totalTimeInput.addEventListener("change", () => {
-      recalculateEditTotalHours();
-    });
-  }
-
-  if (hoursWorkedInput) {
-    hoursWorkedInput.addEventListener("change", () => {
-      recalculateEditTotalHours();
-    });
-  }
-}
+          if (startTimeInput && endTimeInput) {
+            startTimeInput.addEventListener(
+              "change",
+              recalculateEditHoursWorked
+            );
+            endTimeInput.addEventListener("change", recalculateEditHoursWorked);
+          }
+        }
 
         // ✅ Setup Autocomplete after a tiny delay
         setTimeout(() => {
@@ -2709,7 +2683,7 @@ if (driveHoursInput && driveMinutesInput && entry.totalTime) {
 
       function exportToCSV() {
         const header =
-          "Date,Start Address,Destinations,End Address,Total Earnings,Fuel Consumption Cost,Maintenance Cost,Supplies Cost,Net Profit,Mileage,Drive Time,Earnings per Stop,Profit per Hour\n";
+          "Date,Start Address,Destinations,End Address,Total Earnings,Fuel Cost,Maintenance Cost,Supplies Cost,Net Profit,Mileage,Drive Time,Earnings per Stop,Profit per Hour\n";
         const csvRows = logEntries.map((entry) => {
           const formattedDate = entry.date; // Keep the original date format for CSV
 
@@ -3321,8 +3295,7 @@ if (driveHoursInput && driveMinutesInput && entry.totalTime) {
       function recalculateEditHoursWorked() {
   const startTime = document.getElementById("edit-start-time")?.value;
   const endTime = document.getElementById("edit-end-time")?.value;
-  const driveHours = parseInt(document.getElementById("edit-drive-hours")?.value) || 0;
-  const driveMinutes = parseInt(document.getElementById("edit-drive-minutes")?.value) || 0;
+  const totalTimeStr = document.getElementById("edit-total-time")?.value;
   const hoursWorkedInput = document.getElementById("edit-hours-worked");
 
   if (startTime && endTime && hoursWorkedInput) {
@@ -3336,30 +3309,28 @@ if (driveHoursInput && driveMinutesInput && entry.totalTime) {
       end += 24 * 60; // overnight shift
     }
 
-    const totalWorkedMinutes = end - start;
-    const driveTotalMinutes = (driveHours * 60) + driveMinutes;
+    const totalWorkedMinutes = end - start; // total minutes logged
+    let driveMinutes = 0;
 
-    const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveTotalMinutes, 0);
+    // Parse total drive time from edit-total-time input
+    if (totalTimeStr) {
+      const hoursMatch = totalTimeStr.match(/(\d+)\s*hour/);
+      const minutesMatch = totalTimeStr.match(/(\d+)\s*minute/);
+
+      if (hoursMatch) {
+        driveMinutes += parseInt(hoursMatch[1], 10) * 60;
+      }
+      if (minutesMatch) {
+        driveMinutes += parseInt(minutesMatch[1], 10);
+      }
+    }
+
+    const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
     const actualWorkedHours = actualWorkedMinutes / 60;
 
     hoursWorkedInput.value = actualWorkedHours.toFixed(2);
   }
 }
-
-function recalculateEditTotalHours() {
-  const driveHours = parseInt(document.getElementById("edit-drive-hours")?.value) || 0;
-  const driveMinutes = parseInt(document.getElementById("edit-drive-minutes")?.value) || 0;
-  const hoursWorked = parseFloat(document.getElementById("edit-hours-worked")?.value) || 0;
-  const totalHoursInput = document.getElementById("edit-total-hours");
-
-  const driveTimeInHours = driveHours + (driveMinutes / 60);
-  const totalHours = driveTimeInHours + hoursWorked;
-
-  if (totalHoursInput) {
-    totalHoursInput.value = totalHours.toFixed(2);
-  }
-}
-
 
 
       function formatTimeToAmPm(timeStr) {
@@ -3369,23 +3340,6 @@ function recalculateEditTotalHours() {
         const displayHours = hours % 12 || 12; // 0 becomes 12
         return `${displayHours}:${minutes.toString().padStart(2, "0")} ${ampm}`;
       }
-
-      function calculateTotalHours(entry) {
-  let driveTimeHours = 0;
-  
-  if (entry.totalTime) {
-    const hoursMatch = entry.totalTime.match(/(\d+)\s*hour/);
-    const minutesMatch = entry.totalTime.match(/(\d+)\s*minute/);
-    if (hoursMatch) driveTimeHours += parseInt(hoursMatch[1]);
-    if (minutesMatch) driveTimeHours += parseInt(minutesMatch[1]) / 60;
-  }
-
-  const hoursWorked = parseFloat(entry.hoursWorked) || 0;
-  const totalHours = driveTimeHours + hoursWorked;
-
-  return totalHours.toFixed(2) + " hours";
-}
-
 
       function toggleLogEntryDetails(index) {
   const entry = logEntries[index];
@@ -3421,9 +3375,7 @@ function recalculateEditTotalHours() {
   <div><strong>End Address:</strong> ${entry.endTime}</div>
   <div><strong>Earnings per Stop:</strong> ${earnings}</div>
   <div><strong>Mileage:</strong> ${entry.totalMileage} miles</div>
-
- <div><strong>Drive Time:</strong> ${entry.totalTime}</div>
-
+  <div><strong>Drive Time:</strong> ${entry.totalTime}</div>
   <div><strong>Total Earnings:</strong> $${entry.totalEarnings}</div>
   <div><strong>Fuel Cost:</strong> $${entry.fuelCost}</div>
   <div><strong>Maintenance:</strong> $${entry.maintenanceCost}</div>
@@ -3444,6 +3396,24 @@ function recalculateEditTotalHours() {
     summaryDiv.classList.remove("hidden"); // 🔥 Show the summary
 toggleButton.textContent = "More Details";
   }
+}
+
+function convertTimeToHours(durationStr) {
+  if (!durationStr) return 0;
+
+  const hourMatch = durationStr.match(/(\d+)\s*hour/);
+  const minuteMatch = durationStr.match(/(\d+)\s*minute/);
+
+  let hours = hourMatch ? parseInt(hourMatch[1]) : 0;
+  let minutes = minuteMatch ? parseInt(minuteMatch[1]) : 0;
+
+  return hours + minutes / 60;
+}
+
+function calculateTotalHours(entry) {
+  const driveTime = convertTimeToHours(entry.totalTime || "");
+  const workedTime = parseFloat(entry.hoursWorked) || 0;
+  return (driveTime + workedTime).toFixed(2) + " hours";
 }
 
 
