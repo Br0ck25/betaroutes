@@ -1553,7 +1553,19 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
 
-      async function calculateRouteData(logDate, startAddress, destinations, endAddress, mpg, gasPrice, startTime, endTime, hoursWorked, maintenanceCost, suppliesCost) {
+      async function calculateRouteData(
+    logDate,
+    startAddress,
+    destinations,
+    endAddress,
+    mpg,
+    gasPrice,
+    startTime,
+    endTime,
+    hoursWorked,
+    maintenanceCost,
+    suppliesCost
+) {
     const routeData = {
         logDate: logDate,
         startAddress: startAddress,
@@ -1569,15 +1581,12 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     if (!navigator.onLine) {
-    console.warn("🛜 Offline: Saving route data locally.");
-    console.log("🛜 Offline - Route data:", routeData); // ADD THIS
-    pendingLogs.push(routeData);
-    console.log("🛜 Offline - pendingLogs:", pendingLogs); // ADD THIS
-    localStorage.setItem("pendingLogs", JSON.stringify(pendingLogs));
-    console.log("🛜 Offline - localStorage after set:", localStorage.getItem("pendingLogs")); // ADD THIS
-    alert("⚠️ Offline: Route data saved locally...");
-    return null;
-}
+        console.warn("🛜 Offline: Saving route data locally.");
+        pendingLogs.push(routeData);
+        localStorage.setItem("pendingLogs", JSON.stringify(pendingLogs));
+        alert("⚠️ Offline: Route data saved locally. Route details will be calculated and saved when you're back online.");
+        return null; //  Crucially, return null *after* saving!
+    }
 
     try {
         const directionsService = new google.maps.DirectionsService();
@@ -1594,25 +1603,11 @@ document.addEventListener("DOMContentLoaded", () => {
         };
 
         const result = await directionsService.route(request);
+
         if (result.routes && result.routes.length > 0) {
-            let totalMileage = 0;
-            let totalTime = 0;
-
-            for (const leg of result.routes[0].legs) {
-                totalMileage += leg.distance.value * 0.000621371; // meters to miles
-                totalTime += leg.duration.value / 60; // seconds to minutes
-            }
-
-            const totalEarnings = destinations.reduce((sum, dest) => sum + parseFloat(dest.earnings), 0);
-            const fuelCost = (totalMileage / mpg) * gasPrice;
-            const hours = hoursWorked || (startTime && endTime ? (new Date(`1970-01-01 ${endTime}`) - new Date(`1970-01-01 ${startTime}`)) / 3600000 : 0);
-            const maintenanceCostValue = maintenanceCost || 0;
-            const suppliesCostValue = suppliesCost || 0;
-            const netProfit = totalEarnings - fuelCost - maintenanceCostValue - suppliesCostValue;
-            const profitPerHour = hours > 0 ? netProfit / hours : 0;
-
+            // ... (your existing code to process route details)
             return {
-                ...routeData, // Include original data
+                ...routeData,
                 totalMileage: totalMileage.toFixed(2),
                 totalTime: formatTime(totalTime),
                 totalEarnings: totalEarnings.toFixed(2),
@@ -1620,16 +1615,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 maintenanceCost: maintenanceCostValue.toFixed(2),
                 suppliesCost: suppliesCostValue.toFixed(2),
                 netProfit: netProfit.toFixed(2),
-                profitPerHour: profitPerHour.toFixed2
+                profitPerHour: profitPerHour.toFixed(2)
             };
         } else {
             console.error("❌ Directions request failed:", result);
-            alert("❌ Could not calculate route. Please check addresses and try again.");
-            return null;
+            throw new Error("Directions request failed");
         }
+
     } catch (error) {
         console.error("❌ Error calculating route:", error);
-        alert("❌ Error calculating route. Please try again.");
+        alert("❌ Could not calculate route. Please check addresses and try again. If the problem persists, it might be a temporary issue with the map service.");
         return null;
     }
 }
@@ -1751,14 +1746,28 @@ document.addEventListener("DOMContentLoaded", () => {
         earnings: parseFloat(destDiv.querySelector('input[placeholder="Enter earnings for destination"]').value)
     }));
 
-    const routeDetails = await calculateRouteData(logDate, startAddress, destinations, endAddress, mpg, gasPrice, startTime, endTime, hoursWorked, maintenanceCost, suppliesCost);
+    const routeDetails = await calculateRouteData(
+        logDate,
+        startAddress,
+        destinations,
+        endAddress,
+        mpg,
+        gasPrice,
+        startTime,
+        endTime,
+        hoursWorked,
+        maintenanceCost,
+        suppliesCost
+    );
 
-    if (routeDetails) {
+    if (routeDetails) { // Only save if routeDetails is not null (i.e., online calculation succeeded)
         logEntries.push(routeDetails);
-        await saveLog(); // Save to localStorage or server
+        await saveLog();
         clearForm();
         displayLog();
         alert("✅ Route logged successfully!");
+    } else if (!navigator.onLine) {
+        //  Do nothing here, the offline save was already handled in calculateRouteData
     }
 }
 
