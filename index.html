@@ -1746,29 +1746,39 @@ document.addEventListener("DOMContentLoaded", () => {
         earnings: parseFloat(destDiv.querySelector('input[placeholder="Enter earnings for destination"]').value)
     }));
 
-    const routeDetails = await calculateRouteData(
-        logDate,
-        startAddress,
-        destinations,
-        endAddress,
-        mpg,
-        gasPrice,
-        startTime,
-        endTime,
-        hoursWorked,
-        maintenanceCost,
-        suppliesCost
-    );
+    console.log("🚀 Calling calculateRouteData...");  //  Add this
 
-    if (routeDetails) { // Only save if routeDetails is not null (i.e., online calculation succeeded)
-        logEntries.push(routeDetails);
-        await saveLog();
-        clearForm();
-        displayLog();
-        alert("✅ Route logged successfully!");
-    } else if (!navigator.onLine) {
-        //  Do nothing here, the offline save was already handled in calculateRouteData
-    }
+const routeDetails = await calculateRouteData(
+    logDate,
+    startAddress,
+    destinations,
+    endAddress,
+    mpg,
+    gasPrice,
+    startTime,
+    endTime,
+    hoursWorked,
+    maintenanceCost,
+    suppliesCost
+);
+
+console.log("🚀 calculateRouteData returned:", routeDetails);  //  Add this
+
+if (routeDetails) {
+    console.log("🚀 Route details are valid. Saving...");  //  Add this
+    logEntries.push(routeDetails);
+    await saveLog();
+    clearForm();
+    displayLog();
+    alert("✅ Route logged successfully!");
+} else if (!navigator.onLine) {
+    console.log("🚀 Offline. Route data saved locally in calculateRouteData.");  //  Add this
+    //  Do nothing here, the offline save was already handled in calculateRouteData
+} else {
+    console.log("🚀 routeDetails is null, but online.  Something went wrong with the API call.");  //  Add this
+}
+
+console.log("🚀 logResults() finished");  //  Add this
 }
 
 
