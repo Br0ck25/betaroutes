@@ -21,7 +21,13 @@ self.addEventListener('install', event => {
   );
 });
 
+// Serve cached content when offline
 self.addEventListener('fetch', event => {
+  // 🛜 Skip external requests like Google Maps
+  if (!event.request.url.startsWith(self.location.origin)) {
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .catch(() => {
@@ -29,7 +35,6 @@ self.addEventListener('fetch', event => {
           if (response) {
             return response;
           } else {
-            // 🛜 If the file is not in cache either, return a safe empty response
             return new Response('', {
               status: 200,
               statusText: 'Offline fallback'
@@ -39,4 +44,3 @@ self.addEventListener('fetch', event => {
       })
   );
 });
-
