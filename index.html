@@ -1321,7 +1321,6 @@ async function calculateMileageAndTime(startAddress, endAddress, destinations = 
 }
 
 
-
 async function loadLog() {
   const token = localStorage.getItem("token");
 
@@ -1344,10 +1343,25 @@ async function loadLog() {
     return logs;
   } catch (err) {
     console.warn("⚠️ Offline or failed to load logs. Loading from local cache.", err);
+    
     const cached = localStorage.getItem("cachedLogs");
-    return cached ? JSON.parse(cached) : [];
+    let logs = cached ? JSON.parse(cached) : [];
+
+    // 🛜 Combine pendingLogs if offline
+    if (!navigator.onLine) {
+      const pending = localStorage.getItem("pendingLogs");
+      if (pending) {
+        const pendingLogs = JSON.parse(pending);
+        if (Array.isArray(pendingLogs) && pendingLogs.length > 0) {
+          logs = logs.concat(pendingLogs);
+        }
+      }
+    }
+
+    return logs;
   }
 }
+
 
 function updateOfflineBanner() {
   const banner = document.getElementById("offline-banner");
