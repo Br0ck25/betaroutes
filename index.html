@@ -844,8 +844,8 @@ transition: opacity 0.3s ease;
       ></div>
 
       <div id="results" class="hidden">
-        <p>Total Mileage: <span id="total-mileage"></span> miles</p>
-        <p>Total Drive Time: <span id="total-time"></span></p>
+        <p>Mileage: <span id="total-mileage"></span> miles</p>
+        <p>Drive Time: <span id="total-time"></span></p>
         <p>Total Earnings: $<span id="total-earnings"></span></p>
         <p>Fuel Consumption Cost: $<span id="fuel-cost"></span></p>
         <p>Maintenance Cost: $<span id="maintenance-cost-result"></span></p>
@@ -1095,14 +1095,15 @@ const logsPerPage = 10;
       <label for="edit-supplies-cost">Supplies Cost</label>
       <input type="number" id="edit-supplies-cost" />
 
-      <label for="edit-total-mileage">Total Mileage</label>
+      <label for="edit-total-mileage">Mileage</label>
       <input type="number" id="edit-total-mileage" />
 
-      <label>Total Drive Time</label>
+      <label>Drive Time</label>
       <div style="display: flex; gap: 10px;">
         <input type="number" id="edit-drive-hours" min="0" placeholder="Hours" style="width: 100px;">
         <input type="number" id="edit-drive-minutes" min="0" max="59" placeholder="Minutes" style="width: 100px;">
       </div>
+      
       
 
       <label for="edit-hours-worked">Hours Worked (Optional)</label>
@@ -1681,8 +1682,8 @@ document.addEventListener("DOMContentLoaded", () => {
             <p><strong>Earnings per Stop:</strong> ${data.earnings
               .map((e) => `$${parseFloat(e).toFixed(2)}`)
               .join(", ")}</p>
-            <p><strong>Total Mileage:</strong> ${data.totalMileage} miles</p>
-            <p><strong>Total Drive Time:</strong> ${data.totalTime}</p>
+            <p><strong>Mileage:</strong> ${data.totalMileage} miles</p>
+            <p><strong>Drive Time:</strong> ${data.totalTime}</p>
             <p><strong>Total Earnings:</strong> $${data.totalEarnings}</p>
             <p><strong>Fuel Cost:</strong> $${data.fuelCost}</p>
             <p><strong>Maintenance:</strong> $${data.maintenanceCost}</p>
@@ -2507,10 +2508,23 @@ document.addEventListener("DOMContentLoaded", () => {
         setInputValue("edit-maintenance-cost", entry.maintenanceCost);
         setInputValue("edit-supplies-cost", entry.suppliesCost);
         setInputValue("edit-total-mileage", entry.totalMileage);
-        setInputValue("edit-total-time", entry.totalTime);
         setInputValue("edit-hours-worked", entry.hoursWorked);
         setInputValue("edit-mpg", entry.mpg);
         setInputValue("edit-gas-price", entry.gasPrice);
+        const driveHoursInput = document.getElementById("edit-drive-hours");
+const driveMinutesInput = document.getElementById("edit-drive-minutes");
+
+if (driveHoursInput && driveMinutesInput && entry.totalTime) {
+  const hoursMatch = entry.totalTime.match(/(\d+)\s*hour/);
+  const minutesMatch = entry.totalTime.match(/(\d+)\s*minute/);
+
+  const driveHours = hoursMatch ? parseInt(hoursMatch[1], 10) : 0;
+  const driveMinutes = minutesMatch ? parseInt(minutesMatch[1], 10) : 0;
+
+  driveHoursInput.value = driveHours;
+  driveMinutesInput.value = driveMinutes;
+}
+
 
         const destinationsContainer = document.getElementById(
           "edit-destinations-container"
@@ -2695,7 +2709,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       function exportToCSV() {
         const header =
-          "Date,Start Address,Destinations,End Address,Total Earnings,Fuel Consumption Cost,Maintenance Cost,Supplies Cost,Net Profit,Total Mileage,Total Drive Time,Earnings per Stop,Profit per Hour\n";
+          "Date,Start Address,Destinations,End Address,Total Earnings,Fuel Consumption Cost,Maintenance Cost,Supplies Cost,Net Profit,Mileage,Drive Time,Earnings per Stop,Profit per Hour\n";
         const csvRows = logEntries.map((entry) => {
           const formattedDate = entry.date; // Keep the original date format for CSV
 
@@ -3406,8 +3420,10 @@ function recalculateEditTotalHours() {
 
   <div><strong>End Address:</strong> ${entry.endTime}</div>
   <div><strong>Earnings per Stop:</strong> ${earnings}</div>
-  <div><strong>Total Mileage:</strong> ${entry.totalMileage} miles</div>
-  <div><strong>Total Drive Time:</strong> ${entry.totalTime}</div>
+  <div><strong>Mileage:</strong> ${entry.totalMileage} miles</div>
+
+ <div><strong>Drive Time:</strong> ${entry.totalTime}</div>
+
   <div><strong>Total Earnings:</strong> $${entry.totalEarnings}</div>
   <div><strong>Fuel Cost:</strong> $${entry.fuelCost}</div>
   <div><strong>Maintenance:</strong> $${entry.maintenanceCost}</div>
