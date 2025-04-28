@@ -1786,25 +1786,34 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       async function logResults() {
-        const token = localStorage.getItem("token");
+  const token = localStorage.getItem("token");
 
-        if (!token) {
-          alert("❌ You must sign in to log your route.");
-          showLogin(); // show sign-in modal
-          return;
-        }
+  if (!token) {
+    alert("❌ You must sign in to log your route.");
+    showLogin(); // show sign-in modal
+    return;
+  }
 
-        const calculationResult = await calculateRouteData();
-        if (calculationResult) {
-          currentPage = 1;
-          logEntry(calculationResult);
-          displayLog();
-          populateYearOptions(); // ✅ add this
-          updateUI(calculationResult);
+  const calculationResult = await calculateRouteData();
 
-          showConfirmationMessage("✅ Route logged successfully!");
-        }
-      }
+  if (calculationResult) {
+    currentPage = 1;
+    logEntry(calculationResult);
+
+    if (navigator.onLine) {
+      // 🌐 Online - full save
+      displayLog();
+      populateYearOptions();
+      updateUI(calculationResult);
+      showConfirmationMessage("✅ Route logged successfully!");
+    } else {
+      // 🛜 Offline - limited save
+      displayLog(); // optional: or just refresh list view
+      showConfirmationMessage("🛜 Saved offline! Will sync mileage later.");
+    }
+  }
+}
+
 
       async function optimizeRoute() {
         if (originalMileage === null) {
