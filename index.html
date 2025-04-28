@@ -1563,37 +1563,48 @@ document.addEventListener("DOMContentLoaded", () => {
 
       async function calculateRouteData() {
   return new Promise((resolve, reject) => {
+
+    // 🛜 1. IMMEDIATELY check offline status at the very top
+    if (!navigator.onLine || typeof google === "undefined" || typeof google.maps === "undefined") {
+      console.warn("🛜 Offline or Google Maps not loaded. Skipping directions.");
+
+      alert("⚠️ Offline: Skipping live directions. Using defaults.");
+      showConfirmationMessage("✅ Saved offline! Will sync when back online.");
+
+      const startAddress = document.getElementById("start-address").value;
+      const endAddress = document.getElementById("end-address").value;
+      const maintenanceCost = parseFloat(document.getElementById("maintenance-cost").value) || 0;
+      const suppliesCost = parseFloat(document.getElementById("supplies-cost").value) || 0;
+      const earningsInputs = document.querySelectorAll('input[id^="earnings-"]');
+      const destInputs = document.querySelectorAll('input[id^="destination-"]');
+      const earnings = Array.from(earningsInputs).map((input) => parseFloat(input.value) || 0);
+      const totalEarnings = earnings.reduce((sum, val) => sum + val, 0);
+
+      resolve({
+        date: document.getElementById("log-date").value || new Date().toISOString().split("T")[0],
+        startTime: startAddress,
+        endTime: endAddress,
+        destinations: Array.from(destInputs).map(input => input.value),
+        earnings: earnings,
+        totalMileage: "0.00",
+        totalTime: "0 minutes",
+        totalEarnings: totalEarnings.toFixed(2),
+        fuelCost: "0.00",
+        maintenanceCost: maintenanceCost.toFixed(2),
+        suppliesCost: suppliesCost.toFixed(2),
+        netProfit: (totalEarnings - maintenanceCost - suppliesCost).toFixed(2),
+        profitPerHour: "0.00",
+        hoursWorked: parseFloat(document.getElementById("hours-worked").value) || 0,
+      });
+      return; // ✅ Exit early immediately if offline
+    }
+
+    // 🌐 2. ONLY if online, continue with real directionsService.route(request)
+    
     const startAddress = document.getElementById("start-address").value;
     const endAddress = document.getElementById("end-address").value;
     const mpg = parseFloat(document.getElementById("mpg").value);
     const gasPrice = parseFloat(document.getElementById("gas-price").value);
-    const startTimeInput = document.getElementById("start-time").value;
-    const endTimeInput = document.getElementById("end-time").value;
-    let hoursWorked = parseFloat(document.getElementById("hours-worked").value) || 0;
-
-    if (startTimeInput && endTimeInput) {
-      const [startHours, startMinutes] = startTimeInput.split(":").map(Number);
-      const [endHours, endMinutes] = endTimeInput.split(":").map(Number);
-
-      let startTotalMinutes = startHours * 60 + startMinutes;
-      let endTotalMinutes = endHours * 60 + endMinutes;
-
-      if (endTotalMinutes < startTotalMinutes) {
-        endTotalMinutes += 24 * 60;
-      }
-
-      let totalWorkedMinutes = endTotalMinutes - startTotalMinutes;
-      let driveMinutes = 0;
-
-      if (typeof totalDuration === "number") {
-        driveMinutes = totalDuration / 60;
-      }
-
-      const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
-      hoursWorked = parseFloat((actualWorkedMinutes / 60).toFixed(2));
-      document.getElementById("hours-worked").value = hoursWorked.toFixed(2);
-    }
-
     const maintenanceCost = parseFloat(document.getElementById("maintenance-cost").value) || 0;
     const suppliesCost = parseFloat(document.getElementById("supplies-cost").value) || 0;
     const destInputs = document.querySelectorAll('input[id^="destination-"]');
@@ -1612,41 +1623,13 @@ document.addEventListener("DOMContentLoaded", () => {
       endAddress,
     });
 
-    const waypoints = destinations;
     const request = {
       origin: startAddress,
       destination: endAddress || destinations[destinations.length - 1]?.location || startAddress,
-      waypoints: waypoints,
+      waypoints: destinations,
       travelMode: "DRIVING",
     };
 
-    // 🛜 Check if offline OR Google Maps not available
-    if (!navigator.onLine || typeof google === "undefined" || typeof google.maps === "undefined") {
-      console.warn("🛜 Offline OR Google Maps not loaded. Skipping directions.");
-
-      alert("⚠️ Offline: Skipping live directions. Using defaults.");
-      showConfirmationMessage("✅ Saved offline! Will sync when back online.");
-
-      resolve({
-        date: document.getElementById("log-date").value || new Date().toISOString().split("T")[0],
-        startTime: startAddress,
-        endTime: endAddress,
-        destinations: Array.from(destInputs).map(input => input.value),
-        earnings: earnings,
-        totalMileage: "0.00",
-        totalTime: "0 minutes",
-        totalEarnings: totalEarnings.toFixed(2),
-        fuelCost: "0.00",
-        maintenanceCost: maintenanceCost.toFixed(2),
-        suppliesCost: suppliesCost.toFixed(2),
-        netProfit: (totalEarnings - maintenanceCost - suppliesCost).toFixed(2),
-        profitPerHour: "0.00",
-        hoursWorked: parseFloat(document.getElementById("hours-worked").value) || 0,
-      });
-      return;
-    }
-
-    // 🌐 Now we are sure Google Maps is loaded and online
     directionsService.route(request, (response, status) => {
       if (status === "OK") {
         directionsRenderer.setDirections(response);
@@ -1663,7 +1646,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const fuelCost = mpg && gasPrice ? (totalMileage / mpg) * gasPrice : 0;
         const netProfitBeforeOptional = totalEarnings - fuelCost;
         const netProfit = netProfitBeforeOptional - maintenanceCost - suppliesCost;
-        const totalHoursSpent = hoursWorked + totalDuration / 3600;
+        const totalHoursSpent = totalDuration / 3600;
         const profitPerHour = totalHoursSpent > 0 ? netProfit / totalHoursSpent : 0;
 
         resolve({
@@ -1691,6 +1674,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 }
+
 
 
 
