@@ -21,9 +21,22 @@ self.addEventListener('install', event => {
   );
 });
 
-// Serve cached content when offline
 self.addEventListener('fetch', event => {
   event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request))
+    fetch(event.request)
+      .catch(() => {
+        return caches.match(event.request).then(response => {
+          if (response) {
+            return response;
+          } else {
+            // 🛜 If the file is not in cache either, return a safe empty response
+            return new Response('', {
+              status: 200,
+              statusText: 'Offline fallback'
+            });
+          }
+        });
+      })
   );
 });
+
