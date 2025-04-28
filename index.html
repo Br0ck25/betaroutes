@@ -1293,6 +1293,11 @@ async function calculateMileageAndTime(startAddress, endAddress, destinations = 
       waypoints: waypoints,
       travelMode: "DRIVING"
     };
+    if (!navigator.onLine) {
+  console.warn("🛜 Offline - not calling Google Maps API");
+  return;
+}
+
 
     directionsService.route(request, (response, status) => {
       if (status === "OK" && response.routes.length > 0) {
@@ -1632,7 +1637,11 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       return;
     } else {
-      // 🌐 Only proceed with live directions if online
+      if (!navigator.onLine) {
+  console.warn("🛜 Offline - not calling Google Maps API");
+  return;
+}
+
       directionsService.route(request, (response, status) => {
         if (status === "OK") {
           directionsRenderer.setDirections(response);
@@ -1827,6 +1836,10 @@ document.addEventListener("DOMContentLoaded", () => {
           travelMode: "DRIVING",
           optimizeWaypoints: true,
         };
+        if (!navigator.onLine) {
+  console.warn("🛜 Offline - not calling Google Maps API");
+  return;
+}
 
         directionsService.route(request, (response, status) => {
           if (status === "OK" && response.routes[0].waypoint_order) {
@@ -2357,6 +2370,10 @@ document.addEventListener("DOMContentLoaded", () => {
           waypoints: destinations,
           travelMode: "DRIVING",
         };
+        if (!navigator.onLine) {
+  console.warn("🛜 Offline - not calling Google Maps API");
+  return;
+}
 
         directionsService.route(request, (response, status) => {
           if (status === "OK") {
@@ -3444,6 +3461,15 @@ document.addEventListener("DOMContentLoaded", () => {
     summaryDiv.classList.remove("hidden"); // 🔥 Show the summary
 toggleButton.textContent = "More Details";
   }
+}
+
+function isOnlineOrWarn() {
+  if (!navigator.onLine) {
+    console.warn("🛜 Offline: action skipped.");
+    alert("⚠️ You are offline. Some features are unavailable.");
+    return false;
+  }
+  return true;
 }
 
 
