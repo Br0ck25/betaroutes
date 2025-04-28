@@ -1615,6 +1615,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!navigator.onLine) {
       alert("⚠️ Offline: Skipping live directions. Using defaults.");
 
+      showConfirmationMessage("✅ Saved offline! Will sync when back online.");
+
       resolve({
         date: document.getElementById("log-date").value || new Date().toISOString().split("T")[0],
         startTime: document.getElementById("start-address").value,
