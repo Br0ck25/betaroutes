@@ -3318,13 +3318,14 @@ function filterLogs() {
       ? entry.destinations.map((d) => `- ${d}`).join("<br>")
       : "None";
 
-    const earnings = Array.isArray(entry.earnings)
-      ? entry.earnings.map((e) => `$${parseFloat(e).toFixed(2)}`).join(", ")
-      : "$0.00";
+      const earnings = Array.isArray(entry.earnings)
+  ? entry.earnings.map((e) => `$${parseFloat(e).toFixed(2)}`).join(", ")
+  : "$0.00";
 
-      const formattedHoursWorked = entry.hoursWorked
-  ? formatHoursAndMinutes(parseFloat(entry.hoursWorked))
-  : "0 hours 0 minutes";
+const formattedHoursWorked = formatHoursAndMinutes(parseFloat(entry.hoursWorked) || 0);
+const formattedTotalHours = calculateTotalHours(entry); // calls the fixed function
+
+
 
 
       detailsDiv.innerHTML = `
@@ -3345,7 +3346,8 @@ function filterLogs() {
   <div><strong>Maintenance:</strong> $${entry.maintenanceCost}</div>
   <div><strong>Supplies:</strong> $${entry.suppliesCost}</div>
   <div><strong>Hours Worked:</strong> ${formattedHoursWorked}</div>
-  <div><strong>Total Hours:</strong> ${calculateTotalHours(entry)}</div>
+ <div><strong>Total Hours:</strong> ${formattedTotalHours}</div>
+
   <div><strong>Net Profit:</strong> $${entry.netProfit}</div>
   <div><strong>Profit per Hour:</strong> $${entry.profitPerHour}</div>
 `;
@@ -3639,23 +3641,20 @@ function formatHoursAndMinutes(decimal) {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
 
-  let formattedString = "";
-
-  if (hours > 0) {
-    formattedString += `${hours} hour${hours !== 1 ? 's' : ''} `;
+  if (hours === 0 && minutes > 0) {
+    return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
   }
 
-  if (minutes > 0) {
-    formattedString += `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+  if (hours > 0 && minutes === 0) {
+    return `${hours} hour${hours !== 1 ? 's' : ''}`;
   }
 
-  if (hours === 0 && minutes === 0) {
-    formattedString = "0 minutes";
+  if (hours > 0 && minutes > 0) {
+    return `${hours} hour${hours !== 1 ? 's' : ''} ${minutes} minute${minutes !== 1 ? 's' : ''}`;
   }
 
-  return formattedString.trim();
+  return "0 minutes";
 }
-
 
 
 
