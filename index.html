@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -796,7 +797,7 @@ transition: opacity 0.3s ease;
         </div>
       </div>
 
-              <button onclick="addDestination()">Add Destination</button>
+              <button onclick="addDestination()">Add Destination</button>
       <label for="end-address">End Address</label>
       <input
         type="text"
@@ -1553,8 +1554,10 @@ document.addEventListener("DOMContentLoaded", () => {
           hoursWorked = actualWorkedMinutes / 60;
 
           hoursWorked = parseFloat(hoursWorked.toFixed(2));
-          document.getElementById("hours-worked").value =
-            hoursWorked.toFixed(2);
+          const workedHours = Math.floor(hoursWorked);
+const workedMinutes = Math.round((hoursWorked - workedHours) * 60);
+document.getElementById("hours-worked").value = `${workedHours} hours ${workedMinutes} minutes`;
+
         }
 
         const maintenanceCost =
@@ -1699,8 +1702,11 @@ document.addEventListener("DOMContentLoaded", () => {
             data.profitPerHour;
           document.getElementById("results").classList.remove("hidden");
           const driveTimeInHours = convertTimeToHours(data.totalTime);
-const totalHours = (parseFloat(data.hoursWorked || 0) + driveTimeInHours).toFixed(2);
-document.getElementById("total-hours").textContent = totalHours;
+          const totalHoursFloat = parseFloat(data.hoursWorked || 0) + driveTimeInHours;
+const totalH = Math.floor(totalHoursFloat);
+const totalM = Math.round((totalHoursFloat - totalH) * 60);
+document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} minutes`;
+
 
           if (originalMileage === null) {
             originalMileage = data.totalMileage;
