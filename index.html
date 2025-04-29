@@ -2600,7 +2600,7 @@ document.getElementById("total-hours").textContent = totalHours;
 
   // ✅ Force reloading the cached logs freshly
   logEntries = await loadLog(); // <-- SUPER IMPORTANT! Fetch fresh logs
-  filterByDate(); // ✅ Refresh the view
+  filterLogs();
 
   closeEditForm(); // ✅ THEN close the edit screen
   showConfirmationMessage("✅ Log entry updated!");
