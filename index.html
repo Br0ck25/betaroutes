@@ -351,14 +351,12 @@ img {
 }
 
 .log-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end; /* ✅ align to right, not stretch */
-  gap: 5px;
-  padding-right: 30px; /* ✅ move more right */
-  margin-left: 10px; /* ✅ create space from text */
-  min-width: 100px; /* ✅ optional - makes buttons consistent width if you want */
-}
+        display: flex;
+        flex-direction: column; /* 🆕 Stack buttons vertically */
+        gap: 5px; /* 🆕 Space between buttons */
+        min-width: 100px; /* 🆕 Keep actions a reasonable size */
+        align-items: stretch; /* 🆕 Stretch buttons to same width */
+      }
 
 
 
