@@ -353,10 +353,14 @@ img {
 .log-actions {
   display: flex;
   flex-direction: column;
-  align-items: flex-end; /* Align buttons to right */
+  align-items: flex-end; /* ✅ align to right, not stretch */
   gap: 5px;
-  padding-right: 15px;
+  padding-right: 30px; /* ✅ move more right */
+  margin-left: 10px; /* ✅ create space from text */
+  min-width: 100px; /* ✅ optional - makes buttons consistent width if you want */
 }
+
+
 
 #log-container {
   padding-left: 10;
@@ -374,15 +378,6 @@ img {
   width: auto;    /* 🆕 Remove 100% width */
 }
 
-
-
-      .log-actions {
-        display: flex;
-        flex-direction: column; /* 🆕 Stack buttons vertically */
-        gap: 5px; /* 🆕 Space between buttons */
-        min-width: 100px; /* 🆕 Keep actions a reasonable size */
-        align-items: stretch; /* 🆕 Stretch buttons to same width */
-      }
 
       .log-actions button {
         background-color: #007bff;
@@ -2089,8 +2084,12 @@ document.getElementById("total-hours").textContent = totalHours;
   <div class="log-item-details" id="log-entry-${realIndex}">
     <div id="summary-${realIndex}">
       <strong>Date:</strong> ${entry.date}<br>
-      <div><strong>Destinations:</strong></div>
-      <div style="margin-left: 0;">${destinations}</div>
+<div><strong>Destinations:</strong><br>
+  <div style="margin-left: 20px;">
+    ${(entry.destinations || []).map(dest => `- ${dest}`).join('<br>')}
+  </div>
+</div>
+
 
       <strong>Net Profit:</strong> $${parseFloat(entry.netProfit || 0).toFixed(2)}
     </div>
