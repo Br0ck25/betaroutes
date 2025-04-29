@@ -1999,11 +1999,17 @@ document.getElementById("total-hours").textContent = totalHours;
       }
 
       function logEntry(data) {
-        data.startClock = document.getElementById("start-time").value || "";
-        data.endClock = document.getElementById("end-time").value || "";
-        logEntries.unshift(data);
-        saveLog();
-      }
+  data.startClock = document.getElementById("start-time").value || "";
+  data.endClock = document.getElementById("end-time").value || "";
+
+  // 🔵 Calculate and store Total Hours
+  const driveTimeInHours = convertTimeToHours(data.totalTime);
+  data.totalHours = (parseFloat(data.hoursWorked || 0) + driveTimeInHours).toFixed(2);
+
+  logEntries.unshift(data);
+  saveLog();
+}
+saveEditedLogEntry()
 
 
 
@@ -2640,6 +2646,8 @@ document.getElementById("total-hours").textContent = totalHours;
   entry.totalMileage = parseFloat(document.getElementById("edit-total-mileage").value);
   entry.totalTime = document.getElementById("edit-total-time").value;
   entry.hoursWorked = parseFloat(document.getElementById("edit-hours-worked").value) || 0;
+  const driveTimeInHours = convertTimeToHours(entry.totalTime);
+entry.totalHours = (parseFloat(entry.hoursWorked || 0) + driveTimeInHours).toFixed(2);
   entry.mpg = parseFloat(document.getElementById("edit-mpg").value);
   entry.gasPrice = parseFloat(document.getElementById("edit-gas-price").value);
 
@@ -2650,10 +2658,6 @@ document.getElementById("total-hours").textContent = totalHours;
     entry.suppliesCost
   ).toFixed(2);
 
-  let driveTimeInHours = 0;
-  const timeMatch = entry.totalTime.match(
-    /(\d+)\s*hour(s)?\s*(\d+)?\s*minute(s)?/i
-  );
   if (timeMatch) {
     const hours = parseInt(timeMatch[1]) || 0;
     const minutes = parseInt(timeMatch[3]) || 0;
@@ -3381,7 +3385,8 @@ document.getElementById("total-hours").textContent = totalHours;
   <div><strong>Maintenance:</strong> $${entry.maintenanceCost}</div>
   <div><strong>Supplies:</strong> $${entry.suppliesCost}</div>
   <div><strong>Hours Worked:</strong> ${formattedHoursWorked}</div>
-  <div><strong>Total Hours:</strong> ${calculateTotalHours(entry)}</div>
+ <div><strong>Total Hours:</strong> ${entry.totalHours} hours</div>
+
   <div><strong>Net Profit:</strong> $${entry.netProfit}</div>
   <div><strong>Profit per Hour:</strong> $${entry.profitPerHour}</div>
 `;
@@ -3410,11 +3415,6 @@ function convertTimeToHours(durationStr) {
   return hours + minutes / 60;
 }
 
-function calculateTotalHours(entry) {
-  const driveTime = convertTimeToHours(entry.totalTime || "");
-  const workedTime = parseFloat(entry.hoursWorked) || 0;
-  return (driveTime + workedTime).toFixed(2) + " hours";
-}
 
 
 
