@@ -3635,26 +3635,27 @@ function clearFilters() {
 function formatHoursAndMinutes(decimal) {
   if (isNaN(decimal)) return "0 minutes";
 
-  const hours = Math.floor(decimal);
-  const minutes = Math.round((decimal - hours) * 60);
+  const totalMinutes = Math.round(decimal * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
 
-  let parts = [];
+  let formattedString = "";
 
   if (hours > 0) {
-    parts.push(`${hours} hour${hours !== 1 ? 's' : ''}`);
+    formattedString += `${hours} hour${hours !== 1 ? 's' : ''} `;
   }
 
   if (minutes > 0) {
-    parts.push(`${minutes} minute${minutes !== 1 ? 's' : ''}`);
+    formattedString += `${minutes} minute${minutes !== 1 ? 's' : ''}`;
   }
 
-  // If both are 0
-  if (parts.length === 0) {
-    return "0 minutes";
+  if (hours === 0 && minutes === 0) {
+    formattedString = "0 minutes";
   }
 
-  return parts.join(" ");
+  return formattedString.trim();
 }
+
 
 
 
