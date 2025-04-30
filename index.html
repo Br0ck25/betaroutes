@@ -1598,6 +1598,10 @@ document.getElementById("hours-worked").value = `${workedHours} hours ${workedMi
           travelMode: "DRIVING",
         };
 
+        const logDateInput = document.getElementById("log-date").value;
+const selectedDate = logDateInput || new Date().toISOString().split("T")[0];
+
+
         return new Promise((resolve, reject) => {
           directionsService.route(request, (response, status) => {
             if (status === "OK") {
@@ -1658,9 +1662,9 @@ document.getElementById("hours-worked").value = `${workedHours} hours ${workedMi
                 totalHoursSpent > 0 ? netProfit / totalHoursSpent : 0;
 
               resolve({
-                date:
-                  document.getElementById("log-date").value ||
-                  new Date().toISOString().split("T")[0],
+              
+                 date: selectedDate,
+
                 startTime: startAddress,
                 endTime: endAddress,
                 destinations: destinations.map((d) => d.location),
