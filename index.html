@@ -1732,10 +1732,10 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
             <p><strong>Fuel Cost:</strong> $${data.fuelCost}</p>
             <p><strong>Maintenance:</strong> $${data.maintenanceCost}</p>
             <p><strong>Supplies:</strong> $${data.suppliesCost}</p>
-            <p><strong>Hours Worked:</strong> ${
-              data.hoursWorked ?? "0"
-            } hours</p>
-            <p><strong>Net Profit:</strong> $${data.netProfit}</p>
+              <p><strong>Hours Worked:</strong> ${formatHoursAndMinutes(data.hoursWorked ?? 0)}</p>
+  <p><strong>Total Hours:</strong> ${formatHoursAndMinutes((data.hoursWorked ?? 0) + convertTimeToHours(data.totalTime))}</p>
+  <p><strong>Net Profit:</strong> $${data.netProfit}</p>
+
             <p><strong>Profit per Hour:</strong> $${data.profitPerHour}</p>
         `;
           document.getElementById("detailed-results").innerHTML =
@@ -3634,7 +3634,6 @@ function clearFilters() {
 
 function formatHoursAndMinutes(decimal) {
   if (isNaN(decimal)) return "0 minutes";
-
   const hours = Math.floor(decimal);
   const minutes = Math.round((decimal - hours) * 60);
 
@@ -3646,6 +3645,7 @@ function formatHoursAndMinutes(decimal) {
     return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
   }
 }
+
 
 
 
