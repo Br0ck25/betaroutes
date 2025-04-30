@@ -2061,11 +2061,16 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
       }
 
       function logEntry(data) {
-        data.startClock = document.getElementById("start-time").value || "";
-        data.endClock = document.getElementById("end-time").value || "";
-        logEntries.unshift(data);
-        saveLog();
-      }
+  data.startClock = document.getElementById("start-time").value || "";
+  data.endClock = document.getElementById("end-time").value || "";
+  
+  data.mpg = parseFloat(document.getElementById("mpg").value) || 0;
+  data.gasPrice = parseFloat(document.getElementById("gas-price").value) || 0;
+  
+  logEntries.unshift(data);
+  saveLog();
+}
+
 
 
 
