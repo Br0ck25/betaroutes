@@ -1337,10 +1337,13 @@ displayLog();
 document.addEventListener("DOMContentLoaded", async () => {
   // Set today's date
   const dateInput = document.getElementById("log-date");
-  if (dateInput) {
-    const today = new Date().toISOString().split("T")[0];
-    dateInput.value = today;
-  }
+if (dateInput) {
+  const today = new Date().toLocaleDateString('en-CA'); // outputs yyyy-mm-dd
+
+  dateInput.value = "";       // force clear
+  dateInput.value = today;    // set today's date
+}
+
 
   await syncPendingLogs();
 
@@ -3246,16 +3249,22 @@ function filterLogs() {
         summaryDiv.innerHTML = `
   <div style="display: flex; flex-direction: column; align-items: center;">
     <div style="margin-bottom: 8px;">
-      Net Profit: <span style="color: green;">$${totalNetProfit.toFixed(
-        2
-      )}</span>
+      Net Profit: <span style="color: green;">$${totalNetProfit.toFixed(2)}</span>
+    </div>
+    <div style="margin-bottom: 8px;">
+      Profit Per Hour: <span style="color: blue;">$${averageProfitPerHour.toFixed(2)}</span>
     </div>
     <div>
-      Profit Per Hour: <span style="color: blue;">$${averageProfitPerHour.toFixed(
-        2
+      Total Hours: <span style="color: black;">${formatHoursAndMinutes(
+        filteredEntries.reduce((sum, entry) => {
+          const drive = convertTimeToHours(entry.totalTime || "");
+          const worked = parseFloat(entry.hoursWorked) || 0;
+          return sum + drive + worked;
+        }, 0)
       )}</span>
     </div>
   </div>
+
 `;
       }
 
