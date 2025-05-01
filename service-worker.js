@@ -1,46 +1,67 @@
-const CACHE_NAME = 'route-app-cache-v1';
+// service-worker.js
+
+const CACHE_NAME = "route-calculator-cache-v2";
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/logo.png',
-  '/logo-512.png',
-  '/manifest.json',
-  '/styles.css', // if you have
-  '/script.js',  // if you have
-  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js'
+  "/",
+  "/index.html",
+  "/logo.png",
+  "/logo-512.png",
+  // ⚠️ Do NOT hardcode CDN URLs — they'll be handled dynamically below
 ];
 
-// Install and cache static assets
-self.addEventListener('install', event => {
+// Install: cache essential files
+self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      console.log('✅ Caching app shell');
+    caches.open(CACHE_NAME).then((cache) => {
+      console.log("✅ Caching app shell");
       return cache.addAll(urlsToCache);
     })
   );
 });
 
-// Serve cached content when offline
-self.addEventListener('fetch', event => {
-  // 🛜 Skip external requests like Google Maps
-  if (!event.request.url.startsWith(self.location.origin)) {
-    return;
-  }
+// Activate: remove old caches
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) =>
+      Promise.all(
+        cacheNames.map((cache) => {
+          if (cache !== CACHE_NAME) {
+            console.log("🗑️ Deleting old cache:", cache);
+            return caches.delete(cache);
+          }
+        })
+      )
+    )
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  if (event.request.method !== "GET") return;
 
   event.respondWith(
-    fetch(event.request)
-      .catch(() => {
-        return caches.match(event.request).then(response => {
-          if (response) {
-            return response;
-          } else {
-            return new Response('', {
-              status: 200,
-              statusText: 'Offline fallback'
-            });
+    caches.match(event.request).then((response) => {
+      if (response) return response;
+
+      return fetch(event.request)
+        .then((networkResponse) => {
+          // Cache third-party files (e.g., CDN) dynamically if successful
+          const cloned = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            // Only cache CDN/static files (optional: add whitelist logic)
+            if (
+              event.request.url.startsWith("https://cdnjs.cloudflare.com") ||
+              event.request.url.startsWith(self.origin)
+            ) {
+              cache.put(event.request, cloned);
+            }
+          });
+          return networkResponse;
+        })
+        .catch(() => {
+          if (event.request.destination === "document") {
+            return caches.match("/index.html");
           }
         });
-      })
+    })
   );
 });
