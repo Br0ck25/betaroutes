@@ -800,11 +800,14 @@ transition: opacity 0.3s ease;
         <div class="destination">
           <label for="destination-1">Destination 1</label>
           <input
-            type="text"
-            id="destination-1"
-            placeholder="Enter destination address"
-            required
-          />
+          type="text"
+          id="destination-1"
+          list="recent-destinations"
+          placeholder="Enter destination address"
+          required
+        />
+        <datalist id="recent-destinations"></datalist>
+        
           <label for="earnings-1">Earnings for Destination 1</label>
           <input
             type="number"
@@ -1100,6 +1103,24 @@ let originalMileage = null;
 let logEntries = [];
 let currentPage = 1;
 const logsPerPage = 10;
+
+function getRecentDestinations() {
+  return JSON.parse(localStorage.getItem("recentDestinations") || "[]");
+}
+
+function saveRecentDestinations(newDestinations) {
+  const current = getRecentDestinations();
+  const combined = [...new Set([...newDestinations, ...current])].slice(0, 10);
+  localStorage.setItem("recentDestinations", JSON.stringify(combined));
+}
+
+function updateDatalistSuggestions() {
+  const datalist = document.getElementById("recent-destinations");
+  if (!datalist) return;
+  const recent = getRecentDestinations();
+  datalist.innerHTML = recent.map(dest => `<option value="${dest}">`).join("");
+}
+
 
       function toggleManageLogMenu() {
         const menu = document.getElementById("manage-log-menu");
@@ -1402,8 +1423,27 @@ async function loadLog() {
     }
 
     const logs = await response.json();
-    localStorage.setItem("cachedLogs", JSON.stringify(logs)); // ✅ Save fresh logs locally
-    return logs;
+    const localLogs = JSON.parse(localStorage.getItem("cachedLogs") || "[]");
+
+const merged = logs.map(serverLog => {
+  const localMatch = localLogs.find(l =>
+    l.date === serverLog.date &&
+    JSON.stringify(l.destinations) === JSON.stringify(serverLog.destinations)
+  );
+
+  if (!localMatch) return serverLog;
+
+  const localTime = new Date(localMatch.lastModified || 0).getTime();
+  const serverTime = new Date(serverLog.lastModified || 0).getTime();
+
+  console.log("⛓ Conflict on", serverLog.date, "— using", serverTime >= localTime ? "server" : "local");
+
+  return serverTime >= localTime ? serverLog : localMatch;
+});
+
+localStorage.setItem("cachedLogs", JSON.stringify(merged));
+return merged;
+
   } catch (err) {
     console.warn("⚠️ Offline or failed to load logs. Loading from local cache.", err);
     const cached = localStorage.getItem("cachedLogs");
@@ -1480,6 +1520,9 @@ if (dateInput) {
     setTimeout(() => document.getElementById("end-time")?.focus(), 200);
   });
 
+  updateDatalistSuggestions();
+
+
 });
 
   // 🆕 After selecting start time, auto-focus end time after slight delay
@@ -1507,11 +1550,16 @@ async function syncAndReloadLogs() {
     // First, sync any pending logs if needed
     await syncPendingLogs();
 
-    // Then, force a fresh fetch of the latest logs
     logEntries = await loadLog();
 
-    // Display the updated logs
-    displayLog();
+// 🆕 Ensure all logs have lastModified timestamp
+logEntries = logEntries.map(entry => ({
+  ...entry,
+  lastModified: entry.lastModified || new Date().toISOString()
+}));
+
+displayLog();
+
 
 
     console.log("✅ Logs refreshed after reconnecting!");
@@ -1694,6 +1742,10 @@ document.getElementById("hours-worked").value = `${workedHours} hours ${workedMi
           location: input.value,
           stopover: true,
         }));
+
+        saveRecentDestinations(destinations.map(d => d.location));
+updateDatalistSuggestions();
+
         const earnings = Array.from(earningsInputs).map(
           (input) => parseFloat(input.value) || 0
         );
@@ -2117,7 +2169,8 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
         newDestinationDiv.classList.add("destination");
         newDestinationDiv.innerHTML = `
     <label for="destination-${newDestinationIndex}">Destination ${newDestinationIndex}</label>
-    <input type="text" id="destination-${newDestinationIndex}" placeholder="Enter destination address" required>
+   <input type="text" id="destination-${newDestinationIndex}" list="recent-destinations" placeholder="Enter destination address" required>
+
     <label for="earnings-${newDestinationIndex}">Earnings for Destination ${newDestinationIndex}</label>
     <input type="number" id="earnings-${newDestinationIndex}" placeholder="Enter earnings for destination" required>
     <div class="destination-actions">
@@ -2163,8 +2216,10 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
   data.mpg = parseFloat(document.getElementById("mpg").value) || 0;
   data.gasPrice = parseFloat(document.getElementById("gas-price").value) || 0;
   
-  logEntries.unshift(data);
-  saveLog();
+  data.lastModified = new Date().toISOString();
+logEntries.unshift(data);
+saveLog();
+
 }
 
 
@@ -2463,7 +2518,7 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
         destDiv.classList.add("destination");
         destDiv.innerHTML = `
         <label for="edit-destination-${newIndex}">Destination ${newIndex}</label>
-        <input type="text" id="edit-destination-${newIndex}" placeholder="Enter destination address">
+       <input type="text" id="edit-destination-${newIndex}" list="recent-destinations" placeholder="Enter destination address">
         <label for="edit-earnings-${newIndex}">Earnings ${newIndex}</label>
         <input type="number" id="edit-earnings-${newIndex}" placeholder="Enter earnings">
         <div class="destination-actions">
@@ -2595,9 +2650,8 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
             destDiv.className = "destination";
             destDiv.innerHTML = `
         <label for="edit-destination-${i + 1}">Destination ${i + 1}</label>
-        <input type="text" id="edit-destination-${
-          i + 1
-        }" value="${destination}">
+        <input type="text" id="edit-destination-${i + 1}" list="recent-destinations" value="${destination}">
+
         <label for="edit-earnings-${i + 1}">Earnings for Destination ${
               i + 1
             }</label>
@@ -2683,6 +2737,8 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
   entry.destinations = [];
   entry.earnings = [];
 
+  
+
   const destInputs = document.querySelectorAll(
     '#edit-destinations-container input[id^="edit-destination-"]'
   );
@@ -2693,6 +2749,9 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
   destInputs.forEach((input) => {
     entry.destinations.push(input.value.trim());
   });
+
+  saveRecentDestinations(entry.destinations);
+updateDatalistSuggestions();
 
   earningsInputs.forEach((input) => {
     const value = parseFloat(input.value.trim()) || 0;
@@ -2740,6 +2799,7 @@ entry.hoursWorked = getNumberValue("edit-hours-worked");
       ? (entry.netProfit / totalHoursSpent).toFixed(2)
       : "0.00";
 
+      entry.lastModified = new Date().toISOString();
   await saveLog(); // ✅ Wait for save
   filterLogs();
 
@@ -2931,6 +2991,8 @@ entry.hoursWorked = getNumberValue("edit-hours-worked");
                         .trim(),
                       earnings: earnings,
                       profitPerHour: profitPerHour,
+                      lastModified: new Date().toISOString(),
+
                     });
                   } catch (error) {
                     console.error("Error parsing CSV line:", line, error);
