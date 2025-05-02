@@ -2047,14 +2047,17 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
     return;
   }
 
-  const calculationResult = await calculateRouteData();
   if (calculationResult) {
-    currentPage = 1;
-    logEntry(calculationResult);
-    displayLog();
-    updateUI(calculationResult);
-    showConfirmationMessage("✅ Route logged successfully!");
-  }
+  currentPage = 1;
+  logEntry(calculationResult);
+  displayLog();
+  updateUI(calculationResult);
+
+  localStorage.removeItem("draftTrip"); // ✅ Clear the saved draft
+
+  showConfirmationMessage("✅ Route logged successfully!");
+}
+
 }
 
 
