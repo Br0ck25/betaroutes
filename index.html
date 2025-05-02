@@ -1613,9 +1613,18 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const proceed = confirm("📝 Resume your last unsaved trip?");
     if (!proceed) {
-      localStorage.removeItem("draftTrip");
-      return;
-    }
+  localStorage.removeItem("draftTrip");
+
+  // ✅ Reset date to today if user declines to restore
+  const today = new Date().toISOString().split("T")[0];
+  const dateInput = document.getElementById("log-date");
+  if (dateInput) {
+    dateInput.value = today;
+  }
+
+  return;
+}
+
 
     // ✅ Now and only now, start restoring the form:
     document.getElementById("log-date").value = data.date || "";
