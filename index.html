@@ -591,34 +591,69 @@ img {
   </head>
   <body>
 
-    <!-- 🧩 Link Existing Account Modal -->
+<!-- 🔗 Link Account Modal -->
 <div id="link-account-modal" style="
-display: none;
-position: fixed;
-top: 0; left: 0;
-width: 100%; height: 100%;
-background: rgba(0, 0, 0, 0.6);
-z-index: 3000;
-justify-content: center;
-align-items: center;
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.6);
+  justify-content: center;
+  align-items: center;
+  z-index: 3000;
 ">
-<div style="
-  background: white;
-  padding: 20px;
-  border-radius: 8px;
-  max-width: 400px;
-  text-align: center;
-">
-  <h3>Link Your Old Account?</h3>
-  <p>If you created a previous account with a username and password, you can link it to this Google account.</p>
-  <input id="link-username" placeholder="Old Username" style="margin-bottom: 10px; width: 100%; padding: 8px;">
-  <input id="link-password" type="password" placeholder="Password" style="margin-bottom: 10px; width: 100%; padding: 8px;">
-  <div>
-    <button onclick="submitLinkAccount()" style="margin-right: 10px;">Link</button>
-    <button onclick="closeLinkModal()">Skip</button>
+  <div style="
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    max-width: 400px;
+    text-align: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  ">
+    <h3>Link Your Old Account?</h3>
+    <p>If you previously created an account using a username and password, you can link it to this Google account.</p>
+    <input id="link-username" placeholder="Old Username" style="margin-bottom: 10px; width: 100%; padding: 8px;">
+    <input id="link-password" type="password" placeholder="Password" style="margin-bottom: 10px; width: 100%; padding: 8px;">
+    <div>
+      <button onclick="submitLinkAccount()" style="margin-right: 10px;">Link</button>
+      <button onclick="closeLinkModal()">Skip</button>
+    </div>
   </div>
 </div>
-</div>
+
+<script>
+  function showLinkAccountModal() {
+    document.getElementById("link-account-modal").style.display = "flex";
+  }
+
+  function closeLinkModal() {
+    document.getElementById("link-account-modal").style.display = "none";
+  }
+
+  async function submitLinkAccount() {
+    const email = localStorage.getItem("username");
+    const username = document.getElementById("link-username").value;
+    const password = document.getElementById("link-password").value;
+
+    const res = await fetch("/api/link-account", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, username, password })
+    });
+
+    if (res.ok) {
+      alert("✅ Account linked successfully!");
+      closeLinkModal();
+      location.reload();
+    } else {
+      alert("❌ Failed to link account: " + (await res.text()));
+    }
+  }
+</script>
+
+
 
 
 
