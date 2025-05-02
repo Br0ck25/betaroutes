@@ -1561,9 +1561,7 @@ if (draft) {
     } else {
       localStorage.removeItem("draftTrip");
     }
-  } else {
-    localStorage.removeItem("draftTrip");
-  }
+  } 
 }
 
 
@@ -2053,8 +2051,6 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
   displayLog();
   updateUI(calculationResult);
 
-  localStorage.removeItem("draftTrip"); // ✅ Clear the saved draft
-
   showConfirmationMessage("✅ Route logged successfully!");
 }
 
@@ -2292,15 +2288,16 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
       function logEntry(data) {
   data.startClock = document.getElementById("start-time").value || "";
   data.endClock = document.getElementById("end-time").value || "";
-  
   data.mpg = parseFloat(document.getElementById("mpg").value) || 0;
   data.gasPrice = parseFloat(document.getElementById("gas-price").value) || 0;
-  
   data.lastModified = new Date().toISOString();
-logEntries.unshift(data);
-saveLog();
 
+  localStorage.removeItem("draftTrip"); // ✅ Move it HERE
+
+  logEntries.unshift(data);
+  saveLog();
 }
+
 
 
 
