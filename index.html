@@ -1547,10 +1547,13 @@ function saveDraftTrip() {
     hoursWorked: document.getElementById("hours-worked")?.value,
     maintenance: document.getElementById("maintenance-cost")?.value,
     supplies: document.getElementById("supplies-cost")?.value,
-    destinations: Array.from(document.querySelectorAll('#destinations-container .destination')).map(div => ({
-      address: div.querySelector('input[id^="destination-"]')?.value || '',
-      earnings: div.querySelector('input[id^="earnings-"]')?.value || ''
-    }))
+    destinations: Array.from(document.querySelectorAll('#destinations-container .destination'))
+  .map(div => ({
+    address: div.querySelector('input[id^="destination-"]')?.value.trim() || '',
+    earnings: div.querySelector('input[id^="earnings-"]')?.value.trim() || ''
+  }))
+  .filter(d => d.address || d.earnings)
+
   };
 
   localStorage.setItem("draftTrip", JSON.stringify(draft));
@@ -1568,12 +1571,13 @@ if (draft) {
   const data = JSON.parse(draft);
 
   const hasMeaningfulData =
-    data.destinations?.some(d => d.address || d.earnings) ||
-    data.startTime ||
-    data.endTime ||
-    data.hoursWorked ||
-    data.maintenance ||
-    data.supplies;
+  (Array.isArray(data.destinations) && data.destinations.length > 0) ||
+  data.startTime ||
+  data.endTime ||
+  data.hoursWorked ||
+  data.maintenance ||
+  data.supplies;
+
 
   if (hasMeaningfulData) {
     const proceed = confirm("📝 Resume your last unsaved trip?");
