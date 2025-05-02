@@ -2075,7 +2075,6 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
         document.getElementById("mileage-display").textContent = "";
         document.getElementById("optimized-mileage-display").textContent = "";
       }
-
       async function logResults() {
   const token = localStorage.getItem("token");
   if (!token) {
@@ -2092,18 +2091,18 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
     return;
   }
 
+  // ✅ Get calculation result
+  const calculationResult = await calculateRouteData();
   if (calculationResult) {
-  currentPage = 1;
-  logEntry(calculationResult);
-  displayLog();
-  updateUI(calculationResult);
-  clearTripForm(); // ✅ Reset the form
-
-
-  showConfirmationMessage("✅ Route logged successfully!");
+    currentPage = 1;
+    logEntry(calculationResult);
+    displayLog();
+    updateUI(calculationResult);
+    clearTripForm(); // ✅ Reset the form
+    showConfirmationMessage("✅ Route logged successfully!");
+  }
 }
 
-}
 
 
       async function optimizeRoute() {
