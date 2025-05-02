@@ -39,6 +39,9 @@
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ&libraries=places&callback=initMap"
     defer
   ></script>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
   
 
     <style>
@@ -3792,61 +3795,69 @@ function initOfflineListeners() {
         z-index: 2000;
       "
     >
-      <div onclick="event.stopPropagation()" class="modal-box">
-        <h3 id="auth-title">Sign In</h3>
-        <input
-          type="text"
-          id="auth-username"
-          placeholder="Username"
-          style="
-            width: 100%;
-            margin-bottom: 10px;
-            box-sizing: border-box;
-            padding: 10px;
-            font-size: 16px;
-            line-height: 1.4;
-          "
-        />
-
-        <input
-          type="password"
-          id="auth-password"
-          placeholder="Password"
-          style="
-            width: 100%;
-            margin-bottom: 10px;
-            box-sizing: border-box;
-            padding: 10px;
-            font-size: 16px;
-            line-height: 1.4;
-          "
-        />
-
-        <button onclick="submitAuth()" style="width: 100%">Submit</button>
-        <button
-          onclick="closeAuthModal()"
-          style="
-            width: 100%;
-            margin-top: 10px;
-            background-color: #ccc;
-            color: #333;
-          "
-        >
-          Cancel
-        </button>
-        <p style="text-align: center; margin-top: 10px">
-          <a href="#" onclick="toggleAuthMode()"
-            >Switch to <span id="auth-switch-label">Sign Up</span></a
-          ><br />
-          <a
-            href="#"
-            onclick="showResetModal()"
-            style="font-size: 0.9em; color: #0d6efd"
-            >Forgot Password?</a
-          >
-        </p>
+    <div onclick="event.stopPropagation()" class="modal-box">
+      <h3 id="auth-title">Sign In</h3>
+    
+      <input
+        type="text"
+        id="auth-username"
+        placeholder="Username"
+        style="
+          width: 100%;
+          margin-bottom: 10px;
+          box-sizing: border-box;
+          padding: 10px;
+          font-size: 16px;
+          line-height: 1.4;
+        "
+      />
+    
+      <input
+        type="password"
+        id="auth-password"
+        placeholder="Password"
+        style="
+          width: 100%;
+          margin-bottom: 10px;
+          box-sizing: border-box;
+          padding: 10px;
+          font-size: 16px;
+          line-height: 1.4;
+        "
+      />
+    
+      <button onclick="submitAuth()" style="width: 100%">Submit</button>
+    
+      <!-- ✅ Google Sign-In Button -->
+      <div style="margin: 20px 0;">
+        <div id="g_id_onload"
+          data-client_id="AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ
+          data-callback="handleGoogleSignIn"
+          data-auto_prompt="false">
+        </div>
+        <div class="g_id_signin"
+          data-type="standard"
+          data-size="large"
+          data-theme="outline"
+          data-text="sign_in_with"
+          data-shape="rectangular"
+          data-logo_alignment="left">
+        </div>
       </div>
+    
+      <button
+        onclick="closeAuthModal()"
+        style="width: 100%; margin-top: 10px; background-color: #ccc; color: #333;"
+      >
+        Cancel
+      </button>
+    
+      <p style="text-align: center; margin-top: 10px">
+        <a href="#" onclick="toggleAuthMode()">Switch to <span id="auth-switch-label">Sign Up</span></a><br />
+        <a href="#" onclick="showResetModal()" style="font-size: 0.9em; color: #0d6efd">Forgot Password?</a>
+      </p>
     </div>
+    
 
     <div
       id="change-password-modal"
@@ -4123,6 +4134,28 @@ window.addEventListener('scroll', () => {
       : 'none';
   }, 50);
 });
+
+async function handleGoogleSignIn(response) {
+  const idToken = response.credential;
+
+  // Send token to your backend to verify and create/login the user
+  const res = await fetch('https://logs.gorouteyourself.com/api/google-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idToken })
+  });
+
+  if (res.ok) {
+    const data = await res.json();
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("username", data.username); // optional
+    updateAuthUI();
+    location.reload();
+  } else {
+    alert("❌ Google login failed.");
+  }
+}
+
 
     </script>
   </body>
