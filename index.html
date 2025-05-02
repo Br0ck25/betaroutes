@@ -1093,21 +1093,24 @@ transition: opacity 0.3s ease;
     <script>
 
 function clearTripForm() {
-  document.getElementById("log-date").value = "";
-  document.getElementById("start-address").value = "";
-  document.getElementById("end-address").value = "";
-  document.getElementById("mpg").value = "";
-  document.getElementById("gas-price").value = "";
+  // Reset date to today
+  const today = new Date().toISOString().split("T")[0];
+  document.getElementById("log-date").value = today;
+
+  // ❌ Clear only optional fields
   document.getElementById("start-time").value = "";
   document.getElementById("end-time").value = "";
   document.getElementById("hours-worked").value = "";
   document.getElementById("maintenance-cost").value = "";
   document.getElementById("supplies-cost").value = "";
 
+  // ✅ Keep start, end, mpg, and gas-price
+
+  // Reset destinations
   const container = document.getElementById("destinations-container");
   container.innerHTML = "";
 
-  // Add a fresh empty destination block
+  // Add one fresh destination block
   const div = document.createElement("div");
   div.classList.add("destination");
   div.innerHTML = `
@@ -1124,13 +1127,14 @@ function clearTripForm() {
   container.appendChild(div);
   initAutocompleteDestination(div.querySelector('input[type="text"]'));
 
-  // Clear visual results if visible
+  // Hide results and reset UI
   document.getElementById("results").classList.add("hidden");
   document.getElementById("map").classList.add("hidden");
   document.getElementById("detailed-results").innerHTML = "";
   document.getElementById("mileage-display").textContent = "";
   document.getElementById("optimized-mileage-display").textContent = "";
 }
+
 
 
 let disableAutoSave = false;
