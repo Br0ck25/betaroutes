@@ -1092,6 +1092,47 @@ transition: opacity 0.3s ease;
 
     <script>
 
+function clearTripForm() {
+  document.getElementById("log-date").value = "";
+  document.getElementById("start-address").value = "";
+  document.getElementById("end-address").value = "";
+  document.getElementById("mpg").value = "";
+  document.getElementById("gas-price").value = "";
+  document.getElementById("start-time").value = "";
+  document.getElementById("end-time").value = "";
+  document.getElementById("hours-worked").value = "";
+  document.getElementById("maintenance-cost").value = "";
+  document.getElementById("supplies-cost").value = "";
+
+  const container = document.getElementById("destinations-container");
+  container.innerHTML = "";
+
+  // Add a fresh empty destination block
+  const div = document.createElement("div");
+  div.classList.add("destination");
+  div.innerHTML = `
+    <label for="destination-1">Destination 1</label>
+    <input type="text" id="destination-1" list="recent-destinations" placeholder="Enter destination address" required>
+    <label for="earnings-1">Earnings for Destination 1</label>
+    <input type="number" id="earnings-1" placeholder="Enter earnings for destination" required>
+    <div class="destination-actions">
+      <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
+      <button class="move-btn" onclick="moveDestinationUp(this)">Move Up</button>
+      <button class="move-btn" onclick="moveDestinationDown(this)">Move Down</button>
+    </div>
+  `;
+  container.appendChild(div);
+  initAutocompleteDestination(div.querySelector('input[type="text"]'));
+
+  // Clear visual results if visible
+  document.getElementById("results").classList.add("hidden");
+  document.getElementById("map").classList.add("hidden");
+  document.getElementById("detailed-results").innerHTML = "";
+  document.getElementById("mileage-display").textContent = "";
+  document.getElementById("optimized-mileage-display").textContent = "";
+}
+
+
 let disableAutoSave = false;
 
 
@@ -2056,6 +2097,8 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
   logEntry(calculationResult);
   displayLog();
   updateUI(calculationResult);
+  clearTripForm(); // ✅ Reset the form
+
 
   showConfirmationMessage("✅ Route logged successfully!");
 }
