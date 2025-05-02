@@ -1093,6 +1093,34 @@ transition: opacity 0.3s ease;
 
     <div id="overlay" class="hidden"></div>
 
+    <!-- 🆕 Confirm Delete Modal for Google Users -->
+<div id="google-delete-modal" style="
+display: none;
+position: fixed;
+top: 0; left: 0;
+width: 100%; height: 100%;
+background: rgba(0,0,0,0.6);
+z-index: 2000;
+justify-content: center;
+align-items: center;
+">
+<div style="
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  max-width: 400px;
+  text-align: center;
+">
+  <h3>Delete All Logs?</h3>
+  <p>This will erase all your saved routes. This cannot be undone.</p>
+  <button onclick="confirmGoogleDelete()" style="margin-right: 10px; background-color: red; color: white;">
+    Yes, Delete
+  </button>
+  <button onclick="closeGoogleDeleteModal()">Cancel</button>
+</div>
+</div>
+
+
     <script>
 
 function clearTripForm() {
