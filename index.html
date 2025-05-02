@@ -1092,6 +1092,9 @@ transition: opacity 0.3s ease;
 
     <script>
 
+let disableAutoSave = false;
+
+
 
 function scrollToTop() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1486,6 +1489,8 @@ displayLog();
 }
 
 function saveDraftTrip() {
+  if (disableAutoSave) return;
+
   const draft = {
     date: document.getElementById("log-date")?.value,
     start: document.getElementById("start-address")?.value,
@@ -1505,6 +1510,7 @@ function saveDraftTrip() {
 
   localStorage.setItem("draftTrip", JSON.stringify(draft));
 }
+
 
 setInterval(saveDraftTrip, 5000); // Auto-save every 5 seconds
 
@@ -2286,17 +2292,23 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
       }
 
       function logEntry(data) {
+  disableAutoSave = true; // ✅ stop the timer temporarily
+
   data.startClock = document.getElementById("start-time").value || "";
   data.endClock = document.getElementById("end-time").value || "";
   data.mpg = parseFloat(document.getElementById("mpg").value) || 0;
   data.gasPrice = parseFloat(document.getElementById("gas-price").value) || 0;
   data.lastModified = new Date().toISOString();
 
-  localStorage.removeItem("draftTrip"); // ✅ Move it HERE
-
+  localStorage.removeItem("draftTrip"); // ✅ clear before save
   logEntries.unshift(data);
   saveLog();
+
+  setTimeout(() => {
+    disableAutoSave = false; // ✅ re-enable after logging finishes
+  }, 1000); // short delay to prevent race
 }
+
 
 
 
