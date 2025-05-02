@@ -1536,28 +1536,54 @@ displayLog();
 function saveDraftTrip() {
   if (disableAutoSave) return;
 
-  const draft = {
-    date: document.getElementById("log-date")?.value,
-    start: document.getElementById("start-address")?.value,
-    end: document.getElementById("end-address")?.value,
-    mpg: document.getElementById("mpg")?.value,
-    gas: document.getElementById("gas-price")?.value,
-    startTime: document.getElementById("start-time")?.value,
-    endTime: document.getElementById("end-time")?.value,
-    hoursWorked: document.getElementById("hours-worked")?.value,
-    maintenance: document.getElementById("maintenance-cost")?.value,
-    supplies: document.getElementById("supplies-cost")?.value,
-    destinations: Array.from(document.querySelectorAll('#destinations-container .destination'))
-  .map(div => ({
-    address: div.querySelector('input[id^="destination-"]')?.value.trim() || '',
-    earnings: div.querySelector('input[id^="earnings-"]')?.value.trim() || ''
-  }))
-  .filter(d => d.address || d.earnings)
+  const date = document.getElementById("log-date")?.value;
+  const start = document.getElementById("start-address")?.value.trim();
+  const end = document.getElementById("end-address")?.value.trim();
+  const mpg = document.getElementById("mpg")?.value.trim();
+  const gas = document.getElementById("gas-price")?.value.trim();
+  const startTime = document.getElementById("start-time")?.value.trim();
+  const endTime = document.getElementById("end-time")?.value.trim();
+  const hoursWorked = document.getElementById("hours-worked")?.value.trim();
+  const maintenance = document.getElementById("maintenance-cost")?.value.trim();
+  const supplies = document.getElementById("supplies-cost")?.value.trim();
 
+  const destinations = Array.from(document.querySelectorAll('#destinations-container .destination'))
+    .map(div => ({
+      address: div.querySelector('input[id^="destination-"]')?.value.trim() || '',
+      earnings: div.querySelector('input[id^="earnings-"]')?.value.trim() || ''
+    }))
+    .filter(d => d.address || d.earnings); // ❌ Remove empty ones
+
+  const hasMeaningfulData =
+    destinations.length > 0 ||
+    startTime ||
+    endTime ||
+    hoursWorked ||
+    maintenance ||
+    supplies;
+
+  if (!hasMeaningfulData) {
+    localStorage.removeItem("draftTrip"); // ❌ clear if empty
+    return;
+  }
+
+  const draft = {
+    date,
+    start,
+    end,
+    mpg,
+    gas,
+    startTime,
+    endTime,
+    hoursWorked,
+    maintenance,
+    supplies,
+    destinations
   };
 
   localStorage.setItem("draftTrip", JSON.stringify(draft));
 }
+
 
 
 setInterval(saveDraftTrip, 5000); // Auto-save every 5 seconds
