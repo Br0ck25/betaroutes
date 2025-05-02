@@ -39,9 +39,6 @@
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ&libraries=places&callback=initMap"
     defer
   ></script>
-
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
-
   
 
     <style>
@@ -173,16 +170,47 @@ img {
   position: fixed;
   top: 0;
   left: -275px;
-  width: 250px;
+  width: 260px;
   height: 100%;
-  background-color: white;
-  box-shadow: 2px 0 5px rgba(0,0,0,0.5);
+  background: linear-gradient(to bottom, #ffffff, #f9f9f9);
+  box-shadow: 2px 0 8px rgba(0,0,0,0.2);
   z-index: 10000;
-  padding: 20px 10px;
+  padding-top: 10px;
   transition: left 0.3s ease;
   overflow-y: auto;
-  font-size: 16px; /* 🆕 Smaller text */
+  font-size: 16px;
 }
+
+#account-menu button {
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  font-size: 15px;
+  border-radius: 6px;
+  margin: 8px 0;
+  cursor: pointer;
+  width: 100%;
+  max-width: 220px;
+  display: block;
+  text-align: center;
+  transition: background-color 0.2s;
+}
+
+#account-menu button:hover {
+  background-color: #45a049;
+}
+
+#account-menu button:last-child {
+  background-color: #dc3545;
+}
+
+#account-menu button:last-child:hover {
+  background-color: #c82333;
+}
+
+
+
 
 #account-menu.show {
   left: 0;
@@ -583,6 +611,37 @@ img {
 }
 
 
+  #account-menu button {
+    all: unset; /* ✅ Reset all inherited styles */
+    display: block;
+    width: 100%;
+    max-width: 220px;
+    padding: 10px 14px;
+    margin: 10px auto;
+    background-color: #4caf50;
+    color: white !important;
+    font-size: 15px;
+    text-align: center;
+    border-radius: 6px;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: background-color 0.2s ease;
+  }
+
+  #account-menu button:hover {
+    background-color: #45a049;
+  }
+
+  #account-menu button.danger {
+    background-color: #dc3545;
+  }
+
+  #account-menu button.danger:hover {
+    background-color: #c82333;
+  }
+
+
+
 
 
     </style>
@@ -590,71 +649,6 @@ img {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
   </head>
   <body>
-
-<!-- 🔗 Link Account Modal -->
-<div id="link-account-modal" style="
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0,0,0,0.6);
-  justify-content: center;
-  align-items: center;
-  z-index: 3000;
-">
-  <div style="
-    background: white;
-    padding: 20px;
-    border-radius: 8px;
-    max-width: 400px;
-    text-align: center;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-  ">
-    <h3>Link Your Old Account?</h3>
-    <p>If you previously created an account using a username and password, you can link it to this Google account.</p>
-    <input id="link-username" placeholder="Old Username" style="margin-bottom: 10px; width: 100%; padding: 8px;">
-    <input id="link-password" type="password" placeholder="Password" style="margin-bottom: 10px; width: 100%; padding: 8px;">
-    <div>
-      <button onclick="submitLinkAccount()" style="margin-right: 10px;">Link</button>
-      <button onclick="closeLinkModal()">Skip</button>
-    </div>
-  </div>
-</div>
-
-<script>
-  function showLinkAccountModal() {
-    document.getElementById("link-account-modal").style.display = "flex";
-  }
-
-  function closeLinkModal() {
-    document.getElementById("link-account-modal").style.display = "none";
-  }
-
-  async function submitLinkAccount() {
-    const email = localStorage.getItem("username");
-    const username = document.getElementById("link-username").value;
-    const password = document.getElementById("link-password").value;
-
-    const res = await fetch("/api/link-account", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, username, password })
-    });
-
-    if (res.ok) {
-      alert("✅ Account linked successfully!");
-      closeLinkModal();
-      location.reload();
-    } else {
-      alert("❌ Failed to link account: " + (await res.text()));
-    }
-  }
-</script>
-
-
-
 
 
 <!-- Fixed Top Bar -->
@@ -756,104 +750,47 @@ img {
 
 
 
-<!-- 🔒 Only signed-in specific things -->
+<!-- ✅ FIX: Wrap in #logout-message -->
 <div id="logout-message" style="display: none; margin: 20px auto; max-width: 100%;">
   <div id="account-menu">
+    <!-- 🧭 Close Button -->
+    <div style="position: relative; width: 100%; height: 50px;">
+      <button onclick="closeMenu()" style="
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: none;
+        border: none;
+        font-size: 24px;
+        font-weight: bold;
+        color: black;
+        cursor: pointer;
+        line-height: 1;
+        transition: transform 0.2s;
+      " onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">
+        ✕
+      </button>
+    </div>
 
-    <!-- 🆕 Dark overlay -->
-<div id="menu-overlay" style="
-position: fixed;
-top: 0;
-left: 0;
-width: 100%;
-height: 100%;
-background: rgba(0, 0, 0, 0.4);
-z-index: 9999;
-display: none;
-opacity: 0;
-transition: opacity 0.3s ease;
-"></div>
+    <!-- 🖼 Logo -->
+    <div style="text-align: center; margin: 20px 0;">
+      <img src="/logo.png" alt="Logo" style="height: 40px;">
+    </div>
 
-<!-- ✅ FULL WIDTH X, tight to right -->
-<div style="
-  position: relative;
-  width: 100%;
-  height: 50px;
-">
-  <button onclick="closeMenu()" style="
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    background: none;
-    border: none;
-    font-size: 24px;
-    font-weight: bold;
-    color: black;
-    cursor: pointer;
-    line-height: 1;
-    transition: transform 0.2s;
-  " onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">
-    ✕
-  </button>
+    <!-- 📋 Menu Items -->
+    <div style="padding: 0 10px;">
+      <button onclick="closeMenu(); logout()">Log Out</button>
+      <button onclick="closeMenu(); showPasswordModal()">Change Password</button>
+      <button onclick="closeMenu(); showDeleteModal()">Delete Account</button>
+      
+    </div>
+  </div>
 </div>
 
 
 
 
-  
-    <!-- 🔻 Then your menu items -->
-    <button onclick="closeMenu(); logout()" style="width: 100%; padding: 10px; background: none; border: none; color: black; text-align: left;">Log Out</button>
-    <button onclick="closeMenu(); showPasswordModal()" style="width: 100%; padding: 10px; background: none; border: none; color: black; text-align: left;">Change Password</button>
-    <button onclick="closeMenu(); showDeleteModal()" style="width: 100%; padding: 10px; background: none; border: none; color: red; text-align: left;">Delete Account</button>
-  </div>
 
-
-
-
-
-        <div id="account-menu">
-          <button
-            onclick="closeMenu(); logout()"
-            style="
-              width: 100%;
-              padding: 10px;
-              background: none;
-              border: none;
-              color: black;
-              text-align: left;
-            "
-          >
-            Log Out
-          </button>
-          <button
-            onclick="closeMenu(); showPasswordModal()"
-            style="
-              width: 100%;
-              padding: 10px;
-              background: none;
-              border: none;
-              color: black;
-              text-align: left;
-            "
-          >
-            Change Password
-          </button>
-          <button
-            onclick="closeMenu(); showDeleteModal()"
-            style="
-              width: 100%;
-              padding: 10px;
-              background: none;
-              border: none;
-              color: red;
-              text-align: left;
-            "
-          >
-            Delete Account
-          </button>
-        </div>
-      </div>
-    </div>
 
     <div class="container" style="margin-top: 15px;">
 
@@ -1157,34 +1094,6 @@ transition: opacity 0.3s ease;
     />
 
     <div id="overlay" class="hidden"></div>
-
-    <!-- 🆕 Confirm Delete Modal for Google Users -->
-<div id="google-delete-modal" style="
-display: none;
-position: fixed;
-top: 0; left: 0;
-width: 100%; height: 100%;
-background: rgba(0,0,0,0.6);
-z-index: 2000;
-justify-content: center;
-align-items: center;
-">
-<div style="
-  background: white;
-  padding: 20px;
-  border-radius: 8px;
-  max-width: 400px;
-  text-align: center;
-">
-  <h3>Delete All Logs?</h3>
-  <p>This will erase all your saved routes. This cannot be undone.</p>
-  <button onclick="confirmGoogleDelete()" style="margin-right: 10px; background-color: red; color: white;">
-    Yes, Delete
-  </button>
-  <button onclick="closeGoogleDeleteModal()">Cancel</button>
-</div>
-</div>
-
 
     <script>
 
@@ -3888,69 +3797,61 @@ function initOfflineListeners() {
         z-index: 2000;
       "
     >
-    <div onclick="event.stopPropagation()" class="modal-box">
-      <h3 id="auth-title">Sign In</h3>
-    
-      <input
-        type="text"
-        id="auth-username"
-        placeholder="Username"
-        style="
-          width: 100%;
-          margin-bottom: 10px;
-          box-sizing: border-box;
-          padding: 10px;
-          font-size: 16px;
-          line-height: 1.4;
-        "
-      />
-    
-      <input
-        type="password"
-        id="auth-password"
-        placeholder="Password"
-        style="
-          width: 100%;
-          margin-bottom: 10px;
-          box-sizing: border-box;
-          padding: 10px;
-          font-size: 16px;
-          line-height: 1.4;
-        "
-      />
-    
-      <button onclick="submitAuth()" style="width: 100%">Submit</button>
-    
-      <!-- ✅ Google Sign-In Button -->
-      <div style="margin: 20px 0;">
-        <div id="g_id_onload"
-          data-client_id="793067024580-t9o9tq1pist1qte0odvsrvi853t3n9oh.apps.googleusercontent.com"
-          data-callback="handleGoogleSignIn"
-          data-auto_prompt="false">
-        </div>
-        <div class="g_id_signin"
-          data-type="standard"
-          data-size="large"
-          data-theme="outline"
-          data-text="sign_in_with"
-          data-shape="rectangular"
-          data-logo_alignment="left">
-        </div>
+      <div onclick="event.stopPropagation()" class="modal-box">
+        <h3 id="auth-title">Sign In</h3>
+        <input
+          type="text"
+          id="auth-username"
+          placeholder="Username"
+          style="
+            width: 100%;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+            padding: 10px;
+            font-size: 16px;
+            line-height: 1.4;
+          "
+        />
+
+        <input
+          type="password"
+          id="auth-password"
+          placeholder="Password"
+          style="
+            width: 100%;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+            padding: 10px;
+            font-size: 16px;
+            line-height: 1.4;
+          "
+        />
+
+        <button onclick="submitAuth()" style="width: 100%">Submit</button>
+        <button
+          onclick="closeAuthModal()"
+          style="
+            width: 100%;
+            margin-top: 10px;
+            background-color: #ccc;
+            color: #333;
+          "
+        >
+          Cancel
+        </button>
+        <p style="text-align: center; margin-top: 10px">
+          <a href="#" onclick="toggleAuthMode()"
+            >Switch to <span id="auth-switch-label">Sign Up</span></a
+          ><br />
+          <a
+            href="#"
+            onclick="showResetModal()"
+            style="font-size: 0.9em; color: #0d6efd"
+            >Forgot Password?</a
+          >
+        </p>
       </div>
-    
-      <button
-        onclick="closeAuthModal()"
-        style="width: 100%; margin-top: 10px; background-color: #ccc; color: #333;"
-      >
-        Cancel
-      </button>
-    
-      <p style="text-align: center; margin-top: 10px">
-        <a href="#" onclick="toggleAuthMode()">Switch to <span id="auth-switch-label">Sign Up</span></a><br />
-        <a href="#" onclick="showResetModal()" style="font-size: 0.9em; color: #0d6efd">Forgot Password?</a>
-      </p>
     </div>
-    
 
     <div
       id="change-password-modal"
@@ -4227,57 +4128,6 @@ window.addEventListener('scroll', () => {
       : 'none';
   }, 50);
 });
-
-async function handleGoogleSignIn(response) {
-  const idToken = response.credential;
-
-  const res = await fetch("https://logs.gorouteyourself.com/api/google-login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ idToken })
-  });
-
-  if (res.ok) {
-    const data = await res.json();
-
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("username", data.username); // email address
-
-    if (data.token.startsWith("GOOGLE:")) {
-      // 🆕 Show the link modal for Google-authenticated users
-      showLinkAccountModal();
-    } else {
-      // Normal flow: just refresh UI
-      updateAuthUI();
-      location.reload();
-    }
-
-  } else {
-    alert("❌ Google login failed.");
-  }
-}
-
-
-async function submitLinkAccount() {
-  const email = localStorage.getItem("username");
-  const username = document.getElementById("link-username").value;
-  const password = document.getElementById("link-password").value;
-
-  const res = await fetch("/api/link-account", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, username, password })
-  });
-
-  if (res.ok) {
-    alert("✅ Account linked successfully!");
-    closeLinkModal();
-    location.reload(); // reload to show new logs
-  } else {
-    alert("❌ Failed to link account: " + (await res.text()));
-  }
-}
-
 
     </script>
   </body>
