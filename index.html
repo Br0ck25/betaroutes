@@ -591,6 +591,36 @@ img {
   </head>
   <body>
 
+    <!-- 🧩 Link Existing Account Modal -->
+<div id="link-account-modal" style="
+display: none;
+position: fixed;
+top: 0; left: 0;
+width: 100%; height: 100%;
+background: rgba(0, 0, 0, 0.6);
+z-index: 3000;
+justify-content: center;
+align-items: center;
+">
+<div style="
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  max-width: 400px;
+  text-align: center;
+">
+  <h3>Link Your Old Account?</h3>
+  <p>If you created a previous account with a username and password, you can link it to this Google account.</p>
+  <input id="link-username" placeholder="Old Username" style="margin-bottom: 10px; width: 100%; padding: 8px;">
+  <input id="link-password" type="password" placeholder="Password" style="margin-bottom: 10px; width: 100%; padding: 8px;">
+  <div>
+    <button onclick="submitLinkAccount()" style="margin-right: 10px;">Link</button>
+    <button onclick="closeLinkModal()">Skip</button>
+  </div>
+</div>
+</div>
+
+
 
 <!-- Fixed Top Bar -->
 <div id="top-bar" style="
@@ -4166,21 +4196,50 @@ window.addEventListener('scroll', () => {
 async function handleGoogleSignIn(response) {
   const idToken = response.credential;
 
-  // Send token to your backend to verify and create/login the user
-  const res = await fetch('https://logs.gorouteyourself.com/api/google-login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+  const res = await fetch("https://logs.gorouteyourself.com/api/google-login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ idToken })
   });
 
   if (res.ok) {
     const data = await res.json();
+
     localStorage.setItem("token", data.token);
-    localStorage.setItem("username", data.username); // optional
-    updateAuthUI();
-    location.reload();
+    localStorage.setItem("username", data.username); // email address
+
+    if (data.token.startsWith("GOOGLE:")) {
+      // 🆕 Show the link modal for Google-authenticated users
+      showLinkAccountModal();
+    } else {
+      // Normal flow: just refresh UI
+      updateAuthUI();
+      location.reload();
+    }
+
   } else {
     alert("❌ Google login failed.");
+  }
+}
+
+
+async function submitLinkAccount() {
+  const email = localStorage.getItem("username");
+  const username = document.getElementById("link-username").value;
+  const password = document.getElementById("link-password").value;
+
+  const res = await fetch("/api/link-account", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, username, password })
+  });
+
+  if (res.ok) {
+    alert("✅ Account linked successfully!");
+    closeLinkModal();
+    location.reload(); // reload to show new logs
+  } else {
+    alert("❌ Failed to link account: " + (await res.text()));
   }
 }
 
