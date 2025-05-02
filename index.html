@@ -34,7 +34,12 @@
     <meta name="apple-mobile-web-app-title" content="Route Calculator" />
     <meta name="theme-color" content="#ffffff" />
     <link rel="manifest" href="/manifest.json" />
-
+    
+    <script
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ&libraries=places&callback=initMap"
+    defer
+  ></script>
+  
 
     <style>
 
@@ -1497,15 +1502,6 @@ if (dateInput) {
   logEntries = await loadLog();
   displayLog();
   initOfflineListeners();
-
-
-
-  const script = document.createElement("script");
-  script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ&libraries=places&callback=initMap`;
-  script.async = true;
-  script.defer = true;
-  script.setAttribute("loading", "async");
-  document.head.appendChild(script);
 
 
   document.getElementById("hours-worked").addEventListener("input", () => {
