@@ -1750,17 +1750,6 @@ displayLog();
   }
 }
 
-
-
-document.addEventListener("DOMContentLoaded", () => {
-  loadOfflineLogs();
-  initOfflineListeners(); // ✅ new centralized call
-
-  if (!navigator.onLine) {
-    document.getElementById("offline-banner").style.display = "block";
-  }
-});
-
       function showConfirmationMessage(message) {
         const confirmation = document.getElementById("confirmation-message");
         confirmation.textContent = message;
@@ -3779,6 +3768,14 @@ function initOfflineListeners() {
   window.addEventListener("offline", updateOfflineBanner);
 }
 
+document.addEventListener("DOMContentLoaded", () => {
+  loadOfflineLogs();
+  initOfflineListeners(); // ✅ new centralized call
+
+  if (!navigator.onLine) {
+    document.getElementById("offline-banner").style.display = "block";
+  }
+});
 
 
     </script>
