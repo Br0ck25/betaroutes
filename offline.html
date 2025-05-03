@@ -1752,8 +1752,13 @@ displayLog();
 
 
 
-// Call once on page load too
 document.addEventListener("DOMContentLoaded", () => {
+  loadOfflineLogs();
+  initOfflineListeners(); // ✅ new centralized call
+
+  if (!navigator.onLine) {
+    document.getElementById("offline-banner").style.display = "block";
+  }
 });
 
       function showConfirmationMessage(message) {
