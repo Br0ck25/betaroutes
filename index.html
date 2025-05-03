@@ -1753,12 +1753,6 @@ displayLog();
   }
 }
 
-
-
-// Call once on page load too
-document.addEventListener("DOMContentLoaded", () => {
-});
-
       function showConfirmationMessage(message) {
         const confirmation = document.getElementById("confirmation-message");
         confirmation.textContent = message;
@@ -3777,6 +3771,14 @@ function initOfflineListeners() {
   window.addEventListener("offline", updateOfflineBanner);
 }
 
+document.addEventListener("DOMContentLoaded", () => {
+    loadOfflineLogs();
+    initOfflineListeners(); // ✅ centralized call
+
+    if (!navigator.onLine) {
+      document.getElementById("offline-banner").style.display = "block";
+    }
+  });
 
 
     </script>
