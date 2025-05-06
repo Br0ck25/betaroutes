@@ -2677,32 +2677,67 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
   if (prevDiv) {
     destinationDiv.parentNode.insertBefore(destinationDiv, prevDiv);
     resetOriginalMileageDisplay();
-
-    const addressInput = destinationDiv.querySelector('input[type="text"]');
-    if (!addressInput) {
-      console.warn("No address input found in destinationDiv");
-      return;
-    }
-
-    addressInput.addEventListener("blur", recalculateEditMileageAndCosts);
-
-    const autocomplete = new google.maps.places.Autocomplete(addressInput, {
-      types: ["geocode"],
-    });
-    autocomplete.addListener("place_changed", recalculateEditMileageAndCosts);
+    reinitializeEditDestination(destinationDiv);
+    renumberEditDestinations();
   }
 }
 
 
-      function moveEditDestinationDown(button) {
-        const destinationDiv = button.closest(".destination");
-        const nextDiv = destinationDiv.nextElementSibling;
-        if (nextDiv) {
-          destinationDiv.parentNode.insertBefore(nextDiv, destinationDiv);
-          resetOriginalMileageDisplay();
-          recalculateEditMileageAndCosts();
-        }
-      }
+
+function moveEditDestinationDown(button) {
+  const destinationDiv = button.closest(".destination");
+  const nextDiv = destinationDiv.nextElementSibling;
+  if (nextDiv) {
+    destinationDiv.parentNode.insertBefore(nextDiv, destinationDiv);
+    resetOriginalMileageDisplay();
+    reinitializeEditDestination(destinationDiv);
+    renumberEditDestinations();
+  }
+}
+
+function reinitializeEditDestination(destinationDiv) {
+  const addressInput = destinationDiv.querySelector('input[type="text"]');
+  if (!addressInput) return;
+
+  addressInput.removeEventListener("blur", recalculateEditMileageAndCosts); // avoid duplicates
+  addressInput.addEventListener("blur", recalculateEditMileageAndCosts);
+
+  const autocomplete = new google.maps.places.Autocomplete(addressInput, {
+    types: ["geocode"],
+  });
+  autocomplete.addListener("place_changed", recalculateEditMileageAndCosts);
+}
+
+function renumberEditDestinations() {
+  const destinationDivs = document.querySelectorAll("#edit-destinations-container .destination");
+
+  destinationDivs.forEach((div, index) => {
+    const destNum = index + 1;
+    const label = div.querySelector('label[for^="edit-destination-"]');
+    const earningsLabel = div.querySelector('label[for^="edit-earnings-"]');
+    const addressInput = div.querySelector('input[type="text"]');
+    const earningsInput = div.querySelector('input[type="number"]');
+
+    if (label) {
+      label.textContent = `Destination ${destNum}`;
+      label.setAttribute("for", `edit-destination-${destNum}`);
+    }
+
+    if (earningsLabel) {
+      earningsLabel.textContent = `Earnings ${destNum}`;
+      earningsLabel.setAttribute("for", `edit-earnings-${destNum}`);
+    }
+
+    if (addressInput) {
+      addressInput.id = `edit-destination-${destNum}`;
+    }
+
+    if (earningsInput) {
+      earningsInput.id = `edit-earnings-${destNum}`;
+    }
+  });
+}
+
 
       function addEditDestination() {
         const container = document.getElementById(
