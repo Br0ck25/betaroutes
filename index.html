@@ -839,7 +839,9 @@ img {
         </div>
       </div>
 
-              <button onclick="addDestination()">Add Destination</button>
+      <button type="button" onclick="addMainDestination()">Add Destination</button>
+
+
       <label for="end-address">End Address</label>
       <input
         type="text"
@@ -2347,54 +2349,6 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
         return formattedString.trim();
       }
 
-      function addDestination() {
-        const newDestinationIndex =
-          document.querySelectorAll("#destinations-container .destination")
-            .length + 1;
-        const container = document.getElementById("destinations-container");
-        const newDestinationDiv = document.createElement("div");
-        newDestinationDiv.classList.add("destination");
-        newDestinationDiv.innerHTML = `
-    <label for="destination-${newDestinationIndex}">Destination ${newDestinationIndex}</label>
-   <input type="text" id="destination-${newDestinationIndex}" list="recent-destinations" placeholder="Enter destination address" required>
-
-    <label for="earnings-${newDestinationIndex}">Earnings for Destination ${newDestinationIndex}</label>
-    <input type="number" id="earnings-${newDestinationIndex}" placeholder="Enter earnings for destination" required>
-    <div class="destination-actions">
-        <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
-        <button class="move-btn" onclick="moveDestinationUp(this)">Move Up</button>
-        <button class="move-btn" onclick="moveDestinationDown(this)">Move Down</button>
-    </div>
-`;
-        container.appendChild(newDestinationDiv);
-        initAutocompleteDestination(
-          newDestinationDiv.querySelector('input[type="text"]')
-        );
-        resetOriginalMileageDisplay();
-      }
-
-      function deleteDestination(button) {
-        button.closest(".destination").remove();
-        resetOriginalMileageDisplay(); // <- Add this line
-      }
-
-      function moveDestinationUp(button) {
-        const destinationDiv = button.closest(".destination");
-        const prevDiv = destinationDiv.previousElementSibling;
-        if (prevDiv) {
-          destinationDiv.parentNode.insertBefore(destinationDiv, prevDiv);
-          resetOriginalMileageDisplay();
-        }
-      }
-
-      function moveDestinationDown(button) {
-        const destinationDiv = button.closest(".destination");
-        const nextDiv = destinationDiv.nextElementSibling;
-        if (nextDiv) {
-          destinationDiv.parentNode.insertBefore(nextDiv, destinationDiv);
-          resetOriginalMileageDisplay();
-        }
-      }
 
       function logEntry(data) {
   disableAutoSave = true; // ✅ stop the timer temporarily
@@ -2694,6 +2648,115 @@ function moveEditDestinationDown(button) {
     renumberEditDestinations();
   }
 }
+
+function addMainDestination() {
+  const container = document.getElementById("destinations-container");
+  const newIndex = container.querySelectorAll(".destination").length + 1;
+
+  const destDiv = document.createElement("div");
+  destDiv.classList.add("destination");
+  destDiv.innerHTML = `
+    <label for="destination-${newIndex}">Destination ${newIndex}</label>
+    <input type="text" id="destination-${newIndex}" list="recent-destinations" placeholder="Enter destination address">
+
+    <label for="earnings-${newIndex}">Earnings ${newIndex}</label>
+    <input type="number" id="earnings-${newIndex}" placeholder="Enter earnings">
+
+    <div class="destination-actions">
+      <button type="button" class="delete-btn" onclick="deleteMainDestination(this)">Delete</button>
+      <button type="button" class="move-btn" onclick="moveMainDestinationUp(this)">Move Up</button>
+      <button type="button" class="move-btn" onclick="moveMainDestinationDown(this)">Move Down</button>
+    </div>
+  `;
+  container.appendChild(destDiv);
+  renumberMainDestinations();
+  reinitializeMainDestination(destDiv);
+}
+
+function deleteMainDestination(button) {
+  const destinationDiv = button.closest(".destination");
+  destinationDiv.remove();
+  renumberMainDestinations();
+  updateTotalEarnings?.();
+  resetOriginalMileageDisplay?.();
+  recalculateMileageAndCosts?.();
+}
+
+function moveMainDestinationUp(button) {
+  const destinationDiv = button.closest(".destination");
+  const prevDiv = destinationDiv.previousElementSibling;
+  if (prevDiv) {
+    destinationDiv.parentNode.insertBefore(destinationDiv, prevDiv);
+    resetOriginalMileageDisplay?.();
+    reinitializeMainDestination(destinationDiv);
+    renumberMainDestinations();
+  }
+}
+
+function moveMainDestinationDown(button) {
+  const destinationDiv = button.closest(".destination");
+  const nextDiv = destinationDiv.nextElementSibling;
+  if (nextDiv) {
+    destinationDiv.parentNode.insertBefore(nextDiv, destinationDiv);
+    resetOriginalMileageDisplay?.();
+    reinitializeMainDestination(destinationDiv);
+    renumberMainDestinations();
+  }
+}
+
+function reinitializeMainDestination(destinationDiv) {
+  const addressInput = destinationDiv.querySelector('input[type="text"]');
+  if (!addressInput) return;
+
+  addressInput.removeEventListener("blur", recalculateMileageAndCosts);
+  addressInput.addEventListener("blur", recalculateMileageAndCosts);
+
+  const autocomplete = new google.maps.places.Autocomplete(addressInput, {
+    types: ["geocode"],
+  });
+  autocomplete.addListener("place_changed", recalculateMileageAndCosts);
+
+  addressInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      const allDestInputs = document.querySelectorAll(
+        "#destinations-container input[type='text']"
+      );
+      if (addressInput === allDestInputs[allDestInputs.length - 1]) {
+        e.preventDefault();
+        addMainDestination();
+      }
+    }
+  });
+}
+
+function renumberMainDestinations() {
+  const container = document.getElementById("destinations-container");
+  const destinationDivs = container.querySelectorAll(".destination");
+
+  destinationDivs.forEach((div, index) => {
+    const n = index + 1;
+    const label = div.querySelector('label[for^="destination-"]');
+    const earningsLabel = div.querySelector('label[for^="earnings-"]');
+    const addressInput = div.querySelector('input[type="text"]');
+    const earningsInput = div.querySelector('input[type="number"]');
+
+    if (label) {
+      label.textContent = `Destination ${n}`;
+      label.setAttribute("for", `destination-${n}`);
+    }
+    if (earningsLabel) {
+      earningsLabel.textContent = `Earnings ${n}`;
+      earningsLabel.setAttribute("for", `earnings-${n}`);
+    }
+    if (addressInput) {
+      addressInput.id = `destination-${n}`;
+    }
+    if (earningsInput) {
+      earningsInput.id = `earnings-${n}`;
+    }
+  });
+}
+
 
 function reinitializeEditDestination(destinationDiv) {
   const addressInput = destinationDiv.querySelector('input[type="text"]');
