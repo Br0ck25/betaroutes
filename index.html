@@ -826,27 +826,20 @@ img {
             required
           />
           <div class="destination-actions">
-            <button class="delete-btn" onclick="deleteMainDestination(this)">
+            <button class="delete-btn" onclick="deleteDestination(this)">
               Delete
             </button>
-            <button class="move-btn" onclick="moveMainDestinationUp(this)">
+            <button class="move-btn" onclick="moveDestinationUp(this)">
               Move Up
             </button>
-            <button class="move-btn" onclick="moveMainDestinationDown(this)">
+            <button class="move-btn" onclick="moveDestinationDown(this)">
               Move Down
             </button>
           </div>
-          
         </div>
       </div>
 
-      <button type="button" onclick="addMainDestination()">Add Destination</button>
-      
-      <div style="margin-top: 15px;">
-        <strong>Total Earnings:</strong> $<span id="total-earnings">0.00</span>
-      </div>
-
-
+              <button onclick="addDestination()">Add Destination</button>
       <label for="end-address">End Address</label>
       <input
         type="text"
@@ -1104,26 +1097,6 @@ img {
 
     <script>
 
-function updateTotalEarnings() {
-  const earningsInputs = document.querySelectorAll("#destinations-container input[id^='earnings-']");
-  let total = 0;
-
-  earningsInputs.forEach(input => {
-    const val = parseFloat(input.value);
-    if (!isNaN(val)) {
-      total += val;
-    }
-  });
-
-  const totalEarningsField = document.getElementById("total-earnings");
-  if (totalEarningsField) {
-    totalEarningsField.textContent = total.toFixed(2);
-  } else {
-    console.warn("⚠️ #total-earnings not found.");
-  }
-}
-
-
 function clearTripForm() {
   // Reset date to today
   const today = new Date().toLocaleDateString("en-CA"); // format: YYYY-MM-DD in local time
@@ -1152,10 +1125,9 @@ function clearTripForm() {
     <label for="earnings-1">Earnings for Destination 1</label>
     <input type="number" id="earnings-1" placeholder="Enter earnings for destination" required>
     <div class="destination-actions">
-      <button class="delete-btn" onclick="deleteMainDestination(this)">Delete</button>
-<button class="move-btn" onclick="moveMainDestinationUp(this)">Move Up</button>
-<button class="move-btn" onclick="moveMainDestinationDown(this)">Move Down</button>
-
+      <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
+      <button class="move-btn" onclick="moveDestinationUp(this)">Move Up</button>
+      <button class="move-btn" onclick="moveDestinationDown(this)">Move Down</button>
     </div>
   `;
   container.appendChild(div);
@@ -1189,6 +1161,8 @@ let editingIndex = -1;
 let originalMileage = null;
 let logEntries = [];
 let currentPage = 1;
+let skipNextSync = false;
+
 const logsPerPage = 10;
 
 function getRecentDestinations() {
@@ -1551,14 +1525,18 @@ function updateOfflineBanner() {
 }
 
 async function syncAndReloadLogs() {
+  if (skipNextSync) {
+    console.log("⏭ Skipping sync due to Cancel selection");
+    skipNextSync = false; // reset it after skipping once
+    return;
+  }
+
   try {
     console.log("🔄 Online detected: syncing and reloading logs...");
 
     await syncPendingLogs();
-logEntries = await loadLog();
-displayLog();
-
-
+    logEntries = await loadLog();
+    displayLog();
 
     console.log("✅ Logs refreshed after reconnecting!");
     showConfirmationMessage("✅ Logs refreshed after reconnecting!");
@@ -1566,6 +1544,7 @@ displayLog();
     console.error("❌ Error refreshing logs:", error);
   }
 }
+
 
 function saveDraftTrip() {
   if (disableAutoSave) return;
@@ -1619,91 +1598,91 @@ function saveDraftTrip() {
 
 setInterval(saveDraftTrip, 5000); // Auto-save every 5 seconds
 
-
-
 document.addEventListener("DOMContentLoaded", async () => {
   const draft = localStorage.getItem("draftTrip");
   updateAuthUI();
 
   if (draft) {
-  try {
-    const data = JSON.parse(draft);
+    try {
+      const data = JSON.parse(draft);
 
-    const destinations = Array.isArray(data.destinations)
-      ? data.destinations.filter(d => d.address || d.earnings)
-      : [];
+      const destinations = Array.isArray(data.destinations)
+        ? data.destinations.filter(d => d.address || d.earnings)
+        : [];
 
-    const hasMeaningfulData =
-      destinations.length > 0 ||
-      (data.startTime && data.startTime.trim()) ||
-      (data.endTime && data.endTime.trim()) ||
-      (data.hoursWorked && parseFloat(data.hoursWorked) > 0) ||
-      (data.maintenance && parseFloat(data.maintenance) > 0) ||
-      (data.supplies && parseFloat(data.supplies) > 0);
+      const hasMeaningfulData =
+        destinations.length > 0 ||
+        (data.startTime && data.startTime.trim()) ||
+        (data.endTime && data.endTime.trim()) ||
+        (data.hoursWorked && parseFloat(data.hoursWorked) > 0) ||
+        (data.maintenance && parseFloat(data.maintenance) > 0) ||
+        (data.supplies && parseFloat(data.supplies) > 0);
 
-    if (!hasMeaningfulData) {
-      localStorage.removeItem("draftTrip");
-      return; // ✅ Don't touch the DOM, silently skip
-    }
+      if (!hasMeaningfulData) {
+        localStorage.removeItem("draftTrip");
+        return;
+      }
 
-    const proceed = confirm("📝 Resume your last unsaved trip?");
-    if (!proceed) {
+      const proceed = confirm("📝 Resume your last unsaved trip?");
+if (!proceed) {
   localStorage.removeItem("draftTrip");
 
-  // ✅ Reset date to today's local date
   const today = new Date().toLocaleDateString("en-CA");
   const dateInput = document.getElementById("log-date");
-  if (dateInput) {
-    dateInput.value = today;
+  if (dateInput) dateInput.value = today;
+
+  const cached = localStorage.getItem("cachedLogs");
+  if (cached) {
+    try {
+      logEntries = JSON.parse(cached);
+      displayLog();
+    } catch (e) {
+      console.error("❌ Failed to parse cachedLogs:", e);
+    }
   }
 
+  skipNextSync = true; // ✅ prevent immediate server sync
   return;
 }
 
 
+      // ✅ Restore draft data
+      document.getElementById("log-date").value = data.date || "";
+      document.getElementById("start-address").value = data.start || "";
+      document.getElementById("end-address").value = data.end || "";
+      document.getElementById("mpg").value = data.mpg || "";
+      document.getElementById("gas-price").value = data.gas || "";
+      document.getElementById("start-time").value = data.startTime || "";
+      document.getElementById("end-time").value = data.endTime || "";
+      document.getElementById("hours-worked").value = data.hoursWorked || "";
+      document.getElementById("maintenance-cost").value = data.maintenance || "";
+      document.getElementById("supplies-cost").value = data.supplies || "";
 
-    // ✅ Now and only now, start restoring the form:
-    document.getElementById("log-date").value = data.date || "";
-    document.getElementById("start-address").value = data.start || "";
-    document.getElementById("end-address").value = data.end || "";
-    document.getElementById("mpg").value = data.mpg || "";
-    document.getElementById("gas-price").value = data.gas || "";
-    document.getElementById("start-time").value = data.startTime || "";
-    document.getElementById("end-time").value = data.endTime || "";
-    document.getElementById("hours-worked").value = data.hoursWorked || "";
-    document.getElementById("maintenance-cost").value = data.maintenance || "";
-    document.getElementById("supplies-cost").value = data.supplies || "";
+      const container = document.getElementById("destinations-container");
+      container.innerHTML = "";
 
-    const container = document.getElementById("destinations-container");
-    container.innerHTML = "";
-
-    destinations.forEach((d, i) => {
-      const div = document.createElement("div");
-      div.classList.add("destination");
-      div.innerHTML = `
-        <label for="destination-${i + 1}">Destination ${i + 1}</label>
-        <input type="text" id="destination-${i + 1}" list="recent-destinations" value="${d.address || ""}">
-        <label for="earnings-${i + 1}">Earnings for Destination ${i + 1}</label>
-        <input type="number" id="earnings-${i + 1}" value="${d.earnings || ""}">
-        <div class="destination-actions">
-          <button class="delete-btn" onclick="deleteMainDestination(this)">Delete</button>
-<button class="move-btn" onclick="moveMainDestinationUp(this)">Move Up</button>
-<button class="move-btn" onclick="moveMainDestinationDown(this)">Move Down</button>
-
-        </div>
-      `;
-      container.appendChild(div);
-      initAutocompleteDestination(div.querySelector('input[type="text"]'));
-    });
-  } catch (err) {
-    console.error("❌ Failed to parse draftTrip:", err);
-    localStorage.removeItem("draftTrip");
+      destinations.forEach((d, i) => {
+        const div = document.createElement("div");
+        div.classList.add("destination");
+        div.innerHTML = `
+          <label for="destination-${i + 1}">Destination ${i + 1}</label>
+          <input type="text" id="destination-${i + 1}" list="recent-destinations" value="${d.address || ""}">
+          <label for="earnings-${i + 1}">Earnings for Destination ${i + 1}</label>
+          <input type="number" id="earnings-${i + 1}" value="${d.earnings || ""}">
+          <div class="destination-actions">
+            <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
+            <button class="move-btn" onclick="moveDestinationUp(this)">Move Up</button>
+            <button class="move-btn" onclick="moveDestinationDown(this)">Move Down</button>
+          </div>
+        `;
+        container.appendChild(div);
+        initAutocompleteDestination(div.querySelector('input[type="text"]'));
+      });
+    } catch (err) {
+      console.error("❌ Failed to parse draftTrip:", err);
+      localStorage.removeItem("draftTrip");
+    }
   }
-}
-
-
-
-
 
   // Set today's date
   const dateInput = document.getElementById("log-date");
@@ -2376,6 +2355,54 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
         return formattedString.trim();
       }
 
+      function addDestination() {
+        const newDestinationIndex =
+          document.querySelectorAll("#destinations-container .destination")
+            .length + 1;
+        const container = document.getElementById("destinations-container");
+        const newDestinationDiv = document.createElement("div");
+        newDestinationDiv.classList.add("destination");
+        newDestinationDiv.innerHTML = `
+    <label for="destination-${newDestinationIndex}">Destination ${newDestinationIndex}</label>
+   <input type="text" id="destination-${newDestinationIndex}" list="recent-destinations" placeholder="Enter destination address" required>
+
+    <label for="earnings-${newDestinationIndex}">Earnings for Destination ${newDestinationIndex}</label>
+    <input type="number" id="earnings-${newDestinationIndex}" placeholder="Enter earnings for destination" required>
+    <div class="destination-actions">
+        <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
+        <button class="move-btn" onclick="moveDestinationUp(this)">Move Up</button>
+        <button class="move-btn" onclick="moveDestinationDown(this)">Move Down</button>
+    </div>
+`;
+        container.appendChild(newDestinationDiv);
+        initAutocompleteDestination(
+          newDestinationDiv.querySelector('input[type="text"]')
+        );
+        resetOriginalMileageDisplay();
+      }
+
+      function deleteDestination(button) {
+        button.closest(".destination").remove();
+        resetOriginalMileageDisplay(); // <- Add this line
+      }
+
+      function moveDestinationUp(button) {
+        const destinationDiv = button.closest(".destination");
+        const prevDiv = destinationDiv.previousElementSibling;
+        if (prevDiv) {
+          destinationDiv.parentNode.insertBefore(destinationDiv, prevDiv);
+          resetOriginalMileageDisplay();
+        }
+      }
+
+      function moveDestinationDown(button) {
+        const destinationDiv = button.closest(".destination");
+        const nextDiv = destinationDiv.nextElementSibling;
+        if (nextDiv) {
+          destinationDiv.parentNode.insertBefore(nextDiv, destinationDiv);
+          resetOriginalMileageDisplay();
+        }
+      }
 
       function logEntry(data) {
   disableAutoSave = true; // ✅ stop the timer temporarily
@@ -2555,14 +2582,19 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
       }
 
       function organizeLogByDay() {
-        return logEntries.reduce((acc, entry) => {
-          if (!acc[entry.date]) {
-            acc[entry.date] = [];
-          }
-          acc[entry.date].push(entry);
-          return acc;
-        }, {});
-      }
+  const logByDay = {};
+
+  logEntries.forEach((entry) => {
+    if (!entry?.date) return;
+    if (!logByDay[entry.date]) {
+      logByDay[entry.date] = [];
+    }
+    logByDay[entry.date].push(entry);
+  });
+
+  return logByDay;
+}
+
 
 
 
@@ -2652,9 +2684,6 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
         });
       }
 
-      const recalculateMileageAndCosts = recalculateEditMileageAndCosts;
-
-
       function moveEditDestinationUp(button) {
   const destinationDiv = button.closest(".destination");
   const prevDiv = destinationDiv.previousElementSibling;
@@ -2678,115 +2707,6 @@ function moveEditDestinationDown(button) {
     renumberEditDestinations();
   }
 }
-
-function addMainDestination() {
-  const container = document.getElementById("destinations-container");
-  const newIndex = container.querySelectorAll(".destination").length + 1;
-
-  const destDiv = document.createElement("div");
-  destDiv.classList.add("destination");
-  destDiv.innerHTML = `
-    <label for="destination-${newIndex}">Destination ${newIndex}</label>
-    <input type="text" id="destination-${newIndex}" list="recent-destinations" placeholder="Enter destination address">
-
-    <label for="earnings-${newIndex}">Earnings ${newIndex}</label>
-    <input type="number" id="earnings-${newIndex}" placeholder="Enter earnings">
-
-    <div class="destination-actions">
-      <button type="button" class="delete-btn" onclick="deleteMainDestination(this)">Delete</button>
-      <button type="button" class="move-btn" onclick="moveMainDestinationUp(this)">Move Up</button>
-      <button type="button" class="move-btn" onclick="moveMainDestinationDown(this)">Move Down</button>
-    </div>
-  `;
-  container.appendChild(destDiv);
-  renumberMainDestinations();
-  reinitializeMainDestination(destDiv);
-}
-
-function deleteMainDestination(button) {
-  const destinationDiv = button.closest(".destination");
-  destinationDiv.remove();
-  renumberMainDestinations();
-  updateTotalEarnings?.();
-  resetOriginalMileageDisplay?.();
-  recalculateMileageAndCosts?.();
-}
-
-function moveMainDestinationUp(button) {
-  const destinationDiv = button.closest(".destination");
-  const prevDiv = destinationDiv.previousElementSibling;
-  if (prevDiv) {
-    destinationDiv.parentNode.insertBefore(destinationDiv, prevDiv);
-    resetOriginalMileageDisplay?.();
-    reinitializeMainDestination(destinationDiv);
-    renumberMainDestinations();
-  }
-}
-
-function moveMainDestinationDown(button) {
-  const destinationDiv = button.closest(".destination");
-  const nextDiv = destinationDiv.nextElementSibling;
-  if (nextDiv) {
-    destinationDiv.parentNode.insertBefore(nextDiv, destinationDiv);
-    resetOriginalMileageDisplay?.();
-    reinitializeMainDestination(destinationDiv);
-    renumberMainDestinations();
-  }
-}
-
-function reinitializeMainDestination(destinationDiv) {
-  const addressInput = destinationDiv.querySelector('input[type="text"]');
-  if (!addressInput) return;
-
-  addressInput.removeEventListener("blur", recalculateMileageAndCosts);
-  addressInput.addEventListener("blur", recalculateMileageAndCosts);
-
-  const autocomplete = new google.maps.places.Autocomplete(addressInput, {
-    types: ["geocode"],
-  });
-  autocomplete.addListener("place_changed", recalculateMileageAndCosts);
-
-  addressInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      const allDestInputs = document.querySelectorAll(
-        "#destinations-container input[type='text']"
-      );
-      if (addressInput === allDestInputs[allDestInputs.length - 1]) {
-        e.preventDefault();
-        addMainDestination();
-      }
-    }
-  });
-}
-
-function renumberMainDestinations() {
-  const container = document.getElementById("destinations-container");
-  const destinationDivs = container.querySelectorAll(".destination");
-
-  destinationDivs.forEach((div, index) => {
-    const n = index + 1;
-    const label = div.querySelector('label[for^="destination-"]');
-    const earningsLabel = div.querySelector('label[for^="earnings-"]');
-    const addressInput = div.querySelector('input[type="text"]');
-    const earningsInput = div.querySelector('input[type="number"]');
-
-    if (label) {
-      label.textContent = `Destination ${n}`;
-      label.setAttribute("for", `destination-${n}`);
-    }
-    if (earningsLabel) {
-      earningsLabel.textContent = `Earnings ${n}`;
-      earningsLabel.setAttribute("for", `earnings-${n}`);
-    }
-    if (addressInput) {
-      addressInput.id = `destination-${n}`;
-    }
-    if (earningsInput) {
-      earningsInput.id = `earnings-${n}`;
-    }
-  });
-}
-
 
 function reinitializeEditDestination(destinationDiv) {
   const addressInput = destinationDiv.querySelector('input[type="text"]');
