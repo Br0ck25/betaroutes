@@ -2699,14 +2699,29 @@ function reinitializeEditDestination(destinationDiv) {
   const addressInput = destinationDiv.querySelector('input[type="text"]');
   if (!addressInput) return;
 
-  addressInput.removeEventListener("blur", recalculateEditMileageAndCosts); // avoid duplicates
+  // Avoid stacking duplicate listeners
+  addressInput.removeEventListener("blur", recalculateEditMileageAndCosts);
   addressInput.addEventListener("blur", recalculateEditMileageAndCosts);
 
   const autocomplete = new google.maps.places.Autocomplete(addressInput, {
     types: ["geocode"],
   });
   autocomplete.addListener("place_changed", recalculateEditMileageAndCosts);
+
+  // 👇 Add Enter key listener
+  addressInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      const allDestInputs = document.querySelectorAll(
+        '#edit-destinations-container input[type="text"]'
+      );
+      if (addressInput === allDestInputs[allDestInputs.length - 1]) {
+        e.preventDefault(); // prevent form submit
+        addEditDestination(); // add a new destination
+      }
+    }
+  });
 }
+
 
 function renumberEditDestinations() {
   const destinationDivs = document.querySelectorAll("#edit-destinations-container .destination");
@@ -2739,96 +2754,48 @@ function renumberEditDestinations() {
 }
 
 
-      function addEditDestination() {
-        const container = document.getElementById(
-          "edit-destinations-container"
-        );
-        const newIndex = container.querySelectorAll(".destination").length + 1;
+function addEditDestination() {
+  const container = document.getElementById("edit-destinations-container");
 
-        const destDiv = document.createElement("div");
-        destDiv.classList.add("destination");
-        destDiv.innerHTML = `
-        <label for="edit-destination-${newIndex}">Destination ${newIndex}</label>
-       <input type="text" id="edit-destination-${newIndex}" list="recent-destinations" placeholder="Enter destination address">
-        <label for="edit-earnings-${newIndex}">Earnings ${newIndex}</label>
-        <input type="number" id="edit-earnings-${newIndex}" placeholder="Enter earnings">
-        <div class="destination-actions">
-            <button type="button" class="delete-btn" onclick="deleteEditDestination(this)">Delete</button>
-            <button type="button" class="move-btn" onclick="moveEditDestinationUp(this)">Move Up</button>
-            <button type="button" class="move-btn" onclick="moveEditDestinationDown(this)">Move Down</button>
-        </div>
-    `;
+  const destDiv = document.createElement("div");
+  destDiv.classList.add("destination");
 
-        container.appendChild(destDiv);
+  destDiv.innerHTML = `
+    <label for="">Destination</label>
+    <input type="text" list="recent-destinations" placeholder="Enter destination address">
 
-        const addressInput = destDiv.querySelector(
-          `#edit-destination-${newIndex}`
-        );
-        const autocomplete = new google.maps.places.Autocomplete(addressInput, {
-          types: ["geocode"],
-        });
+    <label for="">Earnings</label>
+    <input type="number" placeholder="Enter earnings">
 
-        // ✅ Only trigger recalculation when a valid place is selected
-        autocomplete.addListener("place_changed", () => {
-          const place = autocomplete.getPlace();
-          if (place && place.geometry) {
-            recalculateEditMileageAndCosts();
-          } else {
-          }
-        });
+    <div class="destination-actions">
+      <button type="button" class="delete-btn" onclick="deleteEditDestination(this)">Delete</button>
+      <button type="button" class="move-btn" onclick="moveEditDestinationUp(this)">Move Up</button>
+      <button type="button" class="move-btn" onclick="moveEditDestinationDown(this)">Move Down</button>
+    </div>
+  `;
 
-        initAutocompleteDestination(addressInput); // optional, if used elsewhere
-        const earningsInput = destDiv.querySelector(
-          `#edit-earnings-${newIndex}`
-        );
-        earningsInput.addEventListener("change", updateEditTotalEarnings);
+  container.appendChild(destDiv);
 
-        resetOriginalMileageDisplay();
-      }
+  // Apply correct numbering and IDs
+  renumberEditDestinations();
+
+  // Reinitialize events and autocomplete on the new address input
+  reinitializeEditDestination(destDiv);
+}
+
 
       function deleteEditDestination(button) {
-        const destinationDiv = button.closest(".destination");
-        destinationDiv.remove();
+  const destinationDiv = button.closest(".destination");
+  if (destinationDiv) {
+    destinationDiv.remove();
+    renumberEditDestinations(); // 👈 Use shared function
+    updateEditTotalEarnings();  // 💰 Optional if you're tracking per stop
+    resetOriginalMileageDisplay();
+    recalculateEditMileageAndCosts();
+  }
+}
 
-        // Reindex the remaining destinations
-        const container = document.getElementById(
-          "edit-destinations-container"
-        );
-        const destinationDivs = container.querySelectorAll(".destination");
-        destinationDivs.forEach((div, index) => {
-          const newIndex = index + 1;
 
-          // Update labels and IDs for destination
-          const destLabel = div.querySelector(
-            'label[for^="edit-destination-"]'
-          );
-          const destInput = div.querySelector('input[id^="edit-destination-"]');
-          const earningsLabel = div.querySelector(
-            'label[for^="edit-earnings-"]'
-          );
-          const earningsInput = div.querySelector(
-            'input[id^="edit-earnings-"]'
-          );
-
-          if (destLabel)
-            destLabel.setAttribute("for", `edit-destination-${newIndex}`);
-          if (destInput) {
-            destInput.id = `edit-destination-${newIndex}`;
-            destInput.placeholder = `Enter destination address`;
-          }
-
-          if (earningsLabel)
-            earningsLabel.setAttribute("for", `edit-earnings-${newIndex}`);
-          if (earningsInput) {
-            earningsInput.id = `edit-earnings-${newIndex}`;
-            earningsInput.placeholder = `Enter earnings`;
-          }
-        });
-
-        updateEditTotalEarnings(); // Recalculate earnings after deletion
-        resetOriginalMileageDisplay();
-        recalculateEditMileageAndCosts(); // Recalculate mileage and costs
-      }
 
       function openEditForm(index) {
         editingIndex = index;
