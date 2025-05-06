@@ -841,6 +841,10 @@ img {
       </div>
 
       <button type="button" onclick="addMainDestination()">Add Destination</button>
+      
+      <div style="margin-top: 15px;">
+        <strong>Total Earnings:</strong> $<span id="total-earnings">0.00</span>
+      </div>
 
 
       <label for="end-address">End Address</label>
@@ -1099,6 +1103,26 @@ img {
     <div id="overlay" class="hidden"></div>
 
     <script>
+
+function updateTotalEarnings() {
+  const earningsInputs = document.querySelectorAll("#destinations-container input[id^='earnings-']");
+  let total = 0;
+
+  earningsInputs.forEach(input => {
+    const val = parseFloat(input.value);
+    if (!isNaN(val)) {
+      total += val;
+    }
+  });
+
+  const totalEarningsField = document.getElementById("total-earnings");
+  if (totalEarningsField) {
+    totalEarningsField.textContent = total.toFixed(2);
+  } else {
+    console.warn("⚠️ #total-earnings not found.");
+  }
+}
+
 
 function clearTripForm() {
   // Reset date to today
