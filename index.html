@@ -1127,9 +1127,10 @@ function clearTripForm() {
     <label for="earnings-1">Earnings for Destination 1</label>
     <input type="number" id="earnings-1" placeholder="Enter earnings for destination" required>
     <div class="destination-actions">
-      <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
-      <button class="move-btn" onclick="moveDestinationUp(this)">Move Up</button>
-      <button class="move-btn" onclick="moveDestinationDown(this)">Move Down</button>
+      <button class="delete-btn" onclick="deleteMainDestination(this)">Delete</button>
+<button class="move-btn" onclick="moveMainDestinationUp(this)">Move Up</button>
+<button class="move-btn" onclick="moveMainDestinationDown(this)">Move Down</button>
+
     </div>
   `;
   container.appendChild(div);
@@ -1660,9 +1661,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         <label for="earnings-${i + 1}">Earnings for Destination ${i + 1}</label>
         <input type="number" id="earnings-${i + 1}" value="${d.earnings || ""}">
         <div class="destination-actions">
-          <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
-          <button class="move-btn" onclick="moveDestinationUp(this)">Move Up</button>
-          <button class="move-btn" onclick="moveDestinationDown(this)">Move Down</button>
+          <button class="delete-btn" onclick="deleteMainDestination(this)">Delete</button>
+<button class="move-btn" onclick="moveMainDestinationUp(this)">Move Up</button>
+<button class="move-btn" onclick="moveMainDestinationDown(this)">Move Down</button>
+
         </div>
       `;
       container.appendChild(div);
@@ -2624,6 +2626,9 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
           }
         });
       }
+
+      const recalculateMileageAndCosts = recalculateEditMileageAndCosts;
+
 
       function moveEditDestinationUp(button) {
   const destinationDiv = button.closest(".destination");
