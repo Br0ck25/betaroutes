@@ -1510,22 +1510,23 @@ function closeUniversalModal() {
   const token = localStorage.getItem("token");
 
   if (!token) {
-    console.error("❌ No token found. User must be signed in to save.");
-    alert("You must be signed in to save your route logs.");
-    showLogin();
-    return;
-  }
+  console.error("❌ No token found. User must be signed in to save.");
+  showAlertModal("❌ You must be signed in to save your route logs.", showLogin);
+  return;
+}
+
 
   console.log("⏳ Saving route...");
 
   // 🛜 Detect if offline
   if (!navigator.onLine) {
-    console.warn("🛜 Offline: Saving log locally.");
-    localStorage.setItem("pendingLogs", JSON.stringify(logEntries));
-    localStorage.setItem("cachedLogs", JSON.stringify(logEntries)); // ✅ Update visible logs too
-    alert("⚠️ Offline: Route saved locally. Will sync when back online.");
-    return;
-  }
+  console.warn("🛜 Offline: Saving log locally.");
+  localStorage.setItem("pendingLogs", JSON.stringify(logEntries));
+  localStorage.setItem("cachedLogs", JSON.stringify(logEntries));
+  showAlertModal("⚠️ Offline: Route saved locally. Will sync when back online.");
+  return;
+}
+
 
   try {
     const response = await fetch(
@@ -1551,7 +1552,7 @@ function closeUniversalModal() {
     console.error("❌ Save failed. Saving offline:", err);
     localStorage.setItem("pendingLogs", JSON.stringify(logEntries)); // ✅ Save pending
     localStorage.setItem("cachedLogs", JSON.stringify(logEntries)); // ✅ Update visible logs too
-    alert("⚠️ Offline mode: Your changes are saved locally. We'll sync them next time you're online.");
+    showAlertModal("⚠️ Offline mode: Your changes are saved locally. We'll sync them next time you're online.");
   }
 }
 
@@ -2155,7 +2156,7 @@ const selectedDate = logDateInput || new Date().toISOString().split("T")[0];
                 hoursWorked: hoursWorked,
               });
             } else {
-              alert("Directions request failed due to " + status);
+              showAlertModal("❌ Directions request failed due to: " + status);
               document.getElementById("map").classList.add("hidden");
               document.getElementById("results").classList.add("hidden");
               resolve(null);
@@ -2403,7 +2404,7 @@ async function optimizeRoute() {
     } else if (status === "OK") {
       directionsRenderer.setDirections(response); // fallback
     } else {
-      alert("Could not optimize route due to: " + status);
+      showAlertModal("❌ Could not optimize route due to: " + status);
     }
   });
 }
@@ -2646,7 +2647,7 @@ async function optimizeRoute() {
             .getElementById("log-container")
             .scrollIntoView({ behavior: "smooth" });
         } else {
-          alert("Invalid page number.");
+          showAlertModal("❌ Invalid page number.");
         }
       }
 
@@ -2758,7 +2759,7 @@ async function optimizeRoute() {
 
             updateEditFuelCost();
           } else if (status === "ZERO_RESULTS") {
-  alert("⚠️ No route could be found between the entered locations. Please double-check the addresses.");
+            showAlertModal("⚠️ No route could be found between the entered locations. Please double-check the addresses.");
 } else {
   console.error("Mileage error:", status);
 }
@@ -3225,10 +3226,10 @@ entry.hoursWorked = getNumberValue("edit-hours-worked");
         const token = localStorage.getItem("token");
 
         if (!token) {
-          alert("❌ You must be signed in to import a CSV file.");
-          showLogin(); // Optional: show login modal
-          return;
-        }
+  showAlertModal("❌ You must be signed in to import a CSV file.", showLogin);
+  return;
+}
+
 
         const fileInput = document.getElementById("import-file");
         const file = fileInput.files[0];
@@ -3319,7 +3320,8 @@ entry.hoursWorked = getNumberValue("edit-hours-worked");
             logEntries = [...logEntries, ...newLogEntries];
 await saveLog();        // ✅ Ensure logs are persisted
 filterLogs();           // ✅ Refresh the UI
-alert("Log imported successfully!");
+showAlertModal("✅ Log imported successfully!");
+
           };
           reader.readAsText(file); // trigger reading
 
@@ -3389,9 +3391,9 @@ alert("Log imported successfully!");
 
           // ✅ Show reset key if this was a signup
           if (isSignup && data.resetKey) {
-            alert(
-              `🔐 Your reset key is:\n\n${data.resetKey}\n\nSave this key somewhere safe. You'll need it to reset your password.`
-            );
+            showAlertModal(
+  `🔐 Your reset key is:<br><br><code style="font-size: 18px; user-select: all;">${data.resetKey}</code><br><br>Save this key somewhere safe.`
+);
           }
 
           // ✅ THEN reload the page after user has seen the key
@@ -3446,13 +3448,18 @@ alert("Log imported successfully!");
           .value.trim();
 
         if (!current || !next || !confirm)
-          return alert("Please fill out all fields.");
-        if (next !== confirm) return alert("New passwords do not match.");
+          return showAlertModal("⚠️ Please fill out all fields.");
+
+        if (next !== confirm) return showAlertModal("❌ New passwords do not match.");
 
         const token = localStorage.getItem("token");
         const username = localStorage.getItem("username");
 
-        if (!token || !username) return alert("You must be signed in.");
+        if (!token || !username) {
+  showAlertModal("❌ You must be signed in.");
+  return;
+}
+
 
         const res = await fetch(
           "https://logs.gorouteyourself.com/api/change-password",
@@ -3471,12 +3478,13 @@ alert("Log imported successfully!");
         );
 
         if (res.ok) {
-          alert("✅ Password changed successfully.");
-          closePasswordModal();
-        } else {
-          const msg = await res.text();
-          alert("❌ " + msg);
-        }
+  showAlertModal("✅ Password changed successfully.");
+  closePasswordModal();
+} else {
+  const msg = await res.text();
+  showAlertModal("❌ " + msg);
+}
+
       }
 
       function showResetModal() {
@@ -3495,7 +3503,7 @@ alert("Log imported successfully!");
           .value.trim();
 
         if (!username || !resetKey || !newPassword) {
-          alert("Please fill out all fields.");
+          showAlertModal("⚠️ Please fill out all fields.");
           return;
         }
 
@@ -3509,12 +3517,12 @@ alert("Log imported successfully!");
         );
 
         if (res.ok) {
-          alert("✅ Password reset successfully. You can now sign in.");
-          closeResetModal();
-        } else {
-          const msg = await res.text();
-          alert("❌ " + msg);
-        }
+  showAlertModal("✅ Password reset successfully. You can now sign in.");
+  closeResetModal();
+} else {
+  const msg = await res.text();
+  showAlertModal("❌ " + msg);
+}
       }
 
       function showDeleteModal() {
@@ -3533,7 +3541,7 @@ alert("Log imported successfully!");
         const token = localStorage.getItem("token");
 
         if (!username || !token || !password) {
-          alert("Missing credentials.");
+          showAlertModal("❌ Missing credentials.");
           return;
         }
 
@@ -3550,14 +3558,15 @@ alert("Log imported successfully!");
         );
 
         if (res.ok) {
-          alert("✅ Your account has been deleted.");
-          localStorage.removeItem("username");
-          localStorage.removeItem("token");
-          location.reload();
-        } else {
-          const msg = await res.text();
-          alert("❌ " + msg);
-        }
+  showAlertModal("✅ Your account has been deleted.");
+  localStorage.removeItem("username");
+  localStorage.removeItem("token");
+  location.reload();
+} else {
+  const msg = await res.text();
+  showAlertModal("❌ " + msg);
+}
+
       }
 
       window.toggleMenu = function () {
