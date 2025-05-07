@@ -1356,6 +1356,45 @@ function discardDraftTrip() {
   skipNextSync = true;
 }
 
+function showAlertModal(message, onClose) {
+  const modal = document.getElementById("universal-modal");
+  const msg = document.getElementById("universal-modal-message");
+  const buttons = document.getElementById("universal-modal-buttons");
+
+  msg.textContent = message;
+  buttons.innerHTML = `
+    <button onclick="closeUniversalModal(); ${onClose ? "window._universalCallback();" : ""}">OK</button>
+  `;
+
+  if (onClose) window._universalCallback = onClose;
+
+  modal.style.display = "flex";
+}
+
+function showConfirmModal(message, onConfirm, onCancel) {
+  const modal = document.getElementById("universal-modal");
+  const msg = document.getElementById("universal-modal-message");
+  const buttons = document.getElementById("universal-modal-buttons");
+
+  msg.textContent = message;
+  buttons.innerHTML = `
+    <button onclick="closeUniversalModal(); window._universalConfirmCallback()">Yes</button>
+    <button onclick="closeUniversalModal(); ${onCancel ? "window._universalCancelCallback();" : ""}">No</button>
+  `;
+
+  window._universalConfirmCallback = onConfirm;
+  if (onCancel) window._universalCancelCallback = onCancel;
+
+  modal.style.display = "flex";
+}
+
+function closeUniversalModal() {
+  const modal = document.getElementById("universal-modal");
+  modal.style.display = "none";
+  delete window._universalCallback;
+  delete window._universalConfirmCallback;
+  delete window._universalCancelCallback;
+}
 
 
 
@@ -1936,7 +1975,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const destinationInputs = document.querySelectorAll('input[id^="destination-"]');
   const filledDestinations = Array.from(destinationInputs).filter(input => input.value.trim() !== "");
   if (filledDestinations.length === 0) {
-    alert("🚧 Please enter at least one destination before calculating your route.");
+    showAlertModal("🚧 Please enter at least one destination before calculating your route.");
     return;
   }
 
@@ -2228,7 +2267,7 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
       async function logResults() {
   const token = localStorage.getItem("token");
   if (!token) {
-    alert("❌ You must sign in to log your route.");
+    showAlertModal("❌ You must sign in to log your route.", showLogin);
     showLogin();
     return;
   }
@@ -2237,7 +2276,7 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
   const destinationInputs = document.querySelectorAll('input[id^="destination-"]');
   const filledDestinations = Array.from(destinationInputs).filter(input => input.value.trim() !== "");
   if (filledDestinations.length === 0) {
-    alert("🚧 Please enter at least one destination before logging your route.");
+    showAlertModal("🚧 Please enter at least one destination before logging your route.");
     return;
   }
 
@@ -2263,7 +2302,7 @@ async function optimizeRoute() {
     .filter(value => value !== "");
 
   if (currentDestinations.length < 2) {
-    alert("🚧 Please add at least two destinations to optimize the route.");
+    showAlertModal("🚧 Please add at least two destinations to optimize the route.");
     return;
   }
 
@@ -2612,11 +2651,12 @@ async function optimizeRoute() {
       }
 
       function deleteLogEntry(index) {
-        if (confirm("Are you sure you want to delete this log entry?")) {
-          logEntries.splice(index, 1);
-          saveLog();
-          filterLogs();
-        }
+        showConfirmModal("Are you sure you want to delete this log entry?", () => {
+  logEntries.splice(index, 1);
+  saveLog();
+  filterLogs();
+});
+
       }
 
       function organizeLogByDay() {
@@ -3284,12 +3324,12 @@ alert("Log imported successfully!");
           reader.readAsText(file); // trigger reading
 
           reader.onerror = function () {
-            alert("Error reading the file.");
+            showAlertModal("Error reading the file.");
           };
 
           reader.readAsText(file);
         } else {
-          alert("Please select a CSV file to import.");
+          showAlertModal("Please select a CSV file to import.");
         }
       }
 
@@ -3323,7 +3363,7 @@ alert("Log imported successfully!");
         const password = document.getElementById("auth-password").value.trim();
 
         if (!username || !password) {
-          alert("Username and password required.");
+          showAlertModal("Username and password required.");
           return;
         }
 
@@ -3359,7 +3399,7 @@ alert("Log imported successfully!");
 
           loadLog();
         } else {
-          alert("❌ " + (await res.text()));
+          showAlertModal("❌ " + (await res.text()));
         }
       }
 
@@ -4235,5 +4275,31 @@ window.addEventListener('scroll', () => {
 });
 
     </script>
+
+<div id="universal-modal" style="
+display: none;
+position: fixed;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+background: rgba(0, 0, 0, 0.6);
+z-index: 3000;
+justify-content: center;
+align-items: center;
+">
+<div class="modal-box" style="
+  background: white;
+  padding: 30px;
+  border-radius: 10px;
+  width: 90%;
+  max-width: 400px;
+  text-align: center;
+">
+  <h3 id="universal-modal-message"></h3>
+  <div id="universal-modal-buttons" style="margin-top: 20px;"></div>
+</div>
+</div>
+
   </body>
 </html>
