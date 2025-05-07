@@ -1095,6 +1095,34 @@ img {
 
     <div id="overlay" class="hidden"></div>
 
+    <div id="resume-modal" style="
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 3000;
+  justify-content: center;
+  align-items: center;
+">
+  <div class="modal-box" style="
+    background: white;
+    padding: 30px;
+    border-radius: 10px;
+    width: 90%;
+    max-width: 400px;
+    text-align: center;
+  ">
+    <h3>📝 Resume your last unsaved trip?</h3>
+    <p style="margin-bottom: 20px;">We found a previous trip that wasn't saved. Would you like to continue editing it?</p>
+    <button onclick="resumeDraftTrip()">Resume</button>
+    <button onclick="discardDraftTrip()" style="margin-top: 10px; background-color: #ccc; color: black;">Discard</button>
+  </div>
+</div>
+
+
     <script>
 
 function clearTripForm() {
@@ -1266,6 +1294,67 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 });
+
+function resumeDraftTrip() {
+  document.getElementById("resume-modal").style.display = "none";
+
+  const data = window.__pendingDraftTrip;
+  if (!data) return;
+
+  // Restore data (same logic already in your script)
+  document.getElementById("log-date").value = data.date || "";
+  document.getElementById("start-address").value = data.start || "";
+  document.getElementById("end-address").value = data.end || "";
+  document.getElementById("mpg").value = data.mpg || "";
+  document.getElementById("gas-price").value = data.gas || "";
+  document.getElementById("start-time").value = data.startTime || "";
+  document.getElementById("end-time").value = data.endTime || "";
+  document.getElementById("hours-worked").value = data.hoursWorked || "";
+  document.getElementById("maintenance-cost").value = data.maintenance || "";
+  document.getElementById("supplies-cost").value = data.supplies || "";
+
+  const container = document.getElementById("destinations-container");
+  container.innerHTML = "";
+
+  data.destinations.forEach((d, i) => {
+    const div = document.createElement("div");
+    div.classList.add("destination");
+    div.innerHTML = `
+      <label for="destination-${i + 1}">Destination ${i + 1}</label>
+      <input type="text" id="destination-${i + 1}" list="recent-destinations" value="${d.address || ""}">
+      <label for="earnings-${i + 1}">Earnings for Destination ${i + 1}</label>
+      <input type="number" id="earnings-${i + 1}" value="${d.earnings || ""}">
+      <div class="destination-actions">
+        <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
+        <button class="move-btn" onclick="moveDestinationUp(this)">Move Up</button>
+        <button class="move-btn" onclick="moveDestinationDown(this)">Move Down</button>
+      </div>
+    `;
+    container.appendChild(div);
+    initAutocompleteDestination(div.querySelector('input[type="text"]'));
+  });
+}
+
+function discardDraftTrip() {
+  document.getElementById("resume-modal").style.display = "none";
+  localStorage.removeItem("draftTrip");
+
+  const today = new Date().toLocaleDateString("en-CA");
+  const dateInput = document.getElementById("log-date");
+  if (dateInput) dateInput.value = today;
+
+  const cached = localStorage.getItem("cachedLogs");
+  if (cached) {
+    try {
+      logEntries = JSON.parse(cached);
+      displayLog();
+    } catch (e) {
+      console.error("❌ Failed to parse cachedLogs:", e);
+    }
+  }
+
+  skipNextSync = true;
+}
 
 
 
@@ -1620,27 +1709,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         return;
       }
 
-      const proceed = confirm("📝 Resume your last unsaved trip?");
-if (!proceed) {
-  localStorage.removeItem("draftTrip");
+// Show custom modal instead of confirm()
+window.__pendingDraftTrip = data;
+document.getElementById("resume-modal").style.display = "flex";
+return;
 
-  const today = new Date().toLocaleDateString("en-CA");
-  const dateInput = document.getElementById("log-date");
-  if (dateInput) dateInput.value = today;
-
-  const cached = localStorage.getItem("cachedLogs");
-  if (cached) {
-    try {
-      logEntries = JSON.parse(cached);
-      displayLog();
-    } catch (e) {
-      console.error("❌ Failed to parse cachedLogs:", e);
-    }
-  }
-
-  skipNextSync = true; // ✅ prevent immediate server sync
-  return;
-}
 
 
       // ✅ Restore draft data
@@ -4052,57 +4125,6 @@ function renumberMainDestinations() {
 
     <script>
 
-async function handleResumePrompt() {
-  const draft = localStorage.getItem("draftTrip");
-  if (!draft) return false;
-
-  try {
-    const data = JSON.parse(draft);
-    const destinations = Array.isArray(data.destinations)
-      ? data.destinations.filter(d => d.address || d.earnings)
-      : [];
-
-    const hasMeaningfulData = destinations.length > 0 || 
-      (data.startTime && data.startTime.trim()) || 
-      (data.endTime && data.endTime.trim()) || 
-      (data.hoursWorked && parseFloat(data.hoursWorked) > 0) || 
-      (data.maintenance && parseFloat(data.maintenance) > 0) || 
-      (data.supplies && parseFloat(data.supplies) > 0);
-
-    if (!hasMeaningfulData) {
-      localStorage.removeItem("draftTrip");
-      return false;
-    }
-
-    const proceed = confirm("📝 Resume your last unsaved trip?");
-    if (!proceed) {
-      localStorage.removeItem("draftTrip");
-
-      const today = new Date().toLocaleDateString("en-CA");
-      const dateInput = document.getElementById("log-date");
-      if (dateInput) dateInput.value = today;
-
-      const cached = localStorage.getItem("cachedLogs");
-      if (cached) {
-        try {
-          logEntries = JSON.parse(cached);
-          displayLog();
-        } catch (e) {
-          console.error("❌ Failed to parse cachedLogs:", e);
-        }
-      }
-
-      skipNextSync = true;
-      return false;
-    }
-
-    return data;
-  } catch (e) {
-    console.error("❌ Failed to parse draftTrip:", e);
-    localStorage.removeItem("draftTrip");
-    return false;
-  }
-}
 
 
 // 🧮 Time Helpers
