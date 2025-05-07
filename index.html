@@ -2683,28 +2683,36 @@ function reinitializeEditDestination(destinationDiv) {
   const addressInput = destinationDiv.querySelector('input[type="text"]');
   if (!addressInput) return;
 
-  // Avoid stacking duplicate listeners
-  addressInput.removeEventListener("blur", recalculateEditMileageAndCosts);
-  addressInput.addEventListener("blur", recalculateEditMileageAndCosts); // ✅
-
+  // ✅ Recreate autocomplete
   const autocomplete = new google.maps.places.Autocomplete(addressInput, {
     types: ["geocode"],
   });
-  autocomplete.addListener("place_changed", recalculateEditMileageAndCosts); // ✅ also update on autocomplete selection
 
-  // 👇 Add Enter key listener
+  // ✅ Trigger on selection from dropdown
+  autocomplete.addListener("place_changed", recalculateEditMileageAndCosts);
+
+  // ✅ Trigger when user leaves input field
+  addressInput.addEventListener("blur", () => {
+    // Slight delay to allow autocomplete to trigger first (if applicable)
+    setTimeout(recalculateEditMileageAndCosts, 100);
+  });
+
+  // ✅ Trigger when Enter is pressed
   addressInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
+      e.preventDefault(); // prevent form submission
+      recalculateEditMileageAndCosts();
+
       const allDestInputs = document.querySelectorAll(
         '#edit-destinations-container input[type="text"]'
       );
       if (addressInput === allDestInputs[allDestInputs.length - 1]) {
-        e.preventDefault(); // prevent form submit
-        addEditDestination(); // add a new destination
+        addEditDestination(); // add another one if last
       }
     }
   });
 }
+
 
 
 
