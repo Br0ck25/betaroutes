@@ -1862,12 +1862,21 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       async function calculateRoute() {
-        const calculationResult = await calculateRouteData(); // Call the data calculation function
-        if (calculationResult) {
-          updateUI(calculationResult);
-          showConfirmationMessage("✅ Route calculated successfully!");
-        }
-      }
+  // 🚨 Check for at least one destination
+  const destinationInputs = document.querySelectorAll('input[id^="destination-"]');
+  const filledDestinations = Array.from(destinationInputs).filter(input => input.value.trim() !== "");
+  if (filledDestinations.length === 0) {
+    alert("🚧 Please enter at least one destination before calculating your route.");
+    return;
+  }
+
+  const calculationResult = await calculateRouteData();
+  if (calculationResult) {
+    updateUI(calculationResult);
+    showConfirmationMessage("✅ Route calculated successfully!");
+  }
+}
+
 
       async function calculateRouteData() {
         const startAddress = document.getElementById("start-address").value;
@@ -2190,10 +2199,11 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
           (input) => input.value
         );
 
-        if (currentDestinations.length < 2) {
-          alert("Please add at least two destinations to optimize the route.");
-          return;
-        }
+        if (currentDestinations.filter(dest => dest.trim() !== "").length < 2) {
+  alert("🚧 Please add at least two destinations to optimize the route.");
+  return;
+}
+
 
         const waypoints = currentDestinations.map((location) => ({
           location: location,
