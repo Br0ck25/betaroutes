@@ -1306,7 +1306,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <input type="number" id="edit-mpg" placeholder="Enter MPG" />
 
       <label for="edit-gas-price">Fuel Price Per Gallon</label>
-      <input type="number" id="edit-gas-price" placeholder="Enter Gas Price" />
+      <input type="number" id="edit-gas-price" placeholder="Enter Gas Price" oninput="updateEditFuelCost()" />
 
       <label for="edit-total-earnings">Total Earnings</label>
       <input type="number" id="edit-total-earnings" />
@@ -1321,7 +1321,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <input type="number" id="edit-supplies-cost" />
 
       <label for="edit-total-mileage">Mileage</label>
-      <input type="number" id="edit-total-mileage" />
+      <input type="number" id="edit-total-mileage" oninput="updateEditFuelCost()" />
 
       <label for="edit-total-time">Drive Time</label>
       <input
