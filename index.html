@@ -2656,8 +2656,10 @@ async function optimizeRoute() {
     resetOriginalMileageDisplay();
     reinitializeEditDestination(destinationDiv);
     renumberEditDestinations();
+    recalculateEditMileageAndCosts(); // ✅ added
   }
 }
+
 
 
 
@@ -2669,8 +2671,10 @@ function moveEditDestinationDown(button) {
     resetOriginalMileageDisplay();
     reinitializeEditDestination(destinationDiv);
     renumberEditDestinations();
+    recalculateEditMileageAndCosts(); // ✅ added
   }
 }
+
 
 function reinitializeEditDestination(destinationDiv) {
   const addressInput = destinationDiv.querySelector('input[type="text"]');
@@ -2738,11 +2742,11 @@ function addEditDestination() {
   destDiv.classList.add("destination");
 
   destDiv.innerHTML = `
-    <label for="">Destination</label>
-    <input type="text" list="recent-destinations" placeholder="Enter destination address">
+    <label for="edit-destination-temp">Destination</label>
+    <input type="text" id="edit-destination-temp" list="recent-destinations" placeholder="Enter destination address">
 
-    <label for="">Earnings</label>
-    <input type="number" placeholder="Enter earnings">
+    <label for="edit-earnings-temp">Earnings</label>
+    <input type="number" id="edit-earnings-temp" placeholder="Enter earnings">
 
     <div class="destination-actions">
       <button type="button" class="delete-btn" onclick="deleteEditDestination(this)">Delete</button>
@@ -2753,12 +2757,13 @@ function addEditDestination() {
 
   container.appendChild(destDiv);
 
-  // Apply correct numbering and IDs
+  // ✅ Fix labels/IDs to match numbering
   renumberEditDestinations();
 
-  // Reinitialize events and autocomplete on the new address input
+  // ✅ Setup autocomplete + blur/enter events
   reinitializeEditDestination(destDiv);
 }
+
 
 
       function deleteEditDestination(button) {
