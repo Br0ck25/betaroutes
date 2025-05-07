@@ -2607,10 +2607,11 @@ async function optimizeRoute() {
             stopover: true,
           }));
 
-        if (!start || !end || destinations.length !== destInputs.length) {
-          console.warn("Missing start/end or destination, skipping route calc");
-          return;
-        }
+          if (!start || !end || destinations.length !== destInputs.length || destinations.some(d => !d.location)) {
+  console.warn("❌ Missing or invalid start, end, or destination address — skipping route calculation.");
+  return;
+}
+
 
         const request = {
           origin: start,
@@ -2642,9 +2643,11 @@ async function optimizeRoute() {
             if (timeInput) timeInput.value = formatDuration(totalDuration);
 
             updateEditFuelCost();
-          } else {
-            console.error("Mileage error:", status);
-          }
+          } else if (status === "ZERO_RESULTS") {
+  alert("⚠️ No route could be found between the entered locations. Please double-check the addresses.");
+} else {
+  console.error("Mileage error:", status);
+}
         });
       }
 
