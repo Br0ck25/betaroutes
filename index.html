@@ -2685,12 +2685,12 @@ function reinitializeEditDestination(destinationDiv) {
 
   // Avoid stacking duplicate listeners
   addressInput.removeEventListener("blur", recalculateEditMileageAndCosts);
-  addressInput.addEventListener("blur", recalculateEditMileageAndCosts);
+  addressInput.addEventListener("blur", recalculateEditMileageAndCosts); // ✅
 
   const autocomplete = new google.maps.places.Autocomplete(addressInput, {
     types: ["geocode"],
   });
-  autocomplete.addListener("place_changed", recalculateEditMileageAndCosts);
+  autocomplete.addListener("place_changed", recalculateEditMileageAndCosts); // ✅ also update on autocomplete selection
 
   // 👇 Add Enter key listener
   addressInput.addEventListener("keydown", (e) => {
@@ -2705,6 +2705,7 @@ function reinitializeEditDestination(destinationDiv) {
     }
   });
 }
+
 
 
 function renumberEditDestinations() {
