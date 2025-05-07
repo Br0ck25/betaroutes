@@ -1596,124 +1596,70 @@ function saveDraftTrip() {
 setInterval(saveDraftTrip, 5000); // Auto-save every 5 seconds
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const draft = localStorage.getItem("draftTrip");
-  updateAuthUI();
+  setInterval(saveDraftTrip, 5000); // Auto-save every 5 seconds
 
-  if (draft) {
-    try {
-      const data = JSON.parse(draft);
+  const data = await handleResumePrompt();
+  if (!data) return;
 
-      const destinations = Array.isArray(data.destinations)
-        ? data.destinations.filter(d => d.address || d.earnings)
-        : [];
+  // ✅ Restore draft data
+  document.getElementById("log-date").value = data.date || "";
+  document.getElementById("start-address").value = data.start || "";
+  document.getElementById("end-address").value = data.end || "";
+  document.getElementById("mpg").value = data.mpg || "";
+  document.getElementById("gas-price").value = data.gas || "";
+  document.getElementById("start-time").value = data.startTime || "";
+  document.getElementById("end-time").value = data.endTime || "";
+  document.getElementById("hours-worked").value = data.hoursWorked || "";
+  document.getElementById("maintenance-cost").value = data.maintenance || "";
+  document.getElementById("supplies-cost").value = data.supplies || "";
 
-      const hasMeaningfulData =
-        destinations.length > 0 ||
-        (data.startTime && data.startTime.trim()) ||
-        (data.endTime && data.endTime.trim()) ||
-        (data.hoursWorked && parseFloat(data.hoursWorked) > 0) ||
-        (data.maintenance && parseFloat(data.maintenance) > 0) ||
-        (data.supplies && parseFloat(data.supplies) > 0);
+  const container = document.getElementById("destinations-container");
+  container.innerHTML = "";
 
-      if (!hasMeaningfulData) {
-        localStorage.removeItem("draftTrip");
-        return;
-      }
+  data.destinations.forEach((d, i) => {
+    const div = document.createElement("div");
+    div.classList.add("destination");
+    div.innerHTML = `
+      <label for="destination-${i + 1}">Destination ${i + 1}</label>
+      <input type="text" id="destination-${i + 1}" list="recent-destinations" value="${d.address || ""}">
+      <label for="earnings-${i + 1}">Earnings for Destination ${i + 1}</label>
+      <input type="number" id="earnings-${i + 1}" value="${d.earnings || ""}">
+      <div class="destination-actions">
+        <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
+        <button class="move-btn" onclick="moveDestinationUp(this)">Move Up</button>
+        <button class="move-btn" onclick="moveDestinationDown(this)">Move Down</button>
+      </div>
+    `;
+    container.appendChild(div);
+    initAutocompleteDestination(div.querySelector('input[type="text"]'));
+  });
 
-      const proceed = confirm("📝 Resume your last unsaved trip?");
-if (!proceed) {
-  localStorage.removeItem("draftTrip");
-
-  const today = new Date().toLocaleDateString("en-CA");
   const dateInput = document.getElementById("log-date");
-  if (dateInput) dateInput.value = today;
-
-  const cached = localStorage.getItem("cachedLogs");
-  if (cached) {
-    try {
-      logEntries = JSON.parse(cached);
-      displayLog();
-    } catch (e) {
-      console.error("❌ Failed to parse cachedLogs:", e);
-    }
+  if (dateInput) {
+    const today = new Date().toLocaleDateString("en-CA");
+    dateInput.value = today;
   }
-
-  skipNextSync = true; // ✅ prevent immediate server sync
-  return;
-}
-
-
-      // ✅ Restore draft data
-      document.getElementById("log-date").value = data.date || "";
-      document.getElementById("start-address").value = data.start || "";
-      document.getElementById("end-address").value = data.end || "";
-      document.getElementById("mpg").value = data.mpg || "";
-      document.getElementById("gas-price").value = data.gas || "";
-      document.getElementById("start-time").value = data.startTime || "";
-      document.getElementById("end-time").value = data.endTime || "";
-      document.getElementById("hours-worked").value = data.hoursWorked || "";
-      document.getElementById("maintenance-cost").value = data.maintenance || "";
-      document.getElementById("supplies-cost").value = data.supplies || "";
-
-      const container = document.getElementById("destinations-container");
-      container.innerHTML = "";
-
-      destinations.forEach((d, i) => {
-        const div = document.createElement("div");
-        div.classList.add("destination");
-        div.innerHTML = `
-          <label for="destination-${i + 1}">Destination ${i + 1}</label>
-          <input type="text" id="destination-${i + 1}" list="recent-destinations" value="${d.address || ""}">
-          <label for="earnings-${i + 1}">Earnings for Destination ${i + 1}</label>
-          <input type="number" id="earnings-${i + 1}" value="${d.earnings || ""}">
-          <div class="destination-actions">
-            <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
-            <button class="move-btn" onclick="moveDestinationUp(this)">Move Up</button>
-            <button class="move-btn" onclick="moveDestinationDown(this)">Move Down</button>
-          </div>
-        `;
-        container.appendChild(div);
-        initAutocompleteDestination(div.querySelector('input[type="text"]'));
-      });
-    } catch (err) {
-      console.error("❌ Failed to parse draftTrip:", err);
-      localStorage.removeItem("draftTrip");
-    }
-  }
-
-  // Set today's date
-  const dateInput = document.getElementById("log-date");
-if (dateInput) {
-  const today = new Date().toLocaleDateString("en-CA"); // format: yyyy-mm-dd
-  dateInput.value = today; // ✅ set only the date
-}
-
 
   await syncPendingLogs();
-
   updateAuthUI();
-
   logEntries = await loadLog();
   displayLog();
   initOfflineListeners();
 
-
   document.getElementById("hours-worked").addEventListener("input", () => {
-  const hoursWorked = parseFloat(document.getElementById("hours-worked").value) || 0;
-  const driveTimeInHours = convertTimeToHours(document.getElementById("total-time").textContent);
-  const totalHours = (hoursWorked + driveTimeInHours).toFixed(2);
-  document.getElementById("total-hours").textContent = totalHours;
-});
+    const hoursWorked = parseFloat(document.getElementById("hours-worked").value) || 0;
+    const driveTimeInHours = convertTimeToHours(document.getElementById("total-time").textContent);
+    const totalHours = (hoursWorked + driveTimeInHours).toFixed(2);
+    document.getElementById("total-hours").textContent = totalHours;
+  });
 
-  // 🆕 After selecting start time, auto-focus end time after slight delay
   document.getElementById("start-time").addEventListener("change", () => {
     setTimeout(() => document.getElementById("end-time")?.focus(), 200);
   });
 
   updateDatalistSuggestions();
-
-
 });
+
 
   // 🆕 After selecting start time, auto-focus end time after slight delay
   document.getElementById("start-time").addEventListener("change", () => {
@@ -2340,11 +2286,13 @@ async function optimizeRoute() {
           newDestinationDiv.querySelector('input[type="text"]')
         );
         resetOriginalMileageDisplay();
+        renumberMainDestinations();
       }
 
       function deleteDestination(button) {
         button.closest(".destination").remove();
-        resetOriginalMileageDisplay(); // <- Add this line
+        resetOriginalMileageDisplay();
+        renumberMainDestinations();
       }
 
       function moveDestinationUp(button) {
@@ -2353,6 +2301,7 @@ async function optimizeRoute() {
         if (prevDiv) {
           destinationDiv.parentNode.insertBefore(destinationDiv, prevDiv);
           resetOriginalMileageDisplay();
+          renumberMainDestinations();
         }
       }
 
@@ -2362,6 +2311,7 @@ async function optimizeRoute() {
         if (nextDiv) {
           destinationDiv.parentNode.insertBefore(nextDiv, destinationDiv);
           resetOriginalMileageDisplay();
+          renumberMainDestinations();
         }
       }
 
@@ -3773,6 +3723,36 @@ function initOfflineListeners() {
   window.addEventListener("offline", updateOfflineBanner);
 }
 
+function renumberMainDestinations() {
+  const destinationDivs = document.querySelectorAll("#destinations-container .destination");
+
+  destinationDivs.forEach((div, index) => {
+    const destNum = index + 1;
+    const label = div.querySelector('label[for^="destination-"]');
+    const earningsLabel = div.querySelector('label[for^="earnings-"]');
+    const addressInput = div.querySelector('input[type="text"]');
+    const earningsInput = div.querySelector('input[type="number"]');
+
+    if (label) {
+      label.textContent = `Destination ${destNum}`;
+      label.setAttribute("for", `destination-${destNum}`);
+    }
+
+    if (earningsLabel) {
+      earningsLabel.textContent = `Earnings for Destination ${destNum}`;
+      earningsLabel.setAttribute("for", `earnings-${destNum}`);
+    }
+
+    if (addressInput) {
+      addressInput.id = `destination-${destNum}`;
+    }
+
+    if (earningsInput) {
+      earningsInput.id = `earnings-${destNum}`;
+    }
+  });
+}
+
 
 
     </script>
@@ -4017,6 +3997,59 @@ function initOfflineListeners() {
     </div>
 
     <script>
+
+async function handleResumePrompt() {
+  const draft = localStorage.getItem("draftTrip");
+  if (!draft) return false;
+
+  try {
+    const data = JSON.parse(draft);
+    const destinations = Array.isArray(data.destinations)
+      ? data.destinations.filter(d => d.address || d.earnings)
+      : [];
+
+    const hasMeaningfulData = destinations.length > 0 || 
+      (data.startTime && data.startTime.trim()) || 
+      (data.endTime && data.endTime.trim()) || 
+      (data.hoursWorked && parseFloat(data.hoursWorked) > 0) || 
+      (data.maintenance && parseFloat(data.maintenance) > 0) || 
+      (data.supplies && parseFloat(data.supplies) > 0);
+
+    if (!hasMeaningfulData) {
+      localStorage.removeItem("draftTrip");
+      return false;
+    }
+
+    const proceed = confirm("📝 Resume your last unsaved trip?");
+    if (!proceed) {
+      localStorage.removeItem("draftTrip");
+
+      const today = new Date().toLocaleDateString("en-CA");
+      const dateInput = document.getElementById("log-date");
+      if (dateInput) dateInput.value = today;
+
+      const cached = localStorage.getItem("cachedLogs");
+      if (cached) {
+        try {
+          logEntries = JSON.parse(cached);
+          displayLog();
+        } catch (e) {
+          console.error("❌ Failed to parse cachedLogs:", e);
+        }
+      }
+
+      skipNextSync = true;
+      return false;
+    }
+
+    return data;
+  } catch (e) {
+    console.error("❌ Failed to parse draftTrip:", e);
+    localStorage.removeItem("draftTrip");
+    return false;
+  }
+}
+
 
 // 🧮 Time Helpers
 function convertTimeToHours(durationStr = '') {
