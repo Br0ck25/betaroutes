@@ -2186,160 +2186,119 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
 
 
 
-        async function optimizeRoute() {
-        const destinationInputs = document.querySelectorAll('input[id^="destination-"]');
-const filledDestinations = Array.from(destinationInputs).filter(input => input.value.trim() !== "");
+async function optimizeRoute() {
+  const destInputs = document.querySelectorAll('#destinations-container .destination input[type="text"]');
+  const currentDestinations = Array.from(destInputs)
+    .map(input => input.value.trim())
+    .filter(value => value !== "");
 
-if (filledDestinations.length < 2) {
-  alert("🚧 Please add at least two destinations to optimize the route.");
-  return;
+  if (currentDestinations.length < 2) {
+    alert("🚧 Please add at least two destinations to optimize the route.");
+    return;
+  }
+
+  if (originalMileage === null) {
+    await calculateRouteData(); // no alert or UI update
+  }
+
+  const startAddress = document.getElementById("start-address").value;
+  const endAddress = document.getElementById("end-address").value;
+
+  const waypoints = currentDestinations.map((location) => ({
+    location: location,
+    stopover: true,
+  }));
+
+  const request = {
+    origin: startAddress,
+    destination: endAddress,
+    waypoints: waypoints,
+    travelMode: "DRIVING",
+    optimizeWaypoints: true,
+  };
+
+  directionsService.route(request, (response, status) => {
+    if (status === "OK" && response.routes[0].waypoint_order) {
+      const optimizedOrder = response.routes[0].waypoint_order;
+      const newDestinationsContainer = document.createElement("div");
+      newDestinationsContainer.id = "destinations-container";
+
+      optimizedOrder.forEach((index, i) => {
+        const originalDestinationDiv = destInputs[index].closest(".destination");
+        const clonedDestinationDiv = originalDestinationDiv.cloneNode(true);
+
+        const destLabel = clonedDestinationDiv.querySelector('label[for^="destination-"]');
+        const destInput = clonedDestinationDiv.querySelector('input[id^="destination-"]');
+        const earningsLabel = clonedDestinationDiv.querySelector('label[for^="earnings-"]');
+        const earningsInput = clonedDestinationDiv.querySelector('input[id^="earnings-"]');
+        const newIndex = i + 1;
+
+        if (destLabel) destLabel.setAttribute("for", `destination-${newIndex}`);
+        if (destInput) destInput.id = `destination-${newIndex}`;
+        if (earningsLabel) earningsLabel.setAttribute("for", `earnings-${newIndex}`);
+        if (earningsInput) earningsInput.id = `earnings-${newIndex}`;
+
+        newDestinationsContainer.appendChild(clonedDestinationDiv);
+      });
+
+      const oldDestinationsContainer = document.getElementById("destinations-container");
+      oldDestinationsContainer.parentNode.replaceChild(newDestinationsContainer, oldDestinationsContainer);
+
+      document.querySelectorAll('#destinations-container .destination input[type="text"]').forEach(initAutocompleteDestination);
+
+      // ✅ Update map and show optimized results
+      directionsRenderer.setDirections(response);
+
+      let optimizedMileage = 0;
+      let totalDuration = 0;
+      response.routes[0].legs.forEach((leg) => {
+        optimizedMileage += leg.distance.value / 1609.34;
+        totalDuration += leg.duration.value;
+      });
+
+      document.getElementById("optimized-mileage-display").textContent = "Optimized Route: " + optimizedMileage.toFixed(2) + " miles";
+      document.getElementById("total-time").textContent = formatDuration(totalDuration);
+
+      // 🧠 Build optimizedData like your existing code does
+      const optimizedData = {
+        date: document.getElementById("log-date").value || new Date().toLocaleDateString(),
+        startTime: startAddress,
+        endTime: endAddress,
+        destinations: Array.from(document.querySelectorAll('input[id^="destination-"]')).map(input => input.value),
+        earnings: Array.from(document.querySelectorAll('input[id^="earnings-"]')).map(input => parseFloat(input.value) || 0),
+        totalMileage: optimizedMileage.toFixed(2),
+        totalTime: formatDuration(totalDuration),
+        totalEarnings: Array.from(document.querySelectorAll('input[id^="earnings-"]')).reduce((sum, i) => sum + (parseFloat(i.value) || 0), 0).toFixed(2),
+        fuelCost: (
+          (optimizedMileage / parseFloat(document.getElementById("mpg").value || 1)) *
+          parseFloat(document.getElementById("gas-price").value || 0)
+        ).toFixed(2),
+        maintenanceCost: parseFloat(document.getElementById("maintenance-cost").value || 0).toFixed(2),
+        suppliesCost: parseFloat(document.getElementById("supplies-cost").value || 0).toFixed(2),
+        hoursWorked: parseFloat(document.getElementById("hours-worked").value || 0),
+        netProfit: "0", // calculated below
+        profitPerHour: "0.00",
+      };
+
+      const netProfitBeforeOptional = optimizedData.totalEarnings - optimizedData.fuelCost;
+      optimizedData.netProfit = (
+        netProfitBeforeOptional - optimizedData.maintenanceCost - optimizedData.suppliesCost
+      ).toFixed(2);
+
+      const totalHoursSpent = optimizedData.hoursWorked + totalDuration / 3600;
+      optimizedData.profitPerHour =
+        totalHoursSpent > 0 ? (optimizedData.netProfit / totalHoursSpent).toFixed(2) : "0.00";
+
+      updateUI(optimizedData);
+      showConfirmationMessage("✅ Route optimized successfully!");
+    } else if (status === "OK") {
+      directionsRenderer.setDirections(response); // fallback
+    } else {
+      alert("Could not optimize route due to: " + status);
+    }
+  });
 }
 
-if (originalMileage === null) {
-  await calculateRouteData(); // call just the data function (no alert inside)
-}
-
-
-        const waypoints = currentDestinations.map((location) => ({
-          location: location,
-          stopover: true,
-        }));
-        const request = {
-          origin: startAddress,
-          destination: endAddress,
-          waypoints: waypoints,
-          travelMode: "DRIVING",
-          optimizeWaypoints: true,
-        };
-
-        directionsService.route(request, (response, status) => {
-          if (status === "OK" && response.routes[0].waypoint_order) {
-            const optimizedOrder = response.routes[0].waypoint_order;
-            const newDestinationsContainer = document.createElement("div");
-            newDestinationsContainer.id = "destinations-container";
-
-            optimizedOrder.forEach((index, i) => {
-              const originalDestinationDiv =
-                destInputs[index].closest(".destination");
-              const clonedDestinationDiv =
-                originalDestinationDiv.cloneNode(true);
-
-              const destLabel = clonedDestinationDiv.querySelector(
-                'label[for^="destination-"]'
-              );
-              const destInput = clonedDestinationDiv.querySelector(
-                'input[id^="destination-"]'
-              );
-              const earningsLabel = clonedDestinationDiv.querySelector(
-                'label[for^="earnings-"]'
-              );
-              const earningsInput = clonedDestinationDiv.querySelector(
-                'input[id^="earnings-"]'
-              );
-              const newIndex = i + 1;
-
-              if (destLabel)
-                destLabel.setAttribute("for", `destination-${newIndex}`);
-              if (destInput) destInput.id = `destination-${newIndex}`;
-              if (earningsLabel)
-                earningsLabel.setAttribute("for", `earnings-${newIndex}`);
-              if (earningsInput) earningsInput.id = `earnings-${newIndex}`;
-
-              newDestinationsContainer.appendChild(clonedDestinationDiv);
-            });
-
-            const oldDestinationsContainer = document.getElementById(
-              "destinations-container"
-            );
-            oldDestinationsContainer.parentNode.replaceChild(
-              newDestinationsContainer,
-              oldDestinationsContainer
-            );
-
-            document
-              .querySelectorAll(
-                '#destinations-container .destination input[type="text"]'
-              )
-              .forEach(initAutocompleteDestination);
-
-            // ✅ Update map and show optimized results (WITHOUT overwriting original)
-            directionsRenderer.setDirections(response);
-
-            let optimizedMileage = 0;
-            let totalDuration = 0;
-            response.routes[0].legs.forEach((leg) => {
-              optimizedMileage += leg.distance.value / 1609.34;
-              totalDuration += leg.duration.value;
-            });
-
-            document.getElementById("optimized-mileage-display").textContent =
-              "Optimized Route: " + optimizedMileage.toFixed(2) + " miles";
-            document.getElementById("total-time").textContent =
-              formatDuration(totalDuration);
-
-            const optimizedData = {
-              date:
-                document.getElementById("log-date").value ||
-                new Date().toLocaleDateString(),
-              startTime: startAddress,
-              endTime: endAddress,
-              destinations: Array.from(
-                document.querySelectorAll('input[id^="destination-"]')
-              ).map((input) => input.value),
-              earnings: Array.from(
-                document.querySelectorAll('input[id^="earnings-"]')
-              ).map((input) => parseFloat(input.value) || 0),
-              totalMileage: optimizedMileage.toFixed(2),
-              totalTime: formatDuration(totalDuration),
-              totalEarnings: Array.from(
-                document.querySelectorAll('input[id^="earnings-"]')
-              )
-                .reduce((sum, i) => sum + (parseFloat(i.value) || 0), 0)
-                .toFixed(2),
-              fuelCost: (
-                (optimizedMileage /
-                  parseFloat(document.getElementById("mpg").value || 1)) *
-                parseFloat(document.getElementById("gas-price").value || 0)
-              ).toFixed(2),
-              maintenanceCost: parseFloat(
-                document.getElementById("maintenance-cost").value || 0
-              ).toFixed(2),
-              suppliesCost: parseFloat(
-                document.getElementById("supplies-cost").value || 0
-              ).toFixed(2),
-              hoursWorked: parseFloat(
-                document.getElementById("hours-worked").value || 0
-              ),
-              netProfit: "0", // to be calculated next
-              profitPerHour: "0.00",
-            };
-
-            // Recalculate net profit and profit per hour
-            const netProfitBeforeOptional =
-              optimizedData.totalEarnings - optimizedData.fuelCost;
-            optimizedData.netProfit = (
-              netProfitBeforeOptional -
-              optimizedData.maintenanceCost -
-              optimizedData.suppliesCost
-            ).toFixed(2);
-            const totalHoursSpent =
-              optimizedData.hoursWorked + totalDuration / 3600;
-            optimizedData.profitPerHour =
-              totalHoursSpent > 0
-                ? (optimizedData.netProfit / totalHoursSpent).toFixed(2)
-                : "0.00";
-
-            // ✅ Update UI below the map
-            updateUI(optimizedData);
-            showConfirmationMessage("✅ Route optimized successfully!");
-          } else if (status === "OK") {
-            // fallback if optimization fails
-            directionsRenderer.setDirections(response);
-          } else {
-            alert("Could not optimize route due to: " + status);
-          }
-        });
-      }
 
       function formatDuration(seconds) {
         const hours = Math.floor(seconds / 3600);
