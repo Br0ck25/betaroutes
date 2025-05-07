@@ -2185,23 +2185,18 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
 
 
 
-      async function optimizeRoute() {
-        if (originalMileage === null) {
-          await calculateRoute(); // This ensures we log original mileage before optimizing
-        }
 
-        const startAddress = document.getElementById("start-address").value;
-        const endAddress = document.getElementById("end-address").value;
-        const destInputs = document.querySelectorAll(
-          '#destinations-container .destination input[type="text"]'
-        );
-        const currentDestinations = Array.from(destInputs).map(
-          (input) => input.value
-        );
+        async function optimizeRoute() {
+        const destinationInputs = document.querySelectorAll('input[id^="destination-"]');
+const filledDestinations = Array.from(destinationInputs).filter(input => input.value.trim() !== "");
 
-        if (currentDestinations.filter(dest => dest.trim() !== "").length < 2) {
+if (filledDestinations.length < 2) {
   alert("🚧 Please add at least two destinations to optimize the route.");
   return;
+}
+
+if (originalMileage === null) {
+  await calculateRouteData(); // call just the data function (no alert inside)
 }
 
 
