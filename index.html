@@ -1303,7 +1303,7 @@ document.addEventListener('DOMContentLoaded', () => {
       </button>
 
       <label for="edit-mpg">Miles Per Gallon (MPG)</label>
-      <input type="number" id="edit-mpg" placeholder="Enter MPG" />
+      <input type="number" id="edit-mpg" placeholder="Enter MPG" oninput="updateEditFuelCost()" />
 
       <label for="edit-gas-price">Fuel Price Per Gallon</label>
       <input type="number" id="edit-gas-price" placeholder="Enter Gas Price" oninput="updateEditFuelCost()" />
