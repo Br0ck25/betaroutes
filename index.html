@@ -4253,19 +4253,17 @@ function convertTimeToHours(durationStr = '') {
 function formatHoursAndMinutes(decimal = 0) {
   if (isNaN(decimal) || decimal <= 0) return "0 minutes";
 
-  let hours = Math.floor(decimal);
-  let minutes = Math.round((decimal - hours) * 60);
+  const totalMinutes = Math.round(decimal * 60); // ✅ more accurate
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
 
-  if (minutes === 60) {
-    hours += 1;
-    minutes = 0;
-  }
+  const parts = [];
+  if (hours > 0) parts.push(`${hours} hour${hours !== 1 ? "s" : ""}`);
+  if (minutes > 0) parts.push(`${minutes} minute${minutes !== 1 ? "s" : ""}`);
 
-  const hourPart = hours > 0 ? `${hours} hour${hours !== 1 ? "s" : ""}` : "";
-  const minutePart = minutes > 0 ? `${minutes} minute${minutes !== 1 ? "s" : ""}` : "";
-
-  return [hourPart, minutePart].filter(Boolean).join(" ");
+  return parts.join(" ");
 }
+
 
 
 function parseHoursAndMinutes(str = '') {
