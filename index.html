@@ -1824,9 +1824,13 @@ if (dateInput) {
   document.getElementById("hours-worked").addEventListener("input", () => {
   const hoursWorked = parseFloat(document.getElementById("hours-worked").value) || 0;
   const driveTimeInHours = convertTimeToHours(document.getElementById("total-time").textContent);
-  const totalHours = (hoursWorked + driveTimeInHours).toFixed(2);
-  document.getElementById("total-hours").textContent = totalHours;
+
+  const totalWorkedMinutes = Math.round(hoursWorked * 60 + driveTimeInHours * 60);
+  const totalHoursDecimal = totalWorkedMinutes / 60;
+
+  document.getElementById("total-hours").textContent = formatHoursAndMinutes(totalHoursDecimal);
 });
+
 
   // 🆕 After selecting start time, auto-focus end time after slight delay
   document.getElementById("start-time").addEventListener("change", () => {
