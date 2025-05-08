@@ -2890,12 +2890,16 @@ function addEditDestination() {
 
   container.appendChild(destDiv);
 
-  // ✅ Fix labels/IDs to match numbering
-  renumberEditDestinations();
+renumberEditDestinations();
+reinitializeEditDestination(destDiv);
 
-  // ✅ Setup autocomplete + blur/enter events
-  reinitializeEditDestination(destDiv);
+// ✅ Add listener to update total earnings
+const earningsInput = destDiv.querySelector('input[type="number"]');
+if (earningsInput) {
+  earningsInput.addEventListener("input", updateEditTotalEarnings);
 }
+}
+
 
 
 
@@ -2979,6 +2983,14 @@ function addEditDestination() {
       `;
             destinationsContainer.appendChild(destDiv);
             reinitializeEditDestination(destDiv);
+            setTimeout(() => {
+  document
+    .querySelectorAll('#edit-destinations-container input[id^="edit-earnings-"]')
+    .forEach(input => {
+      input.addEventListener("input", updateEditTotalEarnings);
+    });
+}, 0);
+
           });
         }
 
