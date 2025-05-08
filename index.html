@@ -3251,9 +3251,15 @@ entry.hoursWorked = getNumberValue("edit-hours-worked");
         pdf.save("profit_log.pdf");
       }
 
-      async function importLog() {
-  const token = localStorage.getItem("token");
+      let fileReaderBusy = false; // global or top-level
 
+async function importLog() {
+  if (fileReaderBusy) {
+    console.warn("⏳ FileReader is still busy. Try again in a moment.");
+    return;
+  }
+
+  const token = localStorage.getItem("token");
   if (!token) {
     showAlertModal("❌ You must be signed in to import a CSV file.", showLogin);
     return;
@@ -3267,13 +3273,14 @@ entry.hoursWorked = getNumberValue("edit-hours-worked");
     return;
   }
 
+  fileReaderBusy = true; // ✅ block future reads until done
+
   const reader = new FileReader();
 
-  // ✅ Avoid calling readAsText() more than once
   reader.onload = async function (e) {
     try {
       const csvData = e.target.result;
-      const lines = csvData.split("\n").slice(1); // skip header
+      const lines = csvData.split("\n").slice(1);
       const newLogEntries = [];
 
       lines.forEach((line) => {
@@ -3289,22 +3296,22 @@ entry.hoursWorked = getNumberValue("edit-hours-worked");
 
               newLogEntries.push({
                 date: values[0],
-                startTime: startTime,
-                destinations: destinations,
-                endTime: endTime,
+                startTime,
+                destinations,
+                endTime,
                 totalEarnings: parseFloat(values[4]),
                 fuelCost: parseFloat(values[5]),
                 maintenanceCost: parseFloat(values[6]),
                 suppliesCost: parseFloat(values[7]),
                 netProfit: parseFloat(values[8]),
                 totalMileage: parseFloat(values[9]),
-                totalTime: totalTime,
-                earnings: earnings,
+                totalTime,
+                earnings,
                 profitPerHour: parseFloat(values[12]) || 0,
                 lastModified: new Date().toISOString(),
               });
             } catch (err) {
-              console.warn("Skipping line due to parse error:", err);
+              console.warn("❌ Skipping row due to error:", err);
             }
           }
         }
@@ -3315,18 +3322,21 @@ entry.hoursWorked = getNumberValue("edit-hours-worked");
       filterLogs();
       showAlertModal("✅ Log imported successfully!");
     } catch (err) {
+      console.error("❌ Error processing file:", err);
       showAlertModal("❌ Failed to process the file.");
-      console.error(err);
+    } finally {
+      fileReaderBusy = false; // ✅ ready for next import
     }
   };
 
   reader.onerror = () => {
+    fileReaderBusy = false;
     showAlertModal("❌ Error reading the file.");
   };
 
-  // ✅ Call only ONCE
   reader.readAsText(file);
 }
+
 
 
       let isSignup = false;
