@@ -1995,6 +1995,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
       async function calculateRouteData() {
+        // 🧹 Remove any destinations with empty address
+const container = document.getElementById("destinations-container");
+const allDestinations = container.querySelectorAll(".destination");
+
+allDestinations.forEach((div) => {
+  const addressInput = div.querySelector('input[id^="destination-"]');
+  if (!addressInput || addressInput.value.trim() === "") {
+    div.remove();
+  }
+});
+renumberMainDestinations();
+
         const startAddress = document.getElementById("start-address").value;
         const endAddress = document.getElementById("end-address").value;
         const mpg = parseFloat(document.getElementById("mpg").value);
