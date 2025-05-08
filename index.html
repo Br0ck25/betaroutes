@@ -3390,23 +3390,24 @@ showAlertModal("✅ Log imported successfully!");
     if (isSignup && data.resetKey) {
       showAlertModal(
         `🔐 Your reset key is:<br><br><code style="font-size: 18px; user-select: all;">${data.resetKey}</code><br><br>Save this key somewhere safe.`,
-        () => location.reload() // ✅ reload after modal is dismissed
+        () => location.reload()
       );
     } else {
-      location.reload(); // ✅ normal login flow
+      // ✅ For login or failed signup-then-login, reload to reflect auth state
+      location.reload();
     }
   } else {
-  let msg = "An error occurred.";
-  try {
-    const data = await res.json();
-    msg = data.error || msg;
-  } catch (e) {
-    msg = await res.text(); // fallback in case it's not JSON
+    let msg = "An error occurred.";
+    try {
+      const data = await res.json();
+      msg = data.error || msg;
+    } catch (e) {
+      msg = await res.text();
+    }
+    showAlertModal("❌ " + msg);
   }
-  showAlertModal("❌ " + msg);
 }
 
-}
 
 
       function logout() {
