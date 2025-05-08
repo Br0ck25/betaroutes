@@ -3553,10 +3553,13 @@ showAlertModal("✅ Log imported successfully!");
 
         if (res.ok) {
   showAlertModal("✅ Your account has been deleted.", () => {
+    closeDeleteModal(); // ✅ make sure modal is closed before reload
+    document.getElementById("delete-password").value = ""; // optional cleanup
     localStorage.removeItem("username");
     localStorage.removeItem("token");
     location.reload();
   });
+
   
 } else {
   const msg = await res.text();
