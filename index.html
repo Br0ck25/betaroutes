@@ -3396,9 +3396,16 @@ showAlertModal("✅ Log imported successfully!");
       location.reload(); // ✅ normal login flow
     }
   } else {
-    const msg = await res.text();
-    showAlertModal("❌ " + msg);
+  let msg = "An error occurred.";
+  try {
+    const data = await res.json();
+    msg = data.error || msg;
+  } catch (e) {
+    msg = await res.text(); // fallback in case it's not JSON
   }
+  showAlertModal("❌ " + msg);
+}
+
 }
 
 
