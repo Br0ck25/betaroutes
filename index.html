@@ -3360,6 +3360,24 @@ showAlertModal("✅ Log imported successfully!");
         }
       }
 
+      function updateAuthUI() {
+  const token = localStorage.getItem("token");
+  const username = localStorage.getItem("username");
+  const hamburgerButton = document.getElementById("hamburger-button");
+
+  if (token && username) {
+    document.getElementById("auth-message").style.display = "none";
+    document.getElementById("logout-message").style.display = "block";
+    document.getElementById("username-display").textContent = username;
+    if (hamburgerButton) hamburgerButton.style.display = "inline-block";
+  } else {
+    document.getElementById("auth-message").style.display = "block";
+    document.getElementById("logout-message").style.display = "none";
+    if (hamburgerButton) hamburgerButton.style.display = "none";
+  }
+}
+
+
       async function submitAuth() {
   const username = document.getElementById("auth-username").value.trim();
   const password = document.getElementById("auth-password").value.trim();
