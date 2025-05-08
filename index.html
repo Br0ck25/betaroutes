@@ -3341,15 +3341,11 @@ filterLogs();           // ✅ Refresh the UI
 showAlertModal("✅ Log imported successfully!");
 
           };
-          reader.readAsText(file); // trigger reading
-
-          reader.onerror = function () {
-            showAlertModal("Error reading the file.");
-          };
-
           reader.readAsText(file);
-        } else {
-          showAlertModal("Please select a CSV file to import.");
+
+reader.onerror = function () {
+  showAlertModal("Error reading the file.");
+};
         }
       }
 
