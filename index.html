@@ -874,11 +874,15 @@ img {
       <input type="time" id="end-time" placeholder="Enter end time" />
 
       <label for="hours-worked">Hours Worked (Optional)</label>
-      <input
-        type="number"
-        id="hours-worked"
-        placeholder="Auto-filled if times are entered"
-      />
+<div>
+  <input
+    type="number"
+    id="hours-worked"
+    placeholder="Auto-filled if times are entered"
+  />
+  <div id="hours-display" style="margin-top: 4px; font-size: 14px; color: #555;"></div>
+</div>
+
 
       <div class="optional-costs">
         <h3>Optional Daily Costs</h3>
@@ -2046,7 +2050,10 @@ renumberMainDestinations();
           hoursWorked = parseFloat(hoursWorked.toFixed(2));
           const workedHours = Math.floor(hoursWorked);
 const workedMinutes = Math.round((hoursWorked - workedHours) * 60);
-document.getElementById("hours-worked").value = `${workedHours} hours ${workedMinutes} minutes`;
+document.getElementById("hours-worked").value = hoursWorked.toFixed(2);
+document.getElementById("hours-display").textContent = formatHoursAndMinutes(hoursWorked);
+
+
 
         }
 
