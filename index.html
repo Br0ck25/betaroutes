@@ -3404,30 +3404,31 @@ showAlertModal("✅ Log imported successfully!");
       location.reload();
     }
   } else {
-  let msg = "An error occurred.";
+  let msg = "❌ An error occurred.";
   try {
     const contentType = res.headers.get("Content-Type") || "";
     if (contentType.includes("application/json")) {
       const data = await res.json();
-      msg = data.error || msg;
+      msg = "❌ " + (data.error || msg);
     } else {
-      msg = await res.text();
-    }
-
-    if (res.status === 404 && msg.toLowerCase().includes("not found")) {
-      msg = "❌ Account not found. Please check your username or sign up.";
+      msg = "❌ " + (await res.text());
     }
 
     if (res.status === 400 && msg.toLowerCase().includes("username")) {
       msg = "❌ That username is already taken. Please choose another.";
     }
 
+    if (res.status === 404 && msg.toLowerCase().includes("not found")) {
+      msg = "❌ Account not found. Please check your username or sign up.";
+    }
+
   } catch (e) {
-    console.error("❌ Failed to read error message:", e);
+    console.error("Error parsing error response:", e);
   }
 
   showAlertModal(msg);
 }
+
 
 }
 
