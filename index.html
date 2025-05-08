@@ -3404,15 +3404,21 @@ showAlertModal("✅ Log imported successfully!");
       location.reload();
     }
   } else {
-    let msg = "An error occurred.";
-    try {
-      const data = await res.json();
-      msg = data.error || msg;
-    } catch (e) {
-      msg = await res.text();
-    }
-    showAlertModal("❌ " + msg);
+  let msg = "An error occurred.";
+  try {
+    const data = await res.json();
+    msg = data.error || msg;
+  } catch (e) {
+    msg = (await res.text()) || msg;
   }
+
+  if (res.status === 400 && msg.toLowerCase().includes("username")) {
+    msg = "❌ That username is already taken. Please choose another.";
+  }
+
+  showAlertModal(msg);
+}
+
 }
 
 
