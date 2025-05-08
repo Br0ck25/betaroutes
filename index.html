@@ -1365,14 +1365,18 @@ function showAlertModal(message, onClose) {
   const buttons = document.getElementById("universal-modal-buttons");
 
   msg.innerHTML = message;
-  buttons.innerHTML = `
-    <button onclick="closeUniversalModal(); ${onClose ? "window._universalCallback();" : ""}">OK</button>
-  `;
 
-  if (onClose) window._universalCallback = onClose;
+  // Save callback if provided, or null
+  window._universalCallback = typeof onClose === "function" ? onClose : null;
+
+  buttons.innerHTML = `
+    <button onclick="closeUniversalModal(); if (typeof window._universalCallback === 'function') window._universalCallback();">OK</button>
+  `;
 
   modal.style.display = "flex";
 }
+
+
 
 function showConfirmModal(message, onConfirm, onCancel) {
   const modal = document.getElementById("universal-modal");
@@ -1394,10 +1398,9 @@ function showConfirmModal(message, onConfirm, onCancel) {
 function closeUniversalModal() {
   const modal = document.getElementById("universal-modal");
   modal.style.display = "none";
-  delete window._universalCallback;
-  delete window._universalConfirmCallback;
-  delete window._universalCancelCallback;
+  window._universalCallback = null; // clean up
 }
+
 
 
 
