@@ -4187,11 +4187,19 @@ function renumberMainDestinations() {
         <h3>Delete Account</h3>
         <p style="font-size: 14px; color: red">⚠️ This action is permanent.</p>
         <input
-          type="password"
-          id="delete-password"
-          placeholder="Confirm password"
-          style="width: 100%; margin-bottom: 10px; padding: 10px"
-        />
+  type="password"
+  id="delete-password"
+  placeholder="Confirm password"
+  style="
+    width: 100%;
+    max-width: 400px;
+    margin: 0 auto 10px auto;
+    display: block;
+    padding: 10px;
+    box-sizing: border-box;
+  "
+/>
+
         <button
           onclick="submitDeleteAccount()"
           style="width: 100%; background: red; color: white"
