@@ -3361,64 +3361,43 @@ showAlertModal("✅ Log imported successfully!");
       }
 
       async function submitAuth() {
-        const username = document.getElementById("auth-username").value.trim();
-        const password = document.getElementById("auth-password").value.trim();
+  const username = document.getElementById("auth-username").value.trim();
+  const password = document.getElementById("auth-password").value.trim();
 
-        if (!username || !password) {
-          showAlertModal("Username and password required.");
-          return;
-        }
+  if (!username || !password) {
+    showAlertModal("❌ Username and password required.");
+    return;
+  }
 
-        const endpoint = isSignup
-          ? "https://logs.gorouteyourself.com/api/signup"
-          : "https://logs.gorouteyourself.com/api/login";
+  const endpoint = isSignup
+    ? "https://logs.gorouteyourself.com/api/signup"
+    : "https://logs.gorouteyourself.com/api/login";
 
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
-        });
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
 
-        if (res.ok) {
-          const data = await res.json();
-          localStorage.setItem("username", username);
-          localStorage.setItem("token", data.token);
-          document.getElementById("auth-modal").style.display = "none";
-          showConfirmationMessage(
-            `✅ ${isSignup ? "Account created" : "Signed in"} successfully!`
-          );
-          updateAuthUI();
+  if (res.ok) {
+    const data = await res.json();
+    localStorage.setItem("username", username);
+    localStorage.setItem("token", data.token);
+    document.getElementById("auth-modal").style.display = "none";
+    showConfirmationMessage(`✅ ${isSignup ? "Account created" : "Signed in"} successfully!`);
+    updateAuthUI();
 
-          // ✅ Show reset key if this was a signup
-          if (isSignup && data.resetKey) {
-            showAlertModal(
-  `🔐 Your reset key is:<br><br><code style="font-size: 18px; user-select: all;">${data.resetKey}</code><br><br>Save this key somewhere safe.`
-);
-          }
-
-          // ✅ THEN reload the page after user has seen the key
-          location.reload();
-
-          loadLog();
-        } else {
-          showAlertModal("❌ " + (await res.text()));
-        }
-      }
-
-      function updateAuthUI() {
-  const token = localStorage.getItem("token");
-  const username = localStorage.getItem("username");
-  const hamburgerButton = document.getElementById("hamburger-button");
-
-  if (token && username) {
-    document.getElementById("auth-message").style.display = "none";
-    document.getElementById("logout-message").style.display = "block";
-    document.getElementById("username-display").textContent = username;
-    if (hamburgerButton) hamburgerButton.style.display = "inline-block"; // ✅ Show ☰
+    if (isSignup && data.resetKey) {
+      showAlertModal(
+        `🔐 Your reset key is:<br><br><code style="font-size: 18px; user-select: all;">${data.resetKey}</code><br><br>Save this key somewhere safe.`,
+        () => location.reload() // ✅ reload after modal is dismissed
+      );
+    } else {
+      location.reload(); // ✅ normal login flow
+    }
   } else {
-    document.getElementById("auth-message").style.display = "block";
-    document.getElementById("logout-message").style.display = "none";
-    if (hamburgerButton) hamburgerButton.style.display = "none"; // ✅ Hide ☰
+    const msg = await res.text();
+    showAlertModal("❌ " + msg);
   }
 }
 
