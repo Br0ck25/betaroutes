@@ -3549,10 +3549,12 @@ showAlertModal("✅ Log imported successfully!");
         );
 
         if (res.ok) {
-  showAlertModal("✅ Your account has been deleted.");
-  localStorage.removeItem("username");
-  localStorage.removeItem("token");
-  location.reload();
+  showAlertModal("✅ Your account has been deleted.", () => {
+    localStorage.removeItem("username");
+    localStorage.removeItem("token");
+    location.reload();
+  });
+  
 } else {
   const msg = await res.text();
   showAlertModal("❌ " + msg);
