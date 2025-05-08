@@ -3240,114 +3240,82 @@ entry.hoursWorked = getNumberValue("edit-hours-worked");
       }
 
       async function importLog() {
+  const token = localStorage.getItem("token");
 
-        const token = localStorage.getItem("token");
+  if (!token) {
+    showAlertModal("❌ You must be signed in to import a CSV file.", showLogin);
+    return;
+  }
 
-        if (!token) {
-  showAlertModal("❌ You must be signed in to import a CSV file.", showLogin);
-  return;
+  const fileInput = document.getElementById("import-file");
+  const file = fileInput.files[0];
+
+  if (!file) {
+    showAlertModal("Please select a CSV file to import.");
+    return;
+  }
+
+  const reader = new FileReader();
+
+  // ✅ Avoid calling readAsText() more than once
+  reader.onload = async function (e) {
+    try {
+      const csvData = e.target.result;
+      const lines = csvData.split("\n").slice(1); // skip header
+      const newLogEntries = [];
+
+      lines.forEach((line) => {
+        if (line) {
+          const values = line.match(/("([^"]*)"|[^,]+)/g);
+          if (values && values.length === 13) {
+            try {
+              const startTime = values[1].replace(/^"|"$/g, "").replace(/""/g, '"');
+              const endTime = values[3].replace(/^"|"$/g, "").replace(/""/g, '"');
+              const destinations = values[2].slice(1, -1).split(";").map(d => d.replace(/""/g, '"'));
+              const earnings = values[11].slice(1, -1).split(";").map(parseFloat);
+              const totalTime = values[10].replace(/^"|"$/g, "").trim();
+
+              newLogEntries.push({
+                date: values[0],
+                startTime: startTime,
+                destinations: destinations,
+                endTime: endTime,
+                totalEarnings: parseFloat(values[4]),
+                fuelCost: parseFloat(values[5]),
+                maintenanceCost: parseFloat(values[6]),
+                suppliesCost: parseFloat(values[7]),
+                netProfit: parseFloat(values[8]),
+                totalMileage: parseFloat(values[9]),
+                totalTime: totalTime,
+                earnings: earnings,
+                profitPerHour: parseFloat(values[12]) || 0,
+                lastModified: new Date().toISOString(),
+              });
+            } catch (err) {
+              console.warn("Skipping line due to parse error:", err);
+            }
+          }
+        }
+      });
+
+      logEntries = [...logEntries, ...newLogEntries];
+      await saveLog();
+      filterLogs();
+      showAlertModal("✅ Log imported successfully!");
+    } catch (err) {
+      showAlertModal("❌ Failed to process the file.");
+      console.error(err);
+    }
+  };
+
+  reader.onerror = () => {
+    showAlertModal("❌ Error reading the file.");
+  };
+
+  // ✅ Call only ONCE
+  reader.readAsText(file);
 }
 
-
-        const fileInput = document.getElementById("import-file");
-        const file = fileInput.files[0];
-
-        if (file) {
-          const reader = new FileReader();
-
-          reader.onload = async function (e) {
-
-            const csvData = e.target.result;
-            const lines = csvData.split("\n").slice(1); // Skip the header row
-            const newLogEntries = [];
-
-            lines.forEach((line) => {
-              if (line) {
-                const values = line.match(/("([^"]*)"|[^,]+)/g);
-                console.log("CSV Line Values (Regex Split):", values);
-
-                if (values && values.length === 13) {
-                  // Expecting 13 columns now
-                  try {
-                    const startTime = values[1]
-                      .replace(/^"|"$/g, "")
-                      .replace(/""/g, '"');
-                    const endTime = values[3]
-                      .replace(/^"|"$/g, "")
-                      .replace(/""/g, '"');
-                    const destinationsString = values[2];
-                    const earningsString = values[11];
-                    const totalTimeString = values[10]
-                      .replace(/^"|"$/g, "")
-                      .replace(/""/g, '"');
-                    const profitPerHourString = values[12].replace(
-                      /^"|"$/g,
-                      ""
-                    );
-                    const profitPerHour = parseFloat(profitPerHourString) || 0; // Parse or default to 0
-
-                    const destinations =
-                      destinationsString.startsWith('"') &&
-                      destinationsString.endsWith('"')
-                        ? destinationsString
-                            .slice(1, -1)
-                            .split(";")
-                            .map((d) => d.replace(/""/g, '"'))
-                        : [destinationsString.replace(/^"|"$/g, "")]; // Clean up single destination
-
-                    const earnings =
-                      earningsString.startsWith('"') &&
-                      earningsString.endsWith('"')
-                        ? earningsString.slice(1, -1).split(";").map(parseFloat)
-                        : [parseFloat(earningsString.replace(/^"|"$/g, ""))]; // Clean up single earning
-
-                    newLogEntries.push({
-                      date: values[0],
-                      startTime: startTime,
-                      destinations: destinations,
-                      endTime: endTime,
-                      totalEarnings: parseFloat(values[4]),
-                      fuelCost: parseFloat(values[5]),
-                      maintenanceCost: parseFloat(values[6]),
-                      suppliesCost: parseFloat(values[7]),
-                      netProfit: parseFloat(values[8]),
-                      totalMileage: parseFloat(values[9]),
-                      totalTime: totalTimeString
-                        .replace(/:/g, " hours ")
-                        .replace(/:/g, " minutes ")
-                        .replace(/ seconds$/, "")
-                        .trim(),
-                      earnings: earnings,
-                      profitPerHour: profitPerHour,
-                      lastModified: new Date().toISOString(),
-
-                    });
-                  } catch (error) {
-                    console.error("Error parsing CSV line:", line, error);
-                  }
-                } else {
-                  console.warn(
-                    "Skipping invalid CSV line (wrong number of columns):",
-                    line,
-                    values ? values.length : 0
-                  );
-                }
-              }
-            });
-
-            logEntries = [...logEntries, ...newLogEntries];
-await saveLog();        // ✅ Ensure logs are persisted
-filterLogs();           // ✅ Refresh the UI
-showAlertModal("✅ Log imported successfully!");
-
-          };
-          reader.readAsText(file);
-
-reader.onerror = function () {
-  showAlertModal("Error reading the file.");
-};
-        }
-      }
 
       let isSignup = false;
 
