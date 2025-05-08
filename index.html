@@ -640,6 +640,23 @@ img {
     background-color: #c82333;
   }
 
+  #hamburger-button {
+  display: none; /* hidden by default */
+  background: none;
+  border: none;
+  font-size: 28px;
+  cursor: pointer;
+  color: black;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: background-color 0.3s;
+  width: 50px;
+  height: 50px;
+  align-items: center;
+  justify-content: center;
+  display: none;
+}
+
 
 
 
@@ -671,22 +688,9 @@ img {
   transition: none;
 ">
 
-  <!-- Left Spacer (Hamburger) -->
-  <button id="hamburger-button" onclick="toggleMenu()" style="
-  display: none;
-  background: none;
-  border: none;
-  font-size: 28px;
-  cursor: pointer;
-  color: black;
-  padding: 6px 10px;
-  border-radius: 8px;
-  transition: background-color 0.3s;
-  width: 50px;
-  height: 50px;
-  align-items: center;
-  justify-content: center;
-">☰</button>
+ 
+  <button id="hamburger-button" onclick="toggleMenu()">☰</button>
+
 
 
   <!-- Centered Logo -->
@@ -1360,7 +1364,7 @@ function showAlertModal(message, onClose) {
   const msg = document.getElementById("universal-modal-message");
   const buttons = document.getElementById("universal-modal-buttons");
 
-  msg.textContent = message;
+  msg.innerHTML = message;
   buttons.innerHTML = `
     <button onclick="closeUniversalModal(); ${onClose ? "window._universalCallback();" : ""}">OK</button>
   `;
@@ -1375,7 +1379,7 @@ function showConfirmModal(message, onConfirm, onCancel) {
   const msg = document.getElementById("universal-modal-message");
   const buttons = document.getElementById("universal-modal-buttons");
 
-  msg.textContent = message;
+  msg.innerHTML = message;
   buttons.innerHTML = `
     <button onclick="closeUniversalModal(); window._universalConfirmCallback()">Yes</button>
     <button onclick="closeUniversalModal(); ${onCancel ? "window._universalCancelCallback();" : ""}">No</button>
