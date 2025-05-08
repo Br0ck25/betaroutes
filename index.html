@@ -3528,45 +3528,49 @@ showAlertModal("✅ Log imported successfully!");
       }
 
       async function submitDeleteAccount() {
-        const password = document
-          .getElementById("delete-password")
-          .value.trim();
-        const username = localStorage.getItem("username");
-        const token = localStorage.getItem("token");
+  const password = document.getElementById("delete-password").value.trim();
+  const username = localStorage.getItem("username");
+  const token = localStorage.getItem("token");
 
-        if (!username || !token || !password) {
-          showAlertModal("❌ Missing credentials.");
-          return;
-        }
+  if (!username || !token || !password) {
+    showAlertModal("❌ Missing credentials.");
+    return;
+  }
 
-        const res = await fetch(
-          "https://logs.gorouteyourself.com/api/delete-account",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: token,
-            },
-            body: JSON.stringify({ username, password }),
-          }
-        );
+  const res = await fetch(
+    "https://logs.gorouteyourself.com/api/delete-account",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: token,
+      },
+      body: JSON.stringify({ username, password }),
+    }
+  );
 
-
-          if (res.ok) {
-  closeDeleteModal(); // ✅ Move this up so modal is hidden before reload
-  showAlertModal("✅ Your account has been deleted.", () => {
-    document.getElementById("delete-password").value = "";
+  if (res.ok) {
+    // Remove auth *before* triggering alert
     localStorage.removeItem("username");
     localStorage.removeItem("token");
-    setTimeout(() => location.reload(), 100); // slight delay for UI to hide modal
-  });
-  
-} else {
-  const msg = await res.text();
-  showAlertModal("❌ " + msg);
+
+    // Clear cached logs just in case
+    localStorage.removeItem("cachedLogs");
+    localStorage.removeItem("pendingLogs");
+
+    closeDeleteModal();
+    document.getElementById("delete-password").value = "";
+
+    showAlertModal("✅ Your account has been deleted.", () => {
+      updateAuthUI(); // 🔄 force UI update
+      location.reload(); // 🔁 final reload
+    });
+  } else {
+    const msg = await res.text();
+    showAlertModal("❌ " + msg);
+  }
 }
 
-      }
 
       window.toggleMenu = function () {
   console.log("toggleMenu() triggered!");
