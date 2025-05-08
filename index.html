@@ -3550,21 +3550,36 @@ showAlertModal("✅ Log imported successfully!");
   );
 
   if (res.ok) {
-    // Remove auth *before* triggering alert
-    localStorage.removeItem("username");
-    localStorage.removeItem("token");
+  // 1. Clear all auth and cached data
+  localStorage.removeItem("username");
+  localStorage.removeItem("token");
+  localStorage.removeItem("cachedLogs");
+  localStorage.removeItem("pendingLogs");
 
-    // Clear cached logs just in case
-    localStorage.removeItem("cachedLogs");
-    localStorage.removeItem("pendingLogs");
+  // 2. Close the modal and reset password input
+  closeDeleteModal();
+  document.getElementById("delete-password").value = "";
 
-    closeDeleteModal();
-    document.getElementById("delete-password").value = "";
+  // 3. Force UI update
+  updateAuthUI();
 
-    showAlertModal("✅ Your account has been deleted.", () => {
-      updateAuthUI(); // 🔄 force UI update
-      location.reload(); // 🔁 final reload
-    });
+  // 4. Immediately disable log buttons
+  document.querySelectorAll('button').forEach(btn => {
+    if (
+      btn.textContent.includes("Log Route") ||
+      btn.textContent.includes("Optimize") ||
+      btn.textContent.includes("Calculate")
+    ) {
+      btn.disabled = true;
+    }
+  });
+
+  // 5. Alert and reload
+  showAlertModal("✅ Your account has been deleted.", () => {
+    location.reload();
+  });
+
+
   } else {
     const msg = await res.text();
     showAlertModal("❌ " + msg);
