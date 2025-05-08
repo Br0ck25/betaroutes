@@ -3551,15 +3551,15 @@ showAlertModal("✅ Log imported successfully!");
           }
         );
 
-        if (res.ok) {
+
+          if (res.ok) {
+  closeDeleteModal(); // ✅ Move this up so modal is hidden before reload
   showAlertModal("✅ Your account has been deleted.", () => {
-    closeDeleteModal(); // ✅ make sure modal is closed before reload
-    document.getElementById("delete-password").value = ""; // optional cleanup
+    document.getElementById("delete-password").value = "";
     localStorage.removeItem("username");
     localStorage.removeItem("token");
-    location.reload();
+    setTimeout(() => location.reload(), 100); // slight delay for UI to hide modal
   });
-
   
 } else {
   const msg = await res.text();
