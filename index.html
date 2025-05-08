@@ -3404,15 +3404,31 @@ showAlertModal("✅ Log imported successfully!");
       location.reload();
     }
   } else {
-    let msg = "An error occurred.";
-    try {
+  let msg = "An error occurred.";
+  try {
+    const contentType = res.headers.get("Content-Type") || "";
+    if (contentType.includes("application/json")) {
       const data = await res.json();
       msg = data.error || msg;
-    } catch (e) {
+    } else {
       msg = await res.text();
     }
-    showAlertModal("❌ " + msg);
+
+    if (res.status === 404 && msg.toLowerCase().includes("not found")) {
+      msg = "❌ Account not found. Please check your username or sign up.";
+    }
+
+    if (res.status === 400 && msg.toLowerCase().includes("username")) {
+      msg = "❌ That username is already taken. Please choose another.";
+    }
+
+  } catch (e) {
+    console.error("❌ Failed to read error message:", e);
   }
+
+  showAlertModal(msg);
+}
+
 }
 
 
