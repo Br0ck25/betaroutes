@@ -57,21 +57,26 @@
   align-items: center;
 }
 
-#log-title-bar input[type="text"] {
+#log-title-bar input[type="text"],
+#log-title-bar input[type="date"] {
   min-width: 200px;
   width: 100%;
+  height: 38px;              /* ✅ Add this for alignment */
   box-sizing: border-box;
   font-size: 16px;
   padding: 8px;
 }
 
+
 #log-title-bar button {
   padding: 8px 14px;
   font-size: 16px;
-  height: 40px;
+  height: 38px; /* match input height visually */
   line-height: 1;
-  margin-top: 34px; /* aligns with inputs */
+  margin-top: 25px; /* fine-tuned to align with input */
+  box-sizing: border-box;
 }
+
 
 
 
