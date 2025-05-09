@@ -2331,12 +2331,11 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
         document.getElementById("mileage-display").textContent = "";
         document.getElementById("optimized-mileage-display").textContent = "";
       }
-
-      
       async function logResults() {
   const token = localStorage.getItem("token");
   if (!token) {
     showAlertModal("❌ You must sign in to log your route.", showLogin);
+    showLogin();
     return;
   }
 
@@ -2354,13 +2353,9 @@ document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} 
     currentPage = 1;
     logEntry(calculationResult);
     displayLog();
-    updateUI(calculationResult); // ✅ Show map and details
+    updateUI(calculationResult);
+    clearTripForm(); // ✅ Reset the form
     showConfirmationMessage("✅ Route logged successfully!");
-    
-    // ⏳ Let user view the map/details before clearing the form
-    setTimeout(() => {
-      clearTripForm();
-    }, 3000); // wait 3 seconds before clearing
   }
 }
 
