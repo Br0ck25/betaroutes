@@ -55,7 +55,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  flex: 1 1 150px;     /* 👈 allows wrapping on mobile */
+  min-width: 140px;
+  max-width: 200px;
 }
+
 
 #log-title-bar input[type="text"],
 #log-title-bar input[type="date"] {
@@ -71,10 +75,18 @@
 #log-title-bar button {
   padding: 8px 14px;
   font-size: 16px;
-  height: 38px; /* match input height visually */
-  line-height: 1;
-  margin-top: 25px; /* fine-tuned to align with input */
+  height: 38px;
+  margin-top: 24px; /* 🔧 slightly lower */
   box-sizing: border-box;
+}
+
+#log-title-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start; /* 🛠 ensures Clear button aligns with others */
+  gap: 20px;
+  margin-bottom: 20px;
 }
 
 
@@ -1013,13 +1025,8 @@ img {
       </div>
     
       <!-- 🆕 Step 2: Centered Filters Row -->
-      <div id="log-title-bar" style="
-        display: flex;
-        justify-content: center;
-        flex-wrap: wrap;
-        gap: 20px;
-        margin-bottom: 20px;
-      ">
+      <div id="log-title-bar"">
+      </div>
  <div class="date-filter" style="display: flex; flex-direction: column; align-items: center;">
   <label for="filter-start-date">Start Date:</label>
   <input type="date" id="filter-start-date" onchange="onStartDateChange()" />
