@@ -3850,7 +3850,6 @@ function filterLogs() {
 
 `;
       }
-
       function recalculateEditHoursWorked() {
   const startTime = document.getElementById("edit-start-time")?.value;
   const endTime = document.getElementById("edit-end-time")?.value;
@@ -3859,9 +3858,11 @@ function filterLogs() {
 
   if (!hoursWorkedInput) return;
 
-  // 🔁 If either input is missing, clear hours worked
+  // 🔁 If either input is missing, clear and unlock the field
   if (!startTime || !endTime) {
     hoursWorkedInput.value = "";
+    hoursWorkedInput.readOnly = false;
+    hoursWorkedInput.style.backgroundColor = ""; // Restore default style
     return;
   }
 
@@ -3887,8 +3888,12 @@ function filterLogs() {
   const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
   const actualWorkedHours = actualWorkedMinutes / 60;
 
+  // ✅ Set and lock the field
   hoursWorkedInput.value = actualWorkedHours.toFixed(2);
+  hoursWorkedInput.readOnly = true;
+  hoursWorkedInput.style.backgroundColor = "#f0f0f0"; // Light gray for visual feedback
 }
+
 
 
 
