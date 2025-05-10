@@ -4037,22 +4037,27 @@ function exportToPDFWithTotals() {
     `$${totals.net.toFixed(2)}`,
     "", ""]);
 
-  pdf.autoTable({
-    head: [columns],
-    body: data,
-    margin: { top: 20, left: 10, right: 10, bottom: 20 },
-    headStyles: { fillColor: [44, 62, 80], textColor: [255, 255, 255] },
-    columnStyles: { 2: { columnWidth: 30 } },
-    didDrawPage: function (data) {
-      pdf.setFontSize(12);
-      pdf.setTextColor(40);
-      pdf.text(
-        `Profit Log - Page ${data.pageNumber}`,
-        data.settings.margin.left,
-        pdf.internal.pageSize.height - 10
-      );
-    },
-  });
+    pdf.autoTable({
+  head: [columns],
+  body: data,
+  margin: { top: 20, left: 10, right: 10, bottom: 20 },
+  headStyles: { fillColor: [44, 62, 80], textColor: [255, 255, 255] },
+  columnStyles: {
+    2: { cellWidth: 40 },  // Destinations
+    11: { cellWidth: 30 }, // Earnings per Stop
+    12: { cellWidth: 30 }, // Profit per Hour
+  },
+  didDrawPage: function (data) {
+    pdf.setFontSize(12);
+    pdf.setTextColor(40);
+    pdf.text(
+      `Profit Log - Page ${data.pageNumber}`,
+      data.settings.margin.left,
+      pdf.internal.pageSize.height - 10
+    );
+  },
+});
+
 
   pdf.save("profit_log_with_totals.pdf");
 }
