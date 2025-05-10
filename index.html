@@ -4010,7 +4010,7 @@ function exportToCSVWithTotals() {
 
 function exportToPDFWithTotals() {
   const { jsPDF } = window.jspdf;
-  const pdf = new jsPDF();
+  const pdf = new jsPDF({ orientation: "landscape" });
   const columns = [
     "Date", "Start", "Destinations", "End", "Earnings", "Fuel", "Maintenance", "Supplies", "Net Profit", "Mileage", "Drive Time"
   ];
