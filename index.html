@@ -2271,13 +2271,23 @@ const profitPerHour = totalHoursSpent > 0 ? netProfit / totalHoursSpent : 0;
           document.getElementById("profit-per-hour").textContent =
             data.profitPerHour;
           document.getElementById("results").classList.remove("hidden");
-          const driveTimeInHours = convertTimeToHours(data.totalTime);
-          const totalHoursFloat = parseFloat(data.hoursWorked || 0) + driveTimeInHours;
-          const totalMinutes = Math.round(totalHoursFloat * 60);
+          const start = data.startClock;
+const end = data.endClock;
+
+let totalMinutes = 0;
+if (start && end && start.includes(":") && end.includes(":")) {
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  let startMin = sh * 60 + sm;
+  let endMin = eh * 60 + em;
+  if (endMin < startMin) endMin += 24 * 60;
+  totalMinutes = endMin - startMin;
+}
+
 const totalH = Math.floor(totalMinutes / 60);
 const totalM = totalMinutes % 60;
+document.getElementById("total-hours").textContent = `${totalH} hour${totalH !== 1 ? "s" : ""} ${totalM} minute${totalM !== 1 ? "s" : ""}`;
 
-document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} minutes`;
 
 
           if (originalMileage === null) {
