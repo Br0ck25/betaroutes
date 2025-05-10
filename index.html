@@ -3748,9 +3748,17 @@ function filterLogs() {
   filteredEntries.forEach((entry) => {
     totalNetProfit += parseFloat(entry.netProfit) || 0;
 
-    const worked = parseFloat(entry.hoursWorked) || 0;
-    const drive = convertTimeToHours(entry.totalTime || "");
-    totalMinutes += Math.round((worked + drive) * 60);
+    const start = entry.startClock || "";
+    const end = entry.endClock || "";
+
+    if (start && end && start.includes(":") && end.includes(":")) {
+      const [sh, sm] = start.split(":").map(Number);
+      const [eh, em] = end.split(":").map(Number);
+      let startMin = sh * 60 + sm;
+      let endMin = eh * 60 + em;
+      if (endMin < startMin) endMin += 24 * 60;
+      totalMinutes += endMin - startMin;
+    }
   });
 
   const totalHoursDecimal = totalMinutes / 60;
@@ -3773,6 +3781,7 @@ function filterLogs() {
     </div>
   `;
 }
+
 
       function recalculateEditHoursWorked() {
   const startTime = document.getElementById("edit-start-time")?.value;
