@@ -2273,8 +2273,10 @@ const profitPerHour = totalHoursSpent > 0 ? netProfit / totalHoursSpent : 0;
           document.getElementById("results").classList.remove("hidden");
           const driveTimeInHours = convertTimeToHours(data.totalTime);
           const totalHoursFloat = parseFloat(data.hoursWorked || 0) + driveTimeInHours;
-const totalH = Math.floor(totalHoursFloat);
-const totalM = Math.round((totalHoursFloat - totalH) * 60);
+          const totalMinutes = Math.round(totalHoursFloat * 60);
+const totalH = Math.floor(totalMinutes / 60);
+const totalM = totalMinutes % 60;
+
 document.getElementById("total-hours").textContent = `${totalH} hours ${totalM} minutes`;
 
 
