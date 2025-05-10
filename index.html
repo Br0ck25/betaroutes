@@ -4011,13 +4011,17 @@ function exportToCSVWithTotals() {
 function exportToPDFWithTotals() {
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF({ orientation: "landscape" });
+
   const columns = [
-    "Date", "Start", "Destinations", "End", "Earnings", "Fuel", "Maintenance", "Supplies", "Net Profit", "Mileage", "Drive Time"
+    "Date", "Start", "Destinations", "End", "Earnings",
+    "Fuel", "Maintenance", "Supplies", "Net Profit",
+    "Mileage", "Drive Time", "Earnings per Stop", "Profit per Hour"
   ];
-  const data = logEntries.map((entry) => [
+
+  const data = logEntries.map(entry => [
     entry.date,
     entry.startTime,
-    entry.destinations.join("\n"),
+    (entry.destinations || []).join("\n"),
     entry.endTime,
     `$${entry.totalEarnings}`,
     `$${entry.fuelCost}`,
@@ -4025,62 +4029,61 @@ function exportToPDFWithTotals() {
     `$${entry.suppliesCost}`,
     `$${entry.netProfit}`,
     `${entry.totalMileage} mi`,
-    entry.totalTime
+    entry.totalTime,
+    (entry.earnings || []).map(e => `$${parseFloat(e).toFixed(2)}`).join(", "),
+    `$${entry.profitPerHour || "0.00"}`
   ]);
 
-  const totals = calculateTotals(logEntries);
-  data.push(["Totals:", "", "", "",
+  // ✅ Add totals row
+  const totals = logEntries.reduce((sum, entry) => {
+    sum.earnings += parseFloat(entry.totalEarnings || 0);
+    sum.fuel += parseFloat(entry.fuelCost || 0);
+    sum.maintenance += parseFloat(entry.maintenanceCost || 0);
+    sum.supplies += parseFloat(entry.suppliesCost || 0);
+    sum.net += parseFloat(entry.netProfit || 0);
+    return sum;
+  }, { earnings: 0, fuel: 0, maintenance: 0, supplies: 0, net: 0 });
+
+  data.push([
+    "Totals:", "", "", "",
     `$${totals.earnings.toFixed(2)}`,
     `$${totals.fuel.toFixed(2)}`,
     `$${totals.maintenance.toFixed(2)}`,
     `$${totals.supplies.toFixed(2)}`,
     `$${totals.net.toFixed(2)}`,
-    "", ""]);
+    "", "", "", ""
+  ]);
 
-    pdf.autoTable({
-  head: [columns],
-  body: data,
-  margin: { top: 20, left: 10, right: 10, bottom: 20 },
-  styles: {
-    fontSize: 8, // 🔽 Reduce font size
-    cellPadding: 2, // 🔽 Tighten spacing
-  },
-  headStyles: {
-    fillColor: [44, 62, 80],
-    textColor: [255, 255, 255],
-    fontSize: 9,
-  },
-  
-  columnStyles: {
-  0: { cellWidth: 22 },  // Date
-  1: { cellWidth: 30 },  // Start
-  2: { cellWidth: 30 },  // Destinations
-  3: { cellWidth: 30 },  // End
-  4: { cellWidth: 19 },  // Earnings
-  5: { cellWidth: 15 },  // Fuel
-  6: { cellWidth: 25 },  // Maintenance
-  7: { cellWidth: 20 },  // Supplies
-  8: { cellWidth: 18 },  // Net Profit
-  9: { cellWidth: 18 },  // Mileage
-  10: { cellWidth: 25 }, // Drive Time
-  11: { cellWidth: 25 }, // Earnings per Stop
-  12: { cellWidth: 20 }, // Profit per Hour
-}
-,
-  didDrawPage: function (data) {
-    pdf.setFontSize(12);
-    pdf.setTextColor(40);
-    pdf.text(
-      `Profit Log - Page ${data.pageNumber}`,
-      data.settings.margin.left,
-      pdf.internal.pageSize.height - 10
-    );
-  },
-});
-
+  pdf.autoTable({
+    head: [columns],
+    body: data,
+    styles: {
+      fontSize: 7.5,
+      cellPadding: 1.5,
+      overflow: 'linebreak',
+    },
+    headStyles: {
+      fillColor: [44, 62, 80],
+      textColor: 255,
+      fontSize: 8
+    },
+    theme: 'striped',
+    startY: 20,
+    tableWidth: 'auto',
+    didDrawPage: function (data) {
+      pdf.setFontSize(9);
+      pdf.setTextColor(40);
+      pdf.text(
+        `Profit Log - Page ${data.pageNumber}`,
+        data.settings.margin.left,
+        pdf.internal.pageSize.height - 10
+      );
+    }
+  });
 
   pdf.save("profit_log_with_totals.pdf");
 }
+
 
 
 
