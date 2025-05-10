@@ -1529,6 +1529,8 @@ function closeUniversalModal() {
 
       <label for="edit-hours-worked">Total Hours</label>
 <input type="number" id="edit-hours-worked" readonly style="background-color: #eee; cursor: not-allowed;" />
+<div id="edit-hours-message" style="font-size: 14px; color: #666; margin-top: 4px;"></div>
+
 
 
       <button type="button" class="save-btn" onclick="saveEditedLogEntry()">
@@ -3818,21 +3820,28 @@ function filterLogs() {
 }
 
 
-      function recalculateEditHoursWorked() {
+function recalculateEditHoursWorked() {
   const startTime = document.getElementById("edit-start-time")?.value;
   const endTime = document.getElementById("edit-end-time")?.value;
   const totalTimeStr = document.getElementById("edit-total-time")?.value;
   const hoursWorkedInput = document.getElementById("edit-hours-worked");
+  const messageEl = document.getElementById("edit-hours-message");
 
-  if (!hoursWorkedInput) return;
+  if (!hoursWorkedInput || !messageEl) return;
 
-  // 🔁 If either input is missing, clear and unlock the field
+  // Always lock the field
+  hoursWorkedInput.readOnly = true;
+  hoursWorkedInput.style.backgroundColor = "#f0f0f0";
+
+  // If times are missing, clear value and show message
   if (!startTime || !endTime) {
     hoursWorkedInput.value = "";
-    hoursWorkedInput.readOnly = false;
-    hoursWorkedInput.style.backgroundColor = ""; // Restore default style
+    messageEl.textContent = "Enter times above to calculate.";
     return;
   }
+
+  // ✅ Clear message once valid
+  messageEl.textContent = "";
 
   const [startHours, startMinutes] = startTime.split(":").map(Number);
   const [endHours, endMinutes] = endTime.split(":").map(Number);
@@ -3856,11 +3865,9 @@ function filterLogs() {
   const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
   const actualWorkedHours = actualWorkedMinutes / 60;
 
-  // ✅ Set and lock the field
-  hoursWorkedInput.value = actualWorkedHours.toFixed(2);
-  hoursWorkedInput.readOnly = true;
-  hoursWorkedInput.style.backgroundColor = "#f0f0f0"; // Light gray for visual feedback
-}
+  // ✅ Set calculated value
+  hours
+
 
 
 
