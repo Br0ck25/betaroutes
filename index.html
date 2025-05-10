@@ -3205,19 +3205,8 @@ async function saveEditedLogEntry() {
 
   const netProfitFloat = entry.totalEarnings - entry.fuelCost - entry.maintenanceCost - entry.suppliesCost;
 
-  // ✅ Calculate total hours from start and end time
-  const start = document.getElementById("edit-start-time").value;
-  const end = document.getElementById("edit-end-time").value;
-  let totalHours = 0;
-
-  if (start && end) {
-    const [sh, sm] = start.split(":").map(Number);
-    const [eh, em] = end.split(":").map(Number);
-    let startMin = sh * 60 + sm;
-    let endMin = eh * 60 + em;
-    if (endMin < startMin) endMin += 24 * 60;
-    totalHours = (endMin - startMin) / 60;
-  }
+  const driveTime = convertTimeToHours(entry.totalTime || "");
+  const totalHours = entry.hoursWorked + driveTime;
 
   entry.profitPerHour = totalHours > 0
     ? (netProfitFloat / totalHours).toFixed(2)
@@ -3740,57 +3729,61 @@ function filterLogs() {
       }
 
       function updateLogSummary(filterFn) {
-  const summaryDiv = document.getElementById("log-summary");
+        const summaryDiv = document.getElementById("log-summary");
 
-  const filteredEntries = logEntries.filter(
-    (entry) => entry?.date && filterFn(entry.date, entry)
-  );
+        // Filter the relevant entries
+        const filteredEntries = logEntries.filter((entry) => 
+  entry?.date && filterFn(entry.date, entry)
+);
 
-  if (filteredEntries.length === 0) {
-    summaryDiv.innerHTML = "No data available for selected filter.";
-    return;
-  }
 
-  let totalNetProfit = 0;
-  let totalMinutes = 0;
 
-  filteredEntries.forEach((entry) => {
-    totalNetProfit += parseFloat(entry.netProfit) || 0;
+        if (filteredEntries.length === 0) {
+          summaryDiv.innerHTML = "No data available for selected filter.";
+          return;
+        }
 
-    // ⏱ Combine start and end time to calculate duration
-    const start = entry.startClock;
-    const end = entry.endClock;
+        // Calculate total Net Profit and Profit Per Hour
+        let totalNetProfit = 0;
+        let totalProfitPerHour = 0;
+        let validProfitPerHourEntries = 0;
 
-    if (start && end) {
-      const [sh, sm] = start.split(":").map(Number);
-      const [eh, em] = end.split(":").map(Number);
-      let startMin = sh * 60 + sm;
-      let endMin = eh * 60 + em;
-      if (endMin < startMin) endMin += 24 * 60; // overnight shift
-      totalMinutes += endMin - startMin;
-    }
-  });
+        filteredEntries.forEach((entry) => {
+          totalNetProfit += parseFloat(entry.netProfit) || 0;
 
-  const totalHours = totalMinutes / 60;
-  const averageProfitPerHour =
-    totalHours > 0 ? totalNetProfit / totalHours : 0;
+          if (!isNaN(parseFloat(entry.profitPerHour))) {
+            totalProfitPerHour += parseFloat(entry.profitPerHour);
+            validProfitPerHourEntries++;
+          }
+        });
 
-  summaryDiv.innerHTML = `
-    <div style="display: flex; flex-direction: column; align-items: center;">
-      <div style="margin-bottom: 8px;">
-        Net Profit: <span style="color: green;">$${totalNetProfit.toFixed(2)}</span>
-      </div>
-      <div style="margin-bottom: 8px;">
-        Profit Per Hour: <span style="color: blue;">$${averageProfitPerHour.toFixed(2)}</span>
-      </div>
-      <div>
-        Total Hours: <span style="color: black;">${formatHoursAndMinutes(totalHours)}</span>
-      </div>
+        const averageProfitPerHour =
+          validProfitPerHourEntries > 0
+            ? totalProfitPerHour / validProfitPerHourEntries
+            : 0;
+
+        // ✅ Set the Net Profit and Profit Per Hour text ABOVE h2 (inside log-summary div)
+        summaryDiv.innerHTML = `
+  <div style="display: flex; flex-direction: column; align-items: center;">
+    <div style="margin-bottom: 8px;">
+      Net Profit: <span style="color: green;">$${totalNetProfit.toFixed(2)}</span>
     </div>
-  `;
-}
+    <div style="margin-bottom: 8px;">
+      Profit Per Hour: <span style="color: blue;">$${averageProfitPerHour.toFixed(2)}</span>
+    </div>
+    <div>
+      Total Hours: <span style="color: black;">${formatHoursAndMinutes(
+        filteredEntries.reduce((sum, entry) => {
+          const drive = convertTimeToHours(entry.totalTime || "");
+          const worked = parseFloat(entry.hoursWorked) || 0;
+          return sum + drive + worked;
+        }, 0)
+      )}</span>
+    </div>
+  </div>
 
-
+`;
+      }
       function recalculateEditHoursWorked() {
   const startTime = document.getElementById("edit-start-time")?.value;
   const endTime = document.getElementById("edit-end-time")?.value;
