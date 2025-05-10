@@ -2582,16 +2582,15 @@ async function optimizeRoute() {
   data.gasPrice = parseFloat(document.getElementById("gas-price").value) || 0;
   data.lastModified = new Date().toISOString();
 
-  // ✅ FIX: Calculate profit per hour correctly
   const driveTimeInHours = convertTimeToHours(data.totalTime || "");
-  const totalHours = parseFloat(data.hoursWorked) + driveTimeInHours;
+  const totalHours = data.hoursWorked + driveTimeInHours;
 
-  data.netProfit = parseFloat(data.netProfit).toFixed(2);
-  const netProfitFloat = parseFloat(data.netProfit);
-
+  const netProfitFloat = parseFloat(data.netProfit || 0); // use unrounded float
   data.profitPerHour = totalHours > 0
     ? (netProfitFloat / totalHours).toFixed(2)
     : "0.00";
+
+  data.netProfit = netProfitFloat.toFixed(2); // round only once
 
   localStorage.removeItem("draftTrip");
   logEntries.unshift(data);
@@ -2601,6 +2600,7 @@ async function optimizeRoute() {
     disableAutoSave = false;
   }, 1000);
 }
+
 
 
 
@@ -3144,7 +3144,7 @@ if (earningsInput) {
 }
 
 
-      async function saveEditedLogEntry() {
+async function saveEditedLogEntry() {
   if (editingIndex === -1) {
     console.warn("No entry selected for editing.");
     return;
@@ -3159,11 +3159,8 @@ if (earningsInput) {
   entry.endTime = document.getElementById("edit-end-address").value;
   entry.totalTime = document.getElementById("edit-total-time")?.value || "";
 
-
   entry.destinations = [];
   entry.earnings = [];
-
-  
 
   const destInputs = document.querySelectorAll(
     '#edit-destinations-container input[id^="edit-destination-"]'
@@ -3177,54 +3174,41 @@ if (earningsInput) {
   });
 
   saveRecentDestinations(entry.destinations);
-updateDatalistSuggestions();
+  updateDatalistSuggestions();
 
   earningsInputs.forEach((input) => {
     const value = parseFloat(input.value.trim()) || 0;
     entry.earnings.push(value);
   });
 
-  entry.totalEarnings = entry.earnings
-    .reduce((sum, val) => sum + val, 0)
-    .toFixed(2);
+  entry.totalEarnings = entry.earnings.reduce((sum, val) => sum + val, 0);
 
-entry.fuelCost = getNumberValue("edit-fuel-cost");
-entry.maintenanceCost = getNumberValue("edit-maintenance-cost");
-entry.suppliesCost = getNumberValue("edit-supplies-cost");
-entry.totalMileage = getNumberValue("edit-total-mileage");
-entry.mpg = getNumberValue("edit-mpg");
-entry.gasPrice = getNumberValue("edit-gas-price");
-entry.hoursWorked = getNumberValue("edit-hours-worked");
+  entry.fuelCost = getNumberValue("edit-fuel-cost");
+  entry.maintenanceCost = getNumberValue("edit-maintenance-cost");
+  entry.suppliesCost = getNumberValue("edit-supplies-cost");
+  entry.totalMileage = getNumberValue("edit-total-mileage");
+  entry.mpg = getNumberValue("edit-mpg");
+  entry.gasPrice = getNumberValue("edit-gas-price");
+  entry.hoursWorked = getNumberValue("edit-hours-worked");
 
+  const netProfitFloat = entry.totalEarnings - entry.fuelCost - entry.maintenanceCost - entry.suppliesCost;
 
-  // ... existing field assignments above ...
+  const driveTimeInHours = convertTimeToHours(entry.totalTime || "");
+  const totalHours = entry.hoursWorked + driveTimeInHours;
 
-// Net Profit calculation
-const netProfitBeforeOptional = entry.totalEarnings - entry.fuelCost;
-entry.netProfit = (
-  netProfitBeforeOptional -
-  entry.maintenanceCost -
-  entry.suppliesCost
-).toFixed(2);
+  entry.profitPerHour = totalHours > 0
+    ? (netProfitFloat / totalHours).toFixed(2)
+    : "0.00";
 
-// ✅ Recalculate profit per hour using accurate hours
-const driveTimeInHours = convertTimeToHours(entry.totalTime || "");
-const totalHours = parseFloat(entry.hoursWorked) + driveTimeInHours;
+  entry.netProfit = netProfitFloat.toFixed(2);
+  entry.lastModified = new Date().toISOString();
 
-entry.netProfit = parseFloat(entry.netProfit).toFixed(2);
-const netProfitFloat = parseFloat(entry.netProfit);
+  await saveLog();
+  filterLogs();
+  closeEditForm();
+  showConfirmationMessage("✅ Log entry updated!");
+}
 
-entry.profitPerHour = totalHours > 0
-  ? (netProfitFloat / totalHours).toFixed(2)
-  : "0.00";
-
-entry.lastModified = new Date().toISOString();
-await saveLog();
-filterLogs();
-closeEditForm();
-showConfirmationMessage("✅ Log entry updated!");
-
-      }
 
       let fileReaderBusy = false; // global or top-level
 
