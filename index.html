@@ -2315,7 +2315,27 @@ document.getElementById("total-hours").textContent = `${totalH} hour${totalH !==
             <p><strong>Maintenance:</strong> $${data.maintenanceCost}</p>
             <p><strong>Supplies:</strong> $${data.suppliesCost}</p>
               <p><strong>Hours Worked:</strong> ${formatHoursAndMinutes(data.hoursWorked ?? 0)}</p>
-  <p><strong>Total Hours:</strong> ${formatHoursAndMinutes((data.hoursWorked ?? 0) + convertTimeToHours(data.totalTime))}</p>
+    <p><strong>Total Hours:</strong> ${
+    (() => {
+      const start = data.startClock;
+      const end = data.endClock;
+      let totalMinutes = 0;
+
+      if (start && end && start.includes(":") && end.includes(":")) {
+        const [sh, sm] = start.split(":").map(Number);
+        const [eh, em] = end.split(":").map(Number);
+        let startMin = sh * 60 + sm;
+        let endMin = eh * 60 + em;
+        if (endMin < startMin) endMin += 24 * 60;
+        totalMinutes = endMin - startMin;
+      }
+
+      const h = Math.floor(totalMinutes / 60);
+      const m = totalMinutes % 60;
+      return `${h} hour${h !== 1 ? "s" : ""} ${m} minute${m !== 1 ? "s" : ""}`;
+    })()
+  }</p>
+
   <p><strong>Net Profit:</strong> $${data.netProfit}</p>
 
             <p><strong>Profit per Hour:</strong> $${data.profitPerHour}</p>
