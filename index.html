@@ -926,10 +926,13 @@ img {
       <label for="hours-worked">Hours Worked (Optional)</label>
 <div>
   <input
-    type="number"
-    id="hours-worked"
-    placeholder="Auto-filled if times are entered"
-  />
+  type="number"
+  id="hours-worked"
+  placeholder="Auto-filled from times"
+  readonly
+  style="background-color: #eee; cursor: not-allowed;"
+/>
+
   <div id="hours-display" style="margin-top: 4px; font-size: 14px; color: #555;"></div>
 </div>
 
@@ -3930,32 +3933,21 @@ toggleButton.textContent = "More Details";
 function calculateTotalHours(entry) {
   const start = entry.startClock;
   const end = entry.endClock;
-
-  if (start && end && start.includes(":") && end.includes(":")) {
-    const [sh, sm] = start.split(":").map(Number);
-    const [eh, em] = end.split(":").map(Number);
-    let startMin = sh * 60 + sm;
-    let endMin = eh * 60 + em;
-    if (endMin < startMin) endMin += 24 * 60;
-
-    const totalMinutes = endMin - startMin;
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    return `${hours} hour${hours !== 1 ? "s" : ""} ${minutes} minute${minutes !== 1 ? "s" : ""}`;
+  if (!start || !end || !start.includes(":") || !end.includes(":")) {
+    return "N/A";
   }
 
-  // 🔁 Fallback: use manually entered hoursWorked + driveTime
-  const workedTime = parseFloat(entry.hoursWorked || 0);
-  const driveTime = convertTimeToHours(entry.totalTime || "");
-  const total = workedTime + driveTime;
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  let startMin = sh * 60 + sm;
+  let endMin = eh * 60 + em;
+  if (endMin < startMin) endMin += 24 * 60;
 
-  if (total > 0) {
-    return formatHoursAndMinutes(total);
-  }
-
-  return "N/A";
+  const totalMinutes = endMin - startMin;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours} hour${hours !== 1 ? "s" : ""} ${minutes} minute${minutes !== 1 ? "s" : ""}`;
 }
-
 
 
 function clearFilters() {
