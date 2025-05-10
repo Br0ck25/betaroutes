@@ -3942,28 +3942,36 @@ function renumberMainDestinations() {
   });
 }
 
-// Add this to the bottom of your JavaScript code (or enhance the existing exportToCSV and exportToPDF)
-
-// Add this to the bottom of your JavaScript code (or enhance the existing exportToCSV and exportToPDF)
-
 function calculateTotals(logs) {
   return logs.reduce(
     (totals, entry) => {
-      totals.earnings += parseFloat(entry.totalEarnings || 0);
-      totals.fuel += parseFloat(entry.fuelCost || 0);
+      totals.totalEarnings += parseFloat(entry.totalEarnings || 0);
+      totals.fuelCost += parseFloat(entry.fuelCost || 0);
       totals.maintenance += parseFloat(entry.maintenanceCost || 0);
       totals.supplies += parseFloat(entry.suppliesCost || 0);
-      totals.net += parseFloat(entry.netProfit || 0);
+      totals.netProfit += parseFloat(entry.netProfit || 0);
       totals.mileage += parseFloat(entry.totalMileage || 0);
+      totals.hoursWorked += parseFloat(entry.hoursWorked || 0);
       totals.driveMinutes += convertTimeToMinutes(entry.totalTime);
       const pph = parseFloat(entry.profitPerHour || 0);
       if (!isNaN(pph)) {
         totals.profitPerHourSum += pph;
-        totals.count++; 
+        totals.count++;
       }
       return totals;
     },
-    { earnings: 0, fuel: 0, maintenance: 0, supplies: 0, net: 0, mileage: 0, driveMinutes: 0, profitPerHourSum: 0, count: 0 }
+    {
+      totalEarnings: 0,
+      fuelCost: 0,
+      maintenance: 0,
+      supplies: 0,
+      netProfit: 0,
+      mileage: 0,
+      hoursWorked: 0,
+      driveMinutes: 0,
+      profitPerHourSum: 0,
+      count: 0
+    }
   );
 }
 
@@ -3978,59 +3986,66 @@ function convertTimeToMinutes(timeStr) {
 
 function exportToCSVWithTotals() {
   const header =
-    "Date,Start Address,Destinations,End Address,Total Earnings,Fuel Cost,Maintenance Cost,Supplies Cost,Net Profit,Mileage,Drive Time,Earnings per Stop,Profit per Hour\n";
+    "Date,Start Time,End Time,Start Address,Destinations,End Address,Earnings per Stop,Mileage,Drive Time,Total Earnings,Fuel Cost,Maintenance,Supplies,Hours Worked,Total Hours,Net Profit,Profit per Hour\n";
+
   const csvRows = logEntries.map((entry) => {
-    const destinationsString = `"${entry.destinations.map((d) => d.replace(/"/g, '""')).join(";")}"`;
-    const earningsString = `"${entry.earnings.join(";")}"`;
-    const totalTimeString = `"${entry.totalTime.replace(/"/g, '""')}"`;
-    const startAddressString = `"${entry.startTime.replace(/"/g, '""')}"`;
-    const endAddressString = `"${entry.endTime.replace(/"/g, '""')}"`;
+    const destinationsString = `"${(entry.destinations || []).join(";")}"`;
+    const earningsString = `"${(entry.earnings || []).map(e => `$${parseFloat(e).toFixed(2)}`).join(";")}"`;
+    const driveMinutes = convertTimeToMinutes(entry.totalTime);
+    const totalHours = (parseFloat(entry.hoursWorked || 0) + driveMinutes / 60).toFixed(2);
+
     return [
       entry.date,
-      startAddressString,
+      entry.startClock || "",
+      entry.endClock || "",
+      entry.startTime,
       destinationsString,
-      endAddressString,
+      entry.endTime,
+      earningsString,
+      entry.totalMileage,
+      entry.totalTime,
       entry.totalEarnings,
       entry.fuelCost,
       entry.maintenanceCost,
       entry.suppliesCost,
+      entry.hoursWorked,
+      totalHours,
       entry.netProfit,
-      entry.totalMileage,
-      totalTimeString,
-      earningsString,
       entry.profitPerHour || ""
     ].join(",");
   });
 
   const totals = calculateTotals(logEntries);
   const totalDriveHours = totals.driveMinutes / 60;
-  const averageProfitPerHour = totals.count > 0 ? (totals.profitPerHourSum / totals.count).toFixed(2) : "0.00";
+  const totalHours = totals.hoursWorked + totalDriveHours;
+  const avgProfitPerHour = totals.count > 0 ? (totals.profitPerHourSum / totals.count).toFixed(2) : "0.00";
 
   const totalRow = [
-    "Totals:", "", "", "",
-    totals.earnings.toFixed(2),
-    totals.fuel.toFixed(2),
-    totals.maintenance.toFixed(2),
-    totals.supplies.toFixed(2),
-    totals.net.toFixed(2),
+    "Totals:", "", "", "", "", "", "",
     totals.mileage.toFixed(2),
     `${Math.floor(totalDriveHours)} hour${Math.floor(totalDriveHours) !== 1 ? 's' : ''} ${Math.round((totalDriveHours % 1) * 60)} minutes`,
-    "", // Earnings per Stop total not meaningful
-    averageProfitPerHour
+    totals.totalEarnings.toFixed(2),
+    totals.fuelCost.toFixed(2),
+    totals.maintenance.toFixed(2),
+    totals.supplies.toFixed(2),
+    totals.hoursWorked.toFixed(2),
+    totalHours.toFixed(2),
+    totals.netProfit.toFixed(2),
+    avgProfitPerHour
   ].join(",");
 
   const csvString = header + csvRows.join("\n") + "\n" + totalRow;
-  const filename = "profit_log_with_totals.csv";
   const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
   const link = document.createElement("a");
   const url = URL.createObjectURL(blob);
   link.setAttribute("href", url);
-  link.setAttribute("download", filename);
+  link.setAttribute("download", "profit_log_full_export.csv");
   link.style.visibility = "hidden";
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
 }
+
 
 function exportToPDFWithTotals() {
   const { jsPDF } = window.jspdf;
