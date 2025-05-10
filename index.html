@@ -1528,7 +1528,13 @@ function closeUniversalModal() {
       />
 
       <label for="edit-hours-worked">Total Hours</label>
-<input type="number" id="edit-hours-worked" readonly style="background-color: #eee; cursor: not-allowed;" />
+<input
+  type="number"
+  id="edit-hours-worked"
+  placeholder="Enter times above to calculate."
+  readonly
+  style="background-color: #f0f0f0; cursor: not-allowed;"
+/>
 <div id="edit-hours-message" style="font-size: 14px; color: #666; margin-top: 4px;"></div>
 
 
@@ -3825,36 +3831,27 @@ function recalculateEditHoursWorked() {
   const endTime = document.getElementById("edit-end-time")?.value;
   const totalTimeStr = document.getElementById("edit-total-time")?.value;
   const hoursWorkedInput = document.getElementById("edit-hours-worked");
-  const messageEl = document.getElementById("edit-hours-message");
 
-  if (!hoursWorkedInput || !messageEl) return;
+  if (!hoursWorkedInput) return;
 
-  // Always lock the field
   hoursWorkedInput.readOnly = true;
   hoursWorkedInput.style.backgroundColor = "#f0f0f0";
 
-  // If times are missing, clear value and show message
   if (!startTime || !endTime) {
     hoursWorkedInput.value = "";
-    messageEl.textContent = "Enter times above to calculate.";
     return;
   }
-
-  // ✅ Clear message once valid
-  messageEl.textContent = "";
 
   const [startHours, startMinutes] = startTime.split(":").map(Number);
   const [endHours, endMinutes] = endTime.split(":").map(Number);
 
   let start = startHours * 60 + startMinutes;
   let end = endHours * 60 + endMinutes;
-
-  if (end < start) end += 24 * 60; // overnight shift
+  if (end < start) end += 24 * 60;
 
   const totalWorkedMinutes = end - start;
   let driveMinutes = 0;
 
-  // Parse total drive time
   if (totalTimeStr) {
     const hoursMatch = totalTimeStr.match(/(\d+)\s*hour/);
     const minutesMatch = totalTimeStr.match(/(\d+)\s*minute/);
@@ -3865,9 +3862,9 @@ function recalculateEditHoursWorked() {
   const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
   const actualWorkedHours = actualWorkedMinutes / 60;
 
-  // ✅ Set calculated value
   hoursWorkedInput.value = actualWorkedHours.toFixed(2);
 }
+
 
 
 
