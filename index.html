@@ -2311,49 +2311,41 @@ document.getElementById("total-hours").textContent = `${totalH} hour${totalH !==
 
           // ✅ Add the new detailed display below the map
           const detailedResultsHTML = `
-            <h3>Route Details</h3>
-            <p><strong>Date:</strong> ${data.date}</p>
-            <p><strong>Start Address:</strong> ${data.startTime}</p>
-            <p><strong>Destinations:</strong><br>${data.destinations
-              .map((d) => `- ${d}`)
-              .join("<br>")}</p>
-            <p><strong>End Address:</strong> ${data.endTime}</p>
-            <p><strong>Earnings per Stop:</strong> ${data.earnings
-              .map((e) => `$${parseFloat(e).toFixed(2)}`)
-              .join(", ")}</p>
-            <p><strong>Mileage:</strong> ${data.totalMileage} miles</p>
-            <p><strong>Drive Time:</strong> ${data.totalTime}</p>
-            <p><strong>Total Earnings:</strong> $${data.totalEarnings}</p>
-            <p><strong>Fuel Cost:</strong> $${data.fuelCost}</p>
-            <p><strong>Maintenance:</strong> $${data.maintenanceCost}</p>
-            <p><strong>Supplies:</strong> $${data.suppliesCost}</p>
-<p><strong>Hours Worked:</strong> ${formatHoursAndMinutes(data.hoursWorked ?? 0)}</p>
-<p><strong>Total Hours:</strong> ${
-  (() => {
-    const start = data.startClock;
-    const end = data.endClock;
-    let totalMinutes = 0;
-
-    if (start && end && start.includes(":") && end.includes(":")) {
-      const [sh, sm] = start.split(":").map(Number);
-      const [eh, em] = end.split(":").map(Number);
-      let startMin = sh * 60 + sm;
-      let endMin = eh * 60 + em;
-      if (endMin < startMin) endMin += 24 * 60;
-      totalMinutes = endMin - startMin;
-    }
-
-    const h = Math.floor(totalMinutes / 60);
-    const m = totalMinutes % 60;
-    return `${h} hour${h !== 1 ? "s" : ""} ${m} minute${m !== 1 ? "s" : ""}`;
-  })()
-}</p>
-
-
+  <h3>Route Details</h3>
+  <p><strong>Date:</strong> ${data.date}</p>
+  <p><strong>Start Address:</strong> ${data.startTime}</p>
+  <p><strong>Destinations:</strong><br>${data.destinations.map((d) => `- ${d}`).join("<br>")}</p>
+  <p><strong>End Address:</strong> ${data.endTime}</p>
+  <p><strong>Earnings per Stop:</strong> ${data.earnings.map((e) => `$${parseFloat(e).toFixed(2)}`).join(", ")}</p>
+  <p><strong>Mileage:</strong> ${data.totalMileage} miles</p>
+  <p><strong>Drive Time:</strong> ${data.totalTime}</p>
+  <p><strong>Total Earnings:</strong> $${data.totalEarnings}</p>
+  <p><strong>Fuel Cost:</strong> $${data.fuelCost}</p>
+  <p><strong>Maintenance:</strong> $${data.maintenanceCost}</p>
+  <p><strong>Supplies:</strong> $${data.suppliesCost}</p>
+  <p><strong>Hours Worked:</strong> ${formatHoursAndMinutes(data.hoursWorked ?? 0)}</p>
+  <p><strong>Total Hours:</strong> ${
+    (() => {
+      const start = data.startClock;
+      const end = data.endClock;
+      let totalMinutes = 0;
+      if (start && end && start.includes(":") && end.includes(":")) {
+        const [sh, sm] = start.split(":").map(Number);
+        const [eh, em] = end.split(":").map(Number);
+        let startMin = sh * 60 + sm;
+        let endMin = eh * 60 + em;
+        if (endMin < startMin) endMin += 24 * 60;
+        totalMinutes = endMin - startMin;
+      }
+      const h = Math.floor(totalMinutes / 60);
+      const m = totalMinutes % 60;
+      return `${h} hour${h !== 1 ? "s" : ""} ${m} minute${m !== 1 ? "s" : ""}`;
+    })()
+  }</p>
   <p><strong>Net Profit:</strong> $${data.netProfit}</p>
+  <p><strong>Profit per Hour:</strong> $${data.profitPerHour}</p>
+`;
 
-            <p><strong>Profit per Hour:</strong> $${data.profitPerHour}</p>
-        `;
           document.getElementById("detailed-results").innerHTML =
             detailedResultsHTML;
         }
