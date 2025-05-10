@@ -2223,9 +2223,9 @@ const selectedDate = logDateInput || new Date().toISOString().split("T")[0];
               const netProfitBeforeOptional = totalEarnings - fuelCost;
               const netProfit =
                 netProfitBeforeOptional - maintenanceCost - suppliesCost;
-              const totalHoursSpent = hoursWorked + totalDuration / 3600;
-              const profitPerHour =
-                totalHoursSpent > 0 ? netProfit / totalHoursSpent : 0;
+                const totalHoursSpent = hoursWorked; // use already drive-adjusted value
+const profitPerHour = totalHoursSpent > 0 ? netProfit / totalHoursSpent : 0;
+
 
               resolve({
               
@@ -2582,15 +2582,17 @@ async function optimizeRoute() {
   data.gasPrice = parseFloat(document.getElementById("gas-price").value) || 0;
   data.lastModified = new Date().toISOString();
 
-  const driveTimeInHours = convertTimeToHours(data.totalTime || "");
-  const totalHours = data.hoursWorked + driveTimeInHours;
+  // ✅ totalTime is like "1 hour 30 minutes" — convert to hours
+  const driveTime = convertTimeToHours(data.totalTime || "");
+  const totalHours = data.hoursWorked + driveTime;
 
-  const netProfitFloat = parseFloat(data.netProfit || 0); // use unrounded float
+  const netProfitFloat = parseFloat(data.netProfit || 0);
+
   data.profitPerHour = totalHours > 0
     ? (netProfitFloat / totalHours).toFixed(2)
     : "0.00";
 
-  data.netProfit = netProfitFloat.toFixed(2); // round only once
+  data.netProfit = netProfitFloat.toFixed(2);
 
   localStorage.removeItem("draftTrip");
   logEntries.unshift(data);
@@ -3182,7 +3184,6 @@ async function saveEditedLogEntry() {
   });
 
   entry.totalEarnings = entry.earnings.reduce((sum, val) => sum + val, 0);
-
   entry.fuelCost = getNumberValue("edit-fuel-cost");
   entry.maintenanceCost = getNumberValue("edit-maintenance-cost");
   entry.suppliesCost = getNumberValue("edit-supplies-cost");
@@ -3193,8 +3194,8 @@ async function saveEditedLogEntry() {
 
   const netProfitFloat = entry.totalEarnings - entry.fuelCost - entry.maintenanceCost - entry.suppliesCost;
 
-  const driveTimeInHours = convertTimeToHours(entry.totalTime || "");
-  const totalHours = entry.hoursWorked + driveTimeInHours;
+  const driveTime = convertTimeToHours(entry.totalTime || "");
+  const totalHours = entry.hoursWorked + driveTime;
 
   entry.profitPerHour = totalHours > 0
     ? (netProfitFloat / totalHours).toFixed(2)
@@ -3208,6 +3209,8 @@ async function saveEditedLogEntry() {
   closeEditForm();
   showConfirmationMessage("✅ Log entry updated!");
 }
+
+
 
 
       let fileReaderBusy = false; // global or top-level
