@@ -1077,61 +1077,78 @@ img {
         onclick="toggleManageLogMenu()"
         style="padding: 10px 15px; font-size: 16px"
       >
-        Manage Log ▼
-      </button>
-      <div
-        id="manage-log-menu"
+      Manage Log ▼
+    </button>
+    <div
+      id="manage-log-menu"
+      style="
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: white;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+        z-index: 9999;
+        min-width: 160px;
+        margin-top: 5px;
+        text-align: center;
+      "
+    >
+      <button
+        onclick="triggerImportFile()"
         style="
-          display: none;
-          position: absolute;
-          top: 100%;
-          left: 50%;
-          transform: translateX(-50%);
-          background: white;
-          border: 1px solid #ccc;
-          border-radius: 6px;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-          z-index: 9999;
-          min-width: 160px;
-          margin-top: 5px;
-          text-align: center; /* 🆕 Add this line */
+          width: auto;
+          min-width: 120px;
+          padding: 10px;
+          background: none;
+          border: none;
+          text-align: center;
+          color: black;
+          display: inline-block;
+          margin: 5px 0;
         "
       >
-        <button
-          onclick="triggerImportFile()"
-          style="
-            width: auto; /* 🆕 Change */
-            min-width: 120px; /* 🆕 New */
-            padding: 10px;
-            background: none;
-            border: none;
-            text-align: center; /* 🆕 Change */
-            color: black;
-            display: inline-block; /* 🆕 New */
-            margin: 5px 0; /* 🆕 Add some vertical margin */
-          "
-        >
-          Import CSV
-        </button>
-        <button
-          onclick="exportToCSVWithTotals()"
-          style="
-            width: auto; /* 🆕 Change */
-            min-width: 120px; /* 🆕 New */
-            padding: 10px;
-            background: none;
-            border: none;
-            text-align: center; /* 🆕 Change */
-            color: black;
-            display: inline-block; /* 🆕 New */
-            margin: 5px 0; /* 🆕 Add some vertical margin */
-          "
-        >
-          Export CSV
-        </button>
-      </div>
-      </div>
+        Import CSV
+      </button>
+      <button
+        onclick="exportToCSVWithTotals()"
+        style="
+          width: auto;
+          min-width: 120px;
+          padding: 10px;
+          background: none;
+          border: none;
+          text-align: center;
+          color: black;
+          display: inline-block;
+          margin: 5px 0;
+        "
+      >
+        Export CSV
+      </button>
+      <button
+        onclick="exportToPDFWithTotals()"
+        style="
+          width: auto;
+          min-width: 120px;
+          padding: 10px;
+          background: none;
+          border: none;
+          text-align: center;
+          color: black;
+          display: inline-block;
+          margin: 5px 0;
+        "
+      >
+        Export PDF
+      </button>
     </div>
+    </div>
+    </div>
+    
 
     <input
       type="file"
@@ -3199,110 +3216,6 @@ entry.hoursWorked = getNumberValue("edit-hours-worked");
 
   closeEditForm(); // ✅ THEN close the edit screen
   showConfirmationMessage("✅ Log entry updated!");
-      }
-
-      function exportToCSV() {
-        const header =
-          "Date,Start Address,Destinations,End Address,Total Earnings,Fuel Cost,Maintenance Cost,Supplies Cost,Net Profit,Mileage,Drive Time,Earnings per Stop,Profit per Hour\n";
-        const csvRows = logEntries.map((entry) => {
-          const formattedDate = entry.date; // Keep the original date format for CSV
-
-          const destinationsString = `"${entry.destinations
-            .map((d) => d.replace(/"/g, '""'))
-            .join(";")}"`;
-          const earningsString = `"${entry.earnings.join(";")}"`;
-          const totalTimeString = `"${entry.totalTime.replace(/"/g, '""')}"`;
-          const startAddressString = `"${entry.startTime.replace(/"/g, '""')}"`;
-          const endAddressString = `"${entry.endTime.replace(/"/g, '""')}"`;
-          const profitPerHourString = entry.profitPerHour
-            ? `"${entry.profitPerHour}"`
-            : "";
-
-          return [
-            formattedDate,
-            startAddressString,
-            destinationsString,
-            endAddressString,
-            entry.totalEarnings,
-            entry.fuelCost,
-            entry.maintenanceCost,
-            entry.suppliesCost,
-            entry.netProfit,
-            entry.totalMileage,
-            totalTimeString,
-            earningsString,
-            profitPerHourString,
-          ].join(",");
-        });
-        const csvString = header + csvRows.join("\n");
-
-        const filename = "profit_log.csv";
-        const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
-        const link = document.createElement("a");
-        if (link.download !== undefined) {
-          const url = URL.createObjectURL(blob);
-          link.setAttribute("href", url);
-          link.setAttribute("download", filename);
-          link.style.visibility = "hidden";
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        } else {
-          window.open(
-            "data:text/csv;charset=utf-8," + encodeURIComponent(csvString)
-          );
-        }
-      }
-
-      function exportToPDF() {
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF();
-
-        const columns = [
-          "Date",
-          "Start",
-          "Destinations",
-          "End",
-          "Earnings",
-          "Fuel",
-          "Maintenance",
-          "Supplies",
-          "Net Profit",
-          "Mileage",
-          "Drive Time",
-        ];
-        const data = logEntries.map((entry) => [
-          entry.date,
-          entry.startTime,
-          entry.destinations.join("\n"),
-          entry.endTime,
-          `$${entry.totalEarnings}`,
-          `$${entry.fuelCost}`,
-          `$${entry.maintenanceCost}`,
-          `$${entry.suppliesCost}`,
-          `$${entry.netProfit}`,
-          `${entry.totalMileage} mi`,
-          entry.totalTime,
-        ]);
-
-        pdf.autoTable({
-          head: [columns],
-          body: data,
-          margin: { top: 20, left: 10, right: 10, bottom: 20 },
-          headStyles: { fillColor: [44, 62, 80], textColor: [255, 255, 255] },
-          columnStyles: { 2: { columnWidth: 30 } }, // Adjust column width for destinations
-          didDrawPage: function (data) {
-            pdf.setFontSize(12);
-            pdf.setTextColor(40);
-            pdf.text(
-              `Profit Log - Page ${data.pageNumber}`,
-              data.settings.margin.left,
-              pdf.internal.pageSize.height - 10
-            );
-          },
-        });
-
-        pdf.save("profit_log.pdf");
       }
 
       let fileReaderBusy = false; // global or top-level
