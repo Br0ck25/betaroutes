@@ -2582,12 +2582,16 @@ async function optimizeRoute() {
   data.gasPrice = parseFloat(document.getElementById("gas-price").value) || 0;
   data.lastModified = new Date().toISOString();
 
-  // ✅ Recalculate total hours
+  // ✅ FIX: Calculate profit per hour correctly
   const driveTimeInHours = convertTimeToHours(data.totalTime || "");
-  const totalHours = data.hoursWorked + driveTimeInHours;
+  const totalHours = parseFloat(data.hoursWorked) + driveTimeInHours;
 
-  // ✅ Recalculate profit per hour
-  data.profitPerHour = totalHours > 0 ? (data.netProfit / totalHours).toFixed(2) : "0.00";
+  data.netProfit = parseFloat(data.netProfit).toFixed(2);
+  const netProfitFloat = parseFloat(data.netProfit);
+
+  data.profitPerHour = totalHours > 0
+    ? (netProfitFloat / totalHours).toFixed(2)
+    : "0.00";
 
   localStorage.removeItem("draftTrip");
   logEntries.unshift(data);
@@ -2597,6 +2601,7 @@ async function optimizeRoute() {
     disableAutoSave = false;
   }, 1000);
 }
+
 
 
 
@@ -3192,40 +3197,33 @@ entry.gasPrice = getNumberValue("edit-gas-price");
 entry.hoursWorked = getNumberValue("edit-hours-worked");
 
 
-  const netProfitBeforeOptional = entry.totalEarnings - entry.fuelCost;
-  entry.netProfit = (
-    netProfitBeforeOptional -
-    entry.maintenanceCost -
-    entry.suppliesCost
-  ).toFixed(2);
+  // ... existing field assignments above ...
 
-  let driveTimeInHours = 0;
-  const timeMatch = entry.totalTime.match(
-    /(\d+)\s*hour(s)?\s*(\d+)?\s*minute(s)?/i
-  );
-  if (timeMatch) {
-    const hours = parseInt(timeMatch[1]) || 0;
-    const minutes = parseInt(timeMatch[3]) || 0;
-    driveTimeInHours = hours + minutes / 60;
-  } else {
-    const minuteMatch = entry.totalTime.match(/(\d+)\s*minute(s)?/i);
-    if (minuteMatch) {
-      driveTimeInHours = parseInt(minuteMatch[1]) / 60;
-    }
-  }
+// Net Profit calculation
+const netProfitBeforeOptional = entry.totalEarnings - entry.fuelCost;
+entry.netProfit = (
+  netProfitBeforeOptional -
+  entry.maintenanceCost -
+  entry.suppliesCost
+).toFixed(2);
 
-  const totalHoursSpent = entry.hoursWorked + driveTimeInHours;
-  entry.profitPerHour =
-    totalHoursSpent > 0
-      ? (entry.netProfit / totalHoursSpent).toFixed(2)
-      : "0.00";
+// ✅ Recalculate profit per hour using accurate hours
+const driveTimeInHours = convertTimeToHours(entry.totalTime || "");
+const totalHours = parseFloat(entry.hoursWorked) + driveTimeInHours;
 
-      entry.lastModified = new Date().toISOString();
-  await saveLog(); // ✅ Wait for save
-  filterLogs();
+entry.netProfit = parseFloat(entry.netProfit).toFixed(2);
+const netProfitFloat = parseFloat(entry.netProfit);
 
-  closeEditForm(); // ✅ THEN close the edit screen
-  showConfirmationMessage("✅ Log entry updated!");
+entry.profitPerHour = totalHours > 0
+  ? (netProfitFloat / totalHours).toFixed(2)
+  : "0.00";
+
+entry.lastModified = new Date().toISOString();
+await saveLog();
+filterLogs();
+closeEditForm();
+showConfirmationMessage("✅ Log entry updated!");
+
       }
 
       let fileReaderBusy = false; // global or top-level
