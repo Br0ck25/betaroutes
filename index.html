@@ -923,7 +923,8 @@ img {
       <label for="end-time">End Time (Optional)</label>
       <input type="time" id="end-time" placeholder="Enter end time" />
 
-      <label for="hours-worked">Hours Worked (Optional)</label>
+      <label for="hours-worked">Total Hours</label>
+
 <div>
   <input
   type="number"
@@ -1526,8 +1527,9 @@ function closeUniversalModal() {
         placeholder="e.g., 1 hour 30 minutes"
       />
 
-      <label for="edit-hours-worked">Hours Worked (Optional)</label>
-      <input type="number" id="edit-hours-worked" />
+      <label for="edit-hours-worked">Total Hours</label>
+<input type="number" id="edit-hours-worked" readonly style="background-color: #eee; cursor: not-allowed;" />
+
 
       <button type="button" class="save-btn" onclick="saveEditedLogEntry()">
         Save
