@@ -3745,33 +3745,40 @@ function filterLogs() {
 
   filteredEntries.forEach((entry) => {
     const netProfit = parseFloat(entry.netProfit) || 0;
+    totalNetProfit += netProfit;
 
-    let totalHoursWorked = parseFloat(entry.hoursWorked) || 0;
+    let hoursWorked = parseFloat(entry.hoursWorked) || 0;
+    let driveHours = 0;
 
-    // Convert "X hours Y minutes" format to decimal if needed
-    const match = (entry.totalTime || "").match(/(\d+)\s*hour.*?(\d+)?\s*minute/i);
-    if (match) {
-      const hours = parseInt(match[1]) || 0;
-      const minutes = parseInt(match[2]) || 0;
-      totalHoursWorked += hours + minutes / 60;
+    if (entry.totalTime) {
+      const match = entry.totalTime.match(/(\d+)\s*hour.*?(\d+)?\s*minute/i);
+      if (match) {
+        const h = parseInt(match[1]) || 0;
+        const m = parseInt(match[2]) || 0;
+        driveHours = h + m / 60;
+      } else {
+        const mins = entry.totalTime.match(/(\d+)\s*minute/i);
+        if (mins) {
+          driveHours = parseInt(mins[1]) / 60;
+        }
+      }
     }
 
-    totalNetProfit += netProfit;
-    totalHours += totalHoursWorked;
+    totalHours += hoursWorked + driveHours;
   });
 
   const profitPerHour =
     totalHours > 0 ? (totalNetProfit / totalHours).toFixed(2) : "0.00";
-
-  const hours = Math.floor(totalHours);
-  const minutes = Math.round((totalHours - hours) * 60);
+  const totalH = Math.floor(totalHours);
+  const totalM = Math.round((totalHours - totalH) * 60);
 
   summaryDiv.innerHTML = `
-    Net Profit: $${totalNetProfit.toFixed(2)}<br>
-    Profit Per Hour: $${profitPerHour}<br>
-    Total Hours: ${hours} hour${hours !== 1 ? "s" : ""} ${minutes} minute${minutes !== 1 ? "s" : ""}
+    <div style="color: green;">Net Profit: $${totalNetProfit.toFixed(2)}</div>
+    <div style="color: #007bff;">Profit Per Hour: $${profitPerHour}</div>
+    <div>Total Hours: ${totalH} hour${totalH !== 1 ? "s" : ""} ${totalM} minute${totalM !== 1 ? "s" : ""}</div>
   `;
 }
+
 
       function recalculateEditHoursWorked() {
   const startTime = document.getElementById("edit-start-time")?.value;
