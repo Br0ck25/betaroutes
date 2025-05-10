@@ -2582,12 +2582,22 @@ async function optimizeRoute() {
   data.gasPrice = parseFloat(document.getElementById("gas-price").value) || 0;
   data.lastModified = new Date().toISOString();
 
-  // ✅ totalTime is like "1 hour 30 minutes" — convert to hours
-  const driveTime = convertTimeToHours(data.totalTime || "");
-  const totalHours = data.hoursWorked + driveTime;
+  // ✅ Calculate total time from start and end clock times
+  const start = document.getElementById("start-time").value;
+  const end = document.getElementById("end-time").value;
+  let totalHours = 0;
 
+  if (start && end) {
+    const [sh, sm] = start.split(":").map(Number);
+    const [eh, em] = end.split(":").map(Number);
+    let startMin = sh * 60 + sm;
+    let endMin = eh * 60 + em;
+    if (endMin < startMin) endMin += 24 * 60; // handle overnight
+    totalHours = (endMin - startMin) / 60;
+  }
+
+  // ✅ Use total session time for profitPerHour
   const netProfitFloat = parseFloat(data.netProfit || 0);
-
   data.profitPerHour = totalHours > 0
     ? (netProfitFloat / totalHours).toFixed(2)
     : "0.00";
@@ -2602,6 +2612,7 @@ async function optimizeRoute() {
     disableAutoSave = false;
   }, 1000);
 }
+
 
 
 
@@ -3194,8 +3205,19 @@ async function saveEditedLogEntry() {
 
   const netProfitFloat = entry.totalEarnings - entry.fuelCost - entry.maintenanceCost - entry.suppliesCost;
 
-  const driveTime = convertTimeToHours(entry.totalTime || "");
-  const totalHours = entry.hoursWorked + driveTime;
+  // ✅ Calculate total hours from start and end time
+  const start = document.getElementById("edit-start-time").value;
+  const end = document.getElementById("edit-end-time").value;
+  let totalHours = 0;
+
+  if (start && end) {
+    const [sh, sm] = start.split(":").map(Number);
+    const [eh, em] = end.split(":").map(Number);
+    let startMin = sh * 60 + sm;
+    let endMin = eh * 60 + em;
+    if (endMin < startMin) endMin += 24 * 60;
+    totalHours = (endMin - startMin) / 60;
+  }
 
   entry.profitPerHour = totalHours > 0
     ? (netProfitFloat / totalHours).toFixed(2)
