@@ -3995,24 +3995,25 @@ function exportToCSVWithTotals() {
     const totalHours = (parseFloat(entry.hoursWorked || 0) + driveMinutes / 60).toFixed(2);
 
     return [
-      entry.date,
-      entry.startClock || "",
-      entry.endClock || "",
-      entry.startTime,
-      destinationsString,
-      entry.endTime,
-      earningsString,
-      entry.totalMileage,
-      entry.totalTime,
-      entry.totalEarnings,
-      entry.fuelCost,
-      entry.maintenanceCost,
-      entry.suppliesCost,
-      entry.hoursWorked,
-      totalHours,
-      entry.netProfit,
-      entry.profitPerHour || ""
-    ].join(",");
+  entry.date,
+  entry.startClock || "",
+  entry.endClock || "",
+  `"${(entry.startTime || "").replace(/"/g, '""')}"`,
+  destinationsString,
+  `"${(entry.endTime || "").replace(/"/g, '""')}"`,
+  earningsString,
+  entry.totalMileage,
+  entry.totalTime,
+  entry.totalEarnings,
+  entry.fuelCost,
+  entry.maintenanceCost,
+  entry.suppliesCost,
+  entry.hoursWorked,
+  totalHours,
+  entry.netProfit,
+  entry.profitPerHour || ""
+].join(",");
+
   });
 
   const totals = calculateTotals(logEntries);
