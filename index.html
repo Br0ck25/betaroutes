@@ -3930,21 +3930,32 @@ toggleButton.textContent = "More Details";
 function calculateTotalHours(entry) {
   const start = entry.startClock;
   const end = entry.endClock;
-  if (!start || !end || !start.includes(":") || !end.includes(":")) {
-    return "N/A";
+
+  if (start && end && start.includes(":") && end.includes(":")) {
+    const [sh, sm] = start.split(":").map(Number);
+    const [eh, em] = end.split(":").map(Number);
+    let startMin = sh * 60 + sm;
+    let endMin = eh * 60 + em;
+    if (endMin < startMin) endMin += 24 * 60;
+
+    const totalMinutes = endMin - startMin;
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${hours} hour${hours !== 1 ? "s" : ""} ${minutes} minute${minutes !== 1 ? "s" : ""}`;
   }
 
-  const [sh, sm] = start.split(":").map(Number);
-  const [eh, em] = end.split(":").map(Number);
-  let startMin = sh * 60 + sm;
-  let endMin = eh * 60 + em;
-  if (endMin < startMin) endMin += 24 * 60;
+  // 🔁 Fallback: use manually entered hoursWorked + driveTime
+  const workedTime = parseFloat(entry.hoursWorked || 0);
+  const driveTime = convertTimeToHours(entry.totalTime || "");
+  const total = workedTime + driveTime;
 
-  const totalMinutes = endMin - startMin;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return `${hours} hour${hours !== 1 ? "s" : ""} ${minutes} minute${minutes !== 1 ? "s" : ""}`;
+  if (total > 0) {
+    return formatHoursAndMinutes(total);
+  }
+
+  return "N/A";
 }
+
 
 
 function clearFilters() {
