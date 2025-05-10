@@ -2577,10 +2577,17 @@ async function optimizeRoute() {
 
   data.startClock = document.getElementById("start-time").value || "";
   data.endClock = document.getElementById("end-time").value || "";
-  data.hoursWorked = parseFloat(document.getElementById("hours-worked").value) || 0; // ✅ ADD THIS
+  data.hoursWorked = parseFloat(document.getElementById("hours-worked").value) || 0;
   data.mpg = parseFloat(document.getElementById("mpg").value) || 0;
   data.gasPrice = parseFloat(document.getElementById("gas-price").value) || 0;
   data.lastModified = new Date().toISOString();
+
+  // ✅ Recalculate total hours
+  const driveTimeInHours = convertTimeToHours(data.totalTime || "");
+  const totalHours = data.hoursWorked + driveTimeInHours;
+
+  // ✅ Recalculate profit per hour
+  data.profitPerHour = totalHours > 0 ? (data.netProfit / totalHours).toFixed(2) : "0.00";
 
   localStorage.removeItem("draftTrip");
   logEntries.unshift(data);
@@ -2590,6 +2597,7 @@ async function optimizeRoute() {
     disableAutoSave = false;
   }, 1000);
 }
+
 
 
 
