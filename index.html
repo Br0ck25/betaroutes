@@ -4029,6 +4029,121 @@ function renumberMainDestinations() {
   });
 }
 
+// Add this to the bottom of your JavaScript code (or enhance the existing exportToCSV and exportToPDF)
+
+function calculateTotals(logs) {
+  return logs.reduce(
+    (totals, entry) => {
+      totals.earnings += parseFloat(entry.totalEarnings || 0);
+      totals.fuel += parseFloat(entry.fuelCost || 0);
+      totals.maintenance += parseFloat(entry.maintenanceCost || 0);
+      totals.supplies += parseFloat(entry.suppliesCost || 0);
+      totals.net += parseFloat(entry.netProfit || 0);
+      return totals;
+    },
+    { earnings: 0, fuel: 0, maintenance: 0, supplies: 0, net: 0 }
+  );
+}
+
+function exportToCSVWithTotals() {
+  const header =
+    "Date,Start Address,Destinations,End Address,Total Earnings,Fuel Cost,Maintenance Cost,Supplies Cost,Net Profit,Mileage,Drive Time,Earnings per Stop,Profit per Hour\n";
+  const csvRows = logEntries.map((entry) => {
+    const destinationsString = `"${entry.destinations.map((d) => d.replace(/"/g, '""')).join(";")}"`;
+    const earningsString = `"${entry.earnings.join(";")}"`;
+    const totalTimeString = `"${entry.totalTime.replace(/"/g, '""')}"`;
+    const startAddressString = `"${entry.startTime.replace(/"/g, '""')}"`;
+    const endAddressString = `"${entry.endTime.replace(/"/g, '""')}"`;
+    return [
+      entry.date,
+      startAddressString,
+      destinationsString,
+      endAddressString,
+      entry.totalEarnings,
+      entry.fuelCost,
+      entry.maintenanceCost,
+      entry.suppliesCost,
+      entry.netProfit,
+      entry.totalMileage,
+      totalTimeString,
+      earningsString,
+      entry.profitPerHour || ""
+    ].join(",");
+  });
+
+  const totals = calculateTotals(logEntries);
+  const totalRow = [
+    "Totals:", "", "", "",
+    totals.earnings.toFixed(2),
+    totals.fuel.toFixed(2),
+    totals.maintenance.toFixed(2),
+    totals.supplies.toFixed(2),
+    totals.net.toFixed(2),
+    "", "", "", ""
+  ].join(",");
+
+  const csvString = header + csvRows.join("\n") + "\n" + totalRow;
+  const filename = "profit_log_with_totals.csv";
+  const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.setAttribute("href", url);
+  link.setAttribute("download", filename);
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function exportToPDFWithTotals() {
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF();
+  const columns = [
+    "Date", "Start", "Destinations", "End", "Earnings", "Fuel", "Maintenance", "Supplies", "Net Profit", "Mileage", "Drive Time"
+  ];
+  const data = logEntries.map((entry) => [
+    entry.date,
+    entry.startTime,
+    entry.destinations.join("\n"),
+    entry.endTime,
+    `$${entry.totalEarnings}`,
+    `$${entry.fuelCost}`,
+    `$${entry.maintenanceCost}`,
+    `$${entry.suppliesCost}`,
+    `$${entry.netProfit}`,
+    `${entry.totalMileage} mi`,
+    entry.totalTime
+  ]);
+
+  const totals = calculateTotals(logEntries);
+  data.push(["Totals:", "", "", "",
+    `$${totals.earnings.toFixed(2)}`,
+    `$${totals.fuel.toFixed(2)}`,
+    `$${totals.maintenance.toFixed(2)}`,
+    `$${totals.supplies.toFixed(2)}`,
+    `$${totals.net.toFixed(2)}`,
+    "", ""]);
+
+  pdf.autoTable({
+    head: [columns],
+    body: data,
+    margin: { top: 20, left: 10, right: 10, bottom: 20 },
+    headStyles: { fillColor: [44, 62, 80], textColor: [255, 255, 255] },
+    columnStyles: { 2: { columnWidth: 30 } },
+    didDrawPage: function (data) {
+      pdf.setFontSize(12);
+      pdf.setTextColor(40);
+      pdf.text(
+        `Profit Log - Page ${data.pageNumber}`,
+        data.settings.margin.left,
+        pdf.internal.pageSize.height - 10
+      );
+    },
+  });
+
+  pdf.save("profit_log_with_totals.pdf");
+}
+
 
 
     </script>
