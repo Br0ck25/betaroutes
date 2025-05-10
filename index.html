@@ -3866,7 +3866,8 @@ function recalculateEditHoursWorked() {
   const actualWorkedHours = actualWorkedMinutes / 60;
 
   // ✅ Set calculated value
-  hours
+  hoursWorkedInput.value = actualWorkedHours.toFixed(2);
+}
 
 
 
