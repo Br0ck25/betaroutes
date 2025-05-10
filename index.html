@@ -3729,57 +3729,61 @@ function filterLogs() {
       }
 
       function updateLogSummary(filterFn) {
-  const summaryDiv = document.getElementById("log-summary");
+        const summaryDiv = document.getElementById("log-summary");
 
-  const filteredEntries = logEntries.filter((entry) =>
-    entry?.date && filterFn(entry.date, entry)
-  );
+        // Filter the relevant entries
+        const filteredEntries = logEntries.filter((entry) => 
+  entry?.date && filterFn(entry.date, entry)
+);
 
-  if (filteredEntries.length === 0) {
-    summaryDiv.innerHTML = "No data available for selected filter.";
-    return;
-  }
 
-  let totalNetProfit = 0;
-  let totalHours = 0;
 
-  filteredEntries.forEach((entry) => {
-    const netProfit = parseFloat(entry.netProfit) || 0;
-    totalNetProfit += netProfit;
-
-    let hoursWorked = parseFloat(entry.hoursWorked) || 0;
-    let driveHours = 0;
-
-    if (entry.totalTime) {
-      const match = entry.totalTime.match(/(\d+)\s*hour.*?(\d+)?\s*minute/i);
-      if (match) {
-        const h = parseInt(match[1]) || 0;
-        const m = parseInt(match[2]) || 0;
-        driveHours = h + m / 60;
-      } else {
-        const mins = entry.totalTime.match(/(\d+)\s*minute/i);
-        if (mins) {
-          driveHours = parseInt(mins[1]) / 60;
+        if (filteredEntries.length === 0) {
+          summaryDiv.innerHTML = "No data available for selected filter.";
+          return;
         }
+
+        // Calculate total Net Profit and Profit Per Hour
+        let totalNetProfit = 0;
+        let totalProfitPerHour = 0;
+        let validProfitPerHourEntries = 0;
+
+        filteredEntries.forEach((entry) => {
+          totalNetProfit += parseFloat(entry.netProfit) || 0;
+
+          if (!isNaN(parseFloat(entry.profitPerHour))) {
+            totalProfitPerHour += parseFloat(entry.profitPerHour);
+            validProfitPerHourEntries++;
+          }
+        });
+
+        const averageProfitPerHour =
+          validProfitPerHourEntries > 0
+            ? totalProfitPerHour / validProfitPerHourEntries
+            : 0;
+
+        // ✅ Set the Net Profit and Profit Per Hour text ABOVE h2 (inside log-summary div)
+        summaryDiv.innerHTML = `
+  <div style="display: flex; flex-direction: column; align-items: center;">
+    <div style="margin-bottom: 8px;">
+      Net Profit: <span style="color: green;">$${totalNetProfit.toFixed(2)}</span>
+    </div>
+    <div style="margin-bottom: 8px;">
+      Profit Per Hour: <span style="color: blue;">$${averageProfitPerHour.toFixed(2)}</span>
+    </div>
+    <div>
+      Total Hours: <span style="color: black;">${formatHoursAndMinutes(
+        filteredEntries.reduce((sum, entry) => {
+          const drive = convertTimeToHours(entry.totalTime || "");
+          const worked = parseFloat(entry.hoursWorked) || 0;
+          return sum + drive + worked;
+        }, 0)
+      )}</span>
+    </div>
+  </div>
+
+`;
       }
-    }
-
-    totalHours += hoursWorked + driveHours;
-  });
-
-  const profitPerHour =
-    totalHours > 0 ? (totalNetProfit / totalHours).toFixed(2) : "0.00";
-  const totalH = Math.floor(totalHours);
-  const totalM = Math.round((totalHours - totalH) * 60);
-
-  summaryDiv.innerHTML = `
-    <div style="color: green;">Net Profit: $${totalNetProfit.toFixed(2)}</div>
-    <div style="color: #007bff;">Profit Per Hour: $${profitPerHour}</div>
-    <div>Total Hours: ${totalH} hour${totalH !== 1 ? "s" : ""} ${totalM} minute${totalM !== 1 ? "s" : ""}</div>
-  `;
-}
-
-
       function recalculateEditHoursWorked() {
   const startTime = document.getElementById("edit-start-time")?.value;
   const endTime = document.getElementById("edit-end-time")?.value;
