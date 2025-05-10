@@ -2573,22 +2573,24 @@ async function optimizeRoute() {
       }
 
       function logEntry(data) {
-  disableAutoSave = true; // ✅ stop the timer temporarily
+  disableAutoSave = true;
 
   data.startClock = document.getElementById("start-time").value || "";
   data.endClock = document.getElementById("end-time").value || "";
+  data.hoursWorked = parseFloat(document.getElementById("hours-worked").value) || 0; // ✅ ADD THIS
   data.mpg = parseFloat(document.getElementById("mpg").value) || 0;
   data.gasPrice = parseFloat(document.getElementById("gas-price").value) || 0;
   data.lastModified = new Date().toISOString();
 
-  localStorage.removeItem("draftTrip"); // ✅ clear before save
+  localStorage.removeItem("draftTrip");
   logEntries.unshift(data);
   saveLog();
 
   setTimeout(() => {
-    disableAutoSave = false; // ✅ re-enable after logging finishes
-  }, 1000); // short delay to prevent race
+    disableAutoSave = false;
+  }, 1000);
 }
+
 
 
 
