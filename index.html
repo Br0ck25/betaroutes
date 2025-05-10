@@ -3944,6 +3944,8 @@ function renumberMainDestinations() {
 
 // Add this to the bottom of your JavaScript code (or enhance the existing exportToCSV and exportToPDF)
 
+// Add this to the bottom of your JavaScript code (or enhance the existing exportToCSV and exportToPDF)
+
 function calculateTotals(logs) {
   return logs.reduce(
     (totals, entry) => {
@@ -3952,10 +3954,26 @@ function calculateTotals(logs) {
       totals.maintenance += parseFloat(entry.maintenanceCost || 0);
       totals.supplies += parseFloat(entry.suppliesCost || 0);
       totals.net += parseFloat(entry.netProfit || 0);
+      totals.mileage += parseFloat(entry.totalMileage || 0);
+      totals.driveMinutes += convertTimeToMinutes(entry.totalTime);
+      const pph = parseFloat(entry.profitPerHour || 0);
+      if (!isNaN(pph)) {
+        totals.profitPerHourSum += pph;
+        totals.count++; 
+      }
       return totals;
     },
-    { earnings: 0, fuel: 0, maintenance: 0, supplies: 0, net: 0 }
+    { earnings: 0, fuel: 0, maintenance: 0, supplies: 0, net: 0, mileage: 0, driveMinutes: 0, profitPerHourSum: 0, count: 0 }
   );
+}
+
+function convertTimeToMinutes(timeStr) {
+  if (!timeStr) return 0;
+  const hourMatch = timeStr.match(/(\d+)\s*hour/);
+  const minMatch = timeStr.match(/(\d+)\s*minute/);
+  const hours = hourMatch ? parseInt(hourMatch[1]) : 0;
+  const minutes = minMatch ? parseInt(minMatch[1]) : 0;
+  return hours * 60 + minutes;
 }
 
 function exportToCSVWithTotals() {
@@ -3985,6 +4003,9 @@ function exportToCSVWithTotals() {
   });
 
   const totals = calculateTotals(logEntries);
+  const totalDriveHours = totals.driveMinutes / 60;
+  const averageProfitPerHour = totals.count > 0 ? (totals.profitPerHourSum / totals.count).toFixed(2) : "0.00";
+
   const totalRow = [
     "Totals:", "", "", "",
     totals.earnings.toFixed(2),
@@ -3992,7 +4013,10 @@ function exportToCSVWithTotals() {
     totals.maintenance.toFixed(2),
     totals.supplies.toFixed(2),
     totals.net.toFixed(2),
-    "", "", "", ""
+    totals.mileage.toFixed(2),
+    `${Math.floor(totalDriveHours)} hour${Math.floor(totalDriveHours) !== 1 ? 's' : ''} ${Math.round((totalDriveHours % 1) * 60)} minutes`,
+    "", // Earnings per Stop total not meaningful
+    averageProfitPerHour
   ].join(",");
 
   const csvString = header + csvRows.join("\n") + "\n" + totalRow;
@@ -4013,12 +4037,10 @@ function exportToPDFWithTotals() {
   const pdf = new jsPDF({ orientation: "landscape" });
 
   const columns = [
-    "Date", "Start", "Destinations", "End", "Earnings",
-    "Fuel", "Maintenance", "Supplies", "Net Profit",
-    "Mileage", "Drive Time", "Earnings per Stop", "Profit per Hour"
+    "Date", "Start", "Destinations", "End", "Earnings", "Fuel", "Maintenance", "Supplies", "Net Profit", "Mileage", "Drive Time", "Earnings per Stop", "Profit per Hour"
   ];
 
-  const data = logEntries.map(entry => [
+  const data = logEntries.map((entry) => [
     entry.date,
     entry.startTime,
     (entry.destinations || []).join("\n"),
@@ -4034,15 +4056,9 @@ function exportToPDFWithTotals() {
     `$${entry.profitPerHour || "0.00"}`
   ]);
 
-  // ✅ Add totals row
-  const totals = logEntries.reduce((sum, entry) => {
-    sum.earnings += parseFloat(entry.totalEarnings || 0);
-    sum.fuel += parseFloat(entry.fuelCost || 0);
-    sum.maintenance += parseFloat(entry.maintenanceCost || 0);
-    sum.supplies += parseFloat(entry.suppliesCost || 0);
-    sum.net += parseFloat(entry.netProfit || 0);
-    return sum;
-  }, { earnings: 0, fuel: 0, maintenance: 0, supplies: 0, net: 0 });
+  const totals = calculateTotals(logEntries);
+  const totalDriveHours = totals.driveMinutes / 60;
+  const averageProfitPerHour = totals.count > 0 ? (totals.profitPerHourSum / totals.count).toFixed(2) : "0.00";
 
   data.push([
     "Totals:", "", "", "",
@@ -4051,7 +4067,10 @@ function exportToPDFWithTotals() {
     `$${totals.maintenance.toFixed(2)}`,
     `$${totals.supplies.toFixed(2)}`,
     `$${totals.net.toFixed(2)}`,
-    "", "", "", ""
+    `${totals.mileage.toFixed(2)} mi`,
+    `${Math.floor(totalDriveHours)} hr ${Math.round((totalDriveHours % 1) * 60)} min`,
+    "",
+    `$${averageProfitPerHour}`
   ]);
 
   pdf.autoTable({
