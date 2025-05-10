@@ -4041,7 +4041,16 @@ function exportToPDFWithTotals() {
   head: [columns],
   body: data,
   margin: { top: 20, left: 10, right: 10, bottom: 20 },
-  headStyles: { fillColor: [44, 62, 80], textColor: [255, 255, 255] },
+  styles: {
+    fontSize: 8, // 🔽 Reduce font size
+    cellPadding: 2, // 🔽 Tighten spacing
+  },
+  headStyles: {
+    fillColor: [44, 62, 80],
+    textColor: [255, 255, 255],
+    fontSize: 9,
+  },
+  
   columnStyles: {
   0: { cellWidth: 22 },  // Date
   1: { cellWidth: 30 },  // Start
@@ -4049,7 +4058,7 @@ function exportToPDFWithTotals() {
   3: { cellWidth: 30 },  // End
   4: { cellWidth: 19 },  // Earnings
   5: { cellWidth: 15 },  // Fuel
-  6: { cellWidth: 24 },  // Maintenance
+  6: { cellWidth: 25 },  // Maintenance
   7: { cellWidth: 20 },  // Supplies
   8: { cellWidth: 18 },  // Net Profit
   9: { cellWidth: 18 },  // Mileage
