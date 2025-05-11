@@ -831,16 +831,19 @@ img {
     </div>
 
     <!-- 📋 Menu Items -->
-    <!-- 📋 Menu Items -->
 <div style="padding: 0 10px;">
   <button onclick="closeMenu(); logout()">Log Out</button>
   <button onclick="closeMenu(); showPasswordModal()">Change Password</button>
   <button onclick="closeMenu(); showDeleteModal()">Delete Account</button>
-  <hr style="margin: 10px 0;">
-  <button onclick="triggerImportFile()">Import CSV</button>
-  <button onclick="exportToCSVWithTotals()">Export CSV</button>
-  <button onclick="exportToPDFWithTotals()">Export PDF</button>
+
+  <hr style="margin: 15px 0;">
+
+  <div style="text-align: center; font-weight: bold; margin-bottom: 10px;">Manage Log</div>
+  <button onclick="closeMenu(); exportToCSVWithTotals()">📤 Export Log</button>
+  <button onclick="closeMenu(); triggerImportFile()">📥 Import Log</button>
+  <button onclick="closeMenu(); exportToPDFWithTotals()">🧾 Export PDF</button>
 </div>
+
 
   </div>
 </div>
