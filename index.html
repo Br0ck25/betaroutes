@@ -830,33 +830,74 @@ img {
       <img src="/logo.png" alt="Logo" style="height: 40px;">
     </div>
 
-
 <!-- 📋 Menu Items -->
 <div style="padding: 0 10px;">
   <button onclick="closeMenu(); logout()">Log Out</button>
   <button onclick="closeMenu(); showPasswordModal()">Change Password</button>
   <button onclick="closeMenu(); showDeleteModal()">Delete Account</button>
-
-<!-- 📂 Manage Log Section -->
-<div style="text-align: center; margin-top: 20px;">
-  <button onclick="toggleManageLogMenu()" style="padding: 10px 15px; font-size: 16px;">Manage Log ▼</button>
-  <div id="manage-log-menu" style="
-    display: none;
-    margin-top: 10px;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-    background: white;
-    text-align: center;
-    padding: 5px;
-  ">
-    <button onclick="triggerImportFile()">Import CSV</button>
-    <button onclick="exportToCSVWithTotals()">Export CSV</button>
-    <button onclick="exportToPDFWithTotals()">Export PDF</button>
-  </div>
 </div>
 
-
+<!-- ✅ Move Manage Log button here -->
+<div id="manage-log-container" style="text-align: center; position: relative; margin-top: 20px;">
+  <button onclick="toggleManageLogMenu()" style="padding: 10px 15px; font-size: 16px">
+    Manage Log ▼
+  </button>
+  <div id="manage-log-menu" style="
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    z-index: 9999;
+    min-width: 160px;
+    margin-top: 5px;
+    text-align: center;
+  ">
+    <button onclick="triggerImportFile()" style="
+      width: auto;
+      min-width: 120px;
+      padding: 10px;
+      background: none;
+      border: none;
+      text-align: center;
+      color: black;
+      display: inline-block;
+      margin: 5px 0;
+    ">
+      Import CSV
+    </button>
+    <button onclick="exportToCSVWithTotals()" style="
+      width: auto;
+      min-width: 120px;
+      padding: 10px;
+      background: none;
+      border: none;
+      text-align: center;
+      color: black;
+      display: inline-block;
+      margin: 5px 0;
+    ">
+      Export CSV
+    </button>
+    <button onclick="exportToPDFWithTotals()" style="
+      width: auto;
+      min-width: 120px;
+      padding: 10px;
+      background: none;
+      border: none;
+      text-align: center;
+      color: black;
+      display: inline-block;
+      margin: 5px 0;
+    ">
+      Export PDF
+    </button>
+  </div>
+</div>
 
 
 
