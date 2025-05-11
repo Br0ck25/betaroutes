@@ -1370,7 +1370,7 @@ function resumeDraftTrip() {
   const data = window.__pendingDraftTrip;
   if (!data) return;
 
-  // Restore data (same logic already in your script)
+  // ✅ Restore form values
   document.getElementById("log-date").value = data.date || "";
   document.getElementById("start-address").value = data.start || "";
   document.getElementById("end-address").value = data.end || "";
@@ -1402,7 +1402,19 @@ function resumeDraftTrip() {
     container.appendChild(div);
     initAutocompleteDestination(div.querySelector('input[type="text"]'));
   });
+
+  // ✅ Restore cached logs (this is what was missing)
+  const cached = localStorage.getItem("cachedLogs");
+  if (cached) {
+    try {
+      logEntries = JSON.parse(cached);
+      displayLog();
+    } catch (e) {
+      console.error("❌ Failed to parse cachedLogs while resuming draft:", e);
+    }
+  }
 }
+
 
 function discardDraftTrip() {
   document.getElementById("resume-modal").style.display = "none";
