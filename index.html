@@ -3738,7 +3738,15 @@ function filterLogs() {
 }
 
 
-function updateLogSummary(filterFn) {
+      function formatCurrency(value) {
+        if (isNaN(value)) return "$0.00";
+        return `$${parseFloat(value).toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`;
+      }
+
+      function updateLogSummary(filterFn) {
   const summaryDiv = document.getElementById("log-summary");
 
   const filteredEntries = logEntries.filter(
@@ -3765,17 +3773,15 @@ function updateLogSummary(filterFn) {
       let startMin = sh * 60 + sm;
       let endMin = eh * 60 + em;
       if (endMin < startMin) endMin += 24 * 60;
-
-      const workedMinutes = endMin - startMin;
-      const driveMinutes = convertTimeToMinutes(entry.totalTime || "");
-
-      totalMinutes += workedMinutes + driveMinutes;
+      totalMinutes += endMin - startMin;
     }
   });
 
   const totalHoursDecimal = totalMinutes / 60;
   const profitPerHour = totalHoursDecimal > 0 ? totalNetProfit / totalHoursDecimal : 0;
+
   const formattedTime = formatHoursAndMinutesFromMinutes(totalMinutes);
+
 
   summaryDiv.innerHTML = `
     <div style="display: flex; flex-direction: column; align-items: center;">
