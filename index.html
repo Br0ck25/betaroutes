@@ -246,6 +246,14 @@ img {
   width: 100%;
 }
 
+#account-menu button.danger {
+  background-color: #dc3545;
+}
+
+#account-menu button.danger:hover {
+  background-color: #c82333;
+}
+
 
 
 
@@ -817,7 +825,7 @@ img {
     <div style="padding: 0 10px;">
       <button onclick="closeMenu(); logout()">Log Out</button>
       <button onclick="closeMenu(); showPasswordModal()">Change Password</button>
-      <button onclick="closeMenu(); showDeleteModal()">Delete Account</button>
+      <button class="danger" onclick="showDeleteModal()">Delete Account</button>
 
       <!-- ✅ NEW Manage Log button (collapsible) -->
 <!-- Manage Log Toggle -->
