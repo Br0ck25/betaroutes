@@ -831,24 +831,14 @@ img {
     </div>
 
     <!-- 📋 Menu Items -->
-<div style="padding: 0 10px;">
-  <button onclick="closeMenu(); logout()">Log Out</button>
-  <button onclick="closeMenu(); showPasswordModal()">Change Password</button>
-  <button onclick="closeMenu(); showDeleteModal()">Delete Account</button>
-
-  <hr style="margin: 15px 0;">
-
-  <!-- Manage Log toggle -->
-  <button onclick="toggleLogTools()" style="font-weight: bold;">📂 Manage Log ▼</button>
-
-  <!-- Hidden log tool buttons -->
-  <div id="log-tools-container" style="display: none; margin-top: 10px;">
-    <button onclick="closeMenu(); exportToCSVWithTotals()">📤 Export Log</button>
-    <button onclick="closeMenu(); triggerImportFile()">📥 Import Log</button>
-    <button onclick="closeMenu(); exportToPDFWithTotals()">🧾 Export PDF</button>
+    <div style="padding: 0 10px;">
+      <button onclick="closeMenu(); logout()">Log Out</button>
+      <button onclick="closeMenu(); showPasswordModal()">Change Password</button>
+      <button onclick="closeMenu(); showDeleteModal()">Delete Account</button>
+      
+    </div>
   </div>
 </div>
-
 
 
 
@@ -1493,10 +1483,6 @@ function closeUniversalModal() {
   window._universalCallback = null; // clean up
 }
 
-function toggleLogTools() {
-  const container = document.getElementById("log-tools-container");
-  container.style.display = container.style.display === "none" ? "block" : "none";
-}
 
 
 
