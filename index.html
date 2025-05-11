@@ -4059,14 +4059,15 @@ function exportToCSVWithTotals() {
     ].join(",");
   });
 
-  // Totals using only startClock and endClock (no hoursWorked or totalTime)
+  // Totals
   let totalNetProfit = 0;
-  let totalSessionMinutes = 0;
+  let totalDriveMinutes = 0;
   let totalEarnings = 0;
   let fuelCost = 0;
   let maintenance = 0;
   let supplies = 0;
   let mileage = 0;
+  let totalSessionMinutes = 0;
 
   logEntries.forEach((entry) => {
     totalNetProfit += parseFloat(entry.netProfit) || 0;
@@ -4076,6 +4077,8 @@ function exportToCSVWithTotals() {
     supplies += parseFloat(entry.suppliesCost) || 0;
     mileage += parseFloat(entry.totalMileage) || 0;
 
+    totalDriveMinutes += convertTimeToMinutes(entry.totalTime || "");
+
     const start = entry.startClock || "";
     const end = entry.endClock || "";
     if (start && end && start.includes(":") && end.includes(":")) {
@@ -4084,7 +4087,6 @@ function exportToCSVWithTotals() {
       let startMin = sh * 60 + sm;
       let endMin = eh * 60 + em;
       if (endMin < startMin) endMin += 24 * 60;
-
       totalSessionMinutes += endMin - startMin;
     }
   });
@@ -4092,17 +4094,18 @@ function exportToCSVWithTotals() {
   const totalHoursDecimal = totalSessionMinutes / 60;
   const profitPerHour = totalHoursDecimal > 0 ? totalNetProfit / totalHoursDecimal : 0;
 
-  const formattedSessionTime = `${Math.floor(totalSessionMinutes / 60)} hour${Math.floor(totalSessionMinutes / 60) !== 1 ? "s" : ""} ${totalSessionMinutes % 60} minutes`;
+  const formattedDriveTime = `${Math.floor(totalDriveMinutes / 60)} hour${Math.floor(totalDriveMinutes / 60) !== 1 ? "s" : ""} ${totalDriveMinutes % 60} minutes`;
+  const formattedSessionTime = `${Math.floor(totalHoursDecimal)} hour${Math.floor(totalHoursDecimal) !== 1 ? "s" : ""} ${Math.round((totalHoursDecimal % 1) * 60)} minutes`;
 
   const totalRow = [
     "Totals:", "", "", "", "", "", "",
     mileage.toFixed(2),
-    formattedSessionTime, // shows Drive Time column as Total Session Time
+    formattedDriveTime, // ✅ actual drive time
     totalEarnings.toFixed(2),
     fuelCost.toFixed(2),
     maintenance.toFixed(2),
     supplies.toFixed(2),
-    "", // skipping Hours Worked total since it's not used in summary
+    "", // omit hours worked (since not used in calc)
     totalHoursDecimal.toFixed(2),
     totalNetProfit.toFixed(2),
     profitPerHour.toFixed(2)
@@ -4119,6 +4122,7 @@ function exportToCSVWithTotals() {
   link.click();
   document.body.removeChild(link);
 }
+
 
 
 
