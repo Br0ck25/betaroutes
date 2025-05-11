@@ -1498,10 +1498,10 @@ function toggleHamburgerManageLogMenu() {
   const menu = document.getElementById("hamburger-manage-log-menu");
   if (!menu) return;
 
-  menu.style.display = menu.style.display === "none" || menu.style.display === ""
-    ? "block"
-    : "none";
+  const isOpen = menu.style.display === "block";
+  menu.style.display = isOpen ? "none" : "block";
 }
+
 
 
 
