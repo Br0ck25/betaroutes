@@ -43,6 +43,11 @@
 
     <style>
 
+      #hamburger-manage-log-menu button {
+  margin: 10px auto;
+}
+
+
 .date-filter input[type="date"] {
   min-width: 120px;
   width: 100%;
@@ -829,26 +834,30 @@ img {
 
       <!-- ✅ NEW Manage Log button (collapsible) -->
 <!-- Manage Log Toggle -->
-<button onclick="toggleHamburgerManageLogMenu()">
+<button id="hamburger-manage-toggle" onclick="toggleHamburgerManageLogMenu()">
   Manage Log <span id="hamburger-manage-arrow" style="display: inline-block; transition: transform 0.3s;">▼</span>
 </button>
 
 
+
 <!-- Dropdown Menu -->
 <div id="hamburger-manage-log-menu" style="
-  display: none;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
   background: white;
   border: 1px solid #ccc;
   border-radius: 6px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
   margin-top: 5px;
   text-align: center;
-  padding: 10px;
+  padding: 0 10px;
 ">
   <button onclick="triggerImportFile()">Import CSV</button>
   <button onclick="exportToCSVWithTotals()">Export CSV</button>
   <button onclick="exportToPDFWithTotals()">Export PDF</button>
 </div>
+
 
       </div>
     </div> <!-- 👈 closes menu items -->
@@ -1208,6 +1217,7 @@ img {
 </div>
 
 
+
     <script>
 
 function clearTripForm() {
@@ -1504,11 +1514,17 @@ function toggleHamburgerManageLogMenu() {
   const arrow = document.getElementById("hamburger-manage-arrow");
   if (!menu || !arrow) return;
 
-  const isOpen = menu.style.display === "block";
+  const isOpen = menu.style.maxHeight && menu.style.maxHeight !== "0px";
 
-  menu.style.display = isOpen ? "none" : "block";
-  arrow.style.transform = isOpen ? "rotate(0deg)" : "rotate(180deg)";
+  if (isOpen) {
+    menu.style.maxHeight = "0";
+    arrow.style.transform = "rotate(0deg)";
+  } else {
+    menu.style.maxHeight = menu.scrollHeight + "px";
+    arrow.style.transform = "rotate(180deg)";
+  }
 }
+
 
 
 
@@ -4300,6 +4316,23 @@ function formatHoursAndMinutesFromMinutes(totalMinutes) {
   const minuteText = m > 0 ? `${m} minute${m !== 1 ? "s" : ""}` : "";
   return [hourText, minuteText].filter(Boolean).join(" ");
 }
+
+document.addEventListener("click", function (event) {
+  const menu = document.getElementById("hamburger-manage-log-menu");
+  const toggleBtn = document.getElementById("hamburger-manage-toggle");
+
+  // Exit if clicking the button itself
+  if (toggleBtn.contains(event.target)) return;
+
+  // Exit if clicking inside the menu
+  if (menu.contains(event.target)) return;
+
+  // Otherwise, close the menu
+  menu.style.maxHeight = "0";
+
+  const arrow = document.getElementById("hamburger-manage-arrow");
+  if (arrow) arrow.style.transform = "rotate(0deg)";
+});
 
 
 
