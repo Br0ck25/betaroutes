@@ -3773,15 +3773,17 @@ function filterLogs() {
       let startMin = sh * 60 + sm;
       let endMin = eh * 60 + em;
       if (endMin < startMin) endMin += 24 * 60;
+
       totalMinutes += endMin - startMin;
     }
   });
 
-  const totalHoursDecimal = totalMinutes / 60;
+  const totalHoursDecimal = totalMinutes / 60; // unrounded for profit calculations
   const profitPerHour = totalHoursDecimal > 0 ? totalNetProfit / totalHoursDecimal : 0;
 
-  const formattedTime = formatHoursAndMinutesFromMinutes(totalMinutes);
-
+  const fullHours = Math.floor(totalHoursDecimal);
+  const fullMinutes = Math.round((totalHoursDecimal % 1) * 60);
+  const formattedTime = `${fullHours} hour${fullHours !== 1 ? "s" : ""}${fullMinutes > 0 ? ` ${fullMinutes} minute${fullMinutes !== 1 ? "s" : ""}` : ""}`;
 
   summaryDiv.innerHTML = `
     <div style="display: flex; flex-direction: column; align-items: center;">
@@ -3797,6 +3799,7 @@ function filterLogs() {
     </div>
   `;
 }
+
 
 
 function recalculateEditHoursWorked() {
@@ -4058,7 +4061,7 @@ function exportToCSVWithTotals() {
 
   // Totals
   let totalNetProfit = 0;
-  let totalDriveMinutes = 0;
+  let totalMinutes = 0;
   let totalEarnings = 0;
   let fuelCost = 0;
   let maintenance = 0;
@@ -4075,19 +4078,20 @@ function exportToCSVWithTotals() {
     mileage += parseFloat(entry.totalMileage) || 0;
     hoursWorked += parseFloat(entry.hoursWorked) || 0;
 
-    totalDriveMinutes += convertTimeToMinutes(entry.totalTime || "");
+    const worked = parseFloat(entry.hoursWorked) || 0;
+    const drive = convertTimeToHours(entry.totalTime || "");
+    totalMinutes += Math.round((worked + drive) * 60);
   });
 
-  const totalHoursDecimal = (hoursWorked * 60 + totalDriveMinutes) / 60;
+  const totalHoursDecimal = totalMinutes / 60;
   const profitPerHour = totalHoursDecimal > 0 ? totalNetProfit / totalHoursDecimal : 0;
 
-  const formattedDriveTime = `${Math.floor(totalDriveMinutes / 60)} hour${Math.floor(totalDriveMinutes / 60) !== 1 ? "s" : ""} ${totalDriveMinutes % 60} minutes`;
   const formattedTotalTime = `${Math.floor(totalHoursDecimal)} hour${Math.floor(totalHoursDecimal) !== 1 ? "s" : ""} ${Math.round((totalHoursDecimal % 1) * 60)} minutes`;
 
   const totalRow = [
     "Totals:", "", "", "", "", "", "",
     mileage.toFixed(2),
-    formattedDriveTime,  // 🆕 Drive Time only
+    formattedTotalTime,
     totalEarnings.toFixed(2),
     fuelCost.toFixed(2),
     maintenance.toFixed(2),
