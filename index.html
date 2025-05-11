@@ -4029,7 +4029,7 @@ function convertTimeToMinutes(timeStr) {
 
 function exportToCSVWithTotals() {
   const header =
-    "Date,Start Time,End Time,Start Address,Destinations,End Address,Earnings per Stop,Mileage,Drive Time,Total Earnings,Fuel Cost,Maintenance,Supplies,Hours Worked,Total Hours,Net Profit,Profit per Hour\n";
+    "Date,Start Time,End Time,Start Address,Destinations,End Address,Earnings per Stop,Mileage,Drive Time,Total Earnings,Fuel Cost,Maintenance,Supplies,Hours Worked,Total Hours,Net Profit,Profit Per Hour\n";
 
   const csvRows = logEntries.map((entry) => {
     const destinationsString = `"${(entry.destinations || []).join(";")}"`;
@@ -4061,7 +4061,7 @@ function exportToCSVWithTotals() {
 
   // Totals
   let totalNetProfit = 0;
-  let totalMinutes = 0;
+  let totalDriveMinutes = 0;
   let totalEarnings = 0;
   let fuelCost = 0;
   let maintenance = 0;
@@ -4077,21 +4077,19 @@ function exportToCSVWithTotals() {
     supplies += parseFloat(entry.suppliesCost) || 0;
     mileage += parseFloat(entry.totalMileage) || 0;
     hoursWorked += parseFloat(entry.hoursWorked) || 0;
-
-    const worked = parseFloat(entry.hoursWorked) || 0;
-    const drive = convertTimeToHours(entry.totalTime || "");
-    totalMinutes += Math.round((worked + drive) * 60);
+    totalDriveMinutes += convertTimeToMinutes(entry.totalTime || "");
   });
 
-  const totalHoursDecimal = totalMinutes / 60;
+  const totalHoursDecimal = (hoursWorked * 60 + totalDriveMinutes) / 60;
   const profitPerHour = totalHoursDecimal > 0 ? totalNetProfit / totalHoursDecimal : 0;
 
+  const formattedDriveTime = `${Math.floor(totalDriveMinutes / 60)} hour${Math.floor(totalDriveMinutes / 60) !== 1 ? "s" : ""} ${totalDriveMinutes % 60} minutes`;
   const formattedTotalTime = `${Math.floor(totalHoursDecimal)} hour${Math.floor(totalHoursDecimal) !== 1 ? "s" : ""} ${Math.round((totalHoursDecimal % 1) * 60)} minutes`;
 
   const totalRow = [
     "Totals:", "", "", "", "", "", "",
     mileage.toFixed(2),
-    formattedTotalTime,
+    formattedDriveTime,
     totalEarnings.toFixed(2),
     fuelCost.toFixed(2),
     maintenance.toFixed(2),
@@ -4113,6 +4111,7 @@ function exportToCSVWithTotals() {
   link.click();
   document.body.removeChild(link);
 }
+
 
 
 
