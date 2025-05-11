@@ -1367,6 +1367,16 @@ document.addEventListener('DOMContentLoaded', () => {
 function resumeDraftTrip() {
   document.getElementById("resume-modal").style.display = "none";
 
+  // ✅ Restore logs first
+  const cached = localStorage.getItem("cachedLogs");
+  if (cached) {
+    try {
+      logEntries = JSON.parse(cached);
+    } catch (e) {
+      console.error("❌ Failed to parse cachedLogs while resuming draft:", e);
+    }
+  }
+
   const data = window.__pendingDraftTrip;
   if (!data) return;
 
@@ -1403,17 +1413,10 @@ function resumeDraftTrip() {
     initAutocompleteDestination(div.querySelector('input[type="text"]'));
   });
 
-  // ✅ Restore cached logs (this is what was missing)
-  const cached = localStorage.getItem("cachedLogs");
-  if (cached) {
-    try {
-      logEntries = JSON.parse(cached);
-      displayLog();
-    } catch (e) {
-      console.error("❌ Failed to parse cachedLogs while resuming draft:", e);
-    }
-  }
+  // ✅ Display restored logs at the end
+  displayLog();
 }
+
 
 
 function discardDraftTrip() {
