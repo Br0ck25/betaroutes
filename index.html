@@ -1842,6 +1842,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         return;
       }
 
+      const cached = localStorage.getItem("cachedLogs");
+if (cached) {
+  try {
+    logEntries = JSON.parse(cached);
+    displayLog();
+  } catch (e) {
+    console.error("❌ Failed to parse cachedLogs while showing resume modal:", e);
+  }
+}
+
+
 // Show custom modal instead of confirm()
 window.__pendingDraftTrip = data;
 document.getElementById("resume-modal").style.display = "flex";
