@@ -1247,21 +1247,6 @@ function updateDatalistSuggestions() {
 }
 
 
-      function toggleManageLogMenu() {
-        const menu = document.getElementById("manage-log-menu");
-        const body = document.body;
-
-        if (!menu) return;
-
-        if (menu.style.display === "none" || menu.style.display === "") {
-          menu.style.display = "block";
-          body.style.paddingBottom = "200px"; // 🆕 Add extra bottom space
-        } else {
-          menu.style.display = "none";
-          body.style.paddingBottom = "0"; // 🆕 Remove extra space
-        }
-      }
-
       function onStartDateChange() {
   filterLogs(); // existing filter logic
 
