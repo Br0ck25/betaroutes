@@ -829,7 +829,10 @@ img {
 
       <!-- ✅ NEW Manage Log button (collapsible) -->
 <!-- Manage Log Toggle -->
-<button onclick="toggleHamburgerManageLogMenu()">Manage Log ▼</button>
+<button onclick="toggleHamburgerManageLogMenu()">
+  Manage Log <span id="hamburger-manage-arrow" style="display: inline-block; transition: transform 0.3s;">▼</span>
+</button>
+
 
 <!-- Dropdown Menu -->
 <div id="hamburger-manage-log-menu" style="
@@ -1498,11 +1501,15 @@ function closeUniversalModal() {
 
 function toggleHamburgerManageLogMenu() {
   const menu = document.getElementById("hamburger-manage-log-menu");
-  if (!menu) return;
+  const arrow = document.getElementById("hamburger-manage-arrow");
+  if (!menu || !arrow) return;
 
   const isOpen = menu.style.display === "block";
+
   menu.style.display = isOpen ? "none" : "block";
+  arrow.style.transform = isOpen ? "rotate(0deg)" : "rotate(180deg)";
 }
+
 
 
 
