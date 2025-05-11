@@ -829,8 +829,29 @@ img {
     <!-- 📋 Menu Items -->
     <div style="padding: 0 10px;">
       <button onclick="closeMenu(); logout()">Log Out</button>
-      <button onclick="closeMenu(); showPasswordModal()">Change Password</button>
-      <button class="danger" onclick="showDeleteModal()">Delete Account</button>
+
+      <!-- ✅ New Manage Account collapsible section -->
+<div style="margin-top: 10px;">
+  <button id="hamburger-manage-account-toggle" onclick="toggleHamburgerManageAccountMenu()">
+    Manage Account <span id="hamburger-manage-account-arrow" style="display: inline-block; transition: transform 0.3s;">▼</span>
+  </button>
+  <div id="hamburger-manage-account-menu" style="
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    margin-top: 5px;
+    text-align: center;
+    padding: 0 10px;
+  ">
+    <button onclick="closeMenu(); showPasswordModal()">Change Password</button>
+    <button onclick="closeMenu(); showDeleteModal()" class="danger">Delete Account</button>
+  </div>
+</div>
+
 
       <!-- ✅ NEW Manage Log button (collapsible) -->
 <!-- Manage Log Toggle -->
@@ -1524,6 +1545,22 @@ function toggleHamburgerManageLogMenu() {
     arrow.style.transform = "rotate(180deg)";
   }
 }
+function toggleHamburgerManageAccountMenu() {
+  const menu = document.getElementById("hamburger-manage-account-menu");
+  const arrow = document.getElementById("hamburger-manage-account-arrow");
+  if (!menu || !arrow) return;
+
+  const isOpen = menu.style.maxHeight && menu.style.maxHeight !== "0px";
+
+  if (isOpen) {
+    menu.style.maxHeight = "0";
+    arrow.style.transform = "rotate(0deg)";
+  } else {
+    menu.style.maxHeight = menu.scrollHeight + "px";
+    arrow.style.transform = "rotate(180deg)";
+  }
+}
+
 
 
 
@@ -4318,21 +4355,32 @@ function formatHoursAndMinutesFromMinutes(totalMinutes) {
 }
 
 document.addEventListener("click", function (event) {
-  const menu = document.getElementById("hamburger-manage-log-menu");
-  const toggleBtn = document.getElementById("hamburger-manage-toggle");
+  const logMenu = document.getElementById("hamburger-manage-log-menu");
+  const logToggle = document.getElementById("hamburger-manage-toggle");
 
-  // Exit if clicking the button itself
-  if (toggleBtn.contains(event.target)) return;
+  const accountMenu = document.getElementById("hamburger-manage-account-menu");
+  const accountToggle = document.getElementById("hamburger-manage-account-toggle");
 
-  // Exit if clicking inside the menu
-  if (menu.contains(event.target)) return;
+  // Ignore clicks on either toggle buttons
+  if (logToggle?.contains(event.target) || accountToggle?.contains(event.target)) return;
 
-  // Otherwise, close the menu
-  menu.style.maxHeight = "0";
+  // Ignore clicks inside the menus
+  if (logMenu?.contains(event.target) || accountMenu?.contains(event.target)) return;
 
-  const arrow = document.getElementById("hamburger-manage-arrow");
-  if (arrow) arrow.style.transform = "rotate(0deg)";
+  // Close both dropdowns
+  if (logMenu) {
+    logMenu.style.maxHeight = "0";
+    const arrow = document.getElementById("hamburger-manage-arrow");
+    if (arrow) arrow.style.transform = "rotate(0deg)";
+  }
+
+  if (accountMenu) {
+    accountMenu.style.maxHeight = "0";
+    const arrow = document.getElementById("hamburger-manage-account-arrow");
+    if (arrow) arrow.style.transform = "rotate(0deg)";
+  }
 });
+
 
 
 
