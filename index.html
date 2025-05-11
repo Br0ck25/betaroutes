@@ -830,15 +830,24 @@ img {
       <img src="/logo.png" alt="Logo" style="height: 40px;">
     </div>
 
-    <!-- 📋 Menu Items -->
-    <div style="padding: 0 10px;">
-      <button onclick="closeMenu(); logout()">Log Out</button>
-      <button onclick="closeMenu(); showPasswordModal()">Change Password</button>
-      <button onclick="closeMenu(); showDeleteModal()">Delete Account</button>
-      
+
+<!-- 📋 Menu Items -->
+<div style="padding: 0 10px;">
+  <button onclick="closeMenu(); logout()">Log Out</button>
+  <button onclick="closeMenu(); showPasswordModal()">Change Password</button>
+  <button onclick="closeMenu(); showDeleteModal()">Delete Account</button>
+
+  <!-- 👇 Add collapsible Manage Log inside menu -->
+  <div style="text-align: center; margin-top: 20px; position: relative;">
+    <button onclick="toggleManageLogMenu()" style="padding: 10px 15px; font-size: 16px;">Manage Log ▼</button>
+    <div id="manage-log-menu" style="display: none; margin-top: 8px;">
+      <button onclick="triggerImportFile()">Import CSV</button>
+      <button onclick="exportToCSVWithTotals()">Export CSV</button>
+      <button onclick="exportToPDFWithTotals()">Export PDF</button>
     </div>
   </div>
 </div>
+
 
 
 
