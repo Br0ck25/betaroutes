@@ -836,14 +836,8 @@ img {
       <button onclick="closeMenu(); showPasswordModal()">Change Password</button>
       <button onclick="closeMenu(); showDeleteModal()">Delete Account</button>
       
-<div style="margin-top: 10px;">
-  <button onclick="toggleHamburgerManageLogMenu()">Manage Log ▼</button>
-  <div id="hamburger-manage-log-menu" style="display: none; background: white; border: 1px solid #ccc; border-radius: 6px; margin-top: 5px; text-align: center;">
-    <button onclick="triggerImportFile()" style="background: none; color: black;">Import CSV</button>
-    <button onclick="exportToCSVWithTotals()" style="background: none; color: black;">Export CSV</button>
-    <button onclick="exportToPDFWithTotals()" style="background: none; color: black;">Export PDF</button>
+    </div>
   </div>
-</div>
 </div>
 
 
@@ -1489,14 +1483,6 @@ function closeUniversalModal() {
   window._universalCallback = null; // clean up
 }
 
-function toggleHamburgerManageLogMenu() {
-  const menu = document.getElementById("hamburger-manage-log-menu");
-  if (!menu) return;
-
-  menu.style.display = menu.style.display === "none" || menu.style.display === ""
-    ? "block"
-    : "none";
-}
 
 
 
