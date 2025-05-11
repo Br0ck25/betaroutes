@@ -838,15 +838,15 @@ img {
 
   <hr style="margin: 15px 0;">
 
-  <div style="text-align: center; font-weight: bold; margin-bottom: 10px;">Manage Log</div>
-  <button onclick="closeMenu(); exportToCSVWithTotals()">📤 Export Log</button>
-  <button onclick="closeMenu(); triggerImportFile()">📥 Import Log</button>
-  <button onclick="closeMenu(); exportToPDFWithTotals()">🧾 Export PDF</button>
-</div>
+  <button onclick="toggleLogMenu()" style="font-weight: bold;">📂 Manage Log ▼</button>
 
-
+  <div id="hamburger-log-menu" style="display: none; margin-top: 10px;">
+    <button onclick="closeMenu(); exportToCSVWithTotals()">📤 Export Log</button>
+    <button onclick="closeMenu(); triggerImportFile()">📥 Import Log</button>
+    <button onclick="closeMenu(); exportToPDFWithTotals()">🧾 Export PDF</button>
   </div>
 </div>
+
 
 
 
@@ -1490,6 +1490,17 @@ function closeUniversalModal() {
   modal.style.display = "none";
   window._universalCallback = null; // clean up
 }
+
+
+  function toggleLogMenu() {
+    const menu = document.getElementById("hamburger-log-menu");
+    if (menu.style.display === "none" || !menu.style.display) {
+      menu.style.display = "block";
+    } else {
+      menu.style.display = "none";
+    }
+  }
+
 
 
 
