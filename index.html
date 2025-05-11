@@ -838,9 +838,11 @@ img {
 
   <hr style="margin: 15px 0;">
 
-  <button onclick="toggleLogMenu()" style="font-weight: bold;">📂 Manage Log ▼</button>
+  <!-- Manage Log toggle -->
+  <button onclick="toggleLogTools()" style="font-weight: bold;">📂 Manage Log ▼</button>
 
-  <div id="hamburger-log-menu" style="display: none; margin-top: 10px;">
+  <!-- Hidden log tool buttons -->
+  <div id="log-tools-container" style="display: none; margin-top: 10px;">
     <button onclick="closeMenu(); exportToCSVWithTotals()">📤 Export Log</button>
     <button onclick="closeMenu(); triggerImportFile()">📥 Import Log</button>
     <button onclick="closeMenu(); exportToPDFWithTotals()">🧾 Export PDF</button>
@@ -1491,17 +1493,10 @@ function closeUniversalModal() {
   window._universalCallback = null; // clean up
 }
 
-
-  function toggleLogMenu() {
-    const menu = document.getElementById("hamburger-log-menu");
-    if (menu.style.display === "none" || !menu.style.display) {
-      menu.style.display = "block";
-    } else {
-      menu.style.display = "none";
-    }
-  }
-
-
+function toggleLogTools() {
+  const container = document.getElementById("log-tools-container");
+  container.style.display = container.style.display === "none" ? "block" : "none";
+}
 
 
 
