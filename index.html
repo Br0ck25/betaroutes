@@ -1904,20 +1904,6 @@ if (dateInput) {
   initOfflineListeners();
 
 
-  document.getElementById("hours-worked").addEventListener("input", () => {
-  const hoursWorked = parseFloat(document.getElementById("hours-worked").value) || 0;
-  const driveTimeInHours = convertTimeToHours(document.getElementById("total-time").textContent);
-
-  const workedMinutes = Math.round(hoursWorked * 60);
-const driveMinutes = Math.round(driveTimeInHours * 60);
-const totalWorkedMinutes = workedMinutes + driveMinutes;
-
-  const totalHoursDecimal = totalWorkedMinutes / 60;
-
-  document.getElementById("total-hours").textContent = formatHoursAndMinutes(totalHoursDecimal);
-});
-
-
   // 🆕 After selecting start time, auto-focus end time after slight delay
   document.getElementById("start-time").addEventListener("change", () => {
     setTimeout(() => document.getElementById("end-time")?.focus(), 200);
@@ -1933,6 +1919,32 @@ const totalWorkedMinutes = workedMinutes + driveMinutes;
     setTimeout(() => document.getElementById("end-time")?.focus(), 200);
   });
 
+
+  function updateTotalHoursFromClockOnly() {
+  const start = document.getElementById("start-time")?.value;
+  const end = document.getElementById("end-time")?.value;
+  if (!start || !end) return;
+
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  let startMin = sh * 60 + sm;
+  let endMin = eh * 60 + em;
+
+  if (endMin < startMin) endMin += 24 * 60; // handle overnight
+
+  const totalMinutes = endMin - startMin;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  const formatted =
+    `${hours} hour${hours !== 1 ? "s" : ""}` +
+    (minutes > 0 ? ` ${minutes} minute${minutes !== 1 ? "s" : ""}` : "");
+
+  document.getElementById("total-hours").textContent = formatted;
+}
+
+document.getElementById("start-time").addEventListener("input", updateTotalHoursFromClockOnly);
+document.getElementById("end-time").addEventListener("input", updateTotalHoursFromClockOnly);
 
 
       function updateOfflineBanner() {
