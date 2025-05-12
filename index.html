@@ -963,10 +963,10 @@ img {
         required
       />
 
-      <label for="start-time">Start Time (Optional)</label>
+      <label for="start-time">Start Time</label>
       <input type="time" id="start-time" placeholder="Enter start time" />
 
-      <label for="end-time">End Time (Optional)</label>
+      <label for="end-time">End Time</label>
       <input type="time" id="end-time" placeholder="Enter end time" />
 
       <label for="hours-worked">Total Hours</label>
@@ -4292,6 +4292,26 @@ document.addEventListener("click", function (event) {
 });
 
 
+function updateTotalHoursFromClock() {
+  const start = document.getElementById("start-time").value;
+  const end = document.getElementById("end-time").value;
+  if (!start || !end) return;
+
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  let startMin = sh * 60 + sm;
+  let endMin = eh * 60 + em;
+  if (endMin < startMin) endMin += 24 * 60; // handle overnight
+  const totalMinutes = endMin - startMin;
+
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  document.getElementById("total-hours").textContent =
+    `${h} hour${h !== 1 ? "s" : ""}${m > 0 ? ` ${m} minute${m !== 1 ? "s" : ""}` : ""}`;
+}
+
+document.getElementById("start-time").addEventListener("change", updateTotalHoursFromClock);
+document.getElementById("end-time").addEventListener("change", updateTotalHoursFromClock);
 
 
 
