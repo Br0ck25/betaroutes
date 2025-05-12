@@ -1913,12 +1913,16 @@ if (dateInput) {
 document.getElementById("hours-worked").addEventListener("input", () => {
   const hoursWorked = parseFloat(document.getElementById("hours-worked").value) || 0;
   const driveTimeInHours = convertTimeToHours(document.getElementById("total-time").textContent);
-  const totalWorkedMinutes = Math.round((hoursWorked + driveTimeInHours) * 60);
-  document.getElementById("total-hours").textContent = formatHoursAndMinutesFromMinutes(totalWorkedMinutes);
 
-  // 👇 NEW: Display inside the input box itself
-  document.getElementById("hours-worked").value = formatHoursAndMinutesFromMinutes(totalWorkedMinutes);
+  const workedMinutes = Math.round(hoursWorked * 60);
+  const driveMinutes = Math.round(driveTimeInHours * 60);
+  const totalWorkedMinutes = workedMinutes + driveMinutes;
+
+  const totalHoursDecimal = totalWorkedMinutes / 60;
+
+  document.getElementById("total-hours").textContent = formatHoursAndMinutes(totalHoursDecimal);
 });
+
 
 
 
@@ -2255,7 +2259,15 @@ const hoursWorked = parseFloat(data.hoursWorked || 0);
 const driveTime = convertTimeToHours(data.totalTime || "");
 const totalDecimal = hoursWorked + driveTime;
 
-document.getElementById("hours-worked").value = formatHoursAndMinutes(data.hoursWorked ?? 0);
+// Set raw decimal for logic
+document.getElementById("hours-worked").value = hoursWorked.toFixed(2);
+
+// Show friendly version
+document.getElementById("hours-display").textContent = formatHoursAndMinutes(hoursWorked);
+
+// Show formatted total hours
+document.getElementById("total-hours").textContent = formatHoursAndMinutes(totalDecimal);
+
 
 
 
