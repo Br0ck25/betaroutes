@@ -1343,7 +1343,8 @@ function resumeDraftTrip() {
   document.getElementById("gas-price").value = data.gas || "";
   document.getElementById("start-time").value = data.startTime || "";
   document.getElementById("end-time").value = data.endTime || "";
-  document.getElementById("total-hours").value = data.hoursWorked || "";
+  document.getElementById("total-hours").value = formatHoursAndMinutes(data.hoursWorked || 0);
+
 
   document.getElementById("maintenance-cost").value = data.maintenance || "";
   document.getElementById("supplies-cost").value = data.supplies || "";
@@ -2095,7 +2096,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 async function calculateRouteData() {
-  // 🧹 Remove empty destinations
   const container = document.getElementById("destinations-container");
   const allDestinations = container.querySelectorAll(".destination");
 
@@ -2113,8 +2113,8 @@ async function calculateRouteData() {
   const gasPrice = parseFloat(document.getElementById("gas-price").value);
   const startTimeInput = document.getElementById("start-time").value;
   const endTimeInput = document.getElementById("end-time").value;
-  let hoursWorked = parseFloat(document.getElementById("total-hours").value) || 0;
 
+  let hoursWorked = 0;
 
   if (startTimeInput && endTimeInput) {
     const [startHours, startMinutes] = startTimeInput.split(":").map(Number);
@@ -2124,21 +2124,10 @@ async function calculateRouteData() {
     let endTotalMinutes = endHours * 60 + endMinutes;
     if (endTotalMinutes < startTotalMinutes) endTotalMinutes += 24 * 60;
 
-    let totalWorkedMinutes = endTotalMinutes - startTotalMinutes;
-    let driveMinutes = 0;
+    const totalWorkedMinutes = endTotalMinutes - startTotalMinutes;
+    hoursWorked = totalWorkedMinutes / 60;
 
-    if (typeof totalDuration === "number") {
-      driveMinutes = totalDuration / 60;
-    }
-
-    const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
-    hoursWorked = parseFloat((actualWorkedMinutes / 60).toFixed(2));
-    const workedHours = Math.floor(hoursWorked);
-    const workedMinutes = Math.round((hoursWorked - workedHours) * 60);
     document.getElementById("total-hours").value = formatHoursAndMinutes(hoursWorked);
-
-
-
   }
 
   const maintenanceCost = parseFloat(document.getElementById("maintenance-cost").value) || 0;
@@ -2169,10 +2158,9 @@ async function calculateRouteData() {
   const selectedDate = logDateInput || new Date().toISOString().split("T")[0];
 
   if (!navigator.onLine) {
-  showAlertModal("🛜 You're offline. Route calculation is unavailable until you're reconnected.");
-  return Promise.resolve(null);
-}
-
+    showAlertModal("🛜 You're offline. Route calculation is unavailable until you're reconnected.");
+    return Promise.resolve(null);
+  }
 
   return new Promise((resolve, reject) => {
     directionsService.route(request, (response, status) => {
@@ -2187,24 +2175,6 @@ async function calculateRouteData() {
           totalMileage += leg.distance.value / 1609.34;
           totalDuration += leg.duration.value;
         });
-
-        if (startTimeInput && endTimeInput) {
-          const [startHours, startMinutes] = startTimeInput.split(":").map(Number);
-          const [endHours, endMinutes] = endTimeInput.split(":").map(Number);
-
-          let startTotalMinutes = startHours * 60 + startMinutes;
-          let endTotalMinutes = endHours * 60 + endMinutes;
-          if (endTotalMinutes < startTotalMinutes) endTotalMinutes += 24 * 60;
-
-          let totalWorkedMinutes = endTotalMinutes - startTotalMinutes;
-          let driveMinutes = totalDuration / 60;
-
-          const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
-          hoursWorked = parseFloat((actualWorkedMinutes / 60).toFixed(2));
-
-          document.getElementById("total-hours").value = formatHoursAndMinutes(hoursWorked);
-
-        }
 
         const fuelCost = mpg && gasPrice ? (totalMileage / mpg) * gasPrice : 0;
         const netProfitBeforeOptional = totalEarnings - fuelCost;
@@ -2239,6 +2209,7 @@ async function calculateRouteData() {
     });
   });
 }
+
 
 
       function updateUI(data) {
@@ -3703,11 +3674,10 @@ function filterLogs() {
         window.open(url, "_blank");
       }
 
-      function handleTimeChange() {
+function handleTimeChange() {
   const startTimeInput = document.getElementById("start-time").value;
   const endTimeInput = document.getElementById("end-time").value;
-  const hoursWorkedInput = document.getElementById("total-hours");
-
+  const totalHoursInput = document.getElementById("total-hours");
 
   // 🆕 Auto-open End Time picker after selecting Start Time
   if (startTimeInput && !endTimeInput) {
@@ -3722,27 +3692,19 @@ function filterLogs() {
     let endTotalMinutes = endHours * 60 + endMinutes;
 
     if (endTotalMinutes < startTotalMinutes) {
-      endTotalMinutes += 24 * 60; // Overnight shift
+      endTotalMinutes += 24 * 60; // Handle overnight shifts
     }
 
-    let totalWorkedMinutes = endTotalMinutes - startTotalMinutes;
-    let driveMinutes =
-      typeof totalDuration === "number" ? totalDuration / 60 : 0;
-    const actualWorkedMinutes = Math.max(
-      totalWorkedMinutes - driveMinutes,
-      0
-    );
-    const hoursWorked = parseFloat((actualWorkedMinutes / 60).toFixed(2));
-    hoursWorkedInput.value = hoursWorked.toFixed(2);
+    const totalWorkedMinutes = endTotalMinutes - startTotalMinutes;
+    const hoursWorked = totalWorkedMinutes / 60;
 
-    hoursWorkedInput.readOnly = true;
-    hoursWorkedInput.style.backgroundColor = "#f0f0f0";
+    // ✅ Display in input as formatted string like "2 hours 15 minutes"
+    totalHoursInput.value = formatHoursAndMinutes(hoursWorked);
   } else {
-    hoursWorkedInput.value = "";
-    hoursWorkedInput.readOnly = false;
-    hoursWorkedInput.style.backgroundColor = "";
+    totalHoursInput.value = "";
   }
 }
+
 
 
       function formatCurrency(value) {
