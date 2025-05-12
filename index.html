@@ -2121,28 +2121,28 @@ async function calculateRouteData() {
   const endTimeInput = document.getElementById("end-time").value;
   let hoursWorked = parseFloat(document.getElementById("hours-worked").value) || 0;
 
-  if (startTimeInput && endTimeInput) {
-    const [startHours, startMinutes] = startTimeInput.split(":").map(Number);
-    const [endHours, endMinutes] = endTimeInput.split(":").map(Number);
+if (startTimeInput && endTimeInput) {
+  const [startHours, startMinutes] = startTimeInput.split(":").map(Number);
+  const [endHours, endMinutes] = endTimeInput.split(":").map(Number);
 
-    let startTotalMinutes = startHours * 60 + startMinutes;
-    let endTotalMinutes = endHours * 60 + endMinutes;
-    if (endTotalMinutes < startTotalMinutes) endTotalMinutes += 24 * 60;
+  let startTotalMinutes = startHours * 60 + startMinutes;
+  let endTotalMinutes = endHours * 60 + endMinutes;
+  if (endTotalMinutes < startTotalMinutes) endTotalMinutes += 24 * 60;
 
-    let totalWorkedMinutes = endTotalMinutes - startTotalMinutes;
-    let driveMinutes = 0;
+  const totalClockMinutes = endTotalMinutes - startTotalMinutes;
+  const totalHours = totalClockMinutes / 60;
 
-    if (typeof totalDuration === "number") {
-      driveMinutes = totalDuration / 60;
-    }
+  const driveMinutes = totalDuration / 60;
+  const workedMinutes = Math.max(totalClockMinutes - driveMinutes, 0);
+  const workedHours = workedMinutes / 60;
 
-    const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
-    hoursWorked = parseFloat((actualWorkedMinutes / 60).toFixed(2));
-    const workedHours = Math.floor(hoursWorked);
-    const workedMinutes = Math.round((hoursWorked - workedHours) * 60);
-    document.getElementById("hours-worked").value = hoursWorked.toFixed(2);
-    document.getElementById("hours-display").textContent = formatHoursAndMinutes(hoursWorked);
-  }
+  document.getElementById("hours-worked").value = workedHours.toFixed(2);
+  document.getElementById("hours-display").textContent = formatHoursAndMinutes(workedHours);
+
+  data.totalHours = totalHours.toFixed(2);
+  data.totalClockMinutes = totalClockMinutes;
+}
+
 
   const maintenanceCost = parseFloat(document.getElementById("maintenance-cost").value) || 0;
   const suppliesCost = parseFloat(document.getElementById("supplies-cost").value) || 0;
@@ -2276,7 +2276,13 @@ const totalH = Math.floor(totalMinutes / 60);
 const totalM = totalMinutes % 60;
 const hourText = `${totalH} hour${totalH !== 1 ? "s" : ""}`;
 const minuteText = totalM > 0 ? ` ${totalM} minute${totalM !== 1 ? "s" : ""}` : "";
-document.getElementById("total-hours").textContent = `${hourText}${minuteText}`;
+if (data.totalClockMinutes) {
+  const h = Math.floor(data.totalClockMinutes / 60);
+  const m = data.totalClockMinutes % 60;
+  document.getElementById("total-hours").textContent =
+    `${h} hour${h !== 1 ? "s" : ""}${m > 0 ? ` ${m} minute${m !== 1 ? "s" : ""}` : ""}`;
+}
+
 
 
 
@@ -3814,39 +3820,30 @@ function recalculateEditHoursWorked() {
   const endTime = document.getElementById("edit-end-time")?.value;
   const totalTimeStr = document.getElementById("edit-total-time")?.value;
   const hoursWorkedInput = document.getElementById("edit-hours-worked");
+  const hoursMessage = document.getElementById("edit-hours-message");
 
-  if (!hoursWorkedInput) return;
-
-  hoursWorkedInput.readOnly = true;
-  hoursWorkedInput.style.backgroundColor = "#f0f0f0";
-
-  if (!startTime || !endTime) {
-    hoursWorkedInput.value = "";
-    return;
-  }
+  if (!startTime || !endTime || !hoursWorkedInput) return;
 
   const [startHours, startMinutes] = startTime.split(":").map(Number);
   const [endHours, endMinutes] = endTime.split(":").map(Number);
 
-  let start = startHours * 60 + startMinutes;
-  let end = endHours * 60 + endMinutes;
-  if (end < start) end += 24 * 60;
+  let startMinutesTotal = startHours * 60 + startMinutes;
+  let endMinutesTotal = endHours * 60 + endMinutes;
+  if (endMinutesTotal < startMinutesTotal) endMinutesTotal += 24 * 60; // overnight
 
-  const totalWorkedMinutes = end - start;
-  let driveMinutes = 0;
+  const totalClockMinutes = endMinutesTotal - startMinutesTotal;
+  const driveMinutes = convertTimeToMinutes(totalTimeStr);
+  const workedMinutes = Math.max(totalClockMinutes - driveMinutes, 0);
 
-  if (totalTimeStr) {
-    const hoursMatch = totalTimeStr.match(/(\d+)\s*hour/);
-    const minutesMatch = totalTimeStr.match(/(\d+)\s*minute/);
-    if (hoursMatch) driveMinutes += parseInt(hoursMatch[1], 10) * 60;
-    if (minutesMatch) driveMinutes += parseInt(minutesMatch[1], 10);
-  }
+  const workedHours = (workedMinutes / 60).toFixed(2);
+  hoursWorkedInput.value = workedHours;
 
-  const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
-  const actualWorkedHours = actualWorkedMinutes / 60;
-
-  hoursWorkedInput.value = actualWorkedHours.toFixed(2);
+  // Show worked time in hours and minutes
+  const h = Math.floor(workedMinutes / 60);
+  const m = workedMinutes % 60;
+  hoursMessage.textContent = `Worked: ${h} hour${h !== 1 ? "s" : ""}${m > 0 ? ` ${m} minute${m !== 1 ? "s" : ""}` : ""}`;
 }
+
 
 
 
