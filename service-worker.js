@@ -1466,6 +1466,12 @@ function toggleHamburgerManageAccountMenu() {
 }
 
 
+function updateEditHoursDisplay() {
+  const decimal = parseFloat(document.getElementById("edit-hours-worked").value) || 0;
+  document.getElementById("edit-hours-message").textContent = formatHoursAndMinutes(decimal);
+}
+
+
 
 
 
@@ -3141,6 +3147,8 @@ if (earningsInput) {
             console.error("Error setting up autocomplete:", error);
           }
         }, 0);
+        updateEditHoursDisplay();
+
       }
 
       function getNumberValue(id) {
@@ -3793,11 +3801,9 @@ function recalculateEditHoursWorked() {
 
   if (!hoursWorkedInput) return;
 
-  hoursWorkedInput.readOnly = true;
-  hoursWorkedInput.style.backgroundColor = "#f0f0f0";
-
   if (!startTime || !endTime) {
     hoursWorkedInput.value = "";
+    updateEditHoursDisplay(); // ← add this
     return;
   }
 
@@ -3806,23 +3812,26 @@ function recalculateEditHoursWorked() {
 
   let start = startHours * 60 + startMinutes;
   let end = endHours * 60 + endMinutes;
+
   if (end < start) end += 24 * 60;
 
   const totalWorkedMinutes = end - start;
   let driveMinutes = 0;
 
   if (totalTimeStr) {
-    const hoursMatch = totalTimeStr.match(/(\d+)\s*hour/);
-    const minutesMatch = totalTimeStr.match(/(\d+)\s*minute/);
-    if (hoursMatch) driveMinutes += parseInt(hoursMatch[1], 10) * 60;
-    if (minutesMatch) driveMinutes += parseInt(minutesMatch[1], 10);
+    const match = totalTimeStr.match(/(\d+)\s*hour.*?(\d+)?\s*minute/i);
+    if (match) {
+      driveMinutes = parseInt(match[1]) * 60 + (parseInt(match[2]) || 0);
+    }
   }
 
-  const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
-  const actualWorkedHours = actualWorkedMinutes / 60;
+  const actualWorked = Math.max(totalWorkedMinutes - driveMinutes, 0);
+  const decimalHours = actualWorked / 60;
 
-  hoursWorkedInput.value = actualWorkedHours.toFixed(2);
+  hoursWorkedInput.value = decimalHours.toFixed(2);
+  updateEditHoursDisplay(); // ← add this
 }
+
 
 
 
