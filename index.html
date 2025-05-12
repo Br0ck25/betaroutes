@@ -973,7 +973,7 @@ img {
 
 <div>
   <input
-    type="number"
+    type="text"
     id="total-hours"
     placeholder="Auto-filled from Start/End Time"
     readonly
@@ -1173,7 +1173,7 @@ function clearTripForm() {
   document.getElementById("total-hours").value = "";
   document.getElementById("maintenance-cost").value = "";
   document.getElementById("supplies-cost").value = "";
-  document.getElementById("hours-display").textContent = "";
+
 
 
   // ✅ Keep start, end, mpg, and gas-price
@@ -2135,9 +2135,10 @@ async function calculateRouteData() {
     hoursWorked = parseFloat((actualWorkedMinutes / 60).toFixed(2));
     const workedHours = Math.floor(hoursWorked);
     const workedMinutes = Math.round((hoursWorked - workedHours) * 60);
-    document.getElementById("total-hours").value = hoursWorked.toFixed(2);
+    document.getElementById("total-hours").value = formatHoursAndMinutes(hoursWorked);
 
-    document.getElementById("hours-display").textContent = formatHoursAndMinutes(hoursWorked);
+
+
   }
 
   const maintenanceCost = parseFloat(document.getElementById("maintenance-cost").value) || 0;
@@ -2201,7 +2202,8 @@ async function calculateRouteData() {
           const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
           hoursWorked = parseFloat((actualWorkedMinutes / 60).toFixed(2));
 
-          document.getElementById("total-hours").value = hoursWorked.toFixed(2);
+          document.getElementById("total-hours").value = formatHoursAndMinutes(hoursWorked);
+
         }
 
         const fuelCost = mpg && gasPrice ? (totalMileage / mpg) * gasPrice : 0;
