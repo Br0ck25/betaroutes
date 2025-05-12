@@ -2401,22 +2401,16 @@ document.getElementById("total-hours").textContent = `${hourText}${minuteText}`;
 
 
 async function optimizeRoute() {
-  const destInputs = document.querySelectorAll('#destinations-container .destination input[type="text"]');
-  const currentDestinations = Array.from(destInputs)
-    .map(input => input.value.trim())
-    .filter(value => value !== "");
+  const startAddressEl = document.getElementById("start-address");
+  const endAddressEl = document.getElementById("end-address");
 
-  if (currentDestinations.length < 2) {
-    showAlertModal("🚧 Please add at least two destinations to optimize the route.");
+  if (!startAddressEl || !endAddressEl) {
+    alert("❌ Start or end address field not found. Please refresh the page.");
     return;
   }
 
-  if (originalMileage === null) {
-    await calculateRouteData(); // no alert or UI update
-  }
-
-  const startAddress = document.getElementById("start-address").value;
-  const endAddress = document.getElementById("end-address").value;
+  const startAddress = startAddressEl.value;
+  const endAddress = endAddressEl.value;
 
   const waypoints = currentDestinations.map((location) => ({
     location: location,
