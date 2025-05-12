@@ -2225,97 +2225,57 @@ async function calculateRouteData() {
 
 
 
-      function updateUI(data) {
-        if (data) {
-          document.getElementById("total-mileage").textContent =
-            data.totalMileage;
-          document.getElementById("total-time").textContent = data.totalTime;
-          document.getElementById("total-earnings").textContent =
-            data.totalEarnings;
-          document.getElementById("fuel-cost").textContent = data.fuelCost;
-          document.getElementById("maintenance-cost-result").textContent =
-            data.maintenanceCost;
-          document.getElementById("supplies-cost-result").textContent =
-            data.suppliesCost;
-          document.getElementById("net-profit").textContent = data.netProfit;
-          document.getElementById("profit-per-hour").textContent =
-            data.profitPerHour;
-          document.getElementById("results").classList.remove("hidden");
-          const start = data.startClock;
-const end = data.endClock;
+function updateUI(data) {
+  if (data) {
+    document.getElementById("total-mileage").textContent = data.totalMileage;
+    document.getElementById("total-time").textContent = data.totalTime;
+    document.getElementById("total-earnings").textContent = data.totalEarnings;
+    document.getElementById("fuel-cost").textContent = data.fuelCost;
+    document.getElementById("maintenance-cost-result").textContent = data.maintenanceCost;
+    document.getElementById("supplies-cost-result").textContent = data.suppliesCost;
+    document.getElementById("net-profit").textContent = data.netProfit;
+    document.getElementById("profit-per-hour").textContent = data.profitPerHour;
+    document.getElementById("results").classList.remove("hidden");
 
-let totalMinutes = 0;
-if (start && end && start.includes(":") && end.includes(":")) {
-  const [sh, sm] = start.split(":").map(Number);
-  const [eh, em] = end.split(":").map(Number);
-  let startMin = sh * 60 + sm;
-  let endMin = eh * 60 + em;
-  if (endMin < startMin) endMin += 24 * 60;
-  totalMinutes = endMin - startMin;
-}
-
-const totalH = Math.floor(totalMinutes / 60);
-const totalM = totalMinutes % 60;
-const hourText = `${totalH} hour${totalH !== 1 ? "s" : ""}`;
-const minuteText = totalM > 0 ? ` ${totalM} minute${totalM !== 1 ? "s" : ""}` : "";
-if (data.totalClockMinutes) {
-  const h = Math.floor(data.totalClockMinutes / 60);
-  const m = data.totalClockMinutes % 60;
-  document.getElementById("total-hours").textContent =
-    `${h} hour${h !== 1 ? "s" : ""}${m > 0 ? ` ${m} minute${m !== 1 ? "s" : ""}` : ""}`;
-}
-
-
-
-
-
-          if (originalMileage === null) {
-            originalMileage = data.totalMileage;
-          }
-          document.getElementById("mileage-display").textContent =
-            "Original Route: " + originalMileage + " miles";
-
-          // ✅ Add the new detailed display below the map
-          const detailedResultsHTML = `
-  <h3>Route Details</h3>
-  <p><strong>Date:</strong> ${data.date}</p>
-  <p><strong>Start Address:</strong> ${data.startTime}</p>
-  <p><strong>Destinations:</strong><br>${data.destinations.map((d) => `- ${d}`).join("<br>")}</p>
-  <p><strong>End Address:</strong> ${data.endTime}</p>
-  <p><strong>Earnings per Stop:</strong> ${data.earnings.map((e) => `$${parseFloat(e).toFixed(2)}`).join(", ")}</p>
-  <p><strong>Mileage:</strong> ${data.totalMileage} miles</p>
-  <p><strong>Drive Time:</strong> ${data.totalTime}</p>
-  <p><strong>Total Earnings:</strong> $${data.totalEarnings}</p>
-  <p><strong>Fuel Cost:</strong> $${data.fuelCost}</p>
-  <p><strong>Maintenance:</strong> $${data.maintenanceCost}</p>
-  <p><strong>Supplies:</strong> $${data.suppliesCost}</p>
-  <p><strong>Hours Worked:</strong> ${formatHoursAndMinutes(data.hoursWorked ?? 0)}</p>
-<p><strong>Total Hours:</strong> ${
-  (() => {
-    const start = data.startClock;
-    const end = data.endClock;
-    let totalMinutes = 0;
-    if (start && end && start.includes(":") && end.includes(":")) {
-      const [sh, sm] = start.split(":").map(Number);
-      const [eh, em] = end.split(":").map(Number);
-      let startMin = sh * 60 + sm;
-      let endMin = eh * 60 + em;
-      if (endMin < startMin) endMin += 24 * 60;
-      totalMinutes = endMin - startMin;
+    // ✅ Display Total Hours based on clock time only
+    if (data.totalClockMinutes) {
+      const h = Math.floor(data.totalClockMinutes / 60);
+      const m = data.totalClockMinutes % 60;
+      document.getElementById("total-hours").textContent =
+        `${h} hour${h !== 1 ? "s" : ""}${m > 0 ? ` ${m} minute${m !== 1 ? "s" : ""}` : ""}`;
     }
-    return formatHoursAndMinutesFromMinutes(totalMinutes);
-  })()
-}</p>
 
+    // ✅ Display Original Route Mileage
+    if (originalMileage === null) {
+      originalMileage = data.totalMileage;
+    }
+    document.getElementById("mileage-display").textContent =
+      "Original Route: " + originalMileage + " miles";
 
-  <p><strong>Net Profit:</strong> $${data.netProfit}</p>
-  <p><strong>Profit per Hour:</strong> $${data.profitPerHour}</p>
-`;
+    // ✅ Detailed results below map
+    const detailedResultsHTML = `
+      <h3>Route Details</h3>
+      <p><strong>Date:</strong> ${data.date}</p>
+      <p><strong>Start Address:</strong> ${data.startTime}</p>
+      <p><strong>Destinations:</strong><br>${data.destinations.map((d) => `- ${d}`).join("<br>")}</p>
+      <p><strong>End Address:</strong> ${data.endTime}</p>
+      <p><strong>Earnings per Stop:</strong> ${data.earnings.map((e) => `$${parseFloat(e).toFixed(2)}`).join(", ")}</p>
+      <p><strong>Mileage:</strong> ${data.totalMileage} miles</p>
+      <p><strong>Drive Time:</strong> ${data.totalTime}</p>
+      <p><strong>Total Earnings:</strong> $${data.totalEarnings}</p>
+      <p><strong>Fuel Cost:</strong> $${data.fuelCost}</p>
+      <p><strong>Maintenance:</strong> $${data.maintenanceCost}</p>
+      <p><strong>Supplies:</strong> $${data.suppliesCost}</p>
+      <p><strong>Worked Hours:</strong> ${formatHoursAndMinutes(data.hoursWorked ?? 0)}</p>
+      <p><strong>Total Hours:</strong> ${formatHoursAndMinutesFromMinutes(data.totalClockMinutes)}</p>
+      <p><strong>Net Profit:</strong> $${data.netProfit}</p>
+      <p><strong>Profit per Hour:</strong> $${data.profitPerHour}</p>
+    `;
 
-          document.getElementById("detailed-results").innerHTML =
-            detailedResultsHTML;
-        }
-      }
+    document.getElementById("detailed-results").innerHTML = detailedResultsHTML;
+  }
+}
+
 
       function openInGoogleMaps() {
         const start = encodeURIComponent(
