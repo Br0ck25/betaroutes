@@ -4052,7 +4052,22 @@ function exportToCSVWithTotals() {
       entry.fuelCost,
       entry.maintenanceCost,
       entry.suppliesCost,
-      entry.hoursWorked,
+      (() => {
+  const start = entry.startClock;
+  const end = entry.endClock;
+  if (!start || !end) return "N/A";
+
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  let startMin = sh * 60 + sm;
+  let endMin = eh * 60 + em;
+  if (endMin < startMin) endMin += 24 * 60;
+
+  const driveMinutes = convertTimeToMinutes(entry.totalTime || "");
+  const workedMinutes = Math.max(endMin - startMin - driveMinutes, 0);
+  return `"${formatHoursAndMinutesFromMinutes(workedMinutes)}"`;
+})(),
+
       totalHours,
       entry.netProfit,
       entry.profitPerHour || ""
@@ -4164,7 +4179,22 @@ function exportToPDFWithTotals() {
     `${entry.totalMileage} mi`,
     entry.totalTime,
     (entry.earnings || []).map(e => `$${parseFloat(e).toFixed(2)}`).join(", "),
-    entry.hoursWorked || "0",
+    (() => {
+  const start = entry.startClock;
+  const end = entry.endClock;
+  if (!start || !end) return "N/A";
+
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  let startMin = sh * 60 + sm;
+  let endMin = eh * 60 + em;
+  if (endMin < startMin) endMin += 24 * 60;
+
+  const driveMinutes = convertTimeToMinutes(entry.totalTime || "");
+  const workedMinutes = Math.max(endMin - startMin - driveMinutes, 0);
+  return formatHoursAndMinutesFromMinutes(workedMinutes);
+})(),
+
     `$${entry.profitPerHour || "0.00"}`
   ]);
 
