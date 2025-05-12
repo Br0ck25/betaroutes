@@ -4038,6 +4038,7 @@ function exportToCSVWithTotals() {
     const start = entry.startClock;
     const end = entry.endClock;
     let workedMinutes = 0;
+    let sessionMinutes = 0;
 
     if (start && end && start.includes(":") && end.includes(":")) {
       const [sh, sm] = start.split(":").map(Number);
@@ -4046,12 +4047,10 @@ function exportToCSVWithTotals() {
       let endMin = eh * 60 + em;
       if (endMin < startMin) endMin += 24 * 60;
 
+      sessionMinutes = endMin - startMin;
       const driveMinutes = convertTimeToMinutes(entry.totalTime || "");
-      workedMinutes = Math.max(endMin - startMin - driveMinutes, 0);
+      workedMinutes = Math.max(sessionMinutes - driveMinutes, 0);
     }
-
-    const totalMinutes = convertTimeToMinutes(entry.totalTime || "");
-    const totalHoursDecimal = (workedMinutes + totalMinutes) / 60;
 
     return [
       entry.date,
@@ -4068,7 +4067,7 @@ function exportToCSVWithTotals() {
       entry.maintenanceCost,
       entry.suppliesCost,
       `"${formatHoursAndMinutesFromMinutes(workedMinutes)}"`,
-      totalHoursDecimal.toFixed(2),
+      `"${formatHoursAndMinutesFromMinutes(sessionMinutes)}"`,
       entry.netProfit,
       entry.profitPerHour || ""
     ].join(",");
@@ -4078,7 +4077,6 @@ function exportToCSVWithTotals() {
   let totalNetProfit = 0;
   let totalDriveMinutes = 0;
   let totalSessionMinutes = 0;
-
   let totalEarnings = 0;
   let fuelCost = 0;
   let maintenance = 0;
@@ -4109,8 +4107,8 @@ function exportToCSVWithTotals() {
 
   const totalWorkedMinutes = Math.max(totalSessionMinutes - totalDriveMinutes, 0);
   const formattedWorkedTime = formatHoursAndMinutesFromMinutes(totalWorkedMinutes);
-  const totalHoursDecimal = totalSessionMinutes / 60;
-  const profitPerHour = totalHoursDecimal > 0 ? totalNetProfit / totalHoursDecimal : 0;
+  const formattedTotalTime = formatHoursAndMinutesFromMinutes(totalSessionMinutes);
+  const profitPerHour = totalSessionMinutes > 0 ? totalNetProfit / (totalSessionMinutes / 60) : 0;
 
   const formattedDriveTime = `${Math.floor(totalDriveMinutes / 60)} hour${Math.floor(totalDriveMinutes / 60) !== 1 ? "s" : ""} ${totalDriveMinutes % 60} minutes`;
 
@@ -4123,7 +4121,7 @@ function exportToCSVWithTotals() {
     maintenance.toFixed(2),
     supplies.toFixed(2),
     formattedWorkedTime,
-    totalHoursDecimal.toFixed(2),
+    formattedTotalTime,
     totalNetProfit.toFixed(2),
     profitPerHour.toFixed(2)
   ].join(",");
@@ -4139,6 +4137,11 @@ function exportToCSVWithTotals() {
   link.click();
   document.body.removeChild(link);
 }
+
+
+
+
+
 
 function exportToPDFWithTotals() {
   const filtered = typeof currentFilterFn === "function"
@@ -4157,7 +4160,7 @@ function exportToPDFWithTotals() {
     "Date", "Start", "Destinations", "End",
     "Earnings", "Fuel", "Maintenance", "Supplies",
     "Net Profit", "Mileage", "Drive Time",
-    "Earnings per Stop", "Hours Worked", "Profit per Hour"
+    "Earnings per Stop", "Hours Worked", "Total Hours", "Profit per Hour"
   ];
 
   const data = filtered.map((entry) => {
@@ -4169,6 +4172,7 @@ function exportToPDFWithTotals() {
     const start = entry.startClock;
     const end = entry.endClock;
     let workedMinutes = 0;
+    let sessionMinutes = 0;
 
     if (start && end && start.includes(":") && end.includes(":")) {
       const [sh, sm] = start.split(":").map(Number);
@@ -4177,8 +4181,9 @@ function exportToPDFWithTotals() {
       let endMin = eh * 60 + em;
       if (endMin < startMin) endMin += 24 * 60;
 
+      sessionMinutes = endMin - startMin;
       const driveMinutes = convertTimeToMinutes(entry.totalTime || "");
-      workedMinutes = Math.max(endMin - startMin - driveMinutes, 0);
+      workedMinutes = Math.max(sessionMinutes - driveMinutes, 0);
     }
 
     return [
@@ -4195,6 +4200,7 @@ function exportToPDFWithTotals() {
       entry.totalTime,
       earningsPerStop,
       formatHoursAndMinutesFromMinutes(workedMinutes),
+      formatHoursAndMinutesFromMinutes(sessionMinutes),
       `$${entry.profitPerHour || "0.00"}`
     ];
   });
@@ -4232,8 +4238,8 @@ function exportToPDFWithTotals() {
 
   const totalWorkedMinutes = Math.max(totalSessionMinutes - totalDriveMinutes, 0);
   const formattedWorkedTime = formatHoursAndMinutesFromMinutes(totalWorkedMinutes);
-  const totalSessionHours = totalSessionMinutes / 60;
-  const profitPerHour = totalSessionHours > 0 ? totalNetProfit / totalSessionHours : 0;
+  const formattedTotalTime = formatHoursAndMinutesFromMinutes(totalSessionMinutes);
+  const profitPerHour = totalSessionMinutes > 0 ? totalNetProfit / (totalSessionMinutes / 60) : 0;
   const formattedDriveTime = `${Math.floor(totalDriveMinutes / 60)} hr ${totalDriveMinutes % 60} min`;
 
   data.push([
@@ -4247,6 +4253,7 @@ function exportToPDFWithTotals() {
     formattedDriveTime,
     "",
     formattedWorkedTime,
+    formattedTotalTime,
     `$${profitPerHour.toFixed(2)}`
   ]);
 
@@ -4279,6 +4286,7 @@ function exportToPDFWithTotals() {
 
   pdf.save("profit_log_with_totals.pdf");
 }
+
 
 
 
