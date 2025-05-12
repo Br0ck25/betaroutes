@@ -2412,6 +2412,16 @@ async function optimizeRoute() {
   const startAddress = startAddressEl.value;
   const endAddress = endAddressEl.value;
 
+  const destInputs = document.querySelectorAll(
+    '#destinations-container .destination input[type="text"]'
+  );
+  const currentDestinations = Array.from(destInputs).map(input => input.value.trim());
+
+  if (currentDestinations.length < 2) {
+    alert("Please add at least two destinations to optimize the route.");
+    return;
+  }
+
   const waypoints = currentDestinations.map((location) => ({
     location: location,
     stopover: true,
