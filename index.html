@@ -969,9 +969,19 @@ img {
       <label for="end-time">End Time (Optional)</label>
       <input type="time" id="end-time" placeholder="Enter end time" />
 
-<label>Total Hours</label>
-<div id="hours-display" style="font-size: 16px; font-weight: bold; color: #333;"></div>
+      <label for="hours-worked">Total Hours</label>
 
+<div>
+  <input
+  type="number"
+  id="hours-worked"
+  placeholder="Auto-filled from times"
+  readonly
+  style="background-color: #eee; cursor: not-allowed;"
+/>
+
+  <div id="hours-display" style="margin-top: 4px; font-size: 14px; color: #555;"></div>
+</div>
 
 
       <div class="optional-costs">
@@ -1456,12 +1466,6 @@ function toggleHamburgerManageAccountMenu() {
 }
 
 
-function updateEditHoursDisplay() {
-  const decimal = parseFloat(document.getElementById("edit-hours-worked").value) || 0;
-  document.getElementById("edit-hours-message").textContent = formatHoursAndMinutes(decimal);
-}
-
-
 
 
 
@@ -1900,20 +1904,18 @@ if (dateInput) {
   initOfflineListeners();
 
 
-document.getElementById("hours-worked").addEventListener("input", () => {
+  document.getElementById("hours-worked").addEventListener("input", () => {
   const hoursWorked = parseFloat(document.getElementById("hours-worked").value) || 0;
   const driveTimeInHours = convertTimeToHours(document.getElementById("total-time").textContent);
 
   const workedMinutes = Math.round(hoursWorked * 60);
-  const driveMinutes = Math.round(driveTimeInHours * 60);
-  const totalWorkedMinutes = workedMinutes + driveMinutes;
+const driveMinutes = Math.round(driveTimeInHours * 60);
+const totalWorkedMinutes = workedMinutes + driveMinutes;
 
   const totalHoursDecimal = totalWorkedMinutes / 60;
 
   document.getElementById("total-hours").textContent = formatHoursAndMinutes(totalHoursDecimal);
 });
-
-
 
 
   // 🆕 After selecting start time, auto-focus end time after slight delay
@@ -2245,21 +2247,24 @@ async function calculateRouteData() {
           document.getElementById("profit-per-hour").textContent =
             data.profitPerHour;
           document.getElementById("results").classList.remove("hidden");
-const hoursWorked = parseFloat(data.hoursWorked || 0);
-const driveTime = convertTimeToHours(data.totalTime || "");
-const totalDecimal = hoursWorked + driveTime;
+          const start = data.startClock;
+const end = data.endClock;
 
-// Set raw decimal for logic
-document.getElementById("hours-worked").value = hoursWorked.toFixed(2);
+let totalMinutes = 0;
+if (start && end && start.includes(":") && end.includes(":")) {
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  let startMin = sh * 60 + sm;
+  let endMin = eh * 60 + em;
+  if (endMin < startMin) endMin += 24 * 60;
+  totalMinutes = endMin - startMin;
+}
 
-// Show friendly version
-document.getElementById("hours-display").textContent = formatHoursAndMinutes(hoursWorked);
-
-// Show formatted total hours
-document.getElementById("total-hours").textContent = formatHoursAndMinutes(totalDecimal);
-
-
-
+const totalH = Math.floor(totalMinutes / 60);
+const totalM = totalMinutes % 60;
+const hourText = `${totalH} hour${totalH !== 1 ? "s" : ""}`;
+const minuteText = totalM > 0 ? ` ${totalM} minute${totalM !== 1 ? "s" : ""}` : "";
+document.getElementById("total-hours").textContent = `${hourText}${minuteText}`;
 
 
 
@@ -3148,8 +3153,6 @@ if (earningsInput) {
             console.error("Error setting up autocomplete:", error);
           }
         }, 0);
-        updateEditHoursDisplay();
-
       }
 
       function getNumberValue(id) {
@@ -3802,9 +3805,11 @@ function recalculateEditHoursWorked() {
 
   if (!hoursWorkedInput) return;
 
+  hoursWorkedInput.readOnly = true;
+  hoursWorkedInput.style.backgroundColor = "#f0f0f0";
+
   if (!startTime || !endTime) {
     hoursWorkedInput.value = "";
-    updateEditHoursDisplay(); // ← add this
     return;
   }
 
@@ -3813,30 +3818,23 @@ function recalculateEditHoursWorked() {
 
   let start = startHours * 60 + startMinutes;
   let end = endHours * 60 + endMinutes;
-
   if (end < start) end += 24 * 60;
 
   const totalWorkedMinutes = end - start;
   let driveMinutes = 0;
 
   if (totalTimeStr) {
-    const match = totalTimeStr.match(/(\d+)\s*hour.*?(\d+)?\s*minute/i);
-    if (match) {
-      driveMinutes = parseInt(match[1]) * 60 + (parseInt(match[2]) || 0);
-    }
+    const hoursMatch = totalTimeStr.match(/(\d+)\s*hour/);
+    const minutesMatch = totalTimeStr.match(/(\d+)\s*minute/);
+    if (hoursMatch) driveMinutes += parseInt(hoursMatch[1], 10) * 60;
+    if (minutesMatch) driveMinutes += parseInt(minutesMatch[1], 10);
   }
 
-  const actualWorked = Math.max(totalWorkedMinutes - driveMinutes, 0);
-  const decimalHours = actualWorked / 60;
+  const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
+  const actualWorkedHours = actualWorkedMinutes / 60;
 
-  hoursWorkedInput.value = formatHoursAndMinutes(decimalHours);
-
-  document.getElementById("edit-hours-worked").value = formatHoursAndMinutes(entry.hoursWorked ?? 0);
-
-
-  updateEditHoursDisplay(); // ← add this
+  hoursWorkedInput.value = actualWorkedHours.toFixed(2);
 }
-
 
 
 
