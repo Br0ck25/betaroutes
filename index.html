@@ -2105,136 +2105,6 @@ document.addEventListener("DOMContentLoaded", () => {
 }
 
 
-async function optimizeRoute() {
-  const startAddressEl = document.getElementById("start-address");
-  const endAddressEl = document.getElementById("end-address");
-  const logDateEl = document.getElementById("log-date");
-  const mpgEl = document.getElementById("mpg");
-  const gasPriceEl = document.getElementById("gas-price");
-  const maintenanceEl = document.getElementById("maintenance-cost");
-  const suppliesEl = document.getElementById("supplies-cost");
-  const hoursWorkedEl = document.getElementById("hours-worked");
-
-  if (!startAddressEl || !endAddressEl) {
-    alert("❌ Start or end address field not found. Please refresh the page.");
-    return;
-  }
-
-  const startAddress = startAddressEl.value.trim();
-  const endAddress = endAddressEl.value.trim();
-
-  const destInputs = document.querySelectorAll(
-    '#destinations-container .destination input[id^="destination-"]'
-  );
-
-  const currentDestinations = Array.from(destInputs).map(input => input.value.trim());
-
-  if (currentDestinations.length < 2) {
-    alert("Please add at least two destinations to optimize the route.");
-    return;
-  }
-
-  const waypoints = currentDestinations.map(location => ({
-    location,
-    stopover: true
-  }));
-
-  const request = {
-    origin: startAddress,
-    destination: endAddress,
-    waypoints: waypoints,
-    travelMode: "DRIVING",
-    optimizeWaypoints: true
-  };
-
-  directionsService.route(request, (response, status) => {
-    if (status === "OK" && response.routes[0].waypoint_order) {
-      const optimizedOrder = response.routes[0].waypoint_order;
-      const newDestinationsContainer = document.createElement("div");
-      newDestinationsContainer.id = "destinations-container";
-
-      optimizedOrder.forEach((index, i) => {
-        const originalDestinationDiv = destInputs[index].closest(".destination");
-        const clonedDestinationDiv = originalDestinationDiv.cloneNode(true);
-
-        const destLabel = clonedDestinationDiv.querySelector('label[for^="destination-"]');
-        const destInput = clonedDestinationDiv.querySelector('input[id^="destination-"]');
-        const earningsLabel = clonedDestinationDiv.querySelector('label[for^="earnings-"]');
-        const earningsInput = clonedDestinationDiv.querySelector('input[id^="earnings-"]');
-        const newIndex = i + 1;
-
-        if (destLabel) destLabel.setAttribute("for", `destination-${newIndex}`);
-        if (destInput) destInput.id = `destination-${newIndex}`;
-        if (earningsLabel) earningsLabel.setAttribute("for", `earnings-${newIndex}`);
-        if (earningsInput) earningsInput.id = `earnings-${newIndex}`;
-
-        newDestinationsContainer.appendChild(clonedDestinationDiv);
-      });
-
-      const oldDestinationsContainer = document.getElementById("destinations-container");
-      oldDestinationsContainer.parentNode.replaceChild(newDestinationsContainer, oldDestinationsContainer);
-
-      document.querySelectorAll('#destinations-container .destination input[type="text"]').forEach(initAutocompleteDestination);
-
-      directionsRenderer.setDirections(response);
-      document.getElementById("map").classList.remove("hidden"); // ✅ Show map
-
-      let optimizedMileage = 0;
-      let totalDuration = 0;
-      response.routes[0].legs.forEach(leg => {
-        optimizedMileage += leg.distance.value / 1609.34;
-        totalDuration += leg.duration.value;
-      });
-
-      document.getElementById("optimized-mileage-display").textContent =
-        "Optimized Route: " + optimizedMileage.toFixed(2) + " miles";
-      document.getElementById("total-time").textContent = formatDuration(totalDuration);
-
-      const earningsInputs = document.querySelectorAll('input[id^="earnings-"]');
-      const earnings = Array.from(earningsInputs).map(input => parseFloat(input.value) || 0);
-      const totalEarnings = earnings.reduce((sum, val) => sum + val, 0);
-
-      const mpg = mpgEl ? parseFloat(mpgEl.value) || 1 : 1;
-      const gasPrice = gasPriceEl ? parseFloat(gasPriceEl.value) || 0 : 0;
-      const maintenanceCost = maintenanceEl ? parseFloat(maintenanceEl.value) || 0 : 0;
-      const suppliesCost = suppliesEl ? parseFloat(suppliesEl.value) || 0 : 0;
-      const hoursWorked = hoursWorkedEl ? parseFloat(hoursWorkedEl.value) || 0 : 0;
-
-      const fuelCost = ((optimizedMileage / mpg) * gasPrice);
-      const netProfit = totalEarnings - fuelCost - maintenanceCost - suppliesCost;
-      const totalHoursSpent = hoursWorked + totalDuration / 3600;
-      const profitPerHour = totalHoursSpent > 0 ? netProfit / totalHoursSpent : 0;
-
-      const optimizedData = {
-        date: logDateEl?.value || new Date().toLocaleDateString(),
-        startTime: startAddress,
-        endTime: endAddress,
-        destinations: Array.from(document.querySelectorAll('input[id^="destination-"]')).map(input => input.value.trim()),
-        earnings: earnings,
-        totalMileage: optimizedMileage.toFixed(2),
-        totalTime: formatDuration(totalDuration),
-        totalEarnings: totalEarnings.toFixed(2),
-        fuelCost: fuelCost.toFixed(2),
-        maintenanceCost: maintenanceCost.toFixed(2),
-        suppliesCost: suppliesCost.toFixed(2),
-        hoursWorked: hoursWorked,
-        netProfit: netProfit.toFixed(2),
-        profitPerHour: profitPerHour.toFixed(2)
-      };
-
-      updateUI(optimizedData);
-      showConfirmationMessage("✅ Route optimized successfully!");
-    } else if (status === "OK") {
-      directionsRenderer.setDirections(response);
-      document.getElementById("map").classList.remove("hidden"); // ✅ Show map fallback
-    } else {
-      showAlertModal("❌ Could not optimize route due to: " + status);
-    }
-  });
-}
-
-
-
 
       function updateUI(data) {
         if (data) {
@@ -2486,6 +2356,7 @@ async function optimizeRoute() {
       document.querySelectorAll('#destinations-container .destination input[type="text"]').forEach(initAutocompleteDestination);
 
       directionsRenderer.setDirections(response);
+      document.getElementById("map").classList.remove("hidden");
 
       let optimizedMileage = 0;
       let totalDuration = 0;
@@ -2498,7 +2369,6 @@ async function optimizeRoute() {
         "Optimized Route: " + optimizedMileage.toFixed(2) + " miles";
       document.getElementById("total-time").textContent = formatDuration(totalDuration);
 
-      // Safe data extraction
       const earningsInputs = document.querySelectorAll('input[id^="earnings-"]');
       const earnings = Array.from(earningsInputs).map(input => parseFloat(input.value) || 0);
       const totalEarnings = earnings.reduce((sum, val) => sum + val, 0);
@@ -2532,14 +2402,18 @@ async function optimizeRoute() {
       };
 
       updateUI(optimizedData);
+      document.getElementById("results").classList.remove("hidden"); // ✅ Show results panel
+      document.getElementById("map").classList.remove("hidden");      // ✅ Show map
       showConfirmationMessage("✅ Route optimized successfully!");
     } else if (status === "OK") {
-      directionsRenderer.setDirections(response); // fallback
+      directionsRenderer.setDirections(response);
+      document.getElementById("map").classList.remove("hidden");
     } else {
       showAlertModal("❌ Could not optimize route due to: " + status);
     }
   });
 }
+
 
 
 
