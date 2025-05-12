@@ -2487,10 +2487,14 @@ async function optimizeRoute() {
         totalMileage: optimizedMileage.toFixed(2),
         totalTime: formatDuration(totalDuration),
         totalEarnings: Array.from(document.querySelectorAll('input[id^="earnings-"]')).reduce((sum, i) => sum + (parseFloat(i.value) || 0), 0).toFixed(2),
-        fuelCost: (
-          (optimizedMileage / parseFloat(document.getElementById("mpg").value || 1)) *
-          parseFloat(document.getElementById("gas-price").value || 0)
-        ).toFixed(2),
+        fuelCost: (() => {
+  const mpgInput = document.getElementById("mpg");
+  const gasInput = document.getElementById("gas-price");
+  const mpg = mpgInput ? parseFloat(mpgInput.value) || 1 : 1;
+  const gasPrice = gasInput ? parseFloat(gasInput.value) || 0 : 0;
+  return ((optimizedMileage / mpg) * gasPrice).toFixed(2);
+})(),
+
         maintenanceCost: parseFloat(document.getElementById("maintenance-cost").value || 0).toFixed(2),
         suppliesCost: parseFloat(document.getElementById("supplies-cost").value || 0).toFixed(2),
         hoursWorked: parseFloat(document.getElementById("hours-worked").value || 0),
