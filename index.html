@@ -963,22 +963,26 @@ img {
         required
       />
 
-      <label for="start-time">Start Time</label>
+      <label for="start-time">Start Time (Optional)</label>
       <input type="time" id="start-time" placeholder="Enter start time" />
 
-      <label for="end-time">End Time</label>
+      <label for="end-time">End Time (Optional)</label>
       <input type="time" id="end-time" placeholder="Enter end time" />
 
-      <label for="hours-worked">Total Hours</label>
+<label for="total-hours">Total Hours</label>
 
 <div>
   <input
-  type="number"
-  id="hours-worked"
-  placeholder="Auto-filled from times"
-  readonly
-  style="background-color: #eee; cursor: not-allowed;"
-/>
+    type="number"
+    id="total-hours"
+    placeholder="Auto-filled from Start/End Time"
+    readonly
+    style="background-color: #eee; cursor: not-allowed;"
+  />
+
+  <div id="hours-display" style="margin-top: 4px; font-size: 14px; color: #555;"></div>
+</div>
+
 
 
       <div class="optional-costs">
@@ -1337,7 +1341,8 @@ function resumeDraftTrip() {
   document.getElementById("gas-price").value = data.gas || "";
   document.getElementById("start-time").value = data.startTime || "";
   document.getElementById("end-time").value = data.endTime || "";
-  document.getElementById("hours-worked").value = data.hoursWorked || "";
+  document.getElementById("total-hours").value = data.hoursWorked || "";
+
   document.getElementById("maintenance-cost").value = data.maintenance || "";
   document.getElementById("supplies-cost").value = data.supplies || "";
 
@@ -1756,7 +1761,8 @@ function saveDraftTrip() {
 
   const startTime = document.getElementById("start-time")?.value.trim();
   const endTime = document.getElementById("end-time")?.value.trim();
-  const hoursWorked = document.getElementById("hours-worked")?.value.trim();
+  const hoursWorked = document.getElementById("total-hours")?.value.trim();
+
   const maintenance = document.getElementById("maintenance-cost")?.value.trim();
   const supplies = document.getElementById("supplies-cost")?.value.trim();
 
@@ -1901,6 +1907,21 @@ if (dateInput) {
   initOfflineListeners();
 
 
+  document.getElementById("total-hours").addEventListener("input", () => {
+  const hoursWorked = parseFloat(document.getElementById("total-hours").value) || 0;
+
+  const driveTimeInHours = convertTimeToHours(document.getElementById("total-time").textContent);
+
+  const workedMinutes = Math.round(hoursWorked * 60);
+const driveMinutes = Math.round(driveTimeInHours * 60);
+const totalWorkedMinutes = workedMinutes + driveMinutes;
+
+  const totalHoursDecimal = totalWorkedMinutes / 60;
+
+  document.getElementById("total-hours").textContent = formatHoursAndMinutes(totalHoursDecimal);
+});
+
+
   // 🆕 After selecting start time, auto-focus end time after slight delay
   document.getElementById("start-time").addEventListener("change", () => {
     setTimeout(() => document.getElementById("end-time")?.focus(), 200);
@@ -1916,32 +1937,6 @@ if (dateInput) {
     setTimeout(() => document.getElementById("end-time")?.focus(), 200);
   });
 
-
-  function updateTotalHoursFromClockOnly() {
-  const start = document.getElementById("start-time")?.value;
-  const end = document.getElementById("end-time")?.value;
-  if (!start || !end) return;
-
-  const [sh, sm] = start.split(":").map(Number);
-  const [eh, em] = end.split(":").map(Number);
-  let startMin = sh * 60 + sm;
-  let endMin = eh * 60 + em;
-
-  if (endMin < startMin) endMin += 24 * 60; // handle overnight
-
-  const totalMinutes = endMin - startMin;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-
-  const formatted =
-    `${hours} hour${hours !== 1 ? "s" : ""}` +
-    (minutes > 0 ? ` ${minutes} minute${minutes !== 1 ? "s" : ""}` : "");
-
-  document.getElementById("total-hours").textContent = formatted;
-}
-
-document.getElementById("start-time").addEventListener("input", updateTotalHoursFromClockOnly);
-document.getElementById("end-time").addEventListener("input", updateTotalHoursFromClockOnly);
 
 
       function updateOfflineBanner() {
@@ -2116,9 +2111,37 @@ async function calculateRouteData() {
   const gasPrice = parseFloat(document.getElementById("gas-price").value);
   const startTimeInput = document.getElementById("start-time").value;
   const endTimeInput = document.getElementById("end-time").value;
+  let hoursWorked = parseFloat(document.getElementById("total-hours").value) || 0;
+
+
+  if (startTimeInput && endTimeInput) {
+    const [startHours, startMinutes] = startTimeInput.split(":").map(Number);
+    const [endHours, endMinutes] = endTimeInput.split(":").map(Number);
+
+    let startTotalMinutes = startHours * 60 + startMinutes;
+    let endTotalMinutes = endHours * 60 + endMinutes;
+    if (endTotalMinutes < startTotalMinutes) endTotalMinutes += 24 * 60;
+
+    let totalWorkedMinutes = endTotalMinutes - startTotalMinutes;
+    let driveMinutes = 0;
+
+    if (typeof totalDuration === "number") {
+      driveMinutes = totalDuration / 60;
+    }
+
+    const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
+    hoursWorked = parseFloat((actualWorkedMinutes / 60).toFixed(2));
+    const workedHours = Math.floor(hoursWorked);
+    const workedMinutes = Math.round((hoursWorked - workedHours) * 60);
+    document.getElementById("total-hours").value = hoursWorked.toFixed(2);
+
+    document.getElementById("hours-display").textContent = formatHoursAndMinutes(hoursWorked);
+  }
 
   const maintenanceCost = parseFloat(document.getElementById("maintenance-cost").value) || 0;
   const suppliesCost = parseFloat(document.getElementById("supplies-cost").value) || 0;
+
+  saveUserInputsToLocalStorage({ mpg, gasPrice, startAddress, endAddress });
 
   const destInputs = document.querySelectorAll('input[id^="destination-"]');
   const earningsInputs = document.querySelectorAll('input[id^="earnings-"]');
@@ -2126,20 +2149,11 @@ async function calculateRouteData() {
     location: input.value,
     stopover: true,
   }));
-  const earnings = Array.from(earningsInputs).map(input => parseFloat(input.value) || 0);
-  const totalEarnings = earnings.reduce((sum, val) => sum + val, 0);
-
-  saveUserInputsToLocalStorage({ mpg, gasPrice, startAddress, endAddress });
   saveRecentDestinations(destinations.map(d => d.location));
   updateDatalistSuggestions();
 
-  const logDateInput = document.getElementById("log-date").value;
-  const selectedDate = logDateInput || new Date().toISOString().split("T")[0];
-
-  if (!navigator.onLine) {
-    showAlertModal("🛜 You're offline. Route calculation is unavailable until you're reconnected.");
-    return Promise.resolve(null);
-  }
+  const earnings = Array.from(earningsInputs).map(input => parseFloat(input.value) || 0);
+  const totalEarnings = earnings.reduce((sum, val) => sum + val, 0);
 
   const request = {
     origin: startAddress,
@@ -2147,6 +2161,15 @@ async function calculateRouteData() {
     waypoints: destinations,
     travelMode: "DRIVING",
   };
+
+  const logDateInput = document.getElementById("log-date").value;
+  const selectedDate = logDateInput || new Date().toISOString().split("T")[0];
+
+  if (!navigator.onLine) {
+  showAlertModal("🛜 You're offline. Route calculation is unavailable until you're reconnected.");
+  return Promise.resolve(null);
+}
+
 
   return new Promise((resolve, reject) => {
     directionsService.route(request, (response, status) => {
@@ -2162,35 +2185,30 @@ async function calculateRouteData() {
           totalDuration += leg.duration.value;
         });
 
-        // ✅ Calculate total and worked hours
-        let totalClockMinutes = 0;
-        let hoursWorked = 0;
-
         if (startTimeInput && endTimeInput) {
-  const [startHours, startMinutes] = startTimeInput.split(":").map(Number);
-  const [endHours, endMinutes] = endTimeInput.split(":").map(Number);
+          const [startHours, startMinutes] = startTimeInput.split(":").map(Number);
+          const [endHours, endMinutes] = endTimeInput.split(":").map(Number);
 
-  let startTotalMinutes = startHours * 60 + startMinutes;
-  let endTotalMinutes = endHours * 60 + endMinutes;
-  if (endTotalMinutes < startTotalMinutes) endTotalMinutes += 24 * 60;
+          let startTotalMinutes = startHours * 60 + startMinutes;
+          let endTotalMinutes = endHours * 60 + endMinutes;
+          if (endTotalMinutes < startTotalMinutes) endTotalMinutes += 24 * 60;
 
-  const totalClockMinutes = endTotalMinutes - startTotalMinutes;
-  const totalHours = (totalClockMinutes / 60).toFixed(2);
+          let totalWorkedMinutes = endTotalMinutes - startTotalMinutes;
+          let driveMinutes = totalDuration / 60;
 
-  document.getElementById("hours-worked").value = totalHours;
+          const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
+          hoursWorked = parseFloat((actualWorkedMinutes / 60).toFixed(2));
 
-        
+          document.getElementById("hours-worked").value = hoursWorked.toFixed(2);
         }
 
         const fuelCost = mpg && gasPrice ? (totalMileage / mpg) * gasPrice : 0;
         const netProfitBeforeOptional = totalEarnings - fuelCost;
         const netProfit = netProfitBeforeOptional - maintenanceCost - suppliesCost;
-        const profitPerHour = (totalClockMinutes > 0)
-          ? netProfit / (totalClockMinutes / 60)
-          : 0;
+        const totalHoursSpent = hoursWorked;
+        const profitPerHour = totalHoursSpent > 0 ? netProfit / totalHoursSpent : 0;
 
         resolve({
-          
           date: selectedDate,
           startTime: startAddress,
           endTime: endAddress,
@@ -2207,7 +2225,6 @@ async function calculateRouteData() {
           netProfit: netProfit.toFixed(2),
           profitPerHour: profitPerHour.toFixed(2),
           hoursWorked: hoursWorked,
-          totalClockMinutes: totalClockMinutes
         });
       } else {
         showAlertModal("❌ Directions request failed due to: " + status);
@@ -2220,67 +2237,91 @@ async function calculateRouteData() {
 }
 
 
+      function updateUI(data) {
+        if (data) {
+          document.getElementById("total-mileage").textContent =
+            data.totalMileage;
+          document.getElementById("total-time").textContent = data.totalTime;
+          document.getElementById("total-earnings").textContent =
+            data.totalEarnings;
+          document.getElementById("fuel-cost").textContent = data.fuelCost;
+          document.getElementById("maintenance-cost-result").textContent =
+            data.maintenanceCost;
+          document.getElementById("supplies-cost-result").textContent =
+            data.suppliesCost;
+          document.getElementById("net-profit").textContent = data.netProfit;
+          document.getElementById("profit-per-hour").textContent =
+            data.profitPerHour;
+          document.getElementById("results").classList.remove("hidden");
+          const start = data.startClock;
+const end = data.endClock;
 
-function updateUI(data) {
-  if (data) {
-    document.getElementById("total-mileage").textContent = data.totalMileage;
-    document.getElementById("total-time").textContent = data.totalTime;
-    document.getElementById("total-earnings").textContent = data.totalEarnings;
-    document.getElementById("fuel-cost").textContent = data.fuelCost;
-    document.getElementById("maintenance-cost-result").textContent = data.maintenanceCost;
-    document.getElementById("supplies-cost-result").textContent = data.suppliesCost;
-    document.getElementById("net-profit").textContent = data.netProfit;
-    document.getElementById("profit-per-hour").textContent = data.profitPerHour;
-    document.getElementById("results").classList.remove("hidden");
-
-    // ✅ Display Total Hours based on clock time only
-    if (typeof data.totalClockMinutes === "number") {
-      const h = Math.floor(data.totalClockMinutes / 60);
-      const m = data.totalClockMinutes % 60;
-      document.getElementById("total-hours").textContent =
-        `${h} hour${h !== 1 ? "s" : ""}${m > 0 ? ` ${m} minute${m !== 1 ? "s" : ""}` : ""}`;
-    } else {
-      console.warn("⚠️ totalClockMinutes is missing in updateUI:", data);
-      document.getElementById("total-hours").textContent = "—";
-    }
-
-    // ✅ Display Original Route Mileage
-    if (originalMileage === null) {
-      originalMileage = data.totalMileage;
-    }
-    document.getElementById("mileage-display").textContent =
-      "Original Route: " + originalMileage + " miles";
-
-    // ✅ Detailed results below map
-    const detailedResultsHTML = `
-      <h3>Route Details</h3>
-      <p><strong>Date:</strong> ${data.date}</p>
-      <p><strong>Start Address:</strong> ${data.startTime}</p>
-      <p><strong>Destinations:</strong><br>${data.destinations.map((d) => `- ${d}`).join("<br>")}</p>
-      <p><strong>End Address:</strong> ${data.endTime}</p>
-      <p><strong>Earnings per Stop:</strong> ${data.earnings.map((e) => `$${parseFloat(e).toFixed(2)}`).join(", ")}</p>
-      <p><strong>Mileage:</strong> ${data.totalMileage} miles</p>
-      <p><strong>Drive Time:</strong> ${data.totalTime}</p>
-      <p><strong>Total Earnings:</strong> $${data.totalEarnings}</p>
-      <p><strong>Fuel Cost:</strong> $${data.fuelCost}</p>
-      <p><strong>Maintenance:</strong> $${data.maintenanceCost}</p>
-      <p><strong>Supplies:</strong> $${data.suppliesCost}</p>
-      <p><strong>Worked Hours:</strong> ${formatHoursAndMinutes(data.hoursWorked ?? 0)}</p>
-      <p><strong>Total Hours:</strong> ${
-        typeof data.totalClockMinutes === "number"
-          ? formatHoursAndMinutesFromMinutes(data.totalClockMinutes)
-          : "—"
-      }</p>
-      <p><strong>Net Profit:</strong> $${data.netProfit}</p>
-      <p><strong>Profit per Hour:</strong> $${data.profitPerHour}</p>
-    `;
-
-    document.getElementById("detailed-results").innerHTML = detailedResultsHTML;
-  }
+let totalMinutes = 0;
+if (start && end && start.includes(":") && end.includes(":")) {
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  let startMin = sh * 60 + sm;
+  let endMin = eh * 60 + em;
+  if (endMin < startMin) endMin += 24 * 60;
+  totalMinutes = endMin - startMin;
 }
 
+const totalH = Math.floor(totalMinutes / 60);
+const totalM = totalMinutes % 60;
+const hourText = `${totalH} hour${totalH !== 1 ? "s" : ""}`;
+const minuteText = totalM > 0 ? ` ${totalM} minute${totalM !== 1 ? "s" : ""}` : "";
+document.getElementById("total-hours").textContent = `${hourText}${minuteText}`;
 
 
+
+
+          if (originalMileage === null) {
+            originalMileage = data.totalMileage;
+          }
+          document.getElementById("mileage-display").textContent =
+            "Original Route: " + originalMileage + " miles";
+
+          // ✅ Add the new detailed display below the map
+          const detailedResultsHTML = `
+  <h3>Route Details</h3>
+  <p><strong>Date:</strong> ${data.date}</p>
+  <p><strong>Start Address:</strong> ${data.startTime}</p>
+  <p><strong>Destinations:</strong><br>${data.destinations.map((d) => `- ${d}`).join("<br>")}</p>
+  <p><strong>End Address:</strong> ${data.endTime}</p>
+  <p><strong>Earnings per Stop:</strong> ${data.earnings.map((e) => `$${parseFloat(e).toFixed(2)}`).join(", ")}</p>
+  <p><strong>Mileage:</strong> ${data.totalMileage} miles</p>
+  <p><strong>Drive Time:</strong> ${data.totalTime}</p>
+  <p><strong>Total Earnings:</strong> $${data.totalEarnings}</p>
+  <p><strong>Fuel Cost:</strong> $${data.fuelCost}</p>
+  <p><strong>Maintenance:</strong> $${data.maintenanceCost}</p>
+  <p><strong>Supplies:</strong> $${data.suppliesCost}</p>
+  <p><strong>Hours Worked:</strong> ${formatHoursAndMinutes(data.hoursWorked ?? 0)}</p>
+<p><strong>Total Hours:</strong> ${
+  (() => {
+    const start = data.startClock;
+    const end = data.endClock;
+    let totalMinutes = 0;
+    if (start && end && start.includes(":") && end.includes(":")) {
+      const [sh, sm] = start.split(":").map(Number);
+      const [eh, em] = end.split(":").map(Number);
+      let startMin = sh * 60 + sm;
+      let endMin = eh * 60 + em;
+      if (endMin < startMin) endMin += 24 * 60;
+      totalMinutes = endMin - startMin;
+    }
+    return formatHoursAndMinutesFromMinutes(totalMinutes);
+  })()
+}</p>
+
+
+  <p><strong>Net Profit:</strong> $${data.netProfit}</p>
+  <p><strong>Profit per Hour:</strong> $${data.profitPerHour}</p>
+`;
+
+          document.getElementById("detailed-results").innerHTML =
+            detailedResultsHTML;
+        }
+      }
 
       function openInGoogleMaps() {
         const start = encodeURIComponent(
@@ -2546,7 +2587,8 @@ async function optimizeRoute() {
 
   data.startClock = document.getElementById("start-time").value || "";
   data.endClock = document.getElementById("end-time").value || "";
-  data.hoursWorked = parseFloat(document.getElementById("hours-worked").value) || 0;
+  data.hoursWorked = parseFloat(document.getElementById("total-hours").value) || 0;
+
   data.mpg = parseFloat(document.getElementById("mpg").value) || 0;
   data.gasPrice = parseFloat(document.getElementById("gas-price").value) || 0;
   data.lastModified = new Date().toISOString();
@@ -3660,7 +3702,8 @@ function filterLogs() {
       function handleTimeChange() {
   const startTimeInput = document.getElementById("start-time").value;
   const endTimeInput = document.getElementById("end-time").value;
-  const hoursWorkedInput = document.getElementById("hours-worked");
+  const hoursWorkedInput = document.getElementById("total-hours");
+
 
   // 🆕 Auto-open End Time picker after selecting Start Time
   if (startTimeInput && !endTimeInput) {
@@ -3767,30 +3810,39 @@ function recalculateEditHoursWorked() {
   const endTime = document.getElementById("edit-end-time")?.value;
   const totalTimeStr = document.getElementById("edit-total-time")?.value;
   const hoursWorkedInput = document.getElementById("edit-hours-worked");
-  const hoursMessage = document.getElementById("edit-hours-message");
 
-  if (!startTime || !endTime || !hoursWorkedInput) return;
+  if (!hoursWorkedInput) return;
+
+  hoursWorkedInput.readOnly = true;
+  hoursWorkedInput.style.backgroundColor = "#f0f0f0";
+
+  if (!startTime || !endTime) {
+    hoursWorkedInput.value = "";
+    return;
+  }
 
   const [startHours, startMinutes] = startTime.split(":").map(Number);
   const [endHours, endMinutes] = endTime.split(":").map(Number);
 
-  let startMinutesTotal = startHours * 60 + startMinutes;
-  let endMinutesTotal = endHours * 60 + endMinutes;
-  if (endMinutesTotal < startMinutesTotal) endMinutesTotal += 24 * 60; // overnight
+  let start = startHours * 60 + startMinutes;
+  let end = endHours * 60 + endMinutes;
+  if (end < start) end += 24 * 60;
 
-  const totalClockMinutes = endMinutesTotal - startMinutesTotal;
-  const driveMinutes = convertTimeToMinutes(totalTimeStr);
-  const workedMinutes = Math.max(totalClockMinutes - driveMinutes, 0);
+  const totalWorkedMinutes = end - start;
+  let driveMinutes = 0;
 
-  const workedHours = (workedMinutes / 60).toFixed(2);
-  hoursWorkedInput.value = workedHours;
+  if (totalTimeStr) {
+    const hoursMatch = totalTimeStr.match(/(\d+)\s*hour/);
+    const minutesMatch = totalTimeStr.match(/(\d+)\s*minute/);
+    if (hoursMatch) driveMinutes += parseInt(hoursMatch[1], 10) * 60;
+    if (minutesMatch) driveMinutes += parseInt(minutesMatch[1], 10);
+  }
 
-  // Show worked time in hours and minutes
-  const h = Math.floor(workedMinutes / 60);
-  const m = workedMinutes % 60;
-  hoursMessage.textContent = `Worked: ${h} hour${h !== 1 ? "s" : ""}${m > 0 ? ` ${m} minute${m !== 1 ? "s" : ""}` : ""}`;
+  const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
+  const actualWorkedHours = actualWorkedMinutes / 60;
+
+  hoursWorkedInput.value = actualWorkedHours.toFixed(2);
 }
-
 
 
 
@@ -4248,26 +4300,6 @@ document.addEventListener("click", function (event) {
 });
 
 
-function updateTotalHoursFromClock() {
-  const start = document.getElementById("start-time").value;
-  const end = document.getElementById("end-time").value;
-  if (!start || !end) return;
-
-  const [sh, sm] = start.split(":").map(Number);
-  const [eh, em] = end.split(":").map(Number);
-  let startMin = sh * 60 + sm;
-  let endMin = eh * 60 + em;
-  if (endMin < startMin) endMin += 24 * 60; // handle overnight
-  const totalMinutes = endMin - startMin;
-
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
-  document.getElementById("total-hours").textContent =
-    `${h} hour${h !== 1 ? "s" : ""}${m > 0 ? ` ${m} minute${m !== 1 ? "s" : ""}` : ""}`;
-}
-
-document.getElementById("start-time").addEventListener("change", updateTotalHoursFromClock);
-document.getElementById("end-time").addEventListener("change", updateTotalHoursFromClock);
 
 
 
