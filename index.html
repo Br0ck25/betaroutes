@@ -2199,7 +2199,7 @@ async function calculateRouteData() {
           const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
           hoursWorked = parseFloat((actualWorkedMinutes / 60).toFixed(2));
 
-          document.getElementById("hours-worked").value = hoursWorked.toFixed(2);
+          document.getElementById("total-hours").value = hoursWorked.toFixed(2);
         }
 
         const fuelCost = mpg && gasPrice ? (totalMileage / mpg) * gasPrice : 0;
