@@ -3272,52 +3272,62 @@ async function importLog() {
         return (hours * 60 + minutes) / 60;
       };
 
-      for (const line of lines) {
-        if (!line.trim()) continue;
+      let successCount = 0;
 
-        const values = line.match(/("([^"]*)"|[^,]+)/g);
-        if (!values || values.length < 17) {
-          console.warn("❌ Skipping line — incorrect column count:", line);
-          continue;
-        }
+for (const line of lines) {
+  if (!line.trim() || line.startsWith("Totals:")) continue;
 
-        try {
-          const destinations = values[4]
-            .replace(/^"|"$/g, "")
-            .split(";")
-            .map((d) => d.trim());
+  const values = line.match(/("([^"]*)"|[^,]+)/g);
+  if (!values || values.length < 17) {
+    console.warn("❌ Skipping line — incorrect column count:", line);
+    continue;
+  }
 
-          const earnings = values[6]
-            .replace(/^"|"$/g, "")
-            .split(";")
-            .map((v) => parseFloat(v.trim()) || 0);
+  try {
+    const destinations = values[4]
+      .replace(/^"|"$/g, "")
+      .split(";")
+      .map((d) => d.trim());
 
-          newLogEntries.push({
-            date: values[0],
-            startClock: values[1],
-            endClock: values[2],
-            startTime: values[3]?.replace(/^"|"$/g, "") || "",
-            destinations: destinations,
-            endTime: values[5]?.replace(/^"|"$/g, "") || "",
-            earnings: earnings,
-            totalMileage: parseFloat(values[7]) || 0,
-            totalTime: values[8]?.replace(/^"|"$/g, ""),
-            totalEarnings: parseFloat(values[9]) || 0,
-            fuelCost: parseFloat(values[10]) || 0,
-            maintenanceCost: parseFloat(values[11]) || 0,
-            suppliesCost: parseFloat(values[12]) || 0,
-            hoursWorked: parseFormattedTime(values[13]),
-            totalHours: parseFormattedTime(values[14]),
-            netProfit: parseFloat(values[15]) || 0,
-            profitPerHour: parseFloat(values[16]) || 0,
-            mpg: 0,
-            gasPrice: 0,
-            lastModified: new Date().toISOString(),
-          });
-        } catch (err) {
-          console.warn("❌ Error parsing CSV row:", err, line);
-        }
-      }
+    const earnings = values[6]
+      .replace(/^"|"$/g, "")
+      .split(";")
+      .map((v) => parseFloat(v.trim()) || 0);
+
+    newLogEntries.push({
+      date: values[0],
+      startClock: values[1],
+      endClock: values[2],
+      startTime: values[3]?.replace(/^"|"$/g, "") || "",
+      destinations: destinations,
+      endTime: values[5]?.replace(/^"|"$/g, "") || "",
+      earnings: earnings,
+      totalMileage: parseFloat(values[7]) || 0,
+      totalTime: values[8]?.replace(/^"|"$/g, ""),
+      totalEarnings: parseFloat(values[9]) || 0,
+      fuelCost: parseFloat(values[10]) || 0,
+      maintenanceCost: parseFloat(values[11]) || 0,
+      suppliesCost: parseFloat(values[12]) || 0,
+      hoursWorked: parseFormattedTime(values[13]),
+      totalHours: parseFormattedTime(values[14]),
+      netProfit: parseFloat(values[15]) || 0,
+      profitPerHour: parseFloat(values[16]) || 0,
+      mpg: 0,
+      gasPrice: 0,
+      lastModified: new Date().toISOString(),
+    });
+
+    successCount++;
+  } catch (err) {
+    console.warn("❌ Error parsing CSV row:", err, line);
+  }
+}
+
+if (successCount === 0) {
+  showAlertModal("❌ The file format appears to be invalid or unsupported.");
+  return;
+}
+
 
       logEntries = [...logEntries, ...newLogEntries];
       await saveLog();
