@@ -2403,18 +2403,25 @@ document.getElementById("total-hours").textContent = `${hourText}${minuteText}`;
 async function optimizeRoute() {
   const startAddressEl = document.getElementById("start-address");
   const endAddressEl = document.getElementById("end-address");
+  const logDateEl = document.getElementById("log-date");
+  const mpgEl = document.getElementById("mpg");
+  const gasPriceEl = document.getElementById("gas-price");
+  const maintenanceEl = document.getElementById("maintenance-cost");
+  const suppliesEl = document.getElementById("supplies-cost");
+  const hoursWorkedEl = document.getElementById("hours-worked");
 
   if (!startAddressEl || !endAddressEl) {
     alert("❌ Start or end address field not found. Please refresh the page.");
     return;
   }
 
-  const startAddress = startAddressEl.value;
-  const endAddress = endAddressEl.value;
+  const startAddress = startAddressEl.value.trim();
+  const endAddress = endAddressEl.value.trim();
 
   const destInputs = document.querySelectorAll(
-    '#destinations-container .destination input[type="text"]'
+    '#destinations-container .destination input[id^="destination-"]'
   );
+
   const currentDestinations = Array.from(destInputs).map(input => input.value.trim());
 
   if (currentDestinations.length < 2) {
@@ -2422,9 +2429,9 @@ async function optimizeRoute() {
     return;
   }
 
-  const waypoints = currentDestinations.map((location) => ({
-    location: location,
-    stopover: true,
+  const waypoints = currentDestinations.map(location => ({
+    location,
+    stopover: true
   }));
 
   const request = {
@@ -2432,7 +2439,7 @@ async function optimizeRoute() {
     destination: endAddress,
     waypoints: waypoints,
     travelMode: "DRIVING",
-    optimizeWaypoints: true,
+    optimizeWaypoints: true
   };
 
   directionsService.route(request, (response, status) => {
@@ -2464,52 +2471,51 @@ async function optimizeRoute() {
 
       document.querySelectorAll('#destinations-container .destination input[type="text"]').forEach(initAutocompleteDestination);
 
-      // ✅ Update map and show optimized results
       directionsRenderer.setDirections(response);
 
       let optimizedMileage = 0;
       let totalDuration = 0;
-      response.routes[0].legs.forEach((leg) => {
+      response.routes[0].legs.forEach(leg => {
         optimizedMileage += leg.distance.value / 1609.34;
         totalDuration += leg.duration.value;
       });
 
-      document.getElementById("optimized-mileage-display").textContent = "Optimized Route: " + optimizedMileage.toFixed(2) + " miles";
+      document.getElementById("optimized-mileage-display").textContent =
+        "Optimized Route: " + optimizedMileage.toFixed(2) + " miles";
       document.getElementById("total-time").textContent = formatDuration(totalDuration);
 
-      // 🧠 Build optimizedData like your existing code does
+      // Safe data extraction
+      const earningsInputs = document.querySelectorAll('input[id^="earnings-"]');
+      const earnings = Array.from(earningsInputs).map(input => parseFloat(input.value) || 0);
+      const totalEarnings = earnings.reduce((sum, val) => sum + val, 0);
+
+      const mpg = mpgEl ? parseFloat(mpgEl.value) || 1 : 1;
+      const gasPrice = gasPriceEl ? parseFloat(gasPriceEl.value) || 0 : 0;
+      const maintenanceCost = maintenanceEl ? parseFloat(maintenanceEl.value) || 0 : 0;
+      const suppliesCost = suppliesEl ? parseFloat(suppliesEl.value) || 0 : 0;
+      const hoursWorked = hoursWorkedEl ? parseFloat(hoursWorkedEl.value) || 0 : 0;
+
+      const fuelCost = ((optimizedMileage / mpg) * gasPrice);
+      const netProfit = totalEarnings - fuelCost - maintenanceCost - suppliesCost;
+      const totalHoursSpent = hoursWorked + totalDuration / 3600;
+      const profitPerHour = totalHoursSpent > 0 ? netProfit / totalHoursSpent : 0;
+
       const optimizedData = {
-        date: document.getElementById("log-date").value || new Date().toLocaleDateString(),
+        date: logDateEl?.value || new Date().toLocaleDateString(),
         startTime: startAddress,
         endTime: endAddress,
-        destinations: Array.from(document.querySelectorAll('input[id^="destination-"]')).map(input => input.value),
-        earnings: Array.from(document.querySelectorAll('input[id^="earnings-"]')).map(input => parseFloat(input.value) || 0),
+        destinations: Array.from(document.querySelectorAll('input[id^="destination-"]')).map(input => input.value.trim()),
+        earnings: earnings,
         totalMileage: optimizedMileage.toFixed(2),
         totalTime: formatDuration(totalDuration),
-        totalEarnings: Array.from(document.querySelectorAll('input[id^="earnings-"]')).reduce((sum, i) => sum + (parseFloat(i.value) || 0), 0).toFixed(2),
-        fuelCost: (() => {
-  const mpgInput = document.getElementById("mpg");
-  const gasInput = document.getElementById("gas-price");
-  const mpg = mpgInput ? parseFloat(mpgInput.value) || 1 : 1;
-  const gasPrice = gasInput ? parseFloat(gasInput.value) || 0 : 0;
-  return ((optimizedMileage / mpg) * gasPrice).toFixed(2);
-})(),
-
-        maintenanceCost: parseFloat(document.getElementById("maintenance-cost").value || 0).toFixed(2),
-        suppliesCost: parseFloat(document.getElementById("supplies-cost").value || 0).toFixed(2),
-        hoursWorked: parseFloat(document.getElementById("hours-worked").value || 0),
-        netProfit: "0", // calculated below
-        profitPerHour: "0.00",
+        totalEarnings: totalEarnings.toFixed(2),
+        fuelCost: fuelCost.toFixed(2),
+        maintenanceCost: maintenanceCost.toFixed(2),
+        suppliesCost: suppliesCost.toFixed(2),
+        hoursWorked: hoursWorked,
+        netProfit: netProfit.toFixed(2),
+        profitPerHour: profitPerHour.toFixed(2)
       };
-
-      const netProfitBeforeOptional = optimizedData.totalEarnings - optimizedData.fuelCost;
-      optimizedData.netProfit = (
-        netProfitBeforeOptional - optimizedData.maintenanceCost - optimizedData.suppliesCost
-      ).toFixed(2);
-
-      const totalHoursSpent = optimizedData.hoursWorked + totalDuration / 3600;
-      optimizedData.profitPerHour =
-        totalHoursSpent > 0 ? (optimizedData.netProfit / totalHoursSpent).toFixed(2) : "0.00";
 
       updateUI(optimizedData);
       showConfirmationMessage("✅ Route optimized successfully!");
@@ -2520,6 +2526,7 @@ async function optimizeRoute() {
     }
   });
 }
+
 
 
       function formatDuration(seconds) {
