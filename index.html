@@ -980,9 +980,6 @@ img {
   style="background-color: #eee; cursor: not-allowed;"
 />
 
-  <div id="hours-display" style="margin-top: 4px; font-size: 14px; color: #555;"></div>
-</div>
-
 
       <div class="optional-costs">
         <h3>Optional Daily Costs</h3>
@@ -2170,21 +2167,19 @@ async function calculateRouteData() {
         let hoursWorked = 0;
 
         if (startTimeInput && endTimeInput) {
-          const [startHours, startMinutes] = startTimeInput.split(":").map(Number);
-          const [endHours, endMinutes] = endTimeInput.split(":").map(Number);
+  const [startHours, startMinutes] = startTimeInput.split(":").map(Number);
+  const [endHours, endMinutes] = endTimeInput.split(":").map(Number);
 
-          let startTotalMinutes = startHours * 60 + startMinutes;
-          let endTotalMinutes = endHours * 60 + endMinutes;
-          if (endTotalMinutes < startTotalMinutes) endTotalMinutes += 24 * 60;
+  let startTotalMinutes = startHours * 60 + startMinutes;
+  let endTotalMinutes = endHours * 60 + endMinutes;
+  if (endTotalMinutes < startTotalMinutes) endTotalMinutes += 24 * 60;
 
-          totalClockMinutes = endTotalMinutes - startTotalMinutes;
-          const driveMinutes = totalDuration / 60;
-          const workedMinutes = Math.max(totalClockMinutes - driveMinutes, 0);
+  const totalClockMinutes = endTotalMinutes - startTotalMinutes;
+  const totalHours = (totalClockMinutes / 60).toFixed(2);
 
-          hoursWorked = parseFloat((workedMinutes / 60).toFixed(2));
+  document.getElementById("hours-worked").value = totalHours;
 
-          document.getElementById("hours-worked").value = hoursWorked.toFixed(2);
-          document.getElementById("hours-display").textContent = formatHoursAndMinutes(hoursWorked);
+        
         }
 
         const fuelCost = mpg && gasPrice ? (totalMileage / mpg) * gasPrice : 0;
@@ -2195,6 +2190,7 @@ async function calculateRouteData() {
           : 0;
 
         resolve({
+          
           date: selectedDate,
           startTime: startAddress,
           endTime: endAddress,
