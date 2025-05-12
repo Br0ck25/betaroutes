@@ -1535,7 +1535,7 @@ function toggleHamburgerManageAccountMenu() {
 
       <label for="edit-hours-worked">Total Hours</label>
 <input
-  type="number"
+  type="text"
   id="edit-hours-worked"
   placeholder="Enter times above to calculate."
   readonly
@@ -3793,7 +3793,6 @@ function handleTimeChange() {
 function recalculateEditHoursWorked() {
   const startTime = document.getElementById("edit-start-time")?.value;
   const endTime = document.getElementById("edit-end-time")?.value;
-  const totalTimeStr = document.getElementById("edit-total-time")?.value;
   const hoursWorkedInput = document.getElementById("edit-hours-worked");
 
   if (!hoursWorkedInput) return;
@@ -3811,23 +3810,13 @@ function recalculateEditHoursWorked() {
 
   let start = startHours * 60 + startMinutes;
   let end = endHours * 60 + endMinutes;
-  if (end < start) end += 24 * 60;
+
+  if (end < start) end += 24 * 60; // handle overnight
 
   const totalWorkedMinutes = end - start;
-  let driveMinutes = 0;
-
-  if (totalTimeStr) {
-    const hoursMatch = totalTimeStr.match(/(\d+)\s*hour/);
-    const minutesMatch = totalTimeStr.match(/(\d+)\s*minute/);
-    if (hoursMatch) driveMinutes += parseInt(hoursMatch[1], 10) * 60;
-    if (minutesMatch) driveMinutes += parseInt(minutesMatch[1], 10);
-  }
-
-  const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
-  const actualWorkedHours = actualWorkedMinutes / 60;
-
-  hoursWorkedInput.value = actualWorkedHours.toFixed(2);
+  hoursWorkedInput.value = formatHoursAndMinutesFromMinutes(totalWorkedMinutes);
 }
+
 
 
 
