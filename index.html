@@ -3283,6 +3283,8 @@ async function importLog() {
       };
 
       let successCount = 0;
+let duplicateCount = 0;
+
 
 for (const line of lines) {
   if (!line.trim() || line.startsWith("Totals:")) continue;
@@ -3327,10 +3329,11 @@ for (const line of lines) {
     lastModified: new Date().toISOString(),
   };
 
-  if (isDuplicateEntry(entry, logEntries)) {
-    console.log("⚠️ Skipping duplicate:", entry);
-    continue;
-  }
+if (isDuplicateEntry(entry, logEntries)) {
+  duplicateCount++;
+  continue;
+}
+
 
   newLogEntries.push(entry);
   successCount++;
@@ -3349,7 +3352,12 @@ if (successCount === 0) {
       logEntries = [...logEntries, ...newLogEntries];
       await saveLog();
       filterLogs();
-      showAlertModal("✅ Log imported successfully!");
+      if (successCount > 0) {
+  showAlertModal(`✅ Imported ${successCount} entr${successCount === 1 ? "y" : "ies"} successfully.${duplicateCount > 0 ? `\n⚠️ Skipped ${duplicateCount} duplicate${duplicateCount === 1 ? "" : "s"}.` : ""}`);
+} else {
+  showAlertModal("❌ The file format appears to be invalid or unsupported.");
+}
+
     } catch (err) {
       console.error("❌ Error processing file:", err);
       showAlertModal("❌ Failed to process the file.");
