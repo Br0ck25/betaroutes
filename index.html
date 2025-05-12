@@ -2233,24 +2233,25 @@ function updateUI(data) {
     document.getElementById("profit-per-hour").textContent = data.profitPerHour;
     document.getElementById("results").classList.remove("hidden");
 
-    // ✅ Set Total Hours (clock-based) to the correct display
-    if (data.totalClockMinutes != null) {
+    // ✅ Display Total Hours based on clock time only
+    if (typeof data.totalClockMinutes === "number") {
       const h = Math.floor(data.totalClockMinutes / 60);
       const m = data.totalClockMinutes % 60;
       document.getElementById("total-hours").textContent =
         `${h} hour${h !== 1 ? "s" : ""}${m > 0 ? ` ${m} minute${m !== 1 ? "s" : ""}` : ""}`;
     } else {
+      console.warn("⚠️ totalClockMinutes is missing in updateUI:", data);
       document.getElementById("total-hours").textContent = "—";
     }
 
-    // ✅ Preserve the first calculated mileage
+    // ✅ Display Original Route Mileage
     if (originalMileage === null) {
       originalMileage = data.totalMileage;
     }
     document.getElementById("mileage-display").textContent =
       "Original Route: " + originalMileage + " miles";
 
-    // ✅ Detailed Results Panel
+    // ✅ Detailed results below map
     const detailedResultsHTML = `
       <h3>Route Details</h3>
       <p><strong>Date:</strong> ${data.date}</p>
@@ -2266,7 +2267,7 @@ function updateUI(data) {
       <p><strong>Supplies:</strong> $${data.suppliesCost}</p>
       <p><strong>Worked Hours:</strong> ${formatHoursAndMinutes(data.hoursWorked ?? 0)}</p>
       <p><strong>Total Hours:</strong> ${
-        data.totalClockMinutes != null
+        typeof data.totalClockMinutes === "number"
           ? formatHoursAndMinutesFromMinutes(data.totalClockMinutes)
           : "—"
       }</p>
@@ -2277,6 +2278,7 @@ function updateUI(data) {
     document.getElementById("detailed-results").innerHTML = detailedResultsHTML;
   }
 }
+
 
 
 
