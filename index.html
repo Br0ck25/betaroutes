@@ -1170,9 +1170,11 @@ function clearTripForm() {
   // ❌ Clear only optional fields
   document.getElementById("start-time").value = "";
   document.getElementById("end-time").value = "";
-  document.getElementById("hours-worked").value = "";
+  document.getElementById("total-hours").value = "";
   document.getElementById("maintenance-cost").value = "";
   document.getElementById("supplies-cost").value = "";
+  document.getElementById("hours-display").textContent = "";
+
 
   // ✅ Keep start, end, mpg, and gas-price
 
