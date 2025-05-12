@@ -2283,39 +2283,26 @@ document.getElementById("total-hours").textContent = `${hourText}${minuteText}`;
 
 
 
-
 async function optimizeRoute() {
-  const startAddressEl = document.getElementById("start-address");
-  const endAddressEl = document.getElementById("end-address");
-  const logDateEl = document.getElementById("log-date");
-  const mpgEl = document.getElementById("mpg");
-  const gasPriceEl = document.getElementById("gas-price");
-  const maintenanceEl = document.getElementById("maintenance-cost");
-  const suppliesEl = document.getElementById("supplies-cost");
-  const hoursWorkedEl = document.getElementById("hours-worked");
-
-  if (!startAddressEl || !endAddressEl) {
-    alert("❌ Start or end address field not found. Please refresh the page.");
-    return;
+  if (originalMileage === null) {
+    await calculateRoute(); // This ensures we log original mileage before optimizing
   }
 
-  const startAddress = startAddressEl.value.trim();
-  const endAddress = endAddressEl.value.trim();
-
+  const startAddress = document.getElementById("start-address").value;
+  const endAddress = document.getElementById("end-address").value;
   const destInputs = document.querySelectorAll(
-    '#destinations-container .destination input[id^="destination-"]'
+    '#destinations-container .destination input[type="text"]'
   );
-
-  const currentDestinations = Array.from(destInputs).map(input => input.value.trim());
+  const currentDestinations = Array.from(destInputs).map((input) => input.value);
 
   if (currentDestinations.length < 2) {
     alert("Please add at least two destinations to optimize the route.");
     return;
   }
 
-  const waypoints = currentDestinations.map(location => ({
-    location,
-    stopover: true
+  const waypoints = currentDestinations.map((location) => ({
+    location: location,
+    stopover: true,
   }));
 
   const request = {
@@ -2323,7 +2310,7 @@ async function optimizeRoute() {
     destination: endAddress,
     waypoints: waypoints,
     travelMode: "DRIVING",
-    optimizeWaypoints: true
+    optimizeWaypoints: true,
   };
 
   directionsService.route(request, (response, status) => {
@@ -2354,13 +2341,11 @@ async function optimizeRoute() {
       oldDestinationsContainer.parentNode.replaceChild(newDestinationsContainer, oldDestinationsContainer);
 
       document.querySelectorAll('#destinations-container .destination input[type="text"]').forEach(initAutocompleteDestination);
-
       directionsRenderer.setDirections(response);
-      document.getElementById("map").classList.remove("hidden"); // ✅ Show map
 
       let optimizedMileage = 0;
       let totalDuration = 0;
-      response.routes[0].legs.forEach(leg => {
+      response.routes[0].legs.forEach((leg) => {
         optimizedMileage += leg.distance.value / 1609.34;
         totalDuration += leg.duration.value;
       });
@@ -2369,26 +2354,44 @@ async function optimizeRoute() {
         "Optimized Route: " + optimizedMileage.toFixed(2) + " miles";
       document.getElementById("total-time").textContent = formatDuration(totalDuration);
 
+      // ✅ Calculate accurate hoursWorked from start/end time
+      let startTimeInput = document.getElementById("start-time").value;
+      let endTimeInput = document.getElementById("end-time").value;
+      let hoursWorked = parseFloat(document.getElementById("hours-worked").value) || 0;
+
+      if (startTimeInput && endTimeInput) {
+        const [startHours, startMinutes] = startTimeInput.split(":").map(Number);
+        const [endHours, endMinutes] = endTimeInput.split(":").map(Number);
+        let startTotalMinutes = startHours * 60 + startMinutes;
+        let endTotalMinutes = endHours * 60 + endMinutes;
+
+        if (endTotalMinutes < startTotalMinutes) endTotalMinutes += 1440;
+
+        const totalWorkedMinutes = endTotalMinutes - startTotalMinutes;
+        const driveMinutes = totalDuration / 60;
+        const actualWorkedMinutes = Math.max(totalWorkedMinutes - driveMinutes, 0);
+        hoursWorked = parseFloat((actualWorkedMinutes / 60).toFixed(2));
+      }
+
       const earningsInputs = document.querySelectorAll('input[id^="earnings-"]');
-      const earnings = Array.from(earningsInputs).map(input => parseFloat(input.value) || 0);
+      const earnings = Array.from(earningsInputs).map((input) => parseFloat(input.value) || 0);
       const totalEarnings = earnings.reduce((sum, val) => sum + val, 0);
 
-      const mpg = mpgEl ? parseFloat(mpgEl.value) || 1 : 1;
-      const gasPrice = gasPriceEl ? parseFloat(gasPriceEl.value) || 0 : 0;
-      const maintenanceCost = maintenanceEl ? parseFloat(maintenanceEl.value) || 0 : 0;
-      const suppliesCost = suppliesEl ? parseFloat(suppliesEl.value) || 0 : 0;
-      const hoursWorked = hoursWorkedEl ? parseFloat(hoursWorkedEl.value) || 0 : 0;
+      const mpg = parseFloat(document.getElementById("mpg").value || 1);
+      const gasPrice = parseFloat(document.getElementById("gas-price").value || 0);
+      const maintenanceCost = parseFloat(document.getElementById("maintenance-cost").value || 0);
+      const suppliesCost = parseFloat(document.getElementById("supplies-cost").value || 0);
 
-      const fuelCost = ((optimizedMileage / mpg) * gasPrice);
+      const fuelCost = (optimizedMileage / mpg) * gasPrice;
       const netProfit = totalEarnings - fuelCost - maintenanceCost - suppliesCost;
       const totalHoursSpent = hoursWorked + totalDuration / 3600;
       const profitPerHour = totalHoursSpent > 0 ? netProfit / totalHoursSpent : 0;
 
       const optimizedData = {
-        date: logDateEl?.value || new Date().toLocaleDateString(),
+        date: document.getElementById("log-date").value || new Date().toLocaleDateString(),
         startTime: startAddress,
         endTime: endAddress,
-        destinations: Array.from(document.querySelectorAll('input[id^="destination-"]')).map(input => input.value.trim()),
+        destinations: Array.from(document.querySelectorAll('input[id^="destination-"]')).map((input) => input.value.trim()),
         earnings: earnings,
         totalMileage: optimizedMileage.toFixed(2),
         totalTime: formatDuration(totalDuration),
@@ -2396,16 +2399,16 @@ async function optimizeRoute() {
         fuelCost: fuelCost.toFixed(2),
         maintenanceCost: maintenanceCost.toFixed(2),
         suppliesCost: suppliesCost.toFixed(2),
-        hoursWorked: hoursWorked,
+        hoursWorked,
         netProfit: netProfit.toFixed(2),
-        profitPerHour: profitPerHour.toFixed(2)
+        profitPerHour: profitPerHour.toFixed(2),
       };
 
       updateUI(optimizedData);
       showConfirmationMessage("✅ Route optimized successfully!");
     } else if (status === "OK") {
       directionsRenderer.setDirections(response);
-      document.getElementById("map").classList.remove("hidden"); // ✅ Show map fallback
+      document.getElementById("map").classList.remove("hidden");
     } else {
       showAlertModal("❌ Could not optimize route due to: " + status);
     }
