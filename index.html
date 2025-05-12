@@ -2270,7 +2270,26 @@ document.getElementById("total-hours").textContent = `${hourText}${minuteText}`;
   <p><strong>Fuel Cost:</strong> $${data.fuelCost}</p>
   <p><strong>Maintenance:</strong> $${data.maintenanceCost}</p>
   <p><strong>Supplies:</strong> $${data.suppliesCost}</p>
-  <p><strong>Hours Worked:</strong> ${formatHoursAndMinutes(data.hoursWorked ?? 0)}</p>
+  <p><strong>Hours Worked:</strong> ${
+  (() => {
+    const totalClockMinutes = (() => {
+      const start = data.startClock;
+      const end = data.endClock;
+      if (!start || !end) return 0;
+      const [sh, sm] = start.split(":").map(Number);
+      const [eh, em] = end.split(":").map(Number);
+      let startMin = sh * 60 + sm;
+      let endMin = eh * 60 + em;
+      if (endMin < startMin) endMin += 24 * 60;
+      return endMin - startMin;
+    })();
+
+    const driveMinutes = convertTimeToMinutes(data.totalTime || "");
+    const workedMinutes = Math.max(totalClockMinutes - driveMinutes, 0);
+    return formatHoursAndMinutesFromMinutes(workedMinutes);
+  })()
+}</p>
+
 <p><strong>Total Hours:</strong> ${
   (() => {
     const start = data.startClock;
@@ -3841,9 +3860,23 @@ function recalculateEditHoursWorked() {
       ? entry.earnings.map((e) => `$${parseFloat(e).toFixed(2)}`).join(", ")
       : "$0.00";
 
-      const formattedHoursWorked = entry.hoursWorked
-  ? formatHoursAndMinutes(parseFloat(entry.hoursWorked))
-  : "0 hours 0 minutes";
+      const formattedHoursWorked = (() => {
+  const start = entry.startClock;
+  const end = entry.endClock;
+  if (!start || !end || !start.includes(":") || !end.includes(":")) return "N/A";
+
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  let startMin = sh * 60 + sm;
+  let endMin = eh * 60 + em;
+  if (endMin < startMin) endMin += 24 * 60;
+
+  const totalMinutes = endMin - startMin;
+  const driveMinutes = convertTimeToMinutes(entry.totalTime || "");
+  const workedMinutes = Math.max(totalMinutes - driveMinutes, 0);
+  return formatHoursAndMinutesFromMinutes(workedMinutes);
+})();
+
 
 
       detailsDiv.innerHTML = `
