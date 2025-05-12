@@ -3344,9 +3344,15 @@ if (isDuplicateEntry(entry, logEntries)) {
 }
 
 if (successCount === 0) {
-  showAlertModal("❌ The file format appears to be invalid or unsupported.");
+  if (duplicateCount > 0) {
+    showAlertModal("⚠️ All entries in the file were duplicates and have been skipped.");
+  } else {
+    showAlertModal("❌ The file format appears to be invalid or unsupported.");
+  }
   return;
 }
+
+
 
 
       logEntries = [...logEntries, ...newLogEntries];
