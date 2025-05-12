@@ -3228,6 +3228,28 @@ async function saveEditedLogEntry() {
     : "0.00";
 
   entry.netProfit = netProfitFloat.toFixed(2);
+  // Calculate drive time in hours
+let driveTimeInHours = 0;
+const timeMatch = entry.totalTime.match(/(\\d+)\\s*hour(?:s)?(?:\\s*(\\d+)\\s*minute(?:s)?)?/i);
+if (timeMatch) {
+  const hours = parseInt(timeMatch[1]) || 0;
+  const minutes = parseInt(timeMatch[2]) || 0;
+  driveTimeInHours = hours + minutes / 60;
+} else {
+  const minuteMatch = entry.totalTime.match(/(\\d+)\\s*minute(?:s)?/i);
+  if (minuteMatch) {
+    driveTimeInHours = parseInt(minuteMatch[1]) / 60;
+  }
+}
+
+// Calculate total time spent
+const totalHoursSpent = entry.hoursWorked + driveTimeInHours;
+
+// ✅ Compute profit per hour
+entry.profitPerHour = totalHoursSpent > 0
+  ? (entry.netProfit / totalHoursSpent).toFixed(2)
+  : "0.00";
+
   entry.lastModified = new Date().toISOString();
 
   await saveLog();
