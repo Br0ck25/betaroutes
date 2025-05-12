@@ -1910,18 +1910,16 @@ if (dateInput) {
   initOfflineListeners();
 
 
-  document.getElementById("hours-worked").addEventListener("input", () => {
+document.getElementById("hours-worked").addEventListener("input", () => {
   const hoursWorked = parseFloat(document.getElementById("hours-worked").value) || 0;
   const driveTimeInHours = convertTimeToHours(document.getElementById("total-time").textContent);
+  const totalWorkedMinutes = Math.round((hoursWorked + driveTimeInHours) * 60);
+  document.getElementById("total-hours").textContent = formatHoursAndMinutesFromMinutes(totalWorkedMinutes);
 
-  const workedMinutes = Math.round(hoursWorked * 60);
-const driveMinutes = Math.round(driveTimeInHours * 60);
-const totalWorkedMinutes = workedMinutes + driveMinutes;
-
-  const totalHoursDecimal = totalWorkedMinutes / 60;
-
-  document.getElementById("total-hours").textContent = formatHoursAndMinutes(totalHoursDecimal);
+  // 👇 NEW: Display inside the input box itself
+  document.getElementById("hours-worked").value = formatHoursAndMinutesFromMinutes(totalWorkedMinutes);
 });
+
 
 
   // 🆕 After selecting start time, auto-focus end time after slight delay
@@ -2257,7 +2255,8 @@ const hoursWorked = parseFloat(data.hoursWorked || 0);
 const driveTime = convertTimeToHours(data.totalTime || "");
 const totalDecimal = hoursWorked + driveTime;
 
-document.getElementById("total-hours").textContent = formatHoursAndMinutes(totalDecimal);
+document.getElementById("hours-worked").value = formatHoursAndMinutes(data.hoursWorked ?? 0);
+
 
 
 
@@ -3828,7 +3827,11 @@ function recalculateEditHoursWorked() {
   const actualWorked = Math.max(totalWorkedMinutes - driveMinutes, 0);
   const decimalHours = actualWorked / 60;
 
-  hoursWorkedInput.value = decimalHours.toFixed(2);
+  hoursWorkedInput.value = formatHoursAndMinutes(decimalHours);
+
+  document.getElementById("edit-hours-worked").value = formatHoursAndMinutes(entry.hoursWorked ?? 0);
+
+
   updateEditHoursDisplay(); // ← add this
 }
 
