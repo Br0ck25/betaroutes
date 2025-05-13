@@ -1003,6 +1003,14 @@ img {
           placeholder="Enter supplies cost for the day"
         />
       </div>
+      <label for="log-notes">Notes (Optional)</label>
+<textarea
+  id="log-notes"
+  rows="4"
+  placeholder="Enter any notes for this trip"
+  style="width: 100%; margin-top: 5px; margin-bottom: 12px; font-size: 16px; padding: 10px; border-radius: 6px; border: 1px solid #ccc;"
+></textarea>
+
       <button onclick="optimizeRoute()">Optimize Route</button>
       <button onclick="calculateRoute()">Calculate Route</button>
       <button onclick="logResults()">Log Route</button>
@@ -2615,6 +2623,8 @@ async function optimizeRoute() {
   data.mpg = parseFloat(document.getElementById("mpg").value) || 0;
   data.gasPrice = parseFloat(document.getElementById("gas-price").value) || 0;
   data.lastModified = new Date().toISOString();
+  data.notes = document.getElementById("log-notes")?.value || "";
+
 
   // ✅ Calculate total time from start and end clock times
   const start = document.getElementById("start-time").value;
@@ -3987,6 +3997,9 @@ function recalculateEditHoursWorked() {
   <div><strong>Net Profit:</strong> $${entry.netProfit}</div>
   <div><strong>Profit per Hour:</strong> $${entry.profitPerHour}</div>
 `;
+if (entry.notes) {
+  detailsDiv.innerHTML += `<div><strong>Notes:</strong> ${entry.notes}</div>`;
+}
 
 
     detailsDiv.classList.remove("hidden");
