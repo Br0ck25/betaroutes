@@ -963,10 +963,10 @@ img {
         required
       />
 
-      <label for="start-time">Start Time (Optional)</label>
+      <label for="start-time">Start Time</label>
       <input type="time" id="start-time" placeholder="Enter start time" />
 
-      <label for="end-time">End Time (Optional)</label>
+      <label for="end-time">End Time</label>
       <input type="time" id="end-time" placeholder="Enter end time" />
 
 <label for="total-hours">Total Hours</label>
@@ -1352,10 +1352,10 @@ function resumeDraftTrip() {
   document.getElementById("start-time").value = data.startTime || "";
   document.getElementById("end-time").value = data.endTime || "";
   document.getElementById("total-hours").value = formatHoursAndMinutes(data.hoursWorked || 0);
-
-
   document.getElementById("maintenance-cost").value = data.maintenance || "";
   document.getElementById("supplies-cost").value = data.supplies || "";
+  document.getElementById("log-notes").value = data.notes || "";
+
 
   const container = document.getElementById("destinations-container");
   container.innerHTML = "";
@@ -1561,6 +1561,13 @@ function isDuplicateEntry(entry, existingLog) {
 />
 <div id="edit-hours-message" style="font-size: 14px; color: #666; margin-top: 4px;"></div>
 
+<label for="edit-notes">Notes</label>
+<textarea
+  id="edit-notes"
+  rows="4"
+  placeholder="Enter notes here..."
+  style="width: 100%; margin-top: 5px; margin-bottom: 12px; font-size: 16px; padding: 10px; border-radius: 6px; border: 1px solid #ccc;"
+></textarea>
 
 
       <button type="button" class="save-btn" onclick="saveEditedLogEntry()">
@@ -1786,6 +1793,7 @@ function saveDraftTrip() {
 
   const maintenance = document.getElementById("maintenance-cost")?.value.trim();
   const supplies = document.getElementById("supplies-cost")?.value.trim();
+  const notes = document.getElementById("log-notes")?.value.trim(); // ✅ add this
 
   const destinations = Array.from(document.querySelectorAll('#destinations-container .destination'))
     .map(div => ({
@@ -1800,14 +1808,14 @@ function saveDraftTrip() {
     endTime ||
     hoursWorked ||
     maintenance ||
-    supplies;
+    supplies ||
+    notes; // ✅ now considers notes too
 
   if (!hasMeaningfulData) {
-    localStorage.removeItem("draftTrip"); // 🚫 don't store empty form
+    localStorage.removeItem("draftTrip");
     return;
   }
 
-  // Still include these in case the user wants them remembered
   const draft = {
     date: document.getElementById("log-date")?.value,
     start: document.getElementById("start-address")?.value,
@@ -1819,11 +1827,13 @@ function saveDraftTrip() {
     hoursWorked,
     maintenance,
     supplies,
+    notes, // ✅ save notes to draft
     destinations
   };
 
   localStorage.setItem("draftTrip", JSON.stringify(draft));
 }
+
 
 
 
@@ -3105,12 +3115,10 @@ if (earningsInput) {
         setInputValue("edit-total-mileage", entry.totalMileage);
         setInputValue("edit-total-time", entry.totalTime);
         setInputValue("edit-hours-worked", entry.hoursWorked ?? 0);
-
-
-
-
         setInputValue("edit-mpg", entry.mpg);
         setInputValue("edit-gas-price", entry.gasPrice);
+        setInputValue("edit-notes", entry.notes || "");
+
 
         const destinationsContainer = document.getElementById(
           "edit-destinations-container"
@@ -3215,6 +3223,8 @@ async function saveEditedLogEntry() {
   entry.startTime = document.getElementById("edit-start-address").value;
   entry.endTime = document.getElementById("edit-end-address").value;
   entry.totalTime = document.getElementById("edit-total-time")?.value || "";
+  entry.notes = document.getElementById("edit-notes").value.trim();
+
 
   entry.destinations = [];
   entry.earnings = [];
@@ -4139,7 +4149,7 @@ function exportToCSVWithTotals() {
   }
 
   const header =
-    "Date,Start Time,End Time,Start Address,Destinations,End Address,Earnings per Stop,Mileage,Drive Time,Total Earnings,Fuel Cost,Maintenance,Supplies,Hours Worked,Total Hours,Net Profit,Profit Per Hour\n";
+    "Date,Start Time,End Time,Start Address,Destinations,End Address,Earnings per Stop,Mileage,Drive Time,Total Earnings,Fuel Cost,Maintenance,Supplies,Hours Worked,Total Hours,Net Profit,Profit Per Hour,Notes\n";
 
   const csvRows = filtered.map((entry) => {
     const destinationsString = `"${(entry.destinations || []).join(";")}"`;
@@ -4179,11 +4189,11 @@ function exportToCSVWithTotals() {
       `"${formatHoursAndMinutesFromMinutes(workedMinutes)}"`,
       `"${formatHoursAndMinutesFromMinutes(sessionMinutes)}"`,
       entry.netProfit,
-      entry.profitPerHour || ""
+      entry.profitPerHour || "",
+      `"${(entry.notes || "").replace(/"/g, '""')}"`
     ].join(",");
   });
 
-  // Totals
   let totalNetProfit = 0;
   let totalDriveMinutes = 0;
   let totalSessionMinutes = 0;
@@ -4219,7 +4229,6 @@ function exportToCSVWithTotals() {
   const formattedWorkedTime = formatHoursAndMinutesFromMinutes(totalWorkedMinutes);
   const formattedTotalTime = formatHoursAndMinutesFromMinutes(totalSessionMinutes);
   const profitPerHour = totalSessionMinutes > 0 ? totalNetProfit / (totalSessionMinutes / 60) : 0;
-
   const formattedDriveTime = `${Math.floor(totalDriveMinutes / 60)} hour${Math.floor(totalDriveMinutes / 60) !== 1 ? "s" : ""} ${totalDriveMinutes % 60} minutes`;
 
   const totalRow = [
@@ -4233,7 +4242,8 @@ function exportToCSVWithTotals() {
     formattedWorkedTime,
     formattedTotalTime,
     totalNetProfit.toFixed(2),
-    profitPerHour.toFixed(2)
+    profitPerHour.toFixed(2),
+    "" // Notes
   ].join(",");
 
   const csvString = header + csvRows.join("\n") + "\n" + totalRow;
@@ -4270,7 +4280,7 @@ function exportToPDFWithTotals() {
     "Date", "Start", "Destinations", "End",
     "Earnings", "Fuel", "Maintenance", "Supplies",
     "Net Profit", "Mileage", "Drive Time",
-    "Earnings per Stop", "Hours Worked", "Total Hours", "Profit per Hour"
+    "Earnings per Stop", "Hours Worked", "Total Hours", "Profit per Hour", "Notes"
   ];
 
   const data = filtered.map((entry) => {
@@ -4311,7 +4321,8 @@ function exportToPDFWithTotals() {
       earningsPerStop,
       formatHoursAndMinutesFromMinutes(workedMinutes),
       formatHoursAndMinutesFromMinutes(sessionMinutes),
-      `$${entry.profitPerHour || "0.00"}`
+      `$${entry.profitPerHour || "0.00"}`,
+      entry.notes || ""
     ];
   });
 
@@ -4364,7 +4375,8 @@ function exportToPDFWithTotals() {
     "",
     formattedWorkedTime,
     formattedTotalTime,
-    `$${profitPerHour.toFixed(2)}`
+    `$${profitPerHour.toFixed(2)}`,
+    "" // Notes
   ]);
 
   pdf.autoTable({
@@ -4396,6 +4408,7 @@ function exportToPDFWithTotals() {
 
   pdf.save("profit_log_with_totals.pdf");
 }
+
 
 
 
