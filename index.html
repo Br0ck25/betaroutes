@@ -39,6 +39,11 @@
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ&libraries=places&callback=initMap"
     defer
   ></script>
+
+  <div id="tax-info" class="hidden" style="margin-top: 10px;">
+  <strong>Tax Deduction Estimate:</strong>
+  <span id="tax-deduction" style="color: green;"></span>
+</div>
   
 
     <style>
@@ -2298,6 +2303,14 @@ const totalM = totalMinutes % 60;
 const hourText = `${totalH} hour${totalH !== 1 ? "s" : ""}`;
 const minuteText = totalM > 0 ? ` ${totalM} minute${totalM !== 1 ? "s" : ""}` : "";
 document.getElementById("total-hours").textContent = `${hourText}${minuteText}`;
+
+const deductionRate = 0.67; // Update this when IRS changes it
+const deductionValue = (parseFloat(data.totalMileage || 0) * deductionRate).toFixed(2);
+
+document.getElementById("tax-deduction").textContent =
+  `$${deductionValue} (based on ${data.totalMileage} mi @ $${deductionRate}/mile)`;
+document.getElementById("tax-info").classList.remove("hidden");
+
 
 
 
