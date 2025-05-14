@@ -40,7 +40,8 @@
     defer
   ></script>
 
-<script src="https://accounts.google.com/gsi/client" async defer crossorigin="anonymous"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
 
   
 
@@ -4484,25 +4485,29 @@ document.addEventListener("click", function (event) {
 
 async function handleGoogleSignIn(response) {
   const credential = response.credential;
+
   try {
     const res = await fetch("https://logs.gorouteyourself.com/api/google-login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ credential })
+      body: JSON.stringify({ credential }),
     });
+
     const data = await res.json();
+
     if (data.token) {
       localStorage.setItem("token", data.token);
-      updateAuthUI();
+      updateAuthUI?.(); // Optional: refresh UI
       showConfirmationMessage("✅ Signed in with Google!");
     } else {
       alert("Google sign-in failed.");
     }
   } catch (err) {
     console.error("Google login error:", err);
-    alert("Google login failed. Try again.");
+    alert("Login failed");
   }
 }
+
 
 
 
