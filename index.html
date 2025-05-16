@@ -4959,6 +4959,33 @@ window.addEventListener('scroll', () => {
   }
 
 
+  window.handleGoogleSignIn = async function (response) {
+    try {
+      if (!response || !response.credential) {
+        throw new Error("Missing credential");
+      }
+
+      const res = await fetch("https://logs.gorouteyourself.com/api/google-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_token: response.credential }),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText);
+      }
+
+      const data = await res.json();
+      localStorage.setItem("token", data.token);
+      updateAuthUI?.();
+      await syncAndReloadLogs?.();
+    } catch (err) {
+      console.error("Google login error:", err);
+      alert("❌ Google login failed: " + err.message);
+    }
+  };
+
 
     </script>
 
