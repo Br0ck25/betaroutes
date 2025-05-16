@@ -4934,6 +4934,32 @@ window.addEventListener('scroll', () => {
   }, 50);
 });
 
+
+  async function onGoogleLogin(response) {
+    try {
+      const res = await fetch("/api/google-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_token: response.credential }),
+      });
+
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+
+      const data = await res.json();
+      localStorage.setItem("token", data.token);
+
+      // Refresh UI, show welcome, or reload logs
+      updateAuthUI?.();
+      await syncAndReloadLogs?.();
+    } catch (err) {
+      alert("❌ Google login failed: " + err.message);
+    }
+  }
+
+
+
     </script>
 
 <div id="universal-modal" style="
