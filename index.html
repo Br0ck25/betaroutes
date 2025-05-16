@@ -42,6 +42,8 @@
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 
+<!-- <link rel="icon" href="favicon.ico" /> -->
+
 
   
 
@@ -1680,27 +1682,25 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
 
-      async function saveLog() {
+async function saveLog() {
   const token = localStorage.getItem("token");
 
   if (!token) {
-  console.error("❌ No token found. User must be signed in to save.");
-  showAlertModal("❌ You must be signed in to save your route logs.", showLogin);
-  return;
-}
-
+    console.error("❌ No token found. User must be signed in to save.");
+    showAlertModal("❌ You must be signed in to save your route logs.", showLogin);
+    return;
+  }
 
   console.log("⏳ Saving route...");
 
   // 🛜 Detect if offline
   if (!navigator.onLine) {
-  console.warn("🛜 Offline: Saving log locally.");
-  localStorage.setItem("pendingLogs", JSON.stringify(logEntries));
-  localStorage.setItem("cachedLogs", JSON.stringify(logEntries));
-  showAlertModal("⚠️ Offline: Route saved locally. Will sync when back online.");
-  return;
-}
-
+    console.warn("🛜 Offline: Saving log locally.");
+    localStorage.setItem("pendingLogs", JSON.stringify(logEntries));
+    localStorage.setItem("cachedLogs", JSON.stringify(logEntries));
+    showAlertModal("⚠️ Offline: Route saved locally. Will sync when back online.");
+    return;
+  }
 
   try {
     const response = await fetch(
@@ -1720,15 +1720,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     console.log("✅ Saved to KV");
-    localStorage.setItem("cachedLogs", JSON.stringify(logEntries)); // ✅ Save fresh logs locally
-    localStorage.removeItem("pendingLogs"); // ✅ Clear pending if successful
+
+    // ✅ Force refresh after successful save
+    await syncAndReloadLogs();
+
   } catch (err) {
     console.error("❌ Save failed. Saving offline:", err);
-    localStorage.setItem("pendingLogs", JSON.stringify(logEntries)); // ✅ Save pending
-    localStorage.setItem("cachedLogs", JSON.stringify(logEntries)); // ✅ Update visible logs too
+    localStorage.setItem("pendingLogs", JSON.stringify(logEntries));
+    localStorage.setItem("cachedLogs", JSON.stringify(logEntries));
     showAlertModal("⚠️ Offline mode: Your changes are saved locally. We'll sync them next time you're online.");
   }
 }
+
 
 
 async function syncPendingLogs() {
