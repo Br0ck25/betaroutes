@@ -5063,6 +5063,16 @@ align-items: center;
   </button>
 </div>
 
+<script>
+  // Remove focus from any button after it's clicked
+  document.addEventListener("click", function (event) {
+    const isButton = event.target.closest("button");
+    if (isButton) {
+      isButton.blur();
+    }
+  });
+</script>
+
 
   </body>
 </html>
