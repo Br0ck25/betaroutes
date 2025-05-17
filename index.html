@@ -845,22 +845,20 @@ html, body {
     background-color: #45a049;
   }
 
-  #hamburger-button {
-  display: none; /* hidden by default */
+#hamburger-button {
+  display: none; /* will be shown via media query if needed */
   background: none;
   border: none;
   font-size: 28px;
   cursor: pointer;
   color: black;
-  padding: 2px 6px;
-  border-radius: 8px;
-  transition: background-color 0.3s;
-  width: 50px;
-  height: 50px;
-  align-items: center;
-  justify-content: center;
-  display: none;
+  margin: 0;
+  padding: 0;
+  width: auto;
+  height: auto;
+  line-height: 1;
 }
+
 
 
 
@@ -908,9 +906,11 @@ html, body {
 ">
 
   <!-- Left: Hamburger -->
+<!-- Left: Hamburger -->
 <div style="flex: 1; min-width: 0; display: flex; justify-content: flex-start;">
-  <button id="hamburger-button" onclick="toggleMenu()" style="margin-left: 0;">☰</button>
+  <button id="hamburger-button" onclick="toggleMenu()">☰</button>
 </div>
+
 
 
   <!-- Center: Logo -->
