@@ -53,37 +53,6 @@
 
     <style>
 
-      #account-menu button.dropdown-toggle {
-  font-weight: bold;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 14px;
-  width: 100%;
-  background-color: #e9f5e9;
-  border-radius: 6px;
-  margin-top: 10px;
-}
-
-#account-menu button.dropdown-toggle:hover {
-  background-color: #d2ebd2;
-}
-
-#account-menu .dropdown-arrow {
-  transition: transform 0.3s ease;
-}
-
-#account-menu .dropdown-arrow.open {
-  transform: rotate(180deg);
-}
-
-#account-menu .dropdown-content button {
-  margin-left: 10px;
-  width: calc(100% - 20px);
-  margin-top: 6px;
-}
-
-
         html, body {
     overflow-x: hidden;
   }
@@ -1075,35 +1044,54 @@ html, body {
 </div>
 
 
-<!-- ✅ Manage Account -->
-<button class="dropdown-toggle" id="hamburger-manage-account-toggle" onclick="toggleHamburgerManageAccountMenu()">
-  Manage Account <span id="hamburger-manage-account-arrow" class="dropdown-arrow">▼</span>
+      <!-- ✅ NEW Manage Log button (collapsible) -->
+<!-- Manage Log Toggle -->
+<button id="hamburger-manage-toggle" onclick="toggleHamburgerManageLogMenu()">
+  Manage Log <span id="hamburger-manage-arrow" style="display: inline-block; transition: transform 0.3s;">▼</span>
 </button>
-<div id="hamburger-manage-account-menu" class="dropdown-content" style="max-height: 0; overflow: hidden; transition: max-height 0.3s ease;">
-  <button onclick="closeMenu(); showPasswordModal()">Change Password</button>
-  <button onclick="closeMenu(); showDeleteModal()" class="danger">Delete Account</button>
-</div>
 
-<!-- ✅ Manage Log -->
-<button class="dropdown-toggle" id="hamburger-manage-toggle" onclick="toggleHamburgerManageLogMenu()">
-  Manage Log <span id="hamburger-manage-arrow" class="dropdown-arrow">▼</span>
-</button>
-<div id="hamburger-manage-log-menu" class="dropdown-content" style="max-height: 0; overflow: hidden; transition: max-height 0.3s ease;">
+
+<!-- Dropdown Menu -->
+<div id="hamburger-manage-log-menu" style="
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  margin-top: 5px;
+  text-align: center;
+  padding: 0 10px;
+">
   <button onclick="triggerImportFile()">Import CSV</button>
   <button onclick="exportToCSVWithTotals()">Export CSV</button>
   <button onclick="exportToPDFWithTotals()">Export PDF</button>
 </div>
 
-<!-- ✅ Settings -->
-<button class="dropdown-toggle" id="hamburger-settings-toggle" onclick="toggleHamburgerSettingsMenu()">
-  Settings <span id="hamburger-settings-arrow" class="dropdown-arrow">▼</span>
+<!-- ✅ New Settings Dropdown -->
+<!-- ✅ New Settings Dropdown -->
+<button id="hamburger-settings-toggle" onclick="toggleHamburgerSettingsMenu()">
+  Settings <span id="hamburger-settings-arrow" style="display: inline-block; transition: transform 0.3s;">▼</span>
 </button>
-<div id="hamburger-settings-menu" class="dropdown-content" style="max-height: 0; overflow: hidden; transition: max-height 0.3s ease;">
+
+<div id="hamburger-settings-menu" style="
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  margin-top: 5px;
+  text-align: center;
+  padding: 0 10px;
+">
   <button onclick="installApp()">Install App</button>
   <button onclick="window.open('/privacy-policy.html', '_blank')">Privacy Policy</button>
   <button onclick="window.open('/faq.html', '_blank')">FAQ</button>
-</div>
 
+</div>
 
 
 
@@ -1674,6 +1662,36 @@ function closeUniversalModal() {
   window._universalCallback = null; // clean up
 }
 
+function toggleHamburgerManageLogMenu() {
+  const menu = document.getElementById("hamburger-manage-log-menu");
+  const arrow = document.getElementById("hamburger-manage-arrow");
+  if (!menu || !arrow) return;
+
+  const isOpen = menu.style.maxHeight && menu.style.maxHeight !== "0px";
+
+  if (isOpen) {
+    menu.style.maxHeight = "0";
+    arrow.style.transform = "rotate(0deg)";
+  } else {
+    menu.style.maxHeight = menu.scrollHeight + "px";
+    arrow.style.transform = "rotate(180deg)";
+  }
+}
+function toggleHamburgerManageAccountMenu() {
+  const menu = document.getElementById("hamburger-manage-account-menu");
+  const arrow = document.getElementById("hamburger-manage-account-arrow");
+  if (!menu || !arrow) return;
+
+  const isOpen = menu.style.maxHeight && menu.style.maxHeight !== "0px";
+
+  if (isOpen) {
+    menu.style.maxHeight = "0";
+    arrow.style.transform = "rotate(0deg)";
+  } else {
+    menu.style.maxHeight = menu.scrollHeight + "px";
+    arrow.style.transform = "rotate(180deg)";
+  }
+}
 
 function isDuplicateEntry(entry, existingLog) {
   return existingLog.some((e) =>
@@ -5144,48 +5162,21 @@ function installApp() {
   }
 }
 
-function toggleHamburgerManageAccountMenu() {
-  const menu = document.getElementById("hamburger-manage-account-menu");
-  const arrow = document.getElementById("hamburger-manage-account-arrow");
-  const isOpen = menu.style.maxHeight && menu.style.maxHeight !== "0px";
-
-  if (isOpen) {
-    menu.style.maxHeight = "0";
-    arrow.classList.remove("open");
-  } else {
-    menu.style.maxHeight = menu.scrollHeight + "px";
-    arrow.classList.add("open");
-  }
-}
-
-function toggleHamburgerManageLogMenu() {
-  const menu = document.getElementById("hamburger-manage-log-menu");
-  const arrow = document.getElementById("hamburger-manage-arrow");
-  const isOpen = menu.style.maxHeight && menu.style.maxHeight !== "0px";
-
-  if (isOpen) {
-    menu.style.maxHeight = "0";
-    arrow.classList.remove("open");
-  } else {
-    menu.style.maxHeight = menu.scrollHeight + "px";
-    arrow.classList.add("open");
-  }
-}
-
 function toggleHamburgerSettingsMenu() {
   const menu = document.getElementById("hamburger-settings-menu");
   const arrow = document.getElementById("hamburger-settings-arrow");
+  if (!menu || !arrow) return;
+
   const isOpen = menu.style.maxHeight && menu.style.maxHeight !== "0px";
 
   if (isOpen) {
     menu.style.maxHeight = "0";
-    arrow.classList.remove("open");
+    arrow.style.transform = "rotate(0deg)";
   } else {
     menu.style.maxHeight = menu.scrollHeight + "px";
-    arrow.classList.add("open");
+    arrow.style.transform = "rotate(180deg)";
   }
 }
-
 
 
     </script>
