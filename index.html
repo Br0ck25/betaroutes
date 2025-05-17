@@ -846,18 +846,19 @@ html, body {
   }
 
 #hamburger-button {
-  display: none; /* will be shown via media query if needed */
+  display: none; /* toggled via media query */
   background: none;
   border: none;
   font-size: 28px;
   cursor: pointer;
   color: black;
-  margin: 0;
-  padding: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: background-color 0.3s;
   width: auto;
   height: auto;
-  line-height: 1;
 }
+
 
 
 
@@ -905,9 +906,8 @@ html, body {
   box-shadow: none;
 ">
 
-  <!-- Left: Hamburger -->
 <!-- Left: Hamburger -->
-<div style="flex: 1; min-width: 0; display: flex; justify-content: flex-start;">
+<div style="flex: 1; display: flex; justify-content: flex-start; padding-left: 10px;">
   <button id="hamburger-button" onclick="toggleMenu()">☰</button>
 </div>
 
