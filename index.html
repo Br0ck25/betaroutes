@@ -48,6 +48,23 @@
 
     <style>
 
+      #bottom-bar button {
+  background-color: #4caf50;
+  color: white;
+  font-size: 16px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  flex: 1;
+  margin: 0 5px;
+}
+
+#bottom-bar button:hover {
+  background-color: #45a049;
+}
+
+
       #hamburger-manage-log-menu button {
   margin: 10px auto;
 }
@@ -1028,11 +1045,6 @@ img {
   "
 ></textarea>
 
-
-      <button onclick="optimizeRoute()">Optimize Route</button>
-      <button onclick="calculateRoute()">Calculate Route</button>
-      <button onclick="logResults()">Log Route</button>
-      <button onclick="openInGoogleMaps()">Open Route in Google Maps</button>
       <div
         id="confirmation-message"
         style="display: none; color: green; font-weight: bold; margin-top: 10px"
@@ -4968,6 +4980,26 @@ align-items: center;
   © Go Route Yourself ·
   <a href="/privacy-policy.html" style="color: #0d6efd; text-decoration: none;">Privacy Policy</a>
 </footer>
+
+<div id="bottom-bar" style="
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background-color: #ffffff;
+  border-top: 1px solid #ddd;
+  display: flex;
+  justify-content: space-around;
+  padding: 12px 10px;
+  box-shadow: 0 -2px 6px rgba(0,0,0,0.05);
+  z-index: 1000;
+">
+  <button onclick="calculateRoute()">Calculate</button>
+  <button onclick="optimizeRoute()">Optimize</button>
+  <button onclick="logResults()">Log</button>
+  <button onclick="openInGoogleMaps()">Map It</button>
+</div>
+
 
   </body>
 </html>
