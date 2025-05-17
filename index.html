@@ -1051,7 +1051,6 @@ html, body {
 </button>
 
 
-
 <!-- Dropdown Menu -->
 <div id="hamburger-manage-log-menu" style="
   max-height: 0;
@@ -1069,6 +1068,38 @@ html, body {
   <button onclick="exportToCSVWithTotals()">Export CSV</button>
   <button onclick="exportToPDFWithTotals()">Export PDF</button>
 </div>
+
+<!-- ✅ New Settings Dropdown -->
+<button id="hamburger-settings-toggle" onclick="toggleHamburgerSettingsMenu()">
+  Settings <span id="hamburger-settings-arrow" style="display: inline-block; transition: transform 0.3s;">▼</span>
+</button>
+
+<div id="hamburger-settings-menu" style="
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  margin-top: 5px;
+  text-align: center;
+  padding: 0 10px;
+">
+  <button onclick="installApp()">Install App</button>
+  <a href="/privacy-policy.html" target="_blank" style="
+    display: block;
+    margin: 10px auto;
+    font-size: 15px;
+    text-decoration: none;
+    color: #333;
+    background: none;
+    border: none;
+    padding: 10px 14px;
+    border-radius: 6px;
+  ">Privacy Policy</a>
+</div>
+
 
     <div style="padding: 0 10px;">
       <button onclick="closeMenu(); logout()">Log Out</button>
@@ -4998,7 +5029,7 @@ function parseHoursAndMinutes(str = '') {
 
 
 
-let deferredPrompt;
+
 
 // ✅ Register the service worker
 if ("serviceWorker" in navigator) {
@@ -5122,6 +5153,46 @@ window.addEventListener('scroll', () => {
       alert("❌ Google login failed: " + err.message);
     }
   };
+
+
+let deferredPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+});
+
+function installApp() {
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then((choiceResult) => {
+      if (choiceResult.outcome === 'accepted') {
+        console.log('✅ User accepted the install prompt');
+      } else {
+        console.log('❌ User dismissed the install prompt');
+      }
+      deferredPrompt = null;
+    });
+  } else {
+    alert("⚠️ Installation is not supported or already installed.");
+  }
+}
+
+function toggleHamburgerSettingsMenu() {
+  const menu = document.getElementById("hamburger-settings-menu");
+  const arrow = document.getElementById("hamburger-settings-arrow");
+  if (!menu || !arrow) return;
+
+  const isOpen = menu.style.maxHeight && menu.style.maxHeight !== "0px";
+
+  if (isOpen) {
+    menu.style.maxHeight = "0";
+    arrow.style.transform = "rotate(0deg)";
+  } else {
+    menu.style.maxHeight = menu.scrollHeight + "px";
+    arrow.style.transform = "rotate(180deg)";
+  }
+}
 
 
     </script>
