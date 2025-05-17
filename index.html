@@ -62,7 +62,8 @@ body {
     <style>
 
 #bottom-bar {
-  position: absolute;
+  position: fixed;
+  bottom: 0;
   left: 0;
   width: 100%;
   max-width: 900px;
@@ -76,7 +77,9 @@ body {
   box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.05);
   z-index: 1000;
   touch-action: manipulation;
+  transition: transform 0.2s ease;
 }
+
 
 
 
