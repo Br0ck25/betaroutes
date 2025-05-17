@@ -52,9 +52,9 @@
 
 #bottom-bar {
   position: fixed;
-  bottom: -10px; /* 👈 Pushes the bar below the visual bottom edge */
   left: 0;
   right: 0;
+  bottom: env(safe-area-inset-bottom, 0); /* ✅ Locks it to bottom regardless of address bar resizing */
   margin: 0 auto;
   max-width: 900px;
   background: white;
@@ -62,12 +62,12 @@
   display: flex;
   justify-content: space-around;
   align-items: center;
-  padding: 12px 0 28px 0; /* 👈 more internal bottom padding to pull content back up */
+  padding: 12px 0 20px 0;
   box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.05);
   z-index: 1000;
-  overflow: hidden;
   touch-action: manipulation;
 }
+
 
 
 
