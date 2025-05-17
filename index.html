@@ -154,7 +154,19 @@ button {
   text-align: center;
   padding: 8px 0;
   transition: background-color 0.2s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
 }
+
+#bottom-bar button:focus,
+#bottom-bar button:focus-visible,
+#bottom-bar button:active {
+  outline: none !important;
+  box-shadow: none !important;
+  background-color: transparent !important;
+}
+
 
 #bottom-bar .material-icons {
   font-size: 35px;
@@ -5122,22 +5134,16 @@ align-items: center;
 </div>
 
 <script>
-  // Blur buttons after click (desktop + mobile)
-  document.addEventListener("click", function (event) {
-    const isButton = event.target.closest("button");
-    if (isButton) {
-      isButton.blur();
-    }
-  });
+  // Blur buttons on both click and touch (covers Android + iOS)
+  function blurButton(e) {
+    const btn = e.target.closest("button");
+    if (btn) btn.blur();
+  }
 
-  // Blur buttons after touch (for iOS/Android)
-  document.addEventListener("touchend", function (event) {
-    const isButton = event.target.closest("button");
-    if (isButton) {
-      isButton.blur();
-    }
-  });
+  document.addEventListener("click", blurButton);
+  document.addEventListener("touchend", blurButton);
 </script>
+
 
 
   </body>
