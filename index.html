@@ -2203,8 +2203,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
 
-      async function calculateRoute() {
-  // 🚨 Check for at least one destination
+async function calculateRoute() {
   const destinationInputs = document.querySelectorAll('input[id^="destination-"]');
   const filledDestinations = Array.from(destinationInputs).filter(input => input.value.trim() !== "");
   if (filledDestinations.length === 0) {
@@ -2216,8 +2215,12 @@ document.addEventListener("DOMContentLoaded", () => {
   if (calculationResult) {
     updateUI(calculationResult);
     showConfirmationMessage("✅ Route calculated successfully!");
+
+    // ✅ Scroll to map
+    document.getElementById("map")?.scrollIntoView({ behavior: "smooth" });
   }
 }
+
 
 
 async function calculateRouteData() {
@@ -2637,7 +2640,11 @@ async function optimizeRoute() {
       };
 
       updateUI(optimizedData);
-      showConfirmationMessage("✅ Route optimized successfully!");
+showConfirmationMessage("✅ Route optimized successfully!");
+
+// ✅ Scroll to map after optimization
+document.getElementById("map")?.scrollIntoView({ behavior: "smooth" });
+
     } else if (status === "OK") {
       directionsRenderer.setDirections(response);
     } else {
