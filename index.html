@@ -18,9 +18,8 @@
 
     <style>
 body {
-  overscroll-behavior-y: none;
+  padding-bottom: calc(80px + env(safe-area-inset-bottom));
   overflow-x: hidden;
-  padding-bottom: 0px; /* ✅ Prevents bottom bar from overlapping content */
 }
 </style>
 
@@ -73,11 +72,12 @@ body {
   display: flex;
   justify-content: space-around;
   align-items: center;
-  padding: 12px 0;
+  padding: 12px 0 calc(12px + env(safe-area-inset-bottom));
   box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.05);
   z-index: 1000;
   touch-action: manipulation;
 }
+
 
 
 
