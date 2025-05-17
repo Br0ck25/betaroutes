@@ -62,10 +62,8 @@ body {
     <style>
 
 #bottom-bar {
-  position: fixed;
+  position: absolute;
   left: 0;
-  right: 0;
-  bottom: 0;
   width: 100%;
   max-width: 900px;
   margin: 0 auto;
@@ -78,8 +76,8 @@ body {
   box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.05);
   z-index: 1000;
   touch-action: manipulation;
-  transition: transform 0.2s ease;
 }
+
 
 
 
@@ -5077,6 +5075,20 @@ align-items: center;
   window.addEventListener("scroll", lockBottomBar);
   window.addEventListener("orientationchange", lockBottomBar);
   document.addEventListener("DOMContentLoaded", lockBottomBar);
+</script>
+
+<script>
+function updateBottomBarPosition() {
+  const bar = document.getElementById("bottom-bar");
+  if (!bar || !window.visualViewport) return;
+
+  const offset = window.visualViewport.height + window.visualViewport.offsetTop - bar.offsetHeight;
+  bar.style.top = offset + "px";
+}
+
+window.visualViewport?.addEventListener("resize", updateBottomBarPosition);
+window.visualViewport?.addEventListener("scroll", updateBottomBarPosition);
+document.addEventListener("DOMContentLoaded", updateBottomBarPosition);
 </script>
 
 
