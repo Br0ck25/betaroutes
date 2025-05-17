@@ -5094,6 +5094,21 @@ window.visualViewport?.addEventListener("scroll", updateBottomBarPosition);
 document.addEventListener("DOMContentLoaded", updateBottomBarPosition);
 </script>
 
+<script>
+function adjustBottomBar() {
+  const bar = document.getElementById("bottom-bar");
+  if (!bar || !window.visualViewport) return;
+
+  const height = window.visualViewport.height;
+  const viewportOffset = window.innerHeight - height;
+  bar.style.transform = `translateY(${viewportOffset}px)`;
+}
+
+window.visualViewport?.addEventListener("resize", adjustBottomBar);
+window.visualViewport?.addEventListener("scroll", adjustBottomBar);
+document.addEventListener("DOMContentLoaded", adjustBottomBar);
+</script>
+
 
   </body>
 </html>
