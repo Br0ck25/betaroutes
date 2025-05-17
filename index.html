@@ -1070,6 +1070,7 @@ html, body {
 </div>
 
 <!-- ✅ New Settings Dropdown -->
+<!-- ✅ New Settings Dropdown -->
 <button id="hamburger-settings-toggle" onclick="toggleHamburgerSettingsMenu()">
   Settings <span id="hamburger-settings-arrow" style="display: inline-block; transition: transform 0.3s;">▼</span>
 </button>
@@ -1087,18 +1088,9 @@ html, body {
   padding: 0 10px;
 ">
   <button onclick="installApp()">Install App</button>
-  <a href="/privacy-policy.html" target="_blank" style="
-    display: block;
-    margin: 10px auto;
-    font-size: 15px;
-    text-decoration: none;
-    color: #333;
-    background: none;
-    border: none;
-    padding: 10px 14px;
-    border-radius: 6px;
-  ">Privacy Policy</a>
+  <button onclick="window.open('/privacy-policy.html', '_blank')">Privacy Policy</button>
 </div>
+
 
 
     <div style="padding: 0 10px;">
