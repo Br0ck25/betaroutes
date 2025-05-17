@@ -84,6 +84,7 @@ body {
 
 
 
+
 #bottom-bar button {
   background: none;
   border: none;
@@ -5056,43 +5057,6 @@ align-items: center;
     <span>Map</span>
   </button>
 </div>
-
-<script>
-  function lockBottomBar() {
-    const bar = document.getElementById("bottom-bar");
-    if (!bar) return;
-
-    const vh = window.innerHeight;
-    const docH = document.documentElement.clientHeight;
-
-    // If viewport is smaller than expected (address bar hidden), adjust position
-    if (vh < docH) {
-      const offset = docH - vh;
-      bar.style.transform = `translateY(${offset}px)`;
-    } else {
-      bar.style.transform = `translateY(0)`;
-    }
-  }
-
-  window.addEventListener("resize", lockBottomBar);
-  window.addEventListener("scroll", lockBottomBar);
-  window.addEventListener("orientationchange", lockBottomBar);
-  document.addEventListener("DOMContentLoaded", lockBottomBar);
-</script>
-
-<script>
-function updateBottomBarPosition() {
-  const bar = document.getElementById("bottom-bar");
-  if (!bar || !window.visualViewport) return;
-
-  const offset = window.visualViewport.height + window.visualViewport.offsetTop - bar.offsetHeight;
-  bar.style.top = offset + "px";
-}
-
-window.visualViewport?.addEventListener("resize", updateBottomBarPosition);
-window.visualViewport?.addEventListener("scroll", updateBottomBarPosition);
-document.addEventListener("DOMContentLoaded", updateBottomBarPosition);
-</script>
 
 <script>
 function adjustBottomBar() {
