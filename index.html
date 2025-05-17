@@ -62,9 +62,8 @@ body {
     <style>
 
 #bottom-bar {
-  position: fixed;
+  position: sticky;
   bottom: 0;
-  left: 0;
   width: 100%;
   max-width: 900px;
   margin: 0 auto;
@@ -75,10 +74,9 @@ body {
   align-items: center;
   padding: 12px 0;
   box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.05);
-  z-index: 1000;
-  touch-action: manipulation;
-  transition: transform 0.2s ease;
+  z-index: 999;
 }
+
 
 
 
@@ -5057,21 +5055,6 @@ align-items: center;
     <span>Map</span>
   </button>
 </div>
-
-<script>
-function adjustBottomBar() {
-  const bar = document.getElementById("bottom-bar");
-  if (!bar || !window.visualViewport) return;
-
-  const height = window.visualViewport.height;
-  const viewportOffset = window.innerHeight - height;
-  bar.style.transform = `translateY(${viewportOffset}px)`;
-}
-
-window.visualViewport?.addEventListener("resize", adjustBottomBar);
-window.visualViewport?.addEventListener("scroll", adjustBottomBar);
-document.addEventListener("DOMContentLoaded", adjustBottomBar);
-</script>
 
 
   </body>
