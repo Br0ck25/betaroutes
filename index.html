@@ -71,16 +71,12 @@
   display: flex;
   justify-content: space-around;
   align-items: center;
-  padding: 12px 0;
-  padding-bottom: env(safe-area-inset-bottom); /* ✅ Just enough for phones with gesture bars */
+  padding: 6px 0; /* ⬅️ Reduce height */
+  padding-bottom: env(safe-area-inset-bottom);
   box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.05);
   z-index: 1000;
   touch-action: manipulation;
 }
-
-
-
-
 
 #bottom-bar button {
   background: none;
@@ -89,15 +85,13 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 10px 0;
-  font-size: 14px; /* ⬆️ Slightly larger label */
+  font-size: 12px;
   color: #333;
   cursor: pointer;
 }
 
 #bottom-bar .material-icons {
-  font-size: 30px;  /* ⬆️ Bigger icon */
+  font-size: 28px; /* ⬅️ Make icons bigger */
   margin-bottom: 2px;
   color: #4caf50;
 }
@@ -105,6 +99,7 @@
 #bottom-bar button:hover .material-icons {
   color: #388e3c;
 }
+
 
 #bottom-bar button:hover {
   background-color: #f0f0f0;
