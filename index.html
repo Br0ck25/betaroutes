@@ -80,9 +80,8 @@ body {
   touch-action: manipulation;
 }
 
-/* === BUTTON RESET + STYLING === */
 button {
-  all: unset; /* Reset all default styles */
+  all: unset; /* Reset all styles */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -90,11 +89,13 @@ button {
   flex: 1;
   cursor: pointer;
   user-select: none;
-  -webkit-tap-highlight-color: transparent; /* Removes Android/iOS tap flash */
+  -webkit-tap-highlight-color: transparent;
   text-align: center;
   font-size: 12px;
   color: #333;
+  background: transparent !important; /* ✅ Prevent any background */
 }
+
 
 button:focus,
 button:focus-visible,
