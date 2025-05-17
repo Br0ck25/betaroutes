@@ -52,11 +52,10 @@
 
 #bottom-bar {
   position: fixed;
-  bottom: -5px; /* 👈 Moves the bar 20px up from the screen bottom */
+  bottom: -5; /* 👈 Always pinned to the *visual* bottom */
   left: 0;
   right: 0;
-  margin: 0 auto;
-  max-width: 900px;
+  width: 100%; /* Optional for extra safety */
   background: white;
   border-top: 1px solid #ddd;
   display: flex;
@@ -64,9 +63,12 @@
   align-items: center;
   padding: 12px 0;
   box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.05);
-  z-index: 1000;
+  z-index: 9999; /* ⬅️ Make sure it's above everything */
+  max-width: 900px;
+  margin: 0 auto;
   touch-action: manipulation;
 }
+
 
 
 
