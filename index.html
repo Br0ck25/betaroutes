@@ -5086,8 +5086,16 @@ align-items: center;
 </div>
 
 <script>
-  // Remove focus from any button after it's clicked
+  // Blur buttons after click (desktop + mobile)
   document.addEventListener("click", function (event) {
+    const isButton = event.target.closest("button");
+    if (isButton) {
+      isButton.blur();
+    }
+  });
+
+  // Blur buttons after touch (for iOS/Android)
+  document.addEventListener("touchend", function (event) {
     const isButton = event.target.closest("button");
     if (isButton) {
       isButton.blur();
