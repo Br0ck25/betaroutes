@@ -52,23 +52,23 @@
 
 #bottom-bar {
   position: fixed;
-  bottom: 20px; /* ⬅️ moves the whole bar up from the screen edge */
+  bottom: 0;
   left: 0;
   right: 0;
   margin: 0 auto;
-  max-width: 900px;
+  max-width: 900px; /* ✅ Matches the top bar */
   background: white;
-  border-radius: 12px; /* ⬅️ optional: add rounded corners since it's floating */
-  border: 1px solid #ddd;
+  border-top: 1px solid #ddd;
   display: flex;
   justify-content: space-around;
   align-items: center;
-  padding: 10px 0;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 12px 0 20px 0; /* ✅ Adjusted to visually "move it down" */
+  box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.05);
   z-index: 1000;
   overflow: hidden;
   touch-action: manipulation;
 }
+
 
 
 
