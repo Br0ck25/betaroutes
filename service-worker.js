@@ -1,19 +1,15 @@
-// service-worker.js
-
-const CACHE_NAME = "route-calculator-cache-v2.1.4";
+const CACHE_NAME = "route-calculator-cache-v2.1.6"; // bump version to invalidate old cache
 const urlsToCache = [
-  "/",
-  "/index.html",
   "/offline.html",
   "/logo.png",
   "/logo-512.png",
   "/main.js",
-  "/styles.css"
+  "/styles.css",
 ];
 
-// ✅ Install: cache updated app shell
+// ✅ Install: Cache app shell (but not index.html)
 self.addEventListener("install", (event) => {
-  self.skipWaiting(); // Activate immediately
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       console.log("✅ Caching app shell");
@@ -22,10 +18,9 @@ self.addEventListener("install", (event) => {
   );
 });
 
-// ✅ Activate: delete old caches & force reload
+// ✅ Activate: Remove old caches and reload clients
 self.addEventListener("activate", (event) => {
-  self.clients.claim(); // Take control immediately
-
+  self.clients.claim();
   event.waitUntil(
     caches.keys().then((cacheNames) =>
       Promise.all(
@@ -38,37 +33,55 @@ self.addEventListener("activate", (event) => {
       )
     ).then(() =>
       self.clients.matchAll().then((clients) => {
-        clients.forEach((client) => client.navigate(client.url)); // 🔁 Refresh open tabs
+        clients.forEach((client) => client.navigate(client.url));
       })
     )
   );
 });
 
-// ✅ Fetch: serve cache-first, fallback to network
+// ✅ Fetch: Cache-first, then network, then fallback — but don't cache .html pages
 self.addEventListener("fetch", (event) => {
+  if (event.request.mode === "navigate") {
+    // Always try to fetch fresh index.html for navigation
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match("/offline.html"))
+    );
+    return;
+  }
+
   if (event.request.method !== "GET") return;
 
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      if (response) return response;
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) return cachedResponse;
 
       return fetch(event.request)
         .then((networkResponse) => {
           const cloned = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            if (
-              event.request.url.startsWith("https://cdnjs.cloudflare.com") ||
-              event.request.url.startsWith(self.origin)
-            ) {
-              cache.put(event.request, cloned);
-            }
-          });
+
+          const url = new URL(event.request.url);
+          const isSameOrigin = url.origin === self.location.origin;
+          const isHTML = url.pathname.endsWith(".html");
+
+          if (
+            !isHTML &&
+            (url.href.startsWith("https://cdnjs.cloudflare.com") || isSameOrigin)
+          ) {
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
+          }
+
           return networkResponse;
         })
         .catch(() => {
           if (event.request.destination === "document") {
             return caches.match("/offline.html");
           }
+
+          return new Response("", {
+            status: 200,
+            statusText: "Fallback empty response",
+            headers: { "Content-Type": "text/plain" },
+          });
         });
     })
   );
