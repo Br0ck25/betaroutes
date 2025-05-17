@@ -54,7 +54,7 @@
   position: fixed;
   left: 0;
   right: 0;
-  bottom: env(safe-area-inset-bottom, 0); /* ✅ Locks it to bottom regardless of address bar resizing */
+  bottom: env(safe-area-inset-bottom, 0);
   margin: 0 auto;
   max-width: 900px;
   background: white;
@@ -62,11 +62,12 @@
   display: flex;
   justify-content: space-around;
   align-items: center;
-  padding: 12px 0 20px 0;
+  padding: 12px 0 40px 0; /* ⬅️ increased bottom padding */
   box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.05);
   z-index: 1000;
   touch-action: manipulation;
 }
+
 
 
 
