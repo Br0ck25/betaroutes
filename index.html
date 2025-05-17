@@ -53,6 +53,22 @@
 
     <style>
 
+      button {
+  -webkit-tap-highlight-color: transparent; /* ⛔ Removes gray iOS tap highlight */
+  outline: none;
+  border: none;
+  background: none;
+}
+
+button:focus,
+button:focus-visible,
+button:active {
+  outline: none !important;
+  box-shadow: none !important;
+  background: none !important;
+}
+
+
       button:focus {
   outline: none;
 }
