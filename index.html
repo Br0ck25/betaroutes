@@ -891,33 +891,34 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0;
+  padding: 10px 15px;
+  box-sizing: border-box;
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 1000;
   background: white;
-  padding: 20px 0;
   width: 100%;
   max-width: 900px;
   margin: 0 auto;
   border-radius: 0;
   box-shadow: none;
-  transition: none;
 ">
 
   <!-- Left: Hamburger -->
-  <div style="flex: 1; display: flex; justify-content: flex-start; padding-left: 10px;">
+  <div style="flex: 1; min-width: 0; display: flex; justify-content: flex-start; padding-left: 10px;">
     <button id="hamburger-button" onclick="toggleMenu()">☰</button>
   </div>
 
   <!-- Center: Logo -->
-  <div style="flex: 1; display: flex; justify-content: center;">
+  <div style="flex: 1; min-width: 0; display: flex; justify-content: center;">
     <img id="logo-image" src="/logo.png" alt="Logo" style="height: 50px; max-height: 70px; cursor: pointer;" onclick="scrollToTop()">
   </div>
 
   <!-- Right: Username -->
-  <div style="flex: 1; display: flex; justify-content: flex-end; padding-right: 10px;">
+  <div style="flex: 1; min-width: 0; display: flex; justify-content: flex-end; padding-right: 10px;">
     <span id="username-display" style="
       font-size: 16px;
       font-weight: bold;
@@ -930,6 +931,7 @@ html, body {
   </div>
 
 </div>
+
 
 
 <!-- Scrollable Auth Message (Sign In Banner) -->
