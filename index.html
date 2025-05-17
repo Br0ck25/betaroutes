@@ -845,8 +845,8 @@ html, body {
     background-color: #45a049;
   }
 
-#hamburger-button {
-  display: none; /* toggled via media query */
+  #hamburger-button {
+  display: none; /* hidden by default */
   background: none;
   border: none;
   font-size: 28px;
@@ -855,11 +855,12 @@ html, body {
   padding: 6px 10px;
   border-radius: 8px;
   transition: background-color 0.3s;
-  width: auto;
-  height: auto;
+  width: 50px;
+  height: 50px;
+  align-items: center;
+  justify-content: center;
+  display: none;
 }
-
-
 
 
 
@@ -889,50 +890,60 @@ html, body {
 <div id="top-bar" style="
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0;
-  padding: 10px 15px;
-  box-sizing: border-box;
+  justify-content: center;
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 1000;
   background: white;
+  padding: 25px 0;
   width: 100%;
   max-width: 900px;
   margin: 0 auto;
   border-radius: 0;
   box-shadow: none;
+  transition: none;
 ">
 
+
 <!-- Left: Hamburger -->
-<div style="flex: 1; display: flex; justify-content: flex-start; padding-left: 10px;">
-  <button id="hamburger-button" onclick="toggleMenu()">☰</button>
+<div style="position: absolute; left: 12px; display: flex; align-items: center; height: 100%;">
+  <button id="hamburger-button" onclick="toggleMenu()" style="
+    background: none;
+    border: none;
+    font-size: 28px;
+    cursor: pointer;
+    color: black;
+    padding: 6px 10px;
+    border-radius: 8px;
+    transition: background-color 0.3s;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  ">☰</button>
+</div>
+
+<!-- Centered Logo -->
+<img id="logo-image" src="/logo.png" alt="Logo" style="height: 50px; max-height: 70px; cursor: pointer;" onclick="scrollToTop()">
+
+<!-- Right: Username -->
+<div style="position: absolute; right: 22px; display: flex; align-items: center; height: 100%;">
+  <span id="username-display" style="
+    font-size: 16px;
+    font-weight: bold;
+    background: none;
+    padding: 6px 10px;
+    border-radius: 8px;
+    color: black;
+    transition: background-color 0.3s;
+  "></span>
 </div>
 
 
-
-  <!-- Center: Logo -->
-  <div style="flex: 1; min-width: 0; display: flex; justify-content: center;">
-    <img id="logo-image" src="/logo.png" alt="Logo" style="height: 50px; max-height: 70px; cursor: pointer;" onclick="scrollToTop()">
-  </div>
-
-  <!-- Right: Username -->
-  <div style="flex: 1; min-width: 0; display: flex; justify-content: flex-end; padding-right: 10px;">
-    <span id="username-display" style="
-      font-size: 16px;
-      font-weight: bold;
-      background: none;
-      padding: 6px 10px;
-      border-radius: 8px;
-      color: black;
-      transition: background-color 0.3s;
-    "></span>
-  </div>
-
 </div>
-
 
 
 <!-- Scrollable Auth Message (Sign In Banner) -->
