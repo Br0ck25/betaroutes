@@ -56,15 +56,16 @@
   left: 0;
   right: 0;
   margin: 0 auto;
-  max-width: 900px; /* match your top bar */
+  max-width: 900px;
   background: white;
   border-top: 1px solid #ddd;
-  display: flex;                  /* ✅ Ensures horizontal layout */
+  display: flex;
   justify-content: space-around;
   align-items: center;
-  padding: 6px 0;
+  padding: 10px 0 18px 0; /* ⬅️ Bottom padding now touches screen edge */
   box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.05);
   z-index: 1000;
+  overflow: hidden; /* ⛔ Prevent scrollbars */
 }
 
 #bottom-bar button {
@@ -75,22 +76,26 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 4px 0;                    /* ↑ More padding */
-  font-size: 15px;                   /* ↑ Larger label text */
+  padding: 10px 0;
+  font-size: 14px; /* ⬆️ Slightly larger label */
   color: #333;
   cursor: pointer;
 }
 
 #bottom-bar .material-icons {
-  font-size: 30px;                   /* ↑ Bigger icon */
+  font-size: 30px;  /* ⬆️ Bigger icon */
   margin-bottom: 2px;
   color: #4caf50;
 }
 
-
 #bottom-bar button:hover .material-icons {
   color: #388e3c;
 }
+
+#bottom-bar button:hover {
+  background-color: #f0f0f0;
+}
+
 
 #bottom-bar button:hover {
   background-color: #f0f0f0;
