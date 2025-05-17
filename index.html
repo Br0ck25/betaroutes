@@ -53,6 +53,10 @@
 
     <style>
 
+        html, body {
+    overflow-x: hidden;
+  }
+
       button {
   all: unset; /* Reset all native button styles */
   display: flex;
@@ -519,11 +523,14 @@ img {
   border-radius: 5px;
   background-color: #f9f9f9;
 
-  max-width: 100%;
-  overflow-x: auto;
+  width: 100%;
+  max-width: 900px;
   box-sizing: border-box;
-  word-wrap: break-word;
+  overflow-x: auto;
+  margin-left: auto;
+  margin-right: auto;
 }
+
 
 
       #map {
@@ -1181,7 +1188,8 @@ img {
         style="display: none; color: green; font-weight: bold; margin-top: 10px"
       ></div>
 
-      <div id="results" class="hidden">
+      <div class="container">
+  <div id="results" class="hidden">
         <p>Mileage: <span id="total-mileage"></span> miles</p>
         <p>Drive Time: <span id="total-time"></span></p>
         <p>Total Earnings: $<span id="total-earnings"></span></p>
@@ -1196,6 +1204,7 @@ img {
             id="profit-per-hour"
           ></span>
         </p>
+        </div>
       </div>
 
       <div id="map" class="hidden"></div>
