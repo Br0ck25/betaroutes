@@ -511,14 +511,20 @@ img {
         background-color: #45a049;
       }
 
-      #results {
-        display: none;
-        margin-top: 20px;
-        padding: 15px;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        background-color: #f9f9f9;
-      }
+#results {
+  display: none;
+  margin-top: 20px;
+  padding: 15px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  background-color: #f9f9f9;
+
+  max-width: 100%;
+  overflow-x: auto;
+  box-sizing: border-box;
+  word-wrap: break-word;
+}
+
 
       #map {
         width: 100%;
