@@ -63,10 +63,10 @@ body {
 
 #bottom-bar {
   position: fixed;
-  bottom: 0; /* 👈 Always pinned to the *visual* bottom */
+  bottom: 0;                  /* 🔒 Anchored to visual viewport */
   left: 0;
   right: 0;
-  width: 100%; /* Optional for extra safety */
+  width: 100%;
   background: white;
   border-top: 1px solid #ddd;
   display: flex;
@@ -74,18 +74,11 @@ body {
   align-items: center;
   padding: 12px 0;
   box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.05);
-  z-index: 9999; /* ⬅️ Make sure it's above everything */
+  z-index: 1000;
   max-width: 900px;
   margin: 0 auto;
   touch-action: manipulation;
 }
-
-
-
-
-
-
-
 
 
 #bottom-bar button {
