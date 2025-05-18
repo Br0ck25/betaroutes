@@ -116,6 +116,10 @@
         <td>${user.logCount}</td>
         <td>${user.disabled ? "❌ Disabled" : "✅ Active"}</td>
         <td>
+          <button class="reset" onclick="resetUserPassword('${
+            user.username
+          }')">Reset Password</button>
+
           <button class="reset" onclick="adminAction('reset-key','${
             user.username
           }')">New Reset Key</button>
@@ -231,6 +235,33 @@
             location.reload();
           });
         });
+      }
+      async function resetUserPassword(username) {
+        const newPassword = prompt(`Enter a new password for ${username}`);
+        if (!newPassword) return;
+
+        const res = await fetch(
+          "https://logs.gorouteyourself.com/admin/actions",
+          {
+            method: "POST",
+            headers: {
+              Authorization: adminToken,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              action: "reset-password",
+              username,
+              newPassword,
+            }),
+          }
+        );
+
+        const result = await res.json().catch(() => null);
+        if (result?.status === "updated") {
+          alert(`✅ Password reset for ${username}`);
+        } else {
+          alert("❌ Failed to reset password.");
+        }
       }
 
       loadUsers();
