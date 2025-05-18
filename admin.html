@@ -1,48 +1,96 @@
-<h2>Admin Panel</h2>
-<ul id="user-list"></ul>
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Admin Panel</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    ul { list-style: none; padding: 0; }
+    li { margin-bottom: 10px; }
+    button { margin-left: 10px; }
+  </style>
+</head>
+<body>
+  <h2>Admin Panel</h2>
+  <div id="login-section">
+    <p>Enter admin token:</p>
+    <input type="password" id="admin-token" placeholder="Admin token" />
+    <button onclick="submitToken()">Submit</button>
+    <p id="error-message" style="color: red;"></p>
+  </div>
 
-<script>
-const ADMIN_KEY = 'your-admin-token';
+  <div id="admin-section" style="display: none;">
+    <ul id="user-list"></ul>
+  </div>
 
-async function loadUsers() {
-  const res = await fetch("https://logs.gorouteyourself.com/admin/users", {
-    headers: { Authorization: `Bearer ${ADMIN_KEY}` }
-  });
-  const users = await res.json();
+  <script>
+    let adminToken = "";
 
-  const list = document.getElementById("user-list");
-  list.innerHTML = "";
+    function submitToken() {
+      const token = document.getElementById("admin-token").value.trim();
+      if (!token) return;
 
-  users.forEach(u => {
-    const li = document.createElement("li");
-    li.innerHTML = `
-      <strong>${u.username}</strong> - Reset Key: ${u.resetKey}
-      <button onclick="deleteUser('${u.username}')">🗑 Delete</button>
-      <button onclick="resetPassword('${u.username}')">🔑 Reset</button>
-    `;
-    list.appendChild(li);
-  });
-}
+      adminToken = token;
+      loadUsers();
+    }
 
-async function deleteUser(username) {
-  await fetch("https://logs.gorouteyourself.com/admin/delete", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username })
-  });
-  loadUsers();
-}
+    async function loadUsers() {
+      try {
+        const res = await fetch("https://logs.gorouteyourself.com/admin/users", {
+          headers: { Authorization: `Bearer ${adminToken}` }
+        });
 
-async function resetPassword(username) {
-  const newHash = prompt("Enter new hashed password");
-  if (!newHash) return;
-  await fetch("https://logs.gorouteyourself.com/admin/reset-password", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, newHash })
-  });
-  alert("Password reset");
-}
+        if (!res.ok) throw new Error("Unauthorized");
 
-loadUsers();
-</script>
+        const users = await res.json();
+        document.getElementById("login-section").style.display = "none";
+        document.getElementById("admin-section").style.display = "block";
+
+        const list = document.getElementById("user-list");
+        list.innerHTML = "";
+        users.forEach(u => {
+          const li = document.createElement("li");
+          li.innerHTML = `
+            <strong>${u.username}</strong> — Reset Key: <code>${u.resetKey}</code>
+            <button onclick="deleteUser('${u.username}')">🗑 Delete</button>
+            <button onclick="resetPassword('${u.username}')">🔑 Reset</button>
+          `;
+          list.appendChild(li);
+        });
+      } catch (err) {
+        document.getElementById("error-message").textContent = "Invalid token or error loading users.";
+      }
+    }
+
+    async function deleteUser(username) {
+      if (!confirm(`Delete user ${username}?`)) return;
+
+      await fetch("https://logs.gorouteyourself.com/admin/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${adminToken}`
+        },
+        body: JSON.stringify({ username })
+      });
+
+      loadUsers();
+    }
+
+    async function resetPassword(username) {
+      const newHash = prompt("Enter new password hash:");
+      if (!newHash) return;
+
+      await fetch("https://logs.gorouteyourself.com/admin/reset-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${adminToken}`
+        },
+        body: JSON.stringify({ username, newHash })
+      });
+
+      alert("Password reset.");
+    }
+  </script>
+</body>
+</html>
