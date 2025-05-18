@@ -147,6 +147,14 @@
         );
         if (!ok) return;
 
+        const payload = { action, username };
+
+        if (action === "reset-password") {
+          const newPassword = prompt(`Enter a new password for ${username}`);
+          if (!newPassword) return;
+          payload.newPassword = newPassword;
+        }
+
         const res = await fetch(
           "https://logs.gorouteyourself.com/admin/actions",
           {
@@ -155,7 +163,7 @@
               Authorization: adminToken,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ action, username }),
+            body: JSON.stringify(payload),
           }
         );
 
@@ -166,7 +174,7 @@
           const result = await res.json();
           if (result.status === "updated") {
             const user = result.user;
-            message = `✅ Token Reset for ${user.username}\n\nNew Token:\n${user.token}\n\nReset Key:\n${user.resetKey}`;
+            message = `✅ Action completed for ${user.username}\n\nNew Token:\n${user.token}\nReset Key:\n${user.resetKey}`;
           } else {
             message = "Something went wrong: " + JSON.stringify(result);
           }
