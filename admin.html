@@ -1,6 +1,3 @@
-from pathlib import Path
-
-admin_pretty_html = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -202,8 +199,3 @@ admin_pretty_html = """
   </script>
 </body>
 </html>
-"""
-
-pretty_file = Path("/mnt/data/admin-pretty.html")
-pretty_file.write_text(admin_pretty_html.strip())
-pretty_file.name
