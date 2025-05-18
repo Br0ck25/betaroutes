@@ -1,0 +1,48 @@
+<h2>Admin Panel</h2>
+<ul id="user-list"></ul>
+
+<script>
+const ADMIN_KEY = 'your-admin-token';
+
+async function loadUsers() {
+  const res = await fetch("https://logs.gorouteyourself.com/admin/users", {
+    headers: { Authorization: `Bearer ${ADMIN_KEY}` }
+  });
+  const users = await res.json();
+
+  const list = document.getElementById("user-list");
+  list.innerHTML = "";
+
+  users.forEach(u => {
+    const li = document.createElement("li");
+    li.innerHTML = `
+      <strong>${u.username}</strong> - Reset Key: ${u.resetKey}
+      <button onclick="deleteUser('${u.username}')">🗑 Delete</button>
+      <button onclick="resetPassword('${u.username}')">🔑 Reset</button>
+    `;
+    list.appendChild(li);
+  });
+}
+
+async function deleteUser(username) {
+  await fetch("https://logs.gorouteyourself.com/admin/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username })
+  });
+  loadUsers();
+}
+
+async function resetPassword(username) {
+  const newHash = prompt("Enter new hashed password");
+  if (!newHash) return;
+  await fetch("https://logs.gorouteyourself.com/admin/reset-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, newHash })
+  });
+  alert("Password reset");
+}
+
+loadUsers();
+</script>
