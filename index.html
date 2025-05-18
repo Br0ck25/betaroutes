@@ -1955,44 +1955,55 @@ async function loadLog() {
 
   try {
     const response = await fetch("https://logs.gorouteyourself.com/logs", {
-  headers: {
-    Authorization: "Bearer " + token
-  }
-});
-
+      headers: {
+        Authorization: "Bearer " + token
+      }
+    });
 
     if (!response.ok) {
       throw new Error(await response.text());
     }
 
-    const logs = await response.json();
+    let logs;
+    try {
+      logs = await response.json();
+    } catch (parseErr) {
+      throw new Error("❌ Invalid JSON in logs response: " + parseErr.message);
+    }
+
     const localLogs = JSON.parse(localStorage.getItem("cachedLogs") || "[]");
 
-const merged = logs.map(serverLog => {
-  const localMatch = localLogs.find(l =>
-    l.date === serverLog.date &&
-    JSON.stringify(l.destinations) === JSON.stringify(serverLog.destinations)
-  );
+    const merged = logs.map(serverLog => {
+      const localMatch = localLogs.find(l =>
+        l.date === serverLog.date &&
+        JSON.stringify(l.destinations) === JSON.stringify(serverLog.destinations)
+      );
 
-  if (!localMatch) return serverLog;
+      if (!localMatch) return serverLog;
 
-  const localTime = new Date(localMatch.lastModified || 0).getTime();
-  const serverTime = new Date(serverLog.lastModified || 0).getTime();
+      const localTime = new Date(localMatch.lastModified || 0).getTime();
+      const serverTime = new Date(serverLog.lastModified || 0).getTime();
 
-  console.log("⛓ Conflict on", serverLog.date, "— using", serverTime >= localTime ? "server" : "local");
+      console.log("⛓ Conflict on", serverLog.date, "— using", serverTime >= localTime ? "server" : "local");
 
-  return serverTime >= localTime ? serverLog : localMatch;
-});
+      return serverTime >= localTime ? serverLog : localMatch;
+    });
 
-localStorage.setItem("cachedLogs", JSON.stringify(merged));
-return merged;
+    localStorage.setItem("cachedLogs", JSON.stringify(merged));
+    return merged;
 
   } catch (err) {
-    console.warn("⚠️ Offline or failed to load logs. Loading from local cache.", err);
+    console.warn("⚠️ Offline or failed to load logs. Loading from local cache. Error:", err.message);
     const cached = localStorage.getItem("cachedLogs");
-    return cached ? JSON.parse(cached) : [];
+    try {
+      return cached ? JSON.parse(cached) : [];
+    } catch (parseErr) {
+      console.error("❌ Failed to parse cached logs:", parseErr.message);
+      return [];
+    }
   }
 }
+
 
 function updateOfflineBanner() {
   const banner = document.getElementById("offline-banner");
