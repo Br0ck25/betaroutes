@@ -1906,31 +1906,27 @@ async function saveLog() {
 
 
 async function syncPendingLogs() {
-  const pending = localStorage.getItem("pendingLogs");
-  if (!pending) return;
+  const pendingRaw = localStorage.getItem("pendingLogs");
+  if (!pendingRaw) return;
 
   const token = localStorage.getItem("token");
   if (!token) return;
 
   try {
-    const response = await fetch(
-      "https://logs.gorouteyourself.com/logs",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + token,
-
-        },
-        body: pending,
-      }
-    );
+    const parsed = JSON.parse(pendingRaw); // Ensure valid JSON
+    const response = await fetch("https://logs.gorouteyourself.com/logs", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token
+      },
+      body: JSON.stringify(parsed)
+    });
 
     if (response.ok) {
       console.log("✅ Pending logs synced successfully!");
       localStorage.removeItem("pendingLogs");
 
-      // 🆕 Important: Update cachedLogs after successful sync
       const freshLogs = await loadLog();
       localStorage.setItem("cachedLogs", JSON.stringify(freshLogs));
       displayLog();
@@ -1941,6 +1937,7 @@ async function syncPendingLogs() {
     console.error("❌ Error syncing pending logs:", err);
   }
 }
+
 
 async function loadLog() {
   const token = localStorage.getItem("token");
