@@ -1879,7 +1879,8 @@ async function saveLog() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: token,
+          Authorization: "Bearer " + token,
+
         },
         body: JSON.stringify(logEntries),
       }
@@ -1918,7 +1919,8 @@ async function syncPendingLogs() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: token,
+          Authorization: "Bearer " + token,
+
         },
         body: pending,
       }
@@ -3831,7 +3833,8 @@ reader.onerror = () => {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: token,
+              Authorization: "Bearer " + token,
+
             },
             body: JSON.stringify({
               username,
@@ -3913,7 +3916,8 @@ reader.onerror = () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: token,
+        Authorization: "Bearer " + token,
+
       },
       body: JSON.stringify({ username, password }),
     }
