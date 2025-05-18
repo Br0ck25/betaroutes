@@ -1952,8 +1952,11 @@ async function loadLog() {
 
   try {
     const response = await fetch("https://logs.gorouteyourself.com/logs", {
-      headers: { Authorization: token }
-    });
+  headers: {
+    Authorization: "Bearer " + token
+  }
+});
+
 
     if (!response.ok) {
       throw new Error(await response.text());
