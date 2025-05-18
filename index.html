@@ -53,6 +53,16 @@
 
     <style>
 
+      .profit-positive {
+  color: #8DC42B; /* ✅ your official green */
+  font-weight: bold;
+}
+.profit-negative {
+  color: #F35E34; /* ✅ your official red */
+  font-weight: bold;
+}
+
+
         html, body {
     overflow-x: hidden;
   }
@@ -2480,9 +2490,15 @@ async function calculateRouteData() {
             data.maintenanceCost;
           document.getElementById("supplies-cost-result").textContent =
             data.suppliesCost;
-          document.getElementById("net-profit").textContent = data.netProfit;
-          document.getElementById("profit-per-hour").textContent =
-            data.profitPerHour;
+          const netProfit = parseFloat(data.netProfit);
+const profitPerHour = parseFloat(data.profitPerHour);
+
+document.getElementById("net-profit").innerHTML =
+  `<span class="${netProfit >= 0 ? 'profit-positive' : 'profit-negative'}">${netProfit.toFixed(2)}</span>`;
+
+document.getElementById("profit-per-hour").innerHTML =
+  `<span class="${profitPerHour >= 0 ? 'profit-positive' : 'profit-negative'}">${profitPerHour.toFixed(2)}</span>`;
+
           document.getElementById("results").classList.remove("hidden");
           const start = data.startClock;
 const end = data.endClock;
@@ -2961,7 +2977,8 @@ document.getElementById("map")?.scrollIntoView({ behavior: "smooth" });
 </div>
 
 
-      <strong>Net Profit:</strong> $${parseFloat(entry.netProfit || 0).toFixed(2)}
+      <strong>Net Profit:</strong> $<span class="${(parseFloat(entry.netProfit || 0) >= 0 ? 'profit-positive' : 'profit-negative')}">${parseFloat(entry.netProfit || 0).toFixed(2)}</span>
+
     </div>
     <div id="details-${realIndex}" class="hidden" style="margin-top:10px;"></div>
   </div>
