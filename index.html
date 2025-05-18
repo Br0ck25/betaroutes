@@ -53,16 +53,6 @@
 
     <style>
 
-      .profit-positive {
-  color: #8DC42B; /* ✅ your official green */
-  font-weight: bold;
-}
-.profit-negative {
-  color: #F35E34; /* ✅ your official red */
-  font-weight: bold;
-}
-
-
         html, body {
     overflow-x: hidden;
   }
@@ -186,7 +176,7 @@ button {
   font-size: 35px;
   line-height: 1;
   margin-bottom: 0;
-  color: #8EC32A;
+  color: #4caf50;
   transition: color 0.2s ease;
 }
 
@@ -195,7 +185,7 @@ button {
 }
 
 #bottom-bar button:hover .material-icons {
-  color: #6AA01F;
+  color: #388e3c;
 }
 
 
@@ -245,7 +235,7 @@ button {
   display: none;
   padding: 10px 16px;
   margin: 20px auto;
-  background-color: #11A6DE;
+  background-color: #007bff;
   color: white;
   border: none;
   border-radius: 6px;
@@ -380,7 +370,7 @@ img {
 }
 
 #account-menu button {
-  background-color: #8EC32A;
+  background-color: #4caf50;
   color: white;
   border: none;
   padding: 8px 12px;
@@ -396,7 +386,7 @@ img {
 }
 
 #account-menu button:hover {
-  background-color: #7DB021;
+  background-color: #45a049;
 }
 
 
@@ -411,11 +401,11 @@ img {
 }
 
 #account-menu button.danger {
-  background-color: #F35E34;
+  background-color: #dc3545;
 }
 
 #account-menu button.danger:hover {
-  background-color: #D14F2A;
+  background-color: #c82333;
 }
 
 
@@ -514,7 +504,7 @@ img {
       }
 
       button {
-        background-color: #8EC32A;
+        background-color: #4caf50;
         color: white;
         border: none;
         cursor: pointer;
@@ -522,7 +512,7 @@ img {
       }
 
       button:hover {
-        background-color: #7DB021;
+        background-color: #45a049;
       }
 
 /* Prevent scroll globally */
@@ -591,7 +581,7 @@ html, body {
 
       .delete-btn,
       .move-btn {
-        background-color: #F35E34;
+        background-color: red;
         color: white;
         padding: 8px 12px;
         font-size: 14px;
@@ -604,15 +594,15 @@ html, body {
 
       .delete-btn:hover,
       .move-btn:hover {
-        background-color: #C74828;
+        background-color: darkred;
       }
 
       .move-btn {
-        background-color: #FA8A28;
+        background-color: #ffa500;
       }
 
       .move-btn:hover {
-        background-color: #E77A22;
+        background-color: #ff7f00;
       }
 
       .destination-actions {
@@ -669,7 +659,7 @@ html, body {
 
 
       .log-actions button {
-        background-color: #11A6DE;
+        background-color: #007bff;
         color: white;
         border: none;
         padding: 8px 0; /* 🆕 Vertically thicker buttons */
@@ -685,7 +675,7 @@ html, body {
       }
 
       .log-actions button:hover {
-        background-color: #0F95C6;
+        background-color: #0056b3;
       }
 
       #log-header {
@@ -736,25 +726,30 @@ html, body {
 
       .save-btn,
       .cancel-btn {
-        background-color: #8EC32A;
+        background-color: #28a745;
         color: white;
         margin-left: 5px;
       }
 
       .cancel-btn {
-        background-color: #F35E34;
+        background-color: #dc3545;
       }
 
-      .edit-form-container {
-        display: none;
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 1000;
-        max-height: 80vh;
-        overflow-y: auto;
-      }
+.edit-form-container {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+  max-height: 80vh;
+  max-width: 90vw;       /* ✅ prevent full width overflow */
+  width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;     /* ✅ prevent horizontal scroll */
+  box-sizing: border-box;
+}
+
 
       .edit-form-container label {
         font-weight: normal;
@@ -808,7 +803,7 @@ html, body {
       }
 
       .custom-view-modal button {
-        background-color: #F35E34;
+        background-color: #dc3545;
         color: white;
         padding: 10px 20px;
         border: none;
@@ -820,7 +815,7 @@ html, body {
       }
 
       .custom-view-modal button:hover {
-        background-color: #D14F2A;
+        background-color: #c82333;
       }
 
       #log-list .hidden {
@@ -841,7 +836,7 @@ html, body {
     max-width: 220px;
     padding: 10px 14px;
     margin: 10px auto;
-    background-color: #8EC32A;
+    background-color: #4caf50;
     color: white !important;
     font-size: 15px;
     text-align: center;
@@ -852,7 +847,7 @@ html, body {
   }
 
   #account-menu button:hover {
-    background-color: #7DB021;
+    background-color: #45a049;
   }
 
   #hamburger-button {
@@ -972,9 +967,9 @@ html, body {
   z-index: 500;
 ">
   🚧 To log your route, you need to
-  <a href="#" onclick="showLogin()" style="color: #11A6DE; font-weight: bold; text-decoration: none;">Sign in</a>
+  <a href="#" onclick="showLogin()" style="color: #0d6efd; font-weight: bold; text-decoration: none;">Sign in</a>
   or
-  <a href="#" onclick="showSignup()" style="color: #11A6DE; font-weight: bold; text-decoration: none;">Create an account</a>.
+  <a href="#" onclick="showSignup()" style="color: #0d6efd; font-weight: bold; text-decoration: none;">Create an account</a>.
 </div>
 
 <!-- Offline Mode Banner (same style as sign-in banner) -->
@@ -2490,15 +2485,9 @@ async function calculateRouteData() {
             data.maintenanceCost;
           document.getElementById("supplies-cost-result").textContent =
             data.suppliesCost;
-          const netProfit = parseFloat(data.netProfit);
-const profitPerHour = parseFloat(data.profitPerHour);
-
-document.getElementById("net-profit").innerHTML =
-  `<span class="${netProfit >= 0 ? 'profit-positive' : 'profit-negative'}">${netProfit.toFixed(2)}</span>`;
-
-document.getElementById("profit-per-hour").innerHTML =
-  `<span class="${profitPerHour >= 0 ? 'profit-positive' : 'profit-negative'}">${profitPerHour.toFixed(2)}</span>`;
-
+          document.getElementById("net-profit").textContent = data.netProfit;
+          document.getElementById("profit-per-hour").textContent =
+            data.profitPerHour;
           document.getElementById("results").classList.remove("hidden");
           const start = data.startClock;
 const end = data.endClock;
@@ -2977,8 +2966,7 @@ document.getElementById("map")?.scrollIntoView({ behavior: "smooth" });
 </div>
 
 
-      <strong>Net Profit:</strong> $<span class="${(parseFloat(entry.netProfit || 0) >= 0 ? 'profit-positive' : 'profit-negative')}">${parseFloat(entry.netProfit || 0).toFixed(2)}</span>
-
+      <strong>Net Profit:</strong> $${parseFloat(entry.netProfit || 0).toFixed(2)}
     </div>
     <div id="details-${realIndex}" class="hidden" style="margin-top:10px;"></div>
   </div>
@@ -4791,7 +4779,7 @@ async function handleGoogleSignIn(response) {
   <a href="#" onclick="toggleAuthMode()">
     Switch to <span id="auth-switch-label">Sign Up</span>
   </a><br />
-  <a href="#" onclick="showResetModal()" style="font-size: 0.9em; color: #11A6DE">
+  <a href="#" onclick="showResetModal()" style="font-size: 0.9em; color: #0d6efd">
     Forgot Password?
   </a>
 </p>
@@ -4945,7 +4933,7 @@ async function handleGoogleSignIn(response) {
     >
       <div onclick="event.stopPropagation()" class="modal-box">
         <h3>Delete Account</h3>
-        <p style="font-size: 14px; color: #F35E34">⚠️ This action is permanent.</p>
+        <p style="font-size: 14px; color: red">⚠️ This action is permanent.</p>
         <input
   type="password"
   id="delete-password"
@@ -4962,7 +4950,7 @@ async function handleGoogleSignIn(response) {
 
         <button
           onclick="submitDeleteAccount()"
-          style="width: 100%; background: #F35E34; color: white"
+          style="width: 100%; background: red; color: white"
         >
           Delete My Account
         </button>
