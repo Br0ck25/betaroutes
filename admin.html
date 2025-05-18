@@ -54,10 +54,38 @@
       background-color: #0d8cc5;
     }
 
+    #search-container {
+      margin-bottom: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #search-input {
+      padding: 8px;
+      font-size: 16px;
+      width: 300px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+
+    #export-btn {
+      padding: 8px 14px;
+      background-color: #8DC42B;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    #export-btn:hover {
+      background-color: #77ad23;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 20px;
+      margin-top: 10px;
     }
 
     th, td {
@@ -102,6 +130,34 @@
       font-weight: bold;
       margin-top: 15px;
     }
+
+    #logs-modal {
+      display: none;
+      position: fixed;
+      top: 10%;
+      left: 10%;
+      width: 80%;
+      height: 70%;
+      background: white;
+      border: 1px solid #ccc;
+      overflow: auto;
+      padding: 20px;
+      z-index: 10;
+      box-shadow: 0 0 20px rgba(0,0,0,0.3);
+    }
+
+    #logs-modal pre {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    #close-modal {
+      position: absolute;
+      top: 10px;
+      right: 20px;
+      font-size: 18px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -111,6 +167,10 @@
       <input type="password" id="admin-token" placeholder="Enter admin token" />
       <button onclick="submitToken()">Submit</button>
       <p id="error-message"></p>
+    </div>
+    <div id="search-container" style="display:none;">
+      <input id="search-input" oninput="filterUsers()" placeholder="Search by username..." />
+      <button id="export-btn" onclick="exportCSV()">📥 Export Users</button>
     </div>
     <table id="user-table" style="display:none;">
       <thead>
@@ -128,13 +188,21 @@
     </table>
   </div>
 
+  <div id="logs-modal">
+    <span id="close-modal" onclick="document.getElementById('logs-modal').style.display='none'">✖</span>
+    <h3>Logs</h3>
+    <pre id="logs-output">Loading...</pre>
+  </div>
+
   <script>
     let adminToken = "";
+    let allUsers = [];
 
     function submitToken() {
       adminToken = document.getElementById("admin-token").value;
       if (!adminToken) return;
       document.getElementById("admin-login").style.display = "none";
+      document.getElementById("search-container").style.display = "flex";
       loadUsers();
     }
 
@@ -144,32 +212,59 @@
           headers: { Authorization: `Bearer ${adminToken}` }
         });
         const users = await res.json();
-        document.getElementById("user-table").style.display = "";
-        const tbody = document.getElementById("user-rows");
-        tbody.innerHTML = "";
-
-        users.forEach(u => {
-          const row = document.createElement("tr");
-          row.innerHTML = `
-            <td>${u.username}</td>
-            <td><code>${u.resetKey}</code></td>
-            <td>${u.createdAt}</td>
-            <td>${u.method}</td>
-            <td>${u.logCount}</td>
-            <td>${u.disabled ? "🔒 Disabled" : "✅ Active"}</td>
-            <td>
-              <button class="primary" onclick="act('${u.username}', 'reset-key')">Reset Key</button>
-              <button class="success" onclick="act('${u.username}', 'reset-token')">New Token</button>
-              <button class="warn" onclick="act('${u.username}', 'toggle-disabled')">${u.disabled ? "Enable" : "Disable"}</button>
-              <button class="danger" onclick="deleteUser('${u.username}')">Delete</button>
-            </td>
-          `;
-          tbody.appendChild(row);
-        });
+        allUsers = users;
+        renderUsers(users);
       } catch (err) {
         document.getElementById("error-message").textContent = "Failed to load users.";
         document.getElementById("admin-login").style.display = "block";
       }
+    }
+
+    function renderUsers(users) {
+      document.getElementById("user-table").style.display = "";
+      const tbody = document.getElementById("user-rows");
+      tbody.innerHTML = "";
+
+      users.forEach(u => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${u.username}</td>
+          <td><code>${u.resetKey}</code></td>
+          <td>${u.createdAt}</td>
+          <td>${u.method}</td>
+          <td>${u.logCount}</td>
+          <td>${u.disabled ? "🔒 Disabled" : "✅ Active"}</td>
+          <td>
+            <button class="primary" onclick="act('${u.username}', 'reset-key')">Reset Key</button>
+            <button class="success" onclick="act('${u.username}', 'reset-token')">New Token</button>
+            <button class="warn" onclick="act('${u.username}', 'toggle-disabled')">${u.disabled ? "Enable" : "Disable"}</button>
+            <button class="primary" onclick="viewLogs('${u.username}')">View Logs</button>
+            <button class="danger" onclick="deleteUser('${u.username}')">Delete</button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    function filterUsers() {
+      const val = document.getElementById("search-input").value.toLowerCase();
+      const filtered = allUsers.filter(u => u.username.toLowerCase().includes(val));
+      renderUsers(filtered);
+    }
+
+    async function exportCSV() {
+      const headers = ["Username", "Reset Key", "Created At", "Method", "Log Count", "Disabled"];
+      const rows = allUsers.map(u =>
+        [u.username, u.resetKey, u.createdAt, u.method, u.logCount, u.disabled]
+      );
+      const csv = [headers, ...rows].map(r => r.join(",")).join("\n");
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "users.csv";
+      link.click();
+      URL.revokeObjectURL(url);
     }
 
     async function act(username, action) {
@@ -195,6 +290,19 @@
         body: JSON.stringify({ username })
       });
       await loadUsers();
+    }
+
+    async function viewLogs(username) {
+      const user = allUsers.find(u => u.username === username);
+      if (!user || !user.token) return alert("User token missing.");
+      const res = await fetch("https://logs.gorouteyourself.com/logs", {
+        headers: {
+          Authorization: user.token
+        }
+      });
+      const data = await res.text();
+      document.getElementById("logs-output").textContent = data || "No logs found.";
+      document.getElementById("logs-modal").style.display = "block";
     }
   </script>
 </body>
