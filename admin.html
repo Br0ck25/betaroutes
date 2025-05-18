@@ -159,16 +159,22 @@
           }
         );
 
-        const result = await res.json();
-        if (result.status === "updated") {
-          const user = result.user;
-          alert(
-            `✅ Token Reset for ${user.username}\n\nNew Token:\n${user.token}\n\nReset Key:\n${user.resetKey}`
-          );
+        const contentType = res.headers.get("content-type") || "";
+        let message = "";
+
+        if (contentType.includes("application/json")) {
+          const result = await res.json();
+          if (result.status === "updated") {
+            const user = result.user;
+            message = `✅ Token Reset for ${user.username}\n\nNew Token:\n${user.token}\n\nReset Key:\n${user.resetKey}`;
+          } else {
+            message = "Something went wrong: " + JSON.stringify(result);
+          }
         } else {
-          alert("Something went wrong: " + JSON.stringify(result));
+          message = await res.text();
         }
 
+        alert(message);
         location.reload();
       }
 
