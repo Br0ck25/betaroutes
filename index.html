@@ -1906,37 +1906,43 @@ async function saveLog() {
 
 
 async function syncPendingLogs() {
-  const pendingRaw = localStorage.getItem("pendingLogs");
-  if (!pendingRaw) return;
+  const raw = localStorage.getItem("pendingLogs");
+  if (!raw) return;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) throw new Error("Expected array");
+  } catch (err) {
+    console.warn("❌ Invalid pending logs, clearing:", err.message);
+    localStorage.removeItem("pendingLogs"); // ❌ purge bad data
+    return;
+  }
 
   const token = localStorage.getItem("token");
   if (!token) return;
 
-  try {
-    const parsed = JSON.parse(pendingRaw); // Ensure valid JSON
-    const response = await fetch("https://logs.gorouteyourself.com/logs", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + token
-      },
-      body: JSON.stringify(parsed)
-    });
+  const res = await fetch("https://logs.gorouteyourself.com/logs", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + token
+    },
+    body: JSON.stringify(parsed)
+  });
 
-    if (response.ok) {
-      console.log("✅ Pending logs synced successfully!");
-      localStorage.removeItem("pendingLogs");
-
-      const freshLogs = await loadLog();
-      localStorage.setItem("cachedLogs", JSON.stringify(freshLogs));
-      displayLog();
-    } else {
-      console.error("❌ Failed to sync pending logs:", await response.text());
-    }
-  } catch (err) {
-    console.error("❌ Error syncing pending logs:", err);
+  if (res.ok) {
+    console.log("✅ Synced pending logs");
+    localStorage.removeItem("pendingLogs");
+    const logs = await loadLog();
+    localStorage.setItem("cachedLogs", JSON.stringify(logs));
+    displayLog();
+  } else {
+    console.warn("❌ Sync failed:", await res.text());
   }
 }
+
+
 
 
 async function loadLog() {
