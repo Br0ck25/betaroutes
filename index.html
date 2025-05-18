@@ -743,12 +743,17 @@ html, body {
   transform: translate(-50%, -50%);
   z-index: 1000;
   max-height: 80vh;
-  max-width: 90vw;       /* ✅ prevent full width overflow */
+  max-width: 600px;     /* ✅ set visual max width */
   width: 100%;
   overflow-y: auto;
-  overflow-x: hidden;     /* ✅ prevent horizontal scroll */
+  overflow-x: hidden;
+  padding: 20px;
+  background: white;
+  box-shadow: 0 0 12px rgba(0,0,0,0.2);
+  border-radius: 8px;
   box-sizing: border-box;
 }
+
 
 
       .edit-form-container label {
