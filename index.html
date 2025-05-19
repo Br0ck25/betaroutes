@@ -32,9 +32,14 @@
 </link></head>
 <body>
 <div class="top-bar" id="top-bar">
-<button class="hamburger-button" id="hamburger-button">
-<img class="logo-image" id="logo-image" src="/logo.png"/>
-<span class="username-display" id="username-display"></span>
+<div class="top-bar-left">
+  <button class="hamburger-button" id="hamburger-button" onclick="toggleMenu()">☰</button>
+</div>
+<img class="logo-image" id="logo-image" src="/logo.png" onclick="scrollToTop()" />
+<div class="top-bar-right">
+  <span class="username-display" id="username-display"></span>
+</div>
+
 <div class="auth-banner" id="auth-message" style="display: none;">
 
   🚧 To log your route, you need to
