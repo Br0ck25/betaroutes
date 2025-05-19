@@ -34,7 +34,7 @@
 <div class="top-bar" id="top-bar">
 <button class="hamburger-button" id="hamburger-button">
 <img class="logo-image" id="logo-image" src="/logo.png"/>
-<span class="username-display" id="username-display">
+<span class="username-display" id="username-display"></span>
 <div class="auth-banner" id="auth-message" style="display: none;">
 
   🚧 To log your route, you need to
@@ -42,7 +42,8 @@
   or
   <a href="#" onclick="showSignup()">Create an account</a>.
 </div>
-<div ...="" id="offline-banner"> → class="offline-banner"
+<div id="offline-banner" class="offline-banner" style="display: none;">
+
 
 
 
@@ -80,7 +81,7 @@
   Manage Log <span id="hamburger-manage-arrow">▼</span>
 </button>
 <!-- Dropdown Menu -->
-<div id="hamburger-manage-log-menu">
+<div id="hamburger-manage-log-menu" class="dropdown-menu">
 <button onclick="triggerImportFile()">Import CSV</button>
 <button onclick="exportToCSVWithTotals()">Export CSV</button>
 <button onclick="exportToPDFWithTotals()">Export PDF</button>
@@ -200,18 +201,7 @@
 </span></button></div>
 <!-- 🔽 Hidden Import Input --><input accept=".csv" id="import-file" onchange="importLog()" style="display: none" type="file"/>
 <div class="hidden" id="overlay"></div>
-<!-- 🔽 Resume Modal --><div id="resume-modal" style="
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 3000;
-  justify-content: center;
-  align-items: center;
-">
+<div id="resume-modal" class="resume-modal">
 <div class="modal-box">
 <h3>📝 Resume your last unsaved trip?</h3>
 <p>We found a previous trip that wasn't saved. Would you like to continue editing it?</p>
@@ -270,129 +260,60 @@
 <input id="edit-index" type="hidden"/>
 </div>
 
-<div id="auth-modal" onclick="closeAuthModal()" style="
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.6);
-        justify-content: center;
-        align-items: center;
-        z-index: 2000;
-      ">
-<div class="modal-box" onclick="event.stopPropagation()">
-<h3 id="auth-title">Sign In</h3>
-<input id="auth-username" placeholder="Username" type="text"/>
-<input id="auth-password" placeholder="Password" type="password"/>
-<button onclick="submitAuth()">Submit</button>
-<button onclick="closeAuthModal()">
-  Cancel
-</button>
-<p>
-<a href="#" onclick="toggleAuthMode()">
-    Switch to <span id="auth-switch-label">Sign Up</span>
-</a><br/>
-<a href="#" onclick="showResetModal()">
-    Forgot Password?
-  </a>
-</p>
-
-</div>
-</div>
-<div id="change-password-modal" style="
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.6);
-        justify-content: center;
-        align-items: center;
-        z-index: 2000;
-      ">
-<div class="modal-box" onclick="event.stopPropagation()">
-<h3>Change Password</h3>
-<input id="current-password" placeholder="Current password" type="password"/>
-<input id="new-password" placeholder="New password" type="password"/>
-<input id="confirm-password" placeholder="Confirm new password" type="password"/>
-<button onclick="submitPasswordChange()">
-          Submit
-        </button>
-<button onclick="closePasswordModal()">
-          Cancel
-        </button>
-</div>
-</div>
-<div id="reset-password-modal" style="
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.6);
-        justify-content: center;
-        align-items: center;
-        z-index: 2000;
-      ">
-<div class="modal-box" onclick="event.stopPropagation()">
-<h3>Reset Password</h3>
-<input id="reset-username" placeholder="Username" type="text"/>
-<input id="reset-key" placeholder="Reset Key (shown at signup)" type="text"/>
-<input id="reset-new-password" placeholder="New Password" type="password"/>
-<button onclick="submitResetPassword()">
-          Submit
-        </button>
-<button onclick="closeResetModal()">
-          Cancel
-        </button>
-</div>
-</div>
-<div id="delete-account-modal" style="
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.6);
-        justify-content: center;
-        align-items: center;
-        z-index: 2000;
-      ">
-<div class="modal-box" onclick="event.stopPropagation()">
-<h3>Delete Account</h3>
-<p>⚠️ This action is permanent.</p>
-<input id="delete-password" placeholder="Confirm password" type="password"/>
-<button onclick="submitDeleteAccount()">
-          Delete My Account
-        </button>
-<button onclick="closeDeleteModal()">
-          Cancel
-        </button>
-</div>
+<div id="auth-modal" class="resume-modal" onclick="closeAuthModal()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <h3 id="auth-title">Sign In</h3>
+    <input id="auth-username" type="text" placeholder="Username" />
+    <input id="auth-password" type="password" placeholder="Password" />
+    <button onclick="submitAuth()">Submit</button>
+    <button onclick="closeAuthModal()">Cancel</button>
+    <p>
+      <a href="#" onclick="toggleAuthMode()">Switch to <span id="auth-switch-label">Sign Up</span></a><br/>
+      <a href="#" onclick="showResetModal()">Forgot Password?</a>
+    </p>
+  </div>
 </div>
 
-<div id="universal-modal" style="
-display: none;
-position: fixed;
-top: 0;
-left: 0;
-width: 100%;
-height: 100%;
-background: rgba(0, 0, 0, 0.6);
-z-index: 3000;
-justify-content: center;
-align-items: center;
-">
-<div class="modal-box">
-<h3 id="universal-modal-message"></h3>
-<div id="universal-modal-buttons"></div>
+<div id="change-password-modal" class="resume-modal" onclick="closePasswordModal()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <h3>Change Password</h3>
+    <input id="current-password" type="password" placeholder="Current password" />
+    <input id="new-password" type="password" placeholder="New password" />
+    <input id="confirm-password" type="password" placeholder="Confirm new password" />
+    <button onclick="submitPasswordChange()">Submit</button>
+    <button onclick="closePasswordModal()">Cancel</button>
+  </div>
 </div>
+
+<div id="reset-password-modal" class="resume-modal" onclick="closeResetModal()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <h3>Reset Password</h3>
+    <input id="reset-username" type="text" placeholder="Username" />
+    <input id="reset-key" type="text" placeholder="Reset Key (shown at signup)" />
+    <input id="reset-new-password" type="password" placeholder="New Password" />
+    <button onclick="submitResetPassword()">Submit</button>
+    <button onclick="closeResetModal()">Cancel</button>
+  </div>
 </div>
+
+<div id="delete-account-modal" class="resume-modal" onclick="closeDeleteModal()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <h3>Delete Account</h3>
+    <p>⚠️ This action is permanent.</p>
+    <input id="delete-password" type="password" placeholder="Confirm password" />
+    <button onclick="submitDeleteAccount()">Delete My Account</button>
+    <button onclick="closeDeleteModal()">Cancel</button>
+  </div>
+</div>
+
+
+<div id="universal-modal" class="resume-modal">
+  <div class="modal-box">
+    <h3 id="universal-modal-message"></h3>
+    <div id="universal-modal-buttons"></div>
+  </div>
+</div>
+
 <div id="bottom-bar">
 <button onclick="calculateRoute()">
 <span class="material-icons">calculate</span>
