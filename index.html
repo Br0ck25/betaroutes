@@ -46,11 +46,6 @@
     defer
   ></script>
 
-<!-- <link rel="icon" href="favicon.ico" /> -->
-
-
-  
-
     <style>
 
         html, body {
@@ -892,9 +887,6 @@ transform: translate(-50%, -48%);
   </head>
   <body>
 
-    
-<div id="g_id_signin"></div>
-
 
 <!-- Fixed Top Bar -->
 <div id="top-bar" style="
@@ -1114,172 +1106,88 @@ transform: translate(-50%, -48%);
 </div> <!-- 👈 closes #logout-message -->
 
 
+<!-- ✅ CLEANED MAIN FORM HTML (trip logging form only) -->
+<div class="container" style="margin-top: 15px;">
 
+  <label for="log-date">Date</label>
+  <input type="date" id="log-date" required />
 
+  <label for="start-address">Start Address</label>
+  <input type="text" id="start-address" placeholder="Enter start address" required />
 
+  <div id="destinations-container">
+    <div class="destination">
+      <label for="destination-1">Destination 1</label>
+      <input type="text" id="destination-1" list="recent-destinations" placeholder="Enter destination address" required />
+      <datalist id="recent-destinations"></datalist>
 
+      <label for="earnings-1">Earnings for Destination 1</label>
+      <input type="number" id="earnings-1" placeholder="Enter earnings for destination" required />
 
-    <div class="container" style="margin-top: 15px;">
-
-
-      <label for="log-date">Date</label>
-      <input type="date" id="log-date" required />
-
-      <label for="start-address">Start Address</label>
-      <input
-        type="text"
-        id="start-address"
-        placeholder="Enter start address"
-        required
-      />
-
-      <div id="destinations-container">
-        <div class="destination">
-          <label for="destination-1">Destination 1</label>
-          <input
-          type="text"
-          id="destination-1"
-          list="recent-destinations"
-          placeholder="Enter destination address"
-          required
-        />
-        <datalist id="recent-destinations"></datalist>
-        
-          <label for="earnings-1">Earnings for Destination 1</label>
-          <input
-            type="number"
-            id="earnings-1"
-            placeholder="Enter earnings for destination"
-            required
-          />
-          <div class="destination-actions">
-            <button class="delete-btn" onclick="deleteDestination(this)">
-              Delete
-            </button>
-            <button class="move-btn" onclick="moveDestinationUp(this)">
-              Move Up
-            </button>
-            <button class="move-btn" onclick="moveDestinationDown(this)">
-              Move Down
-            </button>
-          </div>
-        </div>
+      <div class="destination-actions">
+        <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
+        <button class="move-btn" onclick="moveDestinationUp(this)">Move Up</button>
+        <button class="move-btn" onclick="moveDestinationDown(this)">Move Down</button>
       </div>
+    </div>
+  </div>
 
-              <button onclick="addDestination()">Add Destination</button>
-      <label for="end-address">End Address</label>
-      <input
-        type="text"
-        id="end-address"
-        placeholder="Enter end address"
-        required
-      />
+  <button onclick="addDestination()">Add Destination</button>
 
-      <label for="mpg">Miles per Gallon (MPG)</label>
-      <input
-        type="number"
-        id="mpg"
-        placeholder="Enter miles per gallon"
-        required
-      />
+  <label for="end-address">End Address</label>
+  <input type="text" id="end-address" placeholder="Enter end address" required />
 
-      <label for="gas-price">Fuel Price per Gallon</label>
-      <input
-        type="number"
-        id="gas-price"
-        placeholder="Enter fuel price per gallon"
-        required
-      />
+  <label for="mpg">Miles per Gallon (MPG)</label>
+  <input type="number" id="mpg" placeholder="Enter miles per gallon" required />
 
-      <label for="start-time">Start Time</label>
-      <input type="time" id="start-time" placeholder="Enter start time" />
+  <label for="gas-price">Fuel Price per Gallon</label>
+  <input type="number" id="gas-price" placeholder="Enter fuel price per gallon" required />
 
-      <label for="end-time">End Time</label>
-      <input type="time" id="end-time" placeholder="Enter end time" />
+  <label for="start-time">Start Time</label>
+  <input type="time" id="start-time" placeholder="Enter start time" />
 
-<label for="total-hours">Total Hours</label>
+  <label for="end-time">End Time</label>
+  <input type="time" id="end-time" placeholder="Enter end time" />
 
-<div>
-  <input
-    type="text"
-    id="total-hours"
-    placeholder="Auto-filled from Start/End Time"
-    readonly
-    style="background-color: #eee; cursor: not-allowed;"
-  />
-
+  <label for="total-hours">Total Hours</label>
+  <input type="text" id="total-hours" placeholder="Auto-filled from Start/End Time" readonly style="background-color: #eee; cursor: not-allowed;" />
   <div id="hours-display" style="margin-top: 4px; font-size: 14px; color: #555;"></div>
-</div>
 
+  <div class="optional-costs">
+    <h3>Optional Daily Costs</h3>
+    <label for="maintenance-cost">Vehicle Maintenance Cost (Optional)</label>
+    <input type="number" id="maintenance-cost" placeholder="Enter maintenance cost for the day" />
 
+    <label for="supplies-cost">Supplies Cost (Optional)</label>
+    <input type="number" id="supplies-cost" placeholder="Enter supplies cost for the day" />
+  </div>
 
-      <div class="optional-costs">
-        <h3>Optional Daily Costs</h3>
-        <label for="maintenance-cost"
-          >Vehicle Maintenance Cost (Optional)</label
-        >
-        <input
-          type="number"
-          id="maintenance-cost"
-          placeholder="Enter maintenance cost for the day"
-        />
+  <label for="log-notes" style="margin-top: 8px; display: block; font-weight: bold; color: #555;">Notes (Optional)</label>
+  <textarea id="log-notes" rows="4" placeholder="Enter any notes for this trip" style="width: 100%; box-sizing: border-box; font-size: 16px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 10px; margin-top: 4px; margin-bottom: 12px; border-radius: 5px; border: 1px solid #ccc; resize: vertical;"></textarea>
 
-        <label for="supplies-cost">Supplies Cost (Optional)</label>
-        <input
-          type="number"
-          id="supplies-cost"
-          placeholder="Enter supplies cost for the day"
-        />
-      </div>
-<label for="log-notes" style="margin-top: 8px; display: block; font-weight: bold; color: #555;">Notes (Optional)</label>
-<textarea
-  id="log-notes"
-  rows="4"
-  placeholder="Enter any notes for this trip"
-  style="
-    width: 100%;
-    box-sizing: border-box;
-    font-size: 16px;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    padding: 10px;
-    margin-top: 4px;
-    margin-bottom: 12px;
-    border-radius: 5px;
-    border: 1px solid #ccc;
-    resize: vertical;
-  "
-></textarea>
+  <div id="confirmation-message" style="display: none; color: green; font-weight: bold; margin-top: 10px"></div>
 
-      <div
-        id="confirmation-message"
-        style="display: none; color: green; font-weight: bold; margin-top: 10px"
-      ></div>
+  <div class="container" style="padding: 0;">
+    <div id="results" class="hidden">
+      <p>Mileage: <span id="total-mileage"></span> miles</p>
+      <p>Drive Time: <span id="total-time"></span></p>
+      <p>Total Earnings: $<span id="total-earnings"></span></p>
+      <p>Fuel Cost: $<span id="fuel-cost"></span></p>
+      <p>Maintenance Cost: $<span id="maintenance-cost-result"></span></p>
+      <p>Supplies Cost: $<span id="supplies-cost-result"></span></p>
+      <p>Total Hours: <span id="total-hours"></span></p>
+      <p>Net Profit: $<span id="net-profit"></span></p>
+      <p>Net Profit per Hour (including drive time): $<span id="profit-per-hour"></span></p>
+    </div>
+  </div>
 
-      <div class="container" style="padding: 0;">
-  <div id="results" class="hidden">
-        <p>Mileage: <span id="total-mileage"></span> miles</p>
-        <p>Drive Time: <span id="total-time"></span></p>
-        <p>Total Earnings: $<span id="total-earnings"></span></p>
-        <p>Fuel Cost: $<span id="fuel-cost"></span></p>
-        <p>Maintenance Cost: $<span id="maintenance-cost-result"></span></p>
-        <p>Supplies Cost: $<span id="supplies-cost-result"></span></p>
-        <p>Total Hours: <span id="total-hours"></span></p> 
-
-        <p>Net Profit: $<span id="net-profit"></span></p>
-        <p>
-          Net Profit per Hour (including drive time): $<span
-            id="profit-per-hour"
-          ></span>
-        </p>
-        </div>
-      </div>
-
-<div id="map" class="hidden"></div>
-<div id="detailed-results" style="margin-top: 20px"></div>
-<div id="mileage-display" style="text-align: center; font-weight: bold; margin-top: 10px"></div>
-<div id="optimized-mileage-display" style="text-align: center; font-weight: bold; margin-top: 10px"></div>
+  <div id="map" class="hidden"></div>
+  <div id="detailed-results" style="margin-top: 20px"></div>
+  <div id="mileage-display" style="text-align: center; font-weight: bold; margin-top: 10px"></div>
+  <div id="optimized-mileage-display" style="text-align: center; font-weight: bold; margin-top: 10px"></div>
 
 </div>
+
 
 
     <div id="log-container">
