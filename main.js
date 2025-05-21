@@ -1,5 +1,5 @@
-let logEntries = [];
-let currentPage = 1;
+window.logEntries = [];
+window.currentPage = 1;
 let deferredPrompt = null;
 
 window.addEventListener("beforeinstallprompt", (e) => {
@@ -570,7 +570,7 @@ function logEntry(data) {
   data.netProfit = netProfitFloat.toFixed(2);
 
   localStorage.removeItem("draftTrip");
-  logEntries.unshift(data);
+  window.logEntries.unshift(data);
   saveLog();
 
   setTimeout(() => {
@@ -594,8 +594,8 @@ async function saveLog() {
   // 🛜 Detect if offline
   if (!navigator.onLine) {
     console.warn("🛜 Offline: Saving log locally.");
-    localStorage.setItem("pendingLogs", JSON.stringify(logEntries));
-    localStorage.setItem("cachedLogs", JSON.stringify(logEntries));
+    localStorage.setItem("pendingLogs", JSON.stringify(window.logEntries));
+    localStorage.setItem("cachedLogs", JSON.stringify(window.logEntries));
     showAlertModal(
       "⚠️ Offline: Route saved locally. Will sync when back online."
     );
@@ -609,7 +609,7 @@ async function saveLog() {
         "Content-Type": "application/json",
         Authorization: token,
       },
-      body: JSON.stringify(logEntries),
+      body: JSON.stringify(window.logEntries),
     });
 
     if (!response.ok) {
@@ -622,8 +622,8 @@ async function saveLog() {
     await syncAndReloadLogs();
   } catch (err) {
     console.error("❌ Save failed. Saving offline:", err);
-    localStorage.setItem("pendingLogs", JSON.stringify(logEntries));
-    localStorage.setItem("cachedLogs", JSON.stringify(logEntries));
+    localStorage.setItem("pendingLogs", JSON.stringify(window.logEntries));
+    localStorage.setItem("cachedLogs", JSON.stringify(window.logEntries));
     showAlertModal(
       "⚠️ Offline mode: Your changes are saved locally. We'll sync them next time you're online."
     );
@@ -726,7 +726,7 @@ async function syncAndReloadLogs() {
     console.log("🔄 Online detected: syncing and reloading logs...");
 
     await syncPendingLogs();
-    logEntries = await loadLog();
+    window.logEntries = await loadLog();
     displayLog();
 
     console.log("✅ Logs refreshed after reconnecting!");
@@ -770,7 +770,7 @@ async function logResults() {
   // ✅ Get calculation result
   const calculationResult = await calculateRouteData();
   if (calculationResult) {
-    currentPage = 1;
+    window.currentPage = 1;
     logEntry(calculationResult);
     displayLog();
     updateUI(calculationResult);
@@ -934,7 +934,7 @@ function displayLog(filterFn = () => true) {
 
   const totalPages = Math.ceil(filteredEntries.length / logsPerPage);
 
-  const start = (currentPage - 1) * logsPerPage;
+  const start = (window.currentPage - 1) * logsPerPage;
   const end = start + logsPerPage;
   const pageEntries = filteredEntries.slice(start, end);
 
@@ -945,7 +945,7 @@ function displayLog(filterFn = () => true) {
   } else {
     pageEntries.forEach((entry, index) => {
       if (entry) {
-        const realIndex = logEntries.findIndex(
+        const realIndex = window.logEntries.findIndex(
           (e) => JSON.stringify(e) === JSON.stringify(entry)
         );
         const listItem = document.createElement("li");
@@ -1000,26 +1000,26 @@ function renderPaginationButtons(totalPages) {
 
   paginationContainer.innerHTML = `
     <div style="margin-bottom: 10px; font-size: 18px;">
-      Page ${currentPage} of ${totalPages}
+      Page ${window.currentPage} of ${totalPages}
     </div>
     <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 10px;">
       <button onclick="prevPage()" ${
-        currentPage === 1 ? "disabled" : ""
+        window.currentPage === 1 ? "disabled" : ""
       }>Previous</button>
       <button onclick="nextPage()" ${
-        currentPage === totalPages ? "disabled" : ""
+        window.currentPage === totalPages ? "disabled" : ""
       }>Next</button>
     </div>
     <div style="margin-top: 10px;">
       Go to Page: 
-      <input type="number" id="page-input" min="1" max="${totalPages}" value="${currentPage}" style="width: 60px; text-align: center;">
+      <input type="number" id="page-input" min="1" max="${totalPages}" value="${window.currentPage}" style="width: 60px; text-align: center;">
       <button onclick="goToPage(${totalPages})">Go</button>
     </div>
   `;
 }
 function prevPage() {
-  if (currentPage > 1) {
-    currentPage--;
+  if (window.currentPage > 1) {
+    window.currentPage--;
     displayLog();
     document
       .getElementById("log-container")
@@ -1028,9 +1028,9 @@ function prevPage() {
 }
 
 function nextPage() {
-  const totalPages = Math.ceil(logEntries.length / logsPerPage);
-  if (currentPage < totalPages) {
-    currentPage++;
+  const totalPages = Math.ceil(window.logEntries.length / logsPerPage);
+  if (window.currentPage < totalPages) {
+    window.currentPage++;
     displayLog();
     document
       .getElementById("log-container")
@@ -1043,7 +1043,7 @@ function goToPage(totalPages) {
   const page = parseInt(input.value);
 
   if (!isNaN(page) && page >= 1 && page <= totalPages) {
-    currentPage = page;
+    window.currentPage = page;
     displayLog();
     document
       .getElementById("log-container")
@@ -1055,7 +1055,7 @@ function goToPage(totalPages) {
 function organizeLogByDay() {
   const logByDay = {};
 
-  logEntries.forEach((entry) => {
+  window.logEntries.forEach((entry) => {
     if (!entry?.date) return;
     if (!logByDay[entry.date]) {
       logByDay[entry.date] = [];
@@ -1066,7 +1066,7 @@ function organizeLogByDay() {
   return logByDay;
 }
 function toggleLogEntryDetails(index) {
-  const entry = logEntries[index];
+  const entry = window.logEntries[index];
   const detailsDiv = document.getElementById(`details-${index}`);
   const toggleButton = document.getElementById(`toggle-button-${index}`);
   const summaryDiv = document.getElementById(`summary-${index}`);
@@ -1138,7 +1138,7 @@ function toggleLogEntryDetails(index) {
   }
 }
 function openLogEntryInGoogleMaps(index) {
-  const entry = logEntries[index];
+  const entry = window.logEntries[index];
   if (!entry) {
     console.error("Invalid log entry index");
     return;
@@ -1161,7 +1161,7 @@ function openLogEntryInGoogleMaps(index) {
 }
 function deleteLogEntry(index) {
   showConfirmModal("Are you sure you want to delete this log entry?", () => {
-    logEntries.splice(index, 1);
+    window.logEntries.splice(index, 1);
     saveLog();
     filterLogs();
   });
@@ -1169,7 +1169,7 @@ function deleteLogEntry(index) {
 function updateLogSummary(filterFn) {
   const summaryDiv = document.getElementById("log-summary");
 
-  const filteredEntries = logEntries.filter(
+  const filteredEntries = window.logEntries.filter(
     (entry) => entry?.date && filterFn(entry.date, entry)
   );
 
@@ -1331,10 +1331,10 @@ function closeAuthModal() {
 function exportToCSVWithTotals() {
   const filtered =
     typeof currentFilterFn === "function"
-      ? logEntries.filter(
+      ? window.logEntries.filter(
           (entry) => entry?.date && currentFilterFn(entry.date, entry)
         )
-      : logEntries;
+      : window.logEntries;
 
   if (filtered.length === 0) {
     alert("❌ No entries to export.");
@@ -1469,10 +1469,10 @@ function exportToCSVWithTotals() {
 function exportToPDFWithTotals() {
   const filtered =
     typeof currentFilterFn === "function"
-      ? logEntries.filter(
+      ? window.logEntries.filter(
           (entry) => entry?.date && currentFilterFn(entry.date, entry)
         )
-      : logEntries;
+      : window.logEntries;
 
   if (filtered.length === 0) {
     alert("❌ No entries to export.");
@@ -1693,7 +1693,7 @@ async function submitDeleteAccount() {
     document.getElementById("delete-password").value = "";
 
     // 3. Clear in-memory logs
-    logEntries = [];
+    window.logEntries = [];
 
     // 4. Clear UI elements
     document.getElementById("log-list").innerHTML = "";
@@ -1822,7 +1822,7 @@ async function importLog() {
             lastModified: new Date().toISOString(),
           };
 
-          if (isDuplicateEntry(entry, logEntries)) {
+          if (isDuplicateEntry(entry, window.logEntries)) {
             duplicateCount++;
             continue;
           }
@@ -1847,7 +1847,7 @@ async function importLog() {
         return;
       }
 
-      logEntries = [...logEntries, ...newLogEntries];
+      window.logEntries = [...window.logEntries, ...newLogEntries];
       await saveLog();
       filterLogs();
       if (successCount > 0) {
@@ -2486,7 +2486,7 @@ async function optimizeRoute() {
 
 function openEditForm(index) {
   editingIndex = index;
-  const entry = logEntries[index];
+  const entry = window.logEntries[index];
 
   if (!entry) {
     console.error("No entry found for editing");
@@ -2614,7 +2614,7 @@ async function saveEditedLogEntry() {
     return;
   }
 
-  const entry = logEntries[editingIndex];
+  const entry = window.logEntries[editingIndex];
 
   entry.date = document.getElementById("edit-date").value;
   entry.startClock = document.getElementById("edit-start-time")?.value || "";
@@ -2973,8 +2973,8 @@ async function saveLog() {
   // 🛜 Detect if offline
   if (!navigator.onLine) {
     console.warn("🛜 Offline: Saving log locally.");
-    localStorage.setItem("pendingLogs", JSON.stringify(logEntries));
-    localStorage.setItem("cachedLogs", JSON.stringify(logEntries));
+    localStorage.setItem("pendingLogs", JSON.stringify(window.logEntries));
+    localStorage.setItem("cachedLogs", JSON.stringify(window.logEntries));
     showAlertModal(
       "⚠️ Offline: Route saved locally. Will sync when back online."
     );
@@ -2988,7 +2988,7 @@ async function saveLog() {
         "Content-Type": "application/json",
         Authorization: token,
       },
-      body: JSON.stringify(logEntries),
+      body: JSON.stringify(window.logEntries),
     });
 
     if (!response.ok) {
@@ -3001,8 +3001,8 @@ async function saveLog() {
     await syncAndReloadLogs();
   } catch (err) {
     console.error("❌ Save failed. Saving offline:", err);
-    localStorage.setItem("pendingLogs", JSON.stringify(logEntries));
-    localStorage.setItem("cachedLogs", JSON.stringify(logEntries));
+    localStorage.setItem("pendingLogs", JSON.stringify(window.logEntries));
+    localStorage.setItem("cachedLogs", JSON.stringify(window.logEntries));
     showAlertModal(
       "⚠️ Offline mode: Your changes are saved locally. We'll sync them next time you're online."
     );
@@ -3026,10 +3026,10 @@ async function syncAndReloadLogs() {
     // First, sync any pending logs if needed
     await syncPendingLogs();
 
-    logEntries = await loadLog();
+    window.logEntries = await loadLog();
 
     // 🆕 Ensure all logs have lastModified timestamp
-    logEntries = logEntries.map((entry) => ({
+    window.logEntries = window.logEntries.map((entry) => ({
       ...entry,
       lastModified: entry.lastModified || new Date().toISOString(),
     }));
