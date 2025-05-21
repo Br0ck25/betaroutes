@@ -3087,6 +3087,49 @@ document.addEventListener("click", function (event) {
     closeMenu();
   }
 });
-// Call once on page load too
-document.addEventListener("DOMContentLoaded", () => {
-});
+
+function toggleMenu() {
+  const menu = document.getElementById("account-menu");
+  if (menu) {
+    menu.classList.toggle("show");
+  }
+}
+
+function toggleHamburgerManageAccountMenu() {
+  const menu = document.getElementById("hamburger-manage-account-menu");
+  const arrow = document.getElementById("hamburger-manage-account-arrow");
+  if (!menu || !arrow) return;
+  const isOpen = menu.style.maxHeight && menu.style.maxHeight !== "0px";
+  menu.style.maxHeight = isOpen ? "0" : "300px";
+  arrow.style.transform = isOpen ? "rotate(0deg)" : "rotate(180deg)";
+}
+
+function toggleHamburgerManageLogMenu() {
+  const menu = document.getElementById("hamburger-manage-log-menu");
+  const arrow = document.getElementById("hamburger-manage-arrow");
+  if (!menu || !arrow) return;
+  const isOpen = menu.style.maxHeight && menu.style.maxHeight !== "0px";
+  menu.style.maxHeight = isOpen ? "0" : "300px";
+  arrow.style.transform = isOpen ? "rotate(0deg)" : "rotate(180deg)";
+}
+
+function toggleHamburgerSettingsMenu() {
+  const menu = document.getElementById("hamburger-settings-menu");
+  const arrow = document.getElementById("hamburger-settings-arrow");
+  if (!menu || !arrow) return;
+  const isOpen = menu.style.maxHeight && menu.style.maxHeight !== "0px";
+  menu.style.maxHeight = isOpen ? "0" : "300px";
+  arrow.style.transform = isOpen ? "rotate(0deg)" : "rotate(180deg)";
+}
+
+function resumeDraftTrip() {
+  if (!window.__pendingDraftTrip) return;
+  localStorage.setItem("draftTrip", JSON.stringify(window.__pendingDraftTrip));
+  document.getElementById("resume-modal").style.display = "none";
+  location.reload();
+}
+
+function discardDraftTrip() {
+  localStorage.removeItem("draftTrip");
+  document.getElementById("resume-modal").style.display = "none";
+}
