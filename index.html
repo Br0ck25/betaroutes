@@ -2170,12 +2170,6 @@ const totalWorkedMinutes = workedMinutes + driveMinutes;
 
 });
 
-  // 🆕 After selecting start time, auto-focus end time after slight delay
-  document.getElementById("start-time").addEventListener("change", () => {
-    setTimeout(() => document.getElementById("end-time")?.focus(), 200);
-  });
-
-
 
       function updateOfflineBanner() {
   const banner = document.getElementById("offline-banner");
