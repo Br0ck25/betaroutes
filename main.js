@@ -1,4 +1,6 @@
 let deferredPrompt = null;
+let logEntries = [];
+let currentPage = 1;
 
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault();
