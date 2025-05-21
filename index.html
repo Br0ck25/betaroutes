@@ -468,9 +468,7 @@
     </div>
    </div>
    <!-- Step 3: Log Entries (list stays exactly as it was) -->
-   <ul id="log-list">
-    <!-- Log entries are dynamically added here -->
-   </ul>
+   
   </div>
   <!-- end of #log-container -->
   <ul id="log-list">
@@ -791,6 +789,12 @@ const totalWorkedMinutes = workedMinutes + driveMinutes;
     setTimeout(() => document.getElementById("end-time")?.focus(), 200);
   });
 
+
+
+
+// Call once on page load too
+document.addEventListener("DOMContentLoaded", () => {
+});
 
       let fileReaderBusy = false; // global or top-level
       let isSignup = false;
