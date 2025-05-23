@@ -3103,24 +3103,25 @@ function clockInNow() {
   // ✅ Only auto-calculate if form is ready
   const destinations = document.querySelectorAll('input[id^="destination-"]');
   const filled = Array.from(destinations).some((input) => input.value.trim());
-  const mpg = document.getElementById("mpg").value;
-  const gas = document.getElementById("gas-price").value;
+  const mpg = parseFloat(document.getElementById("mpg").value);
+  const gas = parseFloat(document.getElementById("gas-price").value);
 
-  if (filled && mpg && gas) {
-    calculateRoute(); // 🚀 auto-run
+  if (filled && !isNaN(mpg) && !isNaN(gas)) {
+    calculateRoute();
   }
 }
 
 
-function clockOutNow() {
+async function clockOutNow() {
   const now = new Date();
   const timeStr = now.toTimeString().slice(0, 5);
   document.getElementById("end-time").value = timeStr;
   showConfirmationMessage(`🕔 Clocked out at ${timeStr}`);
 
   // ✅ Automatically calculate and log the route
-  calculateAndLogRoute();
+  await calculateAndLogRoute();
 }
+
 
 async function calculateAndLogRoute() {
   const result = await calculateRouteData();
