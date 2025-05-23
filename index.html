@@ -2182,13 +2182,48 @@ const totalWorkedMinutes = workedMinutes + driveMinutes;
   });
 
   updateDatalistSuggestions();
-  
+
   // ✅ Show "Trip in progress" banner if one exists
   const ongoing = localStorage.getItem("ongoingTrip");
   if (ongoing) {
     const banner = document.getElementById("ongoing-trip-banner");
     if (banner) banner.style.display = "block";
   }
+ // ✅ Restore ongoing trip (if one exists)
+  const ongoingTrip = localStorage.getItem("ongoingTrip");
+  if (ongoingTrip) {
+    const trip = JSON.parse(ongoingTrip);
+    document.getElementById("start-address").value = trip.startTime || "";
+    document.getElementById("start-time").value = trip.startClock || "";
+    document.getElementById("mpg").value = trip.mpg || "";
+    document.getElementById("gas-price").value = trip.gasPrice || "";
+
+    const container = document.getElementById("destinations-container");
+    container.innerHTML = "";
+    trip.destinations.forEach((d, i) => {
+      const div = document.createElement("div");
+      div.classList.add("destination");
+      div.innerHTML = `
+        <label for="destination-${i + 1}">Destination ${i + 1}</label>
+        <input type="text" id="destination-${i + 1}" list="recent-destinations" value="${d}">
+        <label for="earnings-${i + 1}">Earnings for Destination ${i + 1}</label>
+        <input type="number" id="earnings-${i + 1}" value="${trip.earnings[i] || 0}">
+        <div class="destination-actions">
+          <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
+          <button class="move-btn" onclick="moveDestinationUp(this)">Move Up</button>
+          <button class="move-btn" onclick="moveDestinationDown(this)">Move Down</button>
+        </div>
+      `;
+      container.appendChild(div);
+      initAutocompleteDestination(div.querySelector('input[type="text"]'));
+    });
+
+    document.getElementById("ongoing-trip-banner").style.display = "block";
+  }
+
+  // 👇 Then continue with loading saved logs
+  logEntries = await loadLog();
+  displayLog();
 });
 
 
