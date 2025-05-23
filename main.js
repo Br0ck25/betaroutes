@@ -3094,46 +3094,34 @@ document.addEventListener("click", function (event) {
 
 function clockInNow() {
   const now = new Date();
-  const hours = now.getHours().toString().padStart(2, '0');
-  const minutes = now.getMinutes().toString().padStart(2, '0');
-  const timeStr = `${hours}:${minutes}`;
+  const timeStr = now.toTimeString().slice(0, 5);
   document.getElementById("start-time").value = timeStr;
   showConfirmationMessage(`🕒 Clocked in at ${timeStr}`);
 
-  // ✅ Only auto-calculate if form is ready
-  const destinations = document.querySelectorAll('input[id^="destination-"]');
-  const filled = Array.from(destinations).some((input) => input.value.trim());
-  const mpg = parseFloat(document.getElementById("mpg").value);
-  const gas = parseFloat(document.getElementById("gas-price").value);
+  // ⏺ Save ongoing trip draft
+  const draft = {
+    startClock: timeStr,
+    startTime: document.getElementById("start-address").value,
+    mpg: document.getElementById("mpg").value,
+    gasPrice: document.getElementById("gas-price").value,
+    destinations: Array.from(document.querySelectorAll('input[id^="destination-"]')).map(input => input.value),
+    earnings: Array.from(document.querySelectorAll('input[id^="earnings-"]')).map(input => parseFloat(input.value || 0)),
+  };
+  localStorage.setItem("ongoingTrip", JSON.stringify(draft));
 
-  if (filled && !isNaN(mpg) && !isNaN(gas)) {
-    calculateRoute();
-  }
+  // 🚀 Run route calculation
+  calculateRoute();
 }
 
 
-async function clockOutNow() {
+function clockOutNow() {
   const now = new Date();
   const timeStr = now.toTimeString().slice(0, 5);
   document.getElementById("end-time").value = timeStr;
   showConfirmationMessage(`🕔 Clocked out at ${timeStr}`);
 
-  // ✅ Automatically calculate and log the route
-  await calculateAndLogRoute();
-}
-
-
-async function calculateAndLogRoute() {
-  const result = await calculateRouteData();
-  if (result) {
-    logEntry(result);
-    displayLog();
-    updateUI(result);
-    clearTripForm(); // ✅ clear form after logging
-    showConfirmationMessage("✅ Trip logged after clocking out!");
-  } else {
-    showAlertModal("❌ Could not log the trip. Please complete the form.");
-  }
+  // 🚀 Log the trip (same as clicking "Log Route" button)
+  logResults();
 }
 
 function clockInEdit() {
