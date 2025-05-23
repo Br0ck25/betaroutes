@@ -3092,27 +3092,36 @@ document.addEventListener("click", function (event) {
 
 function clockInNow() {
   const now = new Date();
-  document.getElementById("start-time").value = now.toISOString().slice(11, 16);
-  document.getElementById("start-time").dispatchEvent(new Event("change"));
+  const hours = now.getHours().toString().padStart(2, '0');
+  const minutes = now.getMinutes().toString().padStart(2, '0');
+  const timeStr = `${hours}:${minutes}`;
+  document.getElementById("start-time").value = timeStr;
+  showConfirmationMessage(`🕒 Clocked in at ${timeStr}`);
 }
 
 function clockOutNow() {
   const now = new Date();
-  document.getElementById("end-time").value = now.toISOString().slice(11, 16);
-  document.getElementById("end-time").dispatchEvent(new Event("change"));
+  const hours = now.getHours().toString().padStart(2, '0');
+  const minutes = now.getMinutes().toString().padStart(2, '0');
+  const timeStr = `${hours}:${minutes}`;
+  document.getElementById("end-time").value = timeStr;
+  showConfirmationMessage(`🕔 Clocked out at ${timeStr}`);
 }
 
 function clockInEdit() {
   const now = new Date();
-  document.getElementById("edit-start-time").value = now.toISOString().slice(11, 16);
-  document.getElementById("edit-start-time").dispatchEvent(new Event("change"));
+  const timeStr = now.toTimeString().slice(0, 5);
+  document.getElementById("edit-start-time").value = timeStr;
+  showConfirmationMessage(`🕒 Clocked in (edit) at ${timeStr}`);
 }
 
 function clockOutEdit() {
   const now = new Date();
-  document.getElementById("edit-end-time").value = now.toISOString().slice(11, 16);
-  document.getElementById("edit-end-time").dispatchEvent(new Event("change"));
+  const timeStr = now.toTimeString().slice(0, 5);
+  document.getElementById("edit-end-time").value = timeStr;
+  showConfirmationMessage(`🕔 Clocked out (edit) at ${timeStr}`);
 }
+
 function finishOngoingTrip() {
   const ongoing = JSON.parse(localStorage.getItem("ongoingTrip"));
   if (!ongoing) return;
