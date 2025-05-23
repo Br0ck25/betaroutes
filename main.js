@@ -3099,15 +3099,40 @@ function clockInNow() {
   const timeStr = `${hours}:${minutes}`;
   document.getElementById("start-time").value = timeStr;
   showConfirmationMessage(`🕒 Clocked in at ${timeStr}`);
+
+  // ✅ Only auto-calculate if form is ready
+  const destinations = document.querySelectorAll('input[id^="destination-"]');
+  const filled = Array.from(destinations).some((input) => input.value.trim());
+  const mpg = document.getElementById("mpg").value;
+  const gas = document.getElementById("gas-price").value;
+
+  if (filled && mpg && gas) {
+    calculateRoute(); // 🚀 auto-run
+  }
 }
+
 
 function clockOutNow() {
   const now = new Date();
-  const hours = now.getHours().toString().padStart(2, '0');
-  const minutes = now.getMinutes().toString().padStart(2, '0');
-  const timeStr = `${hours}:${minutes}`;
+  const timeStr = now.toTimeString().slice(0, 5);
   document.getElementById("end-time").value = timeStr;
   showConfirmationMessage(`🕔 Clocked out at ${timeStr}`);
+
+  // ✅ Automatically calculate and log the route
+  calculateAndLogRoute();
+}
+
+async function calculateAndLogRoute() {
+  const result = await calculateRouteData();
+  if (result) {
+    logEntry(result);
+    displayLog();
+    updateUI(result);
+    clearTripForm(); // ✅ clear form after logging
+    showConfirmationMessage("✅ Trip logged after clocking out!");
+  } else {
+    showAlertModal("❌ Could not log the trip. Please complete the form.");
+  }
 }
 
 function clockInEdit() {
