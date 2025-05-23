@@ -1,3 +1,5 @@
+console.log("✅ main.js loaded");
+
 window.logEntries = [];
 window.currentPage = 1;
 let deferredPrompt = null;
