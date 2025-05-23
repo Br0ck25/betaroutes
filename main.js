@@ -3092,6 +3092,35 @@ document.addEventListener("click", function (event) {
   }
 });
 
+function clockInNow() {
+  console.log("🔥 clockInNow() called");
+
+  const now = new Date();
+  const timeStr = now.toTimeString().slice(0, 5);
+  document.getElementById("start-time").value = timeStr;
+  showConfirmationMessage(`🕒 Clocked in at ${timeStr}`);
+
+  const draft = {
+    startClock: timeStr,
+    startTime: document.getElementById("start-address")?.value || "",
+    mpg: document.getElementById("mpg")?.value || "",
+    gasPrice: document.getElementById("gas-price")?.value || "",
+    destinations: Array.from(document.querySelectorAll('input[id^="destination-"]')).map(input => input.value),
+    earnings: Array.from(document.querySelectorAll('input[id^="earnings-"]')).map(input => parseFloat(input.value || 0))
+  };
+
+  console.log("📝 Saving this to localStorage:", draft);
+
+  try {
+    localStorage.setItem("ongoingTrip", JSON.stringify(draft));
+    console.log("✅ ongoingTrip saved!");
+  } catch (e) {
+    console.error("❌ Failed to save ongoingTrip:", e);
+  }
+
+  console.log("🧪 Now reading it back:", localStorage.getItem("ongoingTrip"));
+}
+
 
 function clockOutNow() {
   const now = new Date();
