@@ -2,8 +2,6 @@ window.logEntries = [];
 window.currentPage = 1;
 let deferredPrompt = null;
 
-let deferredPrompt = null;
-
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault();
   deferredPrompt = e;
@@ -3091,3 +3089,39 @@ document.addEventListener("click", function (event) {
     closeMenu();
   }
 });
+function clockInNow() {
+  const now = new Date();
+  document.getElementById("start-time").value = now.toISOString().slice(11, 16);
+  document.getElementById("start-time").dispatchEvent(new Event("change"));
+}
+
+function clockOutNow() {
+  const now = new Date();
+  document.getElementById("end-time").value = now.toISOString().slice(11, 16);
+  document.getElementById("end-time").dispatchEvent(new Event("change"));
+}
+
+function clockInEdit() {
+  const now = new Date();
+  document.getElementById("edit-start-time").value = now.toISOString().slice(11, 16);
+  document.getElementById("edit-start-time").dispatchEvent(new Event("change"));
+}
+
+function clockOutEdit() {
+  const now = new Date();
+  document.getElementById("edit-end-time").value = now.toISOString().slice(11, 16);
+  document.getElementById("edit-end-time").dispatchEvent(new Event("change"));
+}
+function finishOngoingTrip() {
+  const ongoing = JSON.parse(localStorage.getItem("ongoingTrip"));
+  if (!ongoing) return;
+
+  ongoing.endClock = new Date().toTimeString().slice(0,5);
+  ongoing.lastModified = new Date().toISOString();
+
+  logEntries.unshift(ongoing);
+  saveLog();
+  localStorage.removeItem("ongoingTrip");
+  clearTripForm();
+  showConfirmationMessage("✅ Trip finished and saved!");
+}
