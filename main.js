@@ -3092,30 +3092,20 @@ document.addEventListener("click", function (event) {
   }
 });
 
-function clockInNow() {
-  console.log("✅ clockInNow() triggered");
-
+async function clockInNow() {
   const now = new Date();
-  const timeStr = now.toTimeString().slice(0, 5);
+  const hours = now.getHours().toString().padStart(2, '0');
+  const minutes = now.getMinutes().toString().padStart(2, '0');
+  const timeStr = `${hours}:${minutes}`;
   document.getElementById("start-time").value = timeStr;
   showConfirmationMessage(`🕒 Clocked in at ${timeStr}`);
 
-  const draft = {
-    startClock: timeStr,
-    startTime: document.getElementById("start-address").value,
-    destinations: Array.from(document.querySelectorAll('input[id^="destination-"]')).map(input => input.value),
-    earnings: Array.from(document.querySelectorAll('input[id^="earnings-"]')).map(input => parseFloat(input.value || 0)),
-    mpg: document.getElementById("mpg").value,
-    gasPrice: document.getElementById("gas-price").value,
-  };
+  const data = await calculateRouteData(); // Try to calculate if form is ready
 
-  console.log("📝 Saving to localStorage.ongoingTrip:", draft);
-  localStorage.setItem("ongoingTrip", JSON.stringify(draft));
-
-  calculateRoute();
+  if (data && data.startClock && !data.endClock) {
+    localStorage.setItem("ongoingTrip", JSON.stringify(data));
+  }
 }
-
-
 
 
 function clockOutNow() {
