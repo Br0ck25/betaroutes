@@ -3092,21 +3092,25 @@ document.addEventListener("click", function (event) {
   }
 });
 
-async function clockInNow() {
+function clockInNow() {
   const now = new Date();
   const timeStr = now.toTimeString().slice(0, 5);
   document.getElementById("start-time").value = timeStr;
   showConfirmationMessage(`🕒 Clocked in at ${timeStr}`);
 
-  // Try to calculate route data immediately
-  const data = await calculateRouteData();
+  const draft = {
+    startClock: timeStr,
+    startTime: document.getElementById("start-address").value,
+    mpg: document.getElementById("mpg").value,
+    gasPrice: document.getElementById("gas-price").value,
+    destinations: Array.from(document.querySelectorAll('input[id^="destination-"]')).map(input => input.value),
+    earnings: Array.from(document.querySelectorAll('input[id^="earnings-"]')).map(input => parseFloat(input.value || 0)),
+  };
 
-  // ✅ Save as ongoing trip if valid and not clocked out yet
-  if (data && data.startClock && !data.endClock) {
-    localStorage.setItem("ongoingTrip", JSON.stringify(data));
-    console.log("✅ Saved to ongoingTrip:", data);
-  }
+  localStorage.setItem("ongoingTrip", JSON.stringify(draft));
+  console.log("✅ Saved partial ongoingTrip:", draft);
 }
+
 
 
 
@@ -3147,6 +3151,7 @@ function finishOngoingTrip() {
   clearTripForm();
   showConfirmationMessage("✅ Trip finished and saved!");
 }
+
 window.clockInNow = clockInNow;
 window.clockOutNow = clockOutNow;
 window.clockInEdit = clockInEdit;
