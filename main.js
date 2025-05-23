@@ -3089,6 +3089,7 @@ document.addEventListener("click", function (event) {
     closeMenu();
   }
 });
+
 function clockInNow() {
   const now = new Date();
   document.getElementById("start-time").value = now.toISOString().slice(11, 16);
@@ -3125,3 +3126,5 @@ function finishOngoingTrip() {
   clearTripForm();
   showConfirmationMessage("✅ Trip finished and saved!");
 }
+window.clockInNow = clockInNow;
+window.clockOutNow = clockOutNow;
