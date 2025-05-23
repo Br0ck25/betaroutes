@@ -3098,20 +3098,20 @@ function clockInNow() {
   document.getElementById("start-time").value = timeStr;
   showConfirmationMessage(`🕒 Clocked in at ${timeStr}`);
 
-  // ⏺ Save ongoing trip draft
+  // ✅ Save an ongoing trip object immediately
   const draft = {
     startClock: timeStr,
     startTime: document.getElementById("start-address").value,
-    mpg: document.getElementById("mpg").value,
-    gasPrice: document.getElementById("gas-price").value,
     destinations: Array.from(document.querySelectorAll('input[id^="destination-"]')).map(input => input.value),
     earnings: Array.from(document.querySelectorAll('input[id^="earnings-"]')).map(input => parseFloat(input.value || 0)),
+    mpg: document.getElementById("mpg").value,
+    gasPrice: document.getElementById("gas-price").value,
   };
   localStorage.setItem("ongoingTrip", JSON.stringify(draft));
 
-  // 🚀 Run route calculation
-  calculateRoute();
+  calculateRoute(); // optional: calculate right away
 }
+
 
 
 function clockOutNow() {
