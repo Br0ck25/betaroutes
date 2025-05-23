@@ -966,6 +966,12 @@ transform: translate(-50%, -48%);
 ">
 
   🛜 Offline Mode: Showing cached routes.
+
+
+</div>
+<div id="ongoing-trip-banner" style="display: none; background: #fff3cd; color: #856404; padding: 12px; text-align: center; border: 1px solid #ffeeba; border-radius: 6px; margin: 20px auto; max-width: 600px;">
+  🚕 You have a trip in progress.
+  <button onclick="finishOngoingTrip()" style="margin-left: 12px;">Clock Out and Finalize</button>
 </div>
 
 
@@ -1168,6 +1174,11 @@ transform: translate(-50%, -48%);
 
       <label for="end-time">End Time</label>
       <input type="time" id="end-time" placeholder="Enter end time" />
+      <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+  <button onclick="clockInNow()">Clock In Now</button>
+  <button onclick="clockOutNow()">Clock Out Now</button>
+</div>
+
 
 <label for="total-hours">Total Hours</label>
 
@@ -1705,6 +1716,11 @@ function isDuplicateEntry(entry, existingLog) {
         <label for="edit-end-time">End Time</label>
         <input type="time" id="edit-end-time" />
       </div>
+      <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+  <button onclick="clockInEdit()">Clock In Now</button>
+  <button onclick="clockOutEdit()">Clock Out Now</button>
+</div>
+
 
       <label for="edit-start-address">Start Address</label>
       <input type="text" id="edit-start-address" />
@@ -2166,8 +2182,13 @@ const totalWorkedMinutes = workedMinutes + driveMinutes;
   });
 
   updateDatalistSuggestions();
-
-
+  
+  // ✅ Show "Trip in progress" banner if one exists
+  const ongoing = localStorage.getItem("ongoingTrip");
+  if (ongoing) {
+    const banner = document.getElementById("ongoing-trip-banner");
+    if (banner) banner.style.display = "block";
+  }
 });
 
 
@@ -2852,6 +2873,11 @@ document.getElementById("map")?.scrollIntoView({ behavior: "smooth" });
   data.gasPrice = parseFloat(document.getElementById("gas-price").value) || 0;
   data.lastModified = new Date().toISOString();
   data.notes = document.getElementById("log-notes")?.value || "";
+   
+  // ✅ Save partial trip if clocked in but not out
+  if (data.startClock && !data.endClock) {
+    localStorage.setItem("ongoingTrip", JSON.stringify(data));
+  }
 
 
   // ✅ Calculate total time from start and end clock times
