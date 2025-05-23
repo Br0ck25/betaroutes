@@ -3100,16 +3100,21 @@ function clockInNow() {
 
   const draft = {
     startClock: timeStr,
-    startTime: document.getElementById("start-address").value,
-    mpg: document.getElementById("mpg").value,
-    gasPrice: document.getElementById("gas-price").value,
+    startTime: document.getElementById("start-address").value || "",
+    mpg: document.getElementById("mpg").value || "",
+    gasPrice: document.getElementById("gas-price").value || "",
     destinations: Array.from(document.querySelectorAll('input[id^="destination-"]')).map(input => input.value),
     earnings: Array.from(document.querySelectorAll('input[id^="earnings-"]')).map(input => parseFloat(input.value || 0)),
   };
 
-  localStorage.setItem("ongoingTrip", JSON.stringify(draft));
-  console.log("✅ Saved partial ongoingTrip:", draft);
+  try {
+    localStorage.setItem("ongoingTrip", JSON.stringify(draft));
+    console.log("✅ Saved to ongoingTrip:", draft);
+  } catch (e) {
+    console.error("❌ Failed to save ongoingTrip:", e);
+  }
 }
+
 
 
 
