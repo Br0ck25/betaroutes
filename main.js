@@ -3094,18 +3094,20 @@ document.addEventListener("click", function (event) {
 
 async function clockInNow() {
   const now = new Date();
-  const hours = now.getHours().toString().padStart(2, '0');
-  const minutes = now.getMinutes().toString().padStart(2, '0');
-  const timeStr = `${hours}:${minutes}`;
+  const timeStr = now.toTimeString().slice(0, 5);
   document.getElementById("start-time").value = timeStr;
   showConfirmationMessage(`🕒 Clocked in at ${timeStr}`);
 
-  const data = await calculateRouteData(); // Try to calculate if form is ready
+  // Try to calculate route data immediately
+  const data = await calculateRouteData();
 
+  // ✅ Save as ongoing trip if valid and not clocked out yet
   if (data && data.startClock && !data.endClock) {
     localStorage.setItem("ongoingTrip", JSON.stringify(data));
+    console.log("✅ Saved to ongoingTrip:", data);
   }
 }
+
 
 
 function clockOutNow() {
