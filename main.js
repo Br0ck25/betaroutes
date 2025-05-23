@@ -3093,12 +3093,13 @@ document.addEventListener("click", function (event) {
 });
 
 function clockInNow() {
+  console.log("✅ clockInNow() triggered");
+
   const now = new Date();
   const timeStr = now.toTimeString().slice(0, 5);
   document.getElementById("start-time").value = timeStr;
   showConfirmationMessage(`🕒 Clocked in at ${timeStr}`);
 
-  // ✅ Save an ongoing trip object immediately
   const draft = {
     startClock: timeStr,
     startTime: document.getElementById("start-address").value,
@@ -3107,10 +3108,13 @@ function clockInNow() {
     mpg: document.getElementById("mpg").value,
     gasPrice: document.getElementById("gas-price").value,
   };
+
+  console.log("📝 Saving to localStorage.ongoingTrip:", draft);
   localStorage.setItem("ongoingTrip", JSON.stringify(draft));
 
-  calculateRoute(); // optional: calculate right away
+  calculateRoute();
 }
+
 
 
 
