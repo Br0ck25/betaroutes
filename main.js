@@ -3128,3 +3128,5 @@ function finishOngoingTrip() {
 }
 window.clockInNow = clockInNow;
 window.clockOutNow = clockOutNow;
+window.clockInEdit = clockInEdit;
+window.clockOutEdit = clockOutEdit;
