@@ -1,8 +1,12 @@
 
 <!DOCTYPE html>
 <html lang="en" style="padding-bottom: env(safe-area-inset-bottom); background: white;">
+
  
   <head>
+
+
+
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -12,10 +16,12 @@
     Go Route Yourself - Route and Cost Calculator with Log - Plan, Optimize, and Track Your Trips
     </title>
 
+
     <meta
       name="description"
       content="Easily calculate driving routes, optimize stops, track trip costs, and log your earnings. Save your routes securely and export your trip logs."
     />
+
     <!-- Open Graph (for social sharing) -->
     <meta property="og:title" content="Route and Cost Calculator with Log" />
     <meta
@@ -960,12 +966,6 @@ transform: translate(-50%, -48%);
 ">
 
   🛜 Offline Mode: Showing cached routes.
-
-
-</div>
-<div id="ongoing-trip-banner" style="display: none; background: #fff3cd; color: #856404; padding: 12px; text-align: center; border: 1px solid #ffeeba; border-radius: 6px; margin: 20px auto; max-width: 600px;">
-  🚕 You have a trip in progress.
-  <button onclick="finishOngoingTrip()" style="margin-left: 12px;">Clock Out and Finalize</button>
 </div>
 
 
@@ -1168,11 +1168,6 @@ transform: translate(-50%, -48%);
 
       <label for="end-time">End Time</label>
       <input type="time" id="end-time" placeholder="Enter end time" />
-      <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-  <button onclick="clockInNow()">Clock In Now</button>
-  <button onclick="clockOutNow()">Clock Out Now</button>
-</div>
-
 
 <label for="total-hours">Total Hours</label>
 
@@ -1710,11 +1705,6 @@ function isDuplicateEntry(entry, existingLog) {
         <label for="edit-end-time">End Time</label>
         <input type="time" id="edit-end-time" />
       </div>
-      <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-  <button onclick="clockInEdit()">Clock In Now</button>
-  <button onclick="clockOutEdit()">Clock Out Now</button>
-</div>
-
 
       <label for="edit-start-address">Start Address</label>
       <input type="text" id="edit-start-address" />
@@ -1796,7 +1786,6 @@ function isDuplicateEntry(entry, existingLog) {
     </div>
 
     <script>
-
       function saveUserInputsToLocalStorage({
         mpg,
         gasPrice,
@@ -2178,47 +2167,7 @@ const totalWorkedMinutes = workedMinutes + driveMinutes;
 
   updateDatalistSuggestions();
 
-  // ✅ Show "Trip in progress" banner if one exists
-  const ongoing = localStorage.getItem("ongoingTrip");
-  if (ongoing) {
-    const banner = document.getElementById("ongoing-trip-banner");
-    if (banner) banner.style.display = "block";
-  }
- // ✅ Restore ongoing trip (if one exists)
-  const ongoingTrip = localStorage.getItem("ongoingTrip");
-  if (ongoingTrip) {
-    const trip = JSON.parse(ongoingTrip);
-    document.getElementById("start-address").value = trip.startTime || "";
-    document.getElementById("start-time").value = trip.startClock || "";
-    document.getElementById("mpg").value = trip.mpg || "";
-    document.getElementById("gas-price").value = trip.gasPrice || "";
 
-    const container = document.getElementById("destinations-container");
-    container.innerHTML = "";
-    trip.destinations.forEach((d, i) => {
-      const div = document.createElement("div");
-      div.classList.add("destination");
-      div.innerHTML = `
-        <label for="destination-${i + 1}">Destination ${i + 1}</label>
-        <input type="text" id="destination-${i + 1}" list="recent-destinations" value="${d}">
-        <label for="earnings-${i + 1}">Earnings for Destination ${i + 1}</label>
-        <input type="number" id="earnings-${i + 1}" value="${trip.earnings[i] || 0}">
-        <div class="destination-actions">
-          <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
-          <button class="move-btn" onclick="moveDestinationUp(this)">Move Up</button>
-          <button class="move-btn" onclick="moveDestinationDown(this)">Move Down</button>
-        </div>
-      `;
-      container.appendChild(div);
-      initAutocompleteDestination(div.querySelector('input[type="text"]'));
-    });
-
-    document.getElementById("ongoing-trip-banner").style.display = "block";
-  }
-
-  // 👇 Then continue with loading saved logs
-  logEntries = await loadLog();
-  displayLog();
 });
 
 
@@ -2903,11 +2852,6 @@ document.getElementById("map")?.scrollIntoView({ behavior: "smooth" });
   data.gasPrice = parseFloat(document.getElementById("gas-price").value) || 0;
   data.lastModified = new Date().toISOString();
   data.notes = document.getElementById("log-notes")?.value || "";
-   
-  // ✅ Save partial trip if clocked in but not out
-  if (data.startClock && !data.endClock) {
-    localStorage.setItem("ongoingTrip", JSON.stringify(data));
-  }
 
 
   // ✅ Calculate total time from start and end clock times
@@ -4010,8 +3954,13 @@ function filterLogs() {
   // ✅ Define the shared filter logic
   currentFilterFn = (entryDate, entry) => {
     let matchesDate = true;
-    if (startDate && entryDate < startDate) matchesDate = false;
-    if (endDate && entryDate > endDate) matchesDate = false;
+const entryDateObj = new Date(entryDate);
+const startDateObj = startDate ? new Date(startDate) : null;
+const endDateObj = endDate ? new Date(endDate) : null;
+
+if (startDateObj && entryDateObj < startDateObj) matchesDate = false;
+if (endDateObj && entryDateObj > endDateObj) matchesDate = false;
+
 
     const fieldsToSearch = [
       entry.startTime,
@@ -5180,6 +5129,9 @@ window.addEventListener('scroll', () => {
     }
   };
 
+
+let deferredPrompt = null;
+
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredPrompt = e;
@@ -5277,6 +5229,6 @@ align-items: center;
 
 
 
-<script src="main.js"></script>
+
   </body>
 </html>
