@@ -1,4 +1,5 @@
-       html, body {
+
+        html, body {
     overflow-x: hidden;
   }
 
@@ -21,46 +22,16 @@ button:focus,
 button:active,
 button:focus-visible {
   outline: none !important;
-  background: none !important;
   box-shadow: none !important;
 }
-
-
-      button {
-  -webkit-tap-highlight-color: transparent; /* ⛔ Removes gray iOS tap highlight */
-  outline: none;
-  border: none;
-  background: none;
-}
-
-button:focus,
-button:focus-visible,
-button:active {
-  outline: none !important;
-  box-shadow: none !important;
-  background: none !important;
+button::-moz-focus-inner { border: 0; }
+button:active { transform: scale(0.98); }
+#bottom-bar button:focus,
+#bottom-bar button:active {
+  background-color: transparent !important;
 }
 
 
-      button:focus {
-  outline: none;
-}
-
-button::-moz-focus-inner {
-  border: 0;
-}
-
-button:active {
-  outline: none;
-}
-
-button:focus-visible {
-  outline: none;
-}
-
-button {
-  -webkit-tap-highlight-color: transparent;
-}
 
 
 
@@ -194,7 +165,7 @@ button {
 
 @media (max-width: 600px) {
   #top-bar {
-    position: sticky;              /* ✅ preserve sticky on mobile */
+    position: sticky;              /* âœ… preserve sticky on mobile */
     top: 0;
     z-index: 999;
     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
@@ -202,7 +173,7 @@ button {
     padding: 10px;
     gap: 8px;
     margin: 0 auto;
-    border-radius: 0;              /* ✅ matches desktop now */
+    border-radius: 0;              /* âœ… matches desktop now */
     max-width: 100%;
   }
 
@@ -564,7 +535,7 @@ html, body {
       #log-list li {
   display: flex;
   justify-content: space-between;
-  align-items: center; /* 🛠 Center vertically with expanded details */
+  align-items: center; /* ðŸ›  Center vertically with expanded details */
   padding: 10px 0;
   border-bottom: 1px solid #eee;
   width: 100%;
@@ -578,10 +549,10 @@ html, body {
 
 .log-actions {
         display: flex;
-        flex-direction: column; /* 🆕 Stack buttons vertically */
-        gap: 5px; /* 🆕 Space between buttons */
-        min-width: 100px; /* 🆕 Keep actions a reasonable size */
-        align-items: stretch; /* 🆕 Stretch buttons to same width */
+        flex-direction: column; /* ðŸ†• Stack buttons vertically */
+        gap: 5px; /* ðŸ†• Space between buttons */
+        min-width: 100px; /* ðŸ†• Keep actions a reasonable size */
+        align-items: stretch; /* ðŸ†• Stretch buttons to same width */
       }
 
 
@@ -597,9 +568,9 @@ html, body {
       }
 
       .log-item-details {
-  flex: 1 1 auto; /* 🆕 */
+  flex: 1 1 auto; /* ðŸ†• */
   margin-right: 10px;
-  width: auto;    /* 🆕 Remove 100% width */
+  width: auto;    /* ðŸ†• Remove 100% width */
 }
 
 
@@ -607,12 +578,12 @@ html, body {
         background-color: #007bff;
         color: white;
         border: none;
-        padding: 8px 0; /* 🆕 Vertically thicker buttons */
+        padding: 8px 0; /* ðŸ†• Vertically thicker buttons */
         border-radius: 5px;
         cursor: pointer;
         font-size: 14px;
         text-align: center; /* Center button text */
-        width: 100%; /* 🆕 Make each button full width of container */
+        width: 100%; /* ðŸ†• Make each button full width of container */
       }
 
       button {
@@ -625,7 +596,7 @@ html, body {
 
       #log-header {
         display: flex;
-        flex-direction: column; /* 🆕 STACK vertically */
+        flex-direction: column; /* ðŸ†• STACK vertically */
         justify-content: center;
         align-items: center;
         margin-bottom: 15px;
@@ -688,7 +659,7 @@ transform: translate(-50%, -48%);
   left: 50%;
   z-index: 1000;
   max-height: 80vh;
-  max-width: 900px;     /* ✅ set visual max width */
+  max-width: 900px;     /* âœ… set visual max width */
   width: 100%;
   overflow-y: auto;
   overflow-x: hidden;
@@ -773,14 +744,14 @@ transform: translate(-50%, -48%);
 }
 
 #log-list div[id^="details-"] {
-  margin-left: 20px; /* ✅ Small indent for expanded text */
+  margin-left: 20px; /* âœ… Small indent for expanded text */
   padding-top: 10px;
   transition: all 0.3s ease;
 }
 
 
   #account-menu button {
-    all: unset; /* ✅ Reset all inherited styles */
+    all: unset; /* âœ… Reset all inherited styles */
     display: block;
     width: 100%;
     max-width: 220px;
@@ -816,3 +787,8 @@ transform: translate(-50%, -48%);
   justify-content: center;
   display: none;
 }
+
+
+
+
+
