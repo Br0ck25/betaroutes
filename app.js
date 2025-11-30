@@ -977,13 +977,17 @@ function isDuplicateEntry(entry, existingLog) {
 async function saveLog() {
   const token = localStorage.getItem("token");
 
+  // ✅ If no token, save to localStorage only (local-first approach)
   if (!token) {
-    console.error("âŒ No token found. User must be signed in to save.");
-    showAlertModal("âŒ You must be signed in to save your route logs.", showLogin);
-    return;
+    console.log("💾 No token - saving locally only.");
+    localStorage.setItem("pendingLogs", JSON.stringify(logEntries));
+    localStorage.setItem("cachedLogs", JSON.stringify(logEntries));
+    console.log("✅ Saved to localStorage (will sync when user signs up)");
+    return; // Don't show any modal - it's normal to save locally
   }
 
-  console.log("â³ Saving route...");
+  console.log("⏳ Saving route to cloud...");
+
 
   // ðŸ›œ Detect if offline
   if (!navigator.onLine) {
