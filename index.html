@@ -1,871 +1,37 @@
-
 <!DOCTYPE html>
 <html lang="en" style="padding-bottom: env(safe-area-inset-bottom); background: white;">
-
- 
   <head>
-
-
-
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta http-equiv="Cross-Origin-Opener-Policy" content="unsafe-none" />
-    <title>
-    Go Route Yourself - Route and Cost Calculator with Log - Plan, Optimize, and Track Your Trips
-    </title>
+    <title>Go Route Yourself - Route and Cost Calculator with Log - Plan, Optimize, and Track Your Trips</title>
 
-
-    <meta
-      name="description"
-      content="Easily calculate driving routes, optimize stops, track trip costs, and log your earnings. Save your routes securely and export your trip logs."
-    />
+    <meta name="description" content="Easily calculate driving routes, optimize stops, track trip costs, and log your earnings. Save your routes securely and export your trip logs." />
 
     <!-- Open Graph (for social sharing) -->
     <meta property="og:title" content="Route and Cost Calculator with Log" />
-    <meta
-      property="og:description"
-      content="Plan routes, calculate costs, optimize trips, and track your earnings with our smart route logging tool."
-    />
+    <meta property="og:description" content="Plan routes, calculate costs, optimize trips, and track your earnings with our smart route logging tool." />
     <meta property="og:url" content="https://gorouteyourself.com/" />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="https://gorouteyourself.com/logo.png" />
-    <!-- optional: if you have a logo or image -->
     <meta property="og:site_name" content="Route and Cost Calculator" />
 
-    <link rel="icon" href="/logo-512.png" sizes="512x512" type="image/png" />
-    <link rel="apple-touch-icon" href="/logo-512.png" />
+    <link rel="icon" href="/logo512.png" sizes="512x512" type="image/png" />
+    <link rel="apple-touch-icon" href="/logo512.png" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Route Calculator" />
     <meta name="theme-color" content="#ffffff" />
     <link rel="manifest" href="/manifest.json" />
     
-    <script
-    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCHrNRHP9LNGVHi9Srk1Gfcrv-4ee_gUHQ&libraries=places&callback=initMap"
-    defer
-  ></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCOdfe7j11yw9ENkX8c7hYsIjwqcQeqJGQ&libraries=places&callback=initMap" defer></script>
 
-    <style>
-button {
-  all: unset;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  cursor: pointer;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  text-align: center;
-  font-size: 12px;
-  color: #333;
-  outline: none;
-}
-
-        html, body {
-    overflow-x: hidden;
-  }
-
-button:focus,
-button:active,
-button:focus-visible {
-  outline: none !important;
-  background: none !important;
-  box-shadow: none !important;
-}
-
-button:focus,
-button:focus-visible,
-button:active {
-  outline: none !important;
-  box-shadow: none !important;
-  background: none !important;
-}
-
-
-      button:focus {
-  outline: none;
-}
-
-button::-moz-focus-inner {
-  border: 0;
-}
-
-button:active {
-  outline: none;
-}
-
-button:focus-visible {
-  outline: none;
-}
-
-
-      body {
-  padding-bottom: calc(100px + env(safe-area-inset-bottom));
-  overflow-x: hidden;
-}
-
-#bottom-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  width: 100%;
-  max-width: 900px;
-  margin: 0 auto;
-  background: white;
-  border-top: 1px solid #ddd;
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  padding: 0;
-  padding-bottom: env(safe-area-inset-bottom);
-  box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.05);
-  z-index: 1000;
-  touch-action: manipulation;
-}
-
-#bottom-bar button {
-  all: unset;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 8px 0;
-  font-size: 12px;
-  color: #333;
-  cursor: pointer;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  background-color: transparent;
-  transition: background-color 0.2s ease;
-}
-
-#bottom-bar button:focus,
-#bottom-bar button:focus-visible,
-#bottom-bar button:active {
-  outline: none !important;
-  box-shadow: none !important;
-  background-color: transparent !important;
-}
-
-
-
-#bottom-bar .material-icons {
-  font-size: 35px;
-  line-height: 1;
-  margin-bottom: 0;
-  color: #4caf50;
-  transition: color 0.2s ease;
-}
-
-#bottom-bar button:hover {
-  background-color: #f0f0f0;
-}
-
-#bottom-bar button:hover .material-icons {
-  color: #388e3c;
-}
-
-
-
-
-
-      #hamburger-manage-log-menu button {
-  margin: 10px auto;
-}
-
-
-.date-filter input[type="date"] {
-  min-width: 120px;
-  width: 100%;
-  box-sizing: border-box;
-  font-size: 16px;
-  padding: 8px;
-}
-
-#log-title-bar .filter-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-#log-title-bar input[type="text"] {
-  min-width: 200px;
-  width: 100%;
-  box-sizing: border-box;
-  font-size: 16px;
-  padding: 8px;
-}
-
-#log-title-bar button {
-  padding: 8px 14px;
-  font-size: 16px;
-  height: 38px; /* match input height visually */
-  line-height: 1;
-  margin-top: 32px; /* fine-tuned to align with input */
-  box-sizing: border-box;
-}
-
-
-
-
-#install-button {
-  display: none;
-  padding: 10px 16px;
-  margin: 20px auto;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 16px;
-  max-width: 300px;
-  width: auto;
-  display: block;
-}
-
-
-@media (max-width: 600px) {
-  #top-bar {
-    position: sticky;              /* ✅ preserve sticky on mobile */
-    top: 0;
-    z-index: 999;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-    background: white;
-    padding: 10px;
-    gap: 8px;
-    margin: 0 auto;
-    border-radius: 0;              /* ✅ matches desktop now */
-    max-width: 100%;
-  }
-
-  #hamburger-button {
-    font-size: 24px;
-    padding: 4px 8px;
-  }
-
-  #username-display {
-    font-size: 14px;
-    padding: 4px 8px;
-  }
-
-  #logo-image {
-    height: 40px;
-  }
-}
-
-#top-bar {
-  position: sticky;
-  top: 0;
-  z-index: 999;
-  background: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px 0;
-  width: 100%;
-  max-width: 900px;
-  margin: 0 auto;
-  border-radius: 0;
-  transition: box-shadow 0.3s;
-}
-
-
-
-@media (max-width: 600px) {
-  #hamburger-button {
-    font-size: 24px;         /* smaller hamburger icon */
-    padding: 4px 8px;        /* less vertical padding */
-  }
-
-  #username-display {
-    font-size: 14px;         /* slightly smaller username text */
-    padding: 4px 8px;        /* less vertical padding */
-  }
-
-  #logo-image {
-    height: 40px;            /* smaller logo height on mobile */
-  }
-}
-
-
-#account-menu button.close-button {
-  background: none;
-  border: none;
-  font-size: 24px;
-  font-weight: bold;
-  color: black;
-  cursor: pointer;
-  margin: 10px;
-  line-height: 1;
-  transition: transform 0.2s ease;
-}
-
-#account-menu button.close-button:hover {
-  transform: scale(1.2);
-}
-
-
-#hamburger-button:hover {
-  background-color: #f0f0f0;
-}
-
-#username-display:hover {
-  background-color: #f0f0f0;
-}
-
-#hamburger-button:hover, #username-display:hover {
-  background-color: #f0f0f0;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-}
-
-
-
-
-#hamburger-button {
-  display: none; /* hidden by default */
-}
-
-
-img {
-  display: block;
-  margin: 0 auto;
-}
-
-#account-menu {
-  position: fixed;
-  top: 0;
-  left: -275px;
-  width: 260px;
-  height: 100%;
-  background: linear-gradient(to bottom, #ffffff, #f9f9f9);
-  box-shadow: 2px 0 8px rgba(0,0,0,0.2);
-  z-index: 10000;
-  padding-top: 10px;
-  transition: left 0.3s ease;
-  overflow-y: auto;
-  font-size: 16px;
-}
-
-#account-menu button {
-  background-color: #4caf50;
-  color: white;
-  border: none;
-  padding: 8px 12px;
-  font-size: 15px;
-  border-radius: 6px;
-  margin: 8px 0;
-  cursor: pointer;
-  width: 100%;
-  max-width: 220px;
-  display: block;
-  text-align: center;
-  transition: background-color 0.2s;
-}
-
-#account-menu button:hover {
-  background-color: #45a049;
-}
-
-
-#account-menu.show {
-  left: 0;
-}
-
-#log-list {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-}
-
-#account-menu button.danger {
-  background-color: #dc3545;
-}
-
-#account-menu button.danger:hover {
-  background-color: #c82333;
-}
-
-
-
-
-      body,
-      html,
-      #log-container {
-        overflow: visible !important;
-      }
-      .modal-box {
-        background: white;
-        padding: 30px;
-        border-radius: 10px;
-        width: 300px;
-        box-sizing: border-box;
-      }
-
-
-
-      #logout-message button {
-  background: none;
-  border: none;
-  font-size: 28px;
-  cursor: pointer;
-  margin-right: 10px;
-}
-#logout-message button:hover {
-  opacity: 0.7;
-}
-#logout-message img {
-  height: 50px;
-  object-fit: contain;
-}
-
-
-      body {
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-        background-color: #f4f4f9;
-        margin: 0;
-        padding: 40px 0;
-        display: flex;
-        justify-content: center; /* center horizontally */
-        flex-direction: column; /* stack sections vertically */
-        align-items: center; /* center horizontally */
-      }
-
-      .container,
-      #log-container,
-      #import-container,
-      #export-options,
-      .edit-form-container {
-        background-color: white;
-        box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
-        padding: 20px;
-        border-radius: 8px;
-        width: 100%;
-        max-width: 900px;
-        margin: 20px auto; /* center and space */
-        box-sizing: border-box;
-        overflow: auto;
-      }
-
-      #export-options,
-      #import-container {
-        text-align: center;
-      }
-
-      h1 {
-        text-align: center;
-        font-size: 24px;
-        margin-bottom: 20px;
-        color: #333;
-      }
-
-      label {
-        display: block;
-        margin-bottom: 5px;
-        font-weight: bold;
-        color: #555;
-      }
-
-      input[type="text"],
-      input[type="number"],
-      input[type="date"],
-      input[type="time"],
-      button,
-      select {
-        width: 100%;
-        padding: 10px;
-        margin: 8px 0;
-        font-size: 16px;
-        border: 1px solid #ccc;
-        border-radius: 5px;
-        box-sizing: border-box;
-      }
-
-      button {
-        background-color: #4caf50;
-        color: white;
-        border: none;
-        cursor: pointer;
-        font-size: 18px;
-      }
-
-      button:hover {
-        background-color: #45a049;
-      }
-
-/* Prevent scroll globally */
-html, body {
-  overflow-x: hidden;
-}
-
-/* Route results box */
-#results {
-  display: none;
-  margin-top: 20px;
-  padding: 15px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-  background-color: #f9f9f9;
-  box-sizing: border-box;
-  max-width: 900px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-/* Keep map clean and constrained */
-#map {
-  width: 100%;
-  height: 300px;
-  margin-top: 20px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-  box-sizing: border-box;
-  max-width: 900px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-/* Text sections */
-#detailed-results,
-#mileage-display,
-#optimized-mileage-display {
-  max-width: 900px;
-  margin: 10px auto 0 auto;
-  padding: 0 15px;
-  box-sizing: border-box;
-  text-align: center;
-}
-
-
-
-      .destination {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        margin-bottom: 15px;
-        padding: 10px;
-        border: 1px solid #eee;
-        border-radius: 5px;
-        background-color: #fefefe;
-      }
-
-      .destination label {
-        margin-top: 0;
-      }
-
-      .destination input {
-        margin-bottom: 8px;
-      }
-
-      .delete-btn,
-      .move-btn {
-        background-color: red;
-        color: white;
-        padding: 8px 12px;
-        font-size: 14px;
-        border: none;
-        cursor: pointer;
-        border-radius: 5px;
-        margin-right: 5px;
-        margin-top: 5px;
-      }
-
-      .delete-btn:hover,
-      .move-btn:hover {
-        background-color: darkred;
-      }
-
-      .move-btn {
-        background-color: #ffa500;
-      }
-
-      .move-btn:hover {
-        background-color: #ff7f00;
-      }
-
-      .destination-actions {
-        display: flex;
-        gap: 5px;
-        margin-top: 10px;
-      }
-
-      #log-list {
-        list-style-type: none;
-        padding: 0;
-      }
-
-      #log-list li {
-  display: flex;
-  justify-content: space-between;
-  align-items: center; /* 🛠 Center vertically with expanded details */
-  padding: 10px 0;
-  border-bottom: 1px solid #eee;
-  width: 100%;
-}
-
-
-.log-item-details {
-  flex: 1 1 auto;
-  margin-right: 10px;
-}
-
-.log-actions {
-        display: flex;
-        flex-direction: column; /* 🆕 Stack buttons vertically */
-        gap: 5px; /* 🆕 Space between buttons */
-        min-width: 100px; /* 🆕 Keep actions a reasonable size */
-        align-items: stretch; /* 🆕 Stretch buttons to same width */
-      }
-
-
-
-#log-container {
-  padding-left: 10;
-  padding-right: 100;
-}
-
-
-      #log-list li:last-child {
-        border-bottom: none;
-      }
-
-      .log-item-details {
-  flex: 1 1 auto; /* 🆕 */
-  margin-right: 10px;
-  width: auto;    /* 🆕 Remove 100% width */
-}
-
-
-      .log-actions button {
-        background-color: #007bff;
-        color: white;
-        border: none;
-        padding: 8px 0; /* 🆕 Vertically thicker buttons */
-        border-radius: 5px;
-        cursor: pointer;
-        font-size: 14px;
-        text-align: center; /* Center button text */
-        width: 100%; /* 🆕 Make each button full width of container */
-      }
-
-      button {
-        white-space: nowrap;
-      }
-
-      .log-actions button:hover {
-        background-color: #0056b3;
-      }
-
-      #log-header {
-        display: flex;
-        flex-direction: column; /* 🆕 STACK vertically */
-        justify-content: center;
-        align-items: center;
-        margin-bottom: 15px;
-      }
-
-      #organize-by-day {
-        padding: 8px;
-        border-radius: 5px;
-        border: 1px solid #ccc;
-        font-size: 16px;
-      }
-
-      .hidden {
-        display: none;
-      }
-
-      .optional-costs {
-        margin-top: 20px;
-        padding: 15px;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        background-color: #f9f9f9;
-      }
-
-      .optional-costs label {
-        font-weight: normal;
-      }
-
-      #export-options button {
-        margin: 5px 10px;
-        padding: 10px 15px;
-        font-size: 16px;
-      }
-
-      .edit-btn {
-        background-color: #ffc107;
-        color: #333;
-      }
-
-      .edit-btn:hover {
-        background-color: #e0a800;
-      }
-
-      .save-btn,
-      .cancel-btn {
-        background-color: #28a745;
-        color: white;
-        margin-left: 5px;
-      }
-
-      .cancel-btn {
-        background-color: #dc3545;
-      }
-
-.edit-form-container {
-  display: none;
-  position: fixed;
-  top: 48%;
-transform: translate(-50%, -48%);
-  left: 50%;
-  z-index: 1000;
-  max-height: 80vh;
-  max-width: 900px;     /* ✅ set visual max width */
-  width: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 20px;
-  background: white;
-  box-shadow: 0 0 12px rgba(0,0,0,0.2);
-  border-radius: 8px;
-  box-sizing: border-box;
-}
-
-
-
-      .edit-form-container label {
-        font-weight: normal;
-      }
-
-      #overlay {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.5);
-        z-index: 999;
-      }
-
-      .custom-view-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-      }
-
-      .custom-view-modal {
-        background: white;
-        padding: 30px;
-        border-radius: 10px;
-        max-width: 700px;
-        width: 90%;
-        max-height: 80vh;
-        overflow-y: auto;
-        box-shadow: 0px 8px 20px rgba(0, 0, 0, 0.2);
-        font-size: 16px;
-        color: #333;
-      }
-
-      .custom-view-modal h3 {
-        margin-top: 0;
-        font-size: 22px;
-        text-align: center;
-      }
-
-      .custom-view-modal p {
-        margin: 10px 0;
-      }
-
-      .custom-view-modal button {
-        background-color: #dc3545;
-        color: white;
-        padding: 10px 20px;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        font-size: 16px;
-        display: block;
-        margin: 20px auto 0;
-      }
-
-      .custom-view-modal button:hover {
-        background-color: #c82333;
-      }
-
-      #log-list .hidden {
-  display: none;
-}
-
-#log-list div[id^="details-"] {
-  margin-left: 20px; /* ✅ Small indent for expanded text */
-  padding-top: 10px;
-  transition: all 0.3s ease;
-}
-
-
-  #account-menu button {
-    all: unset; /* ✅ Reset all inherited styles */
-    display: block;
-    width: 100%;
-    max-width: 220px;
-    padding: 10px 14px;
-    margin: 10px auto;
-    background-color: #4caf50;
-    color: white !important;
-    font-size: 15px;
-    text-align: center;
-    border-radius: 6px;
-    cursor: pointer;
-    box-sizing: border-box;
-    transition: background-color 0.2s ease;
-  }
-
-  #account-menu button:hover {
-    background-color: #45a049;
-  }
-
-  #hamburger-button {
-  display: none; /* hidden by default */
-  background: none;
-  border: none;
-  font-size: 28px;
-  cursor: pointer;
-  color: black;
-  padding: 6px 10px;
-  border-radius: 8px;
-  transition: background-color 0.3s;
-  width: 50px;
-  height: 50px;
-  align-items: center;
-  justify-content: center;
-  display: none;
-}
-
-
-
-
-
-    </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-    
-    
-
+    <!-- External Stylesheet -->
+    <link rel="stylesheet" href="styles.css">
   </head>
   <body>
+
+    
+<div id="g_id_signin"></div>
 
 
 <!-- Fixed Top Bar -->
@@ -905,7 +71,7 @@ transform: translate(-50%, -48%);
     display: flex;
     align-items: center;
     justify-content: center;
-  ">☰</button>
+  ">â˜°</button>
 </div>
 
 <!-- Centered Logo -->
@@ -943,7 +109,7 @@ transform: translate(-50%, -48%);
   position: relative;
   z-index: 500;
 ">
-  🚧 To log your route, you need to
+  ðŸš§ To log your route, you need to
   <a href="#" onclick="showLogin()" style="color: #0d6efd; font-weight: bold; text-decoration: none;">Sign in</a>
   or
   <a href="#" onclick="showSignup()" style="color: #0d6efd; font-weight: bold; text-decoration: none;">Create an account</a>.
@@ -960,12 +126,12 @@ transform: translate(-50%, -48%);
   text-align: center;
   font-size: 16px;
   max-width: 600px;
-  margin: 120px auto 20px auto; /* 👈 Increased top margin for signed-in layout */
+  margin: 120px auto 20px auto; /* ðŸ‘ˆ Increased top margin for signed-in layout */
   position: relative;
   z-index: 500;
 ">
 
-  🛜 Offline Mode: Showing cached routes.
+  ðŸ›œ Offline Mode: Showing cached routes.
 </div>
 
 
@@ -973,11 +139,11 @@ transform: translate(-50%, -48%);
 
 
 
-<!-- ✅ FIX: Wrap in #logout-message -->
+<!-- âœ… FIX: Wrap in #logout-message -->
 <div id="logout-message" style="display: none; margin: 20px auto; max-width: 100%;">
   <div id="account-menu">
   
-    <!-- 🧭 Close Button -->
+    <!-- ðŸ§­ Close Button -->
     <div style="position: relative; width: 100%; height: 50px;">
       <button onclick="closeMenu()" style="
         position: absolute;
@@ -992,21 +158,21 @@ transform: translate(-50%, -48%);
         line-height: 1;
         transition: transform 0.2s;
       " onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">
-        ✕
+        âœ•
       </button>
     </div>
 
-    <!-- 🖼 Logo -->
+    <!-- ðŸ–¼ Logo -->
     <div style="text-align: center; margin: 20px 0;">
       <img src="/logo.png" alt="Logo" style="height: 40px;">
     </div>
 
-    <!-- 📋 Menu Items -->
+    <!-- ðŸ“‹ Menu Items -->
 
-      <!-- ✅ New Manage Account collapsible section -->
+      <!-- âœ… New Manage Account collapsible section -->
 <div style="margin-top: 10px;">
   <button id="hamburger-manage-account-toggle" onclick="toggleHamburgerManageAccountMenu()">
-    Manage Account <span id="hamburger-manage-account-arrow" style="display: inline-block; transition: transform 0.3s;">▼</span>
+    Manage Account <span id="hamburger-manage-account-arrow" style="display: inline-block; transition: transform 0.3s;">â–¼</span>
   </button>
   <div id="hamburger-manage-account-menu" style="
     max-height: 0;
@@ -1026,10 +192,10 @@ transform: translate(-50%, -48%);
 </div>
 
 
-      <!-- ✅ NEW Manage Log button (collapsible) -->
+      <!-- âœ… NEW Manage Log button (collapsible) -->
 <!-- Manage Log Toggle -->
 <button id="hamburger-manage-toggle" onclick="toggleHamburgerManageLogMenu()">
-  Manage Log <span id="hamburger-manage-arrow" style="display: inline-block; transition: transform 0.3s;">▼</span>
+  Manage Log <span id="hamburger-manage-arrow" style="display: inline-block; transition: transform 0.3s;">â–¼</span>
 </button>
 
 
@@ -1051,10 +217,10 @@ transform: translate(-50%, -48%);
   <button onclick="exportToPDFWithTotals()">Export PDF</button>
 </div>
 
-<!-- ✅ New Settings Dropdown -->
-<!-- ✅ New Settings Dropdown -->
+<!-- âœ… New Settings Dropdown -->
+<!-- âœ… New Settings Dropdown -->
 <button id="hamburger-settings-toggle" onclick="toggleHamburgerSettingsMenu()">
-  Settings <span id="hamburger-settings-arrow" style="display: inline-block; transition: transform 0.3s;">▼</span>
+  Settings <span id="hamburger-settings-arrow" style="display: inline-block; transition: transform 0.3s;">â–¼</span>
 </button>
 
 <div id="hamburger-settings-menu" style="
@@ -1081,9 +247,9 @@ transform: translate(-50%, -48%);
       <button onclick="closeMenu(); logout()">Log Out</button>
 
       </div>
-    </div> <!-- 👈 closes menu items -->
-  </div> <!-- 👈 closes #account-menu -->
-</div> <!-- 👈 closes #logout-message -->
+    </div> <!-- ðŸ‘ˆ closes menu items -->
+  </div> <!-- ðŸ‘ˆ closes #account-menu -->
+</div> <!-- ðŸ‘ˆ closes #logout-message -->
 
 
 
@@ -1256,7 +422,7 @@ transform: translate(-50%, -48%);
 
     <div id="log-container">
 
-      <!-- 🆕 Step 1: Centered Title and Summary -->
+      <!-- ðŸ†• Step 1: Centered Title and Summary -->
       <div id="log-header" style="
         display: flex;
         flex-direction: column;
@@ -1280,7 +446,7 @@ transform: translate(-50%, -48%);
     
       </div>
     
-      <!-- 🆕 Step 2: Centered Filters Row -->
+      <!-- ðŸ†• Step 2: Centered Filters Row -->
       <div id="log-title-bar" style="
         display: flex;
         justify-content: center;
@@ -1353,7 +519,7 @@ transform: translate(-50%, -48%);
     max-width: 400px;
     text-align: center;
   ">
-    <h3>📝 Resume your last unsaved trip?</h3>
+    <h3>ðŸ“ Resume your last unsaved trip?</h3>
     <p style="margin-bottom: 20px;">We found a previous trip that wasn't saved. Would you like to continue editing it?</p>
     <button onclick="resumeDraftTrip()">Resume</button>
     <button onclick="discardDraftTrip()" style="margin-top: 10px; background-color: #ccc; color: black;">Discard</button>
@@ -1370,7 +536,7 @@ function clearTripForm() {
 
   document.getElementById("log-date").value = today;
 
-  // ❌ Clear only optional fields
+  // âŒ Clear only optional fields
   document.getElementById("start-time").value = "";
   document.getElementById("end-time").value = "";
   document.getElementById("total-hours").value = "";
@@ -1381,7 +547,7 @@ function clearTripForm() {
 
 
 
-  // ✅ Keep start, end, mpg, and gas-price
+  // âœ… Keep start, end, mpg, and gas-price
 
   // Reset destinations
   const container = document.getElementById("destinations-container");
@@ -1479,13 +645,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const installBtn = document.getElementById('install-button');
 
   if (isIos()) {
-    // ❌ Hide the install button on iOS
+    // âŒ Hide the install button on iOS
     if (installBtn) installBtn.style.display = 'none';
 
-    // ✅ Only show iOS prompt if not installed
+    // âœ… Only show iOS prompt if not installed
     if (!isInStandaloneMode()) {
       const prompt = document.createElement('div');
-      prompt.id = 'ios-install-prompt'; // ✅ Needed for auto-hide
+      prompt.id = 'ios-install-prompt'; // âœ… Needed for auto-hide
       prompt.innerHTML = `
         <div style="
           background-color: #fffae6;
@@ -1498,13 +664,13 @@ document.addEventListener('DOMContentLoaded', () => {
           margin: 20px auto 0 auto;
           max-width: 600px;
         ">
-          📱 To install this app on your iPhone, tap the
+          ðŸ“± To install this app on your iPhone, tap the
           <strong>Share</strong> button
           <br>then choose <strong>Add to Home Screen</strong>.
         </div>
       `;
 
-      // ⬇️ Insert below the log container
+      // â¬‡ï¸ Insert below the log container
       const manageLog = document.getElementById('manage-log-container');
       if (manageLog) {
         manageLog.insertAdjacentElement('afterend', prompt);
@@ -1512,7 +678,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.appendChild(prompt);
       }
 
-      // ⏱️ Auto-hide if user installs manually while the app is open
+      // â±ï¸ Auto-hide if user installs manually while the app is open
       const checkInterval = setInterval(() => {
         if (isInStandaloneMode()) {
           const iosPrompt = document.getElementById('ios-install-prompt');
@@ -1527,20 +693,20 @@ document.addEventListener('DOMContentLoaded', () => {
 function resumeDraftTrip() {
   document.getElementById("resume-modal").style.display = "none";
 
-  // ✅ Restore logs first
+  // âœ… Restore logs first
   const cached = localStorage.getItem("cachedLogs");
   if (cached) {
     try {
       logEntries = JSON.parse(cached);
     } catch (e) {
-      console.error("❌ Failed to parse cachedLogs while resuming draft:", e);
+      console.error("âŒ Failed to parse cachedLogs while resuming draft:", e);
     }
   }
 
   const data = window.__pendingDraftTrip;
   if (!data) return;
 
-  // ✅ Restore form values
+  // âœ… Restore form values
   document.getElementById("log-date").value = data.date || "";
   document.getElementById("start-address").value = data.start || "";
   document.getElementById("end-address").value = data.end || "";
@@ -1575,7 +741,7 @@ function resumeDraftTrip() {
     initAutocompleteDestination(div.querySelector('input[type="text"]'));
   });
 
-  // ✅ Display restored logs at the end
+  // âœ… Display restored logs at the end
   displayLog();
 }
 
@@ -1595,7 +761,7 @@ function discardDraftTrip() {
       logEntries = JSON.parse(cached);
       displayLog();
     } catch (e) {
-      console.error("❌ Failed to parse cachedLogs:", e);
+      console.error("âŒ Failed to parse cachedLogs:", e);
     }
   }
 
@@ -1803,7 +969,7 @@ function isDuplicateEntry(entry, existingLog) {
         const button = event.target.closest("button");
 
         const isToggleButton =
-          button && (button.innerText === "☰" || button.onclick === toggleMenu);
+          button && (button.innerText === "â˜°" || button.onclick === toggleMenu);
 
         if (menu && !menu.contains(event.target) && !isToggleButton) {
           closeMenu();
@@ -1828,19 +994,19 @@ async function saveLog() {
   const token = localStorage.getItem("token");
 
   if (!token) {
-    console.error("❌ No token found. User must be signed in to save.");
-    showAlertModal("❌ You must be signed in to save your route logs.", showLogin);
+    console.error("âŒ No token found. User must be signed in to save.");
+    showAlertModal("âŒ You must be signed in to save your route logs.", showLogin);
     return;
   }
 
-  console.log("⏳ Saving route...");
+  console.log("â³ Saving route...");
 
-  // 🛜 Detect if offline
+  // ðŸ›œ Detect if offline
   if (!navigator.onLine) {
-    console.warn("🛜 Offline: Saving log locally.");
+    console.warn("ðŸ›œ Offline: Saving log locally.");
     localStorage.setItem("pendingLogs", JSON.stringify(logEntries));
     localStorage.setItem("cachedLogs", JSON.stringify(logEntries));
-    showAlertModal("⚠️ Offline: Route saved locally. Will sync when back online.");
+    showAlertModal("âš ï¸ Offline: Route saved locally. Will sync when back online.");
     return;
   }
 
@@ -1861,16 +1027,16 @@ async function saveLog() {
       throw new Error(await response.text());
     }
 
-    console.log("✅ Saved to KV");
+    console.log("âœ… Saved to KV");
 
-    // ✅ Force refresh after successful save
+    // âœ… Force refresh after successful save
     await syncAndReloadLogs();
 
   } catch (err) {
-    console.error("❌ Save failed. Saving offline:", err);
+    console.error("âŒ Save failed. Saving offline:", err);
     localStorage.setItem("pendingLogs", JSON.stringify(logEntries));
     localStorage.setItem("cachedLogs", JSON.stringify(logEntries));
-    showAlertModal("⚠️ Offline mode: Your changes are saved locally. We'll sync them next time you're online.");
+    showAlertModal("âš ï¸ Offline mode: Your changes are saved locally. We'll sync them next time you're online.");
   }
 }
 
@@ -1897,18 +1063,18 @@ async function syncPendingLogs() {
     );
 
     if (response.ok) {
-      console.log("✅ Pending logs synced successfully!");
+      console.log("âœ… Pending logs synced successfully!");
       localStorage.removeItem("pendingLogs");
 
-      // 🆕 Important: Update cachedLogs after successful sync
+      // ðŸ†• Important: Update cachedLogs after successful sync
       const freshLogs = await loadLog();
       localStorage.setItem("cachedLogs", JSON.stringify(freshLogs));
       displayLog();
     } else {
-      console.error("❌ Failed to sync pending logs:", await response.text());
+      console.error("âŒ Failed to sync pending logs:", await response.text());
     }
   } catch (err) {
-    console.error("❌ Error syncing pending logs:", err);
+    console.error("âŒ Error syncing pending logs:", err);
   }
 }
 
@@ -1916,7 +1082,7 @@ async function loadLog() {
   const token = localStorage.getItem("token");
 
   if (!token) {
-    console.error("❌ No token found. Cannot load logs.");
+    console.error("âŒ No token found. Cannot load logs.");
     return [];
   }
 
@@ -1943,7 +1109,7 @@ const merged = logs.map(serverLog => {
   const localTime = new Date(localMatch.lastModified || 0).getTime();
   const serverTime = new Date(serverLog.lastModified || 0).getTime();
 
-  console.log("⛓ Conflict on", serverLog.date, "— using", serverTime >= localTime ? "server" : "local");
+  console.log("â›“ Conflict on", serverLog.date, "â€” using", serverTime >= localTime ? "server" : "local");
 
   return serverTime >= localTime ? serverLog : localMatch;
 });
@@ -1952,7 +1118,7 @@ localStorage.setItem("cachedLogs", JSON.stringify(merged));
 return merged;
 
   } catch (err) {
-    console.warn("⚠️ Offline or failed to load logs. Loading from local cache.", err);
+    console.warn("âš ï¸ Offline or failed to load logs. Loading from local cache.", err);
     const cached = localStorage.getItem("cachedLogs");
     return cached ? JSON.parse(cached) : [];
   }
@@ -1962,31 +1128,31 @@ function updateOfflineBanner() {
   const banner = document.getElementById("offline-banner");
 
   if (navigator.onLine) {
-    banner.style.display = "none"; // 🟢 Online
-    syncAndReloadLogs();            // 🆕 Force refresh logs!
+    banner.style.display = "none"; // ðŸŸ¢ Online
+    syncAndReloadLogs();            // ðŸ†• Force refresh logs!
   } else {
-    banner.style.display = "block"; // 🔴 Offline
+    banner.style.display = "block"; // ðŸ”´ Offline
   }
 }
 
 async function syncAndReloadLogs() {
   if (skipNextSync) {
-    console.log("⏭ Skipping sync due to Cancel selection");
+    console.log("â­ Skipping sync due to Cancel selection");
     skipNextSync = false; // reset it after skipping once
     return;
   }
 
   try {
-    console.log("🔄 Online detected: syncing and reloading logs...");
+    console.log("ðŸ”„ Online detected: syncing and reloading logs...");
 
     await syncPendingLogs();
     logEntries = await loadLog();
     displayLog();
 
-    console.log("✅ Logs refreshed after reconnecting!");
-    showConfirmationMessage("✅ Logs refreshed after reconnecting!");
+    console.log("âœ… Logs refreshed after reconnecting!");
+    showConfirmationMessage("âœ… Logs refreshed after reconnecting!");
   } catch (error) {
-    console.error("❌ Error refreshing logs:", error);
+    console.error("âŒ Error refreshing logs:", error);
   }
 }
 
@@ -2000,7 +1166,7 @@ function saveDraftTrip() {
 
   const maintenance = document.getElementById("maintenance-cost")?.value.trim();
   const supplies = document.getElementById("supplies-cost")?.value.trim();
-  const notes = document.getElementById("log-notes")?.value.trim(); // ✅ add this
+  const notes = document.getElementById("log-notes")?.value.trim(); // âœ… add this
 
   const destinations = Array.from(document.querySelectorAll('#destinations-container .destination'))
     .map(div => ({
@@ -2016,7 +1182,7 @@ function saveDraftTrip() {
     hoursWorked ||
     maintenance ||
     supplies ||
-    notes; // ✅ now considers notes too
+    notes; // âœ… now considers notes too
 
   if (!hasMeaningfulData) {
     localStorage.removeItem("draftTrip");
@@ -2034,7 +1200,7 @@ function saveDraftTrip() {
     hoursWorked,
     maintenance,
     supplies,
-    notes, // ✅ save notes to draft
+    notes, // âœ… save notes to draft
     destinations
   };
 
@@ -2078,7 +1244,7 @@ if (cached) {
     logEntries = JSON.parse(cached);
     displayLog();
   } catch (e) {
-    console.error("❌ Failed to parse cachedLogs while showing resume modal:", e);
+    console.error("âŒ Failed to parse cachedLogs while showing resume modal:", e);
   }
 }
 
@@ -2090,7 +1256,7 @@ return;
 
 
 
-      // ✅ Restore draft data
+      // âœ… Restore draft data
       document.getElementById("log-date").value = data.date || "";
       document.getElementById("start-address").value = data.start || "";
       document.getElementById("end-address").value = data.end || "";
@@ -2123,7 +1289,7 @@ return;
         initAutocompleteDestination(div.querySelector('input[type="text"]'));
       });
     } catch (err) {
-      console.error("❌ Failed to parse draftTrip:", err);
+      console.error("âŒ Failed to parse draftTrip:", err);
       localStorage.removeItem("draftTrip");
     }
   }
@@ -2132,7 +1298,7 @@ return;
   const dateInput = document.getElementById("log-date");
 if (dateInput) {
   const today = new Date().toLocaleDateString("en-CA"); // format: yyyy-mm-dd
-  dateInput.value = today; // ✅ set only the date
+  dateInput.value = today; // âœ… set only the date
 }
 
 
@@ -2160,7 +1326,7 @@ const totalWorkedMinutes = workedMinutes + driveMinutes;
 });
 
 
-  // 🆕 After selecting start time, auto-focus end time after slight delay
+  // ðŸ†• After selecting start time, auto-focus end time after slight delay
   document.getElementById("start-time").addEventListener("change", () => {
     setTimeout(() => document.getElementById("end-time")?.focus(), 200);
   });
@@ -2170,28 +1336,34 @@ const totalWorkedMinutes = workedMinutes + driveMinutes;
 
 });
 
+  // ðŸ†• After selecting start time, auto-focus end time after slight delay
+  document.getElementById("start-time").addEventListener("change", () => {
+    setTimeout(() => document.getElementById("end-time")?.focus(), 200);
+  });
+
+
 
       function updateOfflineBanner() {
   const banner = document.getElementById("offline-banner");
 
   if (navigator.onLine) {
-    banner.style.display = "none"; // 🟢 Online
-    syncAndReloadLogs();            // 🆕 Force refresh logs!
+    banner.style.display = "none"; // ðŸŸ¢ Online
+    syncAndReloadLogs();            // ðŸ†• Force refresh logs!
   } else {
-    banner.style.display = "block"; // 🔴 Offline
+    banner.style.display = "block"; // ðŸ”´ Offline
   }
 }
 
 async function syncAndReloadLogs() {
   try {
-    console.log("🔄 Online detected: syncing and reloading logs...");
+    console.log("ðŸ”„ Online detected: syncing and reloading logs...");
 
     // First, sync any pending logs if needed
     await syncPendingLogs();
 
     logEntries = await loadLog();
 
-// 🆕 Ensure all logs have lastModified timestamp
+// ðŸ†• Ensure all logs have lastModified timestamp
 logEntries = logEntries.map(entry => ({
   ...entry,
   lastModified: entry.lastModified || new Date().toISOString()
@@ -2201,9 +1373,9 @@ displayLog();
 
 
 
-    console.log("✅ Logs refreshed after reconnecting!");
+    console.log("âœ… Logs refreshed after reconnecting!");
   } catch (error) {
-    console.error("❌ Error refreshing logs:", error);
+    console.error("âŒ Error refreshing logs:", error);
   }
 }
 
@@ -2215,6 +1387,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       function showConfirmationMessage(message) {
         const confirmation = document.getElementById("confirmation-message");
+        if (!confirmation) return;
+        
         confirmation.textContent = message;
         confirmation.style.display = "block";
         setTimeout(() => {
@@ -2311,16 +1485,16 @@ async function calculateRoute() {
   const destinationInputs = document.querySelectorAll('input[id^="destination-"]');
   const filledDestinations = Array.from(destinationInputs).filter(input => input.value.trim() !== "");
   if (filledDestinations.length === 0) {
-    showAlertModal("🚧 Please enter at least one destination before calculating your route.");
+    showAlertModal("ðŸš§ Please enter at least one destination before calculating your route.");
     return;
   }
 
   const calculationResult = await calculateRouteData();
   if (calculationResult) {
     updateUI(calculationResult);
-    showConfirmationMessage("✅ Route calculated successfully!");
+    showConfirmationMessage("âœ… Route calculated successfully!");
 
-    // ✅ Scroll to map
+    // âœ… Scroll to map
     document.getElementById("map")?.scrollIntoView({ behavior: "smooth" });
   }
 }
@@ -2390,7 +1564,7 @@ async function calculateRouteData() {
   const selectedDate = logDateInput || new Date().toISOString().split("T")[0];
 
   if (!navigator.onLine) {
-    showAlertModal("🛜 You're offline. Route calculation is unavailable until you're reconnected.");
+    showAlertModal("ðŸ›œ You're offline. Route calculation is unavailable until you're reconnected.");
     return Promise.resolve(null);
   }
 
@@ -2433,7 +1607,7 @@ async function calculateRouteData() {
           hoursWorked: hoursWorked,
         });
       } else {
-        showAlertModal("❌ Directions request failed due to: " + status);
+        showAlertModal("âŒ Directions request failed due to: " + status);
         document.getElementById("map").classList.add("hidden");
         document.getElementById("results").classList.add("hidden");
         resolve(null);
@@ -2488,7 +1662,7 @@ document.getElementById("total-hours").textContent = `${hourText}${minuteText}`;
           document.getElementById("mileage-display").textContent =
             "Original Route: " + originalMileage + " miles";
 
-          // ✅ Add the new detailed display below the map
+          // âœ… Add the new detailed display below the map
           const detailedResultsHTML = `
   <h3>Route Details</h3>
   <p><strong>Date:</strong> ${data.date}</p>
@@ -2569,12 +1743,12 @@ document.getElementById("total-hours").textContent = `${hourText}${minuteText}`;
             start
         );
 
-        // 🛑 Don't duplicate end address inside destinations
+        // ðŸ›‘ Don't duplicate end address inside destinations
         const destinations = allDestinations.filter(
           (dest) => dest !== endAddressInput
         );
 
-        // ✅ Now build the URL
+        // âœ… Now build the URL
         let url = `https://www.google.com/maps/dir/?api=1&origin=${start}&destination=${end}`;
 
         if (destinations.length > 0) {
@@ -2585,7 +1759,7 @@ document.getElementById("total-hours").textContent = `${hourText}${minuteText}`;
       }
 
       function resetOriginalMileageDisplay() {
-        if (originalMileage === null) return; // Already reset — no need to do anything
+        if (originalMileage === null) return; // Already reset â€” no need to do anything
 
         originalMileage = null;
         document.getElementById("mileage-display").textContent = "";
@@ -2594,28 +1768,28 @@ document.getElementById("total-hours").textContent = `${hourText}${minuteText}`;
       async function logResults() {
   const token = localStorage.getItem("token");
   if (!token) {
-    showAlertModal("❌ You must sign in to log your route.", showLogin);
+    showAlertModal("âŒ You must sign in to log your route.", showLogin);
     showLogin();
     return;
   }
 
-  // 🚨 Check for at least one destination
+  // ðŸš¨ Check for at least one destination
   const destinationInputs = document.querySelectorAll('input[id^="destination-"]');
   const filledDestinations = Array.from(destinationInputs).filter(input => input.value.trim() !== "");
   if (filledDestinations.length === 0) {
-    showAlertModal("🚧 Please enter at least one destination before logging your route.");
+    showAlertModal("ðŸš§ Please enter at least one destination before logging your route.");
     return;
   }
 
-  // ✅ Get calculation result
+  // âœ… Get calculation result
   const calculationResult = await calculateRouteData();
   if (calculationResult) {
     currentPage = 1;
     logEntry(calculationResult);
     displayLog();
     updateUI(calculationResult);
-    clearTripForm(); // ✅ Reset the form
-    showConfirmationMessage("✅ Route logged successfully!");
+    clearTripForm(); // âœ… Reset the form
+    showConfirmationMessage("âœ… Route logged successfully!");
   }
 }
 
@@ -2629,7 +1803,7 @@ async function optimizeRoute() {
     .filter(value => value !== "");
 
   if (currentDestinations.length < 2) {
-    showAlertModal("🚧 Please add at least two destinations to optimize the route.");
+    showAlertModal("ðŸš§ Please add at least two destinations to optimize the route.");
     return;
   }
 
@@ -2703,7 +1877,7 @@ async function optimizeRoute() {
       document.getElementById("optimized-mileage-display").textContent = "Optimized Route: " + optimizedMileage.toFixed(2) + " miles";
       document.getElementById("total-time").textContent = formatDuration(totalDuration);
 
-      // ⚡ CALCULATE hoursWorked from start/end minus drive time
+      // âš¡ CALCULATE hoursWorked from start/end minus drive time
       const startClock = document.getElementById("start-time").value;
       const endClock = document.getElementById("end-time").value;
       let hoursWorked = 0;
@@ -2754,15 +1928,15 @@ async function optimizeRoute() {
       };
 
       updateUI(optimizedData);
-showConfirmationMessage("✅ Route optimized successfully!");
+showConfirmationMessage("âœ… Route optimized successfully!");
 
-// ✅ Scroll to map after optimization
+// âœ… Scroll to map after optimization
 document.getElementById("map")?.scrollIntoView({ behavior: "smooth" });
 
     } else if (status === "OK") {
       directionsRenderer.setDirections(response);
     } else {
-      showAlertModal("❌ Could not optimize route due to: " + status);
+      showAlertModal("âŒ Could not optimize route due to: " + status);
     }
   });
 }
@@ -2854,7 +2028,7 @@ document.getElementById("map")?.scrollIntoView({ behavior: "smooth" });
   data.notes = document.getElementById("log-notes")?.value || "";
 
 
-  // ✅ Calculate total time from start and end clock times
+  // âœ… Calculate total time from start and end clock times
   const start = document.getElementById("start-time").value;
   const end = document.getElementById("end-time").value;
   let totalHours = 0;
@@ -2868,7 +2042,7 @@ document.getElementById("map")?.scrollIntoView({ behavior: "smooth" });
     totalHours = (endMin - startMin) / 60;
   }
 
-  // ✅ Use total session time for profitPerHour
+  // âœ… Use total session time for profitPerHour
   const netProfitFloat = parseFloat(data.netProfit || 0);
   data.profitPerHour = totalHours > 0
     ? (netProfitFloat / totalHours).toFixed(2)
@@ -3037,7 +2211,7 @@ document.getElementById("map")?.scrollIntoView({ behavior: "smooth" });
             .getElementById("log-container")
             .scrollIntoView({ behavior: "smooth" });
         } else {
-          showAlertModal("❌ Invalid page number.");
+          showAlertModal("âŒ Invalid page number.");
         }
       }
 
@@ -3113,7 +2287,7 @@ document.getElementById("map")?.scrollIntoView({ behavior: "smooth" });
           }));
 
           if (!start || !end || destinations.length !== destInputs.length || destinations.some(d => !d.location)) {
-  console.warn("❌ Missing or invalid start, end, or destination address — skipping route calculation.");
+  console.warn("âŒ Missing or invalid start, end, or destination address â€” skipping route calculation.");
   return;
 }
 
@@ -3149,7 +2323,7 @@ document.getElementById("map")?.scrollIntoView({ behavior: "smooth" });
 
             updateEditFuelCost();
           } else if (status === "ZERO_RESULTS") {
-            showAlertModal("⚠️ No route could be found between the entered locations. Please double-check the addresses.");
+            showAlertModal("âš ï¸ No route could be found between the entered locations. Please double-check the addresses.");
 } else {
   console.error("Mileage error:", status);
 }
@@ -3164,7 +2338,7 @@ document.getElementById("map")?.scrollIntoView({ behavior: "smooth" });
     resetOriginalMileageDisplay();
     reinitializeEditDestination(destinationDiv);
     renumberEditDestinations();
-    recalculateEditMileageAndCosts(); // ✅ added
+    recalculateEditMileageAndCosts(); // âœ… added
   }
 }
 
@@ -3179,7 +2353,7 @@ function moveEditDestinationDown(button) {
     resetOriginalMileageDisplay();
     reinitializeEditDestination(destinationDiv);
     renumberEditDestinations();
-    recalculateEditMileageAndCosts(); // ✅ added
+    recalculateEditMileageAndCosts(); // âœ… added
   }
 }
 
@@ -3188,21 +2362,21 @@ function reinitializeEditDestination(destinationDiv) {
   const addressInput = destinationDiv.querySelector('input[type="text"]');
   if (!addressInput) return;
 
-  // ✅ Recreate autocomplete
+  // âœ… Recreate autocomplete
   const autocomplete = new google.maps.places.Autocomplete(addressInput, {
     types: ["geocode"],
   });
 
-  // ✅ Trigger on selection from dropdown
+  // âœ… Trigger on selection from dropdown
   autocomplete.addListener("place_changed", recalculateEditMileageAndCosts);
 
-  // ✅ Trigger when user leaves input field
+  // âœ… Trigger when user leaves input field
   addressInput.addEventListener("blur", () => {
     // Slight delay to allow autocomplete to trigger first (if applicable)
     setTimeout(recalculateEditMileageAndCosts, 100);
   });
 
-  // ✅ Trigger when Enter is pressed
+  // âœ… Trigger when Enter is pressed
   addressInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault(); // prevent form submission
@@ -3277,7 +2451,7 @@ function addEditDestination() {
 renumberEditDestinations();
 reinitializeEditDestination(destDiv);
 
-// ✅ Add listener to update total earnings
+// âœ… Add listener to update total earnings
 const earningsInput = destDiv.querySelector('input[type="number"]');
 if (earningsInput) {
   earningsInput.addEventListener("input", updateEditTotalEarnings);
@@ -3291,8 +2465,8 @@ if (earningsInput) {
   const destinationDiv = button.closest(".destination");
   if (destinationDiv) {
     destinationDiv.remove();
-    renumberEditDestinations(); // 👈 Use shared function
-    updateEditTotalEarnings();  // 💰 Optional if you're tracking per stop
+    renumberEditDestinations(); // ðŸ‘ˆ Use shared function
+    updateEditTotalEarnings();  // ðŸ’° Optional if you're tracking per stop
     resetOriginalMileageDisplay();
     recalculateEditMileageAndCosts();
   }
@@ -3301,11 +2475,13 @@ if (earningsInput) {
 
 
       function openEditForm(index) {
+        console.log('âœ… Opening edit for index:', index);
         editingIndex = index;
         const entry = logEntries[index];
 
         if (!entry) {
-          console.error("No entry found for editing");
+          console.error("âŒ No entry found for editing");
+          alert("Error: Entry not found");
           return;
         }
 
@@ -3314,13 +2490,13 @@ if (earningsInput) {
         );
         const overlay = document.getElementById("overlay");
 
-        // ✅ Helper to safely set input values
+        // âœ… Helper to safely set input values
         function setInputValue(id, value) {
           const input = document.getElementById(id);
           if (input) input.value = value ?? "";
         }
 
-        // ✅ Populate all form fields safely
+        // âœ… Populate all form fields safely
         setInputValue("edit-date", entry.date);
         setInputValue("edit-start-address", entry.startTime);
         setInputValue("edit-end-address", entry.endTime);
@@ -3376,7 +2552,7 @@ if (earningsInput) {
           });
         }
 
-        // ✅ Show Edit form
+        // âœ… Show Edit form
         if (editFormContainer && overlay) {
   editFormContainer.style.display = "block";
   overlay.style.display = "block";
@@ -3391,7 +2567,7 @@ if (earningsInput) {
 }
 
 
-        // ✅ Setup Autocomplete after a tiny delay
+        // âœ… Setup Autocomplete after a tiny delay
         setTimeout(() => {
           try {
             document
@@ -3478,7 +2654,7 @@ async function saveEditedLogEntry() {
   const netProfitFloat = entry.totalEarnings - entry.fuelCost - entry.maintenanceCost - entry.suppliesCost;
 
   const driveTime = convertTimeToHours(entry.totalTime || "");
-// ✅ Use full clock span only (start-end time)
+// âœ… Use full clock span only (start-end time)
 let sessionMinutes = 0;
 const start = entry.startClock;
 const end = entry.endClock;
@@ -3504,7 +2680,7 @@ entry.profitPerHour = sessionHours > 0
   await saveLog();
   filterLogs();
   closeEditForm();
-  showConfirmationMessage("✅ Log entry updated!");
+  showConfirmationMessage("âœ… Log entry updated!");
 }
 
 
@@ -3514,13 +2690,13 @@ entry.profitPerHour = sessionHours > 0
 
 async function importLog() {
   if (fileReaderBusy) {
-    console.warn("⏳ FileReader is still busy. Try again in a moment.");
+    console.warn("â³ FileReader is still busy. Try again in a moment.");
     return;
   }
 
   const token = localStorage.getItem("token");
   if (!token) {
-    showAlertModal("❌ You must be signed in to import a CSV file.", showLogin);
+    showAlertModal("âŒ You must be signed in to import a CSV file.", showLogin);
     return;
   }
 
@@ -3562,7 +2738,7 @@ for (const line of lines) {
 
   const values = line.match(/("([^"]*)"|[^,]+)/g);
   if (!values || values.length < 17) {
-    console.warn("❌ Skipping line — incorrect column count:", line);
+    console.warn("âŒ Skipping line â€” incorrect column count:", line);
     continue;
   }
 
@@ -3597,7 +2773,7 @@ for (const line of lines) {
       totalHours: parseFormattedTime(values[14]),
       netProfit: parseFloat(values[15]) || 0,
       profitPerHour: parseFloat(values[16]) || 0,
-      notes, // ✅ new!
+      notes, // âœ… new!
       mpg: 0,
       gasPrice: 0,
       lastModified: new Date().toISOString(),
@@ -3611,16 +2787,16 @@ for (const line of lines) {
     newLogEntries.push(entry);
     successCount++;
   } catch (err) {
-    console.warn("❌ Error parsing CSV row:", err, line);
+    console.warn("âŒ Error parsing CSV row:", err, line);
   }
 }
 
 
 if (successCount === 0) {
   if (duplicateCount > 0) {
-    showAlertModal("⚠️ All entries in the file were duplicates and have been skipped.");
+    showAlertModal("âš ï¸ All entries in the file were duplicates and have been skipped.");
   } else {
-    showAlertModal("❌ The file format appears to be invalid or unsupported.");
+    showAlertModal("âŒ The file format appears to be invalid or unsupported.");
   }
   return;
 }
@@ -3632,14 +2808,14 @@ if (successCount === 0) {
       await saveLog();
       filterLogs();
       if (successCount > 0) {
-  showAlertModal(`✅ Imported ${successCount} entr${successCount === 1 ? "y" : "ies"} successfully.${duplicateCount > 0 ? `\n⚠️ Skipped ${duplicateCount} duplicate${duplicateCount === 1 ? "" : "s"}.` : ""}`);
+  showAlertModal(`âœ… Imported ${successCount} entr${successCount === 1 ? "y" : "ies"} successfully.${duplicateCount > 0 ? `\nâš ï¸ Skipped ${duplicateCount} duplicate${duplicateCount === 1 ? "" : "s"}.` : ""}`);
 } else {
-  showAlertModal("❌ The file format appears to be invalid or unsupported.");
+  showAlertModal("âŒ The file format appears to be invalid or unsupported.");
 }
 
     } catch (err) {
-      console.error("❌ Error processing file:", err);
-      showAlertModal("❌ Failed to process the file.");
+      console.error("âŒ Error processing file:", err);
+      showAlertModal("âŒ Failed to process the file.");
     } finally {
       fileInput.value = ""; // reset for next upload
 fileReaderBusy = false;
@@ -3650,7 +2826,7 @@ fileReaderBusy = false;
 reader.onerror = () => {
   fileInput.value = ""; // reset in case of error
   fileReaderBusy = false;
-  showAlertModal("❌ Error reading the file.");
+  showAlertModal("âŒ Error reading the file.");
 };
 
 
@@ -3691,7 +2867,7 @@ reader.onerror = () => {
   const password = document.getElementById("auth-password").value.trim();
 
   if (!username || !password) {
-    showAlertModal("❌ Username and password required.");
+    showAlertModal("âŒ Username and password required.");
     return;
   }
 
@@ -3710,35 +2886,35 @@ reader.onerror = () => {
     localStorage.setItem("username", username);
     localStorage.setItem("token", data.token);
     document.getElementById("auth-modal").style.display = "none";
-    showConfirmationMessage(`✅ ${isSignup ? "Account created" : "Signed in"} successfully!`);
+    showConfirmationMessage(`âœ… ${isSignup ? "Account created" : "Signed in"} successfully!`);
     updateAuthUI();
 
     if (isSignup && data.resetKey) {
       showAlertModal(
-        `🔐 Your reset key is:<br><br><code style="font-size: 18px; user-select: all;">${data.resetKey}</code><br><br>Save this key somewhere safe.`,
+        `ðŸ” Your reset key is:<br><br><code style="font-size: 18px; user-select: all;">${data.resetKey}</code><br><br>Save this key somewhere safe.`,
         () => location.reload()
       );
     } else {
-      // ✅ For login or failed signup-then-login, reload to reflect auth state
+      // âœ… For login or failed signup-then-login, reload to reflect auth state
       location.reload();
     }
   } else {
-  let msg = "❌ An error occurred.";
+  let msg = "âŒ An error occurred.";
   try {
     const contentType = res.headers.get("Content-Type") || "";
     if (contentType.includes("application/json")) {
       const data = await res.json();
-      msg = "❌ " + (data.error || msg);
+      msg = "âŒ " + (data.error || msg);
     } else {
-      msg = "❌ " + (await res.text());
+      msg = "âŒ " + (await res.text());
     }
 
     if (res.status === 400 && msg.toLowerCase().includes("username")) {
-      msg = "❌ That username is already taken. Please choose another.";
+      msg = "âŒ That username is already taken. Please choose another.";
     }
 
     if (res.status === 404 && msg.toLowerCase().includes("not found")) {
-      msg = "❌ Account not found. Please check your username or sign up.";
+      msg = "âŒ Account not found. Please check your username or sign up.";
     }
 
   } catch (e) {
@@ -3756,8 +2932,8 @@ reader.onerror = () => {
       function logout() {
         localStorage.removeItem("token");
         localStorage.removeItem("username");
-        showConfirmationMessage("👋 Logged out successfully.");
-        location.reload(); // ✅ this clears state and reinitializes
+        showConfirmationMessage("ðŸ‘‹ Logged out successfully.");
+        location.reload(); // âœ… this clears state and reinitializes
       }
 
       function showPasswordModal() {
@@ -3778,15 +2954,15 @@ reader.onerror = () => {
           .value.trim();
 
         if (!current || !next || !confirm)
-          return showAlertModal("⚠️ Please fill out all fields.");
+          return showAlertModal("âš ï¸ Please fill out all fields.");
 
-        if (next !== confirm) return showAlertModal("❌ New passwords do not match.");
+        if (next !== confirm) return showAlertModal("âŒ New passwords do not match.");
 
         const token = localStorage.getItem("token");
         const username = localStorage.getItem("username");
 
         if (!token || !username) {
-  showAlertModal("❌ You must be signed in.");
+  showAlertModal("âŒ You must be signed in.");
   return;
 }
 
@@ -3808,11 +2984,11 @@ reader.onerror = () => {
         );
 
         if (res.ok) {
-  showAlertModal("✅ Password changed successfully.");
+  showAlertModal("âœ… Password changed successfully.");
   closePasswordModal();
 } else {
   const msg = await res.text();
-  showAlertModal("❌ " + msg);
+  showAlertModal("âŒ " + msg);
 }
 
       }
@@ -3833,7 +3009,7 @@ reader.onerror = () => {
           .value.trim();
 
         if (!username || !resetKey || !newPassword) {
-          showAlertModal("⚠️ Please fill out all fields.");
+          showAlertModal("âš ï¸ Please fill out all fields.");
           return;
         }
 
@@ -3847,11 +3023,11 @@ reader.onerror = () => {
         );
 
         if (res.ok) {
-  showAlertModal("✅ Password reset successfully. You can now sign in.");
+  showAlertModal("âœ… Password reset successfully. You can now sign in.");
   closeResetModal();
 } else {
   const msg = await res.text();
-  showAlertModal("❌ " + msg);
+  showAlertModal("âŒ " + msg);
 }
       }
 
@@ -3869,7 +3045,7 @@ reader.onerror = () => {
   const token = localStorage.getItem("token");
 
   if (!username || !token || !password) {
-    showAlertModal("❌ Missing credentials.");
+    showAlertModal("âŒ Missing credentials.");
     return;
   }
 
@@ -3920,12 +3096,12 @@ reader.onerror = () => {
     });
 
     // 6. Alert and reload
-    showAlertModal("✅ Your account has been deleted.", () => {
+    showAlertModal("âœ… Your account has been deleted.", () => {
       location.reload();
     });
   } else {
     const msg = await res.text();
-    showAlertModal("❌ " + msg);
+    showAlertModal("âŒ " + msg);
   }
 }
 
@@ -3951,16 +3127,11 @@ function filterLogs() {
   const endDate = document.getElementById('filter-end-date').value;
   const searchQuery = document.getElementById('filter-search').value.trim().toLowerCase();
 
-  // ✅ Define the shared filter logic
+  // âœ… Define the shared filter logic
   currentFilterFn = (entryDate, entry) => {
     let matchesDate = true;
-const entryDateObj = new Date(entryDate);
-const startDateObj = startDate ? new Date(startDate) : null;
-const endDateObj = endDate ? new Date(endDate) : null;
-
-if (startDateObj && entryDateObj < startDateObj) matchesDate = false;
-if (endDateObj && entryDateObj > endDateObj) matchesDate = false;
-
+    if (startDate && entryDate < startDate) matchesDate = false;
+    if (endDate && entryDate > endDate) matchesDate = false;
 
     const fieldsToSearch = [
       entry.startTime,
@@ -3982,7 +3153,7 @@ if (endDateObj && entryDateObj > endDateObj) matchesDate = false;
     return matchesDate && matchesSearch;
   };
 
-  // ✅ Use that filter directly in display
+  // âœ… Use that filter directly in display
   displayLog(currentFilterFn);
 }
 
@@ -4040,7 +3211,7 @@ function handleTimeChange() {
   const endTimeInput = document.getElementById("end-time").value;
   const totalHoursInput = document.getElementById("total-hours");
 
-  // 🆕 Auto-open End Time picker after selecting Start Time
+  // ðŸ†• Auto-open End Time picker after selecting Start Time
   if (startTimeInput && !endTimeInput) {
     document.getElementById("end-time")?.showPicker?.();
   }
@@ -4059,7 +3230,7 @@ function handleTimeChange() {
     const totalWorkedMinutes = endTotalMinutes - startTotalMinutes;
     const hoursWorked = totalWorkedMinutes / 60;
 
-    // ✅ Display in input as formatted string like "2 hours 15 minutes"
+    // âœ… Display in input as formatted string like "2 hours 15 minutes"
     totalHoursInput.value = formatHoursAndMinutes(hoursWorked);
   } else {
     totalHoursInput.value = "";
@@ -4238,12 +3409,12 @@ if (entry.notes) {
 
 
     detailsDiv.classList.remove("hidden");
-    summaryDiv.classList.add("hidden"); // 🔥 Hide only the summary
+    summaryDiv.classList.add("hidden"); // ðŸ”¥ Hide only the summary
     toggleButton.textContent = "Less Details";
   } else {
     // Collapse
     detailsDiv.classList.add("hidden");
-    summaryDiv.classList.remove("hidden"); // 🔥 Show the summary
+    summaryDiv.classList.remove("hidden"); // ðŸ”¥ Show the summary
 toggleButton.textContent = "More Details";
   }
 }
@@ -4277,7 +3448,7 @@ function clearFilters() {
   document.getElementById('filter-start-date').value = '';
   document.getElementById('filter-end-date').value = '';
   document.getElementById('filter-search').value = '';
-  filterLogs(); // ✅ Refresh the display
+  filterLogs(); // âœ… Refresh the display
 }
 
 function initOfflineListeners() {
@@ -4369,7 +3540,7 @@ function exportToCSVWithTotals() {
     : logEntries;
 
   if (filtered.length === 0) {
-    alert("❌ No entries to export.");
+    alert("âŒ No entries to export.");
     return;
   }
 
@@ -4494,7 +3665,7 @@ function exportToPDFWithTotals() {
     : logEntries;
 
   if (filtered.length === 0) {
-    alert("❌ No entries to export.");
+    alert("âŒ No entries to export.");
     return;
   }
 
@@ -4691,7 +3862,7 @@ async function handleGoogleSignIn(response) {
     if (data.token) {
       localStorage.setItem("token", data.token);
       updateAuthUI?.(); // Optional: refresh UI
-      showConfirmationMessage("✅ Signed in with Google!");
+      showConfirmationMessage("âœ… Signed in with Google!");
     } else {
       alert("Google sign-in failed.");
     }
@@ -4919,7 +4090,7 @@ async function handleGoogleSignIn(response) {
     >
       <div onclick="event.stopPropagation()" class="modal-box">
         <h3>Delete Account</h3>
-        <p style="font-size: 14px; color: red">⚠️ This action is permanent.</p>
+        <p style="font-size: 14px; color: red">âš ï¸ This action is permanent.</p>
         <input
   type="password"
   id="delete-password"
@@ -4972,7 +4143,7 @@ function updateAuthUI() {
 
 
 
-// 🧮 Time Helpers
+// ðŸ§® Time Helpers
 function convertTimeToHours(durationStr = '') {
   const hours = +(durationStr.match(/(\d+)\s*hour/)?.[1] || 0);
   const minutes = +(durationStr.match(/(\d+)\s*minute/)?.[1] || 0);
@@ -4983,7 +4154,7 @@ function convertTimeToHours(durationStr = '') {
 function formatHoursAndMinutes(decimal = 0) {
   if (isNaN(decimal) || decimal <= 0) return "0 minutes";
 
-  const totalMinutes = Math.round(decimal * 60); // ✅ more accurate
+  const totalMinutes = Math.round(decimal * 60); // âœ… more accurate
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
 
@@ -5006,24 +4177,24 @@ function parseHoursAndMinutes(str = '') {
 
 
 
-// ✅ Register the service worker
+// âœ… Register the service worker
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", function () {
     navigator.serviceWorker.register("/service-worker.js").then(
       function (registration) {
         console.log(
-          "✅ Service Worker registered with scope:",
+          "âœ… Service Worker registered with scope:",
           registration.scope
         );
       },
       function (err) {
-        console.error("❌ Service Worker registration failed:", err);
+        console.error("âŒ Service Worker registration failed:", err);
       }
     );
   });
 }
 
-// ✅ Show install button if eligible and not already installed
+// âœ… Show install button if eligible and not already installed
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault();
   deferredPrompt = e;
@@ -5035,15 +4206,15 @@ window.addEventListener("beforeinstallprompt", (e) => {
   }
 });
 
-// ✅ Handle click on install button
+// âœ… Handle click on install button
 document.getElementById("install-button")?.addEventListener("click", () => {
   if (deferredPrompt) {
     deferredPrompt.prompt();
     deferredPrompt.userChoice.then((choiceResult) => {
       if (choiceResult.outcome === "accepted") {
-        console.log("✅ User accepted the install prompt");
+        console.log("âœ… User accepted the install prompt");
       } else {
-        console.log("❌ User dismissed the install prompt");
+        console.log("âŒ User dismissed the install prompt");
       }
       deferredPrompt = null;
       document.getElementById("install-button").style.display = "none";
@@ -5051,7 +4222,7 @@ document.getElementById("install-button")?.addEventListener("click", () => {
   }
 });
 
-// ✅ Hide the install button if already installed (user is using PWA)
+// âœ… Hide the install button if already installed (user is using PWA)
 window.addEventListener("DOMContentLoaded", () => {
   const isStandalone =
     window.matchMedia("(display-mode: standalone)").matches ||
@@ -5097,7 +4268,7 @@ window.addEventListener('scroll', () => {
       updateAuthUI?.();
       await syncAndReloadLogs?.();
     } catch (err) {
-      alert("❌ Google login failed: " + err.message);
+      alert("âŒ Google login failed: " + err.message);
     }
   }
 
@@ -5125,7 +4296,7 @@ window.addEventListener('scroll', () => {
       await syncAndReloadLogs?.();
     } catch (err) {
       console.error("Google login error:", err);
-      alert("❌ Google login failed: " + err.message);
+      alert("âŒ Google login failed: " + err.message);
     }
   };
 
@@ -5142,14 +4313,14 @@ function installApp() {
     deferredPrompt.prompt();
     deferredPrompt.userChoice.then((choiceResult) => {
       if (choiceResult.outcome === 'accepted') {
-        console.log('✅ User accepted the install prompt');
+        console.log('âœ… User accepted the install prompt');
       } else {
-        console.log('❌ User dismissed the install prompt');
+        console.log('âŒ User dismissed the install prompt');
       }
       deferredPrompt = null;
     });
   } else {
-    alert("⚠️ Installation is not supported or already installed.");
+    alert("âš ï¸ Installation is not supported or already installed.");
   }
 }
 
@@ -5172,63 +4343,63 @@ function toggleHamburgerSettingsMenu() {
 
     </script>
 
-<div id="universal-modal" style="
-display: none;
-position: fixed;
-top: 0;
-left: 0;
-width: 100%;
-height: 100%;
-background: rgba(0, 0, 0, 0.6);
-z-index: 3000;
-justify-content: center;
-align-items: center;
-">
-<div class="modal-box" style="
-  background: white;
-  padding: 30px;
-  border-radius: 10px;
-  width: 90%;
-  max-width: 400px;
-  text-align: center;
-">
-  <h3 id="universal-modal-message"></h3>
-  <div id="universal-modal-buttons" style="margin-top: 20px;"></div>
-</div>
-</div>
+    <!-- External JavaScript -->
+    <script src="app.js"></script>
 
-<div id="bottom-bar">
-<button onclick="calculateRoute()">
-  <span class="material-icons">calculate</span>
-  <span>Calculate</span>
-</button>
+    <div id="universal-modal" style="
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 3000;
+    justify-content: center;
+    align-items: center;
+    ">
+    <div class="modal-box" style="
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      width: 90%;
+      max-width: 400px;
+      text-align: center;
+    ">
+      <h3 id="universal-modal-message"></h3>
+      <div id="universal-modal-buttons" style="margin-top: 20px;"></div>
+    </div>
+    </div>
 
-  <button onclick="optimizeRoute()">
-    <span class="material-icons">tune</span>
-    <span>Optimize</span>
-  </button>
-  <button onclick="logResults()">
-    <span class="material-icons">edit_note</span>
-    <span>Log</span>
-  </button>
-  <button onclick="openInGoogleMaps()">
-    <span class="material-icons">map</span>
-    <span>Map</span>
-  </button>
-</div>
+    <div id="bottom-bar">
+    <button onclick="calculateRoute()">
+      <span class="material-icons">calculate</span>
+      <span>Calculate</span>
+    </button>
 
-<script>
-  function blurButtonOnInteraction(e) {
-    const btn = e.target.closest("button");
-    if (btn) btn.blur();
-  }
+      <button onclick="optimizeRoute()">
+        <span class="material-icons">tune</span>
+        <span>Optimize</span>
+      </button>
+      <button onclick="logResults()">
+        <span class="material-icons">edit_note</span>
+        <span>Log</span>
+      </button>
+      <button onclick="openInGoogleMaps()">
+        <span class="material-icons">map</span>
+        <span>Map</span>
+      </button>
+    </div>
 
-  document.addEventListener("click", blurButtonOnInteraction);
-  document.addEventListener("touchend", blurButtonOnInteraction);
-</script>
+    <script>
+      function blurButtonOnInteraction(e) {
+        const btn = e.target.closest("button");
+        if (btn) btn.blur();
+      }
 
-
-
+      document.addEventListener("click", blurButtonOnInteraction);
+      document.addEventListener("touchend", blurButtonOnInteraction);
+    </script>
 
   </body>
 </html>
