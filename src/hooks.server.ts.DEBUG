@@ -1,0 +1,54 @@
+// /src/hooks.server.ts
+
+export const handle = async ({ event, resolve }) => {
+    const token = event.cookies.get('token');
+    
+    console.log('[HOOK] Token from cookie:', token ? 'exists' : 'missing');
+    console.log('[HOOK] Request URL:', event.url.pathname);
+    
+    if (token) {
+        // Token exists, user is authenticated
+        // Fetch user data from the /api/subscription endpoint
+        try {
+            console.log('[HOOK] Fetching subscription data...');
+            const res = await fetch('https://logs.gorouteyourself.com/api/subscription', {
+                headers: {
+                    Authorization: token
+                }
+            });
+            
+            console.log('[HOOK] Subscription API status:', res.status);
+            
+            if (res.ok) {
+                const subscriptionData = await res.json();
+                console.log('[HOOK] Subscription data:', subscriptionData);
+                
+                // Set user data from subscription endpoint
+                event.locals.user = {
+                    token,
+                    plan: subscriptionData.plan,
+                    tripsThisMonth: subscriptionData.tripsThisMonth,
+                    maxTrips: subscriptionData.maxTrips,
+                    resetDate: subscriptionData.resetDate
+                };
+                
+                console.log('[HOOK] User set in locals:', event.locals.user);
+            } else {
+                const errorText = await res.text();
+                console.log('[HOOK] Invalid token response:', errorText);
+                // Invalid token, clear it
+                event.cookies.delete('token', { path: '/' });
+                event.locals.user = null;
+            }
+        } catch (err) {
+            console.error('[HOOK] Error fetching subscription data:', err);
+            event.locals.user = null;
+        }
+    } else {
+        event.locals.user = null;
+    }
+    
+    console.log('[HOOK] Final locals.user:', event.locals.user ? 'SET' : 'NULL');
+    
+    return resolve(event);
+};

@@ -1,0 +1,837 @@
+<!-- src/routes/+page.svelte -->
+<script lang="ts">
+  import { goto } from '$app/navigation';
+  
+  function scrollToSection(id: string) {
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  }
+</script>
+
+<svelte:head>
+  <title>Go Route Yourself - Route Planning & Profit Tracking for Drivers</title>
+  <meta name="description" content="The easiest way to plan routes, track costs, and maximize profits for delivery drivers and field workers." />
+</svelte:head>
+
+<div class="landing">
+  <!-- Header -->
+  <header class="header">
+    <div class="container">
+      <div class="header-content">
+        <img src="/logo.png" alt="Go Route Yourself" class="logo" />
+        
+        <nav class="nav">
+          <button on:click={() => scrollToSection('features')}>Features</button>
+          <button on:click={() => scrollToSection('pricing')}>Pricing</button>
+          <button on:click={() => scrollToSection('how-it-works')}>How It Works</button>
+          <a href="/login" class="btn-login">Sign In</a>
+          <a href="/login" class="btn-primary">Get Started Free</a>
+        </nav>
+      </div>
+    </div>
+  </header>
+  
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-content">
+        <h1>Plan Routes. Track Costs. <span class="highlight">Maximize Profits.</span></h1>
+        <p class="hero-subtitle">
+          The complete route planning and profit tracking solution for delivery drivers, 
+          field workers, and anyone who gets paid by the route.
+        </p>
+        
+        <div class="hero-buttons">
+          <a href="/login" class="btn-hero-primary">Start Free Trial</a>
+          <button on:click={() => scrollToSection('how-it-works')} class="btn-hero-secondary">
+            Learn More
+          </button>
+        </div>
+        
+        <div class="hero-stats">
+          <div class="stat">
+            <div class="stat-number">10K+</div>
+            <div class="stat-label">Routes Planned</div>
+          </div>
+          <div class="stat">
+            <div class="stat-number">$2M+</div>
+            <div class="stat-label">Profit Tracked</div>
+          </div>
+          <div class="stat">
+            <div class="stat-number">500+</div>
+            <div class="stat-label">Active Drivers</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <!-- Features Section -->
+  <section id="features" class="features">
+    <div class="container">
+      <h2 class="section-title">Everything You Need to Succeed</h2>
+      <p class="section-subtitle">Powerful features designed specifically for drivers</p>
+      
+      <div class="features-grid">
+        <div class="feature-card orange">
+          <div class="feature-icon">🗺️</div>
+          <h3>Google Maps Integration</h3>
+          <p>Plan optimal routes with real-time traffic data, turn-by-turn directions, and automatic mileage calculation.</p>
+        </div>
+        
+        <div class="feature-card blue">
+          <div class="feature-icon">💰</div>
+          <h3>Profit Tracking</h3>
+          <p>Track earnings, fuel costs, maintenance, and supplies. See your actual profit per trip and per hour worked.</p>
+        </div>
+        
+        <div class="feature-card green">
+          <div class="feature-icon">📊</div>
+          <h3>Analytics Dashboard</h3>
+          <p>Beautiful charts and stats showing trends, costs breakdown, and performance over time.</p>
+        </div>
+        
+        <div class="feature-card navy">
+          <div class="feature-icon">📱</div>
+          <h3>Mobile Friendly</h3>
+          <p>Works perfectly on your phone, tablet, or computer. Access your routes anywhere, anytime.</p>
+        </div>
+        
+        <div class="feature-card purple">
+          <div class="feature-icon">📤</div>
+          <h3>Export Reports</h3>
+          <p>Generate CSV and PDF reports for taxes, record-keeping, or sharing with your accountant.</p>
+        </div>
+        
+        <div class="feature-card orange">
+          <div class="feature-icon">💾</div>
+          <h3>Cloud Sync</h3>
+          <p>Your data syncs automatically across all devices. Never lose a trip log again.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <!-- How It Works -->
+  <section id="how-it-works" class="how-it-works">
+    <div class="container">
+      <h2 class="section-title">How It Works</h2>
+      <p class="section-subtitle">Start tracking profits in 3 simple steps</p>
+      
+      <div class="steps">
+        <div class="step">
+          <div class="step-number orange">1</div>
+          <div class="step-content">
+            <h3>Plan Your Route</h3>
+            <p>Enter your starting point and destinations. We'll calculate the optimal route and estimate drive time using Google Maps.</p>
+          </div>
+        </div>
+        
+        <div class="step">
+          <div class="step-number blue">2</div>
+          <div class="step-content">
+            <h3>Track Your Costs</h3>
+            <p>Add earnings per stop, fuel costs, maintenance, and supplies. We automatically calculate your profit.</p>
+          </div>
+        </div>
+        
+        <div class="step">
+          <div class="step-number green">3</div>
+          <div class="step-content">
+            <h3>View Your Analytics</h3>
+            <p>See your profit trends, cost breakdowns, and performance metrics. Export reports for taxes.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <!-- Pricing Section -->
+  <section id="pricing" class="pricing">
+    <div class="container">
+      <h2 class="section-title">Simple, Transparent Pricing</h2>
+      <p class="section-subtitle">Choose the plan that works for you</p>
+      
+      <div class="pricing-grid">
+        <div class="pricing-card">
+          <div class="plan-header">
+            <h3>Free</h3>
+            <div class="price">
+              <span class="currency">$</span>
+              <span class="amount">0</span>
+              <span class="period">/month</span>
+            </div>
+          </div>
+          
+          <ul class="features-list">
+            <li>✓ 10 trips per month</li>
+            <li>✓ Google Maps routing</li>
+            <li>✓ Basic profit tracking</li>
+            <li>✓ Export to CSV</li>
+            <li>✓ Mobile app access</li>
+          </ul>
+          
+          <a href="/login" class="btn-plan">Get Started</a>
+        </div>
+        
+        <div class="pricing-card featured">
+          <div class="badge">Most Popular</div>
+          <div class="plan-header">
+            <h3>Pro</h3>
+            <div class="price">
+              <span class="currency">$</span>
+              <span class="amount">9</span>
+              <span class="period">/month</span>
+            </div>
+          </div>
+          
+          <ul class="features-list">
+            <li>✓ Unlimited trips</li>
+            <li>✓ Advanced analytics</li>
+            <li>✓ PDF reports</li>
+            <li>✓ Cloud backup</li>
+            <li>✓ Priority support</li>
+            <li>✓ Custom reports</li>
+          </ul>
+          
+          <a href="/login" class="btn-plan featured">Start Free Trial</a>
+        </div>
+        
+        <div class="pricing-card">
+          <div class="plan-header">
+            <h3>Business</h3>
+            <div class="price">
+              <span class="currency">$</span>
+              <span class="amount">29</span>
+              <span class="period">/month</span>
+            </div>
+          </div>
+          
+          <ul class="features-list">
+            <li>✓ Everything in Pro</li>
+            <li>✓ Team management</li>
+            <li>✓ Multi-user access</li>
+            <li>✓ API access</li>
+            <li>✓ White-label reports</li>
+            <li>✓ Dedicated support</li>
+          </ul>
+          
+          <a href="/login" class="btn-plan">Contact Sales</a>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <!-- CTA Section -->
+  <section class="cta">
+    <div class="container">
+      <div class="cta-content">
+        <h2>Ready to Maximize Your Profits?</h2>
+        <p>Join hundreds of drivers who are already tracking their routes and increasing their earnings.</p>
+        <div class="cta-buttons">
+          <a href="/login" class="btn-cta-primary">Start Free Trial</a>
+          <span class="cta-note">No credit card required</span>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-section">
+          <img src="/logo.png" alt="Go Route Yourself" class="footer-logo" />
+          <p>Route planning and profit tracking for drivers.</p>
+        </div>
+        
+        <div class="footer-section">
+          <h4>Product</h4>
+          <a href="#features">Features</a>
+          <a href="#pricing">Pricing</a>
+          <a href="#how-it-works">How It Works</a>
+        </div>
+        
+        <div class="footer-section">
+          <h4>Company</h4>
+          <a href="/about">About</a>
+          <a href="/contact">Contact</a>
+          <a href="/blog">Blog</a>
+        </div>
+        
+        <div class="footer-section">
+          <h4>Legal</h4>
+          <a href="/privacy">Privacy Policy</a>
+          <a href="/terms">Terms of Service</a>
+        </div>
+      </div>
+      
+      <div class="footer-bottom">
+        <p>&copy; 2024 Go Route Yourself. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<style>
+  /* Brand Colors */
+  :root {
+    --orange: #FF7F50;
+    --blue: #29ABE2;
+    --navy: #2C4A6E;
+    --green: #8DC63F;
+    --purple: #8B5A9E;
+    --gray-50: #F9FAFB;
+    --gray-100: #F3F4F6;
+    --gray-600: #4B5563;
+    --gray-900: #111827;
+  }
+  
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  .landing {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    line-height: 1.6;
+    color: var(--gray-900);
+  }
+  
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+  
+  /* Header */
+  .header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    border-bottom: 1px solid var(--gray-100);
+    z-index: 1000;
+    padding: 16px 0;
+  }
+  
+  .header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .logo {
+    height: 50px;
+    width: auto;
+  }
+  
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+  
+  .nav button {
+    background: none;
+    border: none;
+    color: var(--gray-600);
+    font-size: 16px;
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+  
+  .nav button:hover {
+    color: var(--orange);
+  }
+  
+  .btn-login {
+    color: var(--gray-600);
+    text-decoration: none;
+    font-weight: 500;
+  }
+  
+  .btn-primary {
+    background: var(--orange);
+    color: white;
+    padding: 10px 24px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: transform 0.2s;
+  }
+  
+  .btn-primary:hover {
+    transform: translateY(-2px);
+  }
+  
+  /* Hero Section */
+  .hero {
+    padding: 140px 0 80px;
+    background: linear-gradient(135deg, var(--navy) 0%, var(--blue) 100%);
+    color: white;
+    text-align: center;
+  }
+  
+  .hero h1 {
+    font-size: 56px;
+    font-weight: 800;
+    margin-bottom: 24px;
+    line-height: 1.2;
+  }
+  
+  .highlight {
+    color: var(--orange);
+  }
+  
+  .hero-subtitle {
+    font-size: 20px;
+    max-width: 700px;
+    margin: 0 auto 40px;
+    opacity: 0.95;
+  }
+  
+  .hero-buttons {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    margin-bottom: 60px;
+  }
+  
+  .btn-hero-primary {
+    background: var(--orange);
+    color: white;
+    padding: 16px 40px;
+    border-radius: 12px;
+    font-size: 18px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all 0.2s;
+  }
+  
+  .btn-hero-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(255, 127, 80, 0.4);
+  }
+  
+  .btn-hero-secondary {
+    background: transparent;
+    color: white;
+    border: 2px solid white;
+    padding: 14px 38px;
+    border-radius: 12px;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .btn-hero-secondary:hover {
+    background: white;
+    color: var(--navy);
+  }
+  
+  .hero-stats {
+    display: flex;
+    justify-content: center;
+    gap: 80px;
+  }
+  
+  .stat {
+    text-align: center;
+  }
+  
+  .stat-number {
+    font-size: 36px;
+    font-weight: 800;
+    margin-bottom: 8px;
+  }
+  
+  .stat-label {
+    font-size: 14px;
+    opacity: 0.9;
+  }
+  
+  /* Features Section */
+  .features {
+    padding: 100px 0;
+    background: white;
+  }
+  
+  .section-title {
+    font-size: 42px;
+    font-weight: 800;
+    text-align: center;
+    margin-bottom: 16px;
+    color: var(--navy);
+  }
+  
+  .section-subtitle {
+    font-size: 20px;
+    color: var(--gray-600);
+    text-align: center;
+    margin-bottom: 60px;
+  }
+  
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 32px;
+  }
+  
+  .feature-card {
+    padding: 32px;
+    background: white;
+    border-radius: 16px;
+    border: 2px solid var(--gray-100);
+    transition: all 0.3s;
+  }
+  
+  .feature-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.1);
+  }
+  
+  .feature-card.orange:hover {
+    border-color: var(--orange);
+  }
+  
+  .feature-card.blue:hover {
+    border-color: var(--blue);
+  }
+  
+  .feature-card.green:hover {
+    border-color: var(--green);
+  }
+  
+  .feature-card.navy:hover {
+    border-color: var(--navy);
+  }
+  
+  .feature-card.purple:hover {
+    border-color: var(--purple);
+  }
+  
+  .feature-icon {
+    font-size: 48px;
+    margin-bottom: 20px;
+  }
+  
+  .feature-card h3 {
+    font-size: 24px;
+    margin-bottom: 12px;
+    color: var(--navy);
+  }
+  
+  .feature-card p {
+    color: var(--gray-600);
+    line-height: 1.7;
+  }
+  
+  /* How It Works */
+  .how-it-works {
+    padding: 100px 0;
+    background: var(--gray-50);
+  }
+  
+  .steps {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  
+  .step {
+    display: flex;
+    gap: 32px;
+    margin-bottom: 60px;
+    align-items: flex-start;
+  }
+  
+  .step-number {
+    width: 60px;
+    height: 60px;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    font-weight: 800;
+    flex-shrink: 0;
+  }
+  
+  .step-number.orange {
+    background: var(--orange);
+  }
+  
+  .step-number.blue {
+    background: var(--blue);
+  }
+  
+  .step-number.green {
+    background: var(--green);
+  }
+  
+  .step-content h3 {
+    font-size: 28px;
+    margin-bottom: 12px;
+    color: var(--navy);
+  }
+  
+  .step-content p {
+    color: var(--gray-600);
+    font-size: 18px;
+    line-height: 1.7;
+  }
+  
+  /* Pricing Section */
+  .pricing {
+    padding: 100px 0;
+    background: white;
+  }
+  
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 32px;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+  
+  .pricing-card {
+    background: white;
+    border: 2px solid var(--gray-100);
+    border-radius: 16px;
+    padding: 40px;
+    position: relative;
+    transition: all 0.3s;
+  }
+  
+  .pricing-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.1);
+  }
+  
+  .pricing-card.featured {
+    border-color: var(--orange);
+    box-shadow: 0 8px 32px rgba(255, 127, 80, 0.2);
+  }
+  
+  .badge {
+    position: absolute;
+    top: -12px;
+    right: 20px;
+    background: var(--orange);
+    color: white;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  
+  .plan-header {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+  
+  .plan-header h3 {
+    font-size: 24px;
+    margin-bottom: 16px;
+    color: var(--navy);
+  }
+  
+  .price {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+  }
+  
+  .currency {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--navy);
+  }
+  
+  .amount {
+    font-size: 56px;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--navy);
+  }
+  
+  .period {
+    font-size: 18px;
+    color: var(--gray-600);
+    margin-left: 4px;
+    align-self: flex-end;
+    margin-bottom: 8px;
+  }
+  
+  .features-list {
+    list-style: none;
+    margin-bottom: 32px;
+  }
+  
+  .features-list li {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--gray-100);
+    color: var(--gray-900);
+  }
+  
+  .btn-plan {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 14px;
+    background: var(--gray-100);
+    color: var(--navy);
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+  
+  .btn-plan:hover {
+    background: var(--gray-100);
+  }
+  
+  .btn-plan.featured {
+    background: var(--orange);
+    color: white;
+  }
+  
+  .btn-plan.featured:hover {
+    transform: translateY(-2px);
+  }
+  
+  /* CTA Section */
+  .cta {
+    padding: 100px 0;
+    background: linear-gradient(135deg, var(--orange) 0%, var(--green) 100%);
+    color: white;
+    text-align: center;
+  }
+  
+  .cta h2 {
+    font-size: 48px;
+    font-weight: 800;
+    margin-bottom: 16px;
+  }
+  
+  .cta p {
+    font-size: 20px;
+    margin-bottom: 40px;
+    opacity: 0.95;
+  }
+  
+  .cta-buttons {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  
+  .btn-cta-primary {
+    background: white;
+    color: var(--orange);
+    padding: 16px 48px;
+    border-radius: 12px;
+    font-size: 18px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all 0.2s;
+  }
+  
+  .btn-cta-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  }
+  
+  .cta-note {
+    font-size: 14px;
+    opacity: 0.9;
+  }
+  
+  /* Footer */
+  .footer {
+    background: var(--navy);
+    color: white;
+    padding: 60px 0 20px;
+  }
+  
+  .footer-content {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 40px;
+    margin-bottom: 40px;
+  }
+  
+  .footer-logo {
+    height: 40px;
+    margin-bottom: 16px;
+  }
+  
+  .footer-section h4 {
+    margin-bottom: 16px;
+    font-size: 16px;
+  }
+  
+  .footer-section a {
+    display: block;
+    color: rgba(255,255,255,0.7);
+    text-decoration: none;
+    margin-bottom: 12px;
+    transition: color 0.2s;
+  }
+  
+  .footer-section a:hover {
+    color: var(--orange);
+  }
+  
+  .footer-section p {
+    color: rgba(255,255,255,0.7);
+  }
+  
+  .footer-bottom {
+    text-align: center;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.5);
+  }
+  
+  /* Responsive */
+  @media (max-width: 768px) {
+    .nav {
+      display: none;
+    }
+    
+    .hero h1 {
+      font-size: 36px;
+    }
+    
+    .hero-subtitle {
+      font-size: 18px;
+    }
+    
+    .hero-stats {
+      flex-direction: column;
+      gap: 32px;
+    }
+    
+    .hero-buttons {
+      flex-direction: column;
+    }
+    
+    .section-title {
+      font-size: 32px;
+    }
+    
+    .pricing-grid,
+    .footer-content {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
