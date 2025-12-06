@@ -230,9 +230,7 @@ async function saveTrip() {
     lastModified: new Date().toISOString()
   };
 
-  // Use user from page data, NOT the store
-  await trips.create(tripToSave, data.user.id);
-
+await trips.create(tripToSave, $user.token)
   goto('/dashboard/trips');
 }
 

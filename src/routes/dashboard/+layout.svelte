@@ -1,11 +1,13 @@
 <!-- src/routes/dashboard/+layout.svelte -->
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { auth, user } from '$lib/stores/auth';
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
   import { trips } from '$lib/stores/trips';
   import { trash } from '$lib/stores/trash';
+  import { syncManager } from '$lib/sync/syncManager';
+  import SyncIndicator from '$lib/components/SyncIndicator.svelte';
   
   let sidebarOpen = false;
   
@@ -21,6 +23,8 @@
     if (confirm('Are you sure you want to logout?')) {
       await fetch('/logout', { method: 'POST' });
       auth.logout();
+      trips.clear();
+      trash.clear();
       goto('/login');
     }
   }
@@ -69,15 +73,30 @@
   function getInitial(name: string): string {
     return name ? name.charAt(0).toUpperCase() : 'U';
   }
- onMount(async () => {
-    // Load trips and trash from IndexedDB when dashboard loads
+
+  // 🔥 LOAD DATA FROM INDEXEDDB ON MOUNT
+  onMount(async () => {
+    console.log('[DASHBOARD LAYOUT] Initializing...');
+    
     if ($user) {
-      const userId = $user.token; // or $user.id depending on your auth
+      const userId = $user.token; // Use token as userId
       
-      console.log('📚 Loading data from IndexedDB...');
-      await trips.load(userId);
-      await trash.load(userId);
-      console.log('✅ Data loaded!');
+      try {
+        console.log('[DASHBOARD LAYOUT] User authenticated, loading data...');
+        
+        // Initialize sync manager
+        await syncManager.initialize();
+        
+        // Load trips and trash from IndexedDB
+        await trips.load(userId);
+        await trash.load(userId);
+        
+        console.log('[DASHBOARD LAYOUT] ✅ Data loaded from IndexedDB!');
+      } catch (err) {
+        console.error('[DASHBOARD LAYOUT] ❌ Failed to load data:', err);
+      }
+    } else {
+      console.log('[DASHBOARD LAYOUT] No user authenticated');
     }
   });
 </script>
@@ -99,13 +118,18 @@
     
     <img src="/logo.png" alt="Go Route Yourself" class="mobile-logo" />
     
-    {#if $user}
-      <div class="mobile-user">
-        <div class="user-avatar small">
-          {getInitial($user.name || $user.email || '')}
+    <div class="mobile-actions">
+      <!-- Sync Indicator in Mobile Header -->
+      <SyncIndicator />
+      
+      {#if $user}
+        <div class="mobile-user">
+          <div class="user-avatar small">
+            {getInitial($user.name || $user.email || '')}
+          </div>
         </div>
-      </div>
-    {/if}
+      {/if}
+    </div>
   </header>
   
   <!-- Sidebar -->
@@ -117,6 +141,11 @@
           <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
         </svg>
       </button>
+    </div>
+    
+    <!-- Sync Indicator in Sidebar (Desktop) -->
+    <div class="sidebar-sync">
+      <SyncIndicator />
     </div>
     
     <nav class="nav">
@@ -157,7 +186,7 @@
   
   <!-- Overlay for mobile -->
   {#if sidebarOpen}
-    <div class="overlay" on:click={closeSidebar}></div>
+    <div class="overlay" on:click={closeSidebar} role="button" tabindex="0"></div>
   {/if}
   
   <!-- Main Content -->
@@ -202,6 +231,12 @@
     align-items: center;
     justify-content: space-between;
     z-index: 100;
+  }
+  
+  .mobile-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
   
   .menu-btn,
@@ -259,6 +294,12 @@
   
   .close-btn {
     display: none;
+  }
+  
+  /* Sync Indicator in Sidebar */
+  .sidebar-sync {
+    padding: 16px 20px;
+    border-bottom: 1px solid #E5E7EB;
   }
   
   .nav {

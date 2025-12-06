@@ -2,6 +2,7 @@
 <script lang="ts">
   import { trips } from '$lib/stores/trips';
   import { goto } from '$app/navigation';
+  import { user } from '$lib/stores/auth';
   
   let searchQuery = '';
   let sortBy = 'date';
@@ -77,9 +78,16 @@
     }).format(date);
   }
   
-  function deleteTrip(id: string) {
-    if (confirm('Are you sure you want to delete this trip?')) {
-      trips.delete(id);
+  // 🔥 UPDATED: Offline-first delete
+  async function deleteTrip(id: string) {
+    if (confirm('Move trip to trash?')) {
+      try {
+        await trips.deleteTrip(id, $user.token);
+        console.log('✅ Trip moved to trash offline!');
+      } catch (err) {
+        console.error('Failed to delete trip:', err);
+        alert('Failed to delete trip. Please try again.');
+      }
     }
   }
   

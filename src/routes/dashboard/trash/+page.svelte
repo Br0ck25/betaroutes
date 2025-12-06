@@ -1,8 +1,11 @@
+<!-- src/routes/dashboard/trash/+page.svelte -->
+
 <script lang="ts">
   import { onMount } from 'svelte';
   import { trash, type TrashedTrip } from '$lib/stores/trash';
   import { trips } from '$lib/stores/trips';
   import { goto } from '$app/navigation';
+  import { user } from '$lib/stores/auth';
   
   let trashedTrips: TrashedTrip[] = [];
   let loading = true;
@@ -16,7 +19,7 @@
   async function loadTrash() {
     loading = true;
     try {
-      trashedTrips = await trash.load();
+      trashedTrips = await trash.load($user.token);
     } finally {
       loading = false;
     }
@@ -28,9 +31,9 @@
     restoring = restoring;
     
     try {
-      await trash.restore(id);
+      await trash.restore(id, $user.token);
       // Reload trips to show restored trip
-      await trips.load();
+      await trips.load($user.token);
       await loadTrash();
     } catch (err) {
       alert('Failed to restore trip: ' + (err instanceof Error ? err.message : 'Unknown error'));
@@ -50,7 +53,7 @@
     deleting = deleting;
     
     try {
-      await trash.permanentDelete(id);
+      await trash.permanentDelete(id, $user.token);
       await loadTrash();
     } catch (err) {
       alert('Failed to delete trip: ' + (err instanceof Error ? err.message : 'Unknown error'));
@@ -66,8 +69,8 @@
     }
     
     try {
-      const result = await trash.emptyAll();
-      alert(result.message || 'Trash emptied successfully');
+      const count = await trash.emptyTrash($user.token);
+      alert(`Deleted ${count} item(s) from trash`);
       await loadTrash();
     } catch (err) {
       alert('Failed to empty trash: ' + (err instanceof Error ? err.message : 'Unknown error'));
