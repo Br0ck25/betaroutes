@@ -5,7 +5,6 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { user } from '$lib/stores/auth';
-  export let data;
   
   let step = 1;
   let mapLoaded = false;
@@ -213,28 +212,54 @@
     if (step > 1) step--;
   }
   
-async function saveTrip() {
-  const tripToSave = {
-    ...tripData,
-    id: tripData.id,
-    maintenanceCost: totalMaintenanceCost,
-    suppliesCost: totalSuppliesCost,
-    netProfit: totalProfit,
-    totalMileage: tripData.totalMiles,
-    fuelCost: tripData.fuelCost,
-    destinations: tripData.stops.map(stop => ({
-      address: stop.address,
-      earnings: stop.earnings,
-      notes: stop.notes || ''
-    })),
-    lastModified: new Date().toISOString()
-  };
-
-await trips.create(tripToSave, $user.token)
-  goto('/dashboard/trips');
-}
-
-
+  async function saveTrip() {
+    // Get userId - try $user.token first, fallback to localStorage or generate temp ID
+    let userId = $user?.token || $user?.id;
+    
+    if (!userId) {
+      // Try to get from localStorage as fallback
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        try {
+          const parsed = JSON.parse(storedUser);
+          userId = parsed.token || parsed.id;
+        } catch (e) {
+          console.error('Failed to parse stored user:', e);
+        }
+      }
+    }
+    
+    // If still no userId, use a temporary one (offline mode)
+    if (!userId) {
+      userId = 'offline-user-' + Date.now();
+      console.warn('No user found, using temporary ID:', userId);
+    }
+    
+    const tripToSave = {
+      ...tripData,
+      id: tripData.id,
+      maintenanceCost: totalMaintenanceCost,
+      suppliesCost: totalSuppliesCost,
+      netProfit: totalProfit,
+      totalMileage: tripData.totalMiles,
+      fuelCost: tripData.fuelCost,
+      destinations: tripData.stops.map(stop => ({
+        address: stop.address,
+        earnings: stop.earnings,
+        notes: stop.notes || ''
+      })),
+      lastModified: new Date().toISOString()
+    };
+    
+    try {
+      console.log('Creating trip with userId:', userId);
+      await trips.create(tripToSave, userId);
+      goto('/dashboard/trips');
+    } catch (err) {
+      console.error('Failed to create trip:', err);
+      alert('Failed to create trip. Please try again.');
+    }
+  }
   
   function formatCurrency(amount: number): string {
     return new Intl.NumberFormat('en-US', {
