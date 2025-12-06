@@ -1,0 +1,37 @@
+name = "go-route-yourself"
+compatibility_date = "2024-12-05"
+
+# Pages configuration
+pages_build_output_dir = ".svelte-kit/cloudflare"
+
+# KV Namespaces for trip data
+[[kv_namespaces]]
+binding = "BETA_LOGS_KV"
+id = "9551bf35d9cc4f75a5210c52d906da24"           # Replace with actual ID from: npx wrangler kv:namespace create "BETA_LOGS_KV"
+preview_id = "babfd9307ecd4a1993a382ebe30c5a16"   # Replace with actual ID from: npx wrangler kv:namespace create "BETA_LOGS_KV" --preview
+
+# KV Namespace for user authentication data
+[[kv_namespaces]]
+binding = "BETA_USERS_KV"
+id = "569eff477945483283fa854d7bdf6b14"          # Replace with actual ID from: npx wrangler kv:namespace create "BETA_USERS_KV"
+preview_id = "a245706e522b444fa9b67fa9a1b88d6a"   # Replace with actual ID from: npx wrangler kv:namespace create "BETA_USERS_KV" --preview
+
+# Deleted Logs (Trash Bin)
+[[kv_namespaces]]
+binding = "BETA_LOGS_TRASH_KV"
+id = "9203d2e85d9d47dabb167faf4e5121a9"
+preview_id = "4dbad92a0fc44f9b91c8a46165c8e40b"
+
+
+# Environment variables (optional)
+[vars]
+# Add any public environment variables here
+# Example: API_URL = "https://api.example.com"
+
+# Development configuration
+[env.development]
+# Development-specific settings
+
+# Production configuration
+[env.production]
+# Production-specific settings

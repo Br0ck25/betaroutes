@@ -40,6 +40,11 @@
       label: 'Trip History' 
     },
     { 
+      href: '/dashboard/trash', 
+      icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M2 4H18M16 4V16C16 17.1046 15.1046 18 14 18H6C4.89543 18 4 17.1046 4 16V4M7 4V2C7 0.89543 7.89543 0 9 0H11C12.1046 0 13 0.89543 13 2V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+      label: 'Trash'
+    },
+    { 
       href: '/dashboard/export', 
       icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M16 11V15C16 15.5304 15.7893 16.0391 15.4142 16.4142C15.0391 16.7893 14.5304 17 14 17H4C3.46957 17 2.96086 16.7893 2.58579 16.4142C2.21071 16.0391 2 15.5304 2 15V11M5 7L9 3M9 3L13 7M9 3V13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
       label: 'Export' 
