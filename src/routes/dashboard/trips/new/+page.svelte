@@ -212,26 +212,28 @@
     if (step > 1) step--;
   }
   
-  function saveTrip() {
-    const tripToSave = {
-      ...tripData,
-      id: tripData.id,
-      maintenanceCost: totalMaintenanceCost,
-      suppliesCost: totalSuppliesCost,
-      netProfit: totalProfit,
-      totalMileage: tripData.totalMiles,
-      fuelCost: tripData.fuelCost,
-      destinations: tripData.stops.map(stop => ({
-        address: stop.address,
-        earnings: stop.earnings,
-        notes: stop.notes || ''
-      })),
-      lastModified: new Date().toISOString()
-    };
-    
-    trips.add(tripToSave);
-    goto('/dashboard/trips');
-  }
+async function saveTrip() {
+  const tripToSave = {
+    ...tripData,
+    maintenanceCost: totalMaintenanceCost,
+    suppliesCost: totalSuppliesCost,
+    netProfit: totalProfit,
+    totalMileage: tripData.totalMiles,
+    fuelCost: tripData.fuelCost,
+    destinations: tripData.stops.map(stop => ({
+      address: stop.address,
+      earnings: stop.earnings,
+      notes: stop.notes || ''
+    })),
+    lastModified: new Date().toISOString()
+  };
+
+  await trips.create(tripToSave, data.user.id);
+
+  goto('/dashboard/trips');
+}
+
+
   
   function formatCurrency(amount: number): string {
     return new Intl.NumberFormat('en-US', {
