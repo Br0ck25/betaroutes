@@ -5,6 +5,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { user } from '$lib/stores/auth';
+  export let data;
   
   let step = 1;
   let mapLoaded = false;
@@ -215,6 +216,7 @@
 async function saveTrip() {
   const tripToSave = {
     ...tripData,
+    id: tripData.id,
     maintenanceCost: totalMaintenanceCost,
     suppliesCost: totalSuppliesCost,
     netProfit: totalProfit,
@@ -228,6 +230,7 @@ async function saveTrip() {
     lastModified: new Date().toISOString()
   };
 
+  // Use user from page data, NOT the store
   await trips.create(tripToSave, data.user.id);
 
   goto('/dashboard/trips');
