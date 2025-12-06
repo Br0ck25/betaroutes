@@ -1,6 +1,6 @@
 <!-- src/routes/dashboard/trips/+page.svelte -->
 <script lang="ts">
-  import { trips } from '$lib/stores/trips.ts';
+  import { trips } from '$lib/stores/trips';
   import { goto } from '$app/navigation';
   
   let searchQuery = '';
@@ -77,11 +77,23 @@
     }).format(date);
   }
   
-function deleteTrip(id: string) {
-  if (confirm('Are you sure you want to delete this trip?')) {
-    trips.delete(id);
+  function deleteTrip(id: string) {
+    if (confirm('Are you sure you want to delete this trip?')) {
+      trips.delete(id);
+    }
   }
-}
+  
+  function editTrip(id: string) {
+    goto(`/dashboard/trips/edit/${id}`);
+  }
+  
+  function calculateHourlyPay(trip: any): number {
+    const earnings = trip.stops?.reduce((s: number, stop: any) => s + (stop.earnings || 0), 0) || 0;
+    const costs = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);
+    const profit = earnings - costs;
+    const hours = trip.hoursWorked || 0;
+    return hours > 0 ? profit / hours : 0;
+  }
   
   function toggleSort(field: string) {
     if (sortBy === field) {
@@ -90,6 +102,17 @@ function deleteTrip(id: string) {
       sortBy = field;
       sortOrder = 'desc';
     }
+  }
+  
+  let expandedTrips = new Set<string>();
+  
+  function toggleExpand(id: string) {
+    if (expandedTrips.has(id)) {
+      expandedTrips.delete(id);
+    } else {
+      expandedTrips.add(id);
+    }
+    expandedTrips = expandedTrips; // Trigger reactivity
   }
 </script>
 
@@ -173,6 +196,19 @@ function deleteTrip(id: string) {
         }, 0))}
       </div>
     </div>
+    <div class="summary-card">
+      <div class="summary-label">Avg $/Hour</div>
+      <div class="summary-value">
+        {(() => {
+          const tripsWithHours = filteredTrips.filter(t => t.hoursWorked > 0);
+          if (tripsWithHours.length === 0) return 'N/A';
+          const totalHourlyPay = tripsWithHours.reduce((sum, trip) => {
+            return sum + calculateHourlyPay(trip);
+          }, 0);
+          return formatCurrency(totalHourlyPay / tripsWithHours.length) + '/hr';
+        })()}
+      </div>
+    </div>
   </div>
   
   <!-- Trips Table -->
@@ -211,6 +247,7 @@ function deleteTrip(id: string) {
                 {/if}
               </button>
             </th>
+            <th>Hours</th>
             <th>
               <button class="th-btn" on:click={() => toggleSort('profit')}>
                 Profit
@@ -225,6 +262,7 @@ function deleteTrip(id: string) {
                 {/if}
               </button>
             </th>
+            <th>$/Hour</th>
             <th class="actions-col">Actions</th>
           </tr>
         </thead>
@@ -233,23 +271,38 @@ function deleteTrip(id: string) {
             {@const earnings = trip.stops?.reduce((s, stop) => s + (stop.earnings || 0), 0) || 0}
             {@const costs = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0)}
             {@const profit = earnings - costs}
+            {@const hourlyPay = calculateHourlyPay(trip)}
+            {@const isExpanded = expandedTrips.has(trip.id)}
             
             <tr class="trip-row">
               <td class="date-col">
                 <div class="date-display">{formatDate(trip.date || '')}</div>
               </td>
               <td class="route-col">
-                <div class="route-display">
-                  <div class="route-start">{trip.startAddress?.split(',')[0] || 'Unknown'}</div>
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                  </svg>
-                  <div class="route-end">
-                    {trip.stops && trip.stops.length > 0 
-                      ? trip.stops[trip.stops.length - 1].address?.split(',')[0] || 'Multiple'
-                      : 'No stops'}
+                <button class="route-display" on:click={() => toggleExpand(trip.id)} type="button">
+                  <div class="route-summary">
+                    <div class="route-start">{trip.startAddress?.split(',')[0] || 'Unknown'}</div>
+                    {#if trip.stops && trip.stops.length > 0}
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                      </svg>
+                      <div class="route-end">
+                        {trip.stops[trip.stops.length - 1].address?.split(',')[0] || 'Multiple'}
+                      </div>
+                    {/if}
                   </div>
-                </div>
+                  {#if isExpanded}
+                    <div class="route-details">
+                      <div class="route-address">📍 Start: {trip.startAddress}</div>
+                      {#each trip.stops as stop, i}
+                        <div class="route-address">📍 Stop {i + 1}: {stop.address}</div>
+                      {/each}
+                      {#if trip.endAddress && trip.endAddress !== trip.startAddress}
+                        <div class="route-address">🏁 End: {trip.endAddress}</div>
+                      {/if}
+                    </div>
+                  {/if}
+                </button>
               </td>
               <td class="stops-col">
                 <div class="stops-badge">{trip.stops?.length || 0}</div>
@@ -257,19 +310,27 @@ function deleteTrip(id: string) {
               <td class="miles-col">
                 <div class="miles-display">{trip.totalMiles?.toFixed(1) || '0.0'} mi</div>
               </td>
+              <td class="hours-col">
+                <div class="hours-display">{trip.hoursWorked?.toFixed(1) || '-'} hrs</div>
+              </td>
               <td class="profit-col">
                 <div class="profit-display" class:positive={profit >= 0} class:negative={profit < 0}>
                   {formatCurrency(profit)}
                 </div>
               </td>
+              <td class="hourly-col">
+                <div class="hourly-display">
+                  {trip.hoursWorked > 0 ? formatCurrency(hourlyPay) + '/hr' : 'N/A'}
+                </div>
+              </td>
               <td class="actions-col">
                 <div class="action-buttons">
-                  <button class="action-btn edit" title="Edit trip">
+                  <button class="action-btn edit" on:click={() => editTrip(trip.id)} title="Edit trip" type="button">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                       <path d="M11 2L14 5L5 14H2V11L11 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                   </button>
-                  <button class="action-btn delete" on:click={() => deleteTrip(trip.id)} title="Delete trip">
+                  <button class="action-btn delete" on:click={() => deleteTrip(trip.id)} title="Delete trip" type="button">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                       <path d="M2 4H14M12 4V13C12 13.5304 11.7893 14.0391 11.4142 14.4142C11.0391 14.7893 10.5304 15 10 15H6C5.46957 15 4.96086 14.7893 4.58579 14.4142C4.21071 14.0391 4 13.5304 4 13V4M5 4V3C5 2.46957 5.21071 1.96086 5.58579 1.58579C5.96086 1.21071 6.46957 1 7 1H9C9.53043 1 10.0391 1.21071 10.4142 1.58579C10.7893 1.96086 11 2.46957 11 3V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
@@ -351,19 +412,17 @@ function deleteTrip(id: string) {
     box-shadow: 0 8px 16px rgba(255, 127, 80, 0.4);
   }
   
-.filters-bar {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-}
+  .filters-bar {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
   
-.search-box {
-  position: relative;
-  flex: 1;
-  max-width: 725px;
-  min-width: 250px;
-}
+  .search-box {
+    position: relative;
+    flex: 1;
+    max-width: 400px;
+  }
   
   .search-icon {
     position: absolute;
@@ -374,18 +433,16 @@ function deleteTrip(id: string) {
     pointer-events: none;
   }
   
-.search-box input {
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-  padding: 14px 16px 14px 48px;
-  border: 2px solid #E5E7EB;
-  border-radius: 12px;
-  font-size: 15px;
-  font-family: inherit;
-  background: white;
-  transition: all 0.2s;
-}
+  .search-box input {
+    width: 100%;
+    padding: 14px 16px 14px 48px;
+    border: 2px solid #E5E7EB;
+    border-radius: 12px;
+    font-size: 15px;
+    font-family: inherit;
+    background: white;
+    transition: all 0.2s;
+  }
   
   .search-box input:focus {
     outline: none;
@@ -393,11 +450,10 @@ function deleteTrip(id: string) {
     box-shadow: 0 0 0 3px rgba(255, 127, 80, 0.1);
   }
   
-.filter-group {
-  display: flex;
-  gap: 12px;
-  flex-shrink: 0;
-}
+  .filter-group {
+    display: flex;
+    gap: 12px;
+  }
   
   .filter-select {
     padding: 14px 16px;
@@ -436,7 +492,7 @@ function deleteTrip(id: string) {
   
   .stats-summary {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 16px;
     margin-bottom: 24px;
   }
@@ -521,13 +577,49 @@ function deleteTrip(id: string) {
   
   .route-display {
     display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .route-display:hover .route-summary {
+    color: var(--orange);
+  }
+  
+  .route-summary {
+    display: flex;
     align-items: center;
     gap: 8px;
+    transition: color 0.2s;
   }
   
   .route-display svg {
     color: #9CA3AF;
     flex-shrink: 0;
+  }
+  
+  .route-details {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 12px;
+    background: #F9FAFB;
+    border-radius: 8px;
+    width: 100%;
+  }
+  
+  .route-address {
+    font-size: 13px;
+    color: #6B7280;
+    line-height: 1.5;
   }
   
   .route-start,
@@ -555,6 +647,12 @@ function deleteTrip(id: string) {
     color: #374151;
   }
   
+  .hours-display {
+    font-size: 14px;
+    font-weight: 600;
+    color: #6B7280;
+  }
+  
   .profit-display {
     font-size: 16px;
     font-weight: 700;
@@ -566,6 +664,12 @@ function deleteTrip(id: string) {
   
   .profit-display.negative {
     color: #DC2626;
+  }
+  
+  .hourly-display {
+    font-size: 14px;
+    font-weight: 600;
+    color: #059669;
   }
   
   .actions-col {
@@ -640,12 +744,16 @@ function deleteTrip(id: string) {
       flex-direction: column;
     }
     
+    .search-box {
+      max-width: 100%;
+    }
+    
     .filter-group {
       flex-wrap: wrap;
     }
     
     .stats-summary {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, 1fr);
     }
     
     .table-container {
@@ -662,6 +770,10 @@ function deleteTrip(id: string) {
       flex-direction: column;
       align-items: flex-start;
       gap: 16px;
+    }
+    
+    .stats-summary {
+      grid-template-columns: 1fr;
     }
   }
 </style>

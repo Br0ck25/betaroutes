@@ -10,10 +10,6 @@
   let map: any = null;
   let directionsService: any = null;
   let directionsRenderer: any = null;
-  let editingStopId: string | null = null;
-  let editedStop = { address: '', earnings: 0, notes: '' };
-
-
   
   // Maintenance & Supplies options storage
   let maintenanceOptions = ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement'];
@@ -35,9 +31,10 @@
   // Form data
   let tripData = {
     id: crypto.randomUUID(),
-    date: new Date().toISOString().split('T')[0],
+    date: new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0],
     startTime: '09:00',
     endTime: '17:00',
+    hoursWorked: 0,
     startAddress: $userSettings.defaultStartAddress || '',
     endAddress: $userSettings.defaultEndAddress || '',
     stops: [] as any[],
@@ -71,36 +68,6 @@
     // Recalculate route
     calculateRoute();
   }
-function startEditStop(stop: any) {
-  editingStopId = stop.id;
-  editedStop = {
-    address: stop.address,
-    earnings: stop.earnings,
-    notes: stop.notes || ''
-  };
-}
-
-function saveEditStop(id: string) {
-  tripData.stops = tripData.stops.map(s => {
-    if (s.id === id) {
-      return {
-        ...s,
-        address: editedStop.address,
-        earnings: editedStop.earnings,
-        notes: editedStop.notes
-      };
-    }
-    return s;
-  });
-
-  editingStopId = null;
-  calculateRoute();
-}
-
-function cancelEditStop() {
-  editingStopId = null;
-}
-
   
   function removeStop(id: string) {
     tripData.stops = tripData.stops.filter(s => s.id !== id);
@@ -166,8 +133,6 @@ function cancelEditStop() {
       localStorage.setItem('suppliesOptions', JSON.stringify(suppliesOptions));
     }
   }
-
-
   
   function calculateRoute() {
     if (!mapLoaded || !directionsService) return;
@@ -218,6 +183,26 @@ function cancelEditStop() {
   $: totalCosts = (tripData.fuelCost || 0) + totalMaintenanceCost + totalSuppliesCost;
   $: totalProfit = totalEarnings - totalCosts;
   
+  // Auto-calculate hours worked from start/end time
+  $: {
+    if (tripData.startTime && tripData.endTime) {
+      const [startHour, startMin] = tripData.startTime.split(':').map(Number);
+      const [endHour, endMin] = tripData.endTime.split(':').map(Number);
+      
+      const startMinutes = startHour * 60 + startMin;
+      const endMinutes = endHour * 60 + endMin;
+      
+      let diffMinutes = endMinutes - startMinutes;
+      
+      // Handle overnight shifts (end time before start time)
+      if (diffMinutes < 0) {
+        diffMinutes += 24 * 60;
+      }
+      
+      tripData.hoursWorked = Math.round((diffMinutes / 60) * 10) / 10;
+    }
+  }
+  
   function nextStep() {
     if (step < 4) step++;
   }
@@ -262,6 +247,18 @@ function cancelEditStop() {
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const hour12 = hour % 12 || 12;
     return `${hour12}:${minutes} ${ampm}`;
+  }
+  
+  function formatDateLocal(dateString: string): string {
+    if (!dateString) return '';
+    // Parse as local date without timezone conversion
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString('en-US', { 
+      month: 'numeric', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
   }
   
   function initAutocomplete(node: HTMLInputElement) {
@@ -318,10 +315,10 @@ function cancelEditStop() {
         input.value = place.formatted_address;
         input.dispatchEvent(new Event('input', { bubbles: true }));
         
-        // Blur to close dropdown, then clear the input's focus
+        // Blur to close dropdown
         input.blur();
         
-        // Force close pac-container by simulating ESC key
+        // Send ESC key to force close the dropdown
         setTimeout(() => {
           const event = new KeyboardEvent('keydown', {
             key: 'Escape',
@@ -331,6 +328,14 @@ function cancelEditStop() {
             bubbles: true
           });
           input.dispatchEvent(event);
+          
+          // Hide all pac-containers after selection
+          setTimeout(() => {
+            const pacContainers = document.querySelectorAll('.pac-container');
+            pacContainers.forEach(container => {
+              (container as HTMLElement).style.display = 'none';
+            });
+          }, 100);
         }, 50);
         
         // Trigger recalculation after a short delay
@@ -338,18 +343,18 @@ function cancelEditStop() {
       }
     });
     
-    // Also hide dropdown when input loses focus
-    input.addEventListener('blur', () => {
-      setTimeout(() => {
-        // Get all pac containers
-        const pacContainers = document.querySelectorAll('.pac-container');
-        pacContainers.forEach(container => {
-          // Only hide if no input currently has focus
-          if (document.activeElement?.tagName !== 'INPUT') {
-            (container as HTMLElement).style.display = 'none';
-          }
-        });
-      }, 200);
+    // Show pac-container only when user starts typing
+    let typingTimeout: any;
+    input.addEventListener('input', () => {
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => {
+        if (input.value.length > 0) {
+          const pacContainers = document.querySelectorAll('.pac-container');
+          pacContainers.forEach(container => {
+            (container as HTMLElement).style.display = '';
+          });
+        }
+      }, 100);
     });
   }
   
@@ -481,6 +486,12 @@ function cancelEditStop() {
             <label>End Time</label>
             <input type="time" bind:value={tripData.endTime} />
           </div>
+          
+          <div class="form-group">
+            <label>Hours Worked</label>
+            <div class="hours-display-field">{tripData.hoursWorked.toFixed(1)} hours</div>
+            <small class="field-hint">Auto-calculated from start and end time</small>
+          </div>
         </div>
         
         <div class="form-actions">
@@ -536,12 +547,24 @@ function cancelEditStop() {
                 <div class="stop-item">
                   <div class="stop-number">{i + 1}</div>
                   <div class="stop-info">
-                    <div class="stop-address">{stop.address}</div>
-                    {#if stop.notes}
-                      <div class="stop-notes">{stop.notes}</div>
-                    {/if}
+                    <input 
+                      type="text"
+                      class="stop-address-input"
+                      bind:value={stop.address}
+                      placeholder="Stop address"
+                      use:initAutocomplete
+                    />
                   </div>
-                  <div class="stop-earnings">{formatCurrency(stop.earnings)}</div>
+                  <div class="stop-earnings-input">
+                    <span class="currency">$</span>
+                    <input 
+                      type="number"
+                      bind:value={stop.earnings}
+                      placeholder="0"
+                      step="0.01"
+                      min="0"
+                    />
+                  </div>
                   <button class="stop-delete" on:click={() => removeStop(stop.id)} type="button">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                       <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -828,12 +851,17 @@ function cancelEditStop() {
           <div class="review-grid">
             <div class="review-item">
               <span class="review-label">Date</span>
-              <span class="review-value">{new Date(tripData.date).toLocaleDateString()}</span>
+              <span class="review-value">{formatDateLocal(tripData.date)}</span>
             </div>
             
             <div class="review-item">
               <span class="review-label">Time</span>
               <span class="review-value">{formatTime12Hour(tripData.startTime)} - {formatTime12Hour(tripData.endTime)}</span>
+            </div>
+            
+            <div class="review-item">
+              <span class="review-label">Hours Worked</span>
+              <span class="review-value">{tripData.hoursWorked || 0} hours</span>
             </div>
             
             <div class="review-item">
@@ -875,6 +903,14 @@ function cancelEditStop() {
                 {formatCurrency(totalProfit)}
               </span>
             </div>
+            {#if tripData.hoursWorked > 0}
+              <div class="summary-row hourly">
+                <span>Hourly Pay</span>
+                <span class="amount positive">
+                  {formatCurrency(totalProfit / tripData.hoursWorked)}/hr
+                </span>
+              </div>
+            {/if}
           </div>
         </div>
         
@@ -1061,6 +1097,24 @@ function cancelEditStop() {
     font-size: 12px;
     font-weight: 400;
     color: #9CA3AF;
+  }
+  
+  .field-hint {
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+    color: #6B7280;
+    font-style: italic;
+  }
+  
+  .hours-display-field {
+    padding: 14px 16px;
+    background: #F9FAFB;
+    border: 2px solid #E5E7EB;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #059669;
   }
   
   .form-group input,
@@ -1376,6 +1430,24 @@ function cancelEditStop() {
     min-width: 0;
   }
   
+  .stop-address-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid #E5E7EB;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: inherit;
+    color: #111827;
+    background: white;
+    transition: border-color 0.2s;
+  }
+  
+  .stop-address-input:focus {
+    outline: none;
+    border-color: var(--orange);
+  }
+  
   .stop-address {
     font-size: 14px;
     font-weight: 600;
@@ -1386,6 +1458,40 @@ function cancelEditStop() {
   .stop-notes {
     font-size: 13px;
     color: #6B7280;
+  }
+  
+  .stop-earnings-input {
+    position: relative;
+    width: 120px;
+    flex-shrink: 0;
+  }
+  
+  .stop-earnings-input .currency {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--green);
+    font-weight: 700;
+    font-size: 16px;
+  }
+  
+  .stop-earnings-input input {
+    width: 100%;
+    padding: 10px 12px 10px 28px;
+    border: 2px solid #E5E7EB;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 700;
+    font-family: inherit;
+    color: var(--green);
+    background: white;
+    transition: border-color 0.2s;
+  }
+  
+  .stop-earnings-input input:focus {
+    outline: none;
+    border-color: var(--green);
   }
   
   .stop-earnings {
