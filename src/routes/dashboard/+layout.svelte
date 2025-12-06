@@ -3,6 +3,9 @@
   import { page } from '$app/stores';
   import { auth, user } from '$lib/stores/auth';
   import { goto } from '$app/navigation';
+  import { onMount } from 'svelte';
+  import { trips } from '$lib/stores/trips';
+  import { trash } from '$lib/stores/trash';
   
   let sidebarOpen = false;
   
@@ -66,6 +69,17 @@
   function getInitial(name: string): string {
     return name ? name.charAt(0).toUpperCase() : 'U';
   }
+ onMount(async () => {
+    // Load trips and trash from IndexedDB when dashboard loads
+    if ($user) {
+      const userId = $user.token; // or $user.id depending on your auth
+      
+      console.log('📚 Loading data from IndexedDB...');
+      await trips.load(userId);
+      await trash.load(userId);
+      console.log('✅ Data loaded!');
+    }
+  });
 </script>
 
 <svelte:head>

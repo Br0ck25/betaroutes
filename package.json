@@ -49,6 +49,7 @@
   "dependencies": {
     "@googlemaps/js-api-loader": "^2.0.2",
     "date-fns": "^4.1.0",
+    "idb": "^8.0.3",
     "jspdf": "^3.0.4",
     "xlsx": "^0.18.5"
   }

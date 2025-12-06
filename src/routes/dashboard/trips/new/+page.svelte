@@ -4,6 +4,7 @@
   import { userSettings } from '$lib/stores/userSettings';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
+  import { user } from '$lib/stores/auth';
   
   let step = 1;
   let mapLoaded = false;
