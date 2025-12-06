@@ -1,20 +1,70 @@
 // src/hooks.server.ts
+import { dev } from '$app/environment';
+
+// Simple in-memory KV mock for local development
+function createMockKV() {
+    const store = new Map();
+
+    return {
+        async get(key) {
+            return store.get(key) ?? null;
+        },
+        async put(key, value) {
+            store.set(key, value);
+        },
+        async delete(key) {
+            store.delete(key);
+        },
+        async list({ prefix }) {
+            const keys = [...store.keys()].filter(k => k.startsWith(prefix));
+            return {
+                keys: keys.map((name) => ({ name }))
+            };
+        }
+    };
+}
 
 export const handle = async ({ event, resolve }) => {
     console.log('[HOOK] ===== HOOK EXECUTING =====');
     console.log('[HOOK] Request URL:', event.url.pathname);
 
+    // ------------------------------------------------------
+    // 🔥 1. Ensure KV bindings exist (mock in dev only)
+    // ------------------------------------------------------
+    if (dev) {
+        console.log('[HOOK] Using MOCK KV (local dev mode)');
+
+        if (!event.platform) event.platform = {};
+        if (!event.platform.env) event.platform.env = {};
+
+        // User KV
+        if (!event.platform.env.BETA_USERS_KV) {
+            event.platform.env.BETA_USERS_KV = createMockKV();
+        }
+
+        // Trips KV
+        if (!event.platform.env.BETA_LOGS_KV) {
+            event.platform.env.BETA_LOGS_KV = createMockKV();
+        }
+
+        // Trash KV
+        if (!event.platform.env.BETA_LOGS_TRASH_KV) {
+            event.platform.env.BETA_LOGS_TRASH_KV = createMockKV();
+        }
+    }
+
+    // ------------------------------------------------------
+    // 🔥 2. User auth exactly as you had it
+    // ------------------------------------------------------
     const token = event.cookies.get('token');
     console.log('[HOOK] Token from cookie:', token ? `exists (${token})` : 'missing');
 
-    // If no token, user remains unauthenticated
     if (!token) {
         console.log('[HOOK] No token, setting user = null');
         event.locals.user = null;
         return resolve(event);
     }
 
-    // Token exists — try to look up user in KV
     try {
         console.log('[HOOK] Looking up user in BETA_USERS_KV...');
 
@@ -30,8 +80,6 @@ export const handle = async ({ event, resolve }) => {
         if (userDataStr) {
             const userData = JSON.parse(userDataStr);
 
-            console.log('[HOOK] KV user loaded:', userData);
-
             event.locals.user = {
                 token,
                 plan: userData.plan ?? "free",
@@ -42,8 +90,8 @@ export const handle = async ({ event, resolve }) => {
 
             console.log('[HOOK] User set from KV');
         } else {
-            // KV entry not found — fallback defaults
             console.log('[HOOK] No KV entry for token — using fallback values');
+
             event.locals.user = {
                 token,
                 plan: 'free',
@@ -56,7 +104,6 @@ export const handle = async ({ event, resolve }) => {
     } catch (err) {
         console.error('[HOOK] ERROR accessing BETA_USERS_KV:', err);
 
-        // KV lookup failed — still allow user with fallback data
         event.locals.user = {
             token,
             plan: 'free',

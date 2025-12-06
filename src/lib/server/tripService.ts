@@ -8,15 +8,15 @@ export type TripRecord = {
   stops?: any[];
   createdAt: string;
   updatedAt?: string;
-  deletedAt?: string;  // Timestamp when moved to trash
-  [key: string]: any;  // Allow other trip properties
+  deletedAt?: string;
+  [key: string]: any;
 };
 
 export type TrashMetadata = {
   deletedAt: string;
   deletedBy: string;
   originalKey: string;
-  expiresAt: string;  // When it will be permanently deleted
+  expiresAt: string;
 };
 
 function prefixForUser(userId: string) {
@@ -28,62 +28,41 @@ function trashPrefixForUser(userId: string) {
 }
 
 export function makeTripService(
-  kv: KVNamespace | undefined,
+  kv: KVNamespace,
   trashKV: KVNamespace | undefined
 ) {
-  if (!kv) {
-    throw new Error('BETA_LOGS_KV not bound');
-  }
-
   return {
-    /**
-     * List all active (non-deleted) trips for a user
-     */
     async list(userId: string): Promise<TripRecord[]> {
       const prefix = prefixForUser(userId);
       const list = await kv.list({ prefix });
-      const keys = list.keys || [];
       const out: TripRecord[] = [];
-      
-      for (const k of keys) {
-        try {
-          const raw = await kv.get(k.name);
-          if (!raw) continue;
-          const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-          out.push(parsed as TripRecord);
-        } catch (e) {
-          console.error('tripService: failed to read', k.name, e);
-        }
+
+      for (const k of list.keys) {
+        const raw = await kv.get(k.name);
+        if (!raw) continue;
+        const t = JSON.parse(raw);
+        out.push(t);
       }
-      
-      // Sort by createdAt descending (newest first)
-      out.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+
+      out.sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
       return out;
     },
 
-    /**
-     * Get a single trip by ID
-     */
-    async get(userId: string, tripId: string): Promise<TripRecord | null> {
+    async get(userId: string, tripId: string) {
       const key = `trip:${userId}:${tripId}`;
       const raw = await kv.get(key);
-      if (!raw) return null;
-      return typeof raw === 'string' ? JSON.parse(raw) : raw;
+      return raw ? JSON.parse(raw) : null;
     },
 
-    /**
-     * Create or update a trip
-     */
-    async put(record: TripRecord): Promise<void> {
-      const key = `trip:${record.userId}:${record.id}`;
-      record.updatedAt = new Date().toISOString();
-      await kv.put(key, JSON.stringify(record));
+    async put(trip: TripRecord) {
+      trip.updatedAt = new Date().toISOString();
+      await kv.put(`trip:${trip.userId}:${trip.id}`, JSON.stringify(trip));
     },
 
     /**
      * Soft delete - Move trip to trash with 30-day expiration
      */
-    async delete(userId: string, tripId: string): Promise<void> {
+    async delete(userId: string, tripId: string) {
       if (!trashKV) {
         // If no trash KV, do hard delete
         const key = `trip:${userId}:${tripId}`;
@@ -98,7 +77,7 @@ export function makeTripService(
         throw new Error('Trip not found');
       }
 
-      const trip = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      const trip = JSON.parse(raw);
       const now = new Date();
       const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
@@ -126,22 +105,41 @@ export function makeTripService(
       await kv.delete(key);
     },
 
-    /**
-     * Permanently delete a trip from trash (cannot be restored)
-     */
-    async permanentDelete(userId: string, tripId: string): Promise<void> {
-      if (!trashKV) {
-        throw new Error('Trash KV not available');
+    async listTrash(userId: string) {
+      if (!trashKV) return [];
+      const prefix = trashPrefixForUser(userId);
+      const list = await trashKV.list({ prefix });
+      const out: any[] = [];
+
+      for (const k of list.keys) {
+        const raw = await trashKV.get(k.name);
+        if (!raw) continue;
+        const { trip, metadata } = JSON.parse(raw);
+        out.push({ ...trip, metadata });
       }
 
-      const trashKey = `trash:${userId}:${tripId}`;
-      await trashKV.delete(trashKey);
+      out.sort((a,b)=>b.metadata.deletedAt.localeCompare(a.metadata.deletedAt));
+      return out;
+    },
+
+    async emptyTrash(userId: string) {
+      if (!trashKV) return 0;
+      const prefix = trashPrefixForUser(userId);
+      const list = await trashKV.list({ prefix });
+      let count = 0;
+
+      for (const k of list.keys) {
+        await trashKV.delete(k.name);
+        count++;
+      }
+
+      return count;
     },
 
     /**
      * Restore a trip from trash back to active trips
      */
-    async restore(userId: string, tripId: string): Promise<TripRecord> {
+    async restore(userId: string, tripId: string) {
       if (!trashKV) {
         throw new Error('Trash KV not available');
       }
@@ -153,7 +151,7 @@ export function makeTripService(
         throw new Error('Trip not found in trash');
       }
 
-      const { trip, metadata } = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      const { trip, metadata } = JSON.parse(raw);
 
       // Remove deletion timestamp
       delete trip.deletedAt;
@@ -170,95 +168,25 @@ export function makeTripService(
     },
 
     /**
-     * List all trips in trash for a user
+     * Permanently delete a trip from trash (cannot be restored)
      */
-    async listTrash(userId: string): Promise<Array<TripRecord & { metadata: TrashMetadata }>> {
-      if (!trashKV) {
-        return [];
-      }
-
-      const prefix = trashPrefixForUser(userId);
-      const list = await trashKV.list({ prefix });
-      const keys = list.keys || [];
-      const out: Array<TripRecord & { metadata: TrashMetadata }> = [];
-
-      for (const k of keys) {
-        try {
-          const raw = await trashKV.get(k.name);
-          if (!raw) continue;
-          const { trip, metadata } = typeof raw === 'string' ? JSON.parse(raw) : raw;
-          out.push({ ...trip, metadata });
-        } catch (e) {
-          console.error('tripService: failed to read trash item', k.name, e);
-        }
-      }
-
-      // Sort by deletedAt descending (most recently deleted first)
-      out.sort((a, b) => 
-        (b.metadata.deletedAt || '').localeCompare(a.metadata.deletedAt || '')
-      );
-
-      return out;
-    },
-
-    /**
-     * Empty entire trash for a user (permanently delete all)
-     */
-    async emptyTrash(userId: string): Promise<number> {
+    async permanentDelete(userId: string, tripId: string) {
       if (!trashKV) {
         throw new Error('Trash KV not available');
       }
 
-      const prefix = trashPrefixForUser(userId);
-      const list = await trashKV.list({ prefix });
-      const keys = list.keys || [];
-
-      let count = 0;
-      for (const k of keys) {
-        await trashKV.delete(k.name);
-        count++;
-      }
-
-      return count;
+      const trashKey = `trash:${userId}:${tripId}`;
+      await trashKV.delete(trashKey);
     },
 
-    /**
-     * Get count of items in trash for a user
-     */
-    async getTrashCount(userId: string): Promise<number> {
-      if (!trashKV) {
-        return 0;
-      }
+    async incrementUserCounter(userId: string, amt = 1) {
+      const key = `meta:user:${userId}:trip_count`;
+      const raw = await kv.get(key);
+      const cur = raw ? parseInt(raw,10) : 0;
+      const next = Math.max(0, cur + amt);
 
-      const prefix = trashPrefixForUser(userId);
-      const list = await trashKV.list({ prefix });
-      return list.keys?.length || 0;
-    },
-
-    /**
-     * Increment/decrement user's trip counter
-     */
-    async incrementUserCounter(userId: string, amount = 1) {
-      const metaKey = `meta:user:${userId}:trip_count`;
-      try {
-        const raw = await kv.get(metaKey);
-        const cur = raw ? parseInt(String(raw), 10) || 0 : 0;
-        const next = Math.max(0, cur + amount);  // Prevent negative counts
-        await kv.put(metaKey, String(next));
-        return next;
-      } catch (e) {
-        console.error('incrementUserCounter failed', e);
-        return null;
-      }
-    },
-
-    /**
-     * Get user's trip count
-     */
-    async getUserTripCount(userId: string) {
-      const metaKey = `meta:user:${userId}:trip_count`;
-      const raw = await kv.get(metaKey);
-      return raw ? parseInt(String(raw), 10) || 0 : 0;
+      await kv.put(key, String(next));
+      return next;
     }
   };
 }
