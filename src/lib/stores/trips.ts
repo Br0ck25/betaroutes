@@ -6,8 +6,7 @@ import type { TripRecord } from '$lib/db/types';
 
 /**
  * Offline-first trips store
- * 
- * All operations save to IndexedDB FIRST, then queue for cloud sync
+ * * All operations save to IndexedDB FIRST, then queue for cloud sync
  * Works 100% offline - syncs automatically when online
  */
 function createTripsStore() {
@@ -310,6 +309,41 @@ function createTripsStore() {
       } catch (err) {
         console.error('❌ Failed to sync from cloud:', err);
       }
+    },
+
+    // NEW FUNCTION: Migrates temporary offline data to the real user account
+    async migrateOfflineTrips(tempUserId: string, realUserId: string) {
+      if (!tempUserId || !realUserId || tempUserId === realUserId) return;
+
+      console.log(`🔄 Migrating trips from ${tempUserId} to ${realUserId}...`);
+      const db = await getDB();
+      const tx = db.transaction('trips', 'readwrite');
+      const store = tx.objectStore('trips');
+      const index = store.index('userId');
+
+      const offlineTrips = await index.getAll(tempUserId);
+
+      for (const trip of offlineTrips) {
+        // Update userId and mark for sync
+        trip.userId = realUserId;
+        trip.syncStatus = 'pending';
+        trip.updatedAt = new Date().toISOString();
+        
+        await store.put(trip);
+        
+        // Queue for sync to cloud
+        await syncManager.addToQueue({
+          action: 'create', // It's a "create" for the cloud since it doesn't exist there yet
+          tripId: trip.id,
+          data: trip
+        });
+      }
+
+      await tx.done;
+      console.log(`✅ Migrated ${offlineTrips.length} trips.`);
+      
+      // Refresh the view
+      await this.load(realUserId);
     },
   };
 }

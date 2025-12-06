@@ -13,6 +13,12 @@ interface AuthState {
   error: string | null;
 }
 
+// Helper to get/set offline ID
+const getOfflineId = () => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('offline_user_id');
+};
+
 function createAuthStore() {
   const { subscribe, set, update } = writable<AuthState>({
     user: null,
@@ -24,15 +30,36 @@ function createAuthStore() {
   return {
     subscribe,
 
+    /**
+     * HYDRATE: Manually set user state (e.g. from Server Load function)
+     * This fixes the issue of state being lost on refresh.
+     */
+    hydrate: (userData: User) => {
+        // Update store
+        set({
+            user: userData,
+            isAuthenticated: true,
+            isLoading: false,
+            error: null,
+        });
+        
+        // Sync to localStorage so it persists if we do client-side navigation
+        if (typeof window !== 'undefined' && userData.token) {
+            storage.setToken(userData.token);
+            // If user has a name/email, we could store that too, but token is key
+        }
+    },
+
     // Initialize auth state from localStorage
     init: async () => {
       const token = storage.getToken();
       const username = storage.getUsername();
 
-      if (token && username) {
+      if (token) {
         update(state => ({ ...state, isLoading: true }));
         
         try {
+          // Verify token / get latest details
           const subscription = await api.getSubscription(token);
           
           const user: User = {
@@ -41,6 +68,8 @@ function createAuthStore() {
             tripsThisMonth: subscription.tripsThisMonth,
             maxTrips: subscription.maxTrips,
             resetDate: subscription.resetDate,
+            // Add name/email if your API returns them or you stored them
+            name: username || 'User' 
           };
 
           set({
@@ -51,11 +80,12 @@ function createAuthStore() {
           });
 
           // Sync trips from cloud
-          await trips.syncFromCloud();
+          await trips.syncFromCloud(token);
         } catch (error) {
           console.error('Failed to load user data:', error);
-          storage.clearToken();
-          storage.clearUsername();
+          // Don't clear token immediately on network error, only on 401
+          // But for now, we assume invalid token
+          // storage.clearToken(); 
           
           set({
             user: null,
@@ -80,7 +110,8 @@ function createAuthStore() {
 
       try {
         const response = await api.signup(username, password);
-        
+        const offlineId = getOfflineId();
+
         storage.setToken(response.token);
         storage.setUsername(username);
 
@@ -92,6 +123,7 @@ function createAuthStore() {
           tripsThisMonth: subscription.tripsThisMonth,
           maxTrips: subscription.maxTrips,
           resetDate: subscription.resetDate,
+          name: username
         };
 
         set({
@@ -101,8 +133,13 @@ function createAuthStore() {
           error: null,
         });
 
-        // Sync local trips to cloud
-        await trips.syncToCloud();
+        // Migrate offline data
+        if (offlineId) {
+            await trips.migrateOfflineTrips(offlineId, response.token);
+            localStorage.removeItem('offline_user_id');
+        }
+
+        await trips.syncFromCloud(response.token);
 
         return { success: true, resetKey: response.resetKey };
       } catch (error: any) {
@@ -121,7 +158,8 @@ function createAuthStore() {
 
       try {
         const response = await api.login(username, password);
-        
+        const offlineId = getOfflineId();
+
         storage.setToken(response.token);
         storage.setUsername(username);
 
@@ -133,6 +171,7 @@ function createAuthStore() {
           tripsThisMonth: subscription.tripsThisMonth,
           maxTrips: subscription.maxTrips,
           resetDate: subscription.resetDate,
+          name: username
         };
 
         set({
@@ -142,8 +181,13 @@ function createAuthStore() {
           error: null,
         });
 
-        // Sync trips from cloud
-        await trips.syncFromCloud();
+        // Migrate offline data
+        if (offlineId) {
+            await trips.migrateOfflineTrips(offlineId, response.token);
+            localStorage.removeItem('offline_user_id');
+        }
+
+        await trips.syncFromCloud(response.token);
 
         return { success: true };
       } catch (error: any) {
@@ -175,7 +219,6 @@ function createAuthStore() {
 
       try {
         await api.changePassword(username, currentPassword, newPassword);
-        
         update(state => ({ ...state, isLoading: false, error: null }));
         return { success: true };
       } catch (error: any) {
@@ -194,7 +237,6 @@ function createAuthStore() {
 
       try {
         await api.resetPassword(username, resetKey, newPassword);
-        
         update(state => ({ ...state, isLoading: false, error: null }));
         return { success: true };
       } catch (error: any) {
@@ -213,18 +255,14 @@ function createAuthStore() {
 
       try {
         await api.deleteAccount(username, password);
-        
-        // Clear all local data
         storage.clearAll();
         trips.clear();
-        
         set({
           user: null,
           isAuthenticated: false,
           isLoading: false,
           error: null,
         });
-
         return { success: true };
       } catch (error: any) {
         update(state => ({
@@ -243,7 +281,6 @@ function createAuthStore() {
 
       try {
         const subscription = await api.getSubscription(token);
-        
         update(state => ({
           ...state,
           user: state.user ? {
@@ -276,7 +313,7 @@ export const authError = derived(auth, $auth => $auth.error);
 
 // Helper to check if user can create more trips
 export const canCreateTrip = derived(user, $user => {
-  if (!$user) return true; // Unauthenticated users can use local storage
-  if ($user.plan === 'pro' || $user.plan === 'business') return true; // Unlimited
-  return $user.tripsThisMonth < $user.maxTrips; // Free plan check
+  if (!$user) return true; 
+  if ($user.plan === 'pro' || $user.plan === 'business') return true; 
+  return $user.tripsThisMonth < $user.maxTrips; 
 });

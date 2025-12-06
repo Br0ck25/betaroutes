@@ -1,16 +1,17 @@
-<!-- src/routes/dashboard/trips/new/+page.svelte -->
 <script lang="ts">
   import { trips } from '$lib/stores/trips';
   import { userSettings } from '$lib/stores/userSettings';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { user } from '$lib/stores/auth';
-  
+  import { page } from '$app/stores';
+  import { env } from '$env/dynamic/public';
+
   let step = 1;
   let mapLoaded = false;
-  let map: any = null;
-  let directionsService: any = null;
-  let directionsRenderer: any = null;
+  let map: google.maps.Map | null = null;
+  let directionsService: google.maps.DirectionsService | null = null;
+  let directionsRenderer: google.maps.DirectionsRenderer | null = null;
   
   // Maintenance & Supplies options storage
   let maintenanceOptions = ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement'];
@@ -27,8 +28,25 @@
     if (savedSupplies) {
       suppliesOptions = JSON.parse(savedSupplies);
     }
+
+    // Load Google Maps script securely
+    if (!window.google) {
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${env.PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`;
+      script.async = true;
+      script.onload = () => {
+        mapLoaded = true;
+        directionsService = new google.maps.DirectionsService();
+        directionsRenderer = new google.maps.DirectionsRenderer();
+      };
+      document.head.appendChild(script);
+    } else {
+      mapLoaded = true;
+      directionsService = new google.maps.DirectionsService();
+      directionsRenderer = new google.maps.DirectionsRenderer();
+    }
   });
-  
+
   // Form data
   let tripData = {
     id: crypto.randomUUID(),
@@ -48,18 +66,18 @@
     suppliesItems: [] as any[],
     notes: ''
   };
-  
+
   let newStop = {
     address: '',
     earnings: 0,
     notes: ''
   };
-  
+
   let newMaintenanceItem = '';
   let newSupplyItem = '';
   let showAddMaintenance = false;
   let showAddSupply = false;
-  
+
   function addStop() {
     if (!newStop.address) return;
     
@@ -143,12 +161,11 @@
       location: stop.address,
       stopover: true
     }));
-    
     const destination = tripData.endAddress || tripData.startAddress;
     
     // Only calculate if we have a start and either stops or an end address
     if (!destination && waypoints.length === 0) return;
-    
+
     directionsService.route({
       origin: tripData.startAddress,
       destination: destination,
@@ -183,7 +200,7 @@
   $: totalSuppliesCost = tripData.suppliesItems.reduce((sum, item) => sum + (item.cost || 0), 0);
   $: totalCosts = (tripData.fuelCost || 0) + totalMaintenanceCost + totalSuppliesCost;
   $: totalProfit = totalEarnings - totalCosts;
-  
+
   // Auto-calculate hours worked from start/end time
   $: {
     if (tripData.startTime && tripData.endTime) {
@@ -194,7 +211,6 @@
       const endMinutes = endHour * 60 + endMin;
       
       let diffMinutes = endMinutes - startMinutes;
-      
       // Handle overnight shifts (end time before start time)
       if (diffMinutes < 0) {
         diffMinutes += 24 * 60;
@@ -213,26 +229,20 @@
   }
   
   async function saveTrip() {
-    // Get userId - try $user.token first, fallback to localStorage or generate temp ID
-    let userId = $user?.token || $user?.id;
+    // Get userId - use page data (server auth) first, then store, then offline fallback
+    let userId = $page.data.user?.token || $user?.token;
     
     if (!userId) {
-      // Try to get from localStorage as fallback
-      const storedUser = localStorage.getItem('user');
-      if (storedUser) {
-        try {
-          const parsed = JSON.parse(storedUser);
-          userId = parsed.token || parsed.id;
-        } catch (e) {
-          console.error('Failed to parse stored user:', e);
+        // Generate or retrieve a persistent offline ID
+        const storageKey = 'offline_user_id';
+        let offlineId = localStorage.getItem(storageKey);
+        
+        if (!offlineId) {
+            offlineId = 'offline-user-' + Date.now();
+            localStorage.setItem(storageKey, offlineId);
         }
-      }
-    }
-    
-    // If still no userId, use a temporary one (offline mode)
-    if (!userId) {
-      userId = 'offline-user-' + Date.now();
-      console.warn('No user found, using temporary ID:', userId);
+        userId = offlineId;
+        console.warn('No user found, using offline ID:', userId);
     }
     
     const tripToSave = {
@@ -250,7 +260,7 @@
       })),
       lastModified: new Date().toISOString()
     };
-    
+
     try {
       console.log('Creating trip with userId:', userId);
       await trips.create(tripToSave, userId);
@@ -293,7 +303,6 @@
   function initAutocomplete(node: HTMLInputElement) {
     let retryCount = 0;
     const maxRetries = 10;
-    
     const trySetup = () => {
       if (window.google && window.google.maps && window.google.maps.places) {
         setupAutocomplete(node);
@@ -301,7 +310,7 @@
       }
       return false;
     };
-    
+
     // Try immediately
     if (trySetup()) {
       return {};
@@ -314,7 +323,7 @@
         clearInterval(retryInterval);
       }
     }, 200);
-    
+
     // Cleanup function
     return {
       destroy() {
@@ -333,10 +342,10 @@
     const autocomplete = new google.maps.places.Autocomplete(input, {
       types: ['geocode'] // Allows both addresses and cities/regions
     });
-    
+
     // Store the autocomplete instance on the input
     (input as any).autocompleteInstance = autocomplete;
-    
+
     autocomplete.addListener('place_changed', () => {
       const place = autocomplete.getPlace();
       if (place.formatted_address) {
@@ -386,25 +395,6 @@
       }, 100);
     });
   }
-  
-  onMount(() => {
-    // Load Google Maps script
-    if (!window.google) {
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyCOdfe7j11yw9ENkX8c7hYsIjwqcQeqJGQ&libraries=places`;
-      script.async = true;
-      script.onload = () => {
-        mapLoaded = true;
-        directionsService = new google.maps.DirectionsService();
-        directionsRenderer = new google.maps.DirectionsRenderer();
-      };
-      document.head.appendChild(script);
-    } else {
-      mapLoaded = true;
-      directionsService = new google.maps.DirectionsService();
-      directionsRenderer = new google.maps.DirectionsRenderer();
-    }
-  });
 </script>
 
 <svelte:head>
@@ -423,7 +413,6 @@
 </svelte:head>
 
 <div class="trip-form">
-  <!-- Header -->
   <div class="page-header">
     <div>
       <h1 class="page-title">Create New Trip</h1>
@@ -437,7 +426,6 @@
     </a>
   </div>
   
-  <!-- Progress Steps -->
   <div class="progress-steps">
     <div class="step-item" class:active={step >= 1} class:completed={step > 1}>
       <div class="step-circle">
@@ -490,9 +478,7 @@
     </div>
   </div>
   
-  <!-- Form Content -->
   <div class="form-content">
-    <!-- Step 1: Basic Info -->
     {#if step === 1}
       <div class="form-card">
         <div class="card-header">
@@ -534,7 +520,6 @@
       </div>
     {/if}
     
-    <!-- Step 2: Route & Stops -->
     {#if step === 2}
       <div class="form-card">
         <div class="card-header">
@@ -658,7 +643,6 @@
       </div>
     {/if}
     
-    <!-- Step 3: Costs -->
     {#if step === 3}
       <div class="form-card">
         <div class="card-header">
@@ -698,7 +682,6 @@
           </div>
         </div>
         
-        <!-- Maintenance Section -->
         <div class="expenses-section">
           <div class="section-header">
             <h3>Maintenance Costs</h3>
@@ -769,7 +752,6 @@
           {/if}
         </div>
         
-        <!-- Supplies Section -->
         <div class="expenses-section">
           <div class="section-header">
             <h3>Supplies Costs</h3>
@@ -866,7 +848,6 @@
       </div>
     {/if}
     
-    <!-- Step 4: Review -->
     {#if step === 4}
       <div class="form-card">
         <div class="card-header">

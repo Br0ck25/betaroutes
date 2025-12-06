@@ -1,4 +1,3 @@
-<!-- src/routes/dashboard/+layout.svelte -->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
@@ -9,8 +8,16 @@
   import { syncManager } from '$lib/sync/syncManager';
   import SyncIndicator from '$lib/components/SyncIndicator.svelte';
   
+  // Received from server-side load function
+  export let data;
+
+  // 🔥 REACTIVE HYDRATION: If server sends user data, update store immediately
+  $: if (data?.user) {
+    auth.hydrate(data.user);
+  }
+
   let sidebarOpen = false;
-  
+
   function toggleSidebar() {
     sidebarOpen = !sidebarOpen;
   }
@@ -62,7 +69,7 @@
       label: 'Settings' 
     },
   ];
-  
+
   function isActive(href: string, exact = false): boolean {
     if (exact) {
       return $page.url.pathname === href;
@@ -74,15 +81,29 @@
     return name ? name.charAt(0).toUpperCase() : 'U';
   }
 
-  // 🔥 LOAD DATA FROM INDEXEDDB ON MOUNT
   onMount(async () => {
     console.log('[DASHBOARD LAYOUT] Initializing...');
     
-    if ($user) {
-      const userId = $user.token; // Use token as userId
-      
+    // 1. Prioritize Server Data for User ID
+    let userId = data?.user?.token;
+
+    // 2. If no server data, check store (Hydration handled by reactive statement above)
+    if (!userId && $user) {
+        userId = $user.token;
+    }
+
+    // 3. Fallback to localStorage offline ID if completely unauthenticated
+    if (!userId) {
+        userId = localStorage.getItem('offline_user_id');
+        if (userId) {
+            console.log('[DASHBOARD LAYOUT] Using Offline ID:', userId);
+        }
+    }
+
+    // 4. Initialize Data
+    if (userId) {
       try {
-        console.log('[DASHBOARD LAYOUT] User authenticated, loading data...');
+        console.log('[DASHBOARD LAYOUT] Loading data for:', userId);
         
         // Initialize sync manager
         await syncManager.initialize();
@@ -91,12 +112,14 @@
         await trips.load(userId);
         await trash.load(userId);
         
-        console.log('[DASHBOARD LAYOUT] ✅ Data loaded from IndexedDB!');
+        console.log('[DASHBOARD LAYOUT] ✅ Data loaded successfully!');
       } catch (err) {
         console.error('[DASHBOARD LAYOUT] ❌ Failed to load data:', err);
       }
     } else {
-      console.log('[DASHBOARD LAYOUT] No user authenticated');
+      // Initialize Auth Store from local storage if needed (last resort)
+      // This is mostly for scenarios where server data might be missing but localStorage exists
+      await auth.init();
     }
   });
 </script>
@@ -108,7 +131,6 @@
 </svelte:head>
 
 <div class="layout">
-  <!-- Mobile Header -->
   <header class="mobile-header">
     <button class="menu-btn" on:click={toggleSidebar} aria-label="Toggle menu">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -119,7 +141,6 @@
     <img src="/logo.png" alt="Go Route Yourself" class="mobile-logo" />
     
     <div class="mobile-actions">
-      <!-- Sync Indicator in Mobile Header -->
       <SyncIndicator />
       
       {#if $user}
@@ -132,7 +153,6 @@
     </div>
   </header>
   
-  <!-- Sidebar -->
   <aside class="sidebar" class:open={sidebarOpen}>
     <div class="sidebar-header">
       <img src="/logo.png" alt="Go Route Yourself" class="sidebar-logo" />
@@ -143,7 +163,6 @@
       </button>
     </div>
     
-    <!-- Sync Indicator in Sidebar (Desktop) -->
     <div class="sidebar-sync">
       <SyncIndicator />
     </div>
@@ -184,12 +203,10 @@
     </div>
   </aside>
   
-  <!-- Overlay for mobile -->
   {#if sidebarOpen}
     <div class="overlay" on:click={closeSidebar} role="button" tabindex="0"></div>
   {/if}
   
-  <!-- Main Content -->
   <main class="main-content">
     <slot />
   </main>
@@ -197,7 +214,7 @@
 
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-  
+
   :root {
     --orange: #FF7F50;
     --blue: #29ABE2;

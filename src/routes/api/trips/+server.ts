@@ -1,6 +1,7 @@
 // src/routes/api/trips/+server.ts
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
+import { z } from 'zod';
 
 /**
  * Fake KV for local dev so we never crash
@@ -13,6 +14,29 @@ function fakeKV() {
     list: async () => ({ keys: [] })
   };
 }
+
+// Define schema for validation
+const tripSchema = z.object({
+  id: z.string().uuid().optional(), 
+  date: z.string().optional(),
+  startTime: z.string().optional(),
+  endTime: z.string().optional(),
+  hoursWorked: z.number().optional(),
+  startAddress: z.string().max(500).optional(),
+  endAddress: z.string().max(500).optional(),
+  totalMiles: z.number().nonnegative().optional(),
+  mpg: z.number().positive().optional(),
+  gasPrice: z.number().nonnegative().optional(),
+  fuelCost: z.number().optional(),
+  maintenanceCost: z.number().optional(),
+  suppliesCost: z.number().optional(),
+  netProfit: z.number().optional(),
+  notes: z.string().max(1000).optional(),
+  stops: z.array(z.any()).optional(), 
+  maintenanceItems: z.array(z.any()).optional(),
+  suppliesItems: z.array(z.any()).optional(),
+  lastModified: z.string().optional()
+});
 
 /**
  * GET /api/trips - List all active trips
@@ -57,19 +81,27 @@ export const POST: RequestHandler = async (event) => {
 
     const body = await event.request.json();
 
-    const id =
-      (globalThis as any).crypto?.randomUUID?.() ??
-      String(Date.now());
+    // VALIDATION STEP
+    const parseResult = tripSchema.safeParse(body);
+    if (!parseResult.success) {
+      return new Response(JSON.stringify({ 
+        error: 'Invalid Data', 
+        details: parseResult.error.flatten() 
+      }), { status: 400 });
+    }
 
+    const validData = parseResult.data;
+
+    const id = validData.id || (globalThis as any).crypto?.randomUUID?.() || String(Date.now());
     const now = new Date().toISOString();
 
     // Final trip object stored locally + KV
     const trip = {
+      ...validData,
       id,
       userId: user.token,
       createdAt: now,
       updatedAt: now,
-      ...body
     };
 
     const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
