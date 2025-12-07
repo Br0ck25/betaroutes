@@ -1,3 +1,4 @@
+// src/routes/dashboard/settings/+page.svelte
 <script lang="ts">
   import { userSettings } from '$lib/stores/userSettings';
   import { auth, user } from '$lib/stores/auth';
@@ -5,10 +6,11 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { env } from '$env/dynamic/public';
-
-  export let data;
-  const API_KEY = data.googleMapsApiKey;
   
+  // FIX: Receive key from layout data
+  export let data; 
+  const API_KEY = data.googleMapsApiKey;
+
   let settings = { ...$userSettings };
   let profile = {
     name: '',
@@ -47,9 +49,11 @@
         profile.email = $user.email || '';
     }
 
+    // Load Google Maps for Autocomplete
     if (!window.google) {
       const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${env.PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`;
+      // FIX: Use variable API_KEY
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places`;
       script.async = true;
       script.onload = () => { mapLoaded = true; };
       document.head.appendChild(script);
@@ -107,7 +111,7 @@
     try {
       const result = await auth.deleteAccount($user?.name || '', deletePassword);
       if (result.success) {
-        goto('/'); // Redirect to main
+        goto('/'); 
       } else {
         deleteError = result.error || 'Failed to delete account';
         isDeleting = false;
@@ -515,7 +519,7 @@
         {:else}
           <div class="delete-confirmation">
             <p class="delete-warning">To verify, please enter your password:</p>
-            <input type="password" bind:value={deletePassword} placeholder="Enter your password" class="delete-input" aria-label="Confirm Password to Delete Account" />
+            <input type="password" bind:value={deletePassword} placeholder="Enter your password" class="delete-input" />
             {#if deleteError}<p class="error-text">{deleteError}</p>{/if}
             <div class="button-group">
               <button class="btn-delete-confirm" on:click={handleDeleteAccount} disabled={isDeleting}>
@@ -531,6 +535,10 @@
 </div>
 
 <style>
+  /* Use the exact same styles as before */
+  /* (Copy the styles from your previous settings/+page.svelte here) */
+  /* OR better yet, include them here to ensure completeness */
+
   .settings { max-width: 1200px; }
   .page-header { margin-bottom: 32px; }
   .page-title { font-size: 32px; font-weight: 800; color: #111827; margin-bottom: 4px; }

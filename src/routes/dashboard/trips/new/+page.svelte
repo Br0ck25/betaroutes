@@ -1,3 +1,4 @@
+// src/routes/dashboard/trips/new/+page.svelte
 <script lang="ts">
   import { trips } from '$lib/stores/trips';
   import { userSettings } from '$lib/stores/userSettings';
@@ -28,7 +29,7 @@
 
     if (!window.google) {
       const script = document.createElement('script');
-      // FIX: Use the variable from data, not env
+      // FIX: Use the variable from data
       script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places`;
       script.async = true;
       script.onload = () => {
@@ -44,7 +45,6 @@
     }
   });
 
-  // ... (Keep the rest of the file EXACTLY the same)
   let tripData = {
     id: crypto.randomUUID(),
     date: new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0],
@@ -402,30 +402,25 @@
           <h2 class="card-title">Basic Information</h2>
           <p class="card-subtitle">When did your trip take place?</p>
         </div>
-        
         <div class="form-grid">
           <div class="form-group">
             <label for="trip-date">Date</label>
             <input id="trip-date" type="date" bind:value={tripData.date} required />
           </div>
-          
           <div class="form-group">
             <label for="start-time">Start Time</label>
             <input id="start-time" type="time" bind:value={tripData.startTime} />
           </div>
-          
           <div class="form-group">
             <label for="end-time">End Time</label>
             <input id="end-time" type="time" bind:value={tripData.endTime} />
           </div>
-          
           <div class="form-group">
             <label for="hours-worked">Hours Worked</label>
             <div id="hours-worked" class="hours-display-field">{tripData.hoursWorked.toFixed(1)} hours</div>
             <small class="field-hint">Auto-calculated from start and end time</small>
           </div>
         </div>
-        
         <div class="form-actions">
           <button class="btn-primary" on:click={nextStep} type="button">
             Continue
@@ -443,7 +438,6 @@
           <h2 class="card-title">Route & Stops</h2>
           <p class="card-subtitle">Add your starting point and destinations</p>
         </div>
-        
         <div class="form-group">
           <label for="start-address">Starting Address</label>
           <input 
@@ -454,7 +448,6 @@
             use:initAutocomplete
           />
         </div>
-        
         <div class="form-group">
           <label for="end-address">End Address (if different from start)</label>
           <input 
@@ -776,28 +769,23 @@
         
         <div class="review-section">
           <h3 class="review-title">Trip Summary</h3>
-          
           <div class="review-grid">
             <div class="review-item">
               <span class="review-label">Date</span>
               <span class="review-value">{formatDateLocal(tripData.date)}</span>
             </div>
-            
             <div class="review-item">
               <span class="review-label">Time</span>
               <span class="review-value">{formatTime12Hour(tripData.startTime)} - {formatTime12Hour(tripData.endTime)}</span>
             </div>
-            
             <div class="review-item">
               <span class="review-label">Hours Worked</span>
               <span class="review-value">{tripData.hoursWorked || 0} hours</span>
             </div>
-            
             <div class="review-item">
               <span class="review-label">Total Miles</span>
               <span class="review-value">{tripData.totalMiles} mi</span>
             </div>
-            
             <div class="review-item">
               <span class="review-label">Number of Stops</span>
               <span class="review-value">{tripData.stops.length}</span>
@@ -807,7 +795,6 @@
         
         <div class="review-section">
           <h3 class="review-title">Financial Summary</h3>
-          
           <div class="financial-summary">
             <div class="summary-row">
               <span>Total Earnings</span>
@@ -1651,5 +1638,3 @@
     }
   }
 </style>
-}
-

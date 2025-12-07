@@ -29,7 +29,10 @@ function createAuthStore() {
 	return {
 		subscribe,
 
-		// Fix: Persist name/email on page refresh
+		/**
+		 * HYDRATE: Manually set user state (e.g. from Server Load function)
+		 * Fixes issue where Name/Email disappear on refresh by checking local storage.
+		 */
 		hydrate: (userData: User) => {
 			let localName = '';
 			let localEmail = '';
@@ -42,6 +45,7 @@ function createAuthStore() {
 				}
 			}
 
+			// Merge: Server data takes precedence, but fall back to local if server is missing fields
 			const mergedUser = {
 				...userData,
 				name: userData.name || localName,
@@ -56,6 +60,7 @@ function createAuthStore() {
 			});
 		},
 
+		// Initialize auth state from localStorage on app start
 		init: async () => {
 			const token = storage.getToken();
 			const username = storage.getUsername();
@@ -65,6 +70,7 @@ function createAuthStore() {
 				update((state) => ({ ...state, isLoading: true }));
 				try {
 					const subscription = await api.getSubscription(token);
+
 					const user: User = {
 						token,
 						plan: subscription.plan,
@@ -75,37 +81,64 @@ function createAuthStore() {
 						email: email || ''
 					};
 
-					set({ user, isAuthenticated: true, isLoading: false, error: null });
+					set({
+						user,
+						isAuthenticated: true,
+						isLoading: false,
+						error: null
+					});
+
 					await trips.syncFromCloud(token);
 				} catch (error) {
 					console.error('Failed to load user data:', error);
-					set({ user: null, isAuthenticated: false, isLoading: false, error: 'Session expired' });
+					set({
+						user: null,
+						isAuthenticated: false,
+						isLoading: false,
+						error: 'Session expired'
+					});
 				}
 			} else {
-				set({ user: null, isAuthenticated: false, isLoading: false, error: null });
+				set({
+					user: null,
+					isAuthenticated: false,
+					isLoading: false,
+					error: null
+				});
 			}
 		},
 
+		// Update Profile - Saves to local storage immediately
 		updateProfile: (data: { name?: string; email?: string }) => {
 			update((state) => {
 				if (!state.user) return state;
+
 				const updatedUser = { ...state.user, ...data };
+
 				if (typeof window !== 'undefined') {
 					if (data.name) storage.setUsername(data.name);
 					if (data.email) localStorage.setItem('user_email', data.email);
 				}
-				return { ...state, user: updatedUser };
+
+				return {
+					...state,
+					user: updatedUser
+				};
 			});
 		},
 
+		// Sign up
 		signup: async (username: string, password: string) => {
 			update((state) => ({ ...state, isLoading: true, error: null }));
 			try {
 				const response = await api.signup(username, password);
 				const offlineId = getOfflineId();
+
 				storage.setToken(response.token);
 				storage.setUsername(username);
+
 				const subscription = await api.getSubscription(response.token);
+
 				const user: User = {
 					token: response.token,
 					plan: subscription.plan,
@@ -115,12 +148,21 @@ function createAuthStore() {
 					name: username,
 					email: ''
 				};
-				set({ user, isAuthenticated: true, isLoading: false, error: null });
+
+				set({
+					user,
+					isAuthenticated: true,
+					isLoading: false,
+					error: null
+				});
+
 				if (offlineId) {
 					await trips.migrateOfflineTrips(offlineId, response.token);
 					localStorage.removeItem('offline_user_id');
 				}
+
 				await trips.syncFromCloud(response.token);
+
 				return { success: true, resetKey: response.resetKey };
 			} catch (error: any) {
 				update((state) => ({
@@ -132,15 +174,19 @@ function createAuthStore() {
 			}
 		},
 
+		// Login
 		login: async (username: string, password: string) => {
 			update((state) => ({ ...state, isLoading: true, error: null }));
 			try {
 				const response = await api.login(username, password);
 				const offlineId = getOfflineId();
+
 				storage.setToken(response.token);
 				storage.setUsername(username);
 				const savedEmail = localStorage.getItem('user_email') || '';
+
 				const subscription = await api.getSubscription(response.token);
+
 				const user: User = {
 					token: response.token,
 					plan: subscription.plan,
@@ -150,26 +196,47 @@ function createAuthStore() {
 					name: username,
 					email: savedEmail
 				};
-				set({ user, isAuthenticated: true, isLoading: false, error: null });
+
+				set({
+					user,
+					isAuthenticated: true,
+					isLoading: false,
+					error: null
+				});
+
 				if (offlineId) {
 					await trips.migrateOfflineTrips(offlineId, response.token);
 					localStorage.removeItem('offline_user_id');
 				}
+
 				await trips.syncFromCloud(response.token);
+
 				return { success: true };
 			} catch (error: any) {
-				update((state) => ({ ...state, isLoading: false, error: error.message || 'Login failed' }));
+				update((state) => ({
+					...state,
+					isLoading: false,
+					error: error.message || 'Login failed'
+				}));
 				return { success: false, error: error.message };
 			}
 		},
 
+		// Logout
 		logout: () => {
 			storage.clearToken();
 			storage.clearUsername();
 			if (typeof window !== 'undefined') localStorage.removeItem('user_email');
-			set({ user: null, isAuthenticated: false, isLoading: false, error: null });
+
+			set({
+				user: null,
+				isAuthenticated: false,
+				isLoading: false,
+				error: null
+			});
 		},
 
+		// Change password
 		changePassword: async (username: string, currentPassword: string, newPassword: string) => {
 			update((state) => ({ ...state, isLoading: true, error: null }));
 			try {
@@ -186,6 +253,7 @@ function createAuthStore() {
 			}
 		},
 
+		// Reset password
 		resetPassword: async (username: string, resetKey: string, newPassword: string) => {
 			update((state) => ({ ...state, isLoading: true, error: null }));
 			try {
@@ -202,11 +270,14 @@ function createAuthStore() {
 			}
 		},
 
-		// Fix: Use local proxy (DELETE /api/user) to bypass CORS
+		// Delete Account - Uses local proxy /api/user to bypass CORS
 		deleteAccount: async (username: string, password: string) => {
 			update((state) => ({ ...state, isLoading: true, error: null }));
+
 			try {
 				const token = storage.getToken();
+
+				// Call local server route (proxy) instead of external API directly
 				const response = await fetch('/api/user', {
 					method: 'DELETE',
 					headers: {
@@ -221,10 +292,18 @@ function createAuthStore() {
 					throw new Error(data.error || 'Account deletion failed');
 				}
 
+				// Clean up local data
 				storage.clearAll();
 				if (typeof window !== 'undefined') localStorage.removeItem('user_email');
 				trips.clear();
-				set({ user: null, isAuthenticated: false, isLoading: false, error: null });
+
+				set({
+					user: null,
+					isAuthenticated: false,
+					isLoading: false,
+					error: null
+				});
+
 				return { success: true };
 			} catch (error: any) {
 				update((state) => ({
@@ -236,9 +315,11 @@ function createAuthStore() {
 			}
 		},
 
+		// Refresh subscription data
 		refreshSubscription: async () => {
 			const token = storage.getToken();
 			if (!token) return;
+
 			try {
 				const subscription = await api.getSubscription(token);
 				update((state) => ({
@@ -258,6 +339,7 @@ function createAuthStore() {
 			}
 		},
 
+		// Clear error
 		clearError: () => {
 			update((state) => ({ ...state, error: null }));
 		}
@@ -265,12 +347,16 @@ function createAuthStore() {
 }
 
 export const auth = createAuthStore();
+
+// Derived stores
 export const user = derived(auth, ($auth) => $auth.user);
 export const isAuthenticated = derived(auth, ($auth) => $auth.isAuthenticated);
 export const isLoading = derived(auth, ($auth) => $auth.isLoading);
 export const authError = derived(auth, ($auth) => $auth.error);
+
+// Helper to check if user can create more trips
 export const canCreateTrip = derived(user, ($user) => {
-	if (!$user) return true;
-	if ($user.plan === 'pro' || $user.plan === 'business') return true;
-	return $user.tripsThisMonth < $user.maxTrips;
+	if (!$user) return true; // Unauthenticated users can use local storage
+	if ($user.plan === 'pro' || $user.plan === 'business') return true; // Unlimited
+	return $user.tripsThisMonth < $user.maxTrips; // Free plan check
 });

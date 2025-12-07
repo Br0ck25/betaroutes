@@ -10,7 +10,7 @@ export const load = ({ locals, platform }) => {
 		throw redirect(303, '/login');
 	}
 
-	// Try to get key from Svelte env OR Cloudflare platform env
+	// ROBUST KEY RETRIEVAL: Check Svelte env first, then Cloudflare platform env fallback
 	const googleMapsApiKey =
 		env.PUBLIC_GOOGLE_MAPS_API_KEY || (platform?.env as any)?.PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
