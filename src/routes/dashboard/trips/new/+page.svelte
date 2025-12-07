@@ -957,7 +957,7 @@
   .stop-number { width: 32px; height: 32px; background: var(--orange); color: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0; }
   
   /* FIX: Stop Input Container - take remaining space but shrink if needed */
-  .stop-info { flex: 1; min-width: 0; margin-right: 12px; }
+  .stop-info { flex: 1; min-width: 0; margin-right: 24px; }
   
   /* FIX: Input takes 100% of parent (.stop-info) */
   .stop-address-input { width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; font-weight: 500; font-family: inherit; color: #111827; background: white; transition: border-color 0.2s; }
