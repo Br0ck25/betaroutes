@@ -2,7 +2,8 @@
   import { trips } from '$lib/stores/trips';
   import { goto } from '$app/navigation';
   import { user } from '$lib/stores/auth';
-  
+  import { page } from '$app/stores';
+
   let searchQuery = '';
   let sortBy = 'date';
   let sortOrder = 'desc';
@@ -80,8 +81,12 @@
   async function deleteTrip(id: string) {
     if (confirm('Move trip to trash?')) {
       try {
-        // FIX: Use user.name as stable ID, consistent with how trips are saved
-        const userId = $user?.name || $user?.token || localStorage.getItem('offline_user_id') || '';
+        // FIX: Use robust ID retrieval (Username > Token > LocalStorage)
+        const userId = $page.data.user?.name || 
+                       $page.data.user?.token || 
+                       $user?.name || 
+                       $user?.token || 
+                       localStorage.getItem('offline_user_id') || '';
         
         if (userId) {
             await trips.deleteTrip(id, userId);
@@ -123,7 +128,7 @@
     } else {
       expandedTrips.add(id);
     }
-    expandedTrips = expandedTrips; // Trigger reactivity
+    expandedTrips = expandedTrips;
   }
 </script>
 
@@ -211,7 +216,7 @@
           const tripsWithHours = filteredTrips.filter(t => t.hoursWorked > 0);
           if (tripsWithHours.length === 0) return 'N/A';
           const totalHourlyPay = tripsWithHours.reduce((sum, trip) => {
-              return sum + calculateHourlyPay(trip);
+             return sum + calculateHourlyPay(trip);
           }, 0);
           return formatCurrency(totalHourlyPay / tripsWithHours.length) + '/hr';
         })()}
@@ -300,12 +305,12 @@
                   </div>
                   {#if isExpanded}
                     <div class="route-details">
-                      <div class="route-address">📍 Start: {trip.startAddress}</div>
+                      <div class="route-address">桃 Start: {trip.startAddress}</div>
                       {#each trip.stops as stop, i}
-                        <div class="route-address">🛑 Stop {i + 1}: {stop.address}</div>
+                        <div class="route-address">尅 Stop {i + 1}: {stop.address}</div>
                       {/each}
                       {#if trip.endAddress && trip.endAddress !== trip.startAddress}
-                        <div class="route-address">🏁 End: {trip.endAddress}</div>
+                        <div class="route-address">潤 End: {trip.endAddress}</div>
                       {/if}
                     </div>
                   {/if}
