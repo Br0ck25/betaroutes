@@ -6,7 +6,7 @@
   import { calculateTripTotals } from '$lib/utils/calculations';
   import { storage } from '$lib/utils/storage';
   import { trips, draftTrip } from '$lib/stores/trips';
-  import { user } from '$lib/stores/auth'; // Required for user.name
+  import { user } from '$lib/stores/auth';
 
   // LOAD SETTINGS
   const settings = get(userSettings);
@@ -19,7 +19,7 @@
   let startAddress = settings.startLocation || storage.getSetting('defaultStartAddress') || '';
   let endAddress = settings.endLocation || storage.getSetting('defaultEndAddress') || '';
 
-  let mpg = settings.defaultMPG ?? storage.getSetting('defaultMpg') ?? 25;
+  let mpg = settings.defaultMPG ?? storage.getSetting('defaultMPG') ?? 25;
   let gasPrice = settings.defaultGasPrice ?? storage.getSetting('defaultGasPrice') ?? 3.5;
 
   let distanceUnit = settings.distanceUnit || 'mi';
@@ -240,14 +240,13 @@
     }
   }
 
-  // FIX: Explicitly use user.name as the ID
   async function logTrip() {
     if (!calculated) {
       alert('Please calculate route first');
       return;
     }
 
-    // CRITICAL FIX: Use username if available, fallback to token, then offline
+    // FIX: Get stable user ID
     let userId = $user?.name || $user?.token;
     
     if (!userId) {
@@ -268,6 +267,8 @@
           order: i
       }));
 
+      // trips.create calls the API which uses userId from props or store
+      // But trips.create also saves locally. It is important we pass the RIGHT userId here.
       await trips.create({
         id: crypto.randomUUID(),
         date,
@@ -292,7 +293,7 @@
         gasPrice,
         notes,
         lastModified: new Date().toISOString()
-      }, userId); // Pass the stable userId here
+      }, userId); // Pass correct ID
 
       userSettings.update(s => ({
         ...s,
