@@ -7,9 +7,6 @@ function safeKV(env: any, name: string) {
 	return kv ?? null;
 }
 
-/**
- * POST /api/trash/[id] - Restore a trip from trash
- */
 export const POST: RequestHandler = async (event) => {
 	try {
 		const user = event.locals.user;
@@ -41,9 +38,6 @@ export const POST: RequestHandler = async (event) => {
 	}
 };
 
-/**
- * DELETE /api/trash/[id] - Permanently delete a trip from trash
- */
 export const DELETE: RequestHandler = async (event) => {
 	try {
 		const user = event.locals.user;

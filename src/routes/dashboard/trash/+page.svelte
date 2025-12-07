@@ -87,7 +87,6 @@
     }
   }
   
-  // ... rest of helper functions and template remains the same ...
   function formatDate(dateString: string | undefined): string {
     if (!dateString) return 'Unknown';
     const date = new Date(dateString);

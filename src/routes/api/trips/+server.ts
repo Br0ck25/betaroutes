@@ -35,15 +35,10 @@ const tripSchema = z.object({
 	lastModified: z.string().optional()
 });
 
-/**
- * GET /api/trips - List all active trips
- */
 export const GET: RequestHandler = async (event) => {
 	try {
 		const user = event.locals.user;
-		if (!user) {
-			return new Response('Unauthorized', { status: 401 });
-		}
+		if (!user) return new Response('Unauthorized', { status: 401 });
 
 		const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
 		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
@@ -66,15 +61,10 @@ export const GET: RequestHandler = async (event) => {
 	}
 };
 
-/**
- * POST /api/trips - Create + sync a new trip
- */
 export const POST: RequestHandler = async (event) => {
 	try {
 		const user = event.locals.user;
-		if (!user) {
-			return new Response('Unauthorized', { status: 401 });
-		}
+		if (!user) return new Response('Unauthorized', { status: 401 });
 
 		const body = await event.request.json();
 

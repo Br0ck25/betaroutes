@@ -7,9 +7,6 @@ function safeKV(env: any, name: string) {
 	return kv ?? null;
 }
 
-/**
- * GET /api/trips/[id]
- */
 export const GET: RequestHandler = async (event) => {
 	try {
 		const user = event.locals.user;
@@ -42,9 +39,6 @@ export const GET: RequestHandler = async (event) => {
 	}
 };
 
-/**
- * PUT /api/trips/[id] - Update a trip
- */
 export const PUT: RequestHandler = async (event) => {
 	try {
 		const user = event.locals.user;
@@ -88,9 +82,6 @@ export const PUT: RequestHandler = async (event) => {
 	}
 };
 
-/**
- * DELETE /api/trips/[id] - Soft delete (moves to trash)
- */
 export const DELETE: RequestHandler = async (event) => {
 	try {
 		const user = event.locals.user;

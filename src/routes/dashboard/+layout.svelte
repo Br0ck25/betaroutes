@@ -80,17 +80,15 @@
   onMount(async () => {
     console.log('[DASHBOARD LAYOUT] Initializing...');
     
-    // Use 'name' as the stable User ID. Fallback to token only if essential.
-    let userId = data?.user?.name;
+    // FIX: Prioritize username for ID stability
+    let userId = data?.user?.name || data?.user?.token;
 
-    if (!userId && data?.user?.token) {
-        userId = data.user.token;
-    }
-
+    // Double check store if data prop is missing
     if (!userId && $user) {
         userId = $user.name || $user.token;
     }
 
+    // Offline fallback
     if (!userId) {
         userId = localStorage.getItem('offline_user_id');
         if (userId) {
@@ -103,11 +101,11 @@
         console.log('[DASHBOARD LAYOUT] Loading data for:', userId);
         await syncManager.initialize();
         
-        // 1. Load local data
+        // 1. Load local data first
         await trips.load(userId);
         await trash.load(userId);
         
-        // 2. Pull latest from cloud (FIX for multi-device sync)
+        // 2. Explicitly trigger cloud sync to get latest data from other devices
         await trips.syncFromCloud(userId);
         
         console.log('[DASHBOARD LAYOUT] ✅ Data loaded successfully!');
@@ -119,6 +117,12 @@
     }
   });
 </script>
+
+<svelte:head>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</svelte:head>
 
 <div class="layout">
   <header class="mobile-header">

@@ -11,10 +11,6 @@ function fakeKV() {
 	};
 }
 
-/**
- * GET /api/trash
- * Returns ONLY KV trash
- */
 export const GET: RequestHandler = async (event) => {
 	try {
 		const user = event.locals.user;
@@ -40,10 +36,6 @@ export const GET: RequestHandler = async (event) => {
 	}
 };
 
-/**
- * DELETE /api/trash
- * Empties ONLY KV trash
- */
 export const DELETE: RequestHandler = async (event) => {
 	try {
 		const user = event.locals.user;

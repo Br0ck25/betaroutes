@@ -81,7 +81,6 @@ function createAuthStore() {
 						error: null
 					});
 
-					// FIX: Sync using the username if available, ensuring cross-device visibility
 					const syncId = user.name || user.token;
 					await trips.syncFromCloud(syncId);
 				} catch (error) {
@@ -149,7 +148,6 @@ function createAuthStore() {
 					error: null
 				});
 
-				// FIX: Use username for migration and sync
 				if (offlineId) {
 					await trips.migrateOfflineTrips(offlineId, username);
 					localStorage.removeItem('offline_user_id');
@@ -197,7 +195,6 @@ function createAuthStore() {
 					error: null
 				});
 
-				// FIX: Use username for migration and sync
 				if (offlineId) {
 					await trips.migrateOfflineTrips(offlineId, username);
 					localStorage.removeItem('offline_user_id');
