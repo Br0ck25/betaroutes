@@ -1,112 +1,139 @@
-// src/routes/api/trips/+server.ts
+// src/routes/api/trips/[id]/+server.ts
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
-import { z } from 'zod';
 
-function fakeKV() {
-	return {
-		get: async () => null,
-		put: async () => {},
-		delete: async () => {},
-		list: async () => ({ keys: [] })
-	};
+// Helper to safely get KV namespace
+function safeKV(env: any, name: string) {
+	const kv = env?.[name];
+	if (!kv) {
+		console.warn(`[API] KV Binding '${name}' not found.`);
+	}
+	return kv ?? null;
 }
 
-const tripSchema = z.object({
-	id: z.string().uuid().optional(),
-	date: z.string().optional(),
-	startTime: z.string().optional(),
-	endTime: z.string().optional(),
-	hoursWorked: z.number().optional(),
-	startAddress: z.string().max(500).optional(),
-	endAddress: z.string().max(500).optional(),
-	totalMiles: z.number().nonnegative().optional(),
-	mpg: z.number().positive().optional(),
-	gasPrice: z.number().nonnegative().optional(),
-	fuelCost: z.number().optional(),
-	maintenanceCost: z.number().optional(),
-	suppliesCost: z.number().optional(),
-	netProfit: z.number().optional(),
-	notes: z.string().max(1000).optional(),
-	stops: z.array(z.any()).optional(),
-	destinations: z.array(z.any()).optional(),
-	maintenanceItems: z.array(z.any()).optional(),
-	suppliesItems: z.array(z.any()).optional(),
-	lastModified: z.string().optional()
-});
-
+/**
+ * GET /api/trips/[id] - Retrieve a single trip
+ */
 export const GET: RequestHandler = async (event) => {
 	try {
 		const user = event.locals.user;
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
-		const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
-		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
+		const { id } = event.params;
+
+		// Connect to KVs
+		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
+		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
 		const svc = makeTripService(kv, trashKV);
 
-		// FIX: Always use username if available
+		// Use stable user ID (username)
 		const storageId = user.name || user.token;
 
-		console.log(`[API] Fetching trips for: ${storageId}`);
-		const trips = await svc.list(storageId);
+		const trip = await svc.get(storageId, id);
 
-		return new Response(JSON.stringify(trips), {
+		if (!trip) {
+			return new Response('Not Found', { status: 404 });
+		}
+
+		return new Response(JSON.stringify(trip), {
 			status: 200,
 			headers: { 'Content-Type': 'application/json' }
 		});
 	} catch (err) {
-		console.error('GET /api/trips error', err);
-		return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
+		console.error('GET /api/trips/[id] error', err);
+		return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
+			status: 500,
+			headers: { 'Content-Type': 'application/json' }
+		});
 	}
 };
 
-export const POST: RequestHandler = async (event) => {
+/**
+ * PUT /api/trips/[id] - Update a trip
+ */
+export const PUT: RequestHandler = async (event) => {
 	try {
 		const user = event.locals.user;
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
+		const { id } = event.params;
 		const body = await event.request.json();
-		const parseResult = tripSchema.safeParse(body);
 
-		if (!parseResult.success) {
-			return new Response(
-				JSON.stringify({
-					error: 'Invalid Data',
-					details: parseResult.error.flatten()
-				}),
-				{ status: 400 }
-			);
-		}
-
-		const validData = parseResult.data;
-		const id = validData.id || crypto.randomUUID();
-		const now = new Date().toISOString();
-
-		// FIX: Use stable user ID (name) for storage
-		const storageId = user.name || user.token;
-
-		console.log(`[API] Saving trip for: ${storageId}`);
-
-		const trip = {
-			...validData,
-			id,
-			userId: storageId, // Force storage under stable ID
-			createdAt: now,
-			updatedAt: now
-		};
-
-		const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
-		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
+		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
+		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
 		const svc = makeTripService(kv, trashKV);
 
-		await svc.put(trip);
+		const storageId = user.name || user.token;
 
-		// Also use stable ID for counter
-		await svc.incrementUserCounter(storageId, 1);
+		// Verify existing ownership
+		const existing = await svc.get(storageId, id);
+		if (!existing) {
+			return new Response('Not Found', { status: 404 });
+		}
 
-		return new Response(JSON.stringify(trip), { status: 201 });
+		const updated = {
+			...existing,
+			...body,
+			id,
+			userId: storageId,
+			updatedAt: new Date().toISOString()
+		};
+
+		await svc.put(updated);
+
+		return new Response(JSON.stringify(updated), {
+			status: 200,
+			headers: { 'Content-Type': 'application/json' }
+		});
 	} catch (err) {
-		console.error('POST /api/trips error', err);
-		return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
+		console.error('PUT /api/trips/[id] error', err);
+		return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
+			status: 500,
+			headers: { 'Content-Type': 'application/json' }
+		});
+	}
+};
+
+/**
+ * DELETE /api/trips/[id] - Soft delete trip (move to trash)
+ */
+export const DELETE: RequestHandler = async (event) => {
+	try {
+		const user = event.locals.user;
+		if (!user) return new Response('Unauthorized', { status: 401 });
+
+		const { id } = event.params;
+
+		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
+		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
+		const svc = makeTripService(kv, trashKV);
+
+		const storageId = user.name || user.token;
+
+		// Check if trip exists
+		const existing = await svc.get(storageId, id);
+		if (!existing) {
+			return new Response(JSON.stringify({ error: 'Trip not found' }), {
+				status: 404,
+				headers: { 'Content-Type': 'application/json' }
+			});
+		}
+
+		// Perform soft delete
+		await svc.delete(storageId, id);
+
+		// Decrement trip count
+		await svc.incrementUserCounter(user.token, -1);
+
+		return new Response(JSON.stringify({ success: true }), {
+			status: 200,
+			headers: { 'Content-Type': 'application/json' }
+		});
+	} catch (err) {
+		console.error('DELETE /api/trips/[id] error', err);
+		return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
+			status: 500,
+			headers: { 'Content-Type': 'application/json' }
+		});
 	}
 };
