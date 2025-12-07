@@ -81,12 +81,28 @@
   async function deleteTrip(id: string) {
     if (confirm('Move trip to trash?')) {
       try {
-        // FIX: Use robust ID retrieval (Username > Token > LocalStorage)
-        const userId = $page.data.user?.name || 
-                       $page.data.user?.token || 
-                       $user?.name || 
-                       $user?.token || 
-                       localStorage.getItem('offline_user_id') || '';
+        // SMART ID SELECTION:
+        // Find the trip object to see which ID it expects
+        const trip = $trips.find(t => t.id === id);
+        const currentUser = $page.data.user || $user;
+        
+        let userId = '';
+
+        if (trip && currentUser) {
+            // Check if the trip belongs to the user's name OR token
+            if (trip.userId === currentUser.name) {
+                userId = currentUser.name;
+            } else if (trip.userId === currentUser.token) {
+                userId = currentUser.token;
+            }
+        }
+
+        // Fallback: If we couldn't match or find the trip, try standard order
+        if (!userId) {
+            userId = currentUser?.name || 
+                     currentUser?.token || 
+                     localStorage.getItem('offline_user_id') || '';
+        }
         
         if (userId) {
             await trips.deleteTrip(id, userId);
