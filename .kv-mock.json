@@ -7,8 +7,5 @@
     "meta:user:29c44d78-79d3-4d26-a063-220be7b7fefa:trip_count": "0",
     "meta:user:fd51e6c2-f827-418b-acb9-fcee7d3d9425:trip_count": "0"
   },
-  "TRASH": {
-    "trash:test:79770877-7d7f-4334-bc5b-ebddf7b4bc90": "{\"trip\":{\"id\":\"79770877-7d7f-4334-bc5b-ebddf7b4bc90\",\"date\":\"2025-12-07\",\"startTime\":\"09:00\",\"endTime\":\"17:00\",\"hoursWorked\":8,\"startAddress\":\"\",\"endAddress\":\"\",\"totalMiles\":0,\"mpg\":25,\"gasPrice\":3.5,\"fuelCost\":0,\"maintenanceCost\":0,\"suppliesCost\":0,\"netProfit\":0,\"notes\":\"\",\"stops\":[],\"destinations\":[],\"maintenanceItems\":[],\"suppliesItems\":[],\"lastModified\":\"2025-12-07T21:24:15.468Z\",\"userId\":\"test\",\"createdAt\":\"2025-12-07T21:24:15.474Z\",\"updatedAt\":\"2025-12-07T21:24:15.474Z\",\"deletedAt\":\"2025-12-07T21:24:17.856Z\"},\"metadata\":{\"deletedAt\":\"2025-12-07T21:24:17.856Z\",\"deletedBy\":\"test\",\"originalKey\":\"trip:test:79770877-7d7f-4334-bc5b-ebddf7b4bc90\",\"expiresAt\":\"2026-01-06T21:24:17.856Z\"}}",
-    "trash:test:d953142d-d0a8-42ea-b539-cdd1c465d47e": "{\"trip\":{\"id\":\"d953142d-d0a8-42ea-b539-cdd1c465d47e\",\"date\":\"2025-12-07\",\"startTime\":\"09:00\",\"endTime\":\"17:00\",\"hoursWorked\":8,\"startAddress\":\"\",\"endAddress\":\"\",\"totalMiles\":0,\"mpg\":25,\"gasPrice\":3.5,\"fuelCost\":0,\"maintenanceCost\":0,\"suppliesCost\":0,\"netProfit\":0,\"notes\":\"\",\"stops\":[],\"destinations\":[],\"maintenanceItems\":[],\"suppliesItems\":[],\"lastModified\":\"2025-12-07T21:24:28.143Z\",\"userId\":\"test\",\"createdAt\":\"2025-12-07T21:24:28.150Z\",\"updatedAt\":\"2025-12-07T21:24:28.150Z\",\"deletedAt\":\"2025-12-07T21:24:31.839Z\"},\"metadata\":{\"deletedAt\":\"2025-12-07T21:24:31.839Z\",\"deletedBy\":\"test\",\"originalKey\":\"trip:test:d953142d-d0a8-42ea-b539-cdd1c465d47e\",\"expiresAt\":\"2026-01-06T21:24:31.839Z\"}}"
-  }
+  "TRASH": {}
 }

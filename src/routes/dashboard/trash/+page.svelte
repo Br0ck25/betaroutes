@@ -4,6 +4,7 @@
   import { trips } from '$lib/stores/trips';
   import { goto } from '$app/navigation';
   import { user } from '$lib/stores/auth';
+  import { getDB } from '$lib/db/indexedDB';
   import type { TrashRecord } from '$lib/db/types';
 
   let trashedTrips: TrashRecord[] = [];
@@ -18,26 +19,64 @@
   async function loadTrash() {
     loading = true;
     try {
-      // FIX: Use stable user ID (name) for loading trash
-      const userId = $user?.name || $user?.token || '';
-      // @ts-ignore
-      trashedTrips = await trash.load(userId);
+        // SMART LOAD: Check all possible user identities
+        const potentialIds = new Set<string>();
+        
+        if ($user?.name) potentialIds.add($user.name);
+        if ($user?.token) potentialIds.add($user.token);
+        
+        const offlineId = localStorage.getItem('offline_user_id');
+        if (offlineId) potentialIds.add(offlineId);
+
+        console.log('Loading trash for IDs:', [...potentialIds]);
+
+        const db = await getDB();
+        const tx = db.transaction('trash', 'readonly');
+        const index = tx.objectStore('trash').index('userId');
+        
+        let allItems: TrashRecord[] = [];
+        
+        for (const id of potentialIds) {
+            const items = await index.getAll(id);
+            allItems = [...allItems, ...items];
+        }
+        
+        // Deduplicate items by ID
+        const uniqueItems = Array.from(new Map(allItems.map(item => [item.id, item])).values());
+        
+        // Sort by deletion date (newest first)
+        uniqueItems.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
+        
+        // Update local state and the global store
+        trashedTrips = uniqueItems;
+        trash.set(uniqueItems);
+        
+    } catch (err) {
+        console.error('Error loading trash:', err);
     } finally {
-      loading = false;
+        loading = false;
     }
   }
   
   async function restoreTrip(id: string) {
     if (restoring.has(id)) return;
+    
+    // Find the item to get its specific userId
+    const item = trashedTrips.find(t => t.id === id);
+    if (!item) {
+        alert('Item not found locally');
+        return;
+    }
+
     restoring.add(id);
     restoring = restoring;
     
-    // FIX: Use stable user ID
-    const userId = $user?.name || $user?.token || '';
-
     try {
-      await trash.restore(id, userId);
-      await trips.load(userId);
+      // Use the item's stored userId to ensure authorization matches
+      await trash.restore(id, item.userId);
+      
+      // Reload active trips for this user ID to reflect the restore
+      await trips.load(item.userId);
       await loadTrash();
     } catch (err) {
       alert('Failed to restore trip: ' + (err instanceof Error ? err.message : 'Unknown error'));
@@ -52,15 +91,16 @@
       return;
     }
     
+    const item = trashedTrips.find(t => t.id === id);
+    if (!item) return;
+
     if (deleting.has(id)) return;
     deleting.add(id);
     deleting = deleting;
 
-    // FIX: Use stable user ID
-    const userId = $user?.name || $user?.token || '';
-
     try {
-      await trash.permanentDelete(id, userId);
+      // Use the item's specific userId
+      await trash.permanentDelete(id, item.userId);
       await loadTrash();
     } catch (err) {
       alert('Failed to delete trip: ' + (err instanceof Error ? err.message : 'Unknown error'));
@@ -75,12 +115,17 @@
       return;
     }
     
-    // FIX: Use stable user ID
-    const userId = $user?.name || $user?.token || '';
-
     try {
-      const count = await trash.emptyTrash(userId);
-      alert(`Deleted ${count} item(s) from trash`);
+      // We must empty trash for ALL loaded IDs
+      const uniqueUserIds = new Set(trashedTrips.map(t => t.userId));
+      let totalDeleted = 0;
+
+      for (const uid of uniqueUserIds) {
+          const count = await trash.emptyTrash(uid);
+          totalDeleted += count;
+      }
+
+      alert(`Deleted ${totalDeleted} item(s) from trash`);
       await loadTrash();
     } catch (err) {
       alert('Failed to empty trash: ' + (err instanceof Error ? err.message : 'Unknown error'));
