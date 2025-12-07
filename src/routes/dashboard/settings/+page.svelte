@@ -7,7 +7,6 @@
   import { env } from '$env/dynamic/public';
   
   let settings = { ...$userSettings };
-  
   let profile = {
     name: '',
     email: ''
@@ -85,7 +84,6 @@
       return;
     }
     
-    // Auth store call would go here
     passwordError = '';
     showPasswordChange = false;
     passwordData = { current: '', new: '', confirm: '' };
@@ -106,7 +104,7 @@
     try {
       const result = await auth.deleteAccount($user?.name || '', deletePassword);
       if (result.success) {
-        goto('/');
+        goto('/'); // Redirect to main
       } else {
         deleteError = result.error || 'Failed to delete account';
         isDeleting = false;
@@ -170,6 +168,7 @@
     }
   }
 
+  // --- Autocomplete Logic ---
   function initAutocomplete(node: HTMLInputElement) {
     let retryCount = 0;
     const maxRetries = 20;
@@ -208,16 +207,9 @@
       if (place.formatted_address) {
         input.value = place.formatted_address;
         input.dispatchEvent(new Event('input'));
-        
         input.blur();
         setTimeout(() => {
-          const event = new KeyboardEvent('keydown', {
-            key: 'Escape',
-            code: 'Escape',
-            keyCode: 27,
-            which: 27,
-            bubbles: true
-          });
+          const event = new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true });
           input.dispatchEvent(event);
           forceHidePac();
         }, 50);
@@ -520,7 +512,7 @@
         {:else}
           <div class="delete-confirmation">
             <p class="delete-warning">To verify, please enter your password:</p>
-            <input type="password" bind:value={deletePassword} placeholder="Enter your password" class="delete-input" />
+            <input type="password" bind:value={deletePassword} placeholder="Enter your password" class="delete-input" aria-label="Confirm Password to Delete Account" />
             {#if deleteError}<p class="error-text">{deleteError}</p>{/if}
             <div class="button-group">
               <button class="btn-delete-confirm" on:click={handleDeleteAccount} disabled={isDeleting}>
