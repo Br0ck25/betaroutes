@@ -7,10 +7,10 @@
   import { user } from '$lib/stores/auth';
   import { page } from '$app/stores';
 
-  // FIX: Receive key from layout data
   export let data; 
   const API_KEY = data.googleMapsApiKey;
 
+  // ... (keep existing variables) ...
   let step = 1;
   let mapLoaded = false;
   let map: google.maps.Map | null = null;
@@ -27,9 +27,14 @@
     if (savedMaintenance) maintenanceOptions = JSON.parse(savedMaintenance);
     if (savedSupplies) suppliesOptions = JSON.parse(savedSupplies);
 
+    // SAFETY CHECK: Don't load maps without a key
+    if (!API_KEY) {
+        console.error('Google Maps API Key is missing. Autocomplete will be disabled.');
+        return;
+    }
+
     if (!window.google) {
       const script = document.createElement('script');
-      // FIX: Use the variable from data
       script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places`;
       script.async = true;
       script.onload = () => {
