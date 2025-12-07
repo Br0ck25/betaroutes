@@ -12,7 +12,6 @@ interface AuthState {
 	error: string | null;
 }
 
-// Helper to get/set offline ID
 const getOfflineId = () => {
 	if (typeof window === 'undefined') return null;
 	return localStorage.getItem('offline_user_id');
@@ -29,10 +28,6 @@ function createAuthStore() {
 	return {
 		subscribe,
 
-		/**
-		 * HYDRATE: Manually set user state (e.g. from Server Load function)
-		 * Fixes issue where Name/Email disappear on refresh by checking local storage.
-		 */
 		hydrate: (userData: User) => {
 			let localName = '';
 			let localEmail = '';
@@ -45,7 +40,6 @@ function createAuthStore() {
 				}
 			}
 
-			// Merge: Server data takes precedence, but fall back to local if server is missing fields
 			const mergedUser = {
 				...userData,
 				name: userData.name || localName,
@@ -60,7 +54,6 @@ function createAuthStore() {
 			});
 		},
 
-		// Initialize auth state from localStorage on app start
 		init: async () => {
 			const token = storage.getToken();
 			const username = storage.getUsername();
@@ -88,7 +81,9 @@ function createAuthStore() {
 						error: null
 					});
 
-					await trips.syncFromCloud(token);
+					// FIX: Sync using the username if available, ensuring cross-device visibility
+					const syncId = user.name || user.token;
+					await trips.syncFromCloud(syncId);
 				} catch (error) {
 					console.error('Failed to load user data:', error);
 					set({
@@ -108,7 +103,6 @@ function createAuthStore() {
 			}
 		},
 
-		// Update Profile - Saves to local storage immediately
 		updateProfile: (data: { name?: string; email?: string }) => {
 			update((state) => {
 				if (!state.user) return state;
@@ -127,7 +121,6 @@ function createAuthStore() {
 			});
 		},
 
-		// Sign up
 		signup: async (username: string, password: string) => {
 			update((state) => ({ ...state, isLoading: true, error: null }));
 			try {
@@ -156,12 +149,13 @@ function createAuthStore() {
 					error: null
 				});
 
+				// FIX: Use username for migration and sync
 				if (offlineId) {
-					await trips.migrateOfflineTrips(offlineId, response.token);
+					await trips.migrateOfflineTrips(offlineId, username);
 					localStorage.removeItem('offline_user_id');
 				}
 
-				await trips.syncFromCloud(response.token);
+				await trips.syncFromCloud(username);
 
 				return { success: true, resetKey: response.resetKey };
 			} catch (error: any) {
@@ -174,7 +168,6 @@ function createAuthStore() {
 			}
 		},
 
-		// Login
 		login: async (username: string, password: string) => {
 			update((state) => ({ ...state, isLoading: true, error: null }));
 			try {
@@ -204,12 +197,13 @@ function createAuthStore() {
 					error: null
 				});
 
+				// FIX: Use username for migration and sync
 				if (offlineId) {
-					await trips.migrateOfflineTrips(offlineId, response.token);
+					await trips.migrateOfflineTrips(offlineId, username);
 					localStorage.removeItem('offline_user_id');
 				}
 
-				await trips.syncFromCloud(response.token);
+				await trips.syncFromCloud(username);
 
 				return { success: true };
 			} catch (error: any) {
@@ -222,7 +216,6 @@ function createAuthStore() {
 			}
 		},
 
-		// Logout
 		logout: () => {
 			storage.clearToken();
 			storage.clearUsername();
@@ -236,7 +229,6 @@ function createAuthStore() {
 			});
 		},
 
-		// Change password
 		changePassword: async (username: string, currentPassword: string, newPassword: string) => {
 			update((state) => ({ ...state, isLoading: true, error: null }));
 			try {
@@ -253,7 +245,6 @@ function createAuthStore() {
 			}
 		},
 
-		// Reset password
 		resetPassword: async (username: string, resetKey: string, newPassword: string) => {
 			update((state) => ({ ...state, isLoading: true, error: null }));
 			try {
@@ -270,14 +261,12 @@ function createAuthStore() {
 			}
 		},
 
-		// Delete Account - Uses local proxy /api/user to bypass CORS
 		deleteAccount: async (username: string, password: string) => {
 			update((state) => ({ ...state, isLoading: true, error: null }));
 
 			try {
 				const token = storage.getToken();
 
-				// Call local server route (proxy) instead of external API directly
 				const response = await fetch('/api/user', {
 					method: 'DELETE',
 					headers: {
@@ -292,7 +281,6 @@ function createAuthStore() {
 					throw new Error(data.error || 'Account deletion failed');
 				}
 
-				// Clean up local data
 				storage.clearAll();
 				if (typeof window !== 'undefined') localStorage.removeItem('user_email');
 				trips.clear();
@@ -315,7 +303,6 @@ function createAuthStore() {
 			}
 		},
 
-		// Refresh subscription data
 		refreshSubscription: async () => {
 			const token = storage.getToken();
 			if (!token) return;
@@ -339,7 +326,6 @@ function createAuthStore() {
 			}
 		},
 
-		// Clear error
 		clearError: () => {
 			update((state) => ({ ...state, error: null }));
 		}
@@ -348,15 +334,13 @@ function createAuthStore() {
 
 export const auth = createAuthStore();
 
-// Derived stores
 export const user = derived(auth, ($auth) => $auth.user);
 export const isAuthenticated = derived(auth, ($auth) => $auth.isAuthenticated);
 export const isLoading = derived(auth, ($auth) => $auth.isLoading);
 export const authError = derived(auth, ($auth) => $auth.error);
 
-// Helper to check if user can create more trips
 export const canCreateTrip = derived(user, ($user) => {
-	if (!$user) return true; // Unauthenticated users can use local storage
-	if ($user.plan === 'pro' || $user.plan === 'business') return true; // Unlimited
-	return $user.tripsThisMonth < $user.maxTrips; // Free plan check
+	if (!$user) return true;
+	if ($user.plan === 'pro' || $user.plan === 'business') return true;
+	return $user.tripsThisMonth < $user.maxTrips;
 });

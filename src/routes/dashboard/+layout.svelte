@@ -80,20 +80,17 @@
   onMount(async () => {
     console.log('[DASHBOARD LAYOUT] Initializing...');
     
-    // FIX: Use 'name' as the stable User ID instead of 'token'
+    // Use 'name' as the stable User ID. Fallback to token only if essential.
     let userId = data?.user?.name;
 
-    // Fallback to token only if name is missing (rare case)
     if (!userId && data?.user?.token) {
         userId = data.user.token;
     }
 
-    // Try store fallback
     if (!userId && $user) {
         userId = $user.name || $user.token;
     }
 
-    // Offline fallback
     if (!userId) {
         userId = localStorage.getItem('offline_user_id');
         if (userId) {
@@ -105,8 +102,14 @@
       try {
         console.log('[DASHBOARD LAYOUT] Loading data for:', userId);
         await syncManager.initialize();
+        
+        // 1. Load local data
         await trips.load(userId);
         await trash.load(userId);
+        
+        // 2. Pull latest from cloud (FIX for multi-device sync)
+        await trips.syncFromCloud(userId);
+        
         console.log('[DASHBOARD LAYOUT] ✅ Data loaded successfully!');
       } catch (err) {
         console.error('[DASHBOARD LAYOUT] ❌ Failed to load data:', err);
