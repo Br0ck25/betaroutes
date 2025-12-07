@@ -1,4 +1,3 @@
-<!-- src/routes/dashboard/trips/+page.svelte -->
 <script lang="ts">
   import { trips } from '$lib/stores/trips';
   import { goto } from '$app/navigation';
@@ -60,12 +59,13 @@
       return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
     });
   
+  // UPDATED: Show cents (2 decimal places)
   function formatCurrency(amount: number): string {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(amount);
   }
   
@@ -78,12 +78,16 @@
     }).format(date);
   }
   
-  // 🔥 UPDATED: Offline-first delete
   async function deleteTrip(id: string) {
     if (confirm('Move trip to trash?')) {
       try {
-        await trips.deleteTrip(id, $user.token);
-        console.log('✅ Trip moved to trash offline!');
+        // Use authenticated token or fallback to offline ID
+        const userId = $user?.token || localStorage.getItem('offline_user_id') || '';
+        if (userId) {
+            await trips.deleteTrip(id, userId);
+        } else {
+            alert('User identification error. Please refresh.');
+        }
       } catch (err) {
         console.error('Failed to delete trip:', err);
         alert('Failed to delete trip. Please try again.');
@@ -113,7 +117,6 @@
   }
   
   let expandedTrips = new Set<string>();
-  
   function toggleExpand(id: string) {
     if (expandedTrips.has(id)) {
       expandedTrips.delete(id);
@@ -129,7 +132,6 @@
 </svelte:head>
 
 <div class="trip-history">
-  <!-- Header -->
   <div class="page-header">
     <div>
       <h1 class="page-title">Trip History</h1>
@@ -143,7 +145,6 @@
     </a>
   </div>
   
-  <!-- Filters -->
   <div class="filters-bar">
     <div class="search-box">
       <svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -182,7 +183,6 @@
     </div>
   </div>
   
-  <!-- Stats Summary -->
   <div class="stats-summary">
     <div class="summary-card">
       <div class="summary-label">Total Trips</div>
@@ -211,7 +211,7 @@
           const tripsWithHours = filteredTrips.filter(t => t.hoursWorked > 0);
           if (tripsWithHours.length === 0) return 'N/A';
           const totalHourlyPay = tripsWithHours.reduce((sum, trip) => {
-            return sum + calculateHourlyPay(trip);
+             return sum + calculateHourlyPay(trip);
           }, 0);
           return formatCurrency(totalHourlyPay / tripsWithHours.length) + '/hr';
         })()}
@@ -219,7 +219,6 @@
     </div>
   </div>
   
-  <!-- Trips Table -->
   {#if filteredTrips.length > 0}
     <div class="table-container">
       <table class="trips-table">
