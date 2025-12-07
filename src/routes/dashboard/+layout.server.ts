@@ -3,23 +3,30 @@ import { redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/public';
 
 export const load = ({ locals, platform }) => {
+	console.log('[DASHBOARD LAYOUT] Checking auth...');
+
 	if (!locals.user) {
 		throw redirect(303, '/login');
 	}
 
-	// 1. Try getting key from Cloudflare Platform object (Production)
+	// 1. Try Cloudflare Platform Env (Production)
 	let apiKey = (platform?.env as any)?.PUBLIC_GOOGLE_MAPS_API_KEY;
+	if (apiKey) console.log('[SERVER] Found key in platform.env');
 
-	// 2. Fallback to Svelte dynamic env (Local Dev)
+	// 2. Try Svelte Dynamic Env (Local/Fallback)
 	if (!apiKey) {
 		apiKey = env.PUBLIC_GOOGLE_MAPS_API_KEY;
+		if (apiKey) console.log('[SERVER] Found key in $env/dynamic/public');
 	}
 
-	// Debug Log (Check Cloudflare Functions logs if this fails)
+	// 3. Try Process Env (Node/Vercel/Netlify fallback)
+	if (!apiKey && typeof process !== 'undefined') {
+		apiKey = process.env.PUBLIC_GOOGLE_MAPS_API_KEY;
+		if (apiKey) console.log('[SERVER] Found key in process.env');
+	}
+
 	if (!apiKey) {
-		console.error('❌ [SERVER] Google Maps API Key is MISSING!');
-	} else {
-		console.log('✅ [SERVER] Google Maps API Key found.');
+		console.error('❌ [SERVER] CRITICAL: Google Maps API Key is MISSING in all environments!');
 	}
 
 	return {

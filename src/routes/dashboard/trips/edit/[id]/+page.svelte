@@ -1,4 +1,3 @@
-// src/routes/dashboard/trips/edit/[id]/+page.svelte
 <script lang="ts">
   import { trips } from '$lib/stores/trips';
   import { userSettings } from '$lib/stores/userSettings';
@@ -11,7 +10,7 @@
 
   // FIX: Receive key from layout data
   export let data; 
-  const API_KEY = data.googleMapsApiKey;
+  $: API_KEY = data.googleMapsApiKey;
 
   const settings = $userSettings;
   const tripId = $page.params.id;
@@ -79,6 +78,13 @@
     await loadTrip();
 
     // 3. Load Maps
+    console.log('[EDIT TRIP] Loading Maps with Key:', API_KEY ? 'Yes' : 'MISSING');
+
+    if (!API_KEY) {
+        console.error('❌ Google Maps API Key is missing.');
+        return;
+    }
+
     if (!window.google) {
       const script = document.createElement('script');
       // FIX: Use API_KEY variable
@@ -93,7 +99,6 @@
     }
   });
 
-  // ... (Keep existing loadTrip function) ...
   async function loadTrip() {
     let userId = $user?.token;
     if (!userId) userId = localStorage.getItem('offline_user_id') || '';
@@ -197,16 +202,27 @@
     input.dataset.autocompleteSetup = 'true';
     
     const autocomplete = new google.maps.places.Autocomplete(input, { types: ['geocode'] });
-    (input as any).autocompleteInstance = autocomplete;
-
+    
+    // 1. Handle Selection
     autocomplete.addListener('place_changed', () => {
       const place = autocomplete.getPlace();
       if (place.formatted_address) {
         input.value = place.formatted_address;
         input.dispatchEvent(new Event('input', { bubbles: true }));
+        
+        // Blur to close dropdown
         input.blur();
+        
+        // --- KEY FIX FOR STUCK DROPDOWN ---
+        // Send ESC key to force close the dropdown via Google's internal listeners
         setTimeout(() => {
-          const event = new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true });
+          const event = new KeyboardEvent('keydown', {
+            key: 'Escape',
+            code: 'Escape',
+            keyCode: 27,
+            which: 27,
+            bubbles: true
+          });
           input.dispatchEvent(event);
           forceHidePac();
           setTimeout(calculateRoute, 150);
@@ -214,24 +230,16 @@
       }
     });
 
+    // 2. Handle Clicking Away (Blur)
     input.addEventListener('blur', () => {
+      // Delay slightly to allow "place_changed" to fire if they clicked a suggestion
       setTimeout(() => {
         forceHidePac();
       }, 200);
     });
-
-    let typingTimeout: any;
-    input.addEventListener('input', () => {
-      clearTimeout(typingTimeout);
-      typingTimeout = setTimeout(() => {
-        if (input.value.length > 0) {
-          const pacContainers = document.querySelectorAll('.pac-container');
-          pacContainers.forEach(container => { (container as HTMLElement).style.display = ''; });
-        }
-      }, 100);
-    });
   }
 
+  // Helper to force hide Google dropdowns
   function forceHidePac() {
     const containers = document.querySelectorAll('.pac-container');
     containers.forEach((c) => (c as HTMLElement).style.display = 'none');
@@ -277,8 +285,10 @@
             stopover: true
         }));
       
+      // Default to start address if end is empty (Round Trip)
       const destination = endAddress.trim() ? endAddress : startAddress;
       
+      // Allow calculation if it's a round trip with waypoints OR pure round trip (0 miles, but valid)
       if (destination === startAddress && waypoints.length === 0) {
           calculating = false;
           return;
@@ -449,7 +459,15 @@
 <svelte:head>
   <title>Edit Trip - Go Route Yourself</title>
   <style>
-    .pac-container { z-index: 10000 !important; background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.3); border-radius: 8px; margin-top: 2px; font-family: inherit; }
+    /* Style Google Places autocomplete dropdown */
+    .pac-container {
+      z-index: 10000 !important;
+      background: white;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      border-radius: 8px;
+      margin-top: 2px;
+      font-family: inherit;
+    }
   </style>
 </svelte:head>
 
@@ -771,8 +789,10 @@
   .stop-earnings-input, .expense-input { position: relative; width: 120px; flex-shrink: 0; }
   .stop-earnings-input .currency, .expense-input .currency { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--green); font-weight: 700; }
   .stop-earnings-input input, .expense-input input { padding-left: 28px; color: var(--green); font-weight: 700; }
-  .stop-delete, .expense-delete { width: 32px; height: 32px; background: #FEF2F2; color: #DC2626; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
-  .stop-delete:hover, .expense-delete:hover { background: #FCA5A5; color: white; }
+  
+  /* Stops Delete Icon */
+  .stop-delete { width: 32px; height: 32px; background: #FEF2F2; color: #DC2626; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+  .stop-delete:hover { background: #FCA5A5; color: white; }
 
   /* FIXED: Expense Delete Button (Text Mode - Same as New Trip) */
   .expense-delete { 
@@ -800,7 +820,7 @@
 
   /* Options Badges */
   .options-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
-  .badge-btn { display: flex; align-items: center; gap: 6px; padding: 8px 16px; background: white; color: #374151; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .badge-btn { display: flex; align-items: center; gap: 6px; padding: 8px 16px; background: white; color: #374151; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
   .badge-btn:hover { border-color: var(--orange); color: var(--orange); }
   .btn-add-custom { padding: 6px 12px; font-size: 13px; font-weight: 600; color: var(--blue); background: white; border: 2px solid var(--blue); border-radius: 8px; cursor: pointer; }
   .btn-add-custom:hover { background: var(--blue); color: white; }
