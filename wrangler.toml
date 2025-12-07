@@ -35,3 +35,6 @@ id = "a245706e522b444fa9b67fa9a1b88d6a"
 [[env.preview.kv_namespaces]]
 binding = "BETA_LOGS_TRASH_KV"
 id = "4dbad92a0fc44f9b91c8a46165c8e40b"
+
+[vars]
+PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyCOdfe7j11yw9ENkX8c7hYsIjwqcQeqJGQ"
