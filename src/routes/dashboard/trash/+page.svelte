@@ -14,12 +14,20 @@
 
   onMount(async () => {
     await loadTrash();
+    
+    // Explicitly fetch trash from the cloud to ensure we see items
+    // that were moved to the TRASH KV by the server.
+    const userId = $user?.name || $user?.token;
+    if (userId) {
+        await trash.syncFromCloud(userId);
+        await loadTrash(); // Reload after sync
+    }
   });
 
   async function loadTrash() {
     loading = true;
     try {
-        // SMART LOAD: Check all possible user identities
+        // SMART LOAD: Check all possible user identities to find local items
         const potentialIds = new Set<string>();
         
         if ($user?.name) potentialIds.add($user.name);
@@ -27,8 +35,6 @@
         
         const offlineId = localStorage.getItem('offline_user_id');
         if (offlineId) potentialIds.add(offlineId);
-
-        console.log('Loading trash for IDs:', [...potentialIds]);
 
         const db = await getDB();
         const tx = db.transaction('trash', 'readonly');
@@ -47,9 +53,8 @@
         // Sort by deletion date (newest first)
         uniqueItems.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
         
-        // Update local state and the global store
+        // Update local state (removed trash.set causing the error)
         trashedTrips = uniqueItems;
-        trash.set(uniqueItems);
         
     } catch (err) {
         console.error('Error loading trash:', err);
