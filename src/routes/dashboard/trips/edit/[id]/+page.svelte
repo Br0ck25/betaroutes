@@ -50,6 +50,12 @@ onMount(async () => {
     }
   });
 
+  function initMapServices() {
+    if (!window.google) return;
+    directionsService = new google.maps.DirectionsService();
+    directionsRenderer = new google.maps.DirectionsRenderer();
+  }
+
   // NEW FUNCTION: Fetch existing data
   async function loadTripData() {
     let userId = $user?.token || localStorage.getItem('offline_user_id');
