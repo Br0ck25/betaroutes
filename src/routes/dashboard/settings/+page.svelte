@@ -5,6 +5,9 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { env } from '$env/dynamic/public';
+
+  export let data;
+  const API_KEY = data.googleMapsApiKey;
   
   let settings = { ...$userSettings };
   let profile = {

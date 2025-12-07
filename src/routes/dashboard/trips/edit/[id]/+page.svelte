@@ -15,6 +15,9 @@
   let map: google.maps.Map | null = null;
   let directionsService: google.maps.DirectionsService | null = null;
   let directionsRenderer: google.maps.DirectionsRenderer | null = null;
+
+  export let data;
+  const API_KEY = data.googleMapsApiKey;
   
   // Maintenance & Supplies options storage
   let maintenanceOptions = ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement'];

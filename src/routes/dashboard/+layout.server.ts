@@ -1,16 +1,23 @@
+// src/routes/dashboard/+layout.server.ts
 import { redirect } from '@sveltejs/kit';
+import { env } from '$env/dynamic/public';
 
-export const load = ({ locals }) => {
-    console.log('[DASHBOARD LAYOUT] Checking auth...');
-    console.log('[DASHBOARD LAYOUT] locals.user:', locals.user);
-    
-    if (!locals.user) {
-        console.log('[DASHBOARD LAYOUT] No user found, redirecting to login');
-        throw redirect(303, '/login');
-    }
+export const load = ({ locals, platform }) => {
+	console.log('[DASHBOARD LAYOUT] Checking auth...');
 
-    console.log('[DASHBOARD LAYOUT] User authenticated, loading dashboard');
-    return {
-        user: locals.user
-    };
+	if (!locals.user) {
+		console.log('[DASHBOARD LAYOUT] No user found, redirecting to login');
+		throw redirect(303, '/login');
+	}
+
+	// Try to get key from Svelte env OR Cloudflare platform env
+	const googleMapsApiKey =
+		env.PUBLIC_GOOGLE_MAPS_API_KEY || (platform?.env as any)?.PUBLIC_GOOGLE_MAPS_API_KEY || '';
+
+	console.log('[DASHBOARD LAYOUT] User authenticated, loading dashboard');
+
+	return {
+		user: locals.user,
+		googleMapsApiKey // <--- Passing the key to the client
+	};
 };
