@@ -2,7 +2,7 @@
   import { trips } from '$lib/stores/trips';
   import { userSettings } from '$lib/stores/userSettings';
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { user } from '$lib/stores/auth';
   import { page } from '$app/stores';
 
@@ -14,8 +14,12 @@
   let map: google.maps.Map | null = null;
   let directionsService: google.maps.DirectionsService | null = null;
   let directionsRenderer: google.maps.DirectionsRenderer | null = null;
+  let mapElement: HTMLElement; 
+
   let maintenanceOptions = ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement'];
   let suppliesOptions = ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental'];
+  
+  let dragItemIndex: number | null = null;
 
   onMount(() => {
     const savedMaintenance = localStorage.getItem('maintenanceOptions');
@@ -24,33 +28,46 @@
     if (savedMaintenance) maintenanceOptions = JSON.parse(savedMaintenance);
     if (savedSupplies) suppliesOptions = JSON.parse(savedSupplies);
 
-    console.log('[NEW TRIP] Loading Maps with Key:', API_KEY ? 'Yes' : 'MISSING');
-
-    if (!API_KEY) {
-        console.error('❌ Google Maps API Key is missing. Autocomplete DISABLED.');
-        return;
-    }
-
-    if (!window.google) {
+    if (API_KEY && !window.google) {
       const script = document.createElement('script');
       script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places`;
       script.async = true;
       script.onload = () => {
         mapLoaded = true;
-        directionsService = new google.maps.DirectionsService();
-        directionsRenderer = new google.maps.DirectionsRenderer();
+        initMapServices();
       };
       document.head.appendChild(script);
-    } else {
+    } else if (window.google) {
       mapLoaded = true;
-      directionsService = new google.maps.DirectionsService();
-      directionsRenderer = new google.maps.DirectionsRenderer();
+      initMapServices();
     }
   });
 
+  function initMapServices() {
+    directionsService = new google.maps.DirectionsService();
+    directionsRenderer = new google.maps.DirectionsRenderer();
+  }
+
+  // Action to initialize map on DOM element
+  function initMap(node: HTMLElement) {
+      if (!mapLoaded || !window.google) return;
+      
+      map = new google.maps.Map(node, {
+          center: { lat: 37.7749, lng: -122.4194 },
+          zoom: 12,
+          disableDefaultUI: true,
+          zoomControl: true
+      });
+      directionsRenderer?.setMap(map);
+      
+      if (tripData.startAddress || tripData.stops.length > 0) {
+          calculateRoute(false);
+      }
+  }
+
   let tripData = {
     id: crypto.randomUUID(),
-    date: new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0],
+    date: new Date().toISOString().split('T')[0],
     startTime: '09:00',
     endTime: '17:00',
     hoursWorked: 0,
@@ -67,93 +84,44 @@
     notes: ''
   };
 
-  let newStop = {
-    address: '',
-    earnings: 0,
-    notes: ''
-  };
-
+  let newStop = { address: '', earnings: 0, notes: '' };
   let newMaintenanceItem = '';
   let newSupplyItem = '';
   let showAddMaintenance = false;
   let showAddSupply = false;
 
-  function addStop() {
-    if (!newStop.address) return;
-    tripData.stops = [...tripData.stops, { ...newStop, id: crypto.randomUUID() }];
-    newStop = { address: '', earnings: 0, notes: '' };
-    calculateRoute();
+  // --- Map Logic ---
+  let calcTimeout: any;
+  $: {
+      if (mapLoaded && step === 2) {
+          void tripData.startAddress;
+          void tripData.endAddress;
+          void tripData.stops;
+          
+          clearTimeout(calcTimeout);
+          calcTimeout = setTimeout(() => {
+             if (tripData.startAddress) calculateRoute(false);
+          }, 800);
+      }
   }
-  
-  function removeStop(id: string) {
-    tripData.stops = tripData.stops.filter(s => s.id !== id);
-    calculateRoute();
-  }
-  
-  function addMaintenanceItem(type: string) {
-    tripData.maintenanceItems = [...tripData.maintenanceItems, {
-      id: crypto.randomUUID(),
-      type,
-      cost: 0
-    }];
-  }
-  
-  function removeMaintenanceItem(id: string) {
-    tripData.maintenanceItems = tripData.maintenanceItems.filter(m => m.id !== id);
-  }
-  
-  function addCustomMaintenance() {
-    if (!newMaintenanceItem.trim()) return;
-    maintenanceOptions = [...maintenanceOptions, newMaintenanceItem.trim()];
-    localStorage.setItem('maintenanceOptions', JSON.stringify(maintenanceOptions));
-    addMaintenanceItem(newMaintenanceItem.trim());
-    newMaintenanceItem = '';
-    showAddMaintenance = false;
-  }
-  
-  function deleteMaintenanceOption(option: string) {
-    if (confirm(`Delete "${option}" from maintenance options?`)) {
-      maintenanceOptions = maintenanceOptions.filter(o => o !== option);
-      localStorage.setItem('maintenanceOptions', JSON.stringify(maintenanceOptions));
-    }
-  }
-  
-  function addSupplyItem(type: string) {
-    tripData.suppliesItems = [...tripData.suppliesItems, {
-      id: crypto.randomUUID(),
-      type,
-      cost: 0
-    }];
-  }
-  
-  function removeSupplyItem(id: string) {
-    tripData.suppliesItems = tripData.suppliesItems.filter(s => s.id !== id);
-  }
-  
-  function addCustomSupply() {
-    if (!newSupplyItem.trim()) return;
-    suppliesOptions = [...suppliesOptions, newSupplyItem.trim()];
-    localStorage.setItem('suppliesOptions', JSON.stringify(suppliesOptions));
-    addSupplyItem(newSupplyItem.trim());
-    newSupplyItem = '';
-    showAddSupply = false;
-  }
-  
-  function deleteSupplyOption(option: string) {
-    if (confirm(`Delete "${option}" from supplies options?`)) {
-      suppliesOptions = suppliesOptions.filter(o => o !== option);
-      localStorage.setItem('suppliesOptions', JSON.stringify(suppliesOptions));
-    }
-  }
-  
-  function calculateRoute() {
+
+  function calculateRoute(optimize = false) {
     if (!mapLoaded || !directionsService) return;
     if (!tripData.startAddress) return;
+    
+    if (mapElement && !map) {
+         map = new google.maps.Map(mapElement, {
+            center: { lat: 37.7749, lng: -122.4194 },
+            zoom: 12
+        });
+        directionsRenderer?.setMap(map);
+    }
     
     const waypoints = tripData.stops.map(stop => ({
       location: stop.address,
       stopover: true
     }));
+    
     const destination = tripData.endAddress || tripData.startAddress;
     
     if (!destination && waypoints.length === 0) return;
@@ -162,19 +130,98 @@
       origin: tripData.startAddress,
       destination: destination,
       waypoints: waypoints,
-      travelMode: 'DRIVING'
+      optimizeWaypoints: optimize,
+      travelMode: google.maps.TravelMode.DRIVING
     }, (result: any, status: any) => {
       if (status === 'OK') {
+        directionsRenderer?.setDirections(result);
         const route = result.routes[0];
         let totalMeters = 0;
-        route.legs.forEach((leg: any) => {
-          totalMeters += leg.distance.value;
-        });
-        tripData.totalMiles = Math.round((totalMeters / 1609.34) * 10) / 10;
+        route.legs.forEach((leg: any) => totalMeters += leg.distance.value);
+        if (step === 2) {
+            tripData.totalMiles = Math.round((totalMeters / 1609.34) * 10) / 10;
+        }
+
+        if (optimize && result.routes[0].waypoint_order) {
+            const order = result.routes[0].waypoint_order;
+            const reorderedStops = order.map((index: number) => tripData.stops[index]);
+            tripData.stops = reorderedStops;
+        }
       }
     });
   }
+
+  // --- Drag & Drop ---
+  function handleDragStart(event: DragEvent, index: number) {
+      dragItemIndex = index;
+      if(event.dataTransfer) {
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.dropEffect = 'move';
+          event.dataTransfer.setData('text/plain', index.toString());
+      }
+  }
+  function handleDragOver(event: DragEvent) {
+      event.preventDefault(); return false;
+  }
+  function handleDrop(event: DragEvent, dropIndex: number) {
+      event.preventDefault();
+      if (dragItemIndex === null) return;
+      const item = tripData.stops[dragItemIndex];
+      const newStops = tripData.stops.filter((_, i) => i !== dragItemIndex);
+      newStops.splice(dropIndex, 0, item);
+      tripData.stops = newStops;
+      dragItemIndex = null;
+      calculateRoute(false);
+  }
+
+  function addStop() {
+    if (!newStop.address) return;
+    tripData.stops = [...tripData.stops, { ...newStop, id: crypto.randomUUID() }];
+    newStop = { address: '', earnings: 0, notes: '' };
+  }
   
+  function removeStop(id: string) {
+    tripData.stops = tripData.stops.filter(s => s.id !== id);
+  }
+  
+  function addMaintenanceItem(type: string) {
+    tripData.maintenanceItems = [...tripData.maintenanceItems, { id: crypto.randomUUID(), type, cost: 0 }];
+  }
+  function removeMaintenanceItem(id: string) {
+    tripData.maintenanceItems = tripData.maintenanceItems.filter(m => m.id !== id);
+  }
+  function addCustomMaintenance() {
+    if (!newMaintenanceItem.trim()) return;
+    addMaintenanceItem(newMaintenanceItem.trim());
+    newMaintenanceItem = '';
+    showAddMaintenance = false;
+  }
+  function deleteMaintenanceOption(option: string) {
+    if (confirm(`Delete "${option}"?`)) {
+      maintenanceOptions = maintenanceOptions.filter(o => o !== option);
+      localStorage.setItem('maintenanceOptions', JSON.stringify(maintenanceOptions));
+    }
+  }
+  function addSupplyItem(type: string) {
+    tripData.suppliesItems = [...tripData.suppliesItems, { id: crypto.randomUUID(), type, cost: 0 }];
+  }
+  function removeSupplyItem(id: string) {
+    tripData.suppliesItems = tripData.suppliesItems.filter(s => s.id !== id);
+  }
+  function addCustomSupply() {
+    if (!newSupplyItem.trim()) return;
+    addSupplyItem(newSupplyItem.trim());
+    newSupplyItem = '';
+    showAddSupply = false;
+  }
+  function deleteSupplyOption(option: string) {
+    if (confirm(`Delete "${option}"?`)) {
+      suppliesOptions = suppliesOptions.filter(o => o !== option);
+      localStorage.setItem('suppliesOptions', JSON.stringify(suppliesOptions));
+    }
+  }
+  
+  // --- Calc ---
   $: {
     if (tripData.totalMiles && tripData.mpg && tripData.gasPrice) {
       const gallons = tripData.totalMiles / tripData.mpg;
@@ -194,16 +241,12 @@
     if (tripData.startTime && tripData.endTime) {
       const [startHour, startMin] = tripData.startTime.split(':').map(Number);
       const [endHour, endMin] = tripData.endTime.split(':').map(Number);
-      const startMinutes = startHour * 60 + startMin;
-      const endMinutes = endHour * 60 + endMin;
-      let diffMinutes = endMinutes - startMinutes;
-      if (diffMinutes < 0) {
-        diffMinutes += 24 * 60;
-      }
-      tripData.hoursWorked = Math.round((diffMinutes / 60) * 10) / 10;
+      let diff = (endHour * 60 + endMin) - (startHour * 60 + startMin);
+      if (diff < 0) diff += 24 * 60;
+      tripData.hoursWorked = Math.round((diff / 60) * 10) / 10;
     }
   }
-  
+
   function nextStep() { if (step < 4) step++; }
   function prevStep() { if (step > 1) step--; }
   
@@ -219,7 +262,6 @@
         userId = offlineId;
     }
     
-    // FIX: Map stops correctly to schema 'stops' instead of 'destinations'
     const tripToSave = {
       ...tripData,
       id: tripData.id,
@@ -228,7 +270,6 @@
       netProfit: totalProfit,
       totalMileage: tripData.totalMiles,
       fuelCost: tripData.fuelCost,
-      // Map to 'stops' as expected by backend Zod schema
       stops: tripData.stops.map((stop, index) => ({
         id: stop.id || crypto.randomUUID(),
         address: stop.address,
@@ -278,55 +319,16 @@
   }
   
   function initAutocomplete(node: HTMLInputElement) {
-    let retryCount = 0;
-    const maxRetries = 10;
-    const trySetup = () => {
-      if (window.google && window.google.maps && window.google.maps.places) {
-        setupAutocomplete(node);
-        return true;
-      }
-      return false;
-    };
-    if (trySetup()) return {};
-    const retryInterval = setInterval(() => {
-      retryCount++;
-      if (trySetup() || retryCount >= maxRetries) clearInterval(retryInterval);
-    }, 200);
-    return { destroy() { clearInterval(retryInterval); } };
-  }
-  
-  function setupAutocomplete(input: HTMLInputElement) {
-    if (input.dataset.autocompleteSetup === 'true') return;
-    input.dataset.autocompleteSetup = 'true';
-    
-    const autocomplete = new google.maps.places.Autocomplete(input, { types: ['geocode'] });
-    (input as any).autocompleteInstance = autocomplete;
-    autocomplete.addListener('place_changed', () => {
-      const place = autocomplete.getPlace();
-      if (place.formatted_address) {
-        input.value = place.formatted_address;
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        input.blur();
-        
-        setTimeout(() => {
-          const event = new KeyboardEvent('keydown', { key: 'Escape', 
-            code: 'Escape', keyCode: 27, which: 27, bubbles: true });
-          input.dispatchEvent(event);
-          forceHidePac();
-          setTimeout(calculateRoute, 150);
-        }, 50);
-      }
+    if (!window.google) return;
+    const ac = new google.maps.places.Autocomplete(node, { types: ['geocode'] });
+    ac.addListener('place_changed', () => {
+        const place = ac.getPlace();
+        node.value = place.formatted_address || '';
+        node.dispatchEvent(new Event('input'));
+        // Trigger manual update for start/end fields for map reactivity
+        if(node.id === 'start-address') tripData.startAddress = node.value;
+        if(node.id === 'end-address') tripData.endAddress = node.value;
     });
-    input.addEventListener('blur', () => {
-      setTimeout(() => {
-        forceHidePac();
-      }, 200);
-    });
-  }
-
-  function forceHidePac() {
-    const containers = document.querySelectorAll('.pac-container');
-    containers.forEach((c) => (c as HTMLElement).style.display = 'none');
   }
 </script>
 
@@ -412,6 +414,7 @@
           <h2 class="card-title">Basic Information</h2>
           <p class="card-subtitle">When did your trip take place?</p>
         </div>
+       
         <div class="form-grid">
           <div class="form-group">
             <label>Date</label>
@@ -446,7 +449,12 @@
       <div class="form-card">
         <div class="card-header">
           <h2 class="card-title">Route & Stops</h2>
-          <p class="card-subtitle">Add your starting point and destinations</p>
+          <button class="btn-optimize" on:click={() => calculateRoute(true)} title="Reorder stops for quickest route">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Optimize
+          </button>
         </div>
         <div class="form-group">
           <label>Starting Address</label>
@@ -455,6 +463,7 @@
             bind:value={tripData.startAddress}
             placeholder="Start typing address..."
             use:initAutocomplete
+            id="start-address"
           />
         </div>
         <div class="form-group">
@@ -464,6 +473,7 @@
             bind:value={tripData.endAddress}
             placeholder="Start typing address..."
             use:initAutocomplete
+            id="end-address"
           />
         </div>
         
@@ -474,9 +484,17 @@
           </div>
           {#if tripData.stops.length > 0}
             <div class="stops-list">
-              {#each tripData.stops as stop, i}
-                <div class="stop-item">
+              {#each tripData.stops as stop, i (stop.id)}
+                <div 
+                    class="stop-item" 
+                    draggable="true" 
+                    on:dragstart={(e) => handleDragStart(e, i)}
+                    on:drop={(e) => handleDrop(e, i)}
+                    on:dragover={handleDragOver}
+                >
+                  <div class="stop-grip" title="Drag to reorder">⋮⋮</div>
                   <div class="stop-number">{i + 1}</div>
+                  
                   <div class="stop-info">
                     <input 
                       type="text"
@@ -486,6 +504,7 @@
                       use:initAutocomplete
                     />
                   </div>
+                  
                   <div class="stop-earnings-input">
                     <span class="currency">$</span>
                     <input 
@@ -496,6 +515,7 @@
                       min="0"
                     />
                   </div>
+                  
                   <button class="stop-delete" on:click={() => removeStop(stop.id)} type="button">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                       <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -527,6 +547,8 @@
             </button>
           </div>
         </div>
+        
+        <div class="map-container" use:initMap></div>
         
         <div class="form-group">
           <label>
@@ -866,8 +888,8 @@
   
   .form-content { margin-bottom: 32px; }
   .form-card { background: white; border: 1px solid #E5E7EB; border-radius: 16px; padding: 32px; }
-  .card-header { margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid #E5E7EB; }
-  .card-title { font-size: 24px; font-weight: 700; color: #111827; margin-bottom: 8px; }
+  .card-header { margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid #E5E7EB; display: flex; justify-content: space-between; align-items: center; }
+  .card-title { font-size: 24px; font-weight: 700; color: #111827; margin: 0; }
   .card-subtitle { font-size: 15px; color: #6B7280; }
   
   .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 24px; }
@@ -887,13 +909,16 @@
   
   .stops-section, .expenses-section { margin: 32px 0; padding: 24px; background: #F9FAFB; border-radius: 12px; }
   .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-  .section-header h3 { font-size: 16px; font-weight: 700; color: #111827; margin-bottom: 4px; }
+  .section-header h3 { font-size: 16px; font-weight: 700; color: #111827; margin: 0; }
   .section-header p { font-size: 14px; color: #6B7280; }
   .header-actions { display: flex; gap: 8px; }
   
   .btn-add-custom { display: flex; align-items: center; gap: 6px; padding: 8px 14px; background: white; color: var(--blue); border: 2px solid var(--blue); border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: inherit; }
   .btn-add-custom:hover { background: var(--blue); color: white; }
   
+  .btn-optimize { display: flex; align-items: center; gap: 6px; padding: 8px 14px; background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-optimize:hover { background: #bae6fd; }
+
   .custom-input-row { display: flex; gap: 8px; margin-bottom: 16px; }
   .custom-input-row input { flex: 1; padding: 10px 14px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; font-family: inherit; }
   .btn-save { padding: 10px 16px; background: var(--green); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-family: inherit; }
@@ -909,26 +934,35 @@
   .expense-items { background: white; border: 1px solid #E5E7EB; border-radius: 10px; padding: 16px; }
   .expense-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid #F3F4F6; }
   .expense-item:last-of-type { border-bottom: none; }
-  .expense-type { flex: 1; font-size: 14px; font-weight: 600; color: #374151; }
-  .expense-input { position: relative; width: 140px; }
+  .expense-type { flex: 1; font-size: 14px; font-weight: 600; color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  
+  .expense-input { position: relative; width: 75px; flex-shrink: 0; margin-right: 45px; }
   .expense-input .currency { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #6B7280; font-weight: 600; }
   .expense-input input { width: 100%; padding: 8px 12px 8px 28px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; font-family: inherit; }
+  
   .expense-delete { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 16px; min-width: auto; height: 36px; flex-shrink: 0; background: #FEF2F2; color: #DC2626; border: 2px solid #FCA5A5; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-size: 14px; font-weight: 600; font-family: inherit; }
   .expense-delete:hover { background: #FCA5A5; border-color: #DC2626; color: white; }
   .expense-total { display: flex; justify-content: space-between; padding-top: 16px; margin-top: 8px; border-top: 2px solid #E5E7EB; font-weight: 700; }
   .total-amount { color: var(--orange); }
   
   .stops-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
-  .stop-item { display: flex; align-items: center; gap: 16px; padding: 16px; background: white; border: 1px solid #E5E7EB; border-radius: 10px; }
+  .stop-item { display: flex; align-items: center; gap: 16px; padding: 16px; background: white; border: 1px solid #E5E7EB; border-radius: 10px; cursor: grab; }
+  .stop-grip { color: #9CA3AF; font-size: 20px; cursor: grab; padding: 0 4px; user-select: none; }
   .stop-number { width: 32px; height: 32px; background: var(--orange); color: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0; }
-  .stop-info { flex: 1; min-width: 0; }
+  
+  /* Stop Input Container */
+  .stop-info { flex: 1; min-width: 0; margin-right: 24px; }
+  
+  /* Input takes 100% of the parent (.stop-info) which is flexible */
   .stop-address-input { width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; font-weight: 500; font-family: inherit; color: #111827; background: white; transition: border-color 0.2s; }
   .stop-address-input:focus { outline: none; border-color: var(--orange); }
+  
   .stop-earnings-input { position: relative; width: 120px; flex-shrink: 0; }
   .stop-earnings-input .currency { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--green); font-weight: 700; font-size: 16px; }
   .stop-earnings-input input { width: 100%; padding: 10px 12px 10px 28px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 16px; font-weight: 700; font-family: inherit; color: var(--green); background: white; transition: border-color 0.2s; }
   .stop-earnings-input input:focus { outline: none; border-color: var(--green); }
-  .stop-delete { width: 32px; height: 32px; background: #FEF2F2; color: #DC2626; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+  
+  .stop-delete { width: 32px; height: 32px; background: #FEF2F2; color: #DC2626; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .stop-delete:hover { background: #FEE2E2; }
   
   .add-stop { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; }
@@ -961,6 +995,9 @@
   .btn-secondary { display: flex; align-items: center; gap: 8px; padding: 14px 28px; background: white; color: #6B7280; border: 2px solid #E5E7EB; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
   .btn-secondary:hover { border-color: var(--orange); color: var(--orange); }
   
+  .map-container { height: 300px; background: #f0f0f0; margin: 20px 0; border-radius: 12px; overflow: hidden; }
+  .map { width: 100%; height: 100%; }
+
   @media (max-width: 768px) {
     .progress-steps { overflow-x: auto; }
     .step-label { font-size: 11px; }
