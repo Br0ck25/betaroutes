@@ -3,10 +3,12 @@ import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
 
 export const POST: RequestHandler = async ({ cookies }) => {
-	// remove session cookie
-	cookies.set('session', '', {
+	// FIX: Clear the 'token' cookie, not 'session'
+	cookies.delete('token', {
 		path: '/',
-		expires: new Date(0)
+		httpOnly: true,
+		sameSite: 'lax',
+		secure: false // set to true in production if using https
 	});
 
 	return json({ success: true });
