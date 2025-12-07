@@ -1,4 +1,3 @@
-<!-- src/routes/dashboard/export/+page.svelte -->
 <script lang="ts">
   import { trips } from '$lib/stores/trips';
   
@@ -66,14 +65,12 @@
   
   function exportCSV() {
     const tripsToExport = filteredTrips.filter(t => selectedTrips.has(t.id));
-    
     if (tripsToExport.length === 0) {
       alert('Please select at least one trip to export');
       return;
     }
     
     let csv = 'Date,Start Time,End Time,Start Address,Stops,Miles,Earnings,Fuel Cost,Maintenance,Supplies,Total Costs,Net Profit,Notes\n';
-    
     let totalMiles = 0;
     let totalEarnings = 0;
     let totalFuel = 0;
@@ -108,7 +105,6 @@
         profit.toFixed(2),
         `"${trip.notes || ''}"`
       ];
-      
       csv += row.join(',') + '\n';
     });
     
@@ -136,7 +132,6 @@
   
   function exportPDF() {
     const tripsToExport = filteredTrips.filter(t => selectedTrips.has(t.id));
-    
     if (tripsToExport.length === 0) {
       alert('Please select at least one trip to export');
       return;
@@ -223,7 +218,6 @@
     ${dateFrom || dateTo ? `<p class="date-range">Period: ${dateFrom || 'Start'} to ${dateTo || 'Present'}</p>` : ''}
   </div>
 `;
-    
     if (includeSummary) {
       tripsToExport.forEach(trip => {
         const earnings = trip.stops?.reduce((sum, stop) => sum + (stop.earnings || 0), 0) || 0;
@@ -235,7 +229,6 @@
         totalCosts += costs;
         totalProfit += profit;
       });
-      
       html += `
   <div class="summary">
     <div class="summary-item">
@@ -272,7 +265,6 @@
     </thead>
     <tbody>
 `;
-    
     tripsToExport.forEach(trip => {
       const earnings = trip.stops?.reduce((sum, stop) => sum + (stop.earnings || 0), 0) || 0;
       const costs = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);
@@ -293,7 +285,6 @@
       </tr>
 `;
     });
-    
     html += `
     </tbody>
   </table>
@@ -304,7 +295,6 @@
 </body>
 </html>
 `;
-    
     const blob = new Blob([html], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');
@@ -324,7 +314,6 @@
 </svelte:head>
 
 <div class="export-page">
-  <!-- Header -->
   <div class="page-header">
     <div>
       <h1 class="page-title">Export Data</h1>
@@ -333,17 +322,17 @@
   </div>
   
   <div class="export-grid">
-    <!-- Export Options -->
     <div class="options-card">
       <h2 class="card-title">Export Options</h2>
       
       <div class="option-group">
-        <label class="option-label">Format</label>
+        <h3 class="option-label">Format</h3>
         <div class="format-buttons">
           <button 
             class="format-btn"
             class:active={exportFormat === 'csv'}
             on:click={() => exportFormat = 'csv'}
+            aria-label="Select CSV Format"
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
               <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -359,6 +348,7 @@
             class="format-btn"
             class:active={exportFormat === 'pdf'}
             on:click={() => exportFormat = 'pdf'}
+            aria-label="Select PDF Format"
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
               <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -373,17 +363,17 @@
       </div>
       
       <div class="option-group">
-        <label class="option-label">Date Range (optional)</label>
+        <h3 class="option-label">Date Range (optional)</h3>
         <div class="date-inputs">
-          <input type="date" bind:value={dateFrom} placeholder="From" />
+          <input id="date-from" type="date" bind:value={dateFrom} aria-label="Start Date" />
           <span class="date-separator">to</span>
-          <input type="date" bind:value={dateTo} placeholder="To" />
+          <input id="date-to" type="date" bind:value={dateTo} aria-label="End Date" />
         </div>
       </div>
       
       <div class="option-group">
-        <label class="checkbox-label">
-          <input type="checkbox" bind:checked={includeSummary} />
+        <label class="checkbox-label" for="include-summary">
+          <input id="include-summary" type="checkbox" bind:checked={includeSummary} />
           <span>Include summary statistics</span>
         </label>
       </div>
@@ -396,7 +386,6 @@
       </button>
     </div>
     
-    <!-- Trip Selection -->
     <div class="selection-card">
       <div class="selection-header">
         <h2 class="card-title">Select Trips</h2>
@@ -407,13 +396,14 @@
       
       {#if filteredTrips.length > 0}
         <div class="trips-list">
-          {#each filteredTrips as trip}
+          {#each filteredTrips as trip (trip.id)}
             {@const earnings = trip.stops?.reduce((sum, stop) => sum + (stop.earnings || 0), 0) || 0}
             {@const costs = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0)}
             {@const profit = earnings - costs}
             
-            <label class="trip-checkbox">
+            <label class="trip-checkbox" for="trip-{trip.id}">
               <input 
+                id="trip-{trip.id}"
                 type="checkbox" 
                 checked={selectedTrips.has(trip.id)}
                 on:change={() => toggleTrip(trip.id)}
@@ -455,338 +445,76 @@
 </div>
 
 <style>
-  .export-page {
-    max-width: 1200px;
-  }
+  .export-page { max-width: 1200px; }
+  .page-header { margin-bottom: 32px; }
+  .page-title { font-size: 32px; font-weight: 800; color: #111827; margin-bottom: 4px; }
+  .page-subtitle { font-size: 16px; color: #6B7280; }
   
-  .page-header {
-    margin-bottom: 32px;
-  }
+  .export-grid { display: grid; grid-template-columns: 400px 1fr; gap: 24px; }
   
-  .page-title {
-    font-size: 32px;
-    font-weight: 800;
-    color: #111827;
-    margin-bottom: 4px;
-  }
+  .options-card, .selection-card { background: white; border: 1px solid #E5E7EB; border-radius: 16px; padding: 24px; }
+  .card-title { font-size: 18px; font-weight: 700; color: #111827; margin-bottom: 24px; }
   
-  .page-subtitle {
-    font-size: 16px;
-    color: #6B7280;
-  }
+  .option-group { margin-bottom: 24px; }
+  .option-label { display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 12px; }
   
-  .export-grid {
-    display: grid;
-    grid-template-columns: 400px 1fr;
-    gap: 24px;
-  }
+  .format-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .format-btn { display: flex; align-items: center; gap: 12px; padding: 16px; background: #F9FAFB; border: 2px solid #E5E7EB; border-radius: 12px; cursor: pointer; transition: all 0.2s; text-align: left; font-family: inherit; }
+  .format-btn:hover { border-color: var(--orange); background: white; }
+  .format-btn.active { border-color: var(--orange); background: rgba(255, 127, 80, 0.05); }
+  .format-btn svg { color: #6B7280; flex-shrink: 0; }
+  .format-btn.active svg { color: var(--orange); }
+  .format-name { font-size: 14px; font-weight: 700; color: #111827; margin-bottom: 2px; }
+  .format-desc { font-size: 12px; color: #6B7280; }
   
-  .options-card,
-  .selection-card {
-    background: white;
-    border: 1px solid #E5E7EB;
-    border-radius: 16px;
-    padding: 24px;
-  }
+  .date-inputs { display: flex; align-items: center; gap: 12px; }
+  .date-inputs input { flex: 1; padding: 12px 16px; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 14px; font-family: inherit; }
+  .date-inputs input:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 127, 80, 0.1); }
+  .date-separator { font-size: 14px; color: #6B7280; }
   
-  .card-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: #111827;
-    margin-bottom: 24px;
-  }
+  .checkbox-label { display: flex; align-items: center; gap: 12px; cursor: pointer; font-size: 14px; color: #374151; }
+  .checkbox-label input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; }
   
-  .option-group {
-    margin-bottom: 24px;
-  }
+  .btn-export { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 16px; background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%); color: white; border: none; border-radius: 12px; font-weight: 600; font-size: 15px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-export:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(255, 127, 80, 0.3); }
+  .btn-export:disabled { opacity: 0.5; cursor: not-allowed; }
   
-  .option-label {
-    display: block;
-    font-size: 14px;
-    font-weight: 600;
-    color: #374151;
-    margin-bottom: 12px;
-  }
+  .selection-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .btn-select-all { padding: 8px 16px; background: white; color: var(--orange); border: 2px solid var(--orange); border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-select-all:hover { background: var(--orange); color: white; }
   
-  .format-buttons {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
+  .trips-list { display: flex; flex-direction: column; gap: 12px; max-height: 600px; overflow-y: auto; padding-right: 8px; }
+  .trip-checkbox { display: flex; gap: 12px; padding: 16px; background: #F9FAFB; border: 2px solid #E5E7EB; border-radius: 12px; cursor: pointer; transition: all 0.2s; }
+  .trip-checkbox:hover { border-color: var(--orange); background: white; }
+  .trip-checkbox input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; flex-shrink: 0; margin-top: 2px; }
   
-  .format-btn {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 16px;
-    background: #F9FAFB;
-    border: 2px solid #E5E7EB;
-    border-radius: 12px;
-    cursor: pointer;
-    transition: all 0.2s;
-    text-align: left;
-    font-family: inherit;
-  }
+  .trip-info { flex: 1; min-width: 0; }
+  .trip-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .trip-date { font-size: 14px; font-weight: 600; color: #111827; }
+  .trip-profit { font-size: 15px; font-weight: 700; }
+  .trip-profit.positive { color: var(--green); }
+  .trip-profit.negative { color: #DC2626; }
+  .trip-route { font-size: 14px; color: #374151; margin-bottom: 4px; }
+  .trip-meta { font-size: 13px; color: #6B7280; }
   
-  .format-btn:hover {
-    border-color: var(--orange);
-    background: white;
-  }
+  .empty-state { padding: 60px 20px; text-align: center; }
+  .empty-state svg { color: #D1D5DB; margin: 0 auto 16px; }
+  .empty-state p { font-size: 14px; color: #6B7280; }
   
-  .format-btn.active {
-    border-color: var(--orange);
-    background: rgba(255, 127, 80, 0.05);
-  }
-  
-  .format-btn svg {
-    color: #6B7280;
-    flex-shrink: 0;
-  }
-  
-  .format-btn.active svg {
-    color: var(--orange);
-  }
-  
-  .format-name {
-    font-size: 14px;
-    font-weight: 700;
-    color: #111827;
-    margin-bottom: 2px;
-  }
-  
-  .format-desc {
-    font-size: 12px;
-    color: #6B7280;
-  }
-  
-  .date-inputs {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  
-  .date-inputs input {
-    flex: 1;
-    padding: 12px 16px;
-    border: 2px solid #E5E7EB;
-    border-radius: 10px;
-    font-size: 14px;
-    font-family: inherit;
-  }
-  
-  .date-inputs input:focus {
-    outline: none;
-    border-color: var(--orange);
-    box-shadow: 0 0 0 3px rgba(255, 127, 80, 0.1);
-  }
-  
-  .date-separator {
-    font-size: 14px;
-    color: #6B7280;
-  }
-  
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    cursor: pointer;
-    font-size: 14px;
-    color: #374151;
-  }
-  
-  .checkbox-label input[type="checkbox"] {
-    width: 20px;
-    height: 20px;
-    cursor: pointer;
-  }
-  
-  .btn-export {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 16px;
-    background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%);
-    color: white;
-    border: none;
-    border-radius: 12px;
-    font-weight: 600;
-    font-size: 15px;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: inherit;
-  }
-  
-  .btn-export:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 16px rgba(255, 127, 80, 0.3);
-  }
-  
-  .btn-export:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  
-  .selection-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-  }
-  
-  .btn-select-all {
-    padding: 8px 16px;
-    background: white;
-    color: var(--orange);
-    border: 2px solid var(--orange);
-    border-radius: 8px;
-    font-weight: 600;
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: inherit;
-  }
-  
-  .btn-select-all:hover {
-    background: var(--orange);
-    color: white;
-  }
-  
-  .trips-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    max-height: 600px;
-    overflow-y: auto;
-    padding-right: 8px;
-  }
-  
-  .trip-checkbox {
-    display: flex;
-    gap: 12px;
-    padding: 16px;
-    background: #F9FAFB;
-    border: 2px solid #E5E7EB;
-    border-radius: 12px;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  
-  .trip-checkbox:hover {
-    border-color: var(--orange);
-    background: white;
-  }
-  
-  .trip-checkbox input[type="checkbox"] {
-    width: 20px;
-    height: 20px;
-    cursor: pointer;
-    flex-shrink: 0;
-    margin-top: 2px;
-  }
-  
-  .trip-info {
-    flex: 1;
-    min-width: 0;
-  }
-  
-  .trip-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 6px;
-  }
-  
-  .trip-date {
-    font-size: 14px;
-    font-weight: 600;
-    color: #111827;
-  }
-  
-  .trip-profit {
-    font-size: 15px;
-    font-weight: 700;
-  }
-  
-  .trip-profit.positive {
-    color: var(--green);
-  }
-  
-  .trip-profit.negative {
-    color: #DC2626;
-  }
-  
-  .trip-route {
-    font-size: 14px;
-    color: #374151;
-    margin-bottom: 4px;
-  }
-  
-  .trip-meta {
-    font-size: 13px;
-    color: #6B7280;
-  }
-  
-  .empty-state {
-    padding: 60px 20px;
-    text-align: center;
-  }
-  
-  .empty-state svg {
-    color: #D1D5DB;
-    margin: 0 auto 16px;
-  }
-  
-  .empty-state p {
-    font-size: 14px;
-    color: #6B7280;
-  }
-  
-  .trips-list::-webkit-scrollbar {
-    width: 6px;
-  }
-  
-  .trips-list::-webkit-scrollbar-track {
-    background: #F3F4F6;
-    border-radius: 3px;
-  }
-  
-  .trips-list::-webkit-scrollbar-thumb {
-    background: #D1D5DB;
-    border-radius: 3px;
-  }
-  
-  .trips-list::-webkit-scrollbar-thumb:hover {
-    background: #9CA3AF;
-  }
+  .trips-list::-webkit-scrollbar { width: 6px; }
+  .trips-list::-webkit-scrollbar-track { background: #F3F4F6; border-radius: 3px; }
+  .trips-list::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 3px; }
+  .trips-list::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
   
   @media (max-width: 1024px) {
-    .export-grid {
-      grid-template-columns: 1fr;
-    }
-    
-    .options-card {
-      order: 2;
-    }
-    
-    .selection-card {
-      order: 1;
-    }
+    .export-grid { grid-template-columns: 1fr; }
+    .options-card { order: 2; }
+    .selection-card { order: 1; }
   }
   
   @media (max-width: 640px) {
-    .format-buttons {
-      grid-template-columns: 1fr;
-    }
-    
-    .date-inputs {
-      flex-direction: column;
-      align-items: stretch;
-    }
-    
-    .date-separator {
-      text-align: center;
-    }
+    .format-buttons { grid-template-columns: 1fr; }
+    .date-inputs { flex-direction: column; align-items: stretch; }
+    .date-separator { text-align: center; }
   }
 </style>

@@ -8,7 +8,6 @@
   
   let settings = { ...$userSettings };
   
-  // Use reactive statement to keep profile in sync with store initially
   let profile = {
     name: '',
     email: ''
@@ -19,7 +18,6 @@
     if (!profile.email) profile.email = $user.email || '';
   }
 
-  // Calculate Monthly Usage dynamically from the trips store
   $: monthlyUsage = $trips.filter(t => {
       if (!t.date) return false;
       const tripDate = new Date(t.date);
@@ -30,18 +28,15 @@
   let showSuccess = false;
   let successMessage = '';
   
-  // Password Change State
   let showPasswordChange = false;
   let passwordData = { current: '', new: '', confirm: '' };
   let passwordError = '';
 
-  // Delete Account State
   let showDeleteConfirm = false;
   let deletePassword = '';
   let deleteError = '';
   let isDeleting = false;
 
-  // Autocomplete State
   let mapLoaded = false;
 
   onMount(() => {
@@ -90,8 +85,7 @@
       return;
     }
     
-    // Call Auth Store (mock for now as API might not exist yet)
-    // auth.changePassword(...)
+    // Auth store call would go here
     passwordError = '';
     showPasswordChange = false;
     passwordData = { current: '', new: '', confirm: '' };
@@ -112,7 +106,7 @@
     try {
       const result = await auth.deleteAccount($user?.name || '', deletePassword);
       if (result.success) {
-        goto('/'); // Redirect to main page
+        goto('/');
       } else {
         deleteError = result.error || 'Failed to delete account';
         isDeleting = false;
@@ -176,7 +170,6 @@
     }
   }
 
-  // --- Autocomplete Logic ---
   function initAutocomplete(node: HTMLInputElement) {
     let retryCount = 0;
     const maxRetries = 20;
@@ -216,7 +209,6 @@
         input.value = place.formatted_address;
         input.dispatchEvent(new Event('input'));
         
-        // Force blur and hide
         input.blur();
         setTimeout(() => {
           const event = new KeyboardEvent('keydown', {
@@ -298,13 +290,13 @@
       </div>
       
       <div class="form-group">
-        <label>Name</label>
-        <input type="text" bind:value={profile.name} placeholder="Your name" />
+        <label for="profile-name">Name</label>
+        <input id="profile-name" type="text" bind:value={profile.name} placeholder="Your name" />
       </div>
       
       <div class="form-group">
-        <label>Email</label>
-        <input type="email" bind:value={profile.email} placeholder="your@email.com" />
+        <label for="profile-email">Email</label>
+        <input id="profile-email" type="email" bind:value={profile.email} placeholder="your@email.com" />
       </div>
 
       <button class="btn-secondary" on:click={saveProfile}>Save Profile</button>
@@ -313,9 +305,9 @@
 
       <div class="plan-section">
         <div class="plan-info">
-          <label>Current Plan</label>
+          <label for="plan-badge">Current Plan</label>
           <div class="plan-row">
-            <div class="plan-badge">{$auth.user?.plan || 'Free'} Plan</div>
+            <div id="plan-badge" class="plan-badge">{$auth.user?.plan || 'Free'} Plan</div>
             {#if $auth.user?.plan === 'free'}
               <a href="/#pricing" class="upgrade-link">Upgrade to Pro</a>
             {/if}
@@ -354,43 +346,45 @@
       </div>
       
       <div class="form-group">
-        <label>Default MPG</label>
-        <input type="number" bind:value={settings.defaultMPG} placeholder="25" min="1" step="0.1" />
+        <label for="default-mpg">Default MPG</label>
+        <input id="default-mpg" type="number" bind:value={settings.defaultMPG} placeholder="25" min="1" step="0.1" />
       </div>
       
       <div class="form-group">
-        <label>Default Gas Price</label>
+        <label for="default-gas">Default Gas Price</label>
         <div class="input-prefix">
           <span class="prefix">$</span>
-          <input type="number" bind:value={settings.defaultGasPrice} placeholder="3.50" min="0" step="0.01" />
+          <input id="default-gas" type="number" bind:value={settings.defaultGasPrice} placeholder="3.50" min="0" step="0.01" />
         </div>
       </div>
       
       <div class="form-group">
-        <label>Default Start Address</label>
+        <label for="default-start">Default Start Address</label>
         {#if mapLoaded}
           <input 
+            id="default-start"
             type="text" 
             bind:value={settings.defaultStartAddress}
             placeholder="Start typing address..."
             use:initAutocomplete
           />
         {:else}
-          <input type="text" bind:value={settings.defaultStartAddress} placeholder="Loading maps..." disabled />
+          <input id="default-start" type="text" bind:value={settings.defaultStartAddress} placeholder="Loading maps..." disabled />
         {/if}
       </div>
       
       <div class="form-group">
-        <label>Default End Address</label>
+        <label for="default-end">Default End Address</label>
         {#if mapLoaded}
           <input 
+            id="default-end"
             type="text" 
             bind:value={settings.defaultEndAddress}
             placeholder="Start typing address..."
             use:initAutocomplete
           />
         {:else}
-          <input type="text" bind:value={settings.defaultEndAddress} placeholder="Loading maps..." disabled />
+          <input id="default-end" type="text" bind:value={settings.defaultEndAddress} placeholder="Loading maps..." disabled />
         {/if}
       </div>
       
@@ -414,16 +408,16 @@
       </div>
       
       <div class="form-group">
-        <label>Distance Unit</label>
-        <select bind:value={settings.distanceUnit}>
+        <label for="distance-unit">Distance Unit</label>
+        <select id="distance-unit" bind:value={settings.distanceUnit}>
           <option value="miles">Miles</option>
           <option value="km">Kilometers</option>
         </select>
       </div>
       
       <div class="form-group">
-        <label>Currency</label>
-        <select bind:value={settings.currency}>
+        <label for="currency">Currency</label>
+        <select id="currency" bind:value={settings.currency}>
           <option value="USD">USD ($)</option>
           <option value="EUR">EUR (€)</option>
           <option value="GBP">GBP (£)</option>
@@ -454,9 +448,9 @@
       {:else}
         <div class="password-change">
           {#if passwordError}<div class="alert error">{passwordError}</div>{/if}
-          <div class="form-group"><label>Current Password</label><input type="password" bind:value={passwordData.current} /></div>
-          <div class="form-group"><label>New Password</label><input type="password" bind:value={passwordData.new} /></div>
-          <div class="form-group"><label>Confirm New Password</label><input type="password" bind:value={passwordData.confirm} /></div>
+          <div class="form-group"><label for="curr-pass">Current Password</label><input id="curr-pass" type="password" bind:value={passwordData.current} /></div>
+          <div class="form-group"><label for="new-pass">New Password</label><input id="new-pass" type="password" bind:value={passwordData.new} /></div>
+          <div class="form-group"><label for="confirm-pass">Confirm New Password</label><input id="confirm-pass" type="password" bind:value={passwordData.confirm} /></div>
           <div class="button-group">
             <button class="btn-primary" on:click={changePassword}>Update</button>
             <button class="btn-secondary" on:click={() => showPasswordChange = false}>Cancel</button>

@@ -8,10 +8,8 @@
   import { syncManager } from '$lib/sync/syncManager';
   import SyncIndicator from '$lib/components/SyncIndicator.svelte';
   
-  // Received from server-side load function
   export let data;
 
-  // 🔥 REACTIVE HYDRATION: If server sends user data, update store immediately
   $: if (data?.user) {
     auth.hydrate(data.user);
   }
@@ -84,15 +82,12 @@
   onMount(async () => {
     console.log('[DASHBOARD LAYOUT] Initializing...');
     
-    // 1. Prioritize Server Data for User ID
     let userId = data?.user?.token;
 
-    // 2. If no server data, check store (Hydration handled by reactive statement above)
     if (!userId && $user) {
         userId = $user.token;
     }
 
-    // 3. Fallback to localStorage offline ID if completely unauthenticated
     if (!userId) {
         userId = localStorage.getItem('offline_user_id');
         if (userId) {
@@ -100,25 +95,17 @@
         }
     }
 
-    // 4. Initialize Data
     if (userId) {
       try {
         console.log('[DASHBOARD LAYOUT] Loading data for:', userId);
-        
-        // Initialize sync manager
         await syncManager.initialize();
-        
-        // Load trips and trash from IndexedDB
         await trips.load(userId);
         await trash.load(userId);
-        
         console.log('[DASHBOARD LAYOUT] ✅ Data loaded successfully!');
       } catch (err) {
         console.error('[DASHBOARD LAYOUT] ❌ Failed to load data:', err);
       }
     } else {
-      // Initialize Auth Store from local storage if needed (last resort)
-      // This is mostly for scenarios where server data might be missing but localStorage exists
       await auth.init();
     }
   });
@@ -204,7 +191,13 @@
   </aside>
   
   {#if sidebarOpen}
-    <div class="overlay" on:click={closeSidebar} role="button" tabindex="0"></div>
+    <div 
+      class="overlay" 
+      role="button" 
+      tabindex="0"
+      on:click={closeSidebar} 
+      on:keydown={(e) => e.key === 'Escape' && closeSidebar()}
+    ></div>
   {/if}
   
   <main class="main-content">

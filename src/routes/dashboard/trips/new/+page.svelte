@@ -13,23 +13,16 @@
   let directionsService: google.maps.DirectionsService | null = null;
   let directionsRenderer: google.maps.DirectionsRenderer | null = null;
   
-  // Maintenance & Supplies options storage
   let maintenanceOptions = ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement'];
   let suppliesOptions = ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental'];
   
-  // Load saved options from localStorage
   onMount(() => {
     const savedMaintenance = localStorage.getItem('maintenanceOptions');
     const savedSupplies = localStorage.getItem('suppliesOptions');
     
-    if (savedMaintenance) {
-      maintenanceOptions = JSON.parse(savedMaintenance);
-    }
-    if (savedSupplies) {
-      suppliesOptions = JSON.parse(savedSupplies);
-    }
+    if (savedMaintenance) maintenanceOptions = JSON.parse(savedMaintenance);
+    if (savedSupplies) suppliesOptions = JSON.parse(savedSupplies);
 
-    // Load Google Maps script securely
     if (!window.google) {
       const script = document.createElement('script');
       script.src = `https://maps.googleapis.com/maps/api/js?key=${env.PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`;
@@ -47,7 +40,6 @@
     }
   });
 
-  // Form data
   let tripData = {
     id: crypto.randomUUID(),
     date: new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0],
@@ -80,11 +72,8 @@
 
   function addStop() {
     if (!newStop.address) return;
-    
     tripData.stops = [...tripData.stops, { ...newStop, id: crypto.randomUUID() }];
     newStop = { address: '', earnings: 0, notes: '' };
-    
-    // Recalculate route
     calculateRoute();
   }
   
@@ -107,10 +96,8 @@
   
   function addCustomMaintenance() {
     if (!newMaintenanceItem.trim()) return;
-    
     maintenanceOptions = [...maintenanceOptions, newMaintenanceItem.trim()];
     localStorage.setItem('maintenanceOptions', JSON.stringify(maintenanceOptions));
-    
     addMaintenanceItem(newMaintenanceItem.trim());
     newMaintenanceItem = '';
     showAddMaintenance = false;
@@ -137,10 +124,8 @@
   
   function addCustomSupply() {
     if (!newSupplyItem.trim()) return;
-    
     suppliesOptions = [...suppliesOptions, newSupplyItem.trim()];
     localStorage.setItem('suppliesOptions', JSON.stringify(suppliesOptions));
-    
     addSupplyItem(newSupplyItem.trim());
     newSupplyItem = '';
     showAddSupply = false;
@@ -163,7 +148,6 @@
     }));
     const destination = tripData.endAddress || tripData.startAddress;
     
-    // Only calculate if we have a start and either stops or an end address
     if (!destination && waypoints.length === 0) return;
 
     directionsService.route({
@@ -175,18 +159,15 @@
       if (status === 'OK') {
         const route = result.routes[0];
         let totalMeters = 0;
-        
         route.legs.forEach((leg: any) => {
           totalMeters += leg.distance.value;
         });
-        
         tripData.totalMiles = Math.round((totalMeters / 1609.34) * 10) / 10;
       }
     });
   }
   
   $: {
-    // Recalculate fuel cost whenever miles, mpg, or gas price changes
     if (tripData.totalMiles && tripData.mpg && tripData.gasPrice) {
       const gallons = tripData.totalMiles / tripData.mpg;
       tripData.fuelCost = Math.round(gallons * tripData.gasPrice * 100) / 100;
@@ -201,48 +182,34 @@
   $: totalCosts = (tripData.fuelCost || 0) + totalMaintenanceCost + totalSuppliesCost;
   $: totalProfit = totalEarnings - totalCosts;
 
-  // Auto-calculate hours worked from start/end time
   $: {
     if (tripData.startTime && tripData.endTime) {
       const [startHour, startMin] = tripData.startTime.split(':').map(Number);
       const [endHour, endMin] = tripData.endTime.split(':').map(Number);
-      
       const startMinutes = startHour * 60 + startMin;
       const endMinutes = endHour * 60 + endMin;
-      
       let diffMinutes = endMinutes - startMinutes;
-      // Handle overnight shifts (end time before start time)
       if (diffMinutes < 0) {
         diffMinutes += 24 * 60;
       }
-      
       tripData.hoursWorked = Math.round((diffMinutes / 60) * 10) / 10;
     }
   }
   
-  function nextStep() {
-    if (step < 4) step++;
-  }
-  
-  function prevStep() {
-    if (step > 1) step--;
-  }
+  function nextStep() { if (step < 4) step++; }
+  function prevStep() { if (step > 1) step--; }
   
   async function saveTrip() {
-    // Get userId - use page data (server auth) first, then store, then offline fallback
     let userId = $page.data.user?.token || $user?.token;
     
     if (!userId) {
-        // Generate or retrieve a persistent offline ID
         const storageKey = 'offline_user_id';
         let offlineId = localStorage.getItem(storageKey);
-        
         if (!offlineId) {
             offlineId = 'offline-user-' + Date.now();
             localStorage.setItem(storageKey, offlineId);
         }
         userId = offlineId;
-        console.warn('No user found, using offline ID:', userId);
     }
     
     const tripToSave = {
@@ -262,7 +229,6 @@
     };
 
     try {
-      console.log('Creating trip with userId:', userId);
       await trips.create(tripToSave, userId);
       goto('/dashboard/trips');
     } catch (err) {
@@ -290,14 +256,9 @@
   
   function formatDateLocal(dateString: string): string {
     if (!dateString) return '';
-    // Parse as local date without timezone conversion
     const [year, month, day] = dateString.split('-').map(Number);
     const date = new Date(year, month - 1, day);
-    return date.toLocaleDateString('en-US', { 
-      month: 'numeric', 
-      day: 'numeric', 
-      year: 'numeric' 
-    });
+    return date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
   }
   
   function initAutocomplete(node: HTMLInputElement) {
@@ -310,87 +271,46 @@
       }
       return false;
     };
-
-    // Try immediately
-    if (trySetup()) {
-      return {};
-    }
-    
-    // Retry with increasing delays
+    if (trySetup()) return {};
     const retryInterval = setInterval(() => {
       retryCount++;
-      if (trySetup() || retryCount >= maxRetries) {
-        clearInterval(retryInterval);
-      }
+      if (trySetup() || retryCount >= maxRetries) clearInterval(retryInterval);
     }, 200);
-
-    // Cleanup function
-    return {
-      destroy() {
-        clearInterval(retryInterval);
-      }
-    };
+    return { destroy() { clearInterval(retryInterval); } };
   }
   
   function setupAutocomplete(input: HTMLInputElement) {
-    // Prevent duplicate setup
-    if (input.dataset.autocompleteSetup === 'true') {
-      return;
-    }
+    if (input.dataset.autocompleteSetup === 'true') return;
     input.dataset.autocompleteSetup = 'true';
     
-    const autocomplete = new google.maps.places.Autocomplete(input, {
-      types: ['geocode'] // Allows both addresses and cities/regions
-    });
-
-    // Store the autocomplete instance on the input
+    const autocomplete = new google.maps.places.Autocomplete(input, { types: ['geocode'] });
     (input as any).autocompleteInstance = autocomplete;
 
     autocomplete.addListener('place_changed', () => {
       const place = autocomplete.getPlace();
       if (place.formatted_address) {
-        // Update the input value with formatted address
         input.value = place.formatted_address;
         input.dispatchEvent(new Event('input', { bubbles: true }));
-        
-        // Blur to close dropdown
         input.blur();
-        
-        // Send ESC key to force close the dropdown
         setTimeout(() => {
-          const event = new KeyboardEvent('keydown', {
-            key: 'Escape',
-            code: 'Escape',
-            keyCode: 27,
-            which: 27,
-            bubbles: true
-          });
+          const event = new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true });
           input.dispatchEvent(event);
-          
-          // Hide all pac-containers after selection
           setTimeout(() => {
             const pacContainers = document.querySelectorAll('.pac-container');
-            pacContainers.forEach(container => {
-              (container as HTMLElement).style.display = 'none';
-            });
+            pacContainers.forEach(container => { (container as HTMLElement).style.display = 'none'; });
           }, 100);
         }, 50);
-        
-        // Trigger recalculation after a short delay
         setTimeout(calculateRoute, 150);
       }
     });
     
-    // Show pac-container only when user starts typing
     let typingTimeout: any;
     input.addEventListener('input', () => {
       clearTimeout(typingTimeout);
       typingTimeout = setTimeout(() => {
         if (input.value.length > 0) {
           const pacContainers = document.querySelectorAll('.pac-container');
-          pacContainers.forEach(container => {
-            (container as HTMLElement).style.display = '';
-          });
+          pacContainers.forEach(container => { (container as HTMLElement).style.display = ''; });
         }
       }, 100);
     });
@@ -400,15 +320,7 @@
 <svelte:head>
   <title>New Trip - Go Route Yourself</title>
   <style>
-    /* Style Google Places autocomplete dropdown */
-    .pac-container {
-      z-index: 10000 !important;
-      background: white;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-      border-radius: 8px;
-      margin-top: 2px;
-      font-family: inherit;
-    }
+    .pac-container { z-index: 10000 !important; background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.3); border-radius: 8px; margin-top: 2px; font-family: inherit; }
   </style>
 </svelte:head>
 
@@ -428,50 +340,20 @@
   
   <div class="progress-steps">
     <div class="step-item" class:active={step >= 1} class:completed={step > 1}>
-      <div class="step-circle">
-        {#if step > 1}
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M13 4L6 11L3 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        {:else}
-          1
-        {/if}
-      </div>
+      <div class="step-circle">{step > 1 ? '✓' : '1'}</div>
       <div class="step-label">Basic Info</div>
     </div>
-    
     <div class="step-line" class:completed={step > 1}></div>
-    
     <div class="step-item" class:active={step >= 2} class:completed={step > 2}>
-      <div class="step-circle">
-        {#if step > 2}
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M13 4L6 11L3 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        {:else}
-          2
-        {/if}
-      </div>
+      <div class="step-circle">{step > 2 ? '✓' : '2'}</div>
       <div class="step-label">Route & Stops</div>
     </div>
-    
     <div class="step-line" class:completed={step > 2}></div>
-    
     <div class="step-item" class:active={step >= 3} class:completed={step > 3}>
-      <div class="step-circle">
-        {#if step > 3}
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M13 4L6 11L3 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        {:else}
-          3
-        {/if}
-      </div>
+      <div class="step-circle">{step > 3 ? '✓' : '3'}</div>
       <div class="step-label">Costs</div>
     </div>
-    
     <div class="step-line" class:completed={step > 3}></div>
-    
     <div class="step-item" class:active={step >= 4}>
       <div class="step-circle">4</div>
       <div class="step-label">Review</div>
@@ -485,30 +367,25 @@
           <h2 class="card-title">Basic Information</h2>
           <p class="card-subtitle">When did your trip take place?</p>
         </div>
-        
         <div class="form-grid">
           <div class="form-group">
-            <label>Date</label>
-            <input type="date" bind:value={tripData.date} required />
+            <label for="trip-date">Date</label>
+            <input id="trip-date" type="date" bind:value={tripData.date} required />
           </div>
-          
           <div class="form-group">
-            <label>Start Time</label>
-            <input type="time" bind:value={tripData.startTime} />
+            <label for="start-time">Start Time</label>
+            <input id="start-time" type="time" bind:value={tripData.startTime} />
           </div>
-          
           <div class="form-group">
-            <label>End Time</label>
-            <input type="time" bind:value={tripData.endTime} />
+            <label for="end-time">End Time</label>
+            <input id="end-time" type="time" bind:value={tripData.endTime} />
           </div>
-          
           <div class="form-group">
-            <label>Hours Worked</label>
-            <div class="hours-display-field">{tripData.hoursWorked.toFixed(1)} hours</div>
+            <label for="hours-worked">Hours Worked</label>
+            <div id="hours-worked" class="hours-display-field">{tripData.hoursWorked.toFixed(1)} hours</div>
             <small class="field-hint">Auto-calculated from start and end time</small>
           </div>
         </div>
-        
         <div class="form-actions">
           <button class="btn-primary" on:click={nextStep} type="button">
             Continue
@@ -526,9 +403,8 @@
           <h2 class="card-title">Route & Stops</h2>
           <p class="card-subtitle">Add your starting point and destinations</p>
         </div>
-        
         <div class="form-group">
-          <label>Starting Address</label>
+          <label for="start-address">Starting Address</label>
           <input 
             id="start-address"
             type="text" 
@@ -537,9 +413,8 @@
             use:initAutocomplete
           />
         </div>
-        
         <div class="form-group">
-          <label>End Address (if different from start)</label>
+          <label for="end-address">End Address (if different from start)</label>
           <input 
             id="end-address"
             type="text" 
@@ -554,7 +429,6 @@
             <h3>Stops & Earnings</h3>
             <p>Add each stop along your route</p>
           </div>
-          
           {#if tripData.stops.length > 0}
             <div class="stops-list">
               {#each tripData.stops as stop, i}
@@ -563,6 +437,7 @@
                   <div class="stop-info">
                     <input 
                       type="text"
+                      id="stop-address-{i}"
                       class="stop-address-input"
                       bind:value={stop.address}
                       placeholder="Stop address"
@@ -573,13 +448,14 @@
                     <span class="currency">$</span>
                     <input 
                       type="number"
+                      id="stop-earnings-{i}"
                       bind:value={stop.earnings}
                       placeholder="0"
                       step="0.01"
                       min="0"
                     />
                   </div>
-                  <button class="stop-delete" on:click={() => removeStop(stop.id)} type="button">
+                  <button class="stop-delete" on:click={() => removeStop(stop.id)} type="button" aria-label="Remove Stop">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                       <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                     </svg>
@@ -588,13 +464,13 @@
               {/each}
             </div>
           {/if}
-          
           <div class="add-stop">
             <input 
               type="text" 
               placeholder="Stop address"
               bind:value={newStop.address}
               use:initAutocomplete
+              aria-label="New Stop Address"
             />
             <input 
               type="number" 
@@ -602,6 +478,7 @@
               bind:value={newStop.earnings}
               step="0.01"
               min="0"
+              aria-label="New Stop Earnings"
             />
             <button class="btn-add" on:click={addStop} type="button">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -613,11 +490,12 @@
         </div>
         
         <div class="form-group">
-          <label>
+          <label for="total-miles">
             Total Miles 
             <span class="label-hint">(auto-calculated, editable)</span>
           </label>
           <input 
+            id="total-miles"
             type="number" 
             bind:value={tripData.totalMiles}
             placeholder="0.0"
@@ -649,23 +527,23 @@
           <h2 class="card-title">Costs & Expenses</h2>
           <p class="card-subtitle">Track all your trip expenses</p>
         </div>
-        
         <div class="form-grid">
           <div class="form-group">
-            <label>Vehicle MPG</label>
+            <label for="mpg">Vehicle MPG</label>
             <input 
+              id="mpg"
               type="number" 
               bind:value={tripData.mpg}
               step="0.1"
               min="0"
             />
           </div>
-          
           <div class="form-group">
-            <label>Gas Price (per gallon)</label>
+            <label for="gas-price">Gas Price (per gallon)</label>
             <div class="input-prefix">
               <span>$</span>
               <input 
+                id="gas-price"
                 type="number" 
                 bind:value={tripData.gasPrice}
                 step="0.01"
@@ -694,19 +572,18 @@
               </button>
             </div>
           </div>
-          
           {#if showAddMaintenance}
             <div class="custom-input-row">
               <input 
                 type="text" 
                 bind:value={newMaintenanceItem}
                 placeholder="Enter custom maintenance item..."
+                aria-label="Custom Maintenance Item Name"
               />
               <button class="btn-save" on:click={addCustomMaintenance} type="button">Save</button>
               <button class="btn-cancel" on:click={() => showAddMaintenance = false} type="button">Cancel</button>
             </div>
           {/if}
-          
           <div class="options-grid">
             {#each maintenanceOptions as option}
               <div class="option-badge">
@@ -716,20 +593,20 @@
                   </svg>
                   {option}
                 </button>
-                <button class="badge-delete" on:click={() => deleteMaintenanceOption(option)} type="button">×</button>
+                <button class="badge-delete" on:click={() => deleteMaintenanceOption(option)} type="button" aria-label={`Delete ${option} option`}>×</button>
               </div>
             {/each}
           </div>
-          
           {#if tripData.maintenanceItems.length > 0}
             <div class="expense-items">
-              {#each tripData.maintenanceItems as item}
+              {#each tripData.maintenanceItems as item, i}
                 <div class="expense-item">
                   <span class="expense-type">{item.type}</span>
                   <div class="expense-input">
                     <span class="currency">$</span>
                     <input 
                       type="number" 
+                      id="maintenance-cost-{i}"
                       bind:value={item.cost}
                       step="0.01"
                       min="0"
@@ -764,19 +641,18 @@
               </button>
             </div>
           </div>
-          
           {#if showAddSupply}
             <div class="custom-input-row">
               <input 
                 type="text" 
                 bind:value={newSupplyItem}
                 placeholder="Enter custom supply item..."
+                aria-label="Custom Supply Item Name"
               />
               <button class="btn-save" on:click={addCustomSupply} type="button">Save</button>
               <button class="btn-cancel" on:click={() => showAddSupply = false} type="button">Cancel</button>
             </div>
           {/if}
-          
           <div class="options-grid">
             {#each suppliesOptions as option}
               <div class="option-badge">
@@ -786,20 +662,20 @@
                   </svg>
                   {option}
                 </button>
-                <button class="badge-delete" on:click={() => deleteSupplyOption(option)} type="button">×</button>
+                <button class="badge-delete" on:click={() => deleteSupplyOption(option)} type="button" aria-label={`Delete ${option} option`}>×</button>
               </div>
             {/each}
           </div>
-          
           {#if tripData.suppliesItems.length > 0}
             <div class="expense-items">
-              {#each tripData.suppliesItems as item}
+              {#each tripData.suppliesItems as item, i}
                 <div class="expense-item">
                   <span class="expense-type">{item.type}</span>
                   <div class="expense-input">
                     <span class="currency">$</span>
                     <input 
                       type="number" 
+                      id="supply-cost-{i}"
                       bind:value={item.cost}
                       step="0.01"
                       min="0"
@@ -823,8 +699,9 @@
         </div>
         
         <div class="form-group">
-          <label>Notes (optional)</label>
+          <label for="notes">Notes (optional)</label>
           <textarea 
+            id="notes"
             bind:value={tripData.notes}
             placeholder="Add any additional notes about this trip..."
             rows="4"
@@ -857,28 +734,23 @@
         
         <div class="review-section">
           <h3 class="review-title">Trip Summary</h3>
-          
           <div class="review-grid">
             <div class="review-item">
               <span class="review-label">Date</span>
               <span class="review-value">{formatDateLocal(tripData.date)}</span>
             </div>
-            
             <div class="review-item">
               <span class="review-label">Time</span>
               <span class="review-value">{formatTime12Hour(tripData.startTime)} - {formatTime12Hour(tripData.endTime)}</span>
             </div>
-            
             <div class="review-item">
               <span class="review-label">Hours Worked</span>
               <span class="review-value">{tripData.hoursWorked || 0} hours</span>
             </div>
-            
             <div class="review-item">
               <span class="review-label">Total Miles</span>
               <span class="review-value">{tripData.totalMiles} mi</span>
             </div>
-            
             <div class="review-item">
               <span class="review-label">Number of Stops</span>
               <span class="review-value">{tripData.stops.length}</span>
@@ -888,7 +760,6 @@
         
         <div class="review-section">
           <h3 class="review-title">Financial Summary</h3>
-          
           <div class="financial-summary">
             <div class="summary-row">
               <span>Total Earnings</span>
@@ -944,790 +815,95 @@
 </div>
 
 <style>
-  .trip-form {
-    max-width: 900px;
-    margin: 0 auto;
-  }
+  /* Base Layout */
+  .trip-form { max-width: 900px; margin: 0 auto; }
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
+  .page-title { font-size: 32px; font-weight: 800; color: #111827; margin-bottom: 4px; }
+  .page-subtitle { font-size: 16px; color: #6B7280; }
   
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 32px;
-  }
-  
-  .page-title {
-    font-size: 32px;
-    font-weight: 800;
-    color: #111827;
-    margin-bottom: 4px;
-  }
-  
-  .page-subtitle {
-    font-size: 16px;
-    color: #6B7280;
-  }
-  
-  .btn-back {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    background: white;
-    color: #6B7280;
-    border: 2px solid #E5E7EB;
-    border-radius: 10px;
-    font-weight: 600;
-    text-decoration: none;
-    transition: all 0.2s;
-  }
-  
-  .btn-back:hover {
-    border-color: var(--orange);
-    color: var(--orange);
-  }
+  /* Buttons */
+  .btn-back, .btn-secondary { background: white; color: #6B7280; border: 2px solid #E5E7EB; border-radius: 10px; padding: 10px 20px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s; text-decoration: none; }
+  .btn-back:hover, .btn-secondary:hover { border-color: var(--orange); color: var(--orange); }
+  .btn-primary { background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%); color: white; border: none; border-radius: 10px; padding: 14px 28px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s; }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(255, 127, 80, 0.3); }
+  .btn-add { background: var(--blue); color: white; border: none; padding: 12px 20px; border-radius: 10px; cursor: pointer; font-weight: 600; }
+  .btn-add:hover { background: #1E9BCF; }
   
   /* Progress Steps */
-  .progress-steps {
-    display: flex;
-    align-items: center;
-    margin-bottom: 40px;
-    padding: 24px;
-    background: white;
-    border: 1px solid #E5E7EB;
-    border-radius: 16px;
-  }
-  
-  .step-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    flex: 1;
-  }
-  
-  .step-circle {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: #F3F4F6;
-    color: #9CA3AF;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 16px;
-    transition: all 0.3s;
-  }
-  
-  .step-item.active .step-circle {
-    background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%);
-    color: white;
-    box-shadow: 0 4px 12px rgba(255, 127, 80, 0.3);
-  }
-  
-  .step-item.completed .step-circle {
-    background: var(--green);
-    color: white;
-  }
-  
-  .step-label {
-    font-size: 13px;
-    font-weight: 600;
-    color: #9CA3AF;
-    text-align: center;
-  }
-  
-  .step-item.active .step-label {
-    color: #111827;
-  }
-  
-  .step-line {
-    flex: 1;
-    height: 2px;
-    background: #E5E7EB;
-    margin: 0 16px;
-    transition: all 0.3s;
-  }
-  
-  .step-line.completed {
-    background: var(--green);
-  }
-  
-  /* Form Content */
-  .form-content {
-    margin-bottom: 32px;
-  }
-  
-  .form-card {
-    background: white;
-    border: 1px solid #E5E7EB;
-    border-radius: 16px;
-    padding: 32px;
-  }
-  
-  .card-header {
-    margin-bottom: 32px;
-    padding-bottom: 24px;
-    border-bottom: 1px solid #E5E7EB;
-  }
-  
-  .card-title {
-    font-size: 24px;
-    font-weight: 700;
-    color: #111827;
-    margin-bottom: 8px;
-  }
-  
-  .card-subtitle {
-    font-size: 15px;
-    color: #6B7280;
-  }
-  
-  .form-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 20px;
-    margin-bottom: 24px;
-  }
-  
-  .form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .form-group label {
-    font-size: 14px;
-    font-weight: 600;
-    color: #374151;
-  }
-  
-  .label-hint {
-    font-size: 12px;
-    font-weight: 400;
-    color: #9CA3AF;
-  }
-  
-  .field-hint {
-    display: block;
-    margin-top: 6px;
-    font-size: 12px;
-    color: #6B7280;
-    font-style: italic;
-  }
-  
-  .hours-display-field {
-    padding: 14px 16px;
-    background: #F9FAFB;
-    border: 2px solid #E5E7EB;
-    border-radius: 10px;
-    font-size: 15px;
-    font-weight: 600;
-    color: #059669;
-  }
-  
-  .form-group input,
-  .form-group textarea {
-    padding: 14px 16px;
-    border: 2px solid #E5E7EB;
-    border-radius: 10px;
-    font-size: 15px;
-    font-family: inherit;
-    background: white;
-    transition: all 0.2s;
-  }
-  
-  .form-group input:focus,
-  .form-group textarea:focus {
-    outline: none;
-    border-color: var(--orange);
-    box-shadow: 0 0 0 3px rgba(255, 127, 80, 0.1);
-  }
-  
-  .input-prefix {
-    position: relative;
-  }
-  
-  .input-prefix span {
-    position: absolute;
-    left: 16px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: #6B7280;
-    font-weight: 600;
-  }
-  
-  .input-prefix input {
-    padding-left: 36px;
-  }
-  
-  textarea {
-    resize: vertical;
-    min-height: 100px;
-  }
-  
-  /* Stops Section */
-  .stops-section,
-  .expenses-section {
-    margin: 32px 0;
-    padding: 24px;
-    background: #F9FAFB;
-    border-radius: 12px;
-  }
-  
-  .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-  }
-  
-  .section-header h3 {
-    font-size: 16px;
-    font-weight: 700;
-    color: #111827;
-    margin-bottom: 4px;
-  }
-  
-  .section-header p {
-    font-size: 14px;
-    color: #6B7280;
-  }
-  
-  .header-actions {
-    display: flex;
-    gap: 8px;
-  }
-  
-  .btn-add-custom {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 14px;
-    background: white;
-    color: var(--blue);
-    border: 2px solid var(--blue);
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: inherit;
-  }
-  
-  .btn-add-custom:hover {
-    background: var(--blue);
-    color: white;
-  }
-  
-  .custom-input-row {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
-  }
-  
-  .custom-input-row input {
-    flex: 1;
-    padding: 10px 14px;
-    border: 2px solid #E5E7EB;
-    border-radius: 8px;
-    font-size: 14px;
-    font-family: inherit;
-  }
-  
-  .btn-save {
-    padding: 10px 16px;
-    background: var(--green);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-weight: 600;
-    cursor: pointer;
-    font-family: inherit;
-  }
-  
-  .btn-cancel {
-    padding: 10px 16px;
-    background: white;
-    color: #6B7280;
-    border: 2px solid #E5E7EB;
-    border-radius: 8px;
-    font-weight: 600;
-    cursor: pointer;
-    font-family: inherit;
-  }
-  
-  .options-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 16px;
-  }
-  
-  .option-badge {
-    position: relative;
-    display: inline-flex;
-  }
-  
-  .badge-btn {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 28px 8px 12px;
-    background: white;
-    color: #374151;
-    border: 2px solid #E5E7EB;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: inherit;
-  }
-  
-  .badge-btn:hover {
-    border-color: var(--orange);
-    color: var(--orange);
-  }
-  
-  .badge-delete {
-    position: absolute;
-    right: 4px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 20px;
-    height: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #FEE2E2;
-    color: #DC2626;
-    border: none;
-    border-radius: 4px;
-    font-size: 16px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s;
-    line-height: 1;
-  }
-  
-  .badge-delete:hover {
-    background: #FCA5A5;
-  }
-  
-  .expense-items {
-    background: white;
-    border: 1px solid #E5E7EB;
-    border-radius: 10px;
-    padding: 16px;
-  }
-  
-  .expense-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 0;
-    border-bottom: 1px solid #F3F4F6;
-  }
-  
-  .expense-item:last-of-type {
-    border-bottom: none;
-  }
-  
-  .expense-type {
-    flex: 1;
-    font-size: 14px;
-    font-weight: 600;
-    color: #374151;
-  }
-  
-  .expense-input {
-    position: relative;
-    width: 140px;
-  }
-  
-  .expense-input .currency {
-    position: absolute;
-    left: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: #6B7280;
-    font-weight: 600;
-  }
-  
-  .expense-input input {
-    width: 100%;
-    padding: 8px 12px 8px 28px;
-    border: 2px solid #E5E7EB;
-    border-radius: 8px;
-    font-size: 14px;
-    font-family: inherit;
-  }
-  
-  .expense-delete {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 8px 16px;
-    min-width: auto;
-    height: 36px;
-    flex-shrink: 0;
-    background: #FEF2F2;
-    color: #DC2626;
-    border: 2px solid #FCA5A5;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-size: 14px;
-    font-weight: 600;
-    font-family: inherit;
-  }
-  
-  .expense-delete:hover {
-    background: #FCA5A5;
-    border-color: #DC2626;
-    color: white;
-  }
-  
-  .expense-total {
-    display: flex;
-    justify-content: space-between;
-    padding-top: 16px;
-    margin-top: 8px;
-    border-top: 2px solid #E5E7EB;
-    font-weight: 700;
-  }
-  
-  .total-amount {
-    color: var(--orange);
-  }
-  
-  .stops-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin-bottom: 20px;
-  }
-  
-  .stop-item {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 16px;
-    background: white;
-    border: 1px solid #E5E7EB;
-    border-radius: 10px;
-  }
-  
-  .stop-number {
-    width: 32px;
-    height: 32px;
-    background: var(--orange);
-    color: white;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 14px;
-    flex-shrink: 0;
-  }
-  
-  .stop-info {
-    flex: 1;
-    min-width: 0;
-  }
-  
-  .stop-address-input {
-    width: 100%;
-    padding: 10px 12px;
-    border: 2px solid #E5E7EB;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    font-family: inherit;
-    color: #111827;
-    background: white;
-    transition: border-color 0.2s;
-  }
-  
-  .stop-address-input:focus {
-    outline: none;
-    border-color: var(--orange);
-  }
-  
-  .stop-address {
-    font-size: 14px;
-    font-weight: 600;
-    color: #111827;
-    margin-bottom: 2px;
-  }
-  
-  .stop-notes {
-    font-size: 13px;
-    color: #6B7280;
-  }
-  
-  .stop-earnings-input {
-    position: relative;
-    width: 120px;
-    flex-shrink: 0;
-  }
-  
-  .stop-earnings-input .currency {
-    position: absolute;
-    left: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--green);
-    font-weight: 700;
-    font-size: 16px;
-  }
-  
-  .stop-earnings-input input {
-    width: 100%;
-    padding: 10px 12px 10px 28px;
-    border: 2px solid #E5E7EB;
-    border-radius: 8px;
-    font-size: 16px;
-    font-weight: 700;
-    font-family: inherit;
-    color: var(--green);
-    background: white;
-    transition: border-color 0.2s;
-  }
-  
-  .stop-earnings-input input:focus {
-    outline: none;
-    border-color: var(--green);
-  }
-  
-  .stop-earnings {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--green);
-  }
-  
-  .stop-delete {
-    width: 32px;
-    height: 32px;
-    background: #FEF2F2;
-    color: #DC2626;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  
-  .stop-delete:hover {
-    background: #FEE2E2;
-  }
-  
-  .add-stop {
-    display: grid;
-    grid-template-columns: 1fr auto auto;
-    gap: 12px;
-  }
-  
-  .add-stop input {
-    padding: 12px 16px;
-    border: 2px solid #E5E7EB;
-    border-radius: 10px;
-    font-size: 15px;
-    font-family: inherit;
-  }
-  
-  .btn-add {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 20px;
-    background: var(--blue);
-    color: white;
-    border: none;
-    border-radius: 10px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-  }
-  
-  .btn-add:hover {
-    background: #1E9BCF;
-  }
-  
-  .cost-summary {
-    padding: 16px;
-    background: #F0FDF4;
-    border: 1px solid #BBF7D0;
-    border-radius: 10px;
-    margin-bottom: 24px;
-  }
-  
-  .cost-item {
-    display: flex;
-    justify-content: space-between;
-    font-size: 14px;
-  }
-  
-  .cost-value {
-    font-weight: 700;
-    color: var(--green);
-  }
-  
-  /* Review Section */
-  .review-section {
-    margin-bottom: 32px;
-  }
-  
-  .review-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: #111827;
-    margin-bottom: 16px;
-  }
-  
-  .review-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-  }
-  
-  .review-item {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 16px;
-    background: #F9FAFB;
-    border-radius: 10px;
-  }
-  
-  .review-label {
-    font-size: 13px;
-    color: #6B7280;
-  }
-  
-  .review-value {
-    font-size: 16px;
-    font-weight: 600;
-    color: #111827;
-  }
-  
-  .financial-summary {
-    padding: 24px;
-    background: #F9FAFB;
-    border-radius: 12px;
-  }
-  
-  .summary-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 12px 0;
-    font-size: 15px;
-  }
-  
-  .summary-row.total {
-    font-size: 18px;
-    font-weight: 700;
-    padding-top: 16px;
-  }
-  
-  .summary-divider {
-    height: 1px;
-    background: #E5E7EB;
-    margin: 12px 0;
-  }
-  
-  .amount {
-    font-weight: 600;
-    color: #111827;
-  }
-  
-  .amount.positive {
-    color: var(--green);
-  }
-  
-  .amount.negative {
-    color: #DC2626;
-  }
-  
+  .progress-steps { display: flex; align-items: center; margin-bottom: 40px; padding: 24px; background: white; border: 1px solid #E5E7EB; border-radius: 16px; }
+  .step-item { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; cursor: pointer; }
+  .step-circle { width: 48px; height: 48px; border-radius: 50%; background: #F3F4F6; color: #9CA3AF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; transition: all 0.3s; }
+  .step-item.active .step-circle { background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%); color: white; box-shadow: 0 4px 12px rgba(255, 127, 80, 0.3); }
+  .step-item.completed .step-circle { background: var(--green); color: white; }
+  .step-label { font-size: 13px; font-weight: 600; color: #9CA3AF; text-align: center; }
+  .step-item.active .step-label { color: #111827; }
+  .step-line { flex: 1; height: 2px; background: #E5E7EB; margin: 0 16px; transition: all 0.3s; }
+  .step-line.completed { background: var(--green); }
+  
+  /* Cards & Forms */
+  .form-card { background: white; border: 1px solid #E5E7EB; border-radius: 16px; padding: 32px; }
+  .card-header { margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid #E5E7EB; }
+  .card-title { font-size: 24px; font-weight: 700; color: #111827; }
+  
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 24px; }
+  .form-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .form-group label { font-size: 14px; font-weight: 600; color: #374151; }
+  input, textarea { padding: 14px 16px; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 15px; width: 100%; transition: all 0.2s; font-family: inherit; }
+  input:focus, textarea:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 127, 80, 0.1); }
+  .input-prefix { position: relative; }
+  .input-prefix span { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #6B7280; font-weight: 600; }
+  .input-prefix input { padding-left: 36px; }
+  .hours-display-field { padding: 14px 16px; background: #F9FAFB; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 15px; font-weight: 600; color: #059669; }
+
+  /* Stops & Expenses */
+  .stops-section, .expenses-section { margin: 32px 0; padding: 24px; background: #F9FAFB; border-radius: 12px; }
+  .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .section-header h3 { font-size: 16px; font-weight: 700; color: #111827; margin: 0; }
+  
+  .stop-item, .expense-item { display: flex; align-items: center; gap: 16px; padding: 16px; background: white; border: 1px solid #E5E7EB; border-radius: 10px; margin-bottom: 12px; }
+  .stop-number { width: 32px; height: 32px; background: var(--orange); color: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
+  .stop-info, .expense-type { flex: 1; font-weight: 600; color: #374151; font-size: 14px; }
+  .stop-earnings-input, .expense-input { position: relative; width: 120px; flex-shrink: 0; }
+  .stop-earnings-input .currency, .expense-input .currency { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--green); font-weight: 700; }
+  .stop-earnings-input input, .expense-input input { padding-left: 28px; color: var(--green); font-weight: 700; }
+  .stop-delete, .expense-delete { width: 32px; height: 32px; background: #FEF2F2; color: #DC2626; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+  .stop-delete:hover, .expense-delete:hover { background: #FCA5A5; color: white; }
+  .add-stop { display: flex; justify-content: flex-end; }
+
+  /* Options Badges */
+  .options-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .badge-btn { display: flex; align-items: center; gap: 6px; padding: 8px 16px; background: white; color: #374151; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .badge-btn:hover { border-color: var(--orange); color: var(--orange); }
+  .btn-add-custom { padding: 6px 12px; font-size: 13px; font-weight: 600; color: var(--blue); background: white; border: 2px solid var(--blue); border-radius: 8px; cursor: pointer; }
+  .btn-add-custom:hover { background: var(--blue); color: white; }
+  .custom-input-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .btn-save { padding: 10px 16px; background: var(--green); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; }
+  .btn-cancel { padding: 10px 16px; background: white; color: #6B7280; border: 2px solid #E5E7EB; border-radius: 8px; font-weight: 600; cursor: pointer; }
+
+  .option-badge { position: relative; display: inline-flex; }
+  .badge-delete { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; background: #FEE2E2; color: #DC2626; border: none; border-radius: 4px; font-size: 16px; font-weight: 700; cursor: pointer; transition: all 0.2s; line-height: 1; }
+  .badge-delete:hover { background: #FCA5A5; }
+
+  /* Summary */
+  .cost-summary, .financial-summary { padding: 16px; background: #F9FAFB; border-radius: 12px; margin-bottom: 24px; }
+  .cost-item, .summary-row { display: flex; justify-content: space-between; font-size: 14px; padding: 8px 0; }
+  .cost-value, .amount { font-weight: 700; }
+  .cost-value { color: var(--green); }
+  .summary-row.total { border-top: 1px solid #E5E7EB; margin-top: 8px; padding-top: 12px; font-size: 18px; }
+  .amount.positive { color: var(--green); }
+  .amount.negative { color: #DC2626; }
+  .review-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .review-item { background: #F9FAFB; padding: 16px; border-radius: 10px; }
+  .review-label { display: block; font-size: 12px; color: #6B7280; margin-bottom: 4px; }
+  .review-value { font-weight: 700; color: #111827; }
+
   /* Form Actions */
-  .form-actions {
-    display: flex;
-    gap: 12px;
-    justify-content: flex-end;
-    margin-top: 32px;
-    padding-top: 24px;
-    border-top: 1px solid #E5E7EB;
-  }
-  
-  .btn-primary {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 14px 28px;
-    background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%);
-    color: white;
-    border: none;
-    border-radius: 10px;
-    font-weight: 600;
-    font-size: 15px;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: inherit;
-  }
-  
-  .btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 16px rgba(255, 127, 80, 0.3);
-  }
-  
-  .btn-secondary {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 14px 28px;
-    background: white;
-    color: #6B7280;
-    border: 2px solid #E5E7EB;
-    border-radius: 10px;
-    font-weight: 600;
-    font-size: 15px;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: inherit;
-  }
-  
-  .btn-secondary:hover {
-    border-color: var(--orange);
-    color: var(--orange);
-  }
-  
+  .form-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 32px; padding-top: 24px; border-top: 1px solid #E5E7EB; }
+
   @media (max-width: 768px) {
-    .progress-steps {
-      overflow-x: auto;
-    }
-    
-    .step-label {
-      font-size: 11px;
-    }
-    
-    .form-grid,
-    .review-grid {
-      grid-template-columns: 1fr;
-    }
-    
-    .add-stop {
-      grid-template-columns: 1fr;
-    }
-    
-    .options-grid {
-      flex-direction: column;
-    }
+    .progress-steps { overflow-x: auto; }
+    .form-grid, .review-grid { grid-template-columns: 1fr; }
+    .add-stop { grid-template-columns: 1fr; }
+    .options-grid { flex-direction: column; }
   }
 </style>
