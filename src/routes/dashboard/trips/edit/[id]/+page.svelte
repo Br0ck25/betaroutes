@@ -1,87 +1,55 @@
 <script lang="ts">
-  import { trips } from '$lib/stores/trips';
   import { userSettings } from '$lib/stores/userSettings';
+  import { auth, user } from '$lib/stores/auth';
+  import { trips } from '$lib/stores/trips';
   import { goto } from '$app/navigation';
-  import { onMount, tick } from 'svelte';
-  import { user } from '$lib/stores/auth';
-  import { page } from '$app/stores';
-  import type { Destination, MaintenanceCost, SupplyCost } from '$lib/types';
-  import { calculateTripTotals } from '$lib/utils/calculations';
-
+  import { onMount } from 'svelte';
+  
   // FIX: Receive key from layout data
   export let data; 
   $: API_KEY = data.googleMapsApiKey;
 
-  const settings = $userSettings;
-  const tripId = $page.params.id;
+  let settings = { ...$userSettings };
+  let profile = {
+    name: '',
+    email: ''
+  };
 
-  let loading = true;
-  let step = 1;
+  $: if ($user) {
+    if (!profile.name) profile.name = $user.name || '';
+    if (!profile.email) profile.email = $user.email || '';
+  }
+
+  $: monthlyUsage = $trips.filter(t => {
+      if (!t.date) return false;
+      const tripDate = new Date(t.date);
+      const now = new Date();
+      return tripDate.getMonth() === now.getMonth() && tripDate.getFullYear() === now.getFullYear();
+  }).length;
+
+  let showSuccess = false;
+  let successMessage = '';
   
-  // Form State
-  let date = '';
-  let startTime = '';
-  let endTime = '';
-  let startAddress = '';
-  let endAddress = '';
-  let mpg = 25;
-  let gasPrice = 3.50;
-  let distanceUnit = settings.distanceUnit || 'mi';
-  let timeFormat = settings.timeFormat || '12h';
+  let showPasswordChange = false;
+  let passwordData = { current: '', new: '', confirm: '' };
+  let passwordError = '';
 
-  let destinations: Destination[] = [{ address: '', earnings: 0 }];
-  
-  // Items with IDs for proper Svelte keying
-  let maintenanceItems: (MaintenanceCost & { id: string })[] = [];
-  let supplyItems: (SupplyCost & { id: string })[] = [];
-  
-  let notes = '';
+  let showDeleteConfirm = false;
+  let deletePassword = '';
+  let deleteError = '';
+  let isDeleting = false;
 
-  // Calculation State
-  let calculating = false;
-  let calculated = false;
-  let totalMileage = 0;
-  let totalTime = '';
-  let totalEarnings = 0;
-  let fuelCost = 0;
-  let maintenanceCost = 0;
-  let suppliesCost = 0;
-  let netProfit = 0;
-  let profitPerHour = 0;
-  let hoursWorked = 0;
+  let mapLoaded = false;
 
-  // Maps State
-  let map: google.maps.Map | null = null;
-  let directionsService: google.maps.DirectionsService | null = null;
-  let directionsRenderer: google.maps.DirectionsRenderer | null = null;
-  let mapElement: HTMLElement;
-  let mapsLoaded = false;
+  onMount(() => {
+    if ($user) {
+        profile.name = $user.name || '';
+        profile.email = $user.email || '';
+    }
 
-  // Options
-  let maintenanceOptions = ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement'];
-  let suppliesOptions = ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental'];
-  
-  // Temporary input state
-  let newMaintenanceItem = '';
-  let newSupplyItem = '';
-  let showAddMaintenance = false;
-  let showAddSupply = false;
-
-  onMount(async () => {
-    // 1. Load Options
-    const savedMaintenance = localStorage.getItem('maintenanceOptions');
-    const savedSupplies = localStorage.getItem('suppliesOptions');
-    if (savedMaintenance) maintenanceOptions = JSON.parse(savedMaintenance);
-    if (savedSupplies) suppliesOptions = JSON.parse(savedSupplies);
-
-    // 2. Load Trip Data
-    await loadTrip();
-
-    // 3. Load Maps
-    console.log('[EDIT TRIP] Loading Maps with Key:', API_KEY ? 'Yes' : 'MISSING');
-
+    // Load Google Maps for Autocomplete
     if (!API_KEY) {
-        console.error('❌ Google Maps API Key is missing.');
+        console.error('❌ Google Maps API Key is missing. Settings autocomplete disabled.');
         return;
     }
 
@@ -90,89 +58,130 @@
       // FIX: Use API_KEY variable
       script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places`;
       script.async = true;
-      script.onload = () => {
-        initMaps();
-      };
+      script.onload = () => { mapLoaded = true; };
       document.head.appendChild(script);
     } else {
-      initMaps();
+      mapLoaded = true;
     }
   });
-
-  async function loadTrip() {
-    let userId = $user?.token;
-    if (!userId) userId = localStorage.getItem('offline_user_id') || '';
-
-    if (!userId) {
-        goto('/login');
-        return;
-    }
-
-    const trip = await trips.get(tripId, userId);
-    
-    if (!trip) {
-        alert('Trip not found');
-        goto('/dashboard/trips');
-        return;
-    }
-
-    // Populate State
-    date = trip.date || '';
-    startTime = trip.startTime || trip.startClock || ''; 
-    endTime = trip.endTime || trip.endClock || '';
-    startAddress = trip.startAddress || '';
-    endAddress = trip.endAddress || '';
-    mpg = trip.mpg || 25;
-    gasPrice = trip.gasPrice || 3.50;
-    notes = trip.notes || '';
-    hoursWorked = trip.hoursWorked || 0;
-    
-    if (trip.stops && trip.stops.length > 0) {
-        destinations = trip.stops.map((s: any) => ({
-            address: s.address,
-            earnings: s.earnings || 0
-        }));
-    } else if (trip.destinations) {
-        destinations = trip.destinations;
-    }
-
-    // Assign IDs to existing items so we can remove them reliably
-    maintenanceItems = (trip.maintenanceItems || []).map((i: any) => ({ ...i, id: i.id || crypto.randomUUID() }));
-    supplyItems = (trip.supplyItems || []).map((i: any) => ({ ...i, id: i.id || crypto.randomUUID() }));
-    
-    totalMileage = trip.totalMileage || 0;
-    
-    loading = false;
-    await tick();
-    
-    // Auto-calculate route if we have data
-    if (mapsLoaded && startAddress) {
-        calculateRoute();
-    }
+  
+  function saveDefaultSettings() {
+    userSettings.set(settings);
+    showSuccessMsg('Default values saved successfully!');
   }
 
-  function initMaps() {
-    mapsLoaded = true;
+  function saveProfile() {
+    auth.updateProfile({
+        name: profile.name,
+        email: profile.email
+    });
+    showSuccessMsg('Profile updated successfully!');
+  }
+  
+  function showSuccessMsg(msg: string) {
+    successMessage = msg;
+    showSuccess = true;
+    setTimeout(() => showSuccess = false, 3000);
+  }
+  
+  function changePassword() {
+    if (passwordData.new !== passwordData.confirm) {
+      passwordError = 'Passwords do not match';
+      return;
+    }
+    if (passwordData.new.length < 8) {
+      passwordError = 'Password must be at least 8 characters';
+      return;
+    }
+    
+    passwordError = '';
+    showPasswordChange = false;
+    passwordData = { current: '', new: '', confirm: '' };
+    showSuccessMsg('Password changed successfully');
+  }
+
+  async function handleDeleteAccount() {
+    if (!deletePassword) {
+      deleteError = 'Please enter your password to confirm.';
+      return;
+    }
+    
+    if (!confirm('FINAL WARNING: This will permanently delete your account and all data. This cannot be undone.')) {
+      return;
+    }
+
+    isDeleting = true;
     try {
-        directionsService = new google.maps.DirectionsService();
-        directionsRenderer = new google.maps.DirectionsRenderer();
-        if (mapElement) {
-            map = new google.maps.Map(mapElement, {
-                center: { lat: 37.7749, lng: -122.4194 },
-                zoom: 12
-            });
-            directionsRenderer.setMap(map);
+      const result = await auth.deleteAccount($user?.name || '', deletePassword);
+      if (result.success) {
+        goto('/'); 
+      } else {
+        deleteError = result.error || 'Failed to delete account';
+        isDeleting = false;
+      }
+    } catch (err) {
+      deleteError = 'An unexpected error occurred';
+      isDeleting = false;
+    }
+  }
+  
+  function exportData() {
+    const data = {
+      settings: $userSettings,
+      trips: $trips,
+      exportDate: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `goroute-backup-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  
+  function importData() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json';
+    input.onchange = (e: any) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = (e: any) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (data.settings) userSettings.set(data.settings);
+          if (data.trips) trips.set(data.trips);
+          showSuccessMsg('Data imported successfully!');
+        } catch (err) {
+          alert('Invalid backup file');
         }
-    } catch (e) {
-        console.error("Maps init error", e);
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }
+  
+  function clearAllData() {
+    if (!confirm('Are you sure? This will delete ALL your trip data locally.')) return;
+    trips.set([]);
+    showSuccessMsg('All trip data cleared.');
+  }
+  
+  async function handleLogout() {
+    if (confirm('Are you sure you want to logout?')) {
+      await fetch('/logout', { method: 'POST' });
+      auth.logout();
+      goto('/login');
     }
   }
 
-  // --- Autocomplete Actions (Fixed for stuck box) ---
+  // --- Autocomplete Logic ---
   function initAutocomplete(node: HTMLInputElement) {
     let retryCount = 0;
     const maxRetries = 20;
-    
     const trySetup = () => {
       if (window.google && window.google.maps && window.google.maps.places) {
         setupAutocomplete(node);
@@ -196,655 +205,413 @@
       }
     };
   }
-  
+
   function setupAutocomplete(input: HTMLInputElement) {
     if (input.dataset.autocompleteSetup === 'true') return;
     input.dataset.autocompleteSetup = 'true';
     
     const autocomplete = new google.maps.places.Autocomplete(input, { types: ['geocode'] });
     
-    // 1. Handle Selection
     autocomplete.addListener('place_changed', () => {
       const place = autocomplete.getPlace();
       if (place.formatted_address) {
         input.value = place.formatted_address;
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        
-        // Blur to close dropdown
+        input.dispatchEvent(new Event('input'));
         input.blur();
-        
-        // --- KEY FIX FOR STUCK DROPDOWN ---
-        // Send ESC key to force close the dropdown via Google's internal listeners
         setTimeout(() => {
-          const event = new KeyboardEvent('keydown', {
-            key: 'Escape',
-            code: 'Escape',
-            keyCode: 27,
-            which: 27,
-            bubbles: true
-          });
+          const event = new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true });
           input.dispatchEvent(event);
           forceHidePac();
-          setTimeout(calculateRoute, 150);
         }, 50);
       }
     });
 
-    // 2. Handle Clicking Away (Blur)
     input.addEventListener('blur', () => {
-      // Delay slightly to allow "place_changed" to fire if they clicked a suggestion
       setTimeout(() => {
         forceHidePac();
       }, 200);
     });
+
+    let typingTimeout: any;
+    input.addEventListener('input', () => {
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => {
+        if (input.value.length > 0) {
+          const pacContainers = document.querySelectorAll('.pac-container');
+          pacContainers.forEach(container => {
+            (container as HTMLElement).style.display = '';
+          });
+        }
+      }, 100);
+    });
   }
 
-  // Helper to force hide Google dropdowns
   function forceHidePac() {
     const containers = document.querySelectorAll('.pac-container');
     containers.forEach((c) => (c as HTMLElement).style.display = 'none');
   }
-
-  // --- Helper Functions ---
-  function convertDistance(miles: number) {
-    return distanceUnit === 'km' ? miles * 1.60934 : miles;
-  }
-
-  function formatTime(dateStr: string) {
-    if (!dateStr) return '';
-    const d = new Date(`1970-01-01T${dateStr}:00`);
-    return d.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: timeFormat === '12h'
-    });
-  }
-
-  // --- Logic ---
-  async function addDestination() {
-    destinations = [...destinations, { address: '', earnings: 0 }];
-  }
-
-  async function removeDestination(index: number) {
-    if (destinations.length > 1) {
-      destinations = destinations.filter((_, i) => i !== index);
-    }
-  }
-
-  async function calculateRoute() {
-    if (!mapsLoaded || !directionsService || !directionsRenderer) return;
-    if (!startAddress) return;
-
-    calculating = true;
-
-    try {
-      const waypoints = destinations
-        .filter(d => d.address.trim() !== '')
-        .map(d => ({
-            location: d.address,
-            stopover: true
-        }));
-      
-      // Default to start address if end is empty (Round Trip)
-      const destination = endAddress.trim() ? endAddress : startAddress;
-      
-      // Allow calculation if it's a round trip with waypoints OR pure round trip (0 miles, but valid)
-      if (destination === startAddress && waypoints.length === 0) {
-          calculating = false;
-          return;
-      }
-
-      const request: google.maps.DirectionsRequest = {
-        origin: startAddress,
-        destination: destination,
-        waypoints,
-        travelMode: google.maps.TravelMode.DRIVING
-      };
-
-      const result = await directionsService.route(request);
-
-      if (result.routes[0]) {
-        directionsRenderer.setDirections(result);
-
-        let distanceMeters = 0;
-        let duration = 0;
-
-        result.routes[0].legs.forEach(leg => {
-          distanceMeters += leg.distance?.value || 0;
-          duration += leg.duration?.value || 0;
-        });
-
-        const miles = convertDistance(distanceMeters / 1609.34);
-        const minutes = duration / 60;
-
-        const totals = calculateTripTotals(
-          miles,
-          minutes,
-          destinations,
-          mpg,
-          gasPrice,
-          maintenanceItems,
-          supplyItems,
-          formatTime(startTime),
-          formatTime(endTime)
-        );
-
-        totalMileage = totals.totalMileage!;
-        totalTime = totals.totalTime!;
-        totalEarnings = totals.totalEarnings!;
-        fuelCost = totals.fuelCost!;
-        maintenanceCost = totals.maintenanceCost!;
-        suppliesCost = totals.suppliesCost!;
-        netProfit = totals.netProfit!;
-        profitPerHour = totals.profitPerHour!;
-        
-        calculated = true;
-      }
-    } catch (error) {
-      console.error('Route error:', error);
-    } finally {
-      calculating = false;
-    }
-  }
-
-  async function updateTrip() {
-    if (!calculated) {
-        await calculateRoute();
-    }
-
-    let userId = $user?.token;
-    if (!userId) userId = localStorage.getItem('offline_user_id') || '';
-
-    const tripToSave = {
-      id: tripId,
-      date,
-      startTime,
-      endTime,
-      startAddress,
-      endAddress: endAddress || '',
-      destinations: destinations, 
-      stops: destinations.map((d, i) => ({
-          id: crypto.randomUUID(),
-          address: d.address,
-          earnings: d.earnings,
-          order: i
-      })),
-      totalMileage,
-      totalTime,
-      totalEarnings,
-      fuelCost,
-      maintenanceCost,
-      maintenanceItems,
-      suppliesCost,
-      supplyItems,
-      hoursWorked,
-      netProfit,
-      profitPerHour,
-      mpg,
-      gasPrice,
-      notes,
-      lastModified: new Date().toISOString()
-    };
-
-    try {
-      await trips.updateTrip(tripId, tripToSave, userId);
-      alert('Trip updated successfully!');
-      goto('/dashboard/trips');
-    } catch (err) {
-      console.error('Update failed:', err);
-      alert('Failed to update trip.');
-    }
-  }
-
-  // --- Expenses Logic (Fixed IDs and Removal) ---
-  function addMaintenanceItem(type: string) {
-    maintenanceItems = [...maintenanceItems, { type, cost: 0, id: crypto.randomUUID() }];
-  }
-  function removeMaintenanceItem(id: string) {
-    maintenanceItems = maintenanceItems.filter((i) => i.id !== id);
-  }
-  function addCustomMaintenance() {
-    if (!newMaintenanceItem) return;
-    addMaintenanceItem(newMaintenanceItem);
-    newMaintenanceItem = '';
-    showAddMaintenance = false;
-  }
-  
-  function addSupplyItem(type: string) {
-    supplyItems = [...supplyItems, { type, cost: 0, id: crypto.randomUUID() }];
-  }
-  function removeSupplyItem(id: string) {
-    supplyItems = supplyItems.filter((i) => i.id !== id);
-  }
-  function addCustomSupply() {
-    if (!newSupplyItem) return;
-    addSupplyItem(newSupplyItem);
-    newSupplyItem = '';
-    showAddSupply = false;
-  }
-
-  // --- Reactivity ---
-  $: {
-    if (startTime && endTime) {
-        const [startHour, startMin] = startTime.split(':').map(Number);
-        const [endHour, endMin] = endTime.split(':').map(Number);
-        const startMinutes = startHour * 60 + startMin;
-        const endMinutes = endHour * 60 + endMin;
-        let diffMinutes = endMinutes - startMinutes;
-        if (diffMinutes < 0) diffMinutes += 24 * 60; 
-        hoursWorked = Math.round((diffMinutes / 60) * 10) / 10;
-    }
-
-    if (mpg && gasPrice && totalMileage) {
-        const gallons = totalMileage / mpg;
-        fuelCost = parseFloat((gallons * gasPrice).toFixed(2));
-    }
-    
-    maintenanceCost = maintenanceItems.reduce((acc, item) => acc + (item.cost || 0), 0);
-    suppliesCost = supplyItems.reduce((acc, item) => acc + (item.cost || 0), 0);
-    totalEarnings = destinations.reduce((acc, d) => acc + (d.earnings || 0), 0);
-    
-    const costs = fuelCost + maintenanceCost + suppliesCost;
-    netProfit = totalEarnings - costs;
-    
-    if (hoursWorked > 0) {
-        profitPerHour = netProfit / hoursWorked;
-    }
-  }
-
-  function nextStep() { if (step < 4) step++; }
-  function prevStep() { if (step > 1) step--; }
 </script>
 
 <svelte:head>
-  <title>Edit Trip - Go Route Yourself</title>
+  <title>Settings - Go Route Yourself</title>
   <style>
-    /* Style Google Places autocomplete dropdown */
-    .pac-container {
-      z-index: 10000 !important;
-      background: white;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-      border-radius: 8px;
-      margin-top: 2px;
-      font-family: inherit;
-    }
+    .pac-container { z-index: 10000 !important; }
   </style>
 </svelte:head>
 
-<div class="trip-form">
+<div class="settings">
   <div class="page-header">
     <div>
-      <h1 class="page-title">Edit Trip</h1>
-      <p class="page-subtitle">Update trip details and earnings</p>
+      <h1 class="page-title">Settings</h1>
+      <p class="page-subtitle">Manage your account and preferences</p>
     </div>
-    <a href="/dashboard/trips" class="btn-back">
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-        <path d="M12 4L6 10L12 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      Back
-    </a>
   </div>
-
-  {#if loading}
-    <div class="loading-state">
-        <div class="spinner"></div>
-        <p>Loading trip details...</p>
-    </div>
-  {:else}
-    <div class="progress-steps">
-        <div class="step-item" class:active={step >= 1} class:completed={step > 1} on:click={() => step = 1}>
-        <div class="step-circle">{step > 1 ? '✓' : '1'}</div>
-        <div class="step-label">Basic Info</div>
-        </div>
-        <div class="step-line" class:completed={step > 1}></div>
-        <div class="step-item" class:active={step >= 2} class:completed={step > 2} on:click={() => step = 2}>
-        <div class="step-circle">{step > 2 ? '✓' : '2'}</div>
-        <div class="step-label">Route & Stops</div>
-        </div>
-        <div class="step-line" class:completed={step > 2}></div>
-        <div class="step-item" class:active={step >= 3} class:completed={step > 3} on:click={() => step = 3}>
-        <div class="step-circle">{step > 3 ? '✓' : '3'}</div>
-        <div class="step-label">Costs</div>
-        </div>
-        <div class="step-line" class:completed={step > 3}></div>
-        <div class="step-item" class:active={step >= 4}>
-        <div class="step-circle">4</div>
-        <div class="step-label">Review</div>
-        </div>
-    </div>
-
-    <div class="form-content">
-        {#if step === 1}
-        <div class="form-card">
-            <div class="card-header">
-            <h2 class="card-title">Basic Information</h2>
-            </div>
-            <div class="form-grid">
-            <div class="form-group">
-                <label>Date</label>
-                <input type="date" bind:value={date} required />
-            </div>
-            <div class="form-group">
-                <label>Start Time</label>
-                <input type="time" bind:value={startTime} />
-            </div>
-            <div class="form-group">
-                <label>End Time</label>
-                <input type="time" bind:value={endTime} />
-            </div>
-            <div class="form-group">
-                <label>Hours Worked</label>
-                <div class="hours-display-field">{hoursWorked.toFixed(1)} hours</div>
-            </div>
-            </div>
-            <div class="form-actions">
-            <button class="btn-primary" type="button" on:click={nextStep}>Continue</button>
-            </div>
-        </div>
-        {/if}
-
-        {#if step === 2}
-        <div class="form-card">
-            <div class="card-header">
-            <h2 class="card-title">Route & Stops</h2>
-            </div>
-            
-            <div class="form-group">
-            <label>Starting Address</label>
-            <input type="text" bind:value={startAddress} placeholder="Start address" use:initAutocomplete />
-            </div>
-            
-            <div class="stops-section">
-            <div class="section-header"><h3>Destinations</h3></div>
-            {#each destinations as dest, i}
-                <div class="stop-item">
-                <div class="stop-number">{i + 1}</div>
-                <div class="stop-info">
-                    <input type="text" class="stop-address-input" bind:value={dest.address} placeholder="Destination address" use:initAutocomplete />
-                </div>
-                <div class="stop-earnings-input">
-                    <span class="currency">$</span>
-                    <input type="number" bind:value={dest.earnings} placeholder="0" step="0.01" />
-                </div>
-                <button class="stop-delete" type="button" on:click={() => removeDestination(i)}>✕</button>
-                </div>
-            {/each}
-            <div class="add-stop">
-                <button class="btn-add" type="button" on:click={addDestination}>+ Add Stop</button>
-            </div>
-            </div>
-
-            <div class="form-group">
-            <label>End Address (Optional - defaults to Start if empty)</label>
-            <input type="text" bind:value={endAddress} placeholder="End address (leave blank for round trip)" use:initAutocomplete />
-            </div>
-
-            <div class="form-group">
-            <label>Total Miles (Auto-calculated)</label>
-            <input type="number" bind:value={totalMileage} step="0.1" />
-            </div>
-
-            <div class="actions">
-                <button class="btn-secondary" type="button" on:click={calculateRoute} disabled={calculating}>
-                    {calculating ? 'Calculating...' : 'Recalculate Route'}
-                </button>
-            </div>
-
-            <div class="map-container" class:hidden={!mapsLoaded}>
-                <div bind:this={mapElement} class="map"></div>
-            </div>
-
-            <div class="form-actions">
-            <button class="btn-secondary" type="button" on:click={prevStep}>Back</button>
-            <button class="btn-primary" type="button" on:click={nextStep}>Continue</button>
-            </div>
-        </div>
-        {/if}
-
-        {#if step === 3}
-        <div class="form-card">
-            <div class="card-header">
-            <h2 class="card-title">Costs & Expenses</h2>
-            </div>
-            <div class="form-grid">
-            <div class="form-group">
-                <label>Vehicle MPG</label>
-                <input type="number" bind:value={mpg} step="0.1" />
-            </div>
-            <div class="form-group">
-                <label>Gas Price</label>
-                <div class="input-prefix">
-                <span>$</span>
-                <input type="number" bind:value={gasPrice} step="0.01" />
-                </div>
-            </div>
-            </div>
-
-            <div class="cost-summary">
-            <div class="cost-item">
-                <span>Fuel Cost (Calculated)</span>
-                <span class="cost-value">${fuelCost.toFixed(2)}</span>
-            </div>
-            </div>
-
-            <div class="expenses-section">
-            <div class="section-header">
-                <h3>Maintenance</h3>
-                <button class="btn-add-custom" type="button" on:click={() => showAddMaintenance = !showAddMaintenance}>Add Custom</button>
-            </div>
-            {#if showAddMaintenance}
-                <div class="custom-input-row">
-                <input type="text" bind:value={newMaintenanceItem} placeholder="Item name" />
-                <button class="btn-save" type="button" on:click={addCustomMaintenance}>Add</button>
-                </div>
-            {/if}
-            <div class="options-grid">
-                {#each maintenanceOptions as option}
-                <button class="badge-btn" type="button" on:click={() => addMaintenanceItem(option)}>{option}</button>
-                {/each}
-            </div>
-            {#each maintenanceItems as item (item.id)}
-                <div class="expense-item">
-                <span class="expense-type">{item.type}</span>
-                <div class="expense-input">
-                    <span class="currency">$</span>
-                    <input type="number" bind:value={item.cost} />
-                </div>
-                <button class="expense-delete" type="button" on:click={() => removeMaintenanceItem(item.id)}>Remove</button>
-                </div>
-            {/each}
-            </div>
-
-            <div class="expenses-section">
-            <div class="section-header">
-                <h3>Supplies</h3>
-                <button class="btn-add-custom" type="button" on:click={() => showAddSupply = !showAddSupply}>Add Custom</button>
-            </div>
-            {#if showAddSupply}
-                <div class="custom-input-row">
-                <input type="text" bind:value={newSupplyItem} placeholder="Item name" />
-                <button class="btn-save" type="button" on:click={addCustomSupply}>Add</button>
-                </div>
-            {/if}
-            <div class="options-grid">
-                {#each suppliesOptions as option}
-                <button class="badge-btn" type="button" on:click={() => addSupplyItem(option)}>{option}</button>
-                {/each}
-            </div>
-            {#each supplyItems as item (item.id)}
-                <div class="expense-item">
-                <span class="expense-type">{item.type}</span>
-                <div class="expense-input">
-                    <span class="currency">$</span>
-                    <input type="number" bind:value={item.cost} />
-                </div>
-                <button class="expense-delete" type="button" on:click={() => removeSupplyItem(item.id)}>Remove</button>
-                </div>
-            {/each}
-            </div>
-
-            <div class="form-group">
-                <label>Notes</label>
-                <textarea bind:value={notes} rows="3"></textarea>
-            </div>
-
-            <div class="form-actions">
-            <button class="btn-secondary" type="button" on:click={prevStep}>Back</button>
-            <button class="btn-primary" type="button" on:click={nextStep}>Continue</button>
-            </div>
-        </div>
-        {/if}
-
-        {#if step === 4}
-        <div class="form-card">
-            <div class="card-header">
-            <h2 class="card-title">Review & Update</h2>
-            </div>
-            
-            <div class="review-section">
-            <div class="review-grid">
-                <div class="review-item"><span class="review-label">Date</span> <span class="review-value">{date}</span></div>
-                <div class="review-item"><span class="review-label">Time</span> <span class="review-value">{startTime} - {endTime}</span></div>
-                <div class="review-item"><span class="review-label">Miles</span> <span class="review-value">{totalMileage}</span></div>
-                <div class="review-item"><span class="review-label">Earnings</span> <span class="review-value">${totalEarnings.toFixed(2)}</span></div>
-            </div>
-            </div>
-
-            <div class="financial-summary">
-            <div class="summary-row"><span>Total Revenue</span> <span class="amount positive">${totalEarnings.toFixed(2)}</span></div>
-            <div class="summary-row"><span>Total Costs</span> <span class="amount negative">${(fuelCost + maintenanceCost + suppliesCost).toFixed(2)}</span></div>
-            <div class="summary-divider"></div>
-            <div class="summary-row total"><span>Net Profit</span> <span class="amount" class:positive={netProfit >= 0} class:negative={netProfit < 0}>${netProfit.toFixed(2)}</span></div>
-            </div>
-
-            <div class="form-actions">
-            <button class="btn-secondary" type="button" on:click={prevStep}>Back</button>
-            <button class="btn-primary" type="button" on:click={updateTrip}>Update Trip</button>
-            </div>
-        </div>
-        {/if}
+  
+  {#if showSuccess}
+    <div class="alert success">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <path d="M16.6 5L7.5 14L3.4 10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      {successMessage}
     </div>
   {/if}
+  
+  <div class="settings-grid">
+    <div class="settings-card">
+      <div class="card-header">
+        <div class="card-icon orange">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M10 10C12.7614 10 15 7.76142 15 5C15 2.23858 12.7614 0 10 0C7.23858 0 5 2.23858 5 5C5 7.76142 7.23858 10 10 10Z" fill="currentColor"/>
+            <path d="M10 12C4.47715 12 0 15.3579 0 19.5C0 19.7761 0.223858 20 0.5 20H19.5C19.7761 20 20 19.7761 20 19.5C20 15.3579 15.5228 12 10 12Z" fill="currentColor"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="card-title">Profile</h2>
+          <p class="card-subtitle">Your account information</p>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label for="profile-name">Name</label>
+        <input id="profile-name" type="text" bind:value={profile.name} placeholder="Your name" />
+      </div>
+      
+      <div class="form-group">
+        <label for="profile-email">Email</label>
+        <input id="profile-email" type="email" bind:value={profile.email} placeholder="your@email.com" />
+      </div>
+
+      <button class="btn-secondary" on:click={saveProfile}>Save Profile</button>
+      
+      <div class="divider"></div>
+
+      <div class="plan-section">
+        <div class="plan-info">
+          <label for="plan-badge">Current Plan</label>
+          <div class="plan-row">
+            <div id="plan-badge" class="plan-badge">{$auth.user?.plan || 'Free'} Plan</div>
+            {#if $auth.user?.plan === 'free'}
+              <a href="/#pricing" class="upgrade-link">Upgrade to Pro</a>
+            {/if}
+          </div>
+        </div>
+
+        {#if $auth.user?.plan === 'free'}
+          <div class="usage-stats">
+            <div class="usage-header">
+              <span>Monthly Usage</span>
+              <span>{monthlyUsage} / {$auth.user?.maxTrips || 10} trips</span>
+            </div>
+            <div class="progress-bar">
+              <div 
+                class="progress-fill" 
+                style="width: {Math.min((monthlyUsage / ($auth.user?.maxTrips || 10)) * 100, 100)}%"
+                class:warning={monthlyUsage >= ($auth.user?.maxTrips || 10)}
+              ></div>
+            </div>
+          </div>
+        {/if}
+      </div>
+    </div>
+    
+    <div class="settings-card">
+      <div class="card-header">
+        <div class="card-icon blue">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M10 2C13.97 2 18 6.03 18 11C18 15.97 13.97 20 9 20H2V13C2 8.03 6.03 4 11 4H18V11C18 6.03 13.97 2 9 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="card-title">Default Values</h2>
+          <p class="card-subtitle">Pre-fill forms with these values</p>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label for="default-mpg">Default MPG</label>
+        <input id="default-mpg" type="number" bind:value={settings.defaultMPG} placeholder="25" min="1" step="0.1" />
+      </div>
+      
+      <div class="form-group">
+        <label for="default-gas">Default Gas Price</label>
+        <div class="input-prefix">
+          <span class="prefix">$</span>
+          <input id="default-gas" type="number" bind:value={settings.defaultGasPrice} placeholder="3.50" min="0" step="0.01" />
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label for="default-start">Default Start Address</label>
+        {#if mapLoaded}
+          <input 
+            id="default-start"
+            type="text" 
+            bind:value={settings.defaultStartAddress}
+            placeholder="Start typing address..."
+            use:initAutocomplete
+          />
+        {:else}
+          <input id="default-start" type="text" bind:value={settings.defaultStartAddress} placeholder="Loading maps..." disabled />
+        {/if}
+      </div>
+      
+      <div class="form-group">
+        <label for="default-end">Default End Address</label>
+        {#if mapLoaded}
+          <input 
+            id="default-end"
+            type="text" 
+            bind:value={settings.defaultEndAddress}
+            placeholder="Start typing address..."
+            use:initAutocomplete
+          />
+        {:else}
+          <input id="default-end" type="text" bind:value={settings.defaultEndAddress} placeholder="Loading maps..." disabled />
+        {/if}
+      </div>
+      
+      <button class="btn-primary" on:click={saveDefaultSettings}>
+        Save Default Values
+      </button>
+    </div>
+    
+    <div class="settings-card">
+      <div class="card-header">
+        <div class="card-icon green">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+             <path d="M10 12C11.1046 12 12 11.1046 12 10C12 8.89543 11.1046 8 10 8C8.89543 8 8 8.89543 8 10C8 11.1046 8.89543 12 10 12Z" stroke="currentColor" stroke-width="2"/>
+            <path d="M16.2 12C16.1 12.5 16.3 13 16.7 13.3L16.8 13.4C17.1 13.7 17.3 14.1 17.3 14.5C17.3 14.9 17.1 15.3 16.8 15.6C16.5 15.9 16.1 16.1 15.7 16.1C15.3 16.1 14.9 15.9 14.6 15.6L14.5 15.5C14.2 15.1 13.7 14.9 13.2 15C12.7 15.1 12.4 15.5 12.3 16V16.2C12.3 17.1 11.6 17.8 10.7 17.8C9.8 17.8 9.1 17.1 9.1 16.2V16.1C9 15.5 8.6 15.1 8 15C7.5 15 7 15.2 6.7 15.6L6.6 15.7C6.3 16 5.9 16.2 5.5 16.2C5.1 16.2 4.7 16 4.4 15.7C4.1 15.4 3.9 15 3.9 14.6C3.9 14.2 4.1 13.8 4.4 13.5L4.5 13.4C4.9 13.1 5.1 12.6 5 12.1C4.9 11.6 4.5 11.3 4 11.2H3.8C2.9 11.2 2.2 10.5 2.2 9.6C2.2 8.7 2.9 8 3.8 8H3.9C4.5 7.9 4.9 7.5 5 6.9C5 6.4 4.8 5.9 4.4 5.6L4.3 5.5C4 5.2 3.8 4.8 3.8 4.4C3.8 4 4 3.6 4.3 3.3C4.6 3 5 2.8 5.4 2.8C5.8 2.8 6.2 3 6.5 3.3L6.6 3.4C7 3.8 7.5 4 8 3.9C8.5 3.9 8.8 3.5 8.9 3V2.8C8.9 1.9 9.6 1.2 10.5 1.2C11.4 1.2 12.1 1.9 12.1 2.8V2.9C12.1 3.5 12.5 3.9 13.1 4C13.6 4.1 14.1 3.9 14.4 3.5L14.5 3.4C14.8 3.1 15.2 2.9 15.6 2.9C16 2.9 16.4 3.1 16.7 3.4C17 3.7 17.2 4.1 17.2 4.5C17.2 4.9 17 5.3 16.7 5.6L16.6 5.7C16.2 6 16 6.5 16.1 7C16.2 7.5 16.6 7.8 17.1 7.9H17.3C18.2 7.9 18.9 8.6 18.9 9.5C18.9 10.4 18.2 11.1 17.3 11.1H17.2C16.6 11.1 16.2 11.5 16.1 12.1L16.2 12Z" stroke="currentColor" stroke-width="2"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="card-title">Preferences</h2>
+          <p class="card-subtitle">Customize your experience</p>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label for="distance-unit">Distance Unit</label>
+        <select id="distance-unit" bind:value={settings.distanceUnit}>
+          <option value="miles">Miles</option>
+          <option value="km">Kilometers</option>
+        </select>
+      </div>
+      
+      <div class="form-group">
+        <label for="currency">Currency</label>
+        <select id="currency" bind:value={settings.currency}>
+          <option value="USD">USD ($)</option>
+          <option value="EUR">EUR (€)</option>
+          <option value="GBP">GBP (£)</option>
+          <option value="JPY">JPY (¥)</option>
+        </select>
+      </div>
+      
+      <button class="btn-primary" on:click={saveDefaultSettings}>
+        Save Preferences
+      </button>
+    </div>
+    
+    <div class="settings-card">
+      <div class="card-header">
+        <div class="card-icon purple">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M15 7H14V5C14 3.67392 13.4732 2.40215 12.5355 1.46447C11.5979 0.526784 10.3261 0 9 0C7.67392 0 6.40215 0.526784 5.46447 1.46447C4.52678 2.40215 4 3.67392 4 5V7H3C2.46957 7 1.96086 7.21071 1.58579 7.58579C1.21071 7.96086 1 8.46957 1 9V17C1 17.5304 1.21071 18.0391 1.58579 18.4142C1.96086 18.7893 2.46957 19 3 19H15C15.5304 19 16.0391 18.7893 16.4142 18.4142C16.7893 18.0391 17 17.5304 17 17V9C17 8.46957 16.7893 7.96086 16.4142 7.58579C16.0391 7.21071 15.5304 7 15 7ZM6 5C6 4.20435 6.31607 3.44129 6.87868 2.87868C7.44129 2.31607 8.20435 2 9 2C9.79565 2 10.5587 2.31607 11.1213 2.87868C11.6839 3.44129 12 4.20435 12 5V7H6V5Z" fill="currentColor"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="card-title">Security</h2>
+          <p class="card-subtitle">Password and authentication</p>
+        </div>
+      </div>
+      
+      {#if !showPasswordChange}
+        <button class="btn-secondary" on:click={() => showPasswordChange = true}>Change Password</button>
+      {:else}
+        <div class="password-change">
+          {#if passwordError}<div class="alert error">{passwordError}</div>{/if}
+          <div class="form-group"><label for="curr-pass">Current Password</label><input id="curr-pass" type="password" bind:value={passwordData.current} /></div>
+          <div class="form-group"><label for="new-pass">New Password</label><input id="new-pass" type="password" bind:value={passwordData.new} /></div>
+          <div class="form-group"><label for="confirm-pass">Confirm New Password</label><input id="confirm-pass" type="password" bind:value={passwordData.confirm} /></div>
+          <div class="button-group">
+            <button class="btn-primary" on:click={changePassword}>Update</button>
+            <button class="btn-secondary" on:click={() => showPasswordChange = false}>Cancel</button>
+          </div>
+        </div>
+      {/if}
+    </div>
+    
+    <div class="settings-card">
+      <div class="card-header">
+        <div class="card-icon navy">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M17 2H3C2.46957 2 1.96086 2.21071 1.58579 2.58579C1.21071 2.96086 1 3.46957 1 4V16C1 16.5304 1.21071 17.0391 1.58579 17.4142C1.96086 17.7893 2.46957 18 3 18H17C17.5304 18 18.0391 17.7893 18.4142 17.4142C18.7893 17.0391 19 16.5304 19 16V4C19 3.46957 18.7893 2.96086 18.4142 2.58579C18.0391 2.21071 17.5304 2 17 2Z" stroke="currentColor" stroke-width="2"/>
+            <path d="M1 8H19M6 1V3M14 1V3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="card-title">Data Management</h2>
+          <p class="card-subtitle">Export, import, or delete your data</p>
+        </div>
+      </div>
+      
+      <div class="data-actions">
+        <button class="action-btn" on:click={exportData}>
+          <div>
+            <div class="action-title">Export Data</div>
+            <div class="action-subtitle">Download backup as JSON</div>
+          </div>
+        </button>
+        <button class="action-btn" on:click={importData}>
+          <div>
+            <div class="action-title">Import Data</div>
+            <div class="action-subtitle">Restore from backup</div>
+          </div>
+        </button>
+        <button class="action-btn danger" on:click={clearAllData}>
+          <div>
+            <div class="action-title">Clear Local Data</div>
+            <div class="action-subtitle">Delete local trip history</div>
+          </div>
+        </button>
+      </div>
+    </div>
+    
+    <div class="settings-card danger-card">
+      <div class="card-header">
+        <div class="card-icon red">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M7 17H3C2.46957 17 1.96086 16.7893 1.58579 16.4142C1.21071 16.0391 1 15.5304 1 15V3C1 2.46957 1.21071 1.96086 1.58579 1.58579C1.96086 1.21071 2.46957 1 3 1H7M13 13L17 9M17 9L13 5M17 9H7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="card-title">Account Actions</h2>
+          <p class="card-subtitle">Sign out or delete account</p>
+        </div>
+      </div>
+      
+      <div class="danger-actions">
+        <button class="btn-logout" on:click={handleLogout}>
+          Logout
+        </button>
+        
+        {#if !showDeleteConfirm}
+          <button class="btn-delete" on:click={() => showDeleteConfirm = true}>
+            Delete Account
+          </button>
+        {:else}
+          <div class="delete-confirmation">
+            <p class="delete-warning">To verify, please enter your password:</p>
+            <input type="password" bind:value={deletePassword} placeholder="Enter your password" class="delete-input" />
+            {#if deleteError}<p class="error-text">{deleteError}</p>{/if}
+            <div class="button-group">
+              <button class="btn-delete-confirm" on:click={handleDeleteAccount} disabled={isDeleting}>
+                {isDeleting ? 'Deleting...' : 'Permanently Delete Account'}
+              </button>
+              <button class="btn-secondary" on:click={() => { showDeleteConfirm = false; deletePassword = ''; deleteError = ''; }}>Cancel</button>
+            </div>
+          </div>
+        {/if}
+      </div>
+    </div>
+  </div>
 </div>
 
 <style>
-  /* Base Layout */
-  .trip-form { max-width: 900px; margin: 0 auto; }
-  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
+  .settings { max-width: 1200px; }
+  .page-header { margin-bottom: 32px; }
   .page-title { font-size: 32px; font-weight: 800; color: #111827; margin-bottom: 4px; }
   .page-subtitle { font-size: 16px; color: #6B7280; }
   
-  /* Loading */
-  .loading-state { text-align: center; padding: 60px; color: #666; font-size: 1.1rem; }
-  .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #FF7F50; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 20px; }
-  @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-  /* Buttons */
-  .btn-back, .btn-secondary { background: white; color: #6B7280; border: 2px solid #E5E7EB; border-radius: 10px; padding: 10px 20px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s; text-decoration: none; }
-  .btn-back:hover, .btn-secondary:hover { border-color: var(--orange); color: var(--orange); }
-  .btn-primary { background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%); color: white; border: none; border-radius: 10px; padding: 14px 28px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s; }
-  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(255, 127, 80, 0.3); }
-  .btn-add { background: var(--blue); color: white; border: none; padding: 12px 20px; border-radius: 10px; cursor: pointer; font-weight: 600; }
-  .btn-add:hover { background: #1E9BCF; }
+  .alert { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-radius: 12px; font-size: 14px; font-weight: 500; margin-bottom: 24px; }
+  .alert.success { background: #F0FDF4; color: #166534; border: 1px solid #BBF7D0; }
+  .alert.error { background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; }
   
-  /* Progress Steps */
-  .progress-steps { display: flex; align-items: center; margin-bottom: 40px; padding: 24px; background: white; border: 1px solid #E5E7EB; border-radius: 16px; }
-  .step-item { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; cursor: pointer; }
-  .step-circle { width: 48px; height: 48px; border-radius: 50%; background: #F3F4F6; color: #9CA3AF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; transition: all 0.3s; }
-  .step-item.active .step-circle { background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%); color: white; box-shadow: 0 4px 12px rgba(255, 127, 80, 0.3); }
-  .step-item.completed .step-circle { background: var(--green); color: white; }
-  .step-label { font-size: 13px; font-weight: 600; color: #9CA3AF; text-align: center; }
-  .step-item.active .step-label { color: #111827; }
-  .step-line { flex: 1; height: 2px; background: #E5E7EB; margin: 0 16px; transition: all 0.3s; }
-  .step-line.completed { background: var(--green); }
+  .settings-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+  .settings-card { background: white; border: 1px solid #E5E7EB; border-radius: 16px; padding: 24px; }
+  .settings-card.danger-card { border-color: #FEE2E2; background: #FEF2F2; }
   
-  /* Cards & Forms */
-  .form-card { background: white; border: 1px solid #E5E7EB; border-radius: 16px; padding: 32px; }
-  .card-header { margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid #E5E7EB; }
-  .card-title { font-size: 24px; font-weight: 700; color: #111827; }
+  .card-header { display: flex; gap: 16px; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid #E5E7EB; }
+  .card-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; flex-shrink: 0; }
+  .card-icon.orange { background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%); }
+  .card-icon.blue { background: linear-gradient(135deg, var(--blue) 0%, #1E9BCF 100%); }
+  .card-icon.green { background: linear-gradient(135deg, var(--green) 0%, #7AB82E 100%); }
+  .card-icon.purple { background: linear-gradient(135deg, var(--purple) 0%, #764a89 100%); }
+  .card-icon.navy { background: linear-gradient(135deg, var(--navy) 0%, #1a3a5c 100%); }
+  .card-icon.red { background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%); }
+  .card-title { font-size: 18px; font-weight: 700; color: #111827; margin-bottom: 4px; }
+  .card-subtitle { font-size: 14px; color: #6B7280; }
   
-  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 24px; }
-  .form-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
-  .form-group label { font-size: 14px; font-weight: 600; color: #374151; }
-  input, textarea { padding: 14px 16px; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 15px; width: 100%; transition: all 0.2s; font-family: inherit; }
-  input:focus, textarea:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 127, 80, 0.1); }
+  .form-group { margin-bottom: 20px; }
+  .form-group label { display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px; }
+  .form-group input, .form-group select { width: 100%; padding: 12px 16px; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 15px; font-family: inherit; background: white; transition: all 0.2s; }
+  .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 127, 80, 0.1); }
+  .form-group input:disabled { background: #F9FAFB; color: #9CA3AF; cursor: not-allowed; }
+  
   .input-prefix { position: relative; }
-  .input-prefix span { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #6B7280; font-weight: 600; }
+  .input-prefix .prefix { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #6B7280; font-weight: 600; }
   .input-prefix input { padding-left: 36px; }
-  .hours-display-field { padding: 14px 16px; background: #F9FAFB; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 15px; font-weight: 600; color: #059669; }
 
-  /* Map */
-  .map-container { margin: 20px 0; border-radius: 12px; overflow: hidden; border: 1px solid #E5E7EB; height: 400px; }
-  .map-container.hidden { display: none; }
-  .map { width: 100%; height: 100%; }
-
-  /* Stops & Expenses */
-  .stops-section, .expenses-section { margin: 32px 0; padding: 24px; background: #F9FAFB; border-radius: 12px; }
-  .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-  .section-header h3 { font-size: 16px; font-weight: 700; color: #111827; margin: 0; }
+  /* Plan & Usage */
+  .divider { height: 1px; background: #E5E7EB; margin: 24px 0; }
+  .plan-row { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+  .plan-badge { display: inline-block; padding: 6px 12px; background: #F3F4F6; color: #374151; border-radius: 8px; font-weight: 600; font-size: 14px; }
+  .upgrade-link { color: var(--orange); font-size: 14px; font-weight: 600; text-decoration: none; }
+  .upgrade-link:hover { text-decoration: underline; }
+  .usage-stats { margin-top: 16px; }
+  .usage-header { display: flex; justify-content: space-between; font-size: 13px; color: #6B7280; margin-bottom: 6px; }
+  .progress-bar { height: 8px; background: #E5E7EB; border-radius: 4px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--green); border-radius: 4px; transition: width 0.3s; }
+  .progress-fill.warning { background: #F59E0B; }
   
-  .stop-item, .expense-item { display: flex; align-items: center; gap: 16px; padding: 16px; background: white; border: 1px solid #E5E7EB; border-radius: 10px; margin-bottom: 12px; }
-  .stop-number { width: 32px; height: 32px; background: var(--orange); color: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
-  .stop-info, .expense-type { flex: 1; font-weight: 600; color: #374151; font-size: 14px; }
-  .stop-earnings-input, .expense-input { position: relative; width: 120px; flex-shrink: 0; }
-  .stop-earnings-input .currency, .expense-input .currency { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--green); font-weight: 700; }
-  .stop-earnings-input input, .expense-input input { padding-left: 28px; color: var(--green); font-weight: 700; }
+  /* Buttons */
+  .btn-primary, .btn-secondary, .btn-logout, .btn-delete, .btn-delete-confirm { width: 100%; padding: 14px; border-radius: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 15px; }
+  .btn-primary { background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%); color: white; border: none; }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(255, 127, 80, 0.3); }
+  .btn-secondary { background: white; color: #374151; border: 2px solid #E5E7EB; }
+  .btn-secondary:hover { border-color: var(--orange); color: var(--orange); }
+  .btn-logout { background: white; color: #DC2626; border: 2px solid #FEE2E2; }
+  .btn-logout:hover { background: #FEF2F2; border-color: #FCA5A5; }
   
-  /* Stops Delete Icon */
-  .stop-delete { width: 32px; height: 32px; background: #FEF2F2; color: #DC2626; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
-  .stop-delete:hover { background: #FCA5A5; color: white; }
+  /* Delete Confirmation */
+  .btn-delete { background: transparent; color: #DC2626; border: none; margin-top: 12px; font-size: 14px; text-decoration: underline; }
+  .btn-delete:hover { color: #B91C1C; }
+  .delete-confirmation { margin-top: 16px; padding: 16px; background: white; border-radius: 10px; border: 1px solid #FECACA; }
+  .delete-warning { font-size: 14px; color: #374151; margin-bottom: 12px; font-weight: 500; }
+  .delete-input { width: 100%; padding: 10px; border: 1px solid #E5E7EB; border-radius: 8px; margin-bottom: 12px; }
+  .error-text { color: #DC2626; font-size: 13px; margin-bottom: 12px; }
+  .btn-delete-confirm { background: #DC2626; color: white; border: none; margin-bottom: 8px; }
+  .btn-delete-confirm:hover { background: #B91C1C; }
 
-  /* FIXED: Expense Delete Button (Text Mode - Same as New Trip) */
-  .expense-delete { 
-    display: flex; 
-    align-items: center; 
-    justify-content: center; 
-    gap: 6px; 
-    padding: 8px 16px; 
-    min-width: auto; 
-    height: 36px; 
-    flex-shrink: 0; 
-    background: #FEF2F2; 
-    color: #DC2626; 
-    border: 2px solid #FCA5A5; 
-    border-radius: 8px; 
-    cursor: pointer; 
-    transition: all 0.2s; 
-    font-size: 14px; 
-    font-weight: 600; 
-    font-family: inherit;
-  }
-  .expense-delete:hover { background: #FCA5A5; border-color: #DC2626; color: white; }
+  .button-group { display: flex; flex-direction: column; gap: 8px; }
+  .data-actions { display: flex; flex-direction: column; gap: 12px; }
+  .action-btn { display: flex; align-items: center; gap: 16px; padding: 16px; background: #F9FAFB; border: 2px solid #E5E7EB; border-radius: 12px; cursor: pointer; text-align: left; width: 100%; }
+  .action-btn:hover { border-color: var(--orange); background: white; }
+  .action-btn.danger:hover { border-color: #DC2626; background: white; }
+  .action-title { font-size: 15px; font-weight: 600; color: #111827; }
+  .action-subtitle { font-size: 13px; color: #6B7280; }
 
-  .add-stop { display: flex; justify-content: flex-end; }
-
-  /* Options Badges */
-  .options-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
-  .badge-btn { display: flex; align-items: center; gap: 6px; padding: 8px 16px; background: white; color: #374151; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-  .badge-btn:hover { border-color: var(--orange); color: var(--orange); }
-  .btn-add-custom { padding: 6px 12px; font-size: 13px; font-weight: 600; color: var(--blue); background: white; border: 2px solid var(--blue); border-radius: 8px; cursor: pointer; }
-  .btn-add-custom:hover { background: var(--blue); color: white; }
-  .custom-input-row { display: flex; gap: 8px; margin-bottom: 16px; }
-  .btn-save { padding: 10px 16px; background: var(--green); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; }
-
-  /* Summary */
-  .cost-summary, .financial-summary { padding: 16px; background: #F9FAFB; border-radius: 12px; margin-bottom: 24px; }
-  .cost-item, .summary-row { display: flex; justify-content: space-between; font-size: 14px; padding: 8px 0; }
-  .cost-value, .amount { font-weight: 700; }
-  .cost-value { color: var(--green); }
-  .summary-row.total { border-top: 1px solid #E5E7EB; margin-top: 8px; padding-top: 12px; font-size: 18px; }
-  .amount.positive { color: var(--green); }
-  .amount.negative { color: #DC2626; }
-  .review-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
-  .review-item { background: #F9FAFB; padding: 16px; border-radius: 10px; }
-  .review-label { display: block; font-size: 12px; color: #6B7280; margin-bottom: 4px; }
-  .review-value { font-weight: 700; color: #111827; }
-
-  /* Form Actions */
-  .form-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 32px; padding-top: 24px; border-top: 1px solid #E5E7EB; }
-
-  @media (max-width: 768px) {
-    .progress-steps { overflow-x: auto; }
-    .form-grid, .review-grid { grid-template-columns: 1fr; }
+  @media (max-width: 1024px) {
+    .settings-grid { grid-template-columns: 1fr; }
   }
 </style>
