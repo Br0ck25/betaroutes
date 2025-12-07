@@ -7,15 +7,17 @@ const globalUserStore = new Map();
 const globalLogsStore = new Map();
 const globalTrashStore = new Map();
 
-function createMockKV(store: Map<any, any>) {
+function createMockKV(store: Map<any, any>, name: string) {
 	return {
 		async get(key: string) {
 			return store.get(key) ?? null;
 		},
 		async put(key: string, value: string) {
+			console.log(`[MOCK KV ${name}] PUT ${key}`);
 			store.set(key, value);
 		},
 		async delete(key: string) {
+			console.log(`[MOCK KV ${name}] DELETE ${key}`);
 			store.delete(key);
 		},
 		async list({ prefix }: { prefix: string }) {
@@ -33,15 +35,18 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (!event.platform) event.platform = { env: {} } as any;
 		if (!event.platform.env) event.platform.env = {} as any;
 
-		// Use the global maps so data persists!
+		// Check if real binding is missing, then use mock
 		if (!event.platform.env.BETA_USERS_KV) {
-			event.platform.env.BETA_USERS_KV = createMockKV(globalUserStore);
+			console.log('[HOOK] Using MOCK BETA_USERS_KV (In-Memory)');
+			event.platform.env.BETA_USERS_KV = createMockKV(globalUserStore, 'USERS');
 		}
 		if (!event.platform.env.BETA_LOGS_KV) {
-			event.platform.env.BETA_LOGS_KV = createMockKV(globalLogsStore);
+			console.log('[HOOK] Using MOCK BETA_LOGS_KV (In-Memory)');
+			event.platform.env.BETA_LOGS_KV = createMockKV(globalLogsStore, 'LOGS');
 		}
 		if (!event.platform.env.BETA_LOGS_TRASH_KV) {
-			event.platform.env.BETA_LOGS_TRASH_KV = createMockKV(globalTrashStore);
+			console.log('[HOOK] Using MOCK BETA_LOGS_TRASH_KV (In-Memory)');
+			event.platform.env.BETA_LOGS_TRASH_KV = createMockKV(globalTrashStore, 'TRASH');
 		}
 	}
 
