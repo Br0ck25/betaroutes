@@ -14,12 +14,12 @@
   let map: google.maps.Map | null = null;
   let directionsService: google.maps.DirectionsService | null = null;
   let directionsRenderer: google.maps.DirectionsRenderer | null = null;
-  let mapElement: HTMLElement; 
+  
+  // Drag state
+  let dragItemIndex: number | null = null;
 
   let maintenanceOptions = ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement'];
   let suppliesOptions = ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental'];
-  
-  let dragItemIndex: number | null = null;
 
   onMount(() => {
     const savedMaintenance = localStorage.getItem('maintenanceOptions');
@@ -60,9 +60,16 @@
       });
       directionsRenderer?.setMap(map);
       
-      if (tripData.startAddress || tripData.stops.length > 0) {
+      // Auto-calculate if data exists
+      if (tripData.startAddress) {
           calculateRoute(false);
       }
+      
+      return {
+          destroy() {
+             // cleanup
+          }
+      };
   }
 
   let tripData = {
@@ -109,12 +116,9 @@
     if (!mapLoaded || !directionsService) return;
     if (!tripData.startAddress) return;
     
-    if (mapElement && !map) {
-         map = new google.maps.Map(mapElement, {
-            center: { lat: 37.7749, lng: -122.4194 },
-            zoom: 12
-        });
-        directionsRenderer?.setMap(map);
+    // Ensure map is linked
+    if (map && directionsRenderer && directionsRenderer.getMap() !== map) {
+        directionsRenderer.setMap(map);
     }
     
     const waypoints = tripData.stops.map(stop => ({
@@ -325,7 +329,6 @@
         const place = ac.getPlace();
         node.value = place.formatted_address || '';
         node.dispatchEvent(new Event('input'));
-        // Trigger manual update for start/end fields for map reactivity
         if(node.id === 'start-address') tripData.startAddress = node.value;
         if(node.id === 'end-address') tripData.endAddress = node.value;
     });
@@ -414,7 +417,6 @@
           <h2 class="card-title">Basic Information</h2>
           <p class="card-subtitle">When did your trip take place?</p>
         </div>
-       
         <div class="form-grid">
           <div class="form-group">
             <label>Date</label>
@@ -449,11 +451,11 @@
       <div class="form-card">
         <div class="card-header">
           <h2 class="card-title">Route & Stops</h2>
-          <button class="btn-optimize" on:click={() => calculateRoute(true)} title="Reorder stops for quickest route">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <button class="btn-optimize" on:click={() => calculateRoute(true)}>
+             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Optimize
+             </svg>
+             Optimize
           </button>
         </div>
         <div class="form-group">
@@ -549,7 +551,7 @@
         </div>
         
         <div class="map-container" use:initMap></div>
-        
+
         <div class="form-group">
           <label>
             Total Miles 
@@ -659,6 +661,7 @@
               {#each tripData.maintenanceItems as item}
                 <div class="expense-item">
                   <span class="expense-type">{item.type}</span>
+                  
                   <div class="expense-input">
                     <span class="currency">$</span>
                     <input 
@@ -669,6 +672,7 @@
                       placeholder="0.00"
                     />
                   </div>
+                  
                   <button class="expense-delete" on:click={() => removeMaintenanceItem(item.id)} type="button">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor">
                       <path d="M12 4L4 12M4 4L12 12" stroke-width="2" stroke-linecap="round"/>
@@ -902,9 +906,10 @@
   .form-group input, .form-group textarea { padding: 14px 16px; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 15px; font-family: inherit; background: white; transition: all 0.2s; }
   .form-group input:focus, .form-group textarea:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 127, 80, 0.1); }
   
-  .input-prefix { position: relative; }
+  /* FIX: Ensure input-prefix (Gas Price container) fills width to match MPG input */
+  .input-prefix { position: relative; width: 86%; }
   .input-prefix span { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #6B7280; font-weight: 600; }
-  .input-prefix input { padding-left: 36px; }
+  .input-prefix input { padding-left: 36px; width: 100%; }
   textarea { resize: vertical; min-height: 100px; }
   
   .stops-section, .expenses-section { margin: 32px 0; padding: 24px; background: #F9FAFB; border-radius: 12px; }
@@ -936,7 +941,8 @@
   .expense-item:last-of-type { border-bottom: none; }
   .expense-type { flex: 1; font-size: 14px; font-weight: 600; color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   
-  .expense-input { position: relative; width: 75px; flex-shrink: 0; margin-right: 45px; }
+  /* FIX: Ensure dollar input and delete button have fixed widths and don't shrink */
+  .expense-input { position: relative; width: 75px; flex-shrink: 0; margin-right: 45px;}
   .expense-input .currency { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #6B7280; font-weight: 600; }
   .expense-input input { width: 100%; padding: 8px 12px 8px 28px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; font-family: inherit; }
   
@@ -950,10 +956,10 @@
   .stop-grip { color: #9CA3AF; font-size: 20px; cursor: grab; padding: 0 4px; user-select: none; }
   .stop-number { width: 32px; height: 32px; background: var(--orange); color: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0; }
   
-  /* Stop Input Container */
-  .stop-info { flex: 1; min-width: 0; margin-right: 24px; }
+  /* FIX: Stop Input Container - take remaining space but shrink if needed */
+  .stop-info { flex: 1; min-width: 0; margin-right: 12px; }
   
-  /* Input takes 100% of the parent (.stop-info) which is flexible */
+  /* FIX: Input takes 100% of parent (.stop-info) */
   .stop-address-input { width: 100%; padding: 10px 12px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; font-weight: 500; font-family: inherit; color: #111827; background: white; transition: border-color 0.2s; }
   .stop-address-input:focus { outline: none; border-color: var(--orange); }
   
