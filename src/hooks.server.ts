@@ -1,120 +1,96 @@
 // src/hooks.server.ts
 import { dev } from '$app/environment';
+import type { Handle } from '@sveltejs/kit';
 
-// Simple in-memory KV mock for local development
-function createMockKV() {
-    const store = new Map();
+// 🔥 GLOBAL STORAGE for local dev (persists across requests)
+const globalUserStore = new Map();
+const globalLogsStore = new Map();
+const globalTrashStore = new Map();
 
-    return {
-        async get(key) {
-            return store.get(key) ?? null;
-        },
-        async put(key, value) {
-            store.set(key, value);
-        },
-        async delete(key) {
-            store.delete(key);
-        },
-        async list({ prefix }) {
-            const keys = [...store.keys()].filter(k => k.startsWith(prefix));
-            return {
-                keys: keys.map((name) => ({ name }))
-            };
-        }
-    };
+function createMockKV(store: Map<any, any>) {
+	return {
+		async get(key: string) {
+			return store.get(key) ?? null;
+		},
+		async put(key: string, value: string) {
+			store.set(key, value);
+		},
+		async delete(key: string) {
+			store.delete(key);
+		},
+		async list({ prefix }: { prefix: string }) {
+			const keys = [...store.keys()]
+				.filter((k) => typeof k === 'string' && k.startsWith(prefix))
+				.map((name) => ({ name }));
+			return { keys };
+		}
+	};
 }
 
-export const handle = async ({ event, resolve }) => {
-    console.log('[HOOK] ===== HOOK EXECUTING =====');
-    console.log('[HOOK] Request URL:', event.url.pathname);
+export const handle: Handle = async ({ event, resolve }) => {
+	// 1. Ensure KV bindings exist (mock in dev using GLOBAL stores)
+	if (dev) {
+		if (!event.platform) event.platform = { env: {} } as any;
+		if (!event.platform.env) event.platform.env = {} as any;
 
-    // ------------------------------------------------------
-    // 🔥 1. Ensure KV bindings exist (mock in dev only)
-    // ------------------------------------------------------
-    if (dev) {
-        console.log('[HOOK] Using MOCK KV (local dev mode)');
+		// Use the global maps so data persists!
+		if (!event.platform.env.BETA_USERS_KV) {
+			event.platform.env.BETA_USERS_KV = createMockKV(globalUserStore);
+		}
+		if (!event.platform.env.BETA_LOGS_KV) {
+			event.platform.env.BETA_LOGS_KV = createMockKV(globalLogsStore);
+		}
+		if (!event.platform.env.BETA_LOGS_TRASH_KV) {
+			event.platform.env.BETA_LOGS_TRASH_KV = createMockKV(globalTrashStore);
+		}
+	}
 
-        if (!event.platform) event.platform = {};
-        if (!event.platform.env) event.platform.env = {};
+	// 2. User auth logic
+	const token = event.cookies.get('token');
 
-        // User KV
-        if (!event.platform.env.BETA_USERS_KV) {
-            event.platform.env.BETA_USERS_KV = createMockKV();
-        }
+	if (!token) {
+		event.locals.user = null;
+		return resolve(event);
+	}
 
-        // Trips KV
-        if (!event.platform.env.BETA_LOGS_KV) {
-            event.platform.env.BETA_LOGS_KV = createMockKV();
-        }
+	try {
+		const usersKV = event.platform?.env?.BETA_USERS_KV;
+		if (usersKV) {
+			const userDataStr = await usersKV.get(token);
+			if (userDataStr) {
+				const userData = JSON.parse(userDataStr);
+				event.locals.user = {
+					token,
+					plan: userData.plan ?? 'free',
+					tripsThisMonth: userData.tripsThisMonth ?? 0,
+					maxTrips: userData.maxTrips ?? 10,
+					resetDate: userData.resetDate ?? new Date().toISOString(),
+					// Add name/email if stored
+					name: userData.name,
+					email: userData.email
+				};
+			} else {
+				// Fallback if token exists but no KV data
+				event.locals.user = {
+					token,
+					plan: 'free',
+					tripsThisMonth: 0,
+					maxTrips: 10,
+					resetDate: new Date().toISOString()
+				};
+			}
+		}
+	} catch (err) {
+		console.error('[HOOK] KV Error:', err);
+		// Fallback on error
+		event.locals.user = {
+			token,
+			plan: 'free',
+			tripsThisMonth: 0,
+			maxTrips: 10,
+			resetDate: new Date().toISOString()
+		};
+	}
 
-        // Trash KV
-        if (!event.platform.env.BETA_LOGS_TRASH_KV) {
-            event.platform.env.BETA_LOGS_TRASH_KV = createMockKV();
-        }
-    }
-
-    // ------------------------------------------------------
-    // 🔥 2. User auth exactly as you had it
-    // ------------------------------------------------------
-    const token = event.cookies.get('token');
-    console.log('[HOOK] Token from cookie:', token ? `exists (${token})` : 'missing');
-
-    if (!token) {
-        console.log('[HOOK] No token, setting user = null');
-        event.locals.user = null;
-        return resolve(event);
-    }
-
-    try {
-        console.log('[HOOK] Looking up user in BETA_USERS_KV...');
-
-        const usersKV = event.platform?.env?.BETA_USERS_KV;
-
-        if (!usersKV) {
-            throw new Error("BETA_USERS_KV is not bound in environment");
-        }
-
-        const userDataStr = await usersKV.get(token);
-        console.log('[HOOK] Raw KV lookup result:', userDataStr);
-
-        if (userDataStr) {
-            const userData = JSON.parse(userDataStr);
-
-            event.locals.user = {
-                token,
-                plan: userData.plan ?? "free",
-                tripsThisMonth: userData.tripsThisMonth ?? 0,
-                maxTrips: userData.maxTrips ?? 10,
-                resetDate: userData.resetDate ?? new Date().toISOString()
-            };
-
-            console.log('[HOOK] User set from KV');
-        } else {
-            console.log('[HOOK] No KV entry for token — using fallback values');
-
-            event.locals.user = {
-                token,
-                plan: 'free',
-                tripsThisMonth: 0,
-                maxTrips: 10,
-                resetDate: new Date().toISOString()
-            };
-        }
-
-    } catch (err) {
-        console.error('[HOOK] ERROR accessing BETA_USERS_KV:', err);
-
-        event.locals.user = {
-            token,
-            plan: 'free',
-            tripsThisMonth: 0,
-            maxTrips: 10,
-            resetDate: new Date().toISOString()
-        };
-    }
-
-    console.log('[HOOK] Final locals.user:', event.locals.user ? 'SET' : 'NULL');
-    console.log('[HOOK] ===== HOOK COMPLETE =====');
-
-    return resolve(event);
+	return resolve(event);
 };
