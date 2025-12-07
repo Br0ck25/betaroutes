@@ -80,7 +80,7 @@
   onMount(async () => {
     console.log('[DASHBOARD LAYOUT] Initializing...');
     
-    // FIX: Prioritize username for ID stability
+    // FIX: Use 'name' as the stable User ID instead of 'token'
     let userId = data?.user?.name || data?.user?.token;
 
     // Double check store if data prop is missing
