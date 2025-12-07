@@ -9,13 +9,11 @@
   import SyncIndicator from '$lib/components/SyncIndicator.svelte';
   
   export let data;
-
   $: if (data?.user) {
     auth.hydrate(data.user);
   }
 
   let sidebarOpen = false;
-
   function toggleSidebar() {
     sidebarOpen = !sidebarOpen;
   }
@@ -26,7 +24,7 @@
   
   async function handleLogout() {
     if (confirm('Are you sure you want to logout?')) {
-      await fetch('/logout', { method: 'POST' });
+      await fetch('/api/logout', { method: 'POST' });
       auth.logout();
       trips.clear();
       trash.clear();
@@ -82,12 +80,20 @@
   onMount(async () => {
     console.log('[DASHBOARD LAYOUT] Initializing...');
     
-    let userId = data?.user?.token;
+    // FIX: Use 'name' as the stable User ID instead of 'token'
+    let userId = data?.user?.name;
 
-    if (!userId && $user) {
-        userId = $user.token;
+    // Fallback to token only if name is missing (rare case)
+    if (!userId && data?.user?.token) {
+        userId = data.user.token;
     }
 
+    // Try store fallback
+    if (!userId && $user) {
+        userId = $user.name || $user.token;
+    }
+
+    // Offline fallback
     if (!userId) {
         userId = localStorage.getItem('offline_user_id');
         if (userId) {
@@ -110,12 +116,6 @@
     }
   });
 </script>
-
-<svelte:head>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-</svelte:head>
 
 <div class="layout">
   <header class="mobile-header">

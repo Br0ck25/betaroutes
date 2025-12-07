@@ -18,8 +18,10 @@
   async function loadTrash() {
     loading = true;
     try {
-      // @ts-ignore - Handle potential type mismatch gracefully
-      trashedTrips = await trash.load($user?.token);
+      // FIX: Use stable user ID (name) for loading trash
+      const userId = $user?.name || $user?.token || '';
+      // @ts-ignore
+      trashedTrips = await trash.load(userId);
     } finally {
       loading = false;
     }
@@ -30,10 +32,12 @@
     restoring.add(id);
     restoring = restoring;
     
+    // FIX: Use stable user ID
+    const userId = $user?.name || $user?.token || '';
+
     try {
-      await trash.restore(id, $user?.token || '');
-      // Reload trips to show restored trip
-      await trips.load($user?.token);
+      await trash.restore(id, userId);
+      await trips.load(userId);
       await loadTrash();
     } catch (err) {
       alert('Failed to restore trip: ' + (err instanceof Error ? err.message : 'Unknown error'));
@@ -51,9 +55,12 @@
     if (deleting.has(id)) return;
     deleting.add(id);
     deleting = deleting;
-    
+
+    // FIX: Use stable user ID
+    const userId = $user?.name || $user?.token || '';
+
     try {
-      await trash.permanentDelete(id, $user?.token || '');
+      await trash.permanentDelete(id, userId);
       await loadTrash();
     } catch (err) {
       alert('Failed to delete trip: ' + (err instanceof Error ? err.message : 'Unknown error'));
@@ -68,8 +75,11 @@
       return;
     }
     
+    // FIX: Use stable user ID
+    const userId = $user?.name || $user?.token || '';
+
     try {
-      const count = await trash.emptyTrash($user?.token || '');
+      const count = await trash.emptyTrash(userId);
       alert(`Deleted ${count} item(s) from trash`);
       await loadTrash();
     } catch (err) {
@@ -77,6 +87,7 @@
     }
   }
   
+  // ... rest of helper functions and template remains the same ...
   function formatDate(dateString: string | undefined): string {
     if (!dateString) return 'Unknown';
     const date = new Date(dateString);
@@ -186,11 +197,7 @@
           </div>
 
           <div class="trip-actions">
-            <button 
-              class="btn-restore" 
-              on:click={() => restoreTrip(trip.id)}
-              disabled={restoring.has(trip.id)}
-            >
+            <button class="btn-restore" on:click={() => restoreTrip(trip.id)} disabled={restoring.has(trip.id)}>
               {#if restoring.has(trip.id)}
                 <svg class="spinner" width="20" height="20" viewBox="0 0 20 20">
                   <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2" fill="none" opacity="0.25"/>
@@ -206,11 +213,7 @@
               {/if}
             </button>
             
-            <button 
-              class="btn-delete" 
-              on:click={() => permanentDelete(trip.id)}
-              disabled={deleting.has(trip.id)}
-            >
+            <button class="btn-delete" on:click={() => permanentDelete(trip.id)} disabled={deleting.has(trip.id)}>
               {#if deleting.has(trip.id)}
                 <svg class="spinner" width="20" height="20" viewBox="0 0 20 20">
                   <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2" fill="none" opacity="0.25"/>
@@ -231,235 +234,47 @@
 </div>
 
 <style>
-  .trash-page {
-    padding: 24px;
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 32px;
-    gap: 24px;
-  }
-
-  .page-title {
-    font-size: 32px;
-    font-weight: 800;
-    color: #111827;
-    margin: 0 0 8px 0;
-  }
-
-  .page-subtitle {
-    font-size: 16px;
-    color: #6B7280;
-    margin: 0;
-  }
-
-  .header-actions {
-    display: flex;
-    gap: 12px;
-  }
-
-  .loading {
-    text-align: center;
-    padding: 48px;
-    color: #6B7280;
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: 64px 24px;
-  }
-
-  .empty-state svg {
-    margin-bottom: 24px;
-  }
-
-  .empty-state h2 {
-    font-size: 24px;
-    font-weight: 700;
-    color: #111827;
-    margin: 0 0 8px 0;
-  }
-
-  .empty-state p {
-    font-size: 16px;
-    color: #6B7280;
-    margin: 0;
-  }
-
-  .trash-list {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .trash-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 24px;
-    background: white;
-    border: 2px solid #E5E7EB;
-    border-radius: 12px;
-    transition: all 0.2s;
-  }
-
-  .trash-item:hover {
-    border-color: #D1D5DB;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  }
-
-  .trip-info {
-    flex: 1;
-  }
-
-  .trip-header {
-    margin-bottom: 12px;
-  }
-
-  .trip-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: #111827;
-    margin: 0 0 8px 0;
-  }
-
-  .trip-meta {
-    display: flex;
-    gap: 16px;
-    font-size: 14px;
-  }
-
-  .deleted-date {
-    color: #6B7280;
-  }
-
-  .expiration {
-    color: #10B981;
-    font-weight: 600;
-  }
-
-  .expiration.warning {
-    color: #F59E0B;
-  }
-
-  .trip-details {
-    display: flex;
-    gap: 24px;
-    flex-wrap: wrap;
-  }
-
-  .detail {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 14px;
-    color: #6B7280;
-  }
-
-  .detail svg {
-    color: #9CA3AF;
-  }
-
-  .trip-actions {
-    display: flex;
-    gap: 12px;
-  }
-
-  button {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 20px;
-    border-radius: 10px;
-    font-size: 15px;
-    font-weight: 600;
-    font-family: inherit;
-    cursor: pointer;
-    transition: all 0.2s;
-    border: none;
-  }
-
-  button:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  .btn-secondary {
-    background: white;
-    color: #374151;
-    border: 2px solid #E5E7EB;
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: #F9FAFB;
-    border-color: #D1D5DB;
-  }
-
-  .btn-restore {
-    background: #10B981;
-    color: white;
-  }
-
-  .btn-restore:hover:not(:disabled) {
-    background: #059669;
-  }
-
-  .btn-delete {
-    background: white;
-    color: #DC2626;
-    border: 2px solid #FCA5A5;
-  }
-
-  .btn-delete:hover:not(:disabled) {
-    background: #FEF2F2;
-    border-color: #DC2626;
-  }
-
-  .btn-danger {
-    background: #DC2626;
-    color: white;
-  }
-
-  .btn-danger:hover:not(:disabled) {
-    background: #B91C1C;
-  }
-
-  .spinner {
-    animation: spin 1s linear infinite;
-  }
-
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-
+  .trash-page { padding: 24px; max-width: 1200px; margin: 0 auto; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; gap: 24px; }
+  .page-title { font-size: 32px; font-weight: 800; color: #111827; margin: 0 0 8px 0; }
+  .page-subtitle { font-size: 16px; color: #6B7280; margin: 0; }
+  .header-actions { display: flex; gap: 12px; }
+  .loading { text-align: center; padding: 48px; color: #6B7280; }
+  .empty-state { text-align: center; padding: 64px 24px; }
+  .empty-state svg { margin-bottom: 24px; }
+  .empty-state h2 { font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 8px 0; }
+  .empty-state p { font-size: 16px; color: #6B7280; margin: 0; }
+  .trash-list { display: flex; flex-direction: column; gap: 16px; }
+  .trash-item { display: flex; justify-content: space-between; align-items: center; padding: 24px; background: white; border: 2px solid #E5E7EB; border-radius: 12px; transition: all 0.2s; }
+  .trash-item:hover { border-color: #D1D5DB; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); }
+  .trip-info { flex: 1; }
+  .trip-header { margin-bottom: 12px; }
+  .trip-title { font-size: 18px; font-weight: 700; color: #111827; margin: 0 0 8px 0; }
+  .trip-meta { display: flex; gap: 16px; font-size: 14px; }
+  .deleted-date { color: #6B7280; }
+  .expiration { color: #10B981; font-weight: 600; }
+  .expiration.warning { color: #F59E0B; }
+  .trip-details { display: flex; gap: 24px; flex-wrap: wrap; }
+  .detail { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #6B7280; }
+  .detail svg { color: #9CA3AF; }
+  .trip-actions { display: flex; gap: 12px; }
+  button { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 10px; font-size: 15px; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 0.2s; border: none; }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  .btn-secondary { background: white; color: #374151; border: 2px solid #E5E7EB; }
+  .btn-secondary:hover:not(:disabled) { background: #F9FAFB; border-color: #D1D5DB; }
+  .btn-restore { background: #10B981; color: white; }
+  .btn-restore:hover:not(:disabled) { background: #059669; }
+  .btn-delete { background: white; color: #DC2626; border: 2px solid #FCA5A5; }
+  .btn-delete:hover:not(:disabled) { background: #FEF2F2; border-color: #DC2626; }
+  .btn-danger { background: #DC2626; color: white; }
+  .btn-danger:hover:not(:disabled) { background: #B91C1C; }
+  .spinner { animation: spin 1s linear infinite; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   @media (max-width: 768px) {
-    .page-header {
-      flex-direction: column;
-    }
-
-    .header-actions {
-      width: 100%;
-      flex-direction: column;
-    }
-
-    .trash-item {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 16px;
-    }
-
-    .trip-actions {
-      width: 100%;
-    }
-
-    .trip-actions button {
-      flex: 1;
-    }
+    .page-header { flex-direction: column; }
+    .header-actions { width: 100%; flex-direction: column; }
+    .trash-item { flex-direction: column; align-items: flex-start; gap: 16px; }
+    .trip-actions { width: 100%; }
+    .trip-actions button { flex: 1; }
   }
 </style>
