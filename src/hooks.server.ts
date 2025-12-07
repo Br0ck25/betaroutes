@@ -1,28 +1,58 @@
 // src/hooks.server.ts
 import { dev } from '$app/environment';
 import type { Handle } from '@sveltejs/kit';
+import fs from 'node:fs';
+import path from 'node:path';
 
-// 🔥 GLOBAL STORAGE for local dev (persists across requests)
-const globalUserStore = new Map();
-const globalLogsStore = new Map();
-const globalTrashStore = new Map();
+// File-based persistence for local dev
+const DB_FILE = path.resolve('.kv-mock.json');
 
-function createMockKV(store: Map<any, any>, name: string) {
+// Load or initialize DB
+let mockDB: Record<string, any> = {
+	USERS: {},
+	LOGS: {},
+	TRASH: {}
+};
+
+if (dev) {
+	try {
+		if (fs.existsSync(DB_FILE)) {
+			const raw = fs.readFileSync(DB_FILE, 'utf-8');
+			mockDB = JSON.parse(raw);
+			console.log('📂 Loaded mock KV data from .kv-mock.json');
+		}
+	} catch (e) {
+		console.error('Failed to load mock DB', e);
+	}
+}
+
+function saveDB() {
+	if (!dev) return;
+	try {
+		fs.writeFileSync(DB_FILE, JSON.stringify(mockDB, null, 2));
+	} catch (e) {
+		console.error('Failed to save mock DB', e);
+	}
+}
+
+function createMockKV(namespace: string) {
 	return {
 		async get(key: string) {
-			return store.get(key) ?? null;
+			return mockDB[namespace][key] ?? null;
 		},
 		async put(key: string, value: string) {
-			console.log(`[MOCK KV ${name}] PUT ${key}`);
-			store.set(key, value);
+			console.log(`[MOCK KV ${namespace}] PUT ${key}`);
+			mockDB[namespace][key] = value;
+			saveDB(); // Persist to file
 		},
 		async delete(key: string) {
-			console.log(`[MOCK KV ${name}] DELETE ${key}`);
-			store.delete(key);
+			console.log(`[MOCK KV ${namespace}] DELETE ${key}`);
+			delete mockDB[namespace][key];
+			saveDB(); // Persist to file
 		},
 		async list({ prefix }: { prefix: string }) {
-			const keys = [...store.keys()]
-				.filter((k) => typeof k === 'string' && k.startsWith(prefix))
+			const keys = Object.keys(mockDB[namespace])
+				.filter((k) => k.startsWith(prefix))
 				.map((name) => ({ name }));
 			return { keys };
 		}
@@ -30,23 +60,20 @@ function createMockKV(store: Map<any, any>, name: string) {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
-	// 1. Ensure KV bindings exist (mock in dev using GLOBAL stores)
+	// 1. Ensure KV bindings exist (mock in dev using FILE store)
 	if (dev) {
 		if (!event.platform) event.platform = { env: {} } as any;
 		if (!event.platform.env) event.platform.env = {} as any;
 
-		// Check if real binding is missing, then use mock
+		// Use the file-backed mocks
 		if (!event.platform.env.BETA_USERS_KV) {
-			console.log('[HOOK] Using MOCK BETA_USERS_KV (In-Memory)');
-			event.platform.env.BETA_USERS_KV = createMockKV(globalUserStore, 'USERS');
+			event.platform.env.BETA_USERS_KV = createMockKV('USERS');
 		}
 		if (!event.platform.env.BETA_LOGS_KV) {
-			console.log('[HOOK] Using MOCK BETA_LOGS_KV (In-Memory)');
-			event.platform.env.BETA_LOGS_KV = createMockKV(globalLogsStore, 'LOGS');
+			event.platform.env.BETA_LOGS_KV = createMockKV('LOGS');
 		}
 		if (!event.platform.env.BETA_LOGS_TRASH_KV) {
-			console.log('[HOOK] Using MOCK BETA_LOGS_TRASH_KV (In-Memory)');
-			event.platform.env.BETA_LOGS_TRASH_KV = createMockKV(globalTrashStore, 'TRASH');
+			event.platform.env.BETA_LOGS_TRASH_KV = createMockKV('TRASH');
 		}
 	}
 
@@ -62,20 +89,22 @@ export const handle: Handle = async ({ event, resolve }) => {
 		const usersKV = event.platform?.env?.BETA_USERS_KV;
 		if (usersKV) {
 			const userDataStr = await usersKV.get(token);
+
 			if (userDataStr) {
 				const userData = JSON.parse(userDataStr);
+				// SUCCESS: Found user "James" linked to this token
 				event.locals.user = {
 					token,
 					plan: userData.plan ?? 'free',
 					tripsThisMonth: userData.tripsThisMonth ?? 0,
 					maxTrips: userData.maxTrips ?? 10,
 					resetDate: userData.resetDate ?? new Date().toISOString(),
-					// Add name/email if stored
-					name: userData.name,
+					name: userData.name, // "James"
 					email: userData.email
 				};
 			} else {
-				// Fallback if token exists but no KV data
+				console.warn('[HOOK] Token exists but user not found in KV. Creating fallback.');
+				// Fallback (User needs to re-login to fix sync strictly, but this prevents crash)
 				event.locals.user = {
 					token,
 					plan: 'free',
@@ -87,14 +116,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 	} catch (err) {
 		console.error('[HOOK] KV Error:', err);
-		// Fallback on error
-		event.locals.user = {
-			token,
-			plan: 'free',
-			tripsThisMonth: 0,
-			maxTrips: 10,
-			resetDate: new Date().toISOString()
-		};
+		event.locals.user = null;
 	}
 
 	return resolve(event);
