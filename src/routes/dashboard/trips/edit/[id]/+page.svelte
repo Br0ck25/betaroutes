@@ -14,18 +14,21 @@
   let loading = true;
   let saving = false;
 
-  // Load trip data
   onMount(async () => {
     // Wait for user/trips to load if refreshing directly
     if (!$trips || $trips.length === 0) {
-        let userId = $user?.token || localStorage.getItem('offline_user_id');
+        // Use stable ID logic matching other pages
+        let userId = $user?.name || $user?.token;
+        if (!userId) {
+            userId = localStorage.getItem('offline_user_id');
+        }
+        
         if (userId) await trips.load(userId);
     }
 
     const found = $trips.find(t => t.id === tripId);
     
     if (found) {
-        // Clone to avoid mutating store directly before save
         tripData = JSON.parse(JSON.stringify(found));
     } else {
         alert('Trip not found');
@@ -37,13 +40,14 @@
   async function saveChanges() {
     saving = true;
     try {
-        let userId = $user?.token || localStorage.getItem('offline_user_id');
+        // FIX: Use stable user ID (username) for save operation
+        let userId = $user?.name || $user?.token || localStorage.getItem('offline_user_id');
+        
         if (!userId) throw new Error("No user ID found");
 
-        // Update timestamp
         tripData.updatedAt = new Date().toISOString();
         
-        // Use store method to sync
+        // Pass userId so store knows where to save it
         await trips.updateTrip(tripId, tripData, userId);
         
         alert('Trip updated successfully!');

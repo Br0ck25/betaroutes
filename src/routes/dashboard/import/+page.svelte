@@ -2,7 +2,6 @@
 	import { trips } from '$lib/stores/trips';
 	import { user } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
-
 	let isProcessing = false;
 	let previewTrip: any = null;
 
@@ -20,7 +19,6 @@
 		const parser = new DOMParser();
 		const xmlDoc = parser.parseFromString(gpxContent, "text/xml");
 		const trkpts = xmlDoc.querySelectorAll('trkpt');
-		
 		if (trkpts.length === 0) {
 			alert("No track points found in GPX file");
 			return;
@@ -56,11 +54,11 @@
 
 	function getDistanceFromLatLonInKm(lat1:number, lon1:number, lat2:number, lon2:number) {
 		const R = 6371; // Radius of the earth in km
-		const dLat = deg2rad(lat2-lat1); 
+		const dLat = deg2rad(lat2-lat1);
 		const dLon = deg2rad(lon2-lon1); 
 		const a = 
 			Math.sin(dLat/2) * Math.sin(dLat/2) +
-			Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
+			Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2);
 		const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
 		return R * c;
 	}
@@ -73,13 +71,13 @@
 		if (!previewTrip) return;
 		isProcessing = true;
 		try {
-            // Get user ID or use fallback for offline
-			let userId = $user?.token;
-            if (!userId) {
+            // FIX: Use stable User ID
+			let userId = $user?.name || $user?.token;
+			if (!userId) {
                 userId = localStorage.getItem('offline_user_id') || 'offline-user-' + Date.now();
                 if (!localStorage.getItem('offline_user_id')) {
                     localStorage.setItem('offline_user_id', userId);
-                }
+				}
             }
 
 			await trips.create(previewTrip, userId);
