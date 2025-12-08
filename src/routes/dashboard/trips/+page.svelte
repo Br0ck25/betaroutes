@@ -557,23 +557,27 @@ filterProfit !== 'all'
   
   /* Media Queries for Responsiveness */
   @media (max-width: 1024px) {
-    /* 1. Filter Bar & Search Box: Stacked */
-    .filters-bar { flex-direction: column; }
-    .search-box { max-width: 100%; }
-
-    /* 2. Filter Group: Stacked, taking full width */
-    .filter-group { 
-        flex-direction: column; /* CHANGE: Force stacking */
-        gap: 12px;
-        flex-wrap: nowrap; /* Prevent horizontal wrapping */
+    /* Stack search box over filter group */
+    .filters-bar { 
+        flex-direction: column;
+        gap: 16px;
     }
-    
-    /* 3. Filter Items: Take full 100% width of the stacked column */
+    .search-box { 
+        max-width: 100%; 
+        flex: none;
+    }
+
+    /* Force the filter group to stack vertically to prevent horizontal overflow */
+    .filter-group { 
+        flex-direction: column; 
+        width: 100%;
+        gap: 8px;
+    }
+
+    /* Force filter elements to take 100% width when stacked */
     .filter-select, .sort-btn {
-        width: 100%; /* CHANGE: Force full width */
+        width: 100%;
         max-width: 100%;
-        /* Ensure consistency with other elements in the group */
-        padding: 12px 16px; 
     }
 
     /* General Layout Fixes */
@@ -583,8 +587,8 @@ filterProfit !== 'all'
   }
   
   @media (max-width: 640px) {
-    .page-header { flex-direction: column;
-    align-items: flex-start; gap: 16px; }
+    /* Ensure header and stats stack aggressively on small screens */
+    .page-header { flex-direction: column; align-items: flex-start; gap: 16px; }
     .stats-summary { grid-template-columns: 1fr; }
   }
 </style>
