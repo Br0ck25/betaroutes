@@ -40,7 +40,6 @@
       initMapServices();
     }
 
-    // FIX: Global listener to close autocomplete when clicking outside
     document.addEventListener('click', handleGlobalClick);
   });
 
@@ -156,7 +155,6 @@
         
         if (step === 2) {
             tripData.totalMiles = Math.round((totalMeters / 1609.34) * 10) / 10;
-            // NEW: Capture drive time in minutes
             tripData.estimatedTime = Math.round(totalSeconds / 60);
         }
 
@@ -169,7 +167,6 @@
     });
   }
 
-  // Helper to display formatted time (e.g. "2 hr 14 min")
   function formatDuration(minutes: number): string {
     if (!minutes) return '0 min';
     const h = Math.floor(minutes / 60);
@@ -178,7 +175,6 @@
     return `${m} min`;
   }
 
-  // --- Drag & Drop ---
   function handleDragStart(event: DragEvent, index: number) {
       dragItemIndex = index;
       if(event.dataTransfer) {
@@ -213,20 +209,14 @@
     tripData.maintenanceItems = tripData.maintenanceItems.filter(m => m.id !== id); 
   }
   
-  // FIX: Save custom option for future use
   function addCustomMaintenance() { 
     if (!newMaintenanceItem.trim()) return; 
     const item = newMaintenanceItem.trim();
-    
-    // 1. Add to trip
-    addMaintenanceItem(item);
-    
-    // 2. Save to options if unique
+    addMaintenanceItem(item); 
     if (!maintenanceOptions.includes(item)) {
         maintenanceOptions = [...maintenanceOptions, item];
         localStorage.setItem('maintenanceOptions', JSON.stringify(maintenanceOptions));
     }
-    
     newMaintenanceItem = ''; 
     showAddMaintenance = false; 
   }
@@ -238,37 +228,22 @@
     } 
   }
   
-  function addSupplyItem(type: string) { 
-    tripData.suppliesItems = [...tripData.suppliesItems, { id: crypto.randomUUID(), type, cost: 0 }]; 
-  }
-  function removeSupplyItem(id: string) { 
-    tripData.suppliesItems = tripData.suppliesItems.filter(s => s.id !== id); 
-  }
+  function addSupplyItem(type: string) { tripData.suppliesItems = [...tripData.suppliesItems, { id: crypto.randomUUID(), type, cost: 0 }]; }
+  function removeSupplyItem(id: string) { tripData.suppliesItems = tripData.suppliesItems.filter(s => s.id !== id); }
   
-  // FIX: Save custom option for future use
   function addCustomSupply() { 
     if (!newSupplyItem.trim()) return; 
     const item = newSupplyItem.trim();
-    
-    // 1. Add to trip
-    addSupplyItem(item);
-    
-    // 2. Save to options
+    addSupplyItem(item); 
     if (!suppliesOptions.includes(item)) {
         suppliesOptions = [...suppliesOptions, item];
         localStorage.setItem('suppliesOptions', JSON.stringify(suppliesOptions));
     }
-    
     newSupplyItem = ''; 
     showAddSupply = false; 
   }
 
-  function deleteSupplyOption(option: string) { 
-    if (confirm(`Delete "${option}"?`)) { 
-      suppliesOptions = suppliesOptions.filter(o => o !== option); 
-      localStorage.setItem('suppliesOptions', JSON.stringify(suppliesOptions)); 
-    } 
-  }
+  function deleteSupplyOption(option: string) { if (confirm(`Delete "${option}"?`)) { suppliesOptions = suppliesOptions.filter(o => o !== option); localStorage.setItem('suppliesOptions', JSON.stringify(suppliesOptions)); } }
   
   $: {
     if (tripData.totalMiles && tripData.mpg && tripData.gasPrice) {
@@ -299,7 +274,6 @@
   function prevStep() { if (step > 1) step--; }
   
   async function saveTrip() {
-    // FIX: Prioritize Name over Token to match backend storage key
     const currentUser = $page.data.user || $user;
     let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
 
@@ -358,7 +332,6 @@
     return date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
   }
   
-  // FIX: Force close autocomplete on selection
   function closeAutocompleteDropdown() {
     if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur();
@@ -374,14 +347,10 @@
         const place = ac.getPlace();
         node.value = place.formatted_address || '';
         node.dispatchEvent(new Event('input'));
-        
         if(node.id === 'start-address') tripData.startAddress = node.value;
         if(node.id === 'end-address') tripData.endAddress = node.value;
-        
         closeAutocompleteDropdown();
     });
-    
-    // Safety check on blur
     node.addEventListener('blur', () => {
         setTimeout(closeAutocompleteDropdown, 200);
     });
@@ -497,7 +466,14 @@
           {#if tripData.stops.length > 0}
             <div class="stops-list">
               {#each tripData.stops as stop, i (stop.id)}
-                <div class="stop-card" draggable="true" on:dragstart={(e) => handleDragStart(e, i)} on:drop={(e) => handleDrop(e, i)} on:dragover={handleDragOver}>
+                <div 
+                  class="stop-card" 
+                  draggable="true" 
+                  on:dragstart={(e) => handleDragStart(e, i)} 
+                  on:drop={(e) => handleDrop(e, i)} 
+                  on:dragover={handleDragOver}
+                  role="listitem"
+                >
                   <div class="stop-header">
                     <div class="stop-number">{i + 1}</div>
                     <div class="stop-actions">
@@ -667,27 +643,27 @@
         
         <div class="review-grid">
             <div class="review-tile">
-                <label>Date</label>
+                <span class="review-label">Date</span>
                 <div>{formatDateLocal(tripData.date)}</div>
             </div>
             <div class="review-tile">
-                <label>Total Time</label>
+                <span class="review-label">Total Time</span>
                 <div>{tripData.hoursWorked.toFixed(1)} hrs</div>
             </div>
             <div class="review-tile">
-                <label>Drive Time</label>
+                <span class="review-label">Drive Time</span>
                 <div>{formatDuration(tripData.estimatedTime)}</div>
             </div>
             <div class="review-tile">
-                <label>Hours Worked</label>
+                <span class="review-label">Hours Worked</span>
                 <div>{Math.max(0, tripData.hoursWorked - (tripData.estimatedTime / 60)).toFixed(1)} hrs</div>
             </div>
             <div class="review-tile">
-                <label>Distance</label>
+                <span class="review-label">Distance</span>
                 <div>{tripData.totalMiles} mi</div>
             </div>
             <div class="review-tile">
-                <label>Stops</label>
+                <span class="review-label">Stops</span>
                 <div>{tripData.stops.length}</div>
             </div>
         </div>
@@ -716,7 +692,7 @@
         
         <div class="form-actions">
           <button class="btn-secondary" on:click={prevStep} type="button">Back</button>
-          <button class="btn-primary" on:click={saveTrip} type="button">Update Trip</button>
+          <button class="btn-primary" on:click={saveTrip} type="button">Save Trip</button>
         </div>
       </div>
     {/if}
@@ -744,8 +720,8 @@
   .step-line { flex: 1; height: 3px; background: #E5E7EB; margin: 0 -4px 22px -4px; position: relative; z-index: 0; }
   .step-line.completed { background: #10B981; }
 
-  /* Forms - PADDING REDUCED to 12px for edge-to-edge feel */
-  .form-card { background: white; border: 1px solid #E5E7EB; border-radius: 18px; padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+  /* Forms - PADDING REDUCED to 16px */
+  .form-card { background: white; border: 1px solid #E5E7EB; border-radius: 18px; padding: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
   .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 26px; }
   .card-title { font-size: 22px; font-weight: 700; color: #111827; margin: 0; }
   
@@ -788,7 +764,6 @@
   
   /* Stops Inputs Grid - Optimized for Mobile */
   .stop-inputs { display: flex; flex-direction: column; gap: 14px; width: 100%; }
-  .input-address { height: 56px; /* Taller on mobile */ } 
   .stop-inputs.new { display: flex; flex-direction: column; gap: 14px; margin-bottom: 18px; }
   
   /* Buttons Enlarged */
@@ -832,7 +807,7 @@
   /* Review */
   .review-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 36px; }
   .review-tile { background: #F9FAFB; padding: 18px; border-radius: 14px; border: 1px solid #E5E7EB; }
-  .review-tile label { font-size: 14px; color: #6B7280; text-transform: uppercase; }
+  .review-tile .review-label { display: block; font-size: 14px; color: #6B7280; text-transform: uppercase; margin-bottom: 4px; }
   .review-tile div { font-weight: 700; font-size: 18px; color: #111827; }
   
   .financial-summary { background: #F9FAFB; padding: 26px; border-radius: 16px; border: 1px solid #E5E7EB; }

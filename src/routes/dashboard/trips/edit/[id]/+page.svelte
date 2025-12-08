@@ -2,7 +2,7 @@
   import { trips } from '$lib/stores/trips';
   import { userSettings } from '$lib/stores/userSettings';
   import { goto } from '$app/navigation';
-  import { onMount, tick } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { user } from '$lib/stores/auth';
   import { page } from '$app/stores';
 
@@ -40,15 +40,19 @@
       initMapServices();
     }
     
-    // Global listener to close autocomplete when clicking outside
     document.addEventListener('click', handleGlobalClick);
   });
   
+  onDestroy(() => {
+    if (typeof document !== 'undefined') {
+        document.removeEventListener('click', handleGlobalClick);
+    }
+  });
+
   function handleGlobalClick(e: Event) {
     const target = e.target as HTMLElement;
     if (target.tagName !== 'INPUT') {
-        const containers = document.querySelectorAll('.pac-container');
-        containers.forEach((c) => (c as HTMLElement).style.display = 'none');
+        closeAutocompleteDropdown();
     }
   }
 
@@ -59,10 +63,9 @@
   }
 
   async function loadTripData() {
-    // FIX: Prioritize Name to find the correct trip list
     const currentUser = $user;
     let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
-
+    
     if (!$trips || $trips.length === 0) {
         if (userId) await trips.load(userId);
     }
@@ -145,6 +148,7 @@
         
         let totalMeters = 0;
         let totalSeconds = 0;
+        
         route.legs.forEach((leg: any) => {
             totalMeters += leg.distance.value;
             totalSeconds += leg.duration.value;
@@ -224,10 +228,8 @@
   function prevStep() { if (step > 1) step--; }
   
   async function saveTrip() {
-    // FIX: Prioritize Name over Token to match backend storage key
     const currentUser = $page.data.user || $user;
     let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
-
     if (!userId) { alert("Authentication error: User ID missing."); return; }
     
     const tripToSave = {
@@ -560,27 +562,27 @@
         
         <div class="review-grid">
             <div class="review-tile">
-                <label>Date</label>
+                <span class="review-label">Date</span>
                 <div>{formatDateLocal(tripData.date)}</div>
             </div>
             <div class="review-tile">
-                <label>Total Time</label>
+                <span class="review-label">Total Time</span>
                 <div>{tripData.hoursWorked.toFixed(1)} hrs</div>
             </div>
             <div class="review-tile">
-                <label>Drive Time</label>
+                <span class="review-label">Drive Time</span>
                 <div>{formatDuration(tripData.estimatedTime)}</div>
             </div>
             <div class="review-tile">
-                <label>Hours Worked</label>
+                <span class="review-label">Hours Worked</span>
                 <div>{Math.max(0, tripData.hoursWorked - (tripData.estimatedTime / 60)).toFixed(1)} hrs</div>
             </div>
             <div class="review-tile">
-                <label>Distance</label>
+                <span class="review-label">Distance</span>
                 <div>{tripData.totalMiles} mi</div>
             </div>
             <div class="review-tile">
-                <label>Stops</label>
+                <span class="review-label">Stops</span>
                 <div>{tripData.stops.length}</div>
             </div>
         </div>
@@ -637,8 +639,8 @@
   .step-line { flex: 1; height: 3px; background: #E5E7EB; margin: 0 -4px 22px -4px; position: relative; z-index: 0; }
   .step-line.completed { background: #10B981; }
 
-  /* Forms - PADDING REDUCED to 12px for edge-to-edge feel */
-  .form-card { background: white; border: 1px solid #E5E7EB; border-radius: 18px; padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+  /* Forms - PADDING REDUCED to 16px */
+  .form-card { background: white; border: 1px solid #E5E7EB; border-radius: 18px; padding: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
   .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 26px; }
   .card-title { font-size: 22px; font-weight: 700; color: #111827; margin: 0; }
   
@@ -679,9 +681,8 @@
   .stop-number { background: #FF7F50; color: white; width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; }
   .stop-actions { display: flex; gap: 18px; align-items: center; color: #9CA3AF; }
   
-  /* Stops Inputs Grid - Optimized for Mobile */
+  /* Stops Inputs Grid */
   .stop-inputs { display: flex; flex-direction: column; gap: 14px; width: 100%; }
-  .input-address { height: 56px; /* Taller on mobile */ } 
   .stop-inputs.new { display: flex; flex-direction: column; gap: 14px; margin-bottom: 18px; }
   
   /* Buttons Enlarged */
@@ -725,7 +726,7 @@
   /* Review */
   .review-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 36px; }
   .review-tile { background: #F9FAFB; padding: 18px; border-radius: 14px; border: 1px solid #E5E7EB; }
-  .review-tile label { font-size: 14px; color: #6B7280; text-transform: uppercase; }
+  .review-tile .review-label { display: block; font-size: 14px; color: #6B7280; text-transform: uppercase; margin-bottom: 4px; }
   .review-tile div { font-weight: 700; font-size: 18px; color: #111827; }
   
   .financial-summary { background: #F9FAFB; padding: 26px; border-radius: 16px; border: 1px solid #E5E7EB; }

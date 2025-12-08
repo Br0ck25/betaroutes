@@ -8,15 +8,11 @@
   let sortBy = 'date';
   let sortOrder = 'desc';
   let filterProfit = 'all'; 
-  
-  // New Date Filters
   let startDate = '';
   let endDate = '';
   
-  // Filter and sort trips
   $: filteredTrips = $trips
     .filter(trip => {
-      // 1. Search filter
       const query = searchQuery.toLowerCase();
       const matchesSearch = !query || 
         trip.startAddress?.toLowerCase().includes(query) ||
@@ -25,21 +21,17 @@
       
       if (!matchesSearch) return false;
       
-      // 2. Profit filter
       if (filterProfit !== 'all') {
         const earnings = trip.stops?.reduce((sum, stop) => sum + (stop.earnings || 0), 0) || 0;
         const costs = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);
         const profit = earnings - costs;
-        
         if (filterProfit === 'positive' && profit <= 0) return false;
         if (filterProfit === 'negative' && profit >= 0) return false;
       }
 
-      // 3. Date Range Filter
       if (trip.date) {
         const tripDate = new Date(trip.date);
         tripDate.setHours(0, 0, 0, 0);
-
         if (startDate) {
             const start = new Date(startDate);
             start.setHours(0, 0, 0, 0);
@@ -51,7 +43,6 @@
             if (tripDate > end) return false;
         }
       }
-      
       return true;
     })
     .sort((a, b) => {
@@ -91,7 +82,6 @@
     }).format(date);
   }
 
-  // NEW: Helper for Drive Time display
   function formatDuration(minutes: number): string {
     if (!minutes) return '-';
     const h = Math.floor(minutes / 60);
@@ -141,6 +131,13 @@
     else expandedTrips.add(id);
     expandedTrips = expandedTrips;
   }
+
+  function handleKeydown(e: KeyboardEvent, id: string) {
+    if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggleExpand(id);
+    }
+  }
 </script>
 
 <svelte:head>
@@ -153,8 +150,8 @@
       <h1 class="page-title">Trip History</h1>
       <p class="page-subtitle">View and manage all your trips</p>
     </div>
-    <a href="/dashboard/trips/new" class="btn-primary">
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+    <a href="/dashboard/trips/new" class="btn-primary" aria-label="Create New Trip">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
         <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
       New Trip
@@ -193,11 +190,11 @@
 
   <div class="filters-bar">
     <div class="search-box">
-      <svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+      <svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
         <path d="M9 17C13.4183 17 17 13.4183 17 9C17 4.58172 13.4183 1 9 1C4.58172 1 1 4.58172 1 9C1 13.4183 4.58172 17 9 17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M19 19L14.65 14.65" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
-      <input type="text" placeholder="Search trips..." bind:value={searchQuery} />
+      <input type="text" placeholder="Search trips..." bind:value={searchQuery} aria-label="Search trips" />
     </div>
     
     <div class="filter-group date-group">
@@ -207,20 +204,20 @@
     </div>
     
     <div class="filter-group">
-      <select bind:value={filterProfit} class="filter-select">
+      <select bind:value={filterProfit} class="filter-select" aria-label="Filter by profit">
         <option value="all">All Trips</option>
         <option value="positive">Profitable</option>
         <option value="negative">Losses</option>
       </select>
       
-      <select bind:value={sortBy} class="filter-select">
+      <select bind:value={sortBy} class="filter-select" aria-label="Sort by">
         <option value="date">By Date</option>
         <option value="profit">By Profit</option>
         <option value="miles">By Miles</option>
       </select>
       
-      <button class="sort-btn" on:click={() => sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'}>
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="transform: rotate({sortOrder === 'asc' ? '180deg' : '0deg'})">
+      <button class="sort-btn" aria-label="Toggle sort order" on:click={() => sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'}>
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="transform: rotate({sortOrder === 'asc' ? '180deg' : '0deg'})" aria-hidden="true">
             <path d="M10 3V17M10 17L4 11M10 17L16 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>
@@ -235,49 +232,65 @@
         {@const isExpanded = expandedTrips.has(trip.id)}
         {@const totalCosts = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0)}
         
-        <div class="trip-card" class:expanded={isExpanded} on:click={() => toggleExpand(trip.id)}>
-          <div class="card-header">
-            <div class="trip-main-info">
-              <span class="trip-date">{formatDate(trip.date || '')}</span>
-              <h3 class="trip-title">
+        <div 
+          class="trip-card" 
+          class:expanded={isExpanded} 
+          on:click={() => toggleExpand(trip.id)}
+          on:keydown={(e) => handleKeydown(e, trip.id)}
+          role="button"
+          tabindex="0"
+          aria-expanded={isExpanded}
+        >
+          <div class="card-top">
+            <div class="trip-route-date">
+              <span class="trip-date-display">{formatDate(trip.date || '')}</span>
+              <h3 class="trip-route-title">
                 {trip.startAddress?.split(',')[0] || 'Unknown'} 
                 {#if trip.stops && trip.stops.length > 0}
                   → {trip.stops[trip.stops.length - 1].address?.split(',')[0] || 'Stop'}
                 {/if}
               </h3>
             </div>
-            <div class="trip-profit-badge" class:positive={profit >= 0} class:negative={profit < 0}>
+            
+            <div class="profit-display-large" class:positive={profit >= 0} class:negative={profit < 0}>
               {formatCurrency(profit)}
             </div>
+            
+            <svg class="expand-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M6 15L10 11L14 15M14 5L10 9L6 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
           </div>
 
           <div class="card-stats">
-            <div class="stat">
-              <span class="label">Miles</span>
-              <span class="val">{trip.totalMiles?.toFixed(1) || '0.0'}</span>
+            <div class="stat-item">
+              <span class="stat-label">Miles</span>
+              <span class="stat-value">{trip.totalMiles?.toFixed(1) || '0.0'}</span>
             </div>
-            <div class="stat">
-              <span class="label">Stops</span>
-              <span class="val">{trip.stops?.length || 0}</span>
+            <div class="stat-item">
+              <span class="stat-label">Stops</span>
+              <span class="stat-value">{trip.stops?.length || 0}</span>
             </div>
-            <div class="stat">
-              <span class="label">Hours</span>
-              <span class="val">{trip.hoursWorked?.toFixed(1) || '-'}</span>
+            <div class="stat-item">
+              <span class="stat-label">Hours</span>
+              <span class="stat-value">{trip.hoursWorked?.toFixed(1) || '-'}</span>
             </div>
-            
-            <div class="stat">
-              <span class="label">Drive</span>
-              <span class="val">{formatDuration(trip.estimatedTime)}</span>
+            <div class="stat-item">
+              <span class="stat-label">Drive</span>
+              <span class="stat-value">{formatDuration(trip.estimatedTime)}</span>
             </div>
-
-            <div class="stat">
-              <span class="label">$/Hr</span>
-              <span class="val hourly">{trip.hoursWorked > 0 ? formatCurrency(hourlyPay) : '-'}</span>
+            <div class="stat-item">
+              <span class="stat-label">$/Hr</span>
+              <span class="stat-value hourly-pay">{trip.hoursWorked > 0 ? formatCurrency(hourlyPay) : '-'}</span>
             </div>
           </div>
           
           {#if isExpanded}
-            <div class="expanded-details">
+            <div 
+                class="expanded-details" 
+                on:click|stopPropagation 
+                on:keydown|stopPropagation
+                role="group"
+            >
               <div class="detail-section">
                 <h4 class="section-heading">Stops & Addresses</h4>
                 <div class="address-list">
@@ -334,7 +347,7 @@
                 </div>
               {/if}
               
-              <div class="action-buttons-footer" on:click|stopPropagation>
+              <div class="action-buttons-footer">
                 <button class="action-btn-lg edit-btn" on:click={() => editTrip(trip.id)}>
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11 2L14 5L5 14H2V11L11 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     Edit
@@ -357,160 +370,73 @@
 </div>
 
 <style>
-  /* --- Global & Layout --- */
-  .trip-history { 
-    max-width: 1200px; 
-    margin: 0 auto; 
-    padding: 12px; /* Narrower padding to maximize width on mobile */
-    padding-bottom: 80px; 
-  }
+  .trip-history { max-width: 1200px; margin: 0 auto; padding: 12px; padding-bottom: 80px; }
 
-  /* --- Header --- */
-  .page-header { 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center; 
-    margin-bottom: 24px; 
-  }
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
   .page-title { font-size: 24px; font-weight: 800; color: #111827; margin: 0; }
   .page-subtitle { font-size: 14px; color: #6B7280; margin: 0; }
   
-  .btn-primary { 
-    display: inline-flex; align-items: center; gap: 6px; 
-    padding: 10px 16px; 
-    background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); 
-    color: white; border: none; border-radius: 8px; 
-    font-weight: 600; font-size: 14px; text-decoration: none; 
-    box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3);
-  }
+  .btn-primary { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); }
 
-  /* --- Stats Grid --- */
-  .stats-summary { 
-    display: grid; 
-    grid-template-columns: repeat(2, 1fr); 
-    gap: 12px; 
-    margin-bottom: 24px; 
-  }
-  .summary-card { 
-    background: white; border: 1px solid #E5E7EB; border-radius: 12px; 
-    padding: 16px; text-align: center; 
-  }
+  .stats-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
+  .summary-card { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; text-align: center; }
   .summary-label { font-size: 12px; color: #6B7280; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
   .summary-value { font-size: 20px; font-weight: 800; color: #111827; }
 
-  /* --- Filter Section --- */
-  .filters-bar { 
-    display: flex; 
-    flex-direction: column; 
-    gap: 12px; 
-    margin-bottom: 20px; 
-  }
+  .filters-bar { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
 
-  /* Search Box */
-  .search-box { 
-    position: relative; 
-    width: 100%; 
-  }
-  .search-icon { 
-    position: absolute; left: 14px; top: 50%; transform: translateY(-50%); 
-    color: #9CA3AF; pointer-events: none; 
-  }
-  .search-box input { 
-    width: 100%; 
-    padding: 12px 16px 12px 42px; 
-    border: 1px solid #E5E7EB; border-radius: 10px; 
-    font-size: 15px; background: white; 
-    box-sizing: border-box; 
-  }
+  .search-box { position: relative; width: 100%; }
+  .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #9CA3AF; pointer-events: none; }
+  .search-box input { width: 100%; padding: 12px 16px 12px 42px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 15px; background: white; box-sizing: border-box; }
   .search-box input:focus { outline: none; border-color: #FF7F50; }
 
-  /* Date Group */
   .date-group { display: flex; gap: 8px; align-items: center; }
   .date-input { flex: 1; padding: 12px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 14px; background: white; color: #374151; min-width: 0; box-sizing: border-box; }
   .date-sep { color: #9CA3AF; font-weight: bold; }
 
-  /* Filter Group (3x1 Layout) */
-  .filter-group { 
-    display: flex; 
-    flex-direction: row; 
-    gap: 8px; 
-    width: 100%; 
-  }
-  .filter-select { 
-    flex: 1; 
-    width: 0; 
-    min-width: 0;
-    padding: 12px; 
-    border: 1px solid #E5E7EB; border-radius: 10px; 
-    font-size: 14px; background: white; color: #374151;
-  }
-  .sort-btn { 
-    flex: 0 0 48px; 
-    display: flex; align-items: center; justify-content: center;
-    border: 1px solid #E5E7EB; border-radius: 10px; 
-    background: white; color: #6B7280; 
-  }
+  .filter-group { display: flex; flex-direction: row; gap: 8px; width: 100%; }
+  .filter-select { flex: 1; width: 0; min-width: 0; padding: 12px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 14px; background: white; color: #374151; }
+  .sort-btn { flex: 0 0 48px; display: flex; align-items: center; justify-content: center; border: 1px solid #E5E7EB; border-radius: 10px; background: white; color: #6B7280; }
 
-  /* --- Trip Cards --- */
   .trip-list-cards { display: flex; flex-direction: column; gap: 12px; }
   
-  .trip-card { 
-    background: white; border: 1px solid #E5E7EB; border-radius: 12px; 
-    padding: 16px; cursor: pointer; transition: all 0.2s;
-  }
+  .trip-card { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; cursor: pointer; transition: all 0.2s; }
   .trip-card:active { background-color: #F9FAFB; }
   .trip-card.expanded { border-color: #FF7F50; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-
-  .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
-  .trip-date { font-size: 12px; font-weight: 600; color: #9CA3AF; display: block; margin-bottom: 2px; }
-  .trip-title { font-size: 16px; font-weight: 700; color: #111827; margin: 0; line-height: 1.3; }
-  
-  .trip-profit-badge { 
-    font-size: 16px; font-weight: 800; 
-    padding: 4px 8px; border-radius: 6px; background: #F3F4F6; color: #374151;
-    white-space: nowrap; margin-left: 12px;
-  }
-  .trip-profit-badge.positive { background: #DCFCE7; color: #166534; }
-  .trip-profit-badge.negative { background: #FEE2E2; color: #991B1B; }
 
   .card-top { display: grid; grid-template-columns: 1fr auto 20px; align-items: center; gap: 12px; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #F3F4F6; }
   .trip-route-date { overflow: hidden; }
   .trip-date-display { display: block; font-size: 12px; font-weight: 600; color: #6B7280; margin-bottom: 4px; }
   .trip-route-title { font-size: 16px; font-weight: 700; color: #111827; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
   .profit-display-large { font-size: 18px; font-weight: 800; white-space: nowrap; }
   .profit-display-large.positive { color: var(--green); }
   .profit-display-large.negative { color: #DC2626; }
   .expand-icon { color: #9CA3AF; transition: transform 0.2s; }
   .trip-card.expanded .expand-icon { transform: rotate(180deg); }
 
-  /* UPDATED: 5-column grid for added Drive Time */
-  .card-stats, .quick-stats { 
-    display: grid; 
-    grid-template-columns: repeat(2, 1fr); /* 2x3 on mobile */
-    gap: 12px; 
-    border-top: 1px solid #F3F4F6; 
-    padding-top: 12px; 
-  }
-  .stat, .stat-item { display: flex; flex-direction: column; align-items: center; }
-  .stat .label, .stat-label { font-size: 11px; color: #9CA3AF; text-transform: uppercase; }
-  .stat .val, .stat-value { font-size: 14px; font-weight: 600; color: #4B5563; }
-  .stat .val.hourly, .hourly-pay { color: #059669; }
+  .card-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .stat-item { display: flex; flex-direction: column; align-items: center; }
+  .stat-label { font-size: 11px; color: #9CA3AF; text-transform: uppercase; }
+  .stat-value { font-size: 14px; font-weight: 600; color: #4B5563; }
+  .hourly-pay { color: #059669; }
 
   .expanded-details { display: flex; flex-direction: column; gap: 16px; padding-top: 16px; border-top: 1px dashed #E5E7EB; margin-top: 16px; }
   .detail-section { background: #F9FAFB; padding: 12px; border-radius: 8px; }
   .section-heading { font-size: 13px; font-weight: 700; color: var(--navy); margin-bottom: 8px; border-bottom: 1px solid #E5E7EB; padding-bottom: 6px; }
   .address-list p { font-size: 14px; color: #374151; margin: 4px 0; }
+  
   .expense-list { display: flex; flex-direction: column; gap: 4px; }
   .expense-row { display: flex; justify-content: space-between; font-size: 13px; color: #4B5563; }
   .expense-row.total { border-top: 1px solid #E5E7EB; margin-top: 4px; padding-top: 4px; font-weight: 700; color: #111827; }
+
   .trip-notes { font-style: italic; font-size: 14px; color: #4B5563; line-height: 1.4; }
   .action-buttons-footer { display: flex; gap: 12px; }
   .action-btn-lg { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-radius: 8px; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 0.2s; border: 2px solid; font-size: 14px; }
   .edit-btn { background: #EFF6FF; color: #2563EB; border-color: #2563EB; }
   .delete-btn { background: #FEF2F2; color: #DC2626; border-color: #DC2626; }
+  
   .empty-state { text-align: center; padding: 40px 20px; color: #6B7280; font-size: 15px; }
-  .empty-state svg { color: #D1D5DB; margin: 0 auto 24px; }
-  .empty-state h3 { font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 8px; }
 
   @media (min-width: 640px) {
     .filters-bar { flex-direction: row; justify-content: space-between; align-items: center; }
@@ -519,8 +445,7 @@
     .filter-group { width: auto; flex-wrap: nowrap; }
     .filter-select { width: 140px; flex: none; }
     .stats-summary { grid-template-columns: repeat(2, 1fr); }
-    /* Tablet: 5 columns for stats */
-    .card-stats, .quick-stats { grid-template-columns: repeat(5, 1fr); }
+    .card-stats { grid-template-columns: repeat(5, 1fr); }
   }
 
   @media (min-width: 1024px) {
