@@ -7,7 +7,7 @@
   let searchQuery = '';
   let sortBy = 'date';
   let sortOrder = 'desc';
-  let filterProfit = 'all'; // all, positive, negative
+  let filterProfit = 'all'; 
   
   // New Date Filters
   let startDate = '';
@@ -38,7 +38,6 @@
       // 3. Date Range Filter
       if (trip.date) {
         const tripDate = new Date(trip.date);
-        // Reset times to midnight for accurate day comparison
         tripDate.setHours(0, 0, 0, 0);
 
         if (startDate) {
@@ -57,7 +56,6 @@
     })
     .sort((a, b) => {
       let aVal, bVal;
-      
       switch (sortBy) {
         case 'date':
           aVal = new Date(a.date || 0).getTime();
@@ -75,29 +73,31 @@
           aVal = a.totalMiles || 0;
           bVal = b.totalMiles || 0;
           break;
-        default:
-          return 0;
+        default: return 0;
       }
-      
       return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
     });
   
   function formatCurrency(amount: number): string {
     return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      style: 'currency', currency: 'USD', minimumFractionDigits: 2
     }).format(amount);
   }
   
   function formatDate(dateString: string): string {
     const date = new Date(dateString);
     return new Intl.DateTimeFormat('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
+      month: 'short', day: 'numeric', year: 'numeric'
     }).format(date);
+  }
+
+  // NEW: Helper for Drive Time display
+  function formatDuration(minutes: number): string {
+    if (!minutes) return '-';
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
   }
   
   async function deleteTrip(id: string) {
@@ -105,28 +105,16 @@
       try {
         const trip = $trips.find(t => t.id === id);
         const currentUser = $page.data.user || $user;
+        let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
         
-        let userId = '';
         if (trip && currentUser) {
-            if (trip.userId === currentUser.name) {
-                userId = currentUser.name;
-            } else if (trip.userId === currentUser.token) {
-                userId = currentUser.token;
-            }
-        }
-
-        if (!userId) {
-            userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
+            if (trip.userId === currentUser.name) userId = currentUser.name;
+            else if (trip.userId === currentUser.token) userId = currentUser.token;
         }
         
-        if (userId) {
-            await trips.deleteTrip(id, userId);
-        } else {
-            alert('User identification error. Please refresh.');
-        }
+        if (userId) await trips.deleteTrip(id, userId);
       } catch (err) {
-        console.error('Failed to delete trip:', err);
-        alert('Failed to delete trip. Please try again.');
+        alert('Failed to delete trip.');
       }
     }
   }
@@ -149,11 +137,8 @@
   
   let expandedTrips = new Set<string>();
   function toggleExpand(id: string) {
-    if (expandedTrips.has(id)) {
-      expandedTrips.delete(id);
-    } else {
-      expandedTrips.add(id);
-    }
+    if (expandedTrips.has(id)) expandedTrips.delete(id);
+    else expandedTrips.add(id);
     expandedTrips = expandedTrips;
   }
 </script>
@@ -164,7 +149,7 @@
 
 <div class="trip-history">
   <div class="page-header">
-    <div>
+    <div class="header-text">
       <h1 class="page-title">Trip History</h1>
       <p class="page-subtitle">View and manage all your trips</p>
     </div>
@@ -190,9 +175,7 @@
     <div class="summary-card">
       <div class="summary-label">Total Profit</div>
       <div class="summary-value">
-        {formatCurrency(filteredTrips.reduce((sum, trip) => {
-          return sum + calculateNetProfit(trip);
-        }, 0))}
+        {formatCurrency(filteredTrips.reduce((sum, trip) => sum + calculateNetProfit(trip), 0))}
       </div>
     </div>
     <div class="summary-card">
@@ -201,9 +184,7 @@
         {(() => {
           const tripsWithHours = filteredTrips.filter(t => t.hoursWorked > 0);
           if (tripsWithHours.length === 0) return 'N/A';
-          const totalHourlyPay = tripsWithHours.reduce((sum, trip) => {
-            return sum + calculateHourlyPay(trip);
-          }, 0);
+          const totalHourlyPay = tripsWithHours.reduce((sum, trip) => sum + calculateHourlyPay(trip), 0);
           return formatCurrency(totalHourlyPay / tripsWithHours.length) + '/hr';
         })()}
       </div>
@@ -211,23 +192,18 @@
   </div>
 
   <div class="filters-bar">
-   
     <div class="search-box">
       <svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
         <path d="M9 17C13.4183 17 17 13.4183 17 9C17 4.58172 13.4183 1 9 1C4.58172 1 1 4.58172 1 9C1 13.4183 4.58172 17 9 17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M19 19L14.65 14.65" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
-      <input 
-        type="text" 
-        placeholder="Search trips..."
-        bind:value={searchQuery}
-      />
+      <input type="text" placeholder="Search trips..." bind:value={searchQuery} />
     </div>
-
+    
     <div class="filter-group date-group">
-        <input type="date" bind:value={startDate} class="date-input" placeholder="Start Date" aria-label="Start Date" />
+        <input type="date" bind:value={startDate} class="date-input" aria-label="Start Date" />
         <span class="date-sep">-</span>
-        <input type="date" bind:value={endDate} class="date-input" placeholder="End Date" aria-label="End Date" />
+        <input type="date" bind:value={endDate} class="date-input" aria-label="End Date" />
     </div>
     
     <div class="filter-group">
@@ -260,43 +236,43 @@
         {@const totalCosts = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0)}
         
         <div class="trip-card" class:expanded={isExpanded} on:click={() => toggleExpand(trip.id)}>
-          
-          <div class="card-top">
-            <div class="trip-route-date">
-              <span class="trip-date-display">{formatDate(trip.date || '')}</span>
-              <h3 class="trip-route-title">
+          <div class="card-header">
+            <div class="trip-main-info">
+              <span class="trip-date">{formatDate(trip.date || '')}</span>
+              <h3 class="trip-title">
                 {trip.startAddress?.split(',')[0] || 'Unknown'} 
                 {#if trip.stops && trip.stops.length > 0}
-                  → {trip.stops[trip.stops.length - 1].address?.split(',')[0] || 'Multiple'}
+                  → {trip.stops[trip.stops.length - 1].address?.split(',')[0] || 'Stop'}
                 {/if}
               </h3>
             </div>
-            
-            <div class="profit-display-large" class:positive={profit >= 0} class:negative={profit < 0}>
+            <div class="trip-profit-badge" class:positive={profit >= 0} class:negative={profit < 0}>
               {formatCurrency(profit)}
             </div>
-            
-            <svg class="expand-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <path d="M6 15L10 11L14 15M14 5L10 9L6 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
           </div>
 
-          <div class="quick-stats">
-            <div class="stat-item">
-              <span class="stat-label">Miles</span>
-              <span class="stat-value">{trip.totalMiles?.toFixed(1) || '0.0'} mi</span>
+          <div class="card-stats">
+            <div class="stat">
+              <span class="label">Miles</span>
+              <span class="val">{trip.totalMiles?.toFixed(1) || '0.0'}</span>
             </div>
-            <div class="stat-item">
-              <span class="stat-label">Stops</span>
-              <span class="stat-value">{trip.stops?.length || 0}</span>
+            <div class="stat">
+              <span class="label">Stops</span>
+              <span class="val">{trip.stops?.length || 0}</span>
             </div>
-            <div class="stat-item">
-              <span class="stat-label">Hours</span>
-              <span class="stat-value">{trip.hoursWorked?.toFixed(1) || '-'} hrs</span>
+            <div class="stat">
+              <span class="label">Hours</span>
+              <span class="val">{trip.hoursWorked?.toFixed(1) || '-'}</span>
             </div>
-            <div class="stat-item">
-              <span class="stat-label">$/Hour</span>
-              <span class="stat-value hourly-pay">{trip.hoursWorked > 0 ? formatCurrency(hourlyPay) + '/hr' : 'N/A'}</span>
+            
+            <div class="stat">
+              <span class="label">Drive</span>
+              <span class="val">{formatDuration(trip.estimatedTime)}</span>
+            </div>
+
+            <div class="stat">
+              <span class="label">$/Hr</span>
+              <span class="val hourly">{trip.hoursWorked > 0 ? formatCurrency(hourlyPay) : '-'}</span>
             </div>
           </div>
           
@@ -361,11 +337,11 @@
               <div class="action-buttons-footer" on:click|stopPropagation>
                 <button class="action-btn-lg edit-btn" on:click={() => editTrip(trip.id)}>
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11 2L14 5L5 14H2V11L11 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    Edit Trip
+                    Edit
                 </button>
                 <button class="action-btn-lg delete-btn" on:click={() => deleteTrip(trip.id)}>
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4H14M12 4V13C12 13.5304 11.7893 14.0391 11.4142 14.4142C11.0391 14.7893 10.5304 15 10 15H6C5.46957 15 4.96086 14.7893 4.58579 14.4142C4.21071 14.0391 4 13.5304 4 13V4M5 4V3C5 2.46957 5.21071 1.96086 5.58579 1.58579C5.96086 1.21071 6.46957 1 7 1H9C9.53043 1 10.0391 1.21071 10.4142 1.58579C10.7893 1.96086 11 2.46957 11 3V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    Move to Trash
+                    Trash
                 </button>
               </div>
             </div>
@@ -375,58 +351,113 @@
     </div>
   {:else}
     <div class="empty-state">
-      <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
-        <path d="M32 56C45.2548 56 56 45.2548 56 32C56 18.7452 45.2548 8 32 8C18.7452 8 8 18.7452 8 32C8 45.2548 18.7452 56 32 56Z" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M8 32H56M32 8C37.5 16 40 24 40 32C40 40 37.5 48 32 56C26.5 48 24 40 24 32C24 24 26.5 16 32 8Z" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      <h3>No trips found</h3>
-      <p>
-        {searchQuery || filterProfit !== 'all' || startDate || endDate
-          ? 'Try adjusting your filters' 
-          : 'Start by creating your first trip'}
-      </p>
-      {#if !searchQuery && filterProfit === 'all' && !startDate && !endDate}
-        <a href="/dashboard/trips/new" class="btn-primary">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          Create Your First Trip
-        </a>
-      {/if}
+      <p>No trips found matching your filters.</p>
     </div>
   {/if}
 </div>
 
 <style>
-  .trip-history { max-width: 1400px; margin: 0 auto; padding: 16px; padding-bottom: 80px; }
-  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  /* --- Global & Layout --- */
+  .trip-history { 
+    max-width: 1200px; 
+    margin: 0 auto; 
+    padding: 12px; /* Narrower padding to maximize width on mobile */
+    padding-bottom: 80px; 
+  }
+
+  /* --- Header --- */
+  .page-header { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    margin-bottom: 24px; 
+  }
   .page-title { font-size: 24px; font-weight: 800; color: #111827; margin: 0; }
   .page-subtitle { font-size: 14px; color: #6B7280; margin: 0; }
   
-  .btn-primary { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); }
+  .btn-primary { 
+    display: inline-flex; align-items: center; gap: 6px; 
+    padding: 10px 16px; 
+    background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); 
+    color: white; border: none; border-radius: 8px; 
+    font-weight: 600; font-size: 14px; text-decoration: none; 
+    box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3);
+  }
 
-  .stats-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
-  .summary-card { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; text-align: center; }
+  /* --- Stats Grid --- */
+  .stats-summary { 
+    display: grid; 
+    grid-template-columns: repeat(2, 1fr); 
+    gap: 12px; 
+    margin-bottom: 24px; 
+  }
+  .summary-card { 
+    background: white; border: 1px solid #E5E7EB; border-radius: 12px; 
+    padding: 16px; text-align: center; 
+  }
   .summary-label { font-size: 12px; color: #6B7280; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
   .summary-value { font-size: 20px; font-weight: 800; color: #111827; }
 
-  .filters-bar { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
-  .search-box { position: relative; width: 100%; box-sizing: border-box; }
-  .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #9CA3AF; pointer-events: none; }
-  .search-box input { width: 100%; padding: 12px 16px 12px 42px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 15px; background: white; box-sizing: border-box; }
+  /* --- Filter Section --- */
+  .filters-bar { 
+    display: flex; 
+    flex-direction: column; 
+    gap: 12px; 
+    margin-bottom: 20px; 
+  }
+
+  /* Search Box */
+  .search-box { 
+    position: relative; 
+    width: 100%; 
+  }
+  .search-icon { 
+    position: absolute; left: 14px; top: 50%; transform: translateY(-50%); 
+    color: #9CA3AF; pointer-events: none; 
+  }
+  .search-box input { 
+    width: 100%; 
+    padding: 12px 16px 12px 42px; 
+    border: 1px solid #E5E7EB; border-radius: 10px; 
+    font-size: 15px; background: white; 
+    box-sizing: border-box; 
+  }
   .search-box input:focus { outline: none; border-color: #FF7F50; }
 
-  /* Date Group Styling */
+  /* Date Group */
   .date-group { display: flex; gap: 8px; align-items: center; }
   .date-input { flex: 1; padding: 12px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 14px; background: white; color: #374151; min-width: 0; box-sizing: border-box; }
   .date-sep { color: #9CA3AF; font-weight: bold; }
 
-  .filter-group { display: flex; flex-direction: row; gap: 8px; width: 100%; }
-  .filter-select { flex: 1; width: 0; min-width: 0; padding: 12px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 14px; background: white; color: #374151; }
-  .sort-btn { flex: 0 0 48px; display: flex; align-items: center; justify-content: center; border: 1px solid #E5E7EB; border-radius: 10px; background: white; color: #6B7280; }
+  /* Filter Group (3x1 Layout) */
+  .filter-group { 
+    display: flex; 
+    flex-direction: row; 
+    gap: 8px; 
+    width: 100%; 
+  }
+  .filter-select { 
+    flex: 1; 
+    width: 0; 
+    min-width: 0;
+    padding: 12px; 
+    border: 1px solid #E5E7EB; border-radius: 10px; 
+    font-size: 14px; background: white; color: #374151;
+  }
+  .sort-btn { 
+    flex: 0 0 48px; 
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid #E5E7EB; border-radius: 10px; 
+    background: white; color: #6B7280; 
+  }
 
+  /* --- Trip Cards --- */
   .trip-list-cards { display: flex; flex-direction: column; gap: 12px; }
-  .trip-card { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; cursor: pointer; transition: all 0.2s; }
+  
+  .trip-card { 
+    background: white; border: 1px solid #E5E7EB; border-radius: 12px; 
+    padding: 16px; cursor: pointer; transition: all 0.2s;
+  }
   .trip-card:active { background-color: #F9FAFB; }
   .trip-card.expanded { border-color: #FF7F50; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
 
@@ -434,7 +465,11 @@
   .trip-date { font-size: 12px; font-weight: 600; color: #9CA3AF; display: block; margin-bottom: 2px; }
   .trip-title { font-size: 16px; font-weight: 700; color: #111827; margin: 0; line-height: 1.3; }
   
-  .trip-profit-badge { font-size: 16px; font-weight: 800; padding: 4px 8px; border-radius: 6px; background: #F3F4F6; color: #374151; white-space: nowrap; margin-left: 12px; }
+  .trip-profit-badge { 
+    font-size: 16px; font-weight: 800; 
+    padding: 4px 8px; border-radius: 6px; background: #F3F4F6; color: #374151;
+    white-space: nowrap; margin-left: 12px;
+  }
   .trip-profit-badge.positive { background: #DCFCE7; color: #166534; }
   .trip-profit-badge.negative { background: #FEE2E2; color: #991B1B; }
 
@@ -448,7 +483,14 @@
   .expand-icon { color: #9CA3AF; transition: transform 0.2s; }
   .trip-card.expanded .expand-icon { transform: rotate(180deg); }
 
-  .card-stats, .quick-stats { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #F3F4F6; padding-top: 12px; }
+  /* UPDATED: 5-column grid for added Drive Time */
+  .card-stats, .quick-stats { 
+    display: grid; 
+    grid-template-columns: repeat(2, 1fr); /* 2x3 on mobile */
+    gap: 12px; 
+    border-top: 1px solid #F3F4F6; 
+    padding-top: 12px; 
+  }
   .stat, .stat-item { display: flex; flex-direction: column; align-items: center; }
   .stat .label, .stat-label { font-size: 11px; color: #9CA3AF; text-transform: uppercase; }
   .stat .val, .stat-value { font-size: 14px; font-weight: 600; color: #4B5563; }
@@ -477,6 +519,8 @@
     .filter-group { width: auto; flex-wrap: nowrap; }
     .filter-select { width: 140px; flex: none; }
     .stats-summary { grid-template-columns: repeat(2, 1fr); }
+    /* Tablet: 5 columns for stats */
+    .card-stats, .quick-stats { grid-template-columns: repeat(5, 1fr); }
   }
 
   @media (min-width: 1024px) {
