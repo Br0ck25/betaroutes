@@ -168,6 +168,78 @@ function createTrashStore() {
 			}
 		},
 
+		async syncFromCloud(userId: string) {
+			try {
+				if (!navigator.onLine) {
+					console.log('📴 Cannot sync trash from cloud while offline');
+					return;
+				}
+
+				console.log('🔄 Syncing trash from cloud...');
+
+				const response = await fetch('/api/trash');
+				if (!response.ok) {
+					throw new Error('Failed to fetch trash from cloud');
+				}
+
+				const cloudTrash: TrashRecord[] = await response.json();
+				
+				// 1. Reconciliation Set: Create a Set of all trash IDs from the cloud
+				const cloudTrashIds = new Set(cloudTrash.map(t => t.id)); //
+
+				// 2. Open DB transaction
+				const db = await getDB(); //
+				const tx = db.transaction('trash', 'readwrite'); //
+				const store = tx.objectStore('trash'); //
+				const index = store.index('userId');
+
+				// 3. Merge new/updated items (PULL new cloud items to local DB)
+				for (const cloudItem of cloudTrash) {
+					// Normalize: Flatten metadata if present
+					const flatItem: any = { ...cloudItem };
+					if (flatItem.metadata) {
+						flatItem.deletedAt = flatItem.metadata.deletedAt;
+						flatItem.deletedBy = flatItem.metadata.deletedBy;
+						flatItem.expiresAt = flatItem.metadata.expiresAt;
+						flatItem.originalKey = flatItem.metadata.originalKey;
+						delete flatItem.metadata;
+					}
+
+					const local = await store.get(flatItem.id);
+
+					// Only update if cloud is newer or doesn't exist locally
+					if (!local || new Date(flatItem.deletedAt) > new Date(local.deletedAt)) {
+						await store.put({
+							...flatItem,
+							syncStatus: 'synced',
+							lastSyncedAt: new Date().toISOString()
+						});
+					}
+				}
+				
+				// 4. Reconciliation: Handle remote deletions/restorations (REMOVE stale local items)
+				const localTrashItems = await index.getAll(userId); // Get all local items for this user
+
+				for (const localItem of localTrashItems) {
+					// If the item is in local trash but NOT in the cloud trash, it was removed remotely.
+					if (!cloudTrashIds.has(localItem.id)) {
+						console.log(`🗑️ Reconciliation: Removing remotely deleted/restored item from local trash: ${localItem.id}`);
+						await store.delete(localItem.id);
+					}
+				}
+
+
+				await tx.done; //
+
+				// Reload from IndexedDB
+				await this.load(userId); //
+
+				console.log('✅ Synced trash from cloud');
+			} catch (err) {
+				console.error('❌ Failed to sync trash from cloud:', err); //
+			}
+		}
+
 		/**
 		 * Empty all trash items (offline-first)
 		 */
