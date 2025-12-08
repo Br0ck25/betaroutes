@@ -414,7 +414,7 @@
      
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
              <path d="M10 12C11.1046 12 12 11.1046 12 10C12 8.89543 11.1046 8 10 8C8.89543 8 8 8.89543 8 10C8 11.1046 8.89543 12 10 12Z" stroke="currentColor" stroke-width="2"/>
-            <path d="M16.2 12C16.1 12.5 16.3 13 16.7 13.3L16.8 13.4C17.1 13.7 17.3 14.1 17.3 14.5C17.3 14.9 17.1 15.3 16.8 15.6C16.5 15.9 16.1 16.1 15.7 16.1C15.3 16.1 14.9 15.9 14.6 15.6L14.5 15.5C14.2 15.1 13.7 14.9 13.2 15C12.7 15.1 12.4 15.5 12.3 16V16.2C12.3 17.1 11.6 17.8 10.7 17.8C9.8 17.8 9.1 17.1 9.1 16.2V16.1C9 15.5 8.6 15.1 8 15C7.5 15 7 15.2 6.7 15.6L6.6 15.7C6.3 16 5.9 16.2 5.5 16.2C5.1 16.2 4.7 16 4.4 15.7C4.1 15.4 3.9 15 3.9 14.6C3.9 14.2 4.1 13.8 4.4 13.5L4.5 13.4C4.9 13.1 5.1 12.6 5 12.1C4.9 11.6 4.5 11.3 4 11.2H3.8C2.9 11.2 2.2 10.5 2.2 9.6C2.2 8.7 2.9 8 3.8 8H3.9C4.5 7.9 4.9 7.5 5 6.9C5 6.4 4.8 5.9 4.4 5.6L4.3 5.5C4 5.2 3.8 4.8 3.8 4.4C3.8 4 4 3.6 4.3 3.3C4.6 3 5 2.8 5.4 2.8C5.8 2.8 6.2 3 6.5 3.3L6.6 3.4C7 3.8 7.5 4 8 3.9C8.5 3.9 8.8 3.5 8.9 3V2.8C8.9 1.9 9.6 1.2 10.5 1.2C11.4 1.2 12.1 1.9 12.1 2.8V2.9C12.1 3.5 12.5 3.9 13.1 4C13.6 4.1 14.1 3.9 14.4 3.5L14.5 3.4C14.8 3.1 15.2 2.9 15.6 2.9C16 2.9 16.4 3.1 16.7 3.4C17 3.7 17.2 4.1 17.2 4.5C17.2 4.9 17 5.3 16.7 5.6L16.6 5.7C16.2 6 16 6.5 16.1 7C16.2 7.5 16.6 7.8 17.1 7.9H17.3C18.2 7.9 18.9 8.6 18.9 9.5C18.9 10.4 18.2 11.1 17.3 11.1H17.2C16.6 11.1 16.2 11.5 16.1 12.1L16.2 12Z" stroke="currentColor" stroke-width="2"/>
+            <path d="M16.2 12C16.1 12.5 16.3 13 16.7 13.3L16.8 13.4C17.1 13.7 17.3 14.1 17.3 14.5C17.3 14.9 17.1 15.3 16.8 15.6C16.5 15.9 16.1 16.1 15.7 16.1C15.3 16.1 14.9 15.9 14.6 15.6L14.5 15.5C14.2 15.1 13.7 14.9 13.2 15C12.7 15.1 12.4 15.5 12.3 16V16.2C12.3 17.1 11.6 17.8 10.7 17.8C9.8 17.8 9.1 17.1 9.1 16.2V16.1C9 15.5 8.6 15.1 8 15C7.5 15 7 15.2 6.7 15.6L6.6 15.7C6.3 16 5.9 16.2 5.5 16.2C5.1 16.2 4.7 16 4.4 15.7C4.1 15.4 3.9 15 3.9 14.6C3.9 14.2 4.1 13.8 4.4 13.5L4.5 13.4C4.9 13.1 5.1 12.6 5 12.1C4.9 11.6 4.5 11.3 4 11.2H3.8C2.9 11.2 2.2 10.5 2.2 9.6C2.2 8.7 2.9 8 3.8 8H3.9C4.5 7.9 4.9 7.5 5 6.9C5 6.4 4.8 5.9 4.4 5.6L4.3 5.5C4 5.2 3.8 4.8 3.8 4.4C3.8 4 4 3.6 4.3 3.3C4.6 3 5 2.8 5.4 2.8C5.8 2.8 6.2 3 6.5 3.3L6.6 3.4C7 3.8 7.5 4 8 3.9C8.5 3.9 8.8 3.4 8.9 2.9V2.7C8.9 1.8 9.6 1.1 10.5 1.1C11.4 1.1 12.1 1.8 12.1 2.7V2.8C12.1 3.4 12.5 3.8 13.1 3.9C13.6 4 14.1 3.8 14.4 3.4L14.5 3.3C14.8 3 15.2 2.8 15.6 2.8C16 2.8 16.4 3 16.7 3.3C17 3.6 17.2 4 17.2 4.4C17.2 4.8 17 5.2 16.7 5.5L16.6 5.6C16.2 5.9 16 6.4 16.1 6.9C16.2 7.4 16.6 7.7 17.1 7.8H17.3C18.2 7.8 18.9 8.5 18.9 9.4C18.9 10.3 18.2 11 17.3 11H17.2C16.6 11.1 16.2 11.5 16.1 12.1L16.2 12Z" stroke="currentColor" stroke-width="2"/>
           </svg>
         </div>
         
@@ -588,13 +588,17 @@
   .form-group { margin-bottom: 20px; }
   .form-group label { display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px; }
   
-  /* Constrain inputs/selects to match the 'correct' size */
+  /* UNIFIED CONSTRAINT: 410px width for ALL inputs, selects, and wrappers */
+  /* Added display: block to ensure selects take up the width properly */
+  
   .form-group input, .form-group select { 
     width: 100%; 
-    max-width: 410px; /* Constrain these */
+    max-width: 450px; /* Constrain text/number inputs and selects */
     padding: 12px 16px; 
     border: 2px solid #E5E7EB;
     border-radius: 10px; font-size: 15px; font-family: inherit; background: white; transition: all 0.2s; 
+    display: block; /* Ensures select elements behave as blocks */
+    box-sizing: border-box; /* Ensures padding doesn't add to width */
   }
   .form-group input:focus, .form-group select:focus { 
     outline: none;
@@ -603,11 +607,12 @@
   }
   .form-group input:disabled { background: #F9FAFB; color: #9CA3AF; cursor: not-allowed; }
   
-  /* Constrain the input wrapper */
+  /* Constraint for the input wrapper (Gas Price) */
   .input-prefix { 
       position: relative; 
       width: 100%;
-      max-width: 390px; /* Constrain this */
+      max-width: 450px; /* SAME CONSTRAINT as above */
+      box-sizing: border-box;
   }
   .input-prefix .prefix { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #6B7280; font-weight: 600; }
   .input-prefix input { padding-left: 36px; }
@@ -627,7 +632,6 @@
   /* Buttons: Full width (No max-width constraint) */
   .btn-primary, .btn-secondary, .btn-logout, .btn-delete, .btn-delete-confirm { 
       width: 100%;
-      /* Removed max-width */
       padding: 14px; border-radius: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 15px;
   }
   .btn-primary { background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%); color: white; border: none; }
