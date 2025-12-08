@@ -406,7 +406,7 @@
   .filters-bar { display: flex; gap: 16px; margin-bottom: 24px; }
   .search-box { position: relative; flex: 1; max-width: 400px; }
   .search-icon { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #9CA3AF; pointer-events: none; }
-  .search-box input { width: 100%; padding: 14px 16px 14px 48px; border: 2px solid #E5E7EB; border-radius: 12px; font-size: 15px; font-family: inherit; background: white; transition: all 0.2s; }
+  .search-box input { width: 84%; padding: 14px 16px 14px 48px; border: 2px solid #E5E7EB; border-radius: 12px; font-size: 15px; font-family: inherit; background: white; transition: all 0.2s; }
   .search-box input:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 127, 80, 0.1); }
   
   .filter-group { display: flex; gap: 12px; }

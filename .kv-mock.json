@@ -5,8 +5,7 @@
   },
   "LOGS": {
     "meta:user:29c44d78-79d3-4d26-a063-220be7b7fefa:trip_count": "0",
-    "meta:user:fd51e6c2-f827-418b-acb9-fcee7d3d9425:trip_count": "1",
-    "trip:test:be29d6a2-4a59-4855-b7bb-9e640fb73ab1": "{\"id\":\"be29d6a2-4a59-4855-b7bb-9e640fb73ab1\",\"date\":\"2025-12-07\",\"startTime\":\"09:00\",\"endTime\":\"17:00\",\"hoursWorked\":8,\"startAddress\":\"\",\"endAddress\":\"\",\"totalMiles\":0,\"mpg\":25,\"gasPrice\":3.5,\"fuelCost\":0,\"maintenanceCost\":0,\"suppliesCost\":0,\"netProfit\":0,\"notes\":\"\",\"stops\":[],\"destinations\":[],\"maintenanceItems\":[],\"suppliesItems\":[],\"lastModified\":\"2025-12-07T21:44:16.535Z\",\"userId\":\"test\",\"createdAt\":\"2025-12-07T21:44:16.542Z\",\"updatedAt\":\"2025-12-07T21:44:16.542Z\"}"
+    "meta:user:fd51e6c2-f827-418b-acb9-fcee7d3d9425:trip_count": "0"
   },
   "TRASH": {}
 }
