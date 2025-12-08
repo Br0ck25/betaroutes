@@ -210,6 +210,73 @@ function createTripsStore() {
 			}
 		},
 
+		async syncFromCloud(userId: string) {
+			try {
+				if (!navigator.onLine) return;
+				console.log('🔄 Syncing active trips from cloud...');
+
+				const response = await fetch('/api/trips');
+				if (!response.ok) throw new Error('Failed to fetch trips');
+				const cloudTrips: TripRecord[] = await response.json();
+
+				// NEW: Create a Set of all active trip IDs from the cloud
+				const cloudTripIds = new Set(cloudTrips.map((t) => t.id)); //
+
+				const db = await getDB();
+				// MODIFIED: Transaction now includes 'trash' store for deletion reconciliation
+				const tx = db.transaction(['trips', 'trash'], 'readwrite');
+				const tripStore = tx.objectStore('trips');
+				const trashStore = tx.objectStore('trash'); //
+
+				// 1. Merge new/updated items: If cloud is newer or local copy doesn't exist, overwrite.
+				for (const cloudTrip of cloudTrips) {
+					const local = await tripStore.get(cloudTrip.id);
+					// Logic from before: writes to IDB if cloud is newer or local is missing
+					if (!local || new Date(cloudTrip.updatedAt) > new Date(local.updatedAt)) {
+						await tripStore.put({
+							...cloudTrip,
+							syncStatus: 'synced',
+							lastSyncedAt: new Date().toISOString()
+						});
+					}
+				}
+
+				// 2. Reconciliation: Handle remote deletions (local trip missing from cloud)
+				const localTrips = await tripStore.index('userId').getAll(userId); //
+				const now = new Date();
+				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days expiration
+
+				for (const localTrip of localTrips) {
+					if (!cloudTripIds.has(localTrip.id)) {
+						// Trip exists locally but not in the active cloud list -> it was deleted elsewhere.
+
+						console.log(
+							`🗑️ Reconciliation: Moving remote deleted trip to local trash: ${localTrip.id}`
+						);
+
+						// Perform local soft delete (move to local trash)
+						const trashItem = {
+							...localTrip,
+							deletedAt: now.toISOString(),
+							deletedBy: userId,
+							expiresAt: expiresAt.toISOString(),
+							originalKey: `trip:${userId}:${localTrip.id}`,
+							syncStatus: 'synced' as const // Mark as synced so the manager doesn't try to "create" a deletion
+						};
+
+						await trashStore.put(trashItem);
+						await tripStore.delete(localTrip.id);
+					}
+				}
+
+				await tx.done;
+				// The local store is re-loaded from IDB, reflecting the deletions.
+				await this.load(userId);
+			} catch (err) {
+				console.error('❌ Failed to sync from cloud:', err);
+			}
+		},
+
 		async migrateOfflineTrips(tempUserId: string, realUserId: string) {
 			if (!tempUserId || !realUserId || tempUserId === realUserId) return;
 			const db = await getDB();
