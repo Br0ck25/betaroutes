@@ -1,18 +1,15 @@
-<!-- src/routes/dashboard/+page.svelte -->
 <script lang="ts">
   import { trips } from '$lib/stores/trips';
   import { onMount } from 'svelte';
-  
+
   // Calculate stats
   $: recentTrips = $trips.slice(0, 5);
   $: totalTrips = $trips.length;
-  
   $: totalProfit = $trips.reduce((sum, trip) => {
     const earnings = trip.stops?.reduce((s, stop) => s + (stop.earnings || 0), 0) || 0;
     const costs = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);
     return sum + (earnings - costs);
   }, 0);
-  
   $: totalMiles = $trips.reduce((sum, trip) => sum + (trip.totalMiles || 0), 0);
   
   $: avgProfitPerTrip = totalTrips > 0 ? totalProfit / totalTrips : 0;
@@ -37,6 +34,7 @@
         const tripDate = new Date(trip.date);
         if (tripDate >= thirtyDaysAgo && tripDate <= today) {
           const key = tripDate.toISOString().split('T')[0];
+          
           const earnings = trip.stops?.reduce((s, stop) => s + (stop.earnings || 0), 0) || 0;
           const costs = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);
           const profit = earnings - costs;
@@ -44,7 +42,7 @@
         }
       }
     });
-    
+
     return Array.from(dailyData.entries()).map(([date, profit]) => ({
       date,
       profit
@@ -64,7 +62,7 @@
       supplies: { amount: supplies, percentage: total > 0 ? (supplies / total) * 100 : 0, color: '#8DC63F' }
     };
   })();
-  
+
   // Previous month comparison
   $: monthComparison = (() => {
     const now = new Date();
@@ -97,9 +95,9 @@
       const costs = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);
       return sum + (earnings - costs);
     }, 0);
-    
+
     const change = lastProfit > 0 ? ((currentProfit - lastProfit) / lastProfit) * 100 : 0;
-    
+
     return {
       current: currentProfit,
       last: lastProfit,
@@ -132,7 +130,6 @@
 </svelte:head>
 
 <div class="dashboard">
-  <!-- Header -->
   <div class="page-header">
     <div>
       <h1 class="page-title">Dashboard</h1>
@@ -146,9 +143,7 @@
     </a>
   </div>
   
-  <!-- Stats Grid -->
   <div class="stats-grid">
-    <!-- Total Profit -->
     <div class="stat-card featured">
       <div class="stat-header">
         <div class="stat-icon orange">
@@ -173,7 +168,6 @@
       </div>
     </div>
     
-    <!-- Total Trips -->
     <div class="stat-card">
       <div class="stat-header">
         <div class="stat-icon blue">
@@ -188,7 +182,6 @@
       <div class="stat-info">All time</div>
     </div>
     
-    <!-- Avg Profit Per Trip -->
     <div class="stat-card">
       <div class="stat-header">
         <div class="stat-icon green">
@@ -202,7 +195,6 @@
       <div class="stat-info">Per completed trip</div>
     </div>
     
-    <!-- Total Miles -->
     <div class="stat-card">
       <div class="stat-header">
         <div class="stat-icon purple">
@@ -218,9 +210,7 @@
     </div>
   </div>
   
-  <!-- Charts Row -->
   <div class="charts-grid">
-    <!-- Profit Trend -->
     <div class="chart-card">
       <div class="chart-header">
         <div>
@@ -261,7 +251,6 @@
       </div>
     </div>
     
-    <!-- Cost Breakdown -->
     <div class="chart-card">
       <div class="chart-header">
         <div>
@@ -283,7 +272,6 @@
             
             <div class="donut-chart">
               <svg viewBox="0 0 200 200">
-                <!-- Fuel -->
                 <circle
                   cx="100"
                   cy="100"
@@ -296,7 +284,6 @@
                   transform="rotate(-90 100 100)"
                 />
                 
-                <!-- Maintenance -->
                 <circle
                   cx="100"
                   cy="100"
@@ -309,7 +296,6 @@
                   transform="rotate(-90 100 100)"
                 />
                 
-                <!-- Supplies -->
                 <circle
                   cx="100"
                   cy="100"
@@ -361,7 +347,6 @@
     </div>
   </div>
   
-  <!-- Recent Trips -->
   <div class="section-card">
     <div class="section-header">
       <div>
@@ -441,31 +426,39 @@
 <style>
   .dashboard {
     max-width: 1400px;
+    margin: 0 auto;
+    padding: 16px; /* Added padding wrapper */
   }
   
-  /* Page Header */
+  /* --- MOBILE FIRST DEFAULT STYLES --- */
+
+  /* Header - Stacked on mobile */
   .page-header {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 32px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 24px;
   }
   
   .page-title {
-    font-size: 32px;
+    font-size: 28px; /* Slightly smaller on mobile */
     font-weight: 800;
     color: #111827;
     margin-bottom: 4px;
+    margin-top: 0;
   }
   
   .page-subtitle {
-    font-size: 16px;
+    font-size: 15px;
     color: #6B7280;
+    margin: 0;
   }
   
   .btn-primary {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     padding: 12px 24px;
     background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%);
@@ -478,6 +471,7 @@
     cursor: pointer;
     transition: all 0.2s;
     box-shadow: 0 4px 12px rgba(255, 127, 80, 0.3);
+    width: fit-content; /* Full width on mobile */
   }
   
   .btn-primary:hover {
@@ -505,19 +499,19 @@
     color: var(--orange);
   }
   
-  /* Stats Grid */
+  /* Stats Grid - 1 Column on Mobile */
   .stats-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 24px;
-    margin-bottom: 32px;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
   }
   
   .stat-card {
     background: white;
     border: 1px solid #E5E7EB;
     border-radius: 16px;
-    padding: 24px;
+    padding: 20px;
     transition: all 0.2s;
   }
   
@@ -537,38 +531,25 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
   }
   
   .stat-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
   }
   
-  .stat-icon.orange {
-    background: rgba(255, 127, 80, 0.2);
-  }
+  .stat-icon.orange { background: rgba(255, 127, 80, 0.2); }
+  .stat-icon.blue { background: linear-gradient(135deg, var(--blue) 0%, #1E9BCF 100%); }
+  .stat-icon.green { background: linear-gradient(135deg, var(--green) 0%, #7AB82E 100%); }
+  .stat-icon.purple { background: linear-gradient(135deg, var(--purple) 0%, #764a89 100%); }
   
-  .stat-icon.blue {
-    background: linear-gradient(135deg, var(--blue) 0%, #1E9BCF 100%);
-  }
-  
-  .stat-icon.green {
-    background: linear-gradient(135deg, var(--green) 0%, #7AB82E 100%);
-  }
-  
-  .stat-icon.purple {
-    background: linear-gradient(135deg, var(--purple) 0%, #764a89 100%);
-  }
-  
-  .stat-card.featured .stat-icon {
-    background: rgba(255, 255, 255, 0.2);
-  }
+  .stat-card.featured .stat-icon { background: rgba(255, 255, 255, 0.2); }
   
   .stat-label {
     font-size: 14px;
@@ -576,20 +557,16 @@
     color: #6B7280;
   }
   
-  .stat-card.featured .stat-label {
-    color: rgba(255, 255, 255, 0.9);
-  }
+  .stat-card.featured .stat-label { color: rgba(255, 255, 255, 0.9); }
   
   .stat-value {
-    font-size: 32px;
+    font-size: 28px;
     font-weight: 800;
     color: #111827;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
   }
   
-  .stat-card.featured .stat-value {
-    color: white;
-  }
+  .stat-card.featured .stat-value { color: white; }
   
   .stat-change {
     display: flex;
@@ -599,23 +576,15 @@
     font-weight: 600;
   }
   
-  .stat-change.positive {
-    color: rgba(255, 255, 255, 0.9);
-  }
+  .stat-change.positive { color: rgba(255, 255, 255, 0.9); }
+  .stat-change.negative { color: rgba(255, 255, 255, 0.8); }
   
-  .stat-change.negative {
-    color: rgba(255, 255, 255, 0.8);
-  }
+  .stat-info { font-size: 13px; color: #9CA3AF; }
   
-  .stat-info {
-    font-size: 13px;
-    color: #9CA3AF;
-  }
-  
-  /* Charts Grid */
+  /* Charts Grid - 1 Column on Mobile */
   .charts-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr;
     gap: 24px;
     margin-bottom: 32px;
   }
@@ -624,32 +593,32 @@
     background: white;
     border: 1px solid #E5E7EB;
     border-radius: 16px;
-    padding: 24px;
+    padding: 20px;
   }
   
   .chart-header {
     display: flex;
     justify-content: space-between;
-    align-items: start;
-    margin-bottom: 24px;
+    align-items: flex-start;
+    margin-bottom: 20px;
+    flex-wrap: wrap; /* Allow wrapping on very small screens */
+    gap: 12px;
   }
   
   .chart-title {
     font-size: 18px;
     font-weight: 700;
     color: #111827;
-    margin-bottom: 4px;
+    margin: 0 0 4px 0;
   }
   
   .chart-subtitle {
     font-size: 14px;
     color: #6B7280;
+    margin: 0;
   }
   
-  .chart-legend {
-    display: flex;
-    gap: 16px;
-  }
+  .chart-legend { display: flex; gap: 16px; }
   
   .legend-item {
     display: flex;
@@ -659,15 +628,8 @@
     color: #6B7280;
   }
   
-  .legend-dot {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-  }
-  
-  .legend-dot.orange {
-    background: var(--orange);
-  }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; }
+  .legend-dot.orange { background: var(--orange); }
   
   .chart-container {
     height: 240px;
@@ -699,34 +661,35 @@
     cursor: pointer;
   }
   
-  .bar:hover {
-    opacity: 0.8;
-  }
+  .bar:hover { opacity: 0.8; }
   
-  /* Donut Chart */
+  /* Donut Chart - Stacked on Mobile */
   .donut-chart {
     display: flex;
-    gap: 32px;
+    flex-direction: column; /* Stacked by default */
+    gap: 24px;
     align-items: center;
     height: 100%;
+    justify-content: center;
   }
   
   .donut-chart svg {
-    width: 200px;
-    height: 200px;
+    width: 180px;
+    height: 180px;
   }
   
   .donut-legend {
-    flex: 1;
+    width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
   }
   
   .donut-legend .legend-item {
     display: flex;
     align-items: center;
     gap: 12px;
+    width: 100%;
   }
   
   .donut-legend .legend-dot {
@@ -738,46 +701,40 @@
   
   .legend-text {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
   }
   
-  .legend-label {
-    font-size: 14px;
-    color: #6B7280;
-  }
-  
-  .legend-value {
-    font-size: 16px;
-    font-weight: 700;
-    color: #111827;
-  }
+  .legend-label { font-size: 14px; color: #6B7280; }
+  .legend-value { font-size: 16px; font-weight: 700; color: #111827; }
   
   /* Section Card */
   .section-card {
     background: white;
     border: 1px solid #E5E7EB;
     border-radius: 16px;
-    padding: 24px;
+    padding: 20px;
   }
   
   .section-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 24px;
+    margin-bottom: 20px;
   }
   
   .section-title {
     font-size: 18px;
     font-weight: 700;
     color: #111827;
-    margin-bottom: 4px;
+    margin: 0 0 4px 0;
   }
   
   .section-subtitle {
     font-size: 14px;
     color: #6B7280;
+    margin: 0;
   }
   
   /* Trips List */
@@ -789,8 +746,8 @@
   
   .trip-item {
     display: flex;
-    align-items: center;
-    gap: 16px;
+    flex-direction: column; /* Stacked on mobile */
+    gap: 12px;
     padding: 16px;
     background: #F9FAFB;
     border: 1px solid #E5E7EB;
@@ -816,11 +773,13 @@
     justify-content: center;
     color: var(--orange);
     flex-shrink: 0;
+    align-self: flex-start; /* Align top on mobile */
   }
   
   .trip-info {
     flex: 1;
     min-width: 0;
+    width: 100%;
   }
   
   .trip-route {
@@ -830,18 +789,17 @@
     font-weight: 600;
     color: #111827;
     margin-bottom: 4px;
+    flex-wrap: wrap; /* Handle long addresses */
   }
   
-  .trip-route svg {
-    color: #9CA3AF;
-    flex-shrink: 0;
-  }
+  .trip-route svg { color: #9CA3AF; flex-shrink: 0; }
   
   .trip-start,
   .trip-destination {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    max-width: 100%;
   }
   
   .trip-meta {
@@ -856,15 +814,11 @@
     font-size: 18px;
     font-weight: 700;
     flex-shrink: 0;
+    align-self: flex-end; /* Right align on mobile */
   }
   
-  .trip-profit.positive {
-    color: var(--green);
-  }
-  
-  .trip-profit.negative {
-    color: #DC2626;
-  }
+  .trip-profit.positive { color: var(--green); }
+  .trip-profit.negative { color: #DC2626; }
   
   /* Empty States */
   .empty-state {
@@ -877,69 +831,62 @@
     text-align: center;
   }
   
-  .empty-state svg {
-    margin-bottom: 12px;
-    color: #D1D5DB;
-  }
+  .empty-state svg { margin-bottom: 12px; color: #D1D5DB; }
+  .empty-state p { font-size: 14px; color: #6B7280; }
   
-  .empty-state p {
-    font-size: 14px;
-    color: #6B7280;
-  }
+  .empty-state-large { padding: 48px 24px; text-align: center; }
+  .empty-state-large svg { color: #D1D5DB; margin: 0 auto 24px; }
+  .empty-state-large h4 { font-size: 18px; font-weight: 700; color: #111827; margin-bottom: 8px; }
+  .empty-state-large p { font-size: 15px; color: #6B7280; margin-bottom: 24px; }
   
-  .empty-state-large {
-    padding: 64px 32px;
-    text-align: center;
-  }
-  
-  .empty-state-large svg {
-    color: #D1D5DB;
-    margin: 0 auto 24px;
-  }
-  
-  .empty-state-large h4 {
-    font-size: 18px;
-    font-weight: 700;
-    color: #111827;
-    margin-bottom: 8px;
-  }
-  
-  .empty-state-large p {
-    font-size: 15px;
-    color: #6B7280;
-    margin-bottom: 24px;
-  }
-  
-  /* Responsive */
-  @media (max-width: 1200px) {
+  /* --- RESPONSIVE BREAKPOINTS --- */
+
+  /* Tablet */
+  @media (min-width: 640px) {
+    .page-header {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .btn-primary { width: auto; }
+    
     .stats-grid {
       grid-template-columns: repeat(2, 1fr);
     }
-  }
-  
-  @media (max-width: 768px) {
-    .page-header {
-      flex-direction: column;
-      align-items: start;
-      gap: 16px;
+    
+    .trip-item {
+      flex-direction: row;
+      align-items: center;
     }
     
-    .stats-grid,
+    .trip-icon { align-self: center; }
+    .trip-profit { align-self: center; }
+  }
+  
+  /* Desktop */
+  @media (min-width: 1024px) {
+    .stats-grid {
+      grid-template-columns: repeat(4, 1fr);
+    }
+    
     .charts-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, 1fr);
     }
     
     .donut-chart {
-      flex-direction: column;
+      flex-direction: row;
+      justify-content: flex-start;
     }
     
-    .trip-item {
-      flex-direction: column;
-      align-items: start;
+    .donut-chart svg {
+      width: 200px;
+      height: 200px;
     }
     
-    .trip-profit {
-      align-self: flex-end;
+    .legend-text {
+      flex-direction: column;
+      align-items: flex-start;
     }
   }
 </style>
