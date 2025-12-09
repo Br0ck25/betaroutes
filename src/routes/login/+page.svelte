@@ -1,13 +1,16 @@
-<!-- src/routes/login/+page.svelte -->
 <script lang="ts">
   import { enhance } from '$app/forms';
+  import { page } from '$app/stores';
   import type { ActionData } from './$types';
-  
+
   export let form: ActionData;
   
-  let isLogin = true;
-  let loading = false;
+  // FIX: Check URL for 'view=register' to determine initial mode
+  // If ?view=register is present, isLogin becomes false (Sign Up mode)
+  let isLogin = $page.url.searchParams.get('view') !== 'register';
   
+  let loading = false;
+
   function toggleMode() {
     isLogin = !isLogin;
     form = null;
@@ -22,7 +25,6 @@
 </svelte:head>
 
 <div class="auth-page">
-  <!-- Left Side - Branding -->
   <div class="auth-brand">
     <div class="brand-content">
       <a href="/" class="brand-logo">
@@ -92,7 +94,6 @@
     </div>
   </div>
   
-  <!-- Right Side - Form -->
   <div class="auth-form">
     <div class="form-container">
       <div class="form-header">

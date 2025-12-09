@@ -5,8 +5,7 @@
   },
   "LOGS": {
     "meta:user:29c44d78-79d3-4d26-a063-220be7b7fefa:trip_count": "0",
-    "meta:user:fd51e6c2-f827-418b-acb9-fcee7d3d9425:trip_count": "1",
-    "trip:test:b76ed047-a7d5-4854-a20f-9cb1bc7bbbc1": "{\"id\":\"b76ed047-a7d5-4854-a20f-9cb1bc7bbbc1\",\"date\":\"2025-12-08\",\"startTime\":\"09:00\",\"endTime\":\"17:00\",\"hoursWorked\":8,\"startAddress\":\"5996 Brock Dr, Wooton, KY 41776, USA\",\"endAddress\":\"5996 Brock Dr, Wooton, KY 41776, USA\",\"totalMiles\":0,\"mpg\":19,\"gasPrice\":2.56,\"fuelCost\":0,\"maintenanceCost\":0,\"suppliesCost\":0,\"netProfit\":0,\"notes\":\"\",\"stops\":[],\"destinations\":[],\"maintenanceItems\":[],\"suppliesItems\":[],\"lastModified\":\"2025-12-08T12:42:28.740Z\",\"userId\":\"test\",\"createdAt\":\"2025-12-08T12:42:28.751Z\",\"updatedAt\":\"2025-12-08T12:42:28.751Z\"}"
+    "meta:user:fd51e6c2-f827-418b-acb9-fcee7d3d9425:trip_count": "0"
   },
   "TRASH": {}
 }
