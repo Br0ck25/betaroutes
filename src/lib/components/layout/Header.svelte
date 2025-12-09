@@ -24,10 +24,8 @@
 <header class="w-full border-b border-neutral-border bg-neutral-bg-primary">
 	<div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
 		
-		<!-- Logo -->
 		<a href="/" class="text-xl font-bold text-primary-green">Go Route Yourself</a>
 
-		<!-- Desktop Nav -->
 		<nav class="hidden tablet:flex gap-6 text-neutral-primary">
 			{#each links as link}
 				<a href={link.href} class="hover:text-primary-green">
@@ -36,13 +34,11 @@
 			{/each}
 		</nav>
 
-		<!-- Desktop Auth Buttons -->
 		<div class="hidden tablet:flex gap-4">
 			{#if $currentUser}
 
-				<!-- Settings link (desktop) -->
 				<a 
-					href="/settings" 
+					href="/dashboard/settings" 
 					class="text-neutral-primary hover:text-primary-green"
 				>
 					Settings
@@ -71,7 +67,6 @@
 			{/if}
 		</div>
 
-		<!-- Mobile Menu Button -->
 		<button 
 			class="tablet:hidden text-neutral-primary"
 			onclick={() => mobileOpen = !mobileOpen}
@@ -80,7 +75,6 @@
 		</button>
 	</div>
 
-	<!-- Mobile Menu -->
 	{#if mobileOpen}
 		<div class="tablet:hidden border-t border-neutral-border bg-white px-4 py-3">
 			<nav class="flex flex-col gap-4">
@@ -93,9 +87,8 @@
 
 				{#if $currentUser}
 
-					<!-- Settings link (mobile) -->
 					<a 
-						href="/settings" 
+						href="/dashboard/settings" 
 						class="text-neutral-primary hover:text-primary-green"
 					>
 						Settings
