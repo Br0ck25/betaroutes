@@ -49,31 +49,38 @@ function createTripsStore() {
 
 		async create(tripData: Partial<TripRecord>, userId: string) {
 			try {
+                // FIX: Respect existing IDs and timestamps if provided (for imports/restores)
+                // Otherwise generate new ones for fresh trips.
 				const trip: TripRecord = {
 					...tripData,
 					id: tripData.id || crypto.randomUUID(),
 					userId,
-					createdAt: new Date().toISOString(),
-					updatedAt: new Date().toISOString(),
+					createdAt: tripData.createdAt || new Date().toISOString(),
+					updatedAt: tripData.updatedAt || new Date().toISOString(),
 					syncStatus: 'pending'
 				} as TripRecord;
 
-				console.log('💾 Creating trip in IndexedDB:', trip.id);
+				console.log('💾 Creating/Restoring trip in IndexedDB:', trip.id);
 
 				const db = await getDB();
 				const tx = db.transaction('trips', 'readwrite');
-				await tx.objectStore('trips').add(trip);
+				await tx.objectStore('trips').put(trip); // Changed from .add() to .put() to handle overwrites/restores
 				await tx.done;
 
-				update((trips) => [trip, ...trips]);
+				update((trips) => {
+                    // Check if exists to avoid duplicates in UI
+                    const exists = trips.find(t => t.id === trip.id);
+                    if (exists) return trips.map(t => t.id === trip.id ? trip : t);
+                    return [trip, ...trips];
+                });
 
 				await syncManager.addToQueue({
-					action: 'create',
+					action: 'create', // Server handles upsert logic ideally
 					tripId: trip.id,
 					data: trip
 				});
 
-				console.log('✅ Trip created:', trip.id);
+				console.log('✅ Trip saved:', trip.id);
 				return trip;
 			} catch (err) {
 				console.error('❌ Failed to create trip:', err);
@@ -191,22 +198,16 @@ function createTripsStore() {
 				
 				const db = await getDB();
 
-				// --- FIX START ---
-				// Check local trash to ensure we don't resurrect deleted trips
-				// that the server still thinks are active.
 				const trashTx = db.transaction('trash', 'readonly');
 				const trashStore = trashTx.objectStore('trash');
 				const trashItems = await trashStore.getAll();
-				// Create a Set of IDs that are currently in the trash
 				const trashIds = new Set(trashItems.map((t: any) => t.id));
 				await trashTx.done;
-				// --- FIX END ---
 
 				const tx = db.transaction('trips', 'readwrite');
 				const store = tx.objectStore('trips');
 				
 				for (const cloudTrip of cloudTrips) {
-					// If this trip is in our local trash, ignore the server's version
 					if (trashIds.has(cloudTrip.id)) {
 						console.log('Skipping synced trip because it is in local trash:', cloudTrip.id);
 						continue;

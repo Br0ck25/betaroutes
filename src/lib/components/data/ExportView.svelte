@@ -6,8 +6,8 @@
   let dateTo = '';
   let selectedTrips = new Set<string>();
   let selectAll = false;
-  let includeSummary = true;
 
+  // Reactive filter logic
   $: filteredTrips = $trips.filter(trip => {
     if (!trip.date) return false;
     const tripDate = new Date(trip.date);
@@ -16,6 +16,7 @@
     return true;
   });
 
+  // Reactive selection logic
   $: if (selectAll) {
     selectedTrips = new Set(filteredTrips.map(t => t.id));
   } else if (selectedTrips.size === filteredTrips.length && filteredTrips.length > 0) {
@@ -38,9 +39,59 @@
     return new Date(dateString).toLocaleDateString();
   }
   
+  // --- NEW: EXPORT LOGIC STARTS HERE ---
+
   function handleExport() {
-    alert(`Exporting ${selectedTrips.size} trips as ${exportFormat.toUpperCase()}...`);
-    // Add your actual export logic here
+    // 1. Get the actual trip objects based on the selected IDs
+    const tripsToExport = filteredTrips.filter(t => selectedTrips.has(t.id));
+
+    if (tripsToExport.length === 0) {
+      alert("No trips selected to export.");
+      return;
+    }
+
+    if (exportFormat === 'csv') {
+      generateCSV(tripsToExport);
+    } else {
+      alert("PDF export requires a library like 'jspdf'. Please install it to enable PDF support.");
+    }
+  }
+
+  function generateCSV(data: any[]) {
+    // 2. Define headers matching your data structure
+    const headers = ['Date', 'Miles', 'Start Address', 'End Address', 'Purpose', 'Vehicle'];
+    
+    // 3. Map trips to CSV rows
+    const rows = data.map(trip => {
+      const date = trip.date ? new Date(trip.date).toLocaleDateString() : '';
+      const miles = trip.totalMiles || 0;
+      
+      // Escape commas in addresses to prevent breaking CSV format
+      const start = `"${(trip.startAddress || '').replace(/"/g, '""')}"`; 
+      const end = trip.stops && trip.stops.length > 0
+        ? `"${(trip.stops[trip.stops.length - 1].address || '').replace(/"/g, '""')}"` 
+        : '"End"';
+      
+      const purpose = `"${(trip.purpose || '').replace(/"/g, '""')}"`;
+      const vehicle = `"${(trip.vehicleId || '').replace(/"/g, '""')}"`;
+
+      return [date, miles, start, end, purpose, vehicle].join(',');
+    });
+
+    // 4. Combine headers and rows
+    const csvContent = [headers.join(','), ...rows].join('\n');
+
+    // 5. Create a download link programmatically
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `trips_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 </script>
 
