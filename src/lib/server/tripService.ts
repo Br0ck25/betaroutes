@@ -1,11 +1,20 @@
 // src/lib/server/tripService.ts
 import type { KVNamespace } from '@cloudflare/workers-types';
 
+export type Stop = {
+  id: string;
+  address: string;
+  notes?: string;
+  earnings?: number;
+  order: number;
+  [key: string]: any;
+};
+
 export type TripRecord = {
   id: string;
   userId: string;
   title?: string;
-  stops?: any[];
+  stops?: Stop[];
   createdAt: string;
   updatedAt?: string;
   deletedAt?: string;
@@ -17,6 +26,10 @@ export type TrashMetadata = {
   deletedBy: string;
   originalKey: string;
   expiresAt: string;
+};
+
+export type TrashItem = TripRecord & {
+  metadata: TrashMetadata;
 };
 
 function prefixForUser(userId: string) {
@@ -51,7 +64,7 @@ export function makeTripService(
     async get(userId: string, tripId: string) {
       const key = `trip:${userId}:${tripId}`;
       const raw = await kv.get(key);
-      return raw ? JSON.parse(raw) : null;
+      return raw ? JSON.parse(raw) as TripRecord : null;
     },
 
     async put(trip: TripRecord) {
@@ -105,11 +118,11 @@ export function makeTripService(
       await kv.delete(key);
     },
 
-    async listTrash(userId: string) {
+    async listTrash(userId: string): Promise<TrashItem[]> {
       if (!trashKV) return [];
       const prefix = trashPrefixForUser(userId);
       const list = await trashKV.list({ prefix });
-      const out: any[] = [];
+      const out: TrashItem[] = [];
 
       for (const k of list.keys) {
         const raw = await trashKV.get(k.name);

@@ -1,7 +1,5 @@
-<!-- src/routes/+page.svelte -->
 <script lang="ts">
   import { goto } from '$app/navigation';
-  
   function scrollToSection(id: string) {
     const element = document.getElementById(id);
     if (element) {
@@ -16,7 +14,6 @@
 </svelte:head>
 
 <div class="landing">
-  <!-- Header -->
   <header class="header">
     <div class="container">
       <div class="header-content">
@@ -26,14 +23,14 @@
           <button on:click={() => scrollToSection('features')}>Features</button>
           <button on:click={() => scrollToSection('pricing')}>Pricing</button>
           <button on:click={() => scrollToSection('how-it-works')}>How It Works</button>
+        
           <a href="/login" class="btn-login">Sign In</a>
-          <a href="/login" class="btn-primary">Get Started Free</a>
+          <a href="/register" class="btn-primary">Get Started Free</a>
         </nav>
       </div>
     </div>
   </header>
   
-  <!-- Hero Section -->
   <section class="hero">
     <div class="container">
       <div class="hero-content">
@@ -44,7 +41,7 @@
         </p>
         
         <div class="hero-buttons">
-          <a href="/login" class="btn-hero-primary">Start Free Trial</a>
+          <a href="/register" class="btn-hero-primary">Start Free Trial</a>
           <button on:click={() => scrollToSection('how-it-works')} class="btn-hero-secondary">
             Learn More
           </button>
@@ -68,7 +65,6 @@
     </div>
   </section>
   
-  <!-- Features Section -->
   <section id="features" class="features">
     <div class="container">
       <h2 class="section-title">Everything You Need to Succeed</h2>
@@ -114,7 +110,6 @@
     </div>
   </section>
   
-  <!-- How It Works -->
   <section id="how-it-works" class="how-it-works">
     <div class="container">
       <h2 class="section-title">How It Works</h2>
@@ -148,7 +143,6 @@
     </div>
   </section>
   
-  <!-- Pricing Section -->
   <section id="pricing" class="pricing">
     <div class="container">
       <h2 class="section-title">Simple, Transparent Pricing</h2>
@@ -173,7 +167,7 @@
             <li>✓ Mobile app access</li>
           </ul>
           
-          <a href="/login" class="btn-plan">Get Started</a>
+          <a href="/register" class="btn-plan">Get Started</a>
         </div>
         
         <div class="pricing-card featured">
@@ -196,7 +190,7 @@
             <li>✓ Custom reports</li>
           </ul>
           
-          <a href="/login" class="btn-plan featured">Start Free Trial</a>
+          <a href="/register" class="btn-plan featured">Start Free Trial</a>
         </div>
         
         <div class="pricing-card">
@@ -218,27 +212,25 @@
             <li>✓ Dedicated support</li>
           </ul>
           
-          <a href="/login" class="btn-plan">Contact Sales</a>
+          <a href="/contact" class="btn-plan">Contact Sales</a>
         </div>
       </div>
     </div>
   </section>
   
-  <!-- CTA Section -->
   <section class="cta">
     <div class="container">
       <div class="cta-content">
         <h2>Ready to Maximize Your Profits?</h2>
         <p>Join hundreds of drivers who are already tracking their routes and increasing their earnings.</p>
         <div class="cta-buttons">
-          <a href="/login" class="btn-cta-primary">Start Free Trial</a>
+          <a href="/register" class="btn-cta-primary">Start Free Trial</a>
           <span class="cta-note">No credit card required</span>
         </div>
       </div>
     </div>
   </section>
   
-  <!-- Footer -->
   <footer class="footer">
     <div class="container">
       <div class="footer-content">
@@ -269,7 +261,7 @@
       </div>
       
       <div class="footer-bottom">
-        <p>&copy; 2024 Go Route Yourself. All rights reserved.</p>
+        <p>&copy; {new Date().getFullYear()} Go Route Yourself. All rights reserved.</p>
       </div>
     </div>
   </footer>

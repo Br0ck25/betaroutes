@@ -7,8 +7,10 @@
   import { trash } from '$lib/stores/trash';
   import { syncManager } from '$lib/sync/syncManager';
   import SyncIndicator from '$lib/components/SyncIndicator.svelte';
-  
-  export let data;
+  import type { LayoutData } from './$types';
+
+  export let data: LayoutData;
+
   $: if (data?.user) {
     auth.hydrate(data.user);
   }
@@ -20,6 +22,10 @@
   
   function closeSidebar() {
     sidebarOpen = false;
+  }
+
+  function handleOverlayKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') closeSidebar();
   }
   
   async function handleLogout() {
@@ -47,7 +53,9 @@
     { 
       href: '/dashboard/trips', 
       icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M9 2C13.97 2 18 6.03 18 11C18 15.97 13.97 20 9 20H2V13C2 8.03 6.03 4 11 4H18V11C18 6.03 13.97 2 9 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-      label: 'Trip History' 
+      label: 'Trip History',
+      // FIX: Don't highlight history when we are on the "New Trip" page
+      exclude: ['/dashboard/trips/new']
     },
     { 
       href: '/dashboard/trash', 
@@ -55,9 +63,9 @@
       label: 'Trash'
     },
     { 
-      href: '/dashboard/export', 
-      icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M16 11V15C16 15.5304 15.7893 16.0391 15.4142 16.4142C15.0391 16.7893 14.5304 17 14 17H4C3.46957 17 2.96086 16.7893 2.58579 16.4142C2.21071 16.0391 2 15.5304 2 15V11M5 7L9 3M9 3L13 7M9 3V13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-      label: 'Export' 
+      href: '/dashboard/data', 
+      icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10h12m-6-6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+      label: 'Data' 
     },
     { 
       href: '/dashboard/settings', 
@@ -66,11 +74,24 @@
     },
   ];
 
-  function isActive(href: string, exact = false): boolean {
-    if (exact) {
-      return $page.url.pathname === href;
+  // FIX: Added optional 'exclude' parameter to handle overlapping paths
+  function isActive(href: string, exact = false, exclude: string[] = []): boolean {
+    const path = $page.url.pathname;
+    
+    // 1. Check exclusions first
+    if (exclude.length > 0) {
+      if (exclude.some(e => path.startsWith(e))) {
+        return false;
+      }
     }
-    return $page.url.pathname.startsWith(href);
+
+    // 2. Check exact match
+    if (exact) {
+      return path === href;
+    }
+
+    // 3. Check partial match (default behavior)
+    return path.startsWith(href);
   }
   
   function getInitial(name: string): string {
@@ -80,15 +101,8 @@
   onMount(async () => {
     console.log('[DASHBOARD LAYOUT] Initializing...');
     
-    // FIX: Use 'name' as the stable User ID instead of 'token'
-    let userId = data?.user?.name || data?.user?.token;
+    let userId = data?.user?.name || $user?.name || data?.user?.token || $user?.token;
 
-    // Double check store if data prop is missing
-    if (!userId && $user) {
-        userId = $user.name || $user.token;
-    }
-
-    // Offline fallback
     if (!userId) {
         userId = localStorage.getItem('offline_user_id');
         if (userId) {
@@ -101,11 +115,8 @@
         console.log('[DASHBOARD LAYOUT] Loading data for:', userId);
         await syncManager.initialize();
         
-        // 1. Load local data first
         await trips.load(userId);
         await trash.load(userId);
-        
-        // 2. Explicitly trigger cloud sync to get latest data from other devices
         await trips.syncFromCloud(userId);
         
         console.log('[DASHBOARD LAYOUT] ✅ Data loaded successfully!');
@@ -138,11 +149,11 @@
       <SyncIndicator />
       
       {#if $user}
-        <div class="mobile-user">
+        <a href="/dashboard/settings" class="mobile-user" aria-label="Profile Settings">
           <div class="user-avatar small">
             {getInitial($user.name || $user.email || '')}
           </div>
-        </div>
+        </a>
       {/if}
     </div>
   </header>
@@ -166,7 +177,7 @@
         <a 
           href={item.href} 
           class="nav-item" 
-          class:active={isActive(item.href, item.exact)}
+          class:active={isActive(item.href, item.exact, item.exclude)}
           on:click={closeSidebar}
         >
           <span class="nav-icon">{@html item.icon}</span>
@@ -177,7 +188,7 @@
     
     <div class="sidebar-footer">
       {#if $user}
-        <div class="user-card">
+        <a href="/dashboard/settings" class="user-card" on:click={closeSidebar}>
           <div class="user-avatar">
             {getInitial($user.name || $user.email || '')}
           </div>
@@ -185,7 +196,7 @@
             <div class="user-name">{$user.name || 'User'}</div>
             <div class="user-plan">{$user.plan || 'Free'} Plan</div>
           </div>
-        </div>
+        </a>
         
         <button class="logout-btn" on:click={handleLogout}>
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -203,7 +214,7 @@
       role="button" 
       tabindex="0"
       on:click={closeSidebar} 
-      on:keydown={(e) => e.key === 'Escape' && closeSidebar()}
+      on:keydown={handleOverlayKeydown}
     ></div>
   {/if}
   
@@ -280,6 +291,9 @@
   .mobile-user {
     display: flex;
     align-items: center;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
   }
   
   /* Sidebar */
@@ -387,6 +401,13 @@
     background: #F9FAFB;
     border-radius: 12px;
     margin-bottom: 12px;
+    text-decoration: none;
+    color: inherit;
+    transition: background-color 0.2s ease;
+  }
+
+  .user-card:hover {
+    background: #F3F4F6;
   }
   
   .user-avatar {
