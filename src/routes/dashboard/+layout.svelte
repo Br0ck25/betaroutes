@@ -93,8 +93,11 @@
     return name ? name.charAt(0).toUpperCase() : 'U';
   }
 
-  onMount(async () => {
+onMount(async () => {
     console.log('[DASHBOARD LAYOUT] Initializing...');
+    
+    // --- FIX: Pass API Key to SyncManager ---
+    const apiKey = data.googleMapsApiKey; 
     
     let userId = data?.user?.name || $user?.name || data?.user?.token || $user?.token;
 
@@ -108,7 +111,9 @@
     if (userId) {
       try {
         console.log('[DASHBOARD LAYOUT] Loading data for:', userId);
-        await syncManager.initialize();
+        
+        // --- FIX: Pass the key here ---
+        await syncManager.initialize(apiKey);
         
         await trips.load(userId);
         await trash.load(userId);
