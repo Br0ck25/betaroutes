@@ -5,20 +5,52 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
 
-  // FIX: Receive key from layout data
   export let data; 
   $: API_KEY = data.googleMapsApiKey;
 
+  // --- Remote Sync Logic ---
+  
+  // 1. Initialize local form state from store (Local Storage)
   let settings = { ...$userSettings };
+
+  // 2. If remote settings exist (from KV via server load), merge them in
+  // This ensures cross-browser consistency
+  $: if (data.remoteSettings?.settings) {
+    const merged = { ...$userSettings, ...data.remoteSettings.settings };
+    // Update the store
+    userSettings.set(merged);
+    // Update the local form binding
+    settings = merged;
+  }
+
   let profile = {
     name: '',
     email: ''
   };
 
-  $: if ($user) {
-    if (!profile.name) profile.name = $user.name || '';
-    if (!profile.email) profile.email = $user.email || '';
+  // 3. Initialize profile from Remote KV or Auth Store
+  $: if ($user || data.remoteSettings?.profile) {
+    const remote = data.remoteSettings?.profile || {};
+    // Prioritize remote saved data, fall back to auth user data
+    if (!profile.name) profile.name = remote.name || $user?.name || '';
+    if (!profile.email) profile.email = remote.email || $user?.email || '';
   }
+
+  // Helper to sync data to Cloudflare KV via our API
+  async function syncToCloud(type: 'settings' | 'profile', payload: any) {
+      try {
+          const res = await fetch('/api/settings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ [type]: payload })
+          });
+          if (!res.ok) console.error('Failed to sync settings to cloud');
+      } catch (e) {
+          console.error('Sync error:', e);
+      }
+  }
+
+  // --- End Remote Sync Logic ---
 
   $: monthlyUsage = $trips.filter(t => {
       if (!t.date) return false;
@@ -42,11 +74,6 @@
   let mapLoaded = false;
 
   onMount(() => {
-    if ($user) {
-        profile.name = $user.name || '';
-        profile.email = $user.email || '';
-    }
-
     // Load Google Maps for Autocomplete
     console.log('[SETTINGS] Loading Maps with Key:', API_KEY ? 'Yes' : 'MISSING');
 
@@ -57,7 +84,6 @@
 
     if (!window.google) {
       const script = document.createElement('script');
-      // FIX: Use API_KEY variable
       script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places`;
       script.async = true;
       script.onload = () => { mapLoaded = true; };
@@ -67,16 +93,26 @@
     }
   });
 
-  function saveDefaultSettings() {
+  async function saveDefaultSettings() {
+    // 1. Save to Local Storage (via Store)
     userSettings.set(settings);
-    showSuccessMsg('Default values saved successfully!');
+    
+    // 2. Sync to Cloudflare KV
+    await syncToCloud('settings', settings);
+
+    showSuccessMsg('Default values saved and synced!');
   }
 
-  function saveProfile() {
+  async function saveProfile() {
+    // 1. Update Auth Store / Backend
     auth.updateProfile({
         name: profile.name,
         email: profile.email
     });
+
+    // 2. Sync to Cloudflare KV
+    await syncToCloud('profile', profile);
+
     showSuccessMsg('Profile updated successfully!');
   }
   
@@ -86,9 +122,6 @@
     setTimeout(() => showSuccess = false, 3000);
   }
   
-  /**
-   * CRITICAL FIX: Update password via server API
-   */
   async function changePassword() {
     // 1. Client-side Validation
     if (passwordData.new !== passwordData.confirm) {
@@ -110,11 +143,9 @@
                 newPassword: passwordData.new
             })
         });
-
         const result = await response.json();
 
         if (!response.ok) {
-            // Display error from server (e.g., "Incorrect current password")
             passwordError = result.message || 'Failed to update password';
             return;
         }
@@ -124,7 +155,6 @@
         showPasswordChange = false;
         passwordData = { current: '', new: '', confirm: '' };
         showSuccessMsg('Password changed successfully');
-
     } catch (e) {
         console.error(e);
         passwordError = 'An unexpected network error occurred.';
@@ -203,7 +233,6 @@
   
   async function handleLogout() {
     if (confirm('Are you sure you want to logout?')) {
-      // Calls the dedicated logout endpoint (ensure you have src/routes/api/logout or src/routes/logout)
       await fetch('/api/logout', { method: 'POST' });
       auth.logout();
       goto('/login');

@@ -4,14 +4,15 @@
     "user:fd51e6c2-f827-418b-acb9-fcee7d3d9425": "{\"id\":\"fd51e6c2-f827-418b-acb9-fcee7d3d9425\",\"username\":\"testuser\",\"name\":\"test\",\"email\":\"\",\"password\":\"$2b$10$5OQa3ww7zFpxKaQSCMmUeeFXci9ZZLWqrzI70PFcLmmHzUAbwVnXy\",\"plan\":\"free\",\"tripsThisMonth\":0,\"maxTrips\":10,\"resetDate\":\"2025-12-07T21:21:14.854Z\",\"createdAt\":\"2025-12-07T21:21:14.854Z\"}",
     "idx:username:james": "29c44d78-79d3-4d26-a063-220be7b7fefa",
     "idx:username:testuser": "fd51e6c2-f827-418b-acb9-fcee7d3d9425",
-    "97c14830-0009-4dc2-9a29-df8ca36302f9": "{\"id\":\"fd51e6c2-f827-418b-acb9-fcee7d3d9425\",\"name\":\"testuser\",\"email\":\"\",\"plan\":\"free\",\"tripsThisMonth\":0,\"maxTrips\":10,\"resetDate\":\"2025-12-09T19:14:48.936Z\"}"
+    "32a9abf8-6df6-4214-8ffa-087f2643c647": "{\"id\":\"29c44d78-79d3-4d26-a063-220be7b7fefa\",\"name\":\"james\",\"email\":\"\",\"plan\":\"free\",\"tripsThisMonth\":0,\"maxTrips\":10,\"resetDate\":\"2025-12-09T20:16:36.694Z\"}"
   },
   "LOGS": {
     "meta:user:29c44d78-79d3-4d26-a063-220be7b7fefa:trip_count": "0",
     "meta:user:fd51e6c2-f827-418b-acb9-fcee7d3d9425:trip_count": "0",
     "meta:user:f686bd2a-7892-4651-a53b-9da52a047cc2:trip_count": "1",
     "trip:james:eb1c7221-d700-4916-8de2-338ecc274272": "{\"id\":\"eb1c7221-d700-4916-8de2-338ecc274272\",\"date\":\"2025-12-09\",\"startTime\":\"09:00\",\"endTime\":\"17:00\",\"hoursWorked\":8,\"startAddress\":\"\",\"endAddress\":\"\",\"totalMiles\":0,\"mpg\":25,\"gasPrice\":3.5,\"fuelCost\":0,\"maintenanceCost\":0,\"suppliesCost\":0,\"netProfit\":0,\"notes\":\"\",\"stops\":[],\"destinations\":[],\"maintenanceItems\":[],\"suppliesItems\":[],\"lastModified\":\"2025-12-09T19:07:01.186Z\",\"userId\":\"james\",\"createdAt\":\"2025-12-09T19:07:01.191Z\",\"updatedAt\":\"2025-12-09T19:07:01.191Z\"}",
-    "meta:user:97c14830-0009-4dc2-9a29-df8ca36302f9:trip_count": "0"
+    "meta:user:97c14830-0009-4dc2-9a29-df8ca36302f9:trip_count": "1",
+    "trip:testuser:eb3b80e2-5409-476b-acc4-b800cc2c1df2": "{\"id\":\"eb3b80e2-5409-476b-acc4-b800cc2c1df2\",\"date\":\"2025-12-09\",\"startTime\":\"09:00\",\"endTime\":\"17:00\",\"hoursWorked\":8,\"startAddress\":\"\",\"endAddress\":\"\",\"totalMiles\":0,\"mpg\":25,\"gasPrice\":3.5,\"fuelCost\":0,\"maintenanceCost\":0,\"suppliesCost\":0,\"netProfit\":0,\"notes\":\"\",\"stops\":[],\"destinations\":[],\"maintenanceItems\":[],\"suppliesItems\":[],\"lastModified\":\"2025-12-09T19:51:48.155Z\",\"userId\":\"testuser\",\"createdAt\":\"2025-12-09T19:51:48.173Z\",\"updatedAt\":\"2025-12-09T19:51:48.173Z\"}"
   },
   "TRASH": {}
 }

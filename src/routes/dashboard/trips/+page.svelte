@@ -10,7 +10,7 @@
   let filterProfit = 'all'; 
   let startDate = '';
   let endDate = '';
-  
+
   $: filteredTrips = $trips
     .filter(trip => {
       const query = searchQuery.toLowerCase();
@@ -68,17 +68,21 @@
       }
       return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
     });
-  
+
   function formatCurrency(amount: number): string {
     return new Intl.NumberFormat('en-US', {
       style: 'currency', currency: 'USD', minimumFractionDigits: 2
     }).format(amount);
   }
   
+  // [FIX] Added timeZone: 'UTC' to prevent dates shifting back a day in local time
   function formatDate(dateString: string): string {
     const date = new Date(dateString);
     return new Intl.DateTimeFormat('en-US', {
-      month: 'short', day: 'numeric', year: 'numeric'
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric',
+      timeZone: 'UTC' 
     }).format(date);
   }
 
@@ -96,7 +100,7 @@
         const trip = $trips.find(t => t.id === id);
         const currentUser = $page.data.user || $user;
         let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
-        
+
         if (trip && currentUser) {
             if (trip.userId === currentUser.name) userId = currentUser.name;
             else if (trip.userId === currentUser.token) userId = currentUser.token;
@@ -126,6 +130,7 @@
   }
   
   let expandedTrips = new Set<string>();
+
   function toggleExpand(id: string) {
     if (expandedTrips.has(id)) expandedTrips.delete(id);
     else expandedTrips.add(id);
@@ -335,7 +340,7 @@
                     <div class="expense-row total">
                       <span>Total Costs</span>
                       <span>{formatCurrency(totalCosts)}</span>
-                    </div>
+                  </div>
                   </div>
                 </div>
               {/if}

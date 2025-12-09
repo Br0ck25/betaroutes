@@ -28,6 +28,10 @@ id = "569eff477945483283fa854d7bdf6b14"
 binding = "BETA_LOGS_TRASH_KV"
 id = "9203d2e85d9d47dabb167faf4e5121a9"
 
+[[env.production.kv_namespaces]]
+binding = "BETA_USER_SETTINGS_KV"
+id = "63469d2321704b1ebcc02d01a894e167"
+
 # ---------------------------------------------------
 # Preview environment (PR previews and local dev)
 # ---------------------------------------------------
@@ -49,3 +53,7 @@ id = "a245706e522b444fa9b67fa9a1b88d6a"
 [[env.preview.kv_namespaces]]
 binding = "BETA_LOGS_TRASH_KV"
 id = "4dbad92a0fc44f9b91c8a46165c8e40b"
+
+[[env.preview.kv_namespaces]]
+binding = "BETA_USER_SETTINGS_KV"
+id = "63469d2321704b1ebcc02d01a894e167"
