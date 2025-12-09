@@ -21,6 +21,12 @@ const tripSchema = z.object({
 	startAddress: z.string().max(500).optional(),
 	endAddress: z.string().max(500).optional(),
 	totalMiles: z.number().nonnegative().optional(),
+	
+    // --- FIX: Added missing time fields ---
+    estimatedTime: z.number().optional(), // Drive time in minutes
+    totalTime: z.string().optional(),     // Drive time as string "1h 30m"
+    // -------------------------------------
+
 	mpg: z.number().positive().optional(),
 	gasPrice: z.number().nonnegative().optional(),
 	fuelCost: z.number().optional(),
@@ -44,7 +50,6 @@ export const GET: RequestHandler = async (event) => {
 		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
 		const svc = makeTripService(kv, trashKV);
 
-		// FIX: Use stable user ID (name) for data retrieval
 		const storageId = user.name || user.token;
 		const trips = await svc.list(storageId);
 
@@ -83,13 +88,12 @@ export const POST: RequestHandler = async (event) => {
 		const id = validData.id || crypto.randomUUID();
 		const now = new Date().toISOString();
 
-		// FIX: Use stable user ID (name) for storage
 		const storageId = user.name || user.token;
 
 		const trip = {
 			...validData,
 			id,
-			userId: storageId, // Store under the stable ID
+			userId: storageId,
 			createdAt: now,
 			updatedAt: now
 		};
