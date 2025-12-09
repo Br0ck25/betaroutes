@@ -4,16 +4,16 @@ declare global {
 		interface Locals {
 			token: string | null;
 			user: {
-				id: string; // Ensure ID is available for the key
 				token: string;
 				plan: string;
 				tripsThisMonth: number;
 				maxTrips: number;
 				resetDate: string;
-				name?: string;
-				email?: string;
+				name?: string;  // Add these for profile sync
+				email?: string; // Add these for profile sync
 			} | null;
 		}
+		// Add the Platform interface with your KVs
 		interface Platform {
 			env: {
 				BETA_LOGS_KV: KVNamespace;

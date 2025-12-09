@@ -11,7 +11,8 @@ const DB_FILE = path.resolve('.kv-mock.json');
 let mockDB: Record<string, any> = {
 	USERS: {},
 	LOGS: {},
-	TRASH: {}
+	TRASH: {},
+	SETTINGS: {} // <--- ADDED: Initialize settings store
 };
 
 if (dev) {
@@ -74,6 +75,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 		if (!event.platform.env.BETA_LOGS_TRASH_KV) {
 			event.platform.env.BETA_LOGS_TRASH_KV = createMockKV('TRASH');
+		}
+		// <--- ADDED: Ensure Settings KV is mocked
+		if (!event.platform.env.BETA_USER_SETTINGS_KV) {
+			event.platform.env.BETA_USER_SETTINGS_KV = createMockKV('SETTINGS');
 		}
 	}
 
