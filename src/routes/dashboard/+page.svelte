@@ -427,22 +427,23 @@
   .dashboard {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 16px; /* Added padding wrapper */
+    padding: 16px;
   }
   
   /* --- MOBILE FIRST DEFAULT STYLES --- */
 
-  /* Header - Stacked on mobile */
+  /* Header - Row layout (Beside each other) */
   .page-header {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: row; /* Aligned horizontally */
+    justify-content: space-between; /* Pushed to edges */
+    align-items: center;
     gap: 16px;
     margin-bottom: 24px;
   }
   
   .page-title {
-    font-size: 28px; /* Slightly smaller on mobile */
+    font-size: 24px; /* Slightly smaller to fit */
     font-weight: 800;
     color: #111827;
     margin-bottom: 4px;
@@ -450,7 +451,7 @@
   }
   
   .page-subtitle {
-    font-size: 15px;
+    font-size: 14px;
     color: #6B7280;
     margin: 0;
   }
@@ -460,18 +461,19 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
-    padding: 12px 24px;
+    padding: 12px 16px; /* Reduced padding slightly */
     background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%);
     color: white;
     border: none;
     border-radius: 10px;
     font-weight: 600;
-    font-size: 15px;
+    font-size: 14px;
     text-decoration: none;
     cursor: pointer;
     transition: all 0.2s;
     box-shadow: 0 4px 12px rgba(255, 127, 80, 0.3);
-    width: fit-content; /* Full width on mobile */
+    width: fit-content; /* Only as wide as needed */
+    white-space: nowrap; /* Prevent text wrapping */
   }
   
   .btn-primary:hover {
@@ -843,14 +845,10 @@
 
   /* Tablet */
   @media (min-width: 640px) {
-    .page-header {
-      flex-direction: row;
-      align-items: center;
-      justify-content: space-between;
-    }
-    
-    .btn-primary { width: auto; }
-    
+    .page-title { font-size: 32px; }
+    .page-subtitle { font-size: 16px; }
+    .btn-primary { padding: 12px 24px; font-size: 15px; }
+
     .stats-grid {
       grid-template-columns: repeat(2, 1fr);
     }
