@@ -48,6 +48,7 @@
   },
   "dependencies": {
     "@googlemaps/js-api-loader": "^2.0.2",
+    "bcryptjs": "^3.0.3",
     "date-fns": "^4.1.0",
     "idb": "^8.0.3",
     "jspdf": "^3.0.4",

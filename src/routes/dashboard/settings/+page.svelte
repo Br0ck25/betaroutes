@@ -4,7 +4,7 @@
   import { trips } from '$lib/stores/trips';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
-  
+
   // FIX: Receive key from layout data
   export let data; 
   $: API_KEY = data.googleMapsApiKey;
@@ -66,7 +66,7 @@
       mapLoaded = true;
     }
   });
-  
+
   function saveDefaultSettings() {
     userSettings.set(settings);
     showSuccessMsg('Default values saved successfully!');
@@ -86,7 +86,11 @@
     setTimeout(() => showSuccess = false, 3000);
   }
   
-  function changePassword() {
+  /**
+   * CRITICAL FIX: Update password via server API
+   */
+  async function changePassword() {
+    // 1. Client-side Validation
     if (passwordData.new !== passwordData.confirm) {
       passwordError = 'Passwords do not match';
       return;
@@ -96,10 +100,35 @@
       return;
     }
     
-    passwordError = '';
-    showPasswordChange = false;
-    passwordData = { current: '', new: '', confirm: '' };
-    showSuccessMsg('Password changed successfully');
+    // 2. Server-side Update
+    try {
+        const response = await fetch('/api/change-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                currentPassword: passwordData.current,
+                newPassword: passwordData.new
+            })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            // Display error from server (e.g., "Incorrect current password")
+            passwordError = result.message || 'Failed to update password';
+            return;
+        }
+
+        // 3. Success State
+        passwordError = '';
+        showPasswordChange = false;
+        passwordData = { current: '', new: '', confirm: '' };
+        showSuccessMsg('Password changed successfully');
+
+    } catch (e) {
+        console.error(e);
+        passwordError = 'An unexpected network error occurred.';
+    }
   }
 
   async function handleDeleteAccount() {
@@ -116,7 +145,7 @@
     try {
       const result = await auth.deleteAccount($user?.name || '', deletePassword);
       if (result.success) {
-        goto('/'); 
+        goto('/');
       } else {
         deleteError = result.error || 'Failed to delete account';
         isDeleting = false;
@@ -174,7 +203,8 @@
   
   async function handleLogout() {
     if (confirm('Are you sure you want to logout?')) {
-      await fetch('/logout', { method: 'POST' });
+      // Calls the dedicated logout endpoint (ensure you have src/routes/api/logout or src/routes/logout)
+      await fetch('/api/logout', { method: 'POST' });
       auth.logout();
       goto('/login');
     }
@@ -193,14 +223,12 @@
     };
 
     if (trySetup()) return {};
-    
     const interval = setInterval(() => {
       retryCount++;
       if (trySetup() || retryCount >= maxRetries) {
         clearInterval(interval);
       }
     }, 200);
-
     return {
       destroy() {
         clearInterval(interval);
@@ -213,7 +241,6 @@
     input.dataset.autocompleteSetup = 'true';
     
     const autocomplete = new google.maps.places.Autocomplete(input, { types: ['geocode'] });
-    
     autocomplete.addListener('place_changed', () => {
       const place = autocomplete.getPlace();
       if (place.formatted_address) {
@@ -223,18 +250,15 @@
         setTimeout(() => {
           const event = new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true });
           input.dispatchEvent(event);
-       
           forceHidePac();
         }, 50);
       }
     });
-
     input.addEventListener('blur', () => {
       setTimeout(() => {
         forceHidePac();
       }, 200);
     });
-
     let typingTimeout: any;
     input.addEventListener('input', () => {
       clearTimeout(typingTimeout);
@@ -280,7 +304,6 @@
   {/if}
   
   <div class="settings-grid">
-   
     <div class="settings-card">
       <div class="card-header">
         <div class="card-icon orange">
@@ -297,7 +320,6 @@
       
       <div class="form-group">
         <label for="profile-name">Name</label>
-        
         <input id="profile-name" type="text" bind:value={profile.name} placeholder="Your name" />
       </div>
       
@@ -312,7 +334,6 @@
 
       <div class="plan-section">
         <div class="plan-info">
-         
           <label for="plan-badge">Current Plan</label>
           <div class="plan-row">
             <div id="plan-badge" class="plan-badge">{$auth.user?.plan || 'Free'} Plan</div>
@@ -325,7 +346,6 @@
         {#if $auth.user?.plan === 'free'}
           <div class="usage-stats">
             <div class="usage-header">
- 
               <span>Monthly Usage</span>
               <span>{monthlyUsage} / {$auth.user?.maxTrips || 10} trips</span>
             </div>
@@ -345,7 +365,6 @@
       <div class="card-header">
         <div class="card-icon blue">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
- 
             <path d="M10 2C13.97 2 18 6.03 18 11C18 15.97 13.97 20 9 20H2V13C2 8.03 6.03 4 11 4H18V11C18 6.03 13.97 2 9 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
@@ -353,7 +372,6 @@
           <h2 class="card-title">Default Values</h2>
           <p class="card-subtitle">Pre-fill forms with these values</p>
         </div>
-  
       </div>
       
       <div class="form-group">
@@ -365,7 +383,6 @@
         <label for="default-gas">Default Gas Price</label>
         <div class="input-prefix">
           <span class="prefix">$</span>
-        
           <input id="default-gas" type="number" bind:value={settings.defaultGasPrice} placeholder="3.50" min="0" step="0.01" />
         </div>
       </div>
@@ -376,7 +393,6 @@
           <input 
             id="default-start"
             type="text" 
-        
             bind:value={settings.defaultStartAddress}
             placeholder="Start typing address..."
             use:initAutocomplete
@@ -387,7 +403,6 @@
       </div>
       
       <div class="form-group">
-        
         <label for="default-end">Default End Address</label>
         {#if mapLoaded}
           <input 
@@ -397,7 +412,6 @@
             placeholder="Start typing address..."
             use:initAutocomplete
           />
-    
         {:else}
           <input id="default-end" type="text" bind:value={settings.defaultEndAddress} placeholder="Loading maps..." disabled />
         {/if}
@@ -411,7 +425,6 @@
     <div class="settings-card">
       <div class="card-header">
         <div class="card-icon green">
-     
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
              <path d="M10 12C11.1046 12 12 11.1046 12 10C12 8.89543 11.1046 8 10 8C8.89543 8 8 8.89543 8 10C8 11.1046 8.89543 12 10 12Z" stroke="currentColor" stroke-width="2"/>
             <path d="M16.2 12C16.1 12.5 16.3 13 16.7 13.3L16.8 13.4C17.1 13.7 17.3 14.1 17.3 14.5C17.3 14.9 17.1 15.3 16.8 15.6C16.5 15.9 16.1 16.1 15.7 16.1C15.3 16.1 14.9 15.9 14.6 15.6L14.5 15.5C14.2 15.1 13.7 14.9 13.2 15C12.7 15.1 12.4 15.5 12.3 16V16.2C12.3 17.1 11.6 17.8 10.7 17.8C9.8 17.8 9.1 17.1 9.1 16.2V16.1C9 15.5 8.6 15.1 8 15C7.5 15 7 15.2 6.7 15.6L6.6 15.7C6.3 16 5.9 16.2 5.5 16.2C5.1 16.2 4.7 16 4.4 15.7C4.1 15.4 3.9 15 3.9 14.6C3.9 14.2 4.1 13.8 4.4 13.5L4.5 13.4C4.9 13.1 5.1 12.6 5 12.1C4.9 11.6 4.5 11.3 4 11.2H3.8C2.9 11.2 2.2 10.5 2.2 9.6C2.2 8.7 2.9 8 3.8 8H3.9C4.5 7.9 4.9 7.5 5 6.9C5 6.4 4.8 5.9 4.4 5.6L4.3 5.5C4 5.2 3.8 4.8 3.8 4.4C3.8 4 4 3.6 4.3 3.3C4.6 3 5 2.8 5.4 2.8C5.8 2.8 6.2 3 6.5 3.3L6.6 3.4C7 3.8 7.5 4 8 3.9C8.5 3.9 8.8 3.4 8.9 2.9V2.7C8.9 1.8 9.6 1.1 10.5 1.1C11.4 1.1 12.1 1.8 12.1 2.7V2.8C12.1 3.4 12.5 3.8 13.1 3.9C13.6 4 14.1 3.8 14.4 3.4L14.5 3.3C14.8 3 15.2 2.8 15.6 2.8C16 2.8 16.4 3 16.7 3.3C17 3.6 17.2 4 17.2 4.4C17.2 4.8 17 5.2 16.7 5.5L16.6 5.6C16.2 5.9 16 6.4 16.1 6.9C16.2 7.4 16.6 7.7 17.1 7.8H17.3C18.2 7.8 18.9 8.5 18.9 9.4C18.9 10.3 18.2 11 17.3 11H17.2C16.6 11.1 16.2 11.5 16.1 12.1L16.2 12Z" stroke="currentColor" stroke-width="2"/>
@@ -429,7 +442,6 @@
         <select id="distance-unit" bind:value={settings.distanceUnit}>
           <option value="miles">Miles</option>
           <option value="km">Kilometers</option>
-       
         </select>
       </div>
       
@@ -441,7 +453,6 @@
           <option value="GBP">GBP (£)</option>
           <option value="JPY">JPY (¥)</option>
         </select>
-     
       </div>
       
       <button class="btn-primary" on:click={saveDefaultSettings}>
@@ -457,7 +468,6 @@
           </svg>
         </div>
         <div>
- 
           <h2 class="card-title">Security</h2>
           <p class="card-subtitle">Password and authentication</p>
         </div>
@@ -468,7 +478,6 @@
       {:else}
         <div class="password-change">
           {#if passwordError}<div class="alert error">{passwordError}</div>{/if}
-       
           <div class="form-group"><label for="curr-pass">Current Password</label><input id="curr-pass" type="password" bind:value={passwordData.current} /></div>
           <div class="form-group"><label for="new-pass">New Password</label><input id="new-pass" type="password" bind:value={passwordData.new} /></div>
           <div class="form-group"><label for="confirm-pass">Confirm New Password</label><input id="confirm-pass" type="password" bind:value={passwordData.confirm} /></div>
@@ -476,7 +485,6 @@
             <button class="btn-primary" on:click={changePassword}>Update</button>
             <button class="btn-secondary" on:click={() => showPasswordChange = false}>Cancel</button>
           </div>
-  
         </div>
       {/if}
     </div>
@@ -493,7 +501,6 @@
           <h2 class="card-title">Data Management</h2>
           <p class="card-subtitle">Export, import, or delete your data</p>
         </div>
-    
       </div>
       
       <div class="data-actions">
@@ -504,7 +511,6 @@
           </div>
         </button>
         <button class="action-btn" on:click={importData}>
-       
           <div>
             <div class="action-title">Import Data</div>
             <div class="action-subtitle">Restore from backup</div>
@@ -533,7 +539,6 @@
       </div>
       
       <div class="danger-actions">
-   
         <button class="btn-logout" on:click={handleLogout}>
           Logout
         </button>
@@ -592,7 +597,7 @@
   /* Added display: block to ensure selects take up the width properly */
   
   .form-group input, .form-group select { 
-    width: 100%; 
+    width: 100%;
     max-width: 450px; /* Constrain text/number inputs and selects */
     padding: 12px 16px; 
     border: 2px solid #E5E7EB;
@@ -609,7 +614,7 @@
   
   /* Constraint for the input wrapper (Gas Price) */
   .input-prefix { 
-      position: relative; 
+      position: relative;
       width: 100%;
       max-width: 450px; /* SAME CONSTRAINT as above */
       box-sizing: border-box;
