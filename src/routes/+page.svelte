@@ -1,10 +1,18 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  
+  let isMobileMenuOpen = false;
+
   function scrollToSection(id: string) {
     const element = document.getElementById(id);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth' });
+      isMobileMenuOpen = false; // Close menu after clicking
     }
+  }
+
+  function toggleMenu() {
+    isMobileMenuOpen = !isMobileMenuOpen;
   }
 </script>
 
@@ -19,16 +27,40 @@
       <div class="header-content">
         <img src="/logo.png" alt="Go Route Yourself" class="logo" />
         
-        <nav class="nav">
+        <nav class="nav desktop-nav">
           <button on:click={() => scrollToSection('features')}>Features</button>
           <button on:click={() => scrollToSection('pricing')}>Pricing</button>
           <button on:click={() => scrollToSection('how-it-works')}>How It Works</button>
-        
+          
           <a href="/login" class="btn-login">Sign In</a>
           <a href="/register" class="btn-primary">Get Started Free</a>
         </nav>
+
+        <div class="mobile-nav-controls">
+          <a href="/login" class="mobile-signin">Sign In</a>
+          
+          <button class="hamburger-btn" on:click={toggleMenu} aria-label="Toggle menu">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              {#if isMobileMenuOpen}
+                <path d="M18 6L6 18M6 6L18 18"></path>
+              {:else}
+                <path d="M3 12h18M3 6h18M3 18h18"></path>
+              {/if}
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
+
+    {#if isMobileMenuOpen}
+      <div class="mobile-menu">
+        <button on:click={() => scrollToSection('features')}>Features</button>
+        <button on:click={() => scrollToSection('pricing')}>Pricing</button>
+        <button on:click={() => scrollToSection('how-it-works')}>How It Works</button>
+        <div class="divider"></div>
+        <a href="/register" class="btn-primary mobile-btn">Get Started Free</a>
+      </div>
+    {/if}
   </header>
   
   <section class="hero">
@@ -299,7 +331,7 @@
     padding: 0 20px;
   }
   
-  /* Header */
+  /* Header & Navigation */
   .header {
     position: fixed;
     top: 0;
@@ -322,13 +354,14 @@
     width: auto;
   }
   
-  .nav {
+  /* Desktop Navigation */
+  .desktop-nav {
     display: flex;
     align-items: center;
     gap: 24px;
   }
   
-  .nav button {
+  .desktop-nav button {
     background: none;
     border: none;
     color: var(--gray-600);
@@ -337,7 +370,7 @@
     transition: color 0.2s;
   }
   
-  .nav button:hover {
+  .desktop-nav button:hover {
     color: var(--orange);
   }
   
@@ -360,6 +393,40 @@
   .btn-primary:hover {
     transform: translateY(-2px);
   }
+
+  /* Mobile Controls Container (Hidden on Desktop) */
+  .mobile-nav-controls {
+    display: none;
+  }
+
+  /* Mobile Dropdown Menu */
+  .mobile-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    background: white;
+    border-bottom: 1px solid var(--gray-100);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  }
+
+  .mobile-menu button, .mobile-link {
+    background: none;
+    border: none;
+    text-align: left;
+    font-size: 16px;
+    color: var(--gray-600);
+    padding: 8px 0;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  
+  .divider { height: 1px; background: var(--gray-100); margin: 4px 0; }
+  .mobile-btn { text-align: center; display: block; }
   
   /* Hero Section */
   .hero {
@@ -488,25 +555,11 @@
     box-shadow: 0 12px 40px rgba(0,0,0,0.1);
   }
   
-  .feature-card.orange:hover {
-    border-color: var(--orange);
-  }
-  
-  .feature-card.blue:hover {
-    border-color: var(--blue);
-  }
-  
-  .feature-card.green:hover {
-    border-color: var(--green);
-  }
-  
-  .feature-card.navy:hover {
-    border-color: var(--navy);
-  }
-  
-  .feature-card.purple:hover {
-    border-color: var(--purple);
-  }
+  .feature-card.orange:hover { border-color: var(--orange); }
+  .feature-card.blue:hover { border-color: var(--blue); }
+  .feature-card.green:hover { border-color: var(--green); }
+  .feature-card.navy:hover { border-color: var(--navy); }
+  .feature-card.purple:hover { border-color: var(--purple); }
   
   .feature-icon {
     font-size: 48px;
@@ -555,17 +608,9 @@
     flex-shrink: 0;
   }
   
-  .step-number.orange {
-    background: var(--orange);
-  }
-  
-  .step-number.blue {
-    background: var(--blue);
-  }
-  
-  .step-number.green {
-    background: var(--green);
-  }
+  .step-number.orange { background: var(--orange); }
+  .step-number.blue { background: var(--blue); }
+  .step-number.green { background: var(--green); }
   
   .step-content h3 {
     font-size: 28px;
@@ -796,8 +841,32 @@
   
   /* Responsive */
   @media (max-width: 768px) {
-    .nav {
+    .desktop-nav {
       display: none;
+    }
+    
+    /* Mobile Controls (Hamburger + Sign In) */
+    .mobile-nav-controls {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .mobile-signin {
+      text-decoration: none;
+      color: var(--navy);
+      font-weight: 600;
+      font-size: 15px;
+    }
+
+    .hamburger-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--gray-600);
+      display: flex;
+      align-items: center;
+      padding: 4px;
     }
     
     .hero h1 {
