@@ -1,8 +1,6 @@
-<!-- src/lib/components/SyncIndicator.svelte -->
 <script lang="ts">
   import { syncStatus, syncIcon, syncLabel, syncColor } from '$lib/stores/sync';
   import { syncManager } from '$lib/sync/syncManager';
-  
   let showDetails = false;
   
   async function handleForceSync() {
@@ -32,6 +30,8 @@
   </button>
   
   {#if showDetails}
+    <div class="backdrop" on:click={() => showDetails = false}></div>
+
     <div class="sync-details">
       <div class="details-header">
         <h3>Sync Status</h3>
@@ -119,35 +119,11 @@
   }
   
   /* Status-specific colors */
-  .sync-button.synced {
-    border-color: #10B981;
-    color: #059669;
-    background: #F0FDF4;
-  }
-  
-  .sync-button.syncing {
-    border-color: #3B82F6;
-    color: #2563EB;
-    background: #EFF6FF;
-  }
-  
-  .sync-button.offline {
-    border-color: #F59E0B;
-    color: #D97706;
-    background: #FFFBEB;
-  }
-  
-  .sync-button.pending {
-    border-color: #F59E0B;
-    color: #D97706;
-    background: #FFFBEB;
-  }
-  
-  .sync-button.error {
-    border-color: #EF4444;
-    color: #DC2626;
-    background: #FEF2F2;
-  }
+  .sync-button.synced { border-color: #10B981; color: #059669; background: #F0FDF4; }
+  .sync-button.syncing { border-color: #3B82F6; color: #2563EB; background: #EFF6FF; }
+  .sync-button.offline { border-color: #F59E0B; color: #D97706; background: #FFFBEB; }
+  .sync-button.pending { border-color: #F59E0B; color: #D97706; background: #FFFBEB; }
+  .sync-button.error { border-color: #EF4444; color: #DC2626; background: #FEF2F2; }
   
   .sync-icon {
     font-size: 16px;
@@ -161,42 +137,48 @@
   }
   
   @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
   
   .sync-text {
     font-size: 13px;
     white-space: nowrap;
   }
-  
-  /* Details Panel */
-  .sync-details {
-    position: absolute;
-    top: calc(100% + 8px);
+
+  /* --- BACKDROP (Click Outside) --- */
+  .backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
     right: 0;
-    width: 320px;
+    bottom: 0;
+    z-index: 998;
+    background: rgba(0,0,0,0.05); /* Slight dim to show it's active */
+  }
+  
+  /* --- DETAILS PANEL (Fixed/Absolute Hybrid) --- */
+  .sync-details {
     background: white;
     border: 2px solid #E5E7EB;
     border-radius: 12px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-    z-index: 1000;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    z-index: 999;
     animation: slideDown 0.2s ease;
+    
+    /* DEFAULT (Mobile) - Fixed Positioning */
+    position: fixed;
+    top: 80px;
+    left: 16px;
+    right: 16px;
+    width: auto;
+    max-width: 400px;
+    margin: 0 auto;
   }
   
   @keyframes slideDown {
-    from {
-      opacity: 0;
-      transform: translateY(-10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
   }
   
   .details-header {
@@ -230,10 +212,7 @@
     font-family: inherit;
   }
   
-  .close-btn:hover {
-    background: #E5E7EB;
-    color: #111827;
-  }
+  .close-btn:hover { background: #E5E7EB; color: #111827; }
   
   .details-content {
     padding: 16px;
@@ -258,15 +237,8 @@
     border-radius: 8px;
   }
   
-  .detail-label {
-    color: #6B7280;
-    font-weight: 500;
-  }
-  
-  .detail-value {
-    color: #111827;
-    font-weight: 600;
-  }
+  .detail-label { color: #6B7280; font-weight: 500; }
+  .detail-value { color: #111827; font-weight: 600; }
   
   .status-badge {
     padding: 4px 10px;
@@ -277,10 +249,7 @@
     letter-spacing: 0.05em;
   }
   
-  .status-badge.synced {
-    background: #D1FAE5;
-    color: #065F46;
-  }
+  .status-badge.synced { background: #D1FAE5; color: #065F46; }
   
   .pending-count {
     padding: 4px 10px;
@@ -315,15 +284,19 @@
     box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
   }
   
-  /* Mobile adjustments */
-  @media (max-width: 640px) {
-    .sync-text {
-      display: none;
-    }
-    
+  /* --- DESKTOP (Sidebar) --- */
+  @media (min-width: 1024px) {
     .sync-details {
-      width: calc(100vw - 32px);
-      right: -16px;
+      position: absolute; /* Relative to the button again */
+      top: calc(100% + 8px);
+      left: 0; /* Align left edge with button (extends right into content) */
+      right: auto;
+      width: 320px;
+      margin: 0;
     }
+  }
+
+  @media (max-width: 640px) {
+    .sync-text { display: none; }
   }
 </style>
