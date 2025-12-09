@@ -12,7 +12,7 @@ let mockDB: Record<string, any> = {
 	USERS: {},
 	LOGS: {},
 	TRASH: {},
-	SETTINGS: {} // <--- ADDED: Initialize settings store
+	SETTINGS: {} 
 };
 
 if (dev) {
@@ -44,12 +44,12 @@ function createMockKV(namespace: string) {
 		async put(key: string, value: string) {
 			console.log(`[MOCK KV ${namespace}] PUT ${key}`);
 			mockDB[namespace][key] = value;
-			saveDB(); // Persist to file
+			saveDB(); 
 		},
 		async delete(key: string) {
 			console.log(`[MOCK KV ${namespace}] DELETE ${key}`);
 			delete mockDB[namespace][key];
-			saveDB(); // Persist to file
+			saveDB(); 
 		},
 		async list({ prefix }: { prefix: string }) {
 			const keys = Object.keys(mockDB[namespace])
@@ -66,20 +66,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (!event.platform) event.platform = { env: {} } as any;
 		if (!event.platform.env) event.platform.env = {} as any;
 
-		// Use the file-backed mocks
-		if (!event.platform.env.BETA_USERS_KV) {
-			event.platform.env.BETA_USERS_KV = createMockKV('USERS');
-		}
-		if (!event.platform.env.BETA_LOGS_KV) {
-			event.platform.env.BETA_LOGS_KV = createMockKV('LOGS');
-		}
-		if (!event.platform.env.BETA_LOGS_TRASH_KV) {
-			event.platform.env.BETA_LOGS_TRASH_KV = createMockKV('TRASH');
-		}
-		// <--- ADDED: Ensure Settings KV is mocked
-		if (!event.platform.env.BETA_USER_SETTINGS_KV) {
-			event.platform.env.BETA_USER_SETTINGS_KV = createMockKV('SETTINGS');
-		}
+		if (!event.platform.env.BETA_USERS_KV) event.platform.env.BETA_USERS_KV = createMockKV('USERS');
+		if (!event.platform.env.BETA_LOGS_KV) event.platform.env.BETA_LOGS_KV = createMockKV('LOGS');
+		if (!event.platform.env.BETA_LOGS_TRASH_KV) event.platform.env.BETA_LOGS_TRASH_KV = createMockKV('TRASH');
+		if (!event.platform.env.BETA_USER_SETTINGS_KV) event.platform.env.BETA_USER_SETTINGS_KV = createMockKV('SETTINGS');
 	}
 
 	// 2. User auth logic
@@ -97,26 +87,20 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 			if (userDataStr) {
 				const userData = JSON.parse(userDataStr);
-				// SUCCESS: Found user "James" linked to this token
+				
 				event.locals.user = {
+					id: userData.id, // <--- CRITICAL FIX: Add this line
 					token,
 					plan: userData.plan ?? 'free',
 					tripsThisMonth: userData.tripsThisMonth ?? 0,
 					maxTrips: userData.maxTrips ?? 10,
 					resetDate: userData.resetDate ?? new Date().toISOString(),
-					name: userData.name, // "James"
+					name: userData.name, 
 					email: userData.email
 				};
 			} else {
-				console.warn('[HOOK] Token exists but user not found in KV. Creating fallback.');
-				// Fallback (User needs to re-login to fix sync strictly, but this prevents crash)
-				event.locals.user = {
-					token,
-					plan: 'free',
-					tripsThisMonth: 0,
-					maxTrips: 10,
-					resetDate: new Date().toISOString()
-				};
+				console.warn('[HOOK] Token exists but user not found in KV.');
+				event.locals.user = null;
 			}
 		}
 	} catch (err) {
