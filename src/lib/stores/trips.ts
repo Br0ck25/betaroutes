@@ -183,17 +183,35 @@ function createTripsStore() {
 		},
 
 		async syncFromCloud(userId: string) {
-			// Existing sync logic...
-			// (Kept as is from your original file, ensuring fetch logic remains)
 			try {
 				if (!navigator.onLine) return;
 				const response = await fetch('/api/trips');
 				if (!response.ok) throw new Error('Failed to fetch trips');
 				const cloudTrips = await response.json();
+				
 				const db = await getDB();
+
+				// --- FIX START ---
+				// Check local trash to ensure we don't resurrect deleted trips
+				// that the server still thinks are active.
+				const trashTx = db.transaction('trash', 'readonly');
+				const trashStore = trashTx.objectStore('trash');
+				const trashItems = await trashStore.getAll();
+				// Create a Set of IDs that are currently in the trash
+				const trashIds = new Set(trashItems.map((t: any) => t.id));
+				await trashTx.done;
+				// --- FIX END ---
+
 				const tx = db.transaction('trips', 'readwrite');
 				const store = tx.objectStore('trips');
+				
 				for (const cloudTrip of cloudTrips) {
+					// If this trip is in our local trash, ignore the server's version
+					if (trashIds.has(cloudTrip.id)) {
+						console.log('Skipping synced trip because it is in local trash:', cloudTrip.id);
+						continue;
+					}
+
 					const local = await store.get(cloudTrip.id);
 					if (!local || new Date(cloudTrip.updatedAt) > new Date(local.updatedAt)) {
 						await store.put({
@@ -232,7 +250,6 @@ function createTripsStore() {
 
 export const trips = createTripsStore();
 
-// --- ADDED THIS SECTION ---
 function createDraftStore() {
 	const { subscribe, set } = writable(storage.getDraftTrip());
 	return {
