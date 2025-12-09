@@ -2,13 +2,12 @@
 import { getDB } from '$lib/db/indexedDB';
 import { syncStatus } from '$lib/stores/sync';
 import type { SyncQueueItem } from '$lib/db/types';
+import { get } from 'svelte/store';
 
 /**
  * Sync Manager
- * 
- * Handles syncing between IndexedDB (local) and Cloudflare KV (cloud)
- * 
- * Features:
+ * * Handles syncing between IndexedDB (local) and Cloudflare KV (cloud)
+ * * Features:
  * - Auto-syncs when online
  * - Queues changes when offline
  * - Retries failed syncs
@@ -21,11 +20,6 @@ class SyncManager {
 
   /**
    * Initialize the sync manager
-   * 
-   * Sets up:
-   * - Online/offline event listeners
-   * - Auto-sync interval
-   * - Initial sync
    */
   async initialize() {
     if (this.initialized) {
@@ -69,8 +63,24 @@ class SyncManager {
     console.log('🌐 Back online!');
     syncStatus.setOnline(true);
     
-    // Sync immediately
+    // 1. Sync immediately (Push changes)
     await this.syncNow();
+
+    // 2. Pull latest data from cloud (Pull changes)
+    try {
+        // Dynamic import to avoid circular dependency
+        const { trips } = await import('$lib/stores/trips');
+        const { auth } = await import('$lib/stores/auth');
+        
+        const currentUser = get(auth).user;
+        if (currentUser) {
+            console.log('📥 Pulling latest data from cloud...');
+            const syncId = currentUser.name || currentUser.token;
+            await trips.syncFromCloud(syncId);
+        }
+    } catch (err) {
+        console.error('Failed to pull data on reconnect:', err);
+    }
     
     // Start auto-sync
     this.startAutoSync();
@@ -173,7 +183,8 @@ class SyncManager {
       const queue = await tx.objectStore('syncQueue').getAll();
 
       if (queue.length === 0) {
-        console.log('✅ Nothing to sync');
+        // Even if nothing to push, we might set synced
+        // console.log('✅ Nothing to sync');
         syncStatus.setSynced();
         this.isSyncing = false;
         return;

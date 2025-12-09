@@ -6,327 +6,377 @@ import { api } from '$lib/utils/api';
 import { trips } from './trips';
 
 interface AuthState {
-	user: User | null;
-	isAuthenticated: boolean;
-	isLoading: boolean;
-	error: string | null;
+  user: User | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  error: string | null;
 }
 
 const getOfflineId = () => {
-	if (typeof window === 'undefined') return null;
-	return localStorage.getItem('offline_user_id');
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('offline_user_id');
+};
+
+// Helper: Cache user data for offline access
+const saveUserCache = (user: User) => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('user_cache', JSON.stringify(user));
+  }
+};
+
+// Helper: Retrieve cached user data
+const getUserCache = (): User | null => {
+  if (typeof window === 'undefined') return null;
+  const cached = localStorage.getItem('user_cache');
+  return cached ? JSON.parse(cached) : null;
 };
 
 function createAuthStore() {
-	const { subscribe, set, update } = writable<AuthState>({
-		user: null,
-		isAuthenticated: false,
-		isLoading: false,
-		error: null
-	});
+  const { subscribe, set, update } = writable<AuthState>({
+    user: null,
+    isAuthenticated: false,
+    isLoading: false,
+    error: null
+  });
 
-	return {
-		subscribe,
+  return {
+    subscribe,
 
-		hydrate: (userData: User) => {
-			let localName = '';
-			let localEmail = '';
+    hydrate: (userData: User) => {
+      let localName = '';
+      let localEmail = '';
 
-			if (typeof window !== 'undefined') {
-				localName = storage.getUsername() || '';
-				localEmail = localStorage.getItem('user_email') || '';
-				if (userData.token) {
-					storage.setToken(userData.token);
-				}
-			}
+      if (typeof window !== 'undefined') {
+        localName = storage.getUsername() || '';
+        localEmail = localStorage.getItem('user_email') || '';
+        if (userData.token) {
+          storage.setToken(userData.token);
+        }
+      }
 
-			const mergedUser = {
-				...userData,
-				name: userData.name || localName,
-				email: userData.email || localEmail
-			};
+      const mergedUser = {
+        ...userData,
+        name: userData.name || localName,
+        email: userData.email || localEmail
+      };
+      
+      // Update cache on hydration
+      saveUserCache(mergedUser);
 
-			set({
-				user: mergedUser,
-				isAuthenticated: true,
-				isLoading: false,
-				error: null
-			});
-		},
+      set({
+        user: mergedUser,
+        isAuthenticated: true,
+        isLoading: false,
+        error: null
+      });
+    },
 
-		init: async () => {
-			const token = storage.getToken();
-			const username = storage.getUsername();
-			const email = typeof window !== 'undefined' ? localStorage.getItem('user_email') : null;
+    init: async () => {
+      const token = storage.getToken();
+      const username = storage.getUsername();
+      const email = typeof window !== 'undefined' ? localStorage.getItem('user_email') : null;
 
-			if (token) {
-				update((state) => ({ ...state, isLoading: true }));
-				try {
-					const subscription = await api.getSubscription(token);
+      if (token) {
+        update((state) => ({ ...state, isLoading: true }));
+        try {
+          // 1. Try fetching fresh data from API
+          const subscription = await api.getSubscription(token);
 
-					const user: User = {
-						token,
-						plan: subscription.plan,
-						tripsThisMonth: subscription.tripsThisMonth,
-						maxTrips: subscription.maxTrips,
-						resetDate: subscription.resetDate,
-						name: username || '',
-						email: email || ''
-					};
+          const user: User = {
+            token,
+            plan: subscription.plan,
+            tripsThisMonth: subscription.tripsThisMonth,
+            maxTrips: subscription.maxTrips,
+            resetDate: subscription.resetDate,
+            name: username || '',
+            email: email || ''
+          };
 
-					set({
-						user,
-						isAuthenticated: true,
-						isLoading: false,
-						error: null
-					});
+          // Success: Update offline cache
+          saveUserCache(user);
 
-					const syncId = user.name || user.token;
-					await trips.syncFromCloud(syncId);
-				} catch (error) {
-					console.error('Failed to load user data:', error);
-					set({
-						user: null,
-						isAuthenticated: false,
-						isLoading: false,
-						error: 'Session expired'
-					});
-				}
-			} else {
-				set({
-					user: null,
-					isAuthenticated: false,
-					isLoading: false,
-					error: null
-				});
-			}
-		},
+          set({
+            user,
+            isAuthenticated: true,
+            isLoading: false,
+            error: null
+          });
 
-		updateProfile: (data: { name?: string; email?: string }) => {
-			update((state) => {
-				if (!state.user) return state;
+          const syncId = user.name || user.token;
+          await trips.syncFromCloud(syncId);
+        } catch (error) {
+          console.warn('Failed to load user data, checking offline cache...', error);
+          
+          // 2. Fallback to offline cache if API fails
+          const cachedUser = getUserCache();
+          
+          // Only use cache if the token matches (simple security check)
+          if (cachedUser && cachedUser.token === token) {
+             console.log('✅ Restored user session from offline cache');
+             set({
+               user: cachedUser,
+               isAuthenticated: true,
+               isLoading: false,
+               error: null // Do not show error so app works normally
+             });
+             
+             // Load local trips immediately
+             await trips.load(cachedUser.name || cachedUser.token);
+          } else {
+             set({
+                user: null,
+                isAuthenticated: false,
+                isLoading: false,
+                error: 'Session expired'
+             });
+          }
+        }
+      } else {
+        set({
+          user: null,
+          isAuthenticated: false,
+          isLoading: false,
+          error: null
+        });
+      }
+    },
 
-				const updatedUser = { ...state.user, ...data };
+    updateProfile: (data: { name?: string; email?: string }) => {
+      update((state) => {
+        if (!state.user) return state;
 
-				if (typeof window !== 'undefined') {
-					if (data.name) storage.setUsername(data.name);
-					if (data.email) localStorage.setItem('user_email', data.email);
-				}
+        const updatedUser = { ...state.user, ...data };
 
-				return {
-					...state,
-					user: updatedUser
-				};
-			});
-		},
+        if (typeof window !== 'undefined') {
+          if (data.name) storage.setUsername(data.name);
+          if (data.email) localStorage.setItem('user_email', data.email);
+          saveUserCache(updatedUser); // Keep cache in sync
+        }
 
-		signup: async (username: string, password: string) => {
-			update((state) => ({ ...state, isLoading: true, error: null }));
-			try {
-				const response = await api.signup(username, password);
-				const offlineId = getOfflineId();
+        return {
+          ...state,
+          user: updatedUser
+        };
+      });
+    },
 
-				storage.setToken(response.token);
-				storage.setUsername(username);
+    signup: async (username: string, password: string) => {
+      update((state) => ({ ...state, isLoading: true, error: null }));
+      try {
+        const response = await api.signup(username, password);
+        const offlineId = getOfflineId();
 
-				const subscription = await api.getSubscription(response.token);
+        storage.setToken(response.token);
+        storage.setUsername(username);
 
-				const user: User = {
-					token: response.token,
-					plan: subscription.plan,
-					tripsThisMonth: subscription.tripsThisMonth,
-					maxTrips: subscription.maxTrips,
-					resetDate: subscription.resetDate,
-					name: username,
-					email: ''
-				};
+        const subscription = await api.getSubscription(response.token);
 
-				set({
-					user,
-					isAuthenticated: true,
-					isLoading: false,
-					error: null
-				});
+        const user: User = {
+          token: response.token,
+          plan: subscription.plan,
+          tripsThisMonth: subscription.tripsThisMonth,
+          maxTrips: subscription.maxTrips,
+          resetDate: subscription.resetDate,
+          name: username,
+          email: ''
+        };
+        
+        saveUserCache(user);
 
-				if (offlineId) {
-					await trips.migrateOfflineTrips(offlineId, username);
-					localStorage.removeItem('offline_user_id');
-				}
+        set({
+          user,
+          isAuthenticated: true,
+          isLoading: false,
+          error: null
+        });
 
-				await trips.syncFromCloud(username);
+        if (offlineId) {
+          await trips.migrateOfflineTrips(offlineId, username);
+          localStorage.removeItem('offline_user_id');
+        }
 
-				return { success: true, resetKey: response.resetKey };
-			} catch (error: any) {
-				update((state) => ({
-					...state,
-					isLoading: false,
-					error: error.message || 'Signup failed'
-				}));
-				return { success: false, error: error.message };
-			}
-		},
+        await trips.syncFromCloud(username);
 
-		login: async (username: string, password: string) => {
-			update((state) => ({ ...state, isLoading: true, error: null }));
-			try {
-				const response = await api.login(username, password);
-				const offlineId = getOfflineId();
+        return { success: true, resetKey: response.resetKey };
+      } catch (error: any) {
+        update((state) => ({
+          ...state,
+          isLoading: false,
+          error: error.message || 'Signup failed'
+        }));
+        return { success: false, error: error.message };
+      }
+    },
 
-				storage.setToken(response.token);
-				storage.setUsername(username);
-				const savedEmail = localStorage.getItem('user_email') || '';
+    login: async (username: string, password: string) => {
+      update((state) => ({ ...state, isLoading: true, error: null }));
+      try {
+        const response = await api.login(username, password);
+        const offlineId = getOfflineId();
 
-				const subscription = await api.getSubscription(response.token);
+        storage.setToken(response.token);
+        storage.setUsername(username);
+        const savedEmail = localStorage.getItem('user_email') || '';
 
-				const user: User = {
-					token: response.token,
-					plan: subscription.plan,
-					tripsThisMonth: subscription.tripsThisMonth,
-					maxTrips: subscription.maxTrips,
-					resetDate: subscription.resetDate,
-					name: username,
-					email: savedEmail
-				};
+        const subscription = await api.getSubscription(response.token);
 
-				set({
-					user,
-					isAuthenticated: true,
-					isLoading: false,
-					error: null
-				});
+        const user: User = {
+          token: response.token,
+          plan: subscription.plan,
+          tripsThisMonth: subscription.tripsThisMonth,
+          maxTrips: subscription.maxTrips,
+          resetDate: subscription.resetDate,
+          name: username,
+          email: savedEmail
+        };
+        
+        saveUserCache(user);
 
-				if (offlineId) {
-					await trips.migrateOfflineTrips(offlineId, username);
-					localStorage.removeItem('offline_user_id');
-				}
+        set({
+          user,
+          isAuthenticated: true,
+          isLoading: false,
+          error: null
+        });
 
-				await trips.syncFromCloud(username);
+        if (offlineId) {
+          await trips.migrateOfflineTrips(offlineId, username);
+          localStorage.removeItem('offline_user_id');
+        }
 
-				return { success: true };
-			} catch (error: any) {
-				update((state) => ({
-					...state,
-					isLoading: false,
-					error: error.message || 'Login failed'
-				}));
-				return { success: false, error: error.message };
-			}
-		},
+        await trips.syncFromCloud(username);
 
-		logout: () => {
-			storage.clearToken();
-			storage.clearUsername();
-			if (typeof window !== 'undefined') localStorage.removeItem('user_email');
+        return { success: true };
+      } catch (error: any) {
+        update((state) => ({
+          ...state,
+          isLoading: false,
+          error: error.message || 'Login failed'
+        }));
+        return { success: false, error: error.message };
+      }
+    },
 
-			set({
-				user: null,
-				isAuthenticated: false,
-				isLoading: false,
-				error: null
-			});
-		},
+    logout: () => {
+      storage.clearToken();
+      storage.clearUsername();
+      if (typeof window !== 'undefined') {
+          localStorage.removeItem('user_email');
+          localStorage.removeItem('user_cache'); // Clear cache
+      }
 
-		changePassword: async (username: string, currentPassword: string, newPassword: string) => {
-			update((state) => ({ ...state, isLoading: true, error: null }));
-			try {
-				await api.changePassword(username, currentPassword, newPassword);
-				update((state) => ({ ...state, isLoading: false, error: null }));
-				return { success: true };
-			} catch (error: any) {
-				update((state) => ({
-					...state,
-					isLoading: false,
-					error: error.message || 'Password change failed'
-				}));
-				return { success: false, error: error.message };
-			}
-		},
+      set({
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+        error: null
+      });
+    },
 
-		resetPassword: async (username: string, resetKey: string, newPassword: string) => {
-			update((state) => ({ ...state, isLoading: true, error: null }));
-			try {
-				await api.resetPassword(username, resetKey, newPassword);
-				update((state) => ({ ...state, isLoading: false, error: null }));
-				return { success: true };
-			} catch (error: any) {
-				update((state) => ({
-					...state,
-					isLoading: false,
-					error: error.message || 'Password reset failed'
-				}));
-				return { success: false, error: error.message };
-			}
-		},
+    changePassword: async (username: string, currentPassword: string, newPassword: string) => {
+      update((state) => ({ ...state, isLoading: true, error: null }));
+      try {
+        await api.changePassword(username, currentPassword, newPassword);
+        update((state) => ({ ...state, isLoading: false, error: null }));
+        return { success: true };
+      } catch (error: any) {
+        update((state) => ({
+          ...state,
+          isLoading: false,
+          error: error.message || 'Password change failed'
+        }));
+        return { success: false, error: error.message };
+      }
+    },
 
-		deleteAccount: async (username: string, password: string) => {
-			update((state) => ({ ...state, isLoading: true, error: null }));
+    resetPassword: async (username: string, resetKey: string, newPassword: string) => {
+      update((state) => ({ ...state, isLoading: true, error: null }));
+      try {
+        await api.resetPassword(username, resetKey, newPassword);
+        update((state) => ({ ...state, isLoading: false, error: null }));
+        return { success: true };
+      } catch (error: any) {
+        update((state) => ({
+          ...state,
+          isLoading: false,
+          error: error.message || 'Password reset failed'
+        }));
+        return { success: false, error: error.message };
+      }
+    },
 
-			try {
-				const token = storage.getToken();
+    deleteAccount: async (username: string, password: string) => {
+      update((state) => ({ ...state, isLoading: true, error: null }));
 
-				const response = await fetch('/api/user', {
-					method: 'DELETE',
-					headers: {
-						'Content-Type': 'application/json',
-						...(token ? { Authorization: token } : {})
-					},
-					body: JSON.stringify({ username, password })
-				});
+      try {
+        const token = storage.getToken();
 
-				if (!response.ok) {
-					const data = await response.json().catch(() => ({}));
-					throw new Error(data.error || 'Account deletion failed');
-				}
+        const response = await fetch('/api/user', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: token } : {})
+          },
+          body: JSON.stringify({ username, password })
+        });
 
-				storage.clearAll();
-				if (typeof window !== 'undefined') localStorage.removeItem('user_email');
-				trips.clear();
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.error || 'Account deletion failed');
+        }
 
-				set({
-					user: null,
-					isAuthenticated: false,
-					isLoading: false,
-					error: null
-				});
+        storage.clearAll();
+        if (typeof window !== 'undefined') {
+            localStorage.removeItem('user_email');
+            localStorage.removeItem('user_cache');
+        }
+        trips.clear();
 
-				return { success: true };
-			} catch (error: any) {
-				update((state) => ({
-					...state,
-					isLoading: false,
-					error: error.message || 'Account deletion failed'
-				}));
-				return { success: false, error: error.message };
-			}
-		},
+        set({
+          user: null,
+          isAuthenticated: false,
+          isLoading: false,
+          error: null
+        });
 
-		refreshSubscription: async () => {
-			const token = storage.getToken();
-			if (!token) return;
+        return { success: true };
+      } catch (error: any) {
+        update((state) => ({
+          ...state,
+          isLoading: false,
+          error: error.message || 'Account deletion failed'
+        }));
+        return { success: false, error: error.message };
+      }
+    },
 
-			try {
-				const subscription = await api.getSubscription(token);
-				update((state) => ({
-					...state,
-					user: state.user
-						? {
-								...state.user,
-								plan: subscription.plan,
-								tripsThisMonth: subscription.tripsThisMonth,
-								maxTrips: subscription.maxTrips,
-								resetDate: subscription.resetDate
-							}
-						: null
-				}));
-			} catch (error) {
-				console.error('Failed to refresh subscription:', error);
-			}
-		},
+    refreshSubscription: async () => {
+      const token = storage.getToken();
+      if (!token) return;
 
-		clearError: () => {
-			update((state) => ({ ...state, error: null }));
-		}
-	};
+      try {
+        const subscription = await api.getSubscription(token);
+        update((state) => {
+            if(!state.user) return state;
+            const updated = {
+                ...state.user,
+                plan: subscription.plan,
+                tripsThisMonth: subscription.tripsThisMonth,
+                maxTrips: subscription.maxTrips,
+                resetDate: subscription.resetDate
+            };
+            saveUserCache(updated); // Update cache
+            return { ...state, user: updated };
+        });
+      } catch (error) {
+        console.error('Failed to refresh subscription:', error);
+      }
+    },
+
+    clearError: () => {
+      update((state) => ({ ...state, error: null }));
+    }
+  };
 }
 
 export const auth = createAuthStore();
@@ -337,7 +387,7 @@ export const isLoading = derived(auth, ($auth) => $auth.isLoading);
 export const authError = derived(auth, ($auth) => $auth.error);
 
 export const canCreateTrip = derived(user, ($user) => {
-	if (!$user) return true;
-	if ($user.plan === 'pro' || $user.plan === 'business') return true;
-	return $user.tripsThisMonth < $user.maxTrips;
+  if (!$user) return true;
+  if ($user.plan === 'pro' || $user.plan === 'business') return true;
+  return $user.tripsThisMonth < $user.maxTrips;
 });
