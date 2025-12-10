@@ -8,25 +8,23 @@ import path from 'node:path';
 const DB_FILE = path.resolve('.kv-mock.json');
 
 // Load or initialize DB
-// 1. ADD 'HUGHESNET' HERE
 let mockDB: Record<string, any> = {
 	USERS: {},
 	LOGS: {},
 	TRASH: {},
 	SETTINGS: {},
-	HUGHESNET: {} 
+	HUGHESNET: {} // <--- ADDED THIS
 };
 
 if (dev) {
 	try {
 		if (fs.existsSync(DB_FILE)) {
 			const raw = fs.readFileSync(DB_FILE, 'utf-8');
-			// Merge with default structure to ensure new keys (like HUGHESNET) exist
-			// even if the file is old
 			const loaded = JSON.parse(raw);
+			// Merge loaded data with structure to ensure new keys exist
 			mockDB = { ...mockDB, ...loaded };
 			
-			// Ensure nested objects exist
+			// Safety check for new namespace
 			if (!mockDB.HUGHESNET) mockDB.HUGHESNET = {};
 			
 			console.log('📂 Loaded mock KV data from .kv-mock.json');
@@ -75,22 +73,21 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (!event.platform) event.platform = { env: {} } as any;
 		if (!event.platform.env) event.platform.env = {} as any;
 
-		// Existing KVs
 		if (!event.platform.env.BETA_USERS_KV) event.platform.env.BETA_USERS_KV = createMockKV('USERS');
 		if (!event.platform.env.BETA_LOGS_KV) event.platform.env.BETA_LOGS_KV = createMockKV('LOGS');
 		if (!event.platform.env.BETA_LOGS_TRASH_KV) event.platform.env.BETA_LOGS_TRASH_KV = createMockKV('TRASH');
 		if (!event.platform.env.BETA_USER_SETTINGS_KV) event.platform.env.BETA_USER_SETTINGS_KV = createMockKV('SETTINGS');
 		
-		// 2. NEW: Add HughesNet KV Mock
+		// --- CRITICAL FIX: Add HughesNet KV ---
 		if (!event.platform.env.BETA_HUGHESNET_KV) event.platform.env.BETA_HUGHESNET_KV = createMockKV('HUGHESNET');
 
-		// 3. NEW: Inject Environment Variables for Local Dev
-		// (These usually come from wrangler.toml but need manual shim in npm run dev)
+		// --- CRITICAL FIX: Add Env Vars ---
 		if (!event.platform.env.HNS_ENCRYPTION_KEY) {
 			event.platform.env.HNS_ENCRYPTION_KEY = 'local-dev-key';
 		}
 		if (!event.platform.env.PUBLIC_GOOGLE_MAPS_API_KEY) {
-			event.platform.env.PUBLIC_GOOGLE_MAPS_API_KEY = 'AIzaSyCOdfe7j11yw9ENkX8c7hYsIjwqcQeqJGQ'; // Your key from wrangler.toml
+			// Fallback if not set in process.env
+			event.platform.env.PUBLIC_GOOGLE_MAPS_API_KEY = process.env.PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyCOdfe7j11yw9ENkX8c7hYsIjwqcQeqJGQ';
 		}
 	}
 
@@ -121,7 +118,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 					email: userData.email
 				};
 			} else {
-				console.warn('[HOOK] Token exists but user not found in KV.');
 				event.locals.user = null;
 			}
 		}
