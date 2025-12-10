@@ -46,7 +46,6 @@ export const GET: RequestHandler = async (event) => {
 		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
 		const svc = makeTripService(kv, trashKV);
 
-		// Check ALL storage locations to find trips
 		const storageIds = new Set<string>();
         if (user.id) storageIds.add(user.id);
         if (user.name) storageIds.add(user.name);
@@ -58,7 +57,6 @@ export const GET: RequestHandler = async (event) => {
             allTrips = allTrips.concat(trips);
         }
 
-        // Deduplicate
         const uniqueTrips = Array.from(new Map(allTrips.map(item => [item.id, item])).values());
 
 		return new Response(JSON.stringify(uniqueTrips), {
@@ -81,35 +79,12 @@ export const POST: RequestHandler = async (event) => {
 
 		const body = await event.request.json();
 		const parseResult = tripSchema.safeParse(body);
-		if (!parseResult.success) {
-			return new Response(
-				JSON.stringify({ error: 'Invalid Data', details: parseResult.error.flatten() }),
-				{ status: 400 }
-			);
-		}
+		if (!parseResult.success) return new Response(JSON.stringify({ error: 'Invalid Data' }), { status: 400 });
 
 		const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
 		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
 		const svc = makeTripService(kv, trashKV);
-        
         const storageId = user.id || user.name || user.token;
-
-        if (user.plan === 'free') {
-            const allTrips = await svc.list(storageId);
-            const now = new Date();
-            const monthlyCount = allTrips.filter(t => {
-                if (!t.date) return false;
-                const [y, m] = t.date.split('-').map(Number);
-                return y === now.getFullYear() && (m - 1) === now.getMonth();
-            }).length;
-
-            if (monthlyCount >= 10) {
-                return new Response(JSON.stringify({
-                    error: 'Limit Reached',
-                    message: 'You have reached your free monthly limit of 10 trips.'
-                }), { status: 403, headers: { 'Content-Type': 'application/json' } });
-            }
-        }
 
 		const validData = parseResult.data;
 		const id = validData.id || crypto.randomUUID();
@@ -126,20 +101,14 @@ export const POST: RequestHandler = async (event) => {
 		await svc.put(trip);
 		await svc.incrementUserCounter(user.token, 1);
 
-		return new Response(JSON.stringify(trip), {
-			status: 201,
-			headers: { 'Content-Type': 'application/json' }
-		});
+		return new Response(JSON.stringify(trip), { status: 201 });
 	} catch (err) {
 		console.error('POST /api/trips error', err);
-		return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
-			status: 500,
-			headers: { 'Content-Type': 'application/json' }
-		});
+		return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
 	}
 };
 
-// --- FIX: SOFT DELETE ALL ---
+// --- SOFT DELETE ALL ---
 export const DELETE: RequestHandler = async (event) => {
     try {
         const user = event.locals.user;
@@ -149,7 +118,6 @@ export const DELETE: RequestHandler = async (event) => {
         const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
         const svc = makeTripService(kv, trashKV);
 
-        // Find ALL trips
         const storageIds = new Set<string>();
         if (user.id) storageIds.add(user.id);
         if (user.name) storageIds.add(user.name);
@@ -157,13 +125,12 @@ export const DELETE: RequestHandler = async (event) => {
 
         let count = 0;
         const now = new Date().toISOString();
-        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
         for (const storageId of storageIds) {
             const trips = await svc.list(storageId);
             for (const trip of trips) {
                 try {
-                    // 1. Save to Trash
                     const trashItem = {
                         ...trip,
                         deletedAt: now,
@@ -172,26 +139,16 @@ export const DELETE: RequestHandler = async (event) => {
                         originalKey: `trip:${storageId}:${trip.id}`,
                         syncStatus: 'synced'
                     };
-                    // Manually putting to trashKV since svc.delete usually handles one ID at a time logic
                     await trashKV.put(`trash:${storageId}:${trip.id}`, JSON.stringify(trashItem));
-
-                    // 2. Delete from Active
                     await kv.delete(`trip:${storageId}:${trip.id}`);
-                    
                     count++;
-                } catch (e) {
-                    console.error(`Failed to soft-delete ${trip.id}`, e);
-                }
+                } catch (e) { console.error(`Delete fail: ${trip.id}`); }
             }
         }
 
-        return new Response(JSON.stringify({ success: true, count }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
-        });
-
+        return new Response(JSON.stringify({ success: true, count }));
     } catch (err) {
-        console.error('DELETE /api/trips error', err);
-        return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
+        console.error('DELETE error', err);
+        return new Response(JSON.stringify({ error: 'Server Error' }), { status: 500 });
     }
 };
