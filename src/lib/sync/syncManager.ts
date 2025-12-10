@@ -6,7 +6,7 @@ import type { SyncQueueItem } from '$lib/db/types';
 /**
  * Sync Manager
  * * Handles syncing between IndexedDB (local) and Cloudflare KV (cloud)
- * * Updates local 'syncStatus' to prevent race conditions during reconciliation
+ * Features: Auto-sync, Retry logic, and **Offline Trip Calculation**.
  */
 class SyncManager {
   private initialized = false;
@@ -35,11 +35,8 @@ class SyncManager {
     });
 
     if (navigator.onLine) {
-      // Small delay to ensure DB is ready
-      setTimeout(() => {
-          this.syncNow();
-          this.startAutoSync();
-      }, 1000);
+      await this.syncNow();
+      this.startAutoSync();
     }
 
     await this.updatePendingCount();
@@ -79,14 +76,9 @@ class SyncManager {
     const tx = db.transaction('syncQueue', 'readwrite');
     await tx.objectStore('syncQueue').add({ ...item, timestamp: Date.now(), retries: 0 });
     await tx.done;
-    
     await this.updatePendingCount();
     console.log(`📋 Added to sync queue: ${item.action} ${item.tripId}`);
-    
-    if (navigator.onLine && !this.isSyncing) {
-        // Debounce slightly
-        setTimeout(() => this.syncNow(), 500);
-    }
+    if (navigator.onLine && !this.isSyncing) this.syncNow();
   }
 
   private async updatePendingCount() {
@@ -204,7 +196,6 @@ class SyncManager {
   }
 
   private async ensureGoogleMapsLoaded() {
-      if (typeof window === 'undefined') return;
       if (window.google && window.google.maps) return;
       if (!this.apiKey) throw new Error("No API Key");
 
@@ -218,75 +209,41 @@ class SyncManager {
       });
   }
 
-  /**
-   * Process a single item from the sync queue
-   * IMPORTANT: Updates local 'syncStatus' upon success to maintain consistency
-   */
   private async processSyncItem(item: SyncQueueItem) {
     const { action, tripId, data } = item;
+    const method = action === 'create' ? 'POST' : action === 'update' || action === 'restore' ? 'PUT' : 'DELETE';
+    const url = action === 'create' ? '/api/trips' : 
+                action.includes('delete') ? `/api/trips/${tripId}` : 
+                `/api/trips/${tripId}`; // Simplify for brevity
 
-    // 1. Create (Active Trip)
-    if (action === 'create') {
-        await this.apiCall('/api/trips', 'POST', data);
-        await this.markAsSynced('trips', tripId);
-    }
-    // 2. Update (Active Trip)
-    else if (action === 'update') {
-        await this.apiCall(`/api/trips/${tripId}`, 'PUT', data);
-        await this.markAsSynced('trips', tripId);
-    }
-    // 3. Delete (Moves to Trash)
-    else if (action === 'delete') {
-        // Calling DELETE on /api/trips/:id moves it to Server Trash
-        await this.apiCall(`/api/trips/${tripId}`, 'DELETE', null);
-        // We must mark the LOCAL TRASH item as synced
-        await this.markAsSynced('trash', tripId);
-    }
-    // 4. Restore (Moves back to Trips)
-    else if (action === 'restore') {
-        // Calling POST on /api/trash/:id restores it to Server Trips
-        await this.apiCall(`/api/trash/${tripId}`, 'POST', null);
-        // We must mark the LOCAL TRIP item as synced
-        await this.markAsSynced('trips', tripId);
-    }
-    // 5. Permanent Delete
-    else if (action === 'permanentDelete') {
-        await this.apiCall(`/api/trash/${tripId}`, 'DELETE', null);
-        // No local state to update; item is already gone from local trash
-    }
+    // Custom handling per action type to match server API
+    if (action === 'create') await this.apiCall('/api/trips', 'POST', data, 'trips', tripId);
+    else if (action === 'update') await this.apiCall(`/api/trips/${tripId}`, 'PUT', data, 'trips', tripId);
+    else if (action === 'delete') await this.apiCall(`/api/trips/${tripId}`, 'DELETE', null, 'trash', tripId);
+    else if (action === 'restore') await this.apiCall(`/api/trash/${tripId}`, 'POST', null, 'trips', tripId);
+    else if (action === 'permanentDelete') await this.apiCall(`/api/trash/${tripId}`, 'DELETE', null, null, tripId);
   }
 
-  /**
-   * Helper to perform fetch requests
-   */
-  private async apiCall(url: string, method: string, body: any) {
+  private async apiCall(url: string, method: string, body: any, updateStore: 'trips' | 'trash' | null, id: string) {
       const res = await fetch(url, {
           method,
           headers: body ? { 'Content-Type': 'application/json' } : undefined,
           body: body ? JSON.stringify(body) : undefined
       });
-      
-      if (!res.ok) {
-          const txt = await res.text();
-          throw new Error(`${method} failed: ${txt}`);
-      }
+      if (!res.ok) throw new Error(`${method} failed`);
+      if (updateStore) await this.markAsSynced(updateStore, id);
   }
 
-  /**
-   * Updates the syncStatus of a local record to 'synced'
-   */
-  private async markAsSynced(storeName: 'trips' | 'trash', id: string) {
+  private async markAsSynced(store: 'trips' | 'trash', tripId: string) {
     const db = await getDB();
-    const tx = db.transaction(storeName, 'readwrite');
-    const store = tx.objectStore(storeName);
-    
-    const record = await store.get(id);
+    const tx = db.transaction(store, 'readwrite');
+    const objectStore = tx.objectStore(store);
+    const record = await objectStore.get(tripId);
     if (record) {
       record.syncStatus = 'synced';
       record.lastSyncedAt = new Date().toISOString();
-      await store.put(record);
+      await objectStore.put(record);
     }
-    
     await tx.done;
   }
 
@@ -294,20 +251,10 @@ class SyncManager {
     const db = await getDB();
     const tx = db.transaction('syncQueue', 'readwrite');
     const store = tx.objectStore('syncQueue');
-    
     item.retries = (item.retries || 0) + 1;
     item.lastError = error.message || String(error);
-    
-    // Give up after 5 tries, or if it's a 404 (already gone)
-    const isNotFound = item.lastError?.includes('404') || item.lastError?.includes('Not Found');
-    
-    if (item.retries > 5 || isNotFound) {
-        console.warn(`⚠️ Dropping sync item ${item.tripId} after failure:`, item.lastError);
-        await store.delete(item.id!);
-    } else {
-        await store.put(item);
-    }
-    
+    if (item.retries > 5) await store.delete(item.id!);
+    else await store.put(item);
     await tx.done;
   }
 

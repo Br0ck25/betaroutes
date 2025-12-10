@@ -1,6 +1,5 @@
 <script lang="ts">
   import { trips } from '$lib/stores/trips';
-  import { trash } from '$lib/stores/trash'; // Import trash store
   import { goto } from '$app/navigation';
   import { user } from '$lib/stores/auth';
   import { page } from '$app/stores';
@@ -76,6 +75,7 @@
     }).format(amount);
   }
   
+  // [FIX] Added timeZone: 'UTC' to prevent dates shifting back a day in local time
   function formatDate(dateString: string): string {
     const date = new Date(dateString);
     return new Intl.DateTimeFormat('en-US', {
@@ -100,10 +100,9 @@
         const trip = $trips.find(t => t.id === id);
         const currentUser = $page.data.user || $user;
         let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
-        
+
         if (trip && currentUser) {
-            if (trip.userId === currentUser.id) userId = currentUser.id;
-            else if (trip.userId === currentUser.name) userId = currentUser.name;
+            if (trip.userId === currentUser.name) userId = currentUser.name;
             else if (trip.userId === currentUser.token) userId = currentUser.token;
         }
         
@@ -112,34 +111,6 @@
         alert('Failed to delete trip.');
       }
     }
-  }
-
-  // --- DELETE ALL FUNCTION (FIXED) ---
-  async function deleteAllTrips() {
-      if (!confirm('Are you sure you want to delete ALL trips? This cannot be undone.')) return;
-      
-      try {
-          // 1. Tell Server to Soft-Delete All
-          const res = await fetch('/api/trips', { method: 'DELETE' });
-          if (res.ok) {
-              // 2. Wipe Local Trips
-              await trips.wipe();
-              
-              // 3. Sync Trash so items appear in Trash tab
-              const currentUser = $page.data.user || $user;
-              if (currentUser) {
-                  const uid = currentUser.id || currentUser.name;
-                  await trash.syncFromCloud(uid);
-              }
-
-              alert('All trips moved to trash.');
-          } else {
-              alert('Failed to delete all trips.');
-          }
-      } catch (err) {
-          console.error(err);
-          alert('Network error while deleting.');
-      }
   }
   
   function editTrip(id: string) {
@@ -159,6 +130,7 @@
   }
   
   let expandedTrips = new Set<string>();
+
   function toggleExpand(id: string) {
     if (expandedTrips.has(id)) expandedTrips.delete(id);
     else expandedTrips.add(id);
@@ -183,21 +155,12 @@
       <h1 class="page-title">Trip History</h1>
       <p class="page-subtitle">View and manage all your trips</p>
     </div>
-    
-    <div class="header-actions">
-        <button class="btn-danger" on:click={deleteAllTrips} aria-label="Delete All Trips">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                <path d="M2 4H14M12 4V13C12 13.5304 11.7893 14.0391 11.4142 14.4142C11.0391 14.7893 10.5304 15 10 15H6C5.46957 15 4.96086 14.7893 4.58579 14.4142C4.21071 14.0391 4 13.5304 4 13V4M5 4V3C5 2.46957 5.21071 1.96086 5.58579 1.58579C5.96086 1.21071 6.46957 1 7 1H9C9.53043 1 10.0391 1.21071 10.4142 1.58579C10.7893 1.96086 11 2.46957 11 3V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Delete All
-        </button>
-        <a href="/dashboard/trips/new" class="btn-primary" aria-label="Create New Trip">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          New Trip
-        </a>
-    </div>
+    <a href="/dashboard/trips/new" class="btn-primary" aria-label="Create New Trip">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      New Trip
+    </a>
   </div>
   
   <div class="stats-summary">
@@ -377,7 +340,7 @@
                     <div class="expense-row total">
                       <span>Total Costs</span>
                       <span>{formatCurrency(totalCosts)}</span>
-                    </div>
+                  </div>
                   </div>
                 </div>
               {/if}
@@ -418,25 +381,7 @@
   .page-title { font-size: 24px; font-weight: 800; color: #111827; margin: 0; }
   .page-subtitle { font-size: 14px; color: #6B7280; margin: 0; }
   
-  .header-actions { display: flex; gap: 8px; align-items: center; }
-
   .btn-primary { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); }
-  
-  .btn-danger { 
-    display: inline-flex; 
-    align-items: center; 
-    gap: 6px; 
-    padding: 10px 16px; 
-    background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%); 
-    color: white; 
-    border: none; 
-    border-radius: 8px; 
-    font-weight: 600; 
-    font-size: 14px; 
-    cursor: pointer; 
-    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3); 
-  }
-  .btn-danger:hover { box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4); }
 
   .stats-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
   .summary-card { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; text-align: center; }

@@ -17,6 +17,7 @@ function createTrashStore() {
 
 		/**
 		 * Load all trash items from IndexedDB
+		 * Call this on app startup or when viewing trash page
 		 */
 		async load(userId?: string) {
 			try {
@@ -28,9 +29,11 @@ function createTrashStore() {
 				let items: TrashRecord[];
 
 				if (userId) {
+					// Load trash for specific user
 					const index = store.index('userId');
 					items = await index.getAll(userId);
 				} else {
+					// Load all trash (for dev/testing)
 					items = await store.getAll();
 				}
 
@@ -42,6 +45,8 @@ function createTrashStore() {
 				});
 
 				set(items);
+				console.log(`✅ Loaded ${items.length} trash item(s) from IndexedDB`);
+
 				return items;
 			} catch (err) {
 				console.error('❌ Failed to load trash:', err);
@@ -56,40 +61,61 @@ function createTrashStore() {
 		async restore(id: string, userId: string) {
 			try {
 				console.log('♻️ Restoring trip from trash:', id);
+
 				const db = await getDB();
 
 				// 1. Get item from trash
 				const trashTx = db.transaction('trash', 'readonly');
 				const trashItem = await trashTx.objectStore('trash').get(id);
 
-				if (!trashItem) throw new Error('Item not found in trash');
-				if (trashItem.userId !== userId) throw new Error('Unauthorized');
+				if (!trashItem) {
+					throw new Error('Item not found in trash');
+				}
 
-				// 2. Create restored trip (clean up metadata)
-				const restoredTrip = { ...trashItem };
-				
-				// Remove trash-specific fields
-				delete (restoredTrip as any).deletedAt;
-				delete (restoredTrip as any).deletedBy;
-				delete (restoredTrip as any).expiresAt;
-				delete (restoredTrip as any).originalKey;
+				// Verify ownership
+				if (trashItem.userId !== userId) {
+					throw new Error('Unauthorized');
+				}
 
-				restoredTrip.updatedAt = new Date().toISOString();
-				restoredTrip.syncStatus = 'pending';
+				// 2. Create restored trip (remove trash metadata)
+				const restoredTrip = {
+					...trashItem,
+					updatedAt: new Date().toISOString(),
+					syncStatus: 'pending' as const,
+					// Remove trash-specific fields
+					deletedAt: undefined,
+					deletedBy: undefined,
+					expiresAt: undefined,
+					originalKey: undefined
+				};
 
-				// 3. Move back to active trips
+				// Clean up undefined fields
+				Object.keys(restoredTrip).forEach((key) => {
+					if ((restoredTrip as any)[key] === undefined) {
+						delete (restoredTrip as any)[key];
+					}
+				});
+
+				// 3. Move back to active trips in IndexedDB
 				const tripsTx = db.transaction('trips', 'readwrite');
 				await tripsTx.objectStore('trips').put(restoredTrip);
 				await tripsTx.done;
 
-				// 4. Remove from trash
+				// 4. Remove from trash in IndexedDB
 				const deleteTx = db.transaction('trash', 'readwrite');
 				await deleteTx.objectStore('trash').delete(id);
 				await deleteTx.done;
 
-				// 5. Update UI & Queue Sync
+				// 5. Update UI immediately
 				update((items) => items.filter((item) => item.id !== id));
-				await syncManager.addToQueue({ action: 'restore', tripId: id });
+
+				// 6. Queue for cloud sync
+				await syncManager.addToQueue({
+					action: 'restore',
+					tripId: id
+				});
+
+				console.log('✅ Trip restored from trash:', id);
 
 				return restoredTrip;
 			} catch (err) {
@@ -100,119 +126,163 @@ function createTrashStore() {
 
 		/**
 		 * Permanently delete a trip from trash (offline-first)
+		 * Cannot be undone!
 		 */
 		async permanentDelete(id: string, userId: string) {
 			try {
+				console.log('💥 Permanently deleting from trash:', id);
+
 				const db = await getDB();
-				
-				// 1. Verify existence
+
+				// 1. Get item to verify ownership
 				const trashTx = db.transaction('trash', 'readonly');
 				const trashItem = await trashTx.objectStore('trash').get(id);
-				if (!trashItem) return; 
 
-				// 2. Delete locally
+				if (!trashItem) {
+					throw new Error('Item not found in trash');
+				}
+
+				// Verify ownership
+				if (trashItem.userId !== userId) {
+					throw new Error('Unauthorized');
+				}
+
+				// 2. Delete from trash in IndexedDB
 				const deleteTx = db.transaction('trash', 'readwrite');
 				await deleteTx.objectStore('trash').delete(id);
 				await deleteTx.done;
 
-				// 3. Update UI & Queue Sync
+				// 3. Update UI immediately
 				update((items) => items.filter((item) => item.id !== id));
-				await syncManager.addToQueue({ action: 'permanentDelete', tripId: id });
+
+				// 4. Queue for cloud sync
+				await syncManager.addToQueue({
+					action: 'permanentDelete',
+					tripId: id
+				});
+
+				console.log('✅ Trip permanently deleted:', id);
 			} catch (err) {
 				console.error('❌ Failed to permanently delete trip:', err);
+				throw err;
 			}
 		},
 
 		/**
-		 * Empty all trash items
+		 * Empty all trash items (offline-first)
 		 */
 		async emptyTrash(userId: string) {
 			try {
+				console.log('🗑️ Emptying trash for user:', userId);
+
 				const db = await getDB();
 
-				// 1. Get user items
+				// 1. Get all items for this user
 				const getTx = db.transaction('trash', 'readonly');
 				const index = getTx.objectStore('trash').index('userId');
 				const userItems = await index.getAll(userId);
 
-				if (userItems.length === 0) return 0;
+				if (userItems.length === 0) {
+					console.log('✅ Trash already empty');
+					return 0;
+				}
 
-				// 2. Delete locally
+				// 2. Delete all items in IndexedDB
 				const deleteTx = db.transaction('trash', 'readwrite');
 				const store = deleteTx.objectStore('trash');
+
 				for (const item of userItems) {
 					await store.delete(item.id);
 				}
+
 				await deleteTx.done;
 
-				// 3. Update UI & Queue Sync
+				// 3. Update UI immediately
 				set([]);
+
+				// 4. Queue each for cloud sync
 				for (const item of userItems) {
-					await syncManager.addToQueue({ action: 'permanentDelete', tripId: item.id });
+					await syncManager.addToQueue({
+						action: 'permanentDelete',
+						tripId: item.id
+					});
 				}
+
+				console.log(`✅ Emptied ${userItems.length} item(s) from trash`);
 
 				return userItems.length;
 			} catch (err) {
 				console.error('❌ Failed to empty trash:', err);
+				throw err;
+			}
+		},
+
+		/**
+		 * Get count of items in trash
+		 */
+		async getCount(userId: string) {
+			try {
+				const db = await getDB();
+				const tx = db.transaction('trash', 'readonly');
+				const index = tx.objectStore('trash').index('userId');
+				const items = await index.getAll(userId);
+				return items.length;
+			} catch (err) {
+				console.error('❌ Failed to get trash count:', err);
 				return 0;
 			}
 		},
 
 		/**
-		 * Sync from cloud (Robust Normalization)
+		 * Clear all trash from store (for logout)
+		 */
+		clear() {
+			set([]);
+		},
+
+		/**
+		 * Sync from cloud (pull remote trash items and reconcile local state)
 		 */
 		async syncFromCloud(userId: string) {
 			try {
-				if (!navigator.onLine) return;
+				if (!navigator.onLine) {
+					console.log('📴 Cannot sync trash from cloud while offline');
+					return;
+				}
+
+				console.log('🔄 Syncing trash from cloud...');
 
 				const response = await fetch('/api/trash');
-				if (!response.ok) return;
+				if (!response.ok) {
+					throw new Error('Failed to fetch trash from cloud');
+				}
 
 				const cloudTrash = await response.json();
-				const cloudIds = new Set<string>();
 
+				// 1. Reconciliation Set: Create a Set of all trash IDs from the cloud
+				const cloudTrashIds = new Set(cloudTrash.map((t: any) => t.id));
+
+				// 2. Open DB transaction
 				const db = await getDB();
 				const tx = db.transaction('trash', 'readwrite');
 				const store = tx.objectStore('trash');
+				const index = store.index('userId');
 
-				// 1. Process Cloud Items (Pull)
-				for (const rawItem of cloudTrash) {
-					let flatItem: any = { ...rawItem };
-
-					// --- FIX: Normalize Nested Data Structure ---
-					
-                    // Case 1: Legacy format { trip: {...}, metadata: {...} }
-					if (flatItem.trip) {
-                        // Merge trip fields up to top level
-						flatItem = { 
-                            ...flatItem.trip, 
-                            ...flatItem 
-                        };
-                        delete flatItem.trip;
-					}
-
-                    // Case 2: Handle Metadata object
+				// 3. Merge new/updated items (PULL new cloud items to local DB)
+				for (const cloudItem of cloudTrash) {
+					// Normalize: Flatten metadata if present
+					const flatItem: any = { ...cloudItem };
 					if (flatItem.metadata) {
-						flatItem.deletedAt = flatItem.metadata.deletedAt || flatItem.deletedAt;
-						flatItem.deletedBy = flatItem.metadata.deletedBy || flatItem.deletedBy;
-						flatItem.expiresAt = flatItem.metadata.expiresAt || flatItem.expiresAt;
-						flatItem.originalKey = flatItem.metadata.originalKey || flatItem.originalKey;
+						flatItem.deletedAt = flatItem.metadata.deletedAt;
+						flatItem.deletedBy = flatItem.metadata.deletedBy;
+						flatItem.expiresAt = flatItem.metadata.expiresAt;
+						flatItem.originalKey = flatItem.metadata.originalKey;
 						delete flatItem.metadata;
 					}
-                    // ---------------------------------------------
-
-                    // Verify ID exists before saving
-                    if (!flatItem.id) {
-                        console.warn('⚠️ Skipping malformed trash item:', flatItem);
-                        continue;
-                    }
-
-                    // Track ID as "seen" in cloud
-                    cloudIds.add(flatItem.id);
 
 					const local = await store.get(flatItem.id);
-					
-                    // Update if cloud is newer or local missing
+
+					// Only update if cloud is newer or doesn't exist locally
 					if (!local || new Date(flatItem.deletedAt) > new Date(local.deletedAt)) {
 						await store.put({
 							...flatItem,
@@ -222,38 +292,28 @@ function createTrashStore() {
 					}
 				}
 
-				// 2. Reconciliation (Clean up local items not in cloud)
-                // Get all local items for this user
-				const index = store.index('userId');
-				const localTrashItems = await index.getAll(userId);
+				// 4. Reconciliation: Handle remote deletions/restorations (REMOVE stale local items)
+				const localTrashItems = await index.getAll(userId); // Get all local items for this user
 
 				for (const localItem of localTrashItems) {
-                    // If not in cloud AND not pending upload... delete it.
-					if (!cloudIds.has(localItem.id)) {
-						if (localItem.syncStatus === 'pending') {
-                            // Keep pending items!
-							continue;
-						}
-                        
+					// If the item is in local trash but NOT in the cloud trash, it was removed remotely.
+					if (!cloudTrashIds.has(localItem.id)) {
+						console.log(
+							`🗑️ Reconciliation: Removing remotely deleted/restored item from local trash: ${localItem.id}`
+						);
 						await store.delete(localItem.id);
 					}
 				}
 
 				await tx.done;
+
+				// Reload from IndexedDB
 				await this.load(userId);
-                
+
+				console.log('✅ Synced trash from cloud');
 			} catch (err) {
 				console.error('❌ Failed to sync trash from cloud:', err);
 			}
-		},
-        
-        async getCount(userId: string) {
-            const items = await this.load(userId);
-            return items.length;
-        },
-
-		clear() {
-			set([]);
 		}
 	};
 }

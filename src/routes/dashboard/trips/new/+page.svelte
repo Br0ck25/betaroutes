@@ -3,7 +3,6 @@
   import { userSettings } from '$lib/stores/userSettings';
   import { goto } from '$app/navigation';
   import { onMount, onDestroy, tick } from 'svelte';
-  import { get } from 'svelte/store';
   import { user } from '$lib/stores/auth';
   import { page } from '$app/stores';
 
@@ -16,9 +15,6 @@
   let directionsService: google.maps.DirectionsService | null = null;
   let directionsRenderer: google.maps.DirectionsRenderer | null = null;
   
-  // --- LIMIT STATE ---
-  let limitReached = false;
-
   let dragItemIndex: number | null = null;
   let maintenanceOptions = ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement'];
   let suppliesOptions = ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental'];
@@ -125,6 +121,7 @@
   function calculateRoute(optimize = false) {
     if (!mapLoaded || !directionsService) return;
     if (!tripData.startAddress) return;
+
     if (map && directionsRenderer && directionsRenderer.getMap() !== map) {
         directionsRenderer.setMap(map);
     }
@@ -136,6 +133,7 @@
     const destination = tripData.endAddress || tripData.startAddress;
     
     if (!destination && waypoints.length === 0) return;
+
     directionsService.route({
       origin: tripData.startAddress,
       destination: destination,
@@ -205,27 +203,27 @@
   function removeStop(id: string) { tripData.stops = tripData.stops.filter(s => s.id !== id); }
   
   function addMaintenanceItem(type: string) { 
-    tripData.maintenanceItems = [...tripData.maintenanceItems, { id: crypto.randomUUID(), type, cost: 0 }];
+    tripData.maintenanceItems = [...tripData.maintenanceItems, { id: crypto.randomUUID(), type, cost: 0 }]; 
   }
   function removeMaintenanceItem(id: string) { 
-    tripData.maintenanceItems = tripData.maintenanceItems.filter(m => m.id !== id);
+    tripData.maintenanceItems = tripData.maintenanceItems.filter(m => m.id !== id); 
   }
   
   function addCustomMaintenance() { 
     if (!newMaintenanceItem.trim()) return; 
     const item = newMaintenanceItem.trim();
-    addMaintenanceItem(item);
+    addMaintenanceItem(item); 
     if (!maintenanceOptions.includes(item)) {
         maintenanceOptions = [...maintenanceOptions, item];
         localStorage.setItem('maintenanceOptions', JSON.stringify(maintenanceOptions));
     }
     newMaintenanceItem = ''; 
-    showAddMaintenance = false;
+    showAddMaintenance = false; 
   }
 
   function deleteMaintenanceOption(option: string) { 
     if (confirm(`Delete "${option}"?`)) { 
-      maintenanceOptions = maintenanceOptions.filter(o => o !== option);
+      maintenanceOptions = maintenanceOptions.filter(o => o !== option); 
       localStorage.setItem('maintenanceOptions', JSON.stringify(maintenanceOptions)); 
     } 
   }
@@ -236,13 +234,13 @@
   function addCustomSupply() { 
     if (!newSupplyItem.trim()) return; 
     const item = newSupplyItem.trim();
-    addSupplyItem(item);
+    addSupplyItem(item); 
     if (!suppliesOptions.includes(item)) {
         suppliesOptions = [...suppliesOptions, item];
         localStorage.setItem('suppliesOptions', JSON.stringify(suppliesOptions));
     }
     newSupplyItem = ''; 
-    showAddSupply = false;
+    showAddSupply = false; 
   }
 
   function deleteSupplyOption(option: string) { if (confirm(`Delete "${option}"?`)) { suppliesOptions = suppliesOptions.filter(o => o !== option); localStorage.setItem('suppliesOptions', JSON.stringify(suppliesOptions)); } }
@@ -261,6 +259,7 @@
   $: totalSuppliesCost = tripData.suppliesItems.reduce((sum, item) => sum + (item.cost || 0), 0);
   $: totalCosts = (tripData.fuelCost || 0) + totalMaintenanceCost + totalSuppliesCost;
   $: totalProfit = totalEarnings - totalCosts;
+  
   $: {
     if (tripData.startTime && tripData.endTime) {
       const [startHour, startMin] = tripData.startTime.split(':').map(Number);
@@ -274,43 +273,12 @@
   function nextStep() { if (step < 4) step++; }
   function prevStep() { if (step > 1) step--; }
   
-  // --- UPGRADE HANDLER ---
-  function handleUpgrade() {
-      goto('/dashboard/settings');
-  }
-
   async function saveTrip() {
-    // Reset state
-    limitReached = false;
-
     const currentUser = $page.data.user || $user;
     let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
 
     if (!userId) { alert("Authentication error: User ID missing."); return; }
     
-    // --- 1. PRE-CHECK MONTHLY LIMIT ---
-    if (currentUser?.plan === 'free') {
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth(); // 0-indexed
-
-        const currentTrips = get(trips);
-        const monthlyCount = currentTrips.filter(t => {
-            if (!t.date) return false;
-            const [y, m] = t.date.split('-').map(Number);
-            return y === currentYear && (m - 1) === currentMonth;
-        }).length;
-
-        if (monthlyCount >= 10) {
-            limitReached = true;
-            await tick();
-            // --- AUTO SCROLL TO MESSAGE ---
-            document.getElementById('limit-alert')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            return;
-        }
-    }
-    // ----------------------------------
-
     const tripToSave = {
       ...tripData,
       id: tripData.id,
@@ -333,20 +301,12 @@
       })),
       lastModified: new Date().toISOString()
     };
-
     try {
       await trips.create(tripToSave, userId);
       goto('/dashboard/trips');
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to create trip:', err);
-      // --- 2. CATCH LIMIT ERROR FROM SERVER ---
-      if (err.message && err.message.includes('Free tier limit reached')) {
-          limitReached = true;
-          await tick();
-          document.getElementById('limit-alert')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      } else {
-          alert('Failed to create trip. Please try again.');
-      }
+      alert('Failed to create trip. Please try again.');
     }
   }
   
@@ -401,12 +361,12 @@
   <title>New Trip - Go Route Yourself</title>
   <style>
     :global(.pac-container) { 
-        z-index: 10000 !important;
+        z-index: 10000 !important; 
         background: white; 
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); 
         border-radius: 8px; 
         margin-top: 4px; 
-        font-family: inherit;
+        font-family: inherit; 
         border: 1px solid #E5E7EB; 
     }
     :global(.pac-item) {
@@ -730,17 +690,7 @@
             <div class="row total"><span>Net Profit</span> <span class="val" class:positive={totalProfit >= 0}>{formatCurrency(totalProfit)}</span></div>
         </div>
         
-        {#if limitReached}
-            <div id="limit-alert" class="limit-alert">
-                <div class="limit-content">
-                    <h3>Free Limit Reached</h3>
-                    <p>You have hit your monthly limit of 10 trips.</p>
-                </div>
-                <button class="btn-upgrade-inline" on:click={handleUpgrade}>Upgrade to Pro</button>
-            </div>
-        {/if}
-
-        <div class="form-actions" class:compact={limitReached}>
+        <div class="form-actions">
           <button class="btn-secondary" on:click={prevStep} type="button">Back</button>
           <button class="btn-primary" on:click={saveTrip} type="button">Save Trip</button>
         </div>
@@ -788,7 +738,7 @@
 
   /* Specific class to increase height of address inputs */
   .address-input { 
-      padding-top: 20px;
+      padding-top: 20px; 
       padding-bottom: 20px; 
       font-size: 19px; 
   }
@@ -817,9 +767,7 @@
   .stop-inputs.new { display: flex; flex-direction: column; gap: 14px; margin-bottom: 18px; }
   
   /* Buttons Enlarged */
-  .form-actions { display: flex; gap: 18px; margin-top: 36px; padding-top: 26px; border-top: 1px solid #E5E7EB; transition: all 0.3s ease; }
-  .form-actions.compact { margin-top: 16px; padding-top: 16px; border-top: none; }
-
+  .form-actions { display: flex; gap: 18px; margin-top: 36px; padding-top: 26px; border-top: 1px solid #E5E7EB; }
   .btn-primary, .btn-secondary, .btn-add { flex: 1; padding: 18px; border-radius: 12px; font-weight: 600; font-size: 18px; cursor: pointer; border: none; text-align: center; }
   .btn-primary { background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; }
   .btn-secondary { background: white; border: 1px solid #E5E7EB; color: #374151; }
@@ -870,30 +818,6 @@
   .financial-summary .total { border-top: 2px solid #D1D5DB; margin-top: 18px; padding-top: 18px; font-weight: 800; font-size: 20px; }
   .val.positive { color: #059669; }
   .val.negative { color: #DC2626; }
-
-  /* INLINE ALERT STYLES */
-  .limit-alert {
-      background: #FFF7ED;
-      border: 1px solid #F97316;
-      border-radius: 12px;
-      padding: 16px;
-      margin-top: 24px;
-      margin-bottom: 0px; /* Minimized space to buttons */
-      display: flex;
-      flex-direction: column; /* Better for mobile */
-      gap: 12px;
-  }
-  @media (min-width: 600px) {
-      .limit-alert { flex-direction: row; align-items: center; justify-content: space-between; }
-  }
-  .limit-content h3 { color: #9A3412; font-size: 18px; font-weight: 700; margin: 0 0 4px 0; }
-  .limit-content p { color: #C2410C; margin: 0; font-size: 15px; }
-  .btn-upgrade-inline {
-      background: #EA580C; color: white; border: none; padding: 12px 20px;
-      border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap;
-      text-align: center; font-size: 16px;
-  }
-  .btn-upgrade-inline:hover { background: #C2410C; }
 
   /* Desktop Upgrades */
   @media (min-width: 768px) {
