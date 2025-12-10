@@ -1,5 +1,6 @@
 <script lang="ts">
   import { trips } from '$lib/stores/trips';
+  import { trash } from '$lib/stores/trash'; // Import trash store
   import { goto } from '$app/navigation';
   import { user } from '$lib/stores/auth';
   import { page } from '$app/stores';
@@ -113,16 +114,25 @@
     }
   }
 
-  // --- NEW: DELETE ALL FUNCTION ---
+  // --- DELETE ALL FUNCTION (FIXED) ---
   async function deleteAllTrips() {
       if (!confirm('Are you sure you want to delete ALL trips? This cannot be undone.')) return;
       
       try {
+          // 1. Tell Server to Soft-Delete All
           const res = await fetch('/api/trips', { method: 'DELETE' });
           if (res.ok) {
-              // WIPE LOCAL DB IMMEDIATELY
+              // 2. Wipe Local Trips
               await trips.wipe();
-              alert('All trips deleted.');
+              
+              // 3. Sync Trash so items appear in Trash tab
+              const currentUser = $page.data.user || $user;
+              if (currentUser) {
+                  const uid = currentUser.id || currentUser.name;
+                  await trash.syncFromCloud(uid);
+              }
+
+              alert('All trips moved to trash.');
           } else {
               alert('Failed to delete all trips.');
           }

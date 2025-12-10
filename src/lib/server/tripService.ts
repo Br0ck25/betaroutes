@@ -53,11 +53,13 @@ export function makeTripService(
       for (const k of list.keys) {
         const raw = await kv.get(k.name);
         if (!raw) continue;
-        const t = JSON.parse(raw);
-        out.push(t);
+        try {
+            const t = JSON.parse(raw);
+            out.push(t);
+        } catch (e) { console.error('Error parsing trip', k.name); }
       }
 
-      out.sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+      out.sort((a,b)=> (b.createdAt || '').localeCompare(a.createdAt || ''));
       return out;
     },
 
@@ -76,17 +78,18 @@ export function makeTripService(
      * Soft delete - Move trip to trash with 30-day expiration
      */
     async delete(userId: string, tripId: string) {
+      const key = `trip:${userId}:${tripId}`;
+      
       if (!trashKV) {
-        // If no trash KV, do hard delete
-        const key = `trip:${userId}:${tripId}`;
+        // Fallback: Hard delete if no Trash KV
         await kv.delete(key);
         return;
       }
 
-      const key = `trip:${userId}:${tripId}`;
       const raw = await kv.get(key);
-      
       if (!raw) {
+        // It might already be deleted or moved. Check trash to be safe?
+        // For now, just throw or return.
         throw new Error('Trip not found');
       }
 
@@ -104,14 +107,14 @@ export function makeTripService(
         expiresAt: expiresAt.toISOString()
       };
 
-      // Move to trash KV with metadata and 30-day expiration
+      // Move to trash KV with metadata
       const trashKey = `trash:${userId}:${tripId}`;
+      
+      // Save properly structured object
       await trashKV.put(
         trashKey, 
         JSON.stringify({ trip, metadata }),
-        {
-          expirationTtl: 30 * 24 * 60 * 60  // 30 days in seconds
-        }
+        { expirationTtl: 30 * 24 * 60 * 60 }
       );
 
       // Remove from active trips
@@ -127,11 +130,37 @@ export function makeTripService(
       for (const k of list.keys) {
         const raw = await trashKV.get(k.name);
         if (!raw) continue;
-        const { trip, metadata } = JSON.parse(raw);
-        out.push({ ...trip, metadata });
+        
+        try {
+            const parsed = JSON.parse(raw);
+            
+            // Validate structure
+            if (parsed.trip && parsed.metadata) {
+                out.push({ ...parsed.trip, metadata: parsed.metadata });
+            } else if (parsed.id && parsed.deletedAt) {
+                // Handle flat format (fallback)
+                out.push({ 
+                    ...parsed, 
+                    metadata: { 
+                        deletedAt: parsed.deletedAt, 
+                        deletedBy: userId, 
+                        originalKey: '', 
+                        expiresAt: '' 
+                    } 
+                });
+            }
+        } catch (e) {
+            console.error('Skipping malformed trash item:', k.name);
+        }
       }
 
-      out.sort((a,b)=>b.metadata.deletedAt.localeCompare(a.metadata.deletedAt));
+      // Safe Sort
+      out.sort((a, b) => {
+          const dateA = a.metadata?.deletedAt || '';
+          const dateB = b.metadata?.deletedAt || '';
+          return dateB.localeCompare(dateA);
+      });
+      
       return out;
     },
 
@@ -149,55 +178,52 @@ export function makeTripService(
       return count;
     },
 
-    /**
-     * Restore a trip from trash back to active trips
-     */
     async restore(userId: string, tripId: string) {
-      if (!trashKV) {
-        throw new Error('Trash KV not available');
-      }
+      if (!trashKV) throw new Error('Trash KV not available');
 
       const trashKey = `trash:${userId}:${tripId}`;
       const raw = await trashKV.get(trashKey);
 
-      if (!raw) {
-        throw new Error('Trip not found in trash');
-      }
+      if (!raw) throw new Error('Trip not found in trash');
 
-      const { trip, metadata } = JSON.parse(raw);
+      let trip, metadata;
+      try {
+          const parsed = JSON.parse(raw);
+          if (parsed.trip) {
+              trip = parsed.trip;
+              metadata = parsed.metadata;
+          } else {
+              trip = parsed; // flat format
+          }
+      } catch (e) { throw new Error('Malformed trash data'); }
 
       // Remove deletion timestamp
       delete trip.deletedAt;
       trip.updatedAt = new Date().toISOString();
 
       // Restore to active trips
-      const activeKey = `trip:${userId}:${tripId}`;
+      // Use the ID from the trip object to ensure it goes back to the right user
+      const ownerId = trip.userId || userId; 
+      const activeKey = `trip:${ownerId}:${tripId}`;
+      
       await kv.put(activeKey, JSON.stringify(trip));
-
-      // Remove from trash
       await trashKV.delete(trashKey);
 
       return trip;
     },
 
-    /**
-     * Permanently delete a trip from trash (cannot be restored)
-     */
     async permanentDelete(userId: string, tripId: string) {
-      if (!trashKV) {
-        throw new Error('Trash KV not available');
-      }
-
+      if (!trashKV) throw new Error('Trash KV not available');
       const trashKey = `trash:${userId}:${tripId}`;
       await trashKV.delete(trashKey);
     },
 
     async incrementUserCounter(userId: string, amt = 1) {
+      if (!userId) return 0;
       const key = `meta:user:${userId}:trip_count`;
       const raw = await kv.get(key);
       const cur = raw ? parseInt(raw,10) : 0;
       const next = Math.max(0, cur + amt);
-
       await kv.put(key, String(next));
       return next;
     }

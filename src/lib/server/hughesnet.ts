@@ -39,7 +39,7 @@ export class HughesNetService {
 
     const res = await fetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
     const html = await res.text();
-    if (html.includes('name="Password"')) throw new Error('Session expired.');
+    if (html.includes('name="Password"')) throw new Error('Session expired. Please reconnect.');
 
     const uniqueIds = new Set<string>();
     this.extractIds(html).forEach(id => uniqueIds.add(id));
@@ -56,7 +56,7 @@ export class HughesNetService {
     }
 
     const finalIds = Array.from(uniqueIds);
-    console.log(`[HNS] Orders found: ${finalIds.length}`);
+    console.log(`[HNS] Total unique orders found: ${finalIds.length}`);
     await this.kv.put(`hns:orders_index:${userId}`, JSON.stringify(finalIds));
 
     // FETCH DETAILS
@@ -98,6 +98,25 @@ export class HughesNetService {
       if (v) try { results[id] = JSON.parse(v); } catch(e) { results[id] = v; }
     }
     return results;
+  }
+
+  async clearAllTrips(userId: string) {
+      console.log(`[HNS] Clearing HNS trips for ${userId}...`);
+      const tripService = makeTripService(this.tripKV, undefined);
+      const allTrips = await tripService.list(userId);
+      let count = 0;
+      for (const trip of allTrips) {
+          const isHns = 
+            (trip.destinations && trip.destinations.some((d:any) => d.notes?.includes('HNS'))) ||
+            (trip.stops && trip.stops.some((s:any) => s.notes?.includes('HNS'))) ||
+            (trip.notes && trip.notes.includes('HNS'));
+
+          if (isHns) {
+              await tripService.delete(userId, trip.id);
+              count++;
+          }
+      }
+      return count;
   }
 
   // --- HELPERS ---
@@ -156,23 +175,21 @@ export class HughesNetService {
 
   private extractIds(html: string) {
     const ids = new Set<string>();
-    const re = /viewservice\.jsp\?.*?\bid=(\d+)/gi;
+    const cleanHtml = html.replace(/&amp;/g, '&');
+    const re1 = /viewservice\.jsp\?.*?\bid=(\d+)/gi;
     let m;
-    while ((m = re.exec(html)) !== null) ids.add(m[1]);
+    while ((m = re1.exec(cleanHtml)) !== null) ids.add(m[1]);
+    if (ids.size === 0) {
+        const re2 = /[?&]id=(\d{8})\b/gi;
+        while ((m = re2.exec(cleanHtml)) !== null) ids.add(m[1]);
+    }
     return Array.from(ids);
   }
 
   private parseOrderPage(html: string, id: string) {
-    // Aggressive normalization
-    let text = html
-        .replace(/<br\s*\/?>/gi, ' ')
-        .replace(/<\/td>/gi, '  ')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ');
-
+    let text = html.replace(/<br\s*\/?>/gi, ' ').replace(/<\/td>/gi, '  ').replace(/<\/div>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
     const out: any = { id, address: '', city: '', state: '', zip: '', confirmScheduleDate: '', beginTime: '' };
 
-    // 1. Try Inputs (Most Reliable)
     const addrInput = html.match(/name=["']FLD_SO_Address1["'][^>]*value=["']([^"']*)["']/i);
     if (addrInput) out.address = addrInput[1].trim();
 
@@ -185,31 +202,15 @@ export class HughesNetService {
     const zipInput = html.match(/name=["']f_zip["'][^>]*value=["']([^"']*)["']/i);
     if (zipInput) out.zip = zipInput[1].trim();
 
-    // 2. Try Regex Text
     if (!out.address) {
-        const m = text.match(/Address:\s*(.*?)\s+(?:City|County|State)/i);
-        if (m) out.address = m[1].trim().split(/county:/i)[0].trim();
-    }
-    if (!out.city) {
-        const m = text.match(/City:\s*(.*?)\s+(?:State|County|Zip)/i);
-        if (m) out.city = m[1].trim();
-    }
-    if (!out.state) {
-        const m = text.match(/State(?:\/Cnty)?:\s*(.*?)\s+(?:Zip|County|Phone)/i);
-        if (m) out.state = m[1].trim().replace(/,$/, '');
+        const addressMatch = text.match(/Address:\s*(.*?)\s+(?:City|County|State)/i);
+        if (addressMatch) out.address = addressMatch[1].trim().split(/county:/i)[0].trim();
     }
     if (!out.zip) {
-        const m = text.match(/Zip(?:\/Postal)?:\s*(\d{5})/i);
-        if (m) out.zip = m[1];
+        const zipMatch = html.match(/Zip(?:\/Postal)?:\s*(?:<[^>]+>)*\s*(\d{5})/i);
+        if (zipMatch) out.zip = zipMatch[1];
     }
 
-    // 3. Fallback: If City is empty, use County or extract from address
-    if (!out.city) {
-        const countyMatch = text.match(/County:\s*(.*?)\s+(?:State|Zip)/i);
-        if (countyMatch) out.city = countyMatch[1].trim();
-    }
-
-    // 4. Date/Time
     const dateInput = html.match(/name=["']f_sched_date["'][^>]*value=["']([^"']*)["']/i);
     if (dateInput) out.confirmScheduleDate = dateInput[1];
     else {
@@ -223,7 +224,6 @@ export class HughesNetService {
         const m = text.match(/Schd Est\. Begin Time:\s*(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
         if (m) out.beginTime = m[1];
     }
-
     return out;
   }
 
@@ -231,24 +231,27 @@ export class HughesNetService {
   private async createTripsFromOrders(userId: string, orders: any[]) {
     const tripService = makeTripService(this.tripKV, undefined);
     
-    // --- LOAD SETTINGS (MOVED TO TOP) ---
+    // --- FIX: READ NESTED SETTINGS ---
     let defaultStartAddress = '';
     let defaultEndAddress = '';
     
-    console.log(`[HNS DEBUG] Loading Settings for ${userId}...`);
     try {
         let settingsRaw = await this.settingsKV.get(`BETA_USER_SETTINGS_KV:${userId}`);
         if (!settingsRaw) settingsRaw = await this.settingsKV.get(userId);
 
         if (settingsRaw) {
-            const settings = JSON.parse(settingsRaw as string);
-            defaultStartAddress = settings.defaultStartAddress || '';
-            defaultEndAddress = settings.defaultEndAddress || settings.defaultStartAddress || '';
-            console.log(`[HNS DEBUG] Found Start Address: "${defaultStartAddress}"`);
+            const data = JSON.parse(settingsRaw as string);
+            // Check if settings are nested under "settings" key (common in sveltekit stores)
+            const s = data.settings || data; 
+            
+            defaultStartAddress = s.defaultStartAddress || '';
+            defaultEndAddress = s.defaultEndAddress || s.defaultStartAddress || '';
+            
+            console.log(`[HNS] Settings Loaded. Start="${defaultStartAddress}"`);
         } else {
-            console.log(`[HNS DEBUG] No Settings Found.`);
+            console.log(`[HNS] No settings found for ${userId}.`);
         }
-    } catch (e) { console.error('[HNS] Settings Error', e); }
+    } catch (e) { console.error('[HNS] Error reading settings:', e); }
 
     const ordersByDate: Record<string, any[]> = {};
     for (const order of orders) {
@@ -267,7 +270,7 @@ export class HughesNetService {
     for (const [date, daysOrders] of Object.entries(ordersByDate)) {
       const existingTrips = await tripService.list(userId);
       if (existingTrips.some(t => t.date === date)) {
-          console.log(`[HNS] Trip already exists for ${date} (Skipping)`);
+          console.log(`[HNS] Trip already exists for ${date}`);
           continue;
       }
 
@@ -276,9 +279,11 @@ export class HughesNetService {
 
       for (const order of daysOrders) {
         const m = this.parseTime(order.beginTime);
-        if (m < 24 * 60 && m < minMinutes) {
-            minMinutes = m;
-            earliestOrder = order;
+        if (m < 24 * 60) {
+            if (m < minMinutes) {
+                minMinutes = m;
+                earliestOrder = order;
+            }
         }
       }
 
@@ -288,15 +293,14 @@ export class HughesNetService {
 
       const firstJobAddress = buildAddr(earliestOrder);
       
-      // --- FALLBACK LOGIC ---
-      // If start address is missing, use the first job's address so the trip is valid.
+      // Fallback if settings missing
       let tripStart = defaultStartAddress;
-      let tripEnd = defaultEndAddress;
-      
+      let tripEnd = defaultEndAddress || defaultStartAddress;
+
       if (!tripStart) {
-          tripStart = firstJobAddress; // Fallback
-          tripEnd = firstJobAddress;   // Fallback
-          console.log(`[HNS] Warning: Using Job Address as Start because Settings are empty.`);
+          console.log(`[HNS] Using Job Address as Start (Settings Empty): ${firstJobAddress}`);
+          tripStart = firstJobAddress;
+          tripEnd = firstJobAddress;
       }
 
       let driveTimeMinutes = 0;
@@ -339,7 +343,7 @@ export class HughesNetService {
       };
 
       await tripService.put(newTrip);
-      console.log(`[HNS] Created Trip for ${date} (Start: ${startTime})`);
+      console.log(`[HNS] Created Trip for ${date}`);
     }
   }
 
@@ -411,9 +415,14 @@ export class HughesNetService {
 
   private extractIds(html: string) {
     const ids = new Set<string>();
-    const re = /viewservice\.jsp\?.*?\bid=(\d+)/gi;
+    const cleanHtml = html.replace(/&amp;/g, '&');
+    const re1 = /viewservice\.jsp\?.*?\bid=(\d+)/gi;
     let m;
-    while ((m = re.exec(html)) !== null) ids.add(m[1]);
+    while ((m = re1.exec(cleanHtml)) !== null) ids.add(m[1]);
+    if (ids.size === 0) {
+        const re2 = /[?&]id=(\d{8})\b/gi;
+        while ((m = re2.exec(cleanHtml)) !== null) ids.add(m[1]);
+    }
     return Array.from(ids);
   }
 

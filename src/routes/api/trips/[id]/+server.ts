@@ -2,34 +2,36 @@
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
 
-// Helper to safely get KV namespace
-function safeKV(env: any, name: string) {
-	const kv = env?.[name];
-	if (!kv) {
-		console.warn(`[API] KV Binding '${name}' not found.`);
-	}
-	return kv ?? null;
+function fakeKV() {
+	return {
+		get: async () => null,
+		put: async () => {},
+		delete: async () => {},
+		list: async () => ({ keys: [] })
+	};
 }
 
 /**
  * GET /api/trips/[id] - Retrieve a single trip
  */
-export const GET: RequestHandler = async (event) => {
+export const GET: RequestHandler = async ({ params, locals, platform }) => {
 	try {
-		const user = event.locals.user;
+		const user = locals.user;
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
-		const { id } = event.params;
-
-		// Connect to KVs
-		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
-		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
+		const { id } = params;
+		const kv = platform?.env?.BETA_LOGS_KV ?? fakeKV();
+		const trashKV = platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
 		const svc = makeTripService(kv, trashKV);
 
-		// Use stable user ID (username)
-		const storageId = user.name || user.token;
+		// FIX: Check ALL storage locations
+		const storageIds = [user.id, user.name, user.token].filter(Boolean);
+		let trip = null;
 
-		const trip = await svc.get(storageId, id);
+		for (const uid of storageIds) {
+			trip = await svc.get(uid!, id);
+			if (trip) break;
+		}
 
 		if (!trip) {
 			return new Response('Not Found', { status: 404 });
@@ -41,33 +43,39 @@ export const GET: RequestHandler = async (event) => {
 		});
 	} catch (err) {
 		console.error('GET /api/trips/[id] error', err);
-		return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
-			status: 500,
-			headers: { 'Content-Type': 'application/json' }
-		});
+		return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
 	}
 };
 
 /**
  * PUT /api/trips/[id] - Update a trip
  */
-export const PUT: RequestHandler = async (event) => {
+export const PUT: RequestHandler = async ({ request, params, locals, platform }) => {
 	try {
-		const user = event.locals.user;
+		const user = locals.user;
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
-		const { id } = event.params;
-		const body = await event.request.json();
+		const { id } = params;
+		const body = await request.json();
 
-		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
-		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
+		const kv = platform?.env?.BETA_LOGS_KV ?? fakeKV();
+		const trashKV = platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
 		const svc = makeTripService(kv, trashKV);
 
-		const storageId = user.name || user.token;
+		// FIX: Find where the trip lives before updating
+		const storageIds = [user.id, user.name, user.token].filter(Boolean);
+		let existing = null;
+		let ownerId = null;
 
-		// Verify existing ownership
-		const existing = await svc.get(storageId, id);
-		if (!existing) {
+		for (const uid of storageIds) {
+			existing = await svc.get(uid!, id);
+			if (existing) {
+				ownerId = uid;
+				break;
+			}
+		}
+
+		if (!existing || !ownerId) {
 			return new Response('Not Found', { status: 404 });
 		}
 
@@ -75,7 +83,7 @@ export const PUT: RequestHandler = async (event) => {
 			...existing,
 			...body,
 			id,
-			userId: storageId,
+			userId: ownerId, // Keep it in the same storage bucket
 			updatedAt: new Date().toISOString()
 		};
 
@@ -87,42 +95,45 @@ export const PUT: RequestHandler = async (event) => {
 		});
 	} catch (err) {
 		console.error('PUT /api/trips/[id] error', err);
-		return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
-			status: 500,
-			headers: { 'Content-Type': 'application/json' }
-		});
+		return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
 	}
 };
 
 /**
- * DELETE /api/trips/[id] - Soft delete trip (move to trash)
+ * DELETE /api/trips/[id] - Soft delete trip
  */
-export const DELETE: RequestHandler = async (event) => {
+export const DELETE: RequestHandler = async ({ params, locals, platform }) => {
 	try {
-		const user = event.locals.user;
+		const user = locals.user;
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
-		const { id } = event.params;
-
-		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
-		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
+		const { id } = params;
+		const kv = platform?.env?.BETA_LOGS_KV ?? fakeKV();
+		const trashKV = platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
 		const svc = makeTripService(kv, trashKV);
 
-		const storageId = user.name || user.token;
+		// FIX: Find where the trip lives before deleting
+		const storageIds = [user.id, user.name, user.token].filter(Boolean);
+		let existing = null;
+		let ownerId = null;
 
-		// Check if trip exists
-		const existing = await svc.get(storageId, id);
-		if (!existing) {
-			return new Response(JSON.stringify({ error: 'Trip not found' }), {
-				status: 404,
-				headers: { 'Content-Type': 'application/json' }
-			});
+		for (const uid of storageIds) {
+			existing = await svc.get(uid!, id);
+			if (existing) {
+				ownerId = uid;
+				break;
+			}
 		}
 
-		// Perform soft delete
-		await svc.delete(storageId, id);
+		if (!existing || !ownerId) {
+			// If it's already gone, consider it a success (idempotent)
+			return new Response(JSON.stringify({ success: true }), { status: 200 });
+		}
 
-		// Decrement trip count
+		// Perform soft delete on the correct owner ID
+		await svc.delete(ownerId, id);
+
+		// Decrement trip count (using token as that's usually the counter key)
 		await svc.incrementUserCounter(user.token, -1);
 
 		return new Response(JSON.stringify({ success: true }), {
@@ -131,9 +142,6 @@ export const DELETE: RequestHandler = async (event) => {
 		});
 	} catch (err) {
 		console.error('DELETE /api/trips/[id] error', err);
-		return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
-			status: 500,
-			headers: { 'Content-Type': 'application/json' }
-		});
+		return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
 	}
 };
