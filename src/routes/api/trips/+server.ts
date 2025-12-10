@@ -58,7 +58,7 @@ export const GET: RequestHandler = async (event) => {
             allTrips = allTrips.concat(trips);
         }
 
-        // Deduplicate based on ID
+        // Deduplicate
         const uniqueTrips = Array.from(new Map(allTrips.map(item => [item.id, item])).values());
 
 		return new Response(JSON.stringify(uniqueTrips), {
@@ -94,7 +94,6 @@ export const POST: RequestHandler = async (event) => {
         
         const storageId = user.id || user.name || user.token;
 
-        // FREE PLAN LIMIT
         if (user.plan === 'free') {
             const allTrips = await svc.list(storageId);
             const now = new Date();
@@ -140,7 +139,7 @@ export const POST: RequestHandler = async (event) => {
 	}
 };
 
-// --- NEW: DELETE ALL TRIPS ---
+// --- FIX: SOFT DELETE ALL ---
 export const DELETE: RequestHandler = async (event) => {
     try {
         const user = event.locals.user;
@@ -150,23 +149,38 @@ export const DELETE: RequestHandler = async (event) => {
         const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
         const svc = makeTripService(kv, trashKV);
 
-        // Find ALL trips from ALL potential IDs
+        // Find ALL trips
         const storageIds = new Set<string>();
         if (user.id) storageIds.add(user.id);
         if (user.name) storageIds.add(user.name);
         if (user.token) storageIds.add(user.token);
 
         let count = 0;
+        const now = new Date().toISOString();
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
+
         for (const storageId of storageIds) {
             const trips = await svc.list(storageId);
             for (const trip of trips) {
                 try {
-                    // Use the trip's actual owner ID to ensure deletion works
-                    await svc.delete(trip.userId || storageId, trip.id);
+                    // 1. Save to Trash
+                    const trashItem = {
+                        ...trip,
+                        deletedAt: now,
+                        deletedBy: user.id || user.name,
+                        expiresAt: expiresAt,
+                        originalKey: `trip:${storageId}:${trip.id}`,
+                        syncStatus: 'synced'
+                    };
+                    // Manually putting to trashKV since svc.delete usually handles one ID at a time logic
+                    await trashKV.put(`trash:${storageId}:${trip.id}`, JSON.stringify(trashItem));
+
+                    // 2. Delete from Active
+                    await kv.delete(`trip:${storageId}:${trip.id}`);
+                    
                     count++;
                 } catch (e) {
-                    // Ignore "Trip not found" errors during bulk delete
-                    console.log(`Skipping ${trip.id} (already deleted)`);
+                    console.error(`Failed to soft-delete ${trip.id}`, e);
                 }
             }
         }

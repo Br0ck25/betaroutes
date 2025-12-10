@@ -13,8 +13,7 @@
     "meta:user:97c14830-0009-4dc2-9a29-df8ca36302f9:trip_count": "1",
     "trip:testuser:eb3b80e2-5409-476b-acc4-b800cc2c1df2": "{\"id\":\"eb3b80e2-5409-476b-acc4-b800cc2c1df2\",\"date\":\"2025-12-09\",\"startTime\":\"09:00\",\"endTime\":\"17:00\",\"hoursWorked\":8,\"startAddress\":\"\",\"endAddress\":\"\",\"totalMiles\":0,\"mpg\":25,\"gasPrice\":3.5,\"fuelCost\":0,\"maintenanceCost\":0,\"suppliesCost\":0,\"netProfit\":0,\"notes\":\"\",\"stops\":[],\"destinations\":[],\"maintenanceItems\":[],\"suppliesItems\":[],\"lastModified\":\"2025-12-09T19:51:48.155Z\",\"userId\":\"testuser\",\"createdAt\":\"2025-12-09T19:51:48.173Z\",\"updatedAt\":\"2025-12-09T19:51:48.173Z\"}",
     "meta:user:32a9abf8-6df6-4214-8ffa-087f2643c647:trip_count": "10",
-    "meta:user:0bba8c7e-4e3c-4d58-a730-f4d197cb12b5:trip_count": "1",
-    "trip:james:4b6fed76-c267-4a8b-8684-f41ffbcaa5bc": "{\"id\":\"4b6fed76-c267-4a8b-8684-f41ffbcaa5bc\",\"date\":\"2025-12-10\",\"startTime\":\"09:00\",\"endTime\":\"17:00\",\"hoursWorked\":8,\"startAddress\":\"5996 Brock Dr, Wooton, KY 41776, USA\",\"endAddress\":\"5996 Brock Dr, Wooton, KY 41776, USA\",\"totalMiles\":26.6,\"estimatedTime\":49,\"mpg\":25,\"gasPrice\":3.5,\"fuelCost\":3.72,\"maintenanceCost\":0,\"suppliesCost\":0,\"netProfit\":-3.72,\"notes\":\"\",\"stops\":[{\"id\":\"aad79cd4-1176-4a66-9658-4f5aa4518dc7\",\"address\":\"Hazard, KY, USA\",\"earnings\":0,\"notes\":\"\",\"order\":0}],\"destinations\":[{\"address\":\"Hazard, KY, USA\",\"earnings\":0,\"notes\":\"\"}],\"maintenanceItems\":[],\"suppliesItems\":[],\"lastModified\":\"2025-12-10T05:27:35.178Z\",\"userId\":\"james\",\"createdAt\":\"2025-12-10T05:27:35.185Z\",\"updatedAt\":\"2025-12-10T05:27:35.185Z\"}"
+    "meta:user:0bba8c7e-4e3c-4d58-a730-f4d197cb12b5:trip_count": "1"
   },
   "TRASH": {},
   "SETTINGS": {

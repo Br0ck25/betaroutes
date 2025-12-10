@@ -18,27 +18,19 @@ export class HughesNetService {
 
   async connect(userId: string, username: string, password: string) {
     console.log(`[HNS] Connecting user ${userId}...`);
-    
-    // 1. Store credentials
     const payload = { username, password, loginUrl: LOGIN_URL, createdAt: new Date().toISOString() };
     const enc = await this.encrypt(JSON.stringify(payload));
     await this.kv.put(`hns:cred:${userId}`, enc);
 
-    // 2. Perform Login
     const cookie = await this.loginAndStoreSession(userId, username, password);
     if (!cookie) {
         console.error('[HNS] Login failed: No cookie received');
         return false;
     }
 
-    // 3. Verify Login
     const verifyRes = await fetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT } });
     const verifyHtml = await verifyRes.text();
-    
-    if (verifyHtml.includes('name="Password"') || verifyHtml.includes('login.jsp')) {
-        console.error('[HNS] Verify failed: Still on login page');
-        return false;
-    }
+    if (verifyHtml.includes('name="Password"') || verifyHtml.includes('login.jsp')) return false;
 
     console.log('[HNS] Connection successful');
     return true;
@@ -49,14 +41,10 @@ export class HughesNetService {
     const cookie = await this.ensureSessionCookie(userId);
     if (!cookie) throw new Error('Could not login. Please check credentials.');
 
-    // 1. Fetch Home Page
-    console.log(`[HNS] Fetching Home: ${HOME_URL}`);
     const res = await fetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
     const html = await res.text();
-    
     if (html.includes('name="Password"')) throw new Error('Session expired. Please reconnect.');
 
-    // 2. COLLECT IDs
     const uniqueIds = new Set<string>();
     this.extractIds(html).forEach(id => uniqueIds.add(id));
 
@@ -75,7 +63,7 @@ export class HughesNetService {
     console.log(`[HNS] Total unique orders found: ${finalIds.length}`);
     await this.kv.put(`hns:orders_index:${userId}`, JSON.stringify(finalIds));
 
-    // 3. FETCH DETAILS
+    // FETCH DETAILS
     const orders: any[] = [];
     const BATCH_SIZE = 5;
     
@@ -98,7 +86,6 @@ export class HughesNetService {
         }));
     }
 
-    // 4. Create Trips
     if (orders.length > 0) {
         await this.createTripsFromOrders(userId, orders);
     }
@@ -117,23 +104,19 @@ export class HughesNetService {
     return results;
   }
 
-  // --- NEW: CLEAR TRIPS ---
   async clearAllTrips(userId: string) {
       console.log(`[HNS] Clearing HNS trips for ${userId}...`);
-      // Pass undefined for trashKV to perform HARD DELETE
       const tripService = makeTripService(this.tripKV, undefined);
       
       const allTrips = await tripService.list(userId);
       let count = 0;
 
       for (const trip of allTrips) {
-          // Only delete trips that have "HNS" in their notes or stops
           const isHns = 
             (trip.destinations && trip.destinations.some((d:any) => d.notes?.includes('HNS'))) ||
             (trip.stops && trip.stops.some((s:any) => s.notes?.includes('HNS'))) ||
             (trip.notes && trip.notes.includes('HNS'));
 
-          // Also check dates if needed, but HNS signature is safer
           if (isHns) {
               await tripService.delete(userId, trip.id);
               count++;
@@ -203,7 +186,6 @@ export class HughesNetService {
     const re1 = /viewservice\.jsp\?.*?\bid=(\d+)/gi;
     let m;
     while ((m = re1.exec(cleanHtml)) !== null) ids.add(m[1]);
-    
     if (ids.size === 0) {
         const re2 = /[?&]id=(\d{8})\b/gi;
         while ((m = re2.exec(cleanHtml)) !== null) ids.add(m[1]);
@@ -266,19 +248,37 @@ export class HughesNetService {
   private async createTripsFromOrders(userId: string, orders: any[]) {
     const tripService = makeTripService(this.tripKV, undefined);
     
+    // --- DEBUGGING SETTINGS LOAD ---
     let defaultStartAddress = '';
     let defaultEndAddress = '';
+    
+    console.log('************************************************');
+    console.log(`[HNS DEBUG] Attempting to load settings for: ${userId}`);
     try {
-        let settingsRaw = await this.settingsKV.get(`BETA_USER_SETTINGS_KV:${userId}`);
-        if (!settingsRaw) settingsRaw = await this.settingsKV.get(userId);
+        // 1. Try ID Key (Most common for new sveltekit)
+        let settingsRaw = await this.settingsKV.get(userId);
+        if (settingsRaw) {
+             console.log(`[HNS DEBUG] FOUND using key: "${userId}"`);
+        } else {
+             console.log(`[HNS DEBUG] NOT FOUND using key: "${userId}"`);
+             // 2. Try Prefix Key
+             settingsRaw = await this.settingsKV.get(`BETA_USER_SETTINGS_KV:${userId}`);
+             if (settingsRaw) console.log(`[HNS DEBUG] FOUND using key: "BETA_USER_SETTINGS_KV:${userId}"`);
+             else console.log(`[HNS DEBUG] NOT FOUND using key: "BETA_USER_SETTINGS_KV:${userId}"`);
+        }
 
         if (settingsRaw) {
             const settings = JSON.parse(settingsRaw as string);
             defaultStartAddress = settings.defaultStartAddress || '';
             defaultEndAddress = settings.defaultEndAddress || settings.defaultStartAddress || '';
-            console.log(`[HNS] Settings Loaded. Start Address: "${defaultStartAddress}"`);
+            console.log(`[HNS DEBUG] Start Address Value: "${defaultStartAddress}"`);
+        } else {
+            console.warn(`[HNS DEBUG] CRITICAL: No settings object found! Please go to /dashboard/settings and click Save.`);
         }
-    } catch (e) { console.error('[HNS] Error reading settings:', e); }
+    } catch (e) {
+        console.error('[HNS DEBUG] Error reading settings:', e);
+    }
+    console.log('************************************************');
 
     const ordersByDate: Record<string, any[]> = {};
     for (const order of orders) {
@@ -364,7 +364,7 @@ export class HughesNetService {
       };
 
       await tripService.put(newTrip);
-      console.log(`[HNS] Created Trip for ${date}`);
+      console.log(`[HNS] Created Trip for ${date} (Start: ${startTime})`);
     }
   }
 
