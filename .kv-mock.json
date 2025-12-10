@@ -4,7 +4,7 @@
     "user:fd51e6c2-f827-418b-acb9-fcee7d3d9425": "{\"id\":\"fd51e6c2-f827-418b-acb9-fcee7d3d9425\",\"username\":\"testuser\",\"name\":\"test\",\"email\":\"\",\"password\":\"$2b$10$5OQa3ww7zFpxKaQSCMmUeeFXci9ZZLWqrzI70PFcLmmHzUAbwVnXy\",\"plan\":\"free\",\"tripsThisMonth\":0,\"maxTrips\":10,\"resetDate\":\"2025-12-07T21:21:14.854Z\",\"createdAt\":\"2025-12-07T21:21:14.854Z\"}",
     "idx:username:james": "29c44d78-79d3-4d26-a063-220be7b7fefa",
     "idx:username:testuser": "fd51e6c2-f827-418b-acb9-fcee7d3d9425",
-    "32a9abf8-6df6-4214-8ffa-087f2643c647": "{\"id\":\"29c44d78-79d3-4d26-a063-220be7b7fefa\",\"name\":\"james\",\"email\":\"\",\"plan\":\"free\",\"tripsThisMonth\":0,\"maxTrips\":10,\"resetDate\":\"2025-12-09T20:16:36.694Z\"}"
+    "0bba8c7e-4e3c-4d58-a730-f4d197cb12b5": "{\"id\":\"29c44d78-79d3-4d26-a063-220be7b7fefa\",\"name\":\"james\",\"email\":\"\",\"plan\":\"free\",\"tripsThisMonth\":0,\"maxTrips\":10,\"resetDate\":\"2025-12-10T02:49:21.767Z\"}"
   },
   "LOGS": {
     "meta:user:29c44d78-79d3-4d26-a063-220be7b7fefa:trip_count": "0",
