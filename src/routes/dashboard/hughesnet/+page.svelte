@@ -11,7 +11,6 @@
   let logs: string[] = [];
 
   function addLog(msg: string) {
-    // Add new log to the top
     logs = [`[${new Date().toLocaleTimeString()}] ${msg}`, ...logs]; 
     console.log('[HNS UI]', msg);
   }
@@ -36,11 +35,9 @@
   }
 
   async function handleConnect() {
-    // This log PROVES the button was clicked
     addLog('Connect button clicked. Sending request...');
     
     if (!username || !password) {
-        addLog('Error: Username or password missing.');
         alert('Please enter username and password');
         return;
     }
@@ -54,7 +51,6 @@
         });
         
         const data = await res.json();
-        addLog(`Response received: ${JSON.stringify(data)}`);
 
         if (data.success) {
             isConnected = true;
@@ -96,6 +92,28 @@
     }
   }
 
+  // --- NEW: CLEAR FUNCTION ---
+  async function handleClear() {
+      if (!confirm('Are you sure you want to delete ALL HughesNet trips? This cannot be undone.')) return;
+      
+      loading = true;
+      addLog('Clearing HNS trips...');
+      try {
+          const res = await fetch('/api/hughesnet', {
+              method: 'POST',
+              body: JSON.stringify({ action: 'clear' })
+          });
+          const data = await res.json();
+          addLog(`Cleared ${data.count} trips.`);
+          // Reload to reflect empty state
+          await loadOrders();
+      } catch (e: any) {
+          addLog('Clear Error: ' + e.message);
+      } finally {
+          loading = false;
+      }
+  }
+
   onMount(loadOrders);
 </script>
 
@@ -103,13 +121,22 @@
     <div class="flex justify-between items-center mb-6">
         <h1 class="text-2xl font-bold text-gray-900">HughesNet Dashboard</h1>
         {#if isConnected}
-            <button 
-                class="px-4 py-2 rounded-md font-semibold text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
-                on:click={handleSync} 
-                disabled={loading}
-            >
-                {loading ? 'Syncing...' : 'Sync Now'}
-            </button>
+            <div class="flex gap-2">
+                <button 
+                    class="px-4 py-2 rounded-md font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50"
+                    on:click={handleClear} 
+                    disabled={loading}
+                >
+                    Reset HNS Trips
+                </button>
+                <button 
+                    class="px-4 py-2 rounded-md font-semibold text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
+                    on:click={handleSync} 
+                    disabled={loading}
+                >
+                    {loading ? 'Syncing...' : 'Sync Now'}
+                </button>
+            </div>
         {/if}
     </div>
 
@@ -141,7 +168,7 @@
                                 <div>
                                     <h3 class="font-bold">Order #{order.id}</h3>
                                     <p class="text-sm text-gray-600">{order.address}</p>
-                                    <p class="text-sm text-gray-500">{order.city}, {order.state}</p>
+                                    <p class="text-sm text-gray-500">{order.city}, {order.state} {order.zip}</p>
                                 </div>
                                 <div class="text-right text-sm">
                                     <div class="font-semibold text-green-700">{order.confirmScheduleDate || 'No Date'}</div>

@@ -100,7 +100,6 @@
         const trip = $trips.find(t => t.id === id);
         const currentUser = $page.data.user || $user;
         let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
-
         if (trip && currentUser) {
             if (trip.userId === currentUser.name) userId = currentUser.name;
             else if (trip.userId === currentUser.token) userId = currentUser.token;
@@ -110,6 +109,37 @@
       } catch (err) {
         alert('Failed to delete trip.');
       }
+    }
+  }
+
+  async function deleteAll() {
+    if (filteredTrips.length === 0) return;
+    
+    if (!confirm(`Are you sure you want to move all ${filteredTrips.length} visible trips to trash?`)) {
+      return;
+    }
+
+    try {
+      const currentUser = $page.data.user || $user;
+      const defaultUserId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
+      
+      // Create a copy to iterate safely
+      const tripsToDelete = [...filteredTrips];
+
+      for (const trip of tripsToDelete) {
+        let userId = defaultUserId;
+        if (currentUser) {
+            if (trip.userId === currentUser.name) userId = currentUser.name;
+            else if (trip.userId === currentUser.token) userId = currentUser.token;
+        }
+        
+        if (userId) {
+          await trips.deleteTrip(trip.id, userId);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to delete some trips.');
     }
   }
   
@@ -155,12 +185,24 @@
       <h1 class="page-title">Trip History</h1>
       <p class="page-subtitle">View and manage all your trips</p>
     </div>
-    <a href="/dashboard/trips/new" class="btn-primary" aria-label="Create New Trip">
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-        <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      New Trip
-    </a>
+    
+    <div class="header-actions">
+      {#if filteredTrips.length > 0}
+        <button class="btn-danger" on:click={deleteAll} aria-label="Delete All Filtered Trips">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M4 6H16M10 6V4H14V6M6 6V16C6 16.5523 6.44772 17 7 17H13C13.5523 17 14 16.5523 14 16V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Delete All
+        </button>
+      {/if}
+
+      <a href="/dashboard/trips/new" class="btn-primary" aria-label="Create New Trip">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        New Trip
+      </a>
+    </div>
   </div>
   
   <div class="stats-summary">
@@ -340,7 +382,7 @@
                     <div class="expense-row total">
                       <span>Total Costs</span>
                       <span>{formatCurrency(totalCosts)}</span>
-                  </div>
+                    </div>
                   </div>
                 </div>
               {/if}
@@ -354,7 +396,7 @@
               
               <div class="action-buttons-footer">
                 <button class="action-btn-lg edit-btn" on:click={() => editTrip(trip.id)}>
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11 2L14 5L5 14H2V11L11 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11 2L14 5L5 14H2V11L11 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     Edit
                 </button>
                 <button class="action-btn-lg delete-btn" on:click={() => deleteTrip(trip.id)}>
@@ -381,7 +423,24 @@
   .page-title { font-size: 24px; font-weight: 800; color: #111827; margin: 0; }
   .page-subtitle { font-size: 14px; color: #6B7280; margin: 0; }
   
-  .btn-primary { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); }
+  .header-actions { display: flex; gap: 12px; align-items: center; }
+
+  .btn-primary { 
+    display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px;
+    background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); 
+    color: white; border: none; border-radius: 8px; 
+    font-weight: 600; font-size: 14px; text-decoration: none;
+    box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); 
+  }
+
+  .btn-danger { 
+    display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px;
+    background: #FEF2F2; color: #DC2626; border: 1px solid #DC2626; 
+    border-radius: 8px; font-weight: 600; font-size: 14px; 
+    cursor: pointer; transition: all 0.2s;
+  }
+  .btn-danger:hover { background: #FEE2E2; }
+  .btn-danger:active { background: #FECACA; }
 
   .stats-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
   .summary-card { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; text-align: center; }
