@@ -85,6 +85,15 @@
     }).format(date);
   }
 
+  function formatTime(time: string): string {
+    if (!time) return '';
+    const [h, m] = time.split(':').map(Number);
+    if (isNaN(h)) return time;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
+  }
+
   function formatDuration(minutes: number): string {
     if (!minutes) return '-';
     const h = Math.floor(minutes / 60);
@@ -99,7 +108,7 @@
         const trip = $trips.find(t => t.id === id);
         const currentUser = $page.data.user || $user;
         let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
-        
+
         if (trip && currentUser) {
             if (trip.userId === currentUser.name) userId = currentUser.name;
             else if (trip.userId === currentUser.token) userId = currentUser.token;
@@ -115,7 +124,6 @@
   // --- DELETE ALL FUNCTION ---
   async function deleteAllTrips() {
       if (!confirm('WARNING: Are you sure you want to delete ALL trips? This cannot be undone.')) return;
-      
       const tripsToDelete = [...$trips];
       for (const trip of tripsToDelete) {
           await deleteTrip(trip.id, true);
@@ -167,7 +175,7 @@
     <div class="header-actions">
         <button class="btn-danger" on:click={deleteAllTrips} aria-label="Delete All Trips">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                <path d="M2 4H14M12 4V13C12 13.5304 11.7893 14.0391 11.4142 14.4142C11.0391 14.7893 10.5304 15 10 15H6C5.46957 15 4.96086 14.7893 4.58579 14.4142C4.21071 14.0391 4 13.5304 4 13V4M5 4V3C5 2.46957 5.21071 1.96086 5.58579 1.58579C5.96086 1.21071 6.46957 1 7 1H9C9.53043 1 10.0391 1.21071 10.4142 1.58579C10.7893 1.96086 11 2.46957 11 3V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+               <path d="M2 4H14M12 4V13C12 13.5304 11.7893 14.0391 11.4142 14.4142C11.0391 14.7893 10.5304 15 10 15H6C5.46957 15 4.96086 14.7893 4.58579 14.4142C4.21071 14.0391 4 13.5304 4 13V4M5 4V3C5 2.46957 5.21071 1.96086 5.58579 1.58579C5.96086 1.21071 6.46957 1 7 1H9C9.53043 1 10.0391 1.21071 10.4142 1.58579C10.7893 1.96086 11 2.46957 11 3V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             Delete All
         </button>
@@ -185,6 +193,7 @@
       <div class="summary-label">Total Trips</div>
       <div class="summary-value">{filteredTrips.length}</div>
     </div>
+    
     <div class="summary-card">
       <div class="summary-label">Total Miles</div>
       <div class="summary-value">
@@ -265,7 +274,12 @@
         >
           <div class="card-top">
             <div class="trip-route-date">
-              <span class="trip-date-display">{formatDate(trip.date || '')}</span>
+              <span class="trip-date-display">
+                  {formatDate(trip.date || '')}
+                  {#if trip.startTime}
+                     <span class="time-range">• {formatTime(trip.startTime)} - {formatTime(trip.endTime || '17:00')}</span>
+                  {/if}
+              </span>
               <h3 class="trip-route-title">
                 {trip.startAddress?.split(',')[0] || 'Unknown'} 
                 {#if trip.stops && trip.stops.length > 0}
@@ -357,7 +371,7 @@
                     <div class="expense-row total">
                       <span>Total Costs</span>
                       <span>{formatCurrency(totalCosts)}</span>
-                    </div>
+                  </div>
                   </div>
                 </div>
               {/if}
@@ -434,6 +448,7 @@
   .card-top { display: grid; grid-template-columns: 1fr auto 20px; align-items: center; gap: 12px; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #F3F4F6; }
   .trip-route-date { overflow: hidden; }
   .trip-date-display { display: block; font-size: 12px; font-weight: 600; color: #6B7280; margin-bottom: 4px; }
+  .time-range { color: #4B5563; margin-left: 4px; font-weight: 500; }
   .trip-route-title { font-size: 16px; font-weight: 700; color: #111827; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .profit-display-large { font-size: 18px; font-weight: 800; white-space: nowrap; }

@@ -28,13 +28,18 @@ export interface SupplyCost {
 export interface Trip {
 	id?: string;
 	date: string; // YYYY-MM-DD
-	startClock?: string; // HH:MM
-	endClock?: string; // HH:MM
+	startTime?: string; // HH:MM
+	endTime?: string; // HH:MM
+    estimatedTime?: number; // Minutes
+    totalTime?: string; // "1h 30m"
 	startAddress: string;
 	endAddress: string;
 	destinations: Destination[];
-	totalMileage: number;
-	totalTime: string;
+	
+    // --- FIX: Renamed to match schema and frontend ---
+    totalMiles: number; 
+    // ------------------------------------------------
+
 	totalEarnings: number;
 	fuelCost: number;
 	maintenanceCost: number;
@@ -50,6 +55,7 @@ export interface Trip {
 	lastModified: string; // ISO 8601 timestamp
 	isOptimized?: boolean;
 	originalOrder?: Destination[];
+    [key: string]: any;
 }
 
 export interface RouteResult {
