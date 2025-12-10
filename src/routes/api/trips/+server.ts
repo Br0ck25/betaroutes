@@ -21,12 +21,8 @@ const tripSchema = z.object({
 	startAddress: z.string().max(500).optional(),
 	endAddress: z.string().max(500).optional(),
 	totalMiles: z.number().nonnegative().optional(),
-	
-    // --- FIX: Added missing time fields ---
-    estimatedTime: z.number().optional(), // Drive time in minutes
-    totalTime: z.string().optional(),     // Drive time as string "1h 30m"
-    // -------------------------------------
-
+    estimatedTime: z.number().optional(),
+    totalTime: z.string().optional(),
 	mpg: z.number().positive().optional(),
 	gasPrice: z.number().nonnegative().optional(),
 	fuelCost: z.number().optional(),
@@ -50,10 +46,23 @@ export const GET: RequestHandler = async (event) => {
 		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
 		const svc = makeTripService(kv, trashKV);
 
-		const storageId = user.name || user.token;
-		const trips = await svc.list(storageId);
+        // --- FIX: Fetch from BOTH locations (UUID and Name) ---
+        // This ensures old trips ("James") and new trips ("UUID") both show up.
+        const storageIds = new Set<string>();
+        if (user.id) storageIds.add(user.id);     // New standard
+        if (user.name) storageIds.add(user.name); // Legacy standard
+        if (user.token) storageIds.add(user.token);
 
-		return new Response(JSON.stringify(trips), {
+        let allTrips: any[] = [];
+        for (const storageId of storageIds) {
+            const trips = await svc.list(storageId);
+            allTrips = allTrips.concat(trips);
+        }
+
+        // Deduplicate: If a trip was somehow migrated and exists in both, keep one.
+        const uniqueTrips = Array.from(new Map(allTrips.map(item => [item.id, item])).values());
+
+		return new Response(JSON.stringify(uniqueTrips), {
 			status: 200,
 			headers: { 'Content-Type': 'application/json' }
 		});
@@ -87,14 +96,16 @@ export const POST: RequestHandler = async (event) => {
 		const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
 		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
 		const svc = makeTripService(kv, trashKV);
-        const storageId = user.name || user.token;
+        
+        // Save new trips to UUID if available (future-proofing)
+        const storageId = user.id || user.name || user.token;
 
-        // --- ENFORCE MONTHLY LIMIT ---
+        // ENFORCE MONTHLY LIMIT
         if (user.plan === 'free') {
             const allTrips = await svc.list(storageId);
             const now = new Date();
             const currentYear = now.getFullYear();
-            const currentMonth = now.getMonth(); // 0-indexed
+            const currentMonth = now.getMonth(); 
 
             const monthlyCount = allTrips.filter(t => {
                 if (!t.date) return false;
@@ -109,7 +120,6 @@ export const POST: RequestHandler = async (event) => {
                 }), { status: 403, headers: { 'Content-Type': 'application/json' } });
             }
         }
-        // -----------------------------
 
 		const validData = parseResult.data;
 		const id = validData.id || crypto.randomUUID();
