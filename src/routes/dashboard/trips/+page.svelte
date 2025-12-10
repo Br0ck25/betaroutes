@@ -100,7 +100,6 @@
         const currentUser = $page.data.user || $user;
         let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
         
-        // FIX: Check ALL possible IDs to match trip ownership
         if (trip && currentUser) {
             if (trip.userId === currentUser.id) userId = currentUser.id;
             else if (trip.userId === currentUser.name) userId = currentUser.name;
@@ -112,6 +111,28 @@
         alert('Failed to delete trip.');
       }
     }
+  }
+
+  // --- NEW: DELETE ALL TRIPS ---
+  async function deleteAllTrips() {
+      if (!confirm('Are you sure you want to delete ALL trips? This cannot be undone.')) return;
+      
+      try {
+          const res = await fetch('/api/trips', { method: 'DELETE' });
+          if (res.ok) {
+              // Clear local store
+              trips.clear();
+              // Reload to verify
+              const currentUser = $page.data.user || $user;
+              if (currentUser) trips.load(currentUser.id || currentUser.name);
+              alert('All trips deleted.');
+          } else {
+              alert('Failed to delete all trips.');
+          }
+      } catch (err) {
+          console.error(err);
+          alert('Network error while deleting.');
+      }
   }
   
   function editTrip(id: string) {
@@ -155,12 +176,18 @@
       <h1 class="page-title">Trip History</h1>
       <p class="page-subtitle">View and manage all your trips</p>
     </div>
-    <a href="/dashboard/trips/new" class="btn-primary" aria-label="Create New Trip">
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-        <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      New Trip
-    </a>
+    
+    <div class="header-actions flex gap-2">
+        <button class="btn-danger" on:click={deleteAllTrips}>
+            Delete All
+        </button>
+        <a href="/dashboard/trips/new" class="btn-primary" aria-label="Create New Trip">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          New Trip
+        </a>
+    </div>
   </div>
   
   <div class="stats-summary">
@@ -382,6 +409,8 @@
   .page-subtitle { font-size: 14px; color: #6B7280; margin: 0; }
   
   .btn-primary { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); }
+  .btn-danger { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; background: #DC2626; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; transition: background 0.2s; }
+  .btn-danger:hover { background: #B91C1C; }
 
   .stats-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
   .summary-card { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; text-align: center; }

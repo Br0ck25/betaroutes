@@ -46,11 +46,10 @@ export const GET: RequestHandler = async (event) => {
 		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
 		const svc = makeTripService(kv, trashKV);
 
-        // --- FIX: Fetch from BOTH locations (UUID and Name) ---
-        // This ensures old trips ("James") and new trips ("UUID") both show up.
-        const storageIds = new Set<string>();
-        if (user.id) storageIds.add(user.id);     // New standard
-        if (user.name) storageIds.add(user.name); // Legacy standard
+		// Check ALL storage locations to find trips
+		const storageIds = new Set<string>();
+        if (user.id) storageIds.add(user.id);
+        if (user.name) storageIds.add(user.name);
         if (user.token) storageIds.add(user.token);
 
         let allTrips: any[] = [];
@@ -59,7 +58,7 @@ export const GET: RequestHandler = async (event) => {
             allTrips = allTrips.concat(trips);
         }
 
-        // Deduplicate: If a trip was somehow migrated and exists in both, keep one.
+        // Deduplicate based on ID
         const uniqueTrips = Array.from(new Map(allTrips.map(item => [item.id, item])).values());
 
 		return new Response(JSON.stringify(uniqueTrips), {
@@ -81,14 +80,10 @@ export const POST: RequestHandler = async (event) => {
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
 		const body = await event.request.json();
-
 		const parseResult = tripSchema.safeParse(body);
 		if (!parseResult.success) {
 			return new Response(
-				JSON.stringify({
-					error: 'Invalid Data',
-					details: parseResult.error.flatten()
-				}),
+				JSON.stringify({ error: 'Invalid Data', details: parseResult.error.flatten() }),
 				{ status: 400 }
 			);
 		}
@@ -97,20 +92,16 @@ export const POST: RequestHandler = async (event) => {
 		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
 		const svc = makeTripService(kv, trashKV);
         
-        // Save new trips to UUID if available (future-proofing)
         const storageId = user.id || user.name || user.token;
 
-        // ENFORCE MONTHLY LIMIT
+        // FREE PLAN LIMIT
         if (user.plan === 'free') {
             const allTrips = await svc.list(storageId);
             const now = new Date();
-            const currentYear = now.getFullYear();
-            const currentMonth = now.getMonth(); 
-
             const monthlyCount = allTrips.filter(t => {
                 if (!t.date) return false;
                 const [y, m] = t.date.split('-').map(Number);
-                return y === currentYear && (m - 1) === currentMonth;
+                return y === now.getFullYear() && (m - 1) === now.getMonth();
             }).length;
 
             if (monthlyCount >= 10) {
@@ -147,4 +138,46 @@ export const POST: RequestHandler = async (event) => {
 			headers: { 'Content-Type': 'application/json' }
 		});
 	}
+};
+
+// --- NEW: DELETE ALL TRIPS ---
+export const DELETE: RequestHandler = async (event) => {
+    try {
+        const user = event.locals.user;
+        if (!user) return new Response('Unauthorized', { status: 401 });
+
+        const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
+        const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
+        const svc = makeTripService(kv, trashKV);
+
+        // Find ALL trips from ALL potential IDs
+        const storageIds = new Set<string>();
+        if (user.id) storageIds.add(user.id);
+        if (user.name) storageIds.add(user.name);
+        if (user.token) storageIds.add(user.token);
+
+        let count = 0;
+        for (const storageId of storageIds) {
+            const trips = await svc.list(storageId);
+            for (const trip of trips) {
+                try {
+                    // Use the trip's actual owner ID to ensure deletion works
+                    await svc.delete(trip.userId || storageId, trip.id);
+                    count++;
+                } catch (e) {
+                    // Ignore "Trip not found" errors during bulk delete
+                    console.log(`Skipping ${trip.id} (already deleted)`);
+                }
+            }
+        }
+
+        return new Response(JSON.stringify({ success: true, count }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+    } catch (err) {
+        console.error('DELETE /api/trips error', err);
+        return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
+    }
 };
