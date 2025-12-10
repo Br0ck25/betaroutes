@@ -292,28 +292,28 @@ function createTrashStore() {
 					}
 				}
 
-// 4. Reconciliation: Handle remote deletions/restorations (REMOVE stale local items)
-const localTrashItems = await index.getAll(userId);
+				// 4. Reconciliation: Handle remote deletions/restorations (REMOVE stale local items)
+				const localTrashItems = await index.getAll(userId); // Get all local items for this user
 
-for (const localItem of localTrashItems) {
-    // If the item is in local trash but NOT in the cloud trash...
-    if (!cloudTrashIds.has(localItem.id)) {
-        
-        // --- ADD THIS BLOCK ---
-        // SAFETY CHECK: If the item is still pending sync (e.g., just deleted locally),
-        // do NOT remove it. It simply hasn't appeared in the cloud KV list yet.
-        if (localItem.syncStatus === 'pending') {
-            console.log(`⏳ Skipping removal of pending trash item: ${localItem.id}`);
-            continue;
-        }
-        // ----------------------
+				for (const localItem of localTrashItems) {
+					// If the item is in local trash but NOT in the cloud trash, it was removed remotely.
+					if (!cloudTrashIds.has(localItem.id)) {
+						
+                        // --- FIX START ---
+                        // If the item is currently waiting to be uploaded (pending), 
+                        // it won't be in the cloud list yet. Do NOT delete it.
+                        if (localItem.syncStatus === 'pending') {
+                            console.log(`⏳ Skipping removal of pending trash item: ${localItem.id}`);
+                            continue;
+                        }
+                        // --- FIX END ---
 
-        console.log(
-            `🗑️ Reconciliation: Removing remotely deleted/restored item from local trash: ${localItem.id}`
-        );
-        await store.delete(localItem.id);
-    }
-}
+						console.log(
+							`🗑️ Reconciliation: Removing remotely deleted/restored item from local trash: ${localItem.id}`
+						);
+						await store.delete(localItem.id);
+					}
+				}
 
 				await tx.done;
 

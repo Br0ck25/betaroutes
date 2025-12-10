@@ -5,7 +5,8 @@
     "idx:username:james": "29c44d78-79d3-4d26-a063-220be7b7fefa",
     "idx:username:testuser": "fd51e6c2-f827-418b-acb9-fcee7d3d9425",
     "0bba8c7e-4e3c-4d58-a730-f4d197cb12b5": "{\"id\":\"29c44d78-79d3-4d26-a063-220be7b7fefa\",\"name\":\"james\",\"email\":\"\",\"plan\":\"free\",\"tripsThisMonth\":0,\"maxTrips\":10,\"resetDate\":\"2025-12-10T02:49:21.767Z\"}",
-    "64b4aec7-f73e-4a48-ac49-647c8a288675": "{\"id\":\"29c44d78-79d3-4d26-a063-220be7b7fefa\",\"name\":\"james\",\"email\":\"\",\"plan\":\"free\",\"tripsThisMonth\":0,\"maxTrips\":10,\"resetDate\":\"2025-12-10T06:01:31.685Z\"}"
+    "64b4aec7-f73e-4a48-ac49-647c8a288675": "{\"id\":\"29c44d78-79d3-4d26-a063-220be7b7fefa\",\"name\":\"james\",\"email\":\"\",\"plan\":\"free\",\"tripsThisMonth\":0,\"maxTrips\":10,\"resetDate\":\"2025-12-10T06:01:31.685Z\"}",
+    "0ed953fe-4c9e-4541-9206-d40fd81c0ebc": "{\"id\":\"29c44d78-79d3-4d26-a063-220be7b7fefa\",\"name\":\"james\",\"email\":\"\",\"plan\":\"free\",\"tripsThisMonth\":0,\"maxTrips\":10,\"resetDate\":\"2025-12-10T06:47:29.898Z\"}"
   },
   "LOGS": {
     "meta:user:29c44d78-79d3-4d26-a063-220be7b7fefa:trip_count": "0",
@@ -15,7 +16,8 @@
     "trip:testuser:eb3b80e2-5409-476b-acc4-b800cc2c1df2": "{\"id\":\"eb3b80e2-5409-476b-acc4-b800cc2c1df2\",\"date\":\"2025-12-09\",\"startTime\":\"09:00\",\"endTime\":\"17:00\",\"hoursWorked\":8,\"startAddress\":\"\",\"endAddress\":\"\",\"totalMiles\":0,\"mpg\":25,\"gasPrice\":3.5,\"fuelCost\":0,\"maintenanceCost\":0,\"suppliesCost\":0,\"netProfit\":0,\"notes\":\"\",\"stops\":[],\"destinations\":[],\"maintenanceItems\":[],\"suppliesItems\":[],\"lastModified\":\"2025-12-09T19:51:48.155Z\",\"userId\":\"testuser\",\"createdAt\":\"2025-12-09T19:51:48.173Z\",\"updatedAt\":\"2025-12-09T19:51:48.173Z\"}",
     "meta:user:32a9abf8-6df6-4214-8ffa-087f2643c647:trip_count": "10",
     "meta:user:0bba8c7e-4e3c-4d58-a730-f4d197cb12b5:trip_count": "1",
-    "meta:user:64b4aec7-f73e-4a48-ac49-647c8a288675:trip_count": "2"
+    "meta:user:64b4aec7-f73e-4a48-ac49-647c8a288675:trip_count": "3",
+    "trip:29c44d78-79d3-4d26-a063-220be7b7fefa:acf8a4cd-cf06-47cf-9ef3-3683623f33c0": "{\"id\":\"acf8a4cd-cf06-47cf-9ef3-3683623f33c0\",\"date\":\"2025-12-10\",\"startTime\":\"09:00\",\"endTime\":\"17:00\",\"hoursWorked\":8,\"startAddress\":\"5996 Brock Dr, Wooton, KY 41776, USA\",\"endAddress\":\"5996 Brock Dr, Wooton, KY 41776, USA\",\"totalMiles\":0,\"estimatedTime\":0,\"mpg\":25,\"gasPrice\":3.5,\"fuelCost\":0,\"maintenanceCost\":0,\"suppliesCost\":0,\"netProfit\":0,\"notes\":\"\",\"stops\":[],\"destinations\":[],\"maintenanceItems\":[],\"suppliesItems\":[],\"lastModified\":\"2025-12-10T06:46:57.246Z\",\"userId\":\"29c44d78-79d3-4d26-a063-220be7b7fefa\",\"createdAt\":\"2025-12-10T06:46:57.372Z\",\"updatedAt\":\"2025-12-10T06:46:57.372Z\"}"
   },
   "TRASH": {
     "trash:29c44d78-79d3-4d26-a063-220be7b7fefa:512ec672-14ab-4e69-a735-640ff1fb7146": "{\"id\":\"512ec672-14ab-4e69-a735-640ff1fb7146\",\"userId\":\"29c44d78-79d3-4d26-a063-220be7b7fefa\",\"date\":\"2025-08-22\",\"startClock\":\"09:00\",\"endClock\":\"17:00\",\"startAddress\":\"Unknown\",\"endAddress\":\"Unknown\",\"destinations\":[{\"address\":\"14636 Brushy Rd, Pikeville, KY, 41501\",\"earnings\":0,\"notes\":\"HNS Order: 14364205\"}],\"stops\":[{\"id\":\"68fc7310-909b-44d7-b077-236c0735dd00\",\"address\":\"14636 Brushy Rd, Pikeville, KY, 41501\",\"order\":0,\"notes\":\"HNS ID: 14364205\",\"earnings\":0}],\"totalMileage\":0,\"createdAt\":\"2025-12-10T06:01:53.407Z\",\"updatedAt\":\"2025-12-10T06:01:53.407Z\",\"syncStatus\":\"synced\",\"deletedAt\":\"2025-12-10T06:02:33.052Z\",\"deletedBy\":\"29c44d78-79d3-4d26-a063-220be7b7fefa\",\"expiresAt\":\"2026-01-09T06:02:33.052Z\",\"originalKey\":\"trip:29c44d78-79d3-4d26-a063-220be7b7fefa:512ec672-14ab-4e69-a735-640ff1fb7146\"}",
