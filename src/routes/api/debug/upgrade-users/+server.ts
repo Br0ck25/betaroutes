@@ -8,73 +8,45 @@ export const POST: RequestHandler = async ({ platform }) => {
 			return json({ error: 'KV not found' }, { status: 500 });
 		}
 
-		// Cutoff Date: January 31, 2026
-		const cutoffDate = new Date('2026-01-31T23:59:59.999Z');
-		
 		let checked = 0;
-		let upgraded = 0;
-		const errors: any[] = [];
-		const skipped: any[] = [];
+		let upgradedCount = 0;
+		const logs: string[] = [];
 
-		const list = await kv.list({ prefix: 'user:' });
+		// 1. List ALL keys (no prefix restriction)
+		const list = await kv.list({ prefix: '' });
 
 		for (const key of list.keys) {
-			try {
-				const raw = await kv.get(key.name);
-				if (!raw) continue;
+			const raw = await kv.get(key.name);
+			if (!raw) continue;
 
-				const user = JSON.parse(raw);
+			try {
+				// 2. Try to parse every value
+				const data = JSON.parse(raw);
 				checked++;
 
-				// 1. Determine if user is effectively 'free'
-				// (Treat missing/null plan as 'free')
-				const currentPlan = user.plan || 'free';
-				const isFree = currentPlan === 'free';
+				// 3. Duck-typing: Does this look like a user record?
+				// It must have 'id', 'email', and 'plan' (or be a target for a plan)
+				if (data && typeof data === 'object' && data.id && data.email) {
+                    
+                    // Force the upgrade
+					data.plan = 'pro';
+					data.maxTrips = 10000;
 
-				// 2. Check Creation Date
-				// If missing createdAt, we assume they are an early user (upgrade them) 
-				// OR skip them. Here we assume SAFE upgrade if missing (early alpha user).
-				let isBeforeCutoff = false;
-				if (user.createdAt) {
-					const created = new Date(user.createdAt);
-					isBeforeCutoff = created < cutoffDate;
-				} else {
-					// Edge case: No date? Assume early user -> Upgrade
-					isBeforeCutoff = true; 
+					// Save it back to the exact same key
+					await kv.put(key.name, JSON.stringify(data));
+					
+					upgradedCount++;
+					logs.push(`✅ Updated key [${key.name}] for user ${data.email}`);
 				}
-
-				if (isFree && isBeforeCutoff) {
-					// 3. Apply Upgrade
-					user.plan = 'pro';
-					user.maxTrips = 10000; 
-
-					await kv.put(key.name, JSON.stringify(user));
-					upgraded++;
-					console.log(`[UPGRADE] User ${user.email} (${user.id}) upgraded to Pro.`);
-				} else {
-					// Log why we skipped
-					skipped.push({
-						id: user.id,
-						email: user.email,
-						reason: !isFree ? `Plan is '${currentPlan}'` : `Created after cutoff (${user.createdAt})`
-					});
-				}
-
-			} catch (err) {
-				console.error(`Failed to process key ${key.name}`, err);
-				errors.push({ key: key.name, error: String(err) });
+			} catch (e) {
+				// Not a JSON object or not a user record; ignore
 			}
 		}
 
 		return json({
 			success: true,
-			message: `Migration complete. Checked ${checked} users. Upgraded ${upgraded}.`,
-			results: {
-				totalChecked: checked,
-				totalUpgraded: upgraded,
-				skipped,
-				errors
-			}
+			message: `Universal upgrade complete. Scanned ${checked} keys. Updated ${upgradedCount}.`,
+			logs
 		});
 
 	} catch (err) {
