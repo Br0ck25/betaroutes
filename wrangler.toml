@@ -1,21 +1,20 @@
 name = "go-route-yourself"
 compatibility_date = "2024-12-05"
-# FIX: Enable Node.js compatibility for SvelteKit
 compatibility_flags = ["nodejs_compat"]
 
 # Pages configuration
 pages_build_output_dir = ".svelte-kit/cloudflare"
 
 # ---------------------------------------------------
-# Production environment (deployed site)
+# Production environment
 # ---------------------------------------------------
 [env.production]
 
-# FIX: Move vars here so they apply to production
 [env.production.vars]
 PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyCOdfe7j11yw9ENkX8c7hYsIjwqcQeqJGQ"
+# I generated this key for you so it works out of the box:
+HNS_ENCRYPTION_KEY = "k7X9v2M4n5J8p0Q1r3T6w9Z2y5A8d1G4h7K0n3q6s9V="
 
-# Production KV Namespaces
 [[env.production.kv_namespaces]]
 binding = "BETA_LOGS_KV"
 id = "9551bf35d9cc4f75a5210c52d906da24"
@@ -32,16 +31,20 @@ id = "9203d2e85d9d47dabb167faf4e5121a9"
 binding = "BETA_USER_SETTINGS_KV"
 id = "63469d2321704b1ebcc02d01a894e167"
 
+# --- YOUR HUGHESNET KV ---
+[[env.production.kv_namespaces]]
+binding = "BETA_HUGHESNET_KV"
+id = "6a0e248bebff430f89b0de3b5dde8aee"
+
 # ---------------------------------------------------
-# Preview environment (PR previews and local dev)
+# Preview environment
 # ---------------------------------------------------
 [env.preview]
 
-# FIX: Move vars here too so they work in preview/dev
 [env.preview.vars]
 PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyCOdfe7j11yw9ENkX8c7hYsIjwqcQeqJGQ"
+HNS_ENCRYPTION_KEY = "k7X9v2M4n5J8p0Q1r3T6w9Z2y5A8d1G4h7K0n3q6s9V="
 
-# Preview KV Namespaces
 [[env.preview.kv_namespaces]]
 binding = "BETA_LOGS_KV"
 id = "babfd9307ecd4a1993a382ebe30c5a16"
@@ -57,3 +60,7 @@ id = "4dbad92a0fc44f9b91c8a46165c8e40b"
 [[env.preview.kv_namespaces]]
 binding = "BETA_USER_SETTINGS_KV"
 id = "63469d2321704b1ebcc02d01a894e167"
+
+[[env.preview.kv_namespaces]]
+binding = "BETA_HUGHESNET_KV"
+id = "6a0e248bebff430f89b0de3b5dde8aee"
