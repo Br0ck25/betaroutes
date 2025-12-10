@@ -72,7 +72,7 @@
   // FIX: Added optional 'exclude' parameter to handle overlapping paths
   function isActive(href: string, exact = false, exclude: string[] = []): boolean {
     const path = $page.url.pathname;
-    
+
     // 1. Check exclusions first
     if (exclude.length > 0) {
       if (exclude.some(e => path.startsWith(e))) {
@@ -93,7 +93,7 @@
     return name ? name.charAt(0).toUpperCase() : 'U';
   }
 
-onMount(async () => {
+  onMount(async () => {
     console.log('[DASHBOARD LAYOUT] Initializing...');
     
     // --- FIX: Pass API Key to SyncManager ---
@@ -194,7 +194,7 @@ onMount(async () => {
           </div>
           <div class="user-info">
             <div class="user-name">{$user.name || 'User'}</div>
-            <div class="user-plan">{$user.plan || 'Free'} Plan</div>
+            <div class="user-plan capitalize">{$user.plan || 'Free'} Plan</div>
           </div>
         </a>
         
@@ -447,6 +447,11 @@ onMount(async () => {
   .user-plan {
     font-size: 12px;
     color: #6B7280;
+  }
+  
+  /* NEW CLASS */
+  .capitalize {
+    text-transform: capitalize;
   }
   
   .logout-btn {
