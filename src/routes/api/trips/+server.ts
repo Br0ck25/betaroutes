@@ -84,11 +84,36 @@ export const POST: RequestHandler = async (event) => {
 			);
 		}
 
+		const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
+		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
+		const svc = makeTripService(kv, trashKV);
+        const storageId = user.name || user.token;
+
+        // --- ENFORCE MONTHLY LIMIT ---
+        if (user.plan === 'free') {
+            const allTrips = await svc.list(storageId);
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth(); // 0-indexed
+
+            const monthlyCount = allTrips.filter(t => {
+                if (!t.date) return false;
+                const [y, m] = t.date.split('-').map(Number);
+                return y === currentYear && (m - 1) === currentMonth;
+            }).length;
+
+            if (monthlyCount >= 10) {
+                return new Response(JSON.stringify({
+                    error: 'Limit Reached',
+                    message: 'You have reached your free monthly limit of 10 trips.'
+                }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+            }
+        }
+        // -----------------------------
+
 		const validData = parseResult.data;
 		const id = validData.id || crypto.randomUUID();
 		const now = new Date().toISOString();
-
-		const storageId = user.name || user.token;
 
 		const trip = {
 			...validData,
@@ -97,10 +122,6 @@ export const POST: RequestHandler = async (event) => {
 			createdAt: now,
 			updatedAt: now
 		};
-
-		const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
-		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
-		const svc = makeTripService(kv, trashKV);
 
 		await svc.put(trip);
 		await svc.incrementUserCounter(user.token, 1);

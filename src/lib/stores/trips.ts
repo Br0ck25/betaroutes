@@ -1,9 +1,11 @@
 // src/lib/stores/trips.ts
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import { getDB } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
 import type { TripRecord } from '$lib/db/types';
 import { storage } from '$lib/utils/storage';
+// Import auth to check user plan
+import { auth } from '$lib/stores/auth';
 
 /**
  * Offline-first trips store
@@ -49,6 +51,32 @@ function createTripsStore() {
 
 		async create(tripData: Partial<TripRecord>, userId: string) {
 			try {
+				// 1. LIMIT CHECK: Calculate local trips this month
+				const currentUser = get(auth).user;
+				
+				// Only enforce for free tier (or if plan is unknown but assumed free)
+				const isFreeTier = !currentUser?.plan || currentUser.plan === 'free';
+				
+				if (isFreeTier) {
+					const db = await getDB();
+					const tx = db.transaction('trips', 'readonly');
+					const index = tx.objectStore('trips').index('userId');
+					const allUserTrips = await index.getAll(userId);
+					
+					const now = new Date();
+					const currentMonth = now.getMonth();
+					const currentYear = now.getFullYear();
+					
+					const tripsThisMonth = allUserTrips.filter(t => {
+						const d = new Date(t.date || t.createdAt);
+						return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+					}).length;
+
+					if (tripsThisMonth >= 10) {
+						throw new Error('Free tier limit reached (10 trips/month). Please upgrade to Pro.');
+					}
+				}
+
                 // FIX: Respect existing IDs and timestamps if provided (for imports/restores)
                 // Otherwise generate new ones for fresh trips.
 				const trip: TripRecord = {

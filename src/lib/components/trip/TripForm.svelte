@@ -10,21 +10,16 @@
 
   // LOAD SETTINGS
   const settings = get(userSettings);
-
   // Default form values
   let date = new Date().toISOString().split('T')[0];
   let startTime = '';
   let endTime = '';
-
   let startAddress = settings.startLocation || storage.getSetting('defaultStartAddress') || '';
   let endAddress = settings.endLocation || storage.getSetting('defaultEndAddress') || '';
-
   let mpg = settings.defaultMPG ?? storage.getSetting('defaultMPG') ?? 25;
   let gasPrice = settings.defaultGasPrice ?? storage.getSetting('defaultGasPrice') ?? 3.5;
-
   let distanceUnit = settings.distanceUnit || 'mi';
   let timeFormat = settings.timeFormat || '12h';
-
   let destinations: Destination[] = [{ address: '', earnings: 0 }];
   let maintenanceItems: MaintenanceCost[] = [];
   let supplyItems: SupplyCost[] = [];
@@ -116,10 +111,8 @@
     if (!mapsLoaded) return;
     autocompletes.forEach(ac => google.maps.event.clearInstanceListeners(ac));
     autocompletes.clear();
-
     setupAutocomplete('start-address', (place) => startAddress = place.formatted_address || place.name || '');
     setupAutocomplete('end-address', (place) => endAddress = place.formatted_address || place.name || '');
-
     destinations.forEach((_, i) => {
       setupAutocomplete(`dest-${i}`, (place) => destinations[i].address = place.formatted_address || place.name || '');
     });
@@ -184,14 +177,12 @@
         location: d.address,
         stopover: true
       }));
-
       const request: google.maps.DirectionsRequest = {
         origin: startAddress,
         destination: endAddress || destinations[destinations.length - 1].address,
         waypoints,
         travelMode: google.maps.TravelMode.DRIVING
       };
-
       const result = await directionsService.route(request);
 
       if (result.routes[0]) {
@@ -204,10 +195,8 @@
           distanceMeters += leg.distance?.value || 0;
           duration += leg.duration?.value || 0;
         });
-
         const miles = convertDistance(distanceMeters / 1609.34);
         const minutes = duration / 60;
-
         const totals = calculateTripTotals(
           miles,
           minutes,
@@ -246,9 +235,32 @@
       return;
     }
 
+    // --- CHECK MONTHLY LIMIT ---
+    const currentUser = get(user);
+    if (currentUser?.plan === 'free') {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth(); // 0-indexed
+
+      // Get trips from local store
+      const currentTrips = get(trips);
+      const monthlyCount = currentTrips.filter(t => {
+          if (!t.date) return false;
+          // Parse YYYY-MM-DD
+          const [y, m] = t.date.split('-').map(Number);
+          // Check if matches current year and month (adjusting for 0-index in JS date vs 1-index in string)
+          return y === currentYear && (m - 1) === currentMonth;
+      }).length;
+
+      if (monthlyCount >= 10) {
+          alert('You have reached your free monthly limit of 10 trips.\n\nPlease upgrade to Pro for unlimited trips!');
+          return;
+      }
+    }
+    // ---------------------------
+
     // FIX: Get stable user ID
     let userId = $user?.name || $user?.token;
-    
     if (!userId) {
         const storageKey = 'offline_user_id';
         let offlineId = localStorage.getItem(storageKey);
@@ -266,9 +278,9 @@
           earnings: d.earnings,
           order: i
       }));
-
       // trips.create calls the API which uses userId from props or store
-      // But trips.create also saves locally. It is important we pass the RIGHT userId here.
+      // But trips.create also saves locally.
+      // It is important we pass the RIGHT userId here.
       await trips.create({
         id: crypto.randomUUID(),
         date,
@@ -293,8 +305,9 @@
         gasPrice,
         notes,
         lastModified: new Date().toISOString()
-      }, userId); // Pass correct ID
+      }, userId);
 
+      // Pass correct ID
       userSettings.update(s => ({
         ...s,
         startLocation: startAddress,
@@ -302,7 +315,6 @@
         defaultMPG: mpg,
         defaultGasPrice: gasPrice
       }));
-
       storage.setSetting('defaultStartAddress', startAddress);
       storage.setSetting('defaultEndAddress', endAddress);
       storage.setSetting('defaultMpg', mpg);
