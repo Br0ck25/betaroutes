@@ -2,7 +2,6 @@
   import { onMount } from 'svelte';
   import Card from '$lib/components/ui/Card.svelte';
   import Input from '$lib/components/ui/Input.svelte';
-  
   // NEW IMPORTS for Immediate Syncing
   import { trips } from '$lib/stores/trips';
   import { trash } from '$lib/stores/trash';
@@ -14,6 +13,10 @@
   let orders: any[] = [];
   let isConnected = false;
   let logs: string[] = [];
+
+  // New Pay Rate Variables
+  let installPay = 0;
+  let repairPay = 0;
 
   function addLog(msg: string) {
     logs = [`[${new Date().toLocaleTimeString()}] ${msg}`, ...logs];
@@ -72,11 +75,15 @@
 
   async function handleSync() {
     loading = true;
-    addLog('Syncing orders...');
+    addLog(`Syncing orders (Install: $${installPay}, Repair: $${repairPay})...`);
     try {
         const res = await fetch('/api/hughesnet', {
             method: 'POST',
-            body: JSON.stringify({ action: 'sync' })
+            body: JSON.stringify({ 
+                action: 'sync',
+                installPay,  // Pass the values to the API
+                repairPay
+            })
         });
         const data = await res.json();
         
@@ -85,7 +92,6 @@
              orders = newOrders;
              isConnected = true;
              addLog(`Sync complete. Found ${newOrders.length} orders.`);
-             
              // --- SYNC FIX: Pull the newly created trips to local DB ---
              const userId = $user?.name || $user?.token;
              if (userId) {
@@ -117,7 +123,6 @@
           addLog(`Cleared ${data.count} trips.`);
           
           // --- SYNC FIX: Sync Trash to remove them locally ---
-          // Because we moved them to Trash on server, syncing trash will delete them from local active trips
           const userId = $user?.name || $user?.token;
           if (userId) {
               addLog('Syncing removal with local database...');
@@ -149,6 +154,7 @@
                 >
                     Reset HNS Trips
                 </button>
+               
                 <button 
                     class="px-4 py-2 rounded-md font-semibold text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
                     on:click={handleSync} 
@@ -159,6 +165,26 @@
             </div>
         {/if}
     </div>
+
+    {#if isConnected}
+        <div class="mb-6 p-4 bg-white rounded-lg shadow-sm border border-gray-200">
+            <h3 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Sync Settings</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input 
+                    label="Install Pay Amount ($)" 
+                    type="number" 
+                    bind:value={installPay} 
+                    placeholder="0.00" 
+                />
+                <Input 
+                    label="Repair Pay Amount ($)" 
+                    type="number" 
+                    bind:value={repairPay} 
+                    placeholder="0.00" 
+                />
+            </div>
+        </div>
+    {/if}
 
     <div class="grid gap-6">
         {#if !isConnected && orders.length === 0}
@@ -180,6 +206,7 @@
             </Card>
         
         {:else}
+        
             {#if orders.length > 0}
                 <div class="grid gap-4">
                     {#each orders as order}
@@ -193,6 +220,9 @@
                                 <div class="text-right text-sm">
                                     <div class="font-semibold text-green-700">{order.confirmScheduleDate || 'No Date'}</div>
                                     <div class="text-gray-500">{order.beginTime || 'No Time'}</div>
+                                    <div class="text-xs mt-1 px-2 py-0.5 rounded bg-gray-100 inline-block text-gray-600">
+                                        {order.type || 'Unknown'}
+                                    </div>
                                 </div>
                             </div>
                         </Card>
@@ -209,7 +239,7 @@
                         >
                             Check Again
                         </button>
-                    </div>
+                     </div>
                 </Card>
              {/if}
         {/if}

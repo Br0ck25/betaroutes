@@ -34,8 +34,12 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
         }
 
         if (body.action === 'sync') {
-            // Pass BOTH IDs to the sync method
-            const orders = await service.sync(userId, settingsId);
+            // Extract Pay Rates (default to 0)
+            const installPay = Number(body.installPay) || 0;
+            const repairPay = Number(body.repairPay) || 0;
+
+            // Pass params to sync
+            const orders = await service.sync(userId, settingsId, installPay, repairPay);
             return json({ success: true, orders });
         }
 

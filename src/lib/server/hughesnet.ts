@@ -35,8 +35,8 @@ export class HughesNetService {
     return true;
   }
 
-  async sync(userId: string, settingsId?: string) {
-    console.log(`[HNS] Starting sync for ${userId}`);
+  async sync(userId: string, settingsId?: string, installPay: number = 0, repairPay: number = 0) {
+    console.log(`[HNS] Starting sync for ${userId} (Install Pay: $${installPay}, Repair Pay: $${repairPay})`);
     const cookie = await this.ensureSessionCookie(userId);
     if (!cookie) throw new Error('Could not login.');
 
@@ -86,7 +86,7 @@ export class HughesNetService {
     }
 
     if (orders.length > 0) {
-        await this.createTripsFromOrders(userId, orders, settingsId);
+        await this.createTripsFromOrders(userId, orders, settingsId, installPay, repairPay);
     }
 
     return orders;
@@ -264,12 +264,20 @@ export class HughesNetService {
   }
 
   // --- TRIP CREATION ---
-  private async createTripsFromOrders(userId: string, orders: any[], settingsId?: string) {
+  private async createTripsFromOrders(
+        userId: string, 
+        orders: any[], 
+        settingsId?: string, 
+        installPay: number = 0, 
+        repairPay: number = 0
+    ) {
     const tripService = makeTripService(this.tripKV, undefined);
     
     // FETCH SETTINGS
     let defaultStartAddress = '';
     let defaultEndAddress = '';
+    let defaultMPG = 25; // Default fallback
+    let defaultGasPrice = 3.50; // Default fallback
     const settingsKey = settingsId || userId;
 
     try {
@@ -283,7 +291,12 @@ export class HughesNetService {
             const s = data.settings || data; 
             defaultStartAddress = s.defaultStartAddress || '';
             defaultEndAddress = s.defaultEndAddress || s.defaultStartAddress || '';
-            console.log(`[HNS] Settings Loaded for ${settingsKey}. Start="${defaultStartAddress}"`);
+            
+            // Extract MPG and Gas Price
+            if (s.defaultMPG) defaultMPG = parseFloat(s.defaultMPG);
+            if (s.defaultGasPrice) defaultGasPrice = parseFloat(s.defaultGasPrice);
+            
+            console.log(`[HNS] Settings Loaded for ${settingsKey}. Start="${defaultStartAddress}" MPG=${defaultMPG} Gas=${defaultGasPrice}`);
         } else {
             console.log(`[HNS] No Settings found for ${settingsKey}`);
         }
@@ -388,9 +401,18 @@ export class HughesNetService {
       const hoursWorked = Number((totalWorkDayMinutes / 60).toFixed(2));
 
       // Calculate End Time (Start Time + Total Work Minutes)
-      // Note: tripStartMinutes is when you left the house.
       const endTimeMinutes = tripStartMinutes + totalWorkDayMinutes;
       const endTime = this.minutesToTime(endTimeMinutes);
+
+      // --- PAY LOGIC ---
+      const calculatePay = (orderType: string) => {
+          if (orderType === 'Install') return installPay;
+          if (orderType === 'Repair') return repairPay;
+          return 0;
+      };
+
+      // Calculate Fuel Cost
+      const fuelCost = defaultMPG > 0 ? (totalDistanceMiles / defaultMPG) * defaultGasPrice : 0;
 
       // 3. Create Trip Record with ALL time fields
       const newTrip: any = { 
@@ -411,7 +433,7 @@ export class HughesNetService {
         endAddress: tripEnd,
         destinations: daysOrders.map(o => ({
           address: buildAddr(o),
-          earnings: 0,
+          earnings: calculatePay(o.type), 
           notes: `HNS Order: ${o.id} (${o.type})`
         })),
         stops: daysOrders.map((o, i) => ({
@@ -419,13 +441,16 @@ export class HughesNetService {
             address: buildAddr(o),
             order: i,
             notes: `HNS ID: ${o.id} - ${o.type}`,
-            earnings: 0,
+            earnings: calculatePay(o.type),
             appointmentTime: o.beginTime,
             type: o.type, // Save type on stop
             duration: o.jobDuration
         })),
         
         totalMiles: totalDistanceMiles,
+        mpg: defaultMPG,
+        gasPrice: defaultGasPrice,
+        fuelCost: Number(fuelCost.toFixed(2)),
         
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
