@@ -13,7 +13,7 @@ let mockDB: Record<string, any> = {
 	LOGS: {},
 	TRASH: {},
 	SETTINGS: {},
-	HUGHESNET: {} // <--- ADDED THIS
+	HUGHESNET: {} 
 };
 
 if (dev) {
@@ -21,10 +21,9 @@ if (dev) {
 		if (fs.existsSync(DB_FILE)) {
 			const raw = fs.readFileSync(DB_FILE, 'utf-8');
 			const loaded = JSON.parse(raw);
-			// Merge loaded data with structure to ensure new keys exist
 			mockDB = { ...mockDB, ...loaded };
 			
-			// Safety check for new namespace
+			// Ensure structure exists
 			if (!mockDB.HUGHESNET) mockDB.HUGHESNET = {};
 			
 			console.log('📂 Loaded mock KV data from .kv-mock.json');
@@ -68,7 +67,6 @@ function createMockKV(namespace: string) {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
-	// 1. Ensure KV bindings exist (mock in dev using FILE store)
 	if (dev) {
 		if (!event.platform) event.platform = { env: {} } as any;
 		if (!event.platform.env) event.platform.env = {} as any;
@@ -78,20 +76,20 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (!event.platform.env.BETA_LOGS_TRASH_KV) event.platform.env.BETA_LOGS_TRASH_KV = createMockKV('TRASH');
 		if (!event.platform.env.BETA_USER_SETTINGS_KV) event.platform.env.BETA_USER_SETTINGS_KV = createMockKV('SETTINGS');
 		
-		// --- CRITICAL FIX: Add HughesNet KV ---
+		// Initialize HughesNet KV
 		if (!event.platform.env.BETA_HUGHESNET_KV) event.platform.env.BETA_HUGHESNET_KV = createMockKV('HUGHESNET');
 
-		// --- CRITICAL FIX: Add Env Vars ---
+		// --- CRITICAL FIX: Use a valid Base64 Key ---
+		// This key is 32 bytes encoded in Base64. It prevents the "Invalid character" error.
 		if (!event.platform.env.HNS_ENCRYPTION_KEY) {
-			event.platform.env.HNS_ENCRYPTION_KEY = 'local-dev-key';
+			event.platform.env.HNS_ENCRYPTION_KEY = 'k7X9v2M4n5J8p0Q1r3T6w9Z2y5A8d1G4h7K0n3q6s9V=';
 		}
+		
 		if (!event.platform.env.PUBLIC_GOOGLE_MAPS_API_KEY) {
-			// Fallback if not set in process.env
-			event.platform.env.PUBLIC_GOOGLE_MAPS_API_KEY = process.env.PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyCOdfe7j11yw9ENkX8c7hYsIjwqcQeqJGQ';
+			event.platform.env.PUBLIC_GOOGLE_MAPS_API_KEY = 'AIzaSyCOdfe7j11yw9ENkX8c7hYsIjwqcQeqJGQ';
 		}
 	}
 
-	// 2. User auth logic
 	const token = event.cookies.get('token');
 
 	if (!token) {
@@ -103,10 +101,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 		const usersKV = event.platform?.env?.BETA_USERS_KV;
 		if (usersKV) {
 			const userDataStr = await usersKV.get(token);
-
 			if (userDataStr) {
 				const userData = JSON.parse(userDataStr);
-				
 				event.locals.user = {
 					id: userData.id,
 					token,

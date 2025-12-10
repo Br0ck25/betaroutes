@@ -4,6 +4,7 @@ import { makeTripService } from './tripService';
 
 const LOGIN_URL = 'https://dwayinstalls.hns.com/start/login.jsp?UsrAction=submit';
 const HOME_URL = 'https://dwayinstalls.hns.com/start/Home.jsp';
+const BASE_URL = 'https://dwayinstalls.hns.com';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 export class HughesNetService {
@@ -16,27 +17,30 @@ export class HughesNetService {
   ) {}
 
   async connect(userId: string, username: string, password: string) {
-    if (!userId || !username || !password) throw new Error('Missing fields');
+    console.log(`[HNS] Connecting user ${userId}...`);
     
     // 1. Store credentials
     const payload = { username, password, loginUrl: LOGIN_URL, createdAt: new Date().toISOString() };
     const enc = await this.encrypt(JSON.stringify(payload));
     await this.kv.put(`hns:cred:${userId}`, enc);
 
-    // 2. Login
+    // 2. Perform Login
     const cookie = await this.loginAndStoreSession(userId, username, password);
-    if (!cookie) return false;
-
-    // 3. Verify Login by checking Home page
-    const verifyRes = await fetch(HOME_URL, { 
-        headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT } 
-    });
-    const verifyHtml = await verifyRes.text();
-    
-    if (verifyHtml.includes('name="Password"') || verifyHtml.includes('login.jsp')) {
+    if (!cookie) {
+        console.error('[HNS] Login failed: No cookie received');
         return false;
     }
 
+    // 3. Verify Login
+    const verifyRes = await fetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT } });
+    const verifyHtml = await verifyRes.text();
+    
+    if (verifyHtml.includes('name="Password"') || verifyHtml.includes('login.jsp')) {
+        console.error('[HNS] Verify failed: Still on login page');
+        return false;
+    }
+
+    console.log('[HNS] Connection successful');
     return true;
   }
 
@@ -45,37 +49,69 @@ export class HughesNetService {
     const cookie = await this.ensureSessionCookie(userId);
     if (!cookie) throw new Error('Could not login. Please check credentials.');
 
-    const homeRes = await fetch(HOME_URL, { 
-        headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }
-    });
-    const homeHtml = await homeRes.text();
+    // 1. Fetch Home Page (The Frameset)
+    console.log(`[HNS] Fetching Home: ${HOME_URL}`);
+    const res = await fetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
+    const html = await res.text();
     
-    if (homeHtml.includes('name="Password"')) {
-        throw new Error('Session expired. Please reconnect.');
+    if (html.includes('name="Password"')) throw new Error('Session expired. Please reconnect.');
+
+    // 2. CHECK FOR ALL FRAMES (Header, Body, etc.)
+    // We need to fetch EVERY frame to find where the orders are hiding.
+    const frames = this.extractFrameUrls(html);
+    const ids = new Set<string>();
+    
+    // Scan the main page first (just in case)
+    const mainPageIds = this.extractIds(html);
+    mainPageIds.forEach(id => ids.add(id));
+
+    if (frames.length > 0) {
+        console.log(`[HNS] Found ${frames.length} frames. Scanning all of them...`);
+        
+        for (const frameUrl of frames) {
+            try {
+                console.log(`[HNS] Scanning Frame: ${frameUrl}`);
+                const frameRes = await fetch(frameUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
+                const frameHtml = await frameRes.text();
+                
+                const frameIds = this.extractIds(frameHtml);
+                console.log(`   -> Found ${frameIds.length} orders in this frame.`);
+                frameIds.forEach(id => ids.add(id));
+            } catch (err) {
+                console.error(`   -> Failed to fetch frame: ${frameUrl}`);
+            }
+        }
     }
 
-    const ids = this.extractIdsFromHome(homeHtml);
-    console.log(`[HNS] Found ${ids.length} orders.`);
+    const uniqueIds = Array.from(ids);
+    console.log(`[HNS] Total unique orders found: ${uniqueIds.length}`);
     
-    await this.kv.put(`hns:orders_index:${userId}`, JSON.stringify(ids));
+    await this.kv.put(`hns:orders_index:${userId}`, JSON.stringify(uniqueIds));
 
+    // 3. Fetch details for each ID
     const orders: any[] = [];
-    for (const id of ids) {
+    for (const id of uniqueIds) {
       try {
         const orderUrl = `https://dwayinstalls.hns.com/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${encodeURIComponent(id)}`;
-        const res = await fetch(orderUrl, { 
-            headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }
-        });
-        const html = await res.text();
-        const parsed = this.parseOrderPage(html, id);
         
-        await this.kv.put(`hns:orders:${userId}:${id}`, JSON.stringify(parsed), { expirationTtl: 60 * 60 * 24 * 7 });
-        orders.push(parsed);
+        const res = await fetch(orderUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
+        const orderHtml = await res.text();
+        const parsed = this.parseOrderPage(orderHtml, id);
+        
+        // Only save if we actually got data back (sanity check)
+        if (parsed.address || parsed.city) {
+            await this.kv.put(`hns:orders:${userId}:${id}`, JSON.stringify(parsed));
+            orders.push(parsed);
+        } else {
+            console.warn(`[HNS] Warning: Parsed order ${id} is empty. HTML might be unexpected.`);
+        }
+
       } catch (err) {
-        console.error(`Failed to sync order ${id}`, err);
+        console.error(`[HNS] Failed to sync order ${id}`, err);
       }
     }
 
+    // 4. Create Trips
     if (orders.length > 0) {
         await this.createTripsFromOrders(userId, orders);
     }
@@ -94,45 +130,82 @@ export class HughesNetService {
     return results;
   }
 
+  // --- HTML Parsing Helpers ---
+
+  private extractFrameUrls(html: string): string[] {
+    const urls: string[] = [];
+    // Match <frame src="..."> and <iframe src="...">
+    const re = /<(?:frame|iframe)[^>]+src=["']([^"']+)["'][^>]*>/gi;
+    let m;
+    while ((m = re.exec(html)) !== null) {
+        let url = m[1];
+        // Convert relative URL to absolute
+        if (!url.startsWith('http')) {
+            // Remove leading ./ or /
+            url = url.replace(/^\.?\//, '');
+            // Most frames are relative to /start/ or root. We'll try appending to BASE_URL + /start/ first if it looks like a JSP
+            // But based on your link, it might be root relative.
+            // Let's assume it is relative to the current page folder (/start/)
+            url = `${BASE_URL}/start/${url}`; 
+        }
+        urls.push(url);
+    }
+    return urls;
+  }
+
+  private extractIds(html: string) {
+    const ids = new Set<string>();
+    
+    // Clean HTML entities first to make matching easier (&amp; -> &)
+    const cleanHtml = html.replace(/&amp;/g, '&');
+
+    // 1. Precise Match (Based on the link you provided)
+    // href="../forms/viewservice.jsp?snb=SO_EST_SCHD&id=14494193"
+    // We match: viewservice.jsp? followed by anything, then id=NUMBERS
+    const re1 = /viewservice\.jsp\?.*?\bid=(\d+)/gi;
+    let m;
+    while ((m = re1.exec(cleanHtml)) !== null) ids.add(m[1]);
+
+    // 2. Fallback: Any parameter-like ID
+    if (ids.size === 0) {
+        const re2 = /[?&]id=(\d{7,10})\b/gi;
+        while ((m = re2.exec(cleanHtml)) !== null) ids.add(m[1]);
+    }
+
+    return Array.from(ids);
+  }
+
   // --- Trip Creation Logic ---
   private async createTripsFromOrders(userId: string, orders: any[]) {
     const tripService = makeTripService(this.tripKV, undefined);
-    
-    // Get Settings
     const settingsRaw = await this.settingsKV.get(`BETA_USER_SETTINGS_KV:${userId}`);
     const settings = settingsRaw ? JSON.parse(settingsRaw as string) : {};
     const defaultStartAddress = settings.defaultStartAddress || '';
 
-    // Group by Date
     const ordersByDate: Record<string, any[]> = {};
     for (const order of orders) {
       if (!order.confirmScheduleDate) continue;
-      
       const dateParts = order.confirmScheduleDate.split('/');
       if (dateParts.length !== 3) continue;
-      // Convert MM/DD/YYYY to YYYY-MM-DD
       const isoDate = `${dateParts[2]}-${dateParts[0].padStart(2, '0')}-${dateParts[1].padStart(2, '0')}`;
-      
       if (!ordersByDate[isoDate]) ordersByDate[isoDate] = [];
       ordersByDate[isoDate].push(order);
     }
 
     for (const [date, daysOrders] of Object.entries(ordersByDate)) {
-      // Prevent duplicates
       const existingTrips = await tripService.list(userId);
       if (existingTrips.some(t => t.date === date)) {
-        console.log(`[HNS] Trip already exists for ${date}`);
-        continue;
+          console.log(`[HNS] Trip already exists for ${date}`);
+          continue;
       }
 
-      // Find earliest time
-      let minMinutes = 9 * 60; // Default 9 AM
+      let minMinutes = 9 * 60; 
       let earliestOrder = daysOrders[0];
       let hasTime = false;
 
       for (const order of daysOrders) {
         const m = this.parseTime(order.beginTime);
-        if (m < 24 * 60) { // Valid time found
+        if (m < 24 * 60) {
             if (!hasTime || m < minMinutes) {
                 minMinutes = m;
                 earliestOrder = order;
@@ -141,13 +214,12 @@ export class HughesNetService {
         }
       }
 
-      // Calculate Drive Time
       let driveTimeMinutes = 0;
       let distanceMiles = 0;
       
       if (defaultStartAddress && earliestOrder.address) {
-         const destStr = `${earliestOrder.address}, ${earliestOrder.city}, ${earliestOrder.state}`;
-         const route = await this.getRouteInfo(defaultStartAddress, destStr);
+         const dest = `${earliestOrder.address}, ${earliestOrder.city}, ${earliestOrder.state}`;
+         const route = await this.getRouteInfo(defaultStartAddress, dest);
          if (route) {
              driveTimeMinutes = Math.round(route.duration / 60);
              distanceMiles = Number((route.distance * 0.000621371).toFixed(1));
@@ -184,25 +256,47 @@ export class HughesNetService {
       };
 
       await tripService.put(newTrip);
-      console.log(`[HNS] Created Trip for ${date} starting at ${startTime}`);
+      console.log(`[HNS] Created Trip for ${date} with ${daysOrders.length} orders`);
     }
   }
 
   // --- Helpers ---
   private async getRouteInfo(origin: string, destination: string) {
-      if (!this.googleApiKey || this.googleApiKey === 'undefined') return null;
-      try {
-          const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&key=${this.googleApiKey}`;
-          const res = await fetch(url);
-          const data = await res.json();
-          if (data.routes?.[0]?.legs?.[0]) {
-              return {
-                  distance: data.routes[0].legs[0].distance.value,
-                  duration: data.routes[0].legs[0].duration.value
-              };
-          }
-      } catch (e) { console.error('Maps API Error', e); }
+      if (!this.googleApiKey || this.googleApiKey.includes('AIza')) {
+          try {
+              const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&key=${this.googleApiKey}`;
+              const res = await fetch(url);
+              const data = await res.json();
+              if (data.routes?.[0]?.legs?.[0]) {
+                  return {
+                      distance: data.routes[0].legs[0].distance.value,
+                      duration: data.routes[0].legs[0].duration.value
+                  };
+              }
+          } catch (e) { console.error('Maps API Error', e); }
+      }
       return null;
+  }
+
+  private parseOrderPage(html: string, id: string) {
+    const clean = (s: string) => s ? s.replace(/&nbsp;|&amp;/g, ' ').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() : null;
+    const out: any = { id, address: '', city: '', state: '', confirmScheduleDate: '', beginTime: '' };
+    
+    const patterns: Record<string, RegExp[]> = {
+      address: [/Address:\s*<\/?[^>]*>([^<\r\n]+)/i, /<b>\s*Address\s*<\/b>[:\s]*<\/?[^>]*>\s*([^<\r\n]+)/i],
+      city: [/City:\s*<\/?[^>]*>([^<\r\n]+)/i, /City[:\s]*<\/?[^>]*>\s*<td[^>]*>([^<\r\n]+)/i],
+      state: [/State\/Cnty:\s*<\/?[^>]*>([^<\r\n]+)/i],
+      confirmScheduleDate: [/Confirm Schedule Date:\s*<\/?[^>]*>([^<\r\n]+)/i, /Confirm Schedule Date[:\s]*([^<\r\n]+)/i],
+      beginTime: [/Schd Est\. Begin Time:\s*<\/?[^>]*>([^<\r\n]+)/i, /Schd Est\.[^\r\n]*Begin Time[:\s]*([^<\r\n]+)/i]
+    };
+
+    for (const [key, pats] of Object.entries(patterns)) {
+        for (const p of pats) {
+            const m = p.exec(html);
+            if (m && m[1]) { out[key] = clean(m[1]); break; }
+        }
+    }
+    return out;
   }
 
   private parseTime(timeStr: string): number {
@@ -226,13 +320,11 @@ export class HughesNetService {
   private async ensureSessionCookie(userId: string) {
     const session = await this.kv.get(`hns:session:${userId}`);
     if (session) return session;
-    
     const enc = await this.kv.get(`hns:cred:${userId}`);
     if (!enc) return null;
     const credsJson = await this.decrypt(enc);
     if (!credsJson) return null;
     const creds = JSON.parse(credsJson);
-    
     return this.loginAndStoreSession(userId, creds.username, creds.password);
   }
 
@@ -260,9 +352,7 @@ export class HughesNetService {
         cookie = this.extractCookie(res2);
     }
 
-    if (cookie) {
-      await this.kv.put(`hns:session:${userId}`, cookie, { expirationTtl: 60 * 60 * 24 * 2 });
-    }
+    if (cookie) await this.kv.put(`hns:session:${userId}`, cookie, { expirationTtl: 60 * 60 * 24 * 2 });
     return cookie;
   }
 
@@ -270,35 +360,6 @@ export class HughesNetService {
     const h = res.headers.get('set-cookie');
     if (!h) return null;
     return h.split(/,(?=[^;]+=)/g).map(p => p.split(';')[0].trim()).filter(Boolean).join('; ');
-  }
-
-  private extractIdsFromHome(html: string) {
-    const re = /viewservice\.jsp\?snb=SO_EST_SCHD&id=(\d+)/g;
-    const ids = new Set<string>();
-    let m;
-    while ((m = re.exec(html)) !== null) ids.add(m[1]);
-    return Array.from(ids);
-  }
-
-  private parseOrderPage(html: string, id: string) {
-    const clean = (s: string) => s ? s.replace(/&nbsp;|&amp;/g, ' ').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() : null;
-    const out: any = { id, address: '', city: '', state: '', confirmScheduleDate: '', beginTime: '' };
-    
-    const patterns: Record<string, RegExp[]> = {
-      address: [/Address:\s*<\/?[^>]*>([^<\r\n]+)/i, /<b>\s*Address\s*<\/b>[:\s]*<\/?[^>]*>\s*([^<\r\n]+)/i],
-      city: [/City:\s*<\/?[^>]*>([^<\r\n]+)/i, /City[:\s]*<\/?[^>]*>\s*<td[^>]*>([^<\r\n]+)/i],
-      state: [/State\/Cnty:\s*<\/?[^>]*>([^<\r\n]+)/i],
-      confirmScheduleDate: [/Confirm Schedule Date:\s*<\/?[^>]*>([^<\r\n]+)/i, /Confirm Schedule Date[:\s]*([^<\r\n]+)/i],
-      beginTime: [/Schd Est\. Begin Time:\s*<\/?[^>]*>([^<\r\n]+)/i, /Schd Est\.[^\r\n]*Begin Time[:\s]*([^<\r\n]+)/i]
-    };
-
-    for (const [key, pats] of Object.entries(patterns)) {
-        for (const p of pats) {
-            const m = p.exec(html);
-            if (m && m[1]) { out[key] = clean(m[1]); break; }
-        }
-    }
-    return out;
   }
 
   private async encrypt(plain: string) {

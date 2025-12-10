@@ -4,12 +4,10 @@ import { HughesNetService } from '$lib/server/hughesnet';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, platform, locals }) => {
-    console.log('[API] HughesNet POST Request');
-
-    // Fail-safe check for bindings
+    // Check if platform is available (crucial for local dev)
     if (!platform?.env?.BETA_HUGHESNET_KV) {
-        console.error('[API] CRITICAL: BETA_HUGHESNET_KV is undefined! Check src/hooks.server.ts');
-        return json({ success: false, error: 'Database configuration error (KV missing)' }, { status: 500 });
+        console.error('CRITICAL: BETA_HUGHESNET_KV is missing. Did you update src/hooks.server.ts?');
+        return json({ success: false, error: 'Internal Error: Database configuration missing.' }, { status: 500 });
     }
 
     try {
@@ -25,14 +23,12 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
         );
 
         if (body.action === 'connect') {
-            console.log(`[API] Connecting user: ${userId}`);
             const success = await service.connect(userId, body.username, body.password);
-            if (!success) return json({ success: false, error: 'Invalid credentials or login failed.' });
+            if (!success) return json({ success: false, error: 'Login failed or invalid credentials.' });
             return json({ success: true });
         }
 
         if (body.action === 'sync') {
-            console.log(`[API] Syncing orders for: ${userId}`);
             const orders = await service.sync(userId);
             return json({ success: true, orders });
         }
@@ -40,8 +36,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
         return json({ success: false, error: 'Invalid action' }, { status: 400 });
 
     } catch (err: any) {
-        console.error('[API] Server Error:', err);
-        return json({ success: false, error: err.message || 'Unknown server error' }, { status: 500 });
+        console.error('API Error:', err);
+        return json({ success: false, error: err.message || 'Server error' }, { status: 500 });
     }
 };
 
@@ -60,7 +56,6 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
         const orders = await service.getOrders(userId);
         return json({ orders });
     } catch (err) {
-        console.error('[API] GET Error:', err);
         return json({ orders: {} });
     }
 };

@@ -15,5 +15,11 @@
     "meta:user:32a9abf8-6df6-4214-8ffa-087f2643c647:trip_count": "10",
     "meta:user:0bba8c7e-4e3c-4d58-a730-f4d197cb12b5:trip_count": "0"
   },
-  "TRASH": {}
+  "TRASH": {},
+  "SETTINGS": {},
+  "HUGHESNET": {
+    "hns:cred:james": "wQBKtEyi6P3Wm94LCRKro2Du0kAxx3ZZ3iLea4LGCVMsoWazqUbYJzd8sMaF3lczkYNlfFXLs/r2sNvsP3z6AZogQADeaD3Lwj+MNAvCse1HKP7YRRHIugIB+M1kIbKG3cKD85M6HyFy0q1YVsphDPj54hktR9j2p/rGhmbYYuSHB5GSM1Y5YKbZs0wspilDQ49v6fIb8LCWaJL4LUGaf7bO1xOcf/s1f+6zLdsZkQbUEV0Vrzb8xmc92znJ8hG04pk=",
+    "hns:session:james": "dtCookie=v_4_srv_10_sn_07DB89C4D9CF9C25CD1D0722DC9F32A1_perc_100000_ol_0_mul_1_app-3Aea7c4b59f27d43eb_1_rcs-3Acss_0; JSESSIONID=5ABC17013280ADC4F1B6810FA8679DD3; IPSESSION=\"73a70cf7ff4b5ea0\"; GCLB=\"4c9928482759768b\"",
+    "hns:orders_index:james": "[]"
+  }
 }
