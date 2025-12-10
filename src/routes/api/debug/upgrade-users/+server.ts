@@ -14,8 +14,8 @@ export const POST: RequestHandler = async ({ platform }) => {
 		let checked = 0;
 		let upgraded = 0;
 		const errors: any[] = [];
+		const skipped: any[] = [];
 
-		// 1. List all keys starting with "user:" (skips index keys like "idx:email:...")
 		const list = await kv.list({ prefix: 'user:' });
 
 		for (const key of list.keys) {
@@ -26,26 +26,40 @@ export const POST: RequestHandler = async ({ platform }) => {
 				const user = JSON.parse(raw);
 				checked++;
 
-				// 2. Check strict criteria:
-				// - Must have a createdAt date
-				// - Must be currently 'free'
-				// - Created date must be strictly BEFORE the cutoff
-				if (user.createdAt && user.plan === 'free') {
+				// 1. Determine if user is effectively 'free'
+				// (Treat missing/null plan as 'free')
+				const currentPlan = user.plan || 'free';
+				const isFree = currentPlan === 'free';
+
+				// 2. Check Creation Date
+				// If missing createdAt, we assume they are an early user (upgrade them) 
+				// OR skip them. Here we assume SAFE upgrade if missing (early alpha user).
+				let isBeforeCutoff = false;
+				if (user.createdAt) {
 					const created = new Date(user.createdAt);
-
-					if (created < cutoffDate) {
-						// 3. Apply Upgrade
-						user.plan = 'pro';
-						
-						// Update maxTrips to reflect unlimited (visually for the UI)
-						// The app logic mainly checks 'plan', but this helps the settings UI progress bar.
-						user.maxTrips = 10000; 
-
-						await kv.put(key.name, JSON.stringify(user));
-						upgraded++;
-						console.log(`[UPGRADE] User ${user.email} (${user.id}) upgraded to Pro.`);
-					}
+					isBeforeCutoff = created < cutoffDate;
+				} else {
+					// Edge case: No date? Assume early user -> Upgrade
+					isBeforeCutoff = true; 
 				}
+
+				if (isFree && isBeforeCutoff) {
+					// 3. Apply Upgrade
+					user.plan = 'pro';
+					user.maxTrips = 10000; 
+
+					await kv.put(key.name, JSON.stringify(user));
+					upgraded++;
+					console.log(`[UPGRADE] User ${user.email} (${user.id}) upgraded to Pro.`);
+				} else {
+					// Log why we skipped
+					skipped.push({
+						id: user.id,
+						email: user.email,
+						reason: !isFree ? `Plan is '${currentPlan}'` : `Created after cutoff (${user.createdAt})`
+					});
+				}
+
 			} catch (err) {
 				console.error(`Failed to process key ${key.name}`, err);
 				errors.push({ key: key.name, error: String(err) });
@@ -54,10 +68,11 @@ export const POST: RequestHandler = async ({ platform }) => {
 
 		return json({
 			success: true,
-			message: `Migration complete. Checked ${checked} users.`,
+			message: `Migration complete. Checked ${checked} users. Upgraded ${upgraded}.`,
 			results: {
 				totalChecked: checked,
 				totalUpgraded: upgraded,
+				skipped,
 				errors
 			}
 		});
