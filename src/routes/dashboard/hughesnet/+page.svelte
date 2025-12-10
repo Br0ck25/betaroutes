@@ -2,6 +2,11 @@
   import { onMount } from 'svelte';
   import Card from '$lib/components/ui/Card.svelte';
   import Input from '$lib/components/ui/Input.svelte';
+  
+  // NEW IMPORTS for Immediate Syncing
+  import { trips } from '$lib/stores/trips';
+  import { trash } from '$lib/stores/trash';
+  import { user } from '$lib/stores/auth';
 
   let username = '';
   let password = '';
@@ -11,7 +16,7 @@
   let logs: string[] = [];
 
   function addLog(msg: string) {
-    logs = [`[${new Date().toLocaleTimeString()}] ${msg}`, ...logs]; 
+    logs = [`[${new Date().toLocaleTimeString()}] ${msg}`, ...logs];
     console.log('[HNS UI]', msg);
   }
 
@@ -36,7 +41,6 @@
 
   async function handleConnect() {
     addLog('Connect button clicked. Sending request...');
-    
     if (!username || !password) {
         alert('Please enter username and password');
         return;
@@ -49,7 +53,6 @@
             method: 'POST',
             body: JSON.stringify({ action: 'connect', username, password })
         });
-        
         const data = await res.json();
 
         if (data.success) {
@@ -82,6 +85,15 @@
              orders = newOrders;
              isConnected = true;
              addLog(`Sync complete. Found ${newOrders.length} orders.`);
+             
+             // --- SYNC FIX: Pull the newly created trips to local DB ---
+             const userId = $user?.name || $user?.token;
+             if (userId) {
+                addLog('Downloading generated trips...');
+                await trips.syncFromCloud(userId);
+                addLog('Trips updated locally.');
+             }
+
         } else {
             addLog('Sync Failed: ' + data.error);
         }
@@ -92,10 +104,8 @@
     }
   }
 
-  // --- NEW: CLEAR FUNCTION ---
   async function handleClear() {
       if (!confirm('Are you sure you want to delete ALL HughesNet trips? This cannot be undone.')) return;
-      
       loading = true;
       addLog('Clearing HNS trips...');
       try {
@@ -105,6 +115,16 @@
           });
           const data = await res.json();
           addLog(`Cleared ${data.count} trips.`);
+          
+          // --- SYNC FIX: Sync Trash to remove them locally ---
+          // Because we moved them to Trash on server, syncing trash will delete them from local active trips
+          const userId = $user?.name || $user?.token;
+          if (userId) {
+              addLog('Syncing removal with local database...');
+              await trash.syncFromCloud(userId);
+              addLog('Local trips cleaned up.');
+          }
+
           // Reload to reflect empty state
           await loadOrders();
       } catch (e: any) {
@@ -160,7 +180,7 @@
             </Card>
         
         {:else}
-             {#if orders.length > 0}
+            {#if orders.length > 0}
                 <div class="grid gap-4">
                     {#each orders as order}
                         <Card>

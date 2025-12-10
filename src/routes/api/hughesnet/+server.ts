@@ -11,9 +11,13 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
     try {
         const body = await request.json();
         
-        // Use UUID (user.id) to match Settings KV
-        const userId = locals.user?.id || locals.user?.name || 'default_user';
-        console.log(`[API] HughesNet Action for User ID: ${userId}`);
+        // 1. Identity for TRIP STORAGE (use Name to match Dashboard)
+        const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
+        
+        // 2. Identity for SETTINGS LOOKUP (use UUID to match Settings API)
+        const settingsId = locals.user?.id;
+
+        console.log(`[API] HughesNet Action for User: ${userId} (Settings ID: ${settingsId})`);
 
         const service = new HughesNetService(
             platform.env.BETA_HUGHESNET_KV, 
@@ -30,11 +34,11 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
         }
 
         if (body.action === 'sync') {
-            const orders = await service.sync(userId);
+            // Pass BOTH IDs to the sync method
+            const orders = await service.sync(userId, settingsId);
             return json({ success: true, orders });
         }
 
-        // --- NEW ACTION: CLEAR TRIPS ---
         if (body.action === 'clear') {
             const count = await service.clearAllTrips(userId);
             return json({ success: true, count });
@@ -51,7 +55,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 export const GET: RequestHandler = async ({ platform, locals }) => {
     if (!platform?.env?.BETA_HUGHESNET_KV) return json({ orders: {} });
     try {
-        const userId = locals.user?.id || locals.user?.name || 'default_user';
+        const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
+        
         const service = new HughesNetService(
             platform.env.BETA_HUGHESNET_KV, 
             platform.env.HNS_ENCRYPTION_KEY,

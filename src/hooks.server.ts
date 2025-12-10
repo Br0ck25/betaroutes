@@ -12,14 +12,22 @@ let mockDB: Record<string, any> = {
 	USERS: {},
 	LOGS: {},
 	TRASH: {},
-	SETTINGS: {} 
+	SETTINGS: {},
+	HUGHESNET: {}
 };
 
 if (dev) {
 	try {
 		if (fs.existsSync(DB_FILE)) {
 			const raw = fs.readFileSync(DB_FILE, 'utf-8');
-			mockDB = JSON.parse(raw);
+			const loaded = JSON.parse(raw);
+			
+			// Merge loaded data with default structure to ensure all keys exist
+			mockDB = { ...mockDB, ...loaded };
+			
+			// Explicitly ensure HUGHESNET exists if the file was old
+			if (!mockDB.HUGHESNET) mockDB.HUGHESNET = {}; 
+			
 			console.log('📂 Loaded mock KV data from .kv-mock.json');
 		}
 	} catch (e) {
@@ -43,15 +51,22 @@ function createMockKV(namespace: string) {
 		},
 		async put(key: string, value: string) {
 			console.log(`[MOCK KV ${namespace}] PUT ${key}`);
+			// Safety check to prevent the "Cannot set properties of undefined" error
+			if (!mockDB[namespace]) mockDB[namespace] = {}; 
+			
 			mockDB[namespace][key] = value;
 			saveDB(); 
 		},
 		async delete(key: string) {
 			console.log(`[MOCK KV ${namespace}] DELETE ${key}`);
-			delete mockDB[namespace][key];
-			saveDB(); 
+			if (mockDB[namespace]) {
+				delete mockDB[namespace][key];
+				saveDB(); 
+			}
 		},
 		async list({ prefix }: { prefix: string }) {
+			if (!mockDB[namespace]) return { keys: [] };
+			
 			const keys = Object.keys(mockDB[namespace])
 				.filter((k) => k.startsWith(prefix))
 				.map((name) => ({ name }));
@@ -70,6 +85,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (!event.platform.env.BETA_LOGS_KV) event.platform.env.BETA_LOGS_KV = createMockKV('LOGS');
 		if (!event.platform.env.BETA_LOGS_TRASH_KV) event.platform.env.BETA_LOGS_TRASH_KV = createMockKV('TRASH');
 		if (!event.platform.env.BETA_USER_SETTINGS_KV) event.platform.env.BETA_USER_SETTINGS_KV = createMockKV('SETTINGS');
+		
+		// Initialize the HughesNet KV
+		if (!event.platform.env.BETA_HUGHESNET_KV) {
+			event.platform.env.BETA_HUGHESNET_KV = createMockKV('HUGHESNET');
+		}
 	}
 
 	// 2. User auth logic
@@ -89,7 +109,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 				const userData = JSON.parse(userDataStr);
 				
 				event.locals.user = {
-					id: userData.id, // <--- CRITICAL FIX: Add this line
+					id: userData.id,
 					token,
 					plan: userData.plan ?? 'free',
 					tripsThisMonth: userData.tripsThisMonth ?? 0,

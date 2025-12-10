@@ -32,7 +32,7 @@ export class HughesNetService {
     return true;
   }
 
-  async sync(userId: string) {
+  async sync(userId: string, settingsId?: string) {
     console.log(`[HNS] Starting sync for ${userId}`);
     const cookie = await this.ensureSessionCookie(userId);
     if (!cookie) throw new Error('Could not login.');
@@ -83,7 +83,7 @@ export class HughesNetService {
     }
 
     if (orders.length > 0) {
-        await this.createTripsFromOrders(userId, orders);
+        await this.createTripsFromOrders(userId, orders, settingsId);
     }
 
     return orders;
@@ -228,28 +228,26 @@ export class HughesNetService {
   }
 
   // --- TRIP CREATION ---
-  private async createTripsFromOrders(userId: string, orders: any[]) {
+  private async createTripsFromOrders(userId: string, orders: any[], settingsId?: string) {
     const tripService = makeTripService(this.tripKV, undefined);
     
-    // --- FIX: READ NESTED SETTINGS ---
+    // FETCH SETTINGS
     let defaultStartAddress = '';
     let defaultEndAddress = '';
-    
+    const settingsKey = settingsId || userId;
+
     try {
-        let settingsRaw = await this.settingsKV.get(`BETA_USER_SETTINGS_KV:${userId}`);
-        if (!settingsRaw) settingsRaw = await this.settingsKV.get(userId);
+        let settingsRaw = await this.settingsKV.get(settingsKey);
+        if (!settingsRaw && settingsKey !== userId) {
+             settingsRaw = await this.settingsKV.get(userId);
+        }
 
         if (settingsRaw) {
             const data = JSON.parse(settingsRaw as string);
-            // Check if settings are nested under "settings" key (common in sveltekit stores)
             const s = data.settings || data; 
-            
             defaultStartAddress = s.defaultStartAddress || '';
             defaultEndAddress = s.defaultEndAddress || s.defaultStartAddress || '';
-            
-            console.log(`[HNS] Settings Loaded. Start="${defaultStartAddress}"`);
-        } else {
-            console.log(`[HNS] No settings found for ${userId}.`);
+            console.log(`[HNS] Settings Loaded for ${settingsKey}. Start="${defaultStartAddress}"`);
         }
     } catch (e) { console.error('[HNS] Error reading settings:', e); }
 
@@ -274,18 +272,16 @@ export class HughesNetService {
           continue;
       }
 
-      let minMinutes = 9 * 60; 
-      let earliestOrder = daysOrders[0];
+      // --- FIX 1: Sort orders chronologically ---
+      daysOrders.sort((a, b) => this.parseTime(a.beginTime) - this.parseTime(b.beginTime));
 
-      for (const order of daysOrders) {
-        const m = this.parseTime(order.beginTime);
-        if (m < 24 * 60) {
-            if (m < minMinutes) {
-                minMinutes = m;
-                earliestOrder = order;
-            }
-        }
-      }
+      // --- FIX 2: Determine Start Time ---
+      let minMinutes = 9 * 60; // Default 9 AM
+      let earliestOrder = daysOrders[0];
+      const earliestTime = this.parseTime(earliestOrder.beginTime);
+      
+      // If we have a valid time from the order, use it as the base
+      if (earliestTime < 24 * 60) minMinutes = earliestTime;
 
       const buildAddr = (o: any) => {
           return [o.address, o.city, o.state, o.zip].filter(Boolean).join(', ');
@@ -293,7 +289,6 @@ export class HughesNetService {
 
       const firstJobAddress = buildAddr(earliestOrder);
       
-      // Fallback if settings missing
       let tripStart = defaultStartAddress;
       let tripEnd = defaultEndAddress || defaultStartAddress;
 
@@ -313,15 +308,17 @@ export class HughesNetService {
          }
       }
 
+      // Subtract drive time from the first appointment time
       const tripStartMinutes = minMinutes - driveTimeMinutes;
       const startTime = this.minutesToTime(tripStartMinutes);
 
+      // --- FIX 3: Use 'startTime' and 'endTime' keys ---
       const newTrip: any = { 
         id: crypto.randomUUID(),
         userId,
         date: date,
-        startClock: startTime,
-        endClock: "17:00",
+        startTime: startTime,    // Was startClock
+        endTime: "17:00",        // Was endClock
         startAddress: tripStart,
         endAddress: tripEnd,
         destinations: daysOrders.map(o => ({
@@ -336,14 +333,14 @@ export class HughesNetService {
             notes: `HNS ID: ${o.id}`,
             earnings: 0
         })),
-        totalMileage: distanceMiles * 2,
+        totalMileage: distanceMiles * 2, // Rough estimate (round trip)
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         syncStatus: 'synced'
       };
 
       await tripService.put(newTrip);
-      console.log(`[HNS] Created Trip for ${date}`);
+      console.log(`[HNS] Created Trip for ${date} (Start: ${startTime})`);
     }
   }
 
@@ -363,12 +360,15 @@ export class HughesNetService {
 
   private parseTime(timeStr: string): number {
       if (!timeStr) return 9999;
-      const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+      // Handle "8:00", "08:30 AM", etc.
+      const match = timeStr.match(/(\d{1,2}):(\d{2})(?:\s*(AM|PM))?/i);
       if (!match) return 9999;
       let h = parseInt(match[1]);
       const m = parseInt(match[2]);
-      if (match[3]?.toUpperCase() === 'PM' && h < 12) h += 12;
-      if (match[3]?.toUpperCase() === 'AM' && h === 12) h = 0;
+      const meridiem = match[3]?.toUpperCase();
+
+      if (meridiem === 'PM' && h < 12) h += 12;
+      if (meridiem === 'AM' && h === 12) h = 0;
       return h * 60 + m;
   }
 
@@ -411,19 +411,6 @@ export class HughesNetService {
     const h = res.headers.get('set-cookie');
     if (!h) return null;
     return h.split(/,(?=[^;]+=)/g).map(p => p.split(';')[0].trim()).filter(Boolean).join('; ');
-  }
-
-  private extractIds(html: string) {
-    const ids = new Set<string>();
-    const cleanHtml = html.replace(/&amp;/g, '&');
-    const re1 = /viewservice\.jsp\?.*?\bid=(\d+)/gi;
-    let m;
-    while ((m = re1.exec(cleanHtml)) !== null) ids.add(m[1]);
-    if (ids.size === 0) {
-        const re2 = /[?&]id=(\d{8})\b/gi;
-        while ((m = re2.exec(cleanHtml)) !== null) ids.add(m[1]);
-    }
-    return Array.from(ids);
   }
 
   private async encrypt(plain: string) {
