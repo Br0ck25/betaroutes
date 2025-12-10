@@ -10,33 +10,45 @@
   let loading = false;
   let orders: any[] = [];
   let isConnected = false;
+  let errorMessage = ''; // New error state
 
   async function loadOrders() {
-    const res = await fetch(`/api/hughesnet`);
-    const data = await res.json();
-    if (data.orders) {
-        orders = Object.values(data.orders);
-        isConnected = orders.length > 0;
+    try {
+        const res = await fetch(`/api/hughesnet`);
+        const data = await res.json();
+        if (data.orders) {
+            orders = Object.values(data.orders);
+            isConnected = orders.length > 0;
+        }
+    } catch (e) {
+        console.warn('Could not load orders:', e);
     }
   }
 
   async function handleConnect() {
+    console.log('Button clicked: handleConnect');
     loading = true;
+    errorMessage = '';
+    
     try {
         const res = await fetch('/api/hughesnet', {
             method: 'POST',
             body: JSON.stringify({ action: 'connect', username, password })
         });
+        
         const data = await res.json();
+        console.log('API Response:', data);
+
         if (data.success) {
             alert('Connected! Syncing orders...');
             await handleSync();
         } else {
-            alert('Connection failed. Check credentials.');
+            // Show the specific error from the server
+            errorMessage = data.error || 'Connection failed. Check credentials.';
         }
-    } catch (e) {
-        console.error(e);
-        alert('Error connecting');
+    } catch (e: any) {
+        console.error('Fetch error:', e);
+        errorMessage = 'Network error: ' + e.message;
     } finally {
         loading = false;
     }
@@ -44,12 +56,19 @@
 
   async function handleSync() {
     loading = true;
+    errorMessage = '';
     try {
         const res = await fetch('/api/hughesnet', {
             method: 'POST',
             body: JSON.stringify({ action: 'sync' })
         });
+        const data = await res.json();
+        if (data.success && data.orders) {
+             orders = data.orders; // Update list immediately
+        }
         await loadOrders();
+    } catch (e: any) {
+        errorMessage = 'Sync failed: ' + e.message;
     } finally {
         loading = false;
     }
@@ -67,6 +86,13 @@
             </Button>
         {/if}
     </div>
+
+    {#if errorMessage}
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+            <strong class="font-bold">Error:</strong>
+            <span class="block sm:inline">{errorMessage}</span>
+        </div>
+    {/if}
 
     <div class="grid gap-6">
         {#if !isConnected && orders.length === 0}
@@ -98,6 +124,9 @@
                                 <span class="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">
                                     {order.confirmScheduleDate || 'Unscheduled'}
                                 </span>
+                                <div class="text-xs text-gray-500 mt-1">
+                                    {order.beginTime || 'No time'}
+                                </div>
                             </div>
                         </div>
                     </Card>

@@ -8,18 +8,27 @@ import path from 'node:path';
 const DB_FILE = path.resolve('.kv-mock.json');
 
 // Load or initialize DB
+// 1. ADD 'HUGHESNET' HERE
 let mockDB: Record<string, any> = {
 	USERS: {},
 	LOGS: {},
 	TRASH: {},
-	SETTINGS: {} 
+	SETTINGS: {},
+	HUGHESNET: {} 
 };
 
 if (dev) {
 	try {
 		if (fs.existsSync(DB_FILE)) {
 			const raw = fs.readFileSync(DB_FILE, 'utf-8');
-			mockDB = JSON.parse(raw);
+			// Merge with default structure to ensure new keys (like HUGHESNET) exist
+			// even if the file is old
+			const loaded = JSON.parse(raw);
+			mockDB = { ...mockDB, ...loaded };
+			
+			// Ensure nested objects exist
+			if (!mockDB.HUGHESNET) mockDB.HUGHESNET = {};
+			
 			console.log('📂 Loaded mock KV data from .kv-mock.json');
 		}
 	} catch (e) {
@@ -66,10 +75,23 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (!event.platform) event.platform = { env: {} } as any;
 		if (!event.platform.env) event.platform.env = {} as any;
 
+		// Existing KVs
 		if (!event.platform.env.BETA_USERS_KV) event.platform.env.BETA_USERS_KV = createMockKV('USERS');
 		if (!event.platform.env.BETA_LOGS_KV) event.platform.env.BETA_LOGS_KV = createMockKV('LOGS');
 		if (!event.platform.env.BETA_LOGS_TRASH_KV) event.platform.env.BETA_LOGS_TRASH_KV = createMockKV('TRASH');
 		if (!event.platform.env.BETA_USER_SETTINGS_KV) event.platform.env.BETA_USER_SETTINGS_KV = createMockKV('SETTINGS');
+		
+		// 2. NEW: Add HughesNet KV Mock
+		if (!event.platform.env.BETA_HUGHESNET_KV) event.platform.env.BETA_HUGHESNET_KV = createMockKV('HUGHESNET');
+
+		// 3. NEW: Inject Environment Variables for Local Dev
+		// (These usually come from wrangler.toml but need manual shim in npm run dev)
+		if (!event.platform.env.HNS_ENCRYPTION_KEY) {
+			event.platform.env.HNS_ENCRYPTION_KEY = 'local-dev-key';
+		}
+		if (!event.platform.env.PUBLIC_GOOGLE_MAPS_API_KEY) {
+			event.platform.env.PUBLIC_GOOGLE_MAPS_API_KEY = 'AIzaSyCOdfe7j11yw9ENkX8c7hYsIjwqcQeqJGQ'; // Your key from wrangler.toml
+		}
 	}
 
 	// 2. User auth logic
@@ -89,7 +111,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 				const userData = JSON.parse(userDataStr);
 				
 				event.locals.user = {
-					id: userData.id, // <--- CRITICAL FIX: Add this line
+					id: userData.id,
 					token,
 					plan: userData.plan ?? 'free',
 					tripsThisMonth: userData.tripsThisMonth ?? 0,
