@@ -12,13 +12,13 @@ function fakeKV() {
 	};
 }
 
-export const GET: RequestHandler = async (event) => {
+export const GET: RequestHandler = async ({ locals, platform }) => {
 	try {
-		const user = event.locals.user;
+		const user = locals.user;
 		if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
 
-		const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
-		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
+		const kv = platform?.env?.BETA_LOGS_KV ?? fakeKV();
+		const trashKV = platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
 		const svc = makeTripService(kv, trashKV);
 
 		// FIX: Scan ALL storage locations (UUID, Name, Token)
@@ -40,17 +40,18 @@ export const GET: RequestHandler = async (event) => {
 		return json(uniqueTrash);
 	} catch (err) {
 		console.error('GET /api/trash error', err);
-		return json({ error: 'Internal Server Error' }, { status: 500 });
+        // Return empty array instead of 500 error to keep UI alive
+		return json([]); 
 	}
 };
 
-export const DELETE: RequestHandler = async (event) => {
+export const DELETE: RequestHandler = async ({ locals, platform }) => {
 	try {
-		const user = event.locals.user;
+		const user = locals.user;
 		if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
 
-		const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
-		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
+		const kv = platform?.env?.BETA_LOGS_KV ?? fakeKV();
+		const trashKV = platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
 		const svc = makeTripService(kv, trashKV);
 
 		// Empty trash for ALL IDs

@@ -81,15 +81,12 @@ export function makeTripService(
       const key = `trip:${userId}:${tripId}`;
       
       if (!trashKV) {
-        // Fallback: Hard delete if no Trash KV
         await kv.delete(key);
         return;
       }
 
       const raw = await kv.get(key);
       if (!raw) {
-        // It might already be deleted or moved. Check trash to be safe?
-        // For now, just throw or return.
         throw new Error('Trip not found');
       }
 
@@ -121,6 +118,7 @@ export function makeTripService(
       await kv.delete(key);
     },
 
+    // --- CRITICAL FIX: Safe Trash Listing ---
     async listTrash(userId: string): Promise<TrashItem[]> {
       if (!trashKV) return [];
       const prefix = trashPrefixForUser(userId);
@@ -134,7 +132,7 @@ export function makeTripService(
         try {
             const parsed = JSON.parse(raw);
             
-            // Validate structure
+            // Validate structure to prevent UI crashes
             if (parsed.trip && parsed.metadata) {
                 out.push({ ...parsed.trip, metadata: parsed.metadata });
             } else if (parsed.id && parsed.deletedAt) {

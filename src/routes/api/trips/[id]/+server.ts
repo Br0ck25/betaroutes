@@ -1,147 +1,134 @@
-// src/routes/api/trips/[id]/+server.ts
+// src/routes/api/trash/[id]/+server.ts
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
 
-function fakeKV() {
-	return {
-		get: async () => null,
-		put: async () => {},
-		delete: async () => {},
-		list: async () => ({ keys: [] })
-	};
+function safeKV(env: any, name: string) {
+	const kv = env?.[name];
+	return kv ?? null;
 }
 
-/**
- * GET /api/trips/[id] - Retrieve a single trip
- */
-export const GET: RequestHandler = async ({ params, locals, platform }) => {
+export const POST: RequestHandler = async (event) => {
 	try {
-		const user = locals.user;
+		const user = event.locals.user;
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
-		const { id } = params;
-		const kv = platform?.env?.BETA_LOGS_KV ?? fakeKV();
-		const trashKV = platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
+		const { id } = event.params;
+		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
+		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
 		const svc = makeTripService(kv, trashKV);
 
-		// FIX: Check ALL storage locations
+		// FIX 1: Scan for the item owner instead of assuming user.name
 		const storageIds = [user.id, user.name, user.token].filter(Boolean);
-		let trip = null;
-
-		for (const uid of storageIds) {
-			trip = await svc.get(uid!, id);
-			if (trip) break;
-		}
-
-		if (!trip) {
-			return new Response('Not Found', { status: 404 });
-		}
-
-		return new Response(JSON.stringify(trip), {
-			status: 200,
-			headers: { 'Content-Type': 'application/json' }
-		});
-	} catch (err) {
-		console.error('GET /api/trips/[id] error', err);
-		return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
-	}
-};
-
-/**
- * PUT /api/trips/[id] - Update a trip
- */
-export const PUT: RequestHandler = async ({ request, params, locals, platform }) => {
-	try {
-		const user = locals.user;
-		if (!user) return new Response('Unauthorized', { status: 401 });
-
-		const { id } = params;
-		const body = await request.json();
-
-		const kv = platform?.env?.BETA_LOGS_KV ?? fakeKV();
-		const trashKV = platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
-		const svc = makeTripService(kv, trashKV);
-
-		// FIX: Find where the trip lives before updating
-		const storageIds = [user.id, user.name, user.token].filter(Boolean);
-		let existing = null;
 		let ownerId = null;
-
-		for (const uid of storageIds) {
-			existing = await svc.get(uid!, id);
-			if (existing) {
-				ownerId = uid;
-				break;
+		
+		// Find which bucket this trash item lives in
+		if (trashKV) {
+			for (const uid of storageIds) {
+				const checkKey = `trash:${uid}:${id}`;
+				const exists = await trashKV.get(checkKey);
+				if (exists) {
+					ownerId = uid;
+					break;
+				}
 			}
 		}
 
-		if (!existing || !ownerId) {
-			return new Response('Not Found', { status: 404 });
-		}
+		// Default to current identifier if not found (will likely fail, but handles edge cases)
+		if (!ownerId) ownerId = user.name || user.token;
 
-		const updated = {
-			...existing,
-			...body,
-			id,
-			userId: ownerId, // Keep it in the same storage bucket
-			updatedAt: new Date().toISOString()
-		};
+        // --- ENFORCE LIMIT ---
+        if (user.plan === 'free') {
+            if (trashKV) {
+                // Use the correct ownerId here
+                const trashKey = `trash:${ownerId}:${id}`;
+                const raw = await trashKV.get(trashKey);
+                
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    const trip = parsed.trip;
 
-		await svc.put(updated);
+                    if (trip && trip.date) {
+                        const tripDate = new Date(trip.date);
+                        const tYear = tripDate.getFullYear();
+                        const tMonth = tripDate.getMonth();
 
-		return new Response(JSON.stringify(updated), {
+                        // Check limits against the OWNER's list
+                        const allTrips = await svc.list(ownerId);
+                        const count = allTrips.filter(t => {
+                            if (!t.date) return false;
+                            const [y, m] = t.date.split('-').map(Number);
+                            return y === tYear && (m - 1) === tMonth;
+                        }).length;
+
+                        if (count >= 10) {
+                             return new Response(JSON.stringify({ 
+                                error: 'Free tier limit reached (10 trips/month). Please upgrade to Pro.' 
+                            }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+                        }
+                    }
+                }
+            }
+        }
+        // ---------------------
+
+		// Restore using the correct ownerId
+		const restoredTrip = await svc.restore(ownerId, id);
+
+		await svc.incrementUserCounter(user.token, 1);
+
+		return new Response(JSON.stringify(restoredTrip), {
 			status: 200,
 			headers: { 'Content-Type': 'application/json' }
 		});
 	} catch (err) {
-		console.error('PUT /api/trips/[id] error', err);
-		return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
+		console.error('POST /api/trash/[id]/restore error', err);
+		const message = err instanceof Error ? err.message : 'Internal Server Error';
+		const status = message.includes('not found') ? 404 : 500;
+		return new Response(JSON.stringify({ error: message }), {
+			status,
+			headers: { 'Content-Type': 'application/json' }
+		});
 	}
 };
 
-/**
- * DELETE /api/trips/[id] - Soft delete trip
- */
-export const DELETE: RequestHandler = async ({ params, locals, platform }) => {
+export const DELETE: RequestHandler = async (event) => {
 	try {
-		const user = locals.user;
+		const user = event.locals.user;
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
-		const { id } = params;
-		const kv = platform?.env?.BETA_LOGS_KV ?? fakeKV();
-		const trashKV = platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
+		const { id } = event.params;
+		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
+		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
 		const svc = makeTripService(kv, trashKV);
 
-		// FIX: Find where the trip lives before deleting
+		// FIX 2: Scan for the item owner for deletion too
 		const storageIds = [user.id, user.name, user.token].filter(Boolean);
-		let existing = null;
 		let ownerId = null;
 
-		for (const uid of storageIds) {
-			existing = await svc.get(uid!, id);
-			if (existing) {
-				ownerId = uid;
-				break;
+		if (trashKV) {
+			for (const uid of storageIds) {
+				const checkKey = `trash:${uid}:${id}`;
+				const exists = await trashKV.get(checkKey);
+				if (exists) {
+					ownerId = uid;
+					break;
+				}
 			}
 		}
 
-		if (!existing || !ownerId) {
-			// If it's already gone, consider it a success (idempotent)
-			return new Response(JSON.stringify({ success: true }), { status: 200 });
+		if (!ownerId) {
+			// If we can't find it, it's already gone. Success.
+			return new Response(null, { status: 204 });
 		}
 
-		// Perform soft delete on the correct owner ID
-		await svc.delete(ownerId, id);
+		await svc.permanentDelete(ownerId, id);
 
-		// Decrement trip count (using token as that's usually the counter key)
-		await svc.incrementUserCounter(user.token, -1);
-
-		return new Response(JSON.stringify({ success: true }), {
-			status: 200,
+		return new Response(null, { status: 204 });
+	} catch (err) {
+		console.error('DELETE /api/trash/[id] error', err);
+		return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
+			status: 500,
 			headers: { 'Content-Type': 'application/json' }
 		});
-	} catch (err) {
-		console.error('DELETE /api/trips/[id] error', err);
-		return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
 	}
 };
