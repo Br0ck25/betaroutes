@@ -2,11 +2,13 @@
   import { userSettings } from '$lib/stores/userSettings';
   import { get } from 'svelte/store';
   import { onMount, tick } from 'svelte';
+  import { goto } from '$app/navigation';
   import type { Destination, MaintenanceCost, SupplyCost } from '$lib/types';
   import { calculateTripTotals } from '$lib/utils/calculations';
   import { storage } from '$lib/utils/storage';
   import { trips, draftTrip } from '$lib/stores/trips';
   import { user } from '$lib/stores/auth';
+  import Modal from '$lib/components/ui/Modal.svelte';
 
   // LOAD SETTINGS
   const settings = get(userSettings);
@@ -45,6 +47,9 @@
   let mapsLoaded = false;
   let loadingMaps = true;
   let autocompletes: Map<string, google.maps.places.Autocomplete> = new Map();
+  
+  // --- LIMIT MODAL STATE ---
+  let showLimitModal = false;
 
   function convertDistance(miles: number) {
     return distanceUnit === 'km' ? miles * 1.60934 : miles;
@@ -253,7 +258,7 @@
       }).length;
 
       if (monthlyCount >= 10) {
-          alert('You have reached your free monthly limit of 10 trips.\n\nPlease upgrade to Pro for unlimited trips!');
+          showLimitModal = true;
           return;
       }
     }
@@ -278,9 +283,7 @@
           earnings: d.earnings,
           order: i
       }));
-      // trips.create calls the API which uses userId from props or store
-      // But trips.create also saves locally.
-      // It is important we pass the RIGHT userId here.
+
       await trips.create({
         id: crypto.randomUUID(),
         date,
@@ -307,7 +310,6 @@
         lastModified: new Date().toISOString()
       }, userId);
 
-      // Pass correct ID
       userSettings.update(s => ({
         ...s,
         startLocation: startAddress,
@@ -367,6 +369,11 @@
     notes = draft.notes || '';
     await tick();
     initAllAutocomplete();
+  }
+
+  function handleUpgrade() {
+      showLimitModal = false;
+      goto('/dashboard/settings');
   }
 </script>
 
@@ -451,6 +458,21 @@
   </div>
 </div>
 
+<Modal bind:open={showLimitModal}>
+    <div class="modal-content">
+        <h2 class="modal-title">Free Limit Reached</h2>
+        <p class="modal-body">
+            You have reached your free monthly limit of 10 trips. 
+            <br/><br/>
+            Upgrade to Pro for unlimited trips, advanced analytics, and data export.
+        </p>
+        <div class="modal-actions">
+            <button class="btn-cancel" on:click={() => showLimitModal = false}>Cancel</button>
+            <button class="btn-upgrade" on:click={handleUpgrade}>Upgrade to Pro</button>
+        </div>
+    </div>
+</Modal>
+
 <style>
   .container { max-width: 900px; margin: 0 auto; padding: 20px; }
   .loading-banner { background: #fff3cd; color: #856404; padding: 12px; border-radius: 6px; margin-bottom: 16px; text-align: center; }
@@ -475,4 +497,11 @@
   .primary { background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white; }
   .success { background: #4caf50; color: white; }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Modal Styles */
+  .modal-title { font-size: 20px; font-weight: 700; margin-bottom: 12px; color: #111827; }
+  .modal-body { font-size: 16px; color: #4B5563; margin-bottom: 24px; line-height: 1.5; }
+  .modal-actions { display: flex; gap: 12px; justify-content: flex-end; }
+  .btn-cancel { background: #F3F4F6; color: #374151; }
+  .btn-upgrade { background: linear-gradient(135deg, #F97316 0%, #EA580C 100%); color: white; }
 </style>
