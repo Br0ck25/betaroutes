@@ -30,7 +30,12 @@
   </button>
   
   {#if showDetails}
-    <div class="backdrop" on:click={() => showDetails = false}></div>
+    <button 
+        class="backdrop" 
+        on:click={() => showDetails = false}
+        aria-label="Close details"
+        type="button"
+    ></button>
 
     <div class="sync-details">
       <div class="details-header">
@@ -154,10 +159,16 @@
     right: 0;
     bottom: 0;
     z-index: 998;
-    background: rgba(0,0,0,0.05); /* Slight dim to show it's active */
+    background: rgba(0,0,0,0.05);
+    /* Reset button styles */
+    border: none;
+    cursor: default;
+    width: 100%;
+    height: 100%;
+    display: block;
   }
   
-  /* --- DETAILS PANEL (Fixed/Absolute Hybrid) --- */
+  /* --- DETAILS PANEL --- */
   .sync-details {
     background: white;
     border: 2px solid #E5E7EB;
@@ -165,8 +176,7 @@
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
     z-index: 999;
     animation: slideDown 0.2s ease;
-    
-    /* DEFAULT (Mobile) - Fixed Positioning */
+    /* DEFAULT (Mobile) */
     position: fixed;
     top: 80px;
     left: 16px;
@@ -287,9 +297,9 @@
   /* --- DESKTOP (Sidebar) --- */
   @media (min-width: 1024px) {
     .sync-details {
-      position: absolute; /* Relative to the button again */
+      position: absolute;
       top: calc(100% + 8px);
-      left: 0; /* Align left edge with button (extends right into content) */
+      left: 0;
       right: auto;
       width: 320px;
       margin: 0;
