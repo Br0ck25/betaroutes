@@ -13,7 +13,8 @@ let mockDB: Record<string, any> = {
 	LOGS: {},
 	TRASH: {},
 	SETTINGS: {},
-	HUGHESNET: {}
+	HUGHESNET: {},
+	PLACES: {} // <--- ADDED
 };
 
 if (dev) {
@@ -22,11 +23,11 @@ if (dev) {
 			const raw = fs.readFileSync(DB_FILE, 'utf-8');
 			const loaded = JSON.parse(raw);
 			
-			// Merge loaded data with default structure to ensure all keys exist
+			// Merge loaded data with default structure
 			mockDB = { ...mockDB, ...loaded };
 			
-			// Explicitly ensure HUGHESNET exists if the file was old
 			if (!mockDB.HUGHESNET) mockDB.HUGHESNET = {}; 
+			if (!mockDB.PLACES) mockDB.PLACES = {}; // <--- ADDED
 			
 			console.log('📂 Loaded mock KV data from .kv-mock.json');
 		}
@@ -51,7 +52,6 @@ function createMockKV(namespace: string) {
 		},
 		async put(key: string, value: string) {
 			console.log(`[MOCK KV ${namespace}] PUT ${key}`);
-			// Safety check to prevent the "Cannot set properties of undefined" error
 			if (!mockDB[namespace]) mockDB[namespace] = {}; 
 			
 			mockDB[namespace][key] = value;
@@ -86,9 +86,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (!event.platform.env.BETA_LOGS_TRASH_KV) event.platform.env.BETA_LOGS_TRASH_KV = createMockKV('TRASH');
 		if (!event.platform.env.BETA_USER_SETTINGS_KV) event.platform.env.BETA_USER_SETTINGS_KV = createMockKV('SETTINGS');
 		
-		// Initialize the HughesNet KV
 		if (!event.platform.env.BETA_HUGHESNET_KV) {
 			event.platform.env.BETA_HUGHESNET_KV = createMockKV('HUGHESNET');
+		}
+		// Initialize PLACES KV
+		if (!event.platform.env.BETA_PLACES_KV) {
+			event.platform.env.BETA_PLACES_KV = createMockKV('PLACES');
 		}
 	}
 
