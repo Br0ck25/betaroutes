@@ -2,7 +2,6 @@
 import { dev } from '$app/environment';
 import type { RequestHandler } from './$types';
 import { authenticateUser } from '$lib/server/auth';
-// CRITICAL FIX: Removed insecure import of { setSessionCookie } from '$lib/server/session';
 import { randomUUID } from 'node:crypto';
 
 export const POST: RequestHandler = async ({ request, cookies, platform }) => {
@@ -18,20 +17,19 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
         return new Response(JSON.stringify({ message: 'Missing fields' }), { status: 400 });
     }
 
-    // CRITICAL FIX: Pass the KV store (usersKV) to authenticateUser
-    // This allows the migration logic and lookups to function.
+    // 2. Authenticate the user
+    // This now returns the user's plan and usage stats thanks to the fix in auth.ts
     const user = await authenticateUser(usersKV, identifier, password);
 
     if (!user) {
         return new Response(JSON.stringify({ message: 'Invalid credentials' }), { status: 401 });
     }
 
-    // --- CRITICAL FIX: Secure Session Setup ---
+    // --- Secure Session Setup ---
 
     // 3. Generate a secure, random session token
     const newToken = randomUUID();
-    const now = new Date().toISOString();
-
+    
     // 4. Create the session data payload for KV.
     const sessionData = {
         // Core User Data
@@ -39,15 +37,15 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
         name: user.username, 
         email: user.email,
         
-        // Subscription/Usage Data (Hooks will now successfully load these)
-        plan: 'free',
-        tripsThisMonth: 0,
-        maxTrips: 10,
-        resetDate: now,
+        // FIX: Use the actual values from the authenticated user record
+        // instead of hardcoded defaults.
+        plan: user.plan,                 
+        tripsThisMonth: user.tripsThisMonth, 
+        maxTrips: user.maxTrips,         
+        resetDate: user.resetDate,       
     };
 
     // 5. Store the session token linked to the user's data in BETA_USERS_KV
-    // The key is the token string itself, as expected by hooks.server.ts
     await usersKV.put(newToken, JSON.stringify(sessionData));
 
     // 6. Set the secure session token cookie
