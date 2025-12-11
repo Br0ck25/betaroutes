@@ -125,11 +125,9 @@ export class HughesNetService {
   ) {
     this.requestCount = 0;
     
-    // 1. Authenticate
     const cookie = await this.ensureSessionCookie(userId);
     if (!cookie) throw new Error('Could not login. Please reconnect.');
 
-    // 2. Load Existing DB
     let orderDb: Record<string, any> = {};
     const dbRaw = await this.kv.get(`hns:db:${userId}`);
     if (dbRaw) orderDb = JSON.parse(dbRaw);
@@ -144,7 +142,6 @@ export class HughesNetService {
         }
     };
 
-    // STAGE 1: HARVESTING 
     if (!skipScan) {
         try {
             const res = await this.safeFetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
@@ -175,7 +172,6 @@ export class HughesNetService {
     
     if (missingDataIds.length > 0) {
         this.log(`[Stage 1] Found ${missingDataIds.length} orders needing details.`);
-        
         let fetchedCount = 0;
         for (const id of missingDataIds) {
             if (this.requestCount >= MAX_REQUESTS_PER_BATCH) {
@@ -183,13 +179,11 @@ export class HughesNetService {
                 this.warn(`[Limit] Pause downloading. Resuming next batch...`);
                 break;
             }
-
             try {
                 const orderUrl = `https://dwayinstalls.hns.com/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${encodeURIComponent(id)}`;
                 const res = await this.safeFetch(orderUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
                 const html = await res.text();
                 const parsed = this.parseOrderPage(html, id);
-                
                 if (parsed.address) {
                     delete parsed._status; 
                     orderDb[id] = parsed;
@@ -203,7 +197,6 @@ export class HughesNetService {
                 if (e.message === 'REQ_LIMIT') { incomplete = true; break; }
             }
         }
-
         if (dbDirty) {
             await this.kv.put(`hns:db:${userId}`, JSON.stringify(orderDb));
             this.log(`[Stage 1] Saved ${fetchedCount} orders. Pausing to save.`);
@@ -211,9 +204,7 @@ export class HughesNetService {
         }
     }
 
-    // STAGE 2: PROCESSING 
     this.log(`[Stage 2] Processing Routes...`);
-    
     const ordersByDate: Record<string, any[]> = {};
     for (const order of Object.values(orderDb)) {
         if (!order.confirmScheduleDate || !order.address) continue;
@@ -230,21 +221,17 @@ export class HughesNetService {
     
     let tripsProcessed = 0;
     for (const date of sortedDates) {
-        
         if (this.requestCount >= (MAX_REQUESTS_PER_BATCH - 5)) {
             incomplete = true;
             this.warn(`[Limit] Buffer low (${this.requestCount}/${MAX_REQUESTS_PER_BATCH}). Stopping before ${date}.`);
             break;
         }
-
         const tripId = `hns_${userId}_${date}`;
-        
         const existingTrip = existingTrips.find(t => t.id === tripId);
         const needsCalc = !existingTrip || (existingTrip.totalMiles === 0);
 
         if (!needsCalc) continue; 
 
-        // --- CALCULATE ROUTE ---
         this.log(`[Stage 2] Routing ${date}...`);
         const daysOrders = ordersByDate[date];
         const success = await this.createTripForDate(
@@ -313,23 +300,49 @@ export class HughesNetService {
           }
       } catch(e) {}
 
-      // SORTING FIX:
-      // Sorts by time. The parsing logic now handles the case where "2:00" should be "14:00"
-      orders.sort((a, b) => this.parseTime(a.beginTime) - this.parseTime(b.beginTime));
+      // 1. Identify the Earliest Order for Start Time Calculation
+      let earliestOrder: any = null;
+      let earliestMins = 9999;
+
+      orders.forEach(o => {
+          const m = this.parseTime(o.beginTime);
+          if (m < earliestMins) {
+              earliestMins = m;
+              earliestOrder = o;
+          }
+      });
+
+      // 2. Sort Orders DESCENDING (Latest -> Earliest) as requested
+      orders.sort((a, b) => this.parseTime(b.beginTime) - this.parseTime(a.beginTime));
       
       const buildAddr = (o: any) => [o.address, o.city, o.state, o.zip].filter(Boolean).join(', ');
 
       let startAddr = defaultStart;
       let endAddr = defaultEnd;
       if (!startAddr && orders.length > 0) {
-          startAddr = buildAddr(orders[0]); 
+          startAddr = buildAddr(orders[0]); // Default to first listed (Latest) if no setting
           endAddr = startAddr;
       }
 
+      // --- CALCULATE COMMUTE FOR START TIME (Based on Earliest Job) ---
+      // We calculate the drive from Home -> Earliest Job specifically to set the trip start clock.
+      let commuteMins = 0;
+      if (earliestOrder && startAddr) {
+          const eAddr = buildAddr(earliestOrder);
+          if (eAddr !== startAddr) {
+              try {
+                  const leg = await this.getRouteInfo(startAddr, eAddr);
+                  if (leg) commuteMins = Math.round(leg.duration / 60);
+              } catch(e) { }
+          }
+      }
+      
+      const startMins = earliestMins !== 9999 ? (earliestMins - commuteMins) : (9 * 60);
+
+      // --- CALCULATE ROUTE TOTALS (Based on Sorted List: Latest -> Earliest) ---
       const points = [startAddr, ...orders.map((o:any) => buildAddr(o)), endAddr];
       let totalMins = 0;
       let totalMeters = 0;
-      let firstLegMins = 0;
 
       for (let i = 0; i < points.length - 1; i++) {
           const origin = points[i];
@@ -344,7 +357,6 @@ export class HughesNetService {
                   const m = Math.round(leg.duration / 60);
                   totalMins += m;
                   totalMeters += leg.distance;
-                  if (i === 0) firstLegMins = m;
                   this.log(`[Maps] Leg ${i+1}: ${m} min`);
               } else {
                   this.warn(`[Maps] Failed leg ${i+1}: ${origin} -> ${dest}`);
@@ -359,13 +371,6 @@ export class HughesNetService {
       }
 
       const miles = Number((totalMeters * 0.000621371).toFixed(1));
-      
-      let minMins = 9 * 60; 
-      if (orders.length > 0) {
-          const t = this.parseTime(orders[0].beginTime);
-          if (t < 24*60) minMins = t;
-      }
-      const startMins = minMins - firstLegMins;
       
       let jobMins = 0;
       orders.forEach((o:any) => jobMins += (o.jobDuration || 60));
@@ -446,11 +451,9 @@ export class HughesNetService {
           mpg, gasPrice: gas,
           fuelCost: Number(fuelCost.toFixed(2)),
           
-          // FIX: Add supply list to BOTH 'supplyItems' (singular) and 'suppliesItems' (plural)
-          // This ensures backward compatibility with pages using either field name
           suppliesCost: totalSuppliesCost,
           supplyItems: tripSupplies,
-          suppliesItems: tripSupplies,
+          suppliesItems: tripSupplies, // Double save for compatibility
           
           stops: stops,
           createdAt: new Date().toISOString(),
@@ -486,29 +489,16 @@ export class HughesNetService {
       return dateStr;
   }
 
-  // IMPROVED TIME PARSER
-  // Handles standard 24h times but also catches 12h formatting issues
+  // UPDATED: Strictly enforces 24h clock parsing
   private parseTime(timeStr: string): number {
-      if (!timeStr) return 9999;
+      if (!timeStr) return 0; // Default to 0 so unparsed morning jobs float to top in ascending sort (bottom in descending)
       
-      // Match HH:MM with optional AM/PM suffix
-      const m = timeStr.match(/(\d{1,2}):(\d{2})(?:\s*([APap]\.?[Mm]\.?))?/);
-      if (!m) return 9999;
+      const m = timeStr.match(/(\d{1,2})[:]?(\d{2})/);
+      if (!m) return 0;
       
       let h = parseInt(m[1]);
       let min = parseInt(m[2]);
-      const ampm = m[3] ? m[3].toLowerCase().replace(/\./g, '') : null;
-
-      if (ampm === 'pm' && h < 12) h += 12;
-      if (ampm === 'am' && h === 12) h = 0;
       
-      // AUTO-CORRECT HEURISTIC:
-      // If no AM/PM is present, but the hour is between 1 and 6, assume PM (13:00-18:00).
-      // This prevents "2:00" from being sorted as 2 AM before an 8 AM job.
-      if (!ampm && h >= 1 && h <= 6) {
-           h += 12; 
-      }
-
       return h * 60 + min;
   }
 
@@ -628,14 +618,14 @@ export class HughesNetService {
         if (m) out.confirmScheduleDate = m[1];
     }
 
-    // TIME PARSING (Improved)
+    // TIME PARSING
     // 1. Try hidden input
     const time = html.match(/name=["']f_begin_time["'][^>]*value=["']([^"']*)["']/i);
     if (time && time[1]) {
         out.beginTime = time[1];
     } else {
-        // 2. Try scraping visual text (e.g. "Begin Time: 2:00 PM")
-        const visTime = text.match(/Begin Time:?\s*(\d{1,2}:\d{2}\s*[AP]M)/i);
+        // 2. Try scraping visual text (e.g. "Begin Time: 14:00")
+        const visTime = text.match(/Begin Time:?\s*(\d{1,2}:?\d{2})/i);
         if (visTime) out.beginTime = visTime[1];
     }
 
