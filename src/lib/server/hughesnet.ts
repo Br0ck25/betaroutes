@@ -56,6 +56,8 @@ export class HughesNetService {
         for (const link of priorityLinks) {
             console.log(`[HNS] Scanning: ${link.text}`);
             await this.scanUrlForOrders(link.url, cookie, uniqueIds);
+            // Small delay between menu scans
+            await new Promise(r => setTimeout(r, 500)); 
         }
     }
 
@@ -63,30 +65,32 @@ export class HughesNetService {
     console.log(`[HNS] Total unique orders found: ${finalIds.length}`);
     await this.kv.put(`hns:orders_index:${userId}`, JSON.stringify(finalIds));
 
-    // FETCH DETAILS
+    // FETCH DETAILS (UPDATED: SEQUENTIAL + DELAY)
     const orders: any[] = [];
-    const BATCH_SIZE = 5;
     
-    for (let i = 0; i < finalIds.length; i += BATCH_SIZE) {
-        const batch = finalIds.slice(i, i + BATCH_SIZE);
-        await Promise.all(batch.map(async (id) => {
-            try {
-                const orderUrl = `https://dwayinstalls.hns.com/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${encodeURIComponent(id)}`;
-                const res = await fetch(orderUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
-                const orderHtml = await res.text();
-                
-                const parsed = this.parseOrderPage(orderHtml, id);
-                if (parsed.address) {
-                    await this.kv.put(`hns:orders:${userId}:${id}`, JSON.stringify(parsed));
-                    orders.push(parsed);
-                } else {
-                    // Log failed parse to help debugging
-                    console.warn(`[HNS] Skipped Order ${id} due to missing address.`);
-                }
-            } catch (err) {
-                console.error(`[HNS] Error syncing ${id}`, err);
+    // Formerly BATCH_SIZE = 5. Now doing 1 by 1 to prevent blocking.
+    for (const id of finalIds) {
+        try {
+            // Rate Limit Protection: Wait 300ms - 600ms between requests
+            const delay = Math.floor(Math.random() * 300) + 300;
+            await new Promise(r => setTimeout(r, delay));
+
+            const orderUrl = `https://dwayinstalls.hns.com/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${encodeURIComponent(id)}`;
+            const res = await fetch(orderUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
+            const orderHtml = await res.text();
+            
+            const parsed = this.parseOrderPage(orderHtml, id);
+            
+            if (parsed.address) {
+                await this.kv.put(`hns:orders:${userId}:${id}`, JSON.stringify(parsed));
+                orders.push(parsed);
+                console.log(`[HNS] Synced Order ${id}`);
+            } else {
+                console.warn(`[HNS] Skipped Order ${id} (Address parsing failed).`);
             }
-        }));
+        } catch (err) {
+            console.error(`[HNS] Error syncing ${id}`, err);
+        }
     }
 
     if (orders.length > 0) {
@@ -193,6 +197,7 @@ export class HughesNetService {
     return Array.from(ids);
   }
 
+  // UPDATED: The Robust Parser from previous step
   private parseOrderPage(html: string, id: string) {
     let text = html.replace(/<br\s*\/?>/gi, ' ').replace(/<\/td>/gi, '  ').replace(/<\/div>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
     const out: any = { 
@@ -203,39 +208,56 @@ export class HughesNetService {
         zip: '', 
         confirmScheduleDate: '', 
         beginTime: '',
-        type: 'Repair', // Default
-        jobDuration: 60 // Minutes
+        type: 'Repair', 
+        jobDuration: 60 
     };
 
-    // --- PARSE ADDRESS ---
+    // 1. Standard Input
     const addrInput = html.match(/name=["']FLD_SO_Address1["'][^>]*value=["']([^"']*)["']/i);
-    if (addrInput) {
-        out.address = addrInput[1].trim();
-    } else {
-        // [DEBUG] CRITICAL LOGGING FOR CLOUDFLARE BLOCKING
-        console.warn(`[HNS DEBUG] Failed to parse Address for Order ${id}.`);
-        console.warn(`[HNS DEBUG] HTML Preview: ${html.substring(0, 500)}...`); 
+    if (addrInput) out.address = addrInput[1].trim();
+
+    // 2. Reversed Input
+    if (!out.address) {
+        const addrInputRev = html.match(/value=["']([^"']*)["'][^>]*name=["']FLD_SO_Address1["']/i);
+        if (addrInputRev) out.address = addrInputRev[1].trim();
+    }
+
+    // 3. Alt Names
+    if (!out.address) {
+         const addrAlt = html.match(/name=["'](?:f_address|txtAddress)["'][^>]*value=["']([^"']*)["']/i);
+         if (addrAlt) out.address = addrAlt[1].trim();
+    }
+
+    // 4. Visual Text
+    if (!out.address) {
+        const addressMatch = text.match(/Address:\s*(.*?)\s+(?:City|County|State)/i);
+        if (addressMatch) out.address = addressMatch[1].trim().split(/county:/i)[0].trim();
+    }
+
+    // 5. Fallback
+    if (!out.address) {
+         const svcLoc = text.match(/Service Location:?\s*(.*?)\s+(?:City|State|Zip)/i);
+         if (svcLoc) out.address = svcLoc[1].trim();
+    }
+    
+    // DEBUG: Log failure
+    if (!out.address) {
+        console.warn(`[HNS DEBUG] ❌ FAILED to find address for Order ${id}`);
     }
 
     const cityInput = html.match(/name=["']f_city["'][^>]*value=["']([^"']*)["']/i);
     if (cityInput) out.city = cityInput[1].trim();
-
+    
     const stateInput = html.match(/name=["']f_state["'][^>]*value=["']([^"']*)["']/i);
     if (stateInput) out.state = stateInput[1].trim();
 
     const zipInput = html.match(/name=["']f_zip["'][^>]*value=["']([^"']*)["']/i);
     if (zipInput) out.zip = zipInput[1].trim();
-
-    if (!out.address) {
-        const addressMatch = text.match(/Address:\s*(.*?)\s+(?:City|County|State)/i);
-        if (addressMatch) out.address = addressMatch[1].trim().split(/county:/i)[0].trim();
-    }
-    if (!out.zip) {
+    else {
         const zipMatch = html.match(/Zip(?:\/Postal)?:\s*(?:<[^>]+>)*\s*(\d{5})/i);
         if (zipMatch) out.zip = zipMatch[1];
     }
 
-    // --- PARSE DATE & TIME ---
     const dateInput = html.match(/name=["']f_sched_date["'][^>]*value=["']([^"']*)["']/i);
     if (dateInput) out.confirmScheduleDate = dateInput[1];
     else {
@@ -250,17 +272,15 @@ export class HughesNetService {
         if (m) out.beginTime = m[1];
     }
 
-    // --- PARSE JOB TYPE (INSTALL VS REPAIR) ---
     const typeMatch = html.match(/Service Order #:\d+.*?(Repair|Install)/i) || html.match(/class="PgTtl"[^>]*>.*?(Repair|Install)/si);
-    
     if (typeMatch) {
         const foundType = typeMatch[1].toLowerCase();
         if (foundType === 'install') {
             out.type = 'Install';
-            out.jobDuration = 90; // 1.5 Hours
+            out.jobDuration = 90; 
         } else {
             out.type = 'Repair';
-            out.jobDuration = 60; // 1.0 Hours
+            out.jobDuration = 60; 
         }
     } else if (text.toLowerCase().includes('install')) {
          out.type = 'Install';
@@ -282,8 +302,8 @@ export class HughesNetService {
     // FETCH SETTINGS
     let defaultStartAddress = '';
     let defaultEndAddress = '';
-    let defaultMPG = 25; // Default fallback
-    let defaultGasPrice = 3.50; // Default fallback
+    let defaultMPG = 25; 
+    let defaultGasPrice = 3.50; 
     const settingsKey = settingsId || userId;
 
     try {
@@ -297,14 +317,9 @@ export class HughesNetService {
             const s = data.settings || data; 
             defaultStartAddress = s.defaultStartAddress || '';
             defaultEndAddress = s.defaultEndAddress || s.defaultStartAddress || '';
-            
-            // Extract MPG and Gas Price
             if (s.defaultMPG) defaultMPG = parseFloat(s.defaultMPG);
             if (s.defaultGasPrice) defaultGasPrice = parseFloat(s.defaultGasPrice);
-            
-            console.log(`[HNS] Settings Loaded for ${settingsKey}. Start="${defaultStartAddress}" MPG=${defaultMPG} Gas=${defaultGasPrice}`);
-        } else {
-            console.log(`[HNS] No Settings found for ${settingsKey}`);
+            console.log(`[HNS] Settings Loaded for ${settingsKey}. Start="${defaultStartAddress}"`);
         }
     } catch (e) { console.error('[HNS] Error reading settings:', e); }
 
@@ -347,11 +362,7 @@ export class HughesNetService {
 
       if (!tripStart) {
           const firstJobAddr = buildAddr(earliestOrder);
-          // If address parsing failed, this might be empty string
-          if (firstJobAddr.length < 5) {
-              console.warn(`[HNS] Warning: Start Address is empty (Job Address missing). Route calcs will fail.`);
-          }
-          console.log(`[HNS] Using Job Address as Start: ${firstJobAddr}`);
+          if (firstJobAddr.length < 5) console.warn(`[HNS] Warning: Start Address is empty/short.`);
           tripStart = firstJobAddr;
           tripEnd = tripStart;
       }
@@ -361,7 +372,6 @@ export class HughesNetService {
       let totalDistanceMeters = 0;
       let startToFirstJobMinutes = 0;
 
-      // Construct path: Start -> Job1 -> Job2 ... -> JobN -> End
       const routePoints = [tripStart];
       daysOrders.forEach(o => routePoints.push(buildAddr(o)));
       routePoints.push(tripEnd);
@@ -373,23 +383,23 @@ export class HughesNetService {
           const dest = routePoints[i+1];
           
           if (origin === dest) continue;
-          
-          // Skip API call if addresses are obviously bad
           if (!origin || !dest || origin.length < 3 || dest.length < 3) {
-             console.warn(`[HNS] Skipping leg ${i+1} due to missing address: "${origin}" -> "${dest}"`);
+             console.warn(`[HNS] Skipping leg ${i+1} (missing address): "${origin}" -> "${dest}"`);
              continue;
           }
 
-          // Call Google Maps API
+          // UPDATED: Added delay for Google Maps QPS protection
+          if (i > 0) {
+              await new Promise(r => setTimeout(r, 200)); // 200ms delay between route calls
+          }
+
           const leg = await this.getRouteInfo(origin, dest);
           
           if (leg) {
               const legMinutes = Math.round(leg.duration / 60);
               totalDriveMinutes += legMinutes;
               totalDistanceMeters += leg.distance;
-              
               if (i === 0) startToFirstJobMinutes = legMinutes;
-              
               console.log(`[HNS] Leg ${i+1}: ${origin} -> ${dest} = ${legMinutes}m`);
           } else {
               console.warn(`[HNS] Failed leg ${i+1}: ${origin} -> ${dest}`);
@@ -397,8 +407,6 @@ export class HughesNetService {
       }
 
       const totalDistanceMiles = Number((totalDistanceMeters * 0.000621371).toFixed(1));
-
-      // Subtract ONE-WAY (Start->Job1) drive time from the first appointment time for START TIME
       const tripStartMinutes = minMinutes - startToFirstJobMinutes;
       const startTime = this.minutesToTime(tripStartMinutes);
       
@@ -406,20 +414,14 @@ export class HughesNetService {
       const m = totalDriveMinutes % 60;
       const totalTimeStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
 
-      // --- NEW: Calculate Total Work Day Hours (Drive + Jobs) ---
       let totalJobMinutes = 0;
-      daysOrders.forEach(o => {
-          totalJobMinutes += (o.jobDuration || 60);
-      });
+      daysOrders.forEach(o => { totalJobMinutes += (o.jobDuration || 60); });
 
       const totalWorkDayMinutes = totalDriveMinutes + totalJobMinutes;
       const hoursWorked = Number((totalWorkDayMinutes / 60).toFixed(2));
-
-      // Calculate End Time
       const endTimeMinutes = tripStartMinutes + totalWorkDayMinutes;
       const endTime = this.minutesToTime(endTimeMinutes);
 
-      // --- PAY LOGIC ---
       const calculatePay = (orderType: string) => {
           if (orderType === 'Install') return installPay;
           if (orderType === 'Repair') return repairPay;
