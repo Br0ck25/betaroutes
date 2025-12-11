@@ -1,63 +1,52 @@
-// src/routes/api/autocomplete/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { KVNamespace } from '@cloudflare/workers-types';
 
 export const GET: RequestHandler = async ({ url, platform }) => {
-	const query = url.searchParams.get('q')?.toLowerCase();
-	
-	if (!query || query.length < 2) return json([]);
+    const query = url.searchParams.get('q');
+    
+    // 1. Validation
+    if (!query || query.length < 2) {
+        return json([]);
+    }
 
-	const placesKV = platform?.env?.BETA_PLACES_KV as KVNamespace;
+    const placesKV = platform?.env?.BETA_PLACES_KV as KVNamespace;
+    if (!placesKV) {
+        // Fallback for local dev if KV isn't mocked properly
+        console.warn('BETA_PLACES_KV not found');
+        return json([]);
+    }
 
-	if (!placesKV) {
-		console.error('[API:Autocomplete:GET] ❌ BETA_PLACES_KV is NOT bound!');
-		return json([]);
-	}
+    try {
+        // 2. Normalize Query to Lowercase
+        // This is the CRITICAL FIX. The DB has "las vegas", so we must search for "las".
+        const prefix = query.toLowerCase().trim();
 
-	try {
-		const list = await placesKV.list({ prefix: query, limit: 5 });
-		const results = [];
-		for (const key of list.keys) {
-			const value = await placesKV.get(key.name, 'json');
-			if (value) results.push(value);
-		}
+        // 3. Search KV
+        const list = await placesKV.list({ 
+            prefix, 
+            limit: 5 // Limit results to keep it fast
+        });
 
-		return json(results);
-	} catch (e) {
-		console.error('[API:Autocomplete:GET] Error:', e);
-		return json([]);
-	}
-};
+        const results = [];
 
-export const POST: RequestHandler = async ({ request, platform }) => {
-	console.log('[API:Autocomplete:POST] 💾 SAVE REQUEST RECEIVED');
-	
-	const placesKV = platform?.env?.BETA_PLACES_KV as KVNamespace;
-	
-	if (!placesKV) {
-		console.error('[API:Autocomplete:POST] ❌ BETA_PLACES_KV is MISSING!');
-		return json({ success: false, error: 'Database not connected' }, { status: 500 });
-	}
+        // 4. Fetch details for each match
+        for (const key of list.keys) {
+            const raw = await placesKV.get(key.name);
+            if (raw) {
+                try {
+                    const place = JSON.parse(raw);
+                    results.push(place);
+                } catch (e) {
+                    // Ignore corrupted entries
+                }
+            }
+        }
 
-	try {
-		const body = await request.json();
+        return json(results);
 
-		if (!body.formatted_address && !body.name) {
-			console.error('[API:Autocomplete:POST] ❌ Missing address/name');
-			return json({ success: false, error: 'Invalid data' }, { status: 400 });
-		}
-
-		// Use address as key, fallback to name
-		const key = (body.formatted_address || body.name).toLowerCase();
-		
-		console.log(`[API:Autocomplete:POST] Writing to KV key: "${key}"`);
-		await placesKV.put(key, JSON.stringify(body));
-		console.log('[API:Autocomplete:POST] ✅ Save successful');
-
-		return json({ success: true, key });
-	} catch (e) {
-		console.error('[API:Autocomplete:POST] ❌ Save failed:', e);
-		return json({ success: false, error: String(e) }, { status: 500 });
-	}
+    } catch (e) {
+        console.error('Autocomplete Error:', e);
+        return json({ error: String(e) }, { status: 500 });
+    }
 };

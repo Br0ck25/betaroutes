@@ -65,7 +65,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     suggestionsList = document.createElement('ul');
     Object.assign(suggestionsList.style, {
       position: 'absolute',
-      zIndex: '9999', // Ensure it sits above Google's .pac-container (usually 1000)
+      zIndex: '2147483647', // Ensure it sits above Google's .pac-container (usually 1000)
       backgroundColor: 'white',
       border: '1px solid #ddd',
       borderRadius: '0 0 8px 8px',
