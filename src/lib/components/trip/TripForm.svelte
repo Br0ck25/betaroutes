@@ -48,8 +48,9 @@
   let directionsService: google.maps.DirectionsService | null = null;
   let directionsRenderer: google.maps.DirectionsRenderer | null = null;
   let mapElement: HTMLElement;
-  let mapsLoaded = false;
-  let loadingMaps = true;
+  
+  // NOTE: loadingMaps state now reflects if the script is loaded OR loading
+  let mapsLoaded = false; 
 
   function convertDistance(miles: number) {
     return distanceUnit === 'km' ? miles * 1.60934 : miles;
@@ -70,17 +71,9 @@
     if (draft && confirm('Resume your last unsaved trip?')) {
       loadDraft(draft);
     }
-
-    // Load Google Maps API (but do not initialize the map visual yet)
-    try {
-        await loadGoogle(API_KEY);
-        mapsLoaded = true;
-        // Map initialization removed from here to save resources
-    } catch (e) {
-        alert('Failed to load Google Maps');
-    } finally {
-        loadingMaps = false;
-    }
+    
+    // REMOVED: Eager loading of Google Maps.
+    // It will now load only when user interacts with inputs or clicks Calculate.
 
     const autoSaveInterval = setInterval(() => saveDraft(), 5000);
 
@@ -90,8 +83,12 @@
   });
 
   async function initializeMap() {
-    if (!mapsLoaded || !mapElement) return;
+    if (!mapElement) return;
     try {
+      // Ensure API is loaded before we try to construct Map objects
+      await loadGoogle(API_KEY);
+      mapsLoaded = true;
+
       map = new google.maps.Map(mapElement, {
         center: { lat: 37.7749, lng: -122.4194 },
         zoom: 12
@@ -100,6 +97,7 @@
       directionsRenderer = new google.maps.DirectionsRenderer({ map });
     } catch (error) {
       console.error('Error initializing map:', error);
+      alert('Failed to load Google Maps network');
     }
   }
 
@@ -115,7 +113,7 @@
 
   async function addDestination() {
     destinations = [...destinations, { address: '', earnings: 0 }];
-    await tick(); 
+    await tick();
   }
 
   async function removeDestination(index: number) {
@@ -139,13 +137,7 @@
   }
 
   async function calculateRoute() {
-    // 1. Check if API is loaded (Map object might not be yet)
-    if (!mapsLoaded) {
-      alert('Google Maps API not loaded. Please refresh.');
-      return;
-    }
-
-    // 2. Validate addresses
+    // 1. Validate addresses
     if (!startAddress || destinations.some(d => !d.address.trim())) {
       alert('Please fill in all addresses');
       return;
@@ -154,13 +146,13 @@
     calculating = true;
 
     try {
-      // 3. Lazy Load: Initialize the map now if it doesn't exist [!code ++]
+      // 2. Ensure Map and API are initialized
       if (!map || !directionsService || !directionsRenderer) {
-          await initializeMap();
+         await initializeMap();
       }
 
       if (!directionsService || !directionsRenderer) {
-           throw new Error('Failed to initialize directions service');
+         throw new Error('Failed to initialize directions service');
       }
 
       const waypoints = destinations.map(d => ({
@@ -355,10 +347,6 @@
 <div class="container">
   <h2>Plan Your Trip</h2>
 
-  {#if loadingMaps}
-    <div class="loading-banner">Loading Google Maps...</div>
-  {/if}
-
   <div class="form-section">
     <label>Date <input type="date" bind:value={date} /></label>
 
@@ -444,8 +432,8 @@
   {/if}
 
   <div class="actions">
-    <button class="primary" on:click={calculateRoute} disabled={calculating || !mapsLoaded}>
-      {calculating ? 'Calculating...' : !mapsLoaded ? 'Loading...' : 'Calculate Route'}
+    <button class="primary" on:click={calculateRoute} disabled={calculating}>
+      {calculating ? 'Calculating...' : 'Calculate Route'}
     </button>
 
     {#if calculated}
@@ -456,7 +444,6 @@
 
 <style>
   .container { max-width: 900px; margin: 0 auto; padding: 20px; }
-  .loading-banner { background: #fff3cd; color: #856404; padding: 12px; border-radius: 6px; margin-bottom: 16px; text-align: center; }
   .form-section { background: white; padding: 24px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); margin-bottom: 20px; }
   label { display: block; font-weight: 600; margin-bottom: 16px; }
   input, textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px; margin-top: 4px; }
