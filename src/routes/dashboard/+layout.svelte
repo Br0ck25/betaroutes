@@ -444,9 +444,10 @@ onMount(async () => {
     text-overflow: ellipsis;
   }
   
-  .user-plan {
+.user-plan {
     font-size: 12px;
     color: #6B7280;
+    text-transform: capitalize;
   }
   
   .logout-btn {

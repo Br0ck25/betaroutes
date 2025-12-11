@@ -587,15 +587,20 @@
       <div class="divider"></div>
 
       <div class="plan-section">
-        <div class="plan-info">
-          <label for="plan-badge">Current Plan</label>
-          <div class="plan-row">
-            <div id="plan-badge" class="plan-badge">{$auth.user?.plan || 'Free'} Plan</div>
-            {#if $auth.user?.plan === 'free'}
-              <a href="/#pricing" class="upgrade-link">Upgrade to Pro</a>
-            {/if}
-          </div>
-        </div>
+<div class="plan-info">
+  <label for="plan-badge">Current Plan</label>
+  <div class="plan-row">
+    <div id="plan-badge" class="plan-badge" style="text-transform: capitalize;">
+      {$auth.user?.plan || 'free'} Plan
+    </div>
+    
+    {#if !$auth.user?.plan || $auth.user?.plan === 'free'}
+      <a href="/#pricing" class="upgrade-link">Upgrade to Pro</a>
+    {:else if $auth.user?.plan === 'pro'}
+      <a href="/contact" class="upgrade-link">Upgrade to Business</a>
+    {/if}
+  </div>
+</div>
 
         {#if $auth.user?.plan === 'free'}
           <div class="usage-stats">

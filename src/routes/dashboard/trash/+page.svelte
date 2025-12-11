@@ -27,7 +27,6 @@
         const potentialIds = new Set<string>();
         if ($user?.name) potentialIds.add($user.name);
         if ($user?.token) potentialIds.add($user.token);
-        
         const offlineId = localStorage.getItem('offline_user_id');
         if (offlineId) potentialIds.add(offlineId);
 
@@ -73,16 +72,31 @@
       restoring = restoring;
     }
   }
+
+  async function restoreAll() {
+    if (trashedTrips.length === 0) return;
+    if (!confirm(`Are you sure you want to restore all ${trashedTrips.length} items?`)) return;
+
+    loading = true;
+    try {
+        await Promise.all(trashedTrips.map(trip => trash.restore(trip.id, trip.userId)));
+        const userId = $user?.name || $user?.token;
+        if (userId) await trips.load(userId);
+        await loadTrash();
+    } catch (err) {
+        console.error('Failed to restore all:', err);
+        alert('Failed to restore some items.');
+        loading = false;
+    }
+  }
   
   async function permanentDelete(id: string) {
     if (!confirm('Permanently delete this trip? Cannot be undone.')) return;
-    
     const item = trashedTrips.find(t => t.id === id);
     if (!item) return;
     if (deleting.has(id)) return;
     deleting.add(id);
     deleting = deleting;
-
     try {
       await trash.permanentDelete(id, item.userId);
       await loadTrash();
@@ -96,7 +110,6 @@
   
   async function emptyTrash() {
     if (!confirm('Permanently delete ALL items? Cannot be undone.')) return;
-    
     try {
       const uniqueUserIds = new Set(trashedTrips.map(t => t.userId));
       let totalDeleted = 0;
@@ -140,11 +153,25 @@
     
     <div class="header-actions">
       {#if trashedTrips.length > 0}
+        <button class="btn-success" on:click={restoreAll}>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M4 4V9H4.58579M4.58579 9H9M4.58579 9L9 4.41421M16 16V11H15.4142M15.4142 11H11M15.4142 11L11 15.5858" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Restore All
+        </button>
+        
         <button class="btn-danger" on:click={emptyTrash}>
-          Empty Trash
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M2 4H14M12 4V13C12 13.5304 11.7893 14.0391 11.4142 14.4142C11.0391 14.7893 10.5304 15 10 15H6C5.46957 15 4.96086 14.7893 4.58579 14.4142C4.21071 14.0391 4 13.5304 4 13V4M5 4V3C5 2.46957 5.21071 1.96086 5.58579 1.58579C5.96086 1.21071 6.46957 1 7 1H9C9.53043 1 10.0391 1.21071 10.4142 1.58579C10.7893 1.96086 11 2.46957 11 3V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Empty Trash
         </button>
       {/if}
+      
       <button class="btn-secondary" on:click={() => goto('/dashboard/trips')}>
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M10 19L3 12M3 12L10 5M3 12H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
         Back to Trips
       </button>
     </div>
@@ -192,10 +219,10 @@
           </div>
 
           <div class="trip-actions">
-            <button class="btn-restore" on:click={() => restoreTrip(trip.id)} disabled={restoring.has(trip.id)}>
+            <button class="btn-restore-item" on:click={() => restoreTrip(trip.id)} disabled={restoring.has(trip.id)}>
               {restoring.has(trip.id) ? 'Restoring...' : 'Restore'}
             </button>
-            <button class="btn-delete" on:click={() => permanentDelete(trip.id)} disabled={deleting.has(trip.id)}>
+            <button class="btn-delete-item" on:click={() => permanentDelete(trip.id)} disabled={deleting.has(trip.id)}>
               Delete
             </button>
           </div>
@@ -214,14 +241,39 @@
   .page-subtitle { font-size: 14px; color: #6B7280; margin: 0; line-height: 1.4; }
   
   .header-actions { display: flex; gap: 12px; width: 100%; }
-  .header-actions button { flex: 1; justify-content: center; }
 
+  /* Top-level Buttons - Matched to Trips Page */
+  .btn-danger, .btn-success, .btn-secondary {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 16px;
+    border: none; border-radius: 8px; font-weight: 600; font-size: 14px; 
+    cursor: pointer; transition: all 0.2s; flex: 1; text-decoration: none;
+  }
+
+  .btn-danger {
+    background: #DC2626; color: white;
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+  }
+  .btn-danger:hover { background: #B91C1C; }
+
+  .btn-success {
+    background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+  }
+  .btn-success:hover { filter: brightness(1.1); }
+
+  .btn-secondary {
+    background: white; color: #374151; border: 1px solid #E5E7EB;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  }
+  .btn-secondary:hover { background: #F9FAFB; border-color: #D1D5DB; }
+
+  /* List Styling */
   .trash-list { display: flex; flex-direction: column; gap: 16px; }
   
   .trash-item { 
     display: flex; flex-direction: column; /* Stack on mobile */
     gap: 16px; padding: 16px; 
-    background: white; border: 1px solid #E5E7EB; border-radius: 12px; 
+    background: white; border: 1px solid #E5E7EB; border-radius: 12px;
     transition: all 0.2s; 
   }
   
@@ -238,15 +290,14 @@
   
   .trip-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
   
-  button { 
-    display: flex; align-items: center; gap: 6px; padding: 10px 16px; 
-    border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; 
+  /* Item Action Buttons (Smaller) */
+  .btn-restore-item, .btn-delete-item { 
+    display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 16px;
+    border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s;
   }
   
-  .btn-secondary { background: white; color: #374151; border: 1px solid #D1D5DB; }
-  .btn-restore { background: #DCFCE7; color: #166534; justify-content: center; }
-  .btn-delete { background: #FEF2F2; color: #DC2626; justify-content: center; }
-  .btn-danger { background: #DC2626; color: white; }
+  .btn-restore-item { background: #DCFCE7; color: #166534; }
+  .btn-delete-item { background: #FEF2F2; color: #DC2626; }
 
   .empty-state { text-align: center; padding: 40px 20px; }
   .empty-state svg { margin-bottom: 16px; }
@@ -258,6 +309,7 @@
     
     .trash-item { flex-direction: row; align-items: center; }
     .trip-actions { width: auto; display: flex; }
-    .btn-restore, .btn-delete { width: auto; }
+    
+    .btn-danger, .btn-success, .btn-secondary { width: auto; flex: none; }
   }
 </style>

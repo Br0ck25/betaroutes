@@ -215,7 +215,7 @@
                </button>
                
                <button class="btn-secondary danger-hover" on:click={handleClear} disabled={loading}>
-                  Reset HNS Trips
+                  Delete HNS Trips
                </button>
           </div>
       {/if}
