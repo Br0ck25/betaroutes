@@ -83,8 +83,6 @@ export class HughesNetService {
     // =========================================================
     // STAGE 1: HARVESTING (Download missing data)
     // =========================================================
-    // We prioritize downloading missing orders over routing.
-    // If we fetch even one new order, we stop and save to avoid timeouts.
     
     if (!skipScan) {
         try {
@@ -160,7 +158,6 @@ export class HughesNetService {
     // =========================================================
     // STAGE 2: PROCESSING (Generate Trips Date-by-Date)
     // =========================================================
-    // Only reachable if Stage 1 found no new data (or cache is full)
     
     this.log(`[Stage 2] Processing Routes (Date by Date)...`);
     
@@ -181,8 +178,7 @@ export class HughesNetService {
     // Load existing trips (to check if we need to update)
     const tripService = makeTripService(this.tripKV, this.trashKV);
     const existingTrips = await tripService.list(userId);
-    const existingDates = new Set(existingTrips.map(t => t.date));
-
+    
     // Process Dates
     let tripsProcessed = 0;
     for (const date of sortedDates) {
@@ -196,12 +192,8 @@ export class HughesNetService {
         // Deterministic ID: hns_USER_DATE
         const tripId = `hns_${userId}_${date}`;
         
-        // CHECK: If trip exists and looks complete, skip it to save API calls
-        // (Unless we want to force refresh? For now, skip to be fast)
-        // We define "Complete" as having miles > 0
+        // CHECK: If trip exists and looks complete (miles > 0), skip it
         const existingTrip = existingTrips.find(t => t.id === tripId);
-        
-        // Logic: Recalculate if it doesn't exist OR if it has 0 miles (failed previously)
         const needsCalc = !existingTrip || (existingTrip.totalMiles === 0);
 
         if (!needsCalc) continue; 
@@ -212,7 +204,6 @@ export class HughesNetService {
         const success = await this.createTripForDate(userId, date, daysOrders, settingsId, installPay, repairPay, tripService);
         
         if (!success) {
-            // If routing failed due to limits/errors
             if (this.requestCount >= MAX_REQUESTS_PER_BATCH) {
                 incomplete = true;
                 break;
@@ -260,7 +251,7 @@ export class HughesNetService {
       installPay: number, repairPay: number, tripService: any
   ): Promise<boolean> {
       
-      // Load Settings (Once per date is fine, or cache globally)
+      // Load Settings
       let defaultStart = '', defaultEnd = '', mpg = 25, gas = 3.50;
       try {
           const sRaw = await this.settingsKV.get(settingsId || userId) || await this.settingsKV.get(userId);
@@ -276,7 +267,6 @@ export class HughesNetService {
       // Sort & Prep
       orders.sort((a, b) => this.parseTime(a.beginTime) - this.parseTime(b.beginTime));
       
-      // Helper
       const buildAddr = (o: any) => [o.address, o.city, o.state, o.zip].filter(Boolean).join(', ');
 
       let startAddr = defaultStart;
@@ -286,13 +276,12 @@ export class HughesNetService {
           endAddr = startAddr;
       }
 
-      // Route Points
       const points = [startAddr, ...orders.map((o:any) => buildAddr(o)), endAddr];
       
       let totalMins = 0;
       let totalMeters = 0;
       let firstLegMins = 0;
-      let routeComplete = true;
+      let routeIncomplete = false;
 
       // Google Maps Loop
       for (let i = 0; i < points.length - 1; i++) {
@@ -316,16 +305,20 @@ export class HughesNetService {
           } catch (e: any) {
               if (e.message === 'REQ_LIMIT') {
                   this.warn(`[Limit] Routing stopped at ${date} Leg ${i+1}`);
-                  return false; // Fail this date
+                  routeIncomplete = true;
+                  break; 
               }
               this.error(`[Maps] Error`, e);
           }
       }
 
+      if (routeIncomplete) {
+          return false; // Fail this date, don't save
+      }
+
       // Calculations
       const miles = Number((totalMeters * 0.000621371).toFixed(1));
       
-      // Start Time
       let minMins = 9 * 60; // 9am default
       if (orders.length > 0) {
           const t = this.parseTime(orders[0].beginTime);
@@ -372,8 +365,6 @@ export class HughesNetService {
           syncStatus: 'synced'
       };
 
-      // Save using TripService
-      // Note: We use put() which overwrites if ID exists.
       await tripService.put(trip as any);
       this.log(`[Stage 2] Saved Trip ${date} ($${trip.fuelCost} fuel, ${miles} mi)`);
       
@@ -421,10 +412,40 @@ export class HughesNetService {
       return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
   }
 
-  // (Scanning/Parsing helpers kept same as previous versions for brevity, but integrated above)
-  // ... extractIds, extractMenuLinks, extractFrameUrls, scanUrlForOrders, extractNextPageUrl ...
-  // Ensuring scanUrlForOrders uses safeFetch is critical.
-  
+  private async ensureSessionCookie(userId: string) {
+    const session = await this.kv.get(`hns:session:${userId}`);
+    if (session) return session;
+    const enc = await this.kv.get(`hns:cred:${userId}`);
+    if (!enc) return null;
+    const credsJson = await this.decrypt(enc);
+    if (!credsJson) return null;
+    const creds = JSON.parse(credsJson);
+    return this.loginAndStoreSession(userId, creds.username, creds.password);
+  }
+
+  private async loginAndStoreSession(userId: string, username: string, password: string) {
+    const form = new URLSearchParams();
+    form.append('User', username);
+    form.append('Password', password);
+    form.append('Submit', 'Log In');
+    form.append('ScreenSize', 'MED');
+    form.append('AuthSystem', 'HNS');
+    const res = await this.safeFetch(LOGIN_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': USER_AGENT }, body: form.toString(), redirect: 'manual' });
+    let cookie = this.extractCookie(res);
+    if (!cookie && res.status === 302) {
+        const res2 = await this.safeFetch(res.headers.get('location') ? `${BASE_URL}${res.headers.get('location')}` : HOME_URL, { method: 'GET', headers: { 'Referer': LOGIN_URL, 'User-Agent': USER_AGENT }, redirect: 'manual' });
+        cookie = this.extractCookie(res2);
+    }
+    if (cookie) await this.kv.put(`hns:session:${userId}`, cookie, { expirationTtl: 60 * 60 * 24 * 2 });
+    return cookie;
+  }
+
+  private extractCookie(res: Response) {
+    const h = res.headers.get('set-cookie');
+    if (!h) return null;
+    return h.split(/,(?=[^;]+=)/g).map(p => p.split(';')[0].trim()).filter(Boolean).join('; ');
+  }
+
   private async scanUrlForOrders(url: string, cookie: string, idSet: Set<string>) {
       let current = url;
       let page = 0;
@@ -434,7 +455,7 @@ export class HughesNetService {
               const html = await res.text();
               this.extractIds(html).forEach(id => idSet.add(id));
               
-              if (page === 0) { // Check frames only on first page
+              if (page === 0) { 
                   const frames = this.extractFrameUrls(html);
                   for (const f of frames) {
                       try {
@@ -460,17 +481,6 @@ export class HughesNetService {
     return null;
   }
 
-  private extractIds(html: string) {
-    const ids = new Set<string>();
-    const clean = html.replace(/&amp;/g, '&');
-    let m;
-    const re1 = /viewservice\.jsp\?.*?\bid=(\d+)/gi;
-    while ((m = re1.exec(clean)) !== null) ids.add(m[1]);
-    const re2 = /[?&]id=(\d{8})\b/gi;
-    while ((m = re2.exec(clean)) !== null) ids.add(m[1]);
-    return Array.from(ids);
-  }
-
   private extractMenuLinks(html: string) {
     const links: { url: string, text: string }[] = [];
     const re = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi;
@@ -493,12 +503,21 @@ export class HughesNetService {
     return urls;
   }
 
+  private extractIds(html: string) {
+    const ids = new Set<string>();
+    const clean = html.replace(/&amp;/g, '&');
+    let m;
+    const re1 = /viewservice\.jsp\?.*?\bid=(\d+)/gi;
+    while ((m = re1.exec(clean)) !== null) ids.add(m[1]);
+    const re2 = /[?&]id=(\d{8})\b/gi;
+    while ((m = re2.exec(clean)) !== null) ids.add(m[1]);
+    return Array.from(ids);
+  }
+
   private parseOrderPage(html: string, id: string) {
-    // (Parsing logic identical to previous best version)
     const out: any = { id, address: '', city: '', state: '', zip: '', confirmScheduleDate: '', beginTime: '', type: 'Repair', jobDuration: 60 };
     const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
     
-    // Address
     const addr = html.match(/name=["']FLD_SO_Address1["'][^>]*value=["']([^"']*)["']/i) || html.match(/value=["']([^"']*)["'][^>]*name=["']FLD_SO_Address1["']/i);
     if (addr) out.address = addr[1].trim();
     if (!out.address) {
@@ -506,7 +525,6 @@ export class HughesNetService {
         if (m) out.address = m[1].trim().split(/county:/i)[0].trim();
     }
 
-    // City/State/Zip
     const city = html.match(/name=["']f_city["'][^>]*value=["']([^"']*)["']/i);
     if (city) out.city = city[1].trim();
     const state = html.match(/name=["']f_state["'][^>]*value=["']([^"']*)["']/i);
@@ -514,7 +532,6 @@ export class HughesNetService {
     const zip = html.match(/name=["']f_zip["'][^>]*value=["']([^"']*)["']/i);
     if (zip) out.zip = zip[1].trim();
 
-    // Date/Time
     const date = html.match(/name=["']f_sched_date["'][^>]*value=["']([^"']*)["']/i);
     if (date) out.confirmScheduleDate = date[1];
     else {
@@ -524,19 +541,33 @@ export class HughesNetService {
     const time = html.match(/name=["']f_begin_time["'][^>]*value=["']([^"']*)["']/i);
     if (time) out.beginTime = time[1];
 
-    // Type
     if (html.match(/Install/i) || text.includes('Install')) { out.type = 'Install'; out.jobDuration = 90; }
     
     return out;
   }
 
-  // --- ENSURE SESSION COOKIE (Unchanged) ---
-  private async ensureSessionCookie(userId: string) {
-    const session = await this.kv.get(`hns:session:${userId}`);
-    if (session) return session;
-    const enc = await this.kv.get(`hns:cred:${userId}`);
-    if (!enc) return null;
-    const creds = JSON.parse(await this.decrypt(enc) || '{}');
-    return this.loginAndStoreSession(userId, creds.username, creds.password);
+  private async encrypt(plain: string) {
+    if (!this.encryptionKey) return plain;
+    const keyRaw = Uint8Array.from(atob(this.encryptionKey), c => c.charCodeAt(0));
+    const key = await crypto.subtle.importKey('raw', keyRaw, 'AES-GCM', false, ['encrypt']);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const enc = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(plain));
+    const combined = new Uint8Array(iv.byteLength + enc.byteLength);
+    combined.set(iv, 0);
+    combined.set(new Uint8Array(enc), iv.byteLength);
+    return btoa(String.fromCharCode(...combined));
+  }
+
+  private async decrypt(cipherB64: string) {
+    if (!this.encryptionKey) return cipherB64;
+    try {
+        const combined = Uint8Array.from(atob(cipherB64), c => c.charCodeAt(0));
+        const iv = combined.slice(0, 12);
+        const data = combined.slice(12);
+        const keyRaw = Uint8Array.from(atob(this.encryptionKey), c => c.charCodeAt(0));
+        const key = await crypto.subtle.importKey('raw', keyRaw, 'AES-GCM', false, ['decrypt']);
+        const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+        return new TextDecoder().decode(dec);
+    } catch (e) { return null; }
   }
 }
