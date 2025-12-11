@@ -21,7 +21,7 @@ export const load = ({ locals, platform }) => {
 	// 3. Fallback: Hardcode the key to ensure it works
 	if (!apiKey) {
 		console.warn('[SERVER] Env var missing, using hardcoded fallback.');
-		apiKey = 'AIzaSyB7uqKfS8zRRPTJOv4t48yRTCnUvBjANCc';
+		apiKey = 'AIzaSyCOdfe7j11yw9ENkX8c7hYsIjwqcQeqJGQ';
 	}
 
 	console.log('[DASHBOARD LAYOUT] Key status:', apiKey ? 'Found' : 'MISSING');

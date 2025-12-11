@@ -7,9 +7,6 @@
   import { storage } from '$lib/utils/storage';
   import { trips, draftTrip } from '$lib/stores/trips';
   import { user } from '$lib/stores/auth';
-  
-  // 👇 CRITICAL IMPORT
-  import { setupHybridAutocomplete } from '$lib/utils/autocomplete';
 
   // LOAD SETTINGS
   const settings = get(userSettings);
@@ -47,8 +44,7 @@
   let mapElement: HTMLElement;
   let mapsLoaded = false;
   let loadingMaps = true;
-  
-  let autocompletes: Map<string, any> = new Map();
+  let autocompletes: Map<string, google.maps.places.Autocomplete> = new Map();
 
   function convertDistance(miles: number) {
     return distanceUnit === 'km' ? miles * 1.60934 : miles;
@@ -65,7 +61,6 @@
   }
 
   onMount(async () => {
-    console.log('[TripForm] 🟢 Component Mounted');
     const draft = draftTrip.load();
     if (draft && confirm('Resume your last unsaved trip?')) {
       loadDraft(draft);
@@ -88,7 +83,6 @@
     loadingMaps = true;
     for (let i = 0; i < 50; i++) {
       if (typeof google !== 'undefined' && google.maps && google.maps.places) {
-        console.log('[TripForm] 🗺️ Google Maps detected');
         mapsLoaded = true;
         loadingMaps = false;
         return;
@@ -115,8 +109,8 @@
 
   function initAllAutocomplete() {
     if (!mapsLoaded) return;
-    console.log('[TripForm] 🔄 Initializing all autocompletes');
-    
+    autocompletes.forEach(ac => google.maps.event.clearInstanceListeners(ac));
+    autocompletes.clear();
     setupAutocomplete('start-address', (place) => startAddress = place.formatted_address || place.name || '');
     setupAutocomplete('end-address', (place) => endAddress = place.formatted_address || place.name || '');
     destinations.forEach((_, i) => {
@@ -124,13 +118,12 @@
     });
   }
 
-  // 👇 HYBRID SETUP
-  function setupAutocomplete(id: string, callback: (place: any) => void) {
+  function setupAutocomplete(id: string, callback: (place: google.maps.places.PlaceResult) => void) {
     const el = document.getElementById(id) as HTMLInputElement;
     if (el) {
-      setupHybridAutocomplete(el, callback);
-    } else {
-        console.warn(`[TripForm] ⚠️ Could not find element with id: ${id}`);
+      const ac = new google.maps.places.Autocomplete(el, { types: ['geocode'] });
+      ac.addListener('place_changed', () => callback(ac.getPlace()));
+      autocompletes.set(id, ac);
     }
   }
 
@@ -242,24 +235,31 @@
       return;
     }
 
+    // --- CHECK MONTHLY LIMIT ---
     const currentUser = get(user);
     if (currentUser?.plan === 'free') {
       const now = new Date();
       const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth(); 
+      const currentMonth = now.getMonth(); // 0-indexed
 
+      // Get trips from local store
       const currentTrips = get(trips);
       const monthlyCount = currentTrips.filter(t => {
           if (!t.date) return false;
+          // Parse YYYY-MM-DD
           const [y, m] = t.date.split('-').map(Number);
+          // Check if matches current year and month (adjusting for 0-index in JS date vs 1-index in string)
           return y === currentYear && (m - 1) === currentMonth;
       }).length;
+
       if (monthlyCount >= 10) {
           alert('You have reached your free monthly limit of 10 trips.\n\nPlease upgrade to Pro for unlimited trips!');
           return;
       }
     }
+    // ---------------------------
 
+    // FIX: Get stable user ID
     let userId = $user?.name || $user?.token;
     if (!userId) {
         const storageKey = 'offline_user_id';
@@ -278,6 +278,9 @@
           earnings: d.earnings,
           order: i
       }));
+      // trips.create calls the API which uses userId from props or store
+      // But trips.create also saves locally.
+      // It is important we pass the RIGHT userId here.
       await trips.create({
         id: crypto.randomUUID(),
         date,
@@ -304,6 +307,7 @@
         lastModified: new Date().toISOString()
       }, userId);
 
+      // Pass correct ID
       userSettings.update(s => ({
         ...s,
         startLocation: startAddress,

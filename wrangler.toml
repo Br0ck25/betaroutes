@@ -6,50 +6,17 @@ compatibility_flags = ["nodejs_compat"]
 # Pages configuration
 pages_build_output_dir = ".svelte-kit/cloudflare"
 
-# ==========================================
-# DEFAULT / LOCAL / PREVIEW CONFIGURATION
-# (Bindings here apply to 'npm run dev' and local preview)
-# ==========================================
-[vars]
-PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyB7uqKfS8zRRPTJOv4t48yRTCnUvBjANCc"
-HNS_ENCRYPTION_KEY = "wMusn9Z5UChOkZJWgufdOafRNNZVKBvkvEEOo6Nk6mM="
-
-# Preview KV Namespaces
-[[kv_namespaces]]
-binding = "BETA_LOGS_KV"
-id = "babfd9307ecd4a1993a382ebe30c5a16"
-
-[[kv_namespaces]]
-binding = "BETA_USERS_KV"
-id = "a245706e522b444fa9b67fa9a1b88d6a"
-
-[[kv_namespaces]]
-binding = "BETA_LOGS_TRASH_KV"
-id = "4dbad92a0fc44f9b91c8a46165c8e40b"
-
-[[kv_namespaces]]
-binding = "BETA_USER_SETTINGS_KV"
-id = "63469d2321704b1ebcc02d01a894e167"
-
-[[kv_namespaces]]
-binding = "BETA_HUGHESNET_KV"
-id = "6a0e248bebff430f89b0de3b5dde8aee"
-
-# SHARED PLACES KV (Added for Local)
-[[kv_namespaces]]
-binding = "BETA_PLACES_KV"
-id = "2030b20c6baa46fe8c7bb620aaf0f8c1"
-
-
-# ==========================================
-# PRODUCTION OVERRIDES (Deployed Site)
-# ==========================================
+# ---------------------------------------------------
+# Production environment (deployed site)
+# ---------------------------------------------------
 [env.production]
 
+# FIX: Move vars here so they apply to production
 [env.production.vars]
-PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyB7uqKfS8zRRPTJOv4t48yRTCnUvBjANCc"
+PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyCOdfe7j11yw9ENkX8c7hYsIjwqcQeqJGQ"
 HNS_ENCRYPTION_KEY = "wMusn9Z5UChOkZJWgufdOafRNNZVKBvkvEEOo6Nk6mM="
 
+# Production KV Namespaces
 [[env.production.kv_namespaces]]
 binding = "BETA_LOGS_KV"
 id = "9551bf35d9cc4f75a5210c52d906da24"
@@ -70,7 +37,33 @@ id = "63469d2321704b1ebcc02d01a894e167"
 binding = "BETA_HUGHESNET_KV"
 id = "6a0e248bebff430f89b0de3b5dde8aee"
 
-# SHARED PLACES KV (Added for Production)
-[[env.production.kv_namespaces]]
-binding = "BETA_PLACES_KV"
-id = "2030b20c6baa46fe8c7bb620aaf0f8c1"
+# ---------------------------------------------------
+# Preview environment (PR previews and local dev)
+# ---------------------------------------------------
+[env.preview]
+
+# FIX: Move vars here too so they work in preview/dev
+[env.preview.vars]
+PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyCOdfe7j11yw9ENkX8c7hYsIjwqcQeqJGQ"
+HNS_ENCRYPTION_KEY = "wMusn9Z5UChOkZJWgufdOafRNNZVKBvkvEEOo6Nk6mM="
+
+# Preview KV Namespaces
+[[env.preview.kv_namespaces]]
+binding = "BETA_LOGS_KV"
+id = "babfd9307ecd4a1993a382ebe30c5a16"
+
+[[env.preview.kv_namespaces]]
+binding = "BETA_USERS_KV"
+id = "a245706e522b444fa9b67fa9a1b88d6a"
+
+[[env.preview.kv_namespaces]]
+binding = "BETA_LOGS_TRASH_KV"
+id = "4dbad92a0fc44f9b91c8a46165c8e40b"
+
+[[env.preview.kv_namespaces]]
+binding = "BETA_USER_SETTINGS_KV"
+id = "63469d2321704b1ebcc02d01a894e167"
+
+[[env.preview.kv_namespaces]]
+binding = "BETA_HUGHESNET_KV"
+id = "6a0e248bebff430f89b0de3b5dde8aee"
