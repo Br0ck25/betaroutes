@@ -313,7 +313,8 @@ export class HughesNetService {
           }
       } catch(e) {}
 
-      // SORTING FIX: Ensure valid Earliest -> Latest sort
+      // SORTING FIX:
+      // Sorts by time. The parsing logic now handles the case where "2:00" should be "14:00"
       orders.sort((a, b) => this.parseTime(a.beginTime) - this.parseTime(b.beginTime));
       
       const buildAddr = (o: any) => [o.address, o.city, o.state, o.zip].filter(Boolean).join(', ');
@@ -486,10 +487,11 @@ export class HughesNetService {
   }
 
   // IMPROVED TIME PARSER
-  // Handles ambiguous 12h times and ensures PM is respected
+  // Handles standard 24h times but also catches 12h formatting issues
   private parseTime(timeStr: string): number {
       if (!timeStr) return 9999;
       
+      // Match HH:MM with optional AM/PM suffix
       const m = timeStr.match(/(\d{1,2}):(\d{2})(?:\s*([APap]\.?[Mm]\.?))?/);
       if (!m) return 9999;
       
@@ -497,16 +499,12 @@ export class HughesNetService {
       let min = parseInt(m[2]);
       const ampm = m[3] ? m[3].toLowerCase().replace(/\./g, '') : null;
 
-      // Handle 12 PM (Noon) -> 12
-      // Handle 1 PM -> 13
       if (ampm === 'pm' && h < 12) h += 12;
-      
-      // Handle 12 AM (Midnight) -> 0
       if (ampm === 'am' && h === 12) h = 0;
       
-      // FALLBACK for Missing AM/PM:
-      // If no AM/PM, but time is small (e.g. "1:00", "2:00", "3:00"), assume PM for reasonable work hours
-      // This is a heuristic: if hour is 1-6 and no AM/PM, assume PM (13:00 - 18:00)
+      // AUTO-CORRECT HEURISTIC:
+      // If no AM/PM is present, but the hour is between 1 and 6, assume PM (13:00-18:00).
+      // This prevents "2:00" from being sorted as 2 AM before an 8 AM job.
       if (!ampm && h >= 1 && h <= 6) {
            h += 12; 
       }
