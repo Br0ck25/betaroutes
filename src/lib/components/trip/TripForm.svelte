@@ -7,9 +7,16 @@
   import { storage } from '$lib/utils/storage';
   import { trips, draftTrip } from '$lib/stores/trips';
   import { user } from '$lib/stores/auth';
+  import { autocomplete, loadGoogle } from '$lib/utils/autocomplete';
+
+  // Props
+  export let googleApiKey = ''; // [!code ++] Pass this from parent
 
   // LOAD SETTINGS
   const settings = get(userSettings);
+  // Fallback to hardcoded key if prop is missing (for safety)
+  const API_KEY = googleApiKey || 'AIzaSyB7uqKfS8zRRPTJOv4t48yRTCnUvBjANCc';
+
   // Default form values
   let date = new Date().toISOString().split('T')[0];
   let startTime = '';
@@ -44,7 +51,6 @@
   let mapElement: HTMLElement;
   let mapsLoaded = false;
   let loadingMaps = true;
-  let autocompletes: Map<string, google.maps.places.Autocomplete> = new Map();
 
   function convertDistance(miles: number) {
     return distanceUnit === 'km' ? miles * 1.60934 : miles;
@@ -66,32 +72,23 @@
       loadDraft(draft);
     }
 
-    await waitForGoogleMaps();
-    await initializeMap();
-    await tick();
-    initAllAutocomplete();
+    // Load Google Maps for the Map display
+    try {
+        await loadGoogle(API_KEY);
+        mapsLoaded = true;
+        await initializeMap();
+    } catch (e) {
+        alert('Failed to load Google Maps');
+    } finally {
+        loadingMaps = false;
+    }
 
     const autoSaveInterval = setInterval(() => saveDraft(), 5000);
 
     return () => {
       clearInterval(autoSaveInterval);
-      autocompletes.forEach(ac => google.maps.event.clearInstanceListeners(ac));
     };
   });
-
-  async function waitForGoogleMaps() {
-    loadingMaps = true;
-    for (let i = 0; i < 50; i++) {
-      if (typeof google !== 'undefined' && google.maps && google.maps.places) {
-        mapsLoaded = true;
-        loadingMaps = false;
-        return;
-      }
-      await new Promise(resolve => setTimeout(resolve, 200));
-    }
-    loadingMaps = false;
-    alert('Google Maps failed to load. Please refresh.');
-  }
 
   async function initializeMap() {
     if (!mapsLoaded || !mapElement) return;
@@ -107,37 +104,24 @@
     }
   }
 
-  function initAllAutocomplete() {
-    if (!mapsLoaded) return;
-    autocompletes.forEach(ac => google.maps.event.clearInstanceListeners(ac));
-    autocompletes.clear();
-    setupAutocomplete('start-address', (place) => startAddress = place.formatted_address || place.name || '');
-    setupAutocomplete('end-address', (place) => endAddress = place.formatted_address || place.name || '');
-    destinations.forEach((_, i) => {
-      setupAutocomplete(`dest-${i}`, (place) => destinations[i].address = place.formatted_address || place.name || '');
-    });
-  }
-
-  function setupAutocomplete(id: string, callback: (place: google.maps.places.PlaceResult) => void) {
-    const el = document.getElementById(id) as HTMLInputElement;
-    if (el) {
-      const ac = new google.maps.places.Autocomplete(el, { types: ['geocode'] });
-      ac.addListener('place_changed', () => callback(ac.getPlace()));
-      autocompletes.set(id, ac);
-    }
+  // --- Helper to update addresses from autocomplete event ---
+  function handlePlaceSelect(field: 'start' | 'end' | number, e: CustomEvent) {
+      const place = e.detail;
+      const val = place.formatted_address || place.name || '';
+      
+      if (field === 'start') startAddress = val;
+      else if (field === 'end') endAddress = val;
+      else if (typeof field === 'number') destinations[field].address = val;
   }
 
   async function addDestination() {
     destinations = [...destinations, { address: '', earnings: 0 }];
-    await tick();
-    initAllAutocomplete();
+    await tick(); // Svelte updates DOM, autocomplete action re-initializes automatically
   }
 
   async function removeDestination(index: number) {
     if (destinations.length > 1) {
       destinations = destinations.filter((_, i) => i !== index);
-      await tick();
-      initAllAutocomplete();
     }
   }
 
@@ -145,8 +129,6 @@
     if (index > 0) {
       [destinations[index], destinations[index - 1]] = [destinations[index - 1], destinations[index]];
       destinations = [...destinations];
-      await tick();
-      initAllAutocomplete();
     }
   }
 
@@ -154,8 +136,6 @@
     if (index < destinations.length - 1) {
       [destinations[index], destinations[index + 1]] = [destinations[index + 1], destinations[index]];
       destinations = [...destinations];
-      await tick();
-      initAllAutocomplete();
     }
   }
 
@@ -174,15 +154,17 @@
 
     try {
       const waypoints = destinations.map(d => ({
-        location: d.address,
+        location: d.address, // API handles string addresses automatically
         stopover: true
       }));
+
       const request: google.maps.DirectionsRequest = {
         origin: startAddress,
         destination: endAddress || destinations[destinations.length - 1].address,
         waypoints,
         travelMode: google.maps.TravelMode.DRIVING
       };
+
       const result = await directionsService.route(request);
 
       if (result.routes[0]) {
@@ -195,8 +177,10 @@
           distanceMeters += leg.distance?.value || 0;
           duration += leg.duration?.value || 0;
         });
+
         const miles = convertDistance(distanceMeters / 1609.34);
         const minutes = duration / 60;
+
         const totals = calculateTripTotals(
           miles,
           minutes,
@@ -240,15 +224,12 @@
     if (currentUser?.plan === 'free') {
       const now = new Date();
       const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth(); // 0-indexed
+      const currentMonth = now.getMonth(); 
 
-      // Get trips from local store
       const currentTrips = get(trips);
       const monthlyCount = currentTrips.filter(t => {
           if (!t.date) return false;
-          // Parse YYYY-MM-DD
           const [y, m] = t.date.split('-').map(Number);
-          // Check if matches current year and month (adjusting for 0-index in JS date vs 1-index in string)
           return y === currentYear && (m - 1) === currentMonth;
       }).length;
 
@@ -257,9 +238,7 @@
           return;
       }
     }
-    // ---------------------------
 
-    // FIX: Get stable user ID
     let userId = $user?.name || $user?.token;
     if (!userId) {
         const storageKey = 'offline_user_id';
@@ -278,9 +257,7 @@
           earnings: d.earnings,
           order: i
       }));
-      // trips.create calls the API which uses userId from props or store
-      // But trips.create also saves locally.
-      // It is important we pass the RIGHT userId here.
+
       await trips.create({
         id: crypto.randomUUID(),
         date,
@@ -307,7 +284,6 @@
         lastModified: new Date().toISOString()
       }, userId);
 
-      // Pass correct ID
       userSettings.update(s => ({
         ...s,
         startLocation: startAddress,
@@ -315,6 +291,7 @@
         defaultMPG: mpg,
         defaultGasPrice: gasPrice
       }));
+
       storage.setSetting('defaultStartAddress', startAddress);
       storage.setSetting('defaultEndAddress', endAddress);
       storage.setSetting('defaultMpg', mpg);
@@ -337,8 +314,6 @@
     destinations = [{ address: '', earnings: 0 }];
     calculated = false;
     if (directionsRenderer) directionsRenderer.setDirections({ routes: [] } as any);
-    await tick();
-    initAllAutocomplete();
   }
 
   function saveDraft() {
@@ -365,8 +340,6 @@
     mpg = draft.mpg || mpg;
     gasPrice = draft.gasPrice || gasPrice;
     notes = draft.notes || '';
-    await tick();
-    initAllAutocomplete();
   }
 </script>
 
@@ -382,14 +355,28 @@
 
     <label>
       Start Address
-      <input type="text" id="start-address" bind:value={startAddress} placeholder="Start address" autocomplete="off" />
+      <input 
+        type="text" 
+        bind:value={startAddress} 
+        placeholder="Start address" 
+        autocomplete="off" 
+        use:autocomplete={{ apiKey: API_KEY }}
+        on:place-selected={(e) => handlePlaceSelect('start', e)}
+      />
     </label>
 
     <div class="destinations">
       <label>Destinations</label>
       {#each destinations as dest, i}
         <div class="dest-row">
-          <input type="text" id="dest-{i}" bind:value={dest.address} placeholder="Destination" autocomplete="off" />
+          <input 
+            type="text" 
+            bind:value={dest.address} 
+            placeholder="Destination" 
+            autocomplete="off"
+            use:autocomplete={{ apiKey: API_KEY }}
+            on:place-selected={(e) => handlePlaceSelect(i, e)}
+          />
           <input type="number" bind:value={dest.earnings} placeholder="$" step="0.01" />
           <button type="button" on:click={() => moveDestinationUp(i)} disabled={i === 0}>↑</button>
           <button type="button" on:click={() => moveDestinationDown(i)} disabled={i === destinations.length - 1}>↓</button>
@@ -401,7 +388,14 @@
 
     <label>
       End Address (Optional)
-      <input type="text" id="end-address" bind:value={endAddress} placeholder="Leave empty for last destination" autocomplete="off" />
+      <input 
+        type="text" 
+        bind:value={endAddress} 
+        placeholder="Leave empty for last destination" 
+        autocomplete="off"
+        use:autocomplete={{ apiKey: API_KEY }}
+        on:place-selected={(e) => handlePlaceSelect('end', e)}
+      />
     </label>
 
     <div class="row">
