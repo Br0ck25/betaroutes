@@ -18,7 +18,9 @@ export const GET: RequestHandler = async (event) => {
 
 		const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
 		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
-		const svc = makeTripService(kv, trashKV);
+		const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV(); // [!code ++]
+		
+		const svc = makeTripService(kv, trashKV, placesKV); // [!code ++]
 
 		// FIX: Use stable User ID (name)
 		const storageId = user.name || user.token;
@@ -43,7 +45,9 @@ export const DELETE: RequestHandler = async (event) => {
 
 		const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
 		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
-		const svc = makeTripService(kv, trashKV);
+		const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV(); // [!code ++]
+		
+		const svc = makeTripService(kv, trashKV, placesKV); // [!code ++]
 
 		// FIX: Use stable User ID (name)
 		const storageId = user.name || user.token;

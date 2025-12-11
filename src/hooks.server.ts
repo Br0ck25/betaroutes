@@ -13,7 +13,8 @@ let mockDB: Record<string, any> = {
 	LOGS: {},
 	TRASH: {},
 	SETTINGS: {},
-	HUGHESNET: {}
+	HUGHESNET: {},
+	PLACES: {} // [!code ++] Add PLACES to mock DB
 };
 
 if (dev) {
@@ -27,6 +28,8 @@ if (dev) {
 			
 			// Explicitly ensure HUGHESNET exists if the file was old
 			if (!mockDB.HUGHESNET) mockDB.HUGHESNET = {}; 
+			// Explicitly ensure PLACES exists
+			if (!mockDB.PLACES) mockDB.PLACES = {}; 
 			
 			console.log('📂 Loaded mock KV data from .kv-mock.json');
 		}
@@ -86,6 +89,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (!event.platform.env.BETA_LOGS_TRASH_KV) event.platform.env.BETA_LOGS_TRASH_KV = createMockKV('TRASH');
 		if (!event.platform.env.BETA_USER_SETTINGS_KV) event.platform.env.BETA_USER_SETTINGS_KV = createMockKV('SETTINGS');
 		
+		// [!code ++] Initialize Places KV mock
+		if (!event.platform.env.BETA_PLACES_KV) {
+			event.platform.env.BETA_PLACES_KV = createMockKV('PLACES');
+		}
+
 		// Initialize the HughesNet KV
 		if (!event.platform.env.BETA_HUGHESNET_KV) {
 			event.platform.env.BETA_HUGHESNET_KV = createMockKV('HUGHESNET');

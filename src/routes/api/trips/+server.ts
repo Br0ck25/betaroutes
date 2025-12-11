@@ -48,7 +48,9 @@ export const GET: RequestHandler = async (event) => {
 
 		const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
 		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
-		const svc = makeTripService(kv, trashKV);
+		const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV(); // [!code ++]
+		
+		const svc = makeTripService(kv, trashKV, placesKV); // [!code ++]
 
 		const storageId = user.name || user.token;
 		const trips = await svc.list(storageId);
@@ -86,7 +88,9 @@ export const POST: RequestHandler = async (event) => {
 
 		const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
 		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
-		const svc = makeTripService(kv, trashKV);
+		const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV(); // [!code ++]
+
+		const svc = makeTripService(kv, trashKV, placesKV); // [!code ++]
         const storageId = user.name || user.token;
 
         // --- ENFORCE MONTHLY LIMIT ---

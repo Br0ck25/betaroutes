@@ -24,7 +24,9 @@ export const GET: RequestHandler = async (event) => {
 		// Connect to KVs
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
-		const svc = makeTripService(kv, trashKV);
+		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV'); // [!code ++]
+		
+		const svc = makeTripService(kv, trashKV, placesKV); // [!code ++]
 
 		// Use stable user ID (username)
 		const storageId = user.name || user.token;
@@ -61,7 +63,9 @@ export const PUT: RequestHandler = async (event) => {
 
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
-		const svc = makeTripService(kv, trashKV);
+		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV'); // [!code ++]
+		
+		const svc = makeTripService(kv, trashKV, placesKV); // [!code ++]
 
 		const storageId = user.name || user.token;
 
@@ -106,7 +110,9 @@ export const DELETE: RequestHandler = async (event) => {
 
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
-		const svc = makeTripService(kv, trashKV);
+		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV'); // [!code ++]
+		
+		const svc = makeTripService(kv, trashKV, placesKV); // [!code ++]
 
 		const storageId = user.name || user.token;
 
