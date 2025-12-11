@@ -7,10 +7,12 @@ const HOME_URL = 'https://dwayinstalls.hns.com/start/Home.jsp';
 const BASE_URL = 'https://dwayinstalls.hns.com';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-// Domain for Google API Key Referer Header
 const APP_DOMAIN = 'https://gorouteyourself.com/';
 
 export class HughesNetService {
+  // NEW: Store logs here
+  public logs: string[] = [];
+
   constructor(
     private kv: KVNamespace, 
     private encryptionKey: string,
@@ -20,8 +22,25 @@ export class HughesNetService {
     private googleApiKey: string | undefined
   ) {}
 
+  // --- LOGGING HELPERS ---
+  private log(msg: string) {
+      console.log(msg);
+      this.logs.push(msg);
+  }
+  
+  private warn(msg: string) {
+      console.warn(msg);
+      this.logs.push(`⚠️ ${msg}`);
+  }
+
+  private error(msg: string, e?: any) {
+      console.error(msg, e);
+      this.logs.push(`❌ ${msg} ${e ? '(' + e + ')' : ''}`);
+  }
+  // ------------------------
+
   async connect(userId: string, username: string, password: string) {
-    console.log(`[HNS] Connecting user ${userId}...`);
+    this.log(`[HNS] Connecting user ${userId}...`);
     const payload = { username, password, loginUrl: LOGIN_URL, createdAt: new Date().toISOString() };
     const enc = await this.encrypt(JSON.stringify(payload));
     await this.kv.put(`hns:cred:${userId}`, enc);
@@ -37,7 +56,7 @@ export class HughesNetService {
   }
 
   async sync(userId: string, settingsId?: string, installPay: number = 0, repairPay: number = 0) {
-    console.log(`[HNS] Starting sync for ${userId} (Install Pay: $${installPay}, Repair Pay: $${repairPay})`);
+    this.log(`[HNS] Starting sync for ${userId} (Install Pay: $${installPay}, Repair Pay: $${repairPay})`);
     const cookie = await this.ensureSessionCookie(userId);
     if (!cookie) throw new Error('Could not login.');
 
@@ -49,29 +68,26 @@ export class HughesNetService {
     this.extractIds(html).forEach(id => uniqueIds.add(id));
 
     if (uniqueIds.size === 0) {
-        console.log('[HNS] Scanning menu links...');
+        this.log('[HNS] Scanning menu links...');
         const links = this.extractMenuLinks(html);
         const priorityLinks = links.filter(l => l.url.includes('SoSearch') || l.url.includes('forms/'));
 
         for (const link of priorityLinks) {
-            console.log(`[HNS] Scanning: ${link.text}`);
+            this.log(`[HNS] Scanning: ${link.text}`);
             await this.scanUrlForOrders(link.url, cookie, uniqueIds);
-            // Small delay between menu scans
             await new Promise(r => setTimeout(r, 500)); 
         }
     }
 
     const finalIds = Array.from(uniqueIds);
-    console.log(`[HNS] Total unique orders found: ${finalIds.length}`);
+    this.log(`[HNS] Total unique orders found: ${finalIds.length}`);
     await this.kv.put(`hns:orders_index:${userId}`, JSON.stringify(finalIds));
 
-    // FETCH DETAILS (UPDATED: SEQUENTIAL + DELAY)
+    // FETCH DETAILS
     const orders: any[] = [];
     
-    // Formerly BATCH_SIZE = 5. Now doing 1 by 1 to prevent blocking.
     for (const id of finalIds) {
         try {
-            // Rate Limit Protection: Wait 300ms - 600ms between requests
             const delay = Math.floor(Math.random() * 300) + 300;
             await new Promise(r => setTimeout(r, delay));
 
@@ -84,12 +100,12 @@ export class HughesNetService {
             if (parsed.address) {
                 await this.kv.put(`hns:orders:${userId}:${id}`, JSON.stringify(parsed));
                 orders.push(parsed);
-                console.log(`[HNS] Synced Order ${id}`);
+                this.log(`[HNS] Synced Order ${id}`);
             } else {
-                console.warn(`[HNS] Skipped Order ${id} (Address parsing failed).`);
+                this.warn(`[HNS] Skipped Order ${id} (Address parsing failed).`);
             }
         } catch (err) {
-            console.error(`[HNS] Error syncing ${id}`, err);
+            this.error(`[HNS] Error syncing ${id}`, err);
         }
     }
 
@@ -112,7 +128,7 @@ export class HughesNetService {
   }
 
   async clearAllTrips(userId: string) {
-      console.log(`[HNS] Clearing HNS trips for ${userId}...`);
+      this.log(`[HNS] Clearing HNS trips for ${userId}...`);
       const tripService = makeTripService(this.tripKV, this.trashKV);
       const allTrips = await tripService.list(userId);
       let count = 0;
@@ -149,7 +165,7 @@ export class HughesNetService {
             const fHtml = await fRes.text();
             this.extractIds(fHtml).forEach(id => idSet.add(id));
         }
-    } catch (e) { console.log(`[HNS] Failed to scan ${url}`); }
+    } catch (e) { this.warn(`[HNS] Failed to scan ${url}`); }
   }
 
   private extractMenuLinks(html: string) {
@@ -197,7 +213,6 @@ export class HughesNetService {
     return Array.from(ids);
   }
 
-  // UPDATED: The Robust Parser from previous step
   private parseOrderPage(html: string, id: string) {
     let text = html.replace(/<br\s*\/?>/gi, ' ').replace(/<\/td>/gi, '  ').replace(/<\/div>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
     const out: any = { 
@@ -212,37 +227,31 @@ export class HughesNetService {
         jobDuration: 60 
     };
 
-    // 1. Standard Input
     const addrInput = html.match(/name=["']FLD_SO_Address1["'][^>]*value=["']([^"']*)["']/i);
     if (addrInput) out.address = addrInput[1].trim();
 
-    // 2. Reversed Input
     if (!out.address) {
         const addrInputRev = html.match(/value=["']([^"']*)["'][^>]*name=["']FLD_SO_Address1["']/i);
         if (addrInputRev) out.address = addrInputRev[1].trim();
     }
 
-    // 3. Alt Names
     if (!out.address) {
          const addrAlt = html.match(/name=["'](?:f_address|txtAddress)["'][^>]*value=["']([^"']*)["']/i);
          if (addrAlt) out.address = addrAlt[1].trim();
     }
 
-    // 4. Visual Text
     if (!out.address) {
         const addressMatch = text.match(/Address:\s*(.*?)\s+(?:City|County|State)/i);
         if (addressMatch) out.address = addressMatch[1].trim().split(/county:/i)[0].trim();
     }
 
-    // 5. Fallback
     if (!out.address) {
          const svcLoc = text.match(/Service Location:?\s*(.*?)\s+(?:City|State|Zip)/i);
          if (svcLoc) out.address = svcLoc[1].trim();
     }
     
-    // DEBUG: Log failure
     if (!out.address) {
-        console.warn(`[HNS DEBUG] ❌ FAILED to find address for Order ${id}`);
+        this.warn(`[HNS DEBUG] ❌ FAILED to find address for Order ${id}`);
     }
 
     const cityInput = html.match(/name=["']f_city["'][^>]*value=["']([^"']*)["']/i);
@@ -319,9 +328,9 @@ export class HughesNetService {
             defaultEndAddress = s.defaultEndAddress || s.defaultStartAddress || '';
             if (s.defaultMPG) defaultMPG = parseFloat(s.defaultMPG);
             if (s.defaultGasPrice) defaultGasPrice = parseFloat(s.defaultGasPrice);
-            console.log(`[HNS] Settings Loaded for ${settingsKey}. Start="${defaultStartAddress}"`);
+            this.log(`[HNS] Settings Loaded for ${settingsKey}. Start="${defaultStartAddress}"`);
         }
-    } catch (e) { console.error('[HNS] Error reading settings:', e); }
+    } catch (e) { this.error('[HNS] Error reading settings:', e); }
 
     const ordersByDate: Record<string, any[]> = {};
     for (const order of orders) {
@@ -340,7 +349,7 @@ export class HughesNetService {
     for (const [date, daysOrders] of Object.entries(ordersByDate)) {
       const existingTrips = await tripService.list(userId);
       if (existingTrips.some(t => t.date === date)) {
-          console.log(`[HNS] Trip already exists for ${date}`);
+          this.log(`[HNS] Trip already exists for ${date}`);
           continue;
       }
 
@@ -362,7 +371,7 @@ export class HughesNetService {
 
       if (!tripStart) {
           const firstJobAddr = buildAddr(earliestOrder);
-          if (firstJobAddr.length < 5) console.warn(`[HNS] Warning: Start Address is empty/short.`);
+          if (firstJobAddr.length < 5) this.warn(`[HNS] Warning: Start Address is empty/short.`);
           tripStart = firstJobAddr;
           tripEnd = tripStart;
       }
@@ -376,7 +385,7 @@ export class HughesNetService {
       daysOrders.forEach(o => routePoints.push(buildAddr(o)));
       routePoints.push(tripEnd);
 
-      console.log(`[HNS] Calculating Route: ${routePoints.length - 1} legs for ${date}`);
+      this.log(`[HNS] Calculating Route: ${routePoints.length - 1} legs for ${date}`);
 
       for (let i = 0; i < routePoints.length - 1; i++) {
           const origin = routePoints[i];
@@ -384,13 +393,12 @@ export class HughesNetService {
           
           if (origin === dest) continue;
           if (!origin || !dest || origin.length < 3 || dest.length < 3) {
-             console.warn(`[HNS] Skipping leg ${i+1} (missing address): "${origin}" -> "${dest}"`);
+             this.warn(`[HNS] Skipping leg ${i+1} (missing address): "${origin}" -> "${dest}"`);
              continue;
           }
 
-          // UPDATED: Added delay for Google Maps QPS protection
           if (i > 0) {
-              await new Promise(r => setTimeout(r, 200)); // 200ms delay between route calls
+              await new Promise(r => setTimeout(r, 200)); 
           }
 
           const leg = await this.getRouteInfo(origin, dest);
@@ -400,9 +408,9 @@ export class HughesNetService {
               totalDriveMinutes += legMinutes;
               totalDistanceMeters += leg.distance;
               if (i === 0) startToFirstJobMinutes = legMinutes;
-              console.log(`[HNS] Leg ${i+1}: ${origin} -> ${dest} = ${legMinutes}m`);
+              this.log(`[HNS] Leg ${i+1}: ${origin} -> ${dest} = ${legMinutes}m`);
           } else {
-              console.warn(`[HNS] Failed leg ${i+1}: ${origin} -> ${dest}`);
+              this.warn(`[HNS] Failed leg ${i+1}: ${origin} -> ${dest}`);
           }
       }
 
@@ -466,7 +474,7 @@ export class HughesNetService {
       };
 
       await tripService.put(newTrip);
-      console.log(`[HNS] Created Trip for ${date} - Start: ${newTrip.startTime}, End: ${newTrip.endTime}, Hours: ${hoursWorked}, Miles: ${totalDistanceMiles}`);
+      this.log(`[HNS] Created Trip for ${date} - Start: ${newTrip.startTime}, End: ${newTrip.endTime}, Hours: ${hoursWorked}, Miles: ${totalDistanceMiles}`);
     }
   }
 
@@ -493,10 +501,10 @@ export class HughesNetService {
           } 
           
           if (data.error_message) {
-              console.error(`[HNS] Google Maps Error: ${data.error_message}`);
+              this.error(`[HNS] Google Maps Error: ${data.error_message}`);
           }
       } catch (e) { 
-          console.error('[HNS] Maps Network Error', e); 
+          this.error('[HNS] Maps Network Error', e); 
       }
       return null;
   }

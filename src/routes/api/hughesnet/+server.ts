@@ -23,15 +23,16 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
             platform.env.BETA_HUGHESNET_KV, 
             platform.env.HNS_ENCRYPTION_KEY,
             platform.env.BETA_LOGS_KV,
-            platform.env.BETA_LOGS_TRASH_KV, // UPDATED: Pass Trash KV
+            platform.env.BETA_LOGS_TRASH_KV, 
             platform.env.BETA_USER_SETTINGS_KV,
             platform.env.PUBLIC_GOOGLE_MAPS_API_KEY
         );
 
         if (body.action === 'connect') {
             const success = await service.connect(userId, body.username, body.password);
-            if (!success) return json({ success: false, error: 'Login failed' });
-            return json({ success: true });
+            
+            // Return logs even if failed
+            return json({ success, error: success ? undefined : 'Login failed', logs: service.logs });
         }
 
         if (body.action === 'sync') {
@@ -41,12 +42,14 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 
             // Pass params to sync
             const orders = await service.sync(userId, settingsId, installPay, repairPay);
-            return json({ success: true, orders });
+            
+            // Return logs with orders
+            return json({ success: true, orders, logs: service.logs });
         }
 
         if (body.action === 'clear') {
             const count = await service.clearAllTrips(userId);
-            return json({ success: true, count });
+            return json({ success: true, count, logs: service.logs });
         }
 
         return json({ success: false, error: 'Invalid action' }, { status: 400 });
@@ -66,7 +69,7 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
             platform.env.BETA_HUGHESNET_KV, 
             platform.env.HNS_ENCRYPTION_KEY,
             platform.env.BETA_LOGS_KV,
-            platform.env.BETA_LOGS_TRASH_KV, // UPDATED: Pass Trash KV
+            platform.env.BETA_LOGS_TRASH_KV,
             platform.env.BETA_USER_SETTINGS_KV,
             platform.env.PUBLIC_GOOGLE_MAPS_API_KEY
         );
