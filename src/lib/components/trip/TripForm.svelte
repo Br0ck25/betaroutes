@@ -8,7 +8,7 @@
   import { trips, draftTrip } from '$lib/stores/trips';
   import { user } from '$lib/stores/auth';
   
-  // 👇 THIS IMPORT IS CRITICAL
+  // 👇 CRITICAL IMPORT
   import { setupHybridAutocomplete } from '$lib/utils/autocomplete';
 
   // LOAD SETTINGS
@@ -48,7 +48,6 @@
   let mapsLoaded = false;
   let loadingMaps = true;
   
-  // We keep this map for cleanup if needed
   let autocompletes: Map<string, any> = new Map();
 
   function convertDistance(miles: number) {
@@ -118,9 +117,6 @@
     if (!mapsLoaded) return;
     console.log('[TripForm] 🔄 Initializing all autocompletes');
     
-    // We don't need to manually clear the map listeners with the new system,
-    // but re-running setup is fine.
-    
     setupAutocomplete('start-address', (place) => startAddress = place.formatted_address || place.name || '');
     setupAutocomplete('end-address', (place) => endAddress = place.formatted_address || place.name || '');
     destinations.forEach((_, i) => {
@@ -128,16 +124,10 @@
     });
   }
 
-  // 👇 THIS FUNCTION CHANGED
+  // 👇 HYBRID SETUP
   function setupAutocomplete(id: string, callback: (place: any) => void) {
     const el = document.getElementById(id) as HTMLInputElement;
     if (el) {
-      // OLD WAY (Commented out):
-      // const ac = new google.maps.places.Autocomplete(el, { types: ['geocode'] });
-      // ac.addListener('place_changed', () => callback(ac.getPlace()));
-      // autocompletes.set(id, ac);
-
-      // NEW WAY:
       setupHybridAutocomplete(el, callback);
     } else {
         console.warn(`[TripForm] ⚠️ Could not find element with id: ${id}`);
@@ -252,14 +242,12 @@
       return;
     }
 
-    // --- CHECK MONTHLY LIMIT ---
     const currentUser = get(user);
     if (currentUser?.plan === 'free') {
       const now = new Date();
       const currentYear = now.getFullYear();
       const currentMonth = now.getMonth(); 
 
-      // Get trips from local store
       const currentTrips = get(trips);
       const monthlyCount = currentTrips.filter(t => {
           if (!t.date) return false;

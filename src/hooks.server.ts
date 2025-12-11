@@ -14,25 +14,28 @@ let mockDB: Record<string, any> = {
 	TRASH: {},
 	SETTINGS: {},
 	HUGHESNET: {},
-	PLACES: {} // <--- ADDED
+	PLACES: {} // Ensure this exists
 };
 
 if (dev) {
+	console.log(`[HOOKS] 📂 Mock DB Path: ${DB_FILE}`);
 	try {
 		if (fs.existsSync(DB_FILE)) {
 			const raw = fs.readFileSync(DB_FILE, 'utf-8');
 			const loaded = JSON.parse(raw);
 			
-			// Merge loaded data with default structure
 			mockDB = { ...mockDB, ...loaded };
 			
+			// Ensure namespaces exist after load
 			if (!mockDB.HUGHESNET) mockDB.HUGHESNET = {}; 
-			if (!mockDB.PLACES) mockDB.PLACES = {}; // <--- ADDED
+			if (!mockDB.PLACES) mockDB.PLACES = {}; 
 			
-			console.log('📂 Loaded mock KV data from .kv-mock.json');
+			console.log('[HOOKS] ✅ Loaded mock KV data from disk');
+		} else {
+			console.log('[HOOKS] ⚠️ No .kv-mock.json found, creating new one on first save.');
 		}
 	} catch (e) {
-		console.error('Failed to load mock DB', e);
+		console.error('[HOOKS] ❌ Failed to load mock DB:', e);
 	}
 }
 
@@ -41,21 +44,21 @@ function saveDB() {
 	try {
 		fs.writeFileSync(DB_FILE, JSON.stringify(mockDB, null, 2));
 	} catch (e) {
-		console.error('Failed to save mock DB', e);
+		console.error('[HOOKS] ❌ FAILED to save mock DB:', e);
 	}
 }
 
 function createMockKV(namespace: string) {
 	return {
 		async get(key: string) {
-			return mockDB[namespace][key] ?? null;
+			return mockDB[namespace]?.[key] ?? null;
 		},
 		async put(key: string, value: string) {
 			console.log(`[MOCK KV ${namespace}] PUT ${key}`);
 			if (!mockDB[namespace]) mockDB[namespace] = {}; 
 			
 			mockDB[namespace][key] = value;
-			saveDB(); 
+			saveDB(); // Trigger save
 		},
 		async delete(key: string) {
 			console.log(`[MOCK KV ${namespace}] DELETE ${key}`);
@@ -76,11 +79,11 @@ function createMockKV(namespace: string) {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
-	// 1. Ensure KV bindings exist (mock in dev using FILE store)
 	if (dev) {
 		if (!event.platform) event.platform = { env: {} } as any;
 		if (!event.platform.env) event.platform.env = {} as any;
 
+		// Initialize KVs
 		if (!event.platform.env.BETA_USERS_KV) event.platform.env.BETA_USERS_KV = createMockKV('USERS');
 		if (!event.platform.env.BETA_LOGS_KV) event.platform.env.BETA_LOGS_KV = createMockKV('LOGS');
 		if (!event.platform.env.BETA_LOGS_TRASH_KV) event.platform.env.BETA_LOGS_TRASH_KV = createMockKV('TRASH');
@@ -89,15 +92,15 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (!event.platform.env.BETA_HUGHESNET_KV) {
 			event.platform.env.BETA_HUGHESNET_KV = createMockKV('HUGHESNET');
 		}
+		
 		// Initialize PLACES KV
 		if (!event.platform.env.BETA_PLACES_KV) {
 			event.platform.env.BETA_PLACES_KV = createMockKV('PLACES');
 		}
 	}
 
-	// 2. User auth logic
+	// Auth Logic
 	const token = event.cookies.get('token');
-
 	if (!token) {
 		event.locals.user = null;
 		return resolve(event);
@@ -107,10 +110,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 		const usersKV = event.platform?.env?.BETA_USERS_KV;
 		if (usersKV) {
 			const userDataStr = await usersKV.get(token);
-
 			if (userDataStr) {
 				const userData = JSON.parse(userDataStr);
-				
 				event.locals.user = {
 					id: userData.id,
 					token,
@@ -122,12 +123,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 					email: userData.email
 				};
 			} else {
-				console.warn('[HOOK] Token exists but user not found in KV.');
 				event.locals.user = null;
 			}
 		}
 	} catch (err) {
-		console.error('[HOOK] KV Error:', err);
+		console.error('[HOOKS] KV Error:', err);
 		event.locals.user = null;
 	}
 

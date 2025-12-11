@@ -117,12 +117,12 @@ export function setupHybridAutocomplete(
     clearTimeout(debounce);
     debounce = setTimeout(async () => {
         try {
-            console.log('[Autocomplete] 🔍 Searching KV for:', query);
+            // Check KV first
             const res = await fetch(`/api/autocomplete?q=${encodeURIComponent(query)}`);
             const results = await res.json();
-            console.log(`[Autocomplete] 🎯 Found ${results.length} local matches`);
-
+            
             if (results && results.length > 0) {
+                console.log(`[Autocomplete] 🎯 Found ${results.length} local matches`);
                 list.innerHTML = '';
                 results.forEach((place: any) => {
                     const item = document.createElement('div');
@@ -137,6 +137,7 @@ export function setupHybridAutocomplete(
                         console.log('[Autocomplete] 🖱️ Selected from KV');
                         input.value = place.formatted_address || place.name;
                         closeList();
+                        // Reconstruct geometry function if needed for legacy code
                         if (place.geometry?.location) {
                              place.geometry.location.lat = () => place.geometry.location.lat;
                              place.geometry.location.lng = () => place.geometry.location.lng;

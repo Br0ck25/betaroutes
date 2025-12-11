@@ -4,7 +4,6 @@ import type { RequestHandler } from './$types';
 import type { KVNamespace } from '@cloudflare/workers-types';
 
 export const GET: RequestHandler = async ({ url, platform }) => {
-	console.log('[API:Autocomplete:GET] 🔍 Received Search Request');
 	const query = url.searchParams.get('q')?.toLowerCase();
 	
 	if (!query || query.length < 2) return json([]);
@@ -12,15 +11,12 @@ export const GET: RequestHandler = async ({ url, platform }) => {
 	const placesKV = platform?.env?.BETA_PLACES_KV as KVNamespace;
 
 	if (!placesKV) {
-		console.error('[API:Autocomplete:GET] ❌ BETA_PLACES_KV is NOT bound! Check hooks.server.ts');
+		console.error('[API:Autocomplete:GET] ❌ BETA_PLACES_KV is NOT bound!');
 		return json([]);
 	}
 
 	try {
-		console.log(`[API:Autocomplete:GET] Searching for: "${query}"`);
 		const list = await placesKV.list({ prefix: query, limit: 5 });
-		console.log(`[API:Autocomplete:GET] Found ${list.keys.length} matches`);
-
 		const results = [];
 		for (const key of list.keys) {
 			const value = await placesKV.get(key.name, 'json');
@@ -35,22 +31,17 @@ export const GET: RequestHandler = async ({ url, platform }) => {
 };
 
 export const POST: RequestHandler = async ({ request, platform }) => {
-	console.log('------------------------------------------------');
 	console.log('[API:Autocomplete:POST] 💾 SAVE REQUEST RECEIVED');
-	console.log('------------------------------------------------');
 	
 	const placesKV = platform?.env?.BETA_PLACES_KV as KVNamespace;
 	
 	if (!placesKV) {
-		console.error('[API:Autocomplete:POST] ❌ BETA_PLACES_KV is MISSING in platform.env!');
-		// Try to dump what IS available for debugging
-		console.log('Available Env:', Object.keys(platform?.env || {}));
+		console.error('[API:Autocomplete:POST] ❌ BETA_PLACES_KV is MISSING!');
 		return json({ success: false, error: 'Database not connected' }, { status: 500 });
 	}
 
 	try {
 		const body = await request.json();
-		console.log('[API:Autocomplete:POST] Payload:', JSON.stringify(body));
 
 		if (!body.formatted_address && !body.name) {
 			console.error('[API:Autocomplete:POST] ❌ Missing address/name');

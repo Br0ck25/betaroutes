@@ -8,13 +8,13 @@ pages_build_output_dir = ".svelte-kit/cloudflare"
 
 # ==========================================
 # DEFAULT / LOCAL / PREVIEW CONFIGURATION
-# (Move Preview vars here so local dev sees them)
+# (Bindings here apply to 'npm run dev' and local preview)
 # ==========================================
 [vars]
 PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyB7uqKfS8zRRPTJOv4t48yRTCnUvBjANCc"
 HNS_ENCRYPTION_KEY = "wMusn9Z5UChOkZJWgufdOafRNNZVKBvkvEEOo6Nk6mM="
 
-# Preview KV Namespaces (Used by default locally)
+# Preview KV Namespaces
 [[kv_namespaces]]
 binding = "BETA_LOGS_KV"
 id = "babfd9307ecd4a1993a382ebe30c5a16"
@@ -35,7 +35,7 @@ id = "63469d2321704b1ebcc02d01a894e167"
 binding = "BETA_HUGHESNET_KV"
 id = "6a0e248bebff430f89b0de3b5dde8aee"
 
-# SHARED PLACES KV
+# SHARED PLACES KV (Added for Local)
 [[kv_namespaces]]
 binding = "BETA_PLACES_KV"
 id = "2030b20c6baa46fe8c7bb620aaf0f8c1"
@@ -70,6 +70,7 @@ id = "63469d2321704b1ebcc02d01a894e167"
 binding = "BETA_HUGHESNET_KV"
 id = "6a0e248bebff430f89b0de3b5dde8aee"
 
+# SHARED PLACES KV (Added for Production)
 [[env.production.kv_namespaces]]
 binding = "BETA_PLACES_KV"
 id = "2030b20c6baa46fe8c7bb620aaf0f8c1"
