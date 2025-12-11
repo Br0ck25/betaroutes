@@ -125,9 +125,11 @@ export class HughesNetService {
   ) {
     this.requestCount = 0;
     
+    // 1. Authenticate
     const cookie = await this.ensureSessionCookie(userId);
     if (!cookie) throw new Error('Could not login. Please reconnect.');
 
+    // 2. Load Existing DB
     let orderDb: Record<string, any> = {};
     const dbRaw = await this.kv.get(`hns:db:${userId}`);
     if (dbRaw) orderDb = JSON.parse(dbRaw);
@@ -142,6 +144,7 @@ export class HughesNetService {
         }
     };
 
+    // STAGE 1: HARVESTING 
     if (!skipScan) {
         try {
             const res = await this.safeFetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
@@ -172,6 +175,7 @@ export class HughesNetService {
     
     if (missingDataIds.length > 0) {
         this.log(`[Stage 1] Found ${missingDataIds.length} orders needing details.`);
+        
         let fetchedCount = 0;
         for (const id of missingDataIds) {
             if (this.requestCount >= MAX_REQUESTS_PER_BATCH) {
@@ -179,11 +183,13 @@ export class HughesNetService {
                 this.warn(`[Limit] Pause downloading. Resuming next batch...`);
                 break;
             }
+
             try {
                 const orderUrl = `https://dwayinstalls.hns.com/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${encodeURIComponent(id)}`;
                 const res = await this.safeFetch(orderUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
                 const html = await res.text();
                 const parsed = this.parseOrderPage(html, id);
+                
                 if (parsed.address) {
                     delete parsed._status; 
                     orderDb[id] = parsed;
@@ -197,6 +203,7 @@ export class HughesNetService {
                 if (e.message === 'REQ_LIMIT') { incomplete = true; break; }
             }
         }
+
         if (dbDirty) {
             await this.kv.put(`hns:db:${userId}`, JSON.stringify(orderDb));
             this.log(`[Stage 1] Saved ${fetchedCount} orders. Pausing to save.`);
@@ -204,7 +211,9 @@ export class HughesNetService {
         }
     }
 
+    // STAGE 2: PROCESSING 
     this.log(`[Stage 2] Processing Routes...`);
+    
     const ordersByDate: Record<string, any[]> = {};
     for (const order of Object.values(orderDb)) {
         if (!order.confirmScheduleDate || !order.address) continue;
@@ -221,17 +230,21 @@ export class HughesNetService {
     
     let tripsProcessed = 0;
     for (const date of sortedDates) {
+        
         if (this.requestCount >= (MAX_REQUESTS_PER_BATCH - 5)) {
             incomplete = true;
             this.warn(`[Limit] Buffer low (${this.requestCount}/${MAX_REQUESTS_PER_BATCH}). Stopping before ${date}.`);
             break;
         }
+
         const tripId = `hns_${userId}_${date}`;
+        
         const existingTrip = existingTrips.find(t => t.id === tripId);
         const needsCalc = !existingTrip || (existingTrip.totalMiles === 0);
 
         if (!needsCalc) continue; 
 
+        // --- CALCULATE ROUTE ---
         this.log(`[Stage 2] Routing ${date}...`);
         const daysOrders = ordersByDate[date];
         const success = await this.createTripForDate(
@@ -300,46 +313,40 @@ export class HughesNetService {
           }
       } catch(e) {}
 
-      // 1. Identify the Earliest Order for Start Time Calculation
-      let earliestOrder: any = null;
-      let earliestMins = 9999;
-
-      orders.forEach(o => {
-          const m = this.parseTime(o.beginTime);
-          if (m < earliestMins) {
-              earliestMins = m;
-              earliestOrder = o;
-          }
-      });
-
-      // 2. Sort Orders DESCENDING (Latest -> Earliest) as requested
-      orders.sort((a, b) => this.parseTime(b.beginTime) - this.parseTime(a.beginTime));
+      // SORTING: Earliest to Latest (Ascending)
+      // This places 8:00 AM first and 2:00 PM second.
+      orders.sort((a, b) => this.parseTime(a.beginTime) - this.parseTime(b.beginTime));
       
       const buildAddr = (o: any) => [o.address, o.city, o.state, o.zip].filter(Boolean).join(', ');
 
       let startAddr = defaultStart;
       let endAddr = defaultEnd;
       if (!startAddr && orders.length > 0) {
-          startAddr = buildAddr(orders[0]); // Default to first listed (Latest) if no setting
+          startAddr = buildAddr(orders[0]); 
           endAddr = startAddr;
       }
 
-      // --- CALCULATE COMMUTE FOR START TIME (Based on Earliest Job) ---
-      // We calculate the drive from Home -> Earliest Job specifically to set the trip start clock.
-      let commuteMins = 0;
-      if (earliestOrder && startAddr) {
+      // --- CALCULATE COMMUTE FOR START TIME ---
+      // Since list is sorted Earliest -> Latest, orders[0] is the first job of the day.
+      let earliestOrder: any = orders[0];
+      let startMins = 9 * 60; // Default 9 AM
+
+      if (earliestOrder) {
+          const earliestMins = this.parseTime(earliestOrder.beginTime);
+          let commuteMins = 0;
           const eAddr = buildAddr(earliestOrder);
-          if (eAddr !== startAddr) {
+          
+          if (startAddr && eAddr !== startAddr) {
               try {
                   const leg = await this.getRouteInfo(startAddr, eAddr);
                   if (leg) commuteMins = Math.round(leg.duration / 60);
               } catch(e) { }
           }
+          // Start Time = First Job Time - Drive Time to get there
+          startMins = earliestMins !== 0 ? (earliestMins - commuteMins) : (9 * 60);
       }
-      
-      const startMins = earliestMins !== 9999 ? (earliestMins - commuteMins) : (9 * 60);
 
-      // --- CALCULATE ROUTE TOTALS (Based on Sorted List: Latest -> Earliest) ---
+      // --- CALCULATE ROUTE TOTALS ---
       const points = [startAddr, ...orders.map((o:any) => buildAddr(o)), endAddr];
       let totalMins = 0;
       let totalMeters = 0;
@@ -451,9 +458,10 @@ export class HughesNetService {
           mpg, gasPrice: gas,
           fuelCost: Number(fuelCost.toFixed(2)),
           
+          // Double save for frontend compatibility
           suppliesCost: totalSuppliesCost,
           supplyItems: tripSupplies,
-          suppliesItems: tripSupplies, // Double save for compatibility
+          suppliesItems: tripSupplies,
           
           stops: stops,
           createdAt: new Date().toISOString(),
@@ -491,7 +499,7 @@ export class HughesNetService {
 
   // UPDATED: Strictly enforces 24h clock parsing
   private parseTime(timeStr: string): number {
-      if (!timeStr) return 0; // Default to 0 so unparsed morning jobs float to top in ascending sort (bottom in descending)
+      if (!timeStr) return 0; // Default to 0 to put unparsed jobs at the start
       
       const m = timeStr.match(/(\d{1,2})[:]?(\d{2})/);
       if (!m) return 0;
@@ -624,7 +632,7 @@ export class HughesNetService {
     if (time && time[1]) {
         out.beginTime = time[1];
     } else {
-        // 2. Try scraping visual text (e.g. "Begin Time: 14:00")
+        // 2. Try scraping visual text
         const visTime = text.match(/Begin Time:?\s*(\d{1,2}:?\d{2})/i);
         if (visTime) out.beginTime = visTime[1];
     }
