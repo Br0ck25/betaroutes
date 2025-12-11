@@ -314,7 +314,6 @@ export class HughesNetService {
       } catch(e) {}
 
       // SORTING: Earliest to Latest (Ascending)
-      // Preserving your correct logic here
       orders.sort((a, b) => this.parseTime(a.beginTime) - this.parseTime(b.beginTime));
       
       const buildAddr = (o: any) => [o.address, o.city, o.state, o.zip].filter(Boolean).join(', ');
@@ -341,7 +340,6 @@ export class HughesNetService {
                   if (leg) commuteMins = Math.round(leg.duration / 60);
               } catch(e) { }
           }
-          // Start Time = First Job Time - Drive Time to get there
           startMins = earliestMins !== 0 ? (earliestMins - commuteMins) : (9 * 60);
       }
 
@@ -395,7 +393,7 @@ export class HughesNetService {
               basePay = installPay + poleCharge;
               notes += ` [POLE MOUNT +$${poleCharge}]`;
               
-              // FIX: Renamed to "Pole" and "Concrete" (dropped " Cost")
+              // FIX: Renamed to "Pole" and "Concrete"
               if (poleCost > 0) {
                   supplyItems.push({ type: 'Pole', cost: poleCost });
               }
@@ -418,7 +416,7 @@ export class HughesNetService {
       };
 
       // FIX: Aggregation Logic
-      // Combine all "Pole" items into one entry per type
+      // Combine "Pole" and "Concrete" items
       const suppliesMap = new Map<string, number>();
       let totalSuppliesCost = 0;
 
@@ -445,7 +443,7 @@ export class HughesNetService {
           };
       });
 
-      // Create aggregated supply list for the trip
+      // Create aggregated supply list
       const tripSupplies = Array.from(suppliesMap.entries()).map(([type, cost]) => ({
           id: crypto.randomUUID(),
           type,
@@ -469,7 +467,7 @@ export class HughesNetService {
           
           suppliesCost: totalSuppliesCost,
           supplyItems: tripSupplies,
-          suppliesItems: tripSupplies, // Double save for compatibility
+          suppliesItems: tripSupplies,
           
           stops: stops,
           createdAt: new Date().toISOString(),
@@ -505,16 +503,12 @@ export class HughesNetService {
       return dateStr;
   }
 
-  // UPDATED: Strictly enforces 24h clock parsing (Matching your correct version)
   private parseTime(timeStr: string): number {
       if (!timeStr) return 0; 
-      
       const m = timeStr.match(/(\d{1,2})[:]?(\d{2})/);
       if (!m) return 0;
-      
       let h = parseInt(m[1]);
       let min = parseInt(m[2]);
-      
       return h * 60 + min;
   }
 
@@ -524,6 +518,12 @@ export class HughesNetService {
       const m = Math.floor(minutes % 60);
       if (h >= 24) h = h % 24;
       return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+  }
+
+  // HELPER: Convert "2052 ROCKLICK RD" -> "2052 Rocklick Rd"
+  private toTitleCase(str: string) {
+      if (!str) return '';
+      return str.toLowerCase().replace(/\b\w/g, s => s.toUpperCase());
   }
 
   private async scanUrlForOrders(url: string, cookie: string, callback: (id: string) => void) {
@@ -618,9 +618,14 @@ export class HughesNetService {
         if (addressMatch) out.address = addressMatch[1].trim().split(/county:/i)[0].trim();
     }
 
+    // FIX: Apply Title Casing to Address
+    if (out.address) out.address = this.toTitleCase(out.address);
+
     // City/State/Zip
     const city = html.match(/name=["']f_city["'][^>]*value=["']([^"']*)["']/i);
     if (city) out.city = city[1].trim();
+    if (out.city) out.city = this.toTitleCase(out.city); // Apply Title Case
+
     const state = html.match(/name=["']f_state["'][^>]*value=["']([^"']*)["']/i);
     if (state) out.state = state[1].trim();
     const zip = html.match(/name=["']f_zip["'][^>]*value=["']([^"']*)["']/i);
