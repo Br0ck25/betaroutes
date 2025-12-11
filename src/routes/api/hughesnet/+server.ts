@@ -29,7 +29,6 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
             return json({ success, error: success ? undefined : 'Login failed', logs: service.logs });
         }
         
-        // NEW: Disconnect Action
         if (body.action === 'disconnect') {
             const success = await service.disconnect(userId);
             return json({ success, logs: service.logs });
@@ -38,8 +37,11 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
         if (body.action === 'sync') {
             const installPay = Number(body.installPay) || 0;
             const repairPay = Number(body.repairPay) || 0;
+            
+            // EXTRACT SKIP SCAN FLAG
+            const skipScan = body.skipScan === true;
 
-            const result = await service.sync(userId, settingsId, installPay, repairPay);
+            const result = await service.sync(userId, settingsId, installPay, repairPay, skipScan);
             
             return json({ 
                 success: true, 

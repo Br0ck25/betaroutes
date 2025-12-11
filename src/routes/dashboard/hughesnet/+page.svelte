@@ -20,8 +20,6 @@
 
   let showSuccess = false;
   let successMessage = '';
-  
-  // New Status Message for Auto-looping
   let statusMessage = 'Sync Now';
 
   function showSuccessMsg(msg: string) {
@@ -83,7 +81,6 @@
             isConnected = true;
             addLog('Connected! Ready to sync.');
             showSuccessMsg('Connected successfully!');
-            // REMOVED: await handleSync(); -> User must click Sync manually
         } else {
             addLog('Login Failed: ' + (data.error || 'Unknown error'));
             alert('Login Failed: ' + (data.error || 'Check logs'));
@@ -110,7 +107,7 @@
         
         if (data.success) {
             isConnected = false;
-            orders = []; // Clear view
+            orders = []; 
             addLog('Disconnected.');
             showSuccessMsg('Disconnected.');
         }
@@ -122,8 +119,11 @@
     loading = true;
     statusMessage = `Syncing Batch ${batchCount}... (Please Wait)`;
     
+    // UPDATED: If batch > 1, we skip scanning to save requests
+    const skipScan = batchCount > 1;
+    
     if (batchCount === 1) {
-        addLog(`Starting Full Sync... (Pay: $${installPay}/$${repairPay})`);
+        addLog(`Starting Full Sync...`);
     } else {
         addLog(`Continuing Sync (Batch ${batchCount})...`);
     }
@@ -137,7 +137,8 @@
                 repairPay,
                 installTime,
                 repairTime,
-                overrideTimes
+                overrideTimes,
+                skipScan // Pass the flag
             })
         });
         const data = await res.json();
@@ -150,7 +151,7 @@
              
              if (data.incomplete) {
                  addLog(`Batch ${batchCount} complete. Starting next batch automatically...`);
-                 await new Promise(r => setTimeout(r, 1000));
+                 await new Promise(r => setTimeout(r, 1500)); // Slightly longer delay
                  await handleSync(batchCount + 1);
                  return;
              }
@@ -172,7 +173,7 @@
     } catch (e: any) {
         addLog('Sync Error: ' + e.message);
     } finally {
-        // Finalize state handled by recursion exit or return
+        // recursion handles loading state
     }
     
     loading = false;
@@ -449,7 +450,6 @@
   .dot { width: 8px; height: 8px; background: #166534; border-radius: 50%; display: inline-block; }
   .last-sync { color: #15803D; font-size: 14px; margin-top: 4px; }
   
-  /* Warning Box for Settings */
   .warning-box { margin: 16px 0; padding: 12px; background: #FFF7ED; border: 1px solid #FED7AA; border-radius: 8px; font-size: 13px; color: #9A3412; }
   .warning-box a { color: #C2410C; text-decoration: underline; font-weight: 600; }
 

@@ -23,7 +23,6 @@ export class HughesNetService {
     private googleApiKey: string | undefined
   ) {}
 
-  // --- LOGGING ---
   private log(msg: string) { console.log(msg); this.logs.push(msg); }
   private warn(msg: string) { console.warn(msg); this.logs.push(`⚠️ ${msg}`); }
   private error(msg: string, e?: any) { console.error(msg, e); this.logs.push(`❌ ${msg} ${e ? '(' + e + ')' : ''}`); }
@@ -50,7 +49,6 @@ export class HughesNetService {
     return true;
   }
 
-  // NEW: Disconnect Method
   async disconnect(userId: string) {
       this.log(`[HNS] Disconnecting user ${userId}...`);
       await this.kv.delete(`hns:session:${userId}`);
@@ -58,37 +56,57 @@ export class HughesNetService {
       return true;
   }
 
-  async sync(userId: string, settingsId?: string, installPay: number = 0, repairPay: number = 0) {
-    this.log(`[HNS] Sync Started. (Pay: $${installPay}/$${repairPay})`);
+  // UPDATED: Added skipScan parameter
+  async sync(userId: string, settingsId?: string, installPay: number = 0, repairPay: number = 0, skipScan: boolean = false) {
+    this.log(`[HNS] Sync Started. (Pay: $${installPay}/$${repairPay}) SkipScan: ${skipScan}`);
     this.requestCount = 0;
 
+    // Login logic uses 1-2 requests.
     const cookie = await this.ensureSessionCookie(userId);
     if (!cookie) throw new Error('Could not login.');
 
-    const res = await this.safeFetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
-    const html = await res.text();
-    if (html.includes('name="Password"')) throw new Error('Session expired. Please reconnect.');
+    let finalIds: string[] = [];
 
-    const uniqueIds = new Set<string>();
-    this.extractIds(html).forEach(id => uniqueIds.add(id));
+    // SCANNING BLOCK
+    if (!skipScan) {
+        // Fetch Menu (Counts as 1 request)
+        const res = await this.safeFetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
+        const html = await res.text();
+        if (html.includes('name="Password"')) throw new Error('Session expired. Please reconnect.');
 
-    if (uniqueIds.size === 0 || this.requestCount < 10) {
-        this.log('[HNS] Scanning menu links...');
-        const links = this.extractMenuLinks(html);
-        const priorityLinks = links.filter(l => l.url.includes('SoSearch') || l.url.includes('forms/'));
+        const uniqueIds = new Set<string>();
+        this.extractIds(html).forEach(id => uniqueIds.add(id));
 
-        for (const link of priorityLinks) {
-            if (this.requestCount > 15) break; 
-            this.log(`[HNS] Scanning: ${link.text}`);
-            await this.scanUrlForOrders(link.url, cookie, uniqueIds);
-            await new Promise(r => setTimeout(r, 300)); 
+        // Scan Sub-pages with try/catch to handle limits gracefully
+        try {
+            if (this.requestCount < 10) {
+                this.log('[HNS] Scanning menu links...');
+                const links = this.extractMenuLinks(html);
+                const priorityLinks = links.filter(l => l.url.includes('SoSearch') || l.url.includes('forms/'));
+
+                for (const link of priorityLinks) {
+                    if (this.requestCount > 25) break; 
+                    this.log(`[HNS] Scanning: ${link.text}`);
+                    await this.scanUrlForOrders(link.url, cookie, uniqueIds);
+                    await new Promise(r => setTimeout(r, 200)); 
+                }
+            }
+        } catch (e: any) {
+            this.warn('[HNS] Scanned partially due to limits. Continuing with found orders...');
         }
+
+        finalIds = Array.from(uniqueIds);
+        this.log(`[HNS] Total unique orders found: ${finalIds.length}`);
+        await this.kv.put(`hns:orders_index:${userId}`, JSON.stringify(finalIds));
+    } else {
+        // LOAD FROM CACHE IF SKIPPING SCAN
+        this.log('[HNS] Skipping scan, loading order list from cache...');
+        const cachedIndex = await this.kv.get(`hns:orders_index:${userId}`);
+        if (cachedIndex) finalIds = JSON.parse(cachedIndex);
+        this.log(`[HNS] Loaded ${finalIds.length} orders from cache.`);
     }
 
-    const finalIds = Array.from(uniqueIds);
-    this.log(`[HNS] Total unique orders found: ${finalIds.length}`);
-    await this.kv.put(`hns:orders_index:${userId}`, JSON.stringify(finalIds));
-
+    // FETCH DETAILS (BATCHED)
     const orders: any[] = [];
     let fetchedNewCount = 0;
     let incomplete = false; 
@@ -180,23 +198,71 @@ export class HughesNetService {
   // --- PRIVATE METHODS ---
   
   private async scanUrlForOrders(url: string, cookie: string, idSet: Set<string>) {
-    try {
-        const res = await this.safeFetch(url, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT, 'Referer': HOME_URL }});
-        const html = await res.text();
-        this.extractIds(html).forEach(id => idSet.add(id));
+      let currentUrl = url;
+      let pageCount = 0;
+      
+      // Limit to 5 pages per category
+      while (currentUrl && pageCount < 5) {
+          try {
+             const res = await this.safeFetch(currentUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT, 'Referer': HOME_URL }});
+             const html = await res.text();
+             
+             this.extractIds(html).forEach(id => idSet.add(id));
 
-        const frames = this.extractFrameUrls(html);
-        for (const frameUrl of frames) {
-            let absUrl = frameUrl;
-            if (!frameUrl.startsWith('http')) {
-                const currentDir = url.substring(0, url.lastIndexOf('/') + 1);
-                absUrl = new URL(frameUrl, currentDir).href;
+             if (pageCount === 0) {
+                 const frames = this.extractFrameUrls(html);
+                 for (const frameUrl of frames) {
+                    let absUrl = frameUrl;
+                    if (!frameUrl.startsWith('http')) {
+                        const currentDir = url.substring(0, url.lastIndexOf('/') + 1);
+                        absUrl = new URL(frameUrl, currentDir).href;
+                    }
+                    try {
+                        const fRes = await this.safeFetch(absUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
+                        const fHtml = await fRes.text();
+                        this.extractIds(fHtml).forEach(id => idSet.add(id));
+                    } catch(e) {}
+                 }
+             }
+
+             const nextLink = this.extractNextPageUrl(html, currentUrl);
+             if (nextLink && nextLink !== currentUrl) {
+                 this.log(`[HNS] Found 'Next' link (Page ${pageCount + 2})...`);
+                 currentUrl = nextLink;
+                 pageCount++;
+                 await new Promise(r => setTimeout(r, 300));
+             } else {
+                 break; 
+             }
+
+          } catch (e: any) {
+             if (e.message === 'SUBREQUEST_LIMIT_REACHED') {
+                 this.warn('[HNS] Subrequest limit reached during scan. Stopping scan.');
+                 throw e; 
+             }
+             break; 
+          }
+      }
+  }
+
+  private extractNextPageUrl(html: string, currentUrl: string): string | null {
+    const regex = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>(?:.*?(?:\bNext\b|&gt;|>).*?)<\/a>/i;
+    const match = html.match(regex);
+    
+    if (match && match[1]) {
+        let nextUrl = match[1].replace(/&amp;/g, '&');
+        if (nextUrl.toLowerCase().startsWith('javascript')) return null;
+        if (!nextUrl.startsWith('http')) {
+            if (nextUrl.startsWith('/')) {
+                return `${BASE_URL}${nextUrl}`;
+            } else {
+                const currentDir = currentUrl.substring(0, currentUrl.lastIndexOf('/') + 1);
+                return new URL(nextUrl, currentDir).href;
             }
-            const fRes = await this.safeFetch(absUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
-            const fHtml = await fRes.text();
-            this.extractIds(fHtml).forEach(id => idSet.add(id));
         }
-    } catch (e) { }
+        return nextUrl;
+    }
+    return null;
   }
 
   private extractMenuLinks(html: string) {
@@ -412,7 +478,6 @@ export class HughesNetService {
           tripEnd = tripStart;
       }
 
-      // --- ROUTING ---
       let totalDriveMinutes = 0;
       let totalDistanceMeters = 0;
       let startToFirstJobMinutes = 0;
