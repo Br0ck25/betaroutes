@@ -10,7 +10,7 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 const APP_DOMAIN = 'https://gorouteyourself.com/';
 
 // SAFETY LIMITS
-const MAX_REQUESTS_PER_BATCH = 35; // Total Cloudflare limit is 50. Keep safely under.
+const MAX_REQUESTS_PER_BATCH = 35; 
 
 export class HughesNetService {
   public logs: string[] = [];
@@ -39,20 +39,35 @@ export class HughesNetService {
   // --- AUTH ---
   async connect(userId: string, username: string, password: string) {
     this.log(`[HNS] Connecting user ${userId}...`);
+    
+    // 1. Attempt Login
+    const cookie = await this.loginAndStoreSession(userId, username, password);
+    if (!cookie) {
+        this.error(`[HNS] Login failed: Invalid credentials or server rejected login.`);
+        return false;
+    }
+
+    // 2. Encrypt & Store Creds SECURELY
     const payload = { username, password, loginUrl: LOGIN_URL, createdAt: new Date().toISOString() };
     const enc = await this.encrypt(JSON.stringify(payload));
     await this.kv.put(`hns:cred:${userId}`, enc);
 
-    const cookie = await this.loginAndStoreSession(userId, username, password);
-    if (!cookie) return false;
-
-    // Verify
+    // 3. Verify Session
     try {
         const verifyRes = await this.safeFetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT } });
         const verifyHtml = await verifyRes.text();
-        if (verifyHtml.includes('name="Password"') || verifyHtml.includes('login.jsp')) return false;
+        
+        if (verifyHtml.includes('name="Password"') || verifyHtml.includes('login.jsp')) {
+             this.error(`[HNS] Verification failed. Cookie was rejected.`);
+             return false;
+        }
+        
+        this.log(`[HNS] Connection verified successfully.`);
         return true;
-    } catch(e) { return false; }
+    } catch(e) { 
+        this.error(`[HNS] Verification error`, e);
+        return false; 
+    }
   }
 
   async disconnect(userId: string) {
@@ -63,7 +78,7 @@ export class HughesNetService {
       return true;
   }
 
-  // --- SMART SYNC (Two-Stage) ---
+  // --- SMART SYNC ---
   async sync(userId: string, settingsId?: string, installPay: number = 0, repairPay: number = 0, skipScan: boolean = false) {
     this.requestCount = 0;
     
@@ -80,28 +95,23 @@ export class HughesNetService {
     let dbDirty = false;
     let incomplete = false;
 
-    // =========================================================
-    // STAGE 1: HARVESTING (Download missing data)
-    // =========================================================
-    
+    // STAGE 1: HARVESTING 
     if (!skipScan) {
         try {
-            // A. Fetch Menu
             const res = await this.safeFetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
             const html = await res.text();
+            
             if (html.includes('name="Password"')) throw new Error('Session expired.');
             
             this.extractIds(html).forEach(id => foundIds.add(id));
 
-            // B. Scan Subpages (Limit depth to save requests)
             if (this.requestCount < 10) {
                 const links = this.extractMenuLinks(html);
                 const priorityLinks = links.filter(l => l.url.includes('SoSearch') || l.url.includes('forms/'));
-                
-                this.log(`[Stage 1] Scanning ${priorityLinks.length} pages for orders...`);
+                this.log(`[Stage 1] Scanning ${priorityLinks.length} pages...`);
                 
                 for (const link of priorityLinks) {
-                    if (this.requestCount > 15) break; // Leave buffer
+                    if (this.requestCount > 15) break; 
                     await this.scanUrlForOrders(link.url, cookie, foundIds);
                     await new Promise(r => setTimeout(r, 150));
                 }
@@ -116,19 +126,16 @@ export class HughesNetService {
     const missingDataIds = allIds.filter(id => !orderDb[id]);
     
     if (missingDataIds.length > 0) {
-        this.log(`[Stage 1] Found ${missingDataIds.length} orders needing details.`);
-        
+        this.log(`[Stage 1] Found ${missingDataIds.length} new orders.`);
         let fetchedCount = 0;
         for (const id of missingDataIds) {
-            // Hard Stop if limit near
             if (this.requestCount >= MAX_REQUESTS_PER_BATCH) {
                 incomplete = true;
-                this.warn(`[Limit] Pause downloading. Resuming next batch...`);
+                this.warn(`[Limit] Pausing download.`);
                 break;
             }
 
             try {
-                // Fetch Details
                 const orderUrl = `https://dwayinstalls.hns.com/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${encodeURIComponent(id)}`;
                 const res = await this.safeFetch(orderUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
                 const html = await res.text();
@@ -143,26 +150,19 @@ export class HughesNetService {
                 await new Promise(r => setTimeout(r, 200)); 
             } catch (e: any) {
                 if (e.message === 'REQ_LIMIT') { incomplete = true; break; }
-                console.error(`Error fetching ${id}`);
             }
         }
 
-        // SAVE & EXIT if we did work
         if (dbDirty) {
             await this.kv.put(`hns:db:${userId}`, JSON.stringify(orderDb));
-            this.log(`[Stage 1] Saved ${fetchedCount} new orders. Pausing to save.`);
-            return { orders: Object.values(orderDb), incomplete: true }; // Force loop to come back
+            this.log(`[Stage 1] Saved ${fetchedCount} orders.`);
+            return { orders: Object.values(orderDb), incomplete: true }; 
         }
     }
 
-    // =========================================================
-    // STAGE 2: PROCESSING (Generate Trips Date-by-Date)
-    // =========================================================
-    // Only reachable if Stage 1 found no new data (or cache is full)
+    // STAGE 2: PROCESSING 
+    this.log(`[Stage 2] Processing Routes...`);
     
-    this.log(`[Stage 2] Processing Routes (Date by Date)...`);
-    
-    // Group by Date
     const ordersByDate: Record<string, any[]> = {};
     for (const order of Object.values(orderDb)) {
         if (!order.confirmScheduleDate) continue;
@@ -173,38 +173,27 @@ export class HughesNetService {
         }
     }
 
-    // Sort Dates (Oldest to Newest)
     const sortedDates = Object.keys(ordersByDate).sort();
-    
-    // Load existing trips (to check if we need to update)
     const tripService = makeTripService(this.tripKV, this.trashKV);
     const existingTrips = await tripService.list(userId);
     
-    // Process Dates
     let tripsProcessed = 0;
     for (const date of sortedDates) {
-        // Stop if limit reached
         if (this.requestCount >= MAX_REQUESTS_PER_BATCH) {
             incomplete = true;
-            this.warn(`[Limit] Stopping routing at ${date}. Resuming next batch.`);
+            this.warn(`[Limit] Pause routing at ${date}.`);
             break;
         }
 
         const tripId = `hns_${userId}_${date}`;
-        
-        // CHECK: If trip exists and looks complete, skip it
         const existingTrip = existingTrips.find(t => t.id === tripId);
-        const needsCalc = !existingTrip || (existingTrip.totalMiles === 0);
+        if (existingTrip && existingTrip.totalMiles > 0) continue; 
 
-        if (!needsCalc) continue; 
-
-        // --- CALCULATE ROUTE ---
         this.log(`[Stage 2] Routing ${date}...`);
         const daysOrders = ordersByDate[date];
         const success = await this.createTripForDate(userId, date, daysOrders, settingsId, installPay, repairPay, tripService);
         
         if (!success) {
-            // If routing failed due to limits/errors
             if (this.requestCount >= MAX_REQUESTS_PER_BATCH) {
                 incomplete = true;
                 break;
@@ -212,12 +201,6 @@ export class HughesNetService {
         } else {
             tripsProcessed++;
         }
-    }
-
-    if (tripsProcessed === 0 && !incomplete) {
-        this.log('[Stage 2] All dates are up to date!');
-    } else {
-        this.log(`[Stage 2] Processed ${tripsProcessed} dates.`);
     }
 
     return { orders: Object.values(orderDb), incomplete };
@@ -229,30 +212,26 @@ export class HughesNetService {
   }
 
   async clearAllTrips(userId: string) {
-      this.log(`[HNS] Clearing HNS trips & cache...`);
+      this.log(`[HNS] Clearing HNS trips...`);
       const tripService = makeTripService(this.tripKV, this.trashKV);
-      
       const allTrips = await tripService.list(userId);
       let count = 0;
       for (const trip of allTrips) {
-          // Robust check for HNS trips
-          if (trip.id.startsWith('hns_') || trip.notes?.includes('HNS') || trip.stops?.some((s:any) => s.notes?.includes('HNS'))) {
+          if (trip.id.startsWith('hns_') || trip.notes?.includes('HNS')) {
               await tripService.delete(userId, trip.id);
               count++;
           }
       }
-      // Clear Cache
       await this.kv.delete(`hns:db:${userId}`);
       return count;
   }
 
-  // --- TRIP CALCULATION LOGIC ---
+  // --- TRIP CALCULATION ---
   private async createTripForDate(
       userId: string, date: string, orders: any[], settingsId: string | undefined, 
       installPay: number, repairPay: number, tripService: any
   ): Promise<boolean> {
       
-      // Load Settings
       let defaultStart = '', defaultEnd = '', mpg = 25, gas = 3.50;
       try {
           const sRaw = await this.settingsKV.get(settingsId || userId) || await this.settingsKV.get(userId);
@@ -265,26 +244,21 @@ export class HughesNetService {
           }
       } catch(e) {}
 
-      // Sort & Prep
       orders.sort((a, b) => this.parseTime(a.beginTime) - this.parseTime(b.beginTime));
-      
       const buildAddr = (o: any) => [o.address, o.city, o.state, o.zip].filter(Boolean).join(', ');
 
       let startAddr = defaultStart;
       let endAddr = defaultEnd;
       if (!startAddr && orders.length > 0) {
-          startAddr = buildAddr(orders[0]); // Fallback
+          startAddr = buildAddr(orders[0]); 
           endAddr = startAddr;
       }
 
-      // Route Points
       const points = [startAddr, ...orders.map((o:any) => buildAddr(o)), endAddr];
-      
       let totalMins = 0;
       let totalMeters = 0;
       let firstLegMins = 0;
 
-      // Google Maps Loop
       for (let i = 0; i < points.length - 1; i++) {
           const origin = points[i];
           const dest = points[i+1];
@@ -299,24 +273,17 @@ export class HughesNetService {
                   totalMins += m;
                   totalMeters += leg.distance;
                   if (i === 0) firstLegMins = m;
-                  this.log(`[Maps] Leg ${i+1}: ${origin} -> ${dest} (${m} min)`);
-              } else {
-                  this.warn(`[Maps] Failed leg ${i+1}: ${origin} -> ${dest}`);
+                  this.log(`[Maps] Leg ${i+1}: ${m} min`);
               }
           } catch (e: any) {
-              if (e.message === 'REQ_LIMIT') {
-                  this.warn(`[Limit] Routing stopped at ${date} Leg ${i+1}`);
-                  return false; // Fail this date
-              }
+              if (e.message === 'REQ_LIMIT') return false; 
               this.error(`[Maps] Error`, e);
           }
       }
 
-      // Calculations
       const miles = Number((totalMeters * 0.000621371).toFixed(1));
       
-      // Start Time
-      let minMins = 9 * 60; // 9am default
+      let minMins = 9 * 60; 
       if (orders.length > 0) {
           const t = this.parseTime(orders[0].beginTime);
           if (t < 24*60) minMins = t;
@@ -329,12 +296,10 @@ export class HughesNetService {
       const totalWorkMins = totalMins + jobMins;
       const hoursWorked = Number((totalWorkMins / 60).toFixed(2));
       const fuelCost = mpg > 0 ? (miles / mpg) * gas : 0;
-
       const calcPay = (type: string) => (type === 'Install' ? installPay : repairPay);
 
-      // Create Trip Object
       const trip = {
-          id: `hns_${userId}_${date}`, // DETERMINISTIC ID
+          id: `hns_${userId}_${date}`,
           userId,
           date,
           startTime: this.minutesToTime(startMins),
@@ -363,8 +328,7 @@ export class HughesNetService {
       };
 
       await tripService.put(trip as any);
-      this.log(`[Stage 2] Saved Trip ${date} ($${trip.fuelCost} fuel, ${miles} mi)`);
-      
+      this.log(`[Stage 2] Saved Trip ${date}`);
       return true;
   }
 
@@ -376,7 +340,6 @@ export class HughesNetService {
           const res = await this.safeFetch(url, { headers: { 'Referer': APP_DOMAIN, 'User-Agent': 'BetaRoutes/1.0' } });
           const data = await res.json();
           if (data.routes?.[0]?.legs?.[0]) return { distance: data.routes[0].legs[0].distance.value, duration: data.routes[0].legs[0].duration.value };
-          if (data.error_message) this.error(`[Maps API] ${data.error_message}`);
       } catch (e: any) { 
           if (e.message === 'REQ_LIMIT') throw e; 
       }
@@ -413,18 +376,16 @@ export class HughesNetService {
   private async scanUrlForOrders(url: string, cookie: string, idSet: Set<string>) {
       let current = url;
       let page = 0;
-      // Safety break for pagination loop
       while(current && page < 5) {
           try {
               const res = await this.safeFetch(current, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT } });
               const html = await res.text();
               this.extractIds(html).forEach(id => idSet.add(id));
               
-              if (page === 0) { // Check frames only on first page
+              if (page === 0) { 
                   const frames = this.extractFrameUrls(html);
                   for (const f of frames) {
                       try {
-                          // FIX: Use URL constructor to handle relative paths safely
                           const frameUrl = new URL(f, BASE_URL).href;
                           const fRes = await this.safeFetch(frameUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT } });
                           this.extractIds(await fRes.text()).forEach(id => idSet.add(id));
@@ -442,7 +403,6 @@ export class HughesNetService {
     const match = html.match(regex);
     if (match && match[1]) {
         let next = match[1].replace(/&amp;/g, '&');
-        // FIX: Use URL constructor to handle relative paths safely
         if (!next.startsWith('javascript')) {
              return new URL(next, currentUrl).href;
         }
@@ -468,7 +428,6 @@ export class HughesNetService {
     while ((m = re.exec(html)) !== null) {
         let url = m[1];
         if (url && (url.includes('.jsp') || url.includes('SoSearch')) && !url.startsWith('javascript')) {
-             // FIX: Use URL constructor
              try {
                 const absolute = new URL(url, BASE_URL).href;
                 links.push({ url: absolute, text: m[2].replace(/<[^>]+>/g, '').trim() });
@@ -516,7 +475,6 @@ export class HughesNetService {
     const time = html.match(/name=["']f_begin_time["'][^>]*value=["']([^"']*)["']/i);
     if (time) out.beginTime = time[1];
 
-    // Type
     if (html.match(/Install/i) || text.includes('Install')) { out.type = 'Install'; out.jobDuration = 90; }
     
     return out;
@@ -538,16 +496,13 @@ export class HughesNetService {
     return null;
   }
 
-  // --- MISSING METHODS ADDED BELOW ---
-
+  // --- AUTH METHOD ---
   private async loginAndStoreSession(userId: string, u: string, p: string) {
     try {
         const params = new URLSearchParams();
         params.append('UserId', u);
         params.append('Password', p);
         
-        // Note: safeFetch not needed for login usually, but good for limit tracking if strict
-        this.requestCount++; 
         const res = await fetch(LOGIN_URL, {
             method: 'POST',
             body: params,
@@ -555,17 +510,25 @@ export class HughesNetService {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'User-Agent': USER_AGENT 
             },
-            redirect: 'manual'
+            redirect: 'manual' 
         });
 
-        const cookie = res.headers.get('set-cookie');
-        if (cookie) {
-            // Basic cleanup of cookie string
-            const simpleCookie = cookie.split(';')[0]; 
-            await this.kv.put(`hns:session:${userId}`, simpleCookie, { expirationTtl: 3600 }); // 1 hour session
+        const cookieHeader = res.headers.get('set-cookie');
+        const location = res.headers.get('Location') || '';
+
+        if (cookieHeader) {
+            // Check for failure redirect
+            if (location && (location.includes('login.jsp') || location.includes('error'))) {
+                this.warn(`[HNS] Server redirected back to login page.`);
+                return null;
+            }
+
+            const simpleCookie = cookieHeader.split(';')[0]; 
+            await this.kv.put(`hns:session:${userId}`, simpleCookie, { expirationTtl: 3600 });
             this.log(`[HNS] Logged in successfully.`);
             return simpleCookie;
         }
+        
         this.warn(`[HNS] Login failed (no cookie returned).`);
     } catch(e) {
         this.error(`[HNS] Login error`, e);
@@ -573,15 +536,29 @@ export class HughesNetService {
     return null;
   }
 
-  // Simple placeholder crypto. In production, use WebCrypto (SubtleCrypto) properly.
-  // This just effectively passes strings for now if you don't have the specific logic.
-  private async encrypt(text: string): Promise<string> {
-      // TODO: Implement actual AES-GCM encryption using this.encryptionKey
-      return btoa(text); 
+  // --- SECURE ENCRYPTION ---
+  private async encrypt(plain: string) {
+    if (!this.encryptionKey) return plain;
+    const keyRaw = Uint8Array.from(atob(this.encryptionKey), c => c.charCodeAt(0));
+    const key = await crypto.subtle.importKey('raw', keyRaw, 'AES-GCM', false, ['encrypt']);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const enc = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(plain));
+    const combined = new Uint8Array(iv.byteLength + enc.byteLength);
+    combined.set(iv, 0);
+    combined.set(new Uint8Array(enc), iv.byteLength);
+    return btoa(String.fromCharCode(...combined));
   }
 
-  private async decrypt(text: string): Promise<string> {
-      // TODO: Implement actual AES-GCM decryption using this.encryptionKey
-      try { return atob(text); } catch(e) { return ''; }
+  private async decrypt(cipherB64: string) {
+    if (!this.encryptionKey) return cipherB64;
+    try {
+        const combined = Uint8Array.from(atob(cipherB64), c => c.charCodeAt(0));
+        const iv = combined.slice(0, 12);
+        const data = combined.slice(12);
+        const keyRaw = Uint8Array.from(atob(this.encryptionKey), c => c.charCodeAt(0));
+        const key = await crypto.subtle.importKey('raw', keyRaw, 'AES-GCM', false, ['decrypt']);
+        const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+        return new TextDecoder().decode(dec);
+    } catch (e) { return null; }
   }
 }
