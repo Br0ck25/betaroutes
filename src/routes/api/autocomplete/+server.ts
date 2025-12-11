@@ -4,20 +4,20 @@ import type { RequestHandler } from './$types';
 import type { KVNamespace } from '@cloudflare/workers-types';
 
 export const GET: RequestHandler = async ({ url, platform }) => {
+	console.log('[API:Autocomplete:GET] 🔍 Received Search Request');
 	const query = url.searchParams.get('q')?.toLowerCase();
-	// Reduce limit to 2 chars for easier testing
+	
 	if (!query || query.length < 2) return json([]);
 
 	const placesKV = platform?.env?.BETA_PLACES_KV as KVNamespace;
 
 	if (!placesKV) {
-		console.warn('[API:Autocomplete:GET] ❌ BETA_PLACES_KV is NOT bound!');
+		console.error('[API:Autocomplete:GET] ❌ BETA_PLACES_KV is NOT bound! Check hooks.server.ts');
 		return json([]);
 	}
 
 	try {
 		console.log(`[API:Autocomplete:GET] Searching for: "${query}"`);
-		// List keys starting with the query (prefix search)
 		const list = await placesKV.list({ prefix: query, limit: 5 });
 		console.log(`[API:Autocomplete:GET] Found ${list.keys.length} matches`);
 
@@ -35,12 +35,16 @@ export const GET: RequestHandler = async ({ url, platform }) => {
 };
 
 export const POST: RequestHandler = async ({ request, platform }) => {
-	console.log('[API:Autocomplete:POST] Received save request');
+	console.log('------------------------------------------------');
+	console.log('[API:Autocomplete:POST] 💾 SAVE REQUEST RECEIVED');
+	console.log('------------------------------------------------');
 	
 	const placesKV = platform?.env?.BETA_PLACES_KV as KVNamespace;
 	
 	if (!placesKV) {
-		console.error('[API:Autocomplete:POST] ❌ BETA_PLACES_KV is NOT bound! Check hooks.server.ts');
+		console.error('[API:Autocomplete:POST] ❌ BETA_PLACES_KV is MISSING in platform.env!');
+		// Try to dump what IS available for debugging
+		console.log('Available Env:', Object.keys(platform?.env || {}));
 		return json({ success: false, error: 'Database not connected' }, { status: 500 });
 	}
 
@@ -49,14 +53,14 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		console.log('[API:Autocomplete:POST] Payload:', JSON.stringify(body));
 
 		if (!body.formatted_address && !body.name) {
-			console.error('[API:Autocomplete:POST] ❌ Missing address/name in payload');
+			console.error('[API:Autocomplete:POST] ❌ Missing address/name');
 			return json({ success: false, error: 'Invalid data' }, { status: 400 });
 		}
 
 		// Use address as key, fallback to name
 		const key = (body.formatted_address || body.name).toLowerCase();
 		
-		console.log(`[API:Autocomplete:POST] Saving to KV with key: "${key}"`);
+		console.log(`[API:Autocomplete:POST] Writing to KV key: "${key}"`);
 		await placesKV.put(key, JSON.stringify(body));
 		console.log('[API:Autocomplete:POST] ✅ Save successful');
 
