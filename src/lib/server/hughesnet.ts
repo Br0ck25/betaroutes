@@ -120,7 +120,7 @@ export class HughesNetService {
       upgradePay: number = 0,     
       poleCost: number = 0,        
       concreteCost: number = 0,
-      poleCharge: number = 0,      // NEW INPUT
+      poleCharge: number = 0,
       skipScan: boolean = false
   ) {
     this.requestCount = 0;
@@ -250,7 +250,7 @@ export class HughesNetService {
         const success = await this.createTripForDate(
             userId, date, daysOrders, settingsId, 
             installPay, repairPay, upgradePay, 
-            poleCost, concreteCost, poleCharge, // Pass new param
+            poleCost, concreteCost, poleCharge, 
             tripService
         );
         
@@ -379,7 +379,7 @@ export class HughesNetService {
           let supplyItems: { type: string, cost: number }[] = [];
           
           if (o.hasPoleMount) {
-              // RULE: If Pole is present, use Install Pay + Pole Charge for ALL order types
+              // RULE: If Pole is present, add Pole Charge to the base pay
               basePay = installPay + poleCharge;
               notes += ` [POLE MOUNT +$${poleCharge}]`;
               
@@ -449,7 +449,7 @@ export class HughesNetService {
           mpg, gasPrice: gas,
           fuelCost: Number(fuelCost.toFixed(2)),
           
-          // Add accumulated supply data
+          // Add accumulated supply data so it shows up in the columns
           suppliesCost: totalSuppliesCost,
           supplyItems: tripSupplies,
           

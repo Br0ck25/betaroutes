@@ -35,13 +35,28 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
         }
 
         if (body.action === 'sync') {
+            // --- FIX: Extract ALL financial inputs ---
             const installPay = Number(body.installPay) || 0;
             const repairPay = Number(body.repairPay) || 0;
+            const upgradePay = Number(body.upgradePay) || 0;
+            const poleCost = Number(body.poleCost) || 0;
+            const concreteCost = Number(body.concreteCost) || 0;
+            const poleCharge = Number(body.poleCharge) || 0;
             
-            // EXTRACT SKIP SCAN FLAG
             const skipScan = body.skipScan === true;
 
-            const result = await service.sync(userId, settingsId, installPay, repairPay, skipScan);
+            // Pass all arguments to sync
+            const result = await service.sync(
+                userId, 
+                settingsId, 
+                installPay, 
+                repairPay, 
+                upgradePay,
+                poleCost,
+                concreteCost,
+                poleCharge,
+                skipScan
+            );
             
             return json({ 
                 success: true, 
