@@ -8,7 +8,9 @@ const BASE_URL = 'https://dwayinstalls.hns.com';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 const APP_DOMAIN = 'https://gorouteyourself.com/';
-const MAX_SUBREQUESTS = 45; 
+
+// UPDATED: Lowered to 30 to leave room for KV (Database) operations which also count toward the 50 limit.
+const MAX_SUBREQUESTS = 30; 
 
 export class HughesNetService {
   public logs: string[] = [];
@@ -56,57 +58,64 @@ export class HughesNetService {
       return true;
   }
 
-  // UPDATED: Added skipScan parameter
   async sync(userId: string, settingsId?: string, installPay: number = 0, repairPay: number = 0, skipScan: boolean = false) {
     this.log(`[HNS] Sync Started. (Pay: $${installPay}/$${repairPay}) SkipScan: ${skipScan}`);
     this.requestCount = 0;
 
-    // Login logic uses 1-2 requests.
     const cookie = await this.ensureSessionCookie(userId);
     if (!cookie) throw new Error('Could not login.');
 
     let finalIds: string[] = [];
 
-    // SCANNING BLOCK
+    // --- SCANNING ---
     if (!skipScan) {
-        // Fetch Menu (Counts as 1 request)
-        const res = await this.safeFetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
-        const html = await res.text();
-        if (html.includes('name="Password"')) throw new Error('Session expired. Please reconnect.');
-
-        const uniqueIds = new Set<string>();
-        this.extractIds(html).forEach(id => uniqueIds.add(id));
-
-        // Scan Sub-pages with try/catch to handle limits gracefully
         try {
+            // Check limit before starting scan
+            if (this.requestCount >= MAX_SUBREQUESTS) throw new Error('SUBREQUEST_LIMIT_REACHED');
+
+            const res = await this.safeFetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
+            const html = await res.text();
+            if (html.includes('name="Password"')) throw new Error('Session expired. Please reconnect.');
+
+            const uniqueIds = new Set<string>();
+            this.extractIds(html).forEach(id => uniqueIds.add(id));
+
             if (this.requestCount < 10) {
                 this.log('[HNS] Scanning menu links...');
                 const links = this.extractMenuLinks(html);
                 const priorityLinks = links.filter(l => l.url.includes('SoSearch') || l.url.includes('forms/'));
 
                 for (const link of priorityLinks) {
-                    if (this.requestCount > 25) break; 
+                    // Lowered scan limit to keep budget for processing
+                    if (this.requestCount > 15) break; 
                     this.log(`[HNS] Scanning: ${link.text}`);
                     await this.scanUrlForOrders(link.url, cookie, uniqueIds);
                     await new Promise(r => setTimeout(r, 200)); 
                 }
             }
-        } catch (e: any) {
-            this.warn('[HNS] Scanned partially due to limits. Continuing with found orders...');
-        }
+            
+            finalIds = Array.from(uniqueIds);
+            this.log(`[HNS] Total unique orders found: ${finalIds.length}`);
+            await this.kv.put(`hns:orders_index:${userId}`, JSON.stringify(finalIds));
 
-        finalIds = Array.from(uniqueIds);
-        this.log(`[HNS] Total unique orders found: ${finalIds.length}`);
-        await this.kv.put(`hns:orders_index:${userId}`, JSON.stringify(finalIds));
+        } catch (e: any) {
+            if (e.message === 'SUBREQUEST_LIMIT_REACHED') {
+                this.warn('[Batch Limit] Scan stopped early. Proceeding with known orders...');
+                // Attempt to load whatever we found so far
+                const cachedIndex = await this.kv.get(`hns:orders_index:${userId}`);
+                if (cachedIndex) finalIds = JSON.parse(cachedIndex);
+            } else {
+                throw e;
+            }
+        }
     } else {
-        // LOAD FROM CACHE IF SKIPPING SCAN
         this.log('[HNS] Skipping scan, loading order list from cache...');
         const cachedIndex = await this.kv.get(`hns:orders_index:${userId}`);
         if (cachedIndex) finalIds = JSON.parse(cachedIndex);
         this.log(`[HNS] Loaded ${finalIds.length} orders from cache.`);
     }
 
-    // FETCH DETAILS (BATCHED)
+    // --- FETCHING DETAILS ---
     const orders: any[] = [];
     let fetchedNewCount = 0;
     let incomplete = false; 
@@ -121,9 +130,10 @@ export class HughesNetService {
                 } catch(e) {}
             }
 
+            // Stricter limit check
             if (this.requestCount >= MAX_SUBREQUESTS - 5) { 
                 if (!incomplete) {
-                    this.warn(`[Batch Limit] Pausing sync. Auto-continuing in next batch...`);
+                    this.warn(`[Batch Limit] Pausing detail fetch. Continuing in next batch...`);
                     incomplete = true;
                 }
                 break;
@@ -157,6 +167,7 @@ export class HughesNetService {
 
     this.log(`[HNS] Batch Summary: ${orders.length} total, ${fetchedNewCount} new.`);
 
+    // --- ROUTING & SAVING ---
     if (orders.length > 0) {
         const routingIncomplete = await this.createTripsFromOrders(userId, orders, settingsId, installPay, repairPay);
         if (routingIncomplete) incomplete = true;
@@ -165,6 +176,7 @@ export class HughesNetService {
     return { orders, incomplete };
   }
 
+  // ... (getOrders, clearAllTrips remain unchanged) ...
   async getOrders(userId: string) {
     const indexRaw = await this.kv.get(`hns:orders_index:${userId}`);
     const index = indexRaw ? JSON.parse(indexRaw) : [];
@@ -196,17 +208,15 @@ export class HughesNetService {
   }
 
   // --- PRIVATE METHODS ---
+  // (scanUrlForOrders, extractNextPageUrl, extractMenuLinks, extractFrameUrls, extractIds, parseOrderPage remain unchanged from previous "pagination" version)
   
   private async scanUrlForOrders(url: string, cookie: string, idSet: Set<string>) {
       let currentUrl = url;
       let pageCount = 0;
-      
-      // Limit to 5 pages per category
       while (currentUrl && pageCount < 5) {
           try {
              const res = await this.safeFetch(currentUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT, 'Referer': HOME_URL }});
              const html = await res.text();
-             
              this.extractIds(html).forEach(id => idSet.add(id));
 
              if (pageCount === 0) {
@@ -234,7 +244,6 @@ export class HughesNetService {
              } else {
                  break; 
              }
-
           } catch (e: any) {
              if (e.message === 'SUBREQUEST_LIMIT_REACHED') {
                  this.warn('[HNS] Subrequest limit reached during scan. Stopping scan.');
@@ -248,7 +257,6 @@ export class HughesNetService {
   private extractNextPageUrl(html: string, currentUrl: string): string | null {
     const regex = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>(?:.*?(?:\bNext\b|&gt;|>).*?)<\/a>/i;
     const match = html.match(regex);
-    
     if (match && match[1]) {
         let nextUrl = match[1].replace(/&amp;/g, '&');
         if (nextUrl.toLowerCase().startsWith('javascript')) return null;
@@ -396,6 +404,7 @@ export class HughesNetService {
     return out;
   }
 
+  // --- UPDATED ROUTING LOGIC ---
   private async createTripsFromOrders(
         userId: string, 
         orders: any[], 
@@ -488,6 +497,9 @@ export class HughesNetService {
 
       this.log(`[HNS] Calculating Route: ${routePoints.length - 1} legs for ${date}`);
 
+      // NEW: Flag to track if the route completed successfully
+      let routeIncomplete = false;
+
       for (let i = 0; i < routePoints.length - 1; i++) {
           const origin = routePoints[i];
           const dest = routePoints[i+1];
@@ -502,12 +514,14 @@ export class HughesNetService {
 
           let leg = null;
           try {
+             // Strict check before API Call
              if (this.requestCount >= MAX_SUBREQUESTS) throw new Error('SUBREQUEST_LIMIT_REACHED');
              leg = await this.getRouteInfo(origin, dest);
           } catch (e) {
-             this.warn(`[Batch Limit] Stopped routing for ${date}. Trip will have 0 miles.`);
+             this.warn(`[Batch Limit] Stopped routing for ${date} at Leg ${i+1}. Trip data incomplete.`);
              hitLimit = true;
-             break; 
+             routeIncomplete = true; // MARK AS BROKEN
+             break; // STOP
           }
           
           if (leg) {
@@ -519,6 +533,12 @@ export class HughesNetService {
           } else {
               this.warn(`[HNS] Failed leg ${i+1}: ${origin} -> ${dest}`);
           }
+      }
+
+      // CRITICAL FIX: Only save if the route completed FULLY
+      if (routeIncomplete) {
+          this.warn(`[HNS] ⚠️ Route incomplete for ${date}. SKIPPING SAVE. Will retry next batch.`);
+          continue; // Go to next date loop (which will also likely fail/stop, but we don't save garbage)
       }
 
       const totalDistanceMiles = Number((totalDistanceMeters * 0.000621371).toFixed(1));
@@ -612,6 +632,7 @@ export class HughesNetService {
       return null;
   }
 
+  // --- UTILS (unchanged) ---
   private parseTime(timeStr: string): number {
       if (!timeStr) return 9999;
       const match = timeStr.match(/(\d{1,2}):(\d{2})(?:\s*(AM|PM))?/i);
