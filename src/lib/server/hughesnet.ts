@@ -9,9 +9,12 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 
 const APP_DOMAIN = 'https://gorouteyourself.com/';
 
+// CLOUDFLARE LIMIT SAFETY
+const MAX_SUBREQUESTS = 45; // Leave room for safety (Limit is 50)
+
 export class HughesNetService {
-  // NEW: Store logs here
   public logs: string[] = [];
+  private requestCount = 0; // Track fetches to prevent "Too many subrequests"
 
   constructor(
     private kv: KVNamespace, 
@@ -37,6 +40,15 @@ export class HughesNetService {
       console.error(msg, e);
       this.logs.push(`❌ ${msg} ${e ? '(' + e + ')' : ''}`);
   }
+
+  // Wrapper to track subrequests
+  private async safeFetch(url: string, options?: RequestInit) {
+      if (this.requestCount >= MAX_SUBREQUESTS) {
+          throw new Error('SUBREQUEST_LIMIT_REACHED');
+      }
+      this.requestCount++;
+      return fetch(url, options);
+  }
   // ------------------------
 
   async connect(userId: string, username: string, password: string) {
@@ -48,7 +60,7 @@ export class HughesNetService {
     const cookie = await this.loginAndStoreSession(userId, username, password);
     if (!cookie) return false;
 
-    const verifyRes = await fetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT } });
+    const verifyRes = await this.safeFetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT } });
     const verifyHtml = await verifyRes.text();
     if (verifyHtml.includes('name="Password"') || verifyHtml.includes('login.jsp')) return false;
 
@@ -56,11 +68,15 @@ export class HughesNetService {
   }
 
   async sync(userId: string, settingsId?: string, installPay: number = 0, repairPay: number = 0) {
-    this.log(`[HNS] Starting sync for ${userId} (Install Pay: $${installPay}, Repair Pay: $${repairPay})`);
+    this.log(`[HNS] Starting sync for ${userId} (Pay: $${installPay}/$${repairPay})`);
+    
+    // Reset counter for this run
+    this.requestCount = 0;
+
     const cookie = await this.ensureSessionCookie(userId);
     if (!cookie) throw new Error('Could not login.');
 
-    const res = await fetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
+    const res = await this.safeFetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
     const html = await res.text();
     if (html.includes('name="Password"')) throw new Error('Session expired. Please reconnect.');
 
@@ -73,6 +89,9 @@ export class HughesNetService {
         const priorityLinks = links.filter(l => l.url.includes('SoSearch') || l.url.includes('forms/'));
 
         for (const link of priorityLinks) {
+            // Stop if we are getting close to limit
+            if (this.requestCount > 10) break; 
+            
             this.log(`[HNS] Scanning: ${link.text}`);
             await this.scanUrlForOrders(link.url, cookie, uniqueIds);
             await new Promise(r => setTimeout(r, 500)); 
@@ -83,16 +102,38 @@ export class HughesNetService {
     this.log(`[HNS] Total unique orders found: ${finalIds.length}`);
     await this.kv.put(`hns:orders_index:${userId}`, JSON.stringify(finalIds));
 
-    // FETCH DETAILS
+    // FETCH DETAILS WITH CACHING & LIMITS
     const orders: any[] = [];
-    
+    let fetchedNewCount = 0;
+    let hitLimit = false;
+
     for (const id of finalIds) {
         try {
+            // 1. Check Cache First (Does not use fetch quota)
+            const cachedRaw = await this.kv.get(`hns:orders:${userId}:${id}`);
+            if (cachedRaw) {
+                try {
+                    const cachedOrder = JSON.parse(cachedRaw);
+                    orders.push(cachedOrder);
+                    continue; // Skip fetch, use cache
+                } catch(e) {}
+            }
+
+            // 2. Check Limits before fetching new
+            if (this.requestCount >= MAX_SUBREQUESTS - 5) { // Leave 5 for Maps
+                if (!hitLimit) {
+                    this.warn(`[Batch Limit] Stopped fetching new orders to prevent errors. Click Sync again to continue.`);
+                    hitLimit = true;
+                }
+                continue; // Skip this order, process what we have
+            }
+
+            // 3. Fetch New
             const delay = Math.floor(Math.random() * 300) + 300;
             await new Promise(r => setTimeout(r, delay));
 
             const orderUrl = `https://dwayinstalls.hns.com/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${encodeURIComponent(id)}`;
-            const res = await fetch(orderUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
+            const res = await this.safeFetch(orderUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
             const orderHtml = await res.text();
             
             const parsed = this.parseOrderPage(orderHtml, id);
@@ -100,14 +141,21 @@ export class HughesNetService {
             if (parsed.address) {
                 await this.kv.put(`hns:orders:${userId}:${id}`, JSON.stringify(parsed));
                 orders.push(parsed);
+                fetchedNewCount++;
                 this.log(`[HNS] Synced Order ${id}`);
             } else {
                 this.warn(`[HNS] Skipped Order ${id} (Address parsing failed).`);
             }
-        } catch (err) {
+        } catch (err: any) {
+            if (err.message === 'SUBREQUEST_LIMIT_REACHED') {
+                 this.warn('Stopped fetching due to Cloudflare limits.');
+                 break;
+            }
             this.error(`[HNS] Error syncing ${id}`, err);
         }
     }
+
+    this.log(`[HNS] Processed ${orders.length} orders (${fetchedNewCount} new).`);
 
     if (orders.length > 0) {
         await this.createTripsFromOrders(userId, orders, settingsId, installPay, repairPay);
@@ -150,7 +198,7 @@ export class HughesNetService {
   
   private async scanUrlForOrders(url: string, cookie: string, idSet: Set<string>) {
     try {
-        const res = await fetch(url, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT, 'Referer': HOME_URL }});
+        const res = await this.safeFetch(url, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT, 'Referer': HOME_URL }});
         const html = await res.text();
         this.extractIds(html).forEach(id => idSet.add(id));
 
@@ -161,11 +209,12 @@ export class HughesNetService {
                 const currentDir = url.substring(0, url.lastIndexOf('/') + 1);
                 absUrl = new URL(frameUrl, currentDir).href;
             }
-            const fRes = await fetch(absUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
+            // Use safeFetch
+            const fRes = await this.safeFetch(absUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
             const fHtml = await fRes.text();
             this.extractIds(fHtml).forEach(id => idSet.add(id));
         }
-    } catch (e) { this.warn(`[HNS] Failed to scan ${url}`); }
+    } catch (e) { /* ignore scan errors */ }
   }
 
   private extractMenuLinks(html: string) {
@@ -347,10 +396,21 @@ export class HughesNetService {
     }
 
     for (const [date, daysOrders] of Object.entries(ordersByDate)) {
+      // OVERWRITE LOGIC:
+      // If a trip exists, we DELETE it so we can recreate it with potentially NEW orders found in this sync.
+      // This solves the "Partial Sync" issue where trips were incomplete.
       const existingTrips = await tripService.list(userId);
-      if (existingTrips.some(t => t.date === date)) {
-          this.log(`[HNS] Trip already exists for ${date}`);
-          continue;
+      const existingTrip = existingTrips.find(t => t.date === date);
+      
+      if (existingTrip) {
+          this.log(`[HNS] Updating existing trip for ${date}...`);
+          await tripService.delete(userId, existingTrip.id);
+      }
+
+      // CHECK LIMITS BEFORE ROUTING
+      if (this.requestCount >= MAX_SUBREQUESTS) {
+          this.warn(`[Batch Limit] Cannot calculate route for ${date} (Limit Reached). Next sync will finish this.`);
+          continue; 
       }
 
       // 1. Sort orders chronologically
@@ -401,7 +461,16 @@ export class HughesNetService {
               await new Promise(r => setTimeout(r, 200)); 
           }
 
-          const leg = await this.getRouteInfo(origin, dest);
+          // Use safeFetch inside getRouteInfo? Or just check limit here.
+          // safeFetch throws, let's catch it gracefully here
+          let leg = null;
+          try {
+             if (this.requestCount >= MAX_SUBREQUESTS) throw new Error('SUBREQUEST_LIMIT_REACHED');
+             leg = await this.getRouteInfo(origin, dest);
+          } catch (e) {
+             this.warn(`[Batch Limit] Stopped routing for ${date}. Trip will have 0 miles.`);
+             break; // Stop legs for this trip
+          }
           
           if (leg) {
               const legMinutes = Math.round(leg.duration / 60);
@@ -484,7 +553,7 @@ export class HughesNetService {
       try {
           const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&key=${this.googleApiKey}`;
           
-          const res = await fetch(url, {
+          const res = await this.safeFetch(url, {
               headers: {
                   'Referer': APP_DOMAIN,
                   'User-Agent': 'BetaRoutes/1.0'
@@ -503,8 +572,12 @@ export class HughesNetService {
           if (data.error_message) {
               this.error(`[HNS] Google Maps Error: ${data.error_message}`);
           }
-      } catch (e) { 
-          this.error('[HNS] Maps Network Error', e); 
+      } catch (e: any) { 
+          if (e.message !== 'SUBREQUEST_LIMIT_REACHED') {
+              this.error('[HNS] Maps Network Error', e); 
+          } else {
+              throw e;
+          }
       }
       return null;
   }
@@ -548,10 +621,10 @@ export class HughesNetService {
     form.append('Submit', 'Log In');
     form.append('ScreenSize', 'MED');
     form.append('AuthSystem', 'HNS');
-    const res = await fetch(LOGIN_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': USER_AGENT }, body: form.toString(), redirect: 'manual' });
+    const res = await this.safeFetch(LOGIN_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': USER_AGENT }, body: form.toString(), redirect: 'manual' });
     let cookie = this.extractCookie(res);
     if (!cookie && res.status === 302) {
-        const res2 = await fetch(res.headers.get('location') ? `${BASE_URL}${res.headers.get('location')}` : HOME_URL, { method: 'GET', headers: { 'Referer': LOGIN_URL, 'User-Agent': USER_AGENT }, redirect: 'manual' });
+        const res2 = await this.safeFetch(res.headers.get('location') ? `${BASE_URL}${res.headers.get('location')}` : HOME_URL, { method: 'GET', headers: { 'Referer': LOGIN_URL, 'User-Agent': USER_AGENT }, redirect: 'manual' });
         cookie = this.extractCookie(res2);
     }
     if (cookie) await this.kv.put(`hns:session:${userId}`, cookie, { expirationTtl: 60 * 60 * 24 * 2 });
