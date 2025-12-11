@@ -6,8 +6,6 @@ const LOGIN_URL = 'https://dwayinstalls.hns.com/start/login.jsp?UsrAction=submit
 const HOME_URL = 'https://dwayinstalls.hns.com/start/Home.jsp';
 const BASE_URL = 'https://dwayinstalls.hns.com';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-
-// Domain for Google API Key Referer Header (Must match your Google Console restrictions)
 const APP_DOMAIN = 'https://gorouteyourself.com/';
 
 export class HughesNetService {
@@ -35,8 +33,18 @@ export class HughesNetService {
     return true;
   }
 
-  async sync(userId: string, settingsId?: string, installPay: number = 0, repairPay: number = 0) {
-    console.log(`[HNS] Starting sync for ${userId} (Install Pay: $${installPay}, Repair Pay: $${repairPay})`);
+  // UPDATED SIGNATURE
+  async sync(
+    userId: string, 
+    settingsId?: string, 
+    installPay: number = 0, 
+    repairPay: number = 0,
+    installTime: number = 90,
+    repairTime: number = 60,
+    overrideTimes: boolean = false
+  ) {
+    console.log(`[HNS] Sync ${userId} | Pay: $${installPay}/$${repairPay} | Time: ${installTime}/${repairTime} | Override: ${overrideTimes}`);
+    
     const cookie = await this.ensureSessionCookie(userId);
     if (!cookie) throw new Error('Could not login.');
 
@@ -48,18 +56,15 @@ export class HughesNetService {
     this.extractIds(html).forEach(id => uniqueIds.add(id));
 
     if (uniqueIds.size === 0) {
-        console.log('[HNS] Scanning menu links...');
         const links = this.extractMenuLinks(html);
         const priorityLinks = links.filter(l => l.url.includes('SoSearch') || l.url.includes('forms/'));
 
         for (const link of priorityLinks) {
-            console.log(`[HNS] Scanning: ${link.text}`);
             await this.scanUrlForOrders(link.url, cookie, uniqueIds);
         }
     }
 
     const finalIds = Array.from(uniqueIds);
-    console.log(`[HNS] Total unique orders found: ${finalIds.length}`);
     await this.kv.put(`hns:orders_index:${userId}`, JSON.stringify(finalIds));
 
     // FETCH DETAILS
@@ -86,7 +91,16 @@ export class HughesNetService {
     }
 
     if (orders.length > 0) {
-        await this.createTripsFromOrders(userId, orders, settingsId, installPay, repairPay);
+        await this.createTripsFromOrders(
+            userId, 
+            orders, 
+            settingsId, 
+            installPay, 
+            repairPay,
+            installTime,
+            repairTime,
+            overrideTimes
+        );
     }
 
     return orders;
@@ -104,7 +118,6 @@ export class HughesNetService {
   }
 
   async clearAllTrips(userId: string) {
-      console.log(`[HNS] Clearing HNS trips for ${userId}...`);
       const tripService = makeTripService(this.tripKV, undefined);
       const allTrips = await tripService.list(userId);
       let count = 0;
@@ -199,11 +212,11 @@ export class HughesNetService {
         zip: '', 
         confirmScheduleDate: '', 
         beginTime: '',
-        type: 'Repair', // Default
-        jobDuration: 60 // Minutes
+        type: 'Repair', 
+        jobDuration: 60, // Fallback default
+        logDuration: null // New Field to store calculated log time
     };
 
-    // --- PARSE ADDRESS ---
     const addrInput = html.match(/name=["']FLD_SO_Address1["'][^>]*value=["']([^"']*)["']/i);
     if (addrInput) out.address = addrInput[1].trim();
 
@@ -225,7 +238,6 @@ export class HughesNetService {
         if (zipMatch) out.zip = zipMatch[1];
     }
 
-    // --- PARSE DATE & TIME ---
     const dateInput = html.match(/name=["']f_sched_date["'][^>]*value=["']([^"']*)["']/i);
     if (dateInput) out.confirmScheduleDate = dateInput[1];
     else {
@@ -240,24 +252,47 @@ export class HughesNetService {
         if (m) out.beginTime = m[1];
     }
 
-    // --- PARSE JOB TYPE (INSTALL VS REPAIR) ---
-    // Look for "Repair" or "Install" in the Page Title area or generally in the text
-    // Regex matches "Service Order #... (Repair|Install)" logic found in the span
     const typeMatch = html.match(/Service Order #:\d+.*?(Repair|Install)/i) || html.match(/class="PgTtl"[^>]*>.*?(Repair|Install)/si);
     
     if (typeMatch) {
         const foundType = typeMatch[1].toLowerCase();
         if (foundType === 'install') {
             out.type = 'Install';
-            out.jobDuration = 90; // 1.5 Hours
         } else {
             out.type = 'Repair';
-            out.jobDuration = 60; // 1.0 Hours
         }
     } else if (text.toLowerCase().includes('install')) {
-         // Fallback loose check
          out.type = 'Install';
-         out.jobDuration = 90;
+    }
+
+    // --- LOG DURATION LOGIC ---
+    const arrivalMatch = text.match(/(\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}:\d{2})\s*Stop - En Route/i);
+    const departureCompleteMatch = text.match(/(\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}:\d{2})\s*Departure Complete/i);
+    const departureIncompleteMatch = text.match(/(\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}:\d{2})\s*Departure Incomplete/i);
+
+    if (arrivalMatch) {
+        const arrivalTime = new Date(arrivalMatch[1]);
+        let departureTime: Date | null = null;
+
+        const completeTime = departureCompleteMatch ? new Date(departureCompleteMatch[1]) : null;
+        const incompleteTime = departureIncompleteMatch ? new Date(departureIncompleteMatch[1]) : null;
+
+        if (completeTime && !isNaN(completeTime.getTime()) && incompleteTime && !isNaN(incompleteTime.getTime())) {
+             departureTime = completeTime < incompleteTime ? completeTime : incompleteTime;
+        } else if (incompleteTime && !isNaN(incompleteTime.getTime())) {
+             departureTime = incompleteTime;
+        } else if (completeTime && !isNaN(completeTime.getTime())) {
+             departureTime = completeTime;
+        }
+
+        if (departureTime && !isNaN(arrivalTime.getTime())) {
+            const diffMs = departureTime.getTime() - arrivalTime.getTime();
+            const diffMins = Math.round(diffMs / 60000);
+            
+            if (diffMins > 0) {
+                out.logDuration = diffMins; // STORE SEPARATELY
+            }
+        }
     }
 
     return out;
@@ -269,15 +304,17 @@ export class HughesNetService {
         orders: any[], 
         settingsId?: string, 
         installPay: number = 0, 
-        repairPay: number = 0
+        repairPay: number = 0,
+        installTime: number = 90,
+        repairTime: number = 60,
+        overrideTimes: boolean = false
     ) {
     const tripService = makeTripService(this.tripKV, undefined);
     
-    // FETCH SETTINGS
     let defaultStartAddress = '';
     let defaultEndAddress = '';
-    let defaultMPG = 25; // Default fallback
-    let defaultGasPrice = 3.50; // Default fallback
+    let defaultMPG = 25; 
+    let defaultGasPrice = 3.50;
     const settingsKey = settingsId || userId;
 
     try {
@@ -291,15 +328,9 @@ export class HughesNetService {
             const s = data.settings || data; 
             defaultStartAddress = s.defaultStartAddress || '';
             defaultEndAddress = s.defaultEndAddress || s.defaultStartAddress || '';
-            
-            // Extract MPG and Gas Price
             if (s.defaultMPG) defaultMPG = parseFloat(s.defaultMPG);
             if (s.defaultGasPrice) defaultGasPrice = parseFloat(s.defaultGasPrice);
-            
-            console.log(`[HNS] Settings Loaded for ${settingsKey}. Start="${defaultStartAddress}" MPG=${defaultMPG} Gas=${defaultGasPrice}`);
-        } else {
-            console.log(`[HNS] No Settings found for ${settingsKey}`);
-        }
+        } 
     } catch (e) { console.error('[HNS] Error reading settings:', e); }
 
     const ordersByDate: Record<string, any[]> = {};
@@ -319,15 +350,12 @@ export class HughesNetService {
     for (const [date, daysOrders] of Object.entries(ordersByDate)) {
       const existingTrips = await tripService.list(userId);
       if (existingTrips.some(t => t.date === date)) {
-          console.log(`[HNS] Trip already exists for ${date}`);
           continue;
       }
 
-      // 1. Sort orders chronologically
       daysOrders.sort((a, b) => this.parseTime(a.beginTime) - this.parseTime(b.beginTime));
 
-      // 2. Determine Start Time of First Job
-      let minMinutes = 9 * 60; // Default 9 AM
+      let minMinutes = 9 * 60; 
       let earliestOrder = daysOrders[0];
       const earliestTime = this.parseTime(earliestOrder.beginTime);
       if (earliestTime < 24 * 60) minMinutes = earliestTime;
@@ -336,99 +364,81 @@ export class HughesNetService {
           return [o.address, o.city, o.state, o.zip].filter(Boolean).join(', ');
       };
 
-      let tripStart = defaultStartAddress;
-      let tripEnd = defaultEndAddress || defaultStartAddress;
+      let tripStart = defaultStartAddress || buildAddr(earliestOrder);
+      let tripEnd = defaultEndAddress || tripStart;
 
-      if (!tripStart) {
-          console.log(`[HNS] Using Job Address as Start (Settings Empty): ${buildAddr(earliestOrder)}`);
-          tripStart = buildAddr(earliestOrder);
-          tripEnd = tripStart;
-      }
-
-      // --- MULTI-LEG CALCULATION (Google Only) ---
       let totalDriveMinutes = 0;
       let totalDistanceMeters = 0;
       let startToFirstJobMinutes = 0;
 
-      // Construct path: Start -> Job1 -> Job2 ... -> JobN -> End
       const routePoints = [tripStart];
       daysOrders.forEach(o => routePoints.push(buildAddr(o)));
       routePoints.push(tripEnd);
 
-      console.log(`[HNS] Calculating Route: ${routePoints.length - 1} legs for ${date}`);
-
       for (let i = 0; i < routePoints.length - 1; i++) {
           const origin = routePoints[i];
           const dest = routePoints[i+1];
-          
           if (origin === dest) continue;
 
-          // Call Google Maps API
           const leg = await this.getRouteInfo(origin, dest);
-          
           if (leg) {
               const legMinutes = Math.round(leg.duration / 60);
               totalDriveMinutes += legMinutes;
               totalDistanceMeters += leg.distance;
-              
-              // Capture first leg (Start -> Job 1) for START TIME calculation
               if (i === 0) startToFirstJobMinutes = legMinutes;
-              
-              console.log(`[HNS] Leg ${i+1}: ${origin} -> ${dest} = ${legMinutes}m`);
-          } else {
-              console.warn(`[HNS] Failed leg ${i+1}: ${origin} -> ${dest}`);
           }
       }
 
       const totalDistanceMiles = Number((totalDistanceMeters * 0.000621371).toFixed(1));
-
-      // Subtract ONE-WAY (Start->Job1) drive time from the first appointment time for START TIME
       const tripStartMinutes = minMinutes - startToFirstJobMinutes;
       const startTime = this.minutesToTime(tripStartMinutes);
       
-      // Calculate Total Drive Time String
       const h = Math.floor(totalDriveMinutes / 60);
       const m = totalDriveMinutes % 60;
       const totalTimeStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
 
-      // --- NEW: Calculate Total Work Day Hours (Drive + Jobs) ---
       let totalJobMinutes = 0;
+      
+      // *** DURATION LOGIC ***
       daysOrders.forEach(o => {
-          totalJobMinutes += (o.jobDuration || 60);
+          let duration = 0;
+          const userDefault = o.type === 'Install' ? installTime : repairTime;
+          
+          if (overrideTimes) {
+              // Forced override
+              duration = userDefault;
+          } else {
+              // Use logs if available, otherwise user default
+              duration = o.logDuration || userDefault;
+          }
+          
+          // Store final calculated duration on object for reference
+          o.finalDuration = duration;
+          totalJobMinutes += duration;
       });
 
       const totalWorkDayMinutes = totalDriveMinutes + totalJobMinutes;
       const hoursWorked = Number((totalWorkDayMinutes / 60).toFixed(2));
-
-      // Calculate End Time (Start Time + Total Work Minutes)
       const endTimeMinutes = tripStartMinutes + totalWorkDayMinutes;
       const endTime = this.minutesToTime(endTimeMinutes);
 
-      // --- PAY LOGIC ---
       const calculatePay = (orderType: string) => {
           if (orderType === 'Install') return installPay;
           if (orderType === 'Repair') return repairPay;
           return 0;
       };
 
-      // Calculate Fuel Cost
       const fuelCost = defaultMPG > 0 ? (totalDistanceMiles / defaultMPG) * defaultGasPrice : 0;
 
-      // 3. Create Trip Record with ALL time fields
       const newTrip: any = { 
         id: crypto.randomUUID(),
         userId,
         date: date,
         startTime: startTime,
         endTime: endTime,
-        
         estimatedTime: totalDriveMinutes, 
         totalTime: totalTimeStr,
-        
-        // --- NEW FIELDS ---
         hoursWorked: hoursWorked, 
-        // ------------------
-
         startAddress: tripStart,
         endAddress: tripEnd,
         destinations: daysOrders.map(o => ({
@@ -443,53 +453,34 @@ export class HughesNetService {
             notes: `HNS ID: ${o.id} - ${o.type}`,
             earnings: calculatePay(o.type),
             appointmentTime: o.beginTime,
-            type: o.type, // Save type on stop
-            duration: o.jobDuration
+            type: o.type,
+            duration: o.finalDuration // Use the calculated duration
         })),
-        
         totalMiles: totalDistanceMiles,
         mpg: defaultMPG,
         gasPrice: defaultGasPrice,
         fuelCost: Number(fuelCost.toFixed(2)),
-        
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         syncStatus: 'synced'
       };
 
       await tripService.put(newTrip);
-      console.log(`[HNS] Created Trip for ${date} - Start: ${newTrip.startTime}, End: ${newTrip.endTime}, Hours: ${hoursWorked}, Miles: ${totalDistanceMiles}`);
+      console.log(`[HNS] Created Trip for ${date} - Hours: ${hoursWorked}`);
     }
   }
 
+  // ... (Other helpers same as before)
   private async getRouteInfo(origin: string, destination: string) {
       if (!this.googleApiKey) return null;
-
       try {
           const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&key=${this.googleApiKey}`;
-          
-          const res = await fetch(url, {
-              headers: {
-                  'Referer': APP_DOMAIN,
-                  'User-Agent': 'BetaRoutes/1.0'
-              }
-          });
-          
+          const res = await fetch(url, { headers: { 'Referer': APP_DOMAIN, 'User-Agent': 'BetaRoutes/1.0' } });
           const data = await res.json();
-          
           if (data.routes?.[0]?.legs?.[0]) {
-              return { 
-                  distance: data.routes[0].legs[0].distance.value, 
-                  duration: data.routes[0].legs[0].duration.value 
-              };
+              return { distance: data.routes[0].legs[0].distance.value, duration: data.routes[0].legs[0].duration.value };
           } 
-          
-          if (data.error_message) {
-              console.error(`[HNS] Google Maps Error: ${data.error_message}`);
-          }
-      } catch (e) { 
-          console.error('[HNS] Maps Network Error', e); 
-      }
+      } catch (e) { console.error('[HNS] Maps Network Error', e); }
       return null;
   }
 
@@ -500,20 +491,16 @@ export class HughesNetService {
       let h = parseInt(match[1]);
       const m = parseInt(match[2]);
       const meridiem = match[3]?.toUpperCase();
-
       if (meridiem === 'PM' && h < 12) h += 12;
       if (meridiem === 'AM' && h === 12) h = 0;
       return h * 60 + m;
   }
 
   private minutesToTime(minutes: number): string {
-      if (minutes < 0) minutes += 1440; // Wrap if negative (previous day)
+      if (minutes < 0) minutes += 1440;
       let h = Math.floor(minutes / 60);
       const m = Math.floor(minutes % 60);
-      
-      // Handle day wrap over
       if (h >= 24) h = h % 24;
-
       return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
   }
 
