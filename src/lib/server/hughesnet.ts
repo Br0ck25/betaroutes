@@ -8,9 +8,8 @@ const BASE_URL = 'https://dwayinstalls.hns.com';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 const APP_DOMAIN = 'https://gorouteyourself.com/';
-
-// SAFETY LIMITS
-const MAX_REQUESTS_PER_BATCH = 35; 
+// Limit strictly to 20 fetches per run to be safe
+const FETCH_LIMIT = 20;
 
 export class HughesNetService {
   public logs: string[] = [];
@@ -25,185 +24,139 @@ export class HughesNetService {
     private googleApiKey: string | undefined
   ) {}
 
-  // --- LOGGING ---
   private log(msg: string) { console.log(msg); this.logs.push(msg); }
   private warn(msg: string) { console.warn(msg); this.logs.push(`⚠️ ${msg}`); }
   private error(msg: string, e?: any) { console.error(msg, e); this.logs.push(`❌ ${msg} ${e ? '(' + e + ')' : ''}`); }
 
   private async safeFetch(url: string, options?: RequestInit) {
-      if (this.requestCount >= MAX_REQUESTS_PER_BATCH) throw new Error('REQ_LIMIT');
       this.requestCount++;
       return fetch(url, options);
   }
 
-  // --- AUTH ---
+  // --- CONNECT / DISCONNECT ---
   async connect(userId: string, username: string, password: string) {
     this.log(`[HNS] Connecting user ${userId}...`);
-    
-    // 1. Attempt Login
-    const cookie = await this.loginAndStoreSession(userId, username, password);
-    if (!cookie) {
-        this.error(`[HNS] Login failed: Invalid credentials or server rejected login.`);
-        return false;
-    }
-
-    // 2. Encrypt & Store Creds SECURELY
     const payload = { username, password, loginUrl: LOGIN_URL, createdAt: new Date().toISOString() };
     const enc = await this.encrypt(JSON.stringify(payload));
     await this.kv.put(`hns:cred:${userId}`, enc);
 
-    // 3. Verify Session
-    try {
-        const verifyRes = await this.safeFetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT } });
-        const verifyHtml = await verifyRes.text();
-        
-        if (verifyHtml.includes('name="Password"') || verifyHtml.includes('login.jsp')) {
-             this.error(`[HNS] Verification failed. Cookie was rejected.`);
-             return false;
-        }
-        
-        this.log(`[HNS] Connection verified successfully.`);
-        return true;
-    } catch(e) { 
-        this.error(`[HNS] Verification error`, e);
-        return false; 
-    }
+    const cookie = await this.loginAndStoreSession(userId, username, password);
+    if (!cookie) return false;
+
+    // Verify login works
+    const verifyRes = await this.safeFetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT } });
+    const verifyHtml = await verifyRes.text();
+    if (verifyHtml.includes('name="Password"') || verifyHtml.includes('login.jsp')) return false;
+
+    return true;
   }
 
   async disconnect(userId: string) {
       this.log(`[HNS] Disconnecting user ${userId}...`);
       await this.kv.delete(`hns:session:${userId}`);
       await this.kv.delete(`hns:cred:${userId}`);
-      await this.kv.delete(`hns:db:${userId}`); 
+      await this.kv.delete(`hns:db:${userId}`); // Clear the order cache
       return true;
   }
 
-  // --- SMART SYNC ---
+  // --- SYNC ---
   async sync(userId: string, settingsId?: string, installPay: number = 0, repairPay: number = 0, skipScan: boolean = false) {
+    this.log(`[HNS] Sync Started. (Pay: $${installPay}/$${repairPay}) SkipScan: ${skipScan}`);
     this.requestCount = 0;
-    
-    // 1. Authenticate
-    const cookie = await this.ensureSessionCookie(userId);
-    if (!cookie) throw new Error('Could not login. Please reconnect.');
 
-    // 2. Load Existing DB
+    const cookie = await this.ensureSessionCookie(userId);
+    if (!cookie) throw new Error('Could not login.');
+
+    // 1. LOAD DB (Monolithic Read - 1 Request)
     let orderDb: Record<string, any> = {};
     const dbRaw = await this.kv.get(`hns:db:${userId}`);
     if (dbRaw) orderDb = JSON.parse(dbRaw);
-    
-    let foundIds = new Set<string>(Object.keys(orderDb));
-    let dbDirty = false;
-    let incomplete = false;
 
-    // STAGE 1: HARVESTING 
+    let foundIds = new Set<string>(Object.keys(orderDb));
+    let newIdsFound = false;
+
+    // 2. SCANNING (If not skipped)
     if (!skipScan) {
         try {
+            // Fetch Menu
             const res = await this.safeFetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
             const html = await res.text();
-            
-            if (html.includes('name="Password"')) throw new Error('Session expired.');
-            
+            if (html.includes('name="Password"')) throw new Error('Session expired. Please reconnect.');
+
             this.extractIds(html).forEach(id => foundIds.add(id));
 
-            if (this.requestCount < 10) {
-                const links = this.extractMenuLinks(html);
-                const priorityLinks = links.filter(l => l.url.includes('SoSearch') || l.url.includes('forms/'));
-                this.log(`[Stage 1] Scanning ${priorityLinks.length} pages...`);
-                
-                for (const link of priorityLinks) {
-                    if (this.requestCount > 15) break; 
-                    await this.scanUrlForOrders(link.url, cookie, foundIds);
-                    await new Promise(r => setTimeout(r, 150));
-                }
-            }
-        } catch (e: any) {
-            if (e.message !== 'REQ_LIMIT') this.error('[Stage 1] Scan error', e);
-        }
-    }
+            // Scan sub-pages
+            this.log('[HNS] Scanning menu links...');
+            const links = this.extractMenuLinks(html);
+            const priorityLinks = links.filter(l => l.url.includes('SoSearch') || l.url.includes('forms/'));
 
-    // C. Identify Missing Data
-    const allIds = Array.from(foundIds);
-    const missingDataIds = allIds.filter(id => !orderDb[id]);
-    
-    if (missingDataIds.length > 0) {
-        this.log(`[Stage 1] Found ${missingDataIds.length} new orders.`);
-        let fetchedCount = 0;
-        for (const id of missingDataIds) {
-            if (this.requestCount >= MAX_REQUESTS_PER_BATCH) {
-                incomplete = true;
-                this.warn(`[Limit] Pausing download.`);
-                break;
-            }
-
-            try {
-                const orderUrl = `https://dwayinstalls.hns.com/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${encodeURIComponent(id)}`;
-                const res = await this.safeFetch(orderUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
-                const html = await res.text();
-                const parsed = this.parseOrderPage(html, id);
-                
-                if (parsed.address) {
-                    orderDb[id] = parsed;
-                    dbDirty = true;
-                    fetchedCount++;
-                    this.log(`[Stage 1] Downloaded Order ${id}`);
-                }
+            for (const link of priorityLinks) {
+                // Hard stop scanning after 15 requests to leave room for processing
+                if (this.requestCount > 15) break; 
+                this.log(`[HNS] Scanning: ${link.text}`);
+                await this.scanUrlForOrders(link.url, cookie, foundIds);
                 await new Promise(r => setTimeout(r, 200)); 
-            } catch (e: any) {
-                if (e.message === 'REQ_LIMIT') { incomplete = true; break; }
             }
-        }
-
-        if (dbDirty) {
-            await this.kv.put(`hns:db:${userId}`, JSON.stringify(orderDb));
-            this.log(`[Stage 1] Saved ${fetchedCount} orders.`);
-            return { orders: Object.values(orderDb), incomplete: true }; 
+            newIdsFound = true;
+        } catch (e: any) {
+            this.warn('[HNS] Scan limit reached. Continuing with known orders.');
         }
     }
 
-    // STAGE 2: PROCESSING 
-    this.log(`[Stage 2] Processing Routes...`);
+    // 3. IDENTIFY MISSING DETAILS
+    const allIds = Array.from(foundIds);
+    const missingDetailsIds = allIds.filter(id => !orderDb[id]);
     
-    const ordersByDate: Record<string, any[]> = {};
-    for (const order of Object.values(orderDb)) {
-        if (!order.confirmScheduleDate) continue;
-        let isoDate = this.toIsoDate(order.confirmScheduleDate);
-        if (isoDate) {
-            if (!ordersByDate[isoDate]) ordersByDate[isoDate] = [];
-            ordersByDate[isoDate].push(order);
-        }
-    }
+    this.log(`[HNS] Total Orders: ${allIds.length}. Cached: ${Object.keys(orderDb).length}. Need Fetch: ${missingDetailsIds.length}`);
 
-    const sortedDates = Object.keys(ordersByDate).sort();
-    const tripService = makeTripService(this.tripKV, this.trashKV);
-    const existingTrips = await tripService.list(userId);
-    
-    let tripsProcessed = 0;
-    for (const date of sortedDates) {
-        if (this.requestCount >= MAX_REQUESTS_PER_BATCH) {
+    // 4. FETCH DETAILS (Batch Limit)
+    let incomplete = false;
+    let fetchCount = 0;
+
+    for (const id of missingDetailsIds) {
+        if (fetchCount >= FETCH_LIMIT) {
+            this.warn(`[Batch Limit] Hit fetch limit (${FETCH_LIMIT}). Pausing...`);
             incomplete = true;
-            this.warn(`[Limit] Pause routing at ${date}.`);
             break;
         }
 
-        const tripId = `hns_${userId}_${date}`;
-        const existingTrip = existingTrips.find(t => t.id === tripId);
-        if (existingTrip && existingTrip.totalMiles > 0) continue; 
+        try {
+            const delay = Math.floor(Math.random() * 300) + 200;
+            await new Promise(r => setTimeout(r, delay));
 
-        this.log(`[Stage 2] Routing ${date}...`);
-        const daysOrders = ordersByDate[date];
-        const success = await this.createTripForDate(userId, date, daysOrders, settingsId, installPay, repairPay, tripService);
-        
-        if (!success) {
-            if (this.requestCount >= MAX_REQUESTS_PER_BATCH) {
-                incomplete = true;
-                break;
+            const orderUrl = `https://dwayinstalls.hns.com/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${encodeURIComponent(id)}`;
+            const res = await this.safeFetch(orderUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
+            const orderHtml = await res.text();
+            
+            const parsed = this.parseOrderPage(orderHtml, id);
+            
+            if (parsed.address) {
+                orderDb[id] = parsed; // Update DB in memory
+                fetchCount++;
+                this.log(`[HNS] Synced Order ${id}`);
+            } else {
+                this.warn(`[HNS] Skipped Order ${id} (Address missing).`);
             }
-        } else {
-            tripsProcessed++;
+        } catch (err) {
+            this.error(`[HNS] Error fetching ${id}`, err);
         }
     }
 
-    return { orders: Object.values(orderDb), incomplete };
+    // 5. SAVE DB (Monolithic Write - 1 Request)
+    // Always save if we fetched something or scanned new IDs
+    if (fetchCount > 0 || newIdsFound) {
+        await this.kv.put(`hns:db:${userId}`, JSON.stringify(orderDb));
+        this.log(`[HNS] Saved database with ${Object.keys(orderDb).length} orders.`);
+    }
+
+    // 6. ROUTE & CREATE TRIPS
+    const ordersToProcess = Object.values(orderDb);
+    if (ordersToProcess.length > 0) {
+        const routingIncomplete = await this.createTripsFromOrders(userId, ordersToProcess, settingsId, installPay, repairPay);
+        if (routingIncomplete) incomplete = true;
+    }
+
+    return { orders: ordersToProcess, incomplete };
   }
 
   async getOrders(userId: string) {
@@ -212,157 +165,265 @@ export class HughesNetService {
   }
 
   async clearAllTrips(userId: string) {
-      this.log(`[HNS] Clearing HNS trips...`);
+      this.log(`[HNS] Clearing HNS trips & cache...`);
       const tripService = makeTripService(this.tripKV, this.trashKV);
+      
+      // Delete Generated Trips
       const allTrips = await tripService.list(userId);
-      let count = 0;
+      let tripCount = 0;
       for (const trip of allTrips) {
-          if (trip.id.startsWith('hns_') || trip.notes?.includes('HNS')) {
+          // Identify HNS trips via ID prefix OR notes (backward compatibility)
+          const isHns = trip.id.startsWith('hns_') || 
+            (trip.destinations?.some((d:any) => d.notes?.includes('HNS'))) ||
+            (trip.notes?.includes('HNS'));
+
+          if (isHns) {
               await tripService.delete(userId, trip.id);
-              count++;
+              tripCount++;
           }
       }
+
+      // Clear Cache
       await this.kv.delete(`hns:db:${userId}`);
-      return count;
+      await this.kv.delete(`hns:orders_index:${userId}`); // Cleanup legacy index if exists
+
+      return tripCount;
   }
 
-  // --- TRIP CALCULATION ---
-  private async createTripForDate(
-      userId: string, date: string, orders: any[], settingsId: string | undefined, 
-      installPay: number, repairPay: number, tripService: any
-  ): Promise<boolean> {
-      
-      let defaultStart = '', defaultEnd = '', mpg = 25, gas = 3.50;
-      try {
-          const sRaw = await this.settingsKV.get(settingsId || userId) || await this.settingsKV.get(userId);
-          if (sRaw) {
-              const d = JSON.parse(sRaw).settings || JSON.parse(sRaw);
-              defaultStart = d.defaultStartAddress || '';
-              defaultEnd = d.defaultEndAddress || defaultStart;
-              if (d.defaultMPG) mpg = parseFloat(d.defaultMPG);
-              if (d.defaultGasPrice) gas = parseFloat(d.defaultGasPrice);
-          }
-      } catch(e) {}
+  // --- TRIP CREATION (Deterministic) ---
+  
+  private async createTripsFromOrders(
+        userId: string, 
+        orders: any[], 
+        settingsId?: string, 
+        installPay: number = 0, 
+        repairPay: number = 0
+    ): Promise<boolean> {
+    
+    const tripService = makeTripService(this.tripKV, this.trashKV);
+    let hitLimit = false;
+    
+    // Load Settings
+    let defaultStartAddress = '';
+    let defaultEndAddress = '';
+    let defaultMPG = 25; 
+    let defaultGasPrice = 3.50; 
+    const settingsKey = settingsId || userId;
 
-      orders.sort((a, b) => this.parseTime(a.beginTime) - this.parseTime(b.beginTime));
+    try {
+        let settingsRaw = await this.settingsKV.get(settingsKey);
+        if (!settingsRaw && settingsKey !== userId) settingsRaw = await this.settingsKV.get(userId);
+        if (settingsRaw) {
+            const data = JSON.parse(settingsRaw as string);
+            const s = data.settings || data; 
+            defaultStartAddress = s.defaultStartAddress || '';
+            defaultEndAddress = s.defaultEndAddress || s.defaultStartAddress || '';
+            if (s.defaultMPG) defaultMPG = parseFloat(s.defaultMPG);
+            if (s.defaultGasPrice) defaultGasPrice = parseFloat(s.defaultGasPrice);
+        }
+    } catch (e) { }
+
+    // Group orders
+    const ordersByDate: Record<string, any[]> = {};
+    for (const order of orders) {
+      if (!order.confirmScheduleDate) continue;
+      let isoDate = order.confirmScheduleDate;
+      // Convert MM/DD/YYYY to YYYY-MM-DD
+      if (order.confirmScheduleDate.includes('/')) {
+          const parts = order.confirmScheduleDate.split('/');
+          if (parts.length === 3) isoDate = `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+      }
+      if (isoDate) {
+          if (!ordersByDate[isoDate]) ordersByDate[isoDate] = [];
+          ordersByDate[isoDate].push(order);
+      }
+    }
+
+    // Process Dates
+    for (const [date, daysOrders] of Object.entries(ordersByDate)) {
+      
+      // DETERMINISTIC ID: trip_USERID_DATE
+      // This prevents duplicates completely.
+      const tripId = `hns_${userId}_${date}`;
+
+      // Check if we already processed this trip successfully in a previous batch
+      // If the trip exists and has > 0 miles, we assume it's good and skip to save API calls
+      // UNLESS we just fetched new data for it. 
+      // For simplicity/robustness: We recalculate if we have the request budget.
+      // But to save API calls: let's verify if it exists.
+      
+      // Actually, simply overwriting ensures we always have the latest data. 
+      // To save Maps API calls, we can check if it exists.
+      // But if we found NEW orders for this date in this batch, we MUST recalculate.
+      
+      if (this.requestCount >= 30) { // Safety limit for Maps API
+          this.warn(`[Batch Limit] Stopping routing at ${date}. Next batch will continue.`);
+          hitLimit = true;
+          break;
+      }
+
+      daysOrders.sort((a, b) => this.parseTime(a.beginTime) - this.parseTime(b.beginTime));
+
+      // Build Route
       const buildAddr = (o: any) => [o.address, o.city, o.state, o.zip].filter(Boolean).join(', ');
+      let tripStart = defaultStartAddress;
+      let tripEnd = defaultEndAddress || defaultStartAddress;
 
-      let startAddr = defaultStart;
-      let endAddr = defaultEnd;
-      if (!startAddr && orders.length > 0) {
-          startAddr = buildAddr(orders[0]); 
-          endAddr = startAddr;
+      let minMinutes = 9 * 60;
+      let earliestOrder = daysOrders[0];
+      const earliestTime = this.parseTime(earliestOrder.beginTime);
+      if (earliestTime < 24 * 60) minMinutes = earliestTime;
+
+      if (!tripStart) {
+          const firstJobAddr = buildAddr(earliestOrder);
+          if (firstJobAddr.length < 5) this.warn(`[HNS] Warning: Start Address missing/short.`);
+          tripStart = firstJobAddr;
+          tripEnd = tripStart;
       }
 
-      const points = [startAddr, ...orders.map((o:any) => buildAddr(o)), endAddr];
-      let totalMins = 0;
-      let totalMeters = 0;
-      let firstLegMins = 0;
+      let totalDriveMinutes = 0;
+      let totalDistanceMeters = 0;
+      let startToFirstJobMinutes = 0;
 
-      for (let i = 0; i < points.length - 1; i++) {
-          const origin = points[i];
-          const dest = points[i+1];
+      const routePoints = [tripStart];
+      daysOrders.forEach(o => routePoints.push(buildAddr(o)));
+      routePoints.push(tripEnd);
+
+      this.log(`[HNS] Routing ${date} (${daysOrders.length} jobs)...`);
+
+      let routeIncomplete = false;
+
+      for (let i = 0; i < routePoints.length - 1; i++) {
+          const origin = routePoints[i];
+          const dest = routePoints[i+1];
           if (origin === dest) continue;
-          
-          if (i > 0) await new Promise(r => setTimeout(r, 200));
+          if (!origin || !dest || origin.length < 3 || dest.length < 3) continue;
 
+          if (i > 0) await new Promise(r => setTimeout(r, 150)); 
+
+          let leg = null;
           try {
-              const leg = await this.getRouteInfo(origin, dest);
-              if (leg) {
-                  const m = Math.round(leg.duration / 60);
-                  totalMins += m;
-                  totalMeters += leg.distance;
-                  if (i === 0) firstLegMins = m;
-                  this.log(`[Maps] Leg ${i+1}: ${m} min`);
-              }
+             // We catch specific Maps errors but NOT subrequest limits
+             if (this.requestCount >= 40) throw new Error('SUBREQUEST_LIMIT_REACHED');
+             leg = await this.getRouteInfo(origin, dest);
           } catch (e: any) {
-              if (e.message === 'REQ_LIMIT') return false; 
-              this.error(`[Maps] Error`, e);
+             if (e.message === 'SUBREQUEST_LIMIT_REACHED') {
+                 hitLimit = true;
+                 routeIncomplete = true;
+                 break;
+             }
+             // Other errors (bad address) just mean 0 miles for that leg
+             this.warn(`[HNS] Route leg failed: ${origin} -> ${dest}`);
+          }
+          
+          if (leg) {
+              const legMinutes = Math.round(leg.duration / 60);
+              totalDriveMinutes += legMinutes;
+              totalDistanceMeters += leg.distance;
+              if (i === 0) startToFirstJobMinutes = legMinutes;
           }
       }
 
-      const miles = Number((totalMeters * 0.000621371).toFixed(1));
-      
-      let minMins = 9 * 60; 
-      if (orders.length > 0) {
-          const t = this.parseTime(orders[0].beginTime);
-          if (t < 24*60) minMins = t;
+      if (routeIncomplete) {
+          this.warn(`[HNS] ⚠️ Routing stopped for ${date}. Skipping save.`);
+          continue; 
       }
-      const startMins = minMins - firstLegMins;
-      
-      let jobMins = 0;
-      orders.forEach((o:any) => jobMins += (o.jobDuration || 60));
-      
-      const totalWorkMins = totalMins + jobMins;
-      const hoursWorked = Number((totalWorkMins / 60).toFixed(2));
-      const fuelCost = mpg > 0 ? (miles / mpg) * gas : 0;
-      const calcPay = (type: string) => (type === 'Install' ? installPay : repairPay);
 
-      const trip = {
-          id: `hns_${userId}_${date}`,
-          userId,
-          date,
-          startTime: this.minutesToTime(startMins),
-          endTime: this.minutesToTime(startMins + totalWorkMins),
-          estimatedTime: totalMins,
-          totalTime: `${Math.floor(totalMins/60)}h ${totalMins%60}m`,
-          hoursWorked,
-          startAddress: startAddr,
-          endAddress: endAddr,
-          totalMiles: miles,
-          mpg, gasPrice: gas,
-          fuelCost: Number(fuelCost.toFixed(2)),
-          stops: orders.map((o:any, i:number) => ({
-              id: crypto.randomUUID(),
-              address: buildAddr(o),
-              order: i,
-              notes: `HNS Order: ${o.id} (${o.type})`,
-              earnings: calcPay(o.type),
-              appointmentTime: o.beginTime,
-              type: o.type,
-              duration: o.jobDuration
-          })),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          syncStatus: 'synced'
+      // Calculations
+      const totalDistanceMiles = Number((totalDistanceMeters * 0.000621371).toFixed(1));
+      const tripStartMinutes = minMinutes - startToFirstJobMinutes;
+      const startTime = this.minutesToTime(tripStartMinutes);
+      
+      const h = Math.floor(totalDriveMinutes / 60);
+      const m = totalDriveMinutes % 60;
+      const totalTimeStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
+
+      let totalJobMinutes = 0;
+      daysOrders.forEach(o => { totalJobMinutes += (o.jobDuration || 60); });
+
+      const totalWorkDayMinutes = totalDriveMinutes + totalJobMinutes;
+      const hoursWorked = Number((totalWorkDayMinutes / 60).toFixed(2));
+      const endTimeMinutes = tripStartMinutes + totalWorkDayMinutes;
+      const endTime = this.minutesToTime(endTimeMinutes);
+
+      const calculatePay = (orderType: string) => {
+          if (orderType === 'Install') return installPay;
+          if (orderType === 'Repair') return repairPay;
+          return 0;
       };
 
-      await tripService.put(trip as any);
-      this.log(`[Stage 2] Saved Trip ${date}`);
-      return true;
+      const fuelCost = defaultMPG > 0 ? (totalDistanceMiles / defaultMPG) * defaultGasPrice : 0;
+
+      const newTrip: any = { 
+        id: tripId, // DETERMINISTIC ID
+        userId,
+        date: date,
+        startTime: startTime,
+        endTime: endTime,
+        estimatedTime: totalDriveMinutes, 
+        totalTime: totalTimeStr,
+        hoursWorked: hoursWorked, 
+        startAddress: tripStart,
+        endAddress: tripEnd,
+        destinations: daysOrders.map(o => ({
+          address: buildAddr(o),
+          earnings: calculatePay(o.type), 
+          notes: `HNS Order: ${o.id} (${o.type})`
+        })),
+        stops: daysOrders.map((o, i) => ({
+            id: crypto.randomUUID(), // Stop IDs can be random
+            address: buildAddr(o),
+            order: i,
+            notes: `HNS ID: ${o.id} - ${o.type}`,
+            earnings: calculatePay(o.type),
+            appointmentTime: o.beginTime,
+            type: o.type,
+            duration: o.jobDuration
+        })),
+        totalMiles: totalDistanceMiles,
+        mpg: defaultMPG,
+        gasPrice: defaultGasPrice,
+        fuelCost: Number(fuelCost.toFixed(2)),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        syncStatus: 'synced'
+      };
+
+      // Upsert (Overwrite) the trip
+      await tripService.put(newTrip);
+      this.log(`[HNS] Saved Trip for ${date} (${totalDistanceMiles} mi)`);
+    }
+
+    return hitLimit;
   }
 
-  // --- PRIVATE UTILS ---
   private async getRouteInfo(origin: string, destination: string) {
       if (!this.googleApiKey) return null;
       try {
           const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&key=${this.googleApiKey}`;
-          const res = await this.safeFetch(url, { headers: { 'Referer': APP_DOMAIN, 'User-Agent': 'BetaRoutes/1.0' } });
+          const res = await this.safeFetch(url, { headers: { 'Referer': APP_DOMAIN, 'User-Agent': 'BetaRoutes/1.0' }});
           const data = await res.json();
-          if (data.routes?.[0]?.legs?.[0]) return { distance: data.routes[0].legs[0].distance.value, duration: data.routes[0].legs[0].duration.value };
-      } catch (e: any) { 
-          if (e.message === 'REQ_LIMIT') throw e; 
-      }
+          if (data.routes?.[0]?.legs?.[0]) {
+              return { 
+                  distance: data.routes[0].legs[0].distance.value, 
+                  duration: data.routes[0].legs[0].duration.value 
+              };
+          } 
+      } catch (e) { }
       return null;
   }
 
-  private toIsoDate(dateStr: string) {
-      if (!dateStr) return null;
-      if (dateStr.includes('/')) {
-          const p = dateStr.split('/');
-          if (p.length === 3) return `${p[2]}-${p[0].padStart(2, '0')}-${p[1].padStart(2, '0')}`;
-      }
-      return dateStr;
-  }
-
+  // --- UTILS ---
   private parseTime(timeStr: string): number {
       if (!timeStr) return 9999;
-      const m = timeStr.match(/(\d{1,2}):(\d{2})(?:\s*(AM|PM))?/i);
-      if (!m) return 9999;
-      let h = parseInt(m[1]);
-      if (m[3]?.toUpperCase() === 'PM' && h < 12) h += 12;
-      if (m[3]?.toUpperCase() === 'AM' && h === 12) h = 0;
-      return h * 60 + parseInt(m[2]);
+      const match = timeStr.match(/(\d{1,2}):(\d{2})(?:\s*(AM|PM))?/i);
+      if (!match) return 9999;
+      let h = parseInt(match[1]);
+      const m = parseInt(match[2]);
+      const meridiem = match[3]?.toUpperCase();
+      if (meridiem === 'PM' && h < 12) h += 12;
+      if (meridiem === 'AM' && h === 12) h = 0;
+      return h * 60 + m;
   }
 
   private minutesToTime(minutes: number): string {
@@ -373,170 +434,40 @@ export class HughesNetService {
       return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
   }
 
-  private async scanUrlForOrders(url: string, cookie: string, idSet: Set<string>) {
-      let current = url;
-      let page = 0;
-      while(current && page < 5) {
-          try {
-              const res = await this.safeFetch(current, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT } });
-              const html = await res.text();
-              this.extractIds(html).forEach(id => idSet.add(id));
-              
-              if (page === 0) { 
-                  const frames = this.extractFrameUrls(html);
-                  for (const f of frames) {
-                      try {
-                          const frameUrl = new URL(f, BASE_URL).href;
-                          const fRes = await this.safeFetch(frameUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT } });
-                          this.extractIds(await fRes.text()).forEach(id => idSet.add(id));
-                      } catch(e){}
-                  }
-              }
-              current = this.extractNextPageUrl(html, current) || '';
-              page++;
-          } catch(e) { break; }
-      }
-  }
-
-  private extractNextPageUrl(html: string, currentUrl: string): string | null {
-    const regex = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>(?:.*?(?:\bNext\b|&gt;|>).*?)<\/a>/i;
-    const match = html.match(regex);
-    if (match && match[1]) {
-        let next = match[1].replace(/&amp;/g, '&');
-        if (!next.startsWith('javascript')) {
-             return new URL(next, currentUrl).href;
-        }
-    }
-    return null;
-  }
-
-  private extractIds(html: string) {
-    const ids = new Set<string>();
-    const clean = html.replace(/&amp;/g, '&');
-    let m;
-    const re1 = /viewservice\.jsp\?.*?\bid=(\d+)/gi;
-    while ((m = re1.exec(clean)) !== null) ids.add(m[1]);
-    const re2 = /[?&]id=(\d{8})\b/gi;
-    while ((m = re2.exec(clean)) !== null) ids.add(m[1]);
-    return Array.from(ids);
-  }
-
-  private extractMenuLinks(html: string) {
-    const links: { url: string, text: string }[] = [];
-    const re = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi;
-    let m;
-    while ((m = re.exec(html)) !== null) {
-        let url = m[1];
-        if (url && (url.includes('.jsp') || url.includes('SoSearch')) && !url.startsWith('javascript')) {
-             try {
-                const absolute = new URL(url, BASE_URL).href;
-                links.push({ url: absolute, text: m[2].replace(/<[^>]+>/g, '').trim() });
-             } catch(e) {}
-        }
-    }
-    return links;
-  }
-
-  private extractFrameUrls(html: string): string[] {
-    const urls: string[] = [];
-    const re = /<(?:frame|iframe)\s+[^>]*src=["']?([^"'>\s]+)["']?/gi;
-    let m;
-    while ((m = re.exec(html)) !== null) urls.push(m[1]);
-    return urls;
-  }
-
-  private parseOrderPage(html: string, id: string) {
-    const out: any = { id, address: '', city: '', state: '', zip: '', confirmScheduleDate: '', beginTime: '', type: 'Repair', jobDuration: 60 };
-    const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
-    
-    // Address
-    const addr = html.match(/name=["']FLD_SO_Address1["'][^>]*value=["']([^"']*)["']/i) || html.match(/value=["']([^"']*)["'][^>]*name=["']FLD_SO_Address1["']/i);
-    if (addr) out.address = addr[1].trim();
-    if (!out.address) {
-        const m = text.match(/Address:\s*(.*?)\s+(?:City|County|State)/i);
-        if (m) out.address = m[1].trim().split(/county:/i)[0].trim();
-    }
-
-    // City/State/Zip
-    const city = html.match(/name=["']f_city["'][^>]*value=["']([^"']*)["']/i);
-    if (city) out.city = city[1].trim();
-    const state = html.match(/name=["']f_state["'][^>]*value=["']([^"']*)["']/i);
-    if (state) out.state = state[1].trim();
-    const zip = html.match(/name=["']f_zip["'][^>]*value=["']([^"']*)["']/i);
-    if (zip) out.zip = zip[1].trim();
-
-    // Date/Time
-    const date = html.match(/name=["']f_sched_date["'][^>]*value=["']([^"']*)["']/i);
-    if (date) out.confirmScheduleDate = date[1];
-    else {
-        const m = text.match(/Confirm Schedule Date:\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
-        if (m) out.confirmScheduleDate = m[1];
-    }
-    const time = html.match(/name=["']f_begin_time["'][^>]*value=["']([^"']*)["']/i);
-    if (time) out.beginTime = time[1];
-
-    if (html.match(/Install/i) || text.includes('Install')) { out.type = 'Install'; out.jobDuration = 90; }
-    
-    return out;
-  }
-
-  // --- ENSURE SESSION COOKIE ---
   private async ensureSessionCookie(userId: string) {
     const session = await this.kv.get(`hns:session:${userId}`);
     if (session) return session;
     const enc = await this.kv.get(`hns:cred:${userId}`);
     if (!enc) return null;
-    try {
-        const dec = await this.decrypt(enc);
-        const creds = JSON.parse(dec || '{}');
-        if (creds.username && creds.password) {
-             return this.loginAndStoreSession(userId, creds.username, creds.password);
-        }
-    } catch(e) {}
-    return null;
+    const credsJson = await this.decrypt(enc);
+    if (!credsJson) return null;
+    const creds = JSON.parse(credsJson);
+    return this.loginAndStoreSession(userId, creds.username, creds.password);
   }
 
-  // --- AUTH METHOD ---
-  private async loginAndStoreSession(userId: string, u: string, p: string) {
-    try {
-        const params = new URLSearchParams();
-        params.append('UserId', u);
-        params.append('Password', p);
-        
-        const res = await fetch(LOGIN_URL, {
-            method: 'POST',
-            body: params,
-            headers: { 
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': USER_AGENT 
-            },
-            redirect: 'manual' 
-        });
-
-        const cookieHeader = res.headers.get('set-cookie');
-        const location = res.headers.get('Location') || '';
-
-        if (cookieHeader) {
-            // Check for failure redirect
-            if (location && (location.includes('login.jsp') || location.includes('error'))) {
-                this.warn(`[HNS] Server redirected back to login page.`);
-                return null;
-            }
-
-            const simpleCookie = cookieHeader.split(';')[0]; 
-            await this.kv.put(`hns:session:${userId}`, simpleCookie, { expirationTtl: 3600 });
-            this.log(`[HNS] Logged in successfully.`);
-            return simpleCookie;
-        }
-        
-        this.warn(`[HNS] Login failed (no cookie returned).`);
-    } catch(e) {
-        this.error(`[HNS] Login error`, e);
+  private async loginAndStoreSession(userId: string, username: string, password: string) {
+    const form = new URLSearchParams();
+    form.append('User', username);
+    form.append('Password', password);
+    form.append('Submit', 'Log In');
+    form.append('ScreenSize', 'MED');
+    form.append('AuthSystem', 'HNS');
+    const res = await this.safeFetch(LOGIN_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': USER_AGENT }, body: form.toString(), redirect: 'manual' });
+    let cookie = this.extractCookie(res);
+    if (!cookie && res.status === 302) {
+        const res2 = await this.safeFetch(res.headers.get('location') ? `${BASE_URL}${res.headers.get('location')}` : HOME_URL, { method: 'GET', headers: { 'Referer': LOGIN_URL, 'User-Agent': USER_AGENT }, redirect: 'manual' });
+        cookie = this.extractCookie(res2);
     }
-    return null;
+    if (cookie) await this.kv.put(`hns:session:${userId}`, cookie, { expirationTtl: 60 * 60 * 24 * 2 });
+    return cookie;
   }
 
-  // --- SECURE ENCRYPTION ---
+  private extractCookie(res: Response) {
+    const h = res.headers.get('set-cookie');
+    if (!h) return null;
+    return h.split(/,(?=[^;]+=)/g).map(p => p.split(';')[0].trim()).filter(Boolean).join('; ');
+  }
+
   private async encrypt(plain: string) {
     if (!this.encryptionKey) return plain;
     const keyRaw = Uint8Array.from(atob(this.encryptionKey), c => c.charCodeAt(0));
@@ -560,5 +491,164 @@ export class HughesNetService {
         const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
         return new TextDecoder().decode(dec);
     } catch (e) { return null; }
+  }
+
+  // (Helper methods extractIds, extractMenuLinks, extractFrameUrls, parseOrderPage, extractNextPageUrl, scanUrlForOrders kept same logic as before but internal use updated)
+  private async scanUrlForOrders(url: string, cookie: string, idSet: Set<string>) {
+      // Re-implement if needed, basically same logic as previous version:
+      // safeFetch URL -> extract IDs -> extract Next Page -> loop 5 times
+      let currentUrl = url;
+      let pageCount = 0;
+      while (currentUrl && pageCount < 5) {
+          try {
+             const res = await this.safeFetch(currentUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT, 'Referer': HOME_URL }});
+             const html = await res.text();
+             this.extractIds(html).forEach(id => idSet.add(id));
+             
+             // ... extract frames logic ...
+             if (pageCount === 0) {
+                 const frames = this.extractFrameUrls(html);
+                 for (const frameUrl of frames) {
+                    // ... frame fetch logic ...
+                    try {
+                        let absUrl = frameUrl;
+                        if (!frameUrl.startsWith('http')) {
+                            const currentDir = url.substring(0, url.lastIndexOf('/') + 1);
+                            absUrl = new URL(frameUrl, currentDir).href;
+                        }
+                        const fRes = await this.safeFetch(absUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
+                        const fHtml = await fRes.text();
+                        this.extractIds(fHtml).forEach(id => idSet.add(id));
+                    } catch(e) {}
+                 }
+             }
+
+             const nextLink = this.extractNextPageUrl(html, currentUrl);
+             if (nextLink && nextLink !== currentUrl) {
+                 currentUrl = nextLink;
+                 pageCount++;
+                 await new Promise(r => setTimeout(r, 200));
+             } else break;
+          } catch(e) { break; }
+      }
+  }
+  
+  private extractNextPageUrl(html: string, currentUrl: string): string | null {
+    const regex = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>(?:.*?(?:\bNext\b|&gt;|>).*?)<\/a>/i;
+    const match = html.match(regex);
+    if (match && match[1]) {
+        let nextUrl = match[1].replace(/&amp;/g, '&');
+        if (nextUrl.toLowerCase().startsWith('javascript')) return null;
+        if (!nextUrl.startsWith('http')) {
+            if (nextUrl.startsWith('/')) return `${BASE_URL}${nextUrl}`;
+            const currentDir = currentUrl.substring(0, currentUrl.lastIndexOf('/') + 1);
+            return new URL(nextUrl, currentDir).href;
+        }
+        return nextUrl;
+    }
+    return null;
+  }
+
+  private extractMenuLinks(html: string) {
+    const links: { url: string, text: string }[] = [];
+    const re = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi;
+    let m;
+    while ((m = re.exec(html)) !== null) {
+        let url = m[1];
+        if (url && !url.startsWith('javascript') && !url.startsWith('#') && (url.includes('.jsp') || url.includes('SoSearch'))) {
+             if (!url.startsWith('http')) {
+                if (url.startsWith('/')) url = `${BASE_URL}${url}`;
+                else url = `${BASE_URL}/start/${url}`;
+            }
+            links.push({ url, text: m[2].replace(/<[^>]+>/g, '').trim() });
+        }
+    }
+    return links;
+  }
+
+  private extractFrameUrls(html: string): string[] {
+    const urls: string[] = [];
+    const re = /<(?:frame|iframe)\s+[^>]*src=["']?([^"'>\s]+)["']?/gi;
+    let m;
+    while ((m = re.exec(html)) !== null) {
+        let url = m[1];
+        if (!url.startsWith('http')) {
+            url = url.replace(/^\.?\//, '');
+            url = `${BASE_URL}/start/${url}`; 
+        }
+        urls.push(url);
+    }
+    return urls;
+  }
+
+  private extractIds(html: string) {
+    const ids = new Set<string>();
+    const cleanHtml = html.replace(/&amp;/g, '&');
+    const re1 = /viewservice\.jsp\?.*?\bid=(\d+)/gi;
+    let m;
+    while ((m = re1.exec(cleanHtml)) !== null) ids.add(m[1]);
+    if (ids.size === 0) {
+        const re2 = /[?&]id=(\d{8})\b/gi;
+        while ((m = re2.exec(cleanHtml)) !== null) ids.add(m[1]);
+    }
+    return Array.from(ids);
+  }
+
+  private parseOrderPage(html: string, id: string) {
+    let text = html.replace(/<br\s*\/?>/gi, ' ').replace(/<\/td>/gi, '  ').replace(/<\/div>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
+    const out: any = { id, address: '', city: '', state: '', zip: '', confirmScheduleDate: '', beginTime: '', type: 'Repair', jobDuration: 60 };
+
+    const addrInput = html.match(/name=["']FLD_SO_Address1["'][^>]*value=["']([^"']*)["']/i);
+    if (addrInput) out.address = addrInput[1].trim();
+    if (!out.address) {
+        const addrInputRev = html.match(/value=["']([^"']*)["'][^>]*name=["']FLD_SO_Address1["']/i);
+        if (addrInputRev) out.address = addrInputRev[1].trim();
+    }
+    if (!out.address) {
+         const addrAlt = html.match(/name=["'](?:f_address|txtAddress)["'][^>]*value=["']([^"']*)["']/i);
+         if (addrAlt) out.address = addrAlt[1].trim();
+    }
+    if (!out.address) {
+        const addressMatch = text.match(/Address:\s*(.*?)\s+(?:City|County|State)/i);
+        if (addressMatch) out.address = addressMatch[1].trim().split(/county:/i)[0].trim();
+    }
+    if (!out.address) {
+         const svcLoc = text.match(/Service Location:?\s*(.*?)\s+(?:City|State|Zip)/i);
+         if (svcLoc) out.address = svcLoc[1].trim();
+    }
+    
+    const cityInput = html.match(/name=["']f_city["'][^>]*value=["']([^"']*)["']/i);
+    if (cityInput) out.city = cityInput[1].trim();
+    const stateInput = html.match(/name=["']f_state["'][^>]*value=["']([^"']*)["']/i);
+    if (stateInput) out.state = stateInput[1].trim();
+    const zipInput = html.match(/name=["']f_zip["'][^>]*value=["']([^"']*)["']/i);
+    if (zipInput) out.zip = zipInput[1].trim();
+    else {
+        const zipMatch = html.match(/Zip(?:\/Postal)?:\s*(?:<[^>]+>)*\s*(\d{5})/i);
+        if (zipMatch) out.zip = zipMatch[1];
+    }
+
+    const dateInput = html.match(/name=["']f_sched_date["'][^>]*value=["']([^"']*)["']/i);
+    if (dateInput) out.confirmScheduleDate = dateInput[1];
+    else {
+        const m = text.match(/Confirm Schedule Date:\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
+        if (m) out.confirmScheduleDate = m[1];
+    }
+
+    const timeInput = html.match(/name=["']f_begin_time["'][^>]*value=["']([^"']*)["']/i);
+    if (timeInput) out.beginTime = timeInput[1];
+    else {
+        const m = text.match(/Schd Est\. Begin Time:\s*(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
+        if (m) out.beginTime = m[1];
+    }
+
+    const typeMatch = html.match(/Service Order #:\d+.*?(Repair|Install)/i) || html.match(/class="PgTtl"[^>]*>.*?(Repair|Install)/si);
+    if (typeMatch) {
+        const foundType = typeMatch[1].toLowerCase();
+        if (foundType === 'install') { out.type = 'Install'; out.jobDuration = 90; } 
+        else { out.type = 'Repair'; out.jobDuration = 60; }
+    } else if (text.toLowerCase().includes('install')) { out.type = 'Install'; out.jobDuration = 90; }
+
+    return out;
   }
 }
