@@ -1,6 +1,6 @@
 import type { Action } from "svelte/action";
 
-// Dummy export to prevent import errors in other files
+// Dummy export to keep imports happy
 export function loadGoogle(key: string) { return Promise.resolve(); }
 
 export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node, params) => {
@@ -44,6 +44,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
   function handleInput() {
     const query = node.value;
     
+    // Update List Position
     if (suggestionsList) {
       const rect = node.getBoundingClientRect();
       Object.assign(suggestionsList.style, {
@@ -64,23 +65,33 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
         // CALL LOCAL API ONLY
         const res = await fetch(`/api/autocomplete?q=${encodeURIComponent(query)}`);
         const results = await res.json();
-        renderSuggestions(results);
+        
+        // Show results OR "No matches" if empty (helps debugging)
+        if (results && results.length > 0) {
+            renderSuggestions(results);
+        } else {
+            renderEmptyState();
+        }
       } catch (err) {
         console.error('Autocomplete error', err);
       }
     }, 300);
   }
 
+  function renderEmptyState() {
+      if (!suggestionsList) return;
+      suggestionsList.innerHTML = '';
+      const li = document.createElement('li');
+      Object.assign(li.style, { padding: '10px 12px', color: '#999', fontStyle: 'italic' });
+      li.textContent = 'No local matches found';
+      suggestionsList.appendChild(li);
+      suggestionsList.style.display = 'block';
+  }
+
   function renderSuggestions(items: any[]) {
     if (!suggestionsList) return;
     suggestionsList.innerHTML = '';
-    
-    if (!items || items.length === 0) {
-      suggestionsList.style.display = 'none';
-      return;
-    }
 
-    // Header
     const header = document.createElement('li');
     Object.assign(header.style, {
         padding: '4px 12px',
@@ -95,7 +106,6 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 
     items.forEach(item => {
       const li = document.createElement('li');
-      // Handle both standard objects and our debug/error objects
       const text = item.formatted_address || item.name;
       
       li.innerHTML = `

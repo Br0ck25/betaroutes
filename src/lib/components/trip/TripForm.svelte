@@ -7,14 +7,12 @@
   import { storage } from '$lib/utils/storage';
   import { trips, draftTrip } from '$lib/stores/trips';
   import { user } from '$lib/stores/auth';
-  // Import autocomplete, but we won't load google
   import { autocomplete } from '$lib/utils/autocomplete';
 
   export let googleApiKey = '';
 
   const settings = get(userSettings);
-  // Dummy key is fine
-  const API_KEY = googleApiKey || 'dummy_key';
+  const API_KEY = googleApiKey || 'dummy_key'; // No Google load, so key doesn't matter
 
   // Default form values
   let date = new Date().toISOString().split('T')[0];
@@ -31,11 +29,10 @@
   let supplyItems: SupplyCost[] = [];
   let notes = '';
 
-  // Calculation state
   let calculating = false;
   let calculated = false;
   
-  // Results
+  // Results placeholders
   let totalMileage = 0;
   let totalTime = '';
   let totalEarnings = 0;
@@ -46,8 +43,7 @@
   let profitPerHour = 0;
   let hoursWorked = 0;
 
-  // No Google Maps variables needed for this test
-  let mapElement: HTMLElement;
+  // No Map Element variables needed for pure KV test
 
   function formatTime(dateStr: string) {
     if (!dateStr) return '';
@@ -60,7 +56,7 @@
   }
 
   onMount(async () => {
-    // Removed loadGoogle() call
+    // REMOVED: loadGoogle()
     const draft = draftTrip.load();
     if (draft && confirm('Resume your last unsaved trip?')) {
       loadDraft(draft);
@@ -103,9 +99,8 @@
     }
   }
 
-  // Modified to bypass Google Router
   async function calculateRoute() {
-    alert("Google Maps Routing is DISABLED for KV testing.\n\nWe cannot calculate miles automatically right now.");
+    alert("Google Maps Routing is DISABLED. \nWe are testing the Autocomplete DB connection only.");
   }
 
   async function logTrip() {
@@ -140,8 +135,16 @@
 
 <div class="container">
   <h2>Plan Your Trip (KV Test Mode)</h2>
-
+  
   <div class="form-section">
+    <div style="background: #e3f2fd; color: #0d47a1; padding: 12px; margin-bottom: 20px; border-radius: 8px; font-size: 14px;">
+      <strong>Test Instructions:</strong>
+      <ul style="margin: 5px 0 0 20px;">
+         <li>Type <code>test</code> to verify API connection.</li>
+         <li>Type <code>101</code> to verify KV data access (based on your logs).</li>
+      </ul>
+    </div>
+
     <label>Date <input type="date" bind:value={date} /></label>
 
     <label>
@@ -149,7 +152,7 @@
       <input 
         type="text" 
         bind:value={startAddress} 
-        placeholder="Type 'test' here to verify connection..." 
+        placeholder="Start address" 
         autocomplete="off" 
         use:autocomplete={{ apiKey: API_KEY }}
         on:place-selected={(e) => handlePlaceSelect('start', e)}
