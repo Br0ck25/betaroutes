@@ -46,14 +46,5 @@ export async function authenticateUser(kv: KVNamespace, identifier: string, pass
 
 	if (!passwordMatches) return null;
 
-    // FIX: Return the full user profile including plan details
-	return { 
-        id: user.id, 
-        username: user.username, 
-        email: user.email,
-        plan: user.plan || 'free',
-        tripsThisMonth: user.tripsThisMonth || 0,
-        maxTrips: user.maxTrips || 10,
-        resetDate: user.resetDate || new Date().toISOString()
-    };
+	return { id: user.id, username: user.username, email: user.email };
 }
