@@ -42,8 +42,40 @@ function trashPrefixForUser(userId: string) {
 
 export function makeTripService(
   kv: KVNamespace,
-  trashKV: KVNamespace | undefined
+  trashKV: KVNamespace | undefined,
+  placesKV: KVNamespace | undefined // [!code ++] Add placesKV binding
 ) {
+  
+  // [!code ++] Helper to save addresses to the Places KV in the background
+  async function cacheAddressesFromTrip(trip: TripRecord) {
+    if (!placesKV) return;
+    
+    const addresses = new Set<string>();
+    
+    // Collect all unique addresses from the trip
+    if (trip.startAddress) addresses.add(trip.startAddress);
+    if (trip.endAddress) addresses.add(trip.endAddress);
+    
+    if (Array.isArray(trip.stops)) {
+      trip.stops.forEach(s => s.address && addresses.add(s.address));
+    }
+    
+    // Handle destinations array if it exists (based on your log format)
+    if (Array.isArray(trip.destinations)) {
+      trip.destinations.forEach((d: any) => d.address && addresses.add(d.address));
+    }
+
+    // Save each unique address
+    for (const addr of addresses) {
+       const key = addr.toLowerCase().trim();
+       // We only save the formatted address for the autocomplete
+       await placesKV.put(key, JSON.stringify({ 
+         formatted_address: addr,
+         lastSeen: new Date().toISOString()
+       }));
+    }
+  }
+
   return {
     async list(userId: string): Promise<TripRecord[]> {
       const prefix = prefixForUser(userId);
@@ -69,7 +101,15 @@ export function makeTripService(
 
     async put(trip: TripRecord) {
       trip.updatedAt = new Date().toISOString();
+      
+      // 1. Save the trip log to the main database (Wait for this)
       await kv.put(`trip:${trip.userId}:${trip.id}`, JSON.stringify(trip));
+
+      // 2. Save addresses to Places KV (Fire and forget)
+      // We catch errors here so address caching never fails the trip save
+      cacheAddressesFromTrip(trip).catch(e => {
+        console.error('[TripService] Failed to cache addresses:', e);
+      });
     },
 
     /**
