@@ -20,6 +20,8 @@ declare global {
 				BETA_USERS_KV: KVNamespace;
 				BETA_LOGS_TRASH_KV: KVNamespace;
 				BETA_USER_SETTINGS_KV: KVNamespace;
+				BETA_HUGHESNET_KV: KVNamespace;
+                		HNS_ENCRYPTION_KEY: string;
 				PUBLIC_GOOGLE_MAPS_API_KEY: string;
 			};
 		}

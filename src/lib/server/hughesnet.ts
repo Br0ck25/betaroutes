@@ -15,13 +15,11 @@ export class HughesNetService {
     private kv: KVNamespace, 
     private encryptionKey: string,
     private tripKV: KVNamespace,
-    private trashKV: KVNamespace, // UPDATED: Added Trash KV to constructor
+    private trashKV: KVNamespace,
     private settingsKV: KVNamespace,
     private googleApiKey: string | undefined
   ) {}
 
-  // ... (connect, sync, getOrders methods remain unchanged) ...
-  
   async connect(userId: string, username: string, password: string) {
     console.log(`[HNS] Connecting user ${userId}...`);
     const payload = { username, password, loginUrl: LOGIN_URL, createdAt: new Date().toISOString() };
@@ -81,6 +79,9 @@ export class HughesNetService {
                 if (parsed.address) {
                     await this.kv.put(`hns:orders:${userId}:${id}`, JSON.stringify(parsed));
                     orders.push(parsed);
+                } else {
+                    // Log failed parse to help debugging
+                    console.warn(`[HNS] Skipped Order ${id} due to missing address.`);
                 }
             } catch (err) {
                 console.error(`[HNS] Error syncing ${id}`, err);
@@ -108,7 +109,6 @@ export class HughesNetService {
 
   async clearAllTrips(userId: string) {
       console.log(`[HNS] Clearing HNS trips for ${userId}...`);
-      // UPDATED: Pass this.trashKV. This enables Soft Delete in tripService.
       const tripService = makeTripService(this.tripKV, this.trashKV);
       const allTrips = await tripService.list(userId);
       let count = 0;
@@ -126,7 +126,7 @@ export class HughesNetService {
       return count;
   }
 
-  // --- HELPERS and Private Methods (unchanged) ---
+  // --- HELPERS and Private Methods ---
   
   private async scanUrlForOrders(url: string, cookie: string, idSet: Set<string>) {
     try {
@@ -209,7 +209,13 @@ export class HughesNetService {
 
     // --- PARSE ADDRESS ---
     const addrInput = html.match(/name=["']FLD_SO_Address1["'][^>]*value=["']([^"']*)["']/i);
-    if (addrInput) out.address = addrInput[1].trim();
+    if (addrInput) {
+        out.address = addrInput[1].trim();
+    } else {
+        // [DEBUG] CRITICAL LOGGING FOR CLOUDFLARE BLOCKING
+        console.warn(`[HNS DEBUG] Failed to parse Address for Order ${id}.`);
+        console.warn(`[HNS DEBUG] HTML Preview: ${html.substring(0, 500)}...`); 
+    }
 
     const cityInput = html.match(/name=["']f_city["'][^>]*value=["']([^"']*)["']/i);
     if (cityInput) out.city = cityInput[1].trim();
@@ -245,8 +251,6 @@ export class HughesNetService {
     }
 
     // --- PARSE JOB TYPE (INSTALL VS REPAIR) ---
-    // Look for "Repair" or "Install" in the Page Title area or generally in the text
-    // Regex matches "Service Order #... (Repair|Install)" logic found in the span
     const typeMatch = html.match(/Service Order #:\d+.*?(Repair|Install)/i) || html.match(/class="PgTtl"[^>]*>.*?(Repair|Install)/si);
     
     if (typeMatch) {
@@ -259,7 +263,6 @@ export class HughesNetService {
             out.jobDuration = 60; // 1.0 Hours
         }
     } else if (text.toLowerCase().includes('install')) {
-         // Fallback loose check
          out.type = 'Install';
          out.jobDuration = 90;
     }
@@ -274,7 +277,6 @@ export class HughesNetService {
         installPay: number = 0, 
         repairPay: number = 0
     ) {
-    // UPDATED: Pass this.trashKV here too, although typically not needed for creation
     const tripService = makeTripService(this.tripKV, this.trashKV);
     
     // FETCH SETTINGS
@@ -344,8 +346,13 @@ export class HughesNetService {
       let tripEnd = defaultEndAddress || defaultStartAddress;
 
       if (!tripStart) {
-          console.log(`[HNS] Using Job Address as Start (Settings Empty): ${buildAddr(earliestOrder)}`);
-          tripStart = buildAddr(earliestOrder);
+          const firstJobAddr = buildAddr(earliestOrder);
+          // If address parsing failed, this might be empty string
+          if (firstJobAddr.length < 5) {
+              console.warn(`[HNS] Warning: Start Address is empty (Job Address missing). Route calcs will fail.`);
+          }
+          console.log(`[HNS] Using Job Address as Start: ${firstJobAddr}`);
+          tripStart = firstJobAddr;
           tripEnd = tripStart;
       }
 
@@ -366,6 +373,12 @@ export class HughesNetService {
           const dest = routePoints[i+1];
           
           if (origin === dest) continue;
+          
+          // Skip API call if addresses are obviously bad
+          if (!origin || !dest || origin.length < 3 || dest.length < 3) {
+             console.warn(`[HNS] Skipping leg ${i+1} due to missing address: "${origin}" -> "${dest}"`);
+             continue;
+          }
 
           // Call Google Maps API
           const leg = await this.getRouteInfo(origin, dest);
@@ -375,7 +388,6 @@ export class HughesNetService {
               totalDriveMinutes += legMinutes;
               totalDistanceMeters += leg.distance;
               
-              // Capture first leg (Start -> Job 1) for START TIME calculation
               if (i === 0) startToFirstJobMinutes = legMinutes;
               
               console.log(`[HNS] Leg ${i+1}: ${origin} -> ${dest} = ${legMinutes}m`);
@@ -390,7 +402,6 @@ export class HughesNetService {
       const tripStartMinutes = minMinutes - startToFirstJobMinutes;
       const startTime = this.minutesToTime(tripStartMinutes);
       
-      // Calculate Total Drive Time String
       const h = Math.floor(totalDriveMinutes / 60);
       const m = totalDriveMinutes % 60;
       const totalTimeStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
@@ -404,7 +415,7 @@ export class HughesNetService {
       const totalWorkDayMinutes = totalDriveMinutes + totalJobMinutes;
       const hoursWorked = Number((totalWorkDayMinutes / 60).toFixed(2));
 
-      // Calculate End Time (Start Time + Total Work Minutes)
+      // Calculate End Time
       const endTimeMinutes = tripStartMinutes + totalWorkDayMinutes;
       const endTime = this.minutesToTime(endTimeMinutes);
 
@@ -415,24 +426,17 @@ export class HughesNetService {
           return 0;
       };
 
-      // Calculate Fuel Cost
       const fuelCost = defaultMPG > 0 ? (totalDistanceMiles / defaultMPG) * defaultGasPrice : 0;
 
-      // 3. Create Trip Record with ALL time fields
       const newTrip: any = { 
         id: crypto.randomUUID(),
         userId,
         date: date,
         startTime: startTime,
         endTime: endTime,
-        
         estimatedTime: totalDriveMinutes, 
         totalTime: totalTimeStr,
-        
-        // --- NEW FIELDS ---
         hoursWorked: hoursWorked, 
-        // ------------------
-
         startAddress: tripStart,
         endAddress: tripEnd,
         destinations: daysOrders.map(o => ({
@@ -447,15 +451,13 @@ export class HughesNetService {
             notes: `HNS ID: ${o.id} - ${o.type}`,
             earnings: calculatePay(o.type),
             appointmentTime: o.beginTime,
-            type: o.type, // Save type on stop
+            type: o.type,
             duration: o.jobDuration
         })),
-        
         totalMiles: totalDistanceMiles,
         mpg: defaultMPG,
         gasPrice: defaultGasPrice,
         fuelCost: Number(fuelCost.toFixed(2)),
-        
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         syncStatus: 'synced'
@@ -511,13 +513,10 @@ export class HughesNetService {
   }
 
   private minutesToTime(minutes: number): string {
-      if (minutes < 0) minutes += 1440; // Wrap if negative (previous day)
+      if (minutes < 0) minutes += 1440; 
       let h = Math.floor(minutes / 60);
       const m = Math.floor(minutes % 60);
-      
-      // Handle day wrap over
       if (h >= 24) h = h % 24;
-
       return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
   }
 
