@@ -442,7 +442,7 @@
     "hns:orders:test:14468087": "{\"id\":\"14468087\",\"address\":\"5110 Ridge Line Rd\",\"city\":\"Raccoon\",\"state\":\"KY\",\"zip\":\"41557\",\"confirmScheduleDate\":\"11/13/2025\",\"beginTime\":\"11:00 \",\"type\":\"Install\",\"jobDuration\":90}",
     "hns:orders:test:14436853": "{\"id\":\"14436853\",\"address\":\"4597 Kentucky 541\",\"city\":\"Jackson\",\"state\":\"KY\",\"zip\":\"41339\",\"confirmScheduleDate\":\"10/14/2025\",\"beginTime\":\"10:00 \",\"type\":\"Install\",\"jobDuration\":90}",
     "hns:orders:test:14461487": "{\"id\":\"14461487\",\"address\":\"5420 Kentucky 7\",\"city\":\"Jeremiah\",\"state\":\"KY\",\"zip\":\"41826\",\"confirmScheduleDate\":\"11/05/2025\",\"beginTime\":\"12:00 \",\"type\":\"Install\",\"jobDuration\":90}",
-    "hns:cred:test": "{\"username\":\"IN9221855\",\"password\":\"!!Friday2025!!\",\"loginUrl\":\"https://dwayinstalls.hns.com/start/login.jsp?UsrAction=submit\",\"createdAt\":\"2025-12-11T05:07:23.574Z\"}",
-    "hns:session:test": "dtCookie=v_4_srv_7_sn_876E61EA56E6978A28BCE9E9017C1D3D_perc_100000_ol_0_mul_1_app-3Aea7c4b59f27d43eb_1_rcs-3Acss_0; JSESSIONID=08FF944934097AC82E25D183353D5A15; IPSESSION=\"0fbfcbba1630e4c7\"; GCLB=\"967b03c2b5e25a30\""
+    "hns:cred:test": "{\"username\":\"IN9221855\",\"password\":\"!!Friday2025!!\",\"loginUrl\":\"https://dwayinstalls.hns.com/start/login.jsp?UsrAction=submit\",\"createdAt\":\"2025-12-11T05:38:49.795Z\"}",
+    "hns:session:test": "dtCookie=v_4_srv_5_sn_0DDCCFF4FAC948167B5E11DCFC37EE69_perc_100000_ol_0_mul_1_app-3Aea7c4b59f27d43eb_1_rcs-3Acss_0; JSESSIONID=C326AFD0748F460371F70E742F1D570B; IPSESSION=\"fae023341d427a32\"; GCLB=\"5b9974ffcb77916a\""
   }
 }

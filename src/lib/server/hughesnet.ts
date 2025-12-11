@@ -112,7 +112,6 @@ export class HughesNetService {
   }
 
   // --- SMART SYNC ---
-  // Updated Signature to accept new financial inputs
   async sync(
       userId: string, 
       settingsId?: string, 
@@ -373,21 +372,24 @@ export class HughesNetService {
       const hoursWorked = Number((totalWorkMins / 60).toFixed(2));
       const fuelCost = mpg > 0 ? (miles / mpg) * gas : 0;
 
-      // --- NEW EARNINGS LOGIC ---
+      // --- EARNINGS & COSTS LOGIC ---
       const calculateEarnings = (o: any) => {
           let basePay = 0;
           let notes = `HNS Order: ${o.id} (${o.type})`;
-          let supplies: string[] = [];
+          let supplyItems: { type: string, cost: number }[] = [];
           
           if (o.hasPoleMount) {
-              // RULE: If Pole is present, use Install Pay + Pole Charge
-              // This applies even if the order type is Repair or Upgrade
+              // RULE: If Pole is present, use Install Pay + Pole Charge for ALL order types
               basePay = installPay + poleCharge;
               notes += ` [POLE MOUNT +$${poleCharge}]`;
               
-              // RULE: If Pole is present, always add Supply Costs
-              if (poleCost > 0) supplies.push(`Pole Cost: -$${poleCost}`);
-              if (concreteCost > 0) supplies.push(`Concrete Cost: -$${concreteCost}`);
+              // RULE: Add Supply Costs as actual expense items
+              if (poleCost > 0) {
+                  supplyItems.push({ type: 'Pole Cost', cost: poleCost });
+              }
+              if (concreteCost > 0) {
+                  supplyItems.push({ type: 'Concrete Cost', cost: concreteCost });
+              }
           } 
           else {
               // Standard Pay Logic
@@ -396,12 +398,41 @@ export class HughesNetService {
               else basePay = repairPay;
           }
 
-          if (supplies.length > 0) {
-              notes += ' | Supplies: ' + supplies.join(', ');
+          if (supplyItems.length > 0) {
+              const costs = supplyItems.map(s => `${s.type}: -$${s.cost}`).join(', ');
+              notes += ` | Supplies: ${costs}`;
           }
 
-          return { amount: basePay, notes };
+          return { amount: basePay, notes, supplyItems };
       };
+
+      // Create Trip and Accumulate Expenses
+      let tripSupplies: any[] = [];
+      let totalSuppliesCost = 0;
+
+      const stops = orders.map((o:any, i:number) => {
+          const fin = calculateEarnings(o);
+          
+          if (fin.supplyItems && fin.supplyItems.length > 0) {
+              // Add to the trip-level supply list
+              fin.supplyItems.forEach(item => {
+                   // Add random ID for frontend compatibility
+                   tripSupplies.push({ ...item, id: crypto.randomUUID() });
+                   totalSuppliesCost += item.cost;
+              });
+          }
+
+          return {
+              id: crypto.randomUUID(),
+              address: buildAddr(o),
+              order: i,
+              notes: fin.notes,
+              earnings: fin.amount,
+              appointmentTime: o.beginTime,
+              type: o.type,
+              duration: o.jobDuration
+          };
+      });
 
       const trip = {
           id: `hns_${userId}_${date}`, 
@@ -417,26 +448,19 @@ export class HughesNetService {
           totalMiles: miles,
           mpg, gasPrice: gas,
           fuelCost: Number(fuelCost.toFixed(2)),
-          stops: orders.map((o:any, i:number) => {
-              const fin = calculateEarnings(o);
-              return {
-                  id: crypto.randomUUID(),
-                  address: buildAddr(o),
-                  order: i,
-                  notes: fin.notes,
-                  earnings: fin.amount,
-                  appointmentTime: o.beginTime,
-                  type: o.type,
-                  duration: o.jobDuration
-              };
-          }),
+          
+          // Add accumulated supply data
+          suppliesCost: totalSuppliesCost,
+          supplyItems: tripSupplies,
+          
+          stops: stops,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           syncStatus: 'synced'
       };
 
       await tripService.put(trip as any);
-      this.log(`[Stage 2] Saved Trip ${date} ($${trip.fuelCost} fuel, ${miles} mi)`);
+      this.log(`[Stage 2] Saved Trip ${date} ($${trip.fuelCost} fuel, ${miles} mi, $${totalSuppliesCost} supplies)`);
       return true;
   }
 
