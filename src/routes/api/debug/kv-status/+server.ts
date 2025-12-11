@@ -3,39 +3,35 @@ import type { RequestHandler } from './$types';
 import type { KVNamespace } from '@cloudflare/workers-types';
 
 export const GET: RequestHandler = async ({ platform }) => {
-    const env = platform?.env || {};
     // @ts-ignore
-    const placesKV = env.BETA_PLACES_KV as KVNamespace;
+    const placesKV = platform?.env?.BETA_PLACES_KV as KVNamespace;
     
-    const diagnostics = {
-        environment: 'production',
-        hasPlatform: !!platform,
-        hasEnv: !!platform?.env,
-        hasKVBinding: !!placesKV,
-        kvStatus: 'Checking...',
-        sampleKeys: [] as any[],
-        totalKeys: 0
-    };
-
-    if (!placesKV) {
-        diagnostics.kvStatus = 'MISSING BINDING - Check Cloudflare Dashboard > Settings > Functions';
-        return json(diagnostics);
-    }
+    if (!placesKV) return json({ error: 'No KV Binding' });
 
     try {
-        // Try to list the first 5 keys to prove connection and data existence
         const list = await placesKV.list({ limit: 5 });
-        diagnostics.kvStatus = 'CONNECTED';
-        diagnostics.sampleKeys = list.keys;
-        diagnostics.totalKeys = list.keys.length;
-        
-        // If empty, we know the connection works but DB is just empty
-        if (list.keys.length === 0) {
-            diagnostics.kvStatus = 'CONNECTED BUT EMPTY';
-        }
-    } catch (e) {
-        diagnostics.kvStatus = `ERROR: ${String(e)}`;
-    }
+        const sampleValues = [];
 
-    return json(diagnostics);
+        // Fetch the actual JSON content for the first 3 items
+        for (const key of list.keys.slice(0, 3)) {
+            const val = await placesKV.get(key.name);
+            sampleValues.push({
+                key: key.name,
+                value_raw: val, // Show exact string stored
+                is_valid_json: isValidJson(val)
+            });
+        }
+
+        return json({
+            status: 'Connected',
+            total_count: list.keys.length,
+            samples: sampleValues
+        });
+    } catch (e) {
+        return json({ error: String(e) });
+    }
 };
+
+function isValidJson(str: string | null) {
+    try { JSON.parse(str || ''); return true; } catch { return false; }
+}
