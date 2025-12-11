@@ -10,11 +10,10 @@
   import { autocomplete, loadGoogle } from '$lib/utils/autocomplete';
 
   // Props
-  export let googleApiKey = ''; // [!code ++] Pass this from parent
+  export let googleApiKey = '';
 
   // LOAD SETTINGS
   const settings = get(userSettings);
-  // Fallback to hardcoded key if prop is missing (for safety)
   const API_KEY = googleApiKey || 'AIzaSyB7uqKfS8zRRPTJOv4t48yRTCnUvBjANCc';
 
   // Default form values
@@ -72,11 +71,11 @@
       loadDraft(draft);
     }
 
-    // Load Google Maps for the Map display
+    // Load Google Maps API (but do not initialize the map visual yet)
     try {
         await loadGoogle(API_KEY);
         mapsLoaded = true;
-        await initializeMap();
+        // Map initialization removed from here to save resources
     } catch (e) {
         alert('Failed to load Google Maps');
     } finally {
@@ -116,7 +115,7 @@
 
   async function addDestination() {
     destinations = [...destinations, { address: '', earnings: 0 }];
-    await tick(); // Svelte updates DOM, autocomplete action re-initializes automatically
+    await tick(); 
   }
 
   async function removeDestination(index: number) {
@@ -140,11 +139,13 @@
   }
 
   async function calculateRoute() {
-    if (!mapsLoaded || !directionsService || !directionsRenderer) {
-      alert('Maps not ready');
+    // 1. Check if API is loaded (Map object might not be yet)
+    if (!mapsLoaded) {
+      alert('Google Maps API not loaded. Please refresh.');
       return;
     }
 
+    // 2. Validate addresses
     if (!startAddress || destinations.some(d => !d.address.trim())) {
       alert('Please fill in all addresses');
       return;
@@ -153,8 +154,17 @@
     calculating = true;
 
     try {
+      // 3. Lazy Load: Initialize the map now if it doesn't exist [!code ++]
+      if (!map || !directionsService || !directionsRenderer) {
+          await initializeMap();
+      }
+
+      if (!directionsService || !directionsRenderer) {
+           throw new Error('Failed to initialize directions service');
+      }
+
       const waypoints = destinations.map(d => ({
-        location: d.address, // API handles string addresses automatically
+        location: d.address, 
         stopover: true
       }));
 
@@ -219,7 +229,6 @@
       return;
     }
 
-    // --- CHECK MONTHLY LIMIT ---
     const currentUser = get(user);
     if (currentUser?.plan === 'free') {
       const now = new Date();
