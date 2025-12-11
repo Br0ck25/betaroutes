@@ -5,10 +5,6 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
   let suggestionsList: HTMLUListElement | null = null;
   let debounceTimer: any;
   
-  // DISABLE GOOGLE FOR TESTING
-  // let autocompleteService: google.maps.places.AutocompleteService | null = null;
-  // let sessionToken: google.maps.places.AutocompleteSessionToken | null = null;
-
   function initUI() {
     suggestionsList = document.createElement('ul');
     Object.assign(suggestionsList.style, {
@@ -36,7 +32,8 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     
     // Event: Focus
     node.addEventListener('focus', () => {
-        console.log('[Auto-Debug] Input focused. Google load skipped for KV testing.');
+        // Log to console to prove we are working
+        console.log('[Auto-Debug] Input focused. Waiting for typing...');
         if (node.value.length > 1) handleInput();
     });
 
@@ -71,7 +68,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       try {
         console.log(`[Auto-Debug] Fetching local API for: "${query}"...`);
         
-        // --- STEP 1: STRICT LOCAL CHECK ---
+        // --- STRICT LOCAL ONLY ---
         const res = await fetch(`/api/autocomplete?q=${encodeURIComponent(query)}`);
         
         if (!res.ok) {
@@ -82,15 +79,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
         const localResults = await res.json();
         console.log('[Auto-Debug] API Response:', localResults);
 
-        if (localResults && localResults.length > 0) {
-           renderSuggestions(localResults, 'local');
-        } else {
-            console.warn('[Auto-Debug] No results found in KV.');
-            renderSuggestions([], 'local'); // Clear list
-        }
-
-        // --- STEP 2: GOOGLE DISABLED ---
-        // console.log('[Auto-Debug] Google Fallback is DISABLED.');
+        renderSuggestions(localResults || []);
 
       } catch (err) {
         console.error('[Auto-Debug] Client fetch error:', err);
@@ -98,7 +87,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     }, 300);
   }
 
-  function renderSuggestions(items: any[], source: 'local' | 'google') {
+  function renderSuggestions(items: any[]) {
     if (!suggestionsList) return;
     suggestionsList.innerHTML = '';
     
@@ -154,14 +143,14 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       name: item.name,
       geometry: item.geometry
     };
-    triggerSelection(place);
-  }
-
-  function triggerSelection(place: any) {
+    
     if(suggestionsList) suggestionsList.style.display = 'none';
     node.value = place.formatted_address || place.name;
     node.dispatchEvent(new CustomEvent('place-selected', { detail: place }));
   }
+  
+  // Create a dummy loadGoogle export so imports don't break
+  export function loadGoogle(key: string) { return Promise.resolve(); }
 
   initUI();
 

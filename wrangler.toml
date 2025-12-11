@@ -13,7 +13,7 @@ pages_build_output_dir = ".svelte-kit/cloudflare"
 
 # FIX: Move vars here so they apply to production
 [env.production.vars]
-PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyB7uqKfS8zRRPTJOv4t48yRTCnUvBjANCc"
+PUBLIC_GOOGLE_MAPS_API_KEY = ""
 HNS_ENCRYPTION_KEY = "wMusn9Z5UChOkZJWgufdOafRNNZVKBvkvEEOo6Nk6mM="
 
 # Production KV Namespaces
