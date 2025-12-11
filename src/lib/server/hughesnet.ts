@@ -10,7 +10,6 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 const APP_DOMAIN = 'https://gorouteyourself.com/';
 
 // SAFETY LIMITS
-// Cloudflare limit is 50 subrequests. We keep a buffer for KV ops and overhead.
 const MAX_REQUESTS_PER_BATCH = 35; 
 
 export class HughesNetService {
@@ -37,44 +36,82 @@ export class HughesNetService {
       return fetch(url, options);
   }
 
-  // --- AUTH ---
+  // --- AUTH (Stable Version) ---
   async connect(userId: string, username: string, password: string) {
     this.log(`[HNS] Connecting user ${userId}...`);
-    
-    // 1. Attempt Login
-    const cookie = await this.loginAndStoreSession(userId, username, password);
-    if (!cookie) {
-        this.error(`[HNS] Login failed: Invalid credentials or server rejected login.`);
-        return false;
-    }
-
-    // 2. Encrypt & Store Creds
     const payload = { username, password, loginUrl: LOGIN_URL, createdAt: new Date().toISOString() };
     const enc = await this.encrypt(JSON.stringify(payload));
     await this.kv.put(`hns:cred:${userId}`, enc);
 
-    // 3. Verify Session
+    const cookie = await this.loginAndStoreSession(userId, username, password);
+    if (!cookie) return false;
+
     try {
-        const verifyRes = await this.safeFetch(HOME_URL, { 
-            headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT, 'Referer': LOGIN_URL } 
-        });
+        const verifyRes = await this.safeFetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT } });
         const verifyHtml = await verifyRes.text();
-        if (verifyHtml.includes('name="Password"') || verifyHtml.includes('login.jsp')) {
-             return false;
-        }
+        if (verifyHtml.includes('name="Password"') || verifyHtml.includes('login.jsp')) return false;
         return true;
-    } catch(e) { return false; }
+    } catch (e) { return false; }
   }
 
   async disconnect(userId: string) {
       this.log(`[HNS] Disconnecting user ${userId}...`);
       await this.kv.delete(`hns:session:${userId}`);
       await this.kv.delete(`hns:cred:${userId}`);
-      await this.kv.delete(`hns:db:${userId}`); 
+      await this.kv.delete(`hns:db:${userId}`);
       return true;
   }
 
-  // --- SMART SYNC (Two-Stage) ---
+  private async ensureSessionCookie(userId: string) {
+    const session = await this.kv.get(`hns:session:${userId}`);
+    if (session) return session;
+    const enc = await this.kv.get(`hns:cred:${userId}`);
+    if (!enc) return null;
+    const credsJson = await this.decrypt(enc);
+    if (!credsJson) return null;
+    const creds = JSON.parse(credsJson);
+    return this.loginAndStoreSession(userId, creds.username, creds.password);
+  }
+
+  private async loginAndStoreSession(userId: string, username: string, password: string) {
+    const form = new URLSearchParams();
+    form.append('User', username);
+    form.append('Password', password);
+    form.append('Submit', 'Log In');
+    form.append('ScreenSize', 'MED');
+    form.append('AuthSystem', 'HNS');
+    
+    const res = await this.safeFetch(LOGIN_URL, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': USER_AGENT }, 
+        body: form.toString(), 
+        redirect: 'manual' 
+    });
+    
+    let cookie = this.extractCookie(res);
+    
+    if (!cookie && res.status === 302) {
+        const location = res.headers.get('location');
+        const nextUrl = location ? (location.startsWith('http') ? location : `${BASE_URL}${location}`) : HOME_URL;
+        const res2 = await this.safeFetch(nextUrl, { 
+            method: 'GET', 
+            headers: { 'Referer': LOGIN_URL, 'User-Agent': USER_AGENT }, 
+            redirect: 'manual' 
+        });
+        cookie = this.extractCookie(res2);
+    }
+    
+    if (cookie) await this.kv.put(`hns:session:${userId}`, cookie, { expirationTtl: 60 * 60 * 24 * 2 });
+    return cookie;
+  }
+
+  private extractCookie(res: Response) {
+    const h = res.headers.get('set-cookie');
+    if (!h) return null;
+    return h.split(/,(?=[^;]+=)/g).map(p => p.split(';')[0].trim()).filter(Boolean).join('; ');
+  }
+
+  // --- SMART SYNC ---
   async sync(userId: string, settingsId?: string, installPay: number = 0, repairPay: number = 0, skipScan: boolean = false) {
     this.requestCount = 0;
     
@@ -87,34 +124,40 @@ export class HughesNetService {
     const dbRaw = await this.kv.get(`hns:db:${userId}`);
     if (dbRaw) orderDb = JSON.parse(dbRaw);
     
-    let foundIds = new Set<string>(Object.keys(orderDb));
     let dbDirty = false;
     let incomplete = false;
+
+    // --- STUB PERSISTENCE HELPER ---
+    // If we find an ID, we check if it's in the DB. If not, we add a "Stub".
+    // This ensures we remember to download it later.
+    const registerFoundId = (id: string) => {
+        if (!orderDb[id]) {
+            orderDb[id] = { id, _status: 'pending' }; // Mark as pending
+            dbDirty = true;
+        }
+    };
 
     // =========================================================
     // STAGE 1: HARVESTING (Download missing data)
     // =========================================================
-    // We prioritize downloading missing orders over routing.
-    // If we fetch even one new order, we stop and save to avoid timeouts.
     
-    // A. Scan Menus for IDs (Lightweight)
+    // A. Scan for IDs (Lightweight)
     if (!skipScan) {
         try {
             const res = await this.safeFetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
             const html = await res.text();
             if (html.includes('name="Password"')) throw new Error('Session expired.');
             
-            this.extractIds(html).forEach(id => foundIds.add(id));
+            this.extractIds(html).forEach(registerFoundId);
 
-            // Scan Subpages (Limit depth to save requests for downloading details)
             if (this.requestCount < 10) {
                 const links = this.extractMenuLinks(html);
                 const priorityLinks = links.filter(l => l.url.includes('SoSearch') || l.url.includes('forms/'));
                 this.log(`[Stage 1] Scanning ${priorityLinks.length} pages for IDs...`);
                 
                 for (const link of priorityLinks) {
-                    if (this.requestCount > 15) break; // Hard cap on menu scanning
-                    await this.scanUrlForOrders(link.url, cookie, foundIds);
+                    if (this.requestCount > 15) break; 
+                    await this.scanUrlForOrders(link.url, cookie, registerFoundId);
                     await new Promise(r => setTimeout(r, 150));
                 }
             }
@@ -123,16 +166,18 @@ export class HughesNetService {
         }
     }
 
-    // B. Identify Missing Data
-    const allIds = Array.from(foundIds);
-    const missingDataIds = allIds.filter(id => !orderDb[id]);
+    // B. Check for Missing Data (Stubs)
+    // We look for any entry that is marked 'pending' or missing an address
+    const missingDataIds = Object.values(orderDb)
+        .filter((o:any) => o._status === 'pending' || !o.address)
+        .map((o:any) => o.id);
     
+    // C. Download Missing Details
     if (missingDataIds.length > 0) {
         this.log(`[Stage 1] Found ${missingDataIds.length} orders needing details.`);
         
         let fetchedCount = 0;
         for (const id of missingDataIds) {
-            // Hard Stop if limit near
             if (this.requestCount >= MAX_REQUESTS_PER_BATCH) {
                 incomplete = true;
                 this.warn(`[Limit] Pause downloading. Resuming next batch...`);
@@ -140,13 +185,13 @@ export class HughesNetService {
             }
 
             try {
-                // Fetch Details
                 const orderUrl = `https://dwayinstalls.hns.com/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${encodeURIComponent(id)}`;
                 const res = await this.safeFetch(orderUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
                 const html = await res.text();
                 const parsed = this.parseOrderPage(html, id);
                 
                 if (parsed.address) {
+                    delete parsed._status; // Remove pending flag
                     orderDb[id] = parsed;
                     dbDirty = true;
                     fetchedCount++;
@@ -155,29 +200,28 @@ export class HughesNetService {
                 await new Promise(r => setTimeout(r, 200)); 
             } catch (e: any) {
                 if (e.message === 'REQ_LIMIT') { incomplete = true; break; }
-                console.error(`Error fetching ${id}`);
             }
         }
 
-        // CRITICAL: If we downloaded anything, SAVE and EXIT. Do not route.
+        // CRITICAL: Save everything (including Stubs) and EXIT. 
+        // This forces the next run to finish downloading before it tries to route.
         if (dbDirty) {
             await this.kv.put(`hns:db:${userId}`, JSON.stringify(orderDb));
-            this.log(`[Stage 1] Saved ${fetchedCount} new orders. Pausing to save.`);
-            return { orders: Object.values(orderDb), incomplete: true }; // Force loop to come back
+            this.log(`[Stage 1] Saved ${fetchedCount} orders (and registered stubs). Pausing to save.`);
+            return { orders: Object.values(orderDb), incomplete: true }; 
         }
     }
 
     // =========================================================
     // STAGE 2: PROCESSING (Generate Trips Date-by-Date)
     // =========================================================
-    // Only reachable if Stage 1 found no new data (or cache is full)
     
     this.log(`[Stage 2] Processing Routes (Date by Date)...`);
     
     // Group by Date
     const ordersByDate: Record<string, any[]> = {};
     for (const order of Object.values(orderDb)) {
-        if (!order.confirmScheduleDate) continue;
+        if (!order.confirmScheduleDate || !order.address) continue;
         let isoDate = this.toIsoDate(order.confirmScheduleDate);
         if (isoDate) {
             if (!ordersByDate[isoDate]) ordersByDate[isoDate] = [];
@@ -185,31 +229,22 @@ export class HughesNetService {
         }
     }
 
-    // Sort Dates (Oldest to Newest)
     const sortedDates = Object.keys(ordersByDate).sort();
-    
-    // Load existing trips (to check if we need to update)
     const tripService = makeTripService(this.tripKV, this.trashKV);
     const existingTrips = await tripService.list(userId);
     
-    // Process Dates
     let tripsProcessed = 0;
     for (const date of sortedDates) {
-        // Stop if limit reached
         if (this.requestCount >= MAX_REQUESTS_PER_BATCH) {
             incomplete = true;
             this.warn(`[Limit] Stopping routing at ${date}. Resuming next batch.`);
             break;
         }
 
-        // Deterministic ID: hns_USER_DATE
         const tripId = `hns_${userId}_${date}`;
         
-        // CHECK: If trip exists and looks complete, skip it to save API calls
-        // We define "Complete" as having miles > 0
+        // Skip if trip exists and has miles > 0
         const existingTrip = existingTrips.find(t => t.id === tripId);
-        
-        // Logic: Recalculate if it doesn't exist OR if it has 0 miles (failed previously)
         const needsCalc = !existingTrip || (existingTrip.totalMiles === 0);
 
         if (!needsCalc) continue; 
@@ -220,7 +255,6 @@ export class HughesNetService {
         const success = await this.createTripForDate(userId, date, daysOrders, settingsId, installPay, repairPay, tripService);
         
         if (!success) {
-            // If routing failed due to limits/errors
             if (this.requestCount >= MAX_REQUESTS_PER_BATCH) {
                 incomplete = true;
                 break;
@@ -251,13 +285,11 @@ export class HughesNetService {
       const allTrips = await tripService.list(userId);
       let count = 0;
       for (const trip of allTrips) {
-          // Robust check for HNS trips
-          if (trip.id.startsWith('hns_') || trip.notes?.includes('HNS') || trip.stops?.some((s:any) => s.notes?.includes('HNS'))) {
+          if (trip.id.startsWith('hns_') || trip.notes?.includes('HNS')) {
               await tripService.delete(userId, trip.id);
               count++;
           }
       }
-      // Clear Cache
       await this.kv.delete(`hns:db:${userId}`);
       return count;
   }
@@ -268,7 +300,6 @@ export class HughesNetService {
       installPay: number, repairPay: number, tripService: any
   ): Promise<boolean> {
       
-      // Load Settings (Once per date is fine, or cache globally)
       let defaultStart = '', defaultEnd = '', mpg = 25, gas = 3.50;
       try {
           const sRaw = await this.settingsKV.get(settingsId || userId) || await this.settingsKV.get(userId);
@@ -281,28 +312,22 @@ export class HughesNetService {
           }
       } catch(e) {}
 
-      // Sort & Prep
       orders.sort((a, b) => this.parseTime(a.beginTime) - this.parseTime(b.beginTime));
       
-      // Helper
       const buildAddr = (o: any) => [o.address, o.city, o.state, o.zip].filter(Boolean).join(', ');
 
       let startAddr = defaultStart;
       let endAddr = defaultEnd;
       if (!startAddr && orders.length > 0) {
-          startAddr = buildAddr(orders[0]); // Fallback
+          startAddr = buildAddr(orders[0]); 
           endAddr = startAddr;
       }
 
-      // Route Points
       const points = [startAddr, ...orders.map((o:any) => buildAddr(o)), endAddr];
-      
       let totalMins = 0;
       let totalMeters = 0;
       let firstLegMins = 0;
-      let routeComplete = true;
 
-      // Google Maps Loop
       for (let i = 0; i < points.length - 1; i++) {
           const origin = points[i];
           const dest = points[i+1];
@@ -324,17 +349,15 @@ export class HughesNetService {
           } catch (e: any) {
               if (e.message === 'REQ_LIMIT') {
                   this.warn(`[Limit] Routing stopped at ${date} Leg ${i+1}`);
-                  return false; // Fail this date
+                  return false; 
               }
               this.error(`[Maps] Error`, e);
           }
       }
 
-      // Calculations
       const miles = Number((totalMeters * 0.000621371).toFixed(1));
       
-      // Start Time
-      let minMins = 9 * 60; // 9am default
+      let minMins = 9 * 60; 
       if (orders.length > 0) {
           const t = this.parseTime(orders[0].beginTime);
           if (t < 24*60) minMins = t;
@@ -347,12 +370,10 @@ export class HughesNetService {
       const totalWorkMins = totalMins + jobMins;
       const hoursWorked = Number((totalWorkMins / 60).toFixed(2));
       const fuelCost = mpg > 0 ? (miles / mpg) * gas : 0;
-
       const calcPay = (type: string) => (type === 'Install' ? installPay : repairPay);
 
-      // Create Trip Object
       const trip = {
-          id: `hns_${userId}_${date}`, // DETERMINISTIC ID
+          id: `hns_${userId}_${date}`, 
           userId,
           date,
           startTime: this.minutesToTime(startMins),
@@ -380,11 +401,8 @@ export class HughesNetService {
           syncStatus: 'synced'
       };
 
-      // Save using TripService
-      // Note: We use put() which overwrites if ID exists.
       await tripService.put(trip as any);
       this.log(`[Stage 2] Saved Trip ${date} ($${trip.fuelCost} fuel, ${miles} mi)`);
-      
       return true;
   }
 
@@ -396,7 +414,6 @@ export class HughesNetService {
           const res = await this.safeFetch(url, { headers: { 'Referer': APP_DOMAIN, 'User-Agent': 'BetaRoutes/1.0' } });
           const data = await res.json();
           if (data.routes?.[0]?.legs?.[0]) return { distance: data.routes[0].legs[0].distance.value, duration: data.routes[0].legs[0].duration.value };
-          if (data.error_message) this.error(`[Maps API] ${data.error_message}`);
       } catch (e: any) { 
           if (e.message === 'REQ_LIMIT') throw e; 
       }
@@ -430,14 +447,14 @@ export class HughesNetService {
       return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
   }
 
-  private async scanUrlForOrders(url: string, cookie: string, idSet: Set<string>) {
+  private async scanUrlForOrders(url: string, cookie: string, callback: (id: string) => void) {
       let current = url;
       let page = 0;
       while(current && page < 5) {
           try {
               const res = await this.safeFetch(current, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT } });
               const html = await res.text();
-              this.extractIds(html).forEach(id => idSet.add(id));
+              this.extractIds(html).forEach(callback);
               
               if (page === 0) { 
                   const frames = this.extractFrameUrls(html);
@@ -445,7 +462,7 @@ export class HughesNetService {
                       try {
                           const frameUrl = new URL(f, BASE_URL).href;
                           const fRes = await this.safeFetch(frameUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT } });
-                          this.extractIds(await fRes.text()).forEach(id => idSet.add(id));
+                          this.extractIds(await fRes.text()).forEach(callback);
                       } catch(e){}
                   }
               }
@@ -506,12 +523,20 @@ export class HughesNetService {
     const out: any = { id, address: '', city: '', state: '', zip: '', confirmScheduleDate: '', beginTime: '', type: 'Repair', jobDuration: 60 };
     const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
     
-    // Address
-    const addr = html.match(/name=["']FLD_SO_Address1["'][^>]*value=["']([^"']*)["']/i) || html.match(/value=["']([^"']*)["'][^>]*name=["']FLD_SO_Address1["']/i);
-    if (addr) out.address = addr[1].trim();
+    // Address (Restored Exact Parsing)
+    const addrInput = html.match(/name=["']FLD_SO_Address1["'][^>]*value=["']([^"']*)["']/i);
+    if (addrInput) out.address = addrInput[1].trim();
     if (!out.address) {
-        const m = text.match(/Address:\s*(.*?)\s+(?:City|County|State)/i);
-        if (m) out.address = m[1].trim().split(/county:/i)[0].trim();
+        const addrInputRev = html.match(/value=["']([^"']*)["'][^>]*name=["']FLD_SO_Address1["']/i);
+        if (addrInputRev) out.address = addrInputRev[1].trim();
+    }
+    if (!out.address) {
+         const addrAlt = html.match(/name=["'](?:f_address|txtAddress)["'][^>]*value=["']([^"']*)["']/i);
+         if (addrAlt) out.address = addrAlt[1].trim();
+    }
+    if (!out.address) {
+        const addressMatch = text.match(/Address:\s*(.*?)\s+(?:City|County|State)/i);
+        if (addressMatch) out.address = addressMatch[1].trim().split(/county:/i)[0].trim();
     }
 
     // City/State/Zip
@@ -537,70 +562,7 @@ export class HughesNetService {
     return out;
   }
 
-  // --- ENSURE SESSION COOKIE ---
-  private async ensureSessionCookie(userId: string) {
-    const session = await this.kv.get(`hns:session:${userId}`);
-    if (session) return session;
-    const enc = await this.kv.get(`hns:cred:${userId}`);
-    if (!enc) return null;
-    try {
-        const dec = await this.decrypt(enc);
-        const creds = JSON.parse(dec || '{}');
-        if (creds.username && creds.password) {
-             return this.loginAndStoreSession(userId, creds.username, creds.password);
-        }
-    } catch(e) {}
-    return null;
-  }
-
-  // --- AUTH METHODS ---
-  private async loginAndStoreSession(userId: string, u: string, p: string) {
-    try {
-        const params = new URLSearchParams();
-        params.append('UserId', u);
-        params.append('Password', p);
-        
-        const res = await fetch(LOGIN_URL, {
-            method: 'POST',
-            body: params,
-            headers: { 
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': USER_AGENT 
-            },
-            redirect: 'manual' 
-        });
-
-        const location = res.headers.get('Location') || '';
-        
-        let cookies: string[] = [];
-        if (typeof res.headers.getSetCookie === 'function') {
-            cookies = res.headers.getSetCookie();
-        } else {
-            const c = res.headers.get('set-cookie');
-            if (c) cookies.push(c);
-        }
-
-        if (cookies.length > 0) {
-            if (location && (location.includes('login.jsp') || location.includes('error'))) {
-                this.warn(`[HNS] Server redirected back to login page.`);
-                return null;
-            }
-
-            const fullCookie = cookies.map(c => c.split(';')[0]).join('; ');
-
-            await this.kv.put(`hns:session:${userId}`, fullCookie, { expirationTtl: 3600 });
-            this.log(`[HNS] Logged in successfully.`);
-            return fullCookie;
-        }
-        
-        this.warn(`[HNS] Login failed (no cookie returned).`);
-    } catch(e) {
-        this.error(`[HNS] Login error`, e);
-    }
-    return null;
-  }
-
-  // --- SECURE ENCRYPTION ---
+  // --- CRYPTO ---
   private async encrypt(plain: string) {
     if (!this.encryptionKey) return plain;
     const keyRaw = Uint8Array.from(atob(this.encryptionKey), c => c.charCodeAt(0));
