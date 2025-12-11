@@ -8,13 +8,11 @@ const BASE_URL = 'https://dwayinstalls.hns.com';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 const APP_DOMAIN = 'https://gorouteyourself.com/';
-
-// CLOUDFLARE LIMIT SAFETY
-const MAX_SUBREQUESTS = 45; // Leave room for safety (Limit is 50)
+const MAX_SUBREQUESTS = 45; 
 
 export class HughesNetService {
   public logs: string[] = [];
-  private requestCount = 0; // Track fetches to prevent "Too many subrequests"
+  private requestCount = 0; 
 
   constructor(
     private kv: KVNamespace, 
@@ -25,31 +23,16 @@ export class HughesNetService {
     private googleApiKey: string | undefined
   ) {}
 
-  // --- LOGGING HELPERS ---
-  private log(msg: string) {
-      console.log(msg);
-      this.logs.push(msg);
-  }
-  
-  private warn(msg: string) {
-      console.warn(msg);
-      this.logs.push(`⚠️ ${msg}`);
-  }
+  // --- LOGGING ---
+  private log(msg: string) { console.log(msg); this.logs.push(msg); }
+  private warn(msg: string) { console.warn(msg); this.logs.push(`⚠️ ${msg}`); }
+  private error(msg: string, e?: any) { console.error(msg, e); this.logs.push(`❌ ${msg} ${e ? '(' + e + ')' : ''}`); }
 
-  private error(msg: string, e?: any) {
-      console.error(msg, e);
-      this.logs.push(`❌ ${msg} ${e ? '(' + e + ')' : ''}`);
-  }
-
-  // Wrapper to track subrequests
   private async safeFetch(url: string, options?: RequestInit) {
-      if (this.requestCount >= MAX_SUBREQUESTS) {
-          throw new Error('SUBREQUEST_LIMIT_REACHED');
-      }
+      if (this.requestCount >= MAX_SUBREQUESTS) throw new Error('SUBREQUEST_LIMIT_REACHED');
       this.requestCount++;
       return fetch(url, options);
   }
-  // ------------------------
 
   async connect(userId: string, username: string, password: string) {
     this.log(`[HNS] Connecting user ${userId}...`);
@@ -67,10 +50,16 @@ export class HughesNetService {
     return true;
   }
 
+  // NEW: Disconnect Method
+  async disconnect(userId: string) {
+      this.log(`[HNS] Disconnecting user ${userId}...`);
+      await this.kv.delete(`hns:session:${userId}`);
+      await this.kv.delete(`hns:cred:${userId}`);
+      return true;
+  }
+
   async sync(userId: string, settingsId?: string, installPay: number = 0, repairPay: number = 0) {
-    this.log(`[HNS] Starting sync for ${userId} (Pay: $${installPay}/$${repairPay})`);
-    
-    // Reset counter for this run
+    this.log(`[HNS] Sync Started. (Pay: $${installPay}/$${repairPay})`);
     this.requestCount = 0;
 
     const cookie = await this.ensureSessionCookie(userId);
@@ -83,18 +72,16 @@ export class HughesNetService {
     const uniqueIds = new Set<string>();
     this.extractIds(html).forEach(id => uniqueIds.add(id));
 
-    if (uniqueIds.size === 0) {
+    if (uniqueIds.size === 0 || this.requestCount < 10) {
         this.log('[HNS] Scanning menu links...');
         const links = this.extractMenuLinks(html);
         const priorityLinks = links.filter(l => l.url.includes('SoSearch') || l.url.includes('forms/'));
 
         for (const link of priorityLinks) {
-            // Stop if we are getting close to limit
-            if (this.requestCount > 10) break; 
-            
+            if (this.requestCount > 15) break; 
             this.log(`[HNS] Scanning: ${link.text}`);
             await this.scanUrlForOrders(link.url, cookie, uniqueIds);
-            await new Promise(r => setTimeout(r, 500)); 
+            await new Promise(r => setTimeout(r, 300)); 
         }
     }
 
@@ -102,34 +89,29 @@ export class HughesNetService {
     this.log(`[HNS] Total unique orders found: ${finalIds.length}`);
     await this.kv.put(`hns:orders_index:${userId}`, JSON.stringify(finalIds));
 
-    // FETCH DETAILS WITH CACHING & LIMITS
     const orders: any[] = [];
     let fetchedNewCount = 0;
-    let hitLimit = false;
+    let incomplete = false; 
 
     for (const id of finalIds) {
         try {
-            // 1. Check Cache First (Does not use fetch quota)
             const cachedRaw = await this.kv.get(`hns:orders:${userId}:${id}`);
             if (cachedRaw) {
                 try {
-                    const cachedOrder = JSON.parse(cachedRaw);
-                    orders.push(cachedOrder);
-                    continue; // Skip fetch, use cache
+                    orders.push(JSON.parse(cachedRaw));
+                    continue; 
                 } catch(e) {}
             }
 
-            // 2. Check Limits before fetching new
-            if (this.requestCount >= MAX_SUBREQUESTS - 5) { // Leave 5 for Maps
-                if (!hitLimit) {
-                    this.warn(`[Batch Limit] Stopped fetching new orders to prevent errors. Click Sync again to continue.`);
-                    hitLimit = true;
+            if (this.requestCount >= MAX_SUBREQUESTS - 5) { 
+                if (!incomplete) {
+                    this.warn(`[Batch Limit] Pausing sync. Auto-continuing in next batch...`);
+                    incomplete = true;
                 }
-                continue; // Skip this order, process what we have
+                break;
             }
 
-            // 3. Fetch New
-            const delay = Math.floor(Math.random() * 300) + 300;
+            const delay = Math.floor(Math.random() * 200) + 200;
             await new Promise(r => setTimeout(r, delay));
 
             const orderUrl = `https://dwayinstalls.hns.com/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${encodeURIComponent(id)}`;
@@ -148,20 +130,21 @@ export class HughesNetService {
             }
         } catch (err: any) {
             if (err.message === 'SUBREQUEST_LIMIT_REACHED') {
-                 this.warn('Stopped fetching due to Cloudflare limits.');
+                 incomplete = true;
                  break;
             }
             this.error(`[HNS] Error syncing ${id}`, err);
         }
     }
 
-    this.log(`[HNS] Processed ${orders.length} orders (${fetchedNewCount} new).`);
+    this.log(`[HNS] Batch Summary: ${orders.length} total, ${fetchedNewCount} new.`);
 
     if (orders.length > 0) {
-        await this.createTripsFromOrders(userId, orders, settingsId, installPay, repairPay);
+        const routingIncomplete = await this.createTripsFromOrders(userId, orders, settingsId, installPay, repairPay);
+        if (routingIncomplete) incomplete = true;
     }
 
-    return orders;
+    return { orders, incomplete };
   }
 
   async getOrders(userId: string) {
@@ -194,7 +177,7 @@ export class HughesNetService {
       return count;
   }
 
-  // --- HELPERS and Private Methods ---
+  // --- PRIVATE METHODS ---
   
   private async scanUrlForOrders(url: string, cookie: string, idSet: Set<string>) {
     try {
@@ -209,12 +192,11 @@ export class HughesNetService {
                 const currentDir = url.substring(0, url.lastIndexOf('/') + 1);
                 absUrl = new URL(frameUrl, currentDir).href;
             }
-            // Use safeFetch
             const fRes = await this.safeFetch(absUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
             const fHtml = await fRes.text();
             this.extractIds(fHtml).forEach(id => idSet.add(id));
         }
-    } catch (e) { /* ignore scan errors */ }
+    } catch (e) { }
   }
 
   private extractMenuLinks(html: string) {
@@ -354,10 +336,11 @@ export class HughesNetService {
         settingsId?: string, 
         installPay: number = 0, 
         repairPay: number = 0
-    ) {
-    const tripService = makeTripService(this.tripKV, this.trashKV);
+    ): Promise<boolean> {
     
-    // FETCH SETTINGS
+    const tripService = makeTripService(this.tripKV, this.trashKV);
+    let hitLimit = false;
+    
     let defaultStartAddress = '';
     let defaultEndAddress = '';
     let defaultMPG = 25; 
@@ -396,9 +379,6 @@ export class HughesNetService {
     }
 
     for (const [date, daysOrders] of Object.entries(ordersByDate)) {
-      // OVERWRITE LOGIC:
-      // If a trip exists, we DELETE it so we can recreate it with potentially NEW orders found in this sync.
-      // This solves the "Partial Sync" issue where trips were incomplete.
       const existingTrips = await tripService.list(userId);
       const existingTrip = existingTrips.find(t => t.date === date);
       
@@ -407,24 +387,20 @@ export class HughesNetService {
           await tripService.delete(userId, existingTrip.id);
       }
 
-      // CHECK LIMITS BEFORE ROUTING
       if (this.requestCount >= MAX_SUBREQUESTS) {
           this.warn(`[Batch Limit] Cannot calculate route for ${date} (Limit Reached). Next sync will finish this.`);
+          hitLimit = true;
           continue; 
       }
 
-      // 1. Sort orders chronologically
       daysOrders.sort((a, b) => this.parseTime(a.beginTime) - this.parseTime(b.beginTime));
 
-      // 2. Determine Start Time of First Job
-      let minMinutes = 9 * 60; // Default 9 AM
+      let minMinutes = 9 * 60;
       let earliestOrder = daysOrders[0];
       const earliestTime = this.parseTime(earliestOrder.beginTime);
       if (earliestTime < 24 * 60) minMinutes = earliestTime;
 
-      const buildAddr = (o: any) => {
-          return [o.address, o.city, o.state, o.zip].filter(Boolean).join(', ');
-      };
+      const buildAddr = (o: any) => [o.address, o.city, o.state, o.zip].filter(Boolean).join(', ');
 
       let tripStart = defaultStartAddress;
       let tripEnd = defaultEndAddress || defaultStartAddress;
@@ -436,7 +412,7 @@ export class HughesNetService {
           tripEnd = tripStart;
       }
 
-      // --- MULTI-LEG CALCULATION (Google Only) ---
+      // --- ROUTING ---
       let totalDriveMinutes = 0;
       let totalDistanceMeters = 0;
       let startToFirstJobMinutes = 0;
@@ -457,19 +433,16 @@ export class HughesNetService {
              continue;
           }
 
-          if (i > 0) {
-              await new Promise(r => setTimeout(r, 200)); 
-          }
+          if (i > 0) await new Promise(r => setTimeout(r, 200)); 
 
-          // Use safeFetch inside getRouteInfo? Or just check limit here.
-          // safeFetch throws, let's catch it gracefully here
           let leg = null;
           try {
              if (this.requestCount >= MAX_SUBREQUESTS) throw new Error('SUBREQUEST_LIMIT_REACHED');
              leg = await this.getRouteInfo(origin, dest);
           } catch (e) {
              this.warn(`[Batch Limit] Stopped routing for ${date}. Trip will have 0 miles.`);
-             break; // Stop legs for this trip
+             hitLimit = true;
+             break; 
           }
           
           if (leg) {
@@ -545,6 +518,8 @@ export class HughesNetService {
       await tripService.put(newTrip);
       this.log(`[HNS] Created Trip for ${date} - Start: ${newTrip.startTime}, End: ${newTrip.endTime}, Hours: ${hoursWorked}, Miles: ${totalDistanceMiles}`);
     }
+
+    return hitLimit;
   }
 
   private async getRouteInfo(origin: string, destination: string) {
@@ -552,32 +527,22 @@ export class HughesNetService {
 
       try {
           const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&key=${this.googleApiKey}`;
-          
           const res = await this.safeFetch(url, {
-              headers: {
-                  'Referer': APP_DOMAIN,
-                  'User-Agent': 'BetaRoutes/1.0'
-              }
+              headers: { 'Referer': APP_DOMAIN, 'User-Agent': 'BetaRoutes/1.0' }
           });
-          
           const data = await res.json();
-          
           if (data.routes?.[0]?.legs?.[0]) {
               return { 
                   distance: data.routes[0].legs[0].distance.value, 
                   duration: data.routes[0].legs[0].duration.value 
               };
           } 
-          
           if (data.error_message) {
               this.error(`[HNS] Google Maps Error: ${data.error_message}`);
           }
       } catch (e: any) { 
-          if (e.message !== 'SUBREQUEST_LIMIT_REACHED') {
-              this.error('[HNS] Maps Network Error', e); 
-          } else {
-              throw e;
-          }
+          if (e.message !== 'SUBREQUEST_LIMIT_REACHED') this.error('[HNS] Maps Network Error', e); 
+          else throw e;
       }
       return null;
   }
@@ -589,7 +554,6 @@ export class HughesNetService {
       let h = parseInt(match[1]);
       const m = parseInt(match[2]);
       const meridiem = match[3]?.toUpperCase();
-
       if (meridiem === 'PM' && h < 12) h += 12;
       if (meridiem === 'AM' && h === 12) h = 0;
       return h * 60 + m;

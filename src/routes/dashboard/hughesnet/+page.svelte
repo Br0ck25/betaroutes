@@ -20,6 +20,9 @@
 
   let showSuccess = false;
   let successMessage = '';
+  
+  // New Status Message for Auto-looping
+  let statusMessage = 'Sync Now';
 
   function showSuccessMsg(msg: string) {
     successMessage = msg;
@@ -29,16 +32,10 @@
 
   function addLog(msg: string) {
     logs = [`[${new Date().toLocaleTimeString()}] ${msg}`, ...logs];
-    // console.log('[HNS UI]', msg); // Optional clean up
   }
 
-  // Helper to ingest server logs
   function processServerLogs(serverLogs?: string[]) {
       if (serverLogs && Array.isArray(serverLogs)) {
-          // Reverse them so they appear in chronological order when we add them one by one
-          // or just map them. Since addLog prepends, we loop normally?
-          // addLog prepends to the TOP. serverLogs come [1, 2, 3].
-          // We want [3, 2, 1] on top of previous logs.
           serverLogs.forEach(log => {
               logs = [`[Server] ${log}`, ...logs];
           });
@@ -71,6 +68,7 @@
     }
 
     loading = true;
+    statusMessage = 'Connecting...';
     addLog('Connecting...');
     
     try {
@@ -79,15 +77,13 @@
             body: JSON.stringify({ action: 'connect', username, password })
         });
         const data = await res.json();
-        
-        // SHOW SERVER LOGS
         processServerLogs(data.logs);
 
         if (data.success) {
             isConnected = true;
-            addLog('Login successful! Starting sync...');
+            addLog('Connected! Ready to sync.');
             showSuccessMsg('Connected successfully!');
-            await handleSync();
+            // REMOVED: await handleSync(); -> User must click Sync manually
         } else {
             addLog('Login Failed: ' + (data.error || 'Unknown error'));
             alert('Login Failed: ' + (data.error || 'Check logs'));
@@ -96,12 +92,42 @@
         addLog('Network Error: ' + e.message);
     } finally {
         loading = false;
+        statusMessage = 'Sync Now';
     }
   }
 
-  async function handleSync() {
+  async function handleDisconnect() {
+    if (!confirm('Disconnect from HughesNet?')) return;
     loading = true;
-    addLog(`Syncing... (Pay: $${installPay}/$${repairPay}, Time: ${installTime}m/${repairTime}m, Override: ${overrideTimes})`);
+    addLog('Disconnecting...');
+    try {
+        const res = await fetch('/api/hughesnet', {
+            method: 'POST',
+            body: JSON.stringify({ action: 'disconnect' })
+        });
+        const data = await res.json();
+        processServerLogs(data.logs);
+        
+        if (data.success) {
+            isConnected = false;
+            orders = []; // Clear view
+            addLog('Disconnected.');
+            showSuccessMsg('Disconnected.');
+        }
+    } catch (e: any) { addLog('Error: ' + e.message); }
+    finally { loading = false; }
+  }
+
+  async function handleSync(batchCount = 1) {
+    loading = true;
+    statusMessage = `Syncing Batch ${batchCount}... (Please Wait)`;
+    
+    if (batchCount === 1) {
+        addLog(`Starting Full Sync... (Pay: $${installPay}/$${repairPay})`);
+    } else {
+        addLog(`Continuing Sync (Batch ${batchCount})...`);
+    }
+
     try {
         const res = await fetch('/api/hughesnet', {
             method: 'POST',
@@ -115,16 +141,23 @@
             })
         });
         const data = await res.json();
-        
-        // SHOW SERVER LOGS
         processServerLogs(data.logs);
         
         if (data.success) {
              const newOrders = data.orders || [];
              orders = newOrders;
              isConnected = true;
-             addLog(`Sync complete. Found ${newOrders.length} orders.`);
+             
+             if (data.incomplete) {
+                 addLog(`Batch ${batchCount} complete. Starting next batch automatically...`);
+                 await new Promise(r => setTimeout(r, 1000));
+                 await handleSync(batchCount + 1);
+                 return;
+             }
+
+             addLog(`Sync Complete! Processed ${newOrders.length} orders total.`);
              showSuccessMsg(`Synced ${newOrders.length} orders!`);
+             statusMessage = 'Sync Complete';
              
              const userId = $user?.name || $user?.token;
              if (userId) {
@@ -139,13 +172,17 @@
     } catch (e: any) {
         addLog('Sync Error: ' + e.message);
     } finally {
-        loading = false;
+        // Finalize state handled by recursion exit or return
     }
+    
+    loading = false;
+    statusMessage = 'Sync Now';
   }
 
   async function handleClear() {
       if (!confirm('Are you sure you want to delete ALL HughesNet trips? This cannot be undone.')) return;
       loading = true;
+      statusMessage = 'Clearing...';
       addLog('Clearing HNS trips...');
       try {
           const res = await fetch('/api/hughesnet', {
@@ -153,8 +190,6 @@
               body: JSON.stringify({ action: 'clear' })
           });
           const data = await res.json();
-          
-          // SHOW SERVER LOGS
           processServerLogs(data.logs);
 
           addLog(`Cleared ${data.count} trips.`);
@@ -172,6 +207,7 @@
           addLog('Clear Error: ' + e.message);
       } finally {
           loading = false;
+          statusMessage = 'Sync Now';
       }
   }
 
@@ -222,7 +258,7 @@
           </div>
 
           <button class="btn-primary" on:click={handleConnect} disabled={loading}>
-            {loading ? 'Connecting...' : 'Connect & Sync'}
+            {statusMessage === 'Sync Now' ? 'Connect' : statusMessage}
           </button>
       {:else}
           <div class="success-state">
@@ -232,11 +268,19 @@
               <p class="last-sync">Found {orders.length} active orders in cache.</p>
           </div>
           
+          <div class="warning-box">
+              <p>⚠️ <strong>Important:</strong> Before syncing, please ensure your Start Address and MPG defaults are updated in <a href="/dashboard/settings">Global Settings</a>.</p>
+          </div>
+
           <div class="button-group mt-4">
-               <button class="btn-primary" on:click={handleSync} disabled={loading}>
-                 {loading ? 'Syncing...' : 'Sync Now'}
+               <button class="btn-primary" on:click={() => handleSync(1)} disabled={loading}>
+                 {statusMessage}
                </button>
                
+               <button class="btn-secondary" on:click={handleDisconnect} disabled={loading}>
+                  Disconnect
+               </button>
+
                <button class="btn-secondary danger-hover" on:click={handleClear} disabled={loading}>
                   Delete HNS Trips
                </button>
@@ -404,6 +448,10 @@
   .status-indicator { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: #166534; font-size: 16px; }
   .dot { width: 8px; height: 8px; background: #166534; border-radius: 50%; display: inline-block; }
   .last-sync { color: #15803D; font-size: 14px; margin-top: 4px; }
+  
+  /* Warning Box for Settings */
+  .warning-box { margin: 16px 0; padding: 12px; background: #FFF7ED; border: 1px solid #FED7AA; border-radius: 8px; font-size: 13px; color: #9A3412; }
+  .warning-box a { color: #C2410C; text-decoration: underline; font-weight: 600; }
 
   .checkbox-wrapper { margin: 20px 0; padding: 16px; background: #F9FAFB; border-radius: 10px; border: 1px solid #E5E7EB; }
   .checkbox-label { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
@@ -435,6 +483,6 @@
   .log-line { margin-bottom: 6px; }
   .log-time { color: #6B7280; margin-right: 8px; }
   .log-msg { color: #34D399; }
-  .log-msg.server { color: #60A5FA; } /* Blue for Server logs to distinguish them */
+  .log-msg.server { color: #60A5FA; } 
   .log-line.muted { color: #4B5563; font-style: italic; }
 </style>
