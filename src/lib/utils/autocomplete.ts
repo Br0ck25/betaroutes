@@ -4,7 +4,6 @@ import type { Action } from "svelte/action";
 let googleLoaded = false;
 let mapsLoadingPromise: Promise<void> | null = null;
 
-// Helper to ensure Google Maps is loaded
 export function loadGoogle(apiKey: string): Promise<void> {
   if (googleLoaded) return Promise.resolve();
   if (mapsLoadingPromise) return mapsLoadingPromise;
@@ -23,49 +22,50 @@ export function loadGoogle(apiKey: string): Promise<void> {
       googleLoaded = true;
       resolve();
     };
+    script.onerror = (e) => console.error("Google Maps failed to load", e);
     document.head.appendChild(script);
   });
   return mapsLoadingPromise;
 }
 
-/**
- * Svelte Action for "Local First" Autocomplete
- * 1. Checks BETA_PLACES_KV via API
- * 2. Falls back to Google Maps Autocomplete
- */
 export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node, params) => {
   let instance: google.maps.places.Autocomplete | null = null;
   let suggestionsList: HTMLUListElement | null = null;
   let debounceTimer: any;
 
-  async function init() {
-    if (!params?.apiKey) return;
-    
-    await loadGoogle(params.apiKey);
+  function init() {
+    console.log('[Autocomplete] Initializing...');
 
-    // 1. Initialize Google Autocomplete (The Fallback)
-    // We attach it to the node so standard Google predictions work if local fails
-    instance = new google.maps.places.Autocomplete(node, {
-      types: ["geocode"],
-      fields: ["formatted_address", "geometry", "name"],
-    });
-
-    // Listen for Google's selection event
-    instance.addListener("place_changed", () => {
-      const place = instance!.getPlace();
-      triggerSelection(place);
-    });
-
-    // 2. Initialize Local KV Search (The Priority)
+    // 1. Setup Local Search IMMEDIATELY (Don't wait for Google)
     setupLocalSearch();
+
+    // 2. Load Google in the background
+    if (params?.apiKey) {
+        loadGoogle(params.apiKey).then(() => {
+            console.log('[Autocomplete] Google Maps loaded. Attaching fallback.');
+            
+            // Attach Google Autocomplete as a fallback
+            instance = new google.maps.places.Autocomplete(node, {
+                types: ["geocode"],
+                fields: ["formatted_address", "geometry", "name"],
+            });
+
+            // Listen for Google's selection
+            instance.addListener("place_changed", () => {
+                const place = instance!.getPlace();
+                console.log('[Autocomplete] Google Place Selected:', place);
+                triggerSelection(place);
+            });
+        }).catch(err => console.error('[Autocomplete] Google Load Error:', err));
+    }
   }
 
   function setupLocalSearch() {
-    // Create the custom dropdown element
+    // Create the custom dropdown
     suggestionsList = document.createElement('ul');
     Object.assign(suggestionsList.style, {
       position: 'absolute',
-      zIndex: '2147483647', // Ensure it sits above Google's .pac-container (usually 1000)
+      zIndex: '2147483647', // Max Z-Index to stay on top of Google
       backgroundColor: 'white',
       border: '1px solid #ddd',
       borderRadius: '0 0 8px 8px',
@@ -74,31 +74,34 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       padding: '0',
       margin: '0',
       width: '100%',
-      maxHeight: '250px',
+      maxHeight: '300px',
       overflowY: 'auto',
       display: 'none',
       fontSize: '14px',
       fontFamily: 'inherit'
     });
     
-    // Append to body to avoid overflow:hidden issues in parents
     document.body.appendChild(suggestionsList);
 
     // Event Listeners
     node.addEventListener('input', handleInput);
-    node.addEventListener('focus', handleInput);
-    node.addEventListener('blur', () => {
-      // Small delay to allow clicking an item before the list disappears
-      setTimeout(() => {
-        if(suggestionsList) suggestionsList.style.display = 'none';
-      }, 200);
+    node.addEventListener('focus', handleInput); // Show on click too
+    
+    // Hide when clicking outside
+    document.addEventListener('click', (e) => {
+        if (e.target !== node && e.target !== suggestionsList && !suggestionsList?.contains(e.target as Node)) {
+            if(suggestionsList) suggestionsList.style.display = 'none';
+        }
     });
+
+    console.log('[Autocomplete] Local search listeners attached.');
   }
 
   function handleInput() {
     const query = node.value;
-    
-    // Update Position (Input might move)
+    console.log('[Autocomplete] Typing:', query); // Debug log
+
+    // Reposition the list (in case window resized or scrolled)
     if (suggestionsList) {
       const rect = node.getBoundingClientRect();
       Object.assign(suggestionsList.style, {
@@ -108,21 +111,21 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       });
     }
 
-    // Hide if empty
     if (!query || query.length < 2) {
       if(suggestionsList) suggestionsList.style.display = 'none';
       return;
     }
 
-    // Debounce the API call
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(async () => {
       try {
+        console.log('[Autocomplete] Fetching from KV:', query);
         const res = await fetch(`/api/autocomplete?q=${encodeURIComponent(query)}`);
         const results = await res.json();
+        console.log('[Autocomplete] KV Results:', results);
         renderSuggestions(results);
       } catch (err) {
-        console.error('Local autocomplete error', err);
+        console.error('[Autocomplete] Fetch error', err);
       }
     }, 200);
   }
@@ -137,25 +140,30 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       return;
     }
 
-    // Header for Local Results
+    // Header
     const header = document.createElement('li');
     Object.assign(header.style, {
-        padding: '4px 12px',
+        padding: '6px 12px',
         fontSize: '11px',
         fontWeight: 'bold',
         color: '#666',
         backgroundColor: '#f8f9fa',
-        borderBottom: '1px solid #eee'
+        borderBottom: '1px solid #eee',
+        letterSpacing: '0.5px'
     });
-    header.textContent = 'SAVED PLACES';
+    header.textContent = 'SAVED PLACES (Cloudflare KV)';
     suggestionsList.appendChild(header);
 
+    // Items
     items.forEach(item => {
       const li = document.createElement('li');
       li.innerHTML = `
         <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="font-size: 1.2em;">🕒</span> 
-          <span style="font-weight: 500;">${item.formatted_address || item.name}</span>
+          <span style="font-size: 1.2em;">🍌</span> 
+          <div style="display:flex; flex-direction:column;">
+            <span style="font-weight: 500; color:#333;">${item.formatted_address || item.name}</span>
+            <span style="font-size: 0.8em; color:#888;">Previously visited</span>
+          </div>
         </div>
       `;
       
@@ -163,15 +171,16 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
         padding: '10px 12px',
         cursor: 'pointer',
         borderBottom: '1px solid #eee',
-        color: '#333',
+        backgroundColor: 'white',
         transition: 'background 0.1s'
       });
       
-      li.addEventListener('mouseenter', () => li.style.backgroundColor = '#eef2f6');
+      li.addEventListener('mouseenter', () => li.style.backgroundColor = '#fff3cd'); // Banana yellow highlight
       li.addEventListener('mouseleave', () => li.style.backgroundColor = 'white');
       
       li.addEventListener('mousedown', (e) => {
         e.preventDefault(); // Prevent focus loss
+        e.stopPropagation();
         selectLocalItem(item);
       });
 
@@ -182,11 +191,10 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
   }
 
   function selectLocalItem(item: any) {
+    console.log('[Autocomplete] Selected Local Item:', item);
     const text = item.formatted_address || item.name;
     
     // Create a mock Google Place object
-    // Note: We might not have 'geometry' stored locally, but DirectionsService 
-    // handles string addresses perfectly fine, so we just pass the text.
     const place = {
       formatted_address: text,
       name: text,
@@ -197,13 +205,8 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
   }
 
   function triggerSelection(place: any) {
-    // Hide our custom list
     if(suggestionsList) suggestionsList.style.display = 'none';
-    
-    // Update input value
     node.value = place.formatted_address || place.name;
-
-    // Dispatch event for Svelte binding
     node.dispatchEvent(new CustomEvent('place-selected', { detail: place }));
   }
 
