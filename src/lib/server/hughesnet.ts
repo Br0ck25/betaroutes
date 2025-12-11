@@ -36,7 +36,7 @@ export class HughesNetService {
       return fetch(url, options);
   }
 
-  // --- AUTH (Stable Version) ---
+  // --- AUTH ---
   async connect(userId: string, username: string, password: string) {
     this.log(`[HNS] Connecting user ${userId}...`);
     const payload = { username, password, loginUrl: LOGIN_URL, createdAt: new Date().toISOString() };
@@ -112,7 +112,18 @@ export class HughesNetService {
   }
 
   // --- SMART SYNC ---
-  async sync(userId: string, settingsId?: string, installPay: number = 0, repairPay: number = 0, skipScan: boolean = false) {
+  // Updated Signature to accept new financial inputs
+  async sync(
+      userId: string, 
+      settingsId?: string, 
+      installPay: number = 0, 
+      repairPay: number = 0, 
+      upgradePay: number = 0,     
+      poleCost: number = 0,        
+      concreteCost: number = 0,
+      poleCharge: number = 0,      // NEW INPUT
+      skipScan: boolean = false
+  ) {
     this.requestCount = 0;
     
     // 1. Authenticate
@@ -127,21 +138,14 @@ export class HughesNetService {
     let dbDirty = false;
     let incomplete = false;
 
-    // --- STUB PERSISTENCE HELPER ---
-    // If we find an ID, we check if it's in the DB. If not, we add a "Stub".
-    // This ensures we remember to download it later.
     const registerFoundId = (id: string) => {
         if (!orderDb[id]) {
-            orderDb[id] = { id, _status: 'pending' }; // Mark as pending
+            orderDb[id] = { id, _status: 'pending' }; 
             dbDirty = true;
         }
     };
 
-    // =========================================================
-    // STAGE 1: HARVESTING (Download missing data)
-    // =========================================================
-    
-    // A. Scan for IDs (Lightweight)
+    // STAGE 1: HARVESTING 
     if (!skipScan) {
         try {
             const res = await this.safeFetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
@@ -153,7 +157,7 @@ export class HughesNetService {
             if (this.requestCount < 10) {
                 const links = this.extractMenuLinks(html);
                 const priorityLinks = links.filter(l => l.url.includes('SoSearch') || l.url.includes('forms/'));
-                this.log(`[Stage 1] Scanning ${priorityLinks.length} pages for IDs...`);
+                this.log(`[Stage 1] Scanning ${priorityLinks.length} pages...`);
                 
                 for (const link of priorityLinks) {
                     if (this.requestCount > 15) break; 
@@ -166,13 +170,10 @@ export class HughesNetService {
         }
     }
 
-    // B. Check for Missing Data (Stubs)
-    // We look for any entry that is marked 'pending' or missing an address
     const missingDataIds = Object.values(orderDb)
         .filter((o:any) => o._status === 'pending' || !o.address)
         .map((o:any) => o.id);
     
-    // C. Download Missing Details
     if (missingDataIds.length > 0) {
         this.log(`[Stage 1] Found ${missingDataIds.length} orders needing details.`);
         
@@ -191,11 +192,12 @@ export class HughesNetService {
                 const parsed = this.parseOrderPage(html, id);
                 
                 if (parsed.address) {
-                    delete parsed._status; // Remove pending flag
+                    delete parsed._status; 
                     orderDb[id] = parsed;
                     dbDirty = true;
                     fetchedCount++;
-                    this.log(`[Stage 1] Downloaded Order ${id}`);
+                    const poleMsg = parsed.hasPoleMount ? ' + POLE' : '';
+                    this.log(`[Stage 1] Downloaded Order ${id} (${parsed.type}${poleMsg})`);
                 }
                 await new Promise(r => setTimeout(r, 200)); 
             } catch (e: any) {
@@ -203,22 +205,16 @@ export class HughesNetService {
             }
         }
 
-        // CRITICAL: Save everything (including Stubs) and EXIT. 
-        // This forces the next run to finish downloading before it tries to route.
         if (dbDirty) {
             await this.kv.put(`hns:db:${userId}`, JSON.stringify(orderDb));
-            this.log(`[Stage 1] Saved ${fetchedCount} orders (and registered stubs). Pausing to save.`);
+            this.log(`[Stage 1] Saved ${fetchedCount} orders. Pausing to save.`);
             return { orders: Object.values(orderDb), incomplete: true }; 
         }
     }
 
-    // =========================================================
-    // STAGE 2: PROCESSING (Generate Trips Date-by-Date)
-    // =========================================================
+    // STAGE 2: PROCESSING 
+    this.log(`[Stage 2] Processing Routes...`);
     
-    this.log(`[Stage 2] Processing Routes (Date by Date)...`);
-    
-    // Group by Date
     const ordersByDate: Record<string, any[]> = {};
     for (const order of Object.values(orderDb)) {
         if (!order.confirmScheduleDate || !order.address) continue;
@@ -235,15 +231,15 @@ export class HughesNetService {
     
     let tripsProcessed = 0;
     for (const date of sortedDates) {
-        if (this.requestCount >= MAX_REQUESTS_PER_BATCH) {
+        
+        if (this.requestCount >= (MAX_REQUESTS_PER_BATCH - 5)) {
             incomplete = true;
-            this.warn(`[Limit] Stopping routing at ${date}. Resuming next batch.`);
+            this.warn(`[Limit] Buffer low (${this.requestCount}/${MAX_REQUESTS_PER_BATCH}). Stopping before ${date}.`);
             break;
         }
 
         const tripId = `hns_${userId}_${date}`;
         
-        // Skip if trip exists and has miles > 0
         const existingTrip = existingTrips.find(t => t.id === tripId);
         const needsCalc = !existingTrip || (existingTrip.totalMiles === 0);
 
@@ -252,7 +248,12 @@ export class HughesNetService {
         // --- CALCULATE ROUTE ---
         this.log(`[Stage 2] Routing ${date}...`);
         const daysOrders = ordersByDate[date];
-        const success = await this.createTripForDate(userId, date, daysOrders, settingsId, installPay, repairPay, tripService);
+        const success = await this.createTripForDate(
+            userId, date, daysOrders, settingsId, 
+            installPay, repairPay, upgradePay, 
+            poleCost, concreteCost, poleCharge, // Pass new param
+            tripService
+        );
         
         if (!success) {
             if (this.requestCount >= MAX_REQUESTS_PER_BATCH) {
@@ -281,7 +282,6 @@ export class HughesNetService {
   async clearAllTrips(userId: string) {
       this.log(`[HNS] Clearing HNS trips & cache...`);
       const tripService = makeTripService(this.tripKV, this.trashKV);
-      
       const allTrips = await tripService.list(userId);
       let count = 0;
       for (const trip of allTrips) {
@@ -297,7 +297,9 @@ export class HughesNetService {
   // --- TRIP CALCULATION LOGIC ---
   private async createTripForDate(
       userId: string, date: string, orders: any[], settingsId: string | undefined, 
-      installPay: number, repairPay: number, tripService: any
+      installPay: number, repairPay: number, upgradePay: number,
+      poleCost: number, concreteCost: number, poleCharge: number,
+      tripService: any
   ): Promise<boolean> {
       
       let defaultStart = '', defaultEnd = '', mpg = 25, gas = 3.50;
@@ -370,7 +372,36 @@ export class HughesNetService {
       const totalWorkMins = totalMins + jobMins;
       const hoursWorked = Number((totalWorkMins / 60).toFixed(2));
       const fuelCost = mpg > 0 ? (miles / mpg) * gas : 0;
-      const calcPay = (type: string) => (type === 'Install' ? installPay : repairPay);
+
+      // --- NEW EARNINGS LOGIC ---
+      const calculateEarnings = (o: any) => {
+          let basePay = 0;
+          let notes = `HNS Order: ${o.id} (${o.type})`;
+          let supplies: string[] = [];
+          
+          if (o.hasPoleMount) {
+              // RULE: If Pole is present, use Install Pay + Pole Charge
+              // This applies even if the order type is Repair or Upgrade
+              basePay = installPay + poleCharge;
+              notes += ` [POLE MOUNT +$${poleCharge}]`;
+              
+              // RULE: If Pole is present, always add Supply Costs
+              if (poleCost > 0) supplies.push(`Pole Cost: -$${poleCost}`);
+              if (concreteCost > 0) supplies.push(`Concrete Cost: -$${concreteCost}`);
+          } 
+          else {
+              // Standard Pay Logic
+              if (o.type === 'Install') basePay = installPay;
+              else if (o.type === 'Upgrade') basePay = upgradePay;
+              else basePay = repairPay;
+          }
+
+          if (supplies.length > 0) {
+              notes += ' | Supplies: ' + supplies.join(', ');
+          }
+
+          return { amount: basePay, notes };
+      };
 
       const trip = {
           id: `hns_${userId}_${date}`, 
@@ -386,16 +417,19 @@ export class HughesNetService {
           totalMiles: miles,
           mpg, gasPrice: gas,
           fuelCost: Number(fuelCost.toFixed(2)),
-          stops: orders.map((o:any, i:number) => ({
-              id: crypto.randomUUID(),
-              address: buildAddr(o),
-              order: i,
-              notes: `HNS Order: ${o.id} (${o.type})`,
-              earnings: calcPay(o.type),
-              appointmentTime: o.beginTime,
-              type: o.type,
-              duration: o.jobDuration
-          })),
+          stops: orders.map((o:any, i:number) => {
+              const fin = calculateEarnings(o);
+              return {
+                  id: crypto.randomUUID(),
+                  address: buildAddr(o),
+                  order: i,
+                  notes: fin.notes,
+                  earnings: fin.amount,
+                  appointmentTime: o.beginTime,
+                  type: o.type,
+                  duration: o.jobDuration
+              };
+          }),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           syncStatus: 'synced'
@@ -523,7 +557,7 @@ export class HughesNetService {
     const out: any = { id, address: '', city: '', state: '', zip: '', confirmScheduleDate: '', beginTime: '', type: 'Repair', jobDuration: 60 };
     const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
     
-    // Address (Restored Exact Parsing)
+    // Address
     const addrInput = html.match(/name=["']FLD_SO_Address1["'][^>]*value=["']([^"']*)["']/i);
     if (addrInput) out.address = addrInput[1].trim();
     if (!out.address) {
@@ -557,7 +591,23 @@ export class HughesNetService {
     const time = html.match(/name=["']f_begin_time["'][^>]*value=["']([^"']*)["']/i);
     if (time) out.beginTime = time[1];
 
-    if (html.match(/Install/i) || text.includes('Install')) { out.type = 'Install'; out.jobDuration = 90; }
+    // Type Parsing
+    const typeMatch = html.match(/Service Order #:\d+.*?((?:Install|Repair|Upgrade))/i);
+    if (typeMatch) {
+        const t = typeMatch[1].toLowerCase();
+        if (t === 'install') { out.type = 'Install'; out.jobDuration = 90; }
+        else if (t === 'upgrade') { out.type = 'Upgrade'; out.jobDuration = 60; }
+        else { out.type = 'Repair'; out.jobDuration = 60; }
+    } else {
+        if (text.includes('Install')) { out.type = 'Install'; out.jobDuration = 90; }
+        else if (text.includes('Upgrade')) { out.type = 'Upgrade'; out.jobDuration = 60; }
+    }
+
+    // --- POLE MOUNT CHECK (UPDATED) ---
+    // Specifically looking for the specific HTML string requested
+    if (html.includes('CON NON-STD CHARGE NEW POLE [Task]')) {
+        out.hasPoleMount = true;
+    }
     
     return out;
   }

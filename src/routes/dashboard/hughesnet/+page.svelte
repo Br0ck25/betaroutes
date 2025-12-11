@@ -12,8 +12,17 @@
   let logs: string[] = [];
   
   // Configuration State
-  let installPay = 0;
-  let repairPay = 0;
+  let installPay = 150;
+  let repairPay = 80;
+  let upgradePay = 80;
+  
+  // Supply Costs
+  let poleCost = 0;
+  let concreteCost = 0;
+  
+  // NEW: Pole Charge Amount
+  let poleCharge = 0;
+
   let installTime = 90; 
   let repairTime = 60;
   let overrideTimes = false;
@@ -119,7 +128,6 @@
     loading = true;
     statusMessage = `Syncing Batch ${batchCount}... (Please Wait)`;
     
-    // UPDATED: If batch > 1, we skip scanning to save requests
     const skipScan = batchCount > 1;
     
     if (batchCount === 1) {
@@ -135,10 +143,14 @@
                 action: 'sync',
                 installPay,
                 repairPay,
+                upgradePay,
+                poleCost,
+                concreteCost,
+                poleCharge, // PASSING NEW FIELD
                 installTime,
                 repairTime,
                 overrideTimes,
-                skipScan // Pass the flag
+                skipScan 
             })
         });
         const data = await res.json();
@@ -151,7 +163,7 @@
              
              if (data.incomplete) {
                  addLog(`Batch ${batchCount} complete. Starting next batch automatically...`);
-                 await new Promise(r => setTimeout(r, 1500)); // Slightly longer delay
+                 await new Promise(r => setTimeout(r, 1500)); 
                  await handleSync(batchCount + 1);
                  return;
              }
@@ -300,21 +312,52 @@
         </div>
         <div>
           <h2 class="card-title">Configuration</h2>
-          <p class="card-subtitle">Pay rates and time estimates</p>
+          <p class="card-subtitle">Pay rates and supply costs</p>
         </div>
       </div>
 
+      <h3 class="section-label">Pay Rates</h3>
       <div class="config-grid">
           <div class="form-group">
             <label for="install-pay">Install Pay ($)</label>
-            <input id="install-pay" type="number" bind:value={installPay} placeholder="0.00" min="0" step="0.01" />
+            <input id="install-pay" type="number" bind:value={installPay} placeholder="150.00" min="0" step="0.01" />
           </div>
           
           <div class="form-group">
             <label for="repair-pay">Repair Pay ($)</label>
-            <input id="repair-pay" type="number" bind:value={repairPay} placeholder="0.00" min="0" step="0.01" />
+            <input id="repair-pay" type="number" bind:value={repairPay} placeholder="80.00" min="0" step="0.01" />
           </div>
 
+          <div class="form-group">
+            <label for="upgrade-pay">Upgrade Pay ($)</label>
+            <input id="upgrade-pay" type="number" bind:value={upgradePay} placeholder="80.00" min="0" step="0.01" />
+          </div>
+      </div>
+      
+      <h3 class="section-label text-red">Supply Costs (Deductions)</h3>
+      <div class="config-grid">
+          <div class="form-group">
+            <label for="pole-cost" class="text-red">Pole Cost ($)</label>
+            <input id="pole-cost" type="number" bind:value={poleCost} placeholder="0.00" min="0" step="0.01" class="border-red" />
+            <span class="help-text">Deducted if Pole detected</span>
+          </div>
+          
+          <div class="form-group">
+            <label for="conc-cost" class="text-red">Concrete Cost ($)</label>
+            <input id="conc-cost" type="number" bind:value={concreteCost} placeholder="0.00" min="0" step="0.01" class="border-red" />
+            <span class="help-text">Deducted if Pole detected</span>
+          </div>
+
+          <div class="form-group">
+            <label for="pole-charge" class="text-green">Pole Charge Amount ($)</label>
+            <input id="pole-charge" type="number" bind:value={poleCharge} placeholder="0.00" min="0" step="0.01" class="border-green" />
+            <span class="help-text">Added to pay if Pole detected</span>
+          </div>
+      </div>
+
+      <div class="separator"></div>
+
+      <div class="config-grid">
           <div class="form-group">
             <label for="install-time">Install Time (min)</label>
             <input id="install-time" type="number" bind:value={installTime} placeholder="90" min="1" />
@@ -363,9 +406,12 @@
              <div class="order-item">
                  <div class="order-main">
                      <span class="order-id">#{order.id}</span>
-                     <span class="order-badge {order.type === 'Install' ? 'blue' : 'purple'}">
+                     <span class="order-badge {order.type === 'Install' ? 'blue' : (order.type === 'Upgrade' ? 'green' : 'purple')}">
                         {order.type || 'Unknown'}
                      </span>
+                     {#if order.hasPoleMount}
+                       <span class="order-badge pole">Pole</span>
+                     {/if}
                  </div>
                  <div class="order-details">
                      <div class="order-addr">{order.address}</div>
@@ -428,11 +474,27 @@
   
   .form-group { margin-bottom: 20px; }
   .form-group label { display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px; }
+  .form-group label.text-red { color: #DC2626; }
+  .form-group label.text-green { color: #166534; }
+  
   .form-group input { width: 100%; padding: 12px 16px; border: 2px solid #E5E7EB; border-radius: 10px; font-size: 15px; background: white; transition: all 0.2s; box-sizing: border-box; }
   .form-group input:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 127, 80, 0.1); }
   
+  .form-group input.border-red { border-color: #FECACA; background: #FEF2F2; }
+  .form-group input.border-red:focus { border-color: #DC2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1); }
+
+  .form-group input.border-green { border-color: #BBF7D0; background: #F0FDF4; }
+  .form-group input.border-green:focus { border-color: #166534; box-shadow: 0 0 0 3px rgba(22, 101, 52, 0.1); }
+
+  .help-text { font-size: 11px; color: #9CA3AF; margin-top: 4px; display: block; }
+  
   .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
   
+  .section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #9CA3AF; margin-bottom: 12px; letter-spacing: 0.05em; margin-top: 8px; }
+  .section-label.text-red { color: #EF4444; }
+  
+  .separator { height: 1px; background: #E5E7EB; margin: 24px 0; }
+
   .btn-primary, .btn-secondary { width: 100%; padding: 14px; border-radius: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 15px; }
   .btn-primary { background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%); color: white; border: none; }
   .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(255, 127, 80, 0.3); }
@@ -468,6 +530,8 @@
   .order-badge { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
   .order-badge.blue { background: #DBEAFE; color: #1E40AF; }
   .order-badge.purple { background: #F3E8FF; color: #6B21A8; }
+  .order-badge.green { background: #DCFCE7; color: #15803D; }
+  .order-badge.pole { background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5; }
   
   .order-details { flex: 1; margin: 0 16px; }
   .order-addr { font-size: 14px; color: #374151; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
