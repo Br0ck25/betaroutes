@@ -7,14 +7,14 @@
   import { storage } from '$lib/utils/storage';
   import { trips, draftTrip } from '$lib/stores/trips';
   import { user } from '$lib/stores/auth';
-  // Note: We import autocomplete, but we won't call loadGoogle eagerly
-  import { autocomplete, loadGoogle } from '$lib/utils/autocomplete';
+  // Import autocomplete, but we won't load google
+  import { autocomplete } from '$lib/utils/autocomplete';
 
   export let googleApiKey = '';
 
   const settings = get(userSettings);
-  // Using a dummy key here is fine since we won't call Google in this test
-  const API_KEY = googleApiKey || 'AIzaSyB7uqKfS8zRRPTJOv4t48yRTCnUvBjANCc';
+  // Dummy key is fine
+  const API_KEY = googleApiKey || 'dummy_key';
 
   // Default form values
   let date = new Date().toISOString().split('T')[0];
@@ -31,9 +31,11 @@
   let supplyItems: SupplyCost[] = [];
   let notes = '';
 
+  // Calculation state
   let calculating = false;
   let calculated = false;
   
+  // Results
   let totalMileage = 0;
   let totalTime = '';
   let totalEarnings = 0;
@@ -44,16 +46,8 @@
   let profitPerHour = 0;
   let hoursWorked = 0;
 
-  // We keep these null for now
-  let map: google.maps.Map | null = null;
-  let directionsService: google.maps.DirectionsService | null = null;
-  let directionsRenderer: google.maps.DirectionsRenderer | null = null;
+  // No Google Maps variables needed for this test
   let mapElement: HTMLElement;
-  let mapsLoaded = false;
-
-  function convertDistance(miles: number) {
-    return distanceUnit === 'km' ? miles * 1.60934 : miles;
-  }
 
   function formatTime(dateStr: string) {
     if (!dateStr) return '';
@@ -66,19 +60,15 @@
   }
 
   onMount(async () => {
-    // --- CHANGE: Removed await loadGoogle(API_KEY) ---
-    // This stops the Google script from loading (and erroring) on startup.
-    
+    // Removed loadGoogle() call
     const draft = draftTrip.load();
     if (draft && confirm('Resume your last unsaved trip?')) {
       loadDraft(draft);
     }
-
     const autoSaveInterval = setInterval(() => saveDraft(), 5000);
     return () => clearInterval(autoSaveInterval);
   });
 
-  // Helper to update addresses
   function handlePlaceSelect(field: 'start' | 'end' | number, e: CustomEvent) {
       const place = e.detail;
       const val = place.formatted_address || place.name || '';
@@ -113,17 +103,13 @@
     }
   }
 
+  // Modified to bypass Google Router
   async function calculateRoute() {
-    alert("Google Maps is currently disabled for KV testing. Address data: " + JSON.stringify(destinations));
-    // We disable the actual route calculation to prevent Google API calls during this test
-    return;
+    alert("Google Maps Routing is DISABLED for KV testing.\n\nWe cannot calculate miles automatically right now.");
   }
 
   async function logTrip() {
-      // (Your existing logTrip logic remains here)
-      // Since calculation is disabled, you might need to manually set 'calculated = true' for testing
-      // or just trust the KV part works.
-      alert("Function disabled during KV Test");
+    alert("Log Trip disabled until Routing is re-enabled.");
   }
 
   async function resetForm() {
@@ -163,7 +149,7 @@
       <input 
         type="text" 
         bind:value={startAddress} 
-        placeholder="Start address" 
+        placeholder="Type 'test' here to verify connection..." 
         autocomplete="off" 
         use:autocomplete={{ apiKey: API_KEY }}
         on:place-selected={(e) => handlePlaceSelect('start', e)}
@@ -221,7 +207,7 @@
 
   <div class="actions">
     <button class="primary" on:click={calculateRoute}>
-      Calculate Route (Test)
+      Calculate Route (Disabled)
     </button>
   </div>
 </div>
@@ -239,7 +225,6 @@
   .dest-row button { padding: 8px; border: none; background: #f0f0f0; cursor: pointer; border-radius: 4px; }
   .actions { display: flex; gap: 12px; }
   button { padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
-  .primary { background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white; }
-  .success { background: #4caf50; color: white; }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .primary { background: #999; color: white; cursor: not-allowed; }
+  button:disabled { opacity: 0.5; }
 </style>

@@ -1,15 +1,12 @@
-// src/lib/utils/autocomplete.ts
 import type { Action } from "svelte/action";
+
+// Dummy export to prevent import errors in other files
+export function loadGoogle(key: string) { return Promise.resolve(); }
 
 export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node, params) => {
   let suggestionsList: HTMLUListElement | null = null;
   let debounceTimer: any;
   
-  // Google Services
-  let autocompleteService: google.maps.places.AutocompleteService | null = null;
-  let placesService: google.maps.places.PlacesService | null = null;
-  let sessionToken: google.maps.places.AutocompleteSessionToken | null = null;
-
   function initUI() {
     suggestionsList = document.createElement('ul');
     Object.assign(suggestionsList.style, {
@@ -31,18 +28,9 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     });
     
     document.body.appendChild(suggestionsList);
+
     node.addEventListener('input', handleInput);
-    
-    // Lazy Load Google on Focus
-    node.addEventListener('focus', async () => {
-        if (params?.apiKey) {
-            await loadGoogle(params.apiKey);
-            if (!autocompleteService && google.maps && google.maps.places) {
-                autocompleteService = new google.maps.places.AutocompleteService();
-                sessionToken = new google.maps.places.AutocompleteSessionToken();
-                placesService = new google.maps.places.PlacesService(document.createElement('div'));
-            }
-        }
+    node.addEventListener('focus', () => {
         if (node.value.length > 1) handleInput();
     });
 
@@ -56,7 +44,6 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
   function handleInput() {
     const query = node.value;
     
-    // Update Position
     if (suggestionsList) {
       const rect = node.getBoundingClientRect();
       Object.assign(suggestionsList.style, {
@@ -74,35 +61,17 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(async () => {
       try {
-        // 1. Try Local KV
+        // CALL LOCAL API ONLY
         const res = await fetch(`/api/autocomplete?q=${encodeURIComponent(query)}`);
-        const localResults = await res.json();
-
-        // IF LOCAL FOUND: Show and STOP. (Save Google Cost)
-        if (localResults && localResults.length > 0) {
-           renderSuggestions(localResults, 'local');
-           return; 
-        }
-
-        // 2. If KV Empty -> Call Google
-        if (autocompleteService && sessionToken) {
-           autocompleteService.getPlacePredictions({
-             input: query,
-             sessionToken: sessionToken,
-             types: ['geocode']
-           }, (predictions, status) => {
-             if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
-               renderSuggestions(predictions, 'google');
-             }
-           });
-        }
+        const results = await res.json();
+        renderSuggestions(results);
       } catch (err) {
         console.error('Autocomplete error', err);
       }
     }, 300);
   }
 
-  function renderSuggestions(items: any[], source: 'local' | 'google') {
+  function renderSuggestions(items: any[]) {
     if (!suggestionsList) return;
     suggestionsList.innerHTML = '';
     
@@ -111,25 +80,27 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       return;
     }
 
+    // Header
     const header = document.createElement('li');
     Object.assign(header.style, {
         padding: '4px 12px',
         fontSize: '11px',
         fontWeight: 'bold',
-        color: source === 'local' ? '#2e7d32' : '#666',
-        backgroundColor: source === 'local' ? '#e8f5e9' : '#f8f9fa',
+        color: '#2e7d32',
+        backgroundColor: '#e8f5e9',
         borderBottom: '1px solid #eee'
     });
-    header.textContent = source === 'local' ? 'SAVED PLACES (OFFLINE)' : 'GOOGLE SEARCH';
+    header.textContent = 'KV DATABASE RESULTS';
     suggestionsList.appendChild(header);
 
     items.forEach(item => {
       const li = document.createElement('li');
-      const text = source === 'google' ? item.description : (item.formatted_address || item.name);
+      // Handle both standard objects and our debug/error objects
+      const text = item.formatted_address || item.name;
       
       li.innerHTML = `
         <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="font-size: 1.2em;">${source === 'local' ? '📍' : '🔎'}</span> 
+          <span style="font-size: 1.2em;">🗄️</span> 
           <span style="font-weight: 500;">${text}</span>
         </div>
       `;
@@ -143,8 +114,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       
       li.addEventListener('mousedown', (e) => {
         e.preventDefault(); 
-        if (source === 'local') selectLocalItem(item);
-        else selectGoogleItem(item);
+        selectItem(item);
       });
 
       suggestionsList!.appendChild(li);
@@ -153,64 +123,20 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     suggestionsList.style.display = 'block';
   }
 
-  function selectLocalItem(item: any) {
+  function selectItem(item: any) {
     const place = {
       formatted_address: item.formatted_address || item.name,
       name: item.name,
       geometry: item.geometry
     };
-    triggerSelection(place);
-  }
-
-  function selectGoogleItem(prediction: google.maps.places.AutocompletePrediction) {
-    if (!placesService || !sessionToken) return;
-
-    placesService.getDetails({
-        placeId: prediction.place_id,
-        fields: ['formatted_address', 'name', 'geometry'], 
-        sessionToken: sessionToken
-    }, (place, status) => {
-        if (status === google.maps.places.PlacesServiceStatus.OK && place) {
-            triggerSelection(place);
-            
-            // CACHE THIS SELECTION TO KV
-            fetch('/api/places/cache', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(place)
-            });
-
-            sessionToken = new google.maps.places.AutocompleteSessionToken();
-        }
-    });
-  }
-
-  function triggerSelection(place: any) {
+    
     if(suggestionsList) suggestionsList.style.display = 'none';
     node.value = place.formatted_address || place.name;
     node.dispatchEvent(new CustomEvent('place-selected', { detail: place }));
   }
 
-  // Real Google Loader
-  let googleLoaded = false;
-  let mapsLoadingPromise: Promise<void> | null = null;
-  export function loadGoogle(apiKey: string): Promise<void> {
-      if (googleLoaded) return Promise.resolve();
-      if (mapsLoadingPromise) return mapsLoadingPromise;
-      mapsLoadingPromise = new Promise((resolve) => {
-        if (typeof google !== "undefined" && google.maps && google.maps.places) {
-          googleLoaded = true; resolve(); return;
-        }
-        const script = document.createElement("script");
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
-        script.async = true;
-        script.onload = () => { googleLoaded = true; resolve(); };
-        document.head.appendChild(script);
-      });
-      return mapsLoadingPromise;
-  }
-
   initUI();
+
   return {
     destroy() {
       if (suggestionsList) suggestionsList.remove();
