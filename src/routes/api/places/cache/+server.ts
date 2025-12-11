@@ -8,31 +8,30 @@ export const POST: RequestHandler = async ({ request, platform }) => {
         const placesKV = platform?.env?.BETA_PLACES_KV as KVNamespace;
 
         if (!placesKV) {
-            console.warn('BETA_PLACES_KV not found during cache attempt');
-            return json({ success: false, error: 'KV not found' });
+            // Silently fail in dev if KV isn't set up, to prevent UI errors
+            console.warn('BETA_PLACES_KV not found for caching');
+            return json({ success: false });
         }
 
         if (!place || (!place.formatted_address && !place.name)) {
-            return json({ success: false, error: 'Invalid place data' });
+            return json({ success: false, error: 'Invalid data' });
         }
 
-        // We use the address as the key for autocomplete lookup
-        // Normalize: lowercase and trim
+        // Use the address as the lookup key (normalized)
         const keyText = place.formatted_address || place.name;
         const key = keyText.toLowerCase().trim();
 
-        // Save to KV
-        // We add a 'cachedAt' timestamp so we know this came from the "Save on Select" feature
+        // Save to KV with a flag indicating it came from user selection
         await placesKV.put(key, JSON.stringify({
             ...place,
             cachedAt: new Date().toISOString(),
-            source: 'user_selection'
+            source: 'autocomplete_selection'
         }));
 
         return json({ success: true });
 
     } catch (e) {
-        console.error('Error caching place:', e);
+        console.error('Cache Error:', e);
         return json({ success: false, error: String(e) }, { status: 500 });
     }
 };

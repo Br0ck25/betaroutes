@@ -1,10 +1,9 @@
-// src/lib/utils/autocomplete.ts
 import type { Action } from "svelte/action";
 
 let googleLoaded = false;
 let mapsLoadingPromise: Promise<void> | null = null;
 
-// Helper to ensure Google Maps is loaded
+// Helper to load the API script (Does not create a visual map)
 export function loadGoogle(apiKey: string): Promise<void> {
   if (googleLoaded) return Promise.resolve();
   if (mapsLoadingPromise) return mapsLoadingPromise;
@@ -17,7 +16,7 @@ export function loadGoogle(apiKey: string): Promise<void> {
     }
 
     const script = document.createElement("script");
-    // Ensure 'places' library is requested
+    // We only need the 'places' library for the search inputs
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
     script.async = true;
     script.onload = () => {
@@ -30,35 +29,21 @@ export function loadGoogle(apiKey: string): Promise<void> {
 }
 
 /**
- * Svelte Action for "Local First" Autocomplete
- * 1. Lazy loads Google Maps on interaction (focus)
- * 2. Checks BETA_PLACES_KV via API first
- * 3. Falls back to Google Maps AutocompleteService (using Session Tokens)
- * 4. Caches Google results locally on selection
+ * Optimized Autocomplete Action
+ * 1. Checks Local KV first.
+ * 2. Only calls Google Service if Local returns empty.
+ * 3. Caches Google selections to Local KV.
  */
 export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node, params) => {
   let suggestionsList: HTMLUListElement | null = null;
   let debounceTimer: any;
   
-  // Google Services
+  // Google Services (Lazy initialized)
   let autocompleteService: google.maps.places.AutocompleteService | null = null;
   let placesService: google.maps.places.PlacesService | null = null;
   let sessionToken: google.maps.places.AutocompleteSessionToken | null = null;
 
-  async function ensureGoogleServices() {
-    if (!params?.apiKey) return;
-    await loadGoogle(params.apiKey);
-    
-    if (!autocompleteService && googleLoaded) {
-      autocompleteService = new google.maps.places.AutocompleteService();
-      sessionToken = new google.maps.places.AutocompleteSessionToken();
-      // PlacesService requires a node, even if dummy
-      placesService = new google.maps.places.PlacesService(document.createElement('div'));
-    }
-  }
-
-  function setupUI() {
-    // Create the custom dropdown element
+  function initUI() {
     suggestionsList = document.createElement('ul');
     Object.assign(suggestionsList.style, {
       position: 'absolute',
@@ -80,15 +65,27 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     
     document.body.appendChild(suggestionsList);
 
-    // Event Listeners
+    // Event: Input typing
     node.addEventListener('input', handleInput);
     
-    // Lazy load Google on focus
-    node.addEventListener('focus', () => {
-      ensureGoogleServices();
-      handleInput(); // Re-trigger search if field has value
+    // Event: Focus (Lazy Load Google Script)
+    node.addEventListener('focus', async () => {
+        if (params?.apiKey) {
+            await loadGoogle(params.apiKey);
+            
+            // Initialize services if they don't exist yet
+            if (!autocompleteService && google.maps && google.maps.places) {
+                autocompleteService = new google.maps.places.AutocompleteService();
+                sessionToken = new google.maps.places.AutocompleteSessionToken();
+                // PlacesService requires a node (even a dummy one) to fetch details
+                placesService = new google.maps.places.PlacesService(document.createElement('div'));
+            }
+        }
+        // Trigger search if field already has text
+        if (node.value.length > 1) handleInput();
     });
 
+    // Event: Blur (Hide list)
     node.addEventListener('blur', () => {
       setTimeout(() => {
         if(suggestionsList) suggestionsList.style.display = 'none';
@@ -99,7 +96,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
   function handleInput() {
     const query = node.value;
     
-    // Update Position
+    // Update List Position
     if (suggestionsList) {
       const rect = node.getBoundingClientRect();
       Object.assign(suggestionsList.style, {
@@ -117,22 +114,23 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(async () => {
       try {
-        // 1. Try Local First
+        // --- STEP 1: STRICT LOCAL CHECK ---
         const res = await fetch(`/api/autocomplete?q=${encodeURIComponent(query)}`);
         const localResults = await res.json();
 
-        // If we have local results, show them and STOP (save API call)
         if (localResults && localResults.length > 0) {
+           console.log('Found in Local KV:', localResults.length);
            renderSuggestions(localResults, 'local');
-           return;
+           return; // STOP HERE. Do not call Google.
         }
 
-        // 2. Fallback to Google if initialized
+        // --- STEP 2: GOOGLE FALLBACK ---
         if (autocompleteService && sessionToken) {
+           console.log('Checking Google API...');
            autocompleteService.getPlacePredictions({
              input: query,
              sessionToken: sessionToken,
-             types: ['geocode'] // optimize for addresses
+             types: ['geocode']
            }, (predictions, status) => {
              if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
                renderSuggestions(predictions, 'google');
@@ -142,7 +140,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       } catch (err) {
         console.error('Autocomplete error', err);
       }
-    }, 300); // Increased debounce slightly to 300ms
+    }, 300);
   }
 
   function renderSuggestions(items: any[], source: 'local' | 'google') {
@@ -154,7 +152,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       return;
     }
 
-    // Optional Header
+    // Header to show user source
     const header = document.createElement('li');
     Object.assign(header.style, {
         padding: '4px 12px',
@@ -164,12 +162,12 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
         backgroundColor: source === 'local' ? '#e8f5e9' : '#f8f9fa',
         borderBottom: '1px solid #eee'
     });
-    header.textContent = source === 'local' ? 'SAVED PLACES (Offline Ready)' : 'GOOGLE SUGGESTIONS';
+    header.textContent = source === 'local' ? 'SAVED PLACES' : 'GOOGLE SUGGESTIONS';
     suggestionsList.appendChild(header);
 
     items.forEach(item => {
       const li = document.createElement('li');
-      // Google predictions use 'description', local uses 'formatted_address' or 'name'
+      // Google uses 'description', our local DB uses 'formatted_address' or 'name'
       const text = source === 'google' ? item.description : (item.formatted_address || item.name);
       
       li.innerHTML = `
@@ -206,11 +204,11 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
   }
 
   function selectLocalItem(item: any) {
-    const text = item.formatted_address || item.name;
+    // Local items already have geometry/details
     const place = {
-      formatted_address: text,
-      name: text,
-      geometry: item.geometry || undefined
+      formatted_address: item.formatted_address || item.name,
+      name: item.name,
+      geometry: item.geometry
     };
     triggerSelection(place);
   }
@@ -218,24 +216,24 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
   function selectGoogleItem(prediction: google.maps.places.AutocompletePrediction) {
     if (!placesService || !sessionToken) return;
 
-    // Fetch Details (charges for Place Details, but we save it immediately)
+    // We must fetch details to get the Lat/Lng for routing
     placesService.getDetails({
         placeId: prediction.place_id,
-        fields: ['formatted_address', 'name', 'geometry'], // Fetch geometry for the map
+        fields: ['formatted_address', 'name', 'geometry'], 
         sessionToken: sessionToken
     }, (place, status) => {
         if (status === google.maps.places.PlacesServiceStatus.OK && place) {
             // 1. Update UI
             triggerSelection(place);
             
-            // 2. Cache this result to our KV!
+            // 2. CACHE THIS IMMEDIATELY
             fetch('/api/places/cache', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(place)
             }).catch(e => console.error('Failed to cache place', e));
 
-            // 3. Reset Session Token
+            // 3. Refresh Session Token
             sessionToken = new google.maps.places.AutocompleteSessionToken();
         }
     });
@@ -243,15 +241,11 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 
   function triggerSelection(place: any) {
     if(suggestionsList) suggestionsList.style.display = 'none';
-    
-    // Update input value
     node.value = place.formatted_address || place.name;
-    
-    // Dispatch event
     node.dispatchEvent(new CustomEvent('place-selected', { detail: place }));
   }
 
-  setupUI();
+  initUI();
 
   return {
     destroy() {
