@@ -314,7 +314,6 @@ export class HughesNetService {
       } catch(e) {}
 
       // SORTING: Earliest to Latest (Ascending)
-      // This places 8:00 AM first and 2:00 PM second.
       orders.sort((a, b) => this.parseTime(a.beginTime) - this.parseTime(b.beginTime));
       
       const buildAddr = (o: any) => [o.address, o.city, o.state, o.zip].filter(Boolean).join(', ');
@@ -327,7 +326,6 @@ export class HughesNetService {
       }
 
       // --- CALCULATE COMMUTE FOR START TIME ---
-      // Since list is sorted Earliest -> Latest, orders[0] is the first job of the day.
       let earliestOrder: any = orders[0];
       let startMins = 9 * 60; // Default 9 AM
 
@@ -396,11 +394,12 @@ export class HughesNetService {
               basePay = installPay + poleCharge;
               notes += ` [POLE MOUNT +$${poleCharge}]`;
               
+              // FIX: Renamed to "Pole" and "Concrete" (dropped "Cost")
               if (poleCost > 0) {
-                  supplyItems.push({ type: 'Pole Cost', cost: poleCost });
+                  supplyItems.push({ type: 'Pole', cost: poleCost });
               }
               if (concreteCost > 0) {
-                  supplyItems.push({ type: 'Concrete Cost', cost: concreteCost });
+                  supplyItems.push({ type: 'Concrete', cost: concreteCost });
               }
           } 
           else {
@@ -417,8 +416,9 @@ export class HughesNetService {
           return { amount: basePay, notes, supplyItems };
       };
 
-      // Create Trip and Accumulate Expenses
-      let tripSupplies: any[] = [];
+      // FIX: Aggregation Logic
+      // Combine all "Pole" items into one, all "Concrete" items into one
+      let suppliesMap = new Map<string, number>();
       let totalSuppliesCost = 0;
 
       const stops = orders.map((o:any, i:number) => {
@@ -426,7 +426,8 @@ export class HughesNetService {
           
           if (fin.supplyItems && fin.supplyItems.length > 0) {
               fin.supplyItems.forEach(item => {
-                   tripSupplies.push({ ...item, id: crypto.randomUUID() });
+                   const cur = suppliesMap.get(item.type) || 0;
+                   suppliesMap.set(item.type, cur + item.cost);
                    totalSuppliesCost += item.cost;
               });
           }
@@ -443,6 +444,13 @@ export class HughesNetService {
           };
       });
 
+      // Convert Map back to List
+      const tripSupplies = Array.from(suppliesMap.entries()).map(([type, cost]) => ({
+          id: crypto.randomUUID(),
+          type,
+          cost
+      }));
+
       const trip = {
           id: `hns_${userId}_${date}`, 
           userId,
@@ -458,10 +466,9 @@ export class HughesNetService {
           mpg, gasPrice: gas,
           fuelCost: Number(fuelCost.toFixed(2)),
           
-          // Double save for frontend compatibility
           suppliesCost: totalSuppliesCost,
           supplyItems: tripSupplies,
-          suppliesItems: tripSupplies,
+          suppliesItems: tripSupplies, // Double save for compatibility
           
           stops: stops,
           createdAt: new Date().toISOString(),
@@ -497,16 +504,12 @@ export class HughesNetService {
       return dateStr;
   }
 
-  // UPDATED: Strictly enforces 24h clock parsing
   private parseTime(timeStr: string): number {
-      if (!timeStr) return 0; // Default to 0 to put unparsed jobs at the start
-      
+      if (!timeStr) return 0; 
       const m = timeStr.match(/(\d{1,2})[:]?(\d{2})/);
       if (!m) return 0;
-      
       let h = parseInt(m[1]);
       let min = parseInt(m[2]);
-      
       return h * 60 + min;
   }
 
@@ -625,17 +628,8 @@ export class HughesNetService {
         const m = text.match(/Confirm Schedule Date:\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
         if (m) out.confirmScheduleDate = m[1];
     }
-
-    // TIME PARSING
-    // 1. Try hidden input
     const time = html.match(/name=["']f_begin_time["'][^>]*value=["']([^"']*)["']/i);
-    if (time && time[1]) {
-        out.beginTime = time[1];
-    } else {
-        // 2. Try scraping visual text
-        const visTime = text.match(/Begin Time:?\s*(\d{1,2}:?\d{2})/i);
-        if (visTime) out.beginTime = visTime[1];
-    }
+    if (time) out.beginTime = time[1];
 
     // Type Parsing
     const typeMatch = html.match(/Service Order #:\d+.*?((?:Install|Repair|Upgrade))/i);
