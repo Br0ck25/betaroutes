@@ -313,6 +313,7 @@ export class HughesNetService {
           }
       } catch(e) {}
 
+      // SORTING FIX: Ensure valid Earliest -> Latest sort
       orders.sort((a, b) => this.parseTime(a.beginTime) - this.parseTime(b.beginTime));
       
       const buildAddr = (o: any) => [o.address, o.city, o.state, o.zip].filter(Boolean).join(', ');
@@ -379,11 +380,9 @@ export class HughesNetService {
           let supplyItems: { type: string, cost: number }[] = [];
           
           if (o.hasPoleMount) {
-              // RULE: If Pole is present, add Pole Charge to the base pay
               basePay = installPay + poleCharge;
               notes += ` [POLE MOUNT +$${poleCharge}]`;
               
-              // RULE: Add Supply Costs as actual expense items
               if (poleCost > 0) {
                   supplyItems.push({ type: 'Pole Cost', cost: poleCost });
               }
@@ -392,7 +391,6 @@ export class HughesNetService {
               }
           } 
           else {
-              // Standard Pay Logic
               if (o.type === 'Install') basePay = installPay;
               else if (o.type === 'Upgrade') basePay = upgradePay;
               else basePay = repairPay;
@@ -414,9 +412,7 @@ export class HughesNetService {
           const fin = calculateEarnings(o);
           
           if (fin.supplyItems && fin.supplyItems.length > 0) {
-              // Add to the trip-level supply list
               fin.supplyItems.forEach(item => {
-                   // Add random ID for frontend compatibility
                    tripSupplies.push({ ...item, id: crypto.randomUUID() });
                    totalSuppliesCost += item.cost;
               });
@@ -449,9 +445,11 @@ export class HughesNetService {
           mpg, gasPrice: gas,
           fuelCost: Number(fuelCost.toFixed(2)),
           
-          // Add accumulated supply data so it shows up in the columns
+          // FIX: Add supply list to BOTH 'supplyItems' (singular) and 'suppliesItems' (plural)
+          // This ensures backward compatibility with pages using either field name
           suppliesCost: totalSuppliesCost,
           supplyItems: tripSupplies,
+          suppliesItems: tripSupplies,
           
           stops: stops,
           createdAt: new Date().toISOString(),
@@ -487,14 +485,33 @@ export class HughesNetService {
       return dateStr;
   }
 
+  // IMPROVED TIME PARSER
+  // Handles ambiguous 12h times and ensures PM is respected
   private parseTime(timeStr: string): number {
       if (!timeStr) return 9999;
-      const m = timeStr.match(/(\d{1,2}):(\d{2})(?:\s*(AM|PM))?/i);
+      
+      const m = timeStr.match(/(\d{1,2}):(\d{2})(?:\s*([APap]\.?[Mm]\.?))?/);
       if (!m) return 9999;
+      
       let h = parseInt(m[1]);
-      if (m[3]?.toUpperCase() === 'PM' && h < 12) h += 12;
-      if (m[3]?.toUpperCase() === 'AM' && h === 12) h = 0;
-      return h * 60 + parseInt(m[2]);
+      let min = parseInt(m[2]);
+      const ampm = m[3] ? m[3].toLowerCase().replace(/\./g, '') : null;
+
+      // Handle 12 PM (Noon) -> 12
+      // Handle 1 PM -> 13
+      if (ampm === 'pm' && h < 12) h += 12;
+      
+      // Handle 12 AM (Midnight) -> 0
+      if (ampm === 'am' && h === 12) h = 0;
+      
+      // FALLBACK for Missing AM/PM:
+      // If no AM/PM, but time is small (e.g. "1:00", "2:00", "3:00"), assume PM for reasonable work hours
+      // This is a heuristic: if hour is 1-6 and no AM/PM, assume PM (13:00 - 18:00)
+      if (!ampm && h >= 1 && h <= 6) {
+           h += 12; 
+      }
+
+      return h * 60 + min;
   }
 
   private minutesToTime(minutes: number): string {
@@ -612,8 +629,17 @@ export class HughesNetService {
         const m = text.match(/Confirm Schedule Date:\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
         if (m) out.confirmScheduleDate = m[1];
     }
+
+    // TIME PARSING (Improved)
+    // 1. Try hidden input
     const time = html.match(/name=["']f_begin_time["'][^>]*value=["']([^"']*)["']/i);
-    if (time) out.beginTime = time[1];
+    if (time && time[1]) {
+        out.beginTime = time[1];
+    } else {
+        // 2. Try scraping visual text (e.g. "Begin Time: 2:00 PM")
+        const visTime = text.match(/Begin Time:?\s*(\d{1,2}:\d{2}\s*[AP]M)/i);
+        if (visTime) out.beginTime = visTime[1];
+    }
 
     // Type Parsing
     const typeMatch = html.match(/Service Order #:\d+.*?((?:Install|Repair|Upgrade))/i);
@@ -627,8 +653,7 @@ export class HughesNetService {
         else if (text.includes('Upgrade')) { out.type = 'Upgrade'; out.jobDuration = 60; }
     }
 
-    // --- POLE MOUNT CHECK (UPDATED) ---
-    // Specifically looking for the specific HTML string requested
+    // --- POLE MOUNT CHECK ---
     if (html.includes('CON NON-STD CHARGE NEW POLE [Task]')) {
         out.hasPoleMount = true;
     }
