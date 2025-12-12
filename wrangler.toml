@@ -14,7 +14,6 @@ pages_build_output_dir = ".svelte-kit/cloudflare"
 # FIX: Move vars here so they apply to production
 [env.production.vars]
 PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyB7uqKfS8zRRPTJOv4t48yRTCnUvBjANCc"
-HNS_ENCRYPTION_KEY = "wMusn9Z5UChOkZJWgufdOafRNNZVKBvkvEEOo6Nk6mM="
 
 # Production KV Namespaces
 [[env.production.kv_namespaces]]
@@ -53,7 +52,6 @@ id = "3fb03d50a94e4b2cb4fc3f54bdfd45d7"
 # FIX: Move vars here too so they work in preview/dev
 [env.preview.vars]
 PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyB7uqKfS8zRRPTJOv4t48yRTCnUvBjANCc"
-HNS_ENCRYPTION_KEY = "wMusn9Z5UChOkZJWgufdOafRNNZVKBvkvEEOo6Nk6mM="
 
 # Preview KV Namespaces
 [[env.preview.kv_namespaces]]
