@@ -11,6 +11,14 @@
   function handlePlaceSelect(index: number, e: CustomEvent) {
     const place = e.detail;
     destinations[index].address = place.formatted_address || place.name || '';
+    
+    // [!code ++] Extract Lat/Lng
+    if (place.geometry && place.geometry.location) {
+        const lat = typeof place.geometry.location.lat === 'function' ? place.geometry.location.lat() : place.geometry.location.lat;
+        const lng = typeof place.geometry.location.lng === 'function' ? place.geometry.location.lng() : place.geometry.location.lng;
+        destinations[index].location = { lat, lng };
+    }
+
     // Trigger reactivity in parent
     dispatch('update', destinations);
   }

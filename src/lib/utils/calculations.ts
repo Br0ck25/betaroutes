@@ -2,22 +2,38 @@
 
 import type { Trip, Destination, MaintenanceCost, SupplyCost } from '$lib/types';
 
+// [!code ++] Helper functions for Integer Math
+const toCents = (amount: number) => Math.round(amount * 100);
+const toDollars = (cents: number) => cents / 100;
+
 export function calculateFuelCost(miles: number, mpg: number, gasPrice: number): number {
   if (mpg <= 0) return 0;
   const gallons = miles / mpg;
-  return Number((gallons * gasPrice).toFixed(2));
+  
+  // Calculate in cents to avoid floating point errors
+  const costInCents = Math.round(gallons * gasPrice * 100);
+  return toDollars(costInCents);
 }
 
 export function calculateTotalEarnings(destinations: Destination[]): number {
-  return destinations.reduce((sum, dest) => sum + (dest.earnings || 0), 0);
+  const totalCents = destinations.reduce((sum, dest) => {
+    return sum + toCents(dest.earnings || 0);
+  }, 0);
+  return toDollars(totalCents);
 }
 
 export function calculateMaintenanceCost(items: MaintenanceCost[]): number {
-  return items.reduce((sum, item) => sum + (item.cost || 0), 0);
+  const totalCents = items.reduce((sum, item) => {
+    return sum + toCents(item.cost || 0);
+  }, 0);
+  return toDollars(totalCents);
 }
 
 export function calculateSupplyCost(items: SupplyCost[]): number {
-  return items.reduce((sum, item) => sum + (item.cost || 0), 0);
+  const totalCents = items.reduce((sum, item) => {
+    return sum + toCents(item.cost || 0);
+  }, 0);
+  return toDollars(totalCents);
 }
 
 export function calculateNetProfit(
@@ -26,12 +42,24 @@ export function calculateNetProfit(
   maintenanceCost: number,
   suppliesCost: number
 ): number {
-  return Number((totalEarnings - fuelCost - maintenanceCost - suppliesCost).toFixed(2));
+  // Convert all inputs to cents before subtracting
+  const earningsCents = toCents(totalEarnings);
+  const fuelCents = toCents(fuelCost);
+  const maintCents = toCents(maintenanceCost);
+  const suppliesCents = toCents(suppliesCost);
+  
+  const netCents = earningsCents - fuelCents - maintCents - suppliesCents;
+  return toDollars(netCents);
 }
 
 export function calculateProfitPerHour(netProfit: number, hoursWorked: number): number {
   if (hoursWorked <= 0) return 0;
-  return Number((netProfit / hoursWorked).toFixed(2));
+  
+  const netCents = toCents(netProfit);
+  // Calculate rate in cents/hour, then round to nearest cent
+  const perHourCents = netCents / hoursWorked;
+  
+  return toDollars(Math.round(perHourCents));
 }
 
 export function calculateHoursWorked(startTime: string, endTime: string): number {
@@ -75,10 +103,12 @@ export function calculateTripTotals(
   startTime?: string,
   endTime?: string
 ): Partial<Trip> {
+  // Use the integer-math functions
   const totalEarnings = calculateTotalEarnings(destinations);
   const fuelCost = calculateFuelCost(distance, mpg, gasPrice);
   const maintenanceCost = calculateMaintenanceCost(maintenanceItems);
   const suppliesCost = calculateSupplyCost(supplyItems);
+  
   const netProfit = calculateNetProfit(totalEarnings, fuelCost, maintenanceCost, suppliesCost);
   const hoursWorked = startTime && endTime ? calculateHoursWorked(startTime, endTime) : 0;
   const profitPerHour = hoursWorked > 0 ? calculateProfitPerHour(netProfit, hoursWorked) : 0;

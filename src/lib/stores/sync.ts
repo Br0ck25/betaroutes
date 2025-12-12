@@ -21,9 +21,13 @@ export interface SyncState {
  * Create sync status store
  */
 function createSyncStore() {
+  // [!code fix] Safe check for navigator (SSR compatibility)
+  const isBrowser = typeof navigator !== 'undefined';
+  const initialOnline = isBrowser ? navigator.onLine : true;
+
   const { subscribe, set, update } = writable<SyncState>({
     status: 'synced',
-    online: navigator.onLine,
+    online: initialOnline,
     pendingCount: 0,
   });
 

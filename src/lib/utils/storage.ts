@@ -1,9 +1,8 @@
 // src/lib/utils/storage.ts
-
 import type { Trip, Settings } from '$lib/types';
 
 const STORAGE_KEYS = {
-  TRIPS: 'trips',
+  // TRIPS: 'trips', // REMOVED: Trips are now in IndexedDB
   CACHED_LOGS: 'cachedLogs',
   DRAFT_TRIP: 'draftTrip',
   TOKEN: 'token',
@@ -12,15 +11,15 @@ const STORAGE_KEYS = {
   RECENT_DESTINATIONS: 'recentDestinations',
   MAINTENANCE_CATEGORIES: 'maintenanceCategories',
   SUPPLY_CATEGORIES: 'supplyCategories',
+  LAST_SYNC: 'last_sync_time' // [!code ++] New Key
 } as const;
 
 class LocalStorage {
   private isClient = typeof window !== 'undefined';
 
-  // Generic get/set
+  // --- Generic Helpers ---
   private get<T>(key: string): T | null {
     if (!this.isClient) return null;
-    
     try {
       const item = localStorage.getItem(key);
       return item ? JSON.parse(item) : null;
@@ -32,7 +31,6 @@ class LocalStorage {
 
   private set<T>(key: string, value: T): void {
     if (!this.isClient) return;
-    
     try {
       localStorage.setItem(key, JSON.stringify(value));
     } catch (error) {
@@ -45,45 +43,18 @@ class LocalStorage {
     localStorage.removeItem(key);
   }
 
-  // Trips
-  getTrips(): Trip[] {
-    return this.get<Trip[]>(STORAGE_KEYS.TRIPS) || [];
+  // --- [!code ++] NEW: Delta Sync Timestamp ---
+  getLastSync(): string | null {
+    return this.isClient ? localStorage.getItem(STORAGE_KEYS.LAST_SYNC) : null;
   }
 
-  saveTrips(trips: Trip[]): void {
-    this.set(STORAGE_KEYS.TRIPS, trips);
-  }
-
-  addTrip(trip: Trip): void {
-    const trips = this.getTrips();
-    trips.unshift(trip); // Add to beginning
-    this.saveTrips(trips);
-  }
-
-  updateTrip(id: string, updatedTrip: Trip): void {
-    const trips = this.getTrips();
-    const index = trips.findIndex(t => t.id === id);
-    if (index !== -1) {
-      trips[index] = updatedTrip;
-      this.saveTrips(trips);
+  setLastSync(isoString: string): void {
+    if (this.isClient) {
+      localStorage.setItem(STORAGE_KEYS.LAST_SYNC, isoString);
     }
   }
 
-  deleteTrip(id: string): void {
-    const trips = this.getTrips().filter(t => t.id !== id);
-    this.saveTrips(trips);
-  }
-
-  // Cached cloud logs
-  getCachedLogs(): Trip[] {
-    return this.get<Trip[]>(STORAGE_KEYS.CACHED_LOGS) || [];
-  }
-
-  setCachedLogs(logs: Trip[]): void {
-    this.set(STORAGE_KEYS.CACHED_LOGS, logs);
-  }
-
-  // Draft trip (auto-save)
+  // --- Draft Trip (Keep for Auto-save) ---
   getDraftTrip(): Partial<Trip> | null {
     return this.get<Partial<Trip>>(STORAGE_KEYS.DRAFT_TRIP);
   }
@@ -96,15 +67,13 @@ class LocalStorage {
     this.remove(STORAGE_KEYS.DRAFT_TRIP);
   }
 
-  // Auth
+  // --- Auth ---
   getToken(): string | null {
     return this.isClient ? localStorage.getItem(STORAGE_KEYS.TOKEN) : null;
   }
 
   setToken(token: string): void {
-    if (this.isClient) {
-      localStorage.setItem(STORAGE_KEYS.TOKEN, token);
-    }
+    if (this.isClient) localStorage.setItem(STORAGE_KEYS.TOKEN, token);
   }
 
   clearToken(): void {
@@ -116,16 +85,14 @@ class LocalStorage {
   }
 
   setUsername(username: string): void {
-    if (this.isClient) {
-      localStorage.setItem(STORAGE_KEYS.USERNAME, username);
-    }
+    if (this.isClient) localStorage.setItem(STORAGE_KEYS.USERNAME, username);
   }
 
   clearUsername(): void {
     this.remove(STORAGE_KEYS.USERNAME);
   }
 
-  // Settings
+  // --- Settings ---
   getSettings(): Partial<Settings> {
     return this.get<Settings>(STORAGE_KEYS.SETTINGS) || {};
   }
@@ -146,27 +113,20 @@ class LocalStorage {
     this.saveSettings(settings);
   }
 
-  // Recent destinations
+  // --- Recent Destinations ---
   getRecentDestinations(): string[] {
     return this.get<string[]>(STORAGE_KEYS.RECENT_DESTINATIONS) || [];
   }
 
   addRecentDestination(address: string): void {
     const recent = this.getRecentDestinations();
-    
-    // Remove if already exists
     const filtered = recent.filter(a => a !== address);
-    
-    // Add to beginning
     filtered.unshift(address);
-    
-    // Keep only last 10
     const trimmed = filtered.slice(0, 10);
-    
     this.set(STORAGE_KEYS.RECENT_DESTINATIONS, trimmed);
   }
 
-  // Maintenance categories
+  // --- Maintenance Categories ---
   getMaintenanceCategories(): string[] {
     return this.get<string[]>(STORAGE_KEYS.MAINTENANCE_CATEGORIES) || [
       'Oil Change',
@@ -189,7 +149,7 @@ class LocalStorage {
     this.set(STORAGE_KEYS.MAINTENANCE_CATEGORIES, categories);
   }
 
-  // Supply categories
+  // --- Supply Categories ---
   getSupplyCategories(): string[] {
     return this.get<string[]>(STORAGE_KEYS.SUPPLY_CATEGORIES) || [
       'Gas',
@@ -212,7 +172,7 @@ class LocalStorage {
     this.set(STORAGE_KEYS.SUPPLY_CATEGORIES, categories);
   }
 
-  // Clear all data
+  // --- Clear Data ---
   clearAll(): void {
     if (!this.isClient) return;
     localStorage.clear();

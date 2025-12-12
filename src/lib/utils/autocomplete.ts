@@ -47,17 +47,32 @@ async function loadGoogleMaps(apiKey: string): Promise<void> {
 export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node, params) => {
   let dropdown: HTMLDivElement | null = null;
   let debounceTimer: any;
-  let isSelecting = false; 
+  let isSelecting = false;
+  
+  // [!code ++] Session Token & Service State
+  let sessionToken: google.maps.places.AutocompleteSessionToken | null = null;
+  let placesService: google.maps.places.PlacesService | null = null;
   
   if (params.apiKey && params.apiKey !== 'undefined') {
-    loadGoogleMaps(params.apiKey).catch(console.error);
+    loadGoogleMaps(params.apiKey)
+        .then(() => initServices())
+        .catch(console.error);
+  }
+  
+  // [!code ++] Initialize Services
+  function initServices() {
+      if (typeof google !== 'undefined' && google.maps && google.maps.places) {
+          sessionToken = new google.maps.places.AutocompleteSessionToken();
+          // PlacesService requires a container, even if dummy
+          placesService = new google.maps.places.PlacesService(document.createElement('div'));
+      }
   }
   
   function initUI() {
     dropdown = document.createElement('div');
     dropdown.className = 'pac-container';
     
-    // GOOGLE MATERIAL DESIGN STYLING
+    // GOOGLE MATERIAL DESIGN STYLING (Restored)
     Object.assign(dropdown.style, {
       position: 'absolute',
       zIndex: '9999',
@@ -140,8 +155,16 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     
     try {
       const service = new google.maps.places.AutocompleteService();
+      
+      // [!code ++] Ensure token exists
+      if (!sessionToken) sessionToken = new google.maps.places.AutocompleteSessionToken();
+
       service.getPlacePredictions(
-        { input, componentRestrictions: { country: 'us' } },
+        { 
+            input, 
+            sessionToken: sessionToken, // [!code ++] Pass Session Token
+            componentRestrictions: { country: 'us' } 
+        },
         (predictions, status) => {
           const googleTime = Math.round(performance.now() - startTime);
           
@@ -150,10 +173,12 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
               formatted_address: p.description,
               name: p.structured_formatting?.main_text || p.description,
               secondary_text: p.structured_formatting?.secondary_text,
-              place_id: p.place_id
+              place_id: p.place_id // Important for getDetails
             }));
             
             renderResults(results, 'google', googleTime);
+            // Don't cache session-based results directly if they depend on the token context, 
+            // but for simple text caching it's usually okay.
             cacheToKV(input, results);
           } else {
             renderEmpty();
@@ -249,7 +274,8 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       
       row.addEventListener('mousedown', (e) => {
         e.preventDefault();
-        selectItem(item);
+        // [!code ++] Pass item source to selectItem to determine if we need details fetch
+        selectItem(item, source);
       });
       
       dropdown!.appendChild(row);
@@ -283,21 +309,54 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
   
   function renderError() { /* same as empty but red text if desired */ }
   
-  function selectItem(item: any) {
+  // [!code ++] Fetches full details to close the session and get precise data
+  function selectItem(item: any, source: 'kv' | 'google') {
     if (dropdown) dropdown.style.display = 'none';
     isSelecting = true;
-    node.value = item.formatted_address || item.name;
+
+    // If it's a Google result, we MUST call getDetails with the session token 
+    // to consolidate billing and get the proper formatted address/geometry.
+    if (source === 'google' && item.place_id && placesService && sessionToken) {
+        const request = {
+            placeId: item.place_id,
+            fields: ['name', 'formatted_address', 'geometry'],
+            sessionToken: sessionToken
+        };
+
+        placesService.getDetails(request, (place, status) => {
+            if (status === google.maps.places.PlacesServiceStatus.OK && place) {
+                commitSelection({
+                    formatted_address: place.formatted_address || item.formatted_address,
+                    name: place.name || item.name,
+                    geometry: place.geometry
+                });
+                // Generate new token for next interaction
+                sessionToken = new google.maps.places.AutocompleteSessionToken();
+            } else {
+                // Fallback if details fail
+                commitSelection(item);
+            }
+        });
+    } else {
+        // KV result or no service available - use what we have
+        commitSelection(item);
+    }
+  }
+
+  function commitSelection(data: any) {
+    node.value = data.formatted_address || data.name;
     
+    // Critical: Dispatch input event so Svelte bind:value updates
     node.dispatchEvent(new Event('input', { bubbles: true }));
+    
     node.dispatchEvent(new CustomEvent('place-selected', { 
-      detail: { 
-        formatted_address: item.formatted_address,
-        name: item.name 
-      } 
+      detail: data
     }));
   }
   
   initUI();
+  initServices(); // Try initializing immediately in case Google is already loaded
+
   node.addEventListener('input', handleInput);
   node.addEventListener('focus', () => {
     if (node.value.length > 1) {

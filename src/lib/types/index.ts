@@ -1,5 +1,11 @@
 // src/lib/types/index.ts
 
+// [!code ++] New Interface
+export interface LatLng {
+    lat: number;
+    lng: number;
+}
+
 export interface User {
 	token: string;
 	plan: 'free' | 'pro' | 'business';
@@ -13,6 +19,7 @@ export interface User {
 export interface Destination {
 	address: string;
 	earnings: number;
+    location?: LatLng; // [!code ++]
 }
 
 export interface MaintenanceCost {
@@ -33,12 +40,12 @@ export interface Trip {
     estimatedTime?: number; // Minutes
     totalTime?: string; // "1h 30m"
 	startAddress: string;
+    startLocation?: LatLng; // [!code ++]
 	endAddress: string;
+    endLocation?: LatLng;   // [!code ++]
 	destinations: Destination[];
 	
-    // --- FIX: Renamed to match schema and frontend ---
     totalMiles: number; 
-    // ------------------------------------------------
 
 	totalEarnings: number;
 	fuelCost: number;

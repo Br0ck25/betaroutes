@@ -4,13 +4,10 @@ import { getDB } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
 import type { TripRecord } from '$lib/db/types';
 import { storage } from '$lib/utils/storage';
-// Import auth to check user plan
 import { auth } from '$lib/stores/auth';
 
-/**
- * Offline-first trips store
- * All operations save to IndexedDB FIRST, then queue for cloud sync
- */
+export const isLoading = writable(false);
+
 function createTripsStore() {
 	const { subscribe, set, update } = writable<TripRecord[]>([]);
 
@@ -18,8 +15,8 @@ function createTripsStore() {
 		subscribe,
 
 		async load(userId?: string) {
+            isLoading.set(true);
 			try {
-				console.log('📚 Loading trips from IndexedDB...');
 				const db = await getDB();
 				const tx = db.transaction('trips', 'readonly');
 				const store = tx.objectStore('trips');
@@ -40,21 +37,19 @@ function createTripsStore() {
 				});
 
 				set(trips);
-				console.log(`✅ Loaded ${trips.length} trip(s) from IndexedDB`);
 				return trips;
 			} catch (err) {
 				console.error('❌ Failed to load trips:', err);
 				set([]);
 				return [];
-			}
+			} finally {
+                isLoading.set(false);
+            }
 		},
 
 		async create(tripData: Partial<TripRecord>, userId: string) {
 			try {
-				// 1. LIMIT CHECK: Calculate local trips this month
 				const currentUser = get(auth).user;
-				
-				// Only enforce for free tier (or if plan is unknown but assumed free)
 				const isFreeTier = !currentUser?.plan || currentUser.plan === 'free';
 				
 				if (isFreeTier) {
@@ -77,8 +72,6 @@ function createTripsStore() {
 					}
 				}
 
-                // FIX: Respect existing IDs and timestamps if provided (for imports/restores)
-                // Otherwise generate new ones for fresh trips.
 				const trip: TripRecord = {
 					...tripData,
 					id: tripData.id || crypto.randomUUID(),
@@ -88,27 +81,23 @@ function createTripsStore() {
 					syncStatus: 'pending'
 				} as TripRecord;
 
-				console.log('💾 Creating/Restoring trip in IndexedDB:', trip.id);
-
 				const db = await getDB();
 				const tx = db.transaction('trips', 'readwrite');
-				await tx.objectStore('trips').put(trip); // Changed from .add() to .put() to handle overwrites/restores
+				await tx.objectStore('trips').put(trip);
 				await tx.done;
 
 				update((trips) => {
-                    // Check if exists to avoid duplicates in UI
                     const exists = trips.find(t => t.id === trip.id);
                     if (exists) return trips.map(t => t.id === trip.id ? trip : t);
                     return [trip, ...trips];
                 });
 
 				await syncManager.addToQueue({
-					action: 'create', // Server handles upsert logic ideally
+					action: 'create',
 					tripId: trip.id,
 					data: trip
 				});
 
-				console.log('✅ Trip saved:', trip.id);
 				return trip;
 			} catch (err) {
 				console.error('❌ Failed to create trip:', err);
@@ -118,8 +107,6 @@ function createTripsStore() {
 
 		async updateTrip(id: string, changes: Partial<TripRecord>, userId: string) {
 			try {
-				console.log('💾 Updating trip in IndexedDB:', id);
-
 				const db = await getDB();
 				const tx = db.transaction('trips', 'readwrite');
 				const store = tx.objectStore('trips');
@@ -148,7 +135,6 @@ function createTripsStore() {
 					data: updated
 				});
 
-				console.log('✅ Trip updated:', id);
 				return updated;
 			} catch (err) {
 				console.error('❌ Failed to update trip:', err);
@@ -157,6 +143,12 @@ function createTripsStore() {
 		},
 
 		async deleteTrip(id: string, userId: string) {
+            let previousTrips: TripRecord[] = [];
+            update(current => {
+                previousTrips = current;
+                return current.filter(t => t.id !== id);
+            });
+
 			try {
 				console.log('🗑️ Moving trip to trash:', id);
 				const db = await getDB();
@@ -186,8 +178,6 @@ function createTripsStore() {
 				await deleteTx.objectStore('trips').delete(id);
 				await deleteTx.done;
 
-				update((trips) => trips.filter((t) => t.id !== id));
-
 				await syncManager.addToQueue({
 					action: 'delete',
 					tripId: id
@@ -196,6 +186,7 @@ function createTripsStore() {
 				console.log('✅ Trip moved to trash:', id);
 			} catch (err) {
 				console.error('❌ Failed to delete trip:', err);
+                set(previousTrips);
 				throw err;
 			}
 		},
@@ -217,12 +208,31 @@ function createTripsStore() {
 			set([]);
 		},
 
+        // [!code changed] Updated Sync Logic for Delta Sync
 		async syncFromCloud(userId: string) {
+            isLoading.set(true);
 			try {
 				if (!navigator.onLine) return;
-				const response = await fetch('/api/trips');
+                
+                // 1. Check last sync time to request delta
+                const lastSync = storage.getLastSync();
+                const url = lastSync 
+                    ? `/api/trips?since=${encodeURIComponent(lastSync)}` 
+                    : '/api/trips';
+
+                console.log(`☁️ Syncing from cloud... ${lastSync ? `(Delta since ${lastSync})` : '(Full)'}`);
+
+				const response = await fetch(url);
 				if (!response.ok) throw new Error('Failed to fetch trips');
-				const cloudTrips = await response.json();
+				
+                const cloudTrips = await response.json();
+                
+                // If no changes, we are done
+                if (cloudTrips.length === 0) {
+                     console.log('☁️ No new changes from cloud.');
+                     storage.setLastSync(new Date().toISOString());
+                     return;
+                }
 				
 				const db = await getDB();
 
@@ -235,6 +245,8 @@ function createTripsStore() {
 				const tx = db.transaction('trips', 'readwrite');
 				const store = tx.objectStore('trips');
 				
+                let updateCount = 0;
+
 				for (const cloudTrip of cloudTrips) {
 					if (trashIds.has(cloudTrip.id)) {
 						console.log('Skipping synced trip because it is in local trash:', cloudTrip.id);
@@ -242,19 +254,28 @@ function createTripsStore() {
 					}
 
 					const local = await store.get(cloudTrip.id);
+                    // Overwrite if cloud is newer OR if we don't have it locally
 					if (!local || new Date(cloudTrip.updatedAt) > new Date(local.updatedAt)) {
 						await store.put({
 							...cloudTrip,
 							syncStatus: 'synced',
 							lastSyncedAt: new Date().toISOString()
 						});
+                        updateCount++;
 					}
 				}
 				await tx.done;
+                
+                // Update Timestamp after successful processing
+                storage.setLastSync(new Date().toISOString());
+                console.log(`✅ Processed ${cloudTrips.length} updates. Applied ${updateCount}.`);
+
 				await this.load(userId);
 			} catch (err) {
 				console.error('❌ Failed to sync from cloud:', err);
-			}
+			} finally {
+                isLoading.set(false);
+            }
 		},
 
 		async migrateOfflineTrips(tempUserId: string, realUserId: string) {

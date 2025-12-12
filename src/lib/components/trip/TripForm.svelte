@@ -2,8 +2,8 @@
   import { userSettings } from '$lib/stores/userSettings';
   import { get } from 'svelte/store';
   import { onMount, tick } from 'svelte';
-  // [!code ++] Added Trip to imports
-  import type { Destination, MaintenanceCost, SupplyCost, Trip } from '$lib/types';
+  // [!code ++] Added LatLng
+  import type { Destination, MaintenanceCost, SupplyCost, Trip, LatLng } from '$lib/types';
   import { calculateTripTotals } from '$lib/utils/calculations';
   import { storage } from '$lib/utils/storage';
   import { draftTrip } from '$lib/stores/trips';
@@ -13,8 +13,11 @@
   import TripSummary from './TripSummary.svelte';
   import TripDebug from './TripDebug.svelte';
   import { toasts } from '$lib/stores/toast';
+  import Skeleton from '$lib/components/ui/Skeleton.svelte';
 
   export let googleApiKey = '';
+  export let loading = false;
+  
   const settings = get(userSettings);
   const API_KEY = googleApiKey || 'dummy_key';
 
@@ -24,6 +27,11 @@
   let endTime = '';
   let startAddress = settings.startLocation || storage.getSetting('defaultStartAddress') || '';
   let endAddress = settings.endLocation || storage.getSetting('defaultEndAddress') || '';
+  
+  // [!code ++] Coordinates State
+  let startLocation: LatLng | undefined;
+  let endLocation: LatLng | undefined;
+
   let mpg = settings.defaultMPG ?? storage.getSetting('defaultMPG') ?? 25;
   let gasPrice = settings.defaultGasPrice ?? storage.getSetting('defaultGasPrice') ?? 3.5;
   let distanceUnit = settings.distanceUnit || 'mi';
@@ -45,8 +53,23 @@
   function handleAddressSelect(field: 'start' | 'end', e: CustomEvent) {
     const place = e.detail;
     const val = place.formatted_address || place.name || '';
-    if (field === 'start') startAddress = val;
-    else endAddress = val;
+    
+    // [!code ++] Extract Geometry
+    let location: LatLng | undefined;
+    if (place.geometry && place.geometry.location) {
+        // Handle both Google Maps object methods and plain JSON objects
+        const lat = typeof place.geometry.location.lat === 'function' ? place.geometry.location.lat() : place.geometry.location.lat;
+        const lng = typeof place.geometry.location.lng === 'function' ? place.geometry.location.lng() : place.geometry.location.lng;
+        location = { lat, lng };
+    }
+
+    if (field === 'start') {
+        startAddress = val;
+        startLocation = location;
+    } else {
+        endAddress = val;
+        endLocation = location;
+    }
   }
 
   async function handleCalculate() {
@@ -61,21 +84,18 @@
     }
 
     try {
-        // 1. Get raw route data from service
         const routeData = await getRouteData(startAddress, endAddress, destinations, distanceUnit as 'mi'|'km');
         
-        // 2. Update state with map results
         totalMileage = routeData.totalMiles;
         
-        // 3. Calculate Financials
         const totals = calculateTripTotals(
             totalMileage,
             routeData.totalMinutes,
             destinations,
             mpg,
             gasPrice,
-            [], // maintenance (add back if needed)
-            [], // supplies
+            [], 
+            [], 
             startTime,
             endTime
         );
@@ -99,36 +119,35 @@
 
   // --- Draft Logic ---
 
-  /**
-   * Type-safe draft loader.
-   * Maps properties from Partial<Trip> to local state variables.
-   */
   function loadDraft(draft: Partial<Trip>) {
     if (!draft || typeof draft !== 'object') return;
 
-    // We check existence to ensure we don't overwrite defaults with undefined
     if (draft.date) date = draft.date;
     if (draft.startTime) startTime = draft.startTime;
     if (draft.endTime) endTime = draft.endTime;
     if (draft.startAddress) startAddress = draft.startAddress;
     if (draft.endAddress) endAddress = draft.endAddress;
+    
+    // [!code ++] Load Coordinates
+    if (draft.startLocation) startLocation = draft.startLocation;
+    if (draft.endLocation) endLocation = draft.endLocation;
+
     if (draft.mpg) mpg = draft.mpg;
     if (draft.gasPrice) gasPrice = draft.gasPrice;
     if (draft.destinations && Array.isArray(draft.destinations)) destinations = draft.destinations;
     if (draft.notes) notes = draft.notes;
-    
-    // Optional: Log success or trigger a toast if you want visual confirmation
-    // console.log('Draft loaded safely');
   }
 
   function saveDraft() {
-    // Construct an object that matches Partial<Trip>
     const draftData: Partial<Trip> = { 
       date, 
       startTime, 
       endTime, 
       startAddress, 
       endAddress, 
+      // [!code ++] Save Coordinates
+      startLocation,
+      endLocation,
       destinations, 
       mpg, 
       gasPrice, 
@@ -138,14 +157,10 @@
   }
 
   onMount(() => {
-    // Retrieve draft (assumed to be 'any' or 'unknown' from storage)
     const rawDraft = draftTrip.load();
-    
     if (rawDraft && confirm('Resume your last unsaved trip?')) {
-        // Cast to Partial<Trip> for the safe loader
         loadDraft(rawDraft as Partial<Trip>);
     }
-    
     const interval = setInterval(saveDraft, 5000);
     return () => clearInterval(interval);
   });
@@ -161,63 +176,103 @@
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
             <label class="block font-semibold mb-2">Date</label>
-            <input type="date" bind:value={date} class="w-full p-2 border rounded" />
+            {#if loading}
+              <Skeleton height="42px" className="rounded" />
+            {:else}
+              <input type="date" bind:value={date} class="w-full p-2 border rounded" />
+            {/if}
         </div>
     </div>
 
     <div>
       <label class="block font-semibold mb-2">Start Address</label>
-      <input 
-        type="text" 
-        bind:value={startAddress} 
-        placeholder="Enter start location" 
-        class="w-full p-2 border rounded"
-        autocomplete="off" 
-        use:autocomplete={{ apiKey: API_KEY }}
-        on:place-selected={(e) => handleAddressSelect('start', e)}
-      />
+      {#if loading}
+        <Skeleton height="42px" className="rounded" />
+      {:else}
+        <input 
+            type="text" 
+            bind:value={startAddress} 
+            placeholder="Enter start location" 
+            class="w-full p-2 border rounded"
+            autocomplete="off" 
+            use:autocomplete={{ apiKey: API_KEY }}
+            on:place-selected={(e) => handleAddressSelect('start', e)}
+        />
+      {/if}
     </div>
 
-    <DestinationList 
-        bind:destinations 
-        apiKey={API_KEY} 
-    />
+    {#if loading}
+        <div class="space-y-3">
+             <label class="block font-semibold">Destinations</label>
+             <Skeleton height="50px" className="rounded" />
+             <Skeleton height="50px" className="rounded" />
+        </div>
+    {:else}
+        <DestinationList 
+            bind:destinations 
+            apiKey={API_KEY} 
+        />
+    {/if}
 
     <div>
       <label class="block font-semibold mb-2">End Address (Optional)</label>
-      <input 
-        type="text" 
-        bind:value={endAddress} 
-        placeholder="Leave empty to end at last stop" 
-        class="w-full p-2 border rounded"
-        autocomplete="off"
-        use:autocomplete={{ apiKey: API_KEY }}
-        on:place-selected={(e) => handleAddressSelect('end', e)}
-      />
+      {#if loading}
+         <Skeleton height="42px" className="rounded" />
+      {:else}
+          <input 
+            type="text" 
+            bind:value={endAddress} 
+            placeholder="Leave empty to end at last stop" 
+            class="w-full p-2 border rounded"
+            autocomplete="off"
+            use:autocomplete={{ apiKey: API_KEY }}
+            on:place-selected={(e) => handleAddressSelect('end', e)}
+          />
+      {/if}
     </div>
 
     <div class="grid grid-cols-2 gap-4">
       <div>
         <label class="block font-semibold mb-2">MPG</label>
-        <input type="number" bind:value={mpg} step="0.1" class="w-full p-2 border rounded" />
+        {#if loading}
+           <Skeleton height="42px" className="rounded" />
+        {:else}
+           <input type="number" bind:value={mpg} step="0.1" class="w-full p-2 border rounded" />
+        {/if}
       </div>
       <div>
         <label class="block font-semibold mb-2">Gas Price ($)</label>
-        <input type="number" bind:value={gasPrice} step="0.01" class="w-full p-2 border rounded" />
+        {#if loading}
+           <Skeleton height="42px" className="rounded" />
+        {:else}
+           <input type="number" bind:value={gasPrice} step="0.01" class="w-full p-2 border rounded" />
+        {/if}
       </div>
       <div>
         <label class="block font-semibold mb-2">Start Time</label>
-        <input type="time" bind:value={startTime} class="w-full p-2 border rounded" />
+        {#if loading}
+           <Skeleton height="42px" className="rounded" />
+        {:else}
+           <input type="time" bind:value={startTime} class="w-full p-2 border rounded" />
+        {/if}
       </div>
       <div>
         <label class="block font-semibold mb-2">End Time</label>
-        <input type="time" bind:value={endTime} class="w-full p-2 border rounded" />
+        {#if loading}
+           <Skeleton height="42px" className="rounded" />
+        {:else}
+           <input type="time" bind:value={endTime} class="w-full p-2 border rounded" />
+        {/if}
       </div>
     </div>
 
     <div>
       <label class="block font-semibold mb-2">Notes</label>
-      <textarea bind:value={notes} rows="3" class="w-full p-2 border rounded"></textarea>
+      {#if loading}
+         <Skeleton height="80px" className="rounded" />
+      {:else}
+         <textarea bind:value={notes} rows="3" class="w-full p-2 border rounded"></textarea>
+      {/if}
     </div>
   </div>
 
@@ -238,12 +293,16 @@
   {/if}
 
   <div class="flex gap-3">
-    <button 
-      class="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      on:click={handleCalculate} 
-      disabled={calculating}
-    >
-      {calculating ? 'Calculating...' : 'Calculate Route'}
-    </button>
+    {#if loading}
+        <Skeleton height="48px" width="160px" className="rounded-lg" />
+    {:else}
+        <button 
+          class="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          on:click={handleCalculate} 
+          disabled={calculating}
+        >
+          {calculating ? 'Calculating...' : 'Calculate Route'}
+        </button>
+    {/if}
   </div>
 </div>

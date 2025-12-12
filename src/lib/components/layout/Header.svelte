@@ -2,6 +2,8 @@
 	import { currentUser } from '$lib/stores/currentUser';
 	import { goto } from '$app/navigation';
 	import { setUser } from '$lib/stores/currentUser';
+    // [!code ++] Import SyncIndicator
+    import SyncIndicator from '$lib/components/SyncIndicator.svelte';
 
 	// Navbar links (public navigation)
 	const links = [
@@ -34,8 +36,9 @@
 			{/each}
 		</nav>
 
-		<div class="hidden tablet:flex gap-4">
+		<div class="hidden tablet:flex items-center gap-4">
 			{#if $currentUser}
+                <SyncIndicator />
 
 				<a 
 					href="/dashboard/settings" 
@@ -86,6 +89,9 @@
 				{/each}
 
 				{#if $currentUser}
+                    <div class="py-1">
+                        <SyncIndicator />
+                    </div>
 
 					<a 
 						href="/dashboard/settings" 

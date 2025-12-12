@@ -12,6 +12,33 @@ function fakeKV() {
 	};
 }
 
+// [!code ++] Location Schema
+const latLngSchema = z.object({
+    lat: z.number(),
+    lng: z.number()
+}).optional();
+
+// Updated sub-schemas
+const destinationSchema = z.object({
+    address: z.string().max(500).optional().default(''),
+    earnings: z.number().optional().default(0),
+    location: latLngSchema // [!code ++]
+});
+
+const stopSchema = z.object({
+    id: z.string().optional(),
+    address: z.string().max(500).optional(),
+    earnings: z.number().optional(),
+    notes: z.string().max(1000).optional(),
+    order: z.number().optional(),
+    location: latLngSchema // [!code ++]
+});
+
+const costItemSchema = z.object({
+    type: z.string().max(100).optional(),
+    cost: z.number().optional()
+});
+
 const tripSchema = z.object({
 	id: z.string().uuid().optional(),
 	date: z.string().optional(),
@@ -19,14 +46,12 @@ const tripSchema = z.object({
 	endTime: z.string().optional(),
 	hoursWorked: z.number().optional(),
 	startAddress: z.string().max(500).optional(),
+    startLocation: latLngSchema, // [!code ++]
 	endAddress: z.string().max(500).optional(),
+    endLocation: latLngSchema,   // [!code ++]
 	totalMiles: z.number().nonnegative().optional(),
-	
-    // --- FIX: Added missing time fields ---
-    estimatedTime: z.number().optional(), // Drive time in minutes
-    totalTime: z.string().optional(),     // Drive time as string "1h 30m"
-    // -------------------------------------
-
+    estimatedTime: z.number().optional(), 
+    totalTime: z.string().optional(),     
 	mpg: z.number().positive().optional(),
 	gasPrice: z.number().nonnegative().optional(),
 	fuelCost: z.number().optional(),
@@ -34,10 +59,12 @@ const tripSchema = z.object({
 	suppliesCost: z.number().optional(),
 	netProfit: z.number().optional(),
 	notes: z.string().max(1000).optional(),
-	stops: z.array(z.any()).optional(),
-	destinations: z.array(z.any()).optional(),
-	maintenanceItems: z.array(z.any()).optional(),
-	suppliesItems: z.array(z.any()).optional(),
+	
+	stops: z.array(stopSchema).optional(),
+	destinations: z.array(destinationSchema).optional(),
+	maintenanceItems: z.array(costItemSchema).optional(),
+	suppliesItems: z.array(costItemSchema).optional(),
+    
 	lastModified: z.string().optional()
 });
 
@@ -46,16 +73,28 @@ export const GET: RequestHandler = async (event) => {
 		const user = event.locals.user;
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
+        const sinceParam = event.url.searchParams.get('since');
+        const sinceDate = sinceParam ? new Date(sinceParam) : null;
+
 		const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
 		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
-		const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV(); // [!code ++]
+		const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV();
 		
-		const svc = makeTripService(kv, trashKV, placesKV); // [!code ++]
+		const svc = makeTripService(kv, trashKV, placesKV);
 
 		const storageId = user.name || user.token;
-		const trips = await svc.list(storageId);
+		
+        const allTrips = await svc.list(storageId);
 
-		return new Response(JSON.stringify(trips), {
+        let tripsToReturn = allTrips;
+        if (sinceDate && !isNaN(sinceDate.getTime())) {
+            tripsToReturn = allTrips.filter(t => {
+                const recordDate = new Date(t.updatedAt || t.createdAt);
+                return recordDate > sinceDate;
+            });
+        }
+
+		return new Response(JSON.stringify(tripsToReturn), {
 			status: 200,
 			headers: { 'Content-Type': 'application/json' }
 		});
@@ -88,23 +127,13 @@ export const POST: RequestHandler = async (event) => {
 
 		const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
 		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
-		const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV(); // [!code ++]
+		const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV();
 
-		const svc = makeTripService(kv, trashKV, placesKV); // [!code ++]
+		const svc = makeTripService(kv, trashKV, placesKV);
         const storageId = user.name || user.token;
 
-        // --- ENFORCE MONTHLY LIMIT ---
         if (user.plan === 'free') {
-            const allTrips = await svc.list(storageId);
-            const now = new Date();
-            const currentYear = now.getFullYear();
-            const currentMonth = now.getMonth(); // 0-indexed
-
-            const monthlyCount = allTrips.filter(t => {
-                if (!t.date) return false;
-                const [y, m] = t.date.split('-').map(Number);
-                return y === currentYear && (m - 1) === currentMonth;
-            }).length;
+            const monthlyCount = await svc.getMonthlyTripCount(storageId);
 
             if (monthlyCount >= 10) {
                 return new Response(JSON.stringify({
@@ -113,7 +142,6 @@ export const POST: RequestHandler = async (event) => {
                 }), { status: 403, headers: { 'Content-Type': 'application/json' } });
             }
         }
-        // -----------------------------
 
 		const validData = parseResult.data;
 		const id = validData.id || crypto.randomUUID();
@@ -128,6 +156,8 @@ export const POST: RequestHandler = async (event) => {
 		};
 
 		await svc.put(trip);
+        
+        await svc.incrementMonthlyTripCount(storageId);
 		await svc.incrementUserCounter(user.token, 1);
 
 		return new Response(JSON.stringify(trip), {

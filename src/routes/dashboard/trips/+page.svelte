@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { trips } from '$lib/stores/trips';
+  import { trips, isLoading } from '$lib/stores/trips';
+  import Skeleton from '$lib/components/ui/Skeleton.svelte';
   import { goto } from '$app/navigation';
   import { user } from '$lib/stores/auth';
   import { page } from '$app/stores';
+  import { toasts } from '$lib/stores/toast';
 
   let searchQuery = '';
   let sortBy = 'date';
@@ -102,13 +104,12 @@
     return `${m}m`;
   }
   
-  async function deleteTrip(id: string, skipConfirm = false) {
+async function deleteTrip(id: string, skipConfirm = false) {
     if (skipConfirm || confirm('Move trip to trash?')) {
       try {
         const trip = $trips.find(t => t.id === id);
         const currentUser = $page.data.user || $user;
         let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
-
         if (trip && currentUser) {
             if (trip.userId === currentUser.name) userId = currentUser.name;
             else if (trip.userId === currentUser.token) userId = currentUser.token;
@@ -116,10 +117,12 @@
         
         if (userId) await trips.deleteTrip(id, userId);
       } catch (err) {
-        if (!skipConfirm) alert('Failed to delete trip.');
+        // [!code ++] Use toast instead of alert for better UX
+        if (!skipConfirm) toasts.error('Failed to delete trip. Changes reverted.');
       }
     }
   }
+
 
   // --- DELETE ALL FUNCTION ---
   async function deleteAllTrips() {
@@ -160,6 +163,39 @@
     }
   }
 </script>
+
+{#if $isLoading}
+    <div class="trip-list-cards">
+      {#each Array(3) as _}
+        <div class="trip-card">
+          <div class="card-top">
+            <div style="flex: 1">
+              <Skeleton height="16px" width="30%" className="mb-2" />
+              <Skeleton height="20px" width="60%" />
+            </div>
+            <Skeleton height="24px" width="60px" />
+          </div>
+          <div class="card-stats">
+            {#each Array(5) as _}
+              <div class="stat-item">
+                 <Skeleton height="10px" width="40px" className="mb-1" />
+                 <Skeleton height="14px" width="30px" />
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/each}
+    </div>
+  {:else if filteredTrips.length > 0}
+    <div class="trip-list-cards">
+      {#each filteredTrips as trip (trip.id)}
+         {/each}
+    </div>
+  {:else}
+    <div class="empty-state">
+      <p>No trips found matching your filters.</p>
+    </div>
+  {/if}
 
 <svelte:head>
   <title>Trip History - Go Route Yourself</title>
