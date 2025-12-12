@@ -1,20 +1,24 @@
-// src/lib/components/trip/TripForm.svelte
 <script lang="ts">
   import { userSettings } from '$lib/stores/userSettings';
   import { get } from 'svelte/store';
   import { onMount, tick } from 'svelte';
-  import type { Destination, MaintenanceCost, SupplyCost } from '$lib/types';
+  // [!code ++] Added Trip to imports
+  import type { Destination, MaintenanceCost, SupplyCost, Trip } from '$lib/types';
   import { calculateTripTotals } from '$lib/utils/calculations';
   import { storage } from '$lib/utils/storage';
-  import { trips, draftTrip } from '$lib/stores/trips';
-  import { user } from '$lib/stores/auth';
+  import { draftTrip } from '$lib/stores/trips';
   import { autocomplete } from '$lib/utils/autocomplete';
+  import { calculateRoute as getRouteData } from '$lib/services/maps';
+  import DestinationList from './DestinationList.svelte';
+  import TripSummary from './TripSummary.svelte';
+  import TripDebug from './TripDebug.svelte';
+  import { toasts } from '$lib/stores/toast';
 
   export let googleApiKey = '';
   const settings = get(userSettings);
   const API_KEY = googleApiKey || 'dummy_key';
 
-  // Default form values
+  // --- Form State ---
   let date = new Date().toISOString().split('T')[0];
   let startTime = '';
   let endTime = '';
@@ -23,338 +27,223 @@
   let mpg = settings.defaultMPG ?? storage.getSetting('defaultMPG') ?? 25;
   let gasPrice = settings.defaultGasPrice ?? storage.getSetting('defaultGasPrice') ?? 3.5;
   let distanceUnit = settings.distanceUnit || 'mi';
-  let timeFormat = settings.timeFormat || '12h';
   let destinations: Destination[] = [{ address: '', earnings: 0 }];
-  let maintenanceItems: MaintenanceCost[] = [];
-  let supplyItems: SupplyCost[] = [];
   let notes = '';
 
+  // --- Calculation State ---
   let calculating = false;
   let calculated = false;
+  let calculationError = '';
   
-  // Results
   let totalMileage = 0;
   let totalTime = '';
-  let totalEarnings = 0;
   let fuelCost = 0;
-  let maintenanceCost = 0;
-  let suppliesCost = 0;
   let netProfit = 0;
-  let profitPerHour = 0;
-  let hoursWorked = 0;
 
-  function formatTime(dateStr: string) {
-    if (!dateStr) return '';
-    const d = new Date(`1970-01-01T${dateStr}:00`);
-    return d.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: timeFormat === '12h'
-    });
-  }
+  // --- Handlers ---
 
-  onMount(async () => {
-    const draft = draftTrip.load();
-    if (draft && confirm('Resume your last unsaved trip?')) {
-      loadDraft(draft);
-    }
-    const autoSaveInterval = setInterval(() => saveDraft(), 5000);
-    return () => clearInterval(autoSaveInterval);
-  });
-
-  function handlePlaceSelect(field: 'start' | 'end' | number, e: CustomEvent) {
+  function handleAddressSelect(field: 'start' | 'end', e: CustomEvent) {
     const place = e.detail;
     const val = place.formatted_address || place.name || '';
-      
     if (field === 'start') startAddress = val;
-    else if (field === 'end') endAddress = val;
-    else if (typeof field === 'number') destinations[field].address = val;
+    else endAddress = val;
   }
 
-  async function addDestination() {
-    destinations = [...destinations, { address: '', earnings: 0 }];
-    await tick();
-  }
-
-  async function removeDestination(index: number) {
-    if (destinations.length > 1) {
-      destinations = destinations.filter((_, i) => i !== index);
-    }
-  }
-
-  async function moveDestinationUp(index: number) {
-    if (index > 0) {
-      [destinations[index], destinations[index - 1]] = [destinations[index - 1], destinations[index]];
-      destinations = [...destinations];
-    }
-  }
-
-  async function moveDestinationDown(index: number) {
-    if (index < destinations.length - 1) {
-      [destinations[index], destinations[index + 1]] = [destinations[index + 1], destinations[index]];
-      destinations = [...destinations];
-    }
-  }
-
-  async function calculateRoute() {
-    console.log('[TRIP DEBUG] Starting calculation...');
-    
-    if (!startAddress) {
-      alert("Please enter a start address.");
-      return;
-    }
-
-    // Check if Google Maps is available
-    if (typeof google === 'undefined' || !google.maps || !google.maps.DirectionsService) {
-      console.warn('[TRIP DEBUG] Google Maps API not ready.');
-      alert("Google Maps API is not loaded yet. Please wait a moment.");
-      return;
-    }
-
+  async function handleCalculate() {
     calculating = true;
+    calculationError = '';
+    calculated = false;
 
-    try {
-      const directionsService = new google.maps.DirectionsService();
-      
-      // Filter out empty destinations
-      const validDestinations = destinations.filter(d => d.address && d.address.trim() !== '');
-      console.log(`[TRIP DEBUG] Valid destinations: ${validDestinations.length}`);
-      
-      const waypoints = validDestinations.map(d => ({
-        location: d.address,
-        stopover: true
-      }));
-
-      // Determine routing logic
-      let origin = startAddress;
-      let destination = endAddress;
-
-      // Logic: If no specific end address, the last stop IS the destination
-      if (!destination && waypoints.length > 0) {
-        destination = waypoints[waypoints.length - 1].location as string;
-        waypoints.pop(); // Remove it from waypoints so it's not visited twice
-        console.log('[TRIP DEBUG] Using last stop as destination');
-      } else if (!destination && waypoints.length === 0) {
-        alert("Please add at least one destination or an end address.");
+    if (!startAddress) {
+        toasts.error("Please enter a start address.");
         calculating = false;
         return;
-      }
+    }
 
-      console.log('[TRIP DEBUG] Requesting route:', { origin, destination, waypoints: waypoints.length });
-
-      const request: google.maps.DirectionsRequest = {
-        origin: origin,
-        destination: destination,
-        waypoints: waypoints,
-        optimizeWaypoints: true,
-        travelMode: google.maps.TravelMode.DRIVING,
-        unitSystem: distanceUnit === 'km' ? google.maps.UnitSystem.METRIC : google.maps.UnitSystem.IMPERIAL
-      };
-
-      directionsService.route(request, (result, status) => {
-        console.log(`[TRIP DEBUG] API Status: ${status}`);
+    try {
+        // 1. Get raw route data from service
+        const routeData = await getRouteData(startAddress, endAddress, destinations, distanceUnit as 'mi'|'km');
         
-        if (status === google.maps.DirectionsStatus.OK && result) {
-          const route = result.routes[0];
-          let distanceMeters = 0;
-          let durationSeconds = 0;
-
-          route.legs.forEach(leg => {
-            if (leg.distance) distanceMeters += leg.distance.value;
-            if (leg.duration) durationSeconds += leg.duration.value;
-          });
-
-          // Conversions
-          const totalMiles = distanceMeters * 0.000621371;
-          const totalMinutes = durationSeconds / 60;
-
-          console.log(`[TRIP DEBUG] Calculated: ${totalMiles.toFixed(1)} miles, ${totalMinutes.toFixed(0)} mins`);
-
-          // Update State
-          totalMileage = parseFloat(totalMiles.toFixed(1));
-          
-          // Use utility for costs
-          const totals = calculateTripTotals(
+        // 2. Update state with map results
+        totalMileage = routeData.totalMiles;
+        
+        // 3. Calculate Financials
+        const totals = calculateTripTotals(
             totalMileage,
-            totalMinutes,
+            routeData.totalMinutes,
             destinations,
             mpg,
             gasPrice,
-            maintenanceItems,
-            supplyItems,
+            [], // maintenance (add back if needed)
+            [], // supplies
             startTime,
             endTime
-          );
+        );
 
-          totalTime = totals.totalTime || '';
-          fuelCost = totals.fuelCost || 0;
-          netProfit = totals.netProfit || 0;
-          totalEarnings = totals.totalEarnings || 0;
-          
-          calculated = true;
-          console.log('[TRIP DEBUG] State updated. calculated = true');
-        } else {
-          console.error("[TRIP DEBUG] Directions request failed:", status);
-          alert("Could not calculate route. Check addresses and try again.");
-        }
+        totalTime = totals.totalTime || '';
+        fuelCost = totals.fuelCost || 0;
+        netProfit = totals.netProfit || 0;
+        calculated = true;
+        
+        toasts.success("Route calculated successfully!");
+
+    } catch (err: any) {
+        console.error("Calculation Error:", err);
+        const msg = err.message || "Failed to calculate route.";
+        calculationError = msg;
+        toasts.error(msg);
+    } finally {
         calculating = false;
-      });
-
-    } catch (error) {
-      console.error("[TRIP DEBUG] Critical error:", error);
-      alert("An error occurred while calculating route.");
-      calculating = false;
     }
   }
 
-  async function logTrip() {
-    alert("Log Trip disabled until Routing is verified.");
-  }
+  // --- Draft Logic ---
 
-  async function resetForm() {
-    date = new Date().toISOString().split('T')[0];
-    startTime = '';
-    endTime = '';
-    notes = '';
-    destinations = [{ address: '', earnings: 0 }];
-    calculated = false;
-    totalMileage = 0;
+  /**
+   * Type-safe draft loader.
+   * Maps properties from Partial<Trip> to local state variables.
+   */
+  function loadDraft(draft: Partial<Trip>) {
+    if (!draft || typeof draft !== 'object') return;
+
+    // We check existence to ensure we don't overwrite defaults with undefined
+    if (draft.date) date = draft.date;
+    if (draft.startTime) startTime = draft.startTime;
+    if (draft.endTime) endTime = draft.endTime;
+    if (draft.startAddress) startAddress = draft.startAddress;
+    if (draft.endAddress) endAddress = draft.endAddress;
+    if (draft.mpg) mpg = draft.mpg;
+    if (draft.gasPrice) gasPrice = draft.gasPrice;
+    if (draft.destinations && Array.isArray(draft.destinations)) destinations = draft.destinations;
+    if (draft.notes) notes = draft.notes;
+    
+    // Optional: Log success or trigger a toast if you want visual confirmation
+    // console.log('Draft loaded safely');
   }
 
   function saveDraft() {
-    draftTrip.save({ date, startClock: startTime, endClock: endTime, startAddress, endAddress, destinations, mpg, gasPrice, notes });
+    // Construct an object that matches Partial<Trip>
+    const draftData: Partial<Trip> = { 
+      date, 
+      startTime, 
+      endTime, 
+      startAddress, 
+      endAddress, 
+      destinations, 
+      mpg, 
+      gasPrice, 
+      notes 
+    };
+    draftTrip.save(draftData);
   }
 
-  async function loadDraft(draft: any) {
-    date = draft.date || date;
-    startTime = draft.startClock || '';
-    endTime = draft.endClock || '';
-    startAddress = draft.startAddress || '';
-    endAddress = draft.endAddress || '';
-    destinations = draft.destinations || [{ address: '', earnings: 0 }];
-    mpg = draft.mpg || mpg;
-    gasPrice = draft.gasPrice || gasPrice;
-    notes = draft.notes || '';
-  }
+  onMount(() => {
+    // Retrieve draft (assumed to be 'any' or 'unknown' from storage)
+    const rawDraft = draftTrip.load();
+    
+    if (rawDraft && confirm('Resume your last unsaved trip?')) {
+        // Cast to Partial<Trip> for the safe loader
+        loadDraft(rawDraft as Partial<Trip>);
+    }
+    
+    const interval = setInterval(saveDraft, 5000);
+    return () => clearInterval(interval);
+  });
 </script>
 
-<div class="container">
-  <h2>Plan Your Trip</h2>
+<div class="max-w-4xl mx-auto p-5">
+  <h2 class="text-2xl font-bold mb-6">Plan Your Trip</h2>
   
-  <div class="form-section">
-    <div style="background: #e3f2fd; color: #0d47a1; padding: 12px; margin-bottom: 20px; border-radius: 8px; font-size: 14px;">
-      <strong>Debug Mode:</strong>
-      <ul style="margin: 5px 0 0 20px;">
-         <li>Enter Start Address</li>
-         <li>Add a Destination</li>
-         <li>Click "Calculate Route" and check the Console Logs (F12)</li>
-      </ul>
+  <TripDebug />
+
+  <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6 space-y-6">
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+            <label class="block font-semibold mb-2">Date</label>
+            <input type="date" bind:value={date} class="w-full p-2 border rounded" />
+        </div>
     </div>
 
-    <label>Date <input type="date" bind:value={date} /></label>
-
-    <label>
-      Start Address
+    <div>
+      <label class="block font-semibold mb-2">Start Address</label>
       <input 
         type="text" 
         bind:value={startAddress} 
-        placeholder="Start address" 
+        placeholder="Enter start location" 
+        class="w-full p-2 border rounded"
         autocomplete="off" 
         use:autocomplete={{ apiKey: API_KEY }}
-        on:place-selected={(e) => handlePlaceSelect('start', e)}
+        on:place-selected={(e) => handleAddressSelect('start', e)}
       />
-    </label>
-
-    <div class="destinations">
-      <label>Destinations</label>
-      {#each destinations as dest, i}
-        <div class="dest-row">
-          <input 
-            type="text" 
-            bind:value={dest.address} 
-            placeholder="Destination" 
-            autocomplete="off"
-            use:autocomplete={{ apiKey: API_KEY }}
-            on:place-selected={(e) => handlePlaceSelect(i, e)}
-          />
-          <input type="number" bind:value={dest.earnings} placeholder="$" step="0.01" />
-          <button type="button" on:click={() => moveDestinationUp(i)} disabled={i === 0}>↑</button>
-          <button type="button" on:click={() => moveDestinationDown(i)} disabled={i === destinations.length - 1}>↓</button>
-          <button type="button" on:click={() => removeDestination(i)} disabled={destinations.length === 1}>✕</button>
-        </div>
-      {/each}
-      <button type="button" on:click={addDestination}>+ Add</button>
     </div>
 
-    <label>
-      End Address (Optional)
+    <DestinationList 
+        bind:destinations 
+        apiKey={API_KEY} 
+    />
+
+    <div>
+      <label class="block font-semibold mb-2">End Address (Optional)</label>
       <input 
         type="text" 
         bind:value={endAddress} 
-        placeholder="Leave empty for last destination" 
+        placeholder="Leave empty to end at last stop" 
+        class="w-full p-2 border rounded"
         autocomplete="off"
         use:autocomplete={{ apiKey: API_KEY }}
-        on:place-selected={(e) => handlePlaceSelect('end', e)}
+        on:place-selected={(e) => handleAddressSelect('end', e)}
       />
-    </label>
-
-    <div class="row">
-      <label>MPG <input type="number" bind:value={mpg} step="0.1" /></label>
-      <label>Gas Price <input type="number" bind:value={gasPrice} step="0.01" /></label>
     </div>
 
-    <div class="row">
-      <label>Start Time <input type="time" bind:value={startTime} /></label>
-      <label>End Time <input type="time" bind:value={endTime} /></label>
-    </div>
-
-    <label>
-      Notes
-      <textarea bind:value={notes} rows="3"></textarea>
-    </label>
-  </div>
-
-  {#if calculated}
-    <div class="form-section" style="background: #f0fdf4; border: 1px solid #bbf7d0;">
-      <h3>Trip Summary</h3>
-      <div class="row">
-        <div><strong>Total Distance:</strong> {totalMileage} {distanceUnit}</div>
-        <div><strong>Est. Time:</strong> {totalTime}</div>
-        <div><strong>Fuel Cost:</strong> ${fuelCost}</div>
-        <div><strong>Net Profit:</strong> ${netProfit}</div>
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block font-semibold mb-2">MPG</label>
+        <input type="number" bind:value={mpg} step="0.1" class="w-full p-2 border rounded" />
+      </div>
+      <div>
+        <label class="block font-semibold mb-2">Gas Price ($)</label>
+        <input type="number" bind:value={gasPrice} step="0.01" class="w-full p-2 border rounded" />
+      </div>
+      <div>
+        <label class="block font-semibold mb-2">Start Time</label>
+        <input type="time" bind:value={startTime} class="w-full p-2 border rounded" />
+      </div>
+      <div>
+        <label class="block font-semibold mb-2">End Time</label>
+        <input type="time" bind:value={endTime} class="w-full p-2 border rounded" />
       </div>
     </div>
-  {:else}
-     <div style="text-align: center; color: #666; padding: 10px;">
-       Results will appear here after calculation.
-     </div>
+
+    <div>
+      <label class="block font-semibold mb-2">Notes</label>
+      <textarea bind:value={notes} rows="3" class="w-full p-2 border rounded"></textarea>
+    </div>
+  </div>
+
+  {#if calculationError}
+    <div class="bg-red-50 text-red-700 p-4 rounded-lg mb-6 border border-red-200">
+        {calculationError}
+    </div>
   {/if}
 
-  <div class="actions">
+  {#if calculated}
+    <TripSummary 
+        {totalMileage} 
+        {distanceUnit} 
+        {totalTime} 
+        {fuelCost} 
+        {netProfit} 
+    />
+  {/if}
+
+  <div class="flex gap-3">
     <button 
-      class="primary" 
-      on:click={calculateRoute} 
+      class="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      on:click={handleCalculate} 
       disabled={calculating}
-      style={calculating ? "opacity: 0.7; cursor: wait;" : "background: #2563eb; color: white;"}
     >
       {calculating ? 'Calculating...' : 'Calculate Route'}
     </button>
   </div>
 </div>
-
-<style>
-  .container { max-width: 900px; margin: 0 auto; padding: 20px; }
-  .form-section { background: white; padding: 24px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); margin-bottom: 20px; }
-  label { display: block; font-weight: 600; margin-bottom: 16px; }
-  input, textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px; margin-top: 4px; }
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .destinations { margin-bottom: 16px; }
-  .dest-row { display: flex; gap: 8px; margin-bottom: 8px; }
-  .dest-row input:first-child { flex: 2; }
-  .dest-row input:nth-child(2) { flex: 1; }
-  .dest-row button { padding: 8px; border: none; background: #f0f0f0; cursor: pointer; border-radius: 4px; }
-  .actions { display: flex; gap: 12px; }
-  button { padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
-  .primary { background: #999; color: white; }
-  button:disabled { opacity: 0.5; }
-</style>
