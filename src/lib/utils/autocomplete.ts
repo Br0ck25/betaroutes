@@ -1,212 +1,108 @@
-// src/lib/utils/autocomplete.ts
+// src/lib/utils/autocomplete.ts - DEBUGGING VERSION
 import type { Action } from "svelte/action";
 
 export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node, params) => {
-  let suggestionsList: HTMLUListElement | null = null;
+  console.log('🔧 [AUTOCOMPLETE] Action attached to input:', node);
+  
+  let dropdown: HTMLDivElement | null = null;
   let debounceTimer: any;
   
-  function initUI() {
-    suggestionsList = document.createElement('ul');
-    suggestionsList.id = `autocomplete-${Math.random().toString(36).substr(2, 9)}`;
+  // Create a VERY VISIBLE dropdown for debugging
+  function createDropdown() {
+    dropdown = document.createElement('div');
+    dropdown.id = 'autocomplete-debug-dropdown';
     
-    Object.assign(suggestionsList.style, {
-      position: 'fixed', // ← Changed from absolute to fixed
-      zIndex: '9999',    // ← Increased z-index
-      backgroundColor: 'white',
-      border: '2px solid #FF7F50', // ← Made more visible for debugging
-      borderRadius: '0 0 12px 12px',
-      boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
-      listStyle: 'none',
-      padding: '8px 0',
-      margin: '0',
-      width: '100%',
-      maxHeight: '300px',
-      overflowY: 'auto',
+    // SUPER VISIBLE STYLING
+    Object.assign(dropdown.style, {
+      position: 'fixed',
+      top: '200px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      width: '400px',
+      backgroundColor: '#FF0000', // RED BACKGROUND - impossible to miss
+      color: 'white',
+      border: '5px solid yellow',
+      borderRadius: '12px',
+      padding: '20px',
+      zIndex: '999999',
+      fontSize: '18px',
+      fontWeight: 'bold',
+      textAlign: 'center',
       display: 'none',
-      fontSize: '16px',
-      fontFamily: 'inherit'
+      boxShadow: '0 0 50px rgba(255,0,0,0.8)'
     });
     
-    document.body.appendChild(suggestionsList);
-    console.log('[Autocomplete] UI initialized');
-
-    node.addEventListener('input', handleInput);
-    node.addEventListener('focus', () => {
-        if (node.value.length > 1) handleInput();
-    });
-
-    node.addEventListener('blur', () => {
-      setTimeout(() => {
-        if(suggestionsList) suggestionsList.style.display = 'none';
-      }, 200);
-    });
+    dropdown.innerHTML = '🔴 AUTOCOMPLETE TEST - If you see this, the action is working!';
+    document.body.appendChild(dropdown);
+    
+    console.log('✅ [AUTOCOMPLETE] Dropdown created and added to DOM');
   }
-
-  function updatePosition() {
-    if (!suggestionsList) return;
-    const rect = node.getBoundingClientRect();
-    Object.assign(suggestionsList.style, {
-      top: `${rect.bottom + window.scrollY}px`,
-      left: `${rect.left + window.scrollX}px`,
-      width: `${rect.width}px`
-    });
-  }
-
-  function handleInput() {
-    const query = node.value;
+  
+  async function handleInput(e: Event) {
+    const value = (e.target as HTMLInputElement).value;
+    console.log('📝 [AUTOCOMPLETE] Input detected:', value);
     
-    console.log('[Autocomplete] Input:', query);
-    
-    // Update position on every input
-    updatePosition();
-
-    if (!query || query.length < 2) {
-      if(suggestionsList) suggestionsList.style.display = 'none';
+    if (!dropdown) {
+      console.error('❌ [AUTOCOMPLETE] Dropdown not created!');
       return;
     }
-
+    
+    // Show dropdown immediately
+    dropdown.style.display = 'block';
+    dropdown.innerHTML = `⏳ Loading results for: "${value}"`;
+    
+    if (!value || value.length < 2) {
+      dropdown.style.display = 'none';
+      return;
+    }
+    
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(async () => {
       try {
-        console.log('[Autocomplete] Fetching:', `/api/autocomplete?q=${query}`);
+        console.log('🌐 [AUTOCOMPLETE] Fetching from API...');
+        const url = `/api/autocomplete?q=${encodeURIComponent(value)}`;
+        console.log('🌐 [AUTOCOMPLETE] URL:', url);
         
-        const res = await fetch(`/api/autocomplete?q=${encodeURIComponent(query)}`);
-        const results = await res.json();
+        const res = await fetch(url);
+        const data = await res.json();
         
-        console.log('[Autocomplete] Results:', results);
+        console.log('✅ [AUTOCOMPLETE] Got response:', data);
         
-        if (results && results.length > 0) {
-            renderSuggestions(results);
+        if (data && data.length > 0) {
+          dropdown!.innerHTML = `
+            <div style="margin-bottom: 10px;">✅ Found ${data.length} results:</div>
+            ${data.map((item: any) => `
+              <div style="background: white; color: black; padding: 10px; margin: 5px 0; border-radius: 6px; cursor: pointer;" 
+                   onclick="alert('Clicked: ${item.formatted_address}')">
+                📍 ${item.formatted_address || item.name}
+              </div>
+            `).join('')}
+          `;
         } else {
-            renderEmptyState();
+          dropdown!.innerHTML = '❌ No results found';
         }
+        
       } catch (err) {
-        console.error('[Autocomplete] Fetch error:', err);
-        renderError();
+        console.error('❌ [AUTOCOMPLETE] Fetch error:', err);
+        dropdown!.innerHTML = `⚠️ Error: ${err}`;
       }
-    }, 300);
+    }, 500);
   }
-
-  function renderError() {
-      if (!suggestionsList) return;
-      suggestionsList.innerHTML = '';
-      const li = document.createElement('li');
-      Object.assign(li.style, { 
-        padding: '12px 16px', 
-        color: '#DC2626', 
-        fontStyle: 'italic',
-        fontSize: '15px'
-      });
-      li.textContent = '⚠️ Error loading suggestions';
-      suggestionsList.appendChild(li);
-      suggestionsList.style.display = 'block';
-      updatePosition();
-  }
-
-  function renderEmptyState() {
-      if (!suggestionsList) return;
-      suggestionsList.innerHTML = '';
-      const li = document.createElement('li');
-      Object.assign(li.style, { 
-        padding: '12px 16px', 
-        color: '#9CA3AF', 
-        fontStyle: 'italic',
-        fontSize: '15px',
-        textAlign: 'center'
-      });
-      li.textContent = '🔍 No matches found';
-      suggestionsList.appendChild(li);
-      suggestionsList.style.display = 'block';
-      updatePosition();
-  }
-
-  function renderSuggestions(items: any[]) {
-    if (!suggestionsList) return;
-    suggestionsList.innerHTML = '';
-
-    // Add a header to show data source
-    const header = document.createElement('li');
-    Object.assign(header.style, {
-        padding: '6px 16px',
-        fontSize: '12px',
-        fontWeight: '700',
-        color: '#059669',
-        backgroundColor: '#ECFDF5',
-        borderBottom: '1px solid #D1FAE5',
-        textTransform: 'uppercase',
-        letterSpacing: '0.5px'
-    });
-    header.textContent = `✓ ${items.length} Result${items.length !== 1 ? 's' : ''} from Database`;
-    suggestionsList.appendChild(header);
-
-    items.forEach(item => {
-      const li = document.createElement('li');
-      const text = item.formatted_address || item.name;
-      
-      li.innerHTML = `
-        <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px;">
-          <span style="font-size: 1.3em;">📍</span> 
-          <div style="flex: 1;">
-            <div style="font-weight: 600; font-size: 15px; color: #111827;">${text}</div>
-            ${item.source === 'kv' ? '<div style="font-size: 12px; color: #059669; margin-top: 2px;">✓ Saved Address</div>' : ''}
-          </div>
-        </div>
-      `;
-      
-      Object.assign(li.style, {
-        cursor: 'pointer',
-        borderBottom: '1px solid #F3F4F6',
-        transition: 'background 0.15s'
-      });
-      
-      li.addEventListener('mouseenter', () => {
-        li.style.backgroundColor = '#F9FAFB';
-      });
-      
-      li.addEventListener('mouseleave', () => {
-        li.style.backgroundColor = 'white';
-      });
-      
-      li.addEventListener('mousedown', (e) => {
-        e.preventDefault(); 
-        selectItem(item);
-      });
-
-      suggestionsList!.appendChild(li);
-    });
-
-    suggestionsList.style.display = 'block';
-    updatePosition();
-    
-    console.log('[Autocomplete] Rendered', items.length, 'suggestions');
-  }
-
-  function selectItem(item: any) {
-    const place = {
-      formatted_address: item.formatted_address || item.name,
-      name: item.name,
-      geometry: item.geometry
-    };
-    
-    if(suggestionsList) suggestionsList.style.display = 'none';
-    node.value = place.formatted_address || place.name;
-    node.dispatchEvent(new CustomEvent('place-selected', { detail: place }));
-    
-    console.log('[Autocomplete] Selected:', place);
-  }
-
-  initUI();
-
-  // Update position on scroll/resize
-  window.addEventListener('scroll', updatePosition);
-  window.addEventListener('resize', updatePosition);
-
+  
+  // Initialize
+  createDropdown();
+  node.addEventListener('input', handleInput);
+  node.addEventListener('focus', () => {
+    console.log('👁️ [AUTOCOMPLETE] Input focused');
+  });
+  
+  console.log('✅ [AUTOCOMPLETE] Event listeners attached');
+  
   return {
     destroy() {
-      if (suggestionsList) suggestionsList.remove();
+      console.log('🗑️ [AUTOCOMPLETE] Cleaning up');
+      if (dropdown) dropdown.remove();
       node.removeEventListener('input', handleInput);
-      window.removeEventListener('scroll', updatePosition);
-      window.removeEventListener('resize', updatePosition);
     }
   };
 };
