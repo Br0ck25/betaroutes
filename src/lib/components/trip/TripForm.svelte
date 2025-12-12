@@ -13,7 +13,6 @@
   export let googleApiKey = '';
   const settings = get(userSettings);
   const API_KEY = googleApiKey || 'dummy_key';
-  // Google Maps is loaded by the autocomplete action
 
   // Default form values
   let date = new Date().toISOString().split('T')[0];
@@ -33,7 +32,7 @@
   let calculating = false;
   let calculated = false;
   
-  // Results placeholders
+  // Results
   let totalMileage = 0;
   let totalTime = '';
   let totalEarnings = 0;
@@ -43,7 +42,6 @@
   let netProfit = 0;
   let profitPerHour = 0;
   let hoursWorked = 0;
-  // No Map Element variables needed for pure KV test
 
   function formatTime(dateStr: string) {
     if (!dateStr) return '';
@@ -99,6 +97,8 @@
   }
 
   async function calculateRoute() {
+    console.log('[TRIP DEBUG] Starting calculation...');
+    
     if (!startAddress) {
       alert("Please enter a start address.");
       return;
@@ -106,6 +106,7 @@
 
     // Check if Google Maps is available
     if (typeof google === 'undefined' || !google.maps || !google.maps.DirectionsService) {
+      console.warn('[TRIP DEBUG] Google Maps API not ready.');
       alert("Google Maps API is not loaded yet. Please wait a moment.");
       return;
     }
@@ -117,46 +118,43 @@
       
       // Filter out empty destinations
       const validDestinations = destinations.filter(d => d.address && d.address.trim() !== '');
+      console.log(`[TRIP DEBUG] Valid destinations: ${validDestinations.length}`);
       
-      // Construct Waypoints
       const waypoints = validDestinations.map(d => ({
         location: d.address,
         stopover: true
       }));
 
-      // Determine final destination
-      // If endAddress is provided, use it. Otherwise, return to start (round trip) or last stop.
-      // For now, if no end address, we'll assume the last destination is the end, 
-      // or if explicitly requested, a round trip back to start.
-      // Current logic: Use endAddress if set, otherwise use last destination as the "end" of the route request.
-      
+      // Determine routing logic
       let origin = startAddress;
       let destination = endAddress;
 
-      // If no end address is typed, use the last destination as the endpoint
-      // and remove it from waypoints to avoid duplication
+      // Logic: If no specific end address, the last stop IS the destination
       if (!destination && waypoints.length > 0) {
         destination = waypoints[waypoints.length - 1].location as string;
-        waypoints.pop();
+        waypoints.pop(); // Remove it from waypoints so it's not visited twice
+        console.log('[TRIP DEBUG] Using last stop as destination');
       } else if (!destination && waypoints.length === 0) {
-        // Only start address? Cannot calculate route.
         alert("Please add at least one destination or an end address.");
         calculating = false;
         return;
       }
 
+      console.log('[TRIP DEBUG] Requesting route:', { origin, destination, waypoints: waypoints.length });
+
       const request: google.maps.DirectionsRequest = {
         origin: origin,
         destination: destination,
         waypoints: waypoints,
-        optimizeWaypoints: true, // Optimizes the order of stops for efficiency
+        optimizeWaypoints: true,
         travelMode: google.maps.TravelMode.DRIVING,
         unitSystem: distanceUnit === 'km' ? google.maps.UnitSystem.METRIC : google.maps.UnitSystem.IMPERIAL
       };
 
       directionsService.route(request, (result, status) => {
+        console.log(`[TRIP DEBUG] API Status: ${status}`);
+        
         if (status === google.maps.DirectionsStatus.OK && result) {
-          // Calculate totals from legs
           const route = result.routes[0];
           let distanceMeters = 0;
           let durationSeconds = 0;
@@ -166,15 +164,16 @@
             if (leg.duration) durationSeconds += leg.duration.value;
           });
 
-          // Convert to miles/minutes
-          // 1 meter = 0.000621371 miles
+          // Conversions
           const totalMiles = distanceMeters * 0.000621371;
           const totalMinutes = durationSeconds / 60;
+
+          console.log(`[TRIP DEBUG] Calculated: ${totalMiles.toFixed(1)} miles, ${totalMinutes.toFixed(0)} mins`);
 
           // Update State
           totalMileage = parseFloat(totalMiles.toFixed(1));
           
-          // Use the utility to calculate costs/profits
+          // Use utility for costs
           const totals = calculateTripTotals(
             totalMileage,
             totalMinutes,
@@ -193,22 +192,23 @@
           totalEarnings = totals.totalEarnings || 0;
           
           calculated = true;
+          console.log('[TRIP DEBUG] State updated. calculated = true');
         } else {
-          console.error("Directions request failed due to " + status);
+          console.error("[TRIP DEBUG] Directions request failed:", status);
           alert("Could not calculate route. Check addresses and try again.");
         }
         calculating = false;
       });
 
     } catch (error) {
-      console.error("Route calculation error:", error);
+      console.error("[TRIP DEBUG] Critical error:", error);
       alert("An error occurred while calculating route.");
       calculating = false;
     }
   }
 
   async function logTrip() {
-    alert("Log Trip disabled until Routing is re-enabled.");
+    alert("Log Trip disabled until Routing is verified.");
   }
 
   async function resetForm() {
@@ -219,9 +219,6 @@
     destinations = [{ address: '', earnings: 0 }];
     calculated = false;
     totalMileage = 0;
-    totalTime = '';
-    fuelCost = 0;
-    netProfit = 0;
   }
 
   function saveDraft() {
@@ -242,14 +239,15 @@
 </script>
 
 <div class="container">
-  <h2>Plan Your Trip (KV Test Mode)</h2>
+  <h2>Plan Your Trip</h2>
   
   <div class="form-section">
     <div style="background: #e3f2fd; color: #0d47a1; padding: 12px; margin-bottom: 20px; border-radius: 8px; font-size: 14px;">
-      <strong>Test Instructions:</strong>
+      <strong>Debug Mode:</strong>
       <ul style="margin: 5px 0 0 20px;">
-         <li>Type <code>test</code> to verify API connection.</li>
-         <li>Type <code>101</code> to verify KV data access (based on your logs).</li>
+         <li>Enter Start Address</li>
+         <li>Add a Destination</li>
+         <li>Click "Calculate Route" and check the Console Logs (F12)</li>
       </ul>
     </div>
 
@@ -326,6 +324,10 @@
         <div><strong>Net Profit:</strong> ${netProfit}</div>
       </div>
     </div>
+  {:else}
+     <div style="text-align: center; color: #666; padding: 10px;">
+       Results will appear here after calculation.
+     </div>
   {/if}
 
   <div class="actions">
