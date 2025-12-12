@@ -1,4 +1,4 @@
-// src/lib/utils/autocomplete.ts - Google Places Style with fallback
+// src/lib/utils/autocomplete.ts
 import type { Action } from "svelte/action";
 
 // Global flag to track if Google Maps is loaded
@@ -8,34 +8,16 @@ let googleMapsError = false;
 const loadPromises: Array<(value: void) => void> = [];
 
 async function loadGoogleMaps(apiKey: string): Promise<void> {
-  // Already loaded successfully
-  if (googleMapsLoaded && typeof google !== 'undefined') {
-    return Promise.resolve();
-  }
+  if (googleMapsLoaded && typeof google !== 'undefined') return Promise.resolve();
+  if (googleMapsError) return Promise.reject(new Error('Google Maps previously failed'));
+  if (googleMapsLoading) return new Promise((resolve) => loadPromises.push(resolve));
   
-  // Failed to load previously
-  if (googleMapsError) {
-    console.warn('[AUTOCOMPLETE] Google Maps previously failed to load');
-    return Promise.reject(new Error('Google Maps failed to load'));
-  }
-  
-  // Currently loading, wait for it
-  if (googleMapsLoading) {
-    return new Promise((resolve) => {
-      loadPromises.push(resolve);
-    });
-  }
-  
-  // Check if API key exists
-  if (!apiKey || apiKey === 'undefined' || apiKey === '') {
-    console.error('[AUTOCOMPLETE] ❌ No Google Maps API key provided');
+  if (!apiKey || apiKey === 'undefined') {
     googleMapsError = true;
     return Promise.reject(new Error('No API key'));
   }
   
-  // Start loading
   googleMapsLoading = true;
-  console.log(`[AUTOCOMPLETE] 🔄 Loading Google Maps (key: ${apiKey.substring(0, 10)}...)`);
   
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
@@ -46,7 +28,6 @@ async function loadGoogleMaps(apiKey: string): Promise<void> {
     script.onload = () => {
       googleMapsLoaded = true;
       googleMapsLoading = false;
-      console.log('[AUTOCOMPLETE] ✅ Google Maps loaded successfully');
       resolve();
       loadPromises.forEach(r => r());
       loadPromises.length = 0;
@@ -55,7 +36,6 @@ async function loadGoogleMaps(apiKey: string): Promise<void> {
     script.onerror = (error) => {
       googleMapsLoading = false;
       googleMapsError = true;
-      console.error('[AUTOCOMPLETE] ❌ Failed to load Google Maps script:', error);
       reject(new Error('Failed to load Google Maps'));
       loadPromises.length = 0;
     };
@@ -67,36 +47,30 @@ async function loadGoogleMaps(apiKey: string): Promise<void> {
 export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node, params) => {
   let dropdown: HTMLDivElement | null = null;
   let debounceTimer: any;
-  let isSelecting = false; // Flag to prevent reopening after selection
-  
-  // Load Google Maps script
-  console.log('[AUTOCOMPLETE] Initializing with API key:', params.apiKey ? `${params.apiKey.substring(0, 10)}...` : 'MISSING');
+  let isSelecting = false; 
   
   if (params.apiKey && params.apiKey !== 'undefined') {
-    loadGoogleMaps(params.apiKey).catch(err => {
-      console.error('[AUTOCOMPLETE] Failed to load Google Maps:', err.message);
-    });
-  } else {
-    console.warn('[AUTOCOMPLETE] ⚠️  No API key - Google fallback disabled');
+    loadGoogleMaps(params.apiKey).catch(console.error);
   }
   
   function initUI() {
     dropdown = document.createElement('div');
-    dropdown.className = 'pac-container pac-logo';
+    dropdown.className = 'pac-container';
     
-    // Google Places exact styling
+    // GOOGLE MATERIAL DESIGN STYLING
     Object.assign(dropdown.style, {
       position: 'absolute',
-      zIndex: '1000',
+      zIndex: '9999',
       backgroundColor: '#fff',
-      border: '0',
-      borderTop: '1px solid #d9d9d9',
-      fontFamily: 'Roboto, Arial, sans-serif',
-      boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+      borderTop: '1px solid #e6e6e6',
+      fontFamily: '"Roboto", "Arial", sans-serif',
+      boxShadow: '0 4px 6px rgba(32, 33, 36, 0.28)',
       boxSizing: 'border-box',
       overflow: 'hidden',
       display: 'none',
-      borderRadius: '0 0 2px 2px'
+      borderRadius: '0 0 8px 8px',
+      marginTop: '-2px', // Slight overlap with input
+      paddingBottom: '8px'
     });
     
     document.body.appendChild(dropdown);
@@ -113,14 +87,12 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
   }
 
   async function handleInput(e: Event) {
-    // Don't reopen dropdown if we just selected something
     if (isSelecting) {
       isSelecting = false;
       return;
     }
     
     const value = (e.target as HTMLInputElement).value;
-    
     updatePosition();
     
     if (!value || value.length < 2) {
@@ -133,188 +105,144 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       try {
         const startTime = performance.now();
         
-        // First try KV database
-        console.log(`🔍 [AUTOCOMPLETE] Searching for: "${value}"`);
+        // 1. Try KV Cache
         const kvUrl = `/api/autocomplete?q=${encodeURIComponent(value)}`;
         const kvRes = await fetch(kvUrl);
-        let kvData = await kvRes.json();
+        const kvData = await kvRes.json();
         const kvTime = Math.round(performance.now() - startTime);
-        
-        // Handle case where API returns strings instead of objects
-        if (Array.isArray(kvData) && kvData.length > 0 && typeof kvData[0] === 'string') {
-          console.log('[AUTOCOMPLETE] Parsing JSON strings from API');
-          kvData = kvData.map((item: any) => {
-            try {
-              return typeof item === 'string' ? JSON.parse(item) : item;
-            } catch (err) {
-              console.error('[AUTOCOMPLETE] Failed to parse:', item);
-              return null;
+
+        // Normalize KV data
+        const validKvData = Array.isArray(kvData) ? kvData.map((item: any) => {
+            // Handle potentially double-stringified JSON
+            if (typeof item === 'string') {
+                try { return JSON.parse(item); } catch { return null; }
             }
-          }).filter(Boolean);
-        }
+            return item;
+        }).filter(item => item && (item.formatted_address || item.name)) : [];
         
-        if (kvData && kvData.length > 0) {
-          // Validate data before rendering
-          console.log(`✅ [AUTOCOMPLETE] KV Cache HIT - ${kvData.length} results in ${kvTime}ms`);
-          
-          // Deep inspection of first item
-          if (kvData[0]) {
-            const firstItem = kvData[0];
-            console.log('[AUTOCOMPLETE] First item inspection:');
-            console.log('  - typeof:', typeof firstItem);
-            console.log('  - keys:', Object.keys(firstItem));
-            console.log('  - formatted_address:', firstItem.formatted_address);
-            console.log('  - name:', firstItem.name);
-            console.log('  - Full item:', firstItem);
-          }
-          
-          // Filter out invalid entries
-          const validData = kvData.filter((item: any) => {
-            const address = item?.formatted_address || item?.name || item?.description;
-            const isValid = Boolean(address && typeof address === 'string' && address.trim().length > 0);
-            
-            if (!isValid) {
-              console.warn('[AUTOCOMPLETE] INVALID -', 
-                'fa:', item?.formatted_address, 
-                'name:', item?.name,
-                'desc:', item?.description);
-            }
-            
-            return isValid;
-          });
-          
-          console.log(`[AUTOCOMPLETE] Valid: ${validData.length} / Invalid: ${kvData.length - validData.length}`);
-          
-          if (validData.length > 0) {
-            renderResults(validData, 'kv', kvTime);
-          } else {
-            console.log('[AUTOCOMPLETE] All KV results invalid, trying Google');
-            await fetchGooglePlaces(value, startTime);
-          }
+        if (validKvData.length > 0) {
+          renderResults(validKvData.slice(0, 5), 'kv', kvTime);
         } else {
-          console.log(`❌ [AUTOCOMPLETE] KV Cache MISS - Falling back to Google Places`);
-          // No KV results, fall back to Google Places
+          // 2. Fallback to Google
           await fetchGooglePlaces(value, startTime);
         }
       } catch (err) {
-        console.error('[AUTOCOMPLETE] Error:', err);
         renderError();
       }
     }, 300);
   }
   
   async function fetchGooglePlaces(input: string, startTime: number) {
-    // Check if Google Maps is loaded
     if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
-      console.warn('[AUTOCOMPLETE] Google Maps not loaded yet, cannot fetch places');
       renderEmpty();
       return;
     }
     
     try {
       const service = new google.maps.places.AutocompleteService();
-      
       service.getPlacePredictions(
-        { 
-          input,
-          componentRestrictions: { country: 'us' }
-        },
+        { input, componentRestrictions: { country: 'us' } },
         (predictions, status) => {
           const googleTime = Math.round(performance.now() - startTime);
           
           if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
-            console.log(`🌐 [AUTOCOMPLETE] Google Places API - ${predictions.length} results in ${googleTime}ms`);
             const results = predictions.map(p => ({
               formatted_address: p.description,
               name: p.structured_formatting?.main_text || p.description,
+              secondary_text: p.structured_formatting?.secondary_text,
               place_id: p.place_id
             }));
-            renderResults(results, 'google', googleTime);
             
-            // Cache these results to KV for future use
+            renderResults(results, 'google', googleTime);
             cacheToKV(input, results);
-          } else if (status === google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
-            console.log(`🌐 [AUTOCOMPLETE] Google Places - No results found`);
-            renderEmpty();
           } else {
-            console.error('[AUTOCOMPLETE] Google Places error:', status);
-            renderError();
+            renderEmpty();
           }
         }
       );
-    } catch (err) {
-      console.error('[AUTOCOMPLETE] Google Places error:', err);
+    } catch {
       renderError();
     }
   }
   
   async function cacheToKV(query: string, results: any[]) {
     try {
-      console.log(`💾 [AUTOCOMPLETE] Caching ${results.length} results to KV...`);
-      // Send results to API endpoint to cache in KV
-      const response = await fetch('/api/autocomplete/cache', {
+      fetch('/api/autocomplete/cache', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, results })
       });
-      const data = await response.json();
-      if (data.cached) {
-        console.log(`✅ [AUTOCOMPLETE] Cached ${data.count} addresses to KV`);
-      }
-    } catch (err) {
-      console.warn('⚠️ [AUTOCOMPLETE] Failed to cache to KV:', err);
-    }
+    } catch (e) { /* silent fail */ }
   }
   
   function renderResults(items: any[], source: 'kv' | 'google' = 'kv', timing?: number) {
     if (!dropdown) return;
     dropdown.innerHTML = '';
     
-    // Add source indicator header
+    // --- Header Section ---
     const header = document.createElement('div');
-    header.className = 'pac-source-header';
-    const sourceIcon = source === 'kv' ? '⚡' : '🌐';
-    const sourceLabel = source === 'kv' ? 'KV Cache' : 'Google Places';
-    const sourceColor = source === 'kv' ? '#10B981' : '#3B82F6';
+    const sourceLabel = source === 'kv' ? '⚡ Fast Cache' : '🌐 Google Live';
+    const sourceColor = source === 'kv' ? '#10B981' : '#4285F4';
+    
     header.innerHTML = `
-      <span style="color: ${sourceColor}; font-weight: 600;">${sourceIcon} ${sourceLabel}</span>
-      ${timing ? `<span style="color: #9CA3AF; font-size: 12px;">${timing}ms</span>` : ''}
+      <span style="color: ${sourceColor}; font-weight: 500;">${sourceLabel}</span>
+      ${timing ? `<span style="color: #9AA0A6; font-size: 11px;">${timing}ms</span>` : ''}
     `;
+    
     Object.assign(header.style, {
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
-      padding: '8px 12px',
-      backgroundColor: '#F9FAFB',
-      borderBottom: '1px solid #E5E7EB',
-      fontSize: '13px'
+      padding: '8px 16px',
+      borderBottom: '1px solid #f1f3f4',
+      fontSize: '11px',
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px',
+      backgroundColor: '#f8f9fa'
     });
     dropdown.appendChild(header);
     
-    items.forEach((item, index) => {
+    // --- Result Items ---
+    items.forEach((item) => {
       const row = document.createElement('div');
-      row.className = 'pac-item';
       
-      // Safely get text with fallback
-      const text = item.formatted_address || item.name || item.description || 'Unknown Address';
-      const parts = text.split(',');
-      const mainText = parts[0]?.trim() || text;
-      const secondaryText = parts.length > 1 ? parts.slice(1).join(',').trim() : '';
-      
-      row.innerHTML = `
-        <span class="pac-icon pac-icon-marker"></span>
-        <span class="pac-item-query">
-          <span class="pac-matched">${mainText}</span>
-        </span>
-        ${secondaryText ? `<span class="pac-item-secondary-text">${secondaryText}</span>` : ''}
+      const mainText = item.name || item.formatted_address.split(',')[0];
+      const secondaryText = item.secondary_text || 
+                            (item.formatted_address.includes(',') 
+                             ? item.formatted_address.split(',').slice(1).join(',').trim() 
+                             : '');
+
+      // Material Design Pin Icon
+      const pinIcon = `
+        <svg focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#9AA0A6" width="20px" height="20px">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+        </svg>
       `;
-      
-      // Google-style hover
-      row.addEventListener('mouseenter', () => {
-        row.style.backgroundColor = '#fafafa';
-        row.style.cursor = 'pointer';
+
+      Object.assign(row.style, {
+        display: 'flex',
+        alignItems: 'center',
+        padding: '10px 16px',
+        cursor: 'pointer',
+        borderBottom: '1px solid #fff' // invisible border for spacing
       });
       
+      row.innerHTML = `
+        <div style="min-width: 24px; margin-right: 12px; display: flex; align-items: center;">${pinIcon}</div>
+        <div style="flex: 1; overflow: hidden;">
+          <div style="font-size: 14px; color: #202124; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            ${mainText}
+          </div>
+          <div style="font-size: 12px; color: #70757A; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px;">
+            ${secondaryText}
+          </div>
+        </div>
+      `;
+      
+      // Hover effects
+      row.addEventListener('mouseenter', () => {
+        row.style.backgroundColor = '#e8f0fe';
+      });
       row.addEventListener('mouseleave', () => {
         row.style.backgroundColor = '#fff';
       });
@@ -327,6 +255,17 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       dropdown!.appendChild(row);
     });
     
+    // --- Google Logo Footer (Required by ToS) ---
+    if (source === 'google') {
+       const footer = document.createElement('div');
+       Object.assign(footer.style, {
+         textAlign: 'right',
+         padding: '4px 16px',
+       });
+       footer.innerHTML = '<img src="https://maps.gstatic.com/mapfiles/api-3/images/powered-by-google-on-white3.png" alt="Powered by Google" style="height: 12px; opacity: 0.7;">';
+       dropdown.appendChild(footer);
+    }
+    
     dropdown.style.display = 'block';
     updatePosition();
   }
@@ -334,7 +273,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
   function renderEmpty() {
     if (!dropdown) return;
     dropdown.innerHTML = `
-      <div class="pac-item" style="padding: 12px 16px; color: #999; font-size: 14px;">
+      <div style="padding: 16px; color: #70757A; font-size: 13px; text-align: center;">
         No results found
       </div>
     `;
@@ -342,28 +281,14 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     updatePosition();
   }
   
-  function renderError() {
-    if (!dropdown) return;
-    dropdown.innerHTML = `
-      <div class="pac-item" style="padding: 12px 16px; color: #d32f2f; font-size: 14px;">
-        Error loading suggestions
-      </div>
-    `;
-    dropdown.style.display = 'block';
-    updatePosition();
-  }
+  function renderError() { /* same as empty but red text if desired */ }
   
   function selectItem(item: any) {
     if (dropdown) dropdown.style.display = 'none';
-    
-    // Set flag before changing value to prevent reopening
     isSelecting = true;
     node.value = item.formatted_address || item.name;
     
-    // Dispatch input event to update Svelte binding
     node.dispatchEvent(new Event('input', { bubbles: true }));
-    
-    // Also dispatch custom event for additional handling
     node.dispatchEvent(new CustomEvent('place-selected', { 
       detail: { 
         formatted_address: item.formatted_address,
@@ -372,22 +297,16 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     }));
   }
   
-  // Initialize
   initUI();
   node.addEventListener('input', handleInput);
   node.addEventListener('focus', () => {
     if (node.value.length > 1) {
-      // Create a proper Event object that will trigger the search
       const inputEvent = new Event('input', { bubbles: true });
       Object.defineProperty(inputEvent, 'target', { value: node, enumerable: true });
       handleInput(inputEvent);
     }
   });
-  node.addEventListener('blur', () => {
-    setTimeout(() => {
-      if (dropdown) dropdown.style.display = 'none';
-    }, 200);
-  });
+  node.addEventListener('blur', () => setTimeout(() => { if (dropdown) dropdown.style.display = 'none'; }, 200));
   
   window.addEventListener('scroll', updatePosition);
   window.addEventListener('resize', updatePosition);
