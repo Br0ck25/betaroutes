@@ -2,19 +2,15 @@
   import { trips } from '$lib/stores/trips';
   import { userSettings } from '$lib/stores/userSettings';
   import { goto } from '$app/navigation';
-  import { onMount, onDestroy, tick } from 'svelte';
+  import { onMount } from 'svelte';
   import { user } from '$lib/stores/auth';
   import { page } from '$app/stores';
+  import { autocomplete } from '$lib/utils/autocomplete'; // ← ADD THIS IMPORT
 
   export let data;
   $: API_KEY = data.googleMapsApiKey;
 
   let step = 1;
-  let mapLoaded = false;
-  let map: google.maps.Map | null = null;
-  let directionsService: google.maps.DirectionsService | null = null;
-  let directionsRenderer: google.maps.DirectionsRenderer | null = null;
-  
   let dragItemIndex: number | null = null;
   let maintenanceOptions = ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement'];
   let suppliesOptions = ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental'];
@@ -25,58 +21,7 @@
     
     if (savedMaintenance) maintenanceOptions = JSON.parse(savedMaintenance);
     if (savedSupplies) suppliesOptions = JSON.parse(savedSupplies);
-
-    if (API_KEY && !window.google) {
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places`;
-      script.async = true;
-      script.onload = () => {
-        mapLoaded = true;
-        initMapServices();
-      };
-      document.head.appendChild(script);
-    } else if (window.google) {
-      mapLoaded = true;
-      initMapServices();
-    }
-
-    document.addEventListener('click', handleGlobalClick);
   });
-
-  onDestroy(() => {
-    if (typeof document !== 'undefined') {
-        document.removeEventListener('click', handleGlobalClick);
-    }
-  });
-
-  function handleGlobalClick(e: Event) {
-    const target = e.target as HTMLElement;
-    if (target.tagName !== 'INPUT') {
-        closeAutocompleteDropdown();
-    }
-  }
-
-  function initMapServices() {
-    directionsService = new google.maps.DirectionsService();
-    directionsRenderer = new google.maps.DirectionsRenderer();
-  }
-
-  function initMap(node: HTMLElement) {
-      if (!mapLoaded || !window.google) return;
-      map = new google.maps.Map(node, {
-          center: { lat: 37.7749, lng: -122.4194 },
-          zoom: 12,
-          disableDefaultUI: true,
-          zoomControl: true
-      });
-      directionsRenderer?.setMap(map);
-      
-      if (tripData.startAddress) {
-          calculateRoute(false);
-      }
-      
-      return { destroy() { } };
-  }
 
   let tripData = {
     id: crypto.randomUUID(),
@@ -88,7 +33,7 @@
     endAddress: $userSettings.defaultEndAddress || '',
     stops: [] as any[],
     totalMiles: 0,
-    estimatedTime: 0, // Minutes
+    estimatedTime: 0,
     mpg: $userSettings.defaultMPG || 25,
     gasPrice: $userSettings.defaultGasPrice || 3.50,
     fuelCost: 0,
@@ -102,70 +47,6 @@
   let newSupplyItem = '';
   let showAddMaintenance = false;
   let showAddSupply = false;
-
-  // --- Map Logic ---
-  let calcTimeout: any;
-  $: {
-      if (mapLoaded && step === 2) {
-          void tripData.startAddress;
-          void tripData.endAddress;
-          void tripData.stops;
-          
-          clearTimeout(calcTimeout);
-          calcTimeout = setTimeout(() => {
-             if (tripData.startAddress) calculateRoute(false);
-          }, 800);
-      }
-  }
-
-  function calculateRoute(optimize = false) {
-    if (!mapLoaded || !directionsService) return;
-    if (!tripData.startAddress) return;
-
-    if (map && directionsRenderer && directionsRenderer.getMap() !== map) {
-        directionsRenderer.setMap(map);
-    }
-    
-    const waypoints = tripData.stops.map(stop => ({
-      location: stop.address,
-      stopover: true
-    }));
-    const destination = tripData.endAddress || tripData.startAddress;
-    
-    if (!destination && waypoints.length === 0) return;
-
-    directionsService.route({
-      origin: tripData.startAddress,
-      destination: destination,
-      waypoints: waypoints,
-      optimizeWaypoints: optimize,
-      travelMode: google.maps.TravelMode.DRIVING
-    }, (result: any, status: any) => {
-      if (status === 'OK') {
-        directionsRenderer?.setDirections(result);
-        const route = result.routes[0];
-        
-        let totalMeters = 0;
-        let totalSeconds = 0;
-        
-        route.legs.forEach((leg: any) => {
-            totalMeters += leg.distance.value;
-            totalSeconds += leg.duration.value;
-        });
-        
-        if (step === 2) {
-            tripData.totalMiles = Math.round((totalMeters / 1609.34) * 10) / 10;
-            tripData.estimatedTime = Math.round(totalSeconds / 60);
-        }
-
-        if (optimize && result.routes[0].waypoint_order) {
-            const order = result.routes[0].waypoint_order;
-            const reorderedStops = order.map((index: number) => tripData.stops[index]);
-            tripData.stops = reorderedStops;
-        }
-      }
-    });
-  }
 
   function formatDuration(minutes: number): string {
     if (!minutes) return '0 min';
@@ -192,7 +73,6 @@
       newStops.splice(dropIndex, 0, item);
       tripData.stops = newStops;
       dragItemIndex = null;
-      calculateRoute(false);
   }
 
   function addStop() {
@@ -331,50 +211,10 @@
     const date = new Date(year, month - 1, day);
     return date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
   }
-  
-  function closeAutocompleteDropdown() {
-    if (document.activeElement instanceof HTMLElement) {
-        document.activeElement.blur();
-    }
-    const containers = document.querySelectorAll('.pac-container');
-    containers.forEach((c) => (c as HTMLElement).style.display = 'none');
-  }
-
-  function initAutocomplete(node: HTMLInputElement) {
-    if (!window.google) return;
-    const ac = new google.maps.places.Autocomplete(node, { types: ['geocode'] });
-    ac.addListener('place_changed', () => {
-        const place = ac.getPlace();
-        node.value = place.formatted_address || '';
-        node.dispatchEvent(new Event('input'));
-        if(node.id === 'start-address') tripData.startAddress = node.value;
-        if(node.id === 'end-address') tripData.endAddress = node.value;
-        closeAutocompleteDropdown();
-    });
-    node.addEventListener('blur', () => {
-        setTimeout(closeAutocompleteDropdown, 200);
-    });
-  }
 </script>
 
 <svelte:head>
   <title>New Trip - Go Route Yourself</title>
-  <style>
-    :global(.pac-container) { 
-        z-index: 10000 !important; 
-        background: white; 
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); 
-        border-radius: 8px; 
-        margin-top: 4px; 
-        font-family: inherit; 
-        border: 1px solid #E5E7EB; 
-    }
-    :global(.pac-item) {
-        padding: 12px;
-        font-size: 16px;
-        cursor: pointer;
-    }
-  </style>
 </svelte:head>
 
 <div class="trip-form">
@@ -449,12 +289,19 @@
       <div class="form-card">
         <div class="card-header">
           <h2 class="card-title">Route & Stops</h2>
-          <button class="btn-optimize" on:click={() => calculateRoute(true)}>Optimize</button>
         </div>
         
         <div class="form-group">
           <label for="start-address">Starting Address</label>
-          <input type="text" bind:value={tripData.startAddress} placeholder="Enter start address..." use:initAutocomplete id="start-address" class="address-input" />
+          <input 
+            type="text" 
+            bind:value={tripData.startAddress}
+            placeholder="Enter start address..."
+            use:autocomplete={{ apiKey: API_KEY }}
+            autocomplete="off"
+            id="start-address"
+            class="address-input"
+          />
         </div>
         
         <div class="stops-container">
@@ -482,7 +329,14 @@
                     </div>
                   </div>
                   <div class="stop-inputs">
-                    <input type="text" class="address-input" bind:value={stop.address} placeholder="Address" use:initAutocomplete />
+                    <input 
+                      type="text" 
+                      bind:value={stop.address}
+                      placeholder="Stop address"
+                      use:autocomplete={{ apiKey: API_KEY }}
+                      autocomplete="off"
+                      class="address-input"
+                    />
                     <div class="input-money-wrapper">
                         <span class="symbol">$</span>
                         <input type="number" class="input-money" bind:value={stop.earnings} placeholder="Earnings" step="0.01" min="0" />
@@ -495,11 +349,18 @@
           
           <div class="add-stop-form">
             <div class="stop-inputs new">
-                <input type="text" class="address-input" placeholder="New stop address..." bind:value={newStop.address} use:initAutocomplete />
-                <div class="input-money-wrapper">
-                    <span class="symbol">$</span>
-                    <input type="number" class="input-money" placeholder="0.00" bind:value={newStop.earnings} step="0.01" min="0" />
-                </div>
+              <input 
+                type="text"
+                bind:value={newStop.address}
+                placeholder="New stop address..."
+                use:autocomplete={{ apiKey: API_KEY }}
+                autocomplete="off"
+                class="address-input"
+              />
+              <div class="input-money-wrapper">
+                  <span class="symbol">$</span>
+                  <input type="number" class="input-money" placeholder="0.00" bind:value={newStop.earnings} step="0.01" min="0" />
+              </div>
             </div>
             <button class="btn-add full-width" on:click={addStop} type="button">+ Add Stop</button>
           </div>
@@ -507,15 +368,21 @@
         
         <div class="form-group">
           <label for="end-address">End Address (Optional)</label>
-          <input type="text" bind:value={tripData.endAddress} placeholder="Same as start if empty" use:initAutocomplete id="end-address" class="address-input" />
+          <input 
+            type="text" 
+            bind:value={tripData.endAddress}
+            placeholder="Same as start if empty"
+            use:autocomplete={{ apiKey: API_KEY }}
+            autocomplete="off"
+            id="end-address"
+            class="address-input"
+          />
         </div>
-
-        <div class="map-wrapper" use:initMap></div>
 
         <div class="form-row">
             <div class="form-group">
-                <label for="total-miles">Total Miles <span class="hint">(Auto)</span></label>
-                <input id="total-miles" type="number" bind:value={tripData.totalMiles} step="0.1" min="0" />
+                <label for="total-miles">Total Miles</label>
+                <input id="total-miles" type="number" bind:value={tripData.totalMiles} step="0.1" min="0" placeholder="0.0" />
             </div>
             <div class="form-group">
                 <label for="drive-time">Drive Time <span class="hint">(Est)</span></label>
@@ -772,15 +639,11 @@
   .btn-primary { background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; }
   .btn-secondary { background: white; border: 1px solid #E5E7EB; color: #374151; }
   .btn-add { background: #2563EB; color: white; margin-top: 14px; font-size: 17px; padding: 16px; }
-  .btn-optimize { background: #EFF6FF; color: #2563EB; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 15px; cursor: pointer; }
   .btn-icon { background: none; border: none; font-size: 22px; cursor: pointer; color: #9CA3AF; padding: 6px; }
   .btn-icon.delete:hover { color: #DC2626; }
   .btn-text { background: none; border: none; color: #2563EB; font-weight: 600; font-size: 16px; cursor: pointer; }
   .btn-small { padding: 12px 18px; border-radius: 8px; border: none; font-weight: 600; font-size: 15px; cursor: pointer; }
   .btn-small.primary { background: #10B981; color: white; }
-
-  /* Map */
-  .map-wrapper { height: 280px; background: #E5E7EB; border-radius: 14px; margin: 26px 0; }
 
   /* Costs & Summary */
   .summary-box { background: #ECFDF5; border: 1px solid #A7F3D0; padding: 22px; border-radius: 14px; display: flex; justify-content: space-between; align-items: center; color: #065F46; margin-bottom: 36px; font-size: 18px; }
@@ -825,7 +688,6 @@
     .form-card { padding: 48px; }
     .step-circle { width: 48px; height: 48px; font-size: 20px; }
     .stop-card { flex-direction: row; align-items: center; }
-    /* Desktop layout for stops: Address gets 75% of space */
     .stop-inputs { display: grid; grid-template-columns: 1fr 160px; }
     .stop-inputs.new { display: grid; grid-template-columns: 1fr 160px; }
     .form-actions { justify-content: flex-end; }
