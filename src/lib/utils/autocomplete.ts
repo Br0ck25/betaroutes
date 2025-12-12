@@ -4,12 +4,19 @@ import type { Action } from "svelte/action";
 // Global flag to track if Google Maps is loaded
 let googleMapsLoaded = false;
 let googleMapsLoading = false;
+let googleMapsError = false;
 const loadPromises: Array<(value: void) => void> = [];
 
 async function loadGoogleMaps(apiKey: string): Promise<void> {
-  // Already loaded
+  // Already loaded successfully
   if (googleMapsLoaded && typeof google !== 'undefined') {
     return Promise.resolve();
+  }
+  
+  // Failed to load previously
+  if (googleMapsError) {
+    console.warn('[AUTOCOMPLETE] Google Maps previously failed to load');
+    return Promise.reject(new Error('Google Maps failed to load'));
   }
   
   // Currently loading, wait for it
@@ -19,8 +26,16 @@ async function loadGoogleMaps(apiKey: string): Promise<void> {
     });
   }
   
+  // Check if API key exists
+  if (!apiKey || apiKey === 'undefined' || apiKey === '') {
+    console.error('[AUTOCOMPLETE] ❌ No Google Maps API key provided');
+    googleMapsError = true;
+    return Promise.reject(new Error('No API key'));
+  }
+  
   // Start loading
   googleMapsLoading = true;
+  console.log(`[AUTOCOMPLETE] 🔄 Loading Google Maps (key: ${apiKey.substring(0, 10)}...)`);
   
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
@@ -31,15 +46,18 @@ async function loadGoogleMaps(apiKey: string): Promise<void> {
     script.onload = () => {
       googleMapsLoaded = true;
       googleMapsLoading = false;
+      console.log('[AUTOCOMPLETE] ✅ Google Maps loaded successfully');
       resolve();
-      // Resolve all waiting promises
       loadPromises.forEach(r => r());
       loadPromises.length = 0;
     };
     
-    script.onerror = () => {
+    script.onerror = (error) => {
       googleMapsLoading = false;
+      googleMapsError = true;
+      console.error('[AUTOCOMPLETE] ❌ Failed to load Google Maps script:', error);
       reject(new Error('Failed to load Google Maps'));
+      loadPromises.length = 0;
     };
     
     document.head.appendChild(script);
@@ -52,10 +70,14 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
   let isSelecting = false; // Flag to prevent reopening after selection
   
   // Load Google Maps script
-  if (params.apiKey) {
+  console.log('[AUTOCOMPLETE] Initializing with API key:', params.apiKey ? `${params.apiKey.substring(0, 10)}...` : 'MISSING');
+  
+  if (params.apiKey && params.apiKey !== 'undefined') {
     loadGoogleMaps(params.apiKey).catch(err => {
-      console.error('[Autocomplete] Failed to load Google Maps:', err);
+      console.error('[AUTOCOMPLETE] Failed to load Google Maps:', err.message);
     });
+  } else {
+    console.warn('[AUTOCOMPLETE] ⚠️  No API key - Google fallback disabled');
   }
   
   function initUI() {
