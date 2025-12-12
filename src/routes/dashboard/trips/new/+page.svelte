@@ -5,7 +5,7 @@
   import { onMount } from 'svelte';
   import { user } from '$lib/stores/auth';
   import { page } from '$app/stores';
-  import { autocomplete } from '$lib/utils/autocomplete'; // ← ADD THIS IMPORT
+  import { autocomplete } from '$lib/utils/autocomplete'; 
 
   export let data;
   $: API_KEY = data.googleMapsApiKey;
@@ -15,7 +15,7 @@
   let maintenanceOptions = ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement'];
   let suppliesOptions = ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental'];
   
-  // NEW: State for calculation loading
+  // State for calculation loading
   let isCalculating = false;
   let directionsService: google.maps.DirectionsService;
 
@@ -60,7 +60,7 @@
     return `${m} min`;
   }
 
-  // --- NEW ROUTING LOGIC START ---
+  // --- ROUTING LOGIC START ---
 
   function getDirectionsService() {
     if (!directionsService && window.google && window.google.maps) {
@@ -70,13 +70,13 @@
   }
 
   function generateRouteKey(start: string, end: string) {
-    // Sanitize strings to create a consistent key
     const s = start.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
     const e = end.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
     return `kv_route_${s}_to_${e}`;
   }
 
   async function fetchRouteSegment(start: string, end: string) {
+    if (!start || !end) return null;
     const key = generateRouteKey(start, end);
     
     // 1. KV CHECK (Simulated with localStorage)
@@ -89,7 +89,7 @@
     // 2. GOOGLE FALLBACK
     console.log("KV Miss. Calling Google:", key);
     const service = getDirectionsService();
-    if (!service) return null; // Maps not loaded yet
+    if (!service) return null;
 
     return new Promise((resolve) => {
       service.route({
@@ -115,13 +115,11 @@
     });
   }
 
-  // UPDATED: Async addStop with calculation
   async function addStop() {
     if (!newStop.address) return;
 
-    // Determine the start point for this segment.
-    // If we have existing stops, start from the last stop.
-    // Otherwise, start from the trip Start Address.
+    // 1. Determine Start Point for the new segment
+    // If stops exist, start from the last stop. Else start from Trip Start Address.
     let segmentStart = tripData.stops.length > 0 
       ? tripData.stops[tripData.stops.length - 1].address 
       : tripData.startAddress;
@@ -134,23 +132,38 @@
     isCalculating = true;
 
     try {
-      // Calculate Route Segment (KV -> Google -> Save)
-      const routeData: any = await fetchRouteSegment(segmentStart, newStop.address);
+      // 2. Calculate "Forward" Leg (Last Stop -> New Stop)
+      const segmentData: any = await fetchRouteSegment(segmentStart, newStop.address);
       
-      if (routeData) {
-        // Automatic Totals Update
-        tripData.totalMiles = parseFloat((tripData.totalMiles + routeData.distance).toFixed(1));
-        tripData.estimatedTime = Math.round(tripData.estimatedTime + routeData.duration);
-      }
-      
-      // Add the stop to the list
+      // 3. Calculate "Return" Leg (New Stop -> End Address OR Start Address)
+      // This ensures we always calculate a Round Trip or a trip to the destination.
+      const returnEnd = tripData.endAddress || tripData.startAddress;
+      const returnLegData: any = await fetchRouteSegment(newStop.address, returnEnd);
+
+      // 4. Update the Stops List
+      // We store the 'distanceFromPrev' so we can reconstruct the chain sum later if needed.
       tripData.stops = [...tripData.stops, { 
         ...newStop, 
         id: crypto.randomUUID(),
-        // Optional: you can store segment specific data here if needed later
-        distanceFromPrev: routeData ? routeData.distance : 0,
-        timeFromPrev: routeData ? routeData.duration : 0
+        distanceFromPrev: segmentData ? segmentData.distance : 0,
+        timeFromPrev: segmentData ? segmentData.duration : 0
       }];
+
+      // 5. Calculate TOTALS (Accumulated Segments + Return Leg)
+      
+      // A. Sum up all confirmed segments in the stops array
+      let accumulatedMiles = tripData.stops.reduce((acc, s) => acc + (s.distanceFromPrev || 0), 0);
+      let accumulatedTime = tripData.stops.reduce((acc, s) => acc + (s.timeFromPrev || 0), 0);
+
+      // B. Add the Return Leg
+      if (returnLegData) {
+        accumulatedMiles += returnLegData.distance;
+        accumulatedTime += returnLegData.duration;
+      }
+
+      // C. Update State
+      tripData.totalMiles = parseFloat(accumulatedMiles.toFixed(1));
+      tripData.estimatedTime = Math.round(accumulatedTime);
 
       // Reset input
       newStop = { address: '', earnings: 0, notes: '' };
@@ -163,7 +176,7 @@
     }
   }
 
-  // --- NEW ROUTING LOGIC END ---
+  // --- ROUTING LOGIC END ---
 
   function handleDragStart(event: DragEvent, index: number) {
       dragItemIndex = index;
@@ -182,8 +195,8 @@
       newStops.splice(dropIndex, 0, item);
       tripData.stops = newStops;
       dragItemIndex = null;
-      // Note: Re-ordering stops here technically changes the real route distance/time.
-      // A full re-calc function would be needed to update totals accurately after a drag/drop.
+      // Note: Re-ordering stops invalidates the strict chain calculation. 
+      // For exact accuracy after re-ordering, a "Recalculate" feature would be needed in the future.
   }
 
   function removeStop(id: string) { tripData.stops = tripData.stops.filter(s => s.id !== id); }

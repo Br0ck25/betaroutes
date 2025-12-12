@@ -13,6 +13,10 @@
   let step = 1;
   let loading = true;
   
+  // NEW: Calculation State
+  let isCalculating = false;
+  let directionsService: google.maps.DirectionsService;
+  
   let dragItemIndex: number | null = null;
   let maintenanceOptions = ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement'];
   let suppliesOptions = ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental'];
@@ -38,7 +42,10 @@
 
     const safeStops = (found.stops || []).map((s: any) => ({
         ...s,
-        id: s.id || crypto.randomUUID()
+        id: s.id || crypto.randomUUID(),
+        // Ensure legacy stops have these properties to prevent calculation errors
+        distanceFromPrev: s.distanceFromPrev || 0, 
+        timeFromPrev: s.timeFromPrev || 0
     }));
     const safeMaintenance = (found.maintenanceItems || []).map((m: any) => ({
         ...m,
@@ -93,10 +100,125 @@
   function formatDuration(minutes: number): string {
     if (!minutes) return '0 min';
     const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
+    const m = Math.round(minutes % 60);
     if (h > 0) return `${h} hr ${m} min`;
     return `${m} min`;
   }
+
+  // --- NEW ROUTING LOGIC START ---
+
+  function getDirectionsService() {
+    if (!directionsService && window.google && window.google.maps) {
+      directionsService = new google.maps.DirectionsService();
+    }
+    return directionsService;
+  }
+
+  function generateRouteKey(start: string, end: string) {
+    const s = start.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+    const e = end.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+    return `kv_route_${s}_to_${e}`;
+  }
+
+  async function fetchRouteSegment(start: string, end: string) {
+    if (!start || !end) return null;
+    const key = generateRouteKey(start, end);
+    
+    // 1. KV CHECK (Simulated with localStorage)
+    const cached = localStorage.getItem(key);
+    if (cached) {
+      console.log("KV Hit:", key);
+      return JSON.parse(cached);
+    }
+
+    // 2. GOOGLE FALLBACK
+    console.log("KV Miss. Calling Google:", key);
+    const service = getDirectionsService();
+    if (!service) return null;
+
+    return new Promise((resolve) => {
+      service.route({
+        origin: start,
+        destination: end,
+        travelMode: google.maps.TravelMode.DRIVING
+      }, (response, status) => {
+        if (status === 'OK' && response) {
+          const leg = response.routes[0].legs[0];
+          const result = {
+            distance: leg.distance?.value ? leg.distance.value * 0.000621371 : 0, // meters to miles
+            duration: leg.duration?.value ? leg.duration.value / 60 : 0 // seconds to minutes
+          };
+          
+          // 3. STORE IN KV
+          localStorage.setItem(key, JSON.stringify(result));
+          resolve(result);
+        } else {
+          console.error('Directions request failed due to ' + status);
+          resolve(null);
+        }
+      });
+    });
+  }
+
+  // UPDATED: Async addStop with Round Trip Calculation
+  async function addStop() {
+    if (!newStop.address) return;
+    
+    // 1. Determine Start Point for the new segment
+    let segmentStart = tripData.stops.length > 0 
+      ? tripData.stops[tripData.stops.length - 1].address 
+      : tripData.startAddress;
+
+    if (!segmentStart) {
+      alert("Please ensure there is a starting address.");
+      return;
+    }
+
+    isCalculating = true;
+
+    try {
+      // 2. Calculate "Forward" Leg (Last Stop -> New Stop)
+      const segmentData: any = await fetchRouteSegment(segmentStart, newStop.address);
+      
+      // 3. Calculate "Return" Leg (New Stop -> End Address OR Start Address)
+      const returnEnd = tripData.endAddress || tripData.startAddress;
+      const returnLegData: any = await fetchRouteSegment(newStop.address, returnEnd);
+
+      // 4. Update the Stops List
+      tripData.stops = [...tripData.stops, { 
+        ...newStop, 
+        id: crypto.randomUUID(),
+        distanceFromPrev: segmentData ? segmentData.distance : 0,
+        timeFromPrev: segmentData ? segmentData.duration : 0
+      }];
+
+      // 5. Calculate TOTALS (Accumulated Segments + Return Leg)
+      // A. Sum up all confirmed segments in the stops array
+      let accumulatedMiles = tripData.stops.reduce((acc, s) => acc + (s.distanceFromPrev || 0), 0);
+      let accumulatedTime = tripData.stops.reduce((acc, s) => acc + (s.timeFromPrev || 0), 0);
+
+      // B. Add the Return Leg
+      if (returnLegData) {
+        accumulatedMiles += returnLegData.distance;
+        accumulatedTime += returnLegData.duration;
+      }
+
+      // C. Update State
+      tripData.totalMiles = parseFloat(accumulatedMiles.toFixed(1));
+      tripData.estimatedTime = Math.round(accumulatedTime);
+
+      // Reset input
+      newStop = { address: '', earnings: 0, notes: '' };
+
+    } catch (e) {
+      console.error(e);
+      alert("Error calculating route segment.");
+    } finally {
+      isCalculating = false;
+    }
+  }
+
+  // --- NEW ROUTING LOGIC END ---
 
   function handleDragStart(event: DragEvent, index: number) { dragItemIndex = index; if(event.dataTransfer) { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.dropEffect = 'move';
     event.dataTransfer.setData('text/plain', index.toString()); } }
@@ -105,9 +227,6 @@
     const newStops = tripData.stops.filter((_, i) => i !== dragItemIndex); newStops.splice(dropIndex, 0, item); tripData.stops = newStops; dragItemIndex = null;
   }
 
-  function addStop() { if (!newStop.address) return; tripData.stops = [...tripData.stops, { ...newStop, id: crypto.randomUUID() }];
-    newStop = { address: '', earnings: 0, notes: '' };
-  }
   function removeStop(id: string) { tripData.stops = tripData.stops.filter(s => s.id !== id); }
   
   function addMaintenanceItem(type: string) { tripData.maintenanceItems = [...tripData.maintenanceItems, { id: crypto.randomUUID(), type, cost: 0 }]; }
@@ -337,7 +456,13 @@
                   <input type="number" class="input-money" placeholder="0.00" bind:value={newStop.earnings} step="0.01" min="0" />
               </div>
             </div>
-            <button class="btn-add full-width" on:click={addStop} type="button">+ Add Stop</button>
+            <button class="btn-add full-width" on:click={addStop} type="button" disabled={isCalculating}>
+                {#if isCalculating}
+                    Calculating...
+                {:else}
+                    + Add Stop
+                {/if}
+            </button>
           </div>
         </div>
         
@@ -466,7 +591,7 @@
         </div>
         
         <div class="form-group">
-          <label for="notes">Notes</label>
+            <label for="notes">Notes</label>
             <textarea id="notes" bind:value={tripData.notes} rows="3" placeholder="Trip details..."></textarea>
         </div>
         
@@ -531,7 +656,7 @@
             
             <div class="row total"><span>Net Profit</span> <span class="val" class:positive={totalProfit >= 0}>{formatCurrency(totalProfit)}</span></div>
         </div>
-    
+        
         <div class="form-actions">
           <button class="btn-secondary" on:click={prevStep} type="button">Back</button>
           <button class="btn-primary" on:click={saveTrip} type="button">Update Trip</button>
