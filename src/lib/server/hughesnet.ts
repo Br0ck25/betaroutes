@@ -22,7 +22,8 @@ export class HughesNetService {
     private tripKV: KVNamespace,
     private trashKV: KVNamespace,
     private settingsKV: KVNamespace,
-    private googleApiKey: string | undefined
+    private googleApiKey: string | undefined,
+    private directionsKV: KVNamespace | undefined // [!code ++] Added Directions KV
   ) {}
 
   // --- LOGGING ---
@@ -225,7 +226,7 @@ export class HughesNetService {
     }
 
     const sortedDates = Object.keys(ordersByDate).sort();
-    const tripService = makeTripService(this.tripKV, this.trashKV);
+    const tripService = makeTripService(this.tripKV, this.trashKV, undefined);
     const existingTrips = await tripService.list(userId);
     
     let tripsProcessed = 0;
@@ -280,7 +281,7 @@ export class HughesNetService {
 
   async clearAllTrips(userId: string) {
       this.log(`[HNS] Clearing HNS trips & cache...`);
-      const tripService = makeTripService(this.tripKV, this.trashKV);
+      const tripService = makeTripService(this.tripKV, this.trashKV, undefined);
       const allTrips = await tripService.list(userId);
       let count = 0;
       for (const trip of allTrips) {
@@ -483,13 +484,35 @@ export class HughesNetService {
   // --- PRIVATE UTILS ---
   private async getRouteInfo(origin: string, destination: string) {
       if (!this.googleApiKey) return null;
+      
+      // [!code ++] CACHE CHECK
+      const key = `dir:${origin.toLowerCase().trim()}_to_${destination.toLowerCase().trim()}`;
+      if (this.directionsKV) {
+          const cached = await this.directionsKV.get(key);
+          if (cached) {
+              this.log(`[Maps] Cache Hit: ${origin} -> ${destination}`);
+              return JSON.parse(cached);
+          }
+      }
+
       try {
           const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&key=${this.googleApiKey}`;
           const res = await this.safeFetch(url, { headers: { 'Referer': APP_DOMAIN, 'User-Agent': 'BetaRoutes/1.0' } });
           const data = await res.json();
-          if (data.routes?.[0]?.legs?.[0]) return { distance: data.routes[0].legs[0].distance.value, duration: data.routes[0].legs[0].duration.value };
+          if (data.routes?.[0]?.legs?.[0]) {
+              const result = { distance: data.routes[0].legs[0].distance.value, duration: data.routes[0].legs[0].duration.value };
+              
+              // [!code ++] CACHE SAVE (FOREVER)
+              if (this.directionsKV) {
+                  // Saved without expirationTtl
+                  await this.directionsKV.put(key, JSON.stringify(result));
+              }
+
+              return result;
+          }
       } catch (e: any) { 
           if (e.message === 'REQ_LIMIT') throw e; 
+          this.error('[Maps] API Error', e);
       }
       return null;
   }

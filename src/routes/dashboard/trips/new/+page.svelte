@@ -14,6 +14,10 @@
   let dragItemIndex: number | null = null;
   let maintenanceOptions = ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement'];
   let suppliesOptions = ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental'];
+  
+  // NEW: State for calculation loading
+  let isCalculating = false;
+  let directionsService: google.maps.DirectionsService;
 
   onMount(() => {
     const savedMaintenance = localStorage.getItem('maintenanceOptions');
@@ -51,10 +55,115 @@
   function formatDuration(minutes: number): string {
     if (!minutes) return '0 min';
     const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
+    const m = Math.round(minutes % 60);
     if (h > 0) return `${h} hr ${m} min`;
     return `${m} min`;
   }
+
+  // --- NEW ROUTING LOGIC START ---
+
+  function getDirectionsService() {
+    if (!directionsService && window.google && window.google.maps) {
+      directionsService = new google.maps.DirectionsService();
+    }
+    return directionsService;
+  }
+
+  function generateRouteKey(start: string, end: string) {
+    // Sanitize strings to create a consistent key
+    const s = start.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+    const e = end.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+    return `kv_route_${s}_to_${e}`;
+  }
+
+  async function fetchRouteSegment(start: string, end: string) {
+    const key = generateRouteKey(start, end);
+    
+    // 1. KV CHECK (Simulated with localStorage)
+    const cached = localStorage.getItem(key);
+    if (cached) {
+      console.log("KV Hit:", key);
+      return JSON.parse(cached);
+    }
+
+    // 2. GOOGLE FALLBACK
+    console.log("KV Miss. Calling Google:", key);
+    const service = getDirectionsService();
+    if (!service) return null; // Maps not loaded yet
+
+    return new Promise((resolve) => {
+      service.route({
+        origin: start,
+        destination: end,
+        travelMode: google.maps.TravelMode.DRIVING
+      }, (response, status) => {
+        if (status === 'OK' && response) {
+          const leg = response.routes[0].legs[0];
+          const result = {
+            distance: leg.distance?.value ? leg.distance.value * 0.000621371 : 0, // meters to miles
+            duration: leg.duration?.value ? leg.duration.value / 60 : 0 // seconds to minutes
+          };
+          
+          // 3. STORE IN KV
+          localStorage.setItem(key, JSON.stringify(result));
+          resolve(result);
+        } else {
+          console.error('Directions request failed due to ' + status);
+          resolve(null);
+        }
+      });
+    });
+  }
+
+  // UPDATED: Async addStop with calculation
+  async function addStop() {
+    if (!newStop.address) return;
+
+    // Determine the start point for this segment.
+    // If we have existing stops, start from the last stop.
+    // Otherwise, start from the trip Start Address.
+    let segmentStart = tripData.stops.length > 0 
+      ? tripData.stops[tripData.stops.length - 1].address 
+      : tripData.startAddress;
+
+    if (!segmentStart) {
+      alert("Please enter a Starting Address for the trip before adding stops.");
+      return;
+    }
+
+    isCalculating = true;
+
+    try {
+      // Calculate Route Segment (KV -> Google -> Save)
+      const routeData: any = await fetchRouteSegment(segmentStart, newStop.address);
+      
+      if (routeData) {
+        // Automatic Totals Update
+        tripData.totalMiles = parseFloat((tripData.totalMiles + routeData.distance).toFixed(1));
+        tripData.estimatedTime = Math.round(tripData.estimatedTime + routeData.duration);
+      }
+      
+      // Add the stop to the list
+      tripData.stops = [...tripData.stops, { 
+        ...newStop, 
+        id: crypto.randomUUID(),
+        // Optional: you can store segment specific data here if needed later
+        distanceFromPrev: routeData ? routeData.distance : 0,
+        timeFromPrev: routeData ? routeData.duration : 0
+      }];
+
+      // Reset input
+      newStop = { address: '', earnings: 0, notes: '' };
+
+    } catch (e) {
+      console.error(e);
+      alert("Error calculating route segment. Please check the address.");
+    } finally {
+      isCalculating = false;
+    }
+  }
+
+  // --- NEW ROUTING LOGIC END ---
 
   function handleDragStart(event: DragEvent, index: number) {
       dragItemIndex = index;
@@ -73,13 +182,10 @@
       newStops.splice(dropIndex, 0, item);
       tripData.stops = newStops;
       dragItemIndex = null;
+      // Note: Re-ordering stops here technically changes the real route distance/time.
+      // A full re-calc function would be needed to update totals accurately after a drag/drop.
   }
 
-  function addStop() {
-    if (!newStop.address) return;
-    tripData.stops = [...tripData.stops, { ...newStop, id: crypto.randomUUID() }];
-    newStop = { address: '', earnings: 0, notes: '' };
-  }
   function removeStop(id: string) { tripData.stops = tripData.stops.filter(s => s.id !== id); }
   
   function addMaintenanceItem(type: string) { 
@@ -362,7 +468,13 @@
                   <input type="number" class="input-money" placeholder="0.00" bind:value={newStop.earnings} step="0.01" min="0" />
               </div>
             </div>
-            <button class="btn-add full-width" on:click={addStop} type="button">+ Add Stop</button>
+            <button class="btn-add full-width" on:click={addStop} type="button" disabled={isCalculating}>
+                {#if isCalculating}
+                    Calculating...
+                {:else}
+                    + Add Stop
+                {/if}
+            </button>
           </div>
         </div>
         
