@@ -16,36 +16,33 @@ export const POST: RequestHandler = async ({ request, platform }) => {
       return json({ cached: false });
     }
     
-    // Store each result with MULTIPLE keys for better matching
-    const cachePromises = results.flatMap(async (result) => {
+    // Collect all write operations into a single array
+    const putPromises: Promise<void>[] = [];
+    
+    for (const result of results) {
       const address = result.formatted_address || result.name || '';
       const normalizedAddress = address.toLowerCase().replace(/\s+/g, '');
       
-      // Generate multiple prefix keys for this address
-      const keys = [];
+      // 1. Full address key
+      putPromises.push(
+        kv.put(normalizedAddress, JSON.stringify(result), { expirationTtl: 60 * 60 * 24 * 90 })
+      );
       
-      // 1. Full address key (original behavior)
-      keys.push(normalizedAddress);
-      
-      // 2. Prefix keys (every 2-10 characters from start)
+      // 2. Prefix keys (every 2-10 characters)
       for (let len = 2; len <= Math.min(10, normalizedAddress.length); len++) {
         const prefix = normalizedAddress.substring(0, len);
-        keys.push(`prefix:${prefix}:${normalizedAddress}`);
+        const key = `prefix:${prefix}:${normalizedAddress}`;
+        
+        putPromises.push(
+          kv.put(key, JSON.stringify(result), { expirationTtl: 60 * 60 * 24 * 90 })
+        );
       }
-      
-      // Store with all keys
-      return keys.map(key => 
-        kv.put(
-          key,
-          JSON.stringify(result),
-          { expirationTtl: 60 * 60 * 24 * 90 } // 90 days
-        )
-      );
-    });
+    }
     
-    await Promise.all(cachePromises.flat());
+    // Wait for ALL writes to complete before returning
+    await Promise.all(putPromises);
     
-    console.log(`✅ [CACHE] Stored ${results.length} addresses with prefix keys to KV`);
+    console.log(`✅ [CACHE] Stored ${results.length} addresses (${putPromises.length} keys) to KV`);
     
     return json({ 
       cached: true, 
