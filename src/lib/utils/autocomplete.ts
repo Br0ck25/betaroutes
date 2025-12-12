@@ -1,108 +1,168 @@
-// src/lib/utils/autocomplete.ts - DEBUGGING VERSION
+// src/lib/utils/autocomplete.ts - Google Places Style
 import type { Action } from "svelte/action";
 
 export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node, params) => {
-  console.log('🔧 [AUTOCOMPLETE] Action attached to input:', node);
-  
   let dropdown: HTMLDivElement | null = null;
   let debounceTimer: any;
   
-  // Create a VERY VISIBLE dropdown for debugging
-  function createDropdown() {
+  function initUI() {
     dropdown = document.createElement('div');
-    dropdown.id = 'autocomplete-debug-dropdown';
+    dropdown.className = 'pac-container pac-logo';
     
-    // SUPER VISIBLE STYLING
+    // Google Places exact styling
     Object.assign(dropdown.style, {
-      position: 'fixed',
-      top: '200px',
-      left: '50%',
-      transform: 'translateX(-50%)',
-      width: '400px',
-      backgroundColor: '#FF0000', // RED BACKGROUND - impossible to miss
-      color: 'white',
-      border: '5px solid yellow',
-      borderRadius: '12px',
-      padding: '20px',
-      zIndex: '999999',
-      fontSize: '18px',
-      fontWeight: 'bold',
-      textAlign: 'center',
+      position: 'absolute',
+      zIndex: '1000',
+      backgroundColor: '#fff',
+      border: '0',
+      borderTop: '1px solid #d9d9d9',
+      fontFamily: 'Roboto, Arial, sans-serif',
+      boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+      boxSizing: 'border-box',
+      overflow: 'hidden',
       display: 'none',
-      boxShadow: '0 0 50px rgba(255,0,0,0.8)'
+      borderRadius: '0 0 2px 2px'
     });
     
-    dropdown.innerHTML = '🔴 AUTOCOMPLETE TEST - If you see this, the action is working!';
     document.body.appendChild(dropdown);
-    
-    console.log('✅ [AUTOCOMPLETE] Dropdown created and added to DOM');
   }
-  
+
+  function updatePosition() {
+    if (!dropdown) return;
+    const rect = node.getBoundingClientRect();
+    Object.assign(dropdown.style, {
+      top: `${rect.bottom + window.scrollY}px`,
+      left: `${rect.left + window.scrollX}px`,
+      width: `${rect.width}px`
+    });
+  }
+
   async function handleInput(e: Event) {
     const value = (e.target as HTMLInputElement).value;
-    console.log('📝 [AUTOCOMPLETE] Input detected:', value);
     
-    if (!dropdown) {
-      console.error('❌ [AUTOCOMPLETE] Dropdown not created!');
-      return;
-    }
-    
-    // Show dropdown immediately
-    dropdown.style.display = 'block';
-    dropdown.innerHTML = `⏳ Loading results for: "${value}"`;
+    updatePosition();
     
     if (!value || value.length < 2) {
-      dropdown.style.display = 'none';
+      if (dropdown) dropdown.style.display = 'none';
       return;
     }
     
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(async () => {
       try {
-        console.log('🌐 [AUTOCOMPLETE] Fetching from API...');
         const url = `/api/autocomplete?q=${encodeURIComponent(value)}`;
-        console.log('🌐 [AUTOCOMPLETE] URL:', url);
-        
         const res = await fetch(url);
         const data = await res.json();
         
-        console.log('✅ [AUTOCOMPLETE] Got response:', data);
-        
         if (data && data.length > 0) {
-          dropdown!.innerHTML = `
-            <div style="margin-bottom: 10px;">✅ Found ${data.length} results:</div>
-            ${data.map((item: any) => `
-              <div style="background: white; color: black; padding: 10px; margin: 5px 0; border-radius: 6px; cursor: pointer;" 
-                   onclick="alert('Clicked: ${item.formatted_address}')">
-                📍 ${item.formatted_address || item.name}
-              </div>
-            `).join('')}
-          `;
+          renderResults(data);
         } else {
-          dropdown!.innerHTML = '❌ No results found';
+          renderEmpty();
         }
-        
       } catch (err) {
-        console.error('❌ [AUTOCOMPLETE] Fetch error:', err);
-        dropdown!.innerHTML = `⚠️ Error: ${err}`;
+        console.error('[Autocomplete] Error:', err);
+        renderError();
       }
-    }, 500);
+    }, 300);
+  }
+  
+  function renderResults(items: any[]) {
+    if (!dropdown) return;
+    dropdown.innerHTML = '';
+    
+    items.forEach((item, index) => {
+      const row = document.createElement('div');
+      row.className = 'pac-item';
+      
+      const text = item.formatted_address || item.name;
+      const parts = text.split(',');
+      const mainText = parts[0]?.trim() || '';
+      const secondaryText = parts.slice(1).join(',').trim();
+      
+      row.innerHTML = `
+        <span class="pac-icon pac-icon-marker"></span>
+        <span class="pac-item-query">
+          <span class="pac-matched">${mainText}</span>
+        </span>
+        ${secondaryText ? `<span class="pac-item-secondary-text">${secondaryText}</span>` : ''}
+      `;
+      
+      // Google-style hover
+      row.addEventListener('mouseenter', () => {
+        row.style.backgroundColor = '#fafafa';
+        row.style.cursor = 'pointer';
+      });
+      
+      row.addEventListener('mouseleave', () => {
+        row.style.backgroundColor = '#fff';
+      });
+      
+      row.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        selectItem(item);
+      });
+      
+      dropdown!.appendChild(row);
+    });
+    
+    dropdown.style.display = 'block';
+    updatePosition();
+  }
+  
+  function renderEmpty() {
+    if (!dropdown) return;
+    dropdown.innerHTML = `
+      <div class="pac-item" style="padding: 12px 16px; color: #999; font-size: 14px;">
+        No results found
+      </div>
+    `;
+    dropdown.style.display = 'block';
+    updatePosition();
+  }
+  
+  function renderError() {
+    if (!dropdown) return;
+    dropdown.innerHTML = `
+      <div class="pac-item" style="padding: 12px 16px; color: #d32f2f; font-size: 14px;">
+        Error loading suggestions
+      </div>
+    `;
+    dropdown.style.display = 'block';
+    updatePosition();
+  }
+  
+  function selectItem(item: any) {
+    if (dropdown) dropdown.style.display = 'none';
+    node.value = item.formatted_address || item.name;
+    node.dispatchEvent(new CustomEvent('place-selected', { 
+      detail: { 
+        formatted_address: item.formatted_address,
+        name: item.name 
+      } 
+    }));
   }
   
   // Initialize
-  createDropdown();
+  initUI();
   node.addEventListener('input', handleInput);
   node.addEventListener('focus', () => {
-    console.log('👁️ [AUTOCOMPLETE] Input focused');
+    if (node.value.length > 1) handleInput(new Event('input'));
+  });
+  node.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (dropdown) dropdown.style.display = 'none';
+    }, 200);
   });
   
-  console.log('✅ [AUTOCOMPLETE] Event listeners attached');
+  window.addEventListener('scroll', updatePosition);
+  window.addEventListener('resize', updatePosition);
   
   return {
     destroy() {
-      console.log('🗑️ [AUTOCOMPLETE] Cleaning up');
       if (dropdown) dropdown.remove();
       node.removeEventListener('input', handleInput);
+      window.removeEventListener('scroll', updatePosition);
+      window.removeEventListener('resize', updatePosition);
     }
   };
 };
