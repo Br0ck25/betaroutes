@@ -28,8 +28,13 @@ export const GET: RequestHandler = async ({ url, platform }) => {
     const normalizedQuery = query.toLowerCase().replace(/\s+/g, '');
     console.log(`   Normalized: "${normalizedQuery}"`);
     
+    // FIX: The cache setter only generates prefix keys up to 10 characters.
+    // If the query is longer, we must truncate the search prefix to match the stored keys.
+    const searchLen = Math.min(10, normalizedQuery.length);
+    const searchPrefix = normalizedQuery.substring(0, searchLen);
+    
     // Search for prefix keys that match this query
-    const prefixKey = `prefix:${normalizedQuery}`;
+    const prefixKey = `prefix:${searchPrefix}`;
     console.log(`   Searching KV with prefix: "${prefixKey}"`);
     
     const { keys } = await kv.list({ prefix: prefixKey });
@@ -40,6 +45,8 @@ export const GET: RequestHandler = async ({ url, platform }) => {
     }
     
     if (keys.length === 0) {
+      // Optional: You could check kv.get(normalizedQuery) here as a fallback 
+      // for the exact full address key, but the prefix fix above should catch it.
       const elapsed = Date.now() - startTime;
       console.log(`❌ [AUTOCOMPLETE API] KV Cache MISS - 0 results in ${elapsed}ms`);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -66,6 +73,11 @@ export const GET: RequestHandler = async ({ url, platform }) => {
       .filter((v): v is any => v !== null)
       .filter(v => {
         const addr = v.formatted_address || v.name;
+        // Basic fuzzy check: ensure the result actually contains our query 
+        // (since we truncated the prefix search, we might get false positives)
+        const normalizedAddr = addr.toLowerCase().replace(/\s+/g, '');
+        if (!normalizedAddr.includes(normalizedQuery)) return false;
+
         if (seenAddresses.has(addr)) return false;
         seenAddresses.add(addr);
         return true;
