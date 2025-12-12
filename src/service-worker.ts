@@ -34,8 +34,13 @@ self.addEventListener('fetch', (event) => {
   // ignore POST requests etc
   if (event.request.method !== 'GET') return;
 
+  const url = new URL(event.request.url);
+
+  // [!code ++] CRITICAL FIX: Exclude API requests from Service Worker caching.
+  // This prevents conflicts with the app's internal IndexedDB sync logic.
+  if (url.pathname.startsWith('/api')) return;
+
   async function respond() {
-    const url = new URL(event.request.url);
     const cache = await caches.open(CACHE);
 
     // Serve build assets from cache

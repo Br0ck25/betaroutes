@@ -1,20 +1,28 @@
 // src/lib/server/hughesnet.ts
 import type { KVNamespace } from '@cloudflare/workers-types';
 import { makeTripService } from './tripService';
+import * as cheerio from 'cheerio'; // [!code ++] Robust HTML Parsing
 
 const LOGIN_URL = 'https://dwayinstalls.hns.com/start/login.jsp?UsrAction=submit';
 const HOME_URL = 'https://dwayinstalls.hns.com/start/Home.jsp';
 const BASE_URL = 'https://dwayinstalls.hns.com';
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+// User-Agent Rotation
+const USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0'
+];
 
 const APP_DOMAIN = 'https://gorouteyourself.com/';
-
-// SAFETY LIMITS
 const MAX_REQUESTS_PER_BATCH = 35; 
 
 export class HughesNetService {
   public logs: string[] = [];
   private requestCount = 0; 
+  private userAgent: string;
 
   constructor(
     private kv: KVNamespace, 
@@ -24,12 +32,17 @@ export class HughesNetService {
     private settingsKV: KVNamespace,
     private googleApiKey: string | undefined,
     private directionsKV: KVNamespace | undefined 
-  ) {}
+  ) {
+      this.userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+  }
 
   // --- LOGGING ---
   private log(msg: string) { console.log(msg); this.logs.push(msg); }
   private warn(msg: string) { console.warn(msg); this.logs.push(`⚠️ ${msg}`); }
-  private error(msg: string, e?: any) { console.error(msg, e); this.logs.push(`❌ ${msg} ${e ? '(' + e + ')' : ''}`); }
+  private error(msg: string, e?: any) { 
+      console.error(msg, e); 
+      this.logs.push(`❌ ${msg}`); 
+  }
 
   private async safeFetch(url: string, options?: RequestInit) {
       if (this.requestCount >= MAX_REQUESTS_PER_BATCH) throw new Error('REQ_LIMIT');
@@ -48,8 +61,11 @@ export class HughesNetService {
     if (!cookie) return false;
 
     try {
-        const verifyRes = await this.safeFetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT } });
+        const verifyRes = await this.safeFetch(HOME_URL, { 
+            headers: { 'Cookie': cookie, 'User-Agent': this.userAgent }
+        });
         const verifyHtml = await verifyRes.text();
+        // Check for login form markers
         if (verifyHtml.includes('name="Password"') || verifyHtml.includes('login.jsp')) return false;
         return true;
     } catch (e) { return false; }
@@ -84,7 +100,7 @@ export class HughesNetService {
     
     const res = await this.safeFetch(LOGIN_URL, { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': USER_AGENT }, 
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': this.userAgent }, 
         body: form.toString(), 
         redirect: 'manual' 
     });
@@ -96,7 +112,7 @@ export class HughesNetService {
         const nextUrl = location ? (location.startsWith('http') ? location : `${BASE_URL}${location}`) : HOME_URL;
         const res2 = await this.safeFetch(nextUrl, { 
             method: 'GET', 
-            headers: { 'Referer': LOGIN_URL, 'User-Agent': USER_AGENT }, 
+            headers: { 'Referer': LOGIN_URL, 'User-Agent': this.userAgent },
             redirect: 'manual' 
         });
         cookie = this.extractCookie(res2);
@@ -125,19 +141,15 @@ export class HughesNetService {
       skipScan: boolean = false
   ) {
     this.requestCount = 0;
-    
-    // 1. Authenticate
     const cookie = await this.ensureSessionCookie(userId);
     if (!cookie) throw new Error('Could not login. Please reconnect.');
 
-    // 2. Load Existing DB
     let orderDb: Record<string, any> = {};
     const dbRaw = await this.kv.get(`hns:db:${userId}`);
     if (dbRaw) orderDb = JSON.parse(dbRaw);
     
     let dbDirty = false;
     let incomplete = false;
-
     const currentScanIds = new Set<string>();
 
     const registerFoundId = (id: string) => {
@@ -151,10 +163,11 @@ export class HughesNetService {
     // STAGE 1: HARVESTING 
     if (!skipScan) {
         try {
-            const res = await this.safeFetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
+            const res = await this.safeFetch(HOME_URL, { headers: { 'Cookie': cookie, 'User-Agent': this.userAgent }});
             const html = await res.text();
             if (html.includes('name="Password"')) throw new Error('Session expired.');
             
+            // [!code changed] Use Cheerio Parsing
             this.extractIds(html).forEach(registerFoundId);
 
             if (this.requestCount < 10) {
@@ -172,11 +185,14 @@ export class HughesNetService {
             if (e.message !== 'REQ_LIMIT') this.error('[Stage 1] Scan error', e);
         }
 
-        // PRUNING: Remove orders that are no longer in HughesNet
+        // PRUNING: Remove orders no longer on site, UNLESS flagged as incomplete
         if (!incomplete) {
             const previousCount = Object.keys(orderDb).length;
             for (const id of Object.keys(orderDb)) {
-                if (!currentScanIds.has(id)) {
+                // [!code changed] Safe-guard: Do not remove incomplete orders even if not found in scan
+                const isProtected = orderDb[id]?.departureIncomplete === true;
+                
+                if (!currentScanIds.has(id) && !isProtected) {
                     delete orderDb[id];
                     dbDirty = true;
                 }
@@ -203,8 +219,9 @@ export class HughesNetService {
 
             try {
                 const orderUrl = `https://dwayinstalls.hns.com/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${encodeURIComponent(id)}`;
-                const res = await this.safeFetch(orderUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT }});
+                const res = await this.safeFetch(orderUrl, { headers: { 'Cookie': cookie, 'User-Agent': this.userAgent }});
                 const html = await res.text();
+                // [!code changed] Parse with Cheerio
                 const parsed = this.parseOrderPage(html, id);
                 
                 if (parsed.address) {
@@ -247,22 +264,25 @@ export class HughesNetService {
         
         if (this.requestCount >= (MAX_REQUESTS_PER_BATCH - 5)) {
             incomplete = true;
-            this.warn(`[Limit] Buffer low (${this.requestCount}/${MAX_REQUESTS_PER_BATCH}). Stopping before ${date}.`);
+            this.warn(`[Limit] Buffer low. Stopping before ${date}.`);
             break;
         }
 
-        // [!code ++] CHECK 24 HOUR LOCK
-        // Check if trip already exists and was created > 24 hours ago
         const tripId = `hns_${userId}_${date}`;
         const existingTrip = await tripService.get(userId, tripId);
         
-        if (existingTrip && existingTrip.createdAt) {
-            const createdTime = new Date(existingTrip.createdAt).getTime();
-            const ageInHours = (Date.now() - createdTime) / (1000 * 60 * 60);
+        // [!code changed] SMART LOCK: Skip only if User Modified it manually
+        // If user changed the trip (lastModified > updatedAt), we respect their edits.
+        // Otherwise, we refresh the route.
+        if (existingTrip) {
+            const lastSystemUpdate = new Date(existingTrip.updatedAt || existingTrip.createdAt).getTime();
+            const lastUserEdit = existingTrip.lastModified ? new Date(existingTrip.lastModified).getTime() : 0;
             
-            if (ageInHours > 24) {
-                this.log(`[Stage 2] Skipping ${date} (Locked: Logged ${Math.round(ageInHours)}h ago)`);
-                continue; // Skip this date
+            // Allow a small buffer (e.g., 2 minutes) where system updates might look like user edits
+            // If user edited significantly AFTER the last system sync, lock it.
+            if (lastUserEdit > lastSystemUpdate + 120000) {
+                this.log(`[Stage 2] Skipping ${date} (Locked: User manually modified)`);
+                continue;
             }
         }
 
@@ -294,13 +314,13 @@ export class HughesNetService {
     return { orders: Object.values(orderDb), incomplete };
   }
 
+  // ... (getOrders, clearAllTrips remain same) ...
   async getOrders(userId: string) {
     const dbRaw = await this.kv.get(`hns:db:${userId}`);
     return dbRaw ? JSON.parse(dbRaw) : {};
   }
 
   async clearAllTrips(userId: string) {
-      this.log(`[HNS] Clearing HNS trips & cache...`);
       const tripService = makeTripService(this.tripKV, this.trashKV, undefined);
       const allTrips = await tripService.list(userId);
       let count = 0;
@@ -314,7 +334,7 @@ export class HughesNetService {
       return count;
   }
 
-  // --- TRIP CALCULATION LOGIC ---
+  // --- TRIP CALCULATION ---
   private async createTripForDate(
       userId: string, date: string, orders: any[], settingsId: string | undefined, 
       installPay: number, repairPay: number, upgradePay: number,
@@ -334,7 +354,6 @@ export class HughesNetService {
           }
       } catch(e) {}
 
-      // SORTING: Earliest to Latest (Ascending)
       orders.sort((a, b) => this.parseTime(a.beginTime) - this.parseTime(b.beginTime));
       
       const buildAddr = (o: any) => [o.address, o.city, o.state, o.zip].filter(Boolean).join(', ');
@@ -346,9 +365,8 @@ export class HughesNetService {
           endAddr = startAddr;
       }
 
-      // --- CALCULATE COMMUTE FOR START TIME ---
       let earliestOrder: any = orders[0];
-      let startMins = 9 * 60; // Default 9 AM
+      let startMins = 9 * 60; 
 
       if (earliestOrder) {
           const earliestMins = this.parseTime(earliestOrder.beginTime);
@@ -364,62 +382,65 @@ export class HughesNetService {
           startMins = earliestMins !== 0 ? (earliestMins - commuteMins) : (9 * 60);
       }
 
-      // --- CALCULATE ROUTE ---
+      // Parallel Route Calculation
       const points = [startAddr, ...orders.map((o:any) => buildAddr(o)), endAddr];
       let totalMins = 0;
       let totalMeters = 0;
 
+      const legPromises = [];
       for (let i = 0; i < points.length - 1; i++) {
           const origin = points[i];
           const dest = points[i+1];
-          if (origin === dest) continue;
-          
-          if (i > 0) await new Promise(r => setTimeout(r, 200));
+          if (origin === dest) {
+              legPromises.push(Promise.resolve(null));
+          } else {
+              legPromises.push(this.getRouteInfo(origin, dest)); 
+          }
+      }
 
-          try {
-              const leg = await this.getRouteInfo(origin, dest);
+      try {
+          const results = await Promise.all(legPromises);
+          results.forEach((leg, index) => {
               if (leg) {
                   const m = Math.round(leg.duration / 60);
                   totalMins += m;
                   totalMeters += leg.distance;
-                  this.log(`[Maps] Leg ${i+1}: ${m} min`);
-              } else {
-                  this.warn(`[Maps] Failed leg ${i+1}: ${origin} -> ${dest}`);
+              } else if (points[index] !== points[index+1]) {
+                  this.warn(`[Maps] Failed leg ${index+1}: ${points[index]} -> ${points[index+1]}`);
               }
-          } catch (e: any) {
-              if (e.message === 'REQ_LIMIT') {
-                  this.warn(`[Limit] Routing stopped at ${date} Leg ${i+1}`);
-                  return false; 
-              }
-              this.error(`[Maps] Error`, e);
+          });
+      } catch (e: any) {
+          if (e.message === 'REQ_LIMIT') {
+              this.warn(`[Limit] Routing stopped at ${date}`);
+              return false; 
           }
+          this.error(`[Maps] Error`, e);
       }
 
       const miles = Number((totalMeters * 0.000621371).toFixed(1));
-      
       let jobMins = 0;
       orders.forEach((o:any) => jobMins += (o.jobDuration || 60));
-      
       const totalWorkMins = totalMins + jobMins;
       const hoursWorked = Number((totalWorkMins / 60).toFixed(2));
       const fuelCost = mpg > 0 ? (miles / mpg) * gas : 0;
 
-      // --- EARNINGS & COSTS LOGIC ---
+      // --- [!code changed] EARNINGS & COSTS LOGIC (Updated for Incomplete) ---
       const calculateEarnings = (o: any) => {
           let basePay = 0;
           let notes = `HNS Order: ${o.id} (${o.type})`;
           let supplyItems: { type: string, cost: number }[] = [];
           
-          if (o.hasPoleMount) {
+          // 1. Check for Departure Incomplete
+          if (o.departureIncomplete) {
+              basePay = 0;
+              notes += ` [DEPARTURE INCOMPLETE: $0]`;
+          } 
+          // 2. Normal Pay Logic
+          else if (o.hasPoleMount) {
               basePay = installPay + poleCharge;
               notes += ` [POLE MOUNT +$${poleCharge}]`;
-              
-              if (poleCost > 0) {
-                  supplyItems.push({ type: 'Pole', cost: poleCost });
-              }
-              if (concreteCost > 0) {
-                  supplyItems.push({ type: 'Concrete', cost: concreteCost });
-              }
+              if (poleCost > 0) supplyItems.push({ type: 'Pole', cost: poleCost });
+              if (concreteCost > 0) supplyItems.push({ type: 'Concrete', cost: concreteCost });
           } 
           else {
               if (o.type === 'Install') basePay = installPay;
@@ -462,9 +483,7 @@ export class HughesNetService {
       });
 
       const tripSupplies = Array.from(suppliesMap.entries()).map(([type, cost]) => ({
-          id: crypto.randomUUID(),
-          type,
-          cost
+          id: crypto.randomUUID(), type, cost
       }));
 
       const trip = {
@@ -481,11 +500,9 @@ export class HughesNetService {
           totalMiles: miles,
           mpg, gasPrice: gas,
           fuelCost: Number(fuelCost.toFixed(2)),
-          
           suppliesCost: totalSuppliesCost,
           supplyItems: tripSupplies,
           suppliesItems: tripSupplies,
-          
           stops: stops,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -493,34 +510,157 @@ export class HughesNetService {
       };
 
       await tripService.put(trip as any);
-      this.log(`[Stage 2] Saved Trip ${date} ($${trip.fuelCost} fuel, ${miles} mi, $${totalSuppliesCost} supplies)`);
+      this.log(`[Stage 2] Saved Trip ${date} ($${trip.fuelCost} fuel, ${miles} mi)`);
       return true;
   }
 
-  // --- PRIVATE UTILS ---
+  // --- UTILS (Parsing & Crypto) ---
+  
+  // [!code changed] New Cheerio-based parsing
+  private async scanUrlForOrders(url: string, cookie: string, callback: (id: string) => void) {
+      let current = url;
+      let page = 0;
+      while(current && page < 5) {
+          try {
+              const res = await this.safeFetch(current, { headers: { 'Cookie': cookie, 'User-Agent': this.userAgent } });
+              const html = await res.text();
+              // Extract IDs
+              this.extractIds(html).forEach(callback);
+              
+              const $ = cheerio.load(html);
+              
+              if (page === 0) { 
+                  // Frame scanning
+                  $('frame, iframe').each((_, el) => {
+                      const src = $(el).attr('src');
+                      if (src) {
+                          try {
+                              const frameUrl = new URL(src, BASE_URL).href;
+                              // Async fetch inside loop is tricky, we trigger and ignore for simplicity in this flow,
+                              // or better: add to a queue. For now, matching original logic:
+                              this.safeFetch(frameUrl, { headers: { 'Cookie': cookie, 'User-Agent': this.userAgent } })
+                                  .then(r => r.text())
+                                  .then(t => this.extractIds(t).forEach(callback))
+                                  .catch(() => {});
+                          } catch(e){}
+                      }
+                  });
+              }
+              
+              // Next Page
+              const nextLink = $('a').filter((_, el) => {
+                  const t = $(el).text().toLowerCase();
+                  return t.includes('next') || t.includes('>');
+              }).first().attr('href');
+
+              if (nextLink && !nextLink.startsWith('javascript')) {
+                  current = new URL(nextLink, current).href;
+              } else {
+                  current = '';
+              }
+              page++;
+          } catch(e) { break; }
+      }
+  }
+
+  private extractIds(html: string) {
+    const ids = new Set<string>();
+    const clean = html.replace(/&amp;/g, '&');
+    let m;
+    const re1 = /viewservice\.jsp\?.*?\bid=(\d+)/gi;
+    while ((m = re1.exec(clean)) !== null) ids.add(m[1]);
+    const re2 = /[?&]id=(\d{8})\b/gi;
+    while ((m = re2.exec(clean)) !== null) ids.add(m[1]);
+    return Array.from(ids);
+  }
+
+  private extractMenuLinks(html: string) {
+    const links: { url: string, text: string }[] = [];
+    const $ = cheerio.load(html);
+    $('a[href]').each((_, el) => {
+        const href = $(el).attr('href');
+        const text = $(el).text().trim();
+        if (href && (href.includes('.jsp') || href.includes('SoSearch')) && !href.startsWith('javascript')) {
+            try {
+                links.push({ url: new URL(href, BASE_URL).href, text });
+            } catch {}
+        }
+    });
+    return links;
+  }
+
+  // [!code changed] New Robust Parser with Cheerio + Departure Check
+  private parseOrderPage(html: string, id: string) {
+    const $ = cheerio.load(html);
+    const out: any = { id, address: '', city: '', state: '', zip: '', confirmScheduleDate: '', beginTime: '', type: 'Repair', jobDuration: 60 };
+    
+    // Helper to find input value by name
+    const val = (name: string) => $(`input[name="${name}"]`).val() as string;
+    
+    // Address
+    out.address = val('FLD_SO_Address1') || val('f_address') || val('txtAddress') || '';
+    if (!out.address) {
+        // Fallback to text searching if input missing
+        const bodyText = $('body').text();
+        const addressMatch = bodyText.match(/Address:\s*(.*?)\s+(?:City|County|State)/i);
+        if (addressMatch) out.address = addressMatch[1].trim();
+    }
+    out.address = this.toTitleCase(out.address);
+
+    out.city = this.toTitleCase(val('f_city') || '');
+    out.state = val('f_state') || '';
+    out.zip = val('f_zip') || '';
+    out.confirmScheduleDate = val('f_sched_date') || '';
+    out.beginTime = val('f_begin_time') || '';
+
+    // Type Logic
+    const pageText = $('body').text();
+    if (pageText.includes('Service Order #')) {
+        if (pageText.match(/Install/i)) { out.type = 'Install'; out.jobDuration = 90; }
+        else if (pageText.match(/Upgrade/i)) { out.type = 'Upgrade'; out.jobDuration = 60; }
+    }
+
+    if (pageText.includes('CON NON-STD CHARGE NEW POLE')) {
+        out.hasPoleMount = true;
+    }
+
+    // [!code changed] DEPARTURE INCOMPLETE CHECK
+    // Logic: Look for "Departure Incomplete". 
+    // If found, ensure it is NOT superseded by "Departure Complete" later in the log.
+    // We assume the log is chronological or we just check presence.
+    // Given the prompt: "if there is a departure incomplete that isnt followed by a departure complete"
+    
+    const incompleteIdx = pageText.indexOf('Departure Incomplete');
+    const completeIdx = pageText.lastIndexOf('Departure Complete'); // Search from end to find latest
+
+    if (incompleteIdx !== -1) {
+        // If incomplete exists, and (complete doesn't exist OR complete happened BEFORE incomplete)
+        // We use text position as a proxy for time if we assume logs append to bottom. 
+        // If logs pre-pend (newest top), we'd need to swap logic. 
+        // Assuming Standard Log (Newest at Bottom):
+        if (completeIdx === -1 || completeIdx < incompleteIdx) {
+            out.departureIncomplete = true;
+        }
+    }
+
+    return out;
+  }
+
+  // ... (Other helpers: getRouteInfo, toIsoDate, parseTime, minutesToTime, toTitleCase, encrypt, decrypt match previous logic) ...
   private async getRouteInfo(origin: string, destination: string) {
       if (!this.googleApiKey) return null;
-      
       const key = `dir:${origin.toLowerCase().trim()}_to_${destination.toLowerCase().trim()}`;
       if (this.directionsKV) {
           const cached = await this.directionsKV.get(key);
-          if (cached) {
-              this.log(`[Maps] Cache Hit: ${origin} -> ${destination}`);
-              return JSON.parse(cached);
-          }
+          if (cached) return JSON.parse(cached);
       }
-
       try {
           const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&key=${this.googleApiKey}`;
           const res = await this.safeFetch(url, { headers: { 'Referer': APP_DOMAIN, 'User-Agent': 'BetaRoutes/1.0' } });
           const data = await res.json();
           if (data.routes?.[0]?.legs?.[0]) {
               const result = { distance: data.routes[0].legs[0].distance.value, duration: data.routes[0].legs[0].duration.value };
-              
-              if (this.directionsKV) {
-                  await this.directionsKV.put(key, JSON.stringify(result));
-              }
-
+              if (this.directionsKV) await this.directionsKV.put(key, JSON.stringify(result));
               return result;
           }
       } catch (e: any) { 
@@ -561,143 +701,6 @@ export class HughesNetService {
       return str.toLowerCase().replace(/\b\w/g, s => s.toUpperCase());
   }
 
-  private async scanUrlForOrders(url: string, cookie: string, callback: (id: string) => void) {
-      let current = url;
-      let page = 0;
-      while(current && page < 5) {
-          try {
-              const res = await this.safeFetch(current, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT } });
-              const html = await res.text();
-              this.extractIds(html).forEach(callback);
-              
-              if (page === 0) { 
-                  const frames = this.extractFrameUrls(html);
-                  for (const f of frames) {
-                      try {
-                          const frameUrl = new URL(f, BASE_URL).href;
-                          const fRes = await this.safeFetch(frameUrl, { headers: { 'Cookie': cookie, 'User-Agent': USER_AGENT } });
-                          this.extractIds(await fRes.text()).forEach(callback);
-                      } catch(e){}
-                  }
-              }
-              current = this.extractNextPageUrl(html, current) || '';
-              page++;
-          } catch(e) { break; }
-      }
-  }
-
-  private extractNextPageUrl(html: string, currentUrl: string): string | null {
-    const regex = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>(?:.*?(?:\bNext\b|&gt;|>).*?)<\/a>/i;
-    const match = html.match(regex);
-    if (match && match[1]) {
-        let next = match[1].replace(/&amp;/g, '&');
-        if (!next.startsWith('javascript')) {
-             return new URL(next, currentUrl).href;
-        }
-    }
-    return null;
-  }
-
-  private extractIds(html: string) {
-    const ids = new Set<string>();
-    const clean = html.replace(/&amp;/g, '&');
-    let m;
-    const re1 = /viewservice\.jsp\?.*?\bid=(\d+)/gi;
-    while ((m = re1.exec(clean)) !== null) ids.add(m[1]);
-    const re2 = /[?&]id=(\d{8})\b/gi;
-    while ((m = re2.exec(clean)) !== null) ids.add(m[1]);
-    return Array.from(ids);
-  }
-
-  private extractMenuLinks(html: string) {
-    const links: { url: string, text: string }[] = [];
-    const re = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi;
-    let m;
-    while ((m = re.exec(html)) !== null) {
-        let url = m[1];
-        if (url && (url.includes('.jsp') || url.includes('SoSearch')) && !url.startsWith('javascript')) {
-             try {
-                const absolute = new URL(url, BASE_URL).href;
-                links.push({ url: absolute, text: m[2].replace(/<[^>]+>/g, '').trim() });
-             } catch(e) {}
-        }
-    }
-    return links;
-  }
-
-  private extractFrameUrls(html: string): string[] {
-    const urls: string[] = [];
-    const re = /<(?:frame|iframe)\s+[^>]*src=["']?([^"'>\s]+)["']?/gi;
-    let m;
-    while ((m = re.exec(html)) !== null) urls.push(m[1]);
-    return urls;
-  }
-
-  private parseOrderPage(html: string, id: string) {
-    const out: any = { id, address: '', city: '', state: '', zip: '', confirmScheduleDate: '', beginTime: '', type: 'Repair', jobDuration: 60 };
-    const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
-    
-    // Address
-    const addrInput = html.match(/name=["']FLD_SO_Address1["'][^>]*value=["']([^"']*)["']/i);
-    if (addrInput) out.address = addrInput[1].trim();
-    if (!out.address) {
-        const addrInputRev = html.match(/value=["']([^"']*)["'][^>]*name=["']FLD_SO_Address1["']/i);
-        if (addrInputRev) out.address = addrInputRev[1].trim();
-    }
-    if (!out.address) {
-         const addrAlt = html.match(/name=["'](?:f_address|txtAddress)["'][^>]*value=["']([^"']*)["']/i);
-         if (addrAlt) out.address = addrAlt[1].trim();
-    }
-    if (!out.address) {
-        const addressMatch = text.match(/Address:\s*(.*?)\s+(?:City|County|State)/i);
-        if (addressMatch) out.address = addressMatch[1].trim().split(/county:/i)[0].trim();
-    }
-
-    if (out.address) out.address = this.toTitleCase(out.address);
-
-    const city = html.match(/name=["']f_city["'][^>]*value=["']([^"']*)["']/i);
-    if (city) out.city = city[1].trim();
-    if (out.city) out.city = this.toTitleCase(out.city);
-
-    const state = html.match(/name=["']f_state["'][^>]*value=["']([^"']*)["']/i);
-    if (state) out.state = state[1].trim();
-    const zip = html.match(/name=["']f_zip["'][^>]*value=["']([^"']*)["']/i);
-    if (zip) out.zip = zip[1].trim();
-
-    const date = html.match(/name=["']f_sched_date["'][^>]*value=["']([^"']*)["']/i);
-    if (date) out.confirmScheduleDate = date[1];
-    else {
-        const m = text.match(/Confirm Schedule Date:\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
-        if (m) out.confirmScheduleDate = m[1];
-    }
-
-    const time = html.match(/name=["']f_begin_time["'][^>]*value=["']([^"']*)["']/i);
-    if (time && time[1]) {
-        out.beginTime = time[1];
-    } else {
-        const visTime = text.match(/Begin Time:?\s*(\d{1,2}:?\d{2})/i);
-        if (visTime) out.beginTime = visTime[1];
-    }
-
-    const typeMatch = html.match(/Service Order #:\d+.*?((?:Install|Repair|Upgrade))/i);
-    if (typeMatch) {
-        const t = typeMatch[1].toLowerCase();
-        if (t === 'install') { out.type = 'Install'; out.jobDuration = 90; }
-        else if (t === 'upgrade') { out.type = 'Upgrade'; out.jobDuration = 60; }
-        else { out.type = 'Repair'; out.jobDuration = 60; }
-    } else {
-        if (text.includes('Install')) { out.type = 'Install'; out.jobDuration = 90; }
-        else if (text.includes('Upgrade')) { out.type = 'Upgrade'; out.jobDuration = 60; }
-    }
-
-    if (html.includes('CON NON-STD CHARGE NEW POLE [Task]')) {
-        out.hasPoleMount = true;
-    }
-    
-    return out;
-  }
-
-  // --- CRYPTO ---
   private async encrypt(plain: string) {
     if (!this.encryptionKey) return plain;
     const keyRaw = Uint8Array.from(atob(this.encryptionKey), c => c.charCodeAt(0));

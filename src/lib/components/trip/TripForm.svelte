@@ -1,9 +1,8 @@
 <script lang="ts">
   import { userSettings } from '$lib/stores/userSettings';
   import { get } from 'svelte/store';
-  import { onMount, tick } from 'svelte';
-  // [!code ++] Added LatLng
-  import type { Destination, MaintenanceCost, SupplyCost, Trip, LatLng } from '$lib/types';
+  import { onMount } from 'svelte';
+  import type { Destination, Trip, LatLng } from '$lib/types';
   import { calculateTripTotals } from '$lib/utils/calculations';
   import { storage } from '$lib/utils/storage';
   import { draftTrip } from '$lib/stores/trips';
@@ -15,38 +14,38 @@
   import { toasts } from '$lib/stores/toast';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
 
-  export let googleApiKey = '';
-  export let loading = false;
+  // [!code changed] Svelte 5 Props using Runes
+  let { googleApiKey = '', loading = false } = $props();
   
   const settings = get(userSettings);
   const API_KEY = googleApiKey || 'dummy_key';
 
-  // --- Form State ---
-  let date = new Date().toISOString().split('T')[0];
-  let startTime = '';
-  let endTime = '';
-  let startAddress = settings.startLocation || storage.getSetting('defaultStartAddress') || '';
-  let endAddress = settings.endLocation || storage.getSetting('defaultEndAddress') || '';
+  // --- Form State (Runes) ---
+  let date = $state(new Date().toISOString().split('T')[0]);
+  let startTime = $state('');
+  let endTime = $state('');
+  let startAddress = $state(settings.startLocation || storage.getSetting('defaultStartAddress') || '');
+  let endAddress = $state(settings.endLocation || storage.getSetting('defaultEndAddress') || '');
   
-  // [!code ++] Coordinates State
-  let startLocation: LatLng | undefined;
-  let endLocation: LatLng | undefined;
+  // Coordinates State
+  let startLocation = $state<LatLng | undefined>(undefined);
+  let endLocation = $state<LatLng | undefined>(undefined);
 
-  let mpg = settings.defaultMPG ?? storage.getSetting('defaultMPG') ?? 25;
-  let gasPrice = settings.defaultGasPrice ?? storage.getSetting('defaultGasPrice') ?? 3.5;
-  let distanceUnit = settings.distanceUnit || 'mi';
-  let destinations: Destination[] = [{ address: '', earnings: 0 }];
-  let notes = '';
+  let mpg = $state(settings.defaultMPG ?? storage.getSetting('defaultMPG') ?? 25);
+  let gasPrice = $state(settings.defaultGasPrice ?? storage.getSetting('defaultGasPrice') ?? 3.5);
+  let distanceUnit = $state(settings.distanceUnit || 'mi');
+  let destinations = $state<Destination[]>([{ address: '', earnings: 0 }]);
+  let notes = $state('');
 
-  // --- Calculation State ---
-  let calculating = false;
-  let calculated = false;
-  let calculationError = '';
+  // --- Calculation State (Runes) ---
+  let calculating = $state(false);
+  let calculated = $state(false);
+  let calculationError = $state('');
   
-  let totalMileage = 0;
-  let totalTime = '';
-  let fuelCost = 0;
-  let netProfit = 0;
+  let totalMileage = $state(0);
+  let totalTime = $state('');
+  let fuelCost = $state(0);
+  let netProfit = $state(0);
 
   // --- Handlers ---
 
@@ -54,10 +53,9 @@
     const place = e.detail;
     const val = place.formatted_address || place.name || '';
     
-    // [!code ++] Extract Geometry
+    // Extract Geometry
     let location: LatLng | undefined;
     if (place.geometry && place.geometry.location) {
-        // Handle both Google Maps object methods and plain JSON objects
         const lat = typeof place.geometry.location.lat === 'function' ? place.geometry.location.lat() : place.geometry.location.lat;
         const lng = typeof place.geometry.location.lng === 'function' ? place.geometry.location.lng() : place.geometry.location.lng;
         location = { lat, lng };
@@ -128,7 +126,6 @@
     if (draft.startAddress) startAddress = draft.startAddress;
     if (draft.endAddress) endAddress = draft.endAddress;
     
-    // [!code ++] Load Coordinates
     if (draft.startLocation) startLocation = draft.startLocation;
     if (draft.endLocation) endLocation = draft.endLocation;
 
@@ -145,7 +142,6 @@
       endTime, 
       startAddress, 
       endAddress, 
-      // [!code ++] Save Coordinates
       startLocation,
       endLocation,
       destinations, 

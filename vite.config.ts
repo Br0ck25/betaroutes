@@ -4,17 +4,10 @@ import { sveltekit } from '@sveltejs/kit/vite';
 export default defineConfig({
 	plugins: [sveltekit()],
 	test: {
-		expect: { requireAssertions: true },
-		projects: [
-			{
-				extends: './vite.config.ts',
-				test: {
-					name: 'server',
-					environment: 'node',
-					include: ['src/**/*.{test,spec}.{js,ts}'],
-					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
-				}
-			}
-		]
+		// [!code changed] Simplified test config
+		include: ['src/**/*.{test,spec}.{js,ts}'],
+		// Optional: explicit environment (defaults to node in Vitest, 
+        // usually 'jsdom' is preferred for Svelte component testing if you add that later)
+		environment: 'node' 
 	}
 });

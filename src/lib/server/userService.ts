@@ -2,111 +2,162 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
 import { randomUUID } from 'node:crypto';
 
-// Re-using the structure assumed in previous steps for consistency
-export type User = {
+// 1. Define Split Types
+export type UserCore = {
     id: string;
     username: string;
     email: string;
-    password: string; // Will store the HASHED password (or legacy plaintext during migration)
+    password: string;
     plan: string;
-    tripsThisMonth: number;
-    maxTrips: number;
-    resetDate: string;
     name: string;
     createdAt: string;
 };
 
+export type UserStats = {
+    tripsThisMonth: number;
+    maxTrips: number;
+    resetDate: string;
+};
+
+// Unified type for app consumption (backward compatibility)
+export type User = UserCore & UserStats;
+
 // --- KV Key Utility Functions ---
 
-// Primary Key: Stores the full user record (JSON)
-function userKey(userId: string): string {
+// Stores UserCore (Profile)
+function userCoreKey(userId: string): string {
     return `user:${userId}`;
 }
 
-// Index Key: Maps username -> userId (lower-casing for case-insensitive lookup)
+// [!code ++] Stores UserStats (Usage)
+function userStatsKey(userId: string): string {
+    return `user:stats:${userId}`;
+}
+
 function usernameKey(username: string): string {
     return `idx:username:${username.toLowerCase()}`;
 }
 
-// Index Key: Maps email -> userId (lower-casing for case-insensitive lookup)
 function emailKey(email: string): string {
     return `idx:email:${email.toLowerCase()}`;
 }
 
 // --- Lookup Functions ---
 
-/**
- * Retrieves the full user record by their internal UUID.
- */
 export async function findUserById(kv: KVNamespace, userId: string): Promise<User | null> {
-    const raw = await kv.get(userKey(userId));
-    return raw ? JSON.parse(raw) as User : null;
+    // [!code changed] Fetch Core and Stats in parallel
+    const [coreRaw, statsRaw] = await Promise.all([
+        kv.get(userCoreKey(userId)),
+        kv.get(userStatsKey(userId))
+    ]);
+
+    if (!coreRaw) return null;
+
+    const core = JSON.parse(coreRaw);
+    
+    // Resolve Stats: 
+    // 1. Look in new stats key
+    // 2. Fallback to legacy fields inside core object (migration)
+    // 3. Fallback to defaults
+    const stats: UserStats = statsRaw ? JSON.parse(statsRaw) : {
+        tripsThisMonth: core.tripsThisMonth ?? 0,
+        maxTrips: core.maxTrips ?? 10,
+        resetDate: core.resetDate ?? new Date().toISOString()
+    };
+
+    return {
+        id: core.id,
+        username: core.username,
+        email: core.email,
+        password: core.password,
+        plan: core.plan,
+        name: core.name,
+        createdAt: core.createdAt,
+        ...stats
+    };
 }
 
-/**
- * Finds a user by their email address using a KV index lookup.
- * Returns the full User object or null.
- */
 export async function findUserByEmail(kv: KVNamespace, email: string): Promise<User | null> {
     const userId = await kv.get(emailKey(email));
     if (!userId) return null;
-    
-    // Now look up the primary record using the found userId
     return findUserById(kv, userId);
 }
 
-/**
- * Finds a user by their username using a KV index lookup.
- * Returns the full User object or null.
- */
 export async function findUserByUsername(kv: KVNamespace, username: string): Promise<User | null> {
     const userId = await kv.get(usernameKey(username));
     if (!userId) return null;
-
-    // Now look up the primary record using the found userId
     return findUserById(kv, userId);
 }
 
-
 // --- Write/Update Functions ---
 
-/**
- * Creates the user record and all necessary KV index entries (email, username).
- */
 export async function createUser(kv: KVNamespace, userData: Omit<User, 'id' | 'createdAt'>): Promise<User> {
     const userId = randomUUID();
     const now = new Date().toISOString();
     
-    const user: User = {
-        ...userData,
+    // Split incoming data
+    const { tripsThisMonth, maxTrips, resetDate, ...coreData } = userData;
+
+    const userCore: UserCore = {
+        ...coreData,
         id: userId,
         createdAt: now,
     };
 
-    const userJson = JSON.stringify(user);
+    const userStats: UserStats = {
+        tripsThisMonth: tripsThisMonth || 0,
+        maxTrips: maxTrips || 10,
+        resetDate: resetDate || now
+    };
 
-    // 1. Store the primary user record
-    await kv.put(userKey(userId), userJson);
+    // Write all keys in parallel
+    await Promise.all([
+        kv.put(userCoreKey(userId), JSON.stringify(userCore)),
+        kv.put(userStatsKey(userId), JSON.stringify(userStats)),
+        kv.put(usernameKey(userCore.username), userId),
+        kv.put(emailKey(userCore.email), userId)
+    ]);
 
-    // 2. Store the secondary index records (for lookups by email/username)
-    await kv.put(usernameKey(user.username), userId);
-    await kv.put(emailKey(user.email), userId);
-
-    return user;
+    return { ...userCore, ...userStats };
 }
 
-
 /**
- * CRITICAL FIX: Updates a user's password hash and saves the full user record.
- * This is used for the plaintext password migration strategy.
+ * Updates a user's password hash safely.
+ * This operation is now atomic regarding stats; it will NOT overwrite concurrent trip count updates.
  */
 export async function updatePasswordHash(kv: KVNamespace, user: User, newHash: string) {
-    // 1. Update the user object in memory
-    user.password = newHash;
+    const key = userCoreKey(user.id);
+    const statsKey = userStatsKey(user.id);
+
+    // 1. Fetch FRESH Core record
+    const raw = await kv.get(key);
+    if (!raw) throw new Error('User not found during password update');
     
-    // 2. Save the full user record back to the primary key
-    const key = userKey(user.id); 
-    await kv.put(key, JSON.stringify(user));
+    const record = JSON.parse(raw);
+
+    // [!code ++] Lazy Migration: If we found legacy stats in the core record, move them!
+    if (record.tripsThisMonth !== undefined || record.maxTrips !== undefined) {
+        console.log('[MIGRATION] Moving stats to separate key for user', user.id);
+        const stats: UserStats = {
+            tripsThisMonth: record.tripsThisMonth ?? 0,
+            maxTrips: record.maxTrips ?? 10,
+            resetDate: record.resetDate ?? new Date().toISOString()
+        };
+        // Save stats to new key
+        await kv.put(statsKey, JSON.stringify(stats));
+    }
+
+    // 2. Prepare Clean Core Object (Strip stats, update password)
+    const core: UserCore = {
+        id: record.id,
+        username: record.username,
+        email: record.email,
+        password: newHash, // Apply new password
+        plan: record.plan,
+        name: record.name,
+        createdAt: record.createdAt
+    };
     
-    // NOTE: Index keys (username/email) do not need updating here.
+    // 3. Save ONLY the Core record
+    await kv.put(key, JSON.stringify(core));
 }
