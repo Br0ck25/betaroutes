@@ -43,7 +43,7 @@ id = "2030b20c6baa46fe8c7bb620aaf0f8c1"
 
 [[env.production.kv_namespaces]]
 binding = "BETA_DIRECTIONS_KV"
-id = "<3fb03d50a94e4b2cb4fc3f54bdfd45d7>"
+id = "3fb03d50a94e4b2cb4fc3f54bdfd45d7"
 
 # ---------------------------------------------------
 # Preview environment (PR previews and local dev)
@@ -82,4 +82,4 @@ id = "2030b20c6baa46fe8c7bb620aaf0f8c1"
 
 [[env.preview.kv_namespaces]]
 binding = "BETA_DIRECTIONS_KV"
-id = "<3fb03d50a94e4b2cb4fc3f54bdfd45d7>"
+id = "3fb03d50a94e4b2cb4fc3f54bdfd45d7"
