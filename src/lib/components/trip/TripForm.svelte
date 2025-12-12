@@ -1,3 +1,4 @@
+// src/lib/components/trip/TripForm.svelte
 <script lang="ts">
   import { userSettings } from '$lib/stores/userSettings';
   import { get } from 'svelte/store';
@@ -10,9 +11,9 @@
   import { autocomplete } from '$lib/utils/autocomplete';
 
   export let googleApiKey = '';
-
   const settings = get(userSettings);
-  const API_KEY = googleApiKey || 'dummy_key'; // No Google load, so key doesn't matter
+  const API_KEY = googleApiKey || 'dummy_key';
+  // Google Maps is loaded by the autocomplete action
 
   // Default form values
   let date = new Date().toISOString().split('T')[0];
@@ -42,7 +43,6 @@
   let netProfit = 0;
   let profitPerHour = 0;
   let hoursWorked = 0;
-
   // No Map Element variables needed for pure KV test
 
   function formatTime(dateStr: string) {
@@ -56,7 +56,6 @@
   }
 
   onMount(async () => {
-    // REMOVED: loadGoogle()
     const draft = draftTrip.load();
     if (draft && confirm('Resume your last unsaved trip?')) {
       loadDraft(draft);
@@ -66,12 +65,12 @@
   });
 
   function handlePlaceSelect(field: 'start' | 'end' | number, e: CustomEvent) {
-      const place = e.detail;
-      const val = place.formatted_address || place.name || '';
+    const place = e.detail;
+    const val = place.formatted_address || place.name || '';
       
-      if (field === 'start') startAddress = val;
-      else if (field === 'end') endAddress = val;
-      else if (typeof field === 'number') destinations[field].address = val;
+    if (field === 'start') startAddress = val;
+    else if (field === 'end') endAddress = val;
+    else if (typeof field === 'number') destinations[field].address = val;
   }
 
   async function addDestination() {
@@ -100,7 +99,112 @@
   }
 
   async function calculateRoute() {
-    alert("Google Maps Routing is DISABLED. \nWe are testing the Autocomplete DB connection only.");
+    if (!startAddress) {
+      alert("Please enter a start address.");
+      return;
+    }
+
+    // Check if Google Maps is available
+    if (typeof google === 'undefined' || !google.maps || !google.maps.DirectionsService) {
+      alert("Google Maps API is not loaded yet. Please wait a moment.");
+      return;
+    }
+
+    calculating = true;
+
+    try {
+      const directionsService = new google.maps.DirectionsService();
+      
+      // Filter out empty destinations
+      const validDestinations = destinations.filter(d => d.address && d.address.trim() !== '');
+      
+      // Construct Waypoints
+      const waypoints = validDestinations.map(d => ({
+        location: d.address,
+        stopover: true
+      }));
+
+      // Determine final destination
+      // If endAddress is provided, use it. Otherwise, return to start (round trip) or last stop.
+      // For now, if no end address, we'll assume the last destination is the end, 
+      // or if explicitly requested, a round trip back to start.
+      // Current logic: Use endAddress if set, otherwise use last destination as the "end" of the route request.
+      
+      let origin = startAddress;
+      let destination = endAddress;
+
+      // If no end address is typed, use the last destination as the endpoint
+      // and remove it from waypoints to avoid duplication
+      if (!destination && waypoints.length > 0) {
+        destination = waypoints[waypoints.length - 1].location as string;
+        waypoints.pop();
+      } else if (!destination && waypoints.length === 0) {
+        // Only start address? Cannot calculate route.
+        alert("Please add at least one destination or an end address.");
+        calculating = false;
+        return;
+      }
+
+      const request: google.maps.DirectionsRequest = {
+        origin: origin,
+        destination: destination,
+        waypoints: waypoints,
+        optimizeWaypoints: true, // Optimizes the order of stops for efficiency
+        travelMode: google.maps.TravelMode.DRIVING,
+        unitSystem: distanceUnit === 'km' ? google.maps.UnitSystem.METRIC : google.maps.UnitSystem.IMPERIAL
+      };
+
+      directionsService.route(request, (result, status) => {
+        if (status === google.maps.DirectionsStatus.OK && result) {
+          // Calculate totals from legs
+          const route = result.routes[0];
+          let distanceMeters = 0;
+          let durationSeconds = 0;
+
+          route.legs.forEach(leg => {
+            if (leg.distance) distanceMeters += leg.distance.value;
+            if (leg.duration) durationSeconds += leg.duration.value;
+          });
+
+          // Convert to miles/minutes
+          // 1 meter = 0.000621371 miles
+          const totalMiles = distanceMeters * 0.000621371;
+          const totalMinutes = durationSeconds / 60;
+
+          // Update State
+          totalMileage = parseFloat(totalMiles.toFixed(1));
+          
+          // Use the utility to calculate costs/profits
+          const totals = calculateTripTotals(
+            totalMileage,
+            totalMinutes,
+            destinations,
+            mpg,
+            gasPrice,
+            maintenanceItems,
+            supplyItems,
+            startTime,
+            endTime
+          );
+
+          totalTime = totals.totalTime || '';
+          fuelCost = totals.fuelCost || 0;
+          netProfit = totals.netProfit || 0;
+          totalEarnings = totals.totalEarnings || 0;
+          
+          calculated = true;
+        } else {
+          console.error("Directions request failed due to " + status);
+          alert("Could not calculate route. Check addresses and try again.");
+        }
+        calculating = false;
+      });
+
+    } catch (error) {
+      console.error("Route calculation error:", error);
+      alert("An error occurred while calculating route.");
+      calculating = false;
+    }
   }
 
   async function logTrip() {
@@ -114,6 +218,10 @@
     notes = '';
     destinations = [{ address: '', earnings: 0 }];
     calculated = false;
+    totalMileage = 0;
+    totalTime = '';
+    fuelCost = 0;
+    netProfit = 0;
   }
 
   function saveDraft() {
@@ -208,9 +316,26 @@
     </label>
   </div>
 
+  {#if calculated}
+    <div class="form-section" style="background: #f0fdf4; border: 1px solid #bbf7d0;">
+      <h3>Trip Summary</h3>
+      <div class="row">
+        <div><strong>Total Distance:</strong> {totalMileage} {distanceUnit}</div>
+        <div><strong>Est. Time:</strong> {totalTime}</div>
+        <div><strong>Fuel Cost:</strong> ${fuelCost}</div>
+        <div><strong>Net Profit:</strong> ${netProfit}</div>
+      </div>
+    </div>
+  {/if}
+
   <div class="actions">
-    <button class="primary" on:click={calculateRoute}>
-      Calculate Route (Disabled)
+    <button 
+      class="primary" 
+      on:click={calculateRoute} 
+      disabled={calculating}
+      style={calculating ? "opacity: 0.7; cursor: wait;" : "background: #2563eb; color: white;"}
+    >
+      {calculating ? 'Calculating...' : 'Calculate Route'}
     </button>
   </div>
 </div>
@@ -228,6 +353,6 @@
   .dest-row button { padding: 8px; border: none; background: #f0f0f0; cursor: pointer; border-radius: 4px; }
   .actions { display: flex; gap: 12px; }
   button { padding: 12px 24px; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
-  .primary { background: #999; color: white; cursor: not-allowed; }
+  .primary { background: #999; color: white; }
   button:disabled { opacity: 0.5; }
 </style>
