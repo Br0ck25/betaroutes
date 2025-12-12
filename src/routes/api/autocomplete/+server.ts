@@ -1,3 +1,4 @@
+// src/routes/api/autocomplete/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
@@ -43,6 +44,7 @@ export const GET: RequestHandler = async (event) => {
     console.log(`[Autocomplete] Found ${list.keys.length} KV keys`);
     
     const results: any[] = [];
+    const seen = new Set<string>(); // ← DEDUPLICATION
 
     // Fetch actual data for each key
     for (const key of list.keys) {
@@ -50,11 +52,18 @@ export const GET: RequestHandler = async (event) => {
         const raw = await placesKV.get(key.name);
         if (raw) {
           const parsed = JSON.parse(raw);
-          results.push({
-            formatted_address: parsed.formatted_address || parsed.name || key.name,
-            name: parsed.name || parsed.formatted_address || key.name,
-            source: 'kv'
-          });
+          const addr = parsed.formatted_address || parsed.name || key.name;
+          
+          // ← DEDUPLICATE by normalized address
+          const normalizedAddr = addr.toLowerCase().trim();
+          if (!seen.has(normalizedAddr)) {
+            seen.add(normalizedAddr);
+            results.push({
+              formatted_address: addr,
+              name: parsed.name || addr.split(',')[0].trim(),
+              source: 'kv'
+            });
+          }
         }
       } catch (e) {
         console.error(`[Autocomplete] Failed to parse KV entry ${key.name}:`, e);
@@ -63,7 +72,7 @@ export const GET: RequestHandler = async (event) => {
 
     // If we have KV results, return them
     if (results.length > 0) {
-      console.log(`[Autocomplete] Returning ${results.length} results from KV`);
+      console.log(`[Autocomplete] Returning ${results.length} unique results from KV`);
       return json(results);
     }
 
