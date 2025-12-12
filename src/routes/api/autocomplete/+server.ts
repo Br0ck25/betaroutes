@@ -2,119 +2,89 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
-async function fetchGoogleFallback(query: string, apiKey: string) {
-  const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${apiKey}`;
-  const res = await fetch(url);
-  const data = await res.json().catch(() => ({}));
-  if (!data.predictions) return [];
-  return data.predictions.map((p:any) => ({
-    formatted_address: p.description,
-    name: p.structured_formatting?.main_text ?? p.description,
-    source: 'google'
-  }));
-}
-
-export const GET: RequestHandler = async (event) => {
-  const platform = event.platform;
-  const q = event.url.searchParams.get('q') ?? '';
+export const GET: RequestHandler = async ({ url, platform }) => {
+  const startTime = Date.now();
+  const query = url.searchParams.get('q');
   
-  if (!q || q.length < 2) return json([]);
-
-  const placesKV = platform?.env?.BETA_PLACES_KV;
-
-  if (!placesKV) {
-    console.warn('[Autocomplete] BETA_PLACES_KV binding missing');
-    
-    // Fallback to Google if KV unavailable
-    const googleApiKey = platform?.env?.PUBLIC_GOOGLE_MAPS_API_KEY;
-    if (googleApiKey) {
-        const results = await fetchGoogleFallback(q, googleApiKey);
-        return json(results);
-    }
-    
-    return json([{ formatted_address: "Error: No autocomplete available", name: "System Error" }]);
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('🔍 [AUTOCOMPLETE API] New search request');
+  console.log(`   Query: "${query}"`);
+  
+  if (!query) {
+    console.log('❌ [AUTOCOMPLETE API] No query provided');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    return json([]);
   }
-
+  
+  const kv = platform?.env?.BETA_PLACES_KV;
+  if (!kv) {
+    console.log('⚠️  [AUTOCOMPLETE API] KV namespace not available');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    return json([]);
+  }
+  
   try {
-    // Search KV with normalized lowercase prefix
-    const searchKey = q.toLowerCase().trim();
-    console.log(`[Autocomplete] Searching KV with prefix: "${searchKey}"`);
+    // Normalize the query for searching
+    const normalizedQuery = query.toLowerCase().replace(/\s+/g, '');
+    console.log(`   Normalized: "${normalizedQuery}"`);
     
-    const list = await placesKV.list({ prefix: searchKey, limit: 10 });
-    console.log(`[Autocomplete] Found ${list.keys.length} KV keys`);
+    // Search for prefix keys that match this query
+    const prefixKey = `prefix:${normalizedQuery}`;
+    console.log(`   Searching KV with prefix: "${prefixKey}"`);
     
-    const results: any[] = [];
-    const seen = new Set<string>(); // ← DEDUPLICATION
-
-    // Fetch actual data for each key
-    for (const key of list.keys) {
-      try {
-        const raw = await placesKV.get(key.name);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          const addr = parsed.formatted_address || parsed.name || key.name;
-          
-          // ← DEDUPLICATE by normalized address
-          const normalizedAddr = addr.toLowerCase().trim();
-          if (!seen.has(normalizedAddr)) {
-            seen.add(normalizedAddr);
-            results.push({
-              formatted_address: addr,
-              name: parsed.name || addr.split(',')[0].trim(),
-              source: 'kv'
-            });
-          }
-        }
-      } catch (e) {
-        console.error(`[Autocomplete] Failed to parse KV entry ${key.name}:`, e);
-      }
+    const { keys } = await kv.list({ prefix: prefixKey });
+    console.log(`   Prefix keys found: ${keys.length}`);
+    
+    if (keys.length > 0) {
+      console.log('   First 3 keys:', keys.slice(0, 3).map(k => k.name));
     }
-
-    // If we have KV results, return them
-    if (results.length > 0) {
-      console.log(`[Autocomplete] Returning ${results.length} unique results from KV`);
-      return json(results);
-    }
-
-    // No KV results → Fetch from Google and cache
-    console.log('[Autocomplete] No KV results, fetching from Google...');
-    const googleApiKey = platform?.env?.PUBLIC_GOOGLE_MAPS_API_KEY;
     
-    if (!googleApiKey) {
-      return json([{ formatted_address: "No results found", name: "No matches" }]);
+    if (keys.length === 0) {
+      const elapsed = Date.now() - startTime;
+      console.log(`❌ [AUTOCOMPLETE API] KV Cache MISS - 0 results in ${elapsed}ms`);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      return json([]);
     }
-
-    const googleResults = await fetchGoogleFallback(q, googleApiKey);
     
-    // Cache Google results in KV (fire and forget)
-    if (googleResults.length > 0) {
-      console.log(`[Autocomplete] Caching ${googleResults.length} Google results...`);
+    // Fetch values for all matching keys
+    const valuePromises = keys.map(async (k) => {
+      const value = await kv.get(k.name, 'text'); // Get as text first
+      if (!value) return null;
       
-      googleResults.forEach(async (place) => {
-        try {
-          const addr = place.formatted_address || place.name;
-          if (!addr) return;
-          
-          // Store with normalized key
-          const cacheKey = addr.toLowerCase().trim();
-          await placesKV.put(cacheKey, JSON.stringify({
-            formatted_address: place.formatted_address,
-            name: place.name,
-            source: 'google',
-            cachedAt: new Date().toISOString()
-          }), { expirationTtl: 60 * 60 * 24 * 90 }); // 90 days
-          
-          console.log(`[Autocomplete] Cached: ${cacheKey}`);
-        } catch (e) {
-          console.error('[Autocomplete] Cache error:', e);
-        }
-      });
-    }
-
-    return json(googleResults);
+      try {
+        return JSON.parse(value); // Parse it ourselves
+      } catch (err) {
+        console.error(`[AUTOCOMPLETE API] Failed to parse JSON for key ${k.name}:`, err);
+        return null;
+      }
+    });
+    const values = await Promise.all(valuePromises);
     
-  } catch (err) {
-    console.error('[Autocomplete] Handler error:', err);
-    return json([{ formatted_address: "Server Error", name: String(err) }]);
+    // Filter out nulls and deduplicate by formatted_address
+    const seenAddresses = new Set<string>();
+    const results = values
+      .filter((v): v is any => v !== null)
+      .filter(v => {
+        const addr = v.formatted_address || v.name;
+        if (seenAddresses.has(addr)) return false;
+        seenAddresses.add(addr);
+        return true;
+      })
+      .slice(0, 10);
+    
+    const elapsed = Date.now() - startTime;
+    console.log(`✅ [AUTOCOMPLETE API] KV Cache HIT - ${results.length} results in ${elapsed}ms`);
+    console.log('   Results:');
+    results.forEach((r, i) => {
+      console.log(`   ${i + 1}. ${r.formatted_address || r.name}`);
+    });
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
+    return json(results);
+  } catch (error) {
+    const elapsed = Date.now() - startTime;
+    console.error(`❌ [AUTOCOMPLETE API] Error after ${elapsed}ms:`, error);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    return json({ error: 'Failed to fetch autocomplete results' }, { status: 500 });
   }
 };
