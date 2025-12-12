@@ -23,7 +23,7 @@ export class HughesNetService {
     private trashKV: KVNamespace,
     private settingsKV: KVNamespace,
     private googleApiKey: string | undefined,
-    private directionsKV: KVNamespace | undefined // [!code ++] Added Directions KV
+    private directionsKV: KVNamespace | undefined 
   ) {}
 
   // --- LOGGING ---
@@ -138,7 +138,10 @@ export class HughesNetService {
     let dbDirty = false;
     let incomplete = false;
 
+    const currentScanIds = new Set<string>();
+
     const registerFoundId = (id: string) => {
+        currentScanIds.add(id);
         if (!orderDb[id]) {
             orderDb[id] = { id, _status: 'pending' }; 
             dbDirty = true;
@@ -167,6 +170,19 @@ export class HughesNetService {
             }
         } catch (e: any) {
             if (e.message !== 'REQ_LIMIT') this.error('[Stage 1] Scan error', e);
+        }
+
+        // PRUNING: Remove orders that are no longer in HughesNet
+        if (!incomplete) {
+            const previousCount = Object.keys(orderDb).length;
+            for (const id of Object.keys(orderDb)) {
+                if (!currentScanIds.has(id)) {
+                    delete orderDb[id];
+                    dbDirty = true;
+                }
+            }
+            const dropped = previousCount - Object.keys(orderDb).length;
+            if (dropped > 0) this.log(`[Stage 1] Pruned ${dropped} old orders.`);
         }
     }
 
@@ -207,8 +223,6 @@ export class HughesNetService {
 
         if (dbDirty) {
             await this.kv.put(`hns:db:${userId}`, JSON.stringify(orderDb));
-            this.log(`[Stage 1] Saved ${fetchedCount} orders. Pausing to save.`);
-            return { orders: Object.values(orderDb), incomplete: true }; 
         }
     }
 
@@ -227,7 +241,6 @@ export class HughesNetService {
 
     const sortedDates = Object.keys(ordersByDate).sort();
     const tripService = makeTripService(this.tripKV, this.trashKV, undefined);
-    const existingTrips = await tripService.list(userId);
     
     let tripsProcessed = 0;
     for (const date of sortedDates) {
@@ -238,14 +251,21 @@ export class HughesNetService {
             break;
         }
 
+        // [!code ++] CHECK 24 HOUR LOCK
+        // Check if trip already exists and was created > 24 hours ago
         const tripId = `hns_${userId}_${date}`;
+        const existingTrip = await tripService.get(userId, tripId);
         
-        const existingTrip = existingTrips.find(t => t.id === tripId);
-        const needsCalc = !existingTrip || (existingTrip.totalMiles === 0);
+        if (existingTrip && existingTrip.createdAt) {
+            const createdTime = new Date(existingTrip.createdAt).getTime();
+            const ageInHours = (Date.now() - createdTime) / (1000 * 60 * 60);
+            
+            if (ageInHours > 24) {
+                this.log(`[Stage 2] Skipping ${date} (Locked: Logged ${Math.round(ageInHours)}h ago)`);
+                continue; // Skip this date
+            }
+        }
 
-        if (!needsCalc) continue; 
-
-        // --- CALCULATE ROUTE ---
         this.log(`[Stage 2] Routing ${date}...`);
         const daysOrders = ordersByDate[date];
         const success = await this.createTripForDate(
@@ -266,7 +286,7 @@ export class HughesNetService {
     }
 
     if (tripsProcessed === 0 && !incomplete) {
-        this.log('[Stage 2] All dates are up to date!');
+        this.log('[Stage 2] All dates checked.');
     } else {
         this.log(`[Stage 2] Processed ${tripsProcessed} dates.`);
     }
@@ -344,7 +364,7 @@ export class HughesNetService {
           startMins = earliestMins !== 0 ? (earliestMins - commuteMins) : (9 * 60);
       }
 
-      // --- CALCULATE ROUTE TOTALS ---
+      // --- CALCULATE ROUTE ---
       const points = [startAddr, ...orders.map((o:any) => buildAddr(o)), endAddr];
       let totalMins = 0;
       let totalMeters = 0;
@@ -394,7 +414,6 @@ export class HughesNetService {
               basePay = installPay + poleCharge;
               notes += ` [POLE MOUNT +$${poleCharge}]`;
               
-              // FIX: Renamed to "Pole" and "Concrete"
               if (poleCost > 0) {
                   supplyItems.push({ type: 'Pole', cost: poleCost });
               }
@@ -416,8 +435,6 @@ export class HughesNetService {
           return { amount: basePay, notes, supplyItems };
       };
 
-      // FIX: Aggregation Logic
-      // Combine "Pole" and "Concrete" items
       const suppliesMap = new Map<string, number>();
       let totalSuppliesCost = 0;
 
@@ -444,7 +461,6 @@ export class HughesNetService {
           };
       });
 
-      // Create aggregated supply list
       const tripSupplies = Array.from(suppliesMap.entries()).map(([type, cost]) => ({
           id: crypto.randomUUID(),
           type,
@@ -485,7 +501,6 @@ export class HughesNetService {
   private async getRouteInfo(origin: string, destination: string) {
       if (!this.googleApiKey) return null;
       
-      // [!code ++] CACHE CHECK
       const key = `dir:${origin.toLowerCase().trim()}_to_${destination.toLowerCase().trim()}`;
       if (this.directionsKV) {
           const cached = await this.directionsKV.get(key);
@@ -502,9 +517,7 @@ export class HughesNetService {
           if (data.routes?.[0]?.legs?.[0]) {
               const result = { distance: data.routes[0].legs[0].distance.value, duration: data.routes[0].legs[0].duration.value };
               
-              // [!code ++] CACHE SAVE (FOREVER)
               if (this.directionsKV) {
-                  // Saved without expirationTtl
                   await this.directionsKV.put(key, JSON.stringify(result));
               }
 
@@ -543,7 +556,6 @@ export class HughesNetService {
       return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
   }
 
-  // HELPER: Convert "2052 ROCKLICK RD" -> "2052 Rocklick Rd"
   private toTitleCase(str: string) {
       if (!str) return '';
       return str.toLowerCase().replace(/\b\w/g, s => s.toUpperCase());
@@ -641,20 +653,17 @@ export class HughesNetService {
         if (addressMatch) out.address = addressMatch[1].trim().split(/county:/i)[0].trim();
     }
 
-    // FIX: Apply Title Casing to Address
     if (out.address) out.address = this.toTitleCase(out.address);
 
-    // City/State/Zip
     const city = html.match(/name=["']f_city["'][^>]*value=["']([^"']*)["']/i);
     if (city) out.city = city[1].trim();
-    if (out.city) out.city = this.toTitleCase(out.city); // Apply Title Case
+    if (out.city) out.city = this.toTitleCase(out.city);
 
     const state = html.match(/name=["']f_state["'][^>]*value=["']([^"']*)["']/i);
     if (state) out.state = state[1].trim();
     const zip = html.match(/name=["']f_zip["'][^>]*value=["']([^"']*)["']/i);
     if (zip) out.zip = zip[1].trim();
 
-    // Date/Time
     const date = html.match(/name=["']f_sched_date["'][^>]*value=["']([^"']*)["']/i);
     if (date) out.confirmScheduleDate = date[1];
     else {
@@ -662,18 +671,14 @@ export class HughesNetService {
         if (m) out.confirmScheduleDate = m[1];
     }
 
-    // TIME PARSING
-    // 1. Try hidden input
     const time = html.match(/name=["']f_begin_time["'][^>]*value=["']([^"']*)["']/i);
     if (time && time[1]) {
         out.beginTime = time[1];
     } else {
-        // 2. Try scraping visual text
         const visTime = text.match(/Begin Time:?\s*(\d{1,2}:?\d{2})/i);
         if (visTime) out.beginTime = visTime[1];
     }
 
-    // Type Parsing
     const typeMatch = html.match(/Service Order #:\d+.*?((?:Install|Repair|Upgrade))/i);
     if (typeMatch) {
         const t = typeMatch[1].toLowerCase();
@@ -685,7 +690,6 @@ export class HughesNetService {
         else if (text.includes('Upgrade')) { out.type = 'Upgrade'; out.jobDuration = 60; }
     }
 
-    // --- POLE MOUNT CHECK ---
     if (html.includes('CON NON-STD CHARGE NEW POLE [Task]')) {
         out.hasPoleMount = true;
     }
