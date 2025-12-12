@@ -1,48 +1,74 @@
 import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 
-export const GET = async ({ url, platform }) => {
-    const q = url.searchParams.get("q") ?? "";
-    const kv = platform?.env?.BETA_PLACES_KV;
+export const GET: RequestHandler = async (event) => {
+    const query = event.url.searchParams.get('q');
 
-    if (q.length < 2) return json([]);
+    // Must extract platform from event
+    const platform = event.platform;
+    const placesKV = platform?.env?.BETA_PLACES_KV;
 
-    const prefix = q.toLowerCase().trim();
-    console.log("[DEBUG] PREFIX SEARCH:", prefix);
-
-    // ---- SEARCH KV ----
-    const list = await kv.list({ prefix });
-    console.log("[DEBUG] KV LIST:", list);
-
-    const results = [];
-
-    for (const key of list.keys) {
-        const value = await kv.get(key.name);
-        console.log("[DEBUG] KV MATCH:", key.name, value);
-        results.push(JSON.parse(value));
+    if (!query || query.length < 2) {
+        return json([]);
     }
 
-    if (results.length > 0) return json(results);
-
-    // ---- GOOGLE FALLBACK ----
-    const googleKey = platform.env.PUBLIC_GOOGLE_MAPS_API_KEY;
-    const googleURL = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(q)}&key=${googleKey}`;
-    
-    const res = await fetch(googleURL);
-    const data = await res.json();
-
-    console.log("[DEBUG] GOOGLE RESULTS:", data.predictions);
-
-    for (const p of data.predictions) {
-        const key = p.description.toLowerCase();
-        console.log("[DEBUG] WRITING KV KEY:", key);
-        await kv.put(key, JSON.stringify({
-            formatted_address: p.description,
-            name: p.structured_formatting?.main_text,
-        }));
+    // Debug test
+    if (query.toLowerCase().includes('test')) {
+        return json([
+            {
+                formatted_address: "TEST CONNECTION SUCCESSFUL",
+                name: "Debug Result",
+                geometry: { location: { lat: 0, lng: 0 } }
+            }
+        ]);
     }
 
-    return json(data.predictions.map(p => ({
-        formatted_address: p.description,
-        name: p.structured_formatting?.main_text,
-    })));
+    if (!placesKV) {
+        return json([
+            {
+                formatted_address: "Error: KV binding missing",
+                name: "System Error"
+            }
+        ]);
+    }
+
+    try {
+        const prefix = query.toLowerCase().trim();
+
+        const list = await placesKV.list({
+            prefix,
+            limit: 5
+        });
+
+        const results: any[] = [];
+
+        for (const key of list.keys) {
+            try {
+                const raw = await placesKV.get(key.name);
+
+                if (raw) {
+                    results.push(JSON.parse(raw));
+                } else {
+                    throw new Error("empty");
+                }
+            } catch {
+                results.push({
+                    formatted_address: key.name,
+                    name: key.name,
+                    geometry: { location: { lat: 0, lng: 0 } },
+                    _fallback: true
+                });
+            }
+        }
+
+        return json(results);
+
+    } catch (err) {
+        return json([
+            {
+                formatted_address: "Server Error",
+                name: String(err)
+            }
+        ]);
+    }
 };
