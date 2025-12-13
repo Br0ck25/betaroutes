@@ -1,6 +1,6 @@
 // src/lib/server/tripService.ts
 import type { KVNamespace } from '@cloudflare/workers-types';
-import { generatePrefixKey } from '$lib/utils/keys';
+import { generatePrefixKey, generatePlaceKey } from '$lib/utils/keys';
 
 export type Stop = {
   id: string;
@@ -87,13 +87,16 @@ export function makeTripService(
        // --- A. Cache Place Details (Lat/Lng) ---
        // Used for optimizing route calculations later
        if (data.lat !== undefined && data.lng !== undefined) {
+           // [!code fix] Use Hashed Key to prevent 512-byte limit errors on long inputs
+           const safeKey = await generatePlaceKey(addrKey);
+
            const payload = { 
              lastSeen: new Date().toISOString(),
-             formatted_address: addrKey, // Using normalized key as address for now
+             formatted_address: addrKey, // Preserve original text for display/search
              lat: data.lat,
              lng: data.lng
            };
-           writePromises.push(placesKV.put(addrKey, JSON.stringify(payload)));
+           writePromises.push(placesKV.put(safeKey, JSON.stringify(payload)));
        }
 
        // --- B. Update Autocomplete Prefix Index ---

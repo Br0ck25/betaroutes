@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { slide } from 'svelte/transition'; // [!code ++] Animation for console
   import { trips } from '$lib/stores/trips';
   import { trash } from '$lib/stores/trash';
   import { user } from '$lib/stores/auth';
@@ -11,15 +12,16 @@
   let isConnected = false;
   let logs: string[] = [];
   
+  // [!code ++] Console Visibility State
+  let showConsole = false;
+
   // Configuration State
   let installPay = 150;
   let repairPay = 80;
   let upgradePay = 80;
-  
   // Supply Costs
   let poleCost = 0;
   let concreteCost = 0;
-  
   // NEW: Pole Charge Amount
   let poleCharge = 0;
 
@@ -30,6 +32,9 @@
   let showSuccess = false;
   let successMessage = '';
   let statusMessage = 'Sync Now';
+  
+  // [!code ++] Track batch for progress visualization
+  let currentBatch = 0;
 
   function showSuccessMsg(msg: string) {
     successMessage = msg;
@@ -77,7 +82,6 @@
     loading = true;
     statusMessage = 'Connecting...';
     addLog('Connecting...');
-    
     try {
         const res = await fetch('/api/hughesnet', {
             method: 'POST',
@@ -126,12 +130,13 @@
 
   async function handleSync(batchCount = 1) {
     loading = true;
-    statusMessage = `Syncing Batch ${batchCount}... (Please Wait)`;
+    currentBatch = batchCount; // [!code ++] Update batch for UI
+    statusMessage = `Syncing Batch ${batchCount}...`;
     
     const skipScan = batchCount > 1;
-    
     if (batchCount === 1) {
         addLog(`Starting Full Sync...`);
+        showConsole = true; // [!code ++] Auto-open console on start
     } else {
         addLog(`Continuing Sync (Batch ${batchCount})...`);
     }
@@ -146,7 +151,7 @@
                 upgradePay,
                 poleCost,
                 concreteCost,
-                poleCharge, // PASSING NEW FIELD
+                poleCharge, 
                 installTime,
                 repairTime,
                 overrideTimes,
@@ -171,6 +176,7 @@
              addLog(`Sync Complete! Processed ${newOrders.length} orders total.`);
              showSuccessMsg(`Synced ${newOrders.length} orders!`);
              statusMessage = 'Sync Complete';
+             currentBatch = 0; // [!code ++] Reset
              
              const userId = $user?.name || $user?.token;
              if (userId) {
@@ -285,19 +291,32 @@
               <p>⚠️ <strong>Important:</strong> Before syncing, please ensure your Start Address and MPG defaults are updated in <a href="/dashboard/settings">Global Settings</a>.</p>
           </div>
 
-          <div class="button-group mt-4">
-               <button class="btn-primary" on:click={() => handleSync(1)} disabled={loading}>
-                 {statusMessage}
-               </button>
-               
-               <button class="btn-secondary" on:click={handleDisconnect} disabled={loading}>
-                  Disconnect
-               </button>
+          {#if loading && currentBatch > 0}
+             <div class="sync-progress-container">
+                 <div class="progress-info">
+                     <span class="progress-label">Syncing Batch {currentBatch}</span>
+                     <span class="progress-sub">Fetching orders...</span>
+                 </div>
+                 <div class="progress-bar">
+                     <div class="progress-fill indeterminate"></div>
+                 </div>
+             </div>
+          {:else}
+              <div class="button-group mt-4">
+                   <button class="btn-primary" on:click={() => handleSync(1)} disabled={loading}>
+                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                     {statusMessage}
+                   </button>
+                   
+                   <button class="btn-secondary" on:click={handleDisconnect} disabled={loading}>
+                      Disconnect
+                   </button>
 
-               <button class="btn-secondary danger-hover" on:click={handleClear} disabled={loading}>
-                  Delete HNS Trips
-               </button>
-          </div>
+                   <button class="btn-secondary danger-hover" on:click={handleClear} disabled={loading}>
+                      Delete HNS Trips
+                   </button>
+              </div>
+          {/if}
       {/if}
     </div>
 
@@ -410,7 +429,7 @@
                         {order.type || 'Unknown'}
                      </span>
                      {#if order.hasPoleMount}
-                       <span class="order-badge pole">Pole</span>
+                        <span class="order-badge pole">Pole</span>
                      {/if}
                  </div>
                  <div class="order-details">
@@ -428,18 +447,27 @@
     {/if}
     
     <div class="settings-card full-width bg-dark">
-        <div class="console-header">Debug Console</div>
-        <div class="console-body">
-            {#each logs as log}
-                <div class="log-line">
-                    <span class="log-time">{log.includes('[') ? '' : '[' + new Date().toLocaleTimeString() + ']'}</span>
-                    <span class="log-msg" class:server={log.includes('[Server]')}>{log}</span>
-                </div>
-            {/each}
-            {#if logs.length === 0}
-                <div class="log-line muted">System ready...</div>
-            {/if}
+        <div class="console-header" on:click={() => showConsole = !showConsole} on:keydown={() => {}} role="button" tabindex="0">
+            <div class="flex items-center gap-2">
+                <span>Debug Console</span>
+                <span class="console-count">({logs.length})</span>
+            </div>
+            <span class="toggle-icon" class:rotated={showConsole}>▶</span>
         </div>
+        
+        {#if showConsole}
+            <div class="console-body" transition:slide>
+                {#each logs as log}
+                    <div class="log-line">
+                        <span class="log-time">{log.includes('[') ? '' : '[' + new Date().toLocaleTimeString() + ']'}</span>
+                        <span class="log-msg" class:server={log.includes('[Server]')}>{log}</span>
+                    </div>
+                {/each}
+                {#if logs.length === 0}
+                    <div class="log-line muted">System ready...</div>
+                {/if}
+            </div>
+        {/if}
     </div>
 
   </div>
@@ -496,7 +524,7 @@
   .separator { height: 1px; background: #E5E7EB; margin: 24px 0; }
 
   .btn-primary, .btn-secondary { width: 100%; padding: 14px; border-radius: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 15px; }
-  .btn-primary { background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%); color: white; border: none; }
+  .btn-primary { display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%); color: white; border: none; }
   .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(255, 127, 80, 0.3); }
   .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; transform: none; box-shadow: none; }
   
@@ -506,6 +534,20 @@
   
   .button-group { display: flex; gap: 12px; }
   .mt-4 { margin-top: 16px; }
+
+  /* SYNC PROGRESS STYLES */
+  .sync-progress-container { background: #FFF7ED; border: 1px solid #FED7AA; border-radius: 12px; padding: 16px; text-align: center; margin-top: 16px; }
+  .progress-info { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .progress-label { font-weight: 700; color: #9A3412; font-size: 14px; }
+  .progress-sub { color: #C2410C; font-size: 12px; }
+  .progress-bar { height: 8px; background: #FFEDD5; border-radius: 4px; overflow: hidden; position: relative; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, #F97316, #EA580C); border-radius: 4px; width: 30%; }
+  .progress-fill.indeterminate { width: 50%; animation: pulse-progress 1.5s infinite ease-in-out; }
+  
+  @keyframes pulse-progress {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(200%); }
+  }
 
   .success-state { padding: 20px; background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 12px; text-align: center; }
   .status-indicator { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: #166534; font-size: 16px; }
@@ -542,8 +584,16 @@
   .time { color: #6B7280; font-size: 12px; }
 
   .bg-dark { background: #111827; border-color: #374151; padding: 0; overflow: hidden; }
-  .console-header { background: #1F2937; padding: 12px 24px; color: #9CA3AF; font-size: 12px; font-weight: 700; text-transform: uppercase; border-bottom: 1px solid #374151; }
-  .console-body { padding: 16px 24px; height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px; display: flex; flex-direction: column-reverse; }
+  .console-header { 
+      background: #1F2937; padding: 12px 24px; color: #9CA3AF; font-size: 12px; font-weight: 700; text-transform: uppercase; 
+      border-bottom: 1px solid #374151; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none;
+  }
+  .console-header:hover { color: #E5E7EB; background: #374151; }
+  .console-count { color: #6B7280; font-weight: 400; font-size: 11px; margin-left: 4px; }
+  .toggle-icon { transition: transform 0.2s; font-size: 10px; }
+  .toggle-icon.rotated { transform: rotate(90deg); }
+
+  .console-body { padding: 16px 24px; height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px; display: flex; flex-direction: column-reverse; border-top: 1px solid #374151; }
   .log-line { margin-bottom: 6px; }
   .log-time { color: #6B7280; margin-right: 8px; }
   .log-msg { color: #34D399; }
