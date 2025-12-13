@@ -102,7 +102,7 @@ export async function sendVerificationEmail(email: string, token: string, baseUr
                 'Authorization': `Bearer ${apiKey}` // [!code fix] Use the dynamic variable
             },
             body: JSON.stringify({
-                from: 'Go Route Yourself <onboarding@resend.dev>',
+                from: 'Go Route Yourself <noreply@gorouteyourself.com>',
                 to: email,
                 subject: 'Verify your account',
                 html: getVerificationHtml(verifyUrl)
