@@ -18,28 +18,29 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	try {
-        // Using BETA_USERS_KV to look up the session
-		const usersKV = event.platform?.env?.BETA_USERS_KV;
-		if (usersKV) {
-			const sessionDataStr = await usersKV.get(sessionId);
+        // [!code fix] Use SESSIONS_KV to find the active session
+		const sessionKV = event.platform?.env?.BETA_SESSIONS_KV;
+		
+        if (sessionKV) {
+			const sessionDataStr = await sessionKV.get(sessionId);
 
 			if (sessionDataStr) {
 				const session = JSON.parse(sessionDataStr);
 				
 				event.locals.user = {
 					id: session.id,
-					token: sessionId, // Keep session ID available as token
+					token: sessionId,
 					plan: session.plan ?? 'free',
 					tripsThisMonth: session.tripsThisMonth ?? 0,
 					maxTrips: session.maxTrips ?? 10,
 					resetDate: session.resetDate ?? new Date().toISOString(),
-					name: session.name, // This contains the username
+					name: session.name, 
 					email: session.email
 				};
 			} else {
-				// Session invalid or expired in KV
+                // Session ID cookie exists, but data is gone from KV (expired/deleted)
                 if (event.url.pathname.startsWith('/dashboard')) {
-				    console.warn('[HOOK] Session ID exists but not found in KV.');
+				    console.warn('[HOOK] Session expired or invalid.');
                 }
 				event.locals.user = null;
 			}

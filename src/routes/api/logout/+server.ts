@@ -3,26 +3,24 @@ import { redirect } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ cookies, platform }) => {
-    // 1. Get the current session ID from the cookie
     const sessionId = cookies.get('session_id');
 
-    // 2. Clear the cookie from the client's browser
+    // 1. Delete cookie
     cookies.delete('session_id', { path: '/' });
 
-    // 3. Invalidate the session server-side
+    // 2. Delete session from KV
     if (sessionId) {
         try {
-            // Using BETA_USERS_KV as configured in your login
-            const kv = platform?.env?.BETA_USERS_KV;
-            if (kv) {
-                await kv.delete(sessionId); 
-                console.log(`[LOGOUT] Session deleted from KV: ${sessionId}`);
+            // [!code fix] Delete from SESSIONS_KV
+            const sessionKV = platform?.env?.BETA_SESSIONS_KV;
+            if (sessionKV) {
+                await sessionKV.delete(sessionId); 
+                console.log(`[LOGOUT] Session deleted: ${sessionId}`);
             }
         } catch (error) {
-            console.error('[LOGOUT] Failed to delete session from KV:', error);
+            console.error('[LOGOUT] Failed to delete session:', error);
         }
     }
 
-    // 4. Redirect the user to the login page
     throw redirect(302, '/login');
 };

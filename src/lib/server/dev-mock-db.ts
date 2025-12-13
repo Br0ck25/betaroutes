@@ -7,6 +7,7 @@ const DB_FILE = path.resolve('.kv-mock.json');
 // Initial state
 let mockDB: Record<string, any> = {
 	USERS: {},
+        SESSIONS: {},
 	LOGS: {},
 	TRASH: {},
 	SETTINGS: {},
@@ -78,6 +79,9 @@ export function setupMockKV(event: any) {
     if (!event.platform.env) event.platform.env = {};
 
     const env = event.platform.env;
+
+    // [!code ++] Mock the Sessions KV
+    if (!env.BETA_SESSIONS_KV) env.BETA_SESSIONS_KV = createMockKV('SESSIONS');
 
     if (!env.BETA_USERS_KV) env.BETA_USERS_KV = createMockKV('USERS');
     if (!env.BETA_LOGS_KV) env.BETA_LOGS_KV = createMockKV('LOGS');
