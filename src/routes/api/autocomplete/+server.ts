@@ -1,40 +1,45 @@
 // src/routes/api/autocomplete/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { generatePrefixKey, normalizeSearchString } from '$lib/utils/keys';
 
 export const GET: RequestHandler = async ({ url, platform }) => {
     const query = url.searchParams.get('q');
+    
+    // The cache logic writes keys starting at length 2, so we skip anything shorter
     if (!query || query.length < 2) {
         return json([]);
     }
 
     try {
-        // [!code change] Use shared key generation to ensure matching against DB
-        const prefixKey = generatePrefixKey(query);
-        const normalizedQuery = normalizeSearchString(query);
-
         const kv = platform?.env?.BETA_PLACES_KV;
-        
-        // If no KV binding (e.g. dev mode without miniflare), return empty
         if (!kv) return json([]);
 
-        // 1. Get the bucket (list of place IDs/Strings starting with this prefix)
-        // We assume the bucket contains a JSON array of full address strings
-        const bucketData = await kv.get(prefixKey, 'json') as string[] | null;
+        // 1. Normalize query to match the Writer's logic (from api/autocomplete/cache/+server.ts)
+        // The cache normalized it by lowercasing and removing spaces
+        const normalizedQuery = query.toLowerCase().replace(/\s+/g, '');
+        
+        // 2. Determine the prefix to list
+        // The cache loop stops at 10 characters, so we cap the prefix length at 10
+        const searchPrefix = normalizedQuery.substring(0, 10);
+        
+        // This matches the key structure: `prefix:${prefix}:${normalizedAddress}`
+        const listPrefix = `prefix:${searchPrefix}:`;
 
-        if (!bucketData || !Array.isArray(bucketData)) {
+        // 3. List keys instead of Getting a bucket
+        // This finds all keys that match the user's input prefix
+        const listResult = await kv.list({ prefix: listPrefix, limit: 5 });
+
+        if (listResult.keys.length === 0) {
             return json([]);
         }
 
-        // 2. Filter in-memory to find exact matches (since prefix is only 10 chars)
-        const matches = bucketData
-            .filter(address => normalizeSearchString(address).includes(normalizedQuery))
-            .slice(0, 5) // Limit results
-            .map(address => ({
-                formatted_address: address,
-                name: address.split(',')[0] // Simple heuristic for name display
-            }));
+        // 4. Fetch the values for the keys found
+        // KV List only returns metadata/names, so we have to get the actual JSON objects
+        const matchPromises = listResult.keys.map(key => kv.get(key.name, 'json'));
+        const matchesRaw = await Promise.all(matchPromises);
+
+        // Filter out any nulls (in case a key expired during the fetch)
+        const matches = matchesRaw.filter(m => m !== null);
 
         return json(matches);
 
