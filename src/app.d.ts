@@ -4,7 +4,7 @@ declare global {
 		interface Locals {
 			token: string | null;
 			user: {
-				id: string; // <--- ADD THIS
+				id: string; 
 				token: string;
 				plan: string;
 				tripsThisMonth: number;
@@ -23,8 +23,12 @@ declare global {
 				BETA_HUGHESNET_KV: KVNamespace;
 				BETA_PLACES_KV: KVNamespace;
 				BETA_DIRECTIONS_KV: KVNamespace;
-                		HNS_ENCRYPTION_KEY: string;
+				BETA_SESSIONS_KV: KVNamespace; // Added for completeness if missing
+                
+                // Secrets & Config
+                HNS_ENCRYPTION_KEY: string;
 				PUBLIC_GOOGLE_MAPS_API_KEY: string;
+                PRIVATE_GOOGLE_MAPS_API_KEY: string; // [!code ++] Added this
 			};
 		}
 	}

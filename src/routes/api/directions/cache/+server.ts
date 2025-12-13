@@ -1,3 +1,4 @@
+// src/routes/api/directions/cache/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { KVNamespace } from '@cloudflare/workers-types';
@@ -20,6 +21,7 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
     }
 
     const kv = platform?.env?.BETA_DIRECTIONS_KV as KVNamespace;
+    // [!code fix] Use Private Key
     const apiKey = platform?.env?.PRIVATE_GOOGLE_MAPS_API_KEY;
     const key = generateKey(start, end);
 
@@ -48,7 +50,6 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
         if (data.status === 'OK' && data.routes?.[0]?.legs?.[0]) {
             const leg = data.routes[0].legs[0];
             
-            // Standardize Format: Meters & Seconds
             const result = {
                 distance: leg.distance.value, 
                 duration: leg.duration.value 

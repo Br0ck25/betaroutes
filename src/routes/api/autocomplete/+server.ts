@@ -5,6 +5,8 @@ import type { RequestHandler } from './$types';
 export const GET: RequestHandler = async ({ url, platform }) => {
     const query = url.searchParams.get('q');
     const placeId = url.searchParams.get('placeid');
+    
+    // Use the PRIVATE key for server-side calls to prevent leaking it
     const apiKey = platform?.env?.PRIVATE_GOOGLE_MAPS_API_KEY;
 
     // --- MODE A: PLACE DETAILS (Get Lat/Lng) ---
@@ -12,7 +14,6 @@ export const GET: RequestHandler = async ({ url, platform }) => {
         if (!apiKey) return json({ error: 'Server key missing' }, { status: 500 });
 
         try {
-            // Fetch secure details from Google using Private Key
             const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=geometry,name,formatted_address&key=${apiKey}`;
             const res = await fetch(detailsUrl);
             const data = await res.json();
@@ -44,7 +45,6 @@ export const GET: RequestHandler = async ({ url, platform }) => {
 
             if (bucketRaw) {
                 const bucket = JSON.parse(bucketRaw);
-                // Simple client-side filtering of the bucket
                 const matches = bucket.filter((item: any) => {
                     const str = (item.formatted_address || item.name || '').toLowerCase();
                     return str.includes(query.toLowerCase());
@@ -57,9 +57,8 @@ export const GET: RequestHandler = async ({ url, platform }) => {
         }
 
         // 2. Google Fallback (Cost: $2.83/1000 reqs)
-        // Only runs if KV missed AND we have the private key
         if (!apiKey) {
-            // If no private key, we can't search Google server-side
+            // Cannot fallback to Google without the private key
             return json([]);
         }
 
@@ -69,7 +68,6 @@ export const GET: RequestHandler = async ({ url, platform }) => {
         const data = await response.json();
 
         if (data.status === 'OK' && data.predictions) {
-            // Map to your app's format
             const results = data.predictions.map((p: any) => ({
                 formatted_address: p.description,
                 name: p.structured_formatting?.main_text || p.description,
