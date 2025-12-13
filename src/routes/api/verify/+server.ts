@@ -10,18 +10,20 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
     const sessionKv = platform?.env?.BETA_SESSIONS_KV;
 
     if (!token || !usersKV || !sessionKv) {
-        throw redirect(303, '/login?error=invalid_link');
+        throw redirect(303, '/login?error=invalid_verification');
     }
 
     // 1. Get Pending Data
-    const pendingDataRaw = await usersKV.get(`pending_verify:${token}`);
+    const pendingKey = `pending_verify:${token}`;
+    const pendingDataRaw = await usersKV.get(pendingKey);
+
     if (!pendingDataRaw) {
-        throw redirect(303, '/login?error=expired_link');
+        throw redirect(303, '/login?error=expired_verification');
     }
 
     const pendingData = JSON.parse(pendingDataRaw);
 
-    // 2. Create Real User (Now it's safe)
+    // 2. Create Real User
     const user = await createUser(usersKV, {
         username: pendingData.username,
         email: pendingData.email,
@@ -33,7 +35,7 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
         resetDate: new Date().toISOString()
     });
 
-    // 3. Log them in immediately
+    // 3. Login Immediately
     const sessionData = {
         id: user.id,
         name: user.username,
@@ -55,8 +57,6 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
         maxAge: 60 * 60 * 24 * 7
     });
 
-    // 4. Delete pending record so link can't be reused
-    await usersKV.delete(`pending_verify:${token}`);
-
+    await usersKV.delete(pendingKey);
     throw redirect(303, '/dashboard?welcome=true');
 };

@@ -19,18 +19,17 @@ export const POST: RequestHandler = async ({ request, platform, url }) => {
         return json({ message: 'Missing fields' }, { status: 400 });
     }
 
-    // 1. Check Duplicates
+    // Check Duplicates
     const existingEmail = await findUserByEmail(usersKV, email);
     if (existingEmail) return json({ message: 'Email already in use.' }, { status: 409 });
 
     const existingUser = await findUserByUsername(usersKV, username);
     if (existingUser) return json({ message: 'Username taken.' }, { status: 409 });
 
-    // 2. Prepare Pending Record
+    // Prepare Pending Record (Expires in 24h)
     const hashedPassword = await hashPassword(password);
     const verificationToken = randomUUID();
     
-    // We store this in KV with a 24-hour expiration
     const pendingUser = {
         username,
         email,
@@ -38,25 +37,19 @@ export const POST: RequestHandler = async ({ request, platform, url }) => {
         createdAt: new Date().toISOString()
     };
 
-    // Store in KV: "pending_verify:TOKEN" -> UserData
     await usersKV.put(
         `pending_verify:${verificationToken}`, 
         JSON.stringify(pendingUser), 
-        { expirationTtl: 86400 } // Expires in 24 hours
+        { expirationTtl: 86400 }
     );
 
-    // 3. Send Email
-    // Note: We DO NOT set a session cookie here. The user is NOT logged in yet.
+    // Send Email (Do NOT log in)
     const emailSent = await sendVerificationEmail(email, verificationToken, url.origin);
 
     if (!emailSent) {
-        // Rollback if email fails
         await usersKV.delete(`pending_verify:${verificationToken}`);
         return json({ message: 'Failed to send verification email.' }, { status: 500 });
     }
 
-    return json({ 
-        success: true, 
-        message: 'Verification email sent. Please check your inbox.' 
-    }, { status: 200 });
+    return json({ success: true, message: 'Verification email sent.' });
 };

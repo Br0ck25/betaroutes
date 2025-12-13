@@ -6,24 +6,19 @@ import { deleteUser } from '$lib/server/userService';
 export const DELETE: RequestHandler = async ({ locals, platform, cookies }) => {
     try {
         const user = locals.user;
-        if (!user) {
-            return json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
 
         const kv = platform?.env?.BETA_USERS_KV;
-        if (!kv) {
-            return json({ error: 'Service Unavailable' }, { status: 503 });
-        }
+        if (!kv) return json({ error: 'Service Unavailable' }, { status: 503 });
 
-        // Perform Internal Deletion
+        // Internal Delete
         await deleteUser(kv, user.id);
 
-        // Cleanup Cookies
+        // Cleanup
         cookies.delete('session_id', { path: '/' });
         cookies.delete('token', { path: '/' });
 
         return json({ success: true });
-
     } catch (err) {
         console.error('Delete account error:', err);
         return json({ error: 'Internal Server Error' }, { status: 500 });
