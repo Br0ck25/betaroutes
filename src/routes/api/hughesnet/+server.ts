@@ -15,14 +15,14 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 
         console.log(`[API] HughesNet Action for User: ${userId} (Settings ID: ${settingsId})`);
 
-        // [!code ++] Pass BETA_DIRECTIONS_KV
+        // [!code changed] Use PRIVATE_GOOGLE_MAPS_API_KEY
         const service = new HughesNetService(
             platform.env.BETA_HUGHESNET_KV, 
             platform.env.HNS_ENCRYPTION_KEY,
             platform.env.BETA_LOGS_KV,
             platform.env.BETA_LOGS_TRASH_KV, 
             platform.env.BETA_USER_SETTINGS_KV,
-            platform.env.PUBLIC_GOOGLE_MAPS_API_KEY,
+            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY, // <--- Updated
             platform.env.BETA_DIRECTIONS_KV 
         );
 
@@ -37,7 +37,6 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
         }
 
         if (body.action === 'sync') {
-            // --- FIX: Extract ALL financial inputs ---
             const installPay = Number(body.installPay) || 0;
             const repairPay = Number(body.repairPay) || 0;
             const upgradePay = Number(body.upgradePay) || 0;
@@ -47,7 +46,6 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
             
             const skipScan = body.skipScan === true;
 
-            // Pass all arguments to sync
             const result = await service.sync(
                 userId, 
                 settingsId, 
@@ -86,14 +84,14 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
     try {
         const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
         
-        // [!code ++] Pass BETA_DIRECTIONS_KV
+        // [!code changed] Use PRIVATE_GOOGLE_MAPS_API_KEY
         const service = new HughesNetService(
             platform.env.BETA_HUGHESNET_KV, 
             platform.env.HNS_ENCRYPTION_KEY,
             platform.env.BETA_LOGS_KV,
             platform.env.BETA_LOGS_TRASH_KV,
             platform.env.BETA_USER_SETTINGS_KV,
-            platform.env.PUBLIC_GOOGLE_MAPS_API_KEY,
+            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY, // <--- Updated
             platform.env.BETA_DIRECTIONS_KV 
         );
         const orders = await service.getOrders(userId);
