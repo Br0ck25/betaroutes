@@ -2,14 +2,17 @@
 import { redirect } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createUser } from '$lib/server/userService';
-import { createSession } from '$lib/server/sessionService';
+// [!code --] import { createSession } from '$lib/server/sessionService';
+import { randomUUID } from 'node:crypto'; // [!code ++]
+import { dev } from '$app/environment'; // [!code ++]
 
 export const GET: RequestHandler = async ({ url, platform, cookies }) => {
     const token = url.searchParams.get('token');
     const usersKV = platform?.env?.BETA_USERS_KV;
-    const sessionKv = platform?.env?.BETA_SESSIONS_KV;
+    // [!code --] const sessionKv = platform?.env?.BETA_SESSIONS_KV;
 
-    if (!token || !usersKV || !sessionKv) {
+    // [!code --] if (!token || !usersKV || !sessionKv) {
+    if (!token || !usersKV) { // [!code ++]
         throw redirect(303, '/login?error=invalid_verification');
     }
 
@@ -35,7 +38,9 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
         resetDate: new Date().toISOString()
     });
 
-    // 3. Login Immediately
+    // 3. Login Immediately (Using logic compatible with hooks.server.ts)
+    const sessionToken = randomUUID(); // [!code ++]
+    
     const sessionData = {
         id: user.id,
         name: user.username,
@@ -44,18 +49,23 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
         tripsThisMonth: user.tripsThisMonth,
         maxTrips: user.maxTrips,
         resetDate: user.resetDate,
-        role: 'user'
+        role: 'user' // [!code ++]
     };
 
-    const sessionId = await createSession(sessionKv, sessionData);
+    // Store in USERS_KV using the token as key, matching the hook's expectation
+    await usersKV.put(sessionToken, JSON.stringify(sessionData)); // [!code ++]
 
-    cookies.set('session_id', sessionId, {
+    // Set the cookie named 'token' (NOT 'session_id')
+    cookies.set('token', sessionToken, { // [!code ++]
         path: '/',
         httpOnly: true,
         sameSite: 'lax',
-        secure: true,
-        maxAge: 60 * 60 * 24 * 7
+        secure: !dev, // [!code ++]
+        maxAge: 60 * 60 * 24 * 30 // 30 days // [!code ++]
     });
+
+    // [!code --] const sessionId = await createSession(sessionKv, sessionData);
+    // [!code --] cookies.set('session_id', sessionId, { ... });
 
     await usersKV.delete(pendingKey);
     throw redirect(303, '/dashboard?welcome=true');
