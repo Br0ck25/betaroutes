@@ -7,22 +7,15 @@ let googleMapsError = false;
 
 // Exported Singleton Loader
 export async function loadGoogleMaps(apiKey: string): Promise<void> {
-  // 1. Check if fully loaded
   if (typeof google !== 'undefined' && google.maps) return Promise.resolve();
-  
-  // 2. Check if previously failed
   if (googleMapsError) return Promise.reject(new Error('Google Maps previously failed'));
-  
-  // 3. Check if currently loading (return existing promise)
   if (loadingPromise) return loadingPromise;
   
-  // 4. Validation
   if (!apiKey || apiKey === 'undefined') {
     googleMapsError = true;
     return Promise.reject(new Error('No API key'));
   }
 
-  // 5. Check DOM for existing script (Edge case: injected by another source)
   const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
   if (existingScript) {
       loadingPromise = new Promise((resolve) => {
@@ -36,18 +29,14 @@ export async function loadGoogleMaps(apiKey: string): Promise<void> {
       return loadingPromise;
   }
   
-  // 6. Start New Load
   loadingPromise = new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    // [!code change] Added 'geometry' to libraries to ensure full compatibility
+    // Note: We still load 'places' lib for types, but we won't call AutocompleteService
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry`;
     script.async = true;
     script.defer = true;
     
-    script.onload = () => {
-      resolve();
-    };
-    
+    script.onload = () => resolve();
     script.onerror = (error) => {
       googleMapsError = true;
       loadingPromise = null;
@@ -65,21 +54,8 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
   let debounceTimer: any;
   let isSelecting = false;
   
-  // Session Token & Service State
-  let sessionToken: google.maps.places.AutocompleteSessionToken | null = null;
-  let placesService: google.maps.places.PlacesService | null = null;
-  
   if (params.apiKey && params.apiKey !== 'undefined') {
-    loadGoogleMaps(params.apiKey)
-        .then(() => initServices())
-        .catch(console.error);
-  }
-  
-  function initServices() {
-      if (typeof google !== 'undefined' && google.maps && google.maps.places) {
-          sessionToken = new google.maps.places.AutocompleteSessionToken();
-          placesService = new google.maps.places.PlacesService(document.createElement('div'));
-      }
+    loadGoogleMaps(params.apiKey).catch(console.error);
   }
   
   function initUI() {
@@ -133,24 +109,20 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       try {
         const startTime = performance.now();
         
-        // 1. Try KV Cache
+        // [!code changed] Always fetch from our API (Proxies to Google if needed)
         const kvUrl = `/api/autocomplete?q=${encodeURIComponent(value)}`;
         const kvRes = await fetch(kvUrl);
-        const kvData = await kvRes.json();
-        const kvTime = Math.round(performance.now() - startTime);
+        const data = await kvRes.json();
+        const time = Math.round(performance.now() - startTime);
 
-        const validKvData = Array.isArray(kvData) ? kvData.map((item: any) => {
-            if (typeof item === 'string') {
-                try { return JSON.parse(item); } catch { return null; }
-            }
-            return item;
-        }).filter(item => item && (item.formatted_address || item.name)) : [];
+        const validData = Array.isArray(data) ? data : [];
         
-        if (validKvData.length > 0) {
-          renderResults(validKvData.slice(0, 5), 'kv', kvTime);
+        if (validData.length > 0) {
+          // Identify source based on data properties (KV usually has full geometry cached)
+          const source = validData[0].source === 'google_proxy' ? 'google' : 'kv';
+          renderResults(validData.slice(0, 5), source, time);
         } else {
-          // 2. Fallback to Google
-          await fetchGooglePlaces(value, startTime);
+          renderEmpty();
         }
       } catch (err) {
         renderError();
@@ -158,44 +130,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     }, 300);
   }
   
-  async function fetchGooglePlaces(input: string, startTime: number) {
-    if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
-      renderEmpty();
-      return;
-    }
-    
-    try {
-      const service = new google.maps.places.AutocompleteService();
-      if (!sessionToken) sessionToken = new google.maps.places.AutocompleteSessionToken();
-
-      service.getPlacePredictions(
-        { 
-            input, 
-            sessionToken: sessionToken,
-            componentRestrictions: { country: 'us' } 
-        },
-        (predictions, status) => {
-          const googleTime = Math.round(performance.now() - startTime);
-          
-          if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
-            const results = predictions.map(p => ({
-              formatted_address: p.description,
-              name: p.structured_formatting?.main_text || p.description,
-              secondary_text: p.structured_formatting?.secondary_text,
-              place_id: p.place_id
-            }));
-            
-            renderResults(results, 'google', googleTime);
-            cacheToKV(input, results);
-          } else {
-            renderEmpty();
-          }
-        }
-      );
-    } catch {
-      renderError();
-    }
-  }
+  // [!code removed] fetchGooglePlaces() removed entirely
   
   async function cacheToKV(query: string, results: any[]) {
     try {
@@ -242,11 +177,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
                              ? item.formatted_address.split(',').slice(1).join(',').trim() 
                              : '');
 
-      const pinIcon = `
-        <svg focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#9AA0A6" width="20px" height="20px">
-          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-        </svg>
-      `;
+      const pinIcon = `<svg focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#9AA0A6" width="20px" height="20px"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`;
 
       Object.assign(row.style, {
         display: 'flex',
@@ -259,12 +190,8 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       row.innerHTML = `
         <div style="min-width: 24px; margin-right: 12px; display: flex; align-items: center;">${pinIcon}</div>
         <div style="flex: 1; overflow: hidden;">
-          <div style="font-size: 14px; color: #202124; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-            ${mainText}
-          </div>
-          <div style="font-size: 12px; color: #70757A; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px;">
-            ${secondaryText}
-          </div>
+          <div style="font-size: 14px; color: #202124; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${mainText}</div>
+          <div style="font-size: 12px; color: #70757A; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px;">${secondaryText}</div>
         </div>
       `;
       
@@ -280,10 +207,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     
     if (source === 'google') {
        const footer = document.createElement('div');
-       Object.assign(footer.style, {
-         textAlign: 'right',
-         padding: '4px 16px',
-       });
+       Object.assign(footer.style, { textAlign: 'right', padding: '4px 16px' });
        footer.innerHTML = '<img src="https://maps.gstatic.com/mapfiles/api-3/images/powered-by-google-on-white3.png" alt="Powered by Google" style="height: 12px; opacity: 0.7;">';
        dropdown.appendChild(footer);
     }
@@ -294,40 +218,44 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
   
   function renderEmpty() {
     if (!dropdown) return;
-    dropdown.innerHTML = `
-      <div style="padding: 16px; color: #70757A; font-size: 13px; text-align: center;">
-        No results found
-      </div>
-    `;
+    dropdown.innerHTML = `<div style="padding: 16px; color: #70757A; font-size: 13px; text-align: center;">No results found</div>`;
     dropdown.style.display = 'block';
     updatePosition();
   }
   
   function renderError() { /* ... */ }
   
-  function selectItem(item: any, source: 'kv' | 'google') {
+  async function selectItem(item: any, source: 'kv' | 'google') {
     if (dropdown) dropdown.style.display = 'none';
     isSelecting = true;
 
-    if (source === 'google' && item.place_id && placesService && sessionToken) {
-        const request = {
-            placeId: item.place_id,
-            fields: ['name', 'formatted_address', 'geometry'],
-            sessionToken: sessionToken
-        };
-
-        placesService.getDetails(request, (place, status) => {
-            if (status === google.maps.places.PlacesServiceStatus.OK && place) {
-                commitSelection({
-                    formatted_address: place.formatted_address || item.formatted_address,
-                    name: place.name || item.name,
-                    geometry: place.geometry
-                });
-                sessionToken = new google.maps.places.AutocompleteSessionToken();
-            } else {
-                commitSelection(item);
+    // Check if we need to fetch details (geometry)
+    // If it came from KV cache, it likely has geometry. 
+    // If it came from Google Proxy, it definitely DOES NOT have geometry yet.
+    if (!item.geometry || !item.geometry.location) {
+        if (item.place_id) {
+            try {
+                // [!code changed] Proxy 'Get Details' through our API
+                const res = await fetch(`/api/autocomplete?placeid=${item.place_id}`);
+                const details = await res.json();
+                
+                if (details && details.geometry) {
+                    const fullItem = {
+                        ...item,
+                        formatted_address: details.formatted_address || item.formatted_address,
+                        name: details.name || item.name,
+                        geometry: details.geometry
+                    };
+                    commitSelection(fullItem);
+                    // Optionally update cache here with full details
+                    return;
+                }
+            } catch(e) {
+                console.error("Details fetch failed", e);
             }
-        });
+        }
+        // Fallback: commit what we have (might miss Lat/Lng)
+        commitSelection(item);
     } else {
         commitSelection(item);
     }
@@ -340,8 +268,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
   }
   
   initUI();
-  initServices();
-
+  
   node.addEventListener('input', handleInput);
   node.addEventListener('focus', () => {
     if (node.value.length > 1) {
