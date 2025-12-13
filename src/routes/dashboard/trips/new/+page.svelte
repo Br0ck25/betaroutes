@@ -14,14 +14,11 @@
   let maintenanceOptions = ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement'];
   let suppliesOptions = ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental'];
   
-  // State for calculation
   let isCalculating = false;
-  let directionsService: google.maps.DirectionsService;
   
   onMount(() => {
     const savedMaintenance = localStorage.getItem('maintenanceOptions');
     const savedSupplies = localStorage.getItem('suppliesOptions');
-    
     if (savedMaintenance) maintenanceOptions = JSON.parse(savedMaintenance);
     if (savedSupplies) suppliesOptions = JSON.parse(savedSupplies);
   });
@@ -59,14 +56,7 @@
     return `${m} min`;
   }
 
-  // --- ROUTING ENGINE ---
-
-  function getDirectionsService() {
-    if (!directionsService && window.google && window.google.maps) {
-      directionsService = new google.maps.DirectionsService();
-    }
-    return directionsService;
-  }
+  // --- ROUTING LOGIC ---
 
   function generateRouteKey(start: string, end: string) {
     const s = start.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
@@ -74,11 +64,11 @@
     return `kv_route_${s}_to_${e}`;
   }
 
-  // Hybrid Fetch: Local Storage -> KV -> Google API
+  // [!code changed] Only check LocalStorage, then ask Server API
   async function fetchRouteSegment(start: string, end: string) {
     if (!start || !end) return null;
     
-    // 1. LOCAL STORAGE CHECK
+    // 1. LOCAL STORAGE CHECK (Fastest)
     const localKey = generateRouteKey(start, end);
     const cached = localStorage.getItem(localKey);
     if (cached) {
@@ -86,76 +76,37 @@
       return JSON.parse(cached);
     }
 
-    // 2. SERVER KV CHECK
+    // 2. SERVER API (Proxies to Google if needed)
     try {
+        console.log("Local Miss. Asking Server...");
         const res = await fetch(`/api/directions/cache?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
         const result = await res.json();
 
-        if (result.found && result.data) {
-            console.log("KV Hit! Saving to Local.");
+        if (result.data) {
+            console.log(`Server Hit (${result.source})`);
+            
+            // CONVERT Meters/Seconds (Server) -> Miles/Minutes (Client)
             const mappedResult = {
-                distance: result.data.distance * 0.000621371, // Meters to Miles
-                duration: result.data.duration / 60           // Seconds to Minutes
+                distance: result.data.distance * 0.000621371,
+                duration: result.data.duration / 60
             };
+
+            // Save to Local for next time
             localStorage.setItem(localKey, JSON.stringify(mappedResult));
             return mappedResult;
+        } else {
+            throw new Error(result.error || 'Route not found');
         }
     } catch (err) {
-        console.warn("KV Check failed, falling back to Google:", err);
+        console.error("Routing failed:", err);
+        return null;
     }
-
-    // 3. GOOGLE MAPS API
-    console.log("KV Miss. Calling Google API...");
-    const service = getDirectionsService();
-    if (!service) return null;
-
-    return new Promise((resolve) => {
-      service.route({
-        origin: start,
-        destination: end,
-        travelMode: google.maps.TravelMode.DRIVING
-      }, (response, status) => {
-        if (status === 'OK' && response) {
-          const leg = response.routes[0].legs[0];
-          
-          const meters = leg.distance?.value || 0;
-          const seconds = leg.duration?.value || 0;
-
-          const clientResult = {
-            distance: meters * 0.000621371, 
-            duration: seconds / 60
-          };
-          
-          // Save to Local
-          localStorage.setItem(localKey, JSON.stringify(clientResult));
-
-          // Background Upload to KV
-          fetch('/api/directions/cache', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                  start, end,
-                  distanceMeters: meters,
-                  durationSeconds: seconds
-              })
-          }).catch(err => console.error("Failed to upload to KV:", err));
-
-          resolve(clientResult);
-        } else {
-          console.error('Directions request failed due to ' + status);
-          resolve(null);
-        }
-      });
-    });
   }
-
-  // --- AUTO RE-CALCULATION LOGIC ---
 
   async function recalculateTotals() {
     let miles = tripData.stops.reduce((acc, s) => acc + (s.distanceFromPrev || 0), 0);
     let mins = tripData.stops.reduce((acc, s) => acc + (s.timeFromPrev || 0), 0);
 
-    // Calculate Final Leg: Last Stop -> End (or Start if Round Trip)
     const lastStop = tripData.stops[tripData.stops.length - 1];
     const startPoint = lastStop ? lastStop.address : tripData.startAddress;
     const endPoint = tripData.endAddress || tripData.startAddress;
@@ -172,16 +123,14 @@
     tripData.estimatedTime = Math.round(mins);
   }
 
-  // Triggered when editing an existing stop
   async function handleStopChange(index: number, placeOrEvent: any) {
     const val = placeOrEvent?.formatted_address || placeOrEvent?.name || tripData.stops[index].address;
-    if (!val || val === tripData.stops[index].address) return; // No change
+    if (!val || val === tripData.stops[index].address) return;
 
     tripData.stops[index].address = val;
     isCalculating = true;
 
     try {
-        // 1. Recalculate Leg INTO this stop
         const prevLoc = index === 0 ? tripData.startAddress : tripData.stops[index - 1].address;
         if (prevLoc) {
             const legIn = await fetchRouteSegment(prevLoc, val);
@@ -191,7 +140,6 @@
             }
         }
 
-        // 2. Recalculate Leg OUT of this stop (to next stop)
         const nextStop = tripData.stops[index + 1];
         if (nextStop) {
             const legOut = await fetchRouteSegment(val, nextStop.address);
@@ -200,17 +148,12 @@
                 tripData.stops[index + 1].timeFromPrev = legOut.duration;
             }
         }
-
-        // 3. Update Totals
         await recalculateTotals();
-    } catch (e) {
-        console.error("Stop update calculation failed", e);
     } finally {
         isCalculating = false;
     }
   }
 
-  // Triggered when editing Start/End address
   async function handleMainAddressChange(type: 'start' | 'end', placeOrEvent: any) {
     const val = placeOrEvent?.formatted_address || placeOrEvent?.name || (type === 'start' ? tripData.startAddress : tripData.endAddress);
     
@@ -220,7 +163,6 @@
     isCalculating = true;
     try {
         if (type === 'start' && tripData.stops.length > 0) {
-            // Recalculate first leg
             const firstStop = tripData.stops[0];
             const leg = await fetchRouteSegment(val, firstStop.address);
             if (leg) {
@@ -250,19 +192,20 @@
     isCalculating = true;
     try {
       const segmentData: any = await fetchRouteSegment(segmentStart, newStop.address);
-      
+      if (!segmentData) throw new Error("Could not calculate route to new stop");
+
       tripData.stops = [...tripData.stops, { 
         ...newStop, 
         id: crypto.randomUUID(),
-        distanceFromPrev: segmentData ? segmentData.distance : 0,
-        timeFromPrev: segmentData ? segmentData.duration : 0
+        distanceFromPrev: segmentData.distance,
+        timeFromPrev: segmentData.duration
       }];
 
       await recalculateTotals();
       newStop = { address: '', earnings: 0, notes: '' };
     } catch (e) {
       console.error(e);
-      alert("Error calculating route segment.");
+      alert("Error calculating route. Please check the address.");
     } finally {
       isCalculating = false;
     }
@@ -290,7 +233,6 @@
       newStops.splice(dropIndex, 0, item);
       tripData.stops = newStops;
       dragItemIndex = null;
-      // Re-ordering invalidates segments; doing a full recalc would be best but simple totals update is fast
       recalculateTotals(); 
   }
   
@@ -474,7 +416,14 @@
           {#if tripData.stops.length > 0}
             <div class="stops-list">
               {#each tripData.stops as stop, i (stop.id)}
-                <div class="stop-card" draggable="true" on:dragstart={(e) => handleDragStart(e, i)} on:drop={(e) => handleDrop(e, i)} on:dragover={handleDragOver}>
+                <div 
+                  class="stop-card" 
+                  draggable="true" 
+                  on:dragstart={(e) => handleDragStart(e, i)} 
+                  on:drop={(e) => handleDrop(e, i)} 
+                  on:dragover={handleDragOver}
+                  role="listitem"
+                >
                   <div class="stop-header">
                     <div class="stop-number">{i + 1}</div>
                     <div class="stop-actions">

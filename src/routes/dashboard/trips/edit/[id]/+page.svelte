@@ -13,9 +13,7 @@
   let step = 1;
   let loading = true;
   
-  // State for calculation
   let isCalculating = false;
-  let directionsService: google.maps.DirectionsService;
   let dragItemIndex: number | null = null;
   let maintenanceOptions = ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement'];
   let suppliesOptions = ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental'];
@@ -42,7 +40,6 @@
     const safeStops = (found.stops || []).map((s: any) => ({
         ...s,
         id: s.id || crypto.randomUUID(),
-        // Ensure legacy stops have these properties
         distanceFromPrev: s.distanceFromPrev || 0, 
         timeFromPrev: s.timeFromPrev || 0
     }));
@@ -104,19 +101,13 @@
 
   // --- ROUTING LOGIC ---
 
-  function getDirectionsService() {
-    if (!directionsService && window.google && window.google.maps) {
-      directionsService = new google.maps.DirectionsService();
-    }
-    return directionsService;
-  }
-
   function generateRouteKey(start: string, end: string) {
     const s = start.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
     const e = end.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
     return `kv_route_${s}_to_${e}`;
   }
 
+  // [!code changed] Only check LocalStorage, then ask Server API
   async function fetchRouteSegment(start: string, end: string) {
     if (!start || !end) return null;
     
@@ -128,67 +119,28 @@
       return JSON.parse(cached);
     }
 
-    // 2. SERVER KV
+    // 2. SERVER
     try {
+        console.log("Local Miss. Asking Server...");
         const res = await fetch(`/api/directions/cache?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
         const result = await res.json();
 
-        if (result.found && result.data) {
+        if (result.data) {
+            console.log(`Server Hit (${result.source})`);
             const mappedResult = {
                 distance: result.data.distance * 0.000621371, 
                 duration: result.data.duration / 60
             };
             localStorage.setItem(localKey, JSON.stringify(mappedResult));
             return mappedResult;
+        } else {
+            throw new Error(result.error || 'Route not found');
         }
     } catch (err) {
-        console.warn("KV Check failed, falling back to Google:", err);
+        console.error("Routing failed:", err);
+        return null;
     }
-
-    // 3. GOOGLE API
-    console.log("KV Miss. Calling Google API...");
-    const service = getDirectionsService();
-    if (!service) return null;
-
-    return new Promise((resolve) => {
-      service.route({
-        origin: start,
-        destination: end,
-        travelMode: google.maps.TravelMode.DRIVING
-      }, (response, status) => {
-        if (status === 'OK' && response) {
-          const leg = response.routes[0].legs[0];
-          
-          const meters = leg.distance?.value || 0;
-          const seconds = leg.duration?.value || 0;
-
-          const clientResult = {
-            distance: meters * 0.000621371, 
-            duration: seconds / 60
-          };
-          
-          localStorage.setItem(localKey, JSON.stringify(clientResult));
-
-          fetch('/api/directions/cache', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                  start, end,
-                  distanceMeters: meters,
-                  durationSeconds: seconds
-              })
-          }).catch(err => console.error("Failed to upload to KV:", err));
-
-          resolve(clientResult);
-        } else {
-          console.error('Directions request failed due to ' + status);
-          resolve(null);
-        }
-      });
-    });
   }
-
-  // --- AUTO RE-CALCULATION ---
 
   async function recalculateTotals() {
     let miles = tripData.stops.reduce((acc, s) => acc + (s.distanceFromPrev || 0), 0);
@@ -237,8 +189,6 @@
         }
 
         await recalculateTotals();
-    } catch (e) {
-        console.error("Stop update calculation failed", e);
     } finally {
         isCalculating = false;
     }
@@ -282,12 +232,13 @@
     isCalculating = true;
     try {
       const segmentData: any = await fetchRouteSegment(segmentStart, newStop.address);
-      
+      if (!segmentData) throw new Error("Could not calculate route to new stop");
+
       tripData.stops = [...tripData.stops, { 
         ...newStop, 
         id: crypto.randomUUID(),
-        distanceFromPrev: segmentData ? segmentData.distance : 0,
-        timeFromPrev: segmentData ? segmentData.duration : 0
+        distanceFromPrev: segmentData.distance,
+        timeFromPrev: segmentData.duration
       }];
 
       await recalculateTotals();
@@ -441,7 +392,9 @@
   <div class="form-content">
     {#if step === 1}
       <div class="form-card">
-        <div class="card-header"><h2 class="card-title">Route & Stops</h2></div>
+        <div class="card-header">
+          <h2 class="card-title">Route & Stops</h2>
+        </div>
         
         <div class="form-group">
           <label for="start-address">Starting Address</label>
@@ -459,7 +412,10 @@
         </div>
         
         <div class="stops-container">
-          <div class="stops-header"><h3>Stops</h3><span class="count">{tripData.stops.length} added</span></div>
+          <div class="stops-header">
+            <h3>Stops</h3>
+            <span class="count">{tripData.stops.length} added</span>
+          </div>
           
           {#if tripData.stops.length > 0}
             <div class="stops-list">
@@ -483,7 +439,10 @@
                       autocomplete="off"
                       class="address-input"
                     />
-                    <div class="input-money-wrapper"><span class="symbol">$</span><input type="number" class="input-money" bind:value={stop.earnings} placeholder="Earnings" step="0.01" min="0" /></div>
+                    <div class="input-money-wrapper">
+                        <span class="symbol">$</span>
+                        <input type="number" class="input-money" bind:value={stop.earnings} placeholder="Earnings" step="0.01" min="0" />
+                    </div>
                   </div>
                 </div>
               {/each}
@@ -500,10 +459,17 @@
                 autocomplete="off"
                 class="address-input"
               />
-              <div class="input-money-wrapper"><span class="symbol">$</span><input type="number" class="input-money" placeholder="0.00" bind:value={newStop.earnings} step="0.01" min="0" /></div>
+              <div class="input-money-wrapper">
+                  <span class="symbol">$</span>
+                  <input type="number" class="input-money" placeholder="0.00" bind:value={newStop.earnings} step="0.01" min="0" />
+              </div>
             </div>
             <button class="btn-add full-width" on:click={addStop} type="button" disabled={isCalculating}>
-                {#if isCalculating} Calculating... {:else} + Add Stop {/if}
+                {#if isCalculating}
+                    Calculating...
+                {:else}
+                    + Add Stop
+                {/if}
             </button>
           </div>
         </div>
@@ -524,78 +490,218 @@
         </div>
 
         <div class="form-row">
-            <div class="form-group"><label for="total-miles">Total Miles</label><input id="total-miles" type="number" bind:value={tripData.totalMiles} step="0.1" min="0" /></div>
-            <div class="form-group"><label for="drive-time">Drive Time <span class="hint">(Est)</span></label><div id="drive-time" class="readonly-field">{formatDuration(tripData.estimatedTime)}</div></div>
+            <div class="form-group">
+                <label for="total-miles">Total Miles</label>
+                <input id="total-miles" type="number" bind:value={tripData.totalMiles} step="0.1" min="0" />
+            </div>
+            <div class="form-group">
+                <label for="drive-time">Drive Time <span class="hint">(Est)</span></label>
+                <div id="drive-time" class="readonly-field">{formatDuration(tripData.estimatedTime)}</div>
+            </div>
         </div>
         
-        <div class="form-actions"><button class="btn-primary full-width" on:click={nextStep} type="button">Continue</button></div>
+        <div class="form-actions">
+          <button class="btn-primary full-width" on:click={nextStep} type="button">Continue</button>
+        </div>
       </div>
     {/if}
     
     {#if step === 2}
       <div class="form-card">
-        <div class="card-header"><h2 class="card-title">Basic Information</h2></div>
-        <div class="form-grid">
-          <div class="form-group"><label for="trip-date">Date</label><input id="trip-date" type="date" bind:value={tripData.date} required /></div>
-          <div class="form-row">
-            <div class="form-group"><label for="start-time">Start Time</label><input id="start-time" type="time" bind:value={tripData.startTime} /></div>
-            <div class="form-group"><label for="end-time">End Time</label><input id="end-time" type="time" bind:value={tripData.endTime} /></div>
-          </div>
-          <div class="form-group"><label for="hours-display">Hours Worked</label><div id="hours-display" class="readonly-field">{tripData.hoursWorked.toFixed(1)} hours</div></div>
+        <div class="card-header">
+          <h2 class="card-title">Basic Information</h2>
         </div>
-        <div class="form-actions"><button class="btn-secondary" on:click={prevStep} type="button">Back</button><button class="btn-primary" on:click={nextStep} type="button">Continue</button></div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="trip-date">Date</label>
+            <input id="trip-date" type="date" bind:value={tripData.date} required />
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+                <label for="start-time">Start Time</label>
+                <input id="start-time" type="time" bind:value={tripData.startTime} />
+            </div>
+            <div class="form-group">
+                <label for="end-time">End Time</label>
+                <input id="end-time" type="time" bind:value={tripData.endTime} />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="hours-display">Hours Worked</label>
+            <div id="hours-display" class="readonly-field">{tripData.hoursWorked.toFixed(1)} hours</div>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn-secondary" on:click={prevStep} type="button">Back</button>
+          <button class="btn-primary" on:click={nextStep} type="button">Continue</button>
+        </div>
       </div>
     {/if}
     
     {#if step === 3}
       <div class="form-card">
-        <div class="card-header"><h2 class="card-title">Costs</h2></div>
-        <div class="form-row">
-            <div class="form-group"><label for="mpg">MPG</label><input id="mpg" type="number" bind:value={tripData.mpg} step="0.1" /></div>
-            <div class="form-group"><label for="gas-price">Gas Price</label><div class="input-money-wrapper"><span class="symbol">$</span><input id="gas-price" type="number" bind:value={tripData.gasPrice} step="0.01" /></div></div>
+        <div class="card-header">
+          <h2 class="card-title">Costs</h2>
         </div>
-        <div class="summary-box" style="margin: 40px 0;"><span>Estimated Fuel Cost</span><strong>{formatCurrency(tripData.fuelCost)}</strong></div>
+        
+        <div class="form-row">
+            <div class="form-group">
+                <label for="mpg">MPG</label>
+                <input id="mpg" type="number" bind:value={tripData.mpg} step="0.1" />
+            </div>
+            <div class="form-group">
+                <label for="gas-price">Gas Price</label>
+                <div class="input-money-wrapper">
+                    <span class="symbol">$</span>
+                    <input id="gas-price" type="number" bind:value={tripData.gasPrice} step="0.01" />
+                </div>
+            </div>
+        </div>
+        
+        <div class="summary-box" style="margin: 40px 0;">
+            <span>Estimated Fuel Cost</span>
+            <strong>{formatCurrency(tripData.fuelCost)}</strong>
+        </div>
         
         <div class="section-group">
-            <div class="section-top"><h3>Maintenance</h3><button class="btn-text" on:click={() => showAddMaintenance = !showAddMaintenance}>+ Custom</button></div>
-            {#if showAddMaintenance}<div class="add-custom-row"><input type="text" bind:value={newMaintenanceItem} placeholder="Item name..." /><button class="btn-small primary" on:click={addCustomMaintenance}>Add</button></div>{/if}
-            <div class="chips-row">{#each maintenanceOptions as option}<div class="option-badge"><button class="badge-btn" on:click={() => addMaintenanceItem(option)}>{option}</button><button class="badge-delete" on:click={() => deleteMaintenanceOption(option)}>✕</button></div>{/each}</div>
-            {#each tripData.maintenanceItems as item}<div class="expense-row"><span class="name">{item.type}</span><div class="input-money-wrapper small"><span class="symbol">$</span><input type="number" bind:value={item.cost} placeholder="0.00" /></div><button class="btn-icon delete" on:click={() => removeMaintenanceItem(item.id)}>✕</button></div>{/each}
+            <div class="section-top">
+                <h3>Maintenance</h3>
+                <button class="btn-text" on:click={() => showAddMaintenance = !showAddMaintenance}>+ Custom</button>
+            </div>
+            
+            {#if showAddMaintenance}
+                <div class="add-custom-row">
+                    <input type="text" bind:value={newMaintenanceItem} placeholder="Item name..." />
+                    <button class="btn-small primary" on:click={addCustomMaintenance}>Add</button>
+                </div>
+            {/if}
+            
+            <div class="chips-row">
+                {#each maintenanceOptions as option}
+                    <div class="option-badge">
+                        <button class="badge-btn" on:click={() => addMaintenanceItem(option)}>{option}</button>
+                        <button class="badge-delete" on:click={() => deleteMaintenanceOption(option)}>✕</button>
+                    </div>
+                {/each}
+            </div>
+            
+            {#each tripData.maintenanceItems as item}
+                <div class="expense-row">
+                    <span class="name">{item.type}</span>
+                    <div class="input-money-wrapper small">
+                        <span class="symbol">$</span>
+                        <input type="number" bind:value={item.cost} placeholder="0.00" />
+                    </div>
+                    <button class="btn-icon delete" on:click={() => removeMaintenanceItem(item.id)}>✕</button>
+                </div>
+            {/each}
         </div>
 
         <div class="section-group">
-            <div class="section-top"><h3>Supplies</h3><button class="btn-text" on:click={() => showAddSupply = !showAddSupply}>+ Custom</button></div>
-            {#if showAddSupply}<div class="add-custom-row"><input type="text" bind:value={newSupplyItem} placeholder="Item name..." /><button class="btn-small primary" on:click={addCustomSupply}>Add</button></div>{/if}
-            <div class="chips-row">{#each suppliesOptions as option}<div class="option-badge"><button class="badge-btn" on:click={() => addSupplyItem(option)}>{option}</button><button class="badge-delete" on:click={() => deleteSupplyOption(option)}>✕</button></div>{/each}</div>
-            {#each tripData.supplyItems as item}<div class="expense-row"><span class="name">{item.type}</span><div class="input-money-wrapper small"><span class="symbol">$</span><input type="number" bind:value={item.cost} placeholder="0.00" /></div><button class="btn-icon delete" on:click={() => removeSupplyItem(item.id)}>✕</button></div>{/each}
+            <div class="section-top">
+                <h3>Supplies</h3>
+                <button class="btn-text" on:click={() => showAddSupply = !showAddSupply}>+ Custom</button>
+            </div>
+            
+            {#if showAddSupply}
+                <div class="add-custom-row">
+                    <input type="text" bind:value={newSupplyItem} placeholder="Item name..." />
+                    <button class="btn-small primary" on:click={addCustomSupply}>Add</button>
+                </div>
+            {/if}
+            
+            <div class="chips-row">
+                {#each suppliesOptions as option}
+                    <div class="option-badge">
+                        <button class="badge-btn" on:click={() => addSupplyItem(option)}>{option}</button>
+                        <button class="badge-delete" on:click={() => deleteSupplyOption(option)}>✕</button>
+                    </div>
+                {/each}
+            </div>
+            
+            {#each tripData.supplyItems as item}
+                <div class="expense-row">
+                    <span class="name">{item.type}</span>
+                    <div class="input-money-wrapper small">
+                        <span class="symbol">$</span>
+                        <input type="number" bind:value={item.cost} placeholder="0.00" />
+                    </div>
+                    <button class="btn-icon delete" on:click={() => removeSupplyItem(item.id)}>✕</button>
+                </div>
+            {/each}
         </div>
         
-        <div class="form-group"><label for="notes">Notes</label><textarea id="notes" bind:value={tripData.notes} rows="3" placeholder="Trip details..."></textarea></div>
-        <div class="form-actions"><button class="btn-secondary" on:click={prevStep} type="button">Back</button><button class="btn-primary" on:click={nextStep} type="button">Review</button></div>
+        <div class="form-group">
+            <label for="notes">Notes</label>
+            <textarea id="notes" bind:value={tripData.notes} rows="3" placeholder="Trip details..."></textarea>
+        </div>
+        
+        <div class="form-actions">
+          <button class="btn-secondary" on:click={prevStep} type="button">Back</button>
+          <button class="btn-primary" on:click={nextStep} type="button">Review</button>
+        </div>
       </div>
     {/if}
     
     {#if step === 4}
       <div class="form-card">
-        <div class="card-header"><h2 class="card-title">Review</h2></div>
-        <div class="review-grid">
-            <div class="review-tile"><span class="review-label">Date</span><div>{formatDateLocal(tripData.date)}</div></div>
-            <div class="review-tile"><span class="review-label">Total Time</span><div>{tripData.hoursWorked.toFixed(1)} hrs</div></div>
-            <div class="review-tile"><span class="review-label">Drive Time</span><div>{formatDuration(tripData.estimatedTime)}</div></div>
-            <div class="review-tile"><span class="review-label">Hours Worked</span><div>{Math.max(0, tripData.hoursWorked - (tripData.estimatedTime / 60)).toFixed(1)} hrs</div></div>
-            <div class="review-tile"><span class="review-label">Distance</span><div>{tripData.totalMiles} mi</div></div>
-            <div class="review-tile"><span class="review-label">Stops</span><div>{tripData.stops.length}</div></div>
+        <div class="card-header">
+          <h2 class="card-title">Review</h2>
         </div>
+        
+        <div class="review-grid">
+            <div class="review-tile">
+                <span class="review-label">Date</span>
+                <div>{formatDateLocal(tripData.date)}</div>
+            </div>
+            <div class="review-tile">
+                <span class="review-label">Total Time</span>
+                <div>{tripData.hoursWorked.toFixed(1)} hrs</div>
+            </div>
+            <div class="review-tile">
+                <span class="review-label">Drive Time</span>
+                <div>{formatDuration(tripData.estimatedTime)}</div>
+            </div>
+            <div class="review-tile">
+                <span class="review-label">Hours Worked</span>
+                <div>{Math.max(0, tripData.hoursWorked - (tripData.estimatedTime / 60)).toFixed(1)} hrs</div>
+            </div>
+            <div class="review-tile">
+                <span class="review-label">Distance</span>
+                <div>{tripData.totalMiles} mi</div>
+            </div>
+            <div class="review-tile">
+                <span class="review-label">Stops</span>
+                <div>{tripData.stops.length}</div>
+            </div>
+        </div>
+        
         <div class="financial-summary">
             <div class="row"><span>Earnings</span> <span class="val positive">{formatCurrency(totalEarnings)}</span></div>
+            
             <div class="row subheader"><span>Expenses Breakdown</span></div>
-            {#if tripData.fuelCost > 0}<div class="row detail"><span>Fuel</span> <span class="val">{formatCurrency(tripData.fuelCost)}</span></div>{/if}
-            {#each tripData.maintenanceItems as item}<div class="row detail"><span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span></div>{/each}
-            {#each tripData.supplyItems as item}<div class="row detail"><span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span></div>{/each}
+            
+            {#if tripData.fuelCost > 0}
+               <div class="row detail"><span>Fuel</span> <span class="val">{formatCurrency(tripData.fuelCost)}</span></div>
+            {/if}
+
+            {#each tripData.maintenanceItems as item}
+                <div class="row detail"><span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span></div>
+            {/each}
+
+            {#each tripData.supplyItems as item}
+                <div class="row detail"><span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span></div>
+            {/each}
+
             <div class="row total-expenses"><span>Total Expenses</span> <span class="val negative">-{formatCurrency(totalCosts)}</span></div>
+            
             <div class="row total"><span>Net Profit</span> <span class="val" class:positive={totalProfit >= 0}>{formatCurrency(totalProfit)}</span></div>
         </div>
-        <div class="form-actions"><button class="btn-secondary" on:click={prevStep} type="button">Back</button><button class="btn-primary" on:click={saveTrip} type="button">Update Trip</button></div>
+        
+        <div class="form-actions">
+          <button class="btn-secondary" on:click={prevStep} type="button">Back</button>
+          <button class="btn-primary" on:click={saveTrip} type="button">Update Trip</button>
+        </div>
       </div>
     {/if}
   </div>
