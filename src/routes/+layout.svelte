@@ -6,28 +6,38 @@
     import { syncManager } from '$lib/sync/syncManager';
     import { trips } from '$lib/stores/trips';
     
-    // [!code fix] Use the standard static import now that .env exists
-    import { PUBLIC_GOOGLE_MAPS_KEY } from '$env/static/public';
+    // [!code fix] Change static import to dynamic to prevent build crashes
+    import { env } from '$env/dynamic/public';
 
 	let { data, children } = $props();
 
+	// 1. Initialize Context
 	const userState = setUserContext(data.user);
 
+	// 2. Keep user state synced
 	$effect(() => {
 		userState.setUser(data.user);
 	});
 
+    // 3. Initialize Sync & Wire to UI Store
     onMount(async () => {
         // Load local data immediately
         await trips.load();
 
         if (data.user) {
+            // Connect SyncManager to the UI Store
             syncManager.setStoreUpdater((enrichedTrip) => {
                 trips.updateLocal(enrichedTrip);
             });
 
-            // Initialize with the environment variable
-            syncManager.initialize(PUBLIC_GOOGLE_MAPS_KEY);
+            // [!code fix] Access key safely via dynamic env object
+            const apiKey = env.PUBLIC_GOOGLE_MAPS_KEY;
+            
+            if (apiKey) {
+                syncManager.initialize(apiKey);
+            } else {
+                console.warn('Google Maps API Key missing in environment variables.');
+            }
         }
     });
 </script>
