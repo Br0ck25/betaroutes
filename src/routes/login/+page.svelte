@@ -24,11 +24,12 @@
         registrationSuccess = false;
     }
 
-    async function submitHandler() {
+async function submitHandler() {
         responseError = null;
         loading = true;
 
-        const endpoint = isLogin ? '/api/login' : '/register';
+        // [!code fix] Point to '/login', NOT '/api/login'
+        const endpoint = isLogin ? '/login' : '/register';
         
         let payload = {};
         if (isLogin) {
