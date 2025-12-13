@@ -5,42 +5,41 @@ import type { Handle } from '@sveltejs/kit';
 export const handle: Handle = async ({ event, resolve }) => {
 	// 1. Ensure KV bindings exist (mock in dev using FILE store)
 	if (dev) {
-        // [!code changed] Dynamic Import for Safety
-        // This ensures 'node:fs' is never loaded in Production Workers
 		const { setupMockKV } = await import('$lib/server/dev-mock-db');
         setupMockKV(event);
 	}
 
-	// 2. User auth logic
-	const token = event.cookies.get('token');
+	// 2. User auth logic: Check for 'session_id' cookie
+	const sessionId = event.cookies.get('session_id');
 
-	if (!token) {
+	if (!sessionId) {
 		event.locals.user = null;
 		return resolve(event);
 	}
 
 	try {
+        // Using BETA_USERS_KV to look up the session
 		const usersKV = event.platform?.env?.BETA_USERS_KV;
 		if (usersKV) {
-			const userDataStr = await usersKV.get(token);
+			const sessionDataStr = await usersKV.get(sessionId);
 
-			if (userDataStr) {
-				const userData = JSON.parse(userDataStr);
+			if (sessionDataStr) {
+				const session = JSON.parse(sessionDataStr);
 				
 				event.locals.user = {
-					id: userData.id,
-					token,
-					plan: userData.plan ?? 'free',
-					tripsThisMonth: userData.tripsThisMonth ?? 0,
-					maxTrips: userData.maxTrips ?? 10,
-					resetDate: userData.resetDate ?? new Date().toISOString(),
-					name: userData.name, 
-					email: userData.email
+					id: session.id,
+					token: sessionId, // Keep session ID available as token
+					plan: session.plan ?? 'free',
+					tripsThisMonth: session.tripsThisMonth ?? 0,
+					maxTrips: session.maxTrips ?? 10,
+					resetDate: session.resetDate ?? new Date().toISOString(),
+					name: session.name, // This contains the username
+					email: session.email
 				};
 			} else {
-				// Don't warn if just checking root, prevents log spam
+				// Session invalid or expired in KV
                 if (event.url.pathname.startsWith('/dashboard')) {
-				    console.warn('[HOOK] Token exists but user not found in KV.');
+				    console.warn('[HOOK] Session ID exists but not found in KV.');
                 }
 				event.locals.user = null;
 			}

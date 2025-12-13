@@ -10,7 +10,7 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
         const { email, password } = await request.json();
 
         const kv = platform?.env?.BETA_USERS_KV;
-        const sessionKv = platform?.env?.BETA_USERS_KV;
+        const sessionKv = platform?.env?.BETA_SESSIONS_KV;
 
         if (!kv || !sessionKv) {
              return json({ error: 'Service Unavailable' }, { status: 503 });

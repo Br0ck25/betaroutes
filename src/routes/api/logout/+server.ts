@@ -3,23 +3,23 @@ import { redirect } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ cookies, platform }) => {
-    // 1. Get the current session token from the cookie
-    const token = cookies.get('token');
+    // 1. Get the current session ID from the cookie
+    const sessionId = cookies.get('session_id');
 
     // 2. Clear the cookie from the client's browser
-    // CRITICAL: We do this directly here instead of importing from the missing session.ts
-    cookies.delete('token', { path: '/' });
+    cookies.delete('session_id', { path: '/' });
 
-    // 3. Invalidate the token server-side (delete KV record)
-    if (token) {
+    // 3. Invalidate the session server-side
+    if (sessionId) {
         try {
-            const usersKV = platform?.env?.BETA_USERS_KV;
-            if (usersKV) {
-                await usersKV.delete(token); 
-                console.log(`[LOGOUT] Session token deleted from KV: ${token}`);
+            // Using BETA_USERS_KV as configured in your login
+            const kv = platform?.env?.BETA_USERS_KV;
+            if (kv) {
+                await kv.delete(sessionId); 
+                console.log(`[LOGOUT] Session deleted from KV: ${sessionId}`);
             }
         } catch (error) {
-            console.error('[LOGOUT] Failed to delete token from KV:', error);
+            console.error('[LOGOUT] Failed to delete session from KV:', error);
         }
     }
 
