@@ -20,7 +20,8 @@
     "pending_verify:caf06869-af1e-4d45-9346-9809fc021090": "{\"username\":\"Brock\",\"email\":\"jamesbrock25@hotmail.com\",\"password\":\"v1:100000:c0cc650a68f81265a9de743742a6e981:942f1f3945eb16c6aa99671a638087342730d0c4c6ee7dd4fb32ea9dfd2498b5\",\"createdAt\":\"2025-12-13T05:12:28.896Z\"}",
     "pending_verify:85e9dd00-4fe4-4485-88b5-a0f673d21b3d": "{\"username\":\"Brock\",\"email\":\"jamesbrock25@hotmail.com\",\"password\":\"v1:100000:23b64456f3bce59d777d95a32b45fc26:38067008b2de683cce631feca5dfd065e4ad7e9d0c060c6ff7b42f9e28868ec5\",\"createdAt\":\"2025-12-13T05:13:49.518Z\"}",
     "pending_verify:3a67e0ca-d727-46d4-9ac8-fc0b281ea203": "{\"username\":\"Brock\",\"email\":\"jamesbrock25@hotmail.com\",\"password\":\"v1:100000:d2d4a144e7892150328da9337df82b66:d45ac5ca686acad5ba4192ac262980ce69afdadfe21b87020588ec24a8e13ac4\",\"createdAt\":\"2025-12-13T05:15:36.617Z\"}",
-    "pending_verify:0c7ee0b1-11c1-4a5e-9149-840044aad813": "{\"username\":\"Brock\",\"email\":\"jamesbrock25@hotmail.com\",\"password\":\"v1:100000:146a9d8feb7c31d012f740ce3eda0bff:2cde00a1727f3a6f320517d3f2cd6418c558bdfd54327aaae449b18af6df379d\",\"createdAt\":\"2025-12-13T05:18:56.896Z\"}"
+    "pending_verify:0c7ee0b1-11c1-4a5e-9149-840044aad813": "{\"username\":\"Brock\",\"email\":\"jamesbrock25@hotmail.com\",\"password\":\"v1:100000:146a9d8feb7c31d012f740ce3eda0bff:2cde00a1727f3a6f320517d3f2cd6418c558bdfd54327aaae449b18af6df379d\",\"createdAt\":\"2025-12-13T05:18:56.896Z\"}",
+    "pending_verify:e3ff2ff8-770e-4a88-b22f-ce09fb85a9ec": "{\"username\":\"Brock\",\"email\":\"jamesbrock25@hotmail.com\",\"password\":\"v1:100000:08995300c9ca582f2b8e61b87ca61011:fed97345be6d072ba9b9a26a11c7394766c8f7a130843cb8a5e48cb4cd011ad9\",\"createdAt\":\"2025-12-13T05:37:10.416Z\"}"
   },
   "LOGS": {
     "meta:user:29c44d78-79d3-4d26-a063-220be7b7fefa:trip_count": "0",
