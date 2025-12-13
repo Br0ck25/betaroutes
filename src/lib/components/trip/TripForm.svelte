@@ -14,7 +14,7 @@
   import { toasts } from '$lib/stores/toast';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
 
-  // [!code changed] Svelte 5 Props using Runes
+  // Svelte 5 Props using Runes
   let { googleApiKey = '', loading = false } = $props();
   
   const settings = get(userSettings);
@@ -24,16 +24,19 @@
   let date = $state(new Date().toISOString().split('T')[0]);
   let startTime = $state('');
   let endTime = $state('');
+  
   let startAddress = $state(settings.startLocation || storage.getSetting('defaultStartAddress') || '');
   let endAddress = $state(settings.endLocation || storage.getSetting('defaultEndAddress') || '');
   
   // Coordinates State
   let startLocation = $state<LatLng | undefined>(undefined);
   let endLocation = $state<LatLng | undefined>(undefined);
-
+  
   let mpg = $state(settings.defaultMPG ?? storage.getSetting('defaultMPG') ?? 25);
   let gasPrice = $state(settings.defaultGasPrice ?? storage.getSetting('defaultGasPrice') ?? 3.5);
   let distanceUnit = $state(settings.distanceUnit || 'mi');
+  
+  // Destinations State
   let destinations = $state<Destination[]>([{ address: '', earnings: 0 }]);
   let notes = $state('');
 
@@ -47,6 +50,26 @@
   let fuelCost = $state(0);
   let netProfit = $state(0);
 
+  // --- Auto-Calculation Effect ---
+  // [!code ++] Watches for changes and auto-calculates after delay
+  $effect(() => {
+    // 1. Register dependencies to watch
+    const _deps = { startAddress, endAddress, destinations, mpg, gasPrice };
+
+    // 2. Validate basic requirements before calculating
+    const hasStart = startAddress && startAddress.length > 3;
+    const hasDest = destinations.length > 0 && destinations[0].address.length > 3;
+
+    if (hasStart && hasDest) {
+        // 3. Debounce: Wait 1.5s after last change before hitting API
+        const timer = setTimeout(() => {
+            handleCalculate(true); // true = silent mode (no success toast)
+        }, 1500);
+
+        return () => clearTimeout(timer);
+    }
+  });
+
   // --- Handlers ---
 
   function handleAddressSelect(field: 'start' | 'end', e: CustomEvent) {
@@ -56,7 +79,8 @@
     // Extract Geometry
     let location: LatLng | undefined;
     if (place.geometry && place.geometry.location) {
-        const lat = typeof place.geometry.location.lat === 'function' ? place.geometry.location.lat() : place.geometry.location.lat;
+        const lat = typeof place.geometry.location.lat === 'function' ?
+            place.geometry.location.lat() : place.geometry.location.lat;
         const lng = typeof place.geometry.location.lng === 'function' ? place.geometry.location.lng() : place.geometry.location.lng;
         location = { lat, lng };
     }
@@ -68,28 +92,35 @@
         endAddress = val;
         endLocation = location;
     }
+    // Note: The $effect above will see this change and trigger calculation automatically
   }
 
-  async function handleCalculate() {
-    calculating = true;
-    calculationError = '';
-    calculated = false;
-
+  // [!code changed] Added 'silent' parameter to suppress toasts on auto-calc
+  async function handleCalculate(silent = false) {
     if (!startAddress) {
-        toasts.error("Please enter a start address.");
-        calculating = false;
+        if (!silent) toasts.error("Please enter a start address.");
         return;
     }
 
+    calculating = true;
+    calculationError = '';
+    
     try {
-        const routeData = await getRouteData(startAddress, endAddress, destinations, distanceUnit as 'mi'|'km');
+        // [!code ++] Round Trip Logic: If End is empty, use Start
+        const effectiveEndAddress = endAddress ? endAddress : startAddress;
+
+        // Note: 'destinations' is a Proxy in Svelte 5 state. 
+        // We clone it to strip Proxy wrapper for the API call to avoid issues.
+        const destsCopy = $state.snapshot(destinations);
+
+        const routeData = await getRouteData(startAddress, effectiveEndAddress, destsCopy, distanceUnit as 'mi'|'km');
         
         totalMileage = routeData.totalMiles;
         
         const totals = calculateTripTotals(
             totalMileage,
             routeData.totalMinutes,
-            destinations,
+            destsCopy,
             mpg,
             gasPrice,
             [], 
@@ -102,14 +133,19 @@
         fuelCost = totals.fuelCost || 0;
         netProfit = totals.netProfit || 0;
         calculated = true;
-        
-        toasts.success("Route calculated successfully!");
+
+        if (!silent) toasts.success("Route calculated successfully!");
 
     } catch (err: any) {
         console.error("Calculation Error:", err);
+        // Only show error if it wasn't a silent auto-calc, OR if it's a critical API failure
+        // We suppress "ZERO_RESULTS" on auto-calc to avoid annoying user while typing incomplete address
         const msg = err.message || "Failed to calculate route.";
-        calculationError = msg;
-        toasts.error(msg);
+        
+        if (!silent || !msg.includes('ZERO_RESULTS')) {
+             calculationError = msg;
+             if (!silent) toasts.error(msg);
+        }
     } finally {
         calculating = false;
     }
@@ -119,7 +155,6 @@
 
   function loadDraft(draft: Partial<Trip>) {
     if (!draft || typeof draft !== 'object') return;
-
     if (draft.date) date = draft.date;
     if (draft.startTime) startTime = draft.startTime;
     if (draft.endTime) endTime = draft.endTime;
@@ -218,7 +253,7 @@
           <input 
             type="text" 
             bind:value={endAddress} 
-            placeholder="Leave empty to end at last stop" 
+            placeholder="Leave empty to return to Start" 
             class="w-full p-2 border rounded"
             autocomplete="off"
             use:autocomplete={{ apiKey: API_KEY }}
@@ -286,6 +321,10 @@
         {fuelCost} 
         {netProfit} 
     />
+  {:else if calculating}
+    <div class="p-6 text-center text-gray-500 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+        <div class="inline-block animate-spin mr-2">⟳</div> Calculating route...
+    </div>
   {/if}
 
   <div class="flex gap-3">
@@ -294,10 +333,10 @@
     {:else}
         <button 
           class="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          on:click={handleCalculate} 
+          on:click={() => handleCalculate(false)} 
           disabled={calculating}
         >
-          {calculating ? 'Calculating...' : 'Calculate Route'}
+          {calculating ? 'Calculating...' : 'Recalculate Route'}
         </button>
     {/if}
   </div>

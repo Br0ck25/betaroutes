@@ -19,11 +19,10 @@
 
   // --- SELECTION STATE ---
   let selectedTrips = new Set<string>();
-  
+
   // Reset selection and page when filters change
   $: if (searchQuery || sortBy || sortOrder || filterProfit || startDate || endDate) {
       currentPage = 1;
-      // Optional: selectedTrips = new Set(); 
   }
 
   // Derived: All filtered results (for metrics/export)
@@ -88,7 +87,6 @@
   // Derived: Visible trips for current page
   $: totalPages = Math.ceil(allFilteredTrips.length / itemsPerPage);
   $: visibleTrips = allFilteredTrips.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
   $: allSelected = allFilteredTrips.length > 0 && selectedTrips.size === allFilteredTrips.length;
 
   function toggleSelection(id: string) {
@@ -123,7 +121,7 @@
 
       const currentUser = $page.data.user || $user;
       let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
-
+      
       if (!userId) {
           toasts.error('User identity missing. Cannot delete.');
           return;
@@ -131,7 +129,6 @@
 
       let successCount = 0;
       const ids = Array.from(selectedTrips);
-
       for (const id of ids) {
           try {
               await trips.deleteTrip(id, userId);
@@ -146,7 +143,6 @@
   }
 
   function exportSelected() {
-      // Export from ALL filtered items that are selected
       const selectedData = allFilteredTrips.filter(t => selectedTrips.has(t.id));
       if (selectedData.length === 0) return;
 
@@ -263,6 +259,79 @@
         toggleExpand(id);
     }
   }
+
+  // [!code ++] Swipe Action for Mobile
+  function swipeable(node: HTMLElement, { onEdit, onDelete }: { onEdit: () => void, onDelete: () => void }) {
+    let startX = 0;
+    let startY = 0;
+    let x = 0;
+    let swiping = false;
+
+    function handleTouchStart(e: TouchEvent) {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        x = 0;
+        node.style.transition = 'none'; // Disable transition for drag
+    }
+
+    function handleTouchMove(e: TouchEvent) {
+        const dx = e.touches[0].clientX - startX;
+        const dy = e.touches[0].clientY - startY;
+
+        // If scrolling vertically, ignore swipe
+        if (Math.abs(dy) > Math.abs(dx)) return;
+
+        swiping = true;
+        
+        // Limit swipe range (-120px for delete, 120px for edit)
+        if (dx < -120) x = -120;
+        else if (dx > 120) x = 120;
+        else x = dx;
+
+        node.style.transform = `translateX(${x}px)`;
+        
+        // Prevent accidental scrolling while swiping hard
+        if (Math.abs(x) > 10) e.preventDefault();
+    }
+
+    function handleTouchEnd() {
+        if (!swiping) return;
+        swiping = false;
+        node.style.transition = 'transform 0.2s ease-out'; // Smooth snap back
+
+        // Threshold to trigger action
+        if (x < -80) {
+            onDelete();
+        } else if (x > 80) {
+            onEdit();
+        }
+        
+        // Always reset position
+        node.style.transform = 'translateX(0)';
+    }
+
+    // [!code ++] Prevent click if we were just swiping
+    function handleClick(e: MouseEvent) {
+        if (Math.abs(x) > 10) {
+            e.stopPropagation();
+            e.preventDefault();
+        }
+    }
+
+    node.addEventListener('touchstart', handleTouchStart, { passive: false });
+    node.addEventListener('touchmove', handleTouchMove, { passive: false });
+    node.addEventListener('touchend', handleTouchEnd);
+    node.addEventListener('click', handleClick, { capture: true });
+
+    return {
+        destroy() {
+            node.removeEventListener('touchstart', handleTouchStart);
+            node.removeEventListener('touchmove', handleTouchMove);
+            node.removeEventListener('touchend', handleTouchEnd);
+            node.removeEventListener('click', handleClick);
+        }
+    }
+  }
 </script>
 
 {#if $isLoading}
@@ -342,7 +411,7 @@
     </div>
   </div>
 
-  <div class="filters-bar">
+  <div class="filters-bar sticky-bar">
     <div class="search-box">
       <svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
         <path d="M9 17C13.4183 17 17 13.4183 17 9C17 4.58172 13.4183 1 9 1C4.58172 1 1 4.58172 1 9C1 13.4183 4.58172 17 9 17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -397,150 +466,165 @@
         {@const totalCosts = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0)}
         {@const isSelected = selectedTrips.has(trip.id)}
         
-        <div 
-          class="trip-card" 
-          class:expanded={isExpanded} 
-          class:selected={isSelected}
-          on:click={() => toggleExpand(trip.id)}
-          on:keydown={(e) => handleKeydown(e, trip.id)}
-          role="button"
-          tabindex="0"
-          aria-expanded={isExpanded}
-        >
-          <div class="card-top">
-            <div class="selection-box" on:click|stopPropagation on:keydown|stopPropagation role="none">
-                <label class="checkbox-container">
-                    <input 
-                        type="checkbox" 
-                        checked={isSelected} 
-                        on:change={() => toggleSelection(trip.id)} 
-                    />
-                    <span class="checkmark"></span>
-                </label>
-            </div>
-
-            <div class="trip-route-date">
-              <span class="trip-date-display">
-                  {formatDate(trip.date || '')}
-                  {#if trip.startTime}
-                     <span class="time-range">• {formatTime(trip.startTime)} - {formatTime(trip.endTime || '17:00')}</span>
-                  {/if}
-              </span>
-              <h3 class="trip-route-title">
-                {trip.startAddress?.split(',')[0] || 'Unknown'} 
-                {#if trip.stops && trip.stops.length > 0}
-                  → {trip.stops[trip.stops.length - 1].address?.split(',')[0] || 'Stop'}
-                {/if}
-              </h3>
-            </div>
-            
-            <div class="profit-display-large" class:positive={profit >= 0} class:negative={profit < 0}>
-              {formatCurrency(profit)}
-            </div>
-            
-            <svg class="expand-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <path d="M6 15L10 11L14 15M14 5L10 9L6 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-          </div>
-
-          <div class="card-stats">
-            <div class="stat-item">
-              <span class="stat-label">Miles</span>
-              <span class="stat-value">{trip.totalMiles?.toFixed(1) || '0.0'}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">Stops</span>
-              <span class="stat-value">{trip.stops?.length || 0}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">Hours</span>
-              <span class="stat-value">{trip.hoursWorked?.toFixed(1) || '-'}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">Drive</span>
-              <span class="stat-value">{formatDuration(trip.estimatedTime)}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">$/Hr</span>
-              <span class="stat-value hourly-pay">{trip.hoursWorked > 0 ? formatCurrency(hourlyPay) : '-'}</span>
-            </div>
-          </div>
-          
-          {#if isExpanded}
-            <div 
-                class="expanded-details" 
-                on:click|stopPropagation 
-                on:keydown|stopPropagation
-                role="group"
-            >
-              <div class="detail-section">
-                <h4 class="section-heading">Stops & Addresses</h4>
-                <div class="address-list">
-                    <p><strong>Start:</strong> {trip.startAddress}</p>
-                    {#if trip.stops}
-                      {#each trip.stops as stop, i}
-                          <p><strong>Stop {i + 1}:</strong> {stop.address}</p>
-                      {/each}
-                    {/if}
-                    {#if trip.endAddress && trip.endAddress !== trip.startAddress}
-                        <p><strong>End:</strong> {trip.endAddress}</p>
-                    {/if}
+        <div class="trip-card-wrapper">
+            <div class="swipe-bg">
+                <div class="swipe-action edit">
+                    <span>Edit</span>
                 </div>
+                <div class="swipe-action delete">
+                    <span>Delete</span>
+                </div>
+            </div>
+
+            <div 
+              class="trip-card" 
+              class:expanded={isExpanded} 
+              class:selected={isSelected}
+              on:click={() => toggleExpand(trip.id)}
+              on:keydown={(e) => handleKeydown(e, trip.id)}
+              role="button"
+              tabindex="0"
+              aria-expanded={isExpanded}
+              use:swipeable={{
+                  onEdit: () => editTrip(trip.id),
+                  onDelete: () => deleteTrip(trip.id)
+              }}
+            >
+              <div class="card-top">
+                <div class="selection-box" on:click|stopPropagation on:keydown|stopPropagation role="none">
+                    <label class="checkbox-container">
+                        <input 
+                            type="checkbox" 
+                            checked={isSelected} 
+                            on:change={() => toggleSelection(trip.id)} 
+                        />
+                        <span class="checkmark"></span>
+                    </label>
+                </div>
+
+                <div class="trip-route-date">
+                  <span class="trip-date-display">
+                      {formatDate(trip.date || '')}
+                      {#if trip.startTime}
+                         <span class="time-range">• {formatTime(trip.startTime)} - {formatTime(trip.endTime || '17:00')}</span>
+                      {/if}
+                  </span>
+                  <h3 class="trip-route-title">
+                    {trip.startAddress?.split(',')[0] || 'Unknown'} 
+                    {#if trip.stops && trip.stops.length > 0}
+                      → {trip.stops[trip.stops.length - 1].address?.split(',')[0] || 'Stop'}
+                    {/if}
+                  </h3>
+                </div>
+                
+                <div class="profit-display-large" class:positive={profit >= 0} class:negative={profit < 0}>
+                  {formatCurrency(profit)}
+                </div>
+                
+                <svg class="expand-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="M6 15L10 11L14 15M14 5L10 9L6 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
               </div>
 
-              {#if totalCosts > 0}
-                <div class="detail-section">
-                  <h4 class="section-heading">Expenses & Costs</h4>
-                  <div class="expense-list">
-                    {#if trip.fuelCost > 0}
-                      <div class="expense-row">
-                        <span>Fuel</span>
-                        <span>{formatCurrency(trip.fuelCost)}</span>
-                      </div>
-                    {/if}
-                    {#if trip.maintenanceItems}
-                      {#each trip.maintenanceItems as item}
-                        <div class="expense-row">
-                          <span>{item.type}</span>
-                          <span>{formatCurrency(item.cost)}</span>
-                        </div>
-                      {/each}
-                    {/if}
-                    {#if trip.suppliesItems}
-                      {#each trip.suppliesItems as item}
-                        <div class="expense-row">
-                          <span>{item.type}</span>
-                          <span>{formatCurrency(item.cost)}</span>
-                        </div>
-                      {/each}
-                    {/if}
-                    <div class="expense-row total">
-                      <span>Total Costs</span>
-                      <span>{formatCurrency(totalCosts)}</span>
+              <div class="card-stats">
+                <div class="stat-item">
+                  <span class="stat-label">Miles</span>
+                  <span class="stat-value">{trip.totalMiles?.toFixed(1) || '0.0'}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">Stops</span>
+                  <span class="stat-value">{trip.stops?.length || 0}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">Hours</span>
+                  <span class="stat-value">{trip.hoursWorked?.toFixed(1) || '-'}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">Drive</span>
+                  <span class="stat-value">{formatDuration(trip.estimatedTime)}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">$/Hr</span>
+                  <span class="stat-value hourly-pay">{trip.hoursWorked > 0 ? formatCurrency(hourlyPay) : '-'}</span>
+                </div>
+              </div>
+              
+              {#if isExpanded}
+                <div 
+                    class="expanded-details" 
+                    on:click|stopPropagation 
+                    on:keydown|stopPropagation
+                    role="group"
+                >
+                  <div class="detail-section">
+                    <h4 class="section-heading">Stops & Addresses</h4>
+                    <div class="address-list">
+                        <p><strong>Start:</strong> {trip.startAddress}</p>
+                        {#if trip.stops}
+                          {#each trip.stops as stop, i}
+                              <p><strong>Stop {i + 1}:</strong> {stop.address}</p>
+                          {/each}
+                        {/if}
+                        {#if trip.endAddress && trip.endAddress !== trip.startAddress}
+                            <p><strong>End:</strong> {trip.endAddress}</p>
+                        {/if}
                     </div>
+                  </div>
+
+                  {#if totalCosts > 0}
+                    <div class="detail-section">
+                      <h4 class="section-heading">Expenses & Costs</h4>
+                      <div class="expense-list">
+                        {#if trip.fuelCost > 0}
+                          <div class="expense-row">
+                            <span>Fuel</span>
+                            <span>{formatCurrency(trip.fuelCost)}</span>
+                          </div>
+                        {/if}
+                        {#if trip.maintenanceItems}
+                          {#each trip.maintenanceItems as item}
+                            <div class="expense-row">
+                              <span>{item.type}</span>
+                              <span>{formatCurrency(item.cost)}</span>
+                            </div>
+                          {/each}
+                        {/if}
+                        {#if trip.suppliesItems}
+                          {#each trip.suppliesItems as item}
+                            <div class="expense-row">
+                              <span>{item.type}</span>
+                              <span>{formatCurrency(item.cost)}</span>
+                            </div>
+                          {/each}
+                        {/if}
+                        <div class="expense-row total">
+                          <span>Total Costs</span>
+                          <span>{formatCurrency(totalCosts)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  {/if}
+
+                  {#if trip.notes}
+                    <div class="detail-section">
+                      <h4 class="section-heading">Notes</h4>
+                      <p class="trip-notes">{trip.notes}</p>
+                    </div>
+                  {/if}
+                  
+                  <div class="action-buttons-footer">
+                    <button class="action-btn-lg edit-btn" on:click={() => editTrip(trip.id)}>
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11 2L14 5L5 14H2V11L11 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        Edit
+                    </button>
+                    <button class="action-btn-lg delete-btn" on:click={() => deleteTrip(trip.id)}>
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4H14M12 4V13C12 13.5304 11.7893 14.0391 11.4142 14.4142C11.0391 14.7893 10.5304 15 10 15H6C5.46957 15 4.96086 14.7893 4.58579 14.4142C4.21071 14.0391 4 13.5304 4 13V4M5 4V3C5 2.46957 5.21071 1.96086 5.58579 1.58579C5.96086 1.21071 6.46957 1 7 1H9C9.53043 1 10.0391 1.21071 10.4142 1.58579C10.7893 1.96086 11 2.46957 11 3V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        Trash
+                    </button>
                   </div>
                 </div>
               {/if}
-
-              {#if trip.notes}
-                <div class="detail-section">
-                  <h4 class="section-heading">Notes</h4>
-                  <p class="trip-notes">{trip.notes}</p>
-                </div>
-              {/if}
-              
-              <div class="action-buttons-footer">
-                <button class="action-btn-lg edit-btn" on:click={() => editTrip(trip.id)}>
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11 2L14 5L5 14H2V11L11 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    Edit
-                </button>
-                <button class="action-btn-lg delete-btn" on:click={() => deleteTrip(trip.id)}>
-                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4H14M12 4V13C12 13.5304 11.7893 14.0391 11.4142 14.4142C11.0391 14.7893 10.5304 15 10 15H6C5.46957 15 4.96086 14.7893 4.58579 14.4142C4.21071 14.0391 4 13.5304 4 13V4M5 4V3C5 2.46957 5.21071 1.96086 5.58579 1.58579C5.96086 1.21071 6.46957 1 7 1H9C9.53043 1 10.0391 1.21071 10.4142 1.58579C10.7893 1.96086 11 2.46957 11 3V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    Trash
-                </button>
-              </div>
             </div>
-          {/if}
         </div>
       {/each}
     </div>
@@ -599,13 +683,11 @@
 <style>
   .trip-history { max-width: 1200px; margin: 0 auto; padding: 12px; padding-bottom: 80px; }
 
-  /* New: Batch Header for Select All & Info */
   .batch-header { 
       display: flex; justify-content: space-between; align-items: center; 
       margin-bottom: 12px; padding: 0 4px; color: #6B7280; font-size: 13px; font-weight: 500;
   }
 
-  /* New: Pagination Styles */
   .pagination-controls { 
       display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 32px; 
   }
@@ -623,13 +705,28 @@
   .page-subtitle { font-size: 14px; color: #6B7280; margin: 0; }
   .header-actions { display: flex; gap: 12px; align-items: center; }
   .btn-primary { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); }
-  .btn-danger { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; background: #DC2626; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; transition: background 0.2s; box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3); }
-  .btn-danger:hover { background: #B91C1C; }
+  
   .stats-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
   .summary-card { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; text-align: center; }
   .summary-label { font-size: 12px; color: #6B7280; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
   .summary-value { font-size: 20px; font-weight: 800; color: #111827; }
+  
   .filters-bar { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+  
+  /* [!code ++] Sticky Filters Style */
+  .sticky-bar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: #F9FAFB; /* Match page bg */
+      padding-top: 10px;
+      padding-bottom: 10px;
+      margin: -12px -12px 10px -12px; /* Pull out of parent padding */
+      padding-left: 12px;
+      padding-right: 12px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.02); /* Subtle separation */
+  }
+
   .search-box { position: relative; width: 100%; }
   .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #9CA3AF; pointer-events: none; }
   .search-box input { width: 100%; padding: 12px 16px 12px 42px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 15px; background: white; box-sizing: border-box; }
@@ -653,7 +750,44 @@
 
   .trip-list-cards { display: flex; flex-direction: column; gap: 12px; }
   
-  .trip-card { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; cursor: pointer; transition: all 0.2s; position: relative; }
+  /* [!code ++] Swipe Wrapper & Backgrounds */
+  .trip-card-wrapper {
+      position: relative;
+      overflow: hidden;
+      border-radius: 12px;
+      /* Background colors for swipes */
+      background: #F3F4F6; 
+  }
+
+  .swipe-bg {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 20px;
+      z-index: 0;
+  }
+  
+  .swipe-action {
+      font-weight: 700;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+  }
+  .swipe-action.edit { color: #2563EB; }
+  .swipe-action.delete { color: #DC2626; }
+
+  .trip-card { 
+      background: white; 
+      border: 1px solid #E5E7EB; 
+      border-radius: 12px; 
+      padding: 16px; 
+      cursor: pointer; 
+      transition: all 0.2s; 
+      position: relative; 
+      z-index: 1; /* Sit above the swipe actions */
+  }
   .trip-card:active { background-color: #F9FAFB; }
   .trip-card.expanded { border-color: #FF7F50; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
   .trip-card.selected { background-color: #FFF7ED; border-color: #FF7F50; }
