@@ -1,7 +1,6 @@
-// src/routes/api/login/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-// [!code fix] Changed 'authService' to 'auth' (matches your file structure)
+// [!code fix] Ensure this points to 'auth' (not authService)
 import { authenticateUser } from '$lib/server/auth';
 import { createSession } from '$lib/server/sessionService';
 import { findUserById } from '$lib/server/userService';
@@ -24,12 +23,11 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
             return json({ error: 'Invalid credentials' }, { status: 401 });
         }
 
-        // 2. Fetch Full User Record
+        // 2. Fetch Full User
         const fullUser = await findUserById(kv, authResult.id);
-        
         const now = new Date().toISOString();
         
-        // 3. Construct Session Data
+        // 3. Create Session
         const sessionData = {
             id: authResult.id,
             name: authResult.username,
@@ -41,16 +39,14 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
             role: fullUser?.role || 'user'
         };
 
-        // 4. Create Session
         const sessionId = await createSession(sessionKv, sessionData);
         
-        // 5. Set Cookie
         cookies.set('session_id', sessionId, {
             path: '/',
             httpOnly: true,
             sameSite: 'lax',
-            secure: process.env.NODE_ENV === 'production',
-            maxAge: 60 * 60 * 24 * 7 // 1 week
+            secure: true,
+            maxAge: 60 * 60 * 24 * 7 
         });
 
         return json({ user: sessionData });
