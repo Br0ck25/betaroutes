@@ -2,17 +2,16 @@
 import { redirect } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createUser } from '$lib/server/userService';
-// [!code --] import { createSession } from '$lib/server/sessionService';
-import { randomUUID } from 'node:crypto'; // [!code ++]
-import { dev } from '$app/environment'; // [!code ++]
+import { randomUUID } from 'node:crypto'; // [!code ++] Use standard crypto
+import { dev } from '$app/environment';   // [!code ++] For cookie security
 
 export const GET: RequestHandler = async ({ url, platform, cookies }) => {
     const token = url.searchParams.get('token');
+    
+    // [!code fix] Use ONLY BETA_USERS_KV (Single Source of Truth)
     const usersKV = platform?.env?.BETA_USERS_KV;
-    // [!code --] const sessionKv = platform?.env?.BETA_SESSIONS_KV;
-
-    // [!code --] if (!token || !usersKV || !sessionKv) {
-    if (!token || !usersKV) { // [!code ++]
+    
+    if (!token || !usersKV) {
         throw redirect(303, '/login?error=invalid_verification');
     }
 
@@ -38,8 +37,8 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
         resetDate: new Date().toISOString()
     });
 
-    // 3. Login Immediately (Using logic compatible with hooks.server.ts)
-    const sessionToken = randomUUID(); // [!code ++]
+    // 3. Login Immediately (Corrected to match login/+server.ts)
+    const sessionToken = randomUUID(); // [!code ++] Generate new token
     
     const sessionData = {
         id: user.id,
@@ -49,24 +48,22 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
         tripsThisMonth: user.tripsThisMonth,
         maxTrips: user.maxTrips,
         resetDate: user.resetDate,
-        role: 'user' // [!code ++]
+        role: 'user'
     };
 
-    // Store in USERS_KV using the token as key, matching the hook's expectation
-    await usersKV.put(sessionToken, JSON.stringify(sessionData)); // [!code ++]
+    // [!code fix] Store session in USERS_KV using the token as key
+    await usersKV.put(sessionToken, JSON.stringify(sessionData));
 
-    // Set the cookie named 'token' (NOT 'session_id')
-    cookies.set('token', sessionToken, { // [!code ++]
+    // [!code fix] Set 'token' cookie (NOT 'session_id')
+    cookies.set('token', sessionToken, {
         path: '/',
         httpOnly: true,
         sameSite: 'lax',
-        secure: !dev, // [!code ++]
-        maxAge: 60 * 60 * 24 * 30 // 30 days // [!code ++]
+        secure: !dev,
+        maxAge: 60 * 60 * 24 * 30 // 30 days
     });
 
-    // [!code --] const sessionId = await createSession(sessionKv, sessionData);
-    // [!code --] cookies.set('session_id', sessionId, { ... });
-
+    // 4. Cleanup and Redirect
     await usersKV.delete(pendingKey);
     throw redirect(303, '/dashboard?welcome=true');
 };
