@@ -8,7 +8,8 @@
     let confirmPassword = '';
     let responseError: string | null = null;
     let loading = false;
-    let registrationSuccess = false; // New state for "Check Inbox" message
+    let registrationSuccess = false;
+    let submittedEmail = ''; // [!code ++] New variable to store email for display
 
     $: isLogin = $page.url.searchParams.get('view') !== 'register';
 
@@ -32,7 +33,7 @@
         let payload = {};
         if (isLogin) {
              // Login expects 'email' key even if user types username
-             payload = { email: username, password }; 
+             payload = { email: username, password };
         } else {
              if (password !== confirmPassword) {
                  responseError = "Passwords don't match";
@@ -57,6 +58,7 @@
                     await goto('/dashboard', { invalidateAll: true });
                 } else {
                     // Registration Success -> Show Message
+                    submittedEmail = email; // [!code ++] Save the email before clearing it
                     registrationSuccess = true;
                     username = ''; email = ''; password = ''; confirmPassword = '';
                 }
@@ -80,7 +82,7 @@
 </svelte:head>
 
 <div class="auth-page">
-	<div class="auth-brand">
+    <div class="auth-brand">
 		<div class="brand-content">
 			<a href="/" class="brand-logo">
 				<img src="/logo.png" alt="Go Route Yourself" />
@@ -159,7 +161,7 @@
                             <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                         <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 8px; color: #166534;">Check your inbox!</h3>
-                        <p style="font-size: 15px; color: #166534;">We've sent a verification link to <strong>{email}</strong>.</p>
+                        <p style="font-size: 15px; color: #166534;">We've sent a verification link to <strong>{submittedEmail}</strong>.</p>
                     </div>
                     <button class="toggle-link" on:click={() => { registrationSuccess = false; toggleMode(); }}>
                         Back to Sign In
@@ -307,6 +309,7 @@
 
 <style>
 	@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    
 	:root {
 		--orange: #FF7F50;
 		--blue: #29ABE2;
