@@ -1,9 +1,11 @@
+// src/routes/api/login/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-// [!code fix] Ensure this points to 'auth' (not authService)
 import { authenticateUser } from '$lib/server/auth';
 import { createSession } from '$lib/server/sessionService';
 import { findUserById } from '$lib/server/userService';
+// [!code ++] Import dev to check environment
+import { dev } from '$app/environment';
 
 export const POST: RequestHandler = async ({ request, platform, cookies }) => {
     try {
@@ -16,18 +18,15 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
              return json({ error: 'Service Unavailable' }, { status: 503 });
         }
 
-        // 1. Authenticate
         const authResult = await authenticateUser(kv, email, password);
         
         if (!authResult) {
             return json({ error: 'Invalid credentials' }, { status: 401 });
         }
 
-        // 2. Fetch Full User
         const fullUser = await findUserById(kv, authResult.id);
         const now = new Date().toISOString();
         
-        // 3. Create Session
         const sessionData = {
             id: authResult.id,
             name: authResult.username,
@@ -41,11 +40,12 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
 
         const sessionId = await createSession(sessionKv, sessionData);
         
+        // [!code fix] Only require 'secure' in production
         cookies.set('session_id', sessionId, {
             path: '/',
             httpOnly: true,
             sameSite: 'lax',
-            secure: true,
+            secure: !dev, 
             maxAge: 60 * 60 * 24 * 7 
         });
 
