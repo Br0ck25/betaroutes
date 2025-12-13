@@ -11,7 +11,6 @@ pages_build_output_dir = ".svelte-kit/cloudflare"
 # ---------------------------------------------------
 [env.production]
 
-# FIX: Move vars here so they apply to production
 [env.production.vars]
 PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyB7uqKfS8zRRPTJOv4t48yRTCnUvBjANCc"
 
@@ -44,12 +43,15 @@ id = "2030b20c6baa46fe8c7bb620aaf0f8c1"
 binding = "BETA_DIRECTIONS_KV"
 id = "3fb03d50a94e4b2cb4fc3f54bdfd45d7"
 
+[[env.production.kv_namespaces]]
+binding = "BETA_SESSIONS_KV"
+id = "d395b64dcd0641f5a44d94c5ef5628eb"
+
 # ---------------------------------------------------
 # Preview environment (PR previews and local dev)
 # ---------------------------------------------------
 [env.preview]
 
-# FIX: Move vars here too so they work in preview/dev
 [env.preview.vars]
 PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyB7uqKfS8zRRPTJOv4t48yRTCnUvBjANCc"
 
@@ -81,3 +83,7 @@ id = "2030b20c6baa46fe8c7bb620aaf0f8c1"
 [[env.preview.kv_namespaces]]
 binding = "BETA_DIRECTIONS_KV"
 id = "3fb03d50a94e4b2cb4fc3f54bdfd45d7"
+
+[[env.preview.kv_namespaces]]
+binding = "BETA_SESSIONS_KV"
+id = "d395b64dcd0641f5a44d94c5ef5628eb"
