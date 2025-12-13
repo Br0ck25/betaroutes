@@ -10,19 +10,18 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
     const sessionKv = platform?.env?.BETA_SESSIONS_KV;
 
     if (!token || !usersKV || !sessionKv) {
-        throw redirect(303, '/login?error=invalid_verification');
+        throw redirect(303, '/login?error=invalid_link');
     }
 
-    const pendingKey = `pending_verify:${token}`;
-    const pendingDataRaw = await usersKV.get(pendingKey);
-
+    // 1. Get Pending Data
+    const pendingDataRaw = await usersKV.get(`pending_verify:${token}`);
     if (!pendingDataRaw) {
-        throw redirect(303, '/login?error=expired_verification');
+        throw redirect(303, '/login?error=expired_link');
     }
 
     const pendingData = JSON.parse(pendingDataRaw);
 
-    // Create Real User
+    // 2. Create Real User (Now it's safe)
     const user = await createUser(usersKV, {
         username: pendingData.username,
         email: pendingData.email,
@@ -34,7 +33,7 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
         resetDate: new Date().toISOString()
     });
 
-    // Auto-Login
+    // 3. Log them in immediately
     const sessionData = {
         id: user.id,
         name: user.username,
@@ -52,10 +51,12 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
         path: '/',
         httpOnly: true,
         sameSite: 'lax',
-        secure: true, // Always true in prod
+        secure: true,
         maxAge: 60 * 60 * 24 * 7
     });
 
-    await usersKV.delete(pendingKey);
+    // 4. Delete pending record so link can't be reused
+    await usersKV.delete(`pending_verify:${token}`);
+
     throw redirect(303, '/dashboard?welcome=true');
 };

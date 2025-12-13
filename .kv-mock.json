@@ -15,7 +15,8 @@
     "4410e993-867c-4c81-9f07-b1468a7cf1ed": "{\"id\":\"29c44d78-79d3-4d26-a063-220be7b7fefa\",\"name\":\"james\",\"email\":\"\",\"plan\":\"free\",\"tripsThisMonth\":0,\"maxTrips\":10,\"resetDate\":\"2025-12-11T22:22:32.297Z\"}",
     "ratelimit:register:unknown": "3",
     "pending_verify:8add7100-0ffe-4505-8c39-2cd0e77ad480": "{\"username\":\"Brock\",\"email\":\"jamesbrock25@hotmail.com\",\"password\":\"v1:100000:1119ef5c6a3042d48252352d78740c96:e4d15797220601e666bbc6576ae01de2e29b50624f1224098cabd65be78cfd98\",\"createdAt\":\"2025-12-13T04:12:27.852Z\"}",
-    "pending_verify:13040f69-506a-427c-83a9-cc8824413ae8": "{\"username\":\"Brock\",\"email\":\"jamesbrock25@hotmail.com\",\"password\":\"v1:100000:c260372a8b1571cc40693b665952a2c4:476fb6e9773246feefb1a374ee64528cd4dce8252406306a7c084d3671611ee0\",\"createdAt\":\"2025-12-13T04:13:17.996Z\"}"
+    "pending_verify:13040f69-506a-427c-83a9-cc8824413ae8": "{\"username\":\"Brock\",\"email\":\"jamesbrock25@hotmail.com\",\"password\":\"v1:100000:c260372a8b1571cc40693b665952a2c4:476fb6e9773246feefb1a374ee64528cd4dce8252406306a7c084d3671611ee0\",\"createdAt\":\"2025-12-13T04:13:17.996Z\"}",
+    "pending_verify:bc9cf344-b372-4135-9a78-c403711978a9": "{\"username\":\"Brock\",\"email\":\"jamesbrock25@hotmail.com\",\"password\":\"v1:100000:99352d0e6642b6265db4a4215b5df290:65e0a64ee49d97e7349ed2cafda66faa18402e48201be5b0e9540c70cb799989\",\"createdAt\":\"2025-12-13T04:28:27.019Z\"}"
   },
   "LOGS": {
     "meta:user:29c44d78-79d3-4d26-a063-220be7b7fefa:trip_count": "0",
