@@ -1,59 +1,54 @@
-/// <reference types="@sveltejs/kit" />
-import { build, files, version } from '$service-worker';
+// src/hooks.server.ts
+import { dev } from '$app/environment';
+import type { Handle } from '@sveltejs/kit';
 
-const CACHE = `cache-${version}`;
-const ASSETS = [...build, ...files];
+export const handle: Handle = async ({ event, resolve }) => {
+	// 1. Setup Mock DB in Dev
+	if (dev) {
+		const { setupMockKV } = await import('$lib/server/dev-mock-db');
+        setupMockKV(event);
+	}
 
-self.addEventListener('install', (event) => {
-  async function addFilesToCache() {
-    const cache = await caches.open(CACHE);
-    await cache.addAll(ASSETS);
-  }
-  event.waitUntil(addFilesToCache());
-});
+	// 2. Check for the correct 'session_id' cookie
+	const sessionId = event.cookies.get('session_id');
 
-self.addEventListener('activate', (event) => {
-  async function deleteOldCaches() {
-    for (const key of await caches.keys()) {
-      if (key !== CACHE) await caches.delete(key);
-    }
-  }
-  event.waitUntil(deleteOldCaches());
-});
+	if (!sessionId) {
+		event.locals.user = null;
+		return resolve(event);
+	}
 
-self.addEventListener('fetch', (event) => {
-  // 1. Only handle GET requests
-  if (event.request.method !== 'GET') return;
+	try {
+        // 3. Look up session in SESSIONS_KV
+		const sessionKV = event.platform?.env?.BETA_SESSIONS_KV;
+		
+        if (sessionKV) {
+			const sessionDataStr = await sessionKV.get(sessionId);
 
-  const url = new URL(event.request.url);
+			if (sessionDataStr) {
+				const session = JSON.parse(sessionDataStr);
+				
+				event.locals.user = {
+					id: session.id,
+					token: sessionId,
+					plan: session.plan ?? 'free',
+					tripsThisMonth: session.tripsThisMonth ?? 0,
+					maxTrips: session.maxTrips ?? 10,
+					resetDate: session.resetDate ?? new Date().toISOString(),
+					name: session.name, 
+					email: session.email
+				};
+			} else {
+                // Cookie exists but session is gone from DB
+                if (event.url.pathname.startsWith('/dashboard')) {
+				    console.warn('[HOOK] Session expired or invalid.');
+                }
+				event.locals.user = null;
+			}
+		}
+	} catch (err) {
+		console.error('[HOOK] KV Error:', err);
+		event.locals.user = null;
+	}
 
-  // 2. [CRITICAL] Ignore API calls (let the app handle sync)
-  if (url.pathname.startsWith('/api')) return;
-
-  // 3. [CRITICAL FIX] Ignore external domains (Cloudflare, Google Maps, etc.)
-  // This prevents "FetchEvent resulted in a network error"
-  if (url.origin !== self.location.origin) return;
-
-  async function respond() {
-    const cache = await caches.open(CACHE);
-
-    if (ASSETS.includes(url.pathname)) {
-      const response = await cache.match(url.pathname);
-      if (response) return response;
-    }
-
-    try {
-      const response = await fetch(event.request);
-      if (response.status === 200) {
-        cache.put(event.request, response.clone());
-      }
-      return response;
-    } catch {
-      const cachedResponse = await cache.match(event.request);
-      if (cachedResponse) return cachedResponse;
-      throw new Error('Offline and resource not found in cache');
-    }
-  }
-
-  event.respondWith(respond());
-});
+	return resolve(event);
+};

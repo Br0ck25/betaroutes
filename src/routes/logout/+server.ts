@@ -1,11 +1,24 @@
 // src/routes/logout/+server.ts
+import { redirect } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 
-import { json } from '@sveltejs/kit';
+export const POST: RequestHandler = async ({ cookies, platform }) => {
+    const sessionId = cookies.get('session_id');
 
-export async function POST({ cookies }) {
-  // Clear the token cookie
-  cookies.delete('token', { path: '/' });
-  
-  // Return success
-  return json({ success: true });
-}
+    // 1. Delete cookie
+    cookies.delete('session_id', { path: '/' });
+
+    // 2. Delete session from SESSIONS_KV
+    if (sessionId) {
+        try {
+            const sessionKV = platform?.env?.BETA_SESSIONS_KV;
+            if (sessionKV) {
+                await sessionKV.delete(sessionId); 
+            }
+        } catch (error) {
+            console.error('[LOGOUT] Failed to delete session:', error);
+        }
+    }
+
+    throw redirect(302, '/login');
+};
