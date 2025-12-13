@@ -11,11 +11,11 @@ export const load = ({ locals, platform }) => {
 	}
 
 	// 1. Try Cloudflare Platform Env
-	let apiKey = (platform?.env as any)?.PUBLIC_GOOGLE_MAPS_API_KEY;
+	let apiKey = (platform?.env as any)?.PRIVATE_GOOGLE_MAPS_API_KEY;
 
 	// 2. Try Svelte Dynamic Env
 	if (!apiKey) {
-		apiKey = env.PUBLIC_GOOGLE_MAPS_API_KEY;
+		apiKey = env.PRIVATE_GOOGLE_MAPS_API_KEY;
 	}
 
 	// 3. Fallback: Hardcode the key to ensure it works
