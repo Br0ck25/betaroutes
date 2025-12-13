@@ -1,64 +1,45 @@
 // src/routes/api/autocomplete/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { generatePrefixKey, normalizeSearchString } from '$lib/utils/keys';
 
 export const GET: RequestHandler = async ({ url, platform }) => {
-  const query = url.searchParams.get('q');
-  
-  // [!code ++] 1. Cost Protection: Minimum Character Limit
-  // Do not search until user types at least 3 chars to avoid massive wildcard matches
-  if (!query || query.length < 3) return json([]);
-  
-  const kv = platform?.env?.BETA_PLACES_KV;
-  if (!kv) return json([]);
-  
-  try {
-    const normalizedQuery = query.toLowerCase().replace(/\s+/g, '');
-    
-    // Truncate search to max 10 chars
-    const searchLen = Math.min(10, normalizedQuery.length);
-    const searchPrefix = normalizedQuery.substring(0, searchLen);
-    
-    // Note: Assuming your keys are stored with this prefix structure.
-    // If your keys are just "123mainst...", remove the "prefix:" part below.
-    const prefixKey = `prefix:${searchPrefix}`; 
-    
-    // [!code changed] 2. N+1 Prevention: Strict Limit
-    // We limit the LIST operation to 10 keys.
-    // This ensures we never trigger 500+ GET operations from a single user keystroke.
-    const { keys } = await kv.list({ prefix: prefixKey, limit: 10 });
-    
-    if (keys.length === 0) {
-       return json([]);
+    const query = url.searchParams.get('q');
+    if (!query || query.length < 2) {
+        return json([]);
     }
 
-    // Fetch values (now capped at max 10 reads)
-    const valuePromises = keys.map(async (k) => {
-      const value = await kv.get(k.name, 'text');
-      return value ? JSON.parse(value) : null;
-    });
-    
-    const values = await Promise.all(valuePromises);
-    
-    // Deduplication & Filtering
-    const seenAddresses = new Set<string>();
-    const results = values
-      .filter((v): v is any => v !== null)
-      .filter(v => {
-        const addr = v.formatted_address || v.name;
-        // Verify match (since prefix search is broad)
-        const normalizedAddr = addr.toLowerCase().replace(/\s+/g, '');
-        if (!normalizedAddr.includes(normalizedQuery)) return false;
+    try {
+        // [!code change] Use shared key generation to ensure matching against DB
+        const prefixKey = generatePrefixKey(query);
+        const normalizedQuery = normalizeSearchString(query);
 
-        if (seenAddresses.has(addr)) return false;
-        seenAddresses.add(addr);
-        return true;
-      });
-      
-    return json(results);
+        const kv = platform?.env?.BETA_PLACES_KV;
+        
+        // If no KV binding (e.g. dev mode without miniflare), return empty
+        if (!kv) return json([]);
 
-  } catch (error) {
-    console.error(`❌ [AUTOCOMPLETE API] Error:`, error);
-    return json({ error: 'Failed' }, { status: 500 });
-  }
+        // 1. Get the bucket (list of place IDs/Strings starting with this prefix)
+        // We assume the bucket contains a JSON array of full address strings
+        const bucketData = await kv.get(prefixKey, 'json') as string[] | null;
+
+        if (!bucketData || !Array.isArray(bucketData)) {
+            return json([]);
+        }
+
+        // 2. Filter in-memory to find exact matches (since prefix is only 10 chars)
+        const matches = bucketData
+            .filter(address => normalizeSearchString(address).includes(normalizedQuery))
+            .slice(0, 5) // Limit results
+            .map(address => ({
+                formatted_address: address,
+                name: address.split(',')[0] // Simple heuristic for name display
+            }));
+
+        return json(matches);
+
+    } catch (err) {
+        console.error('Autocomplete Error:', err);
+        return json([]); // Fail gracefully
+    }
 };

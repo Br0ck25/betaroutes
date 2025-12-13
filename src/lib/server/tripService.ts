@@ -1,5 +1,6 @@
 // src/lib/server/tripService.ts
 import type { KVNamespace } from '@cloudflare/workers-types';
+import { generatePrefixKey } from '$lib/utils/keys';
 
 export type Stop = {
   id: string;
@@ -50,20 +51,20 @@ export function makeTripService(
   placesKV: KVNamespace | undefined
 ) {
   
-  // [!code changed] Updated to cache Lat/Lng
-  async function cacheAddressesFromTrip(trip: TripRecord) {
+  // Updated to handle both Lat/Lng Caching AND Autocomplete Indexing
+  async function indexTripData(trip: TripRecord) {
     if (!placesKV) return;
     
+    // 1. Gather Unique Data
     // Map address string -> Data object (to handle duplicates but keep best data)
-    const addressData = new Map<string, { lat?: number, lng?: number }>();
+    const uniquePlaces = new Map<string, { lat?: number, lng?: number }>();
     
-    // Helper to add to map
     const add = (addr?: string, loc?: { lat: number, lng: number }) => {
-        if (!addr) return;
+        if (!addr || addr.length < 3) return;
         const normalized = addr.toLowerCase().trim();
-        // If we have new coordinates OR we don't have this address yet, update it
-        if (!addressData.has(normalized) || loc) {
-            addressData.set(normalized, loc || {});
+        // Update if we have new coordinates OR if it's a new address
+        if (!uniquePlaces.has(normalized) || loc) {
+            uniquePlaces.set(normalized, loc || {});
         }
     };
 
@@ -78,24 +79,44 @@ export function makeTripService(
       trip.destinations.forEach((d: any) => add(d.address, d.location));
     }
 
-    // Save to KV
-    for (const [addrKey, data] of addressData.entries()) {
-       const payload: any = { 
-         lastSeen: new Date().toISOString() 
-       };
+    // 2. Process KV Writes
+    // We group these promises to run in parallel
+    const writePromises: Promise<void>[] = [];
 
-       // Store formatted address (key is normalized, so we might want pretty version if available)
-       // For now, using key as address reference.
-       payload.formatted_address = addrKey; 
-
+    for (const [addrKey, data] of uniquePlaces.entries()) {
+       // --- A. Cache Place Details (Lat/Lng) ---
+       // Used for optimizing route calculations later
        if (data.lat !== undefined && data.lng !== undefined) {
-           payload.lat = data.lat;
-           payload.lng = data.lng;
-           
-           // Only write to KV if we have useful data (coords)
-           await placesKV.put(addrKey, JSON.stringify(payload));
+           const payload = { 
+             lastSeen: new Date().toISOString(),
+             formatted_address: addrKey, // Using normalized key as address for now
+             lat: data.lat,
+             lng: data.lng
+           };
+           writePromises.push(placesKV.put(addrKey, JSON.stringify(payload)));
        }
+
+       // --- B. Update Autocomplete Prefix Index ---
+       // Used for the frontend "Type-ahead" search
+       const prefixKey = generatePrefixKey(addrKey);
+       
+       // Note: Read-Modify-Write inside a loop isn't atomic in KV, 
+       // but acceptable for this eventual-consistency use case.
+       const updatePrefixBucket = async () => {
+           const existingList = await placesKV!.get(prefixKey, 'json') as string[] | null;
+           const list = existingList || [];
+
+           if (!list.includes(addrKey)) {
+               list.push(addrKey);
+               // Cap bucket size to 50 to prevent massive JSON blobs
+               if (list.length > 50) list.shift();
+               await placesKV!.put(prefixKey, JSON.stringify(list));
+           }
+       };
+       writePromises.push(updatePrefixBucket());
     }
+
+    await Promise.allSettled(writePromises);
   }
 
   async function updateIndex(userId: string, trip: TripRecord, action: 'put' | 'delete') {
@@ -106,6 +127,7 @@ export function makeTripService(
       if (idxRaw) {
           trips = JSON.parse(idxRaw);
       } else {
+          // Fallback: Rebuild index from list if missing
           const prefix = prefixForUser(userId);
           const list = await kv.list({ prefix });
           for (const k of list.keys) {
@@ -125,6 +147,7 @@ export function makeTripService(
           trips = trips.filter(t => t.id !== trip.id);
       }
 
+      // Keep index sorted by date (newest first)
       trips.sort((a,b) => b.createdAt.localeCompare(a.createdAt));
       await kv.put(idxKey, JSON.stringify(trips));
   }
@@ -153,10 +176,12 @@ export function makeTripService(
       const idxKey = indexKeyForUser(userId);
       const idxRaw = await kv.get(idxKey);
       
+      // Fast path: Return cached index
       if (idxRaw) {
           return JSON.parse(idxRaw);
       }
 
+      // Slow path: Rebuild index
       const prefix = prefixForUser(userId);
       const list = await kv.list({ prefix });
       const out: TripRecord[] = [];
@@ -170,6 +195,7 @@ export function makeTripService(
 
       out.sort((a,b) => b.createdAt.localeCompare(a.createdAt));
       
+      // Cache the result
       if (out.length > 0) {
           await kv.put(idxKey, JSON.stringify(out));
       }
@@ -189,13 +215,15 @@ export function makeTripService(
       await kv.put(`trip:${trip.userId}:${trip.id}`, JSON.stringify(trip));
       await updateIndex(trip.userId, trip, 'put');
 
-      cacheAddressesFromTrip(trip).catch(e => {
-        console.error('[TripService] Failed to cache addresses:', e);
+      // Async caching/indexing - don't block main response
+      indexTripData(trip).catch(e => {
+        console.error('[TripService] Failed to index trip data:', e);
       });
     },
 
     async delete(userId: string, tripId: string) {
       if (!trashKV) {
+        // Hard delete if no trash support
         const key = `trip:${userId}:${tripId}`;
         await kv.delete(key);
         await updateIndex(userId, { id: tripId } as TripRecord, 'delete');
@@ -211,6 +239,7 @@ export function makeTripService(
 
       const trip = JSON.parse(raw);
       const now = new Date();
+      // 30 Day soft delete policy
       const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); 
 
       trip.deletedAt = now.toISOString();
@@ -226,7 +255,7 @@ export function makeTripService(
       await trashKV.put(
         trashKey, 
         JSON.stringify({ trip, metadata }),
-        { expirationTtl: 30 * 24 * 60 * 60 }
+        { expirationTtl: 30 * 24 * 60 * 60 } // Cloudflare auto-delete
       );
 
       await kv.delete(key);

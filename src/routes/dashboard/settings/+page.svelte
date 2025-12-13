@@ -1,4 +1,4 @@
-// src/routes/dashboard/settings/+page.svelte
+
 <script lang="ts">
   import { userSettings } from '$lib/stores/userSettings';
   import { auth, user } from '$lib/stores/auth';

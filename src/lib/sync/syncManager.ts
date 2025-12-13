@@ -1,22 +1,20 @@
-// src/lib/sync/syncManager.ts
 import { getDB } from '$lib/db/indexedDB';
 import { syncStatus } from '$lib/stores/sync';
 import type { SyncQueueItem } from '$lib/db/types';
+import { loadGoogleMaps } from '$lib/utils/autocomplete';
 
-/**
- * Sync Manager
- * * Handles syncing between IndexedDB (local) and Cloudflare KV (cloud)
- * Features: Auto-sync, Retry logic, and **Offline Trip Calculation**.
- */
 class SyncManager {
   private initialized = false;
   private syncInterval: ReturnType<typeof setInterval> | null = null;
   private isSyncing = false;
   private apiKey: string = '';
+  
+  private storeUpdater: ((trip: any) => void) | null = null;
 
-  /**
-   * Initialize with API Key for offline calculations
-   */
+  setStoreUpdater(fn: (trip: any) => void) {
+      this.storeUpdater = fn;
+  }
+
   async initialize(apiKey?: string) {
     if (this.initialized) return;
 
@@ -78,7 +76,10 @@ class SyncManager {
     await tx.done;
     await this.updatePendingCount();
     console.log(`📋 Added to sync queue: ${item.action} ${item.tripId}`);
-    if (navigator.onLine && !this.isSyncing) this.syncNow();
+    
+    if (navigator.onLine && !this.isSyncing) {
+        await this.syncNow();
+    }
   }
 
   private async updatePendingCount() {
@@ -110,8 +111,6 @@ class SyncManager {
 
       for (const item of queue) {
         try {
-          // --- ENRICHMENT STEP ---
-          // If this is a trip creation/update and miles are missing, calculate them now
           if ((item.action === 'create' || item.action === 'update') && item.data) {
              await this.enrichTripData(item.data);
           }
@@ -138,16 +137,12 @@ class SyncManager {
     }
   }
 
-  /**
-   * Calculates miles, time, and costs if they are missing (0)
-   */
   private async enrichTripData(trip: any) {
-    // Only calculate if miles are 0 AND we have addresses
     if (trip.totalMiles === 0 && trip.startAddress) {
         console.log(`🧮 Calculating offline route for trip ${trip.id}...`);
         
         try {
-            await this.ensureGoogleMapsLoaded();
+            await loadGoogleMaps(this.apiKey);
             
             const directionsService = new google.maps.DirectionsService();
             const waypoints = (trip.stops || []).map((s: any) => ({ location: s.address, stopover: true }));
@@ -166,11 +161,9 @@ class SyncManager {
                     dur: acc.dur + curr.duration.value
                 }), { dist: 0, dur: 0 });
 
-                // Update Trip Data
                 trip.totalMiles = Math.round((leg.dist / 1609.34) * 10) / 10;
                 trip.estimatedTime = Math.round(leg.dur / 60);
                 
-                // Recalculate Financials
                 if (trip.mpg && trip.gasPrice) {
                     const gallons = trip.totalMiles / trip.mpg;
                     trip.fuelCost = Math.round(gallons * trip.gasPrice * 100) / 100;
@@ -180,46 +173,31 @@ class SyncManager {
                 const costs = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);
                 trip.netProfit = earnings - costs;
 
-                // Update Local DB immediately so UI reflects calculations
                 const db = await getDB();
                 const tx = db.transaction('trips', 'readwrite');
                 await tx.objectStore('trips').put(trip);
                 await tx.done;
                 
-                console.log(`✅ Offline trip calculated: ${trip.totalMiles} mi, $${trip.fuelCost} fuel`);
+                if (this.storeUpdater) {
+                    console.log('⚡ Updating UI with enriched data:', trip.id);
+                    this.storeUpdater(trip);
+                }
             }
         } catch (e) {
             console.warn('⚠️ Could not calculate route for offline trip:', e);
-            // We proceed syncing anyway; better to save raw data than nothing
         }
     }
   }
 
-  private async ensureGoogleMapsLoaded() {
-      if (window.google && window.google.maps) return;
-      if (!this.apiKey) throw new Error("No API Key");
-
-      return new Promise<void>((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = `https://maps.googleapis.com/maps/api/js?key=${this.apiKey}&libraries=places`;
-          script.async = true;
-          script.onload = () => resolve();
-          script.onerror = () => reject("Failed to load Maps");
-          document.head.appendChild(script);
-      });
-  }
-
   private async processSyncItem(item: SyncQueueItem) {
     const { action, tripId, data } = item;
-    const method = action === 'create' ? 'POST' : action === 'update' || action === 'restore' ? 'PUT' : 'DELETE';
     const url = action === 'create' ? '/api/trips' : 
                 action.includes('delete') ? `/api/trips/${tripId}` : 
-                `/api/trips/${tripId}`; // Simplify for brevity
+                `/api/trips/${tripId}`;
 
-    // Custom handling per action type to match server API
-    if (action === 'create') await this.apiCall('/api/trips', 'POST', data, 'trips', tripId);
-    else if (action === 'update') await this.apiCall(`/api/trips/${tripId}`, 'PUT', data, 'trips', tripId);
-    else if (action === 'delete') await this.apiCall(`/api/trips/${tripId}`, 'DELETE', null, 'trash', tripId);
+    if (action === 'create') await this.apiCall(url, 'POST', data, 'trips', tripId);
+    else if (action === 'update') await this.apiCall(url, 'PUT', data, 'trips', tripId);
+    else if (action === 'delete') await this.apiCall(url, 'DELETE', null, 'trash', tripId);
     else if (action === 'restore') await this.apiCall(`/api/trash/${tripId}`, 'POST', null, 'trips', tripId);
     else if (action === 'permanentDelete') await this.apiCall(`/api/trash/${tripId}`, 'DELETE', null, null, tripId);
   }
@@ -227,10 +205,20 @@ class SyncManager {
   private async apiCall(url: string, method: string, body: any, updateStore: 'trips' | 'trash' | null, id: string) {
       const res = await fetch(url, {
           method,
+          keepalive: true,
           headers: body ? { 'Content-Type': 'application/json' } : undefined,
           body: body ? JSON.stringify(body) : undefined
       });
-      if (!res.ok) throw new Error(`${method} failed`);
+      
+      if (!res.ok) {
+          // [!code ++] Detect Client Errors (400-499) which are non-retriable
+          if (res.status >= 400 && res.status < 500) {
+              const errText = await res.text().catch(() => '');
+              throw new Error(`ABORT_RETRY: Server rejected request (${res.status}): ${errText.substring(0, 100)}`);
+          }
+          throw new Error(`${method} failed with status ${res.status}`);
+      }
+
       if (updateStore) await this.markAsSynced(updateStore, id);
   }
 
@@ -251,10 +239,26 @@ class SyncManager {
     const db = await getDB();
     const tx = db.transaction('syncQueue', 'readwrite');
     const store = tx.objectStore('syncQueue');
-    item.retries = (item.retries || 0) + 1;
-    item.lastError = error.message || String(error);
-    if (item.retries > 5) await store.delete(item.id!);
-    else await store.put(item);
+    
+    // [!code ++] Check for fatal error flag
+    const isFatal = error.message?.includes('ABORT_RETRY');
+
+    if (isFatal) {
+         console.error(`🛑 Sync failed permanently for item ${item.id} (Trip ${item.tripId}). Removing from queue.`);
+         // Delete immediately to prevent battery drain from infinite retries on bad data
+         await store.delete(item.id!);
+         
+         // Update status to show specific error
+         syncStatus.setError(`Sync rejected: ${error.message.replace('ABORT_RETRY: ', '')}`);
+    } else {
+        // Standard retry logic for 5xx or Network errors
+        item.retries = (item.retries || 0) + 1;
+        item.lastError = error.message || String(error);
+        
+        if (item.retries > 5) await store.delete(item.id!);
+        else await store.put(item);
+    }
+    
     await tx.done;
   }
 

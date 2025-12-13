@@ -1,47 +1,63 @@
 // src/lib/utils/autocomplete.ts
 import type { Action } from "svelte/action";
 
-// Global flag to track if Google Maps is loaded
-let googleMapsLoaded = false;
-let googleMapsLoading = false;
+// Singleton Promise to prevent race conditions
+let loadingPromise: Promise<void> | null = null;
 let googleMapsError = false;
-const loadPromises: Array<(value: void) => void> = [];
 
-async function loadGoogleMaps(apiKey: string): Promise<void> {
-  if (googleMapsLoaded && typeof google !== 'undefined') return Promise.resolve();
-  if (googleMapsError) return Promise.reject(new Error('Google Maps previously failed'));
-  if (googleMapsLoading) return new Promise((resolve) => loadPromises.push(resolve));
+// Exported Singleton Loader
+export async function loadGoogleMaps(apiKey: string): Promise<void> {
+  // 1. Check if fully loaded
+  if (typeof google !== 'undefined' && google.maps) return Promise.resolve();
   
+  // 2. Check if previously failed
+  if (googleMapsError) return Promise.reject(new Error('Google Maps previously failed'));
+  
+  // 3. Check if currently loading (return existing promise)
+  if (loadingPromise) return loadingPromise;
+  
+  // 4. Validation
   if (!apiKey || apiKey === 'undefined') {
     googleMapsError = true;
     return Promise.reject(new Error('No API key'));
   }
+
+  // 5. Check DOM for existing script (Edge case: injected by another source)
+  const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
+  if (existingScript) {
+      loadingPromise = new Promise((resolve) => {
+          const check = setInterval(() => {
+              if (typeof google !== 'undefined' && google.maps) {
+                  clearInterval(check);
+                  resolve();
+              }
+          }, 100);
+      });
+      return loadingPromise;
+  }
   
-  googleMapsLoading = true;
-  
-  return new Promise((resolve, reject) => {
+  // 6. Start New Load
+  loadingPromise = new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+    // [!code change] Added 'geometry' to libraries to ensure full compatibility
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry`;
     script.async = true;
     script.defer = true;
     
     script.onload = () => {
-      googleMapsLoaded = true;
-      googleMapsLoading = false;
       resolve();
-      loadPromises.forEach(r => r());
-      loadPromises.length = 0;
     };
     
     script.onerror = (error) => {
-      googleMapsLoading = false;
       googleMapsError = true;
+      loadingPromise = null;
       reject(new Error('Failed to load Google Maps'));
-      loadPromises.length = 0;
     };
     
     document.head.appendChild(script);
   });
+
+  return loadingPromise;
 }
 
 export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node, params) => {
@@ -49,7 +65,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
   let debounceTimer: any;
   let isSelecting = false;
   
-  // [!code ++] Session Token & Service State
+  // Session Token & Service State
   let sessionToken: google.maps.places.AutocompleteSessionToken | null = null;
   let placesService: google.maps.places.PlacesService | null = null;
   
@@ -59,11 +75,9 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
         .catch(console.error);
   }
   
-  // [!code ++] Initialize Services
   function initServices() {
       if (typeof google !== 'undefined' && google.maps && google.maps.places) {
           sessionToken = new google.maps.places.AutocompleteSessionToken();
-          // PlacesService requires a container, even if dummy
           placesService = new google.maps.places.PlacesService(document.createElement('div'));
       }
   }
@@ -72,7 +86,6 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     dropdown = document.createElement('div');
     dropdown.className = 'pac-container';
     
-    // GOOGLE MATERIAL DESIGN STYLING (Restored)
     Object.assign(dropdown.style, {
       position: 'absolute',
       zIndex: '9999',
@@ -84,7 +97,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       overflow: 'hidden',
       display: 'none',
       borderRadius: '0 0 8px 8px',
-      marginTop: '-2px', // Slight overlap with input
+      marginTop: '-2px',
       paddingBottom: '8px'
     });
     
@@ -126,9 +139,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
         const kvData = await kvRes.json();
         const kvTime = Math.round(performance.now() - startTime);
 
-        // Normalize KV data
         const validKvData = Array.isArray(kvData) ? kvData.map((item: any) => {
-            // Handle potentially double-stringified JSON
             if (typeof item === 'string') {
                 try { return JSON.parse(item); } catch { return null; }
             }
@@ -155,14 +166,12 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     
     try {
       const service = new google.maps.places.AutocompleteService();
-      
-      // [!code ++] Ensure token exists
       if (!sessionToken) sessionToken = new google.maps.places.AutocompleteSessionToken();
 
       service.getPlacePredictions(
         { 
             input, 
-            sessionToken: sessionToken, // [!code ++] Pass Session Token
+            sessionToken: sessionToken,
             componentRestrictions: { country: 'us' } 
         },
         (predictions, status) => {
@@ -173,12 +182,10 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
               formatted_address: p.description,
               name: p.structured_formatting?.main_text || p.description,
               secondary_text: p.structured_formatting?.secondary_text,
-              place_id: p.place_id // Important for getDetails
+              place_id: p.place_id
             }));
             
             renderResults(results, 'google', googleTime);
-            // Don't cache session-based results directly if they depend on the token context, 
-            // but for simple text caching it's usually okay.
             cacheToKV(input, results);
           } else {
             renderEmpty();
@@ -204,7 +211,6 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     if (!dropdown) return;
     dropdown.innerHTML = '';
     
-    // --- Header Section ---
     const header = document.createElement('div');
     const sourceLabel = source === 'kv' ? '⚡ Fast Cache' : '🌐 Google Live';
     const sourceColor = source === 'kv' ? '#10B981' : '#4285F4';
@@ -227,7 +233,6 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     });
     dropdown.appendChild(header);
     
-    // --- Result Items ---
     items.forEach((item) => {
       const row = document.createElement('div');
       
@@ -237,7 +242,6 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
                              ? item.formatted_address.split(',').slice(1).join(',').trim() 
                              : '');
 
-      // Material Design Pin Icon
       const pinIcon = `
         <svg focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#9AA0A6" width="20px" height="20px">
           <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
@@ -249,7 +253,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
         alignItems: 'center',
         padding: '10px 16px',
         cursor: 'pointer',
-        borderBottom: '1px solid #fff' // invisible border for spacing
+        borderBottom: '1px solid #fff'
       });
       
       row.innerHTML = `
@@ -264,24 +268,16 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
         </div>
       `;
       
-      // Hover effects
-      row.addEventListener('mouseenter', () => {
-        row.style.backgroundColor = '#e8f0fe';
-      });
-      row.addEventListener('mouseleave', () => {
-        row.style.backgroundColor = '#fff';
-      });
-      
+      row.addEventListener('mouseenter', () => { row.style.backgroundColor = '#e8f0fe'; });
+      row.addEventListener('mouseleave', () => { row.style.backgroundColor = '#fff'; });
       row.addEventListener('mousedown', (e) => {
         e.preventDefault();
-        // [!code ++] Pass item source to selectItem to determine if we need details fetch
         selectItem(item, source);
       });
       
       dropdown!.appendChild(row);
     });
     
-    // --- Google Logo Footer (Required by ToS) ---
     if (source === 'google') {
        const footer = document.createElement('div');
        Object.assign(footer.style, {
@@ -307,15 +303,12 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     updatePosition();
   }
   
-  function renderError() { /* same as empty but red text if desired */ }
+  function renderError() { /* ... */ }
   
-  // [!code ++] Fetches full details to close the session and get precise data
   function selectItem(item: any, source: 'kv' | 'google') {
     if (dropdown) dropdown.style.display = 'none';
     isSelecting = true;
 
-    // If it's a Google result, we MUST call getDetails with the session token 
-    // to consolidate billing and get the proper formatted address/geometry.
     if (source === 'google' && item.place_id && placesService && sessionToken) {
         const request = {
             placeId: item.place_id,
@@ -330,32 +323,24 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
                     name: place.name || item.name,
                     geometry: place.geometry
                 });
-                // Generate new token for next interaction
                 sessionToken = new google.maps.places.AutocompleteSessionToken();
             } else {
-                // Fallback if details fail
                 commitSelection(item);
             }
         });
     } else {
-        // KV result or no service available - use what we have
         commitSelection(item);
     }
   }
 
   function commitSelection(data: any) {
     node.value = data.formatted_address || data.name;
-    
-    // Critical: Dispatch input event so Svelte bind:value updates
     node.dispatchEvent(new Event('input', { bubbles: true }));
-    
-    node.dispatchEvent(new CustomEvent('place-selected', { 
-      detail: data
-    }));
+    node.dispatchEvent(new CustomEvent('place-selected', { detail: data }));
   }
   
   initUI();
-  initServices(); // Try initializing immediately in case Google is already loaded
+  initServices();
 
   node.addEventListener('input', handleInput);
   node.addEventListener('focus', () => {

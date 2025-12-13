@@ -1,111 +1,109 @@
 <script lang="ts">
   import { trips } from '$lib/stores/trips';
-  import { onMount } from 'svelte';
-
-  // Calculate stats
-  $: recentTrips = $trips.slice(0, 5);
-  $: totalTrips = $trips.length;
-  $: totalProfit = $trips.reduce((sum, trip) => {
-    const earnings = trip.stops?.reduce((s, stop) => s + (stop.earnings || 0), 0) || 0;
-    const costs = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);
-    return sum + (earnings - costs);
-  }, 0);
-  $: totalMiles = $trips.reduce((sum, trip) => sum + (trip.totalMiles || 0), 0);
   
-  $: avgProfitPerTrip = totalTrips > 0 ? totalProfit / totalTrips : 0;
-  
-  // Get last 30 days data for chart
-  $: last30DaysData = (() => {
-    const today = new Date();
-    const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-    
-    const dailyData = new Map<string, number>();
-    
-    // Initialize all days with 0
-    for (let i = 0; i < 30; i++) {
-      const date = new Date(thirtyDaysAgo.getTime() + i * 24 * 60 * 60 * 1000);
-      const key = date.toISOString().split('T')[0];
-      dailyData.set(key, 0);
-    }
-    
-    // Add trip profits
-    $trips.forEach(trip => {
-      if (trip.date) {
-        const tripDate = new Date(trip.date);
-        if (tripDate >= thirtyDaysAgo && tripDate <= today) {
-          const key = tripDate.toISOString().split('T')[0];
-          
-          const earnings = trip.stops?.reduce((s, stop) => s + (stop.earnings || 0), 0) || 0;
-          const costs = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);
-          const profit = earnings - costs;
-          dailyData.set(key, (dailyData.get(key) || 0) + profit);
-        }
-      }
-    });
-
-    return Array.from(dailyData.entries()).map(([date, profit]) => ({
-      date,
-      profit
-    }));
-  })();
-  
-  // Cost breakdown
-  $: costBreakdown = (() => {
-    const fuel = $trips.reduce((sum, trip) => sum + (trip.fuelCost || 0), 0);
-    const maintenance = $trips.reduce((sum, trip) => sum + (trip.maintenanceCost || 0), 0);
-    const supplies = $trips.reduce((sum, trip) => sum + (trip.suppliesCost || 0), 0);
-    const total = fuel + maintenance + supplies;
-    
-    return {
-      fuel: { amount: fuel, percentage: total > 0 ? (fuel / total) * 100 : 0, color: '#FF7F50' },
-      maintenance: { amount: maintenance, percentage: total > 0 ? (maintenance / total) * 100 : 0, color: '#29ABE2' },
-      supplies: { amount: supplies, percentage: total > 0 ? (supplies / total) * 100 : 0, color: '#8DC63F' }
-    };
-  })();
-
-  // Previous month comparison
-  $: monthComparison = (() => {
+  // Single-pass calculation function to prevent main-thread blocking
+  function calculateDashboardStats(allTrips: any[]) {
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
-    
-    const currentMonthTrips = $trips.filter(trip => {
-      if (!trip.date) return false;
-      const d = new Date(trip.date);
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-    });
-    
     const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
     const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
     
-    const lastMonthTrips = $trips.filter(trip => {
-      if (!trip.date) return false;
-      const d = new Date(trip.date);
-      return d.getMonth() === lastMonth && d.getFullYear() === lastMonthYear;
-    });
-    
-    const currentProfit = currentMonthTrips.reduce((sum, trip) => {
-      const earnings = trip.stops?.reduce((s, stop) => s + (stop.earnings || 0), 0) || 0;
-      const costs = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);
-      return sum + (earnings - costs);
-    }, 0);
-    
-    const lastProfit = lastMonthTrips.reduce((sum, trip) => {
-      const earnings = trip.stops?.reduce((s, stop) => s + (stop.earnings || 0), 0) || 0;
-      const costs = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);
-      return sum + (earnings - costs);
-    }, 0);
+    // Setup 30-day window
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    // Pre-fill map to ensure empty days show up in chart
+    const dailyDataMap = new Map<string, number>();
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(thirtyDaysAgo.getTime() + i * 24 * 60 * 60 * 1000);
+      dailyDataMap.set(d.toISOString().split('T')[0], 0);
+    }
 
-    const change = lastProfit > 0 ? ((currentProfit - lastProfit) / lastProfit) * 100 : 0;
+    // Accumulators
+    let totalProfit = 0;
+    let totalMiles = 0;
+    let fuel = 0;
+    let maintenance = 0;
+    let supplies = 0;
+    let currentMonthProfit = 0;
+    let lastMonthProfit = 0;
+
+    // --- ONE LOOP TO RULE THEM ALL ---
+    for (let i = 0; i < allTrips.length; i++) {
+      const trip = allTrips[i];
+      
+      // 1. Basic Stats
+      const earnings = trip.stops?.reduce((s: number, stop: any) => s + (Number(stop.earnings) || 0), 0) || 0;
+      const tCosts = (Number(trip.fuelCost) || 0) + (Number(trip.maintenanceCost) || 0) + (Number(trip.suppliesCost) || 0);
+      const profit = earnings - tCosts;
+      
+      totalProfit += profit;
+      totalMiles += (Number(trip.totalMiles) || 0);
+      fuel += (Number(trip.fuelCost) || 0);
+      maintenance += (Number(trip.maintenanceCost) || 0);
+      supplies += (Number(trip.suppliesCost) || 0);
+
+      // 2. Date-based Stats
+      if (trip.date) {
+        const d = new Date(trip.date);
+        const tripTime = d.getTime();
+
+        // Chart Data (Last 30 Days)
+        if (tripTime >= thirtyDaysAgo.getTime() && tripTime <= now.getTime()) {
+           const key = d.toISOString().split('T')[0];
+           // We use the map we pre-filled, so no need to check 'has' unless bounds are weird
+           const currentVal = dailyDataMap.get(key) || 0;
+           dailyDataMap.set(key, currentVal + profit);
+        }
+
+        // Month Comparison
+        const tMonth = d.getMonth();
+        const tYear = d.getFullYear();
+        
+        if (tMonth === currentMonth && tYear === currentYear) {
+            currentMonthProfit += profit;
+        } else if (tMonth === lastMonth && tYear === lastMonthYear) {
+            lastMonthProfit += profit;
+        }
+      }
+    }
+
+    // --- Final Data Shaping ---
+    
+    // Chart Array
+    const last30DaysData = Array.from(dailyDataMap.entries()).map(([date, profit]) => ({ date, profit }));
+    
+    // Cost Breakdown
+    const totalCost = fuel + maintenance + supplies;
+    const costBreakdown = {
+        fuel: { amount: fuel, percentage: totalCost > 0 ? (fuel / totalCost) * 100 : 0, color: '#FF7F50' },
+        maintenance: { amount: maintenance, percentage: totalCost > 0 ? (maintenance / totalCost) * 100 : 0, color: '#29ABE2' },
+        supplies: { amount: supplies, percentage: totalCost > 0 ? (supplies / totalCost) * 100 : 0, color: '#8DC63F' }
+    };
+
+    // Month Comparison
+    const change = lastMonthProfit > 0 ? ((currentMonthProfit - lastMonthProfit) / lastMonthProfit) * 100 : 0;
+    const monthComparison = {
+        current: currentMonthProfit,
+        last: lastMonthProfit,
+        change: change,
+        isPositive: change >= 0
+    };
 
     return {
-      current: currentProfit,
-      last: lastProfit,
-      change: change,
-      isPositive: change >= 0
+        recentTrips: allTrips.slice(0, 5),
+        totalTrips: allTrips.length,
+        totalProfit,
+        totalMiles,
+        avgProfitPerTrip: allTrips.length > 0 ? totalProfit / allTrips.length : 0,
+        last30DaysData,
+        costBreakdown,
+        monthComparison
     };
-  })();
-  
+  }
+
+  // Reactive assignment - runs once whenever $trips updates
+  $: stats = calculateDashboardStats($trips);
+
   function formatCurrency(amount: number): string {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -155,16 +153,16 @@
         </div>
         <span class="stat-label">Total Profit</span>
       </div>
-      <div class="stat-value">{formatCurrency(totalProfit)}</div>
-      <div class="stat-change" class:positive={monthComparison.isPositive} class:negative={!monthComparison.isPositive}>
+      <div class="stat-value">{formatCurrency(stats.totalProfit)}</div>
+      <div class="stat-change" class:positive={stats.monthComparison.isPositive} class:negative={!stats.monthComparison.isPositive}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          {#if monthComparison.isPositive}
+          {#if stats.monthComparison.isPositive}
             <path d="M8 12V4M8 4L4 8M8 4L12 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           {:else}
             <path d="M8 4V12M8 12L4 8M8 12L12 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           {/if}
         </svg>
-        {Math.abs(monthComparison.change).toFixed(1)}% from last month
+        {Math.abs(stats.monthComparison.change).toFixed(1)}% from last month
       </div>
     </div>
     
@@ -178,7 +176,7 @@
         </div>
         <span class="stat-label">Total Trips</span>
       </div>
-      <div class="stat-value">{totalTrips}</div>
+      <div class="stat-value">{stats.totalTrips}</div>
       <div class="stat-info">All time</div>
     </div>
     
@@ -191,7 +189,7 @@
         </div>
         <span class="stat-label">Avg Profit/Trip</span>
       </div>
-      <div class="stat-value">{formatCurrency(avgProfitPerTrip)}</div>
+      <div class="stat-value">{formatCurrency(stats.avgProfitPerTrip)}</div>
       <div class="stat-info">Per completed trip</div>
     </div>
     
@@ -205,7 +203,7 @@
         </div>
         <span class="stat-label">Total Miles</span>
       </div>
-      <div class="stat-value">{totalMiles.toLocaleString()}</div>
+      <div class="stat-value">{stats.totalMiles.toLocaleString(undefined, { maximumFractionDigits: 1 })}</div>
       <div class="stat-info">Miles driven</div>
     </div>
   </div>
@@ -226,10 +224,10 @@
       </div>
       
       <div class="chart-container">
-        {#if last30DaysData.length > 0}
-          {@const maxProfit = Math.max(...last30DaysData.map(d => d.profit), 1)}
+        {#if stats.last30DaysData.some(d => d.profit > 0)}
+          {@const maxProfit = Math.max(...stats.last30DaysData.map(d => d.profit), 1)}
           <div class="bar-chart">
-            {#each last30DaysData as day}
+            {#each stats.last30DaysData as day}
               {@const height = (day.profit / maxProfit) * 100}
               <div class="bar-wrapper">
                 <div 
@@ -260,13 +258,13 @@
       </div>
       
       <div class="chart-container">
-        {#if costBreakdown.fuel.amount + costBreakdown.maintenance.amount + costBreakdown.supplies.amount > 0}
-          {#key costBreakdown}
+        {#if stats.costBreakdown.fuel.amount + stats.costBreakdown.maintenance.amount + stats.costBreakdown.supplies.amount > 0}
+          {#key stats.costBreakdown}
             {@const radius = 70}
             {@const circumference = 2 * Math.PI * radius}
-            {@const fuelLength = (costBreakdown.fuel.percentage / 100) * circumference}
-            {@const maintenanceLength = (costBreakdown.maintenance.percentage / 100) * circumference}
-            {@const suppliesLength = (costBreakdown.supplies.percentage / 100) * circumference}
+            {@const fuelLength = (stats.costBreakdown.fuel.percentage / 100) * circumference}
+            {@const maintenanceLength = (stats.costBreakdown.maintenance.percentage / 100) * circumference}
+            {@const suppliesLength = (stats.costBreakdown.supplies.percentage / 100) * circumference}
             {@const maintenanceOffset = fuelLength}
             {@const suppliesOffset = maintenanceOffset + maintenanceLength}
             
@@ -277,7 +275,7 @@
                   cy="100"
                   r={radius}
                   fill="none"
-                  stroke={costBreakdown.fuel.color}
+                  stroke={stats.costBreakdown.fuel.color}
                   stroke-width="30"
                   stroke-dasharray="{fuelLength} {circumference}"
                   stroke-dashoffset="0"
@@ -289,7 +287,7 @@
                   cy="100"
                   r={radius}
                   fill="none"
-                  stroke={costBreakdown.maintenance.color}
+                  stroke={stats.costBreakdown.maintenance.color}
                   stroke-width="30"
                   stroke-dasharray="{maintenanceLength} {circumference}"
                   stroke-dashoffset={-maintenanceOffset}
@@ -301,7 +299,7 @@
                   cy="100"
                   r={radius}
                   fill="none"
-                  stroke={costBreakdown.supplies.color}
+                  stroke={stats.costBreakdown.supplies.color}
                   stroke-width="30"
                   stroke-dasharray="{suppliesLength} {circumference}"
                   stroke-dashoffset={-suppliesOffset}
@@ -311,24 +309,24 @@
               
               <div class="donut-legend">
                 <div class="legend-item">
-                  <div class="legend-dot" style="background: {costBreakdown.fuel.color}"></div>
+                  <div class="legend-dot" style="background: {stats.costBreakdown.fuel.color}"></div>
                   <div class="legend-text">
                     <span class="legend-label">Fuel</span>
-                    <span class="legend-value">{formatCurrency(costBreakdown.fuel.amount)}</span>
+                    <span class="legend-value">{formatCurrency(stats.costBreakdown.fuel.amount)}</span>
                   </div>
                 </div>
                 <div class="legend-item">
-                  <div class="legend-dot" style="background: {costBreakdown.maintenance.color}"></div>
+                  <div class="legend-dot" style="background: {stats.costBreakdown.maintenance.color}"></div>
                   <div class="legend-text">
                     <span class="legend-label">Maintenance</span>
-                    <span class="legend-value">{formatCurrency(costBreakdown.maintenance.amount)}</span>
+                    <span class="legend-value">{formatCurrency(stats.costBreakdown.maintenance.amount)}</span>
                   </div>
                 </div>
                 <div class="legend-item">
-                  <div class="legend-dot" style="background: {costBreakdown.supplies.color}"></div>
+                  <div class="legend-dot" style="background: {stats.costBreakdown.supplies.color}"></div>
                   <div class="legend-text">
                     <span class="legend-label">Supplies</span>
-                    <span class="legend-value">{formatCurrency(costBreakdown.supplies.amount)}</span>
+                    <span class="legend-value">{formatCurrency(stats.costBreakdown.supplies.amount)}</span>
                   </div>
                 </div>
               </div>
@@ -361,11 +359,11 @@
       </a>
     </div>
     
-    {#if recentTrips.length > 0}
+    {#if stats.recentTrips.length > 0}
       <div class="trips-list">
-        {#each recentTrips as trip}
-          {@const earnings = trip.stops?.reduce((s, stop) => s + (stop.earnings || 0), 0) || 0}
-          {@const costs = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0)}
+        {#each stats.recentTrips as trip}
+          {@const earnings = trip.stops?.reduce((s: number, stop: any) => s + (Number(stop.earnings) || 0), 0) || 0}
+          {@const costs = (Number(trip.fuelCost) || 0) + (Number(trip.maintenanceCost) || 0) + (Number(trip.suppliesCost) || 0)}
           {@const profit = earnings - costs}
           
           <a href="/dashboard/trips?id={trip.id}" class="trip-item">
@@ -390,7 +388,7 @@
               <div class="trip-meta">
                 <span>{formatDate(trip.date || '')}</span>
                 <span>•</span>
-                <span>{trip.totalMiles?.toFixed(1) || 0} mi</span>
+                <span>{(Number(trip.totalMiles) || 0).toFixed(1)} mi</span>
                 {#if trip.stops && trip.stops.length > 0}
                   <span>•</span>
                   <span>{trip.stops.length} stops</span>
