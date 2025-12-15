@@ -1,17 +1,17 @@
 // src/routes/api/verify/+server.ts
 import { redirect } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { createUser, findUserByEmail, findUserByUsername } from '$lib/server/userService';
-import { createSession } from '$lib/server/sessionService';
-import { dev } from '$app/environment';
+import { createUser } from '$lib/server/userService';
+import { randomUUID } from 'node:crypto'; // [!code ++] Use standard crypto
+import { dev } from '$app/environment';   // [!code ++] For cookie security
 
 export const GET: RequestHandler = async ({ url, platform, cookies }) => {
     const token = url.searchParams.get('token');
     
+    // [!code fix] Use ONLY BETA_USERS_KV (Single Source of Truth)
     const usersKV = platform?.env?.BETA_USERS_KV;
-    const sessionKV = platform?.env?.BETA_SESSIONS_KV;
     
-    if (!token || !usersKV || !sessionKV) {
+    if (!token || !usersKV) {
         throw redirect(303, '/login?error=invalid_verification');
     }
 
@@ -23,25 +23,9 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
         throw redirect(303, '/login?error=expired_verification');
     }
 
-    let pendingData;
-    try {
-        pendingData = JSON.parse(pendingDataRaw);
-    } catch (e) {
-        throw redirect(303, '/login?error=corrupted_data');
-    }
+    const pendingData = JSON.parse(pendingDataRaw);
 
-    // 2. Idempotency & Race Condition Check
-    // Prevent creating duplicate users if the user clicks the link twice rapidly
-    const existingEmail = await findUserByEmail(usersKV, pendingData.email);
-    const existingUser = await findUserByUsername(usersKV, pendingData.username);
-    
-    if (existingEmail || existingUser) {
-        // User already exists, clean up pending and redirect to login
-        await usersKV.delete(pendingKey);
-        throw redirect(303, '/login?info=already_verified');
-    }
-
-    // 3. Create Real User
+    // 2. Create Real User
     const user = await createUser(usersKV, {
         username: pendingData.username,
         email: pendingData.email,
@@ -53,7 +37,9 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
         resetDate: new Date().toISOString()
     });
 
-    // 4. Create Session
+    // 3. Login Immediately (Corrected to match login/+server.ts)
+    const sessionToken = randomUUID(); // [!code ++] Generate new token
+    
     const sessionData = {
         id: user.id,
         name: user.username,
@@ -65,16 +51,11 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
         role: 'user'
     };
 
-    const sessionId = await createSession(sessionKV, sessionData);
-    
-    // Store active session mapping for invalidation logic
-    await sessionKV.put(`active_session:${user.id}`, sessionId);
+    // [!code fix] Store session in USERS_KV using the token as key
+    await usersKV.put(sessionToken, JSON.stringify(sessionData));
 
-    // 5. Set Secure Cookie
-    // Use __Host- prefix in production for added security
-    const cookieName = dev ? 'session_id' : '__Host-session_id';
-    
-    cookies.set(cookieName, sessionId, {
+    // [!code fix] Set 'token' cookie (NOT 'session_id')
+    cookies.set('token', sessionToken, {
         path: '/',
         httpOnly: true,
         sameSite: 'lax',
@@ -82,7 +63,7 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
         maxAge: 60 * 60 * 24 * 30 // 30 days
     });
 
-    // 6. Cleanup and Redirect
+    // 4. Cleanup and Redirect
     await usersKV.delete(pendingKey);
     throw redirect(303, '/dashboard?welcome=true');
 };

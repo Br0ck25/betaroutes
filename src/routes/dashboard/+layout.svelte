@@ -93,7 +93,7 @@
     return name ? name.charAt(0).toUpperCase() : 'U';
   }
 
-  onMount(async () => {
+onMount(async () => {
     console.log('[DASHBOARD LAYOUT] Initializing...');
     
     // --- FIX: Pass API Key to SyncManager ---
@@ -112,16 +112,12 @@
       try {
         console.log('[DASHBOARD LAYOUT] Loading data for:', userId);
         
-        // 1. Load Local Data FIRST (Instant UI)
-        await trips.load(userId);
-        await trash.load(userId);
-
-        // 2. Then Initialize Sync (Background)
-        // This ensures the user sees their data immediately even if network is slow
+        // --- FIX: Pass the key here ---
         await syncManager.initialize(apiKey);
         
-        // 3. Pull latest changes from cloud
-        trips.syncFromCloud(userId).catch(console.error);
+        await trips.load(userId);
+        await trash.load(userId);
+        await trips.syncFromCloud(userId);
         
         console.log('[DASHBOARD LAYOUT] ✅ Data loaded successfully!');
       } catch (err) {
@@ -448,7 +444,7 @@
     text-overflow: ellipsis;
   }
   
-  .user-plan {
+.user-plan {
     font-size: 12px;
     color: #6B7280;
     text-transform: capitalize;

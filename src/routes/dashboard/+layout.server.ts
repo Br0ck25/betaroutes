@@ -1,6 +1,7 @@
 // src/routes/dashboard/+layout.server.ts
 import { redirect } from '@sveltejs/kit';
-import { env } from '$env/dynamic/public';
+import { env as publicEnv } from '$env/dynamic/public';
+import { env as privateEnv } from '$env/dynamic/private';
 
 export const load = ({ locals, platform }) => {
 	console.log('[DASHBOARD LAYOUT] Checking auth...');
@@ -10,24 +11,26 @@ export const load = ({ locals, platform }) => {
 		throw redirect(303, '/login');
 	}
 
-	// 1. Try Cloudflare Platform Env
-	let apiKey = (platform?.env as any)?.PRIVATE_GOOGLE_MAPS_API_KEY;
+	// [!code fix] Prioritize PUBLIC key for the Frontend (Browser)
+	// 1. Try to get a Public key (safe for browser)
+	let clientApiKey = publicEnv.PUBLIC_GOOGLE_MAPS_API_KEY;
 
-	// 2. Try Svelte Dynamic Env
-	if (!apiKey) {
-		apiKey = env.PRIVATE_GOOGLE_MAPS_API_KEY;
+	// 2. If missing, check if we accidentally have the private key exposed (Dev fallback)
+	if (!clientApiKey) {
+		// Try Cloudflare Platform Env (Private) or Dynamic Private Env
+		const privateKey = (platform?.env as any)?.PRIVATE_GOOGLE_MAPS_API_KEY || privateEnv.PRIVATE_GOOGLE_MAPS_API_KEY;
+		
+		if (privateKey) {
+			console.warn('[SERVER] Warning: Using PRIVATE key for frontend. This will fail if IP-restricted.');
+			clientApiKey = privateKey;
+		}
 	}
 
-	// 3. Fallback: Hardcode the key to ensure it works
-	if (!apiKey) {
-		console.warn('[SERVER] Env var missing, using hardcoded fallback.');
-		apiKey = 'AIzaSyB7uqKfS8zRRPTJOv4t48yRTCnUvBjANCc';
-	}
 
-	console.log('[DASHBOARD LAYOUT] Key status:', apiKey ? 'Found' : 'MISSING');
+	console.log('[DASHBOARD LAYOUT] Frontend Key:', clientApiKey ? 'Loaded' : 'MISSING');
 
 	return {
 		user: locals.user,
-		googleMapsApiKey: apiKey
+		googleMapsApiKey: clientApiKey
 	};
 };

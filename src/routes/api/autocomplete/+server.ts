@@ -1,127 +1,138 @@
 // src/routes/api/autocomplete/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import type { KVNamespace } from '@cloudflare/workers-types';
+import { generatePlaceKey } from '$lib/utils/keys';
 
-// Helper to normalize keys (Lowercase, remove spaces, limit length)
-function normalizeKey(str: string): string {
-    return str.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 50);
-}
+/**
+ * GET Handler
+ * Mode A: ?placeid=... -> Returns Google Place Details (Lat/Lng)
+ * Mode B: ?q=...       -> Returns Autocomplete Suggestions (Cache -> Google)
+ */
+export const GET: RequestHandler = async ({ url, platform }) => {
+	const query = url.searchParams.get('q');
+	const placeId = url.searchParams.get('placeid');
+	
+	// Use the PRIVATE key for server-side calls to prevent leaking it
+	const apiKey = platform?.env?.PRIVATE_GOOGLE_MAPS_API_KEY;
 
-export const GET: RequestHandler = async ({ url, platform, locals }) => {
-    // 1. Security: Scope to User
-    if (!locals.user || !locals.user.id) {
-        return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    const userId = locals.user.id;
+	// --- MODE A: PLACE DETAILS (Get Lat/Lng) ---
+	if (placeId) {
+		if (!apiKey) return json({ error: 'Server key missing' }, { status: 500 });
 
-    const query = url.searchParams.get('q');
-    const placeId = url.searchParams.get('placeid');
-    const apiKey = platform?.env?.PRIVATE_GOOGLE_MAPS_API_KEY;
+		try {
+			const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=geometry,name,formatted_address&key=${apiKey}`;
+			const res = await fetch(detailsUrl);
+			const data = await res.json();
 
-    // --- MODE A: PLACE DETAILS ---
-    if (placeId) {
-        if (!apiKey) return json({ error: 'Server config error' }, { status: 500 });
-        try {
-            // Check cache first? (Optional, but safe if scoped)
-            // For now, we hit Google directly for fresh details
-            const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=geometry,name,formatted_address&key=${apiKey}`;
-            const res = await fetch(detailsUrl);
-            const data = await res.json();
-            if (data.status === 'OK' && data.result) {
-                return json(data.result);
-            }
-            return json({ error: data.status }, { status: 400 });
-        } catch (e) {
-            return json({ error: 'Failed to fetch details' }, { status: 500 });
-        }
-    }
+			if (data.status === 'OK' && data.result) {
+				return json(data.result);
+			}
+			return json({ error: data.status }, { status: 400 });
+		} catch (e) {
+			return json({ error: 'Failed to fetch details' }, { status: 500 });
+		}
+	}
 
-    // --- MODE B: AUTOCOMPLETE SEARCH ---
-    if (!query || query.length < 2) return json([]);
+	// --- MODE B: AUTOCOMPLETE SEARCH ---
+	if (!query || query.length < 2) {
+		return json([]);
+	}
 
-    try {
-        const kv = platform?.env?.BETA_PLACES_KV;
-        const normalizedQuery = normalizeKey(query);
-        const prefix = normalizedQuery.substring(0, 10);
-        
-        // [!code fix] Scoped Key: prefix:{userId}:{fragment}
-        const bucketKey = `prefix:${userId}:${prefix}`;
+	try {
+		const kv = platform?.env?.BETA_PLACES_KV;
+		
+		// 1. Try KV Cache First (Free)
+		if (kv) {
+			const normalizedQuery = query.toLowerCase().replace(/\s+/g, '');
+			const searchPrefix = normalizedQuery.substring(0, 10);
+			
+			const bucketKey = `prefix:${searchPrefix}`;
+			const bucketRaw = await kv.get(bucketKey);
 
-        // 1. Try KV Cache (User Scoped)
-        if (kv) {
-            const bucketRaw = await kv.get(bucketKey);
-            if (bucketRaw) {
-                const bucket = JSON.parse(bucketRaw);
-                const matches = bucket.filter((item: any) => {
-                    const str = (item.formatted_address || item.name || '').toLowerCase();
-                    return str.includes(query.toLowerCase());
-                });
+			if (bucketRaw) {
+				const bucket = JSON.parse(bucketRaw);
+				const matches = bucket.filter((item: any) => {
+					const str = (item.formatted_address || item.name || '').toLowerCase();
+					return str.includes(query.toLowerCase());
+				});
+				
+				if (matches.length > 0) {
+					return json(matches);
+				}
+			}
+		}
 
-                if (matches.length > 0) {
-                    // Return cached results (mark source)
-                    return json(matches.map((m: any) => ({ ...m, source: 'cache' })));
-                }
-            }
-        }
+		// 2. Google Fallback (Cost: $2.83/1000 reqs)
+		if (!apiKey) {
+			// Cannot fallback to Google without the private key
+			return json([]);
+		}
 
-        // 2. Google Fallback
-        if (!apiKey) return json([]);
+		const googleUrl = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${apiKey}&types=geocode&components=country:us`;
+		
+		const response = await fetch(googleUrl);
+		const data = await response.json();
 
-        const googleUrl = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${apiKey}&types=geocode&components=country:us`;
-        const response = await fetch(googleUrl);
-        const data = await response.json();
+		if (data.status === 'OK' && data.predictions) {
+			const results = data.predictions.map((p: any) => ({
+				formatted_address: p.description,
+				name: p.structured_formatting?.main_text || p.description,
+				secondary_text: p.structured_formatting?.secondary_text,
+				place_id: p.place_id,
+				source: 'google_proxy'
+			}));
+			return json(results);
+		}
 
-        if (data.status === 'OK' && data.predictions) {
-            const results = data.predictions.map((p: any) => ({
-                formatted_address: p.description,
-                name: p.structured_formatting?.main_text || p.description,
-                place_id: p.place_id,
-                source: 'google'
-            }));
+		return json([]);
 
-            // 3. Server-Side Caching (Self-Healing Cache)
-            // We cache these results into the user's bucket immediately
-            if (kv && results.length > 0) {
-                // Background execution to not block response
-                platform.context.waitUntil((async () => {
-                    try {
-                        // Generate all prefixes for the query (e.g., "123", "123m", "123ma")
-                        // to populate the index for future keystrokes
-                        const prefixes = new Set<string>();
-                        for (let i = 2; i <= Math.min(10, normalizedQuery.length); i++) {
-                            prefixes.add(normalizedQuery.substring(0, i));
-                        }
+	} catch (err) {
+		console.error('Autocomplete Error:', err);
+		return json([]);
+	}
+};
 
-                        for (const p of prefixes) {
-                            const k = `prefix:${userId}:${p}`;
-                            const existing = await kv.get(k);
-                            let bucket = existing ? JSON.parse(existing) : [];
-                            
-                            // Merge
-                            for (const r of results) {
-                                if (!bucket.some((b: any) => b.formatted_address === r.formatted_address)) {
-                                    bucket.push(r);
-                                }
-                            }
-                            
-                            // Cap size
-                            if (bucket.length > 20) bucket = bucket.slice(0, 20);
-                            
-                            await kv.put(k, JSON.stringify(bucket), { expirationTtl: 86400 * 30 });
-                        }
-                    } catch (err) {
-                        console.error('Background Cache Error:', err);
-                    }
-                })());
-            }
+/**
+ * POST Handler
+ * Caches a user selection to the KV store to save money on future searches.
+ */
+export const POST: RequestHandler = async ({ request, platform, locals }) => {
+	// 1. Security: Block unauthenticated writes
+	if (!locals.user) {
+		return json({ error: 'Unauthorized' }, { status: 401 });
+	}
 
-            return json(results);
-        }
+	try {
+		const place = await request.json();
+		const placesKV = platform?.env?.BETA_PLACES_KV as KVNamespace;
 
-        return json([]);
+		if (!placesKV) {
+			console.warn('BETA_PLACES_KV not found for caching');
+			return json({ success: false });
+		}
 
-    } catch (err) {
-        console.error('Autocomplete Error:', err);
-        return json([]);
-    }
+		if (!place || (!place.formatted_address && !place.name)) {
+			return json({ success: false, error: 'Invalid data' });
+		}
+
+		const keyText = place.formatted_address || place.name;
+		
+		// [!code fix] Use Hashed Key to prevent 512-byte limit errors
+		const key = await generatePlaceKey(keyText);
+
+		// Save to KV with TTL (60 days)
+		await placesKV.put(key, JSON.stringify({
+			...place,
+			cachedAt: new Date().toISOString(),
+			source: 'autocomplete_selection',
+			contributedBy: locals.user.id
+		}), { expirationTtl: 5184000 });
+
+		return json({ success: true });
+
+	} catch (e) {
+		console.error('Cache Error:', e);
+		return json({ success: false, error: String(e) }, { status: 500 });
+	}
 };

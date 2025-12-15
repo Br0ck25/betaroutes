@@ -9,7 +9,7 @@ const DB_FILE = path.resolve('.kv-mock.json');
 // Initial state
 let mockDB: Record<string, any> = {
 	USERS: {},
-    SESSIONS: {}, // [!code fix] Ensure consistency with indentation
+	SESSIONS: {}, // [!code fix] Ensure consistency with indentation
 	LOGS: {},
 	TRASH: {},
 	SETTINGS: {},
@@ -19,20 +19,20 @@ let mockDB: Record<string, any> = {
 
 // Load existing data
 try {
-    if (fs.existsSync(DB_FILE)) {
-        const raw = fs.readFileSync(DB_FILE, 'utf-8');
-        const loaded = JSON.parse(raw);
-        mockDB = { ...mockDB, ...loaded };
-        
-        // Ensure namespaces exist
-        ['HUGHESNET', 'PLACES', 'SESSIONS'].forEach(ns => {
-            if (!mockDB[ns]) mockDB[ns] = {};
-        });
-        
-        console.log('📂 Loaded mock KV data from .kv-mock.json');
-    }
+	if (fs.existsSync(DB_FILE)) {
+		const raw = fs.readFileSync(DB_FILE, 'utf-8');
+		const loaded = JSON.parse(raw);
+		mockDB = { ...mockDB, ...loaded };
+		
+		// Ensure namespaces exist
+		['HUGHESNET', 'PLACES', 'SESSIONS'].forEach(ns => {
+			if (!mockDB[ns]) mockDB[ns] = {};
+		});
+		
+		console.log('📂 Loaded mock KV data from .kv-mock.json');
+	}
 } catch (e) {
-    console.error('Failed to load mock DB', e);
+	console.error('Failed to load mock DB', e);
 }
 
 // Save helper
@@ -77,22 +77,22 @@ function createMockKV(namespace: string) {
  * Main Setup Function
  */
 export function setupMockKV(event: any) {
-    if (!event.platform) event.platform = { env: {} };
-    if (!event.platform.env) event.platform.env = {};
+	if (!event.platform) event.platform = { env: {} };
+	if (!event.platform.env) event.platform.env = {};
 
-    const env = event.platform.env;
+	const env = event.platform.env;
 
-    // [!code ++] Inject API Key for Dev (Required for Autocomplete)
-    if (!env.PRIVATE_GOOGLE_MAPS_API_KEY) {
-        env.PRIVATE_GOOGLE_MAPS_API_KEY = PRIVATE_GOOGLE_MAPS_API_KEY;
-    }
+	// [!code ++] Inject API Key for Dev (Required for Autocomplete)
+	if (!env.PRIVATE_GOOGLE_MAPS_API_KEY) {
+		env.PRIVATE_GOOGLE_MAPS_API_KEY = PRIVATE_GOOGLE_MAPS_API_KEY;
+	}
 
-    // Mock KVs
-    if (!env.BETA_SESSIONS_KV) env.BETA_SESSIONS_KV = createMockKV('SESSIONS');
-    if (!env.BETA_USERS_KV) env.BETA_USERS_KV = createMockKV('USERS');
-    if (!env.BETA_LOGS_KV) env.BETA_LOGS_KV = createMockKV('LOGS');
-    if (!env.BETA_LOGS_TRASH_KV) env.BETA_LOGS_TRASH_KV = createMockKV('TRASH');
-    if (!env.BETA_USER_SETTINGS_KV) env.BETA_USER_SETTINGS_KV = createMockKV('SETTINGS');
-    if (!env.BETA_PLACES_KV) env.BETA_PLACES_KV = createMockKV('PLACES');
-    if (!env.BETA_HUGHESNET_KV) env.BETA_HUGHESNET_KV = createMockKV('HUGHESNET');
+	// Mock KVs
+	if (!env.BETA_SESSIONS_KV) env.BETA_SESSIONS_KV = createMockKV('SESSIONS');
+	if (!env.BETA_USERS_KV) env.BETA_USERS_KV = createMockKV('USERS');
+	if (!env.BETA_LOGS_KV) env.BETA_LOGS_KV = createMockKV('LOGS');
+	if (!env.BETA_LOGS_TRASH_KV) env.BETA_LOGS_TRASH_KV = createMockKV('TRASH');
+	if (!env.BETA_USER_SETTINGS_KV) env.BETA_USER_SETTINGS_KV = createMockKV('SETTINGS');
+	if (!env.BETA_PLACES_KV) env.BETA_PLACES_KV = createMockKV('PLACES');
+	if (!env.BETA_HUGHESNET_KV) env.BETA_HUGHESNET_KV = createMockKV('HUGHESNET');
 }

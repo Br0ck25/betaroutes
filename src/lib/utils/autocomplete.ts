@@ -109,7 +109,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       try {
         const startTime = performance.now();
         
-        // [!code changed] Always fetch from our API (Proxies to Google if needed)
+        // Always fetch from our API (Proxies to Google if needed)
         const kvUrl = `/api/autocomplete?q=${encodeURIComponent(value)}`;
         const kvRes = await fetch(kvUrl);
         const data = await kvRes.json();
@@ -118,8 +118,18 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
         const validData = Array.isArray(data) ? data : [];
         
         if (validData.length > 0) {
-          // Identify source based on data properties (KV usually has full geometry cached)
-          const source = validData[0].source === 'google_proxy' ? 'google' : 'kv';
+          // Identify source based on data properties
+          // 'google_proxy' is set by the server when it hits the Google API
+          const isGoogle = validData[0].source === 'google_proxy';
+          const source = isGoogle ? 'google' : 'kv';
+
+          // [!code ++] If results came from Google, cache them for next time
+          if (isGoogle) {
+             // Remove the 'source' tag so the cache sees them as clean KV objects next time
+             const cleanResults = validData.map(({ source, ...rest }) => rest);
+             cacheToKV(value, cleanResults);
+          }
+
           renderResults(validData.slice(0, 5), source, time);
         } else {
           renderEmpty();
@@ -130,8 +140,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     }, 300);
   }
   
-  // [!code removed] fetchGooglePlaces() removed entirely
-  
+  // [!code ++] Updated to actually send data to the cache endpoint
   async function cacheToKV(query: string, results: any[]) {
     try {
       fetch('/api/autocomplete/cache', {
@@ -140,6 +149,17 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
         body: JSON.stringify({ query, results })
       });
     } catch (e) { /* silent fail */ }
+  }
+
+  // [!code ++] Save a fully selected place (with geometry) to KV
+  async function savePlaceToKV(place: any) {
+    try {
+      fetch('/api/autocomplete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(place)
+      });
+    } catch (e) { console.error('Failed to save place details', e); }
   }
   
   function renderResults(items: any[], source: 'kv' | 'google' = 'kv', timing?: number) {
@@ -235,7 +255,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     if (!item.geometry || !item.geometry.location) {
         if (item.place_id) {
             try {
-                // [!code changed] Proxy 'Get Details' through our API
+                // Proxy 'Get Details' through our API
                 const res = await fetch(`/api/autocomplete?placeid=${item.place_id}`);
                 const details = await res.json();
                 
@@ -246,8 +266,11 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
                         name: details.name || item.name,
                         geometry: details.geometry
                     };
+                    
+                    // [!code ++] Save the FULL item (with geometry) to KV for next time
+                    savePlaceToKV(fullItem);
+                    
                     commitSelection(fullItem);
-                    // Optionally update cache here with full details
                     return;
                 }
             } catch(e) {
@@ -257,6 +280,8 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
         // Fallback: commit what we have (might miss Lat/Lng)
         commitSelection(item);
     } else {
+        // If it came from KV, it might be an older incomplete record, but usually it's full.
+        // We could optionally update `lastUsed` here if we wanted.
         commitSelection(item);
     }
   }
