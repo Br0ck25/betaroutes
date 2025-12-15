@@ -1,14 +1,15 @@
 // src/hooks.server.ts
+import { dev } from '$app/environment';
 import type { Handle } from '@sveltejs/kit';
 
 export const handle: Handle = async ({ event, resolve }) => {
-	// 1. Setup Mock DB in Dev
+	// 1. Ensure KV bindings exist (mock in dev using FILE store)
 	if (dev) {
 		const { setupMockKV } = await import('$lib/server/dev-mock-db');
         setupMockKV(event);
 	}
 
-	// 2. Check for the correct 'session_id' cookie
+	// 2. User auth logic: Check for 'session_id' cookie
 	const sessionId = event.cookies.get('session_id');
 
 	if (!sessionId) {
@@ -17,7 +18,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	try {
-        // 3. Look up session in SESSIONS_KV
+        // [!code fix] Use SESSIONS_KV to find the active session
 		const sessionKV = event.platform?.env?.BETA_SESSIONS_KV;
 		
         if (sessionKV) {
@@ -37,7 +38,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 					email: session.email
 				};
 			} else {
-                // Cookie exists but session is gone from DB
+                // Session ID cookie exists, but data is gone from KV (expired/deleted)
                 if (event.url.pathname.startsWith('/dashboard')) {
 				    console.warn('[HOOK] Session expired or invalid.');
                 }

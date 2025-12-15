@@ -4,67 +4,45 @@ import { HughesNetService } from '$lib/server/hughesnet';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, platform, locals }) => {
-    // 1. Configuration & Env Validation
-    if (!platform?.env?.BETA_HUGHESNET_KV || !platform?.env?.HNS_ENCRYPTION_KEY) {
-        console.error('[Configuration] Critical: Database or Encryption Key missing');
-        return json({ success: false, error: 'Server configuration error' }, { status: 500 });
-    }
-
-    // 2. Enforce Authentication (No 'default_user' fallback)
-    if (!locals.user) {
-        return json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    if (!platform?.env?.BETA_HUGHESNET_KV) {
+        return json({ success: false, error: 'Database configuration missing' }, { status: 500 });
     }
 
     try {
         const body = await request.json();
-        
-        // 3. Use Immutable User ID
-        const userId = locals.user.id;
-        const settingsId = locals.user.id;
+        const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
+        const settingsId = locals.user?.id;
 
-        console.log(`[API] HughesNet Action: ${body.action} | User: ${userId}`);
+        console.log(`[API] HughesNet Action for User: ${userId} (Settings ID: ${settingsId})`);
 
-        // Service Instantiation
-        // Note: For heavy scraping, this should eventually be offloaded to Cloudflare Queues.
+        // [!code changed] Use PRIVATE_GOOGLE_MAPS_API_KEY
         const service = new HughesNetService(
             platform.env.BETA_HUGHESNET_KV, 
             platform.env.HNS_ENCRYPTION_KEY,
             platform.env.BETA_LOGS_KV,
             platform.env.BETA_LOGS_TRASH_KV, 
             platform.env.BETA_USER_SETTINGS_KV,
-            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY,
+            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY, // <--- Updated
             platform.env.BETA_DIRECTIONS_KV 
         );
 
         if (body.action === 'connect') {
             const success = await service.connect(userId, body.username, body.password);
-            // 4. Redact Logs from Client Response
-            return json({ success, error: success ? undefined : 'Login failed' });
+            return json({ success, error: success ? undefined : 'Login failed', logs: service.logs });
         }
         
         if (body.action === 'disconnect') {
             const success = await service.disconnect(userId);
-            return json({ success });
+            return json({ success, logs: service.logs });
         }
 
         if (body.action === 'sync') {
-            // 5. Fetch Pricing from Server (Source of Truth)
-            // Do not trust body.installPay etc.
-            let settings = {};
-            try {
-                const settingsRaw = await platform.env.BETA_USER_SETTINGS_KV.get(settingsId);
-                if (settingsRaw) settings = JSON.parse(settingsRaw);
-            } catch (e) {
-                console.error('[API] Failed to load user settings', e);
-            }
-
-            // Default to 0 if not set in KV
-            const installPay = Number(settings.installPay) || 0;
-            const repairPay = Number(settings.repairPay) || 0;
-            const upgradePay = Number(settings.upgradePay) || 0;
-            const poleCost = Number(settings.poleCost) || 0;
-            const concreteCost = Number(settings.concreteCost) || 0;
-            const poleCharge = Number(settings.poleCharge) || 0;
+            const installPay = Number(body.installPay) || 0;
+            const repairPay = Number(body.repairPay) || 0;
+            const upgradePay = Number(body.upgradePay) || 0;
+            const poleCost = Number(body.poleCost) || 0;
+            const concreteCost = Number(body.concreteCost) || 0;
+            const poleCharge = Number(body.poleCharge) || 0;
             
             const skipScan = body.skipScan === true;
 
@@ -83,54 +61,42 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
             return json({ 
                 success: true, 
                 orders: result.orders, 
-                incomplete: result.incomplete 
-                // Logs removed
+                incomplete: result.incomplete, 
+                logs: service.logs 
             });
         }
 
         if (body.action === 'clear') {
             const count = await service.clearAllTrips(userId);
-            return json({ success: true, count });
+            return json({ success: true, count, logs: service.logs });
         }
 
         return json({ success: false, error: 'Invalid action' }, { status: 400 });
 
     } catch (err: any) {
         console.error('API Error:', err);
-        // 6. Explicit Error Serialization
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        return json({ success: false, error: errorMessage || 'Internal Server Error' }, { status: 500 });
+        return json({ success: false, error: err.message || 'Server error' }, { status: 500 });
     }
 };
 
 export const GET: RequestHandler = async ({ platform, locals }) => {
-    // Validation
-    if (!platform?.env?.BETA_HUGHESNET_KV || !platform?.env?.HNS_ENCRYPTION_KEY) {
-        return json({ orders: {} }, { status: 500 });
-    }
-
-    // Auth Check
-    if (!locals.user) {
-        return json({ orders: {}, error: 'Unauthorized' }, { status: 401 });
-    }
-
+    if (!platform?.env?.BETA_HUGHESNET_KV) return json({ orders: {} });
     try {
-        const userId = locals.user.id;
+        const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
         
+        // [!code changed] Use PRIVATE_GOOGLE_MAPS_API_KEY
         const service = new HughesNetService(
             platform.env.BETA_HUGHESNET_KV, 
             platform.env.HNS_ENCRYPTION_KEY,
             platform.env.BETA_LOGS_KV,
             platform.env.BETA_LOGS_TRASH_KV,
             platform.env.BETA_USER_SETTINGS_KV,
-            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY,
+            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY, // <--- Updated
             platform.env.BETA_DIRECTIONS_KV 
         );
-        
         const orders = await service.getOrders(userId);
         return json({ orders });
     } catch (err) {
-        console.error('[API] GET Error:', err);
         return json({ orders: {} });
     }
 };
