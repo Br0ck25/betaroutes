@@ -11,10 +11,11 @@ pages_build_output_dir = ".svelte-kit/cloudflare"
 # ---------------------------------------------------
 [env.production]
 
-# [!code fix] Durable Object Binding (Must be inside environment)
+# [!code fix] Durable Object Binding
 [[env.production.durable_objects.bindings]]
 name = "TRIP_INDEX_DO"
 class_name = "TripIndexDO"
+script_name = "betaroutes" # [!code ++] REQUIRED: Points to this project
 
 [env.production.vars]
 
@@ -56,10 +57,11 @@ id = "d395b64dcd0641f5a44d94c5ef5628eb"
 # ---------------------------------------------------
 [env.preview]
 
-# [!code fix] Durable Object Binding (Must be inside environment)
+# [!code fix] Durable Object Binding
 [[env.preview.durable_objects.bindings]]
 name = "TRIP_INDEX_DO"
 class_name = "TripIndexDO"
+script_name = "go-route-yourself" # [!code ++] REQUIRED: Previews will use the Prod DO script
 
 [env.preview.vars]
 
