@@ -4,7 +4,8 @@ import type { KVNamespace } from '@cloudflare/workers-types';
 import { findUserByEmail, findUserByUsername, updatePasswordHash, type User } from './userService';
 
 // --- PBKDF2 CONFIGURATION (Web Crypto) ---
-const PBKDF2_ITERATIONS = 100000;
+// [!code fix] Increased to 600,000 (OWASP 2025 Recommendation)
+const PBKDF2_ITERATIONS = 600000;
 const SALT_SIZE = 16;
 const HASH_ALGO = 'SHA-256';
 
@@ -26,6 +27,19 @@ function hexToBuffer(hex: string): Uint8Array {
         bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
     }
     return bytes;
+}
+
+/**
+ * Helper: Constant-time comparison to prevent timing attacks.
+ * Returns true if the two arrays are equal, false otherwise.
+ */
+function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
+    if (a.length !== b.length) return false;
+    let c = 0;
+    for (let i = 0; i < a.length; i++) {
+        c |= a[i] ^ b[i];
+    }
+    return c === 0;
 }
 
 /**
@@ -70,7 +84,7 @@ async function verifyPBKDF2(password: string, storedHash: string): Promise<boole
 
     const iterations = parseInt(parts[1], 10);
     const salt = hexToBuffer(parts[2]);
-    const originalHash = parts[3];
+    const originalHashBuffer = hexToBuffer(parts[3]);
 
     const enc = new TextEncoder();
     const keyMaterial = await crypto.subtle.importKey(
@@ -92,14 +106,14 @@ async function verifyPBKDF2(password: string, storedHash: string): Promise<boole
         256
     );
 
-    return bufferToHex(derivedBits) === originalHash;
+    // [!code fix] Use constant-time comparison
+    return constantTimeEqual(new Uint8Array(derivedBits), originalHashBuffer);
 }
 
 /**
  * Authenticates a user using Hybrid Strategy:
  * 1. PBKDF2 (Preferred)
  * 2. Bcrypt (Legacy - Auto Migrates)
- * 3. Plaintext (Legacy - Auto Migrates)
  */
 export async function authenticateUser(kv: KVNamespace, identifier: string, password: string) {
 	const isEmail = identifier.includes('@');
@@ -123,13 +137,9 @@ export async function authenticateUser(kv: KVNamespace, identifier: string, pass
         passwordMatches = await bcrypt.compare(password, user.password);
         if (passwordMatches) needsMigration = true;
     } 
-    // --- Path C: Plaintext (Legacy) ---
-    else {
-        if (user.password === password) {
-            passwordMatches = true;
-            needsMigration = true;
-        }
-    }
+    // [!code fix] REMOVED Path C: Plaintext (Vulnerability)
+    // Plaintext passwords are no longer supported. 
+    // Any remaining plaintext users must reset their password.
 
 	if (!passwordMatches) return null;
 

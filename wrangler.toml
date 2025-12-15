@@ -12,7 +12,6 @@ pages_build_output_dir = ".svelte-kit/cloudflare"
 [env.production]
 
 [env.production.vars]
-PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyB7uqKfS8zRRPTJOv4t48yRTCnUvBjANCc"
 
 # Production KV Namespaces
 [[env.production.kv_namespaces]]
@@ -53,7 +52,6 @@ id = "d395b64dcd0641f5a44d94c5ef5628eb"
 [env.preview]
 
 [env.preview.vars]
-PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyB7uqKfS8zRRPTJOv4t48yRTCnUvBjANCc"
 
 # Preview KV Namespaces
 [[env.preview.kv_namespaces]]

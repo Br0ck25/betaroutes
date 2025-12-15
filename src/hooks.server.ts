@@ -12,7 +12,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// 2. User auth logic: Check for 'session_id' cookie
 	const sessionId = event.cookies.get('session_id');
 
-	if (!sessionId) {
+    // [!code fix] Regex for UUID v4 validation
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+    // [!code fix] Validate format before trusting the cookie to avoid wasting KV reads
+	if (!sessionId || !UUID_REGEX.test(sessionId)) {
 		event.locals.user = null;
 		return resolve(event);
 	}
