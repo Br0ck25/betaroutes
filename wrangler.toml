@@ -15,7 +15,7 @@ pages_build_output_dir = ".svelte-kit/cloudflare"
 [[env.production.durable_objects.bindings]]
 name = "TRIP_INDEX_DO"
 class_name = "TripIndexDO"
-script_name = "betaroutes" # [!code ++] REQUIRED: Points to this project
+script_name = "go-route-yourself" # [!code ++] REQUIRED: Points to this project
 
 [env.production.vars]
 
