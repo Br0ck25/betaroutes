@@ -1,6 +1,6 @@
 // src/lib/server/auth.ts
 import bcrypt from 'bcryptjs'; // [!code note] Kept for legacy verification
-import type { KVNamespace } from '@cloudflare/workers-types';
+import type { KVNamespace, ExecutionContext } from '@cloudflare/workers-types';
 import { findUserByEmail, findUserByUsername, updatePasswordHash, type User } from './userService';
 
 // --- PBKDF2 CONFIGURATION (Web Crypto) ---
@@ -114,15 +114,28 @@ async function verifyPBKDF2(password: string, storedHash: string): Promise<boole
  * Authenticates a user using Hybrid Strategy:
  * 1. PBKDF2 (Preferred)
  * 2. Bcrypt (Legacy - Auto Migrates)
+ * * Note: context is optional but recommended to offload migration logic.
  */
-export async function authenticateUser(kv: KVNamespace, identifier: string, password: string) {
+export async function authenticateUser(
+    kv: KVNamespace, 
+    identifier: string, 
+    password: string,
+    context?: ExecutionContext
+) {
 	const isEmail = identifier.includes('@');
 
 	let user = isEmail
 		? await findUserByEmail(kv, identifier)
 		: await findUserByUsername(kv, identifier);
 
-	if (!user) return null;
+    // [!code fix] PREVENT TIMING ATTACK
+    // If user is not found, verify against a dummy hash to consume the same CPU time.
+	if (!user) {
+        // Use a pre-generated valid hash (PBKDF2 v1 with same iteration count and zeroed salt/hash)
+        const dummyHash = 'v1:600000:00000000000000000000000000000000:00000000000000000000000000000000';
+        await verifyPBKDF2(password, dummyHash);
+        return null;
+    }
     
     let passwordMatches = false;
     let needsMigration = false;
@@ -139,16 +152,25 @@ export async function authenticateUser(kv: KVNamespace, identifier: string, pass
     } 
     // [!code fix] REMOVED Path C: Plaintext (Vulnerability)
     // Plaintext passwords are no longer supported. 
-    // Any remaining plaintext users must reset their password.
 
 	if (!passwordMatches) return null;
 
     // --- Auto-Migration ---
     if (needsMigration) {
         console.log(`[AUTH] Migrating user "${user.username}" to optimized PBKDF2 hash.`);
-        // Run in background (don't await) or await if you want strict consistency
-        const newHash = await hashPassword(password);
-        await updatePasswordHash(kv, user as User, newHash);
+        
+        const migrationTask = async () => {
+             const newHash = await hashPassword(password);
+             await updatePasswordHash(kv, user as User, newHash);
+        };
+
+        // [!code fix] Use waitUntil if available to prevent blocking the login response
+        if (context) {
+            context.waitUntil(migrationTask());
+        } else {
+            // Fallback: Await if no context is provided (preserves consistency at cost of latency)
+            await migrationTask();
+        }
     }
 
 	return { id: user.id, username: user.username, email: user.email };
