@@ -1,24 +1,20 @@
 name = "beta-go-route-yourself"
 compatibility_date = "2024-12-05"
-# FIX: Enable Node.js compatibility for SvelteKit
 compatibility_flags = ["nodejs_compat"]
-
-# Pages configuration
 pages_build_output_dir = ".svelte-kit/cloudflare"
 
 # ---------------------------------------------------
-# Production environment (deployed site)
+# Production environment
 # ---------------------------------------------------
 [env.production]
 
-# [!code fix] Durable Object Binding
-[[env.production.durable_objects.bindings]]
-name = "TRIP_INDEX_DO"
-class_name = "TripIndexDO"
-script_name = "beta-go-route-yourself"
+# [!code note] --- COMMENTED OUT FOR FIRST DEPLOY ---
+# [[env.production.durable_objects.bindings]]
+# name = "TRIP_INDEX_DO"
+# class_name = "TripIndexDO"
+# script_name = "beta-go-route-yourself"
 
 [env.production.vars]
-
 # Production KV Namespaces
 [[env.production.kv_namespaces]]
 binding = "BETA_LOGS_KV"
@@ -53,18 +49,17 @@ binding = "BETA_SESSIONS_KV"
 id = "d395b64dcd0641f5a44d94c5ef5628eb"
 
 # ---------------------------------------------------
-# Preview environment (PR previews and local dev)
+# Preview environment
 # ---------------------------------------------------
 [env.preview]
 
-# [!code fix] Durable Object Binding
-[[env.preview.durable_objects.bindings]]
-name = "TRIP_INDEX_DO"
-class_name = "TripIndexDO"
-script_name = "go-route-yourself" # [!code ++] REQUIRED: Previews will use the Prod DO script
+# [!code note] --- COMMENTED OUT FOR FIRST DEPLOY ---
+# [[env.preview.durable_objects.bindings]]
+# name = "TRIP_INDEX_DO"
+# class_name = "TripIndexDO"
+# script_name = "beta-go-route-yourself"
 
 [env.preview.vars]
-
 # Preview KV Namespaces
 [[env.preview.kv_namespaces]]
 binding = "BETA_LOGS_KV"
@@ -97,8 +92,3 @@ id = "3fb03d50a94e4b2cb4fc3f54bdfd45d7"
 [[env.preview.kv_namespaces]]
 binding = "BETA_SESSIONS_KV"
 id = "d395b64dcd0641f5a44d94c5ef5628eb"
-
-[[env.preview.durable_objects.bindings]]
-name = "TRIP_INDEX_DO"
-class_name = "TripIndexDO"
-script_name = "beta-go-route-yourself"
