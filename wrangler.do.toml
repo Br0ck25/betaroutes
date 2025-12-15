@@ -1,13 +1,13 @@
-name = "beta_go_route_yourself_worker"
+name = "trip-index-worker"
 main = "src/do-worker.ts"
 compatibility_date = "2024-12-05"
 
 # Define the Durable Object Class here
 [[durable_objects.bindings]]
-name = "beta_go_route_yourself_worker"
-class_name = "betagorouteyourselfworker"
+name = "TRIP_INDEX_DO"
+class_name = "TripIndexDO"
 
 # Migrations are allowed here (unlike in Pages)
 [[migrations]]
 tag = "v1"
-new_classes = ["betagorouteyourselfworker"]
+new_classes = ["TripIndexDO"]
