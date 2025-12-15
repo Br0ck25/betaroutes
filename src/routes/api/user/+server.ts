@@ -8,13 +8,20 @@ export const DELETE: RequestHandler = async ({ locals, platform, cookies }) => {
         const user = locals.user;
         if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
 
-        const kv = platform?.env?.BETA_USERS_KV;
-        if (!kv) return json({ error: 'Service Unavailable' }, { status: 503 });
+        const env = platform?.env;
+        if (!env || !env.BETA_USERS_KV) {
+            return json({ error: 'Service Unavailable' }, { status: 503 });
+        }
 
-        // Internal Delete
-        await deleteUser(kv, user.id);
+        // [!code fix] Inject all bindings for complete cleanup
+        await deleteUser(env.BETA_USERS_KV, user.id, {
+            tripsKV: env.BETA_LOGS_KV,
+            trashKV: env.BETA_LOGS_TRASH_KV,
+            settingsKV: env.BETA_USER_SETTINGS_KV,
+            tripIndexDO: env.TRIP_INDEX_DO
+        });
 
-        // Cleanup
+        // Cleanup Cookies
         cookies.delete('session_id', { path: '/' });
         cookies.delete('token', { path: '/' });
 

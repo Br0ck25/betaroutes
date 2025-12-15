@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
 import { z } from 'zod';
 
-// --- Validation Schemas (Same as before) ---
+// --- Validation Schemas ---
 const latLngSchema = z.object({
     lat: z.number(),
     lng: z.number()
@@ -56,7 +56,6 @@ const tripSchema = z.object({
     lastModified: z.string().optional()
 });
 
-// Helper for dev mode
 function fakeKV() {
     return {
         get: async () => null,
@@ -66,12 +65,11 @@ function fakeKV() {
     };
 }
 
-// [!code ++] Helper for fake Durable Object (Fallback)
 function fakeDO() {
     return {
         idFromName: () => ({ name: 'fake' }),
         get: () => ({
-            fetch: async () => new Response(JSON.stringify([]))
+            fetch: async () => new Response(JSON.stringify({ allowed: true, count: 0 }))
         })
     };
 }
@@ -87,11 +85,8 @@ export const GET: RequestHandler = async (event) => {
         const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
         const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
         const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV();
-        
-        // [!code fix] Get DO binding or fallback
         const tripIndexDO = event.platform?.env?.TRIP_INDEX_DO ?? fakeDO();
 
-        // [!code fix] Pass the 4th argument
         const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO);
 
         const storageId = user.name || user.token;
@@ -142,12 +137,9 @@ export const POST: RequestHandler = async (event) => {
         const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
         const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
         const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV();
-        // [!code fix] Get DO binding or fallback
         const tripIndexDO = event.platform?.env?.TRIP_INDEX_DO ?? fakeDO();
 
-        // [!code fix] Pass the 4th argument
         const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO);
-        
         const storageId = user.name || user.token;
         const validData = parseResult.data;
 
@@ -159,14 +151,18 @@ export const POST: RequestHandler = async (event) => {
             existingTrip = await svc.get(storageId, id);
         }
 
-        // 4. Check Limits (ONLY if this is a BRAND NEW trip)
-        if (!existingTrip && user.plan === 'free') {
-            // [!code note] This check should eventually be moved to DO for strict consistency
-            const monthlyCount = await svc.getMonthlyTripCount(storageId);
-            if (monthlyCount >= 10) {
+        // [!code fix] 4. Atomic Billing Check (Durable Object)
+        if (!existingTrip) {
+            // Logic:
+            // - If FREE: Limit is 10. DO returns { allowed: false } if exceeded.
+            // - If PRO: Limit is huge (e.g. 1M). DO just increments stats.
+            const limit = user.plan === 'free' ? 10 : 999999;
+            const quota = await svc.checkMonthlyQuota(storageId, limit);
+            
+            if (!quota.allowed) {
                 return new Response(JSON.stringify({
                     error: 'Limit Reached',
-                    message: 'You have reached your free monthly limit of 10 trips.'
+                    message: `You have reached your free monthly limit of 10 trips. (Used: ${quota.count})`
                 }), { status: 403, headers: { 'Content-Type': 'application/json' } });
             }
         }
@@ -181,12 +177,11 @@ export const POST: RequestHandler = async (event) => {
             updatedAt: now
         };
 
-        // 6. Save (Idempotent)
+        // 6. Save
         await svc.put(trip);
         
-        // 7. Billing / Counters (ONLY if BRAND NEW)
+        // 7. General Lifetime Counter (Legacy support)
         if (!existingTrip) {
-            await svc.incrementMonthlyTripCount(storageId);
             await svc.incrementUserCounter(user.token, 1);
         }
 
