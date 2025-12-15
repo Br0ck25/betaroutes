@@ -12,7 +12,7 @@ pages_build_output_dir = ".svelte-kit/cloudflare"
  [[env.production.durable_objects.bindings]]
  name = "TRIP_INDEX_DO"
  class_name = "TripIndexDO"
- script_name = "beta-go-route-yourself"
+script_name = "trip-index-worker"
 
 [env.production.vars]
 # Production KV Namespaces
@@ -57,7 +57,7 @@ id = "d395b64dcd0641f5a44d94c5ef5628eb"
  [[env.preview.durable_objects.bindings]]
  name = "TRIP_INDEX_DO"
  class_name = "TripIndexDO"
- script_name = "beta-go-route-yourself"
+script_name = "trip-index-worker"
 
 [env.preview.vars]
 # Preview KV Namespaces
