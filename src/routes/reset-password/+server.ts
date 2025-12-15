@@ -1,7 +1,8 @@
+// src/routes/reset-password/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { hashPassword } from '$lib/server/auth';
-import { findUserById, updateUser } from '$lib/server/userService'; // Ensure updateUser exists, see note below
+import { findUserById, updatePasswordHash } from '$lib/server/userService'; // [!code fix] Import correct helper
 
 export const POST: RequestHandler = async ({ request, platform }) => {
     const usersKV = platform?.env?.BETA_USERS_KV;
@@ -34,14 +35,10 @@ export const POST: RequestHandler = async ({ request, platform }) => {
     // 3. Hash New Password
     const hashedPassword = await hashPassword(password);
 
-    // 4. Update User Password
-    // If you don't have a specific `updateUser` function, we manually update the user object here:
-    user.password = hashedPassword;
-    
-    // Save updated user back to KV
-    // Assuming users are stored by ID as well as secondary indices. 
-    // In typical KV setups we update the main record.
-    await usersKV.put(user.id, JSON.stringify(user));
+    // [!code fix] 4. Update User Password via Service
+    // This handles the correct key prefixes (e.g. "user:123") and any necessary migrations.
+    // Previous code wrote to `user.id` directly, which created a phantom record.
+    await updatePasswordHash(usersKV, user, hashedPassword);
 
     // 5. Cleanup - Delete the used token
     await usersKV.delete(resetKey);

@@ -4,8 +4,8 @@ import { randomUUID } from 'node:crypto';
 
 export async function createSession(kv: KVNamespace, userData: any) {
     const sessionId = randomUUID();
-    // Session expires in 7 days (seconds)
-    const SESSION_TTL = 60 * 60 * 24 * 7; 
+    // [!code fix] Session expires in 30 days (matches cookie)
+    const SESSION_TTL = 60 * 60 * 24 * 30; 
     
     await kv.put(sessionId, JSON.stringify(userData), { expirationTtl: SESSION_TTL });
     return sessionId;
