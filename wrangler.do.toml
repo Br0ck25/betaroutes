@@ -1,4 +1,4 @@
-name = "trip-index-worker"
+name = "beta_go_route_yourself_worker"
 main = "src/do-worker.ts"
 compatibility_date = "2024-12-05"
 
