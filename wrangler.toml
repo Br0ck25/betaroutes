@@ -12,10 +12,10 @@ pages_build_output_dir = ".svelte-kit/cloudflare"
 [env.production]
 
 # [!code fix] Durable Object Binding
-#[[env.production.durable_objects.bindings]]
-#name = "TRIP_INDEX_DO"
-#class_name = "TripIndexDO"
-#script_name = "beta-go-route-yourself"
+[[env.production.durable_objects.bindings]]
+name = "TRIP_INDEX_DO"
+class_name = "TripIndexDO"
+script_name = "beta-go-route-yourself"
 
 [env.production.vars]
 
