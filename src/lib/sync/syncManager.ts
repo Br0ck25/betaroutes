@@ -1,3 +1,4 @@
+// src/lib/sync/syncManager.ts
 import { getDB } from '$lib/db/indexedDB';
 import { syncStatus } from '$lib/stores/sync';
 import type { SyncQueueItem } from '$lib/db/types';
@@ -126,8 +127,13 @@ class SyncManager {
       }
 
       await this.updatePendingCount();
-      if (failCount === 0) syncStatus.setSynced();
-      else syncStatus.setError(`${failCount} item(s) failed`);
+      
+      if (failCount === 0) {
+          syncStatus.setSynced();
+          console.log(`✅ Sync complete. Processed ${successCount} items.`);
+      } else {
+          syncStatus.setError(`${failCount} item(s) failed`);
+      }
 
     } catch (err) {
       console.error('❌ Sync error:', err);
@@ -211,7 +217,13 @@ class SyncManager {
       });
       
       if (!res.ok) {
-          // [!code ++] Detect Client Errors (400-499) which are non-retriable
+          // [!code ++] FIX: Treat 404 on DELETE as success (Item already gone from server)
+          if (res.status === 404 && method === 'DELETE') {
+              console.warn(`⚠️ Item ${id} already deleted on server. Skipping.`);
+              return; // Exit normally, do not throw
+          }
+
+          // Detect Client Errors (400-499) which are non-retriable
           if (res.status >= 400 && res.status < 500) {
               const errText = await res.text().catch(() => '');
               throw new Error(`ABORT_RETRY: Server rejected request (${res.status}): ${errText.substring(0, 100)}`);
@@ -240,7 +252,7 @@ class SyncManager {
     const tx = db.transaction('syncQueue', 'readwrite');
     const store = tx.objectStore('syncQueue');
     
-    // [!code ++] Check for fatal error flag
+    // Check for fatal error flag
     const isFatal = error.message?.includes('ABORT_RETRY');
 
     if (isFatal) {

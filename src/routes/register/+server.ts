@@ -4,42 +4,65 @@ import type { RequestHandler } from './$types';
 import { hashPassword } from '$lib/server/auth';
 import { findUserByEmail, findUserByUsername } from '$lib/server/userService';
 import { sendVerificationEmail } from '$lib/server/email';
-import { checkRateLimit } from '$lib/server/rateLimit'; // [!code ++]
+import { checkRateLimit } from '$lib/server/rateLimit';
 import { randomUUID } from 'node:crypto';
+
+const BLOCKED_USERNAMES = ['admin', 'root', 'support', 'default_user', 'system', 'betaroutes'];
 
 export const POST: RequestHandler = async ({ request, platform, url, getClientAddress }) => {
     const usersKV = platform?.env?.BETA_USERS_KV;
-    if (!usersKV) {
-        return json({ message: 'Database not available' }, { status: 500 });
+    const logsKV = platform?.env?.BETA_LOGS_KV;
+
+    if (!usersKV || !logsKV) {
+        return json({ message: 'Service temporarily unavailable' }, { status: 503 });
     }
 
-    // [!code fix] 1. Rate Limiting (5 requests per hour per IP)
-    // Prevents spam registration attempts
+    // 1. Rate Limiting (5 requests per hour per IP)
     const ip = getClientAddress();
-    const { allowed } = await checkRateLimit(usersKV, ip, 'register_attempt', 5, 3600);
-    if (!allowed) {
+    const limit = await checkRateLimit(logsKV, ip, 'register', 5, 3600);
+    if (!limit.allowed) {
         return json({ message: 'Too many registration attempts. Please try again later.' }, { status: 429 });
     }
 
-    const { username, email, password } = await request.json();
+    let body;
+    try {
+        body = await request.json();
+    } catch (e) {
+        return json({ message: 'Invalid request body' }, { status: 400 });
+    }
+    
+    const { username, email, password } = body;
 
-    if (!username || !email || !password) {
-        return json({ message: 'Missing fields' }, { status: 400 });
+    // 2. Strict Input Validation
+    if (!username || typeof username !== 'string' || username.length < 3 || username.length > 20) {
+        return json({ message: 'Username must be between 3 and 20 characters.' }, { status: 400 });
+    }
+    
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+        return json({ message: 'Username can only contain letters, numbers, and underscores.' }, { status: 400 });
     }
 
-    // 2. Check Duplicates (Existing Users)
+    if (BLOCKED_USERNAMES.includes(username.toLowerCase())) {
+        return json({ message: 'Username is not available.' }, { status: 400 });
+    }
+
+    if (!email || typeof email !== 'string' || !email.includes('@') || email.length > 100) {
+        return json({ message: 'Invalid email address.' }, { status: 400 });
+    }
+
+    if (!password || typeof password !== 'string' || password.length < 8) {
+        return json({ message: 'Password must be at least 8 characters long.' }, { status: 400 });
+    }
+
+    // 3. Check Duplicates
+    // We check purely to avoid overwriting, but we return a generic message if possible
+    // or handle specific conflicts if UI requires it. For security, we often hide this,
+    // but for UX, we usually reveal it. We will reveal for better UX in this context.
     const existingEmail = await findUserByEmail(usersKV, email);
     if (existingEmail) return json({ message: 'Email already in use.' }, { status: 409 });
 
     const existingUser = await findUserByUsername(usersKV, username);
     if (existingUser) return json({ message: 'Username taken.' }, { status: 409 });
-
-    // [!code fix] 3. Check Pending Reservations (Race Condition Protection)
-    // Prevents someone from taking a username that is currently pending verification
-    const isReserved = await usersKV.get(`reservation:username:${username.toLowerCase()}`);
-    if (isReserved) {
-        return json({ message: 'Username is pending verification.' }, { status: 409 });
-    }
 
     // 4. Prepare Pending Record
     const hashedPassword = await hashPassword(password);
@@ -52,32 +75,23 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
         createdAt: new Date().toISOString()
     };
 
-    // [!code fix] 5. Atomic Writes (Pending Data + Reservations + Email Index)
-    // We create:
-    // A. The pending data itself
-    // B. A username reservation to block others
-    // C. An email index so we can find the token later if we need to Resend
-    await Promise.all([
-        usersKV.put(`pending_verify:${verificationToken}`, JSON.stringify(pendingUser), { expirationTtl: 86400 }),
-        usersKV.put(`reservation:username:${username.toLowerCase()}`, verificationToken, { expirationTtl: 86400 }),
-        usersKV.put(`idx:pending_email:${email.toLowerCase()}`, verificationToken, { expirationTtl: 86400 })
-    ]);
+    // Save to KV: "pending_verify:TOKEN" (Expires in 24h)
+    await usersKV.put(
+        `pending_verify:${verificationToken}`, 
+        JSON.stringify(pendingUser), 
+        { expirationTtl: 86400 }
+    );
 
-    // 6. Send Email
+    // 5. Send Email
     const emailSent = await sendVerificationEmail(email, verificationToken, url.origin);
 
     if (!emailSent) {
-        // [!code fix] Rollback all keys if email fails
-        await Promise.all([
-            usersKV.delete(`pending_verify:${verificationToken}`),
-            usersKV.delete(`reservation:username:${username.toLowerCase()}`),
-            usersKV.delete(`idx:pending_email:${email.toLowerCase()}`)
-        ]);
+        await usersKV.delete(`pending_verify:${verificationToken}`);
         return json({ message: 'Failed to send verification email. Please try again.' }, { status: 500 });
     }
 
     return json({ 
         success: true, 
-        message: 'Verification email sent.' 
+        message: 'Verification email sent. Please check your inbox.' 
     });
 };

@@ -1,13 +1,15 @@
 // src/lib/server/dev-mock-db.ts
 import fs from 'node:fs';
 import path from 'node:path';
+// [!code ++] Import the key from SvelteKit's env module
+import { PRIVATE_GOOGLE_MAPS_API_KEY } from '$env/static/private';
 
 const DB_FILE = path.resolve('.kv-mock.json');
 
 // Initial state
 let mockDB: Record<string, any> = {
 	USERS: {},
-        SESSIONS: {},
+    SESSIONS: {}, // [!code fix] Ensure consistency with indentation
 	LOGS: {},
 	TRASH: {},
 	SETTINGS: {},
@@ -23,7 +25,7 @@ try {
         mockDB = { ...mockDB, ...loaded };
         
         // Ensure namespaces exist
-        ['HUGHESNET', 'PLACES'].forEach(ns => {
+        ['HUGHESNET', 'PLACES', 'SESSIONS'].forEach(ns => {
             if (!mockDB[ns]) mockDB[ns] = {};
         });
         
@@ -80,9 +82,13 @@ export function setupMockKV(event: any) {
 
     const env = event.platform.env;
 
-    // [!code ++] Mock the Sessions KV
-    if (!env.BETA_SESSIONS_KV) env.BETA_SESSIONS_KV = createMockKV('SESSIONS');
+    // [!code ++] Inject API Key for Dev (Required for Autocomplete)
+    if (!env.PRIVATE_GOOGLE_MAPS_API_KEY) {
+        env.PRIVATE_GOOGLE_MAPS_API_KEY = PRIVATE_GOOGLE_MAPS_API_KEY;
+    }
 
+    // Mock KVs
+    if (!env.BETA_SESSIONS_KV) env.BETA_SESSIONS_KV = createMockKV('SESSIONS');
     if (!env.BETA_USERS_KV) env.BETA_USERS_KV = createMockKV('USERS');
     if (!env.BETA_LOGS_KV) env.BETA_LOGS_KV = createMockKV('LOGS');
     if (!env.BETA_LOGS_TRASH_KV) env.BETA_LOGS_TRASH_KV = createMockKV('TRASH');
