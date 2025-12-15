@@ -24,11 +24,11 @@ export const GET: RequestHandler = async (event) => {
 		// Connect to KVs
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
-		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV'); // [!code ++]
+		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
 		
-		const svc = makeTripService(kv, trashKV, placesKV); // [!code ++]
+		const svc = makeTripService(kv, trashKV, placesKV);
 
-		// Use stable user ID (username)
+		// [!code fix] Reverted to use name/token to access existing data
 		const storageId = user.name || user.token;
 
 		const trip = await svc.get(storageId, id);
@@ -63,10 +63,11 @@ export const PUT: RequestHandler = async (event) => {
 
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
-		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV'); // [!code ++]
+		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
 		
-		const svc = makeTripService(kv, trashKV, placesKV); // [!code ++]
+		const svc = makeTripService(kv, trashKV, placesKV);
 
+		// [!code fix] Reverted to use name/token to access existing data
 		const storageId = user.name || user.token;
 
 		// Verify existing ownership
@@ -110,10 +111,11 @@ export const DELETE: RequestHandler = async (event) => {
 
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
-		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV'); // [!code ++]
+		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
 		
-		const svc = makeTripService(kv, trashKV, placesKV); // [!code ++]
+		const svc = makeTripService(kv, trashKV, placesKV);
 
+		// [!code fix] Reverted to use name/token to access existing data
 		const storageId = user.name || user.token;
 
 		// Check if trip exists
@@ -128,7 +130,7 @@ export const DELETE: RequestHandler = async (event) => {
 		// Perform soft delete
 		await svc.delete(storageId, id);
 
-		// Decrement trip count
+		// [!code fix] Reverted counter to use user.token (matching your original logic)
 		await svc.incrementUserCounter(user.token, -1);
 
 		return new Response(JSON.stringify({ success: true }), {

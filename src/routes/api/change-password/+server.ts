@@ -16,6 +16,11 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
         return json({ message: 'Current and new password are required' }, { status: 400 });
     }
 
+    // [!code fix] Enforce Password Strength
+    if (newPassword.length < 8) {
+        return json({ message: 'New password must be at least 8 characters.' }, { status: 400 });
+    }
+
     const usersKV = platform?.env?.BETA_USERS_KV;
     if (!usersKV) {
         return json({ message: 'Database unavailable' }, { status: 500 });
