@@ -1,53 +1,72 @@
-// src/hooks.server.ts
-import type { Handle } from '@sveltejs/kit';
+// src/service-worker.ts
+/// <reference types="@sveltejs/kit" />
+import { build, files, version } from '$service-worker';
 
-export const handle: Handle = async ({ event, resolve }) => {
-	// 1. Setup Mock DB in Dev
-	if (dev) {
-		const { setupMockKV } = await import('$lib/server/dev-mock-db');
-        setupMockKV(event);
+// Create a unique cache name for this deployment
+const CACHE = `cache-${version}`;
+
+const ASSETS = [
+	...build, // the app itself
+	...files  // everything in `static`
+];
+
+self.addEventListener('install', (event) => {
+	// Create a new cache and add all files to it
+	async function addFilesToCache() {
+		const cache = await caches.open(CACHE);
+		await cache.addAll(ASSETS);
 	}
 
-	// 2. Check for the correct 'session_id' cookie
-	const sessionId = event.cookies.get('session_id');
+	event.waitUntil(addFilesToCache());
+});
 
-	if (!sessionId) {
-		event.locals.user = null;
-		return resolve(event);
-	}
-
-	try {
-        // 3. Look up session in SESSIONS_KV
-		const sessionKV = event.platform?.env?.BETA_SESSIONS_KV;
-		
-        if (sessionKV) {
-			const sessionDataStr = await sessionKV.get(sessionId);
-
-			if (sessionDataStr) {
-				const session = JSON.parse(sessionDataStr);
-				
-				event.locals.user = {
-					id: session.id,
-					token: sessionId,
-					plan: session.plan ?? 'free',
-					tripsThisMonth: session.tripsThisMonth ?? 0,
-					maxTrips: session.maxTrips ?? 10,
-					resetDate: session.resetDate ?? new Date().toISOString(),
-					name: session.name, 
-					email: session.email
-				};
-			} else {
-                // Cookie exists but session is gone from DB
-                if (event.url.pathname.startsWith('/dashboard')) {
-				    console.warn('[HOOK] Session expired or invalid.');
-                }
-				event.locals.user = null;
-			}
+self.addEventListener('activate', (event) => {
+	// Remove previous caches
+	async function deleteOldCaches() {
+		for (const key of await caches.keys()) {
+			if (key !== CACHE) await caches.delete(key);
 		}
-	} catch (err) {
-		console.error('[HOOK] KV Error:', err);
-		event.locals.user = null;
 	}
 
-	return resolve(event);
-};
+	event.waitUntil(deleteOldCaches());
+});
+
+self.addEventListener('fetch', (event) => {
+	// ignore POST requests etc
+	if (event.request.method !== 'GET') return;
+
+	async function respond() {
+		const url = new URL(event.request.url);
+		const cache = await caches.open(CACHE);
+
+		// Serve build assets from cache directly
+		if (ASSETS.includes(url.pathname)) {
+			const response = await cache.match(url.pathname);
+			if (response) return response;
+		}
+
+		// For everything else, try the network first, then cache
+		try {
+			const response = await fetch(event.request);
+
+			// if we're offline, fetch can return a value that is not a Response
+			// instead of throwing - and we only want to cache valid responses
+			if (!(response instanceof Response)) {
+				throw new Error('invalid response from fetch');
+			}
+
+			if (response.status === 200) {
+				cache.put(event.request, response.clone());
+			}
+
+			return response;
+		} catch (err) {
+			const response = await cache.match(event.request);
+			if (response) return response;
+
+			throw err;
+		}
+	}
+
+	event.respondWith(respond());
+});

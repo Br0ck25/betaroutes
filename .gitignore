@@ -19,6 +19,7 @@ Thumbs.db
 !.env.example
 !.env.test
 .dev.vars
+.kv-mock.json
 
 # Vite
 vite.config.js.timestamp-*
