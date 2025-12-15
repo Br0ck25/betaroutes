@@ -7,8 +7,21 @@ compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = ".svelte-kit/cloudflare"
 
 # ---------------------------------------------------
+# Durable Objects
+# ---------------------------------------------------
+[[durable_objects.bindings]]
+name = "TRIP_INDEX_DO"
+class_name = "TripIndexDO"
+
+# Database Migration (Required to initialize the class)
+[[migrations]]
+tag = "v1" # Unique identifier for this change
+new_classes = ["TripIndexDO"]
+
+# ---------------------------------------------------
 # Production environment (deployed site)
 # ---------------------------------------------------
+
 [env.production]
 
 [env.production.vars]

@@ -1,5 +1,5 @@
 // src/lib/server/tripService.ts
-import type { KVNamespace } from '@cloudflare/workers-types';
+import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
 import { generatePrefixKey, generatePlaceKey } from '$lib/utils/keys';
 
 export type Stop = {
@@ -41,16 +41,35 @@ function trashPrefixForUser(userId: string) {
   return `trash:${userId}:`;
 }
 
-function indexKeyForUser(userId: string) {
-  return `index:trips:${userId}`;
-}
+// [!code --] Removed: indexKeyForUser is no longer needed (DO handles it)
 
 export function makeTripService(
   kv: KVNamespace,
   trashKV: KVNamespace | undefined,
-  placesKV: KVNamespace | undefined
+  placesKV: KVNamespace | undefined,
+  tripIndexDO: DurableObjectNamespace // [!code ++] Added DO Binding
 ) {
   
+  // Helper to get the specific Durable Object for a user
+  const getIndexStub = (userId: string) => {
+    const id = tripIndexDO.idFromName(userId);
+    return tripIndexDO.get(id);
+  };
+
+  // Helper to strip heavy data for the lightweight index
+  const toSummary = (trip: TripRecord) => ({
+      id: trip.id,
+      userId: trip.userId,
+      date: trip.date,
+      title: trip.title,
+      startAddress: trip.startAddress,
+      endAddress: trip.endAddress,
+      netProfit: trip.netProfit,
+      totalMiles: trip.totalMiles,
+      createdAt: trip.createdAt,
+      updatedAt: trip.updatedAt
+  });
+
   // Updated to handle both Lat/Lng Caching AND Autocomplete Indexing
   async function indexTripData(trip: TripRecord) {
     if (!placesKV) return;
@@ -122,38 +141,7 @@ export function makeTripService(
     await Promise.allSettled(writePromises);
   }
 
-  async function updateIndex(userId: string, trip: TripRecord, action: 'put' | 'delete') {
-      const idxKey = indexKeyForUser(userId);
-      const idxRaw = await kv.get(idxKey);
-      let trips: TripRecord[] = [];
-
-      if (idxRaw) {
-          trips = JSON.parse(idxRaw);
-      } else {
-          // Fallback: Rebuild index from list if missing
-          const prefix = prefixForUser(userId);
-          const list = await kv.list({ prefix });
-          for (const k of list.keys) {
-             const raw = await kv.get(k.name);
-             if (raw) trips.push(JSON.parse(raw));
-          }
-      }
-
-      if (action === 'put') {
-          const existingIdx = trips.findIndex(t => t.id === trip.id);
-          if (existingIdx >= 0) {
-              trips[existingIdx] = trip;
-          } else {
-              trips.push(trip);
-          }
-      } else if (action === 'delete') {
-          trips = trips.filter(t => t.id !== trip.id);
-      }
-
-      // Keep index sorted by date (newest first)
-      trips.sort((a,b) => b.createdAt.localeCompare(a.createdAt));
-      await kv.put(idxKey, JSON.stringify(trips));
-  }
+  // [!code --] Removed: updateIndex (Replaced by Durable Object logic below)
 
   return {
     async getMonthlyTripCount(userId: string): Promise<number> {
@@ -176,34 +164,41 @@ export function makeTripService(
     },
 
     async list(userId: string): Promise<TripRecord[]> {
-      const idxKey = indexKeyForUser(userId);
-      const idxRaw = await kv.get(idxKey);
-      
-      // Fast path: Return cached index
-      if (idxRaw) {
-          return JSON.parse(idxRaw);
+      // [!code fix] 1. Try to get list from Durable Object (Atomic & Fast)
+      const stub = getIndexStub(userId);
+      const res = await stub.fetch('http://internal/list');
+      const data = await res.json() as any;
+
+      // [!code fix] 2. Handle Migration (If DO is empty, lazy-load from KV)
+      if (data.needsMigration) {
+          console.log(`[TripService] Migrating index for user ${userId} to Durable Object...`);
+          
+          // Slow path: Read all files from KV
+          const prefix = prefixForUser(userId);
+          const list = await kv.list({ prefix });
+          const out: TripRecord[] = [];
+
+          for (const k of list.keys) {
+            const raw = await kv.get(k.name);
+            if (!raw) continue;
+            const t = JSON.parse(raw);
+            out.push(t);
+          }
+          
+          // Send summaries to DO for future fast access
+          const summaries = out.map(toSummary);
+          await stub.fetch('http://internal/migrate', {
+              method: 'POST',
+              body: JSON.stringify(summaries)
+          });
+
+          // Sort for immediate return
+          out.sort((a,b) => b.createdAt.localeCompare(a.createdAt));
+          return out;
       }
 
-      // Slow path: Rebuild index
-      const prefix = prefixForUser(userId);
-      const list = await kv.list({ prefix });
-      const out: TripRecord[] = [];
-
-      for (const k of list.keys) {
-        const raw = await kv.get(k.name);
-        if (!raw) continue;
-        const t = JSON.parse(raw);
-        out.push(t);
-      }
-
-      out.sort((a,b) => b.createdAt.localeCompare(a.createdAt));
-      
-      // Cache the result
-      if (out.length > 0) {
-          await kv.put(idxKey, JSON.stringify(out));
-      }
-      
-      return out;
+      // Standard path: Return fast data from DO
+      return data as TripRecord[];
     },
 
     async get(userId: string, tripId: string) {
@@ -215,21 +210,34 @@ export function makeTripService(
     async put(trip: TripRecord) {
       trip.updatedAt = new Date().toISOString();
       
+      // 1. Save Full Data to KV (Storage)
       await kv.put(`trip:${trip.userId}:${trip.id}`, JSON.stringify(trip));
-      await updateIndex(trip.userId, trip, 'put');
+      
+      // [!code fix] 2. Update Index via DO (Atomic Consistency)
+      const stub = getIndexStub(trip.userId);
+      await stub.fetch('http://internal/put', {
+          method: 'POST',
+          body: JSON.stringify(toSummary(trip))
+      });
 
-      // Async caching/indexing - don't block main response
+      // 3. Async caching/indexing (Places) - don't block main response
       indexTripData(trip).catch(e => {
         console.error('[TripService] Failed to index trip data:', e);
       });
     },
 
     async delete(userId: string, tripId: string) {
+      // [!code fix] Update Index via DO first
+      const stub = getIndexStub(userId);
+      await stub.fetch('http://internal/delete', {
+          method: 'POST',
+          body: JSON.stringify({ id: tripId })
+      });
+
       if (!trashKV) {
         // Hard delete if no trash support
         const key = `trip:${userId}:${tripId}`;
         await kv.delete(key);
-        await updateIndex(userId, { id: tripId } as TripRecord, 'delete');
         return;
       }
 
@@ -237,7 +245,8 @@ export function makeTripService(
       const raw = await kv.get(key);
       
       if (!raw) {
-        throw new Error('Trip not found');
+        // If not found in KV, we still cleaned the index above, so just return
+        return; 
       }
 
       const trip = JSON.parse(raw);
@@ -262,7 +271,6 @@ export function makeTripService(
       );
 
       await kv.delete(key);
-      await updateIndex(userId, trip, 'delete');
     },
 
     async listTrash(userId: string): Promise<TrashItem[]> {
@@ -316,7 +324,13 @@ export function makeTripService(
       const activeKey = `trip:${userId}:${tripId}`;
       await kv.put(activeKey, JSON.stringify(trip));
 
-      await updateIndex(userId, trip, 'put');
+      // [!code fix] Update Index via DO
+      const stub = getIndexStub(userId);
+      await stub.fetch('http://internal/put', {
+          method: 'POST',
+          body: JSON.stringify(toSummary(trip))
+      });
+
       await trashKV.delete(trashKey);
 
       return trip;
