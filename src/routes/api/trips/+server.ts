@@ -1,9 +1,10 @@
 // src/routes/api/trips/+server.ts
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
+import { findUserById } from '$lib/server/userService'; // [!code ++] Import lookup
 import { z } from 'zod';
 
-// --- Validation Schemas ---
+// --- Validation Schemas (Unchanged) ---
 const latLngSchema = z.object({
     lat: z.number(),
     lng: z.number()
@@ -56,21 +57,33 @@ const tripSchema = z.object({
     lastModified: z.string().optional()
 });
 
-function fakeKV() {
-    return {
-        get: async () => null,
-        put: async () => {},
-        delete: async () => {},
-        list: async () => ({ keys: [] })
-    };
-}
+// Helper: Only use fake adapters if explicitly NOT in production environment
+function getEnv(platform: any) {
+    const env = platform?.env;
+    
+    // [!code fix] Critical: Fail loudly in production if bindings are missing
+    // If 'platform' exists (Cloudflare context) but keys are missing, we must crash safely.
+    if (platform && (!env?.BETA_LOGS_KV || !env?.TRIP_INDEX_DO)) {
+        throw new Error('CRITICAL: Database bindings missing in production');
+    }
 
-function fakeDO() {
+    // Fallback for local 'npm run dev' without wrangler (if needed)
+    if (!env?.BETA_LOGS_KV) {
+        return {
+            kv: { get: async () => null, put: async () => {}, delete: async () => {}, list: async () => ({ keys: [] }) },
+            trashKV: { get: async () => null, put: async () => {}, delete: async () => {}, list: async () => ({ keys: [] }) },
+            placesKV: { get: async () => null, put: async () => {}, delete: async () => {}, list: async () => ({ keys: [] }) },
+            usersKV: { get: async () => null }, // Mock User KV
+            tripIndexDO: { idFromName: () => ({ name: 'fake' }), get: () => ({ fetch: async () => new Response(JSON.stringify({ allowed: true, count: 0 })) }) }
+        };
+    }
+
     return {
-        idFromName: () => ({ name: 'fake' }),
-        get: () => ({
-            fetch: async () => new Response(JSON.stringify({ allowed: true, count: 0 }))
-        })
+        kv: env.BETA_LOGS_KV,
+        trashKV: env.BETA_LOGS_TRASH_KV,
+        placesKV: env.BETA_PLACES_KV,
+        usersKV: env.BETA_USERS_KV, // [!code ++] Needed for fresh plan check
+        tripIndexDO: env.TRIP_INDEX_DO
     };
 }
 
@@ -82,12 +95,21 @@ export const GET: RequestHandler = async (event) => {
         const sinceParam = event.url.searchParams.get('since');
         const sinceDate = sinceParam ? new Date(sinceParam) : null;
 
-        const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
-        const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
-        const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV();
-        const tripIndexDO = event.platform?.env?.TRIP_INDEX_DO ?? fakeDO();
+        let env;
+        try {
+            env = getEnv(event.platform);
+        } catch (e) {
+            // Catch the critical error from getEnv and return 503
+            console.error('Environment Error:', e);
+            return new Response('Service Unavailable', { status: 503 });
+        }
 
-        const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO);
+        const { kv, trashKV, placesKV, tripIndexDO } = env;
+        
+        // Final safety check for production fail-state
+        if (!kv.put && event.platform) return new Response('Service Unavailable', { status: 503 });
+
+        const svc = makeTripService(kv as any, trashKV as any, placesKV as any, tripIndexDO as any);
 
         const storageId = user.name || user.token;
         
@@ -116,31 +138,33 @@ export const GET: RequestHandler = async (event) => {
 
 export const POST: RequestHandler = async (event) => {
     try {
-        const user = event.locals.user;
-        if (!user) return new Response('Unauthorized', { status: 401 });
+        const sessionUser = event.locals.user;
+        if (!sessionUser) return new Response('Unauthorized', { status: 401 });
 
         const body = await event.request.json();
 
         // 1. Validate Input
         const parseResult = tripSchema.safeParse(body);
         if (!parseResult.success) {
-            return new Response(
-                JSON.stringify({
-                    error: 'Invalid Data',
-                    details: parseResult.error.flatten()
-                }),
-                { status: 400 }
-            );
+            return new Response(JSON.stringify({
+                error: 'Invalid Data',
+                details: parseResult.error.flatten()
+            }), { status: 400 });
         }
 
-        // 2. Initialize Service
-        const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
-        const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
-        const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV();
-        const tripIndexDO = event.platform?.env?.TRIP_INDEX_DO ?? fakeDO();
+        let env;
+        try {
+            env = getEnv(event.platform);
+        } catch (e) {
+            console.error('Environment Error:', e);
+            return new Response(JSON.stringify({ error: 'Service Unavailable' }), { status: 503 });
+        }
 
-        const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO);
-        const storageId = user.name || user.token;
+        const { kv, trashKV, placesKV, usersKV, tripIndexDO } = env;
+        if (!kv.put && event.platform) return new Response('Service Unavailable', { status: 503 });
+
+        const svc = makeTripService(kv as any, trashKV as any, placesKV as any, tripIndexDO as any);
+        const storageId = sessionUser.name || sessionUser.token;
         const validData = parseResult.data;
 
         // 3. Determine ID and Check Existence
@@ -151,12 +175,23 @@ export const POST: RequestHandler = async (event) => {
             existingTrip = await svc.get(storageId, id);
         }
 
-        // [!code fix] 4. Atomic Billing Check (Durable Object)
+        // [!code fix] 4. Fetch FRESH User Plan (Fix Stale Session Bug)
+        let currentPlan = sessionUser.plan;
+        
+        // If we have the Users KV, fetch the latest status
+        if (usersKV && usersKV.get) {
+            const freshUser = await findUserById(usersKV as any, sessionUser.id);
+            if (freshUser) {
+                currentPlan = freshUser.plan;
+            }
+        }
+
+        // 5. Atomic Billing Check (Using Fresh Plan)
         if (!existingTrip) {
             // Logic:
             // - If FREE: Limit is 10. DO returns { allowed: false } if exceeded.
-            // - If PRO: Limit is huge (e.g. 1M). DO just increments stats.
-            const limit = user.plan === 'free' ? 10 : 999999;
+            // - If PRO: Limit is huge. DO increments stats.
+            const limit = currentPlan === 'free' ? 10 : 999999;
             const quota = await svc.checkMonthlyQuota(storageId, limit);
             
             if (!quota.allowed) {
@@ -167,7 +202,7 @@ export const POST: RequestHandler = async (event) => {
             }
         }
 
-        // 5. Prepare Object
+        // 6. Prepare Object
         const now = new Date().toISOString();
         const trip = {
             ...validData,
@@ -177,12 +212,12 @@ export const POST: RequestHandler = async (event) => {
             updatedAt: now
         };
 
-        // 6. Save
+        // 7. Save
         await svc.put(trip);
         
-        // 7. General Lifetime Counter (Legacy support)
+        // 8. General Lifetime Counter
         if (!existingTrip) {
-            await svc.incrementUserCounter(user.token, 1);
+            await svc.incrementUserCounter(sessionUser.token, 1);
         }
 
         return new Response(JSON.stringify(trip), {
