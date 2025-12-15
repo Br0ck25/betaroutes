@@ -4,10 +4,10 @@ compatibility_date = "2024-12-05"
 
 # Define the Durable Object Class here
 [[durable_objects.bindings]]
-name = "TRIP_INDEX_DO"
-class_name = "TripIndexDO"
+name = "beta_go_route_yourself_worker"
+class_name = "betagorouteyourselfworker"
 
 # Migrations are allowed here (unlike in Pages)
 [[migrations]]
 tag = "v1"
-new_classes = ["TripIndexDO"]
+new_classes = ["betagorouteyourselfworker"]
