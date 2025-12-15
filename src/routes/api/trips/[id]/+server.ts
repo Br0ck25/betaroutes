@@ -11,6 +11,16 @@ function safeKV(env: any, name: string) {
 	return kv ?? null;
 }
 
+// [!code ++] Helper for fake Durable Object (Fallback)
+function fakeDO() {
+    return {
+        idFromName: () => ({ name: 'fake' }),
+        get: () => ({
+            fetch: async () => new Response(JSON.stringify([]))
+        })
+    };
+}
+
 /**
  * GET /api/trips/[id] - Retrieve a single trip
  */
@@ -25,10 +35,12 @@ export const GET: RequestHandler = async (event) => {
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
+		// [!code fix] Get DO binding
+		const tripIndexDO = event.platform?.env?.TRIP_INDEX_DO ?? fakeDO();
 		
-		const svc = makeTripService(kv, trashKV, placesKV);
+		// [!code fix] Pass DO to service
+		const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO);
 
-		// [!code fix] Reverted to use name/token to access existing data
 		const storageId = user.name || user.token;
 
 		const trip = await svc.get(storageId, id);
@@ -64,10 +76,12 @@ export const PUT: RequestHandler = async (event) => {
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
+		// [!code fix] Get DO binding
+		const tripIndexDO = event.platform?.env?.TRIP_INDEX_DO ?? fakeDO();
 		
-		const svc = makeTripService(kv, trashKV, placesKV);
+		// [!code fix] Pass DO to service
+		const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO);
 
-		// [!code fix] Reverted to use name/token to access existing data
 		const storageId = user.name || user.token;
 
 		// Verify existing ownership
@@ -112,10 +126,12 @@ export const DELETE: RequestHandler = async (event) => {
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
+		// [!code fix] Get DO binding
+		const tripIndexDO = event.platform?.env?.TRIP_INDEX_DO ?? fakeDO();
 		
-		const svc = makeTripService(kv, trashKV, placesKV);
+		// [!code fix] Pass DO to service
+		const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO);
 
-		// [!code fix] Reverted to use name/token to access existing data
 		const storageId = user.name || user.token;
 
 		// Check if trip exists
@@ -130,7 +146,6 @@ export const DELETE: RequestHandler = async (event) => {
 		// Perform soft delete
 		await svc.delete(storageId, id);
 
-		// [!code fix] Reverted counter to use user.token (matching your original logic)
 		await svc.incrementUserCounter(user.token, -1);
 
 		return new Response(JSON.stringify({ success: true }), {

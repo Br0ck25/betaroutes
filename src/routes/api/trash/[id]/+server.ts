@@ -7,6 +7,16 @@ function safeKV(env: any, name: string) {
 	return kv ?? null;
 }
 
+// [!code ++] Fake DO helper
+function fakeDO() {
+    return {
+        idFromName: () => ({ name: 'fake' }),
+        get: () => ({
+            fetch: async () => new Response(JSON.stringify([]))
+        })
+    };
+}
+
 export const POST: RequestHandler = async (event) => {
 	try {
 		const user = event.locals.user;
@@ -15,11 +25,13 @@ export const POST: RequestHandler = async (event) => {
 		const { id } = event.params;
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
-		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV'); // [!code ++]
+		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
+		// [!code fix]
+		const tripIndexDO = event.platform?.env?.TRIP_INDEX_DO ?? fakeDO();
 		
-		const svc = makeTripService(kv, trashKV, placesKV); // [!code ++]
+		// [!code fix]
+		const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO);
 
-		// FIX: Use stable User ID (name)
 		const storageId = user.name || user.token;
 		const restoredTrip = await svc.restore(storageId, id);
 
@@ -48,11 +60,13 @@ export const DELETE: RequestHandler = async (event) => {
 		const { id } = event.params;
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
-		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV'); // [!code ++]
+		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
+		// [!code fix]
+		const tripIndexDO = event.platform?.env?.TRIP_INDEX_DO ?? fakeDO();
 		
-		const svc = makeTripService(kv, trashKV, placesKV); // [!code ++]
+		// [!code fix]
+		const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO);
 
-		// FIX: Use stable User ID (name)
 		const storageId = user.name || user.token;
 		await svc.permanentDelete(storageId, id);
 

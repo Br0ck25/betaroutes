@@ -3,15 +3,12 @@ import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
 import { z } from 'zod';
 
-// --- Validation Schemas (Restored) ---
-
-// Location Schema
+// --- Validation Schemas (Same as before) ---
 const latLngSchema = z.object({
     lat: z.number(),
     lng: z.number()
 }).optional();
 
-// Updated sub-schemas
 const destinationSchema = z.object({
     address: z.string().max(500).optional().default(''),
     earnings: z.number().optional().default(0),
@@ -52,16 +49,14 @@ const tripSchema = z.object({
     suppliesCost: z.number().optional(),
     netProfit: z.number().optional(),
     notes: z.string().max(1000).optional(),
-    
     stops: z.array(stopSchema).optional(),
     destinations: z.array(destinationSchema).optional(),
     maintenanceItems: z.array(costItemSchema).optional(),
     suppliesItems: z.array(costItemSchema).optional(),
-    
     lastModified: z.string().optional()
 });
 
-// Helper for dev mode (Restored)
+// Helper for dev mode
 function fakeKV() {
     return {
         get: async () => null,
@@ -71,7 +66,16 @@ function fakeKV() {
     };
 }
 
-// --- GET Handler (Restored for Sync) ---
+// [!code ++] Helper for fake Durable Object (Fallback)
+function fakeDO() {
+    return {
+        idFromName: () => ({ name: 'fake' }),
+        get: () => ({
+            fetch: async () => new Response(JSON.stringify([]))
+        })
+    };
+}
+
 export const GET: RequestHandler = async (event) => {
     try {
         const user = event.locals.user;
@@ -84,7 +88,11 @@ export const GET: RequestHandler = async (event) => {
         const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
         const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV();
         
-        const svc = makeTripService(kv, trashKV, placesKV);
+        // [!code fix] Get DO binding or fallback
+        const tripIndexDO = event.platform?.env?.TRIP_INDEX_DO ?? fakeDO();
+
+        // [!code fix] Pass the 4th argument
+        const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO);
 
         const storageId = user.name || user.token;
         
@@ -111,7 +119,6 @@ export const GET: RequestHandler = async (event) => {
     }
 };
 
-// --- POST Handler (Fixed with Idempotency) ---
 export const POST: RequestHandler = async (event) => {
     try {
         const user = event.locals.user;
@@ -119,7 +126,7 @@ export const POST: RequestHandler = async (event) => {
 
         const body = await event.request.json();
 
-        // 1. Validate Input (Zod)
+        // 1. Validate Input
         const parseResult = tripSchema.safeParse(body);
         if (!parseResult.success) {
             return new Response(
@@ -135,14 +142,16 @@ export const POST: RequestHandler = async (event) => {
         const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
         const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
         const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV();
+        // [!code fix] Get DO binding or fallback
+        const tripIndexDO = event.platform?.env?.TRIP_INDEX_DO ?? fakeDO();
 
-        const svc = makeTripService(kv, trashKV, placesKV);
+        // [!code fix] Pass the 4th argument
+        const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO);
+        
         const storageId = user.name || user.token;
         const validData = parseResult.data;
 
         // 3. Determine ID and Check Existence
-        // If client sends an ID (SyncManager), we check if it exists.
-        // If client sends no ID (New Trip UI), we generate one (definitely new).
         const id = validData.id || crypto.randomUUID();
         let existingTrip = null;
 
@@ -151,8 +160,8 @@ export const POST: RequestHandler = async (event) => {
         }
 
         // 4. Check Limits (ONLY if this is a BRAND NEW trip)
-        // We do not want to block users from *updating* existing trips even if they are over limit.
         if (!existingTrip && user.plan === 'free') {
+            // [!code note] This check should eventually be moved to DO for strict consistency
             const monthlyCount = await svc.getMonthlyTripCount(storageId);
             if (monthlyCount >= 10) {
                 return new Response(JSON.stringify({
@@ -168,7 +177,6 @@ export const POST: RequestHandler = async (event) => {
             ...validData,
             id,
             userId: storageId,
-            // Preserve original creation date if updating, otherwise use now
             createdAt: existingTrip ? existingTrip.createdAt : now,
             updatedAt: now
         };
@@ -180,9 +188,6 @@ export const POST: RequestHandler = async (event) => {
         if (!existingTrip) {
             await svc.incrementMonthlyTripCount(storageId);
             await svc.incrementUserCounter(user.token, 1);
-            console.log(`[Billing] Counted new trip ${id} for user ${user.token}`);
-        } else {
-            console.log(`[Billing] Updated existing trip ${id} - No charge`);
         }
 
         return new Response(JSON.stringify(trip), {

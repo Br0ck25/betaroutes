@@ -11,6 +11,16 @@ function fakeKV() {
 	};
 }
 
+// [!code ++] Fake DO helper
+function fakeDO() {
+    return {
+        idFromName: () => ({ name: 'fake' }),
+        get: () => ({
+            fetch: async () => new Response(JSON.stringify([]))
+        })
+    };
+}
+
 export const GET: RequestHandler = async (event) => {
 	try {
 		const user = event.locals.user;
@@ -18,11 +28,13 @@ export const GET: RequestHandler = async (event) => {
 
 		const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
 		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
-		const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV(); // [!code ++]
+		const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV();
+		// [!code fix]
+		const tripIndexDO = event.platform?.env?.TRIP_INDEX_DO ?? fakeDO();
 		
-		const svc = makeTripService(kv, trashKV, placesKV); // [!code ++]
+		// [!code fix]
+		const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO);
 
-		// FIX: Use stable User ID (name)
 		const storageId = user.name || user.token;
 		const cloudTrash = await svc.listTrash(storageId);
 
@@ -45,11 +57,13 @@ export const DELETE: RequestHandler = async (event) => {
 
 		const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
 		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
-		const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV(); // [!code ++]
+		const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV();
+		// [!code fix]
+		const tripIndexDO = event.platform?.env?.TRIP_INDEX_DO ?? fakeDO();
 		
-		const svc = makeTripService(kv, trashKV, placesKV); // [!code ++]
+		// [!code fix]
+		const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO);
 
-		// FIX: Use stable User ID (name)
 		const storageId = user.name || user.token;
 		const deleted = await svc.emptyTrash(storageId);
 
