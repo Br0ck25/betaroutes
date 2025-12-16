@@ -15,22 +15,10 @@ interface JobEvent {
     raw: string;
 }
 
-function analyzeJobHistory(rawText: any): JobEvent[] {
+function analyzeJobHistory(rawText: string): JobEvent[] {
     if (!rawText) return [];
-
-    // ✅ HANDLE RAW EPOCH TIMESTAMP (ms or sec)
-    if (typeof rawText === 'number' || /^\d{10,13}$/.test(String(rawText))) {
-        const n = Number(rawText);
-        return [{
-            type: 'Arrival',
-            ts: n > 1e12 ? n : n * 1000,
-            raw: 'epoch'
-        }];
-    }
-
     const events: JobEvent[] = [];
     const str = String(rawText);
-
 
     // Split by labels to isolate the timestamps
     const segments = str.split(/(Arrival On Site|Departure Incomplete|Departure Complete)/i);
@@ -39,7 +27,8 @@ function analyzeJobHistory(rawText: any): JobEvent[] {
         const label = segments[i]; 
         const timeChunk = segments[i - 1]; 
 
-        // [!code fix] Regex allows optional space AND optional seconds
+        // Regex allows optional space AND optional seconds
+        // Matches "09/03/2025 10:47" or "09/03/2025 10:47:05"
         const timeMatch = timeChunk.match(/(\d{1,2}\/\d{1,2}\/\d{4}\s*\d{1,2}:\d{2}(?::\d{2})?)/g);
         
         if (timeMatch && timeMatch.length > 0) {
@@ -61,11 +50,10 @@ function analyzeJobHistory(rawText: any): JobEvent[] {
     return events.sort((a, b) => a.ts - b.ts);
 }
 
-// Helper to scan a raw string and find the earliest valid timestamp (Fallback)
+// Fallback: Scan raw string for any valid date/time
 function findEarliestTimestamp(rawText: string): number {
     if (!rawText) return 0;
     const str = String(rawText);
-    // Scan for any MM/DD/YYYY HH:MM pattern
     const regex = /(\d{1,2}\/\d{1,2}\/\d{4}\s*\d{1,2}:\d{2}(?::\d{2})?)/g;
     let match;
     let minTs = Infinity;
@@ -78,20 +66,11 @@ function findEarliestTimestamp(rawText: string): number {
 }
 
 function parseDateTimeString(dtStr: string): number {
-if (!dtStr) return 0;
-const str = String(dtStr).trim();
-
-// ✅ accept ms or seconds
-if (/^\d{10,13}$/.test(str)) {
-    const n = Number(str);
-    return n > 1e12 ? n : n * 1000;
-}
-
-// ✅ let JS try first (keeps time!)
-const direct = new Date(str);
-if (!isNaN(direct.getTime())) return direct.getTime();
+    if (!dtStr) return 0;
+    const str = String(dtStr).trim();
+    if (/^\d{13}$/.test(str)) return parseInt(str);
     
-    // [!code fix] Regex allows optional space and optional seconds
+    // Matches MM/DD/YYYY HH:MM (seconds optional)
     const m = str.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/);
     if (!m) return 0;
 
@@ -141,23 +120,17 @@ function extractDateFromTs(ts: string): string | null {
     return null;
 }
 
-// [!code fix] Aggressive Time Parser: strips everything but digits and colon
+// SIMPLIFIED 24-HOUR PARSER
+// No AM/PM logic. Just reads "13:00" as 13 * 60 + 0
 function parseTime(timeStr: string): number {
     if (!timeStr) return 0; 
     
-    // Find the first pattern that looks like "10:00" or "9:30"
+    // Find first HH:MM pattern
     const m = String(timeStr).match(/(\d{1,2}):(\d{2})/);
     if (!m) return 0;
     
     let h = parseInt(m[1]);
     let min = parseInt(m[2]);
-    
-    // Check for PM/AM in the original string
-    const isPM = timeStr.toLowerCase().includes('pm');
-    const isAM = timeStr.toLowerCase().includes('am');
-
-    if (isPM && h < 12) h += 12;
-    if (isAM && h === 12) h = 0;
     
     return h * 60 + min;
 }
@@ -279,7 +252,6 @@ export class HughesNetService {
         const knownIds = Object.keys(orderDb).map(id => parseInt(id)).filter(n => !isNaN(n)).sort((a,b) => a - b);
         if (knownIds.length > 0 && !skipScan) {
             const minId = knownIds[0];
-            const maxId = knownIds[knownIds.length - 1];
             
             const tryFetchId = async (targetId: number) => {
                  if (orderDb[String(targetId)]) return true; 
@@ -301,7 +273,7 @@ export class HughesNetService {
                  return false;
             };
 
-            this.log(`[Stage 1.5] Smart Discovery: Range ${minId} - ${maxId}.`);
+            this.log(`[Stage 1.5] Smart Discovery...`);
 
             // GAP FILLER
             for (let i = 0; i < knownIds.length - 1; i++) {
@@ -462,20 +434,14 @@ export class HughesNetService {
             const comEvent = events.find(e => e.type === 'DepartureComplete');
 
             let sortTime = 0;
-if (arrivalEvent) {
-    sortTime = arrivalEvent.ts;
-} else {
-    const fallbackTs = findEarliestTimestamp(o.actualArrivalTs);
-    if (fallbackTs > 0) {
-        sortTime = fallbackTs;
-    } else if (o.actualArrivalTs) {
-        const direct = parseDateTimeString(o.actualArrivalTs);
-        if (direct > 0) {
-            sortTime = direct;
-        }
-    } else {
-        let dateObj = parseDateOnly(o.confirmScheduleDate);
-
+            if (arrivalEvent) sortTime = arrivalEvent.ts;
+            else {
+                const fallbackTs = findEarliestTimestamp(o.actualArrivalTs);
+                if (fallbackTs > 0) {
+                    sortTime = fallbackTs;
+                } else {
+                    let dateObj = parseDateOnly(o.confirmScheduleDate);
+                    if (!dateObj) dateObj = parseDateOnly(date);
                     if (dateObj) sortTime = dateObj.getTime() + (parseTime(o.beginTime) * 60000);
                 }
             }
@@ -529,10 +495,8 @@ if (arrivalEvent) {
             }
 
             if (anchorOrder._arrivalTs > 0) {
-const d = new Date(anchorOrder._arrivalTs);
-const arrivalMins = d.getUTCHours() * 60 + d.getUTCMinutes();
-
-
+                const d = new Date(anchorOrder._arrivalTs);
+                const arrivalMins = d.getHours() * 60 + d.getMinutes();
                 startMins = arrivalMins - commuteMins;
                 this.log(`[Time] Start derived from Job ${anchorOrder.id} Arrival: ${minutesToTime(startMins)}`);
             } else {
@@ -541,9 +505,7 @@ const arrivalMins = d.getUTCHours() * 60 + d.getUTCMinutes();
                     startMins = schedMins - commuteMins;
                     this.log(`[Time] Start derived from Job ${anchorOrder.id} Schedule: ${minutesToTime(startMins)}`);
                 } else {
-                    this.warn(`[Time Debug] Job ${anchorOrder.id} Raw: ${JSON.stringify(anchorOrder.actualArrivalTs)} / Sched: ${anchorOrder.beginTime}`);
-                    this.warn(`[Time] Job ${anchorOrder.id} no arrival timestamp found; using schedule or default.`);
-
+                    this.warn(`[Time] Job ${anchorOrder.id} has no valid time. Defaulting to 9 AM.`);
                 }
             }
         }
