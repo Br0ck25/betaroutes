@@ -1,10 +1,11 @@
 // src/routes/api/hughesnet/+server.ts
 import { json } from '@sveltejs/kit';
-import { HughesNetService } from '$lib/server/hughesnet';
+import { HughesNetService } from '$lib/server/hughesnet/service';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, platform, locals }) => {
-    if (!platform?.env?.BETA_HUGHESNET_KV) {
+    // Check for both KV and DO bindings
+    if (!platform?.env?.BETA_HUGHESNET_KV || !platform?.env?.TRIP_INDEX_DO) {
         return json({ success: false, error: 'Database configuration missing' }, { status: 500 });
     }
 
@@ -13,17 +14,15 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
         const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
         const settingsId = locals.user?.id;
 
-        console.log(`[API] HughesNet Action for User: ${userId} (Settings ID: ${settingsId})`);
-
-        // [!code changed] Use PRIVATE_GOOGLE_MAPS_API_KEY
         const service = new HughesNetService(
             platform.env.BETA_HUGHESNET_KV, 
             platform.env.HNS_ENCRYPTION_KEY,
             platform.env.BETA_LOGS_KV,
             platform.env.BETA_LOGS_TRASH_KV, 
             platform.env.BETA_USER_SETTINGS_KV,
-            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY, // <--- Updated
-            platform.env.BETA_DIRECTIONS_KV 
+            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY, 
+            platform.env.BETA_DIRECTIONS_KV,
+            platform.env.TRIP_INDEX_DO // [!code ++] Pass the Durable Object
         );
 
         if (body.action === 'connect') {
@@ -80,19 +79,19 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 };
 
 export const GET: RequestHandler = async ({ platform, locals }) => {
-    if (!platform?.env?.BETA_HUGHESNET_KV) return json({ orders: {} });
+    if (!platform?.env?.BETA_HUGHESNET_KV || !platform?.env?.TRIP_INDEX_DO) return json({ orders: {} });
     try {
         const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
         
-        // [!code changed] Use PRIVATE_GOOGLE_MAPS_API_KEY
         const service = new HughesNetService(
             platform.env.BETA_HUGHESNET_KV, 
             platform.env.HNS_ENCRYPTION_KEY,
             platform.env.BETA_LOGS_KV,
             platform.env.BETA_LOGS_TRASH_KV,
             platform.env.BETA_USER_SETTINGS_KV,
-            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY, // <--- Updated
-            platform.env.BETA_DIRECTIONS_KV 
+            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY,
+            platform.env.BETA_DIRECTIONS_KV,
+            platform.env.TRIP_INDEX_DO // [!code ++] Pass the Durable Object
         );
         const orders = await service.getOrders(userId);
         return json({ orders });

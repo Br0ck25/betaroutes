@@ -23,12 +23,15 @@ declare global {
 				BETA_HUGHESNET_KV: KVNamespace;
 				BETA_PLACES_KV: KVNamespace;
 				BETA_DIRECTIONS_KV: KVNamespace;
-				BETA_SESSIONS_KV: KVNamespace; // Added for completeness if missing
+				BETA_SESSIONS_KV: KVNamespace;
+
+                // [!code ++] Add the Durable Object Binding
+                TRIP_INDEX_DO: DurableObjectNamespace;
                 
                 // Secrets & Config
                 HNS_ENCRYPTION_KEY: string;
 				PUBLIC_GOOGLE_MAPS_API_KEY: string;
-                PRIVATE_GOOGLE_MAPS_API_KEY: string; // [!code ++] Added this
+                PRIVATE_GOOGLE_MAPS_API_KEY: string;
 			};
 		}
 	}
