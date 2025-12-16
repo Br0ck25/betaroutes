@@ -513,21 +513,41 @@ export class HughesNetService {
                 } catch(e) {}
             }
 
-            if (anchorOrder._arrivalTs > 0) {
-                const d = new Date(anchorOrder._arrivalTs);
-                const arrivalMins = d.getHours() * 60 + d.getMinutes();
-                startMins = arrivalMins - commuteMins;
-                this.log(`[Time] Start derived from Job ${anchorOrder.id} Arrival: ${minutesToTime(startMins)}`);
-            } else {
-                const schedMins = parseTime(anchorOrder.beginTime);
-                if (schedMins !== 0) {
-                    startMins = schedMins - commuteMins;
-                    this.log(`[Time] Start derived from Job ${anchorOrder.id} Schedule: ${minutesToTime(startMins)}`);
-                } else {
-                    this.warn(`[Time] Job ${anchorOrder.id} has no valid time. Defaulting to 9 AM.`);
-                }
-            }
-        }
+// 1️⃣ Prefer actual arrival timestamp from HughesNet
+let arrivalTime24: string | null = null;
+
+if (anchorOrder._arrivalTs && anchorOrder._arrivalTs > 0) {
+    const d = new Date(anchorOrder._arrivalTs);
+    arrivalTime24 = `${d.getHours().toString().padStart(2, '0')}:${d
+        .getMinutes()
+        .toString()
+        .padStart(2, '0')}`;
+}
+
+
+if (arrivalTime24) {
+    const [h, m] = arrivalTime24.split(':').map(Number);
+    startMins = (h * 60 + m) - commuteMins;
+
+    this.log(
+        `[Time] Start derived from Job ${anchorOrder.id} Arrival: ${to12Hour(arrivalTime24)}`
+    );
+}
+// 2️⃣ Fallback to scheduled begin time
+else {
+    const schedMins = parseTime(anchorOrder.beginTime);
+    if (schedMins > 0) {
+        startMins = schedMins - commuteMins;
+        this.log(
+            `[Time] Start derived from Job ${anchorOrder.id} Schedule: ${minutesToTime(startMins)}`
+        );
+    } else {
+        this.warn(
+            `[Time] Job ${anchorOrder.id} has no valid time. Defaulting to 9 AM.`
+        );
+    }
+}
+}
 
         const points = [startAddr, ...ordersWithMeta.map((o:any) => buildAddr(o))];
         if (endAddr) points.push(endAddr);
