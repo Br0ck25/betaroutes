@@ -15,10 +15,22 @@ interface JobEvent {
     raw: string;
 }
 
-function analyzeJobHistory(rawText: string): JobEvent[] {
+function analyzeJobHistory(rawText: any): JobEvent[] {
     if (!rawText) return [];
+
+    // ✅ HANDLE RAW EPOCH TIMESTAMP (ms or sec)
+    if (typeof rawText === 'number' || /^\d{10,13}$/.test(String(rawText))) {
+        const n = Number(rawText);
+        return [{
+            type: 'Arrival',
+            ts: n > 1e12 ? n : n * 1000,
+            raw: 'epoch'
+        }];
+    }
+
     const events: JobEvent[] = [];
     const str = String(rawText);
+
 
     // Split by labels to isolate the timestamps
     const segments = str.split(/(Arrival On Site|Departure Incomplete|Departure Complete)/i);
@@ -66,9 +78,18 @@ function findEarliestTimestamp(rawText: string): number {
 }
 
 function parseDateTimeString(dtStr: string): number {
-    if (!dtStr) return 0;
-    const str = String(dtStr).trim();
-    if (/^\d{13}$/.test(str)) return parseInt(str);
+if (!dtStr) return 0;
+const str = String(dtStr).trim();
+
+// ✅ accept ms or seconds
+if (/^\d{10,13}$/.test(str)) {
+    const n = Number(str);
+    return n > 1e12 ? n : n * 1000;
+}
+
+// ✅ let JS try first (keeps time!)
+const direct = new Date(str);
+if (!isNaN(direct.getTime())) return direct.getTime();
     
     // [!code fix] Regex allows optional space and optional seconds
     const m = str.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/);
@@ -441,15 +462,20 @@ export class HughesNetService {
             const comEvent = events.find(e => e.type === 'DepartureComplete');
 
             let sortTime = 0;
-            if (arrivalEvent) sortTime = arrivalEvent.ts;
-            else {
-                // Fallback scan if label wasn't found but timestamp exists
-                const fallbackTs = findEarliestTimestamp(o.actualArrivalTs);
-                if (fallbackTs > 0) {
-                    sortTime = fallbackTs;
-                } else {
-                    let dateObj = parseDateOnly(o.confirmScheduleDate);
-                    if (!dateObj) dateObj = parseDateOnly(date);
+if (arrivalEvent) {
+    sortTime = arrivalEvent.ts;
+} else {
+    const fallbackTs = findEarliestTimestamp(o.actualArrivalTs);
+    if (fallbackTs > 0) {
+        sortTime = fallbackTs;
+    } else if (o.actualArrivalTs) {
+        const direct = parseDateTimeString(o.actualArrivalTs);
+        if (direct > 0) {
+            sortTime = direct;
+        }
+    } else {
+        let dateObj = parseDateOnly(o.confirmScheduleDate);
+
                     if (dateObj) sortTime = dateObj.getTime() + (parseTime(o.beginTime) * 60000);
                 }
             }
@@ -503,8 +529,10 @@ export class HughesNetService {
             }
 
             if (anchorOrder._arrivalTs > 0) {
-                const d = new Date(anchorOrder._arrivalTs);
-                const arrivalMins = d.getHours() * 60 + d.getMinutes();
+const d = new Date(anchorOrder._arrivalTs);
+const arrivalMins = d.getUTCHours() * 60 + d.getUTCMinutes();
+
+
                 startMins = arrivalMins - commuteMins;
                 this.log(`[Time] Start derived from Job ${anchorOrder.id} Arrival: ${minutesToTime(startMins)}`);
             } else {
@@ -514,7 +542,8 @@ export class HughesNetService {
                     this.log(`[Time] Start derived from Job ${anchorOrder.id} Schedule: ${minutesToTime(startMins)}`);
                 } else {
                     this.warn(`[Time Debug] Job ${anchorOrder.id} Raw: ${JSON.stringify(anchorOrder.actualArrivalTs)} / Sched: ${anchorOrder.beginTime}`);
-                    this.warn(`[Time] Job ${anchorOrder.id} has no valid time. Defaulting to 9 AM.`);
+                    this.warn(`[Time] Job ${anchorOrder.id} no arrival timestamp found; using schedule or default.`);
+
                 }
             }
         }
