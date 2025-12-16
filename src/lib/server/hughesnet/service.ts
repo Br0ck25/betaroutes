@@ -15,26 +15,23 @@ interface JobEvent {
     raw: string;
 }
 
-// [!code fix] Improved Analyzer for "Double Date" strings without spaces
 function analyzeJobHistory(rawText: string): JobEvent[] {
     if (!rawText) return [];
     const events: JobEvent[] = [];
     const str = String(rawText);
 
-    // 1. Split the string by common event labels to isolate segments
-    // We look for the label and grab the text immediately preceding it
+    // Split by labels to isolate the timestamps
     const segments = str.split(/(Arrival On Site|Departure Incomplete|Departure Complete)/i);
 
     for (let i = 1; i < segments.length; i += 2) {
-        const label = segments[i]; // The label (e.g. "Arrival On Site")
-        const timeChunk = segments[i - 1]; // The text before it (dates)
+        const label = segments[i]; 
+        const timeChunk = segments[i - 1]; 
 
-        // Extract the last valid date pattern in the chunk before the label
-        // Matches "09/03/2025 10:47:05" even if stuck to another number like "...0509/03..."
-        const timeMatch = timeChunk.match(/(\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}:\d{2})/g);
+        // [!code fix] Regex allows optional space AND optional seconds
+        const timeMatch = timeChunk.match(/(\d{1,2}\/\d{1,2}\/\d{4}\s*\d{1,2}:\d{2}(?::\d{2})?)/g);
         
         if (timeMatch && timeMatch.length > 0) {
-            // Use the last one found immediately before the label
+            // Use the last timestamp found immediately before the label
             const timeStr = timeMatch[timeMatch.length - 1];
             const ts = parseDateTimeString(timeStr);
 
@@ -52,12 +49,29 @@ function analyzeJobHistory(rawText: string): JobEvent[] {
     return events.sort((a, b) => a.ts - b.ts);
 }
 
+// Helper to scan a raw string and find the earliest valid timestamp (Fallback)
+function findEarliestTimestamp(rawText: string): number {
+    if (!rawText) return 0;
+    const str = String(rawText);
+    // Scan for any MM/DD/YYYY HH:MM pattern
+    const regex = /(\d{1,2}\/\d{1,2}\/\d{4}\s*\d{1,2}:\d{2}(?::\d{2})?)/g;
+    let match;
+    let minTs = Infinity;
+    
+    while ((match = regex.exec(str)) !== null) {
+        const ts = parseDateTimeString(match[1]);
+        if (ts > 0 && ts < minTs) minTs = ts;
+    }
+    return minTs === Infinity ? 0 : minTs;
+}
+
 function parseDateTimeString(dtStr: string): number {
     if (!dtStr) return 0;
     const str = String(dtStr).trim();
     if (/^\d{13}$/.test(str)) return parseInt(str);
     
-    const m = str.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})[\s\t]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    // [!code fix] Regex allows optional space and optional seconds
+    const m = str.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/);
     if (!m) return 0;
 
     const month = parseInt(m[1]) - 1; 
@@ -106,17 +120,24 @@ function extractDateFromTs(ts: string): string | null {
     return null;
 }
 
+// [!code fix] Aggressive Time Parser: strips everything but digits and colon
 function parseTime(timeStr: string): number {
     if (!timeStr) return 0; 
-    let clean = timeStr.split('-')[0].replace('(24hr)', '').replace('&nbsp;', '').trim();
-    const m = clean.match(/(\d{1,2})[:]?(\d{2})/);
+    
+    // Find the first pattern that looks like "10:00" or "9:30"
+    const m = String(timeStr).match(/(\d{1,2}):(\d{2})/);
     if (!m) return 0;
+    
     let h = parseInt(m[1]);
     let min = parseInt(m[2]);
-    const isPM = clean.toLowerCase().includes('pm');
-    const isAM = clean.toLowerCase().includes('am');
+    
+    // Check for PM/AM in the original string
+    const isPM = timeStr.toLowerCase().includes('pm');
+    const isAM = timeStr.toLowerCase().includes('am');
+
     if (isPM && h < 12) h += 12;
     if (isAM && h === 12) h = 0;
+    
     return h * 60 + min;
 }
 
@@ -233,15 +254,70 @@ export class HughesNetService {
             }
         }
 
+        // STAGE 1.5: SMART NEIGHBOR DISCOVERY
+        const knownIds = Object.keys(orderDb).map(id => parseInt(id)).filter(n => !isNaN(n)).sort((a,b) => a - b);
+        if (knownIds.length > 0 && !skipScan) {
+            const minId = knownIds[0];
+            const maxId = knownIds[knownIds.length - 1];
+            
+            const tryFetchId = async (targetId: number) => {
+                 if (orderDb[String(targetId)]) return true; 
+                 if (this.fetcher.getRequestCount() >= 200) return false; 
+
+                 try {
+                    const orderUrl = `${parser.BASE_URL}/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${targetId}`;
+                    const res = await this.fetcher.safeFetch(orderUrl, { headers: { 'Cookie': cookie }});
+                    const html = await res.text();
+                    const parsed = parser.parseOrderPage(html, String(targetId));
+                    if (parsed.address) {
+                        delete parsed._status;
+                        orderDb[String(targetId)] = parsed;
+                        dbDirty = true;
+                        this.log(`[Discovery] Found HIDDEN Order ${targetId}`);
+                        return true;
+                    }
+                 } catch(e) {}
+                 return false;
+            };
+
+            this.log(`[Stage 1.5] Smart Discovery: Range ${minId} - ${maxId}.`);
+
+            // GAP FILLER
+            for (let i = 0; i < knownIds.length - 1; i++) {
+                if (this.fetcher.getRequestCount() >= 150) break;
+                const current = knownIds[i];
+                const next = knownIds[i+1];
+                if (next - current > 1 && next - current < 50) {
+                    for (let j = current + 1; j < next; j++) {
+                        await tryFetchId(j);
+                        await new Promise(r => setTimeout(r, 50));
+                    }
+                }
+            }
+
+            // BACKWARD SCAN (100 items)
+            let failures = 0;
+            let current = minId - 1;
+            let checks = 0;
+            while(failures < 50 && checks < 100) { 
+                 const found = await tryFetchId(current);
+                 if (found) failures = 0; else failures++;
+                 current--;
+                 checks++;
+                 await new Promise(r => setTimeout(r, 80));
+            }
+            this.log(`[Stage 1.5] Backward Scan: Checked ${checks} IDs`);
+        }
+
         // STAGE 2: DOWNLOADING DETAILS
         const missingDataIds = Object.values(orderDb)
             .filter((o:any) => (o._status === 'pending' || !o.address) && o._status !== 'failed')
             .map((o:any) => o.id);
         
         if (missingDataIds.length > 0) {
-            this.log(`[Stage 1] Found ${missingDataIds.length} orders needing details.`);
+            this.log(`[Stage 2] Downloading details for ${missingDataIds.length} orders...`);
             for (const id of missingDataIds) {
-                if (this.fetcher.getRequestCount() >= 30) {
+                if (this.fetcher.getRequestCount() >= 250) {
                     incomplete = true;
                     this.warn(`[Limit] Pause downloading. Resuming next batch...`);
                     break;
@@ -258,7 +334,7 @@ export class HughesNetService {
                         orderDb[id] = parsed;
                         dbDirty = true;
                         const poleMsg = parsed.hasPoleMount ? ' + POLE' : '';
-                        this.log(`[Stage 1] Downloaded Order ${id}`);
+                        this.log(`[Stage 2] Downloaded ${id}`);
                     } else {
                         if (!parsed.address) {
                             orderDb[id]._status = 'failed';
@@ -278,7 +354,7 @@ export class HughesNetService {
         }
 
         // STAGE 3: PROCESSING TRIPS
-        this.log(`[Stage 2] Processing Routes...`);
+        this.log(`[Stage 3] Processing Routes...`);
         
         const ordersByDate: Record<string, any[]> = {};
         for (const order of Object.values(orderDb)) {
@@ -296,7 +372,7 @@ export class HughesNetService {
         let tripsProcessed = 0;
 
         for (const date of sortedDates) {
-             if (this.fetcher.getRequestCount() >= 35) { incomplete = true; break; }
+             if (this.fetcher.getRequestCount() >= 250) { incomplete = true; break; }
 
             const tripId = `hns_${userId}_${date}`;
             const existingTrip = await tripService.get(userId, tripId);
@@ -305,12 +381,12 @@ export class HughesNetService {
                 const lastSys = new Date(existingTrip.updatedAt || existingTrip.createdAt).getTime();
                 const lastUser = existingTrip.lastModified ? new Date(existingTrip.lastModified).getTime() : 0;
                 if (lastUser > lastSys + 120000) {
-                    this.log(`[Stage 2] Skipping ${date} (Locked: User modified)`);
+                    this.log(`[Stage 3] Skipping ${date} (Locked: User modified)`);
                     continue;
                 }
             }
 
-            this.log(`[Stage 2] Routing ${date}...`);
+            this.log(`[Stage 3] Routing ${date}...`);
             await this.createTripForDate(
                 userId, date, ordersByDate[date], settingsId,
                 installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge, tripService
@@ -358,7 +434,6 @@ export class HughesNetService {
             }
         } catch(e) {}
 
-        // 1. ANALYZE HISTORY & PAY STATUS
         const ordersWithMeta = orders.map((o: any) => {
             const events = analyzeJobHistory(o.actualArrivalTs);
             const arrivalEvent = events.find(e => e.type === 'Arrival');
@@ -368,33 +443,41 @@ export class HughesNetService {
             let sortTime = 0;
             if (arrivalEvent) sortTime = arrivalEvent.ts;
             else {
-                let dateObj = parseDateOnly(o.confirmScheduleDate);
-                if (!dateObj) dateObj = parseDateOnly(date);
-                if (dateObj) sortTime = dateObj.getTime() + (parseTime(o.beginTime) * 60000);
+                // Fallback scan if label wasn't found but timestamp exists
+                const fallbackTs = findEarliestTimestamp(o.actualArrivalTs);
+                if (fallbackTs > 0) {
+                    sortTime = fallbackTs;
+                } else {
+                    let dateObj = parseDateOnly(o.confirmScheduleDate);
+                    if (!dateObj) dateObj = parseDateOnly(date);
+                    if (dateObj) sortTime = dateObj.getTime() + (parseTime(o.beginTime) * 60000);
+                }
             }
 
-            // [!code fix] PAY & TIME LOGIC
-            // Rule 1: Paid if "Departure Complete" exists ANYWHERE
             let isPaid = !!comEvent; 
-            
-            // Rule 2: If no complete, check incomplete flag
             if (!isPaid) {
-                // If explicitly incomplete event found, or flag set -> Not Paid
                 if (incEvent || o.departureIncomplete) isPaid = false;
-                else isPaid = true; // Default to paid if ambiguous
+                else isPaid = true; 
             }
 
-            // Rule 3: End Time logic
-            // Use Incomplete time if it exists (stops the clock earlier)
             let endTimeTs = 0;
             if (incEvent) endTimeTs = incEvent.ts;
             else if (comEvent) endTimeTs = comEvent.ts;
 
-            return { ...o, _sortTime: sortTime, _isPaid: isPaid, _arrivalTs: arrivalEvent?.ts || 0, _endTs: endTimeTs };
+            return { 
+                ...o, 
+                _sortTime: sortTime, 
+                _isPaid: isPaid, 
+                _arrivalTs: (arrivalEvent ? arrivalEvent.ts : findEarliestTimestamp(o.actualArrivalTs)), 
+                _endTs: endTimeTs 
+            };
         });
 
-        // Sort by the calculated time
         ordersWithMeta.sort((a, b) => a._sortTime - b._sortTime);
+
+        // Find anchor order for trip start
+        let anchorOrder = ordersWithMeta.find(o => o._sortTime > 0);
+        if (!anchorOrder && ordersWithMeta.length > 0) anchorOrder = ordersWithMeta[0];
 
         const buildAddr = (o: any) => [o.address, o.city, o.state, o.zip].filter(Boolean).join(', ');
 
@@ -402,17 +485,16 @@ export class HughesNetService {
         let endAddr = defaultEnd;
 
         if (startAddr && !endAddr) endAddr = startAddr;
-        if (!startAddr && ordersWithMeta.length > 0) {
-            startAddr = buildAddr(ordersWithMeta[0]); 
+        if (!startAddr && anchorOrder) {
+            startAddr = buildAddr(anchorOrder); 
             if (!endAddr) endAddr = startAddr;
         }
 
         let startMins = 9 * 60; 
         let commuteMins = 0;
 
-        if (ordersWithMeta[0]) {
-            const first = ordersWithMeta[0];
-            const eAddr = buildAddr(first);
+        if (anchorOrder) {
+            const eAddr = buildAddr(anchorOrder);
             if (startAddr && eAddr !== startAddr) {
                 try {
                     const leg = await this.router.getRouteInfo(startAddr, eAddr);
@@ -420,14 +502,20 @@ export class HughesNetService {
                 } catch(e) {}
             }
 
-            if (first._arrivalTs > 0) {
-                const d = new Date(first._arrivalTs);
+            if (anchorOrder._arrivalTs > 0) {
+                const d = new Date(anchorOrder._arrivalTs);
                 const arrivalMins = d.getHours() * 60 + d.getMinutes();
                 startMins = arrivalMins - commuteMins;
-                this.log(`[Time] Start derived from Job 1 arrival: ${minutesToTime(startMins)}`);
+                this.log(`[Time] Start derived from Job ${anchorOrder.id} Arrival: ${minutesToTime(startMins)}`);
             } else {
-                const schedMins = parseTime(first.beginTime);
-                if (schedMins !== 0) startMins = schedMins - commuteMins;
+                const schedMins = parseTime(anchorOrder.beginTime);
+                if (schedMins !== 0) {
+                    startMins = schedMins - commuteMins;
+                    this.log(`[Time] Start derived from Job ${anchorOrder.id} Schedule: ${minutesToTime(startMins)}`);
+                } else {
+                    this.warn(`[Time Debug] Job ${anchorOrder.id} Raw: ${JSON.stringify(anchorOrder.actualArrivalTs)} / Sched: ${anchorOrder.beginTime}`);
+                    this.warn(`[Time] Job ${anchorOrder.id} has no valid time. Defaulting to 9 AM.`);
+                }
             }
         }
 
@@ -459,7 +547,6 @@ export class HughesNetService {
 
         const miles = Number((totalMeters * 0.000621371).toFixed(1));
         
-        // Calculate Job Duration based on logs if available
         let jobMins = 0;
         ordersWithMeta.forEach((o:any) => {
             let duration = o.jobDuration || 60;
@@ -561,7 +648,7 @@ export class HughesNetService {
 
         await tripService.put(trip as any);
         stops.forEach(s => this.log(`   > Stop ${s.order+1}: ${s.address} [${s.type}] ($${s.earnings})`));
-        this.log(`[Stage 2] Saved Trip ${date}`);
+        this.log(`[Stage 3] Saved Trip ${date}`);
         
         return true;
     }
