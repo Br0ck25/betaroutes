@@ -1,10 +1,10 @@
 // src/routes/api/trips/+server.ts
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
-import { findUserById } from '$lib/server/userService'; // [!code ++] Import lookup
+import { findUserById } from '$lib/server/userService';
 import { z } from 'zod';
 
-// --- Validation Schemas (Unchanged) ---
+// --- Validation Schemas ---
 const latLngSchema = z.object({
     lat: z.number(),
     lng: z.number()
@@ -57,23 +57,22 @@ const tripSchema = z.object({
     lastModified: z.string().optional()
 });
 
-// Helper: Only use fake adapters if explicitly NOT in production environment
+// Helper: Fail loudly in production if bindings are missing
 function getEnv(platform: any) {
     const env = platform?.env;
     
-    // [!code fix] Critical: Fail loudly in production if bindings are missing
-    // If 'platform' exists (Cloudflare context) but keys are missing, we must crash safely.
+    // Check for critical bindings if we are in a Cloudflare environment
     if (platform && (!env?.BETA_LOGS_KV || !env?.TRIP_INDEX_DO)) {
         throw new Error('CRITICAL: Database bindings missing in production');
     }
 
-    // Fallback for local 'npm run dev' without wrangler (if needed)
+    // Fallback for local 'npm run dev' without wrangler
     if (!env?.BETA_LOGS_KV) {
         return {
             kv: { get: async () => null, put: async () => {}, delete: async () => {}, list: async () => ({ keys: [] }) },
             trashKV: { get: async () => null, put: async () => {}, delete: async () => {}, list: async () => ({ keys: [] }) },
             placesKV: { get: async () => null, put: async () => {}, delete: async () => {}, list: async () => ({ keys: [] }) },
-            usersKV: { get: async () => null }, // Mock User KV
+            usersKV: { get: async () => null },
             tripIndexDO: { idFromName: () => ({ name: 'fake' }), get: () => ({ fetch: async () => new Response(JSON.stringify({ allowed: true, count: 0 })) }) }
         };
     }
@@ -82,7 +81,7 @@ function getEnv(platform: any) {
         kv: env.BETA_LOGS_KV,
         trashKV: env.BETA_LOGS_TRASH_KV,
         placesKV: env.BETA_PLACES_KV,
-        usersKV: env.BETA_USERS_KV, // [!code ++] Needed for fresh plan check
+        usersKV: env.BETA_USERS_KV,
         tripIndexDO: env.TRIP_INDEX_DO
     };
 }
@@ -99,7 +98,6 @@ export const GET: RequestHandler = async (event) => {
         try {
             env = getEnv(event.platform);
         } catch (e) {
-            // Catch the critical error from getEnv and return 503
             console.error('Environment Error:', e);
             return new Response('Service Unavailable', { status: 503 });
         }
@@ -111,7 +109,8 @@ export const GET: RequestHandler = async (event) => {
 
         const svc = makeTripService(kv as any, trashKV as any, placesKV as any, tripIndexDO as any);
 
-        const storageId = user.name || user.token;
+        // [!code fix] Use Immutable ID (UUID)
+        const storageId = user.id;
         
         const allTrips = await svc.list(storageId);
 
@@ -164,7 +163,9 @@ export const POST: RequestHandler = async (event) => {
         if (!kv.put && event.platform) return new Response('Service Unavailable', { status: 503 });
 
         const svc = makeTripService(kv as any, trashKV as any, placesKV as any, tripIndexDO as any);
-        const storageId = sessionUser.name || sessionUser.token;
+        
+        // [!code fix] Use Immutable ID (UUID)
+        const storageId = sessionUser.id;
         const validData = parseResult.data;
 
         // 3. Determine ID and Check Existence

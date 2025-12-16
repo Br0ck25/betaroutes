@@ -48,13 +48,11 @@ export function makeTripService(
   tripIndexDO: DurableObjectNamespace
 ) {
   
-  // Helper to get the specific Durable Object for a user
   const getIndexStub = (userId: string) => {
     const id = tripIndexDO.idFromName(userId);
     return tripIndexDO.get(id);
   };
 
-  // Helper to strip heavy data for the lightweight index
   const toSummary = (trip: TripRecord) => ({
       id: trip.id,
       userId: trip.userId,
@@ -68,11 +66,9 @@ export function makeTripService(
       updatedAt: trip.updatedAt
   });
 
-  // Updated to handle both Lat/Lng Caching AND Autocomplete Indexing
   async function indexTripData(trip: TripRecord) {
     if (!placesKV) return;
     
-    // 1. Gather Unique Data
     const uniquePlaces = new Map<string, { lat?: number, lng?: number }>();
     
     const add = (addr?: string, loc?: { lat: number, lng: number }) => {
@@ -94,14 +90,11 @@ export function makeTripService(
       trip.destinations.forEach((d: any) => add(d.address, d.location));
     }
 
-    // 2. Process KV Writes
     const writePromises: Promise<void>[] = [];
 
     for (const [addrKey, data] of uniquePlaces.entries()) {
-       // --- A. Cache Place Details (Lat/Lng) ---
        if (data.lat !== undefined && data.lng !== undefined) {
            const safeKey = await generatePlaceKey(addrKey);
-
            const payload = { 
              lastSeen: new Date().toISOString(),
              formatted_address: addrKey,
@@ -111,7 +104,6 @@ export function makeTripService(
            writePromises.push(placesKV.put(safeKey, JSON.stringify(payload)));
        }
 
-       // --- B. Update Autocomplete Prefix Index ---
        const prefixKey = generatePrefixKey(addrKey);
        
        const updatePrefixBucket = async () => {
@@ -131,22 +123,18 @@ export function makeTripService(
   }
 
   return {
-    // [!code ++] New Atomic Billing Check
     async checkMonthlyQuota(userId: string, limit: number): Promise<{ allowed: boolean, count: number }> {
         const date = new Date();
-        // Key format: 2025-12
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
         
         const stub = getIndexStub(userId);
         
-        // This call is atomic inside the Durable Object
         const res = await stub.fetch('http://internal/billing/check-increment', {
             method: 'POST',
             body: JSON.stringify({ monthKey, limit })
         });
         
         if (!res.ok) {
-            // Fallback: Fail closed if DO is down
             return { allowed: false, count: limit }; 
         }
 
@@ -193,32 +181,26 @@ export function makeTripService(
 
     async put(trip: TripRecord) {
       trip.updatedAt = new Date().toISOString();
-      
-      // 1. Save Full Data to KV (Storage)
       await kv.put(`trip:${trip.userId}:${trip.id}`, JSON.stringify(trip));
       
-      // 2. Update Index via DO (Atomic Consistency)
       const stub = getIndexStub(trip.userId);
       await stub.fetch('http://internal/put', {
           method: 'POST',
           body: JSON.stringify(toSummary(trip))
       });
 
-      // 3. Async caching/indexing (Places)
       indexTripData(trip).catch(e => {
         console.error('[TripService] Failed to index trip data:', e);
       });
     },
 
     async delete(userId: string, tripId: string) {
-      // Update Index via DO first
       const stub = getIndexStub(userId);
       await stub.fetch('http://internal/delete', {
           method: 'POST',
           body: JSON.stringify({ id: tripId })
       });
 
-      // Decrement billing counter (Atomic Refund)
       const date = new Date();
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       await stub.fetch('http://internal/billing/decrement', {
@@ -234,10 +216,7 @@ export function makeTripService(
 
       const key = `trip:${userId}:${tripId}`;
       const raw = await kv.get(key);
-      
-      if (!raw) {
-        return; 
-      }
+      if (!raw) return; 
 
       const trip = JSON.parse(raw);
       const now = new Date();
@@ -294,16 +273,11 @@ export function makeTripService(
     },
 
     async restore(userId: string, tripId: string) {
-      if (!trashKV) {
-        throw new Error('Trash KV not available');
-      }
+      if (!trashKV) throw new Error('Trash KV not available');
 
       const trashKey = `trash:${userId}:${tripId}`;
       const raw = await trashKV.get(trashKey);
-
-      if (!raw) {
-        throw new Error('Trip not found in trash');
-      }
+      if (!raw) throw new Error('Trip not found in trash');
 
       const { trip, metadata } = JSON.parse(raw);
 
@@ -313,7 +287,6 @@ export function makeTripService(
       const activeKey = `trip:${userId}:${tripId}`;
       await kv.put(activeKey, JSON.stringify(trip));
 
-      // Update Index via DO
       const stub = getIndexStub(userId);
       await stub.fetch('http://internal/put', {
           method: 'POST',
@@ -321,28 +294,68 @@ export function makeTripService(
       });
 
       await trashKV.delete(trashKey);
-
       return trip;
     },
 
     async permanentDelete(userId: string, tripId: string) {
-      if (!trashKV) {
-        throw new Error('Trash KV not available');
-      }
-
+      if (!trashKV) throw new Error('Trash KV not available');
       const trashKey = `trash:${userId}:${tripId}`;
       await trashKV.delete(trashKey);
     },
 
-    // Kept for backward compatibility if other parts of the app use it
     async incrementUserCounter(userId: string, amt = 1) {
       const key = `meta:user:${userId}:trip_count`;
       const raw = await kv.get(key);
       const cur = raw ? parseInt(raw,10) : 0;
       const next = Math.max(0, cur + amt);
-
       await kv.put(key, String(next));
       return next;
+    },
+
+    // [!code ++] MIGRATION: Moves data from 'username' key to 'uuid' key
+    async migrateUser(oldOwnerId: string, newOwnerId: string) {
+        console.log(`[MIGRATION] Checking for legacy data: ${oldOwnerId} -> ${newOwnerId}`);
+        
+        const moveKeys = async (ns: KVNamespace, oldPrefix: string, newPrefixFn: (id: string) => string) => {
+            let cursor: string | undefined = undefined;
+            let movedCount = 0;
+            
+            do {
+                const list = await ns.list({ prefix: oldPrefix, cursor, limit: 100 });
+                for (const key of list.keys) {
+                    const raw = await ns.get(key.name);
+                    if (raw) {
+                        const data = JSON.parse(raw);
+                        
+                        // Update ownership fields in the JSON blob
+                        if (data.userId) data.userId = newOwnerId; 
+                        if (data.metadata?.deletedBy) data.metadata.deletedBy = newOwnerId;
+                        
+                        // Construct new key: swap prefix
+                        // Old: trip:james:123  -> New: trip:uuid:123
+                        const suffix = key.name.substring(oldPrefix.length);
+                        const newKey = newPrefixFn(newOwnerId) + suffix;
+                        
+                        await ns.put(newKey, JSON.stringify(data));
+                        await ns.delete(key.name);
+                        movedCount++;
+                    }
+                }
+                cursor = list.list_complete ? undefined : list.cursor;
+            } while (cursor);
+            
+            if (movedCount > 0) {
+                console.log(`[MIGRATION] Moved ${movedCount} items from ${oldPrefix}`);
+            }
+        };
+
+        // 1. Move Active Trips
+        await moveKeys(kv, `trip:${oldOwnerId}:`, (id) => `trip:${id}:`);
+        
+        // 2. Move Trash
+        if (trashKV) {
+            await moveKeys(trashKV, `trash:${oldOwnerId}:`, (id) => `trash:${id}:`);
+        }
     }
   };
 }
