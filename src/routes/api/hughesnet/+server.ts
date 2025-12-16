@@ -13,16 +13,13 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
         const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
         const settingsId = locals.user?.id;
 
-        console.log(`[API] HughesNet Action for User: ${userId} (Settings ID: ${settingsId})`);
-
-        // [!code changed] Use PRIVATE_GOOGLE_MAPS_API_KEY
         const service = new HughesNetService(
             platform.env.BETA_HUGHESNET_KV, 
             platform.env.HNS_ENCRYPTION_KEY,
             platform.env.BETA_LOGS_KV,
             platform.env.BETA_LOGS_TRASH_KV, 
             platform.env.BETA_USER_SETTINGS_KV,
-            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY, // <--- Updated
+            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY, 
             platform.env.BETA_DIRECTIONS_KV 
         );
 
@@ -84,18 +81,22 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
     try {
         const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
         
-        // [!code changed] Use PRIVATE_GOOGLE_MAPS_API_KEY
         const service = new HughesNetService(
             platform.env.BETA_HUGHESNET_KV, 
             platform.env.HNS_ENCRYPTION_KEY,
             platform.env.BETA_LOGS_KV,
             platform.env.BETA_LOGS_TRASH_KV,
             platform.env.BETA_USER_SETTINGS_KV,
-            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY, // <--- Updated
+            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY, 
             platform.env.BETA_DIRECTIONS_KV 
         );
-        const orders = await service.getOrders(userId);
-        return json({ orders });
+        // [!code changed] Get Config and Orders
+        const [orders, config] = await Promise.all([
+            service.getOrders(userId),
+            service.getConfig(userId)
+        ]);
+
+        return json({ orders, config });
     } catch (err) {
         return json({ orders: {} });
     }

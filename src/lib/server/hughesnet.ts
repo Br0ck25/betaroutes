@@ -1,7 +1,8 @@
 // src/lib/server/hughesnet.ts
 import type { KVNamespace } from '@cloudflare/workers-types';
 import { makeTripService } from './tripService';
-import * as cheerio from 'cheerio'; // [!code ++] Robust HTML Parsing
+import * as cheerio from 'cheerio'; 
+import { extractIds, extractMenuLinks, parseOrderPage } from './hughesnet-parser'; // [!code ++] Use new parser
 
 const LOGIN_URL = 'https://dwayinstalls.hns.com/start/login.jsp?UsrAction=submit';
 const HOME_URL = 'https://dwayinstalls.hns.com/start/Home.jsp';
@@ -65,7 +66,6 @@ export class HughesNetService {
             headers: { 'Cookie': cookie, 'User-Agent': this.userAgent }
         });
         const verifyHtml = await verifyRes.text();
-        // Check for login form markers
         if (verifyHtml.includes('name="Password"') || verifyHtml.includes('login.jsp')) return false;
         return true;
     } catch (e) { return false; }
@@ -128,10 +128,22 @@ export class HughesNetService {
     return h.split(/,(?=[^;]+=)/g).map(p => p.split(';')[0].trim()).filter(Boolean).join('; ');
   }
 
+  // --- CONFIG MANAGEMENT ---
+  // [!code ++] Save user supply/pay preferences
+  async saveConfig(userId: string, config: any) {
+      await this.kv.put(`hns:config:${userId}`, JSON.stringify(config));
+  }
+
+  // [!code ++] Get user supply/pay preferences
+  async getConfig(userId: string) {
+      const raw = await this.kv.get(`hns:config:${userId}`);
+      return raw ? JSON.parse(raw) : null;
+  }
+
   // --- SMART SYNC ---
   async sync(
       userId: string, 
-      settingsId?: string, 
+      settingsId: string | undefined, 
       installPay: number = 0, 
       repairPay: number = 0, 
       upgradePay: number = 0,     
@@ -141,6 +153,10 @@ export class HughesNetService {
       skipScan: boolean = false
   ) {
     this.requestCount = 0;
+    
+    // [!code ++] Persist these values for next time
+    await this.saveConfig(userId, { installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge });
+
     const cookie = await this.ensureSessionCookie(userId);
     if (!cookie) throw new Error('Could not login. Please reconnect.');
 
@@ -167,11 +183,11 @@ export class HughesNetService {
             const html = await res.text();
             if (html.includes('name="Password"')) throw new Error('Session expired.');
             
-            // [!code changed] Use Cheerio Parsing
-            this.extractIds(html).forEach(registerFoundId);
+            // [!code changed] Use imported parser
+            extractIds(html).forEach(registerFoundId);
 
             if (this.requestCount < 10) {
-                const links = this.extractMenuLinks(html);
+                const links = extractMenuLinks(html, BASE_URL);
                 const priorityLinks = links.filter(l => l.url.includes('SoSearch') || l.url.includes('forms/'));
                 this.log(`[Stage 1] Scanning ${priorityLinks.length} pages...`);
                 
@@ -185,13 +201,11 @@ export class HughesNetService {
             if (e.message !== 'REQ_LIMIT') this.error('[Stage 1] Scan error', e);
         }
 
-        // PRUNING: Remove orders no longer on site, UNLESS flagged as incomplete
+        // PRUNING
         if (!incomplete) {
             const previousCount = Object.keys(orderDb).length;
             for (const id of Object.keys(orderDb)) {
-                // [!code changed] Safe-guard: Do not remove incomplete orders even if not found in scan
                 const isProtected = orderDb[id]?.departureIncomplete === true;
-                
                 if (!currentScanIds.has(id) && !isProtected) {
                     delete orderDb[id];
                     dbDirty = true;
@@ -209,7 +223,6 @@ export class HughesNetService {
     if (missingDataIds.length > 0) {
         this.log(`[Stage 1] Found ${missingDataIds.length} orders needing details.`);
         
-        let fetchedCount = 0;
         for (const id of missingDataIds) {
             if (this.requestCount >= MAX_REQUESTS_PER_BATCH) {
                 incomplete = true;
@@ -221,14 +234,14 @@ export class HughesNetService {
                 const orderUrl = `https://dwayinstalls.hns.com/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${encodeURIComponent(id)}`;
                 const res = await this.safeFetch(orderUrl, { headers: { 'Cookie': cookie, 'User-Agent': this.userAgent }});
                 const html = await res.text();
-                // [!code changed] Parse with Cheerio
-                const parsed = this.parseOrderPage(html, id);
+                
+                // [!code changed] Use imported parser
+                const parsed = parseOrderPage(html, id);
                 
                 if (parsed.address) {
                     delete parsed._status; 
                     orderDb[id] = parsed;
                     dbDirty = true;
-                    fetchedCount++;
                     const poleMsg = parsed.hasPoleMount ? ' + POLE' : '';
                     this.log(`[Stage 1] Downloaded Order ${id} (${parsed.type}${poleMsg})`);
                 }
@@ -261,7 +274,6 @@ export class HughesNetService {
     
     let tripsProcessed = 0;
     for (const date of sortedDates) {
-        
         if (this.requestCount >= (MAX_REQUESTS_PER_BATCH - 5)) {
             incomplete = true;
             this.warn(`[Limit] Buffer low. Stopping before ${date}.`);
@@ -271,15 +283,9 @@ export class HughesNetService {
         const tripId = `hns_${userId}_${date}`;
         const existingTrip = await tripService.get(userId, tripId);
         
-        // [!code changed] SMART LOCK: Skip only if User Modified it manually
-        // If user changed the trip (lastModified > updatedAt), we respect their edits.
-        // Otherwise, we refresh the route.
         if (existingTrip) {
             const lastSystemUpdate = new Date(existingTrip.updatedAt || existingTrip.createdAt).getTime();
             const lastUserEdit = existingTrip.lastModified ? new Date(existingTrip.lastModified).getTime() : 0;
-            
-            // Allow a small buffer (e.g., 2 minutes) where system updates might look like user edits
-            // If user edited significantly AFTER the last system sync, lock it.
             if (lastUserEdit > lastSystemUpdate + 120000) {
                 this.log(`[Stage 2] Skipping ${date} (Locked: User manually modified)`);
                 continue;
@@ -314,7 +320,6 @@ export class HughesNetService {
     return { orders: Object.values(orderDb), incomplete };
   }
 
-  // ... (getOrders, clearAllTrips remain same) ...
   async getOrders(userId: string) {
     const dbRaw = await this.kv.get(`hns:db:${userId}`);
     return dbRaw ? JSON.parse(dbRaw) : {};
@@ -348,7 +353,8 @@ export class HughesNetService {
           if (sRaw) {
               const d = JSON.parse(sRaw).settings || JSON.parse(sRaw);
               defaultStart = d.defaultStartAddress || '';
-              defaultEnd = d.defaultEndAddress || defaultStart;
+              // [!code changed] Strict Rule: If no end address, use start address
+              defaultEnd = d.defaultEndAddress || defaultStart; 
               if (d.defaultMPG) mpg = parseFloat(d.defaultMPG);
               if (d.defaultGasPrice) gas = parseFloat(d.defaultGasPrice);
           }
@@ -360,8 +366,15 @@ export class HughesNetService {
 
       let startAddr = defaultStart;
       let endAddr = defaultEnd;
+      
+      // [!code changed] Fallback to order address if NO default start is set
       if (!startAddr && orders.length > 0) {
           startAddr = buildAddr(orders[0]); 
+          endAddr = startAddr;
+      }
+      
+      // [!code changed] Ensure End matches Start if End is missing (redundant check for safety)
+      if (!endAddr && startAddr) {
           endAddr = startAddr;
       }
 
@@ -424,18 +437,15 @@ export class HughesNetService {
       const hoursWorked = Number((totalWorkMins / 60).toFixed(2));
       const fuelCost = mpg > 0 ? (miles / mpg) * gas : 0;
 
-      // --- [!code changed] EARNINGS & COSTS LOGIC (Updated for Incomplete) ---
       const calculateEarnings = (o: any) => {
           let basePay = 0;
           let notes = `HNS Order: ${o.id} (${o.type})`;
           let supplyItems: { type: string, cost: number }[] = [];
           
-          // 1. Check for Departure Incomplete
           if (o.departureIncomplete) {
               basePay = 0;
               notes += ` [DEPARTURE INCOMPLETE: $0]`;
           } 
-          // 2. Normal Pay Logic
           else if (o.hasPoleMount) {
               basePay = installPay + poleCharge;
               notes += ` [POLE MOUNT +$${poleCharge}]`;
@@ -496,7 +506,7 @@ export class HughesNetService {
           totalTime: `${Math.floor(totalMins/60)}h ${totalMins%60}m`,
           hoursWorked,
           startAddress: startAddr,
-          endAddress: endAddr,
+          endAddress: endAddr, // [!code verified] uses start if defaultEnd was empty
           totalMiles: miles,
           mpg, gasPrice: gas,
           fuelCost: Number(fuelCost.toFixed(2)),
@@ -514,9 +524,9 @@ export class HughesNetService {
       return true;
   }
 
-  // --- UTILS (Parsing & Crypto) ---
-  
-  // [!code changed] New Cheerio-based parsing
+  // --- UTILS ---
+  // Parsing logic moved to hughesnet-parser.ts
+  // Kept scanUrlForOrders here as it does fetching, but it calls extractIds
   private async scanUrlForOrders(url: string, cookie: string, callback: (id: string) => void) {
       let current = url;
       let page = 0;
@@ -524,30 +534,26 @@ export class HughesNetService {
           try {
               const res = await this.safeFetch(current, { headers: { 'Cookie': cookie, 'User-Agent': this.userAgent } });
               const html = await res.text();
-              // Extract IDs
-              this.extractIds(html).forEach(callback);
+              
+              // [!code changed] Use imported parser
+              extractIds(html).forEach(callback);
               
               const $ = cheerio.load(html);
-              
               if (page === 0) { 
-                  // Frame scanning
                   $('frame, iframe').each((_, el) => {
                       const src = $(el).attr('src');
                       if (src) {
                           try {
                               const frameUrl = new URL(src, BASE_URL).href;
-                              // Async fetch inside loop is tricky, we trigger and ignore for simplicity in this flow,
-                              // or better: add to a queue. For now, matching original logic:
                               this.safeFetch(frameUrl, { headers: { 'Cookie': cookie, 'User-Agent': this.userAgent } })
                                   .then(r => r.text())
-                                  .then(t => this.extractIds(t).forEach(callback))
+                                  .then(t => extractIds(t).forEach(callback))
                                   .catch(() => {});
                           } catch(e){}
                       }
                   });
               }
               
-              // Next Page
               const nextLink = $('a').filter((_, el) => {
                   const t = $(el).text().toLowerCase();
                   return t.includes('next') || t.includes('>');
@@ -563,90 +569,6 @@ export class HughesNetService {
       }
   }
 
-  private extractIds(html: string) {
-    const ids = new Set<string>();
-    const clean = html.replace(/&amp;/g, '&');
-    let m;
-    const re1 = /viewservice\.jsp\?.*?\bid=(\d+)/gi;
-    while ((m = re1.exec(clean)) !== null) ids.add(m[1]);
-    const re2 = /[?&]id=(\d{8})\b/gi;
-    while ((m = re2.exec(clean)) !== null) ids.add(m[1]);
-    return Array.from(ids);
-  }
-
-  private extractMenuLinks(html: string) {
-    const links: { url: string, text: string }[] = [];
-    const $ = cheerio.load(html);
-    $('a[href]').each((_, el) => {
-        const href = $(el).attr('href');
-        const text = $(el).text().trim();
-        if (href && (href.includes('.jsp') || href.includes('SoSearch')) && !href.startsWith('javascript')) {
-            try {
-                links.push({ url: new URL(href, BASE_URL).href, text });
-            } catch {}
-        }
-    });
-    return links;
-  }
-
-  // [!code changed] New Robust Parser with Cheerio + Departure Check
-  private parseOrderPage(html: string, id: string) {
-    const $ = cheerio.load(html);
-    const out: any = { id, address: '', city: '', state: '', zip: '', confirmScheduleDate: '', beginTime: '', type: 'Repair', jobDuration: 60 };
-    
-    // Helper to find input value by name
-    const val = (name: string) => $(`input[name="${name}"]`).val() as string;
-    
-    // Address
-    out.address = val('FLD_SO_Address1') || val('f_address') || val('txtAddress') || '';
-    if (!out.address) {
-        // Fallback to text searching if input missing
-        const bodyText = $('body').text();
-        const addressMatch = bodyText.match(/Address:\s*(.*?)\s+(?:City|County|State)/i);
-        if (addressMatch) out.address = addressMatch[1].trim();
-    }
-    out.address = this.toTitleCase(out.address);
-
-    out.city = this.toTitleCase(val('f_city') || '');
-    out.state = val('f_state') || '';
-    out.zip = val('f_zip') || '';
-    out.confirmScheduleDate = val('f_sched_date') || '';
-    out.beginTime = val('f_begin_time') || '';
-
-    // Type Logic
-    const pageText = $('body').text();
-    if (pageText.includes('Service Order #')) {
-        if (pageText.match(/Install/i)) { out.type = 'Install'; out.jobDuration = 90; }
-        else if (pageText.match(/Upgrade/i)) { out.type = 'Upgrade'; out.jobDuration = 60; }
-    }
-
-    if (pageText.includes('CON NON-STD CHARGE NEW POLE')) {
-        out.hasPoleMount = true;
-    }
-
-    // [!code changed] DEPARTURE INCOMPLETE CHECK
-    // Logic: Look for "Departure Incomplete". 
-    // If found, ensure it is NOT superseded by "Departure Complete" later in the log.
-    // We assume the log is chronological or we just check presence.
-    // Given the prompt: "if there is a departure incomplete that isnt followed by a departure complete"
-    
-    const incompleteIdx = pageText.indexOf('Departure Incomplete');
-    const completeIdx = pageText.lastIndexOf('Departure Complete'); // Search from end to find latest
-
-    if (incompleteIdx !== -1) {
-        // If incomplete exists, and (complete doesn't exist OR complete happened BEFORE incomplete)
-        // We use text position as a proxy for time if we assume logs append to bottom. 
-        // If logs pre-pend (newest top), we'd need to swap logic. 
-        // Assuming Standard Log (Newest at Bottom):
-        if (completeIdx === -1 || completeIdx < incompleteIdx) {
-            out.departureIncomplete = true;
-        }
-    }
-
-    return out;
-  }
-
-  // ... (Other helpers: getRouteInfo, toIsoDate, parseTime, minutesToTime, toTitleCase, encrypt, decrypt match previous logic) ...
   private async getRouteInfo(origin: string, destination: string) {
       if (!this.googleApiKey) return null;
       const key = `dir:${origin.toLowerCase().trim()}_to_${destination.toLowerCase().trim()}`;
@@ -694,11 +616,6 @@ export class HughesNetService {
       const m = Math.floor(minutes % 60);
       if (h >= 24) h = h % 24;
       return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-  }
-
-  private toTitleCase(str: string) {
-      if (!str) return '';
-      return str.toLowerCase().replace(/\b\w/g, s => s.toUpperCase());
   }
 
   private async encrypt(plain: string) {
