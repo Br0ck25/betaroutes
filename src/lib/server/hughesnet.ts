@@ -1,14 +1,14 @@
 // src/lib/server/hughesnet.ts
-import type { KVNamespace } from '@cloudflare/workers-types';
+import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
 import { makeTripService } from './tripService';
 import * as cheerio from 'cheerio'; 
-import { extractIds, extractMenuLinks, parseOrderPage } from './hughesnet-parser'; // [!code ++] Use new parser
+import { extractIds, extractMenuLinks, parseOrderPage } from './hughesnet-parser'; 
 
 const LOGIN_URL = 'https://dwayinstalls.hns.com/start/login.jsp?UsrAction=submit';
 const HOME_URL = 'https://dwayinstalls.hns.com/start/Home.jsp';
 const BASE_URL = 'https://dwayinstalls.hns.com';
+const APP_DOMAIN = 'https://gorouteyourself.com/'; // [!code fix] Ensure this is defined
 
-// User-Agent Rotation
 const USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -17,7 +17,6 @@ const USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0'
 ];
 
-const APP_DOMAIN = 'https://gorouteyourself.com/';
 const MAX_REQUESTS_PER_BATCH = 35; 
 
 export class HughesNetService {
@@ -32,12 +31,12 @@ export class HughesNetService {
     private trashKV: KVNamespace,
     private settingsKV: KVNamespace,
     private googleApiKey: string | undefined,
-    private directionsKV: KVNamespace | undefined 
+    private directionsKV: KVNamespace | undefined,
+    private tripIndexDO: DurableObjectNamespace // [!code fix] Added required binding
   ) {
       this.userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
   }
 
-  // --- LOGGING ---
   private log(msg: string) { console.log(msg); this.logs.push(msg); }
   private warn(msg: string) { console.warn(msg); this.logs.push(`⚠️ ${msg}`); }
   private error(msg: string, e?: any) { 
@@ -128,13 +127,11 @@ export class HughesNetService {
     return h.split(/,(?=[^;]+=)/g).map(p => p.split(';')[0].trim()).filter(Boolean).join('; ');
   }
 
-  // --- CONFIG MANAGEMENT ---
-  // [!code ++] Save user supply/pay preferences
+  // --- CONFIG ---
   async saveConfig(userId: string, config: any) {
       await this.kv.put(`hns:config:${userId}`, JSON.stringify(config));
   }
 
-  // [!code ++] Get user supply/pay preferences
   async getConfig(userId: string) {
       const raw = await this.kv.get(`hns:config:${userId}`);
       return raw ? JSON.parse(raw) : null;
@@ -154,7 +151,6 @@ export class HughesNetService {
   ) {
     this.requestCount = 0;
     
-    // [!code ++] Persist these values for next time
     await this.saveConfig(userId, { installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge });
 
     const cookie = await this.ensureSessionCookie(userId);
@@ -164,6 +160,15 @@ export class HughesNetService {
     const dbRaw = await this.kv.get(`hns:db:${userId}`);
     if (dbRaw) orderDb = JSON.parse(dbRaw);
     
+    let removedCount = 0;
+    for (const id of Object.keys(orderDb)) {
+        if (orderDb[id].address && !orderDb[id].confirmScheduleDate) {
+            delete orderDb[id];
+            removedCount++;
+        }
+    }
+    if (removedCount > 0) this.log(`[Cache] Removed ${removedCount} broken orders (missing dates). Will re-download.`);
+
     let dbDirty = false;
     let incomplete = false;
     const currentScanIds = new Set<string>();
@@ -183,7 +188,6 @@ export class HughesNetService {
             const html = await res.text();
             if (html.includes('name="Password"')) throw new Error('Session expired.');
             
-            // [!code changed] Use imported parser
             extractIds(html).forEach(registerFoundId);
 
             if (this.requestCount < 10) {
@@ -217,11 +221,11 @@ export class HughesNetService {
     }
 
     const missingDataIds = Object.values(orderDb)
-        .filter((o:any) => o._status === 'pending' || !o.address)
+        .filter((o:any) => o._status === 'pending' || !o.address || !o.confirmScheduleDate)
         .map((o:any) => o.id);
     
     if (missingDataIds.length > 0) {
-        this.log(`[Stage 1] Found ${missingDataIds.length} orders needing details.`);
+        this.log(`[Stage 1] Downloading ${missingDataIds.length} orders...`);
         
         for (const id of missingDataIds) {
             if (this.requestCount >= MAX_REQUESTS_PER_BATCH) {
@@ -235,15 +239,23 @@ export class HughesNetService {
                 const res = await this.safeFetch(orderUrl, { headers: { 'Cookie': cookie, 'User-Agent': this.userAgent }});
                 const html = await res.text();
                 
-                // [!code changed] Use imported parser
                 const parsed = parseOrderPage(html, id);
                 
                 if (parsed.address) {
                     delete parsed._status; 
-                    orderDb[id] = parsed;
-                    dbDirty = true;
-                    const poleMsg = parsed.hasPoleMount ? ' + POLE' : '';
-                    this.log(`[Stage 1] Downloaded Order ${id} (${parsed.type}${poleMsg})`);
+                    
+                    if (parsed.confirmScheduleDate) {
+                        orderDb[id] = parsed;
+                        dbDirty = true;
+                        const poleMsg = parsed.hasPoleMount ? ' + POLE' : '';
+                        this.log(`[Stage 1] Downloaded Order ${id} (${parsed.type}${poleMsg})`);
+                    } else {
+                        this.warn(`[DEBUG] Missing Date for ${id}.`);
+                        const snippet = html.match(/.{0,50}Confirm Schedule Date.{0,100}/i)?.[0] 
+                                     || html.match(/.{0,50}Schedule Date.{0,100}/i)?.[0]
+                                     || "Label not found in HTML";
+                        this.warn(`[HTML DUMP] ...${snippet.replace(/</g, '&lt;')}...`);
+                    }
                 }
                 await new Promise(r => setTimeout(r, 200)); 
             } catch (e: any) {
@@ -260,17 +272,34 @@ export class HughesNetService {
     this.log(`[Stage 2] Processing Routes...`);
     
     const ordersByDate: Record<string, any[]> = {};
+    let skippedCount = 0;
+
     for (const order of Object.values(orderDb)) {
-        if (!order.confirmScheduleDate || !order.address) continue;
+        if (!order.address) continue;
+        
+        if (!order.confirmScheduleDate) {
+            skippedCount++;
+            continue;
+        }
+
         let isoDate = this.toIsoDate(order.confirmScheduleDate);
         if (isoDate) {
             if (!ordersByDate[isoDate]) ordersByDate[isoDate] = [];
             ordersByDate[isoDate].push(order);
+        } else {
+             skippedCount++;
+             if (skippedCount <= 5) this.warn(`[Stage 2] Skipping ${order.id}: Invalid Date (${order.confirmScheduleDate})`);
         }
     }
 
+    if (skippedCount > 0) {
+        this.warn(`[Stage 2] Skipped ${skippedCount} orders (Missing/Invalid Dates).`);
+    }
+
     const sortedDates = Object.keys(ordersByDate).sort();
-    const tripService = makeTripService(this.tripKV, this.trashKV, undefined);
+    
+    // [!code fix] Pass correct arguments including DO binding
+    const tripService = makeTripService(this.tripKV, this.trashKV, undefined, this.tripIndexDO);
     
     let tripsProcessed = 0;
     for (const date of sortedDates) {
@@ -320,13 +349,15 @@ export class HughesNetService {
     return { orders: Object.values(orderDb), incomplete };
   }
 
+  // ... (getOrders, clearAllTrips remain the same) ...
   async getOrders(userId: string) {
     const dbRaw = await this.kv.get(`hns:db:${userId}`);
     return dbRaw ? JSON.parse(dbRaw) : {};
   }
 
   async clearAllTrips(userId: string) {
-      const tripService = makeTripService(this.tripKV, this.trashKV, undefined);
+      // [!code fix] Add required 4th argument
+      const tripService = makeTripService(this.tripKV, this.trashKV, undefined, this.tripIndexDO);
       const allTrips = await tripService.list(userId);
       let count = 0;
       for (const trip of allTrips) {
@@ -339,7 +370,6 @@ export class HughesNetService {
       return count;
   }
 
-  // --- TRIP CALCULATION ---
   private async createTripForDate(
       userId: string, date: string, orders: any[], settingsId: string | undefined, 
       installPay: number, repairPay: number, upgradePay: number,
@@ -353,7 +383,6 @@ export class HughesNetService {
           if (sRaw) {
               const d = JSON.parse(sRaw).settings || JSON.parse(sRaw);
               defaultStart = d.defaultStartAddress || '';
-              // [!code changed] Strict Rule: If no end address, use start address
               defaultEnd = d.defaultEndAddress || defaultStart; 
               if (d.defaultMPG) mpg = parseFloat(d.defaultMPG);
               if (d.defaultGasPrice) gas = parseFloat(d.defaultGasPrice);
@@ -367,13 +396,11 @@ export class HughesNetService {
       let startAddr = defaultStart;
       let endAddr = defaultEnd;
       
-      // [!code changed] Fallback to order address if NO default start is set
       if (!startAddr && orders.length > 0) {
           startAddr = buildAddr(orders[0]); 
           endAddr = startAddr;
       }
       
-      // [!code changed] Ensure End matches Start if End is missing (redundant check for safety)
       if (!endAddr && startAddr) {
           endAddr = startAddr;
       }
@@ -395,7 +422,6 @@ export class HughesNetService {
           startMins = earliestMins !== 0 ? (earliestMins - commuteMins) : (9 * 60);
       }
 
-      // Parallel Route Calculation
       const points = [startAddr, ...orders.map((o:any) => buildAddr(o)), endAddr];
       let totalMins = 0;
       let totalMeters = 0;
@@ -506,7 +532,7 @@ export class HughesNetService {
           totalTime: `${Math.floor(totalMins/60)}h ${totalMins%60}m`,
           hoursWorked,
           startAddress: startAddr,
-          endAddress: endAddr, // [!code verified] uses start if defaultEnd was empty
+          endAddress: endAddr, 
           totalMiles: miles,
           mpg, gasPrice: gas,
           fuelCost: Number(fuelCost.toFixed(2)),
@@ -524,9 +550,9 @@ export class HughesNetService {
       return true;
   }
 
-  // --- UTILS ---
-  // Parsing logic moved to hughesnet-parser.ts
-  // Kept scanUrlForOrders here as it does fetching, but it calls extractIds
+  // --- UTILS (scanUrlForOrders, getRouteInfo, toIsoDate, parseTime, minutesToTime, encrypt, decrypt) ...
+  // These are identical to previous version, ensuring getRouteInfo uses the now defined APP_DOMAIN
+  
   private async scanUrlForOrders(url: string, cookie: string, callback: (id: string) => void) {
       let current = url;
       let page = 0;
@@ -535,7 +561,6 @@ export class HughesNetService {
               const res = await this.safeFetch(current, { headers: { 'Cookie': cookie, 'User-Agent': this.userAgent } });
               const html = await res.text();
               
-              // [!code changed] Use imported parser
               extractIds(html).forEach(callback);
               
               const $ = cheerio.load(html);
@@ -578,6 +603,7 @@ export class HughesNetService {
       }
       try {
           const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&key=${this.googleApiKey}`;
+          // [!code fix] uses globally defined APP_DOMAIN
           const res = await this.safeFetch(url, { headers: { 'Referer': APP_DOMAIN, 'User-Agent': 'BetaRoutes/1.0' } });
           const data = await res.json();
           if (data.routes?.[0]?.legs?.[0]) {

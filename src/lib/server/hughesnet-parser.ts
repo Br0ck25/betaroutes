@@ -44,7 +44,6 @@ export function extractMenuLinks(html: string, baseUrl: string): { url: string, 
 
 export function parseOrderPage(html: string, id: string): OrderData {
     const $ = cheerio.load(html);
-    // Default structure
     const out: OrderData = { 
         id, 
         address: '', 
@@ -57,43 +56,89 @@ export function parseOrderPage(html: string, id: string): OrderData {
         jobDuration: 60 
     };
     
-    // Helper to find input value by name
+    // --- HELPER 1: Scan Forward (Best for "Label: Value" structure) ---
+    // Finds the label, then looks at the next 500 characters for a pattern.
+    const scanForward = (label: string, regex: RegExp) => {
+        const idx = html.indexOf(label);
+        if (idx === -1) return '';
+        
+        // Grab a chunk of text starting from the label
+        const chunk = html.slice(idx, idx + 500); 
+        const match = chunk.match(regex);
+        return match ? match[1].trim() : '';
+    };
+
+    // --- HELPER 2: Cheerio Input Value ---
     const val = (name: string) => $(`input[name="${name}"]`).val() as string;
+
+    const bodyText = $('body').text();
     
-    // Address
-    out.address = val('FLD_SO_Address1') || val('f_address') || val('txtAddress') || '';
+    // 1. ADDRESS
+    out.address = val('FLD_SO_Address1') || val('f_address') || val('txtAddress');
     if (!out.address) {
-        // Fallback to text searching if input missing
-        const bodyText = $('body').text();
+        // Try regex on the full HTML for robustness
+        const match = html.match(/Address:<\/td>\s*<td[^>]*>(.*?)<\/td>/i);
+        if (match) out.address = match[1].replace(/<[^>]*>/g, '').trim();
+    }
+    if (!out.address) {
         const addressMatch = bodyText.match(/Address:\s*(.*?)\s+(?:City|County|State)/i);
         if (addressMatch) out.address = addressMatch[1].trim();
     }
-    out.address = toTitleCase(out.address);
+    out.address = toTitleCase(out.address || '');
 
-    out.city = toTitleCase(val('f_city') || '');
-    out.state = val('f_state') || '';
-    out.zip = val('f_zip') || '';
-    out.confirmScheduleDate = val('f_sched_date') || '';
-    out.beginTime = val('f_begin_time') || '';
-
-    // Type Logic
-    const pageText = $('body').text();
-    if (pageText.includes('Service Order #')) {
-        if (pageText.match(/Install/i)) { out.type = 'Install'; out.jobDuration = 90; }
-        else if (pageText.match(/Upgrade/i)) { out.type = 'Upgrade'; out.jobDuration = 60; }
+    out.city = toTitleCase(val('f_city') || scanForward('City:', />([^<]+)</) || '');
+    out.state = val('f_state') || scanForward('State:', />([A-Z]{2})</) || '';
+    out.zip = val('f_zip') || scanForward('Zip:', />(\d{5})</) || '';
+    
+    // 2. DATE 
+    // Logic: Look for "Confirm Schedule Date", then find the next date-like string
+    out.confirmScheduleDate = val('f_sched_date');
+    
+    if (!out.confirmScheduleDate) {
+        // [!code fix] Scan forward for MM/DD/YYYY or MM/DD/YY
+        out.confirmScheduleDate = scanForward('Confirm Schedule Date', /(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+    }
+    
+    if (!out.confirmScheduleDate) {
+        // Fallback: Scan forward from "Schedule Date"
+        out.confirmScheduleDate = scanForward('Schedule Date', /(\d{1,2}\/\d{1,2}\/\d{2,4})/);
     }
 
-    if (pageText.includes('CON NON-STD CHARGE NEW POLE')) {
+    // Last resort: Look for "Date:"
+    if (!out.confirmScheduleDate) {
+        out.confirmScheduleDate = scanForward('Date:', /(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+    }
+    out.confirmScheduleDate = out.confirmScheduleDate || '';
+
+    // 3. TIME
+    // Logic: Look for "Arrival Window" or "Time", then find the next time-like string
+    out.beginTime = val('f_begin_time');
+    
+    if (!out.beginTime) {
+        // Matches 8:00, 08:00, 8:00 AM, 14:00
+        out.beginTime = scanForward('Arrival Window', /(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
+    }
+    
+    if (!out.beginTime) {
+        out.beginTime = scanForward('Time:', /(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
+    }
+    out.beginTime = out.beginTime || '';
+
+    // 4. TYPE & EXTRAS
+    if (bodyText.includes('Service Order #')) {
+        if (bodyText.match(/Install/i)) { out.type = 'Install'; out.jobDuration = 90; }
+        else if (bodyText.match(/Upgrade/i)) { out.type = 'Upgrade'; out.jobDuration = 60; }
+    }
+
+    if (bodyText.includes('CON NON-STD CHARGE NEW POLE')) {
         out.hasPoleMount = true;
     }
 
-    // DEPARTURE INCOMPLETE CHECK
-    // Logic: If "Departure Incomplete" exists and is NOT followed by "Departure Complete"
-    const incompleteIdx = pageText.indexOf('Departure Incomplete');
-    const completeIdx = pageText.lastIndexOf('Departure Complete'); 
+    // 5. DEPARTURE CHECK
+    const incompleteIdx = bodyText.indexOf('Departure Incomplete');
+    const completeIdx = bodyText.lastIndexOf('Departure Complete'); 
 
     if (incompleteIdx !== -1) {
-        // Assuming logs append to bottom: if complete is -1 (never happened) or appeared BEFORE incomplete
         if (completeIdx === -1 || completeIdx < incompleteIdx) {
             out.departureIncomplete = true;
         }

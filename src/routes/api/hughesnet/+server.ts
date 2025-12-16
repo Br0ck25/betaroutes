@@ -10,7 +10,6 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 
     try {
         const body = await request.json();
-        // [!code fix] Prioritize ID (UUID) to match the Trip Service
         const userId = locals.user?.id || locals.user?.name || locals.user?.token || 'default_user';
         const settingsId = locals.user?.id;
 
@@ -23,7 +22,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
             platform.env.BETA_LOGS_TRASH_KV, 
             platform.env.BETA_USER_SETTINGS_KV,
             platform.env.PRIVATE_GOOGLE_MAPS_API_KEY,
-            platform.env.BETA_DIRECTIONS_KV 
+            platform.env.BETA_DIRECTIONS_KV,
+            platform.env.TRIP_INDEX_DO // [!code fix] Passed the missing DO binding
         );
 
         if (body.action === 'connect') {
@@ -82,7 +82,6 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 export const GET: RequestHandler = async ({ platform, locals }) => {
     if (!platform?.env?.BETA_HUGHESNET_KV) return json({ orders: {} });
     try {
-        // [!code fix] Prioritize ID (UUID)
         const userId = locals.user?.id || locals.user?.name || locals.user?.token || 'default_user';
         
         const service = new HughesNetService(
@@ -92,7 +91,8 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
             platform.env.BETA_LOGS_TRASH_KV,
             platform.env.BETA_USER_SETTINGS_KV,
             platform.env.PRIVATE_GOOGLE_MAPS_API_KEY, 
-            platform.env.BETA_DIRECTIONS_KV 
+            platform.env.BETA_DIRECTIONS_KV,
+            platform.env.TRIP_INDEX_DO // [!code fix] Passed missing binding
         );
         
         const [orders, config] = await Promise.all([
