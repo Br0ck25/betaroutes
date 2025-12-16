@@ -123,25 +123,44 @@ function extractDateFromTs(ts: string): string | null {
 // SIMPLIFIED 24-HOUR PARSER
 // No AM/PM logic. Just reads "13:00" as 13 * 60 + 0
 function parseTime(timeStr: string): number {
-    if (!timeStr) return 0; 
-    
-    // Find first HH:MM pattern
-    const m = String(timeStr).match(/(\d{1,2}):(\d{2})/);
-    if (!m) return 0;
-    
-    let h = parseInt(m[1]);
-    let min = parseInt(m[2]);
-    
-    return h * 60 + min;
+    const t24 = extract24HourTime(timeStr);
+    if (!t24) return 0;
+
+    const [h, m] = t24.split(':').map(Number);
+    return h * 60 + m;
 }
 
+
 function minutesToTime(minutes: number): string {
-    if (minutes < 0) minutes += 1440; 
-    let h = Math.floor(minutes / 60);
+    if (minutes < 0) minutes += 1440;
+
+    let h = Math.floor(minutes / 60) % 24;
     const m = Math.floor(minutes % 60);
-    if (h >= 24) h = h % 24;
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+
+    return to12Hour(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
 }
+
+
+// --- SIMPLE TIME EXTRACTION & CONVERSION ---
+
+function extract24HourTime(raw: string): string | null {
+    if (!raw) return null;
+
+    // Matches HH:MM or HH:MM:SS
+    const match = raw.match(/\b(\d{1,2}:\d{2})(?::\d{2})?\b/);
+    return match ? match[1] : null;
+}
+
+function to12Hour(time24: string): string {
+    const [hStr, m] = time24.split(':');
+    let h = parseInt(hStr, 10);
+
+    const suffix = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+
+    return `${h}:${m} ${suffix}`;
+}
+
 
 export class HughesNetService {
     public logs: string[] = [];
