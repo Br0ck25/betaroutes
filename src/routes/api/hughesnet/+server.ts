@@ -10,20 +10,20 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 
     try {
         const body = await request.json();
-        const userId = locals.user?.id || locals.user?.name || locals.user?.token || 'default_user';
+        const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
         const settingsId = locals.user?.id;
 
-        console.log(`[API] HughesNet Action for User: ${userId}`);
+        console.log(`[API] HughesNet Action for User: ${userId} (Settings ID: ${settingsId})`);
 
+        // [!code changed] Use PRIVATE_GOOGLE_MAPS_API_KEY
         const service = new HughesNetService(
             platform.env.BETA_HUGHESNET_KV, 
             platform.env.HNS_ENCRYPTION_KEY,
             platform.env.BETA_LOGS_KV,
             platform.env.BETA_LOGS_TRASH_KV, 
             platform.env.BETA_USER_SETTINGS_KV,
-            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY,
-            platform.env.BETA_DIRECTIONS_KV,
-            platform.env.TRIP_INDEX_DO // [!code fix] Passed the missing DO binding
+            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY, // <--- Updated
+            platform.env.BETA_DIRECTIONS_KV 
         );
 
         if (body.action === 'connect') {
@@ -82,25 +82,20 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 export const GET: RequestHandler = async ({ platform, locals }) => {
     if (!platform?.env?.BETA_HUGHESNET_KV) return json({ orders: {} });
     try {
-        const userId = locals.user?.id || locals.user?.name || locals.user?.token || 'default_user';
+        const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
         
+        // [!code changed] Use PRIVATE_GOOGLE_MAPS_API_KEY
         const service = new HughesNetService(
             platform.env.BETA_HUGHESNET_KV, 
             platform.env.HNS_ENCRYPTION_KEY,
             platform.env.BETA_LOGS_KV,
             platform.env.BETA_LOGS_TRASH_KV,
             platform.env.BETA_USER_SETTINGS_KV,
-            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY, 
-            platform.env.BETA_DIRECTIONS_KV,
-            platform.env.TRIP_INDEX_DO // [!code fix] Passed missing binding
+            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY, // <--- Updated
+            platform.env.BETA_DIRECTIONS_KV 
         );
-        
-        const [orders, config] = await Promise.all([
-            service.getOrders(userId),
-            service.getConfig(userId)
-        ]);
-
-        return json({ orders, config });
+        const orders = await service.getOrders(userId);
+        return json({ orders });
     } catch (err) {
         return json({ orders: {} });
     }

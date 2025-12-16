@@ -27,6 +27,7 @@ function createTrashStore() {
 		},
 
 		async restore(id: string, userId: string) {
+            // ... (keep existing restore logic) ...
             try {
 				const db = await getDB();
 				const trashTx = db.transaction('trash', 'readonly');
@@ -72,6 +73,7 @@ function createTrashStore() {
 		},
 
 		async emptyTrash(userId: string) {
+			// ... (keep existing emptyTrash logic) ...
             const db = await getDB();
             const userItems = await db.getAllFromIndex('trash', 'userId', userId);
             if (userItems.length === 0) return 0;
@@ -87,7 +89,7 @@ function createTrashStore() {
             return userItems.length;
 		},
 
-        // --- UPDATED SYNC LOGIC (Anti-Zombie Fix) ---
+        // --- UPDATED SYNC LOGIC ---
 		async syncFromCloud(userId: string) {
 			try {
 				if (!navigator.onLine) return;
@@ -100,19 +102,7 @@ function createTrashStore() {
 
 				const db = await getDB();
 				
-                // [!code ++] Step 1: Check Sync Queue for pending deletions
-                // If we are waiting to delete ID "X", and the cloud sends us ID "X",
-                // we must ignore the cloud version to prevent it from reappearing.
-                const queueTx = db.transaction('syncQueue', 'readonly');
-                const queueItems = await queueTx.objectStore('syncQueue').getAll();
-                const pendingDeletes = new Set(
-                    queueItems
-                        .filter(q => q.action === 'permanentDelete')
-                        .map(q => q.tripId)
-                );
-                await queueTx.done;
-
-                // Transaction 2: Update Trash Store
+                // Transaction 1: Update Trash Store
 				const tx = db.transaction('trash', 'readwrite');
 				
 				for (const rawItem of cloudTrash) {
@@ -128,13 +118,6 @@ function createTrashStore() {
 					}
                     
                     if (!flatItem.id) continue;
-
-                    // [!code ++] Zombie Check
-                    if (pendingDeletes.has(flatItem.id)) {
-                        console.log(`🧟 Skipping zombie trash item ${flatItem.id} (locally queued for deletion)`);
-                        continue;
-                    }
-
                     cloudIds.add(flatItem.id);
 
 					const local = await tx.store.get(flatItem.id);
@@ -147,20 +130,19 @@ function createTrashStore() {
 					}
 				}
                 
-                // Reconciliation: Remove items that exist locally but NOT on cloud
-                // (Only if they are synced; if they are pending upload, keep them)
+                // Reconciliation
 				const index = tx.store.index('userId');
 				const localItems = await index.getAll(userId);
 				for (const localItem of localItems) {
 					if (!cloudIds.has(localItem.id)) {
-                        // Keep if we just created it locally (though trash usually doesn't have 'create')
 						if (localItem.syncStatus === 'pending') continue; 
 						await tx.store.delete(localItem.id);
 					}
 				}
 				await tx.done;
 
-                // Transaction 3: CLEAN UP ACTIVE TRIPS
+                // Transaction 2: CLEAN UP ACTIVE TRIPS
+                // If an item is in Trash, it MUST NOT be in Trips
                 const cleanupTx = db.transaction(['trash', 'trips'], 'readwrite');
                 const allTrash = await cleanupTx.objectStore('trash').getAll();
                 const tripStore = cleanupTx.objectStore('trips');

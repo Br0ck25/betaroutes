@@ -82,9 +82,7 @@ function createAuthStore() {
           // 1. Try fetching fresh data from API
           const subscription = await api.getSubscription(token);
 
-          // [!code fix] Capture the ID if returned by API, ensuring we have the UUID
           const user: User = {
-            id: subscription.id, // Ensure ID is captured
             token,
             plan: subscription.plan,
             tripsThisMonth: subscription.tripsThisMonth,
@@ -104,8 +102,7 @@ function createAuthStore() {
             error: null
           });
 
-          // [!code fix] Use ID for sync if available
-          const syncId = user.id || user.name || user.token;
+          const syncId = user.name || user.token;
           await trips.syncFromCloud(syncId);
         } catch (error) {
           console.warn('Failed to load user data, checking offline cache...', error);
@@ -113,18 +110,18 @@ function createAuthStore() {
           // 2. Fallback to offline cache if API fails
           const cachedUser = getUserCache();
           
+          // Only use cache if the token matches (simple security check)
           if (cachedUser && cachedUser.token === token) {
              console.log('✅ Restored user session from offline cache');
              set({
                user: cachedUser,
                isAuthenticated: true,
                isLoading: false,
-               error: null 
+               error: null // Do not show error so app works normally
              });
              
-             // [!code fix] Use cached ID
-             const loadId = cachedUser.id || cachedUser.name || cachedUser.token;
-             await trips.load(loadId);
+             // Load local trips immediately
+             await trips.load(cachedUser.name || cachedUser.token);
           } else {
              set({
                 user: null,
@@ -153,7 +150,7 @@ function createAuthStore() {
         if (typeof window !== 'undefined') {
           if (data.name) storage.setUsername(data.name);
           if (data.email) localStorage.setItem('user_email', data.email);
-          saveUserCache(updatedUser); 
+          saveUserCache(updatedUser); // Keep cache in sync
         }
 
         return {
@@ -175,7 +172,6 @@ function createAuthStore() {
         const subscription = await api.getSubscription(response.token);
 
         const user: User = {
-          id: subscription.id || response.id, // Capture ID
           token: response.token,
           plan: subscription.plan,
           tripsThisMonth: subscription.tripsThisMonth,
@@ -194,15 +190,12 @@ function createAuthStore() {
           error: null
         });
 
-        // [!code fix] Use the real ID for migration
-        const realUserId = user.id || username;
-
         if (offlineId) {
-          await trips.migrateOfflineTrips(offlineId, realUserId);
+          await trips.migrateOfflineTrips(offlineId, username);
           localStorage.removeItem('offline_user_id');
         }
 
-        await trips.syncFromCloud(realUserId);
+        await trips.syncFromCloud(username);
 
         return { success: true, resetKey: response.resetKey };
       } catch (error: any) {
@@ -228,7 +221,6 @@ function createAuthStore() {
         const subscription = await api.getSubscription(response.token);
 
         const user: User = {
-          id: subscription.id || response.id, // Capture ID
           token: response.token,
           plan: subscription.plan,
           tripsThisMonth: subscription.tripsThisMonth,
@@ -247,14 +239,12 @@ function createAuthStore() {
           error: null
         });
 
-        const realUserId = user.id || username;
-
         if (offlineId) {
-          await trips.migrateOfflineTrips(offlineId, realUserId);
+          await trips.migrateOfflineTrips(offlineId, username);
           localStorage.removeItem('offline_user_id');
         }
 
-        await trips.syncFromCloud(realUserId);
+        await trips.syncFromCloud(username);
 
         return { success: true };
       } catch (error: any) {
@@ -272,7 +262,7 @@ function createAuthStore() {
       storage.clearUsername();
       if (typeof window !== 'undefined') {
           localStorage.removeItem('user_email');
-          localStorage.removeItem('user_cache'); 
+          localStorage.removeItem('user_cache'); // Clear cache
       }
 
       set({
@@ -370,14 +360,12 @@ function createAuthStore() {
             if(!state.user) return state;
             const updated = {
                 ...state.user,
-                // [!code fix] Ensure we keep the ID if it's there
-                id: subscription.id || state.user.id, 
                 plan: subscription.plan,
                 tripsThisMonth: subscription.tripsThisMonth,
                 maxTrips: subscription.maxTrips,
                 resetDate: subscription.resetDate
             };
-            saveUserCache(updated); 
+            saveUserCache(updated); // Update cache
             return { ...state, user: updated };
         });
       } catch (error) {
@@ -401,5 +389,5 @@ export const authError = derived(auth, ($auth) => $auth.error);
 export const canCreateTrip = derived(user, ($user) => {
   if (!$user) return true;
   if ($user.plan === 'pro' || $user.plan === 'business') return true;
-  return ($user.tripsThisMonth || 0) < ($user.maxTrips || 10);
+  return $user.tripsThisMonth < $user.maxTrips;
 });

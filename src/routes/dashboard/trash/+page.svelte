@@ -14,8 +14,7 @@
 
   onMount(async () => {
     await loadTrash();
-    // [!code fix] Use ID first for sync
-    const userId = $user?.id || $user?.name || $user?.token;
+    const userId = $user?.name || $user?.token;
     if (userId) {
         await trash.syncFromCloud(userId);
         await loadTrash(); 
@@ -26,15 +25,10 @@
     loading = true;
     try {
         const potentialIds = new Set<string>();
-        // [!code fix] Add the new UUID field to the lookup list
-        if ($user?.id) potentialIds.add($user.id);
         if ($user?.name) potentialIds.add($user.name);
         if ($user?.token) potentialIds.add($user.token);
-        
         const offlineId = localStorage.getItem('offline_user_id');
         if (offlineId) potentialIds.add(offlineId);
-
-        console.log('[Trash] Checking IDs:', Array.from(potentialIds));
 
         const db = await getDB();
         const tx = db.transaction('trash', 'readonly');
@@ -44,17 +38,6 @@
         for (const id of potentialIds) {
             const items = await index.getAll(id);
             allItems = [...allItems, ...items];
-        }
-        
-        // [!code ++] Fallback: If still empty, check for HNS items specifically
-        // This catches cases where the user ID might not match exactly but they are clearly HNS trips
-        if (allItems.length === 0) {
-             const allTrash = await tx.objectStore('trash').getAll();
-             const hnsOrphans = allTrash.filter(t => t.id.startsWith('hns_') || t.userId.includes('-'));
-             if (hnsOrphans.length > 0) {
-                 console.log('[Trash] Found orphan HNS items:', hnsOrphans.length);
-                 allItems = [...allItems, ...hnsOrphans];
-             }
         }
         
         const uniqueItems = Array.from(new Map(allItems.map(item => [item.id, item])).values());
@@ -97,7 +80,7 @@
     loading = true;
     try {
         await Promise.all(trashedTrips.map(trip => trash.restore(trip.id, trip.userId)));
-        const userId = $user?.id || $user?.name || $user?.token;
+        const userId = $user?.name || $user?.token;
         if (userId) await trips.load(userId);
         await loadTrash();
     } catch (err) {
@@ -128,18 +111,12 @@
   async function emptyTrash() {
     if (!confirm('Permanently delete ALL items? Cannot be undone.')) return;
     try {
-      // Delete specifically using the IDs found in the list
-      const db = await getDB();
-      const tx = db.transaction('trash', 'readwrite');
-      
-      for (const trip of trashedTrips) {
-          await tx.store.delete(trip.id);
+      const uniqueUserIds = new Set(trashedTrips.map(t => t.userId));
+      let totalDeleted = 0;
+      for (const uid of uniqueUserIds) {
+          const count = await trash.emptyTrash(uid);
+          totalDeleted += count;
       }
-      await tx.done;
-      
-      // Also update store state
-      trash.clear();
-      
       await loadTrash();
     } catch (err) {
       alert('Failed to empty trash.');
@@ -265,26 +242,39 @@
   
   .header-actions { display: flex; gap: 12px; width: 100%; }
 
+  /* Top-level Buttons - Matched to Trips Page */
   .btn-danger, .btn-success, .btn-secondary {
     display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 16px;
     border: none; border-radius: 8px; font-weight: 600; font-size: 14px; 
     cursor: pointer; transition: all 0.2s; flex: 1; text-decoration: none;
   }
 
-  .btn-danger { background: #DC2626; color: white; box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3); }
+  .btn-danger {
+    background: #DC2626; color: white;
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+  }
   .btn-danger:hover { background: #B91C1C; }
 
-  .btn-success { background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3); }
+  .btn-success {
+    background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+  }
   .btn-success:hover { filter: brightness(1.1); }
 
-  .btn-secondary { background: white; color: #374151; border: 1px solid #E5E7EB; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); }
+  .btn-secondary {
+    background: white; color: #374151; border: 1px solid #E5E7EB;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  }
   .btn-secondary:hover { background: #F9FAFB; border-color: #D1D5DB; }
 
+  /* List Styling */
   .trash-list { display: flex; flex-direction: column; gap: 16px; }
   
   .trash-item { 
-    display: flex; flex-direction: column; gap: 16px; padding: 16px; 
-    background: white; border: 1px solid #E5E7EB; border-radius: 12px; transition: all 0.2s; 
+    display: flex; flex-direction: column; /* Stack on mobile */
+    gap: 16px; padding: 16px; 
+    background: white; border: 1px solid #E5E7EB; border-radius: 12px;
+    transition: all 0.2s; 
   }
   
   .trip-info { flex: 1; }
@@ -300,6 +290,7 @@
   
   .trip-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
   
+  /* Item Action Buttons (Smaller) */
   .btn-restore-item, .btn-delete-item { 
     display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 16px;
     border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s;
@@ -311,11 +302,14 @@
   .empty-state { text-align: center; padding: 40px 20px; }
   .empty-state svg { margin-bottom: 16px; }
   
+  /* Tablet/Desktop */
   @media (min-width: 640px) {
     .page-header { flex-direction: row; align-items: flex-start; justify-content: space-between; }
     .header-actions { width: auto; }
+    
     .trash-item { flex-direction: row; align-items: center; }
     .trip-actions { width: auto; display: flex; }
+    
     .btn-danger, .btn-success, .btn-secondary { width: auto; flex: none; }
   }
 </style>
