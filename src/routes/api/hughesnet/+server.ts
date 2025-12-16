@@ -10,8 +10,11 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 
     try {
         const body = await request.json();
-        const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
+        // [!code fix] Prioritize ID (UUID) to match the Trip Service
+        const userId = locals.user?.id || locals.user?.name || locals.user?.token || 'default_user';
         const settingsId = locals.user?.id;
+
+        console.log(`[API] HughesNet Action for User: ${userId}`);
 
         const service = new HughesNetService(
             platform.env.BETA_HUGHESNET_KV, 
@@ -19,7 +22,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
             platform.env.BETA_LOGS_KV,
             platform.env.BETA_LOGS_TRASH_KV, 
             platform.env.BETA_USER_SETTINGS_KV,
-            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY, 
+            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY,
             platform.env.BETA_DIRECTIONS_KV 
         );
 
@@ -79,7 +82,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 export const GET: RequestHandler = async ({ platform, locals }) => {
     if (!platform?.env?.BETA_HUGHESNET_KV) return json({ orders: {} });
     try {
-        const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
+        // [!code fix] Prioritize ID (UUID)
+        const userId = locals.user?.id || locals.user?.name || locals.user?.token || 'default_user';
         
         const service = new HughesNetService(
             platform.env.BETA_HUGHESNET_KV, 
@@ -90,7 +94,7 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
             platform.env.PRIVATE_GOOGLE_MAPS_API_KEY, 
             platform.env.BETA_DIRECTIONS_KV 
         );
-        // [!code changed] Get Config and Orders
+        
         const [orders, config] = await Promise.all([
             service.getOrders(userId),
             service.getConfig(userId)

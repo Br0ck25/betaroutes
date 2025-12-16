@@ -56,7 +56,6 @@
         const res = await fetch(`/api/hughesnet`);
         const data = await res.json();
         
-        // [!code ++] Load Saved Config
         if (data.config) {
             installPay = data.config.installPay ?? installPay;
             repairPay = data.config.repairPay ?? repairPay;
@@ -180,9 +179,11 @@
              statusMessage = 'Sync Complete';
              currentBatch = 0;
              
-             const userId = $user?.name || $user?.token;
+             // [!code fix] Use ID first, then fallback
+             const userId = $user?.id || $user?.name || $user?.token;
              if (userId) {
                 addLog('Downloading generated trips...');
+                // This triggers the local store to fetch the new data from the API
                 await trips.syncFromCloud(userId);
                 addLog('Trips updated locally.');
              }
@@ -193,11 +194,10 @@
     } catch (e: any) {
         addLog('Sync Error: ' + e.message);
     } finally {
-       if (currentBatch === 0) loading = false; // Only reset if not recurring
+       if (currentBatch === 0) loading = false;
        statusMessage = 'Sync Now';
     }
     
-    // Ensure loading is false if we exit recursion
     if (currentBatch === 0) loading = false;
   }
 
@@ -217,7 +217,7 @@
           addLog(`Cleared ${data.count} trips.`);
           showSuccessMsg(`Cleared ${data.count} trips.`);
           
-          const userId = $user?.name || $user?.token;
+          const userId = $user?.id || $user?.name || $user?.token;
           if (userId) {
               addLog('Syncing removal with local database...');
               await trash.syncFromCloud(userId);
