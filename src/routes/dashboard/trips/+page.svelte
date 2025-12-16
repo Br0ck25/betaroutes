@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte'; // [!code ++] Import onMount
   import { trips, isLoading } from '$lib/stores/trips';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
   import { goto } from '$app/navigation';
@@ -19,6 +20,18 @@
 
   // --- SELECTION STATE ---
   let selectedTrips = new Set<string>();
+
+  // [!code ++] Force data reload on mount to ensure we use the correct UUID
+  onMount(async () => {
+      const currentUser = $user || $page.data.user;
+      // Priority: ID (UUID) -> Name -> Token
+      const userId = currentUser?.id || currentUser?.name || currentUser?.token;
+      
+      if (userId) {
+          console.log('[Trips Page] Reloading trips for user ID:', userId);
+          await trips.load(userId);
+      }
+  });
 
   // Reset selection and page when filters change
   $: if (searchQuery || sortBy || sortOrder || filterProfit || startDate || endDate) {
@@ -120,7 +133,7 @@
       if (!confirm(`Are you sure you want to delete ${count} trip(s)?`)) return;
 
       const currentUser = $page.data.user || $user;
-      let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
+      let userId = currentUser?.id || currentUser?.name || currentUser?.token || '';
       
       if (!userId) {
           toasts.error('User identity missing. Cannot delete.');
@@ -209,9 +222,11 @@
       try {
         const trip = $trips.find(t => t.id === id);
         const currentUser = $page.data.user || $user;
-        let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
+        let userId = currentUser?.id || currentUser?.name || currentUser?.token || '';
+        
         if (trip && currentUser) {
-            if (trip.userId === currentUser.name) userId = currentUser.name;
+            if (trip.userId === currentUser.id) userId = currentUser.id;
+            else if (trip.userId === currentUser.name) userId = currentUser.name;
             else if (trip.userId === currentUser.token) userId = currentUser.token;
         }
         
@@ -260,7 +275,7 @@
     }
   }
 
-  // [!code ++] Swipe Action for Mobile
+  // Swipe Action for Mobile
   function swipeable(node: HTMLElement, { onEdit, onDelete }: { onEdit: () => void, onDelete: () => void }) {
     let startX = 0;
     let startY = 0;
@@ -271,46 +286,33 @@
         startX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
         x = 0;
-        node.style.transition = 'none'; // Disable transition for drag
+        node.style.transition = 'none'; 
     }
 
     function handleTouchMove(e: TouchEvent) {
         const dx = e.touches[0].clientX - startX;
         const dy = e.touches[0].clientY - startY;
-
-        // If scrolling vertically, ignore swipe
         if (Math.abs(dy) > Math.abs(dx)) return;
-
         swiping = true;
-        
-        // Limit swipe range (-120px for delete, 120px for edit)
         if (dx < -120) x = -120;
         else if (dx > 120) x = 120;
         else x = dx;
-
         node.style.transform = `translateX(${x}px)`;
-        
-        // Prevent accidental scrolling while swiping hard
         if (Math.abs(x) > 10) e.preventDefault();
     }
 
     function handleTouchEnd() {
         if (!swiping) return;
         swiping = false;
-        node.style.transition = 'transform 0.2s ease-out'; // Smooth snap back
-
-        // Threshold to trigger action
+        node.style.transition = 'transform 0.2s ease-out'; 
         if (x < -80) {
             onDelete();
         } else if (x > 80) {
             onEdit();
         }
-        
-        // Always reset position
         node.style.transform = 'translateX(0)';
     }
 
-    // [!code ++] Prevent click if we were just swiping
     function handleClick(e: MouseEvent) {
         if (Math.abs(x) > 10) {
             e.stopPropagation();
@@ -491,7 +493,7 @@
               }}
             >
               <div class="card-top">
-                <div class="selection-box" on:click|stopPropagation on:keydown|stopPropagation role="none">
+                  <div class="selection-box" on:click|stopPropagation on:keydown|stopPropagation role="none">
                     <label class="checkbox-container">
                         <input 
                             type="checkbox" 
@@ -518,7 +520,7 @@
                 </div>
                 
                 <div class="profit-display-large" class:positive={profit >= 0} class:negative={profit < 0}>
-                  {formatCurrency(profit)}
+                   {formatCurrency(profit)}
                 </div>
                 
                 <svg class="expand-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
@@ -689,7 +691,7 @@
   }
 
   .pagination-controls { 
-      display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 32px; 
+      display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 32px;
   }
   .page-btn {
       padding: 8px 16px; background: white; border: 1px solid #E5E7EB; border-radius: 8px;
@@ -699,12 +701,13 @@
   .page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .page-status { font-size: 14px; color: #4B5563; font-weight: 500; }
 
-  /* Existing Styles Preserved */
   .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
   .page-title { font-size: 24px; font-weight: 800; color: #111827; margin: 0; }
   .page-subtitle { font-size: 14px; color: #6B7280; margin: 0; }
   .header-actions { display: flex; gap: 12px; align-items: center; }
-  .btn-primary { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); }
+  .btn-primary { display: inline-flex; align-items: center;
+    gap: 6px; padding: 10px 16px; background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; border: none; border-radius: 8px; font-weight: 600;
+    font-size: 14px; text-decoration: none; box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); }
   
   .stats-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
   .summary-card { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; text-align: center; }
@@ -713,35 +716,35 @@
   
   .filters-bar { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
   
-  /* [!code ++] Sticky Filters Style */
   .sticky-bar {
-      position: sticky;
-      top: 0;
+      position: sticky; top: 0;
       z-index: 10;
-      background: #F9FAFB; /* Match page bg */
+      background: #F9FAFB; 
       padding-top: 10px;
       padding-bottom: 10px;
-      margin: -12px -12px 10px -12px; /* Pull out of parent padding */
-      padding-left: 12px;
-      padding-right: 12px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.02); /* Subtle separation */
+      margin: -12px -12px 10px -12px; 
+      padding-left: 12px; padding-right: 12px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.02); 
   }
 
   .search-box { position: relative; width: 100%; }
   .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #9CA3AF; pointer-events: none; }
-  .search-box input { width: 100%; padding: 12px 16px 12px 42px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 15px; background: white; box-sizing: border-box; }
+  .search-box input { width: 100%; padding: 12px 16px 12px 42px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 15px;
+    background: white; box-sizing: border-box; }
   .search-box input:focus { outline: none; border-color: #FF7F50; }
   .date-group { display: flex; gap: 8px; align-items: center; }
-  .date-input { flex: 1; padding: 12px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 14px; background: white; color: #374151; min-width: 0; box-sizing: border-box; }
+  .date-input { flex: 1; padding: 12px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 14px;
+    background: white; color: #374151; min-width: 0; box-sizing: border-box; }
   .date-sep { color: #9CA3AF; font-weight: bold; }
   .filter-group { display: flex; flex-direction: row; gap: 8px; width: 100%; }
   .filter-select { flex: 1; width: 0; min-width: 0; padding: 12px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 14px; background: white; color: #374151; }
   .sort-btn { flex: 0 0 48px; display: flex; align-items: center; justify-content: center; border: 1px solid #E5E7EB; border-radius: 10px; background: white; color: #6B7280; }
   
-  /* CHECKBOX STYLES */
-  .checkbox-container { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: #4B5563; position: relative; padding-left: 28px; user-select: none; }
+  .checkbox-container { display: inline-flex; align-items: center;
+    gap: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: #4B5563; position: relative; padding-left: 28px; user-select: none; }
   .checkbox-container input { position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0; }
-  .checkmark { position: absolute; top: 0; left: 0; height: 20px; width: 20px; background-color: white; border: 2px solid #D1D5DB; border-radius: 6px; transition: all 0.2s; }
+  .checkmark { position: absolute; top: 0; left: 0; height: 20px; width: 20px; background-color: white; border: 2px solid #D1D5DB;
+    border-radius: 6px; transition: all 0.2s; }
   .checkbox-container:hover input ~ .checkmark { border-color: #9CA3AF; }
   .checkbox-container input:checked ~ .checkmark { background-color: #FF7F50; border-color: #FF7F50; }
   .checkmark:after { content: ""; position: absolute; display: none; }
@@ -750,43 +753,25 @@
 
   .trip-list-cards { display: flex; flex-direction: column; gap: 12px; }
   
-  /* [!code ++] Swipe Wrapper & Backgrounds */
   .trip-card-wrapper {
-      position: relative;
-      overflow: hidden;
+      position: relative; overflow: hidden;
       border-radius: 12px;
-      /* Background colors for swipes */
-      background: #F3F4F6; 
+      background: #F3F4F6;
   }
 
   .swipe-bg {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0 20px;
-      z-index: 0;
+      position: absolute; inset: 0;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0 20px; z-index: 0;
   }
   
-  .swipe-action {
-      font-weight: 700;
-      font-size: 14px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-  }
+  .swipe-action { font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
   .swipe-action.edit { color: #2563EB; }
   .swipe-action.delete { color: #DC2626; }
 
   .trip-card { 
-      background: white; 
-      border: 1px solid #E5E7EB; 
-      border-radius: 12px; 
-      padding: 16px; 
-      cursor: pointer; 
-      transition: all 0.2s; 
-      position: relative; 
-      z-index: 1; /* Sit above the swipe actions */
+      background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px;
+      cursor: pointer; transition: all 0.2s; position: relative; z-index: 1; 
   }
   .trip-card:active { background-color: #F9FAFB; }
   .trip-card.expanded { border-color: #FF7F50; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
@@ -822,7 +807,6 @@
   .delete-btn { background: #FEF2F2; color: #DC2626; border-color: #DC2626; }
   .empty-state { text-align: center; padding: 40px 20px; color: #6B7280; font-size: 15px; }
 
-  /* FLOATING ACTION BAR */
   .action-bar-container { position: fixed; bottom: 20px; left: 0; right: 0; display: flex; justify-content: center; z-index: 50; padding: 0 16px; animation: slideUp 0.3s ease-out; }
   .action-bar { background: #1F2937; color: white; padding: 8px 16px; border-radius: 100px; display: flex; align-items: center; gap: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
   .selected-count { font-weight: 700; font-size: 14px; }
