@@ -516,6 +516,7 @@ export class HughesNetService {
 // 1️⃣ Prefer actual arrival timestamp from HughesNet
 let arrivalTime24: string | null = null;
 
+// 1️⃣ Preferred: numeric arrival timestamp
 if (anchorOrder._arrivalTs && anchorOrder._arrivalTs > 0) {
     const d = new Date(anchorOrder._arrivalTs);
     arrivalTime24 = `${d.getHours().toString().padStart(2, '0')}:${d
@@ -523,6 +524,12 @@ if (anchorOrder._arrivalTs && anchorOrder._arrivalTs > 0) {
         .toString()
         .padStart(2, '0')}`;
 }
+
+// 2️⃣ Fallback: raw HughesNet timestamp string
+if (!arrivalTime24 && anchorOrder.actualArrivalTs) {
+    arrivalTime24 = extract24HourTime(anchorOrder.actualArrivalTs);
+}
+
 
 
 if (arrivalTime24) {
