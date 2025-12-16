@@ -1,11 +1,12 @@
+// src/routes/api/settings/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { z } from 'zod';
 
-// [!code ++] Security Schema: Whitelist allowed settings only
 const settingsSchema = z.object({
   defaultStartAddress: z.string().max(500).optional(),
-  defaultMPG: z.number().positive().nullish(), // Nullish allows resetting to default
+  defaultEndAddress: z.string().max(500).optional(), // [!code ++] Ensure this is included
+  defaultMPG: z.number().positive().nullish(),
   defaultGasPrice: z.number().nonnegative().nullish(),
   vehicleName: z.string().max(100).optional(),
   distanceUnit: z.enum(['mi', 'km']).optional(),
@@ -16,13 +17,8 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
   const user = locals.user;
   if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
 
-  // [!code fix] Use Cloudflare Platform Env, not Vercel SDK
   const kv = platform?.env?.BETA_USER_SETTINGS_KV;
-  
-  // Fallback for dev mode if bindings are missing
-  if (!kv) {
-      return json({}); 
-  }
+  if (!kv) return json({}); 
 
   try {
       const raw = await kv.get(`settings:${user.id}`);
@@ -44,9 +40,10 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
   try {
       const body = await request.json();
       
-      // 1. Security: Validate input against schema
-      // This prevents "Arbitrary Injection" of unapproved keys
-      const result = settingsSchema.safeParse(body);
+      // [!code fix] Unwrap the 'settings' object if sent by the frontend helper
+      const payload = body.settings || body;
+
+      const result = settingsSchema.safeParse(payload);
       
       if (!result.success) {
           return json({ 
@@ -55,14 +52,12 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
           }, { status: 400 });
       }
 
-      // 2. Fetch existing settings to merge correctly
       const key = `settings:${user.id}`;
       const existingRaw = await kv.get(key);
       const existing = existingRaw ? JSON.parse(existingRaw) : {};
 
-      // 3. Merge: Only apply the valid data from Zod
+      // Merge and save
       const updated = { ...existing, ...result.data };
-      
       await kv.put(key, JSON.stringify(updated));
 
       return json(updated);

@@ -48,13 +48,12 @@ export function makeTripService(
   tripIndexDO: DurableObjectNamespace
 ) {
   
-  // Helper to get the specific Durable Object for a user
   const getIndexStub = (userId: string) => {
     const id = tripIndexDO.idFromName(userId);
     return tripIndexDO.get(id);
   };
 
-  // Helper to strip heavy data for the lightweight index
+  // [!code fix] Expanded Summary to include ALL fields needed for Dashboard/Edit
   const toSummary = (trip: TripRecord) => ({
       id: trip.id,
       userId: trip.userId,
@@ -62,17 +61,40 @@ export function makeTripService(
       title: trip.title,
       startAddress: trip.startAddress,
       endAddress: trip.endAddress,
+      
+      // Time
+      startTime: trip.startTime,
+      endTime: trip.endTime,
+
+      // Financials
       netProfit: trip.netProfit,
+      totalEarnings: trip.totalEarnings, 
+      fuelCost: trip.fuelCost,
+      maintenanceCost: trip.maintenanceCost,
+      suppliesCost: trip.suppliesCost,
+
+      // Itemized Lists (Critical for Edit Page)
+      maintenanceItems: trip.maintenanceItems,
+      supplyItems: trip.supplyItems,
+      suppliesItems: trip.suppliesItems, 
+
+      // Stats
       totalMiles: trip.totalMiles,
+      hoursWorked: trip.hoursWorked,      
+      estimatedTime: trip.estimatedTime,  
+      totalTime: trip.totalTime,
+      stopsCount: trip.stops?.length || 0,
+      
+      // Stops (Critical for List View)
+      stops: trip.stops, 
+
       createdAt: trip.createdAt,
       updatedAt: trip.updatedAt
   });
 
-  // Updated to handle both Lat/Lng Caching AND Autocomplete Indexing
   async function indexTripData(trip: TripRecord) {
     if (!placesKV) return;
     
-    // 1. Gather Unique Data
     const uniquePlaces = new Map<string, { lat?: number, lng?: number }>();
     
     const add = (addr?: string, loc?: { lat: number, lng: number }) => {
@@ -94,14 +116,11 @@ export function makeTripService(
       trip.destinations.forEach((d: any) => add(d.address, d.location));
     }
 
-    // 2. Process KV Writes
     const writePromises: Promise<void>[] = [];
 
     for (const [addrKey, data] of uniquePlaces.entries()) {
-       // --- A. Cache Place Details (Lat/Lng) ---
        if (data.lat !== undefined && data.lng !== undefined) {
            const safeKey = await generatePlaceKey(addrKey);
-
            const payload = { 
              lastSeen: new Date().toISOString(),
              formatted_address: addrKey,
@@ -111,13 +130,10 @@ export function makeTripService(
            writePromises.push(placesKV.put(safeKey, JSON.stringify(payload)));
        }
 
-       // --- B. Update Autocomplete Prefix Index ---
        const prefixKey = generatePrefixKey(addrKey);
-       
        const updatePrefixBucket = async () => {
            const existingList = await placesKV!.get(prefixKey, 'json') as string[] | null;
            const list = existingList || [];
-
            if (!list.includes(addrKey)) {
                list.push(addrKey);
                if (list.length > 50) list.shift();
@@ -126,30 +142,21 @@ export function makeTripService(
        };
        writePromises.push(updatePrefixBucket());
     }
-
     await Promise.allSettled(writePromises);
   }
 
   return {
-    // [!code ++] New Atomic Billing Check
     async checkMonthlyQuota(userId: string, limit: number): Promise<{ allowed: boolean, count: number }> {
         const date = new Date();
-        // Key format: 2025-12
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
         
         const stub = getIndexStub(userId);
-        
-        // This call is atomic inside the Durable Object
         const res = await stub.fetch('http://internal/billing/check-increment', {
             method: 'POST',
             body: JSON.stringify({ monthKey, limit })
         });
         
-        if (!res.ok) {
-            // Fallback: Fail closed if DO is down
-            return { allowed: false, count: limit }; 
-        }
-
+        if (!res.ok) return { allowed: false, count: limit }; 
         return await res.json() as { allowed: boolean, count: number };
     },
 
@@ -160,7 +167,6 @@ export function makeTripService(
 
       if (data.needsMigration) {
           console.log(`[TripService] Migrating index for user ${userId} to Durable Object...`);
-          
           const prefix = prefixForUser(userId);
           const list = await kv.list({ prefix });
           const out: TripRecord[] = [];
@@ -194,31 +200,28 @@ export function makeTripService(
     async put(trip: TripRecord) {
       trip.updatedAt = new Date().toISOString();
       
-      // 1. Save Full Data to KV (Storage)
+      // 1. Save Full Data to KV
       await kv.put(`trip:${trip.userId}:${trip.id}`, JSON.stringify(trip));
       
-      // 2. Update Index via DO (Atomic Consistency)
+      // 2. Update Index via DO using the COMPLETE summary
       const stub = getIndexStub(trip.userId);
       await stub.fetch('http://internal/put', {
           method: 'POST',
           body: JSON.stringify(toSummary(trip))
       });
 
-      // 3. Async caching/indexing (Places)
       indexTripData(trip).catch(e => {
         console.error('[TripService] Failed to index trip data:', e);
       });
     },
 
     async delete(userId: string, tripId: string) {
-      // Update Index via DO first
       const stub = getIndexStub(userId);
       await stub.fetch('http://internal/delete', {
           method: 'POST',
           body: JSON.stringify({ id: tripId })
       });
 
-      // Decrement billing counter (Atomic Refund)
       const date = new Date();
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       await stub.fetch('http://internal/billing/decrement', {
@@ -234,10 +237,7 @@ export function makeTripService(
 
       const key = `trip:${userId}:${tripId}`;
       const raw = await kv.get(key);
-      
-      if (!raw) {
-        return; 
-      }
+      if (!raw) return; 
 
       const trip = JSON.parse(raw);
       const now = new Date();
@@ -294,16 +294,12 @@ export function makeTripService(
     },
 
     async restore(userId: string, tripId: string) {
-      if (!trashKV) {
-        throw new Error('Trash KV not available');
-      }
+      if (!trashKV) throw new Error('Trash KV not available');
 
       const trashKey = `trash:${userId}:${tripId}`;
       const raw = await trashKV.get(trashKey);
 
-      if (!raw) {
-        throw new Error('Trip not found in trash');
-      }
+      if (!raw) throw new Error('Trip not found in trash');
 
       const { trip, metadata } = JSON.parse(raw);
 
@@ -313,7 +309,7 @@ export function makeTripService(
       const activeKey = `trip:${userId}:${tripId}`;
       await kv.put(activeKey, JSON.stringify(trip));
 
-      // Update Index via DO
+      // Update Index via DO with restored summary
       const stub = getIndexStub(userId);
       await stub.fetch('http://internal/put', {
           method: 'POST',
@@ -321,26 +317,20 @@ export function makeTripService(
       });
 
       await trashKV.delete(trashKey);
-
       return trip;
     },
 
     async permanentDelete(userId: string, tripId: string) {
-      if (!trashKV) {
-        throw new Error('Trash KV not available');
-      }
-
+      if (!trashKV) throw new Error('Trash KV not available');
       const trashKey = `trash:${userId}:${tripId}`;
       await trashKV.delete(trashKey);
     },
 
-    // Kept for backward compatibility if other parts of the app use it
     async incrementUserCounter(userId: string, amt = 1) {
       const key = `meta:user:${userId}:trip_count`;
       const raw = await kv.get(key);
       const cur = raw ? parseInt(raw,10) : 0;
       const next = Math.max(0, cur + amt);
-
       await kv.put(key, String(next));
       return next;
     }
