@@ -34,8 +34,7 @@
         if (userId) await trips.load(userId);
     }
     const found = $trips.find(t => t.id === tripId);
-    if (!found) { alert('Trip not found'); goto('/dashboard/trips'); return;
-    }
+    if (!found) { alert('Trip not found'); goto('/dashboard/trips'); return; }
 
     const safeStops = (found.stops || []).map((s: any) => ({
         ...s,
@@ -52,6 +51,23 @@
         ...s,
         id: s.id || crypto.randomUUID()
     }));
+
+    // [!code ++] Helper to convert "5:00 PM" -> "17:00" for input[type="time"]
+    const to24h = (timeStr: string) => {
+        if (!timeStr) return '';
+        // If already 24h format or doesn't have AM/PM, return as is
+        if (!timeStr.match(/AM|PM/i)) return timeStr;
+        
+        const [time, modifier] = timeStr.split(' ');
+        let [hours, minutes] = time.split(':');
+        let h = parseInt(hours, 10);
+        
+        if (h === 12) h = 0; // Handle 12 AM -> 0
+        if (modifier && modifier.toUpperCase() === 'PM') h += 12; // Handle PM
+        
+        return `${h.toString().padStart(2, '0')}:${minutes}`;
+    };
+
     tripData = {
         ...JSON.parse(JSON.stringify(found)),
         stops: safeStops,
@@ -62,7 +78,10 @@
         gasPrice: Number(found.gasPrice) || 3.50,
         fuelCost: Number(found.fuelCost) || 0,
         hoursWorked: Number(found.hoursWorked) || 0,
-        estimatedTime: found.estimatedTime || 0
+        estimatedTime: found.estimatedTime || 0,
+        // [!code ++] Apply conversion here
+        startTime: to24h(found.startTime),
+        endTime: to24h(found.endTime)
     };
     loading = false;
   }
@@ -107,10 +126,9 @@
     return `kv_route_${s}_to_${e}`;
   }
 
-  // [!code changed] Only check LocalStorage, then ask Server API
+  // Only check LocalStorage, then ask Server API
   async function fetchRouteSegment(start: string, end: string) {
     if (!start || !end) return null;
-    
     // 1. LOCAL
     const localKey = generateRouteKey(start, end);
     const cached = localStorage.getItem(localKey);
@@ -124,7 +142,6 @@
         console.log("Local Miss. Asking Server...");
         const res = await fetch(`/api/directions/cache?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
         const result = await res.json();
-
         if (result.data) {
             console.log(`Server Hit (${result.source})`);
             const mappedResult = {
@@ -149,7 +166,6 @@
     const lastStop = tripData.stops[tripData.stops.length - 1];
     const startPoint = lastStop ? lastStop.address : tripData.startAddress;
     const endPoint = tripData.endAddress || tripData.startAddress;
-
     if (startPoint && endPoint) {
         const finalLeg = await fetchRouteSegment(startPoint, endPoint);
         if (finalLeg) {
@@ -168,7 +184,6 @@
 
     tripData.stops[index].address = val;
     isCalculating = true;
-
     try {
         const prevLoc = index === 0 ? tripData.startAddress : tripData.stops[index - 1].address;
         if (prevLoc) {
@@ -199,7 +214,6 @@
     
     if (type === 'start') tripData.startAddress = val;
     else tripData.endAddress = val;
-
     isCalculating = true;
     try {
         if (type === 'start' && tripData.stops.length > 0) {
@@ -223,7 +237,6 @@
     let segmentStart = tripData.stops.length > 0 
       ? tripData.stops[tripData.stops.length - 1].address 
       : tripData.startAddress;
-    
     if (!segmentStart) {
       alert("Please ensure there is a starting address.");
       return;
@@ -233,14 +246,12 @@
     try {
       const segmentData: any = await fetchRouteSegment(segmentStart, newStop.address);
       if (!segmentData) throw new Error("Could not calculate route to new stop");
-
       tripData.stops = [...tripData.stops, { 
         ...newStop, 
         id: crypto.randomUUID(),
         distanceFromPrev: segmentData.distance,
         timeFromPrev: segmentData.duration
       }];
-
       await recalculateTotals();
       newStop = { address: '', earnings: 0, notes: '' };
     } catch (e) {
@@ -252,18 +263,19 @@
   }
 
   function handleDragStart(event: DragEvent, index: number) { dragItemIndex = index;
-    if(event.dataTransfer) { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.dropEffect = 'move';
+    if(event.dataTransfer) { event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.dropEffect = 'move';
     event.dataTransfer.setData('text/plain', index.toString()); } }
   function handleDragOver(event: DragEvent) { event.preventDefault(); return false;
   }
   function handleDrop(event: DragEvent, dropIndex: number) { event.preventDefault(); if (dragItemIndex === null) return; const item = tripData.stops[dragItemIndex];
   const newStops = tripData.stops.filter((_, i) => i !== dragItemIndex); newStops.splice(dropIndex, 0, item); tripData.stops = newStops; dragItemIndex = null;
-  recalculateTotals(); 
+  recalculateTotals();
   }
 
   function removeStop(id: string) { 
       tripData.stops = tripData.stops.filter(s => s.id !== id);
-      recalculateTotals(); 
+      recalculateTotals();
   }
   
   function addMaintenanceItem(type: string) { tripData.maintenanceItems = [...tripData.maintenanceItems, { id: crypto.randomUUID(), type, cost: 0 }];
@@ -319,8 +331,10 @@
   if (diff < 0) diff += 24 * 60; tripData.hoursWorked = Math.round((diff / 60) * 10) / 10;
   } }
 
-  function nextStep() { if (step < 4) step++; }
-  function prevStep() { if (step > 1) step--; }
+  function nextStep() { if (step < 4) step++;
+  }
+  function prevStep() { if (step > 1) step--;
+  }
   
   async function saveTrip() {
     const currentUser = $page.data.user || $user;
@@ -337,8 +351,7 @@
       totalMileage: tripData.totalMiles,
       fuelCost: tripData.fuelCost,
       stops: tripData.stops.map((stop, index) => ({ id: stop.id || crypto.randomUUID(), address: stop.address, earnings: Number(stop.earnings), notes: stop.notes || '', order: index })),
-      destinations: tripData.stops.map(stop => ({ address: stop.address, earnings: stop.earnings, notes: 
-      stop.notes || '' })),
+      destinations: tripData.stops.map(stop => ({ address: stop.address, earnings: stop.earnings, notes: stop.notes || '' })),
       updatedAt: new Date().toISOString()
     };
     try {

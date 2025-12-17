@@ -665,18 +665,12 @@ export class HughesNetService {
             // Calculate actual duration based on timestamps
             let actualDuration: number;
             
-            if (o.arrivalTimestamp && o.departureCompleteTimestamp) {
-                // Complete job - use actual time
-                const dur = Math.round((o.departureCompleteTimestamp - o.arrivalTimestamp) / 60000);
-                if (dur > MIN_JOB_DURATION_MINS && dur < MAX_JOB_DURATION_MINS) {
-                    actualDuration = dur;
-                } else {
-                    // Invalid duration, fall back to type-based default
-                    actualDuration = o.type === 'Install' ? 90 : 60;
-                }
-            } else if (o.arrivalTimestamp && o.departureIncompleteTimestamp) {
-                // Incomplete job - use actual time spent (no pay, but time counts)
-                const dur = Math.round((o.departureIncompleteTimestamp - o.arrivalTimestamp) / 60000);
+            // [!code changed] Prioritize Departure Incomplete over Departure Complete for time calculations
+            const endTs = o.departureIncompleteTimestamp || o.departureCompleteTimestamp;
+
+            if (o.arrivalTimestamp && endTs) {
+                // Use actual time
+                const dur = Math.round((endTs - o.arrivalTimestamp) / 60000);
                 if (dur > MIN_JOB_DURATION_MINS && dur < MAX_JOB_DURATION_MINS) {
                     actualDuration = dur;
                 } else {

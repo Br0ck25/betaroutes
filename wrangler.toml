@@ -3,12 +3,15 @@ compatibility_date = "2024-12-05"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = ".svelte-kit/cloudflare"
 
+[[kv_namespaces]]
+binding = "BETA_DIRECTIONS_KV"
+id = "3fb03d50a94e4b2cb4fc3f54bdfd45d7"
+
 # ---------------------------------------------------
 # Production environment
 # ---------------------------------------------------
 [env.production]
 
-# [!code note] --- COMMENTED OUT FOR FIRST DEPLOY ---
  [[env.production.durable_objects.bindings]]
  name = "TRIP_INDEX_DO"
  class_name = "TripIndexDO"

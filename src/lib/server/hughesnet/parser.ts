@@ -13,7 +13,7 @@ function toTitleCase(str: string) {
 function findEventTimestamp($: cheerio.CheerioAPI, eventLabel: string): number | null {
     let foundTs: number | null = null;
     
-    // [!code fix] Regex updated: 
+    // Regex updated: 
     // 1. \s* instead of \s+ (handles missing space between date/time)
     // 2. Looks for seconds optionally
     const tsRegex = /(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/;
@@ -22,9 +22,6 @@ function findEventTimestamp($: cheerio.CheerioAPI, eventLabel: string): number |
         const text = $(elem).text().trim();
         
         if (text.includes(eventLabel)) {
-            // [!code debug] Log what we found to help debug NaN
-            console.log(`[Parser] Found '${eventLabel}' in text: "${text.substring(0, 50)}..."`);
-
             // Check current cell first (new format)
             let match = text.match(tsRegex);
 
@@ -40,9 +37,6 @@ function findEventTimestamp($: cheerio.CheerioAPI, eventLabel: string): number |
             if (match) {
                 const [_, month, day, year, hour, min, sec] = match;
                 
-                // [!code debug] Log the parsed components
-                console.log(`[Parser] Parsed: ${month}/${day}/${year} ${hour}:${min}:${sec || '00'}`);
-
                 const date = new Date(
                     parseInt(year), 
                     parseInt(month) - 1, 
@@ -55,8 +49,6 @@ function findEventTimestamp($: cheerio.CheerioAPI, eventLabel: string): number |
                 if (!isNaN(date.getTime())) {
                     foundTs = date.getTime();
                     return false; // Break loop
-                } else {
-                    console.log('[Parser] Invalid Date generated');
                 }
             }
         }
@@ -162,9 +154,12 @@ export function parseOrderPage(html: string, id: string): OrderData {
     out.departureCompleteTimestamp = findEventTimestamp($, 'Departure Complete');
     out.departureIncompleteTimestamp = findEventTimestamp($, 'Departure Incomplete');
 
+    // [!code changed] Prioritize Departure Incomplete for duration calculation
+    const endTimestamp = out.departureIncompleteTimestamp || out.departureCompleteTimestamp;
+
     // Calculate duration only if we have valid timestamps
-    if (out.arrivalTimestamp && out.departureCompleteTimestamp) {
-        const durationMins = Math.round((out.departureCompleteTimestamp - out.arrivalTimestamp) / 60000);
+    if (out.arrivalTimestamp && endTimestamp) {
+        const durationMins = Math.round((endTimestamp - out.arrivalTimestamp) / 60000);
         // Sanity check: duration between 10 mins and 10 hours
         if (durationMins > 10 && durationMins < 600) {
             out.jobDuration = durationMins;

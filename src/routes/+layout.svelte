@@ -5,11 +5,11 @@
     import { onMount } from 'svelte';
     import { syncManager } from '$lib/sync/syncManager';
     import { trips } from '$lib/stores/trips';
-    
-    // [!code fix] Change static import to dynamic to prevent build crashes
     import { env } from '$env/dynamic/public';
+    // [!code ++] Import page store to check current route
+    import { page } from '$app/stores';
 
-	let { data, children } = $props();
+    let { data, children } = $props();
 
 	// 1. Initialize Context
 	const userState = setUserContext(data.user);
@@ -30,7 +30,7 @@
                 trips.updateLocal(enrichedTrip);
             });
 
-            // [!code fix] Access key safely via dynamic env object
+            // Access key safely via dynamic env object
             const apiKey = env.PUBLIC_GOOGLE_MAPS_KEY;
             
             if (apiKey) {
@@ -47,5 +47,7 @@
 		{@render children()}
 	</main>
 
-	<Footer />
+    {#if $page.url.pathname !== '/'}
+	    <Footer />
+    {/if}
 </div>

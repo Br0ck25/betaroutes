@@ -189,11 +189,22 @@
 
   function formatTime(time: string): string {
     if (!time) return '';
+
+    // If time is already in 12-hour format (e.g. "5:11 PM"), return as is.
+    if (time.toLowerCase().includes('am') || time.toLowerCase().includes('pm')) {
+      return time;
+    }
+
     const [h, m] = time.split(':').map(Number);
     if (isNaN(h)) return time;
+    
     const ampm = h >= 12 ? 'PM' : 'AM';
     const h12 = h % 12 || 12;
-    return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
+    
+    // Ensure m is a number before calling toString
+    const mStr = !isNaN(m) ? m.toString().padStart(2, '0') : '00';
+    
+    return `${h12}:${mStr} ${ampm}`;
   }
 
   function formatDuration(minutes: number): string {
@@ -260,7 +271,7 @@
     }
   }
 
-  // [!code ++] Swipe Action for Mobile
+  // Swipe Action for Mobile
   function swipeable(node: HTMLElement, { onEdit, onDelete }: { onEdit: () => void, onDelete: () => void }) {
     let startX = 0;
     let startY = 0;
@@ -310,7 +321,7 @@
         node.style.transform = 'translateX(0)';
     }
 
-    // [!code ++] Prevent click if we were just swiping
+    // Prevent click if we were just swiping
     function handleClick(e: MouseEvent) {
         if (Math.abs(x) > 10) {
             e.stopPropagation();
@@ -466,6 +477,8 @@
         {@const totalCosts = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0)}
         {@const isSelected = selectedTrips.has(trip.id)}
         
+        {@const supplies = trip.supplyItems || trip.suppliesItems || []}
+        
         <div class="trip-card-wrapper">
             <div class="swipe-bg">
                 <div class="swipe-action edit">
@@ -589,8 +602,9 @@
                             </div>
                           {/each}
                         {/if}
-                        {#if trip.suppliesItems}
-                          {#each trip.suppliesItems as item}
+                        
+                        {#if supplies.length > 0}
+                          {#each supplies as item}
                             <div class="expense-row">
                               <span>{item.type}</span>
                               <span>{formatCurrency(item.cost)}</span>
@@ -713,7 +727,7 @@
   
   .filters-bar { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
   
-  /* [!code ++] Sticky Filters Style */
+  /* Sticky Filters Style */
   .sticky-bar {
       position: sticky;
       top: 0;
@@ -750,7 +764,7 @@
 
   .trip-list-cards { display: flex; flex-direction: column; gap: 12px; }
   
-  /* [!code ++] Swipe Wrapper & Backgrounds */
+  /* Swipe Wrapper & Backgrounds */
   .trip-card-wrapper {
       position: relative;
       overflow: hidden;

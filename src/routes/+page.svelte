@@ -2,7 +2,6 @@
   import { goto } from '$app/navigation';
   
   let isMobileMenuOpen = false;
-
   function scrollToSection(id: string) {
     const element = document.getElementById(id);
     if (element) {
@@ -195,6 +194,8 @@
             <li>✓ 10 trips per month</li>
             <li>✓ Google Maps routing</li>
             <li>✓ Basic profit tracking</li>
+            <li>✓ Export to CSV</li>
+            <li>✓ Mobile app access</li>
           </ul>
           
           <a href="/register" class="btn-plan">Get Started</a>
@@ -212,7 +213,6 @@
           </div>
           
           <ul class="features-list">
-            <li>✓ Everything in Free</li>
             <li>✓ Unlimited trips</li>
             <li>✓ Advanced analytics</li>
             <li>✓ PDF reports</li>
@@ -229,7 +229,7 @@
             <h3>Business</h3>
             <div class="price">
               <span class="currency">$</span>
-              <span class="amount">29.99</span>
+              <span class="amount">29</span>
               <span class="period">/month</span>
             </div>
           </div>
@@ -308,6 +308,8 @@
     --purple: #8B5A9E;
     --gray-50: #F9FAFB;
     --gray-100: #F3F4F6;
+    --gray-200: #E5E7EB;
+    --gray-500: #6B7280;
     --gray-600: #4B5563;
     --gray-900: #111827;
   }
@@ -425,7 +427,8 @@
   }
   
   .divider { height: 1px; background: var(--gray-100); margin: 4px 0; }
-  .mobile-btn { text-align: center; display: block; }
+  .mobile-btn { text-align: center;
+    display: block; }
   
   /* Hero Section */
   .hero {
@@ -793,9 +796,10 @@
   
   /* Footer */
   .footer {
-    background: var(--navy);
-    color: white;
+    background: var(--gray-50); /* Changed from var(--navy) to light gray */
+    color: var(--gray-900);     /* Changed from white to dark gray */
     padding: 60px 0 20px;
+    border-top: 1px solid var(--gray-200); /* Added subtle border */
   }
   
   .footer-content {
@@ -813,11 +817,13 @@
   .footer-section h4 {
     margin-bottom: 16px;
     font-size: 16px;
+    color: var(--navy); /* Ensure headings are colored */
+    font-weight: 700;
   }
   
   .footer-section a {
     display: block;
-    color: rgba(255,255,255,0.7);
+    color: var(--gray-600); /* Changed from rgba(255,255,255,0.7) */
     text-decoration: none;
     margin-bottom: 12px;
     transition: color 0.2s;
@@ -828,14 +834,14 @@
   }
   
   .footer-section p {
-    color: rgba(255,255,255,0.7);
+    color: var(--gray-600); /* Changed from rgba(255,255,255,0.7) */
   }
   
   .footer-bottom {
     text-align: center;
     padding-top: 20px;
-    border-top: 1px solid rgba(255,255,255,0.1);
-    color: rgba(255,255,255,0.5);
+    border-top: 1px solid var(--gray-200); /* Changed border color */
+    color: var(--gray-500); /* Changed text color */
   }
   
   /* Responsive */

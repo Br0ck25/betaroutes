@@ -1,7 +1,6 @@
 <script lang="ts">
     import { goto } from '$app/navigation';
     import { page } from '$app/stores';
-
     let username = '';
     let email = '';
     let password = '';
@@ -9,8 +8,9 @@
     let responseError: string | null = null;
     let loading = false;
     let registrationSuccess = false;
-    let submittedEmail = ''; // [!code ++] New variable to store email for display
-
+    let submittedEmail = '';
+    
+    // Check if we are in register mode based on URL query param
     $: isLogin = $page.url.searchParams.get('view') !== 'register';
 
     function toggleMode() {
@@ -24,16 +24,14 @@
         registrationSuccess = false;
     }
 
-async function submitHandler() {
+    async function submitHandler() {
         responseError = null;
         loading = true;
 
-        // [!code fix] Point to '/login', NOT '/api/login'
         const endpoint = isLogin ? '/login' : '/register';
         
         let payload = {};
         if (isLogin) {
-             // Login expects 'email' key even if user types username
              payload = { email: username, password };
         } else {
              if (password !== confirmPassword) {
@@ -55,11 +53,9 @@ async function submitHandler() {
 
             if (response.ok) {
                 if (isLogin) {
-                    // Login Success -> Dashboard
                     await goto('/dashboard', { invalidateAll: true });
                 } else {
-                    // Registration Success -> Show Message
-                    submittedEmail = email; // [!code ++] Save the email before clearing it
+                    submittedEmail = email;
                     registrationSuccess = true;
                     username = ''; email = ''; password = ''; confirmPassword = '';
                 }
@@ -152,12 +148,12 @@ async function submitHandler() {
 		</div>
 	</div>
 	
-	<div class="auth-form">
+    <div class="auth-form">
 		<div class="form-container">
             
             {#if registrationSuccess}
                 <div style="text-align: center;">
-                    <div class="alert success" style="display: block; text-align: center; background: #F0FDF4; border-color: #BBF7D0;">
+                     <div class="alert success" style="display: block; text-align: center; background: #F0FDF4; border-color: #BBF7D0;">
                         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2" style="margin: 0 auto 16px auto; display: block;">
                             <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
@@ -180,14 +176,14 @@ async function submitHandler() {
                 </div>
                 
                 <form on:submit|preventDefault={submitHandler}>
-                    <div class="form-fields">
+                     <div class="form-fields">
                         <div class="field-group">
                             <label for="username">
                                 {isLogin ? 'Username or Email' : 'Username'}
                                 <span class="required">*</span>
                             </label>
                             <div class="input-wrapper">
-                                <svg class="input-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                 <svg class="input-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
                                     <path d="M10 10C12.7614 10 15 7.76142 15 5C15 2.23858 12.7614 0 10 0C7.23858 0 5 2.23858 5 5C5 7.76142 7.23858 10 10 10Z" fill="currentColor"/>
                                     <path d="M10 12C4.47715 12 0 15.3579 0 19.5C0 19.7761 0.223858 20 0.5 20H19.5C19.7761 20 20 19.7761 20 19.5C20 15.3579 15.5228 12 10 12Z" fill="currentColor"/>
                                 </svg>
@@ -206,12 +202,12 @@ async function submitHandler() {
                             <div class="field-group">
                                 <label for="email">
                                     Email Address
-                                    <span class="required">*</span>
+                                   <span class="required">*</span>
                                 </label>
                                 <div class="input-wrapper">
-                                    <svg class="input-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                     <svg class="input-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
                                         <path d="M2 4C2 3.44772 2.44772 3 3 3H17C17.5523 3 18 3.44772 18 4V16C18 16.5523 17.5523 17 17 17H3C2.44772 17 2 16.5523 2 16V4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                        <path d="M18 4L10 10.5L2 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                         <path d="M18 4L10 10.5L2 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                     </svg>
                                     <input	
                                         type="email"	
@@ -221,17 +217,17 @@ async function submitHandler() {
                                         placeholder="Enter your email address"
                                         autocomplete="email"
                                     />
-                                </div>
+                                 </div>
                             </div>
                         {/if}
                         
-                        <div class="field-group">
+                         <div class="field-group">
                             <label for="password">
                                 Password
                                 <span class="required">*</span>
                             </label>
                             <div class="input-wrapper">
-                                <svg class="input-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                 <svg class="input-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
                                     <path d="M15 7H14V5C14 3.67392 13.4732 2.40215 12.5355 1.46447C11.5979 0.526784 10.3261 0 9 0C7.67392 0 6.40215 0.526784 5.46447 1.46447C4.52678 2.40215 4 3.67392 4 5V7H3C2.46957 7 1.96086 7.21071 1.58579 7.58579C1.21071 7.96086 1 8.46957 1 9V17C1 17.5304 1.21071 18.0391 1.58579 18.4142C1.96086 18.7893 2.46957 19 3 19H15C15.5304 19 16.0391 18.7893 16.4142 18.4142C16.7893 18.0391 17 17.5304 17 17V9C17 8.46957 16.7893 7.96086 16.4142 7.58579C16.0391 7.21071 15.5304 7 15 7ZM6 5C6 4.20435 6.31607 3.44129 6.87868 2.87868C7.44129 2.31607 8.20435 2 9 2C9.79565 2 10.5587 2.31607 11.1213 2.87868C11.6839 3.44129 12 4.20435 12 5V7H6V5Z" fill="currentColor"/>
                                 </svg>
                                 <input	
@@ -253,7 +249,7 @@ async function submitHandler() {
                                 </label>
                                 <div class="input-wrapper">
                                     <svg class="input-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                        <path d="M15 7H14V5C14 3.67392 13.4732 2.40215 12.5355 1.46447C11.5979 0.526784 10.3261 0 9 0C7.67392 0 6.40215 0.526784 5.46447 1.46447C4.52678 2.40215 4 3.67392 4 5V7H3C2.46957 7 1.96086 7.21071 1.58579 7.58579C1.21071 7.96086 1 8.46957 1 9V17C1 17.5304 1.21071 18.0391 1.58579 18.4142C1.96086 18.7893 2.46957 19 3 19H15C15.5304 19 16.0391 18.7893 16.4142 18.4142C16.7893 18.0391 17 17.5304 17 17V9C17 8.46957 16.7893 7.96086 16.4142 7.58579C16.0391 7.21071 15.5304 7 15 7ZM6 5C6 4.20435 6.31607 3.44129 6.87868 2.87868C7.44129 2.31607 8.20435 2 9 2C9.79565 2 10.5587 2.31607 11.1213 2.87868C11.6839 3.44129 12 4.20435 12 5V7H6V5Z" fill="currentColor"/>
+                                         <path d="M15 7H14V5C14 3.67392 13.4732 2.40215 12.5355 1.46447C11.5979 0.526784 10.3261 0 9 0C7.67392 0 6.40215 0.526784 5.46447 1.46447C4.52678 2.40215 4 3.67392 4 5V7H3C2.46957 7 1.96086 7.21071 1.58579 7.58579C1.21071 7.96086 1 8.46957 1 9V17C1 17.5304 1.21071 18.0391 1.58579 18.4142C1.96086 18.7893 2.46957 19 3 19H15C15.5304 19 16.0391 18.7893 16.4142 18.4142C16.7893 18.0391 17 17.5304 17 17V9C17 8.46957 16.7893 7.96086 16.4142 7.58579C16.0391 7.21071 15.5304 7 15 7ZM6 5C6 4.20435 6.31607 3.44129 6.87868 2.87868C7.44129 2.31607 8.20435 2 9 2C9.79565 2 10.5587 2.31607 11.1213 2.87868C11.6839 3.44129 12 4.20435 12 5V7H6V5Z" fill="currentColor"/>
                                     </svg>
                                     <input	
                                         type="password"	
@@ -264,38 +260,38 @@ async function submitHandler() {
                                         autocomplete="new-password"
                                     />
                                 </div>
-                            </div>
+                             </div>
                         {/if}
                         
                         {#if isLogin}
-                            <div class="form-options">
+                             <div class="form-options">
                                 <label class="checkbox-label">
                                     <input type="checkbox" name="remember" />
-                                    <span>Remember me</span>
+                                     <span>Remember me</span>
                                 </label>
                                 <a href="/forgot-password" class="forgot-link">Forgot password?</a>
-                            </div>
+                             </div>
                         {/if}
                     </div>
                     
-                    {#if responseError}
+                     {#if responseError}
                         <div class="alert error">
                             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                                 <path d="M10 0C4.48 0 0 4.48 0 10C0 15.52 4.48 20 10 20C15.52 20 20 15.52 20 10C20 4.48 15.52 0 10 0ZM11 15H9V13H11V15ZM11 11H9V5H11V11Z" fill="currentColor"/>
                             </svg>
                             {responseError}
-                        </div>
+                         </div>
                     {/if}
                     
                     <button type="submit" class="btn-submit" disabled={loading}>
                         {#if loading}
-                            <svg class="spinner" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                             <svg class="spinner" width="20" height="20" viewBox="0 0 20 20" fill="none">
                                 <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2" opacity="0.25"/>
                                 <path d="M10 2C10 2 10 2 10 2C14.4183 2 18 5.58172 18 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             </svg>
                             Processing...
                         {:else}
-                            {isLogin ? 'Sign In' : 'Create Account'}
+                             {isLogin ? 'Sign In' : 'Create Account'}
                         {/if}
                     </button>
                 </form>
@@ -310,13 +306,16 @@ async function submitHandler() {
 
 <style>
 	@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-    
-	:root {
+    :root {
 		--orange: #FF7F50;
 		--blue: #29ABE2;
 		--navy: #2C4A6E;
 		--green: #8DC63F;
 		--purple: #8B5A9E;
+        --gray-50: #F9FAFB;
+        --gray-100: #F3F4F6;
+        --gray-600: #4B5563;
+        --gray-900: #111827;
 	}
 	
 	* {
@@ -334,22 +333,18 @@ async function submitHandler() {
 	
 	/* Left Side - Branding */
 	.auth-brand {
-		background: linear-gradient(135deg, var(--navy) 0%, #1a3a5c 100%);
+		background: var(--gray-50); /* CHANGED: from navy gradient to light gray */
 		position: relative;
 		overflow: hidden;
 		padding: 48px;
 		display: flex;
-		flex-direction: column;
+        flex-direction: column;
+        border-right: 1px solid var(--gray-100);
 	}
 	
 	.auth-brand::after {
-		content: '';
-		position: absolute;
-		inset: 0;
-		background:	
-			radial-gradient(circle at 20% 30%, rgba(41, 171, 226, 0.15) 0%, transparent 50%),
-			radial-gradient(circle at 80% 70%, rgba(141, 198, 63, 0.15) 0%, transparent 50%);
-		pointer-events: none;
+        /* Removed the radial gradient overlay to keep it clean */
+		display: none;
 	}
 	
 	.brand-content {
@@ -377,14 +372,14 @@ async function submitHandler() {
 	.brand-text h1 {
 		font-size: 36px;
 		font-weight: 800;
-		color: white;
+		color: var(--navy); /* CHANGED: from white to navy */
 		margin-bottom: 16px;
 		line-height: 1.2;
 	}
 	
 	.brand-text p {
 		font-size: 18px;
-		color: rgba(255, 255, 255, 0.8);
+		color: var(--gray-600); /* CHANGED: from white transparent to gray */
 		line-height: 1.6;
 	}
 	
@@ -404,33 +399,34 @@ async function submitHandler() {
 	.feature-icon {
 		width: 48px;
 		height: 48px;
-		background: rgba(255, 255, 255, 0.1);
-		backdrop-filter: blur(8px);
+		background: white; /* CHANGED: from transparent white to solid white */
+		border: 1px solid var(--gray-100);
 		border-radius: 12px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		color: var(--orange);
 		flex-shrink: 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 	}
 	
 	.feature-text h3 {
 		font-size: 16px;
 		font-weight: 600;
-		color: white;
+		color: var(--navy); /* CHANGED: from white to navy */
 		margin-bottom: 4px;
 	}
 	
 	.feature-text p {
 		font-size: 14px;
-		color: rgba(255, 255, 255, 0.7);
+		color: var(--gray-600); /* CHANGED: from white transparent to gray */
 	}
 	
 	.brand-stats {
 		display: flex;
 		gap: 48px;
 		padding-top: 48px;
-		border-top: 1px solid rgba(255, 255, 255, 0.1);
+		border-top: 1px solid var(--gray-200); /* CHANGED: border color */
 	}
 	
 	.stat {
@@ -440,18 +436,18 @@ async function submitHandler() {
 	.stat-value {
 		font-size: 24px;
 		font-weight: 800;
-		color: white;
+		color: var(--navy); /* CHANGED: from white to navy */
 		margin-bottom: 4px;
 	}
 	
 	.stat-label {
 		font-size: 13px;
-		color: rgba(255, 255, 255, 0.6);
+		color: var(--gray-600); /* CHANGED: from white transparent to gray */
 	}
 	
 	/* Right Side - Form */
 	.auth-form {
-		background: #F9FAFB;
+		background: white; /* Changed from #F9FAFB to white for contrast against the now-gray sidebar */
 		display: flex;
 		align-items: center;
 		justify-content: center;
