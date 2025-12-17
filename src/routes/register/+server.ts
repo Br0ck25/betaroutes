@@ -8,18 +8,24 @@ import { checkRateLimit } from '$lib/server/rateLimit';
 import { randomUUID } from 'node:crypto';
 
 export const POST: RequestHandler = async ({ request, platform, url, getClientAddress }) => {
+    console.log('[Register] ===== START REGISTRATION =====');
+    console.log('[Register] Hostname:', url.hostname);
+    console.log('[Register] Platform available:', !!platform);
+    console.log('[Register] Platform.env available:', !!platform?.env);
+    
     try {
-        // 1. Debug Database Binding
+        // 1. Check Database Binding
         const usersKV = platform?.env?.BETA_USERS_KV;
         if (!usersKV) {
             console.error('[Register] CRITICAL: BETA_USERS_KV binding missing');
             return json({ 
                 message: 'Database service unavailable',
-                technical: 'BETA_USERS_KV binding not configured'
+                debug: { error: 'BETA_USERS_KV binding not configured' }
             }, { status: 503 });
         }
+        console.log('[Register] ✅ KV binding present');
 
-        // 1.5. Check Email Configuration (Critical for Production)
+        // 1.5. Check Email Configuration
         const resendKey = platform?.env?.RESEND_API_KEY;
         const isProduction = !url.hostname.includes('localhost') && !url.hostname.includes('127.0.0.1');
         
@@ -27,16 +33,17 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
             console.error('[Register] CRITICAL: RESEND_API_KEY is missing in production');
             return json({ 
                 message: 'Email service not configured. Please contact support.',
-                technical: 'RESEND_API_KEY environment variable missing'
+                debug: { error: 'RESEND_API_KEY environment variable missing' }
             }, { status: 503 });
         }
+        console.log('[Register] ✅ Email key present:', !!resendKey);
 
         // 2. Rate Limit
+        console.log('[Register] Checking rate limit...');
         const clientIp = request.headers.get('CF-Connecting-IP') || getClientAddress();
-        // Wrap rate limit in its own try/catch to ensure it doesn't block critical flow if it fails
         let limitResult = { allowed: true };
         try {
-             limitResult = await checkRateLimit(usersKV, clientIp, 'register_attempt', 100, 3600);
+             limitResult = await checkRateLimit(usersKV, clientIp, 'register_attempt', 500, 3600);
         } catch (e) {
              console.warn('[Register] Rate limit check failed (ignoring):', e);
         }
@@ -44,12 +51,27 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
         if (!limitResult.allowed) {
             return json({ message: 'Too many registration attempts. Please try again later.' }, { status: 429 });
         }
+        console.log('[Register] ✅ Rate limit passed');
 
-        const { username, email, password } = await request.json();
+        // 3. Parse Body
+        const body = await request.json();
+        const { username, email, password } = body;
+        console.log('[Register] Request body parsed:', { 
+            hasUsername: !!username, 
+            hasEmail: !!email, 
+            hasPassword: !!password 
+        });
 
-        // 3. Validation
+        // 4. Validation
         if (!username || !email || !password) {
-            return json({ message: 'Missing required fields' }, { status: 400 });
+            return json({ 
+                message: 'Missing required fields',
+                debug: { 
+                    hasUsername: !!username, 
+                    hasEmail: !!email, 
+                    hasPassword: !!password 
+                }
+            }, { status: 400 });
         }
         
         if (password.length < 8) {
@@ -58,8 +80,10 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
         
         const normEmail = email.toLowerCase().trim();
         const normUser = username.toLowerCase().trim();
+        console.log('[Register] ✅ Validation passed');
 
-        // 4. Check Existing
+        // 5. Check Existing Users
+        console.log('[Register] Checking for existing users...');
         const existingEmail = await findUserByEmail(usersKV, normEmail);
         if (existingEmail) {
             return json({ message: 'Email already in use.' }, { status: 409 });
@@ -69,8 +93,10 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
         if (existingUser) {
             return json({ message: 'Username taken.' }, { status: 409 });
         }
+        console.log('[Register] ✅ User is new');
 
-        // 5. Check Reservations
+        // 6. Check Reservations
+        console.log('[Register] Checking reservations...');
         const [resUser, resEmail] = await Promise.all([
             usersKV.get(`reservation:username:${normUser}`),
             usersKV.get(`reservation:email:${normEmail}`)
@@ -79,10 +105,16 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
         if (resUser || resEmail) {
             return json({ message: 'Username or Email is pending verification.' }, { status: 409 });
         }
+        console.log('[Register] ✅ No conflicting reservations');
 
-        // 6. Create Pending Record
+        // 7. Hash Password
+        console.log('[Register] Hashing password...');
         const hashedPassword = await hashPassword(password);
+        console.log('[Register] ✅ Password hashed');
+        
+        // 8. Create Pending Record
         const verificationToken = randomUUID();
+        console.log('[Register] Generated token:', verificationToken.substring(0, 8) + '...');
         
         const pendingUser = {
             username: normUser,
@@ -93,25 +125,30 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
 
         const ttl = 86400; // 24 hours
 
-        // 7. Atomic Writes
+        // 9. Store in KV
+        console.log('[Register] Writing to KV...');
         await Promise.all([
             usersKV.put(`pending_verify:${verificationToken}`, JSON.stringify(pendingUser), { expirationTtl: ttl }),
             usersKV.put(`reservation:username:${normUser}`, verificationToken, { expirationTtl: ttl }),
             usersKV.put(`reservation:email:${normEmail}`, verificationToken, { expirationTtl: ttl }),
             usersKV.put(`lookup:pending:${normEmail}`, verificationToken, { expirationTtl: ttl })
         ]);
+        console.log('[Register] ✅ KV writes complete');
 
-        // 8. Send Email (Likely Failure Point)
-        console.log(`[Register] Sending verification email to ${normEmail}...`);
-        
-        // Wrap email sending specifically to catch config errors
+        // 10. Send Email
+        console.log('[Register] Sending verification email...');
         let emailSent = false;
         try {
-            // Pass API key from platform.env (required for Cloudflare Workers)
-            const resendApiKey = platform?.env?.RESEND_API_KEY;
-            emailSent = await sendVerificationEmail(normEmail, verificationToken, url.origin, resendApiKey);
+            // Import check
+            if (typeof sendVerificationEmail !== 'function') {
+                throw new Error('sendVerificationEmail is not a function - import failed');
+            }
+            
+            emailSent = await sendVerificationEmail(normEmail, verificationToken, url.origin, resendKey);
+            console.log('[Register] ✅ Email sent successfully');
         } catch (emailErr: any) {
             console.error('[Register] Email send failed:', emailErr);
+            console.error('[Register] Email error stack:', emailErr.stack);
             
             // Rollback pending registration
             await Promise.all([
@@ -122,8 +159,11 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
             ]);
             
             return json({ 
-                message: 'Failed to send verification email. Please try again or contact support.',
-                technical: emailErr.message 
+                message: 'Failed to send verification email. Please try again.',
+                debug: { 
+                    error: emailErr.message,
+                    name: emailErr.name
+                }
             }, { status: 500 });
         }
 
@@ -139,29 +179,33 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
             ]);
             
             return json({ 
-                message: 'Failed to send verification email. Please check your email address and try again.',
-                technical: 'Email service returned false'
+                message: 'Failed to send verification email.',
+                debug: { error: 'Email service returned false' }
             }, { status: 500 });
         }
 
-        console.log(`[Register] ✅ Registration successful for ${normEmail}`);
+        console.log('[Register] ===== SUCCESS =====');
         return json({ 
             success: true, 
             message: 'Verification email sent. Please check your inbox.' 
         });
 
     } catch (e: any) {
-        console.error('[Register] Unexpected error:', e);
+        console.error('[Register] ===== CRITICAL ERROR =====');
+        console.error('[Register] Error type:', typeof e);
+        console.error('[Register] Error name:', e?.name);
+        console.error('[Register] Error message:', e?.message);
+        console.error('[Register] Error stack:', e?.stack);
         
-        // Don't expose stack traces in production
-        const isProduction = !url?.hostname?.includes('localhost') && !url?.hostname?.includes('127.0.0.1');
-        
+        // Always return detailed error for debugging
         return json({ 
             message: 'Registration failed. Please try again.',
-            ...(isProduction ? {} : { 
-                debug_error: e.message,
-                stack: e.stack 
-            })
+            debug: {
+                error: e?.message || 'Unknown error',
+                name: e?.name || 'Unknown',
+                type: typeof e,
+                stack: e?.stack?.split('\n').slice(0, 5).join('\n')
+            }
         }, { status: 500 });
     }
 };
