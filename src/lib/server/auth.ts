@@ -5,7 +5,7 @@ import { findUserByEmail, findUserByUsername, updatePasswordHash, type User } fr
 
 // --- PBKDF2 CONFIGURATION (Web Crypto) ---
 // [!code fix] Increased to 600,000 (OWASP 2025 Recommendation)
-const PBKDF2_ITERATIONS = 600000;
+const PBKDF2_ITERATIONS = 100000;
 const SALT_SIZE = 16;
 const HASH_ALGO = 'SHA-256';
 
