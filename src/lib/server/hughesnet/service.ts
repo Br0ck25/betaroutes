@@ -34,6 +34,10 @@ const LOCK_MAX_RETRIES = 10;
 // ROLLBACK CONSTANTS (Issue #7)
 const MAX_ROLLBACK_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
+// RESYNC SYSTEM CONSTANTS
+const RESYNC_WINDOW_DAYS = 7;
+const RESYNC_WINDOW_MS = RESYNC_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
 // --- HELPERS ---
 
 function parseDateOnly(dateStr: string): Date | null {
@@ -69,6 +73,10 @@ function parseTime(timeStr: string): number {
 }
 
 function minutesToTime(minutes: number): string {
+    // Safeguard against NaN
+    if (!isFinite(minutes) || isNaN(minutes)) {
+        return '12:00 PM'; // Default fallback
+    }
     if (minutes < 0) minutes += 1440;
     let h = Math.floor(minutes / 60) % 24;
     const m = Math.floor(minutes % 60);
@@ -113,6 +121,60 @@ function isValidAddress(order: OrderData): boolean {
     const trimmedState = order.state?.trim();
     
     return !!(trimmedAddress || (trimmedCity && trimmedState));
+}
+
+// RESYNC SYSTEM: Determine order sync status
+function determineOrderSyncStatus(order: OrderData): {
+    syncStatus: 'complete' | 'incomplete' | 'future';
+    needsResync: boolean;
+} {
+    const now = Date.now();
+    
+    // Check if order is complete
+    if (order.departureCompleteTimestamp) {
+        return { syncStatus: 'complete', needsResync: false };
+    }
+    
+    // Check if incomplete (has departure incomplete timestamp)
+    if (order.departureIncompleteTimestamp) {
+        // Only resync if within 7 days
+        const withinWindow = order.lastSyncTimestamp && 
+                            (now - order.lastSyncTimestamp) < RESYNC_WINDOW_MS;
+        return { syncStatus: 'incomplete', needsResync: withinWindow };
+    }
+    
+    // No departure timestamp = future job
+    return { syncStatus: 'future', needsResync: true };
+}
+
+// RESYNC SYSTEM: Check if order transitioned from incomplete to complete
+function checkIncompleteToComplete(
+    oldOrder: OrderData | undefined, 
+    newOrder: OrderData
+): boolean {
+    if (!oldOrder) return false;
+    
+    // Must have been incomplete before
+    if (oldOrder.syncStatus !== 'incomplete') return false;
+    
+    // Must be complete now
+    if (!newOrder.departureCompleteTimestamp) return false;
+    
+    // Must have old incomplete timestamp
+    if (!oldOrder.departureIncompleteTimestamp) return false;
+    
+    // Must be within 7 day window
+    if (!oldOrder.lastSyncTimestamp) return false;
+    const daysSinceSync = (Date.now() - oldOrder.lastSyncTimestamp) / (1000 * 60 * 60 * 24);
+    if (daysSinceSync > RESYNC_WINDOW_DAYS) return false;
+    
+    return true;
+}
+
+// RESYNC SYSTEM: Check if order should be marked as removed
+function shouldMarkAsRemoved(order: OrderData): boolean {
+    // Only mark as removed if it had both arrival and departure incomplete
+    return !!(order.arrivalTimestamp && order.departureIncompleteTimestamp);
 }
 
 function buildAddress(o: OrderData): string {
@@ -431,13 +493,36 @@ export class HughesNetService {
                         const parsed = parser.parseOrderPage(html, id);
                         
                         if (parsed.address && (parsed.confirmScheduleDate || parsed.arrivalTimestamp)) {
-                            delete parsed._status; 
-                            orderDb[id] = parsed;
+                            const existingOrder = orderDb[id];
+                            
+                            // Determine sync status
+                            const { syncStatus, needsResync } = determineOrderSyncStatus(parsed);
+                            
+                            // Check for incomplete→complete transition
+                            const wasIncompleteNowComplete = checkIncompleteToComplete(existingOrder, parsed);
+                            
+                            // Update order with sync tracking
+                            delete parsed._status;
+                            const updatedOrder: OrderData = {
+                                ...parsed,
+                                syncStatus,
+                                needsResync,
+                                lastSyncTimestamp: Date.now()
+                            };
+                            
+                            // If incomplete→complete, mark for payment update
+                            if (wasIncompleteNowComplete) {
+                                updatedOrder.lastPaymentUpdate = Date.now();
+                                this.log(`  ${id} [INCOMPLETE→COMPLETE] Payment update needed`);
+                            }
+                            
+                            orderDb[id] = updatedOrder;
                             dbDirty = true;
                             
                             const ts = parsed.arrivalTimestamp ? `Arr:${formatTimestamp(parsed.arrivalTimestamp)}` : '';
                             const pole = parsed.hasPoleMount ? '+POLE' : '';
-                            this.log(`  ${id} ${ts} ${pole}`.trim());
+                            const status = syncStatus === 'future' ? '[FUTURE]' : syncStatus === 'incomplete' ? '[INCOMPLETE]' : '';
+                            this.log(`  ${id} ${ts} ${pole} ${status}`.trim());
                         } else if (!parsed.address) {
                             orderDb[id]._status = 'failed';
                             dbDirty = true;
@@ -609,6 +694,16 @@ export class HughesNetService {
 
         ordersWithMeta.sort((a, b) => a._sortTime - b._sortTime);
 
+        // RESYNC SYSTEM: Check if any orders just transitioned incomplete→complete
+        const hasPaymentUpdates = ordersWithMeta.some(o => 
+            o.lastPaymentUpdate && 
+            (Date.now() - o.lastPaymentUpdate) < 60000 // Within last minute
+        );
+
+        if (hasPaymentUpdates) {
+            this.log(`[Trip ${date}] Payment updates detected - recalculating earnings`);
+        }
+
         const anchorOrder = ordersWithMeta.find(o => o._sortTime > 0) || ordersWithMeta[0];
 
         let startAddr = defaultStart?.trim() || '';
@@ -637,26 +732,41 @@ export class HughesNetService {
             if (startAddr && eAddr !== startAddr) {
                 try {
                     const leg = await this.router.getRouteInfo(startAddr, eAddr);
-                    if (leg) commuteMins = Math.round(leg.duration / 60);
+                    if (leg && leg.duration && isFinite(leg.duration)) {
+                        commuteMins = Math.round(leg.duration / 60);
+                    }
                 } catch(e) {
                     console.warn('Failed to get route info:', e);
                 }
+            }
+            
+            // Ensure commuteMins is valid
+            if (isNaN(commuteMins) || !isFinite(commuteMins) || commuteMins < 0) {
+                commuteMins = 0;
             }
 
             if (anchorOrder.arrivalTimestamp) {
                 const d = new Date(anchorOrder.arrivalTimestamp);
                 const arrivalMins = d.getHours() * 60 + d.getMinutes();
-                if (!isNaN(arrivalMins)) {
-                    startMins = arrivalMins - commuteMins;
+                if (!isNaN(arrivalMins) && isFinite(arrivalMins)) {
+                    const calculatedStart = arrivalMins - commuteMins;
+                    if (!isNaN(calculatedStart) && isFinite(calculatedStart)) {
+                        startMins = calculatedStart;
+                    }
                 }
             } else {
                 const schedMins = parseTime(anchorOrder.beginTime);
-                if (schedMins > 0) startMins = schedMins - commuteMins;
+                if (schedMins > 0 && isFinite(schedMins)) {
+                    const calculatedStart = schedMins - commuteMins;
+                    if (!isNaN(calculatedStart) && isFinite(calculatedStart)) {
+                        startMins = calculatedStart;
+                    }
+                }
             }
         }
         
-        // Ensure startMins is valid
-        if (isNaN(startMins) || !isFinite(startMins)) {
+        // Ensure startMins is valid and positive
+        if (isNaN(startMins) || !isFinite(startMins) || startMins < 0 || startMins > 1440) {
             startMins = 9 * 60; // Fallback to 9 AM
         }
 
@@ -684,18 +794,45 @@ export class HughesNetService {
         try {
             const results = await Promise.all(legPromises);
             results.forEach((leg) => {
-                if (leg) {
-                    totalMins += Math.round(leg.duration / 60);
-                    totalMeters += leg.distance;
+                if (leg && leg.duration && isFinite(leg.duration)) {
+                    const mins = Math.round(leg.duration / 60);
+                    if (isFinite(mins) && mins >= 0) {
+                        totalMins += mins;
+                    }
+                }
+                if (leg && leg.distance && isFinite(leg.distance)) {
+                    const meters = leg.distance;
+                    if (isFinite(meters) && meters >= 0) {
+                        totalMeters += meters;
+                    }
                 }
             });
         } catch (e: any) {
             if (e.message === 'REQ_LIMIT') return false;
             console.warn('Failed to get route legs:', e);
         }
+        
+        // Validate totalMins
+        if (isNaN(totalMins) || !isFinite(totalMins) || totalMins < 0) {
+            this.warn(`[Trip ${date}] Invalid totalMins: ${totalMins}, resetting to 0`);
+            totalMins = 0;
+        }
 
         const miles = Number((totalMeters * 0.000621371).toFixed(1));
-        const jobMins = ordersWithMeta.reduce((sum, o) => sum + (o._actualDuration || o.jobDuration || 60), 0);
+        const jobMins = ordersWithMeta.reduce((sum, o) => {
+            const dur = o._actualDuration || o.jobDuration || 60;
+            if (isFinite(dur) && dur > 0) {
+                return sum + dur;
+            }
+            return sum;
+        }, 0);
+        
+        // Validate jobMins
+        if (isNaN(jobMins) || !isFinite(jobMins) || jobMins < 0) {
+            this.warn(`[Trip ${date}] Invalid jobMins: ${jobMins}`);
+            return false;
+        }
+        
         const totalWorkMins = totalMins + jobMins;
         
         // Ensure totalWorkMins is valid

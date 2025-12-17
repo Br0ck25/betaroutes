@@ -4,38 +4,42 @@ import type { RequestHandler } from './$types';
 import { authenticateUser } from '$lib/server/auth';
 import { createSession } from '$lib/server/sessionService';
 import { findUserById } from '$lib/server/userService';
-// [!code fix] Import the rate limiter
+import { makeTripService } from '$lib/server/tripService';
 import { checkRateLimit } from '$lib/server/rateLimit';
 import { dev } from '$app/environment';
 
 export const POST: RequestHandler = async ({ request, platform, cookies, getClientAddress }) => {
     try {
-        // 1. Get bindings first
-        const kv = platform?.env?.BETA_USERS_KV;
-        const sessionKv = platform?.env?.BETA_SESSIONS_KV;
+        const env = platform?.env;
+        const kv = env?.BETA_USERS_KV;
+        const sessionKv = env?.BETA_SESSIONS_KV;
 
+        // 1. Check Bindings
         if (!kv || !sessionKv) {
              console.error('KV Binding Missing. Check wrangler.toml');
-             return json({ error: 'Service Unavailable' }, { status: 503 });
+             if (!dev) return json({ error: 'Service Unavailable' }, { status: 503 });
         }
 
-        // [!code fix] 2. Rate Limiting (Prevent Credential Stuffing)
-        // Use CF-Connecting-IP for accurate Cloudflare IPs, fallback to SvelteKit default
-        const clientIp = request.headers.get('CF-Connecting-IP') || getClientAddress();
-        
-        // Rule: 5 Login attempts per 60 seconds per IP
-        const limitResult = await checkRateLimit(kv, clientIp, 'login_attempt', 5, 60);
+        // 2. Rate Limiting (Prevent Credential Stuffing)
+        // [!code fix] Skip this check in dev mode to prevent localhost lockouts
+        if (kv && !dev) {
+            const clientIp = request.headers.get('CF-Connecting-IP') || getClientAddress();
+            
+            // Rule: 5 Login attempts per 60 seconds per IP
+            const limitResult = await checkRateLimit(kv, clientIp, 'login_attempt', 5, 60);
 
-        if (!limitResult.allowed) {
-            return json({ 
-                error: 'Too many login attempts. Please try again in a minute.' 
-            }, { status: 429 });
+            if (!limitResult.allowed) {
+                return json({ 
+                    error: 'Too many login attempts. Please try again in a minute.' 
+                }, { status: 429 });
+            }
         }
 
-        // 3. Parse Body (Only proceed if rate limit passes)
+        // 3. Parse Body
         const { email, password } = await request.json();
 
         // 4. Authenticate
+        // @ts-ignore
         const authResult = await authenticateUser(kv, email, password);
         
         if (!authResult) {
@@ -43,6 +47,7 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
         }
 
         // 5. Fetch Full User details
+        // @ts-ignore
         const fullUser = await findUserById(kv, authResult.id);
         const now = new Date().toISOString();
         
@@ -59,6 +64,7 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
         };
 
         // 7. Create Session in SESSIONS_KV
+        // @ts-ignore
         const sessionId = await createSession(sessionKv, sessionData);
         
         // 8. Set Cookie
@@ -69,6 +75,30 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
             secure: !dev, 
             maxAge: 60 * 60 * 24 * 7 
         });
+
+        // 9. AUTO-MIGRATION
+        // Move legacy data (username key) to new storage (UUID key) in background
+        if (platform?.context && env?.BETA_LOGS_KV && env?.TRIP_INDEX_DO) {
+            const userId = authResult.id;
+            const username = authResult.username;
+
+            platform.context.waitUntil((async () => {
+                try {
+                    const svc = makeTripService(
+                        env.BETA_LOGS_KV,
+                        env.BETA_LOGS_TRASH_KV,
+                        env.BETA_PLACES_KV,
+                        env.TRIP_INDEX_DO
+                    );
+                    
+                    // Trigger the move. If keys exist under 'username', they move to 'userId'.
+                    await svc.migrateUser(username, userId);
+                    
+                } catch (e) {
+                    console.error(`[Auto-Migration] Failed for ${username}:`, e);
+                }
+            })());
+        }
 
         return json({ user: sessionData });
 

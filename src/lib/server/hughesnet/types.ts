@@ -17,6 +17,11 @@ export interface OrderData {
     departureCompleteTimestamp?: number;
     departureIncompleteTimestamp?: number;
     _status?: 'pending' | 'failed';
+    // Resync tracking fields
+    syncStatus?: 'complete' | 'incomplete' | 'future' | 'removed';
+    needsResync?: boolean;
+    lastSyncTimestamp?: number;
+    lastPaymentUpdate?: number;
 }
 
 // Type for orders with computed metadata
