@@ -126,6 +126,7 @@ export function parseOrderPage(html: string, id: string): OrderData {
     
     const val = (name: string) => $(`input[name="${name}"]`).val() as string;
     
+    // --- Address Parsing ---
     out.address = val('FLD_SO_Address1') || val('f_address') || val('txtAddress') || '';
     if (!out.address) {
         const bodyText = $('body').text();
@@ -137,24 +138,73 @@ export function parseOrderPage(html: string, id: string): OrderData {
     out.state = val('f_state') || scanForward(html, 'State:', />([A-Z]{2})</) || '';
     out.zip = val('f_zip') || scanForward(html, 'Zip:', />(\d{5})</) || '';
 
+    // --- Date Parsing ---
     out.confirmScheduleDate = val('f_sched_date') || scanForward(html, 'Confirm Schedule Date', /(\d{1,2}\/\d{1,2}\/\d{2,4})/) || scanForward(html, 'Date:', /(\d{1,2}\/\d{1,2}\/\d{2,4})/);
-    out.beginTime = val('f_begin_time') || scanForward(html, 'Arrival Window', /(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i) || scanForward(html, 'Time:', /(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
+    
+    // --- Time Parsing (Updated) ---
+    // Helper to clean text (removes &nbsp; and trims)
+    const cleanText = (text: string) => text.replace(/[\u00A0\s]+/g, ' ').trim();
 
+    let arrivalTime = '';
+    let schdBeginTime = '';
+
+    // 1. Try to find "Arrival Time" or "Arrival Window"
+    // We look for the label, then get the text of the NEXT sibling cell
+    const arrivalLabel = $('td.displaytextlbl').filter((_, el) => {
+        const t = $(el).text();
+        return t.includes('Arrival Time') || t.includes('Arrival Window');
+    });
+
+    if (arrivalLabel.length > 0) {
+        const rawArrival = cleanText(arrivalLabel.next('td.displaytext').text());
+        // Extract HH:MM, ignore (24hr) or AM/PM for now, just grab the digits
+        const match = rawArrival.match(/(\d{1,2}:\d{2})/);
+        if (match) arrivalTime = match[1];
+    }
+
+    // 2. Try to find "Schd Est. Begin Time" (Fallback)
+    const beginLabel = $('td.displaytextlbl').filter((_, el) => $(el).text().includes('Schd Est. Begin Time'));
+    
+    if (beginLabel.length > 0) {
+        const rawBegin = cleanText(beginLabel.next('td.displaytext').text());
+        // Matches "11:00" from "11:00 (24hr)"
+        const match = rawBegin.match(/(\d{1,2}:\d{2})/);
+        if (match) schdBeginTime = match[1];
+    }
+
+    // Priority: Form Input -> Arrival Time -> Schd Est. Begin Time -> Legacy Scan
+    out.beginTime = val('f_begin_time') || 
+                    arrivalTime || 
+                    schdBeginTime || 
+                    scanForward(html, 'Time:', /(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
+
+    // --- Type Parsing (Prioritize Repair/Upgrade) ---
     const bodyText = $('body').text();
-    if (bodyText.includes('Service Order #')) {
-        if (bodyText.match(/Install/i)) { out.type = 'Install'; out.jobDuration = 90; }
-        else if (bodyText.match(/Upgrade/i)) { out.type = 'Upgrade'; out.jobDuration = 60; }
+    
+    const typeLabelMatch = bodyText.match(/(?:Order|Service)\s*Type\s*[:\.]?\s*(Install|Repair|Upgrade)/i);
+    
+    if (typeLabelMatch) {
+        const found = typeLabelMatch[1].toLowerCase();
+        if (found.includes('install')) { out.type = 'Install'; out.jobDuration = 90; }
+        else if (found.includes('upgrade')) { out.type = 'Upgrade'; out.jobDuration = 60; }
+        else { out.type = 'Repair'; out.jobDuration = 60; }
+    } 
+    else if (bodyText.includes('Service Order #')) {
+        if (bodyText.match(/Upgrade/i)) { out.type = 'Upgrade'; out.jobDuration = 60; }
+        else if (bodyText.match(/Repair/i)) { out.type = 'Repair'; out.jobDuration = 60; }
+        else if (bodyText.match(/Install/i)) { out.type = 'Install'; out.jobDuration = 90; }
     }
 
     if (bodyText.includes('CON NON-STD CHARGE NEW POLE')) {
         out.hasPoleMount = true;
     }
 
+    // --- Timestamp & Duration ---
     out.arrivalTimestamp = findEventTimestamp($, 'Arrival On Site');
     out.departureCompleteTimestamp = findEventTimestamp($, 'Departure Complete');
     out.departureIncompleteTimestamp = findEventTimestamp($, 'Departure Incomplete');
 
-    // [!code changed] Prioritize Departure Incomplete for duration calculation
+    // Prioritize Departure Incomplete for duration calculation
     const endTimestamp = out.departureIncompleteTimestamp || out.departureCompleteTimestamp;
 
     // Calculate duration only if we have valid timestamps

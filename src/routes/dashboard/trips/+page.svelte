@@ -87,6 +87,7 @@
   // Derived: Visible trips for current page
   $: totalPages = Math.ceil(allFilteredTrips.length / itemsPerPage);
   $: visibleTrips = allFilteredTrips.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   $: allSelected = allFilteredTrips.length > 0 && selectedTrips.size === allFilteredTrips.length;
 
   function toggleSelection(id: string) {
@@ -187,6 +188,7 @@
     }).format(date);
   }
 
+  // [!code changed] Updated robust time formatter
   function formatTime(time: string): string {
     if (!time) return '';
 
@@ -221,6 +223,7 @@
         const trip = $trips.find(t => t.id === id);
         const currentUser = $page.data.user || $user;
         let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
+        
         if (trip && currentUser) {
             if (trip.userId === currentUser.name) userId = currentUser.name;
             else if (trip.userId === currentUser.token) userId = currentUser.token;
@@ -271,6 +274,35 @@
     }
   }
 
+  // [!code ++] Deep Link Handling
+  let deepLinkHandled = false;
+  
+  $: if (!$isLoading && allFilteredTrips.length > 0 && !deepLinkHandled) {
+      const id = $page.url.searchParams.get('id');
+      
+      if (id) {
+          const index = allFilteredTrips.findIndex(t => t.id === id);
+          if (index !== -1) {
+              // 1. Calculate and set the correct page
+              currentPage = Math.floor(index / itemsPerPage) + 1;
+              
+              // 2. Expand the card
+              expandedTrips.add(id);
+              expandedTrips = expandedTrips;
+              
+              // 3. Scroll to the card (wait for render)
+              setTimeout(() => {
+                  const element = document.getElementById('trip-' + id);
+                  if (element) {
+                      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      element.classList.add('highlight-pulse');
+                  }
+              }, 200);
+          }
+      }
+      deepLinkHandled = true; // Mark handled so we don't re-run
+  }
+
   // Swipe Action for Mobile
   function swipeable(node: HTMLElement, { onEdit, onDelete }: { onEdit: () => void, onDelete: () => void }) {
     let startX = 0;
@@ -291,7 +323,6 @@
 
         // If scrolling vertically, ignore swipe
         if (Math.abs(dy) > Math.abs(dx)) return;
-
         swiping = true;
         
         // Limit swipe range (-120px for delete, 120px for edit)
@@ -300,7 +331,6 @@
         else x = dx;
 
         node.style.transform = `translateX(${x}px)`;
-        
         // Prevent accidental scrolling while swiping hard
         if (Math.abs(x) > 10) e.preventDefault();
     }
@@ -477,8 +507,6 @@
         {@const totalCosts = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0)}
         {@const isSelected = selectedTrips.has(trip.id)}
         
-        {@const supplies = trip.supplyItems || trip.suppliesItems || []}
-        
         <div class="trip-card-wrapper">
             <div class="swipe-bg">
                 <div class="swipe-action edit">
@@ -491,6 +519,7 @@
 
             <div 
               class="trip-card" 
+              id={'trip-' + trip.id}
               class:expanded={isExpanded} 
               class:selected={isSelected}
               on:click={() => toggleExpand(trip.id)}
@@ -519,7 +548,7 @@
                   <span class="trip-date-display">
                       {formatDate(trip.date || '')}
                       {#if trip.startTime}
-                         <span class="time-range">• {formatTime(trip.startTime)} - {formatTime(trip.endTime || '17:00')}</span>
+                          <span class="time-range">• {formatTime(trip.startTime)} - {formatTime(trip.endTime || '17:00')}</span>
                       {/if}
                   </span>
                   <h3 class="trip-route-title">
@@ -531,7 +560,7 @@
                 </div>
                 
                 <div class="profit-display-large" class:positive={profit >= 0} class:negative={profit < 0}>
-                  {formatCurrency(profit)}
+                    {formatCurrency(profit)}
                 </div>
                 
                 <svg class="expand-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
@@ -602,9 +631,8 @@
                             </div>
                           {/each}
                         {/if}
-                        
-                        {#if supplies.length > 0}
-                          {#each supplies as item}
+                        {#if trip.suppliesItems}
+                          {#each trip.suppliesItems as item}
                             <div class="expense-row">
                               <span>{item.type}</span>
                               <span>{formatCurrency(item.cost)}</span>
@@ -703,166 +731,214 @@
   }
 
   .pagination-controls { 
-      display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 32px; 
+      display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 32px;
   }
   .page-btn {
       padding: 8px 16px; background: white; border: 1px solid #E5E7EB; border-radius: 8px;
       font-weight: 600; font-size: 14px; color: #374151; cursor: pointer; transition: all 0.2s;
   }
-  .page-btn:hover:not(:disabled) { border-color: #FF7F50; color: #FF7F50; }
+  .page-btn:hover:not(:disabled) { border-color: #FF7F50; color: #FF7F50;
+  }
   .page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .page-status { font-size: 14px; color: #4B5563; font-weight: 500; }
+  .page-status { font-size: 14px; color: #4B5563; font-weight: 500;
+  }
 
   /* Existing Styles Preserved */
-  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;
+  }
   .page-title { font-size: 24px; font-weight: 800; color: #111827; margin: 0; }
   .page-subtitle { font-size: 14px; color: #6B7280; margin: 0; }
   .header-actions { display: flex; gap: 12px; align-items: center; }
-  .btn-primary { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); }
-  
+  .btn-primary { display: inline-flex; align-items: center;
+  gap: 6px; padding: 10px 16px; background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; border: none; border-radius: 8px; font-weight: 600;
+  font-size: 14px; text-decoration: none; box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); }
+   
   .stats-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
-  .summary-card { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; text-align: center; }
-  .summary-label { font-size: 12px; color: #6B7280; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .summary-card { background: white; border: 1px solid #E5E7EB; border-radius: 12px;
+  padding: 16px; text-align: center; }
+  .summary-label { font-size: 12px; color: #6B7280; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px;
+  }
   .summary-value { font-size: 20px; font-weight: 800; color: #111827; }
-  
+   
   .filters-bar { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
-  
+   
   /* Sticky Filters Style */
   .sticky-bar {
-      position: sticky;
-      top: 0;
+      position: sticky; top: 0;
       z-index: 10;
       background: #F9FAFB; /* Match page bg */
       padding-top: 10px;
       padding-bottom: 10px;
       margin: -12px -12px 10px -12px; /* Pull out of parent padding */
-      padding-left: 12px;
-      padding-right: 12px;
+      padding-left: 12px; padding-right: 12px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.02); /* Subtle separation */
   }
 
-  .search-box { position: relative; width: 100%; }
-  .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #9CA3AF; pointer-events: none; }
-  .search-box input { width: 100%; padding: 12px 16px 12px 42px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 15px; background: white; box-sizing: border-box; }
+  .search-box { position: relative; width: 100%;
+  }
+  .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #9CA3AF; pointer-events: none;
+  }
+  .search-box input { width: 100%; padding: 12px 16px 12px 42px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 15px;
+  background: white; box-sizing: border-box; }
   .search-box input:focus { outline: none; border-color: #FF7F50; }
   .date-group { display: flex; gap: 8px; align-items: center; }
-  .date-input { flex: 1; padding: 12px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 14px; background: white; color: #374151; min-width: 0; box-sizing: border-box; }
-  .date-sep { color: #9CA3AF; font-weight: bold; }
+  .date-input { flex: 1; padding: 12px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 14px;
+  background: white; color: #374151; min-width: 0; box-sizing: border-box; }
+  .date-sep { color: #9CA3AF; font-weight: bold;
+  }
   .filter-group { display: flex; flex-direction: row; gap: 8px; width: 100%; }
-  .filter-select { flex: 1; width: 0; min-width: 0; padding: 12px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 14px; background: white; color: #374151; }
-  .sort-btn { flex: 0 0 48px; display: flex; align-items: center; justify-content: center; border: 1px solid #E5E7EB; border-radius: 10px; background: white; color: #6B7280; }
-  
+  .filter-select { flex: 1; width: 0; min-width: 0; padding: 12px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 14px; background: white; color: #374151;
+  }
+  .sort-btn { flex: 0 0 48px; display: flex; align-items: center; justify-content: center; border: 1px solid #E5E7EB; border-radius: 10px;
+  background: white; color: #6B7280; }
+   
   /* CHECKBOX STYLES */
-  .checkbox-container { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: #4B5563; position: relative; padding-left: 28px; user-select: none; }
-  .checkbox-container input { position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0; }
-  .checkmark { position: absolute; top: 0; left: 0; height: 20px; width: 20px; background-color: white; border: 2px solid #D1D5DB; border-radius: 6px; transition: all 0.2s; }
-  .checkbox-container:hover input ~ .checkmark { border-color: #9CA3AF; }
+  .checkbox-container { display: inline-flex; align-items: center;
+  gap: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: #4B5563; position: relative; padding-left: 28px; user-select: none;
+  }
+  .checkbox-container input { position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0;
+  }
+  .checkmark { position: absolute; top: 0; left: 0; height: 20px; width: 20px; background-color: white; border: 2px solid #D1D5DB;
+  border-radius: 6px; transition: all 0.2s; }
+  .checkbox-container:hover input ~ .checkmark { border-color: #9CA3AF;
+  }
   .checkbox-container input:checked ~ .checkmark { background-color: #FF7F50; border-color: #FF7F50; }
   .checkmark:after { content: ""; position: absolute; display: none; }
   .checkbox-container input:checked ~ .checkmark:after { display: block; }
-  .checkbox-container .checkmark:after { left: 6px; top: 2px; width: 5px; height: 10px; border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  .checkbox-container .checkmark:after { left: 6px; top: 2px;
+  width: 5px; height: 10px; border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg); }
 
   .trip-list-cards { display: flex; flex-direction: column; gap: 12px; }
-  
+   
   /* Swipe Wrapper & Backgrounds */
   .trip-card-wrapper {
-      position: relative;
-      overflow: hidden;
+      position: relative; overflow: hidden;
       border-radius: 12px;
-      /* Background colors for swipes */
-      background: #F3F4F6; 
+      background: #F3F4F6;
   }
 
   .swipe-bg {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      position: absolute; inset: 0;
+      display: flex; justify-content: space-between; align-items: center;
       padding: 0 20px;
       z-index: 0;
   }
-  
+   
   .swipe-action {
-      font-weight: 700;
-      font-size: 14px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
+      font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;
   }
   .swipe-action.edit { color: #2563EB; }
-  .swipe-action.delete { color: #DC2626; }
+  .swipe-action.delete { color: #DC2626;
+  }
 
   .trip-card { 
-      background: white; 
-      border: 1px solid #E5E7EB; 
-      border-radius: 12px; 
-      padding: 16px; 
-      cursor: pointer; 
-      transition: all 0.2s; 
-      position: relative; 
-      z-index: 1; /* Sit above the swipe actions */
+      background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px;
+      cursor: pointer; transition: all 0.2s; position: relative; z-index: 1; 
   }
-  .trip-card:active { background-color: #F9FAFB; }
+  .trip-card:active { background-color: #F9FAFB;
+  }
   .trip-card.expanded { border-color: #FF7F50; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-  .trip-card.selected { background-color: #FFF7ED; border-color: #FF7F50; }
+  .trip-card.selected { background-color: #FFF7ED; border-color: #FF7F50;
+  }
 
-  .card-top { display: grid; grid-template-columns: auto 1fr auto 20px; align-items: center; gap: 12px; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #F3F4F6; }
+  /* Highlight Animation */
+  @keyframes pulse-border {
+      0% { border-color: #FF7F50; box-shadow: 0 0 0 0 rgba(255, 127, 80, 0.4); }
+      70% { border-color: #FF7F50; box-shadow: 0 0 0 10px rgba(255, 127, 80, 0); }
+      100% { border-color: #E5E7EB; box-shadow: 0 0 0 0 rgba(255, 127, 80, 0); }
+  }
+  :global(.highlight-pulse) {
+      animation: pulse-border 2s ease-out;
+  }
+
+  .card-top { display: grid; grid-template-columns: auto 1fr auto 20px; align-items: center; gap: 12px; padding-bottom: 12px; margin-bottom: 12px;
+  border-bottom: 1px solid #F3F4F6; }
   .selection-box { display: flex; align-items: center; justify-content: center; }
-  .trip-route-date { overflow: hidden; }
+  .trip-route-date { overflow: hidden;
+  }
   .trip-date-display { display: block; font-size: 12px; font-weight: 600; color: #6B7280; margin-bottom: 4px; }
   .time-range { color: #4B5563; margin-left: 4px; font-weight: 500; }
-  .trip-route-title { font-size: 16px; font-weight: 700; color: #111827; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .trip-route-title { font-size: 16px; font-weight: 700; color: #111827; margin: 0; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
   .profit-display-large { font-size: 18px; font-weight: 800; white-space: nowrap; }
-  .profit-display-large.positive { color: var(--green); }
+  .profit-display-large.positive { color: var(--green);
+  }
   .profit-display-large.negative { color: #DC2626; }
-  .expand-icon { color: #9CA3AF; transition: transform 0.2s; }
+  .expand-icon { color: #9CA3AF; transition: transform 0.2s;
+  }
   .trip-card.expanded .expand-icon { transform: rotate(180deg); }
-  .card-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .card-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
+  }
   .stat-item { display: flex; flex-direction: column; align-items: center; }
-  .stat-label { font-size: 11px; color: #9CA3AF; text-transform: uppercase; }
+  .stat-label { font-size: 11px; color: #9CA3AF; text-transform: uppercase;
+  }
   .stat-value { font-size: 14px; font-weight: 600; color: #4B5563; }
-  .hourly-pay { color: #059669; }
-  .expanded-details { display: flex; flex-direction: column; gap: 16px; padding-top: 16px; border-top: 1px dashed #E5E7EB; margin-top: 16px; }
+  .hourly-pay { color: #059669;
+  }
+  .expanded-details { display: flex; flex-direction: column; gap: 16px; padding-top: 16px; border-top: 1px dashed #E5E7EB; margin-top: 16px;
+  }
   .detail-section { background: #F9FAFB; padding: 12px; border-radius: 8px; }
-  .section-heading { font-size: 13px; font-weight: 700; color: var(--navy); margin-bottom: 8px; border-bottom: 1px solid #E5E7EB; padding-bottom: 6px; }
-  .address-list p { font-size: 14px; color: #374151; margin: 4px 0; }
+  .section-heading { font-size: 13px; font-weight: 700; color: var(--navy);
+  margin-bottom: 8px; border-bottom: 1px solid #E5E7EB; padding-bottom: 6px; }
+  .address-list p { font-size: 14px; color: #374151; margin: 4px 0;
+  }
   .expense-list { display: flex; flex-direction: column; gap: 4px; }
-  .expense-row { display: flex; justify-content: space-between; font-size: 13px; color: #4B5563; }
-  .expense-row.total { border-top: 1px solid #E5E7EB; margin-top: 4px; padding-top: 4px; font-weight: 700; color: #111827; }
+  .expense-row { display: flex; justify-content: space-between; font-size: 13px;
+  color: #4B5563; }
+  .expense-row.total { border-top: 1px solid #E5E7EB; margin-top: 4px; padding-top: 4px; font-weight: 700; color: #111827;
+  }
   .trip-notes { font-style: italic; font-size: 14px; color: #4B5563; line-height: 1.4; }
-  .action-buttons-footer { display: flex; gap: 12px; }
-  .action-btn-lg { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-radius: 8px; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 0.2s; border: 2px solid; font-size: 14px; }
-  .edit-btn { background: #EFF6FF; color: #2563EB; border-color: #2563EB; }
+  .action-buttons-footer { display: flex; gap: 12px;
+  }
+  .action-btn-lg { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-radius: 8px; font-weight: 600;
+  font-family: inherit; cursor: pointer; transition: all 0.2s; border: 2px solid; font-size: 14px; }
+  .edit-btn { background: #EFF6FF; color: #2563EB;
+  border-color: #2563EB; }
   .delete-btn { background: #FEF2F2; color: #DC2626; border-color: #DC2626; }
-  .empty-state { text-align: center; padding: 40px 20px; color: #6B7280; font-size: 15px; }
+  .empty-state { text-align: center;
+  padding: 40px 20px; color: #6B7280; font-size: 15px; }
 
   /* FLOATING ACTION BAR */
-  .action-bar-container { position: fixed; bottom: 20px; left: 0; right: 0; display: flex; justify-content: center; z-index: 50; padding: 0 16px; animation: slideUp 0.3s ease-out; }
-  .action-bar { background: #1F2937; color: white; padding: 8px 16px; border-radius: 100px; display: flex; align-items: center; gap: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+  .action-bar-container { position: fixed;
+  bottom: 20px; left: 0; right: 0; display: flex; justify-content: center; z-index: 50; padding: 0 16px; animation: slideUp 0.3s ease-out;
+  }
+  .action-bar { background: #1F2937; color: white; padding: 8px 16px; border-radius: 100px; display: flex; align-items: center; gap: 24px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
   .selected-count { font-weight: 700; font-size: 14px; }
-  .action-buttons { display: flex; gap: 8px; }
-  .action-pill { border: none; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
-  .action-pill.secondary { background: #374151; color: #E5E7EB; }
+  .action-buttons { display: flex;
+  gap: 8px; }
+  .action-pill { border: none; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
+  .action-pill.secondary { background: #374151; color: #E5E7EB;
+  }
   .action-pill.secondary:hover { background: #4B5563; }
   .action-pill.export { background: #E5E7EB; color: #1F2937; }
-  .action-pill.export:hover { background: #F3F4F6; }
+  .action-pill.export:hover { background: #F3F4F6;
+  }
   .action-pill.danger { background: #EF4444; color: white; }
-  .action-pill.danger:hover { background: #DC2626; }
+  .action-pill.danger:hover { background: #DC2626;
+  }
 
-  @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1;
+  } }
 
   @media (min-width: 640px) {
-    .filters-bar { flex-direction: row; justify-content: space-between; align-items: center; }
+    .filters-bar { flex-direction: row; justify-content: space-between; align-items: center;
+    }
     .search-box { max-width: 300px; }
-    .date-group { width: auto; }
+    .date-group { width: auto;
+    }
     .filter-group { width: auto; flex-wrap: nowrap; }
-    .filter-select { width: 140px; flex: none; }
+    .filter-select { width: 140px; flex: none;
+    }
     .stats-summary { grid-template-columns: repeat(2, 1fr); }
-    .card-stats { grid-template-columns: repeat(5, 1fr); }
+    .card-stats { grid-template-columns: repeat(5, 1fr);
+    }
   }
 
   @media (min-width: 1024px) {
-    .stats-summary { grid-template-columns: repeat(4, 1fr); }
+    .stats-summary { grid-template-columns: repeat(4, 1fr);
+    }
     .search-box { max-width: 300px; }
   }
 </style>

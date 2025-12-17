@@ -1,5 +1,7 @@
 // src/lib/utils/dashboardLogic.ts
 
+export type TimeRange = '30d' | '60d' | '90d' | '1y' | 'all';
+
 export function formatCurrency(amount: number): string {
     return new Intl.NumberFormat('en-US', {
         style: 'currency',
@@ -10,83 +12,160 @@ export function formatCurrency(amount: number): string {
 }
 
 export function formatDate(dateString: string): string {
-    const date = new Date(dateString);
+    // Handle 'YYYY-MM' format (Month grouping)
+    if (/^\d{4}-\d{2}$/.test(dateString)) {
+        const [y, m] = dateString.split('-').map(Number);
+        const date = new Date(y, m - 1, 1);
+        return new Intl.DateTimeFormat('en-US', {
+            month: 'short',
+            year: 'numeric'
+        }).format(date);
+    }
+    
+    // Handle 'YYYY-MM-DD' format
+    // Append T00:00:00 to force local time interpretation
+    const date = new Date(dateString.includes('T') ? dateString : dateString + 'T00:00:00');
     return new Intl.DateTimeFormat('en-US', {
         month: 'short',
-        day: 'numeric',
-        year: 'numeric'
+        day: 'numeric'
     }).format(date);
 }
 
-export function calculateDashboardStats(allTrips: any[]) {
+export function calculateDashboardStats(allTrips: any[], range: TimeRange = '30d') {
     const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
-    const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
-
-    // Setup 30-day window
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    // Set to end of today to include all trips from today
+    now.setHours(23, 59, 59, 999);
     
-    // Pre-fill map to ensure empty days show up in chart
-    const dailyDataMap = new Map<string, number>();
-    for (let i = 0; i < 30; i++) {
-        const d = new Date(thirtyDaysAgo.getTime() + i * 24 * 60 * 60 * 1000);
-        dailyDataMap.set(d.toISOString().split('T')[0], 0);
+    const currentYear = now.getFullYear();
+    
+    // 1. Determine Date Ranges & Grouping Strategy
+    let startDate: Date;
+    let prevStartDate: Date; 
+    let groupBy: 'day' | 'month' = 'day';
+
+    switch (range) {
+        case '30d':
+            startDate = new Date(now);
+            startDate.setDate(now.getDate() - 30);
+            prevStartDate = new Date(startDate);
+            prevStartDate.setDate(startDate.getDate() - 30);
+            break;
+        case '60d':
+            startDate = new Date(now);
+            startDate.setDate(now.getDate() - 60);
+            prevStartDate = new Date(startDate);
+            prevStartDate.setDate(startDate.getDate() - 60);
+            break;
+        case '90d':
+            startDate = new Date(now);
+            startDate.setDate(now.getDate() - 90);
+            prevStartDate = new Date(startDate);
+            prevStartDate.setDate(startDate.getDate() - 90);
+            break;
+        case '1y':
+            // Current Year (Year to Date)
+            startDate = new Date(currentYear, 0, 1); // Jan 1st of current year
+            prevStartDate = new Date(currentYear - 1, 0, 1); // Jan 1st of last year
+            groupBy = 'month';
+            break;
+        case 'all':
+            startDate = new Date(0); // 1970
+            prevStartDate = new Date(0);
+            groupBy = 'month'; // Group by month for all time to avoid crowding
+            break;
+        default:
+             startDate = new Date(now);
+             startDate.setDate(now.getDate() - 30);
+             prevStartDate = new Date(startDate);
+             prevStartDate.setDate(startDate.getDate() - 30);
     }
 
-    // Accumulators
+    // 2. Initialize Chart Data (Map of Date Key -> Profit)
+    const chartDataMap = new Map<string, number>();
+    
+    // Fill empty buckets if range is fixed (not 'all')
+    if (range !== 'all') {
+        const d = new Date(startDate);
+        // Loop until d is past 'now'
+        while (d <= now) {
+            let key: string;
+            
+            if (groupBy === 'month') {
+                // Key: YYYY-MM
+                key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                // Advance 1 month
+                d.setMonth(d.getMonth() + 1);
+            } else {
+                // Key: YYYY-MM-DD
+                key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                // Advance 1 day
+                d.setDate(d.getDate() + 1);
+            }
+            
+            // Set initial 0 if not exists
+            if (!chartDataMap.has(key)) {
+                chartDataMap.set(key, 0);
+            }
+        }
+    }
+
+    // 3. Process Trips
+    const currentTrips: any[] = [];
     let totalProfit = 0;
     let totalMiles = 0;
     let fuel = 0;
     let maintenance = 0;
     let supplies = 0;
-    let currentMonthProfit = 0;
-    let lastMonthProfit = 0;
+    let prevTotalProfit = 0;
 
-    // --- ONE LOOP TO RULE THEM ALL ---
-    for (let i = 0; i < allTrips.length; i++) {
-        const trip = allTrips[i];
-
-        // 1. Basic Stats
+    for (const trip of allTrips) {
+        if (!trip.date) continue;
+        
+        // Force local time interpretation for trip date to match our buckets
+        const d = new Date(trip.date.includes('T') ? trip.date : trip.date + 'T00:00:00');
+        const tTime = d.getTime();
+        
+        // Calc Profit
         const earnings = trip.stops?.reduce((s: number, stop: any) => s + (Number(stop.earnings) || 0), 0) || 0;
-        const tCosts = (Number(trip.fuelCost) || 0) + (Number(trip.maintenanceCost) || 0) + (Number(trip.suppliesCost) || 0);
-        const profit = earnings - tCosts;
+        const costs = (Number(trip.fuelCost) || 0) + (Number(trip.maintenanceCost) || 0) + (Number(trip.suppliesCost) || 0);
+        const tripProfit = earnings - costs;
 
-        totalProfit += profit;
-        totalMiles += (Number(trip.totalMiles) || 0);
-        fuel += (Number(trip.fuelCost) || 0);
-        maintenance += (Number(trip.maintenanceCost) || 0);
-        supplies += (Number(trip.suppliesCost) || 0);
+        // Current Range Logic
+        if (tTime >= startDate.getTime() && tTime <= now.getTime()) {
+            currentTrips.push(trip);
+            
+            totalProfit += tripProfit;
+            totalMiles += (Number(trip.totalMiles) || 0);
+            
+            fuel += (Number(trip.fuelCost) || 0);
+            maintenance += (Number(trip.maintenanceCost) || 0);
+            supplies += (Number(trip.suppliesCost) || 0);
 
-        // 2. Date-based Stats
-        if (trip.date) {
-            const d = new Date(trip.date);
-            const tripTime = d.getTime();
-
-            // Chart Data (Last 30 Days)
-            if (tripTime >= thirtyDaysAgo.getTime() && tripTime <= now.getTime()) {
-                const key = d.toISOString().split('T')[0];
-                const currentVal = dailyDataMap.get(key) || 0;
-                dailyDataMap.set(key, currentVal + profit);
+            // Add to Chart Map
+            let key: string;
+            if (groupBy === 'month') {
+                key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            } else {
+                key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
             }
-
-            // Month Comparison
-            const tMonth = d.getMonth();
-            const tYear = d.getFullYear();
-
-            if (tMonth === currentMonth && tYear === currentYear) {
-                currentMonthProfit += profit;
-            } else if (tMonth === lastMonth && tYear === lastMonthYear) {
-                lastMonthProfit += profit;
-            }
+            
+            // For 'all' range, we might encounter keys not pre-filled
+            const currentVal = chartDataMap.get(key) || 0;
+            chartDataMap.set(key, currentVal + tripProfit);
+        }
+        
+        // Previous Range Logic (for comparison)
+        if (range !== 'all' && tTime >= prevStartDate.getTime() && tTime < startDate.getTime()) {
+            prevTotalProfit += tripProfit;
         }
     }
 
-    // --- Final Data Shaping ---
-
-    // Chart Array
-    const last30DaysData = Array.from(dailyDataMap.entries()).map(([date, profit]) => ({ date, profit }));
+    // 4. Final Shaping
+    
+    // Convert Map to Sorted Array
+    const chartData = Array.from(chartDataMap.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([date, profit]) => ({ date, profit }));
 
     // Cost Breakdown
     const totalCost = fuel + maintenance + supplies;
@@ -96,23 +175,36 @@ export function calculateDashboardStats(allTrips: any[]) {
         supplies: { amount: supplies, percentage: totalCost > 0 ? (supplies / totalCost) * 100 : 0, color: '#8DC63F' }
     };
 
-    // Month Comparison
-    const change = lastMonthProfit > 0 ? ((currentMonthProfit - lastMonthProfit) / lastMonthProfit) * 100 : 0;
-    const monthComparison = {
-        current: currentMonthProfit,
-        last: lastMonthProfit,
+    // Comparison Stats
+    let change = 0;
+    if (range !== 'all') {
+        if (prevTotalProfit !== 0) {
+            change = ((totalProfit - prevTotalProfit) / Math.abs(prevTotalProfit)) * 100;
+        } else if (totalProfit > 0) {
+            change = 100;
+        }
+    }
+
+    const periodComparison = {
+        current: totalProfit,
+        last: prevTotalProfit,
         change: change,
         isPositive: change >= 0
     };
+    
+    // Sort recent trips (newest first)
+    const sortedCurrentTrips = [...currentTrips].sort((a, b) => 
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
 
     return {
-        recentTrips: allTrips.slice(0, 5),
-        totalTrips: allTrips.length,
+        recentTrips: sortedCurrentTrips.slice(0, 5),
+        totalTrips: currentTrips.length,
         totalProfit,
         totalMiles,
-        avgProfitPerTrip: allTrips.length > 0 ? totalProfit / allTrips.length : 0,
-        last30DaysData,
+        avgProfitPerTrip: currentTrips.length > 0 ? totalProfit / currentTrips.length : 0,
+        chartData,
         costBreakdown,
-        monthComparison
+        periodComparison
     };
 }

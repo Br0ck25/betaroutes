@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { slide } from 'svelte/transition'; // [!code ++] Animation for console
+  import { onMount, onDestroy } from 'svelte';
+  import { slide } from 'svelte/transition';
   import { trips } from '$lib/stores/trips';
   import { trash } from '$lib/stores/trash';
   import { user } from '$lib/stores/auth';
@@ -12,29 +12,36 @@
   let isConnected = false;
   let logs: string[] = [];
   
-  // [!code ++] Console Visibility State
+  // Console Visibility State
   let showConsole = false;
 
-  // Configuration State
-  let installPay = 150;
-  let repairPay = 80;
-  let upgradePay = 80;
-  // Supply Costs
-  let poleCost = 0;
-  let concreteCost = 0;
-  // NEW: Pole Charge Amount
-  let poleCharge = 0;
+  // Configuration State - Initialized as undefined so inputs are empty until loaded
+  let installPay: number;
+  let repairPay: number;
+  let upgradePay: number;
+  
+  // Supply Costs - Initialized as undefined
+  let poleCost: number;
+  let concreteCost: number;
+  let poleCharge: number;
 
-  let installTime = 90; 
-  let repairTime = 60;
+  // [!code ++] Times - Initialized as undefined for KV sync
+  let installTime: number; 
+  let repairTime: number;
+  
   let overrideTimes = false;
 
   let showSuccess = false;
   let successMessage = '';
   let statusMessage = 'Sync Now';
   
-  // [!code ++] Track batch for progress visualization
+  // Track batch for progress visualization
   let currentBatch = 0;
+  
+  // [!code ++] Config Sync State
+  let isConfigLoaded = false;
+  let saveTimeout: any; // Timer for debouncing saves
+  let isSaving = false;
 
   function showSuccessMsg(msg: string) {
     successMessage = msg;
@@ -52,6 +59,77 @@
               logs = [`[Server] ${log}`, ...logs];
           });
       }
+  }
+
+  // [!code ++] Load Settings from Server (KV)
+  async function loadSettings() {
+      try {
+          const res = await fetch('/api/hughesnet', {
+              method: 'POST',
+              body: JSON.stringify({ action: 'get_settings' })
+          });
+          const data = await res.json();
+          
+          if (data.settings) {
+              // Apply settings if they exist in KV
+              installPay = data.settings.installPay;
+              repairPay = data.settings.repairPay;
+              upgradePay = data.settings.upgradePay;
+              poleCost = data.settings.poleCost;
+              concreteCost = data.settings.concreteCost;
+              poleCharge = data.settings.poleCharge;
+              installTime = data.settings.installTime;
+              repairTime = data.settings.repairTime;
+              addLog('Settings loaded from cloud.');
+          }
+      } catch (e) {
+          console.error('Failed to load settings', e);
+      } finally {
+          isConfigLoaded = true; // Enable auto-save watcher
+      }
+  }
+
+  // [!code ++] Save Settings to Server (KV)
+  async function saveSettings() {
+      if (!isConfigLoaded) return;
+      isSaving = true;
+      
+      const settings = {
+          installPay,
+          repairPay,
+          upgradePay,
+          poleCost,
+          concreteCost,
+          poleCharge,
+          installTime,
+          repairTime
+      };
+
+      try {
+          await fetch('/api/hughesnet', {
+              method: 'POST',
+              body: JSON.stringify({ 
+                  action: 'save_settings', 
+                  settings 
+              })
+          });
+          // Quietly saved
+      } catch (e) {
+          console.error('Failed to auto-save settings', e);
+      } finally {
+          isSaving = false;
+      }
+  }
+
+  // [!code ++] Reactive Watcher: Auto-save when values change (Debounced)
+  $: if (isConfigLoaded) {
+      // Access all variables to trigger dependency
+      const _ = [installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge, installTime, repairTime];
+      
+      if (saveTimeout) clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(() => {
+          saveSettings();
+      }, 1000); // Wait 1 second after typing stops to save
   }
 
   async function loadOrders() {
@@ -130,13 +208,13 @@
 
   async function handleSync(batchCount = 1) {
     loading = true;
-    currentBatch = batchCount; // [!code ++] Update batch for UI
+    currentBatch = batchCount; 
     statusMessage = `Syncing Batch ${batchCount}...`;
     
     const skipScan = batchCount > 1;
     if (batchCount === 1) {
         addLog(`Starting Full Sync...`);
-        showConsole = true; // [!code ++] Auto-open console on start
+        showConsole = true; 
     } else {
         addLog(`Continuing Sync (Batch ${batchCount})...`);
     }
@@ -146,14 +224,15 @@
             method: 'POST',
             body: JSON.stringify({ 
                 action: 'sync',
-                installPay,
-                repairPay,
-                upgradePay,
-                poleCost,
-                concreteCost,
-                poleCharge, 
-                installTime,
-                repairTime,
+                // Use || 0 to handle empty inputs safely during calculation
+                installPay: installPay || 0,
+                repairPay: repairPay || 0,
+                upgradePay: upgradePay || 0,
+                poleCost: poleCost || 0,
+                concreteCost: concreteCost || 0,
+                poleCharge: poleCharge || 0, 
+                installTime: installTime || 0,
+                repairTime: repairTime || 0,
                 overrideTimes,
                 skipScan 
             })
@@ -176,7 +255,7 @@
              addLog(`Sync Complete! Processed ${newOrders.length} orders total.`);
              showSuccessMsg(`Synced ${newOrders.length} orders!`);
              statusMessage = 'Sync Complete';
-             currentBatch = 0; // [!code ++] Reset
+             currentBatch = 0; 
              
              const userId = $user?.name || $user?.token;
              if (userId) {
@@ -230,7 +309,14 @@
       }
   }
 
-  onMount(loadOrders);
+  onMount(() => {
+    loadSettings(); // [!code ++] Fetch config from KV on load
+    loadOrders();
+  });
+
+  onDestroy(() => {
+      if (saveTimeout) clearTimeout(saveTimeout);
+  });
 </script>
 
 <div class="settings">
@@ -339,17 +425,17 @@
       <div class="config-grid">
           <div class="form-group">
             <label for="install-pay">Install Pay ($)</label>
-            <input id="install-pay" type="number" bind:value={installPay} placeholder="150.00" min="0" step="0.01" />
+            <input id="install-pay" type="number" bind:value={installPay} placeholder="0.00" min="0" step="0.01" />
           </div>
           
           <div class="form-group">
             <label for="repair-pay">Repair Pay ($)</label>
-            <input id="repair-pay" type="number" bind:value={repairPay} placeholder="80.00" min="0" step="0.01" />
+            <input id="repair-pay" type="number" bind:value={repairPay} placeholder="0.00" min="0" step="0.01" />
           </div>
 
           <div class="form-group">
             <label for="upgrade-pay">Upgrade Pay ($)</label>
-            <input id="upgrade-pay" type="number" bind:value={upgradePay} placeholder="80.00" min="0" step="0.01" />
+            <input id="upgrade-pay" type="number" bind:value={upgradePay} placeholder="0.00" min="0" step="0.01" />
           </div>
       </div>
       
@@ -379,12 +465,12 @@
       <div class="config-grid">
           <div class="form-group">
             <label for="install-time">Install Time (min)</label>
-            <input id="install-time" type="number" bind:value={installTime} placeholder="90" min="1" />
+            <input id="install-time" type="number" bind:value={installTime} placeholder="0" min="1" />
           </div>
           
           <div class="form-group">
             <label for="repair-time">Repair Time (min)</label>
-            <input id="repair-time" type="number" bind:value={repairTime} placeholder="60" min="1" />
+            <input id="repair-time" type="number" bind:value={repairTime} placeholder="0" min="1" />
           </div>
       </div>
       
@@ -399,7 +485,7 @@
       </div>
       
       <div class="tip-text">
-        Values will be applied to the next sync.
+        {isSaving ? 'Saving...' : 'Changes are saved to the cloud automatically.'}
       </div>
 
     </div>

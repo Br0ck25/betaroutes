@@ -306,6 +306,44 @@ export class HughesNetService {
         return count;
     }
 
+    // [!code ++] NEW: Get Settings from KV
+    async getSettings(userId: string) {
+        try {
+            const raw = await this.kv.get(`hns:settings:${userId}`);
+            return raw ? JSON.parse(raw) : null;
+        } catch (e) {
+            this.error('Failed to retrieve settings', e);
+            return null;
+        }
+    }
+
+    // [!code ++] NEW: Save Settings to KV
+    async saveSettings(userId: string, settings: any) {
+        try {
+            // Re-use existing validation logic
+            validateSyncConfig({
+                installPay: settings.installPay,
+                repairPay: settings.repairPay,
+                upgradePay: settings.upgradePay,
+                poleCost: settings.poleCost,
+                concreteCost: settings.concreteCost,
+                poleCharge: settings.poleCharge
+            });
+
+            // Add manual validation for times
+            if (settings.installTime < 0 || settings.repairTime < 0) {
+                throw new Error("Job times cannot be negative");
+            }
+
+            // Save to KV using consistent key format
+            await this.kv.put(`hns:settings:${userId}`, JSON.stringify(settings));
+            return true;
+        } catch (e) {
+            this.error('Failed to save settings', e);
+            throw e;
+        }
+    }
+
     async sync(
         userId: string, 
         settingsId: string | undefined, 
@@ -427,9 +465,9 @@ export class HughesNetService {
                 const minId = knownIds[0];
                 
                 const tryFetchId = async (targetId: number) => {
-                     if (orderDb[String(targetId)] || this.fetcher.getRequestCount() >= DISCOVERY_BACKWARD_LIMIT) return false; 
+                      if (orderDb[String(targetId)] || this.fetcher.getRequestCount() >= DISCOVERY_BACKWARD_LIMIT) return false; 
 
-                     try {
+                      try {
                         const orderUrl = `${parser.BASE_URL}/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${targetId}`;
                         const res = await this.fetcher.safeFetch(orderUrl, { headers: { 'Cookie': cookie }});
                         const html = await res.text();
@@ -440,10 +478,10 @@ export class HughesNetService {
                             dbDirty = true;
                             return true;
                         }
-                     } catch(e) {
+                      } catch(e) {
                         console.warn(`Failed to fetch order ${targetId}:`, e);
-                     }
-                     return false;
+                      }
+                      return false;
                 };
 
                 this.log(`[Discovery] Checking gaps and backward scan...`);
@@ -464,11 +502,11 @@ export class HughesNetService {
                 // Backward scan
                 let failures = 0, current = minId - 1, checks = 0;
                 while(failures < DISCOVERY_MAX_FAILURES && checks < DISCOVERY_MAX_CHECKS) { 
-                     const found = await tryFetchId(current);
-                     if (found) failures = 0; else failures++;
-                     current--;
-                     checks++;
-                     await new Promise(r => setTimeout(r, DELAY_BETWEEN_BACKWARD_SCANS_MS));
+                      const found = await tryFetchId(current);
+                      if (found) failures = 0; else failures++;
+                      current--;
+                      checks++;
+                      await new Promise(r => setTimeout(r, DELAY_BETWEEN_BACKWARD_SCANS_MS));
                 }
             }
 
@@ -659,13 +697,16 @@ export class HughesNetService {
                 if (dateObj) sortTime = dateObj.getTime() + (parseTime(o.beginTime) * 60000);
             }
 
-            // Only get paid if departed complete (not incomplete)
-            const isPaid = !!o.departureCompleteTimestamp;
+            // [!code changed] Pay Logic for Future Jobs
+            // 1. If explicit incomplete -> No pay
+            // 2. If complete -> Pay
+            // 3. If neither (Future) -> Estimate Pay
+            const isPaid = !o.departureIncompleteTimestamp;
 
             // Calculate actual duration based on timestamps
             let actualDuration: number;
             
-            // [!code changed] Prioritize Departure Incomplete over Departure Complete for time calculations
+            // Prioritize Departure Incomplete over Departure Complete for time calculations
             const endTs = o.departureIncompleteTimestamp || o.departureCompleteTimestamp;
 
             if (o.arrivalTimestamp && endTs) {
@@ -678,7 +719,7 @@ export class HughesNetService {
                     actualDuration = o.type === 'Install' ? 90 : 60;
                 }
             } else {
-                // No departure timestamp - use type-based default
+                // [!code changed] Future jobs / Missing timestamps -> use type-based default
                 // Install: 90 mins, Repair/Upgrade: 60 mins
                 actualDuration = o.type === 'Install' ? 90 : 60;
             }

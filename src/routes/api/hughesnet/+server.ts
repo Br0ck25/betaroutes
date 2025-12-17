@@ -1,6 +1,6 @@
 // src/routes/api/hughesnet/+server.ts
 import { json } from '@sveltejs/kit';
-import { HughesNetService } from '$lib/server/hughesnet/service'; // [!code ++] Update import to new location
+import { HughesNetService } from '$lib/server/hughesnet/service';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, platform, locals }) => {
@@ -11,19 +11,13 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 
     try {
         const body = await request.json();
+        // Resolve User ID
         const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
         const settingsId = locals.user?.id;
 
         console.log(`[API] HughesNet Action: ${body.action} for ${userId}`);
 
-        console.log('[API] Checking KV Namespaces:');
-        console.log('  BETA_HUGHESNET_KV:', !!platform.env.BETA_HUGHESNET_KV);
-        console.log('  BETA_LOGS_KV:', !!platform.env.BETA_LOGS_KV);
-        console.log('  BETA_DIRECTIONS_KV:', !!platform.env.BETA_DIRECTIONS_KV);
-        console.log('  BETA_PLACES_KV:', !!platform.env.BETA_PLACES_KV);
-        console.log('  TRIP_INDEX_DO:', !!platform.env.TRIP_INDEX_DO);
-
-        // [!code fix] Initialize with new Constructor Signature
+        // Initialize Service with your specific environment bindings
         const service = new HughesNetService(
             platform.env.BETA_HUGHESNET_KV,          // 1. Main DB
             platform.env.HNS_ENCRYPTION_KEY,         // 2. Encryption
@@ -32,9 +26,24 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
             platform.env.BETA_USER_SETTINGS_KV,      // 5. Settings
             platform.env.PRIVATE_GOOGLE_MAPS_API_KEY,// 6. Google Maps Key
             platform.env.BETA_DIRECTIONS_KV,         // 7. Directions Cache
-            platform.env.BETA_LOGS_KV,               // 8. Trip Storage (Using LOGS_KV as per old config to preserve data)
+            platform.env.BETA_LOGS_KV,               // 8. Trip Storage (Using LOGS_KV per config)
             platform.env.TRIP_INDEX_DO               // 9. Durable Object Index
         );
+
+        // [!code ++] HANDLE SAVE SETTINGS
+        if (body.action === 'save_settings') {
+            if (!body.settings) {
+                return json({ success: false, error: 'Settings data missing' }, { status: 400 });
+            }
+            await service.saveSettings(userId, body.settings);
+            return json({ success: true, logs: service.logs });
+        }
+
+        // [!code ++] HANDLE GET SETTINGS
+        if (body.action === 'get_settings') {
+            const settings = await service.getSettings(userId);
+            return json({ success: true, settings });
+        }
 
         if (body.action === 'connect') {
             const success = await service.connect(userId, body.username, body.password);
@@ -55,6 +64,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
             const poleCharge = Number(body.poleCharge) || 0;
             const skipScan = body.skipScan === true;
 
+            // Note: Times (installTime, repairTime) are saved via 'save_settings' 
+            // and read from KV during sync generation inside the service.
             const result = await service.sync(
                 userId, 
                 settingsId, 
@@ -67,7 +78,6 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
                 skipScan
             );
             
-            // [!code note] Logs are returned here, so the UI can display them
             return json({ 
                 success: true, 
                 orders: result.orders, 
@@ -107,8 +117,6 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
         );
         const orders = await service.getOrders(userId);
         
-        // [!code note] GET requests usually don't return execution logs, only data.
-        // If you want to see "Checking cache" logs, those happen client-side in +page.svelte.
         return json({ orders });
     } catch (err) {
         return json({ orders: {} });

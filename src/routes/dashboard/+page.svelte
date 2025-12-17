@@ -1,10 +1,21 @@
 <script lang="ts">
   import { trips } from '$lib/stores/trips';
-  import { calculateDashboardStats, formatCurrency, formatDate } from '$lib/utils/dashboardLogic';
+  import { calculateDashboardStats, formatCurrency, formatDate, type TimeRange } from '$lib/utils/dashboardLogic';
+  
+  // Default range
+  let selectedRange: TimeRange = '30d';
 
-  // Reactive assignment - runs once whenever $trips updates
-  // All the heavy math is now handled in the imported function
-  $: stats = calculateDashboardStats($trips);
+  // Reactive assignment - updates when $trips OR selectedRange changes
+  $: stats = calculateDashboardStats($trips, selectedRange);
+
+  // Helper for display text
+  const rangeLabels = {
+    '30d': 'Last 30 days',
+    '60d': 'Last 60 days',
+    '90d': 'Last 90 days',
+    '1y': 'Current Year',
+    'all': 'All Time'
+  };
 </script>
 
 <svelte:head>
@@ -13,16 +24,27 @@
 
 <div class="dashboard">
   <div class="page-header">
-    <div>
+    <div class="header-left">
       <h1 class="page-title">Dashboard</h1>
-      <p class="page-subtitle">Welcome back! Here's your overview</p>
+      <p class="page-subtitle">Overview for <span class="highlight-text">{rangeLabels[selectedRange]}</span></p>
     </div>
-    <a href="/dashboard/trips/new" class="btn-primary">
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-        <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      New Trip
-    </a>
+    
+    <div class="header-actions">
+      <select bind:value={selectedRange} class="range-select">
+        <option value="30d">Last 30 Days</option>
+        <option value="60d">Last 60 Days</option>
+        <option value="90d">Last 90 Days</option>
+        <option value="1y">Current Year</option>
+        <option value="all">All Time</option>
+      </select>
+
+      <a href="/dashboard/trips/new" class="btn-primary">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        New Trip
+      </a>
+    </div>
   </div>
   
   <div class="stats-grid">
@@ -38,16 +60,19 @@
         <span class="stat-label">Total Profit</span>
       </div>
       <div class="stat-value">{formatCurrency(stats.totalProfit)}</div>
-      <div class="stat-change" class:positive={stats.monthComparison.isPositive} class:negative={!stats.monthComparison.isPositive}>
+      
+      {#if selectedRange !== 'all'}
+      <div class="stat-change" class:positive={stats.periodComparison.isPositive} class:negative={!stats.periodComparison.isPositive}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          {#if stats.monthComparison.isPositive}
+          {#if stats.periodComparison.isPositive}
             <path d="M8 12V4M8 4L4 8M8 4L12 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           {:else}
             <path d="M8 4V12M8 12L4 8M8 12L12 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           {/if}
         </svg>
-        {Math.abs(stats.monthComparison.change).toFixed(1)}% from last month
+        {Math.abs(stats.periodComparison.change).toFixed(1)}% vs previous
       </div>
+      {/if}
     </div>
     
     <div class="stat-card">
@@ -61,7 +86,7 @@
         <span class="stat-label">Total Trips</span>
       </div>
       <div class="stat-value">{stats.totalTrips}</div>
-      <div class="stat-info">All time</div>
+      <div class="stat-info">{rangeLabels[selectedRange]}</div>
     </div>
     
     <div class="stat-card">
@@ -74,7 +99,7 @@
         <span class="stat-label">Avg Profit/Trip</span>
       </div>
       <div class="stat-value">{formatCurrency(stats.avgProfitPerTrip)}</div>
-      <div class="stat-info">Per completed trip</div>
+      <div class="stat-info">{rangeLabels[selectedRange]}</div>
     </div>
     
     <div class="stat-card">
@@ -88,7 +113,7 @@
         <span class="stat-label">Total Miles</span>
       </div>
       <div class="stat-value">{stats.totalMiles.toLocaleString(undefined, { maximumFractionDigits: 1 })}</div>
-      <div class="stat-info">Miles driven</div>
+      <div class="stat-info">{rangeLabels[selectedRange]}</div>
     </div>
   </div>
   
@@ -97,7 +122,7 @@
       <div class="chart-header">
         <div>
           <h3 class="chart-title">Profit Trend</h3>
-          <p class="chart-subtitle">Last 30 days</p>
+          <p class="chart-subtitle">{rangeLabels[selectedRange]}</p>
         </div>
         <div class="chart-legend">
           <div class="legend-item">
@@ -108,10 +133,10 @@
       </div>
       
       <div class="chart-container">
-        {#if stats.last30DaysData.some(d => d.profit > 0)}
-          {@const maxProfit = Math.max(...stats.last30DaysData.map(d => d.profit), 1)}
+        {#if stats.chartData.some(d => d.profit > 0)}
+          {@const maxProfit = Math.max(...stats.chartData.map(d => d.profit), 1)}
           <div class="bar-chart">
-            {#each stats.last30DaysData as day}
+            {#each stats.chartData as day}
               {@const height = (day.profit / maxProfit) * 100}
               <div class="bar-wrapper">
                 <div 
@@ -125,9 +150,9 @@
         {:else}
           <div class="empty-state">
             <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-              <path d="M8 36V12M16 36V20M24 36V24M32 36V16M40 36V28" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+               <path d="M8 36V12M16 36V20M24 36V24M32 36V16M40 36V28" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <p>No data yet</p>
+            <p>No data for this period</p>
           </div>
         {/if}
       </div>
@@ -136,8 +161,8 @@
     <div class="chart-card">
       <div class="chart-header">
         <div>
-          <h3 class="chart-title">Cost Breakdown</h3>
-          <p class="chart-subtitle">Total expenses</p>
+           <h3 class="chart-title">Cost Breakdown</h3>
+          <p class="chart-subtitle">Expenses in period</p>
         </div>
       </div>
       
@@ -151,47 +176,20 @@
             {@const suppliesLength = (stats.costBreakdown.supplies.percentage / 100) * circumference}
             {@const maintenanceOffset = fuelLength}
             {@const suppliesOffset = maintenanceOffset + maintenanceLength}
-            
+             
             <div class="donut-chart">
               <svg viewBox="0 0 200 200">
-                <circle
-                  cx="100"
-                  cy="100"
-                  r={radius}
-                  fill="none"
-                  stroke={stats.costBreakdown.fuel.color}
-                  stroke-width="30"
-                  stroke-dasharray="{fuelLength} {circumference}"
-                  stroke-dashoffset="0"
-                  transform="rotate(-90 100 100)"
-                />
+                <circle cx="100" cy="100" r={radius} fill="none" stroke={stats.costBreakdown.fuel.color} stroke-width="30"
+                  stroke-dasharray="{fuelLength} {circumference}" stroke-dashoffset="0" transform="rotate(-90 100 100)" />
                 
-                <circle
-                  cx="100"
-                  cy="100"
-                  r={radius}
-                  fill="none"
-                  stroke={stats.costBreakdown.maintenance.color}
-                  stroke-width="30"
-                  stroke-dasharray="{maintenanceLength} {circumference}"
-                  stroke-dashoffset={-maintenanceOffset}
-                  transform="rotate(-90 100 100)"
-                />
+                <circle cx="100" cy="100" r={radius} fill="none" stroke={stats.costBreakdown.maintenance.color} stroke-width="30"
+                  stroke-dasharray="{maintenanceLength} {circumference}" stroke-dashoffset={-maintenanceOffset} transform="rotate(-90 100 100)" />
                 
-                <circle
-                  cx="100"
-                  cy="100"
-                  r={radius}
-                  fill="none"
-                  stroke={stats.costBreakdown.supplies.color}
-                  stroke-width="30"
-                  stroke-dasharray="{suppliesLength} {circumference}"
-                  stroke-dashoffset={-suppliesOffset}
-                  transform="rotate(-90 100 100)"
-                />
+                <circle cx="100" cy="100" r={radius} fill="none" stroke={stats.costBreakdown.supplies.color} stroke-width="30"
+                  stroke-dasharray="{suppliesLength} {circumference}" stroke-dashoffset={-suppliesOffset} transform="rotate(-90 100 100)" />
                 </svg>
               
-              <div class="donut-legend">
+               <div class="donut-legend">
                 <div class="legend-item">
                   <div class="legend-dot" style="background: {stats.costBreakdown.fuel.color}"></div>
                   <div class="legend-text">
@@ -202,12 +200,12 @@
                 <div class="legend-item">
                   <div class="legend-dot" style="background: {stats.costBreakdown.maintenance.color}"></div>
                   <div class="legend-text">
-                    <span class="legend-label">Maintenance</span>
+                      <span class="legend-label">Maintenance</span>
                     <span class="legend-value">{formatCurrency(stats.costBreakdown.maintenance.amount)}</span>
                   </div>
                 </div>
                 <div class="legend-item">
-                  <div class="legend-dot" style="background: {stats.costBreakdown.supplies.color}"></div>
+                   <div class="legend-dot" style="background: {stats.costBreakdown.supplies.color}"></div>
                   <div class="legend-text">
                     <span class="legend-label">Supplies</span>
                     <span class="legend-value">{formatCurrency(stats.costBreakdown.supplies.amount)}</span>
@@ -220,9 +218,9 @@
           <div class="empty-state">
             <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
               <circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="2"/>
-              <path d="M24 14V24L30 30" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+               <path d="M24 14V24L30 30" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             </svg>
-            <p>No expenses yet</p>
+            <p>No expenses for this period</p>
           </div>
         {/if}
       </div>
@@ -233,7 +231,7 @@
     <div class="section-header">
       <div>
         <h3 class="section-title">Recent Trips</h3>
-        <p class="section-subtitle">Your latest activities</p>
+        <p class="section-subtitle">Latest from selected period</p>
       </div>
       <a href="/dashboard/trips" class="btn-secondary">
         View All
@@ -253,31 +251,29 @@
           <a href="/dashboard/trips?id={trip.id}" class="trip-item">
             <div class="trip-icon">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path d="M17 9L9 2L1 9V17C1 17.5304 1.21071 18.0391 1.58579 18.4142C1.96086 18.7893 2.46957 19 3 19H15C15.5304 19 16.0391 18.7893 16.4142 18.4142C16.7893 18.0391 17 17.5304 17 17V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                 <path d="M17 9L9 2L1 9V17C1 17.5304 1.21071 18.0391 1.58579 18.4142C1.96086 18.7893 2.46957 19 3 19H15C15.5304 19 16.0391 18.7893 16.4142 18.4142C16.7893 18.0391 17 17.5304 17 17V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </div>
             
             <div class="trip-info">
-              <div class="trip-route">
+               <div class="trip-route">
                 <span class="trip-start">{trip.startAddress?.split(',')[0] || 'Unknown'}</span>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
                 <span class="trip-destination">
-                  {trip.stops && trip.stops.length > 0 
-                    ? trip.stops[trip.stops.length - 1].address?.split(',')[0] || 'Multiple stops'
-                    : 'No stops'}
+                  {trip.stops && trip.stops.length > 0 ? trip.stops[trip.stops.length - 1].address?.split(',')[0] || 'Multiple stops' : 'No stops'}
                 </span>
               </div>
               <div class="trip-meta">
                 <span>{formatDate(trip.date || '')}</span>
-                <span>•</span>
+                 <span>•</span>
                 <span>{(Number(trip.totalMiles) || 0).toFixed(1)} mi</span>
                 {#if trip.stops && trip.stops.length > 0}
                   <span>•</span>
                   <span>{trip.stops.length} stops</span>
                 {/if}
-              </div>
+               </div>
             </div>
             
             <div class="trip-profit" class:positive={profit >= 0} class:negative={profit < 0}>
@@ -292,8 +288,8 @@
           <path d="M8 24L32 8L56 24V48C56 49.0609 55.5786 50.0783 54.8284 50.8284C54.0783 51.5786 53.0609 52 52 52H12C10.9391 52 9.92172 51.5786 9.17157 50.8284C8.42143 50.0783 8 49.0609 8 48V24Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M24 52V32H40V52" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        <h4>No trips yet</h4>
-        <p>Start by creating your first trip</p>
+         <h4>No trips found</h4>
+        <p>No trips found in this date range.</p>
         <a href="/dashboard/trips/new" class="btn-primary">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
             <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -312,20 +308,48 @@
     padding: 16px;
   }
   
-  /* --- MOBILE FIRST DEFAULT STYLES --- */
-
-  /* Header - Row layout (Beside each other) */
   .page-header {
     display: flex;
-    flex-direction: row; /* Aligned horizontally */
-    justify-content: space-between; /* Pushed to edges */
-    align-items: center;
+    flex-direction: column;
     gap: 16px;
     margin-bottom: 24px;
   }
+
+  /* Header Layout for Mobile */
+  .header-actions {
+      display: flex;
+      gap: 12px;
+      width: 100%;
+  }
+
+  .range-select {
+      flex: 1;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid #E5E7EB;
+      background: white;
+      font-size: 14px;
+      color: #374151;
+      cursor: pointer;
+  }
+
+  @media (min-width: 640px) {
+    .page-header {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .header-actions {
+        width: auto;
+    }
+    .range-select {
+        width: 160px;
+        flex: none;
+    }
+  }
   
   .page-title {
-    font-size: 24px; /* Slightly smaller to fit */
+    font-size: 24px;
     font-weight: 800;
     color: #111827;
     margin-bottom: 4px;
@@ -337,13 +361,18 @@
     color: #6B7280;
     margin: 0;
   }
+
+  .highlight-text {
+      color: var(--orange);
+      font-weight: 600;
+  }
   
   .btn-primary {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    padding: 12px 16px; /* Reduced padding slightly */
+    padding: 12px 16px;
     background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%);
     color: white;
     border: none;
@@ -354,8 +383,7 @@
     cursor: pointer;
     transition: all 0.2s;
     box-shadow: 0 4px 12px rgba(255, 127, 80, 0.3);
-    width: fit-content; /* Only as wide as needed */
-    white-space: nowrap; /* Prevent text wrapping */
+    white-space: nowrap;
   }
   
   .btn-primary:hover {
@@ -383,7 +411,7 @@
     color: var(--orange);
   }
   
-  /* Stats Grid - 1 Column on Mobile */
+  /* Stats Grid */
   .stats-grid {
     display: grid;
     grid-template-columns: 1fr;
@@ -465,7 +493,7 @@
   
   .stat-info { font-size: 13px; color: #9CA3AF; }
   
-  /* Charts Grid - 1 Column on Mobile */
+  /* Charts Grid */
   .charts-grid {
     display: grid;
     grid-template-columns: 1fr;
@@ -485,7 +513,7 @@
     justify-content: space-between;
     align-items: flex-start;
     margin-bottom: 20px;
-    flex-wrap: wrap; /* Allow wrapping on very small screens */
+    flex-wrap: wrap;
     gap: 12px;
   }
   
@@ -547,10 +575,10 @@
   
   .bar:hover { opacity: 0.8; }
   
-  /* Donut Chart - Stacked on Mobile */
+  /* Donut Chart */
   .donut-chart {
     display: flex;
-    flex-direction: column; /* Stacked by default */
+    flex-direction: column;
     gap: 24px;
     align-items: center;
     height: 100%;
@@ -630,7 +658,7 @@
   
   .trip-item {
     display: flex;
-    flex-direction: column; /* Stacked on mobile */
+    flex-direction: column;
     gap: 12px;
     padding: 16px;
     background: #F9FAFB;
@@ -657,7 +685,7 @@
     justify-content: center;
     color: var(--orange);
     flex-shrink: 0;
-    align-self: flex-start; /* Align top on mobile */
+    align-self: flex-start;
   }
   
   .trip-info {
@@ -673,7 +701,7 @@
     font-weight: 600;
     color: #111827;
     margin-bottom: 4px;
-    flex-wrap: wrap; /* Handle long addresses */
+    flex-wrap: wrap;
   }
   
   .trip-route svg { color: #9CA3AF; flex-shrink: 0; }
@@ -698,7 +726,7 @@
     font-size: 18px;
     font-weight: 700;
     flex-shrink: 0;
-    align-self: flex-end; /* Right align on mobile */
+    align-self: flex-end;
   }
   
   .trip-profit.positive { color: var(--green); }
@@ -724,8 +752,6 @@
   .empty-state-large p { font-size: 15px; color: #6B7280; margin-bottom: 24px; }
   
   /* --- RESPONSIVE BREAKPOINTS --- */
-
-  /* Tablet */
   @media (min-width: 640px) {
     .page-title { font-size: 32px; }
     .page-subtitle { font-size: 16px; }
@@ -744,7 +770,6 @@
     .trip-profit { align-self: center; }
   }
   
-  /* Desktop */
   @media (min-width: 1024px) {
     .stats-grid {
       grid-template-columns: repeat(4, 1fr);
