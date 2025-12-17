@@ -34,7 +34,7 @@
   let showSuccess = false;
   let successMessage = '';
   let statusMessage = 'Sync Now';
-  
+
   // Track batch for progress visualization
   let currentBatch = 0;
   
@@ -125,7 +125,6 @@
   $: if (isConfigLoaded) {
       // Access all variables to trigger dependency
       const _ = [installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge, installTime, repairTime];
-      
       if (saveTimeout) clearTimeout(saveTimeout);
       saveTimeout = setTimeout(() => {
           saveSettings();
@@ -202,8 +201,11 @@
             addLog('Disconnected.');
             showSuccessMsg('Disconnected.');
         }
-    } catch (e: any) { addLog('Error: ' + e.message); }
-    finally { loading = false; }
+    } catch (e: any) { 
+        addLog('Error: ' + e.message);
+    } finally { 
+        loading = false; 
+    }
   }
 
   async function handleSync(batchCount = 1) {
@@ -212,9 +214,12 @@
     statusMessage = `Syncing Batch ${batchCount}...`;
     
     const skipScan = batchCount > 1;
+    // [!code fix] Define data here so it is accessible in the finally block
+    let data: any = null;
+
     if (batchCount === 1) {
         addLog(`Starting Full Sync...`);
-        showConsole = true; 
+        showConsole = true;
     } else {
         addLog(`Continuing Sync (Batch ${batchCount})...`);
     }
@@ -243,7 +248,6 @@
             addLog(`❌ Server returned HTML instead of JSON (Batch ${batchCount})`);
             addLog(`This usually means the session expired or there was a server error.`);
             addLog(`Please disconnect and reconnect, then try syncing again.`);
-            
             // Show user-friendly error
             alert('Session expired or server error. Please disconnect and reconnect.');
             loading = false;
@@ -252,9 +256,10 @@
             return;
         }
 
-        const data = await res.json();
+        // [!code fix] Assign to the outer 'data' variable
+        data = await res.json();
         processServerLogs(data.logs);
-        
+
         if (data.success) {
              const newOrders = data.orders || [];
              orders = newOrders;
@@ -302,6 +307,7 @@
         currentBatch = 0;
     } finally {
         // Only set loading = false if we're not recursing
+        // [!code fix] data is now accessible here
         if (!data || !data.incomplete) {
             loading = false;
             statusMessage = 'Sync Now';
@@ -431,7 +437,7 @@
                    </button>
 
                    <button class="btn-secondary danger-hover" on:click={handleClear} disabled={loading}>
-                      Delete HNS Trips
+                       Delete HNS Trips
                    </button>
               </div>
           {/if}
@@ -547,7 +553,7 @@
                         {order.type || 'Unknown'}
                      </span>
                      {#if order.hasPoleMount}
-                        <span class="order-badge pole">Pole</span>
+                       <span class="order-badge pole">Pole</span>
                      {/if}
                  </div>
                  <div class="order-details">
