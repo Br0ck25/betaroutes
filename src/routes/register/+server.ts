@@ -18,7 +18,7 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
 
         // 1. Rate Limiting (Prevent Spam)
         const clientIp = request.headers.get('CF-Connecting-IP') || getClientAddress();
-        const limitRes = await checkRateLimit(usersKV, clientIp, 'register_attempt', 3, 3600); // 3 attempts/hour
+        const limitRes = await checkRateLimit(usersKV, clientIp, 'register_attempt', 100, 3600); // 3 attempts/hour
         
         if (!limitRes.allowed) {
             return json({ message: 'Too many attempts. Please try again later.' }, { status: 429 });
