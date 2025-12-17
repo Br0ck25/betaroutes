@@ -668,13 +668,57 @@ export class HughesNetService {
                 }
             }
 
+            // STAGE 1.5.5: RECALCULATE RESYNC STATUS
+            // Before downloading, check which existing orders need resyncing
+            const now = Date.now();
+            let resyncCount = 0;
+            
+            for (const order of Object.values(orderDb)) {
+                // Skip if already pending download or failed
+                if (order._status === 'pending' || order._status === 'failed') continue;
+                
+                // Skip if no address (will be downloaded anyway)
+                if (!order.address) continue;
+                
+                // Determine if this order needs resyncing
+                const { needsResync } = determineOrderSyncStatus(order);
+                
+                if (needsResync && !order.needsResync) {
+                    order.needsResync = true;
+                    dbDirty = true;
+                    resyncCount++;
+                }
+            }
+            
+            if (resyncCount > 0) {
+                this.log(`[Resync] Flagged ${resyncCount} orders for resync (future jobs or incomplete within 7 days)`);
+                if (dbDirty) {
+                    await this.kv.put(`hns:db:${userId}`, JSON.stringify(orderDb));
+                    dbDirty = false;
+                }
+            }
+
             // STAGE 2: DOWNLOAD DETAILS
+            // Get orders that need downloading or resyncing
             const missingDataIds = Object.values(orderDb)
-                .filter((o:OrderData) => (o._status === 'pending' || !o.address) && o._status !== 'failed')
-                .map((o:OrderData) => o.id);
+                .filter((o: OrderData) => {
+                    // Skip failed orders
+                    if (o._status === 'failed') return false;
+                    
+                    // Download if pending or missing address
+                    if (o._status === 'pending' || !o.address) return true;
+                    
+                    // Resync if flagged (future jobs or incomplete within 7 days)
+                    if (o.needsResync) return true;
+                    
+                    return false;
+                })
+                .map((o: OrderData) => o.id);
             
             if (missingDataIds.length > 0) {
-                this.log(`[Download] Starting download of ${missingDataIds.length} orders...`);
+                this.log(`[Download] Starting download of ${missingDataIds.length} orders (includes ${
+                    Object.values(orderDb).filter(o => o.needsResync).length
+                } resyncs)...`);
                 
                 // Check soft limit before downloads
                 if (this.fetcher.shouldBatch()) {
@@ -867,6 +911,10 @@ export class HughesNetService {
         // Check for incomplete→complete transition
         const wasIncompleteNowComplete = checkIncompleteToComplete(existingOrder, parsed);
         
+        // Check if this was a resync that's now complete
+        const wasResync = existingOrder?.needsResync === true;
+        const nowComplete = syncStatus === 'complete';
+        
         // Update order with sync tracking
         delete parsed._status;
         const updatedOrder: OrderData = {
@@ -880,6 +928,13 @@ export class HughesNetService {
         if (wasIncompleteNowComplete) {
             updatedOrder.lastPaymentUpdate = Date.now();
             this.log(`  ${id} [INCOMPLETE→COMPLETE] Payment update needed`);
+        }
+        
+        // Log if this was a successful resync
+        if (wasResync && nowComplete) {
+            this.log(`  ${id} [RESYNC SUCCESS] Timestamps updated`);
+        } else if (wasResync && !nowComplete) {
+            this.log(`  ${id} [RESYNC] Still incomplete/future`);
         }
         
         orderDb[id] = updatedOrder;
