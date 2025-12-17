@@ -581,13 +581,13 @@
         </div>
       </div>
       
-      <div class="form-group">
-        <label for="distance-unit">Distance Unit</label>
-        <select id="distance-unit" bind:value={settings.distanceUnit}>
-          <option value="miles">Miles</option>
-          <option value="km">Kilometers</option>
-        </select>
-      </div>
+<div class="form-group">
+  <label for="distance-unit">Distance Unit</label>
+  <select id="distance-unit" bind:value={settings.distanceUnit}>
+    <option value="mi">Miles</option> 
+    <option value="km">Kilometers</option>
+  </select>
+</div>
       
       <div class="form-group">
         <label for="currency">Currency</label>
