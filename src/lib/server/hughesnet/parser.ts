@@ -9,16 +9,41 @@ function toTitleCase(str: string) {
     return str.toLowerCase().replace(/\b\w/g, s => s.toUpperCase());
 }
 
-// [!code ++] Helper to find specific log timestamps
-function findTimestamp(text: string, keyword: string): number | null {
-    // Matches patterns like "10/20/2025 08:04:50...Arrival On Site"
-    // We capture the first valid date/time found before the keyword
-    const regex = new RegExp(`(\\d{1,2}\\/\\d{1,2}\\/\\d{4}\\s+\\d{1,2}:\\d{2}:\\d{2}).*?${keyword}`, 'i');
-    const match = text.match(regex);
-    if (match) {
-        return new Date(match[1]).getTime();
-    }
-    return null;
+// Hybrid approach: Use Cheerio for structure, regex for parsing
+function findEventTimestamp($: cheerio.CheerioAPI, eventLabel: string): number | null {
+    let foundTs: number | null = null;
+    
+    $('.SearchUtilData').each((i, elem) => {
+        const text = $(elem).text().trim();
+        
+        if (text.includes(eventLabel)) {
+            const prevCell = $(elem).prev('.SearchUtilData');
+            if (prevCell.length) {
+                const tsText = prevCell.text().trim();
+                
+                const match = tsText.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+                if (match) {
+                    const [_, month, day, year, hour, min, sec] = match;
+                    
+                    const date = new Date(
+                        parseInt(year), 
+                        parseInt(month) - 1, 
+                        parseInt(day), 
+                        parseInt(hour), 
+                        parseInt(min), 
+                        sec ? parseInt(sec) : 0
+                    );
+                    
+                    if (!isNaN(date.getTime())) {
+                        foundTs = date.getTime();
+                        return false;
+                    }
+                }
+            }
+        }
+    });
+    
+    return foundTs;
 }
 
 function scanForward(html: string, label: string, regex: RegExp): string {
@@ -101,8 +126,8 @@ export function parseOrderPage(html: string, id: string): OrderData {
     out.state = val('f_state') || scanForward(html, 'State:', />([A-Z]{2})</) || '';
     out.zip = val('f_zip') || scanForward(html, 'Zip:', />(\d{5})</) || '';
 
-    out.confirmScheduleDate = val('f_sched_date') || scanForward(html, 'Confirm Schedule Date', /(\d{1,2}\/\d{1,2}\/\d{2,4})/) || scanForward('Date:', /(\d{1,2}\/\d{1,2}\/\d{2,4})/);
-    out.beginTime = val('f_begin_time') || scanForward('Arrival Window', /(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i) || scanForward('Time:', /(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
+    out.confirmScheduleDate = val('f_sched_date') || scanForward(html, 'Confirm Schedule Date', /(\d{1,2}\/\d{1,2}\/\d{2,4})/) || scanForward(html, 'Date:', /(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+    out.beginTime = val('f_begin_time') || scanForward(html, 'Arrival Window', /(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i) || scanForward(html, 'Time:', /(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
 
     const bodyText = $('body').text();
     if (bodyText.includes('Service Order #')) {
@@ -114,33 +139,19 @@ export function parseOrderPage(html: string, id: string): OrderData {
         out.hasPoleMount = true;
     }
 
-    const incompleteIdx = bodyText.indexOf('Departure Incomplete');
-    const completeIdx = bodyText.lastIndexOf('Departure Complete'); 
+    out.arrivalTimestamp = findEventTimestamp($, 'Arrival On Site');
+    out.departureCompleteTimestamp = findEventTimestamp($, 'Departure Complete');
+    out.departureIncompleteTimestamp = findEventTimestamp($, 'Departure Incomplete');
 
-    if (incompleteIdx !== -1) {
-        if (completeIdx === -1 || completeIdx < incompleteIdx) {
-            out.departureIncomplete = true;
-        }
-    }
-
-    // [!code feature] Extract Actual Times from Log Text
-    const arrivedTs = findTimestamp(bodyText, 'Arrival On Site'); 
-    const departTs = findTimestamp(bodyText, 'Departure Complete');
-
-    // Calculate Real Duration
-    if (arrivedTs && departTs && departTs > arrivedTs) {
-        const durationMins = Math.round((departTs - arrivedTs) / 60000);
+    if (out.arrivalTimestamp && out.departureCompleteTimestamp) {
+        const durationMins = Math.round((out.departureCompleteTimestamp - out.arrivalTimestamp) / 60000);
         if (durationMins > 10 && durationMins < 600) {
             out.jobDuration = durationMins;
-            out.actualDuration = true;
         }
     }
 
-    // Store Arrival for Sorting
-    if (arrivedTs) {
-        out.actualArrivalTs = arrivedTs;
-        const d = new Date(arrivedTs);
-        out.actualArrivalTime = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+    if (out.departureIncompleteTimestamp) {
+        out.departureIncomplete = true;
     }
 
     return out;

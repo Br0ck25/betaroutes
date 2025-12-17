@@ -7,12 +7,15 @@ const USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0'
 ];
 
+const DEFAULT_MAX_REQUESTS = 35;
+
 export class HughesNetFetcher {
     private requestCount = 0;
-    private maxRequests = 35;
+    private maxRequests: number;
     private userAgent: string;
 
-    constructor() {
+    constructor(maxRequests: number = DEFAULT_MAX_REQUESTS) {
+        this.maxRequests = maxRequests;
         this.userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
     }
 

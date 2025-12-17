@@ -5,99 +5,47 @@ import { HughesNetFetcher } from './fetcher';
 import { HughesNetAuth } from './auth';
 import { HughesNetRouter } from './router';
 import * as parser from './parser';
-import type { OrderData } from './types';
+import type { OrderData, OrderWithMeta, Trip, TripStop, SupplyItem, SyncConfig, SyncResult, DistributedLock } from './types';
+
+// --- CONSTANTS ---
+const SCAN_REQUEST_LIMIT = 15;
+const DISCOVERY_GAP_LIMIT = 150;
+const DISCOVERY_BACKWARD_LIMIT = 200;
+const DOWNLOAD_LIMIT = 250;
+const TRIP_CREATION_LIMIT = 250;
+const DISCOVERY_GAP_MAX_SIZE = 50;
+const DISCOVERY_MAX_FAILURES = 50;
+const DISCOVERY_MAX_CHECKS = 100;
+const USER_MODIFICATION_BUFFER_MS = 120000; // 2 minutes
+const MIN_JOB_DURATION_MINS = 10;
+const MAX_JOB_DURATION_MINS = 600;
+
+// DELAY CONSTANTS (Issue #7)
+const DELAY_BETWEEN_SCANS_MS = 150;
+const DELAY_BETWEEN_GAP_FILLS_MS = 50;
+const DELAY_BETWEEN_BACKWARD_SCANS_MS = 80;
+const DELAY_BETWEEN_DOWNLOADS_MS = 200;
+
+// DISTRIBUTED LOCK CONSTANTS (Issue #1)
+const LOCK_TTL_MS = 300000; // 5 minutes
+const LOCK_RETRY_DELAY_MS = 1000; // 1 second
+const LOCK_MAX_RETRIES = 10;
+
+// ROLLBACK CONSTANTS (Issue #7)
+const MAX_ROLLBACK_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
 // --- HELPERS ---
 
-interface JobEvent {
-    type: 'Arrival' | 'DepartureIncomplete' | 'DepartureComplete' | 'Unknown';
-    ts: number;
-    raw: string;
-}
-
-function analyzeJobHistory(rawText: string): JobEvent[] {
-    if (!rawText) return [];
-    const events: JobEvent[] = [];
-    const str = String(rawText);
-
-    // Split by labels to isolate the timestamps
-    const segments = str.split(/(Arrival On Site|Departure Incomplete|Departure Complete)/i);
-
-    for (let i = 1; i < segments.length; i += 2) {
-        const label = segments[i]; 
-        const timeChunk = segments[i - 1]; 
-
-        // Regex allows optional space AND optional seconds
-        // Matches "09/03/2025 10:47" or "09/03/2025 10:47:05"
-        const timeMatch = timeChunk.match(/(\d{1,2}\/\d{1,2}\/\d{4}\s*\d{1,2}:\d{2}(?::\d{2})?)/g);
-        
-        if (timeMatch && timeMatch.length > 0) {
-            // Use the last timestamp found immediately before the label
-            const timeStr = timeMatch[timeMatch.length - 1];
-            const ts = parseDateTimeString(timeStr);
-
-            let type: JobEvent['type'] = 'Unknown';
-            if (label.toLowerCase().includes('arrival')) type = 'Arrival';
-            else if (label.toLowerCase().includes('incomplete')) type = 'DepartureIncomplete';
-            else if (label.toLowerCase().includes('complete')) type = 'DepartureComplete';
-
-            if (ts > 0) {
-                events.push({ type, ts, raw: label });
-            }
-        }
-    }
-    
-    return events.sort((a, b) => a.ts - b.ts);
-}
-
-// Fallback: Scan raw string for any valid date/time
-function findEarliestTimestamp(rawText: string): number {
-    if (!rawText) return 0;
-    const str = String(rawText);
-    const regex = /(\d{1,2}\/\d{1,2}\/\d{4}\s*\d{1,2}:\d{2}(?::\d{2})?)/g;
-    let match;
-    let minTs = Infinity;
-    
-    while ((match = regex.exec(str)) !== null) {
-        const ts = parseDateTimeString(match[1]);
-        if (ts > 0 && ts < minTs) minTs = ts;
-    }
-    return minTs === Infinity ? 0 : minTs;
-}
-
-function parseDateTimeString(dtStr: string): number {
-    if (!dtStr) return 0;
-    const str = String(dtStr).trim();
-    if (/^\d{13}$/.test(str)) return parseInt(str);
-    
-    // Matches MM/DD/YYYY HH:MM (seconds optional)
-    const m = str.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-    if (!m) return 0;
-
-    const month = parseInt(m[1]) - 1; 
-    const day = parseInt(m[2]);
-    const year = parseInt(m[3]);
-    const hour = parseInt(m[4]);
-    const min = parseInt(m[5]);
-    const sec = m[6] ? parseInt(m[6]) : 0;
-
-    return new Date(year, month, day, hour, min, sec).getTime();
-}
-
 function parseDateOnly(dateStr: string): Date | null {
     if (!dateStr) return null;
-    const clean = dateStr.trim();
-    const m = clean.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
-    if (m) {
-        let y = m[3];
-        if (y.length === 2) y = '20' + y;
-        return new Date(parseInt(y), parseInt(m[1]) - 1, parseInt(m[2]));
-    }
-    return null;
+    const m = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if (!m) return null;
+    let y = m[3];
+    if (y.length === 2) y = '20' + y;
+    return new Date(parseInt(y), parseInt(m[1]) - 1, parseInt(m[2]));
 }
 
 function toIsoDate(dateStr: string) {
-    if (!dateStr) return null;
     const d = parseDateOnly(dateStr);
     if (!d) return null;
     const y = d.getFullYear();
@@ -106,61 +54,76 @@ function toIsoDate(dateStr: string) {
     return `${y}-${m}-${day}`;
 }
 
-function extractDateFromTs(ts: string): string | null {
+function extractDateFromTs(ts: number): string | null {
     if (!ts) return null;
-    if (/^\d{13}$/.test(String(ts))) {
-         const d = new Date(parseInt(String(ts)));
-         return toIsoDate(`${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`);
-    }
-    const latestTs = parseDateTimeString(ts);
-    if (latestTs > 0) {
-         const d = new Date(latestTs);
-         return toIsoDate(`${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`);
-    }
-    return null;
+    const d = new Date(ts);
+    return toIsoDate(`${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`);
 }
 
-// SIMPLIFIED 24-HOUR PARSER
-// No AM/PM logic. Just reads "13:00" as 13 * 60 + 0
 function parseTime(timeStr: string): number {
-    const t24 = extract24HourTime(timeStr);
-    if (!t24) return 0;
-
-    const [h, m] = t24.split(':').map(Number);
+    if (!timeStr) return 0;
+    const match = timeStr.match(/\b(\d{1,2}:\d{2})/);
+    if (!match) return 0;
+    const [h, m] = match[1].split(':').map(Number);
     return h * 60 + m;
 }
 
-
 function minutesToTime(minutes: number): string {
     if (minutes < 0) minutes += 1440;
-
     let h = Math.floor(minutes / 60) % 24;
     const m = Math.floor(minutes % 60);
-
-    return to12Hour(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
-}
-
-
-// --- SIMPLE TIME EXTRACTION & CONVERSION ---
-
-function extract24HourTime(raw: string): string | null {
-    if (!raw) return null;
-
-    // Matches HH:MM or HH:MM:SS
-    const match = raw.match(/\b(\d{1,2}:\d{2})(?::\d{2})?\b/);
-    return match ? match[1] : null;
-}
-
-function to12Hour(time24: string): string {
-    const [hStr, m] = time24.split(':');
-    let h = parseInt(hStr, 10);
-
     const suffix = h >= 12 ? 'PM' : 'AM';
     h = h % 12 || 12;
-
-    return `${h}:${m} ${suffix}`;
+    return `${h}:${m.toString().padStart(2, '0')} ${suffix}`;
 }
 
+function formatTimestamp(ts: number): string {
+    const d = new Date(ts);
+    return minutesToTime(d.getHours() * 60 + d.getMinutes());
+}
+
+// Issue #4: Enhanced validation with Infinity check
+function validateSyncConfig(config: SyncConfig): void {
+    const { installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge } = config;
+    
+    if (!isFinite(installPay) || installPay < 0) {
+        throw new Error('Install pay must be a positive finite number');
+    }
+    if (!isFinite(repairPay) || repairPay < 0) {
+        throw new Error('Repair pay must be a positive finite number');
+    }
+    if (!isFinite(upgradePay) || upgradePay < 0) {
+        throw new Error('Upgrade pay must be a positive finite number');
+    }
+    if (!isFinite(poleCost) || poleCost < 0) {
+        throw new Error('Pole cost must be a positive finite number');
+    }
+    if (!isFinite(concreteCost) || concreteCost < 0) {
+        throw new Error('Concrete cost must be a positive finite number');
+    }
+    if (!isFinite(poleCharge) || poleCharge < 0) {
+        throw new Error('Pole charge must be a positive finite number');
+    }
+}
+
+// Issue #5: Address validation with whitespace trimming
+function isValidAddress(order: OrderData): boolean {
+    const trimmedAddress = order.address?.trim();
+    const trimmedCity = order.city?.trim();
+    const trimmedState = order.state?.trim();
+    
+    return !!(trimmedAddress || (trimmedCity && trimmedState));
+}
+
+function buildAddress(o: OrderData): string {
+    const parts = [o.address, o.city, o.state, o.zip]
+        .filter(Boolean)
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+    
+    if (parts.length === 0) return '';
+    return parts.join(', ');
+}
 
 export class HughesNetService {
     public logs: string[] = [];
@@ -188,7 +151,70 @@ export class HughesNetService {
     private warn(msg: string) { console.warn(msg); this.logs.push(`⚠️ ${msg}`); }
     private error(msg: string, e?: any) { console.error(msg, e); this.logs.push(`❌ ${msg}`); }
 
-    // --- Public API ---
+    // Issue #1: Distributed lock implementation using KV
+    private async acquireLock(lockKey: string, ownerId: string): Promise<boolean> {
+        const expiresAt = Date.now() + LOCK_TTL_MS;
+        const lock: DistributedLock = { lockId: lockKey, ownerId, expiresAt };
+        
+        try {
+            // Try to acquire lock
+            await this.kv.put(lockKey, JSON.stringify(lock), {
+                expirationTtl: Math.ceil(LOCK_TTL_MS / 1000)
+            });
+            
+            // Verify we got the lock by reading it back
+            const stored = await this.kv.get(lockKey);
+            if (!stored) return false;
+            
+            const storedLock = JSON.parse(stored) as DistributedLock;
+            return storedLock.ownerId === ownerId;
+        } catch (e) {
+            console.error('Failed to acquire lock:', e);
+            return false;
+        }
+    }
+
+    private async releaseLock(lockKey: string, ownerId: string): Promise<void> {
+        try {
+            const stored = await this.kv.get(lockKey);
+            if (!stored) return;
+            
+            const lock = JSON.parse(stored) as DistributedLock;
+            // Only release if we own the lock
+            if (lock.ownerId === ownerId) {
+                await this.kv.delete(lockKey);
+            }
+        } catch (e) {
+            console.error('Failed to release lock:', e);
+        }
+    }
+
+    private async waitForLock(lockKey: string, ownerId: string): Promise<boolean> {
+        for (let i = 0; i < LOCK_MAX_RETRIES; i++) {
+            const acquired = await this.acquireLock(lockKey, ownerId);
+            if (acquired) return true;
+            
+            // Check if lock is expired
+            try {
+                const stored = await this.kv.get(lockKey);
+                if (stored) {
+                    const lock = JSON.parse(stored) as DistributedLock;
+                    if (lock.expiresAt < Date.now()) {
+                        // Lock expired, try to clean it up
+                        await this.kv.delete(lockKey);
+                        continue;
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to check lock expiry:', e);
+            }
+            
+            this.log(`[Lock] Waiting for lock... (attempt ${i + 1}/${LOCK_MAX_RETRIES})`);
+            await new Promise(r => setTimeout(r, LOCK_RETRY_DELAY_MS));
+        }
+        
+        return false;
+    }
 
     async connect(userId: string, u: string, p: string) {
         this.log(`[HNS] Connecting user ${userId}...`);
@@ -221,195 +247,278 @@ export class HughesNetService {
     async sync(
         userId: string, 
         settingsId: string | undefined, 
-        installPay: number, repairPay: number, upgradePay: number,      
-        poleCost: number, concreteCost: number, poleCharge: number,
+        installPay: number, 
+        repairPay: number, 
+        upgradePay: number,      
+        poleCost: number, 
+        concreteCost: number, 
+        poleCharge: number,
         skipScan: boolean
-    ) {
+    ): Promise<SyncResult> {
+        // Validate input
+        validateSyncConfig({ installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge });
+
+        // Issue #1 & #2: Distributed lock with proper cleanup
+        const lockKey = `lock:sync:${userId}`;
+        const ownerId = `${userId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        let lockAcquired = false;
+        try {
+            lockAcquired = await this.waitForLock(lockKey, ownerId);
+            if (!lockAcquired) {
+                throw new Error('Could not acquire sync lock. Another sync may be in progress.');
+            }
+
+            const result = await this.performSync(
+                userId, settingsId, installPay, repairPay, upgradePay, 
+                poleCost, concreteCost, poleCharge, skipScan
+            );
+            
+            return result;
+        } finally {
+            // Issue #2: Guaranteed cleanup even if performSync throws
+            if (lockAcquired) {
+                await this.releaseLock(lockKey, ownerId);
+            }
+        }
+    }
+
+    private async performSync(
+        userId: string, 
+        settingsId: string | undefined, 
+        installPay: number, 
+        repairPay: number, 
+        upgradePay: number,      
+        poleCost: number, 
+        concreteCost: number, 
+        poleCharge: number,
+        skipScan: boolean
+    ): Promise<SyncResult> {
         this.fetcher.resetCount();
-        this.log(`[Sync Config] Rates -> Install: $${installPay} | Repair: $${repairPay} | Upgrade: $${upgradePay} | Pole Charge: $${poleCharge}`);
+        this.log(`[Config] Install: $${installPay} | Repair: $${repairPay} | Upgrade: $${upgradePay}`);
 
         const cookie = await this.auth.ensureSessionCookie(userId);
         if (!cookie) throw new Error('Could not login. Please reconnect.');
 
         let orderDb: Record<string, OrderData> = {};
         const dbRaw = await this.kv.get(`hns:db:${userId}`);
-        if (dbRaw) orderDb = JSON.parse(dbRaw);
+        if (dbRaw) {
+            try {
+                orderDb = JSON.parse(dbRaw);
+            } catch (e) {
+                // Issue #8: Handle corrupt JSON gracefully
+                this.error('[Sync] Failed to parse existing order database, starting fresh', e);
+                orderDb = {};
+            }
+        }
+        
+        // Issue #7: Memory-efficient rollback
+        let originalDbState: string | null = null;
+        const dbString = JSON.stringify(orderDb);
+        if (dbString.length < MAX_ROLLBACK_SIZE_BYTES) {
+            originalDbState = dbString;
+        } else {
+            this.warn(`[Sync] Order database too large (${(dbString.length / 1024 / 1024).toFixed(2)}MB), rollback disabled`);
+        }
         
         let dbDirty = false;
         let incomplete = false;
         
-        // STAGE 1: SCANNING
-        if (!skipScan) {
-            try {
-                const res = await this.fetcher.safeFetch(parser.BASE_URL + '/start/Home.jsp', { headers: { 'Cookie': cookie }});
-                const html = await res.text();
-                if (html.includes('name="Password"')) throw new Error('Session expired.');
-                
-                parser.extractIds(html).forEach(id => {
-                    if (!orderDb[id]) { orderDb[id] = { id, address: '', city: '', state: '', zip: '', confirmScheduleDate: '', beginTime: '', type: '', jobDuration: 0, _status: 'pending' }; dbDirty = true; }
-                });
-
-                if (this.fetcher.getRequestCount() < 10) {
-                    const links = parser.extractMenuLinks(html);
-                    const priorityLinks = links.filter(l => l.url.includes('SoSearch') || l.url.includes('forms/'));
-                    this.log(`[Stage 1] Scanning ${priorityLinks.length} pages...`);
-                    
-                    for (const link of priorityLinks) {
-                        if (this.fetcher.getRequestCount() > 15) break; 
-                        await this.scanUrl(link.url, cookie, (id) => {
-                             if (!orderDb[id]) { orderDb[id] = { id, address: '', city: '', state: '', zip: '', confirmScheduleDate: '', beginTime: '', type: '', jobDuration: 0, _status: 'pending' }; dbDirty = true; }
-                        });
-                        await new Promise(r => setTimeout(r, 150));
-                    }
-                }
-            } catch (e: any) {
-                if (e.message !== 'REQ_LIMIT') this.error('[Stage 1] Scan error', e);
-            }
-        }
-
-        // STAGE 1.5: SMART NEIGHBOR DISCOVERY
-        const knownIds = Object.keys(orderDb).map(id => parseInt(id)).filter(n => !isNaN(n)).sort((a,b) => a - b);
-        if (knownIds.length > 0 && !skipScan) {
-            const minId = knownIds[0];
-            
-            const tryFetchId = async (targetId: number) => {
-                 if (orderDb[String(targetId)]) return true; 
-                 if (this.fetcher.getRequestCount() >= 200) return false; 
-
-                 try {
-                    const orderUrl = `${parser.BASE_URL}/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${targetId}`;
-                    const res = await this.fetcher.safeFetch(orderUrl, { headers: { 'Cookie': cookie }});
-                    const html = await res.text();
-                    const parsed = parser.parseOrderPage(html, String(targetId));
-                    if (parsed.address) {
-                        delete parsed._status;
-                        orderDb[String(targetId)] = parsed;
-                        dbDirty = true;
-                        this.log(`[Discovery] Found HIDDEN Order ${targetId}`);
-                        return true;
-                    }
-                 } catch(e) {}
-                 return false;
-            };
-
-            this.log(`[Stage 1.5] Smart Discovery...`);
-
-            // GAP FILLER
-            for (let i = 0; i < knownIds.length - 1; i++) {
-                if (this.fetcher.getRequestCount() >= 150) break;
-                const current = knownIds[i];
-                const next = knownIds[i+1];
-                if (next - current > 1 && next - current < 50) {
-                    for (let j = current + 1; j < next; j++) {
-                        await tryFetchId(j);
-                        await new Promise(r => setTimeout(r, 50));
-                    }
-                }
-            }
-
-            // BACKWARD SCAN (100 items)
-            let failures = 0;
-            let current = minId - 1;
-            let checks = 0;
-            while(failures < 50 && checks < 100) { 
-                 const found = await tryFetchId(current);
-                 if (found) failures = 0; else failures++;
-                 current--;
-                 checks++;
-                 await new Promise(r => setTimeout(r, 80));
-            }
-            this.log(`[Stage 1.5] Backward Scan: Checked ${checks} IDs`);
-        }
-
-        // STAGE 2: DOWNLOADING DETAILS
-        const missingDataIds = Object.values(orderDb)
-            .filter((o:any) => (o._status === 'pending' || !o.address) && o._status !== 'failed')
-            .map((o:any) => o.id);
-        
-        if (missingDataIds.length > 0) {
-            this.log(`[Stage 2] Downloading details for ${missingDataIds.length} orders...`);
-            for (const id of missingDataIds) {
-                if (this.fetcher.getRequestCount() >= 250) {
-                    incomplete = true;
-                    this.warn(`[Limit] Pause downloading. Resuming next batch...`);
-                    break;
-                }
-
+        try {
+            // STAGE 1: SCANNING
+            if (!skipScan) {
                 try {
-                    const orderUrl = `${parser.BASE_URL}/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${encodeURIComponent(id)}`;
-                    const res = await this.fetcher.safeFetch(orderUrl, { headers: { 'Cookie': cookie }});
+                    const res = await this.fetcher.safeFetch(parser.BASE_URL + '/start/Home.jsp', { headers: { 'Cookie': cookie }});
                     const html = await res.text();
-                    const parsed = parser.parseOrderPage(html, id);
+                    if (html.includes('name="Password"')) throw new Error('Session expired.');
                     
-                    if (parsed.address && (parsed.confirmScheduleDate || parsed.actualArrivalTs)) {
-                        delete parsed._status; 
-                        orderDb[id] = parsed;
-                        dbDirty = true;
-                        const poleMsg = parsed.hasPoleMount ? ' + POLE' : '';
-                        this.log(`[Stage 2] Downloaded ${id}`);
-                    } else {
-                        if (!parsed.address) {
+                    parser.extractIds(html).forEach(id => {
+                        if (!orderDb[id]) { 
+                            orderDb[id] = { id, address: '', city: '', state: '', zip: '', confirmScheduleDate: '', beginTime: '', type: '', jobDuration: 0, _status: 'pending' }; 
+                            dbDirty = true; 
+                        }
+                    });
+
+                    if (this.fetcher.getRequestCount() < 10) {
+                        const links = parser.extractMenuLinks(html).filter(l => l.url.includes('SoSearch') || l.url.includes('forms/'));
+                        this.log(`[Scan] Found ${links.length} pages...`);
+                        
+                        for (const link of links) {
+                            if (this.fetcher.getRequestCount() > SCAN_REQUEST_LIMIT) break; 
+                            await this.scanUrl(link.url, cookie, (id) => {
+                                 if (!orderDb[id]) { 
+                                     orderDb[id] = { id, address: '', city: '', state: '', zip: '', confirmScheduleDate: '', beginTime: '', type: '', jobDuration: 0, _status: 'pending' }; 
+                                     dbDirty = true; 
+                                 }
+                            });
+                            await new Promise(r => setTimeout(r, DELAY_BETWEEN_SCANS_MS));
+                        }
+                    }
+                } catch (e: any) {
+                    if (e.message !== 'REQ_LIMIT') this.error('[Scan] Error', e);
+                }
+            }
+
+            // STAGE 1.5: SMART DISCOVERY
+            const knownIds = Object.keys(orderDb).map(id => parseInt(id)).filter(n => !isNaN(n)).sort((a,b) => a - b);
+            if (knownIds.length > 0 && !skipScan) {
+                const minId = knownIds[0];
+                
+                const tryFetchId = async (targetId: number) => {
+                     if (orderDb[String(targetId)] || this.fetcher.getRequestCount() >= DISCOVERY_BACKWARD_LIMIT) return false; 
+
+                     try {
+                        const orderUrl = `${parser.BASE_URL}/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${targetId}`;
+                        const res = await this.fetcher.safeFetch(orderUrl, { headers: { 'Cookie': cookie }});
+                        const html = await res.text();
+                        const parsed = parser.parseOrderPage(html, String(targetId));
+                        if (parsed.address) {
+                            delete parsed._status;
+                            orderDb[String(targetId)] = parsed;
+                            dbDirty = true;
+                            return true;
+                        }
+                     } catch(e) {
+                        console.warn(`Failed to fetch order ${targetId}:`, e);
+                     }
+                     return false;
+                };
+
+                this.log(`[Discovery] Checking gaps and backward scan...`);
+
+                // Fill gaps
+                for (let i = 0; i < knownIds.length - 1; i++) {
+                    if (this.fetcher.getRequestCount() >= DISCOVERY_GAP_LIMIT) break;
+                    const current = knownIds[i];
+                    const next = knownIds[i+1];
+                    if (next - current > 1 && next - current < DISCOVERY_GAP_MAX_SIZE) {
+                        for (let j = current + 1; j < next; j++) {
+                            await tryFetchId(j);
+                            await new Promise(r => setTimeout(r, DELAY_BETWEEN_GAP_FILLS_MS));
+                        }
+                    }
+                }
+
+                // Backward scan
+                let failures = 0, current = minId - 1, checks = 0;
+                while(failures < DISCOVERY_MAX_FAILURES && checks < DISCOVERY_MAX_CHECKS) { 
+                     const found = await tryFetchId(current);
+                     if (found) failures = 0; else failures++;
+                     current--;
+                     checks++;
+                     await new Promise(r => setTimeout(r, DELAY_BETWEEN_BACKWARD_SCANS_MS));
+                }
+            }
+
+            // STAGE 2: DOWNLOAD DETAILS
+            const missingDataIds = Object.values(orderDb)
+                .filter((o:OrderData) => (o._status === 'pending' || !o.address) && o._status !== 'failed')
+                .map((o:OrderData) => o.id);
+            
+            if (missingDataIds.length > 0) {
+                this.log(`[Download] Getting ${missingDataIds.length} orders...`);
+                for (const id of missingDataIds) {
+                    if (this.fetcher.getRequestCount() >= DOWNLOAD_LIMIT) {
+                        incomplete = true;
+                        this.warn(`[Limit] Paused. Resume next sync.`);
+                        break;
+                    }
+
+                    try {
+                        const orderUrl = `${parser.BASE_URL}/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${encodeURIComponent(id)}`;
+                        const res = await this.fetcher.safeFetch(orderUrl, { headers: { 'Cookie': cookie }});
+                        const html = await res.text();
+                        const parsed = parser.parseOrderPage(html, id);
+                        
+                        if (parsed.address && (parsed.confirmScheduleDate || parsed.arrivalTimestamp)) {
+                            delete parsed._status; 
+                            orderDb[id] = parsed;
+                            dbDirty = true;
+                            
+                            const ts = parsed.arrivalTimestamp ? `Arr:${formatTimestamp(parsed.arrivalTimestamp)}` : '';
+                            const pole = parsed.hasPoleMount ? '+POLE' : '';
+                            this.log(`  ${id} ${ts} ${pole}`.trim());
+                        } else if (!parsed.address) {
                             orderDb[id]._status = 'failed';
                             dbDirty = true;
                         }
+                        await new Promise(r => setTimeout(r, DELAY_BETWEEN_DOWNLOADS_MS)); 
+                    } catch (e: any) {
+                        if (e.message === 'REQ_LIMIT') { 
+                            incomplete = true; 
+                            break; 
+                        }
+                        console.warn(`Failed to download order ${id}:`, e);
                     }
-                    await new Promise(r => setTimeout(r, 200)); 
-                } catch (e: any) {
-                    if (e.message === 'REQ_LIMIT') { incomplete = true; break; }
                 }
+                if (dbDirty) await this.kv.put(`hns:db:${userId}`, JSON.stringify(orderDb));
             }
-            if (dbDirty) await this.kv.put(`hns:db:${userId}`, JSON.stringify(orderDb));
-        }
 
-        if (incomplete) {
-            return { orders: Object.values(orderDb), incomplete: true };
-        }
-
-        // STAGE 3: PROCESSING TRIPS
-        this.log(`[Stage 3] Processing Routes...`);
-        
-        const ordersByDate: Record<string, any[]> = {};
-        for (const order of Object.values(orderDb)) {
-            if (!order.address) continue; 
-            let isoDate = toIsoDate(order.confirmScheduleDate);
-            if (!isoDate && order.actualArrivalTs) isoDate = extractDateFromTs(order.actualArrivalTs);
-            if (isoDate) {
-                if (!ordersByDate[isoDate]) ordersByDate[isoDate] = [];
-                ordersByDate[isoDate].push(order);
+            if (incomplete) {
+                return { orders: Object.values(orderDb), incomplete: true };
             }
-        }
 
-        const sortedDates = Object.keys(ordersByDate).sort();
-        const tripService = makeTripService(this.tripKV, this.trashKV, undefined, this.tripIndexDO);
-        let tripsProcessed = 0;
-
-        for (const date of sortedDates) {
-             if (this.fetcher.getRequestCount() >= 250) { incomplete = true; break; }
-
-            const tripId = `hns_${userId}_${date}`;
-            const existingTrip = await tripService.get(userId, tripId);
+            // STAGE 3: CREATE TRIPS
+            this.log(`[Trips] Building routes...`);
             
-            if (existingTrip) {
-                const lastSys = new Date(existingTrip.updatedAt || existingTrip.createdAt).getTime();
-                const lastUser = existingTrip.lastModified ? new Date(existingTrip.lastModified).getTime() : 0;
-                if (lastUser > lastSys + 120000) {
-                    this.log(`[Stage 3] Skipping ${date} (Locked: User modified)`);
+            const ordersByDate: Record<string, OrderData[]> = {};
+            for (const order of Object.values(orderDb)) {
+                if (!isValidAddress(order)) {
+                    this.warn(`[Trips] Skipping order ${order.id} - invalid address`);
                     continue;
                 }
+                
+                let isoDate = toIsoDate(order.confirmScheduleDate);
+                if (!isoDate && order.arrivalTimestamp) isoDate = extractDateFromTs(order.arrivalTimestamp);
+                if (isoDate) {
+                    if (!ordersByDate[isoDate]) ordersByDate[isoDate] = [];
+                    ordersByDate[isoDate].push(order);
+                }
             }
 
-            this.log(`[Stage 3] Routing ${date}...`);
-            await this.createTripForDate(
-                userId, date, ordersByDate[date], settingsId,
-                installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge, tripService
-            );
-            tripsProcessed++;
+            const sortedDates = Object.keys(ordersByDate).sort();
+            const tripService = makeTripService(this.tripKV, this.trashKV, undefined, this.tripIndexDO);
+
+            for (const date of sortedDates) {
+                 if (this.fetcher.getRequestCount() >= TRIP_CREATION_LIMIT) { incomplete = true; break; }
+
+                const tripId = `hns_${userId}_${date}`;
+                const existingTrip = await tripService.get(userId, tripId);
+                
+                if (existingTrip) {
+                    const lastSys = new Date(existingTrip.updatedAt || existingTrip.createdAt).getTime();
+                    const lastUser = existingTrip.lastModified ? new Date(existingTrip.lastModified).getTime() : 0;
+                    if (lastUser > lastSys + USER_MODIFICATION_BUFFER_MS) {
+                        this.log(`  ${date}: Skipped (user modified)`);
+                        continue;
+                    }
+                }
+
+                await this.createTripForDate(
+                    userId, date, ordersByDate[date], settingsId,
+                    installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge, tripService
+                );
+            }
+
+            return { orders: Object.values(orderDb), incomplete };
+            
+        } catch (error) {
+            // Issue #8: Enhanced rollback
+            if (originalDbState) {
+                this.error('[Sync] Critical error occurred, attempting rollback', error);
+                try {
+                    JSON.parse(originalDbState);
+                    await this.kv.put(`hns:db:${userId}`, originalDbState);
+                    this.log('[Sync] Rollback successful');
+                } catch (rollbackError) {
+                    this.error('[Sync] Rollback failed - original state may be corrupt', rollbackError);
+                }
+            } else {
+                this.error('[Sync] Critical error occurred, rollback not available (database too large)', error);
+            }
+            throw error;
         }
-
-        return { orders: Object.values(orderDb), incomplete };
     }
-
-    // --- Private Helpers ---
 
     private async scanUrl(url: string, cookie: string, cb: (id: string) => void) {
         let current = url;
@@ -421,14 +530,24 @@ export class HughesNetService {
                 parser.extractIds(html).forEach(cb);
                 current = parser.extractNextLink(html, current) || '';
                 page++;
-            } catch(e) { break; }
+            } catch(e) { 
+                console.warn('Failed to scan URL:', url, e);
+                break; 
+            }
         }
     }
 
     private async createTripForDate(
-        userId: string, date: string, orders: any[], settingsId: string | undefined, 
-        installPay: number, repairPay: number, upgradePay: number,
-        poleCost: number, concreteCost: number, poleCharge: number,
+        userId: string, 
+        date: string, 
+        orders: OrderData[], 
+        settingsId: string | undefined, 
+        installPay: number, 
+        repairPay: number, 
+        upgradePay: number,
+        poleCost: number, 
+        concreteCost: number, 
+        poleCharge: number,
         tripService: any
     ): Promise<boolean> {
         let defaultStart = '', defaultEnd = '', mpg = 25, gas = 3.50;
@@ -444,60 +563,64 @@ export class HughesNetService {
                 if (s.defaultMPG) mpg = parseFloat(s.defaultMPG);
                 if (s.defaultGasPrice) gas = parseFloat(s.defaultGasPrice);
             }
-        } catch(e) {}
+        } catch(e) {
+            console.warn('Failed to load settings:', e);
+        }
 
-        const ordersWithMeta = orders.map((o: any) => {
-            const events = analyzeJobHistory(o.actualArrivalTs);
-            const arrivalEvent = events.find(e => e.type === 'Arrival');
-            const incEvent = events.find(e => e.type === 'DepartureIncomplete');
-            const comEvent = events.find(e => e.type === 'DepartureComplete');
+        const ordersWithMeta: OrderWithMeta[] = orders.map((o: OrderData): OrderWithMeta => {
+            let sortTime = o.arrivalTimestamp || 0;
+            if (!sortTime) {
+                let dateObj = parseDateOnly(o.confirmScheduleDate) || parseDateOnly(date);
+                if (dateObj) sortTime = dateObj.getTime() + (parseTime(o.beginTime) * 60000);
+            }
 
-            let sortTime = 0;
-            if (arrivalEvent) sortTime = arrivalEvent.ts;
-            else {
-                const fallbackTs = findEarliestTimestamp(o.actualArrivalTs);
-                if (fallbackTs > 0) {
-                    sortTime = fallbackTs;
+            // Only get paid if departed complete (not incomplete)
+            const isPaid = !!o.departureCompleteTimestamp;
+
+            // Calculate actual duration based on timestamps
+            let actualDuration: number;
+            
+            if (o.arrivalTimestamp && o.departureCompleteTimestamp) {
+                // Complete job - use actual time
+                const dur = Math.round((o.departureCompleteTimestamp - o.arrivalTimestamp) / 60000);
+                if (dur > MIN_JOB_DURATION_MINS && dur < MAX_JOB_DURATION_MINS) {
+                    actualDuration = dur;
                 } else {
-                    let dateObj = parseDateOnly(o.confirmScheduleDate);
-                    if (!dateObj) dateObj = parseDateOnly(date);
-                    if (dateObj) sortTime = dateObj.getTime() + (parseTime(o.beginTime) * 60000);
+                    // Invalid duration, fall back to type-based default
+                    actualDuration = o.type === 'Install' ? 90 : 60;
                 }
+            } else if (o.arrivalTimestamp && o.departureIncompleteTimestamp) {
+                // Incomplete job - use actual time spent (no pay, but time counts)
+                const dur = Math.round((o.departureIncompleteTimestamp - o.arrivalTimestamp) / 60000);
+                if (dur > MIN_JOB_DURATION_MINS && dur < MAX_JOB_DURATION_MINS) {
+                    actualDuration = dur;
+                } else {
+                    // Invalid duration, fall back to type-based default
+                    actualDuration = o.type === 'Install' ? 90 : 60;
+                }
+            } else {
+                // No departure timestamp - use type-based default
+                // Install: 90 mins, Repair/Upgrade: 60 mins
+                actualDuration = o.type === 'Install' ? 90 : 60;
             }
 
-            let isPaid = !!comEvent; 
-            if (!isPaid) {
-                if (incEvent || o.departureIncomplete) isPaid = false;
-                else isPaid = true; 
-            }
-
-            let endTimeTs = 0;
-            if (incEvent) endTimeTs = incEvent.ts;
-            else if (comEvent) endTimeTs = comEvent.ts;
-
-            return { 
-                ...o, 
-                _sortTime: sortTime, 
-                _isPaid: isPaid, 
-                _arrivalTs: (arrivalEvent ? arrivalEvent.ts : findEarliestTimestamp(o.actualArrivalTs)), 
-                _endTs: endTimeTs 
-            };
+            return { ...o, _sortTime: sortTime, _isPaid: isPaid, _actualDuration: actualDuration };
         });
 
         ordersWithMeta.sort((a, b) => a._sortTime - b._sortTime);
 
-        // Find anchor order for trip start
-        let anchorOrder = ordersWithMeta.find(o => o._sortTime > 0);
-        if (!anchorOrder && ordersWithMeta.length > 0) anchorOrder = ordersWithMeta[0];
+        const anchorOrder = ordersWithMeta.find(o => o._sortTime > 0) || ordersWithMeta[0];
 
-        const buildAddr = (o: any) => [o.address, o.city, o.state, o.zip].filter(Boolean).join(', ');
-
-        let startAddr = defaultStart;
-        let endAddr = defaultEnd;
+        let startAddr = defaultStart?.trim() || '';
+        let endAddr = defaultEnd?.trim() || '';
 
         if (startAddr && !endAddr) endAddr = startAddr;
         if (!startAddr && anchorOrder) {
-            startAddr = buildAddr(anchorOrder); 
+            startAddr = buildAddress(anchorOrder);
+            if (!startAddr) {
+                this.warn(`[Trip ${date}] Cannot build valid start address`);
+                return false;
+            }
             if (!endAddr) endAddr = startAddr;
         }
 
@@ -505,59 +628,47 @@ export class HughesNetService {
         let commuteMins = 0;
 
         if (anchorOrder) {
-            const eAddr = buildAddr(anchorOrder);
+            const eAddr = buildAddress(anchorOrder);
+            if (!eAddr) {
+                this.warn(`[Trip ${date}] Cannot build valid address for anchor order`);
+                return false;
+            }
+            
             if (startAddr && eAddr !== startAddr) {
                 try {
                     const leg = await this.router.getRouteInfo(startAddr, eAddr);
                     if (leg) commuteMins = Math.round(leg.duration / 60);
-                } catch(e) {}
+                } catch(e) {
+                    console.warn('Failed to get route info:', e);
+                }
             }
 
-// 1️⃣ Prefer actual arrival timestamp from HughesNet
-let arrivalTime24: string | null = null;
+            if (anchorOrder.arrivalTimestamp) {
+                const d = new Date(anchorOrder.arrivalTimestamp);
+                const arrivalMins = d.getHours() * 60 + d.getMinutes();
+                if (!isNaN(arrivalMins)) {
+                    startMins = arrivalMins - commuteMins;
+                }
+            } else {
+                const schedMins = parseTime(anchorOrder.beginTime);
+                if (schedMins > 0) startMins = schedMins - commuteMins;
+            }
+        }
+        
+        // Ensure startMins is valid
+        if (isNaN(startMins) || !isFinite(startMins)) {
+            startMins = 9 * 60; // Fallback to 9 AM
+        }
 
-// 1️⃣ Preferred: numeric arrival timestamp
-if (anchorOrder._arrivalTs && anchorOrder._arrivalTs > 0) {
-    const d = new Date(anchorOrder._arrivalTs);
-    arrivalTime24 = `${d.getHours().toString().padStart(2, '0')}:${d
-        .getMinutes()
-        .toString()
-        .padStart(2, '0')}`;
-}
-
-// 2️⃣ Fallback: raw HughesNet timestamp string
-if (!arrivalTime24 && anchorOrder.actualArrivalTs) {
-    arrivalTime24 = extract24HourTime(anchorOrder.actualArrivalTs);
-}
-
-
-
-if (arrivalTime24) {
-    const [h, m] = arrivalTime24.split(':').map(Number);
-    startMins = (h * 60 + m) - commuteMins;
-
-    this.log(
-        `[Time] Start derived from Job ${anchorOrder.id} Arrival: ${to12Hour(arrivalTime24)}`
-    );
-}
-// 2️⃣ Fallback to scheduled begin time
-else {
-    const schedMins = parseTime(anchorOrder.beginTime);
-    if (schedMins > 0) {
-        startMins = schedMins - commuteMins;
-        this.log(
-            `[Time] Start derived from Job ${anchorOrder.id} Schedule: ${minutesToTime(startMins)}`
-        );
-    } else {
-        this.warn(
-            `[Time] Job ${anchorOrder.id} has no valid time. Defaulting to 9 AM.`
-        );
-    }
-}
-}
-
-        const points = [startAddr, ...ordersWithMeta.map((o:any) => buildAddr(o))];
-        if (endAddr) points.push(endAddr);
+        const points: string[] = [startAddr];
+        for (const o of ordersWithMeta) {
+            const addr = buildAddress(o);
+            if (addr) points.push(addr);
+        }
+        // Issue #6: Validate endAddr
+        if (endAddr && endAddr.trim()) {
+            points.push(endAddr);
+        }
 
         let totalMins = 0, totalMeters = 0;
         const legPromises = [];
@@ -579,22 +690,20 @@ else {
                 }
             });
         } catch (e: any) {
-            if (e.message === 'REQ_LIMIT') return false; 
+            if (e.message === 'REQ_LIMIT') return false;
+            console.warn('Failed to get route legs:', e);
         }
 
         const miles = Number((totalMeters * 0.000621371).toFixed(1));
-        
-        let jobMins = 0;
-        ordersWithMeta.forEach((o:any) => {
-            let duration = o.jobDuration || 60;
-            if (o._arrivalTs > 0 && o._endTs > 0) {
-                const diffMs = o._endTs - o._arrivalTs;
-                if (diffMs > 0) duration = Math.round(diffMs / 60000);
-            }
-            jobMins += duration;
-        });
-
+        const jobMins = ordersWithMeta.reduce((sum, o) => sum + (o._actualDuration || o.jobDuration || 60), 0);
         const totalWorkMins = totalMins + jobMins;
+        
+        // Ensure totalWorkMins is valid
+        if (isNaN(totalWorkMins) || !isFinite(totalWorkMins) || totalWorkMins < 0) {
+            this.warn(`[Trip ${date}] Invalid totalWorkMins calculated: ${totalWorkMins}`);
+            return false;
+        }
+        
         const hoursWorked = Number((totalWorkMins / 60).toFixed(2));
         const fuelCost = mpg > 0 ? (miles / mpg) * gas : 0;
 
@@ -602,22 +711,21 @@ else {
         let totalSuppliesCost = 0;
         const suppliesMap = new Map<string, number>();
 
-        const stops = ordersWithMeta.map((o:any, i:number) => {
+        const stops: TripStop[] = ordersWithMeta.map((o: OrderWithMeta, i: number): TripStop => {
             let basePay = 0;
-            let notes = `HNS Order: ${o.id} (${o.type})`;
+            let notes = `HNS #${o.id} (${o.type})`;
             let supplyItems: { type: string, cost: number }[] = [];
             
             if (!o._isPaid) {
-                basePay = 0;
-                notes += ` [DEPARTURE INCOMPLETE: $0]`;
+                // Didn't complete the job - no pay, but time still counts
+                notes += ` [INCOMPLETE: $0]`;
             } else {
                 if (o.hasPoleMount) {
                     basePay = installPay + poleCharge;
-                    notes += ` [POLE MOUNT: $${installPay} + $${poleCharge}]`;
+                    notes += ` [POLE: $${poleCharge}]`;
                     if (poleCost > 0) supplyItems.push({ type: 'Pole', cost: poleCost });
                     if (concreteCost > 0) supplyItems.push({ type: 'Concrete', cost: concreteCost });
-                } 
-                else {
+                } else {
                     if (o.type === 'Install') basePay = installPay;
                     else if (o.type === 'Upgrade') basePay = upgradePay;
                     else basePay = repairPay;
@@ -627,41 +735,36 @@ else {
             totalEarnings += basePay;
 
             if (supplyItems.length > 0) {
-                const costs = supplyItems.map(s => `${s.type}: -$${s.cost}`).join(', ');
-                notes += ` | Supplies: ${costs}`;
                 supplyItems.forEach(item => {
-                      const currentCost = suppliesMap.get(item.type) || 0;
-                      suppliesMap.set(item.type, currentCost + item.cost);
-                      totalSuppliesCost += item.cost;
+                    suppliesMap.set(item.type, (suppliesMap.get(item.type) || 0) + item.cost);
+                    totalSuppliesCost += item.cost;
                 });
-            }
-
-            if (o._endTs > 0 && o._arrivalTs > 0) {
-                 const dur = Math.round((o._endTs - o._arrivalTs)/60000);
-                 notes += ` | Logged Time: ${dur}m`;
             }
 
             return {
                 id: crypto.randomUUID(),
-                address: buildAddr(o),
+                address: buildAddress(o),
                 order: i,
                 notes,
                 earnings: basePay,
                 appointmentTime: o.beginTime,
                 type: o.type,
-                duration: o.jobDuration
+                duration: o._actualDuration || o.jobDuration
             };
         });
 
-        const tripSupplies = Array.from(suppliesMap.entries()).map(([type, cost]) => ({
-            id: crypto.randomUUID(), type, cost
+        const tripSupplies: SupplyItem[] = Array.from(suppliesMap.entries()).map(([type, cost]): SupplyItem => ({
+            id: crypto.randomUUID(), 
+            type, 
+            cost
         }));
 
         const netProfit = totalEarnings - (fuelCost + totalSuppliesCost);
 
-        const trip = {
+        const trip: Trip = {
             id: `hns_${userId}_${date}`, 
-            userId, date,
+            userId, 
+            date,
             startTime: minutesToTime(startMins),
             endTime: minutesToTime(startMins + totalWorkMins),
             estimatedTime: totalMins,
@@ -670,22 +773,21 @@ else {
             startAddress: startAddr,
             endAddress: endAddr,
             totalMiles: miles,
-            mpg, gasPrice: gas,
+            mpg, 
+            gasPrice: gas,
             fuelCost: Number(fuelCost.toFixed(2)),
             totalEarnings, 
             netProfit: Number(netProfit.toFixed(2)),
             suppliesCost: totalSuppliesCost,
             supplyItems: tripSupplies,
-            suppliesItems: tripSupplies,
-            stops: stops,
+            stops,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             syncStatus: 'synced'
         };
 
-        await tripService.put(trip as any);
-        stops.forEach(s => this.log(`   > Stop ${s.order+1}: ${s.address} [${s.type}] ($${s.earnings})`));
-        this.log(`[Stage 3] Saved Trip ${date}`);
+        await tripService.put(trip);
+        this.log(`  ${date}: $${totalEarnings} - $${(fuelCost + totalSuppliesCost).toFixed(2)} = $${netProfit.toFixed(2)} (${hoursWorked}h)`);
         
         return true;
     }
