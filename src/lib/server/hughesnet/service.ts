@@ -278,6 +278,40 @@ export class HughesNetService {
         return false;
     }
 
+    // SESSION REFRESH: Verify and refresh session if needed
+    private async refreshSessionIfNeeded(userId: string): Promise<string | null> {
+        this.log('[Session] Verifying session...');
+        
+        // Check if session exists and is valid
+        const cookie = await this.auth.ensureSessionCookie(userId);
+        if (!cookie) {
+            throw new Error('Session expired. Please reconnect.');
+        }
+        
+        // Verify session is still valid
+        try {
+            const testUrl = `${parser.BASE_URL}/start/Home.jsp`;
+            const res = await this.fetcher.safeFetch(testUrl, { 
+                headers: { 'Cookie': cookie }
+            });
+            const html = await res.text();
+            
+            // Check if we got logged out
+            if (html.includes('name="Password"') || html.includes('login.jsp')) {
+                this.error('[Session] Session expired during sync');
+                throw new Error('Session expired. Please reconnect.');
+            }
+            
+            this.log('[Session] Session valid');
+            return cookie;
+        } catch (e: any) {
+            if (e.message === 'REQ_LIMIT') throw e;
+            if (e.message.includes('Session expired')) throw e;
+            this.error('[Session] Failed to verify session', e);
+            throw new Error('Session validation failed. Please reconnect.');
+        }
+    }
+
     async connect(userId: string, u: string, p: string) {
         this.log(`[HNS] Connecting user ${userId}...`);
         return this.auth.connect(userId, u, p);
@@ -306,7 +340,7 @@ export class HughesNetService {
         return count;
     }
 
-    // [!code ++] NEW: Get Settings from KV
+    // Get Settings from KV
     async getSettings(userId: string) {
         try {
             const raw = await this.kv.get(`hns:settings:${userId}`);
@@ -317,7 +351,7 @@ export class HughesNetService {
         }
     }
 
-    // [!code ++] NEW: Save Settings to KV
+    // Save Settings to KV
     async saveSettings(userId: string, settings: any) {
         try {
             // Re-use existing validation logic
@@ -397,7 +431,7 @@ export class HughesNetService {
         this.fetcher.resetCount();
         this.log(`[Config] Install: $${installPay} | Repair: $${repairPay} | Upgrade: $${upgradePay}`);
 
-        const cookie = await this.auth.ensureSessionCookie(userId);
+        let cookie = await this.auth.ensureSessionCookie(userId);
         if (!cookie) throw new Error('Could not login. Please reconnect.');
 
         let orderDb: Record<string, OrderData> = {};
@@ -462,6 +496,9 @@ export class HughesNetService {
             // STAGE 1.5: SMART DISCOVERY
             const knownIds = Object.keys(orderDb).map(id => parseInt(id)).filter(n => !isNaN(n)).sort((a,b) => a - b);
             if (knownIds.length > 0 && !skipScan) {
+                // Refresh session before discovery
+                cookie = await this.refreshSessionIfNeeded(userId);
+                
                 const minId = knownIds[0];
                 
                 const tryFetchId = async (targetId: number) => {
@@ -516,6 +553,9 @@ export class HughesNetService {
                 .map((o:OrderData) => o.id);
             
             if (missingDataIds.length > 0) {
+                // Refresh session before downloads
+                cookie = await this.refreshSessionIfNeeded(userId);
+                
                 this.log(`[Download] Getting ${missingDataIds.length} orders...`);
                 for (const id of missingDataIds) {
                     if (this.fetcher.getRequestCount() >= DOWNLOAD_LIMIT) {
@@ -582,24 +622,15 @@ export class HughesNetService {
             }
 
             // STAGE 3: CREATE TRIPS
+            // Refresh session before trip creation
+            const sortedDates = Object.keys(this.groupOrdersByDate(orderDb)).sort();
+            if (sortedDates.length > 0) {
+                cookie = await this.refreshSessionIfNeeded(userId);
+            }
+            
             this.log(`[Trips] Building routes...`);
             
-            const ordersByDate: Record<string, OrderData[]> = {};
-            for (const order of Object.values(orderDb)) {
-                if (!isValidAddress(order)) {
-                    this.warn(`[Trips] Skipping order ${order.id} - invalid address`);
-                    continue;
-                }
-                
-                let isoDate = toIsoDate(order.confirmScheduleDate);
-                if (!isoDate && order.arrivalTimestamp) isoDate = extractDateFromTs(order.arrivalTimestamp);
-                if (isoDate) {
-                    if (!ordersByDate[isoDate]) ordersByDate[isoDate] = [];
-                    ordersByDate[isoDate].push(order);
-                }
-            }
-
-            const sortedDates = Object.keys(ordersByDate).sort();
+            const ordersByDate = this.groupOrdersByDate(orderDb);
             const tripService = makeTripService(this.tripKV, this.trashKV, undefined, this.tripIndexDO);
 
             for (const date of sortedDates) {
@@ -641,6 +672,26 @@ export class HughesNetService {
             }
             throw error;
         }
+    }
+
+    private groupOrdersByDate(orderDb: Record<string, OrderData>): Record<string, OrderData[]> {
+        const ordersByDate: Record<string, OrderData[]> = {};
+        
+        for (const order of Object.values(orderDb)) {
+            if (!isValidAddress(order)) {
+                this.warn(`[Trips] Skipping order ${order.id} - invalid address`);
+                continue;
+            }
+            
+            let isoDate = toIsoDate(order.confirmScheduleDate);
+            if (!isoDate && order.arrivalTimestamp) isoDate = extractDateFromTs(order.arrivalTimestamp);
+            if (isoDate) {
+                if (!ordersByDate[isoDate]) ordersByDate[isoDate] = [];
+                ordersByDate[isoDate].push(order);
+            }
+        }
+        
+        return ordersByDate;
     }
 
     private async scanUrl(url: string, cookie: string, cb: (id: string) => void) {
@@ -697,7 +748,7 @@ export class HughesNetService {
                 if (dateObj) sortTime = dateObj.getTime() + (parseTime(o.beginTime) * 60000);
             }
 
-            // [!code changed] Pay Logic for Future Jobs
+            // Pay Logic for Future Jobs
             // 1. If explicit incomplete -> No pay
             // 2. If complete -> Pay
             // 3. If neither (Future) -> Estimate Pay
@@ -719,7 +770,7 @@ export class HughesNetService {
                     actualDuration = o.type === 'Install' ? 90 : 60;
                 }
             } else {
-                // [!code changed] Future jobs / Missing timestamps -> use type-based default
+                // Future jobs / Missing timestamps -> use type-based default
                 // Install: 90 mins, Repair/Upgrade: 60 mins
                 actualDuration = o.type === 'Install' ? 90 : 60;
             }

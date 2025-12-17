@@ -25,7 +25,7 @@
   let concreteCost: number;
   let poleCharge: number;
 
-  // [!code ++] Times - Initialized as undefined for KV sync
+  // Times - Initialized as undefined for KV sync
   let installTime: number; 
   let repairTime: number;
   
@@ -38,7 +38,7 @@
   // Track batch for progress visualization
   let currentBatch = 0;
   
-  // [!code ++] Config Sync State
+  // Config Sync State
   let isConfigLoaded = false;
   let saveTimeout: any; // Timer for debouncing saves
   let isSaving = false;
@@ -61,7 +61,7 @@
       }
   }
 
-  // [!code ++] Load Settings from Server (KV)
+  // Load Settings from Server (KV)
   async function loadSettings() {
       try {
           const res = await fetch('/api/hughesnet', {
@@ -89,7 +89,7 @@
       }
   }
 
-  // [!code ++] Save Settings to Server (KV)
+  // Save Settings to Server (KV)
   async function saveSettings() {
       if (!isConfigLoaded) return;
       isSaving = true;
@@ -121,7 +121,7 @@
       }
   }
 
-  // [!code ++] Reactive Watcher: Auto-save when values change (Debounced)
+  // Reactive Watcher: Auto-save when values change (Debounced)
   $: if (isConfigLoaded) {
       // Access all variables to trigger dependency
       const _ = [installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge, installTime, repairTime];
@@ -224,7 +224,6 @@
             method: 'POST',
             body: JSON.stringify({ 
                 action: 'sync',
-                // Use || 0 to handle empty inputs safely during calculation
                 installPay: installPay || 0,
                 repairPay: repairPay || 0,
                 upgradePay: upgradePay || 0,
@@ -237,6 +236,22 @@
                 skipScan 
             })
         });
+
+        // Check content type before parsing
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            addLog(`❌ Server returned HTML instead of JSON (Batch ${batchCount})`);
+            addLog(`This usually means the session expired or there was a server error.`);
+            addLog(`Please disconnect and reconnect, then try syncing again.`);
+            
+            // Show user-friendly error
+            alert('Session expired or server error. Please disconnect and reconnect.');
+            loading = false;
+            statusMessage = 'Sync Failed';
+            currentBatch = 0;
+            return;
+        }
+
         const data = await res.json();
         processServerLogs(data.logs);
         
@@ -266,15 +281,32 @@
 
         } else {
             addLog('Sync Failed: ' + data.error);
+            // Check if it's a session error
+            if (data.error && (data.error.includes('login') || data.error.includes('Session expired'))) {
+                addLog('⚠️ Session expired. Please disconnect and reconnect.');
+                alert('Your HughesNet session expired. Please disconnect and reconnect.');
+            }
+            loading = false;
+            statusMessage = 'Sync Failed';
+            currentBatch = 0;
         }
     } catch (e: any) {
         addLog('Sync Error: ' + e.message);
+        // Handle JSON parse errors specifically
+        if (e.message.includes('JSON')) {
+            addLog('❌ Server returned invalid response. Session may have expired.');
+            alert('Session error. Please disconnect and reconnect.');
+        }
+        loading = false;
+        statusMessage = 'Sync Failed';
+        currentBatch = 0;
     } finally {
-        // recursion handles loading state
+        // Only set loading = false if we're not recursing
+        if (!data || !data.incomplete) {
+            loading = false;
+            statusMessage = 'Sync Now';
+        }
     }
-    
-    loading = false;
-    statusMessage = 'Sync Now';
   }
 
   async function handleClear() {
@@ -310,7 +342,7 @@
   }
 
   onMount(() => {
-    loadSettings(); // [!code ++] Fetch config from KV on load
+    loadSettings();
     loadOrders();
   });
 
