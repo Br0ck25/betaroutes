@@ -71,7 +71,6 @@ function getVerificationHtml(verifyUrl: string) {
     `;
 }
 
-// [!code ++] New helper for Password Reset HTML
 function getPasswordResetHtml(resetUrl: string) {
     const brandColor = '#FF7F50';
     const accentColor = '#FF6A3D';
@@ -141,11 +140,20 @@ function getPasswordResetHtml(resetUrl: string) {
 
 // --- Main Send Functions ---
 
-export async function sendVerificationEmail(email: string, token: string, baseUrl: string) {
+/**
+ * Send verification email
+ * @param email - Recipient email address
+ * @param token - Verification token
+ * @param baseUrl - Base URL for verification link
+ * @param apiKey - Resend API key (REQUIRED in Cloudflare Workers - pass from platform.env)
+ */
+export async function sendVerificationEmail(
+    email: string, 
+    token: string, 
+    baseUrl: string,
+    apiKey?: string
+) {
     const verifyUrl = `${baseUrl}/api/verify?token=${token}`;
-    
-    // [!code fix] Access the key safely via the 'env' object
-    const apiKey = env.RESEND_API_KEY;
 
     // 1. Dev Mode: Skip actual sending to save API credits and ease debugging
     if (dev) {
@@ -157,10 +165,12 @@ export async function sendVerificationEmail(email: string, token: string, baseUr
         return true;
     }
 
-    if (!apiKey) {
-        console.error('❌ Missing RESEND_API_KEY env variable');
-        // We return false here, which will cause the registration endpoint to fail gracefully
-        return false;
+    // 2. Check for API key (from parameter in production, or env in traditional deployments)
+    const resolvedApiKey = apiKey || env.RESEND_API_KEY;
+    
+    if (!resolvedApiKey) {
+        console.error('❌ Missing RESEND_API_KEY - must be passed as parameter or in env');
+        throw new Error('Email service not configured - RESEND_API_KEY missing');
     }
 
     try {
@@ -168,7 +178,7 @@ export async function sendVerificationEmail(email: string, token: string, baseUr
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}` // [!code fix] Use the dynamic variable
+                'Authorization': `Bearer ${resolvedApiKey}`
             },
             body: JSON.stringify({
                 from: 'Go Route Yourself <noreply@gorouteyourself.com>',
@@ -180,22 +190,34 @@ export async function sendVerificationEmail(email: string, token: string, baseUr
 
         if (!res.ok) {
             const errorText = await res.text();
-            console.error('❌ Resend API Error:', errorText);
-            return false;
+            console.error('❌ Resend API Error:', res.status, errorText);
+            throw new Error(`Resend API error: ${res.status} - ${errorText}`);
         }
 
+        console.log('✅ Verification email sent successfully to', email);
         return true;
     } catch (e) {
         console.error('❌ Email send failed:', e);
-        return false;
+        throw e; // Re-throw so caller can handle
     }
 }
 
-// [!code ++] New function for sending Password Reset emails
-export async function sendPasswordResetEmail(email: string, token: string, baseUrl: string) {
+/**
+ * Send password reset email
+ * @param email - Recipient email address
+ * @param token - Reset token
+ * @param baseUrl - Base URL for reset link
+ * @param apiKey - Resend API key (REQUIRED in Cloudflare Workers - pass from platform.env)
+ */
+export async function sendPasswordResetEmail(
+    email: string, 
+    token: string, 
+    baseUrl: string,
+    apiKey?: string
+) {
     const resetUrl = `${baseUrl}/reset-password?token=${token}`;
-    const apiKey = env.RESEND_API_KEY;
 
+    // 1. Dev Mode: Skip actual sending
     if (dev) {
         console.log('\n================ [DEV EMAIL] ================');
         console.log(`To: ${email}`);
@@ -205,9 +227,12 @@ export async function sendPasswordResetEmail(email: string, token: string, baseU
         return true;
     }
 
-    if (!apiKey) {
-        console.error('❌ Missing RESEND_API_KEY env variable');
-        return false;
+    // 2. Check for API key
+    const resolvedApiKey = apiKey || env.RESEND_API_KEY;
+    
+    if (!resolvedApiKey) {
+        console.error('❌ Missing RESEND_API_KEY - must be passed as parameter or in env');
+        throw new Error('Email service not configured - RESEND_API_KEY missing');
     }
 
     try {
@@ -215,7 +240,7 @@ export async function sendPasswordResetEmail(email: string, token: string, baseU
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
+                'Authorization': `Bearer ${resolvedApiKey}`
             },
             body: JSON.stringify({
                 from: 'Go Route Yourself <noreply@gorouteyourself.com>',
@@ -227,13 +252,14 @@ export async function sendPasswordResetEmail(email: string, token: string, baseU
 
         if (!res.ok) {
             const errorText = await res.text();
-            console.error('❌ Resend API Error:', errorText);
-            return false;
+            console.error('❌ Resend API Error:', res.status, errorText);
+            throw new Error(`Resend API error: ${res.status} - ${errorText}`);
         }
 
+        console.log('✅ Password reset email sent successfully to', email);
         return true;
     } catch (e) {
         console.error('❌ Email send failed:', e);
-        return false;
+        throw e; // Re-throw so caller can handle
     }
 }
