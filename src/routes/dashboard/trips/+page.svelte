@@ -494,6 +494,7 @@
         {@const isExpanded = expandedTrips.has(trip.id)}
         {@const totalCosts = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0)}
         {@const isSelected = selectedTrips.has(trip.id)}
+        {@const supplies = trip.supplyItems || trip.suppliesItems || []}
         
         <div class="trip-card-wrapper">
             <div class="swipe-bg">
@@ -619,7 +620,7 @@
                             </div>
                           {/each}
                         {/if}
-                        {@const supplies = trip.supplyItems || trip.suppliesItems || []}
+                        
                         {#if supplies.length > 0}
                           {#each supplies as item}
                             <div class="expense-row">
