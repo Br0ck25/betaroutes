@@ -43,7 +43,7 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
         const clientIp = request.headers.get('CF-Connecting-IP') || getClientAddress();
         let limitResult = { allowed: true };
         try {
-             limitResult = await checkRateLimit(usersKV, clientIp, 'register_attempt', 500, 3600);
+             limitResult = await checkRateLimit(usersKV, clientIp, 'register_attempt', 100, 3600);
         } catch (e) {
              console.warn('[Register] Rate limit check failed (ignoring):', e);
         }
@@ -135,7 +135,7 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
         ]);
         console.log('[Register] ✅ KV writes complete');
 
-        // 10. Send Email
+        // 10. Send Email - THIS IS THE CRITICAL FIX
         console.log('[Register] Sending verification email...');
         let emailSent = false;
         try {
@@ -144,7 +144,9 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
                 throw new Error('sendVerificationEmail is not a function - import failed');
             }
             
-            emailSent = await sendVerificationEmail(normEmail, verificationToken, url.origin, resendKey);
+            // CRITICAL: Pass the API key from platform.env
+            const resendApiKey = platform?.env?.RESEND_API_KEY;
+            emailSent = await sendVerificationEmail(normEmail, verificationToken, url.origin, resendApiKey);
             console.log('[Register] ✅ Email sent successfully');
         } catch (emailErr: any) {
             console.error('[Register] Email send failed:', emailErr);
