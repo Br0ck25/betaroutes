@@ -132,7 +132,7 @@ export async function authenticateUser(
     // If user is not found, verify against a dummy hash to consume the same CPU time.
 	if (!user) {
         // Use a pre-generated valid hash (PBKDF2 v1 with same iteration count and zeroed salt/hash)
-        const dummyHash = 'v1:600000:00000000000000000000000000000000:00000000000000000000000000000000';
+        const dummyHash = 'v1:100000:00000000000000000000000000000000:00000000000000000000000000000000';
         await verifyPBKDF2(password, dummyHash);
         return null;
     }
