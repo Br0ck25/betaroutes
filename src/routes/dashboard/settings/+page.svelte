@@ -1,15 +1,14 @@
-
 <script lang="ts">
   import { userSettings } from '$lib/stores/userSettings';
   import { auth, user } from '$lib/stores/auth';
   import { trips } from '$lib/stores/trips';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
-  import { autocomplete } from '$lib/utils/autocomplete'; // <--- IMPORTED UTILITY
+  import { autocomplete } from '$lib/utils/autocomplete';
 
   export let data; 
   $: API_KEY = data.googleMapsApiKey;
-
+  
   // --- REMOTE SYNC LOGIC START ---
   let settings = { ...$userSettings };
   $: if (data.remoteSettings?.settings) {
@@ -57,7 +56,7 @@
   let deletePassword = '';
   let deleteError = '';
   let isDeleting = false;
-
+  
   // Handler for the Autocomplete selection
   function handleAddressSelect(field: 'start' | 'end', e: CustomEvent) {
     const val = e.detail.formatted_address || e.detail.name;
@@ -335,7 +334,6 @@
           if (!row) continue;
           
           const cleanRow = row.map((c: string) => c.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
-          
           const stopsStr = cleanRow[2];
           let stops: any[] = [];
           if (stopsStr) {
@@ -425,7 +423,6 @@
 <svelte:head>
   <title>Settings - Go Route Yourself</title>
   <style>
-    /* Ensure the autocomplete dropdown appears above everything */
     .pac-container { z-index: 10000 !important; }
   </style>
 </svelte:head>
@@ -572,7 +569,7 @@
         <div class="card-icon green">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
              <path d="M10 12C11.1046 12 12 11.1046 12 10C12 8.89543 11.1046 8 10 8C8.89543 8 8 8.89543 8 10C8 11.1046 8.89543 12 10 12Z" stroke="currentColor" stroke-width="2"/>
-            <path d="M16.2 12C16.1 12.5 16.3 13 16.7 13.3L16.8 13.4C17.1 13.7 17.3 14.1 17.3 14.5C17.3 14.9 17.1 15.3 16.8 15.6C16.5 15.9 16.1 16.1 15.7 16.1C15.3 16.1 14.9 15.9 14.6 15.6L14.5 15.5C14.2 15.1 13.7 14.9 13.2 15C12.7 15.1 12.4 15.5 12.3 16V16.2C12.3 17.1 11.6 17.8 10.7 17.8C9.8 17.8 9.1 17.1 9.1 16.2V16.1C9 15.5 8.6 15.1 8 15C7.5 15 7 15.2 6.7 15.6L6.6 15.7C6.3 16 5.9 16.2 5.5 16.2C5.1 16.2 4.7 16 4.4 15.7C4.1 15.4 3.9 15 3.9 14.6C3.9 14.2 4.1 13.8 4.4 13.5L4.5 13.4C4.9 13.1 5.1 12.6 5 12.1C4.9 11.6 4.5 11.3 4 11.2H3.8C2.9 11.2 2.2 10.5 2.2 9.6C2.2 8.7 2.9 8 3.8 8H3.9C4.5 7.9 4.9 7.5 5 6.9C5 6.4 4.8 5.9 4.4 5.6L4.3 5.5C4 5.2 3.8 4.8 3.8 4.4C3.8 4 4 3.6 4.3 3.3C4.6 3 5 2.8 5.4 2.8C5.8 2.8 6.2 3 6.5 3.3L6.6 3.4C7 3.8 7.5 4 8 3.9C8.5 3.9 8.8 3.4 8.9 2.9V2.7C8.9 1.8 9.6 1.1 10.5 1.1C11.4 1.1 12.1 1.8 12.1 2.7V2.8C12.1 3.4 12.5 3.8 13.1 3.9C13.6 4 14.1 3.8 14.4 3.4L14.5 3.3C14.8 3 15.2 2.8 15.6 2.8C16 2.8 16.4 3 16.7 3.3C17 3.6 17.2 4 17.2 4.4C17.2 4.8 17 5.2 16.7 5.5L16.6 5.6C16.2 5.9 16 6.4 16.1 6.9C16.2 7.4 16.6 7.7 17.1 7.8H17.3C18.2 7.8 18.9 8.5 18.9 9.4C18.9 10.3 18.2 11 17.3 11H17.2C16.6 11.1 16.2 11.5 16.1 12.1L16.2 12Z" stroke="currentColor" stroke-width="2"/>
+             <path d="M16.2 12C16.1 12.5 16.3 13 16.7 13.3L16.8 13.4C17.1 13.7 17.3 14.1 17.3 14.5C17.3 14.9 17.1 15.3 16.8 15.6C16.5 15.9 16.1 16.1 15.7 16.1C15.3 16.1 14.9 15.9 14.6 15.6L14.5 15.5C14.2 15.1 13.7 14.9 13.2 15C12.7 15.1 12.4 15.5 12.3 16V16.2C12.3 17.1 11.6 17.8 10.7 17.8C9.8 17.8 9.1 17.1 9.1 16.2V16.1C9 15.5 8.6 15.1 8 15C7.5 15 7 15.2 6.7 15.6L6.6 15.7C6.3 16 5.9 16.2 5.5 16.2C5.1 16.2 4.7 16 4.4 15.7C4.1 15.4 3.9 15 3.9 14.6C3.9 14.2 4.1 13.8 4.4 13.5L4.5 13.4C4.9 13.1 5.1 12.6 5 12.1C4.9 11.6 4.5 11.3 4 11.2H3.8C2.9 11.2 2.2 10.5 2.2 9.6C2.2 8.7 2.9 8 3.8 8H3.9C4.5 7.9 4.9 7.5 5 6.9C5 6.4 4.8 5.9 4.4 5.6L4.3 5.5C4 5.2 3.8 4.8 3.8 4.4C3.8 4 4 3.6 4.3 3.3C4.6 3 5 2.8 5.4 2.8C5.8 2.8 6.2 3 6.5 3.3L6.6 3.4C7 3.8 7.5 4 8 3.9C8.5 3.9 8.8 3.4 8.9 2.9V2.7C8.9 1.8 9.6 1.1 10.5 1.1C11.4 1.1 12.1 1.8 12.1 2.7V2.8C12.1 3.4 12.5 3.8 13.1 3.9C13.6 4 14.1 3.8 14.4 3.4L14.5 3.3C14.8 3 15.2 2.8 15.6 2.8C16 2.8 16.4 3 16.7 3.3C17 3.6 17.2 4 17.2 4.4C17.2 4.8 17 5.2 16.7 5.5L16.6 5.6C16.2 5.9 16 6.4 16.1 6.9C16.2 7.4 16.6 7.7 17.1 7.8H17.3C18.2 7.8 18.9 8.5 18.9 9.4C18.9 10.3 18.2 11 17.3 11H17.2C16.6 11.1 16.2 11.5 16.1 12.1L16.2 12Z" stroke="currentColor" stroke-width="2"/>
           </svg>
         </div>
         <div>
@@ -581,13 +578,13 @@
         </div>
       </div>
       
-<div class="form-group">
-  <label for="distance-unit">Distance Unit</label>
-  <select id="distance-unit" bind:value={settings.distanceUnit}>
-    <option value="mi">Miles</option> 
-    <option value="km">Kilometers</option>
-  </select>
-</div>
+      <div class="form-group">
+        <label for="distance-unit">Distance Unit</label>
+        <select id="distance-unit" bind:value={settings.distanceUnit}>
+          <option value="mi">Miles</option> 
+          <option value="km">Kilometers</option>
+        </select>
+      </div>
       
       <div class="form-group">
         <label for="currency">Currency</label>
@@ -603,7 +600,43 @@
         Save Preferences
       </button>
     </div>
-    
+
+    <div class="settings-card">
+      <div class="card-header">
+        <div class="card-icon teal">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+             <path d="M13 3H7C4.79086 3 3 4.79086 3 7V13C3 15.2091 4.79086 17 7 17H13C15.2091 17 17 15.2091 17 13V7C17 4.79086 15.2091 3 13 3Z" stroke="currentColor" stroke-width="2"/>
+             <path d="M7 8.5H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+             <path d="M7 11.5H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="card-title">Integrations</h2>
+          <p class="card-subtitle">Connect external services</p>
+        </div>
+      </div>
+      
+      <div class="data-actions">
+        <a href="/dashboard/hughesnet" class="action-btn" style="text-decoration: none; color: inherit;">
+          <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
+             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #0D9488;">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M2 12h20"></path>
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+             </svg>
+             <div>
+                <div class="action-title">HughesNet</div>
+                <div class="action-subtitle">Configure satellite integration</div>
+             </div>
+             <div style="margin-left: auto;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                   <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+             </div>
+          </div>
+        </a>
+      </div>
+    </div>
     <div class="settings-card">
       <div class="card-header">
         <div class="card-icon purple">
@@ -749,40 +782,31 @@
   .card-icon.purple { background: linear-gradient(135deg, var(--purple) 0%, #764a89 100%); }
   .card-icon.navy { background: linear-gradient(135deg, var(--navy) 0%, #1a3a5c 100%); }
   .card-icon.red { background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%); }
+  /* [!code ++] New Teal Color for Integrations */
+  .card-icon.teal { background: linear-gradient(135deg, #14B8A6 0%, #0D9488 100%); }
+  
   .card-title { font-size: 18px; font-weight: 700; color: #111827; margin-bottom: 4px; }
   .card-subtitle { font-size: 14px; color: #6B7280; }
   
   .form-group { margin-bottom: 20px; }
   .form-group label { display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px; }
   
-  /* UNIFIED CONSTRAINT: 410px width for ALL inputs, selects, and wrappers */
   .form-group input, .form-group select { 
-    width: 100%;
-    max-width: 450px; 
+    width: 100%; max-width: 450px; 
     padding: 12px 16px; 
     border: 2px solid #E5E7EB;
-    border-radius: 10px; font-size: 15px; font-family: inherit; background: white; transition: all 0.2s; 
-    display: block;
-    box-sizing: border-box;
+    border-radius: 10px; font-size: 15px; font-family: inherit; background: white; transition: all 0.2s;
+    display: block; box-sizing: border-box;
   }
   .form-group input:focus, .form-group select:focus { 
-    outline: none;
-    border-color: var(--orange); 
-    box-shadow: 0 0 0 3px rgba(255, 127, 80, 0.1); 
+    outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 127, 80, 0.1); 
   }
   .form-group input:disabled { background: #F9FAFB; color: #9CA3AF; cursor: not-allowed; }
   
-  /* Constraint for the input wrapper (Gas Price) */
-  .input-prefix { 
-      position: relative;
-      width: 100%;
-      max-width: 450px;
-      box-sizing: border-box;
-  }
+  .input-prefix { position: relative; width: 100%; max-width: 450px; box-sizing: border-box; }
   .input-prefix .prefix { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #6B7280; font-weight: 600; }
   .input-prefix input { padding-left: 36px; }
 
-  /* Plan & Usage */
   .divider { height: 1px; background: #E5E7EB; margin: 24px 0; }
   .plan-row { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
   .plan-badge { display: inline-block; padding: 6px 12px; background: #F3F4F6; color: #374151; border-radius: 8px; font-weight: 600; font-size: 14px; }
@@ -794,10 +818,8 @@
   .progress-fill { height: 100%; background: var(--green); border-radius: 4px; transition: width 0.3s; }
   .progress-fill.warning { background: #F59E0B; }
   
-  /* Buttons: Full width (No max-width constraint) */
   .btn-primary, .btn-secondary, .btn-logout, .btn-delete, .btn-delete-confirm { 
-      width: 100%;
-      padding: 14px; border-radius: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 15px;
+      width: 100%; padding: 14px; border-radius: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 15px;
   }
   .btn-primary { background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%); color: white; border: none; }
   .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(255, 127, 80, 0.3); }
@@ -806,7 +828,6 @@
   .btn-logout { background: white; color: #DC2626; border: 2px solid #FEE2E2; }
   .btn-logout:hover { background: #FEF2F2; border-color: #FCA5A5; }
   
-  /* Delete Confirmation */
   .btn-delete { background: transparent; color: #DC2626; border: none; margin-top: 12px; font-size: 14px; text-decoration: underline; }
   .btn-delete:hover { color: #B91C1C; }
   .delete-confirmation { margin-top: 16px; padding: 16px; background: white; border-radius: 10px; border: 1px solid #FECACA; }

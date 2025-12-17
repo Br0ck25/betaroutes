@@ -5,6 +5,8 @@
   export let poleCost: number;
   export let concreteCost: number;
   export let poleCharge: number;
+  // [!code ++]
+  export let wifiExtenderPay: number;
   export let installTime: number;
   export let repairTime: number;
   export let overrideTimes: boolean;
@@ -39,6 +41,12 @@
       <div class="form-group">
         <label for="upgrade-pay">Upgrade Pay ($)</label>
         <input id="upgrade-pay" type="number" bind:value={upgradePay} placeholder="80.00" min="0" step="0.01" />
+      </div>
+
+      <div class="form-group">
+        <label for="wifi-pay" class="text-green">WIFI Extender Pay ($)</label>
+        <input id="wifi-pay" type="number" bind:value={wifiExtenderPay} placeholder="0.00" min="0" step="0.01" class="border-green" />
+        <span class="help-text">Added to pay if WIFI detected</span>
       </div>
   </div>
   

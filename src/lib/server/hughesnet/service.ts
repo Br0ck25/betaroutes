@@ -88,7 +88,7 @@ function formatTimestamp(ts: number): string {
 
 // Issue #4: Enhanced validation with Infinity check
 function validateSyncConfig(config: SyncConfig): void {
-    const { installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge } = config;
+    const { installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge, wifiExtenderPay, voipPay, driveTimeBonus } = config;
     
     if (!isFinite(installPay) || installPay < 0) {
         throw new Error('Install pay must be a positive finite number');
@@ -107,6 +107,16 @@ function validateSyncConfig(config: SyncConfig): void {
     }
     if (!isFinite(poleCharge) || poleCharge < 0) {
         throw new Error('Pole charge must be a positive finite number');
+    }
+    if (!isFinite(wifiExtenderPay) || wifiExtenderPay < 0) {
+        throw new Error('WiFi Extender pay must be a positive finite number');
+    }
+    if (!isFinite(voipPay) || voipPay < 0) {
+        throw new Error('Phone pay must be a positive finite number');
+    }
+    // [!code ++] Validate driveTimeBonus
+    if (!isFinite(driveTimeBonus) || driveTimeBonus < 0) {
+        throw new Error('Drive Time Bonus must be a positive finite number');
     }
 }
 
@@ -388,7 +398,10 @@ export class HughesNetService {
                 upgradePay: settings.upgradePay,
                 poleCost: settings.poleCost,
                 concreteCost: settings.concreteCost,
-                poleCharge: settings.poleCharge
+                poleCharge: settings.poleCharge,
+                wifiExtenderPay: settings.wifiExtenderPay,
+                voipPay: settings.voipPay,
+                driveTimeBonus: settings.driveTimeBonus // [!code ++]
             });
 
             // Add manual validation for times
@@ -410,14 +423,17 @@ export class HughesNetService {
         settingsId: string | undefined, 
         installPay: number, 
         repairPay: number, 
-        upgradePay: number,      
+        upgradePay: number,       
         poleCost: number, 
         concreteCost: number, 
         poleCharge: number,
+        wifiExtenderPay: number,
+        voipPay: number,
+        driveTimeBonus: number, // [!code ++] Added
         skipScan: boolean
     ): Promise<SyncResult> {
         // Validate input
-        validateSyncConfig({ installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge });
+        validateSyncConfig({ installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge, wifiExtenderPay, voipPay, driveTimeBonus });
 
         // Issue #1 & #2: Distributed lock with proper cleanup
         const lockKey = `lock:sync:${userId}`;
@@ -432,7 +448,7 @@ export class HughesNetService {
 
             const result = await this.performSync(
                 userId, settingsId, installPay, repairPay, upgradePay, 
-                poleCost, concreteCost, poleCharge, skipScan
+                poleCost, concreteCost, poleCharge, wifiExtenderPay, voipPay, driveTimeBonus, skipScan
             );
             
             return result;
@@ -449,16 +465,19 @@ export class HughesNetService {
         settingsId: string | undefined, 
         installPay: number, 
         repairPay: number, 
-        upgradePay: number,      
+        upgradePay: number,       
         poleCost: number, 
         concreteCost: number, 
         poleCharge: number,
+        wifiExtenderPay: number,
+        voipPay: number, 
+        driveTimeBonus: number, // [!code ++] Added
         skipScan: boolean
     ): Promise<SyncResult> {
         this.fetcher.resetCount();
         this.lastSessionRefresh = Date.now();
         this.requestsSinceRefresh = 0;
-        this.log(`[Config] Install: $${installPay} | Repair: $${repairPay} | Upgrade: $${upgradePay}`);
+        this.log(`[Config] Install: $${installPay} | Repair: $${repairPay} | Upgrade: $${upgradePay} | WiFi: $${wifiExtenderPay} | Phone: $${voipPay} | Drive Bonus: $${driveTimeBonus}`);
 
         let cookie = await this.auth.ensureSessionCookie(userId);
         if (!cookie) throw new Error('Could not login. Please reconnect.');
@@ -847,7 +866,9 @@ export class HughesNetService {
 
                 const created = await this.createTripForDate(
                     userId, date, ordersByDate[date], settingsId,
-                    installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge, tripService
+                    installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge, 
+                    wifiExtenderPay, voipPay, driveTimeBonus, // [!code ++]
+                    tripService
                 );
                 
                 // If trip creation failed due to limits, stop and batch
@@ -941,8 +962,10 @@ export class HughesNetService {
         
         const ts = parsed.arrivalTimestamp ? `Arr:${formatTimestamp(parsed.arrivalTimestamp)}` : '';
         const pole = parsed.hasPoleMount ? '+POLE' : '';
+        const wifi = parsed.hasWifiExtender ? '+WIFI' : ''; 
+        const voip = parsed.hasVoip ? '+VOIP' : ''; 
         const status = syncStatus === 'future' ? '[FUTURE]' : syncStatus === 'incomplete' ? '[INCOMPLETE]' : '';
-        this.log(`  ${id} ${ts} ${pole} ${status}`.trim());
+        this.log(`  ${id} ${ts} ${pole} ${wifi} ${voip} ${status}`.trim());
         
         return true; // Data was modified
     }
@@ -981,6 +1004,9 @@ export class HughesNetService {
         poleCost: number, 
         concreteCost: number, 
         poleCharge: number,
+        wifiExtenderPay: number, 
+        voipPay: number,
+        driveTimeBonus: number, // [!code ++]
         tripService: any
     ): Promise<boolean> {
         let defaultStart = '', defaultEnd = '', mpg = 25, gas = 3.50;
@@ -1206,6 +1232,9 @@ export class HughesNetService {
         let totalSuppliesCost = 0;
         const suppliesMap = new Map<string, number>();
 
+        // [!code ++] Drive Time Bonus Condition
+        const applyDriveBonus = totalMins > 330;
+
         const stops: TripStop[] = ordersWithMeta.map((o: OrderWithMeta, i: number): TripStop => {
             let basePay = 0;
             let notes = `HNS #${o.id} (${o.type})`;
@@ -1224,6 +1253,24 @@ export class HughesNetService {
                     if (o.type === 'Install') basePay = installPay;
                     else if (o.type === 'Upgrade') basePay = upgradePay;
                     else basePay = repairPay;
+                }
+
+                // Wi-Fi Extender Pay Logic
+                if (o.hasWifiExtender) {
+                    basePay += wifiExtenderPay;
+                    notes += ` [WIFI: $${wifiExtenderPay}]`;
+                }
+
+                // VOIP Pay Logic
+                if (o.hasVoip) {
+                    basePay += voipPay;
+                    notes += ` [VOIP: $${voipPay}]`;
+                }
+
+                // [!code ++] Drive Time Bonus Logic
+                if (applyDriveBonus && driveTimeBonus > 0) {
+                    basePay += driveTimeBonus;
+                    notes += ` [DRIVE BONUS: $${driveTimeBonus}]`;
                 }
             }
 

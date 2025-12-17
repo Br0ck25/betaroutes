@@ -12,6 +12,8 @@ export interface OrderData {
     type: string;
     jobDuration: number;
     hasPoleMount?: boolean;
+    hasWifiExtender?: boolean;
+    hasVoip?: boolean;
     departureIncomplete?: boolean;
     arrivalTimestamp?: number;
     departureCompleteTimestamp?: number;
@@ -85,6 +87,9 @@ export interface SyncConfig {
     poleCost: number;
     concreteCost: number;
     poleCharge: number;
+    wifiExtenderPay: number;
+    voipPay: number;
+    driveTimeBonus: number; // [!code ++] Changed from adminBonus
 }
 
 // Type for sync result

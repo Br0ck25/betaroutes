@@ -19,7 +19,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 
         // Initialize Service with your specific environment bindings
         const service = new HughesNetService(
-            platform.env.BETA_HUGHESNET_KV,          // 1. Main DB
+            platform.env.BETA_HUGHESNET_KV,           // 1. Main DB
             platform.env.HNS_ENCRYPTION_KEY,         // 2. Encryption
             platform.env.BETA_LOGS_KV,               // 3. Logs KV
             platform.env.BETA_LOGS_TRASH_KV,         // 4. Trash
@@ -30,7 +30,6 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
             platform.env.TRIP_INDEX_DO               // 9. Durable Object Index
         );
 
-        // [!code ++] HANDLE SAVE SETTINGS
         if (body.action === 'save_settings') {
             if (!body.settings) {
                 return json({ success: false, error: 'Settings data missing' }, { status: 400 });
@@ -39,7 +38,6 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
             return json({ success: true, logs: service.logs });
         }
 
-        // [!code ++] HANDLE GET SETTINGS
         if (body.action === 'get_settings') {
             const settings = await service.getSettings(userId);
             return json({ success: true, settings });
@@ -62,6 +60,9 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
             const poleCost = Number(body.poleCost) || 0;
             const concreteCost = Number(body.concreteCost) || 0;
             const poleCharge = Number(body.poleCharge) || 0;
+            const wifiExtenderPay = Number(body.wifiExtenderPay) || 0; 
+            const voipPay = Number(body.voipPay) || 0;
+            const driveTimeBonus = Number(body.driveTimeBonus) || 0; // [!code ++]
             const skipScan = body.skipScan === true;
 
             // Note: Times (installTime, repairTime) are saved via 'save_settings' 
@@ -71,10 +72,13 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
                 settingsId, 
                 installPay, 
                 repairPay, 
-                upgradePay,
-                poleCost,
-                concreteCost,
+                upgradePay, 
+                poleCost, 
+                concreteCost, 
                 poleCharge,
+                wifiExtenderPay,
+                voipPay,
+                driveTimeBonus, // [!code ++]
                 skipScan
             );
             

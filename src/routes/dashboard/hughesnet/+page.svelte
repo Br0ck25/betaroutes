@@ -15,17 +15,20 @@
   // Console Visibility State
   let showConsole = false;
 
-  // Configuration State - Initialized as undefined so inputs are empty until loaded
+  // Configuration State
   let installPay: number;
   let repairPay: number;
   let upgradePay: number;
+  let wifiExtenderPay: number;
+  let voipPay: number;
+  let driveTimeBonus: number; // [!code ++]
   
-  // Supply Costs - Initialized as undefined
+  // Supply Costs
   let poleCost: number;
   let concreteCost: number;
   let poleCharge: number;
 
-  // Times - Initialized as undefined for KV sync
+  // Times
   let installTime: number; 
   let repairTime: number;
   
@@ -40,7 +43,7 @@
   
   // Config Sync State
   let isConfigLoaded = false;
-  let saveTimeout: any; // Timer for debouncing saves
+  let saveTimeout: any; 
   let isSaving = false;
 
   function showSuccessMsg(msg: string) {
@@ -71,10 +74,12 @@
           const data = await res.json();
           
           if (data.settings) {
-              // Apply settings if they exist in KV
               installPay = data.settings.installPay;
               repairPay = data.settings.repairPay;
               upgradePay = data.settings.upgradePay;
+              wifiExtenderPay = data.settings.wifiExtenderPay;
+              voipPay = data.settings.voipPay;
+              driveTimeBonus = data.settings.driveTimeBonus; // [!code ++]
               poleCost = data.settings.poleCost;
               concreteCost = data.settings.concreteCost;
               poleCharge = data.settings.poleCharge;
@@ -85,7 +90,7 @@
       } catch (e) {
           console.error('Failed to load settings', e);
       } finally {
-          isConfigLoaded = true; // Enable auto-save watcher
+          isConfigLoaded = true; 
       }
   }
 
@@ -98,6 +103,9 @@
           installPay,
           repairPay,
           upgradePay,
+          wifiExtenderPay,
+          voipPay,
+          driveTimeBonus, // [!code ++]
           poleCost,
           concreteCost,
           poleCharge,
@@ -113,7 +121,6 @@
                   settings 
               })
           });
-          // Quietly saved
       } catch (e) {
           console.error('Failed to auto-save settings', e);
       } finally {
@@ -121,14 +128,14 @@
       }
   }
 
-  // Reactive Watcher: Auto-save when values change (Debounced)
+  // Reactive Watcher
   $: if (isConfigLoaded) {
-      // Access all variables to trigger dependency
-      const _ = [installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge, installTime, repairTime];
+      // [!code ++] Added driveTimeBonus
+      const _ = [installPay, repairPay, upgradePay, wifiExtenderPay, voipPay, driveTimeBonus, poleCost, concreteCost, poleCharge, installTime, repairTime];
       if (saveTimeout) clearTimeout(saveTimeout);
       saveTimeout = setTimeout(() => {
           saveSettings();
-      }, 1000); // Wait 1 second after typing stops to save
+      }, 1000); 
   }
 
   async function loadOrders() {
@@ -214,7 +221,6 @@
     statusMessage = `Syncing Batch ${batchCount}...`;
     
     const skipScan = batchCount > 1;
-    // [!code fix] Define data here so it is accessible in the finally block
     let data: any = null;
 
     if (batchCount === 1) {
@@ -232,6 +238,9 @@
                 installPay: installPay || 0,
                 repairPay: repairPay || 0,
                 upgradePay: upgradePay || 0,
+                wifiExtenderPay: wifiExtenderPay || 0,
+                voipPay: voipPay || 0,
+                driveTimeBonus: driveTimeBonus || 0, // [!code ++]
                 poleCost: poleCost || 0,
                 concreteCost: concreteCost || 0,
                 poleCharge: poleCharge || 0, 
@@ -242,13 +251,11 @@
             })
         });
 
-        // Check content type before parsing
         const contentType = res.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
             addLog(`❌ Server returned HTML instead of JSON (Batch ${batchCount})`);
             addLog(`This usually means the session expired or there was a server error.`);
             addLog(`Please disconnect and reconnect, then try syncing again.`);
-            // Show user-friendly error
             alert('Session expired or server error. Please disconnect and reconnect.');
             loading = false;
             statusMessage = 'Sync Failed';
@@ -256,7 +263,6 @@
             return;
         }
 
-        // [!code fix] Assign to the outer 'data' variable
         data = await res.json();
         processServerLogs(data.logs);
 
@@ -286,7 +292,6 @@
 
         } else {
             addLog('Sync Failed: ' + data.error);
-            // Check if it's a session error
             if (data.error && (data.error.includes('login') || data.error.includes('Session expired'))) {
                 addLog('⚠️ Session expired. Please disconnect and reconnect.');
                 alert('Your HughesNet session expired. Please disconnect and reconnect.');
@@ -297,7 +302,6 @@
         }
     } catch (e: any) {
         addLog('Sync Error: ' + e.message);
-        // Handle JSON parse errors specifically
         if (e.message.includes('JSON')) {
             addLog('❌ Server returned invalid response. Session may have expired.');
             alert('Session error. Please disconnect and reconnect.');
@@ -306,8 +310,6 @@
         statusMessage = 'Sync Failed';
         currentBatch = 0;
     } finally {
-        // Only set loading = false if we're not recursing
-        // [!code fix] data is now accessible here
         if (!data || !data.incomplete) {
             loading = false;
             statusMessage = 'Sync Now';
@@ -433,7 +435,7 @@
                    </button>
                    
                    <button class="btn-secondary" on:click={handleDisconnect} disabled={loading}>
-                      Disconnect
+                     Disconnect
                    </button>
 
                    <button class="btn-secondary danger-hover" on:click={handleClear} disabled={loading}>
@@ -475,9 +477,27 @@
             <label for="upgrade-pay">Upgrade Pay ($)</label>
             <input id="upgrade-pay" type="number" bind:value={upgradePay} placeholder="0.00" min="0" step="0.01" />
           </div>
+
+          <div class="form-group">
+            <label for="wifi-pay">WIFI Extender Pay ($)</label>
+            <input id="wifi-pay" type="number" bind:value={wifiExtenderPay} placeholder="0.00" min="0" step="0.01" />
+          </div>
+
+          <div class="form-group">
+            <label for="voip-pay">Phone Pay ($)</label>
+            <input id="voip-pay" type="number" bind:value={voipPay} placeholder="0.00" min="0" step="0.01" />
+          </div>
+
+          {#if $user?.name === 'james'}
+          <div class="form-group">
+            <label>Drive Time Bonus ($)</label>
+            <input type="number" bind:value={driveTimeBonus} placeholder="0.00" min="0" step="0.01" />
+            <span class="help-text">Added to EACH order if total drive > 5.5h</span>
+          </div>
+          {/if}
       </div>
       
-      <h3 class="section-label text-red">Supply Costs (Deductions)</h3>
+      <h3 class="section-label text-red">Supply Costs & Extras</h3>
       <div class="config-grid">
           <div class="form-group">
             <label for="pole-cost" class="text-red">Pole Cost ($)</label>
@@ -554,6 +574,12 @@
                      </span>
                      {#if order.hasPoleMount}
                        <span class="order-badge pole">Pole</span>
+                     {/if}
+                     {#if order.hasWifiExtender}
+                       <span class="order-badge wifi">Wifi</span>
+                     {/if}
+                     {#if order.hasVoip}
+                       <span class="order-badge voip">Phone</span>
                      {/if}
                  </div>
                  <div class="order-details">
@@ -698,6 +724,8 @@
   .order-badge.purple { background: #F3E8FF; color: #6B21A8; }
   .order-badge.green { background: #DCFCE7; color: #15803D; }
   .order-badge.pole { background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5; }
+  .order-badge.wifi { background: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7; }
+  .order-badge.voip { background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D; }
   
   .order-details { flex: 1; margin: 0 16px; }
   .order-addr { font-size: 14px; color: #374151; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -124,22 +124,23 @@ export function parseOrderPage(html: string, id: string): OrderData {
         type: 'Repair', jobDuration: 60 
     };
     
-    const val = (name: string) => $(`input[name="${name}"]`).val() as string;
+    const val = (name: string) => `input[name="${name}"]`;
+    const getVal = (name: string) => $(val(name)).val() as string;
     
     // --- Address Parsing ---
-    out.address = val('FLD_SO_Address1') || val('f_address') || val('txtAddress') || '';
+    out.address = getVal('FLD_SO_Address1') || getVal('f_address') || getVal('txtAddress') || '';
     if (!out.address) {
         const bodyText = $('body').text();
         const addressMatch = bodyText.match(/Address:\s*(.*?)\s+(?:City|County|State)/i);
         if (addressMatch) out.address = addressMatch[1].trim();
     }
     out.address = toTitleCase(out.address);
-    out.city = toTitleCase(val('f_city') || scanForward(html, 'City:', />([^<]+)</) || '');
-    out.state = val('f_state') || scanForward(html, 'State:', />([A-Z]{2})</) || '';
-    out.zip = val('f_zip') || scanForward(html, 'Zip:', />(\d{5})</) || '';
+    out.city = toTitleCase(getVal('f_city') || scanForward(html, 'City:', />([^<]+)</) || '');
+    out.state = getVal('f_state') || scanForward(html, 'State:', />([A-Z]{2})</) || '';
+    out.zip = getVal('f_zip') || scanForward(html, 'Zip:', />(\d{5})</) || '';
 
     // --- Date Parsing ---
-    out.confirmScheduleDate = val('f_sched_date') || scanForward(html, 'Confirm Schedule Date', /(\d{1,2}\/\d{1,2}\/\d{2,4})/) || scanForward(html, 'Date:', /(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+    out.confirmScheduleDate = getVal('f_sched_date') || scanForward(html, 'Confirm Schedule Date', /(\d{1,2}\/\d{1,2}\/\d{2,4})/) || scanForward(html, 'Date:', /(\d{1,2}\/\d{1,2}\/\d{2,4})/);
     
     // --- Time Parsing (Updated) ---
     // Helper to clean text (removes &nbsp; and trims)
@@ -173,7 +174,7 @@ export function parseOrderPage(html: string, id: string): OrderData {
     }
 
     // Priority: Form Input -> Arrival Time -> Schd Est. Begin Time -> Legacy Scan
-    out.beginTime = val('f_begin_time') || 
+    out.beginTime = getVal('f_begin_time') || 
                     arrivalTime || 
                     schdBeginTime || 
                     scanForward(html, 'Time:', /(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
@@ -197,6 +198,16 @@ export function parseOrderPage(html: string, id: string): OrderData {
 
     if (bodyText.includes('CON NON-STD CHARGE NEW POLE')) {
         out.hasPoleMount = true;
+    }
+
+    // Check for WI-FI INSTALLATION task
+    if (bodyText.includes('WI-FI INSTALLATION [Task]')) {
+        out.hasWifiExtender = true;
+    }
+
+    // [!code ++] Check for VOIP Phone task
+    if (bodyText.includes('Install, VOIP Phone [Task]')) {
+        out.hasVoip = true;
     }
 
     // --- Timestamp & Duration ---
