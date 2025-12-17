@@ -16,6 +16,13 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 
         console.log(`[API] HughesNet Action: ${body.action} for ${userId}`);
 
+        console.log('[API] Checking KV Namespaces:');
+        console.log('  BETA_HUGHESNET_KV:', !!platform.env.BETA_HUGHESNET_KV);
+        console.log('  BETA_LOGS_KV:', !!platform.env.BETA_LOGS_KV);
+        console.log('  BETA_DIRECTIONS_KV:', !!platform.env.BETA_DIRECTIONS_KV);
+        console.log('  BETA_PLACES_KV:', !!platform.env.BETA_PLACES_KV);
+        console.log('  TRIP_INDEX_DO:', !!platform.env.TRIP_INDEX_DO);
+
         // [!code fix] Initialize with new Constructor Signature
         const service = new HughesNetService(
             platform.env.BETA_HUGHESNET_KV,          // 1. Main DB
