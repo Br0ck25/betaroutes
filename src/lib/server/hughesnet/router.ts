@@ -50,7 +50,8 @@ export class HughesNetRouter {
                     };
                     if (this.kv) {
                         try {
-                            await this.kv.put(kvKey, JSON.stringify(point), { expirationTtl: 60 * 60 * 24 * 30 });
+                            // PERMANENT CACHE - NO EXPIRATION
+                            await this.kv.put(kvKey, JSON.stringify(point));
                         } catch (e) {
                             console.warn('Failed to cache geocode:', e);
                         }
@@ -83,7 +84,8 @@ export class HughesNetRouter {
                     };
                     if (this.kv) {
                         try {
-                            await this.kv.put(kvKey, JSON.stringify(point), { expirationTtl: 60 * 60 * 24 * 30 });
+                            // PERMANENT CACHE - NO EXPIRATION
+                            await this.kv.put(kvKey, JSON.stringify(point));
                         } catch (e) {
                             console.warn('Failed to cache geocode:', e);
                         }
@@ -132,6 +134,7 @@ export class HughesNetRouter {
                         };
                         if (this.kv) {
                             try {
+                                // PERMANENT CACHE - NO EXPIRATION
                                 await this.kv.put(key, JSON.stringify(result));
                             } catch (e) {
                                 console.warn('Failed to cache route:', e);
@@ -164,6 +167,7 @@ export class HughesNetRouter {
                     };
                     if (this.kv) {
                         try {
+                            // PERMANENT CACHE - NO EXPIRATION
                             await this.kv.put(key, JSON.stringify(result));
                         } catch (e) {
                             console.warn('Failed to cache route:', e);
