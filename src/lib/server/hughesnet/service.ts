@@ -748,11 +748,11 @@ export class HughesNetService {
                 if (dateObj) sortTime = dateObj.getTime() + (parseTime(o.beginTime) * 60000);
             }
 
-            // Pay Logic for Future Jobs
-            // 1. If explicit incomplete -> No pay
-            // 2. If complete -> Pay
-            // 3. If neither (Future) -> Estimate Pay
-            const isPaid = !o.departureIncompleteTimestamp;
+            // Pay Logic (Fixed):
+            // 1. If has departureCompleteTimestamp -> PAID (even if incomplete timestamp also exists)
+            // 2. Else if has departureIncompleteTimestamp -> NOT PAID
+            // 3. Else (future job) -> ESTIMATE PAY
+            const isPaid = !!o.departureCompleteTimestamp || !o.departureIncompleteTimestamp;
 
             // Calculate actual duration based on timestamps
             let actualDuration: number;
