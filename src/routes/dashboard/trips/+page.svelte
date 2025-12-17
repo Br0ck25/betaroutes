@@ -188,25 +188,13 @@
     }).format(date);
   }
 
-  // [!code changed] Updated robust time formatter
   function formatTime(time: string): string {
     if (!time) return '';
-
-    // If time is already in 12-hour format (e.g. "5:11 PM"), return as is.
-    if (time.toLowerCase().includes('am') || time.toLowerCase().includes('pm')) {
-      return time;
-    }
-
     const [h, m] = time.split(':').map(Number);
     if (isNaN(h)) return time;
-    
     const ampm = h >= 12 ? 'PM' : 'AM';
     const h12 = h % 12 || 12;
-    
-    // Ensure m is a number before calling toString
-    const mStr = !isNaN(m) ? m.toString().padStart(2, '0') : '00';
-    
-    return `${h12}:${mStr} ${ampm}`;
+    return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
   }
 
   function formatDuration(minutes: number): string {
@@ -274,7 +262,7 @@
     }
   }
 
-  // [!code ++] Deep Link Handling
+  // Deep Link Handling
   let deepLinkHandled = false;
   
   $: if (!$isLoading && allFilteredTrips.length > 0 && !deepLinkHandled) {
@@ -548,7 +536,7 @@
                   <span class="trip-date-display">
                       {formatDate(trip.date || '')}
                       {#if trip.startTime}
-                          <span class="time-range">• {formatTime(trip.startTime)} - {formatTime(trip.endTime || '17:00')}</span>
+                         <span class="time-range">• {formatTime(trip.startTime)} - {formatTime(trip.endTime || '17:00')}</span>
                       {/if}
                   </span>
                   <h3 class="trip-route-title">
@@ -560,7 +548,7 @@
                 </div>
                 
                 <div class="profit-display-large" class:positive={profit >= 0} class:negative={profit < 0}>
-                    {formatCurrency(profit)}
+                   {formatCurrency(profit)}
                 </div>
                 
                 <svg class="expand-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
@@ -631,8 +619,9 @@
                             </div>
                           {/each}
                         {/if}
-                        {#if trip.suppliesItems}
-                          {#each trip.suppliesItems as item}
+                        {@const supplies = trip.supplyItems || trip.suppliesItems || []}
+                        {#if supplies.length > 0}
+                          {#each supplies as item}
                             <div class="expense-row">
                               <span>{item.type}</span>
                               <span>{formatCurrency(item.cost)}</span>
@@ -752,16 +741,16 @@
   .btn-primary { display: inline-flex; align-items: center;
   gap: 6px; padding: 10px 16px; background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; border: none; border-radius: 8px; font-weight: 600;
   font-size: 14px; text-decoration: none; box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); }
-   
+  
   .stats-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
   .summary-card { background: white; border: 1px solid #E5E7EB; border-radius: 12px;
   padding: 16px; text-align: center; }
   .summary-label { font-size: 12px; color: #6B7280; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px;
   }
   .summary-value { font-size: 20px; font-weight: 800; color: #111827; }
-   
+  
   .filters-bar { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
-   
+  
   /* Sticky Filters Style */
   .sticky-bar {
       position: sticky; top: 0;
@@ -791,7 +780,7 @@
   }
   .sort-btn { flex: 0 0 48px; display: flex; align-items: center; justify-content: center; border: 1px solid #E5E7EB; border-radius: 10px;
   background: white; color: #6B7280; }
-   
+  
   /* CHECKBOX STYLES */
   .checkbox-container { display: inline-flex; align-items: center;
   gap: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: #4B5563; position: relative; padding-left: 28px; user-select: none;
@@ -809,7 +798,7 @@
   width: 5px; height: 10px; border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg); }
 
   .trip-list-cards { display: flex; flex-direction: column; gap: 12px; }
-   
+  
   /* Swipe Wrapper & Backgrounds */
   .trip-card-wrapper {
       position: relative; overflow: hidden;
@@ -823,7 +812,7 @@
       padding: 0 20px;
       z-index: 0;
   }
-   
+  
   .swipe-action {
       font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;
   }

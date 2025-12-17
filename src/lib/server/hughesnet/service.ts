@@ -188,6 +188,10 @@ export class HughesNetService {
     private fetcher: HughesNetFetcher;
     private auth: HughesNetAuth;
     private router: HughesNetRouter;
+    private lastSessionRefresh: number = 0;
+    private sessionRefreshInterval: number = 10 * 60 * 1000; // 10 minutes
+    private requestsSinceRefresh: number = 0;
+    private requestsBeforeRefresh: number = 20; // Refresh every 20 requests
 
     constructor(
         private kv: KVNamespace, 
@@ -299,6 +303,8 @@ export class HughesNetService {
             }
             
             this.log('[Session] Session valid');
+            this.lastSessionRefresh = Date.now();
+            this.requestsSinceRefresh = 0;
             return cookie;
         } catch (e: any) {
             if (e.message === 'REQ_LIMIT') throw e;
@@ -306,6 +312,31 @@ export class HughesNetService {
             this.error('[Session] Failed to verify session', e);
             throw new Error('Session validation failed. Please reconnect.');
         }
+    }
+
+    // PROACTIVE SESSION REFRESH: Check if we should refresh based on time or requests
+    private shouldRefreshSession(): boolean {
+        const timeSinceRefresh = Date.now() - this.lastSessionRefresh;
+        const timeExpired = timeSinceRefresh > this.sessionRefreshInterval;
+        const requestsExpired = this.requestsSinceRefresh >= this.requestsBeforeRefresh;
+        
+        return timeExpired || requestsExpired;
+    }
+
+    // MAYBE REFRESH: Conditionally refresh if criteria met
+    private async maybeRefreshSession(userId: string, currentCookie: string): Promise<string> {
+        if (this.shouldRefreshSession()) {
+            this.log(`[Session] Proactive refresh (${Math.round((Date.now() - this.lastSessionRefresh) / 1000)}s elapsed, ${this.requestsSinceRefresh} requests)`);
+            try {
+                const newCookie = await this.refreshSessionIfNeeded(userId);
+                return newCookie || currentCookie;
+            } catch (e) {
+                this.warn('[Session] Refresh failed, continuing with current cookie');
+                return currentCookie;
+            }
+        }
+        this.requestsSinceRefresh++;
+        return currentCookie;
     }
 
     async connect(userId: string, u: string, p: string) {
@@ -425,6 +456,8 @@ export class HughesNetService {
         skipScan: boolean
     ): Promise<SyncResult> {
         this.fetcher.resetCount();
+        this.lastSessionRefresh = Date.now();
+        this.requestsSinceRefresh = 0;
         this.log(`[Config] Install: $${installPay} | Repair: $${repairPay} | Upgrade: $${upgradePay}`);
 
         let cookie = await this.auth.ensureSessionCookie(userId);
@@ -487,6 +520,9 @@ export class HughesNetService {
                             this.log(`[Scan] Soft limit reached, saving progress and batching`);
                             break;
                         }
+                        
+                        // Proactively refresh session if needed
+                        cookie = await this.maybeRefreshSession(userId, cookie);
                         
                         try {
                             await this.scanUrl(link.url, cookie, (id) => {
@@ -553,6 +589,9 @@ export class HughesNetService {
                       
                       // Check soft limit before each fetch
                       if (this.fetcher.shouldBatch()) return false;
+                      
+                      // Proactively refresh session if needed
+                      cookie = await this.maybeRefreshSession(userId, cookie);
 
                       try {
                         const orderUrl = `${parser.BASE_URL}/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${targetId}`;
@@ -659,53 +698,47 @@ export class HughesNetService {
                         break;
                     }
 
+                    // Proactively refresh session if needed (time or request-based)
+                    cookie = await this.maybeRefreshSession(userId, cookie);
+
                     try {
                         const orderUrl = `${parser.BASE_URL}/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${encodeURIComponent(id)}`;
                         const res = await this.fetcher.safeFetch(orderUrl, { headers: { 'Cookie': cookie }});
                         const html = await res.text();
-                        const parsed = parser.parseOrderPage(html, id);
                         
-                        if (parsed.address && (parsed.confirmScheduleDate || parsed.arrivalTimestamp)) {
-                            const existingOrder = orderDb[id];
-                            
-                            // Determine sync status
-                            const { syncStatus, needsResync } = determineOrderSyncStatus(parsed);
-                            
-                            // Check for incomplete→complete transition
-                            const wasIncompleteNowComplete = checkIncompleteToComplete(existingOrder, parsed);
-                            
-                            // Update order with sync tracking
-                            delete parsed._status;
-                            const updatedOrder: OrderData = {
-                                ...parsed,
-                                syncStatus,
-                                needsResync,
-                                lastSyncTimestamp: Date.now()
-                            };
-                            
-                            // If incomplete→complete, mark for payment update
-                            if (wasIncompleteNowComplete) {
-                                updatedOrder.lastPaymentUpdate = Date.now();
-                                this.log(`  ${id} [INCOMPLETE→COMPLETE] Payment update needed`);
+                        // Check for session expiration in response
+                        if (html.includes('name="Password"') || html.includes('login.jsp')) {
+                            this.error('[Download] Session expired, attempting refresh...');
+                            cookie = await this.refreshSessionIfNeeded(userId);
+                            // Retry this order
+                            const retryRes = await this.fetcher.safeFetch(orderUrl, { headers: { 'Cookie': cookie }});
+                            const retryHtml = await retryRes.text();
+                            if (retryHtml.includes('name="Password"')) {
+                                throw new Error('Session expired. Please reconnect.');
                             }
-                            
-                            orderDb[id] = updatedOrder;
-                            dbDirty = true;
-                            
-                            const ts = parsed.arrivalTimestamp ? `Arr:${formatTimestamp(parsed.arrivalTimestamp)}` : '';
-                            const pole = parsed.hasPoleMount ? '+POLE' : '';
-                            const status = syncStatus === 'future' ? '[FUTURE]' : syncStatus === 'incomplete' ? '[INCOMPLETE]' : '';
-                            this.log(`  ${id} ${ts} ${pole} ${status}`.trim());
-                        } else if (!parsed.address) {
-                            orderDb[id]._status = 'failed';
-                            dbDirty = true;
+                            const parsed = parser.parseOrderPage(retryHtml, id);
+                            if (parsed.address && (parsed.confirmScheduleDate || parsed.arrivalTimestamp)) {
+                                dbDirty = this.processOrderData(orderDb, id, parsed) || dbDirty;
+                            }
+                        } else {
+                            const parsed = parser.parseOrderPage(html, id);
+                            if (parsed.address && (parsed.confirmScheduleDate || parsed.arrivalTimestamp)) {
+                                dbDirty = this.processOrderData(orderDb, id, parsed) || dbDirty;
+                            } else if (!parsed.address) {
+                                orderDb[id]._status = 'failed';
+                                dbDirty = true;
+                            }
                         }
+                        
                         await new Promise(r => setTimeout(r, DELAY_BETWEEN_DOWNLOADS_MS)); 
                     } catch (e: any) {
                         if (e.message === 'REQ_LIMIT') { 
                             this.warn('[Download] Hard limit reached');
                             incomplete = true; 
                             break; 
+                        }
+                        if (e.message.includes('Session expired')) {
+                            throw e;
                         }
                         console.warn(`Failed to download order ${id}:`, e);
                     }
@@ -823,6 +856,40 @@ export class HughesNetService {
         }
         
         return ordersByDate;
+    }
+
+    private processOrderData(orderDb: Record<string, OrderData>, id: string, parsed: OrderData): boolean {
+        const existingOrder = orderDb[id];
+        
+        // Determine sync status
+        const { syncStatus, needsResync } = determineOrderSyncStatus(parsed);
+        
+        // Check for incomplete→complete transition
+        const wasIncompleteNowComplete = checkIncompleteToComplete(existingOrder, parsed);
+        
+        // Update order with sync tracking
+        delete parsed._status;
+        const updatedOrder: OrderData = {
+            ...parsed,
+            syncStatus,
+            needsResync,
+            lastSyncTimestamp: Date.now()
+        };
+        
+        // If incomplete→complete, mark for payment update
+        if (wasIncompleteNowComplete) {
+            updatedOrder.lastPaymentUpdate = Date.now();
+            this.log(`  ${id} [INCOMPLETE→COMPLETE] Payment update needed`);
+        }
+        
+        orderDb[id] = updatedOrder;
+        
+        const ts = parsed.arrivalTimestamp ? `Arr:${formatTimestamp(parsed.arrivalTimestamp)}` : '';
+        const pole = parsed.hasPoleMount ? '+POLE' : '';
+        const status = syncStatus === 'future' ? '[FUTURE]' : syncStatus === 'incomplete' ? '[INCOMPLETE]' : '';
+        this.log(`  ${id} ${ts} ${pole} ${status}`.trim());
+        
+        return true; // Data was modified
     }
 
     private async scanUrl(url: string, cookie: string, cb: (id: string) => void) {
