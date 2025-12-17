@@ -5,11 +5,13 @@ import { z } from 'zod';
 
 const settingsSchema = z.object({
   defaultStartAddress: z.string().max(500).optional(),
-  defaultEndAddress: z.string().max(500).optional(), // [!code ++] Ensure this is included
+  defaultEndAddress: z.string().max(500).optional(),
   defaultMPG: z.number().positive().nullish(),
   defaultGasPrice: z.number().nonnegative().nullish(),
   vehicleName: z.string().max(100).optional(),
   distanceUnit: z.enum(['mi', 'km']).optional(),
+  // [!code ++] Add this line so Currency saves to the cloud
+  currency: z.enum(['USD', 'EUR', 'GBP', 'JPY']).optional(), 
   theme: z.enum(['light', 'dark', 'system']).optional()
 });
 
@@ -40,7 +42,7 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
   try {
       const body = await request.json();
       
-      // [!code fix] Unwrap the 'settings' object if sent by the frontend helper
+      // Unwrap 'settings' if sent by the frontend helper
       const payload = body.settings || body;
 
       const result = settingsSchema.safeParse(payload);
