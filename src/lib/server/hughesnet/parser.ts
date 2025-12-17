@@ -13,31 +13,50 @@ function toTitleCase(str: string) {
 function findEventTimestamp($: cheerio.CheerioAPI, eventLabel: string): number | null {
     let foundTs: number | null = null;
     
+    // [!code fix] Regex updated: 
+    // 1. \s* instead of \s+ (handles missing space between date/time)
+    // 2. Looks for seconds optionally
+    const tsRegex = /(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/;
+    
     $('.SearchUtilData').each((i, elem) => {
         const text = $(elem).text().trim();
         
         if (text.includes(eventLabel)) {
-            const prevCell = $(elem).prev('.SearchUtilData');
-            if (prevCell.length) {
-                const tsText = prevCell.text().trim();
+            // [!code debug] Log what we found to help debug NaN
+            console.log(`[Parser] Found '${eventLabel}' in text: "${text.substring(0, 50)}..."`);
+
+            // Check current cell first (new format)
+            let match = text.match(tsRegex);
+
+            // If not found, check previous cell (legacy format)
+            if (!match) {
+                const prevCell = $(elem).prev('.SearchUtilData');
+                if (prevCell.length) {
+                    const tsText = prevCell.text().trim();
+                    match = tsText.match(tsRegex);
+                }
+            }
+
+            if (match) {
+                const [_, month, day, year, hour, min, sec] = match;
                 
-                const match = tsText.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-                if (match) {
-                    const [_, month, day, year, hour, min, sec] = match;
-                    
-                    const date = new Date(
-                        parseInt(year), 
-                        parseInt(month) - 1, 
-                        parseInt(day), 
-                        parseInt(hour), 
-                        parseInt(min), 
-                        sec ? parseInt(sec) : 0
-                    );
-                    
-                    if (!isNaN(date.getTime())) {
-                        foundTs = date.getTime();
-                        return false;
-                    }
+                // [!code debug] Log the parsed components
+                console.log(`[Parser] Parsed: ${month}/${day}/${year} ${hour}:${min}:${sec || '00'}`);
+
+                const date = new Date(
+                    parseInt(year), 
+                    parseInt(month) - 1, 
+                    parseInt(day), 
+                    parseInt(hour), 
+                    parseInt(min), 
+                    sec ? parseInt(sec) : 0
+                );
+                
+                if (!isNaN(date.getTime())) {
+                    foundTs = date.getTime();
+                    return false; // Break loop
+                } else {
+                    console.log('[Parser] Invalid Date generated');
                 }
             }
         }
@@ -143,8 +162,10 @@ export function parseOrderPage(html: string, id: string): OrderData {
     out.departureCompleteTimestamp = findEventTimestamp($, 'Departure Complete');
     out.departureIncompleteTimestamp = findEventTimestamp($, 'Departure Incomplete');
 
+    // Calculate duration only if we have valid timestamps
     if (out.arrivalTimestamp && out.departureCompleteTimestamp) {
         const durationMins = Math.round((out.departureCompleteTimestamp - out.arrivalTimestamp) / 60000);
+        // Sanity check: duration between 10 mins and 10 hours
         if (durationMins > 10 && durationMins < 600) {
             out.jobDuration = durationMins;
         }

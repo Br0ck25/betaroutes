@@ -195,8 +195,6 @@
             <li>✓ 10 trips per month</li>
             <li>✓ Google Maps routing</li>
             <li>✓ Basic profit tracking</li>
-            <li>✓ Export to CSV</li>
-            <li>✓ Mobile app access</li>
           </ul>
           
           <a href="/register" class="btn-plan">Get Started</a>
@@ -208,12 +206,13 @@
             <h3>Pro</h3>
             <div class="price">
               <span class="currency">$</span>
-              <span class="amount">9</span>
+              <span class="amount">2.99</span>
               <span class="period">/month</span>
             </div>
           </div>
           
           <ul class="features-list">
+            <li>✓ Everything in Free</li>
             <li>✓ Unlimited trips</li>
             <li>✓ Advanced analytics</li>
             <li>✓ PDF reports</li>
@@ -230,7 +229,7 @@
             <h3>Business</h3>
             <div class="price">
               <span class="currency">$</span>
-              <span class="amount">29</span>
+              <span class="amount">29.99</span>
               <span class="period">/month</span>
             </div>
           </div>
