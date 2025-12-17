@@ -36,7 +36,7 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
         // Wrap rate limit in its own try/catch to ensure it doesn't block critical flow if it fails
         let limitResult = { allowed: true };
         try {
-             limitResult = await checkRateLimit(usersKV, clientIp, 'register_attempt', 5, 3600);
+             limitResult = await checkRateLimit(usersKV, clientIp, 'register_attempt', 100, 3600);
         } catch (e) {
              console.warn('[Register] Rate limit check failed (ignoring):', e);
         }
