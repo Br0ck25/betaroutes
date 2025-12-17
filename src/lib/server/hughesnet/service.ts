@@ -8,11 +8,7 @@ import * as parser from './parser';
 import type { OrderData, OrderWithMeta, Trip, TripStop, SupplyItem, SyncConfig, SyncResult, DistributedLock } from './types';
 
 // --- CONSTANTS ---
-const SCAN_REQUEST_LIMIT = 15;
-const DISCOVERY_GAP_LIMIT = 150;
-const DISCOVERY_BACKWARD_LIMIT = 200;
-const DOWNLOAD_LIMIT = 250;
-const TRIP_CREATION_LIMIT = 250;
+// No per-stage limits - we check the fetcher's soft/hard limits instead
 const DISCOVERY_GAP_MAX_SIZE = 50;
 const DISCOVERY_MAX_FAILURES = 50;
 const DISCOVERY_MAX_CHECKS = 100;
@@ -461,6 +457,8 @@ export class HughesNetService {
         try {
             // STAGE 1: SCANNING
             if (!skipScan) {
+                this.log('[Scan] Starting scan phase...');
+                
                 try {
                     const res = await this.fetcher.safeFetch(parser.BASE_URL + '/start/Home.jsp', { headers: { 'Cookie': cookie }});
                     const html = await res.text();
@@ -473,12 +471,24 @@ export class HughesNetService {
                         }
                     });
 
-                    if (this.fetcher.getRequestCount() < 10) {
-                        const links = parser.extractMenuLinks(html).filter(l => l.url.includes('SoSearch') || l.url.includes('forms/'));
-                        this.log(`[Scan] Found ${links.length} pages...`);
+                    // Check soft limit before scanning menu links
+                    if (this.fetcher.shouldBatch()) {
+                        this.log(`[Scan] Soft limit reached (${this.fetcher.getRequestCount()}/${this.fetcher.getSoftLimit()}), will batch`);
+                        if (dbDirty) await this.kv.put(`hns:db:${userId}`, JSON.stringify(orderDb));
+                        return { orders: Object.values(orderDb), incomplete: true };
+                    }
+
+                    const links = parser.extractMenuLinks(html).filter(l => l.url.includes('SoSearch') || l.url.includes('forms/'));
+                    this.log(`[Scan] Found ${links.length} menu links to scan...`);
+                    
+                    for (const link of links) {
+                        // Check soft limit before each link scan
+                        if (this.fetcher.shouldBatch()) {
+                            this.log(`[Scan] Soft limit reached, saving progress and batching`);
+                            break;
+                        }
                         
-                        for (const link of links) {
-                            if (this.fetcher.getRequestCount() > SCAN_REQUEST_LIMIT) break; 
+                        try {
                             await this.scanUrl(link.url, cookie, (id) => {
                                  if (!orderDb[id]) { 
                                      orderDb[id] = { id, address: '', city: '', state: '', zip: '', confirmScheduleDate: '', beginTime: '', type: '', jobDuration: 0, _status: 'pending' }; 
@@ -486,23 +496,63 @@ export class HughesNetService {
                                  }
                             });
                             await new Promise(r => setTimeout(r, DELAY_BETWEEN_SCANS_MS));
+                        } catch (e: any) {
+                            if (e.message === 'REQ_LIMIT') {
+                                this.warn('[Scan] Hard limit reached');
+                                break;
+                            }
+                            this.warn(`[Scan] Failed to scan ${link.url}: ${e.message}`);
                         }
                     }
                 } catch (e: any) {
-                    if (e.message !== 'REQ_LIMIT') this.error('[Scan] Error', e);
+                    if (e.message === 'REQ_LIMIT') {
+                        this.warn('[Scan] Hard limit reached during initial scan');
+                    } else if (e.message !== 'Session expired.') {
+                        this.error('[Scan] Error', e);
+                    } else {
+                        throw e; // Re-throw session errors
+                    }
+                }
+                
+                // Save any pending changes from scanning
+                if (dbDirty) {
+                    await this.kv.put(`hns:db:${userId}`, JSON.stringify(orderDb));
+                    dbDirty = false;
+                }
+                
+                // Check if we should batch after scanning
+                if (this.fetcher.shouldBatch()) {
+                    this.log(`[Scan] Completed with ${this.fetcher.getRequestCount()} requests, batching`);
+                    return { orders: Object.values(orderDb), incomplete: true };
                 }
             }
 
             // STAGE 1.5: SMART DISCOVERY
             const knownIds = Object.keys(orderDb).map(id => parseInt(id)).filter(n => !isNaN(n)).sort((a,b) => a - b);
             if (knownIds.length > 0 && !skipScan) {
+                this.log('[Discovery] Starting discovery phase...');
+                
+                // Check soft limit before discovery
+                if (this.fetcher.shouldBatch()) {
+                    this.log(`[Discovery] Soft limit reached before discovery, batching`);
+                    return { orders: Object.values(orderDb), incomplete: true };
+                }
+                
                 // Refresh session before discovery
-                cookie = await this.refreshSessionIfNeeded(userId);
+                try {
+                    cookie = await this.refreshSessionIfNeeded(userId);
+                } catch (e: any) {
+                    this.error('[Discovery] Session refresh failed', e);
+                    throw e;
+                }
                 
                 const minId = knownIds[0];
                 
                 const tryFetchId = async (targetId: number) => {
-                      if (orderDb[String(targetId)] || this.fetcher.getRequestCount() >= DISCOVERY_BACKWARD_LIMIT) return false; 
+                      if (orderDb[String(targetId)]) return false;
+                      
+                      // Check soft limit before each fetch
+                      if (this.fetcher.shouldBatch()) return false;
 
                       try {
                         const orderUrl = `${parser.BASE_URL}/forms/viewservice.jsp?snb=SO_EST_SCHD&id=${targetId}`;
@@ -515,35 +565,67 @@ export class HughesNetService {
                             dbDirty = true;
                             return true;
                         }
-                      } catch(e) {
+                      } catch(e: any) {
+                        if (e.message === 'REQ_LIMIT') return false;
                         console.warn(`Failed to fetch order ${targetId}:`, e);
                       }
                       return false;
                 };
 
-                this.log(`[Discovery] Checking gaps and backward scan...`);
-
-                // Fill gaps
-                for (let i = 0; i < knownIds.length - 1; i++) {
-                    if (this.fetcher.getRequestCount() >= DISCOVERY_GAP_LIMIT) break;
-                    const current = knownIds[i];
-                    const next = knownIds[i+1];
-                    if (next - current > 1 && next - current < DISCOVERY_GAP_MAX_SIZE) {
-                        for (let j = current + 1; j < next; j++) {
-                            await tryFetchId(j);
-                            await new Promise(r => setTimeout(r, DELAY_BETWEEN_GAP_FILLS_MS));
+                try {
+                    // Fill gaps
+                    this.log('[Discovery] Filling gaps...');
+                    for (let i = 0; i < knownIds.length - 1; i++) {
+                        if (this.fetcher.shouldBatch()) {
+                            this.log('[Discovery] Soft limit reached during gap filling');
+                            break;
+                        }
+                        
+                        const current = knownIds[i];
+                        const next = knownIds[i+1];
+                        if (next - current > 1 && next - current < DISCOVERY_GAP_MAX_SIZE) {
+                            for (let j = current + 1; j < next; j++) {
+                                const found = await tryFetchId(j);
+                                if (!found && this.fetcher.shouldBatch()) break;
+                                await new Promise(r => setTimeout(r, DELAY_BETWEEN_GAP_FILLS_MS));
+                            }
                         }
                     }
-                }
 
-                // Backward scan
-                let failures = 0, current = minId - 1, checks = 0;
-                while(failures < DISCOVERY_MAX_FAILURES && checks < DISCOVERY_MAX_CHECKS) { 
-                      const found = await tryFetchId(current);
-                      if (found) failures = 0; else failures++;
-                      current--;
-                      checks++;
-                      await new Promise(r => setTimeout(r, DELAY_BETWEEN_BACKWARD_SCANS_MS));
+                    // Backward scan
+                    if (!this.fetcher.shouldBatch()) {
+                        this.log('[Discovery] Scanning backward...');
+                        let failures = 0, current = minId - 1, checks = 0;
+                        while(failures < DISCOVERY_MAX_FAILURES && checks < DISCOVERY_MAX_CHECKS) { 
+                              if (this.fetcher.shouldBatch()) {
+                                  this.log('[Discovery] Soft limit reached during backward scan');
+                                  break;
+                              }
+                              const found = await tryFetchId(current);
+                              if (found) failures = 0; else failures++;
+                              current--;
+                              checks++;
+                              await new Promise(r => setTimeout(r, DELAY_BETWEEN_BACKWARD_SCANS_MS));
+                        }
+                    }
+                } catch (e: any) {
+                    if (e.message === 'REQ_LIMIT') {
+                        this.warn('[Discovery] Hard limit reached');
+                    } else {
+                        this.error('[Discovery] Unexpected error', e);
+                    }
+                }
+                
+                // Save any pending changes from discovery
+                if (dbDirty) {
+                    await this.kv.put(`hns:db:${userId}`, JSON.stringify(orderDb));
+                    dbDirty = false;
+                }
+                
+                // Check if we should batch after discovery
+                if (this.fetcher.shouldBatch()) {
+                    this.log(`[Discovery] Completed with ${this.fetcher.getRequestCount()} requests, batching`);
+                    return { orders: Object.values(orderDb), incomplete: true };
                 }
             }
 
@@ -553,14 +635,27 @@ export class HughesNetService {
                 .map((o:OrderData) => o.id);
             
             if (missingDataIds.length > 0) {
-                // Refresh session before downloads
-                cookie = await this.refreshSessionIfNeeded(userId);
+                this.log(`[Download] Starting download of ${missingDataIds.length} orders...`);
                 
-                this.log(`[Download] Getting ${missingDataIds.length} orders...`);
+                // Check soft limit before downloads
+                if (this.fetcher.shouldBatch()) {
+                    this.log(`[Download] Soft limit reached before downloads, batching`);
+                    return { orders: Object.values(orderDb), incomplete: true };
+                }
+                
+                // Refresh session before downloads
+                try {
+                    cookie = await this.refreshSessionIfNeeded(userId);
+                } catch (e: any) {
+                    this.error('[Download] Session refresh failed', e);
+                    throw e;
+                }
+                
                 for (const id of missingDataIds) {
-                    if (this.fetcher.getRequestCount() >= DOWNLOAD_LIMIT) {
+                    // Check soft limit before each download
+                    if (this.fetcher.shouldBatch()) {
+                        this.log(`[Download] Soft limit reached, ${missingDataIds.length - missingDataIds.indexOf(id)} orders remaining`);
                         incomplete = true;
-                        this.warn(`[Limit] Paused. Resume next sync.`);
                         break;
                     }
 
@@ -608,16 +703,23 @@ export class HughesNetService {
                         await new Promise(r => setTimeout(r, DELAY_BETWEEN_DOWNLOADS_MS)); 
                     } catch (e: any) {
                         if (e.message === 'REQ_LIMIT') { 
+                            this.warn('[Download] Hard limit reached');
                             incomplete = true; 
                             break; 
                         }
                         console.warn(`Failed to download order ${id}:`, e);
                     }
                 }
-                if (dbDirty) await this.kv.put(`hns:db:${userId}`, JSON.stringify(orderDb));
+                
+                // Save progress
+                if (dbDirty) {
+                    await this.kv.put(`hns:db:${userId}`, JSON.stringify(orderDb));
+                    dbDirty = false;
+                }
             }
 
             if (incomplete) {
+                this.log(`[Download] Batching with ${this.fetcher.getRequestCount()} requests used`);
                 return { orders: Object.values(orderDb), incomplete: true };
             }
 
@@ -625,16 +727,34 @@ export class HughesNetService {
             // Refresh session before trip creation
             const sortedDates = Object.keys(this.groupOrdersByDate(orderDb)).sort();
             if (sortedDates.length > 0) {
-                cookie = await this.refreshSessionIfNeeded(userId);
+                this.log('[Trips] Starting trip creation...');
+                
+                // Check soft limit before trips
+                if (this.fetcher.shouldBatch()) {
+                    this.log(`[Trips] Soft limit reached before trip creation, batching`);
+                    return { orders: Object.values(orderDb), incomplete: true };
+                }
+                
+                try {
+                    cookie = await this.refreshSessionIfNeeded(userId);
+                } catch (e: any) {
+                    this.error('[Trips] Session refresh failed', e);
+                    throw e;
+                }
             }
             
-            this.log(`[Trips] Building routes...`);
+            this.log(`[Trips] Building routes for ${sortedDates.length} dates...`);
             
             const ordersByDate = this.groupOrdersByDate(orderDb);
             const tripService = makeTripService(this.tripKV, this.trashKV, undefined, this.tripIndexDO);
 
             for (const date of sortedDates) {
-                 if (this.fetcher.getRequestCount() >= TRIP_CREATION_LIMIT) { incomplete = true; break; }
+                 // Check soft limit before each trip
+                 if (this.fetcher.shouldBatch()) { 
+                     this.log(`[Trips] Soft limit reached, ${sortedDates.length - sortedDates.indexOf(date)} trips remaining`);
+                     incomplete = true; 
+                     break; 
+                 }
 
                 const tripId = `hns_${userId}_${date}`;
                 const existingTrip = await tripService.get(userId, tripId);
@@ -652,6 +772,10 @@ export class HughesNetService {
                     userId, date, ordersByDate[date], settingsId,
                     installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge, tripService
                 );
+            }
+
+            if (incomplete) {
+                this.log(`[Trips] Batching with ${this.fetcher.getRequestCount()} requests used`);
             }
 
             return { orders: Object.values(orderDb), incomplete };
@@ -698,13 +822,19 @@ export class HughesNetService {
         let current = url;
         let page = 0;
         while(current && page < 5) {
+            // Check soft limit before each page
+            if (this.fetcher.shouldBatch()) {
+                break;
+            }
+            
             try {
                 const res = await this.fetcher.safeFetch(current, { headers: { 'Cookie': cookie } });
                 const html = await res.text();
                 parser.extractIds(html).forEach(cb);
                 current = parser.extractNextLink(html, current) || '';
                 page++;
-            } catch(e) { 
+            } catch(e: any) { 
+                if (e.message === 'REQ_LIMIT') break;
                 console.warn('Failed to scan URL:', url, e);
                 break; 
             }

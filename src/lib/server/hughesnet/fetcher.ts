@@ -7,15 +7,19 @@ const USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0'
 ];
 
-const DEFAULT_MAX_REQUESTS = 35;
+// Cloudflare Workers limits
+const HARD_REQUEST_LIMIT = 35;  // Absolute maximum - never exceed
+const SOFT_REQUEST_LIMIT = 30;  // Trigger batching when reached
 
 export class HughesNetFetcher {
     private requestCount = 0;
-    private maxRequests: number;
+    private hardLimit: number;
+    private softLimit: number;
     private userAgent: string;
 
-    constructor(maxRequests: number = DEFAULT_MAX_REQUESTS) {
-        this.maxRequests = maxRequests;
+    constructor(hardLimit: number = HARD_REQUEST_LIMIT, softLimit: number = SOFT_REQUEST_LIMIT) {
+        this.hardLimit = hardLimit;
+        this.softLimit = softLimit;
         this.userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
     }
 
@@ -26,13 +30,29 @@ export class HughesNetFetcher {
     getRequestCount() {
         return this.requestCount;
     }
+    
+    getSoftLimit() {
+        return this.softLimit;
+    }
+    
+    getHardLimit() {
+        return this.hardLimit;
+    }
+    
+    shouldBatch(): boolean {
+        return this.requestCount >= this.softLimit;
+    }
+    
+    isAtHardLimit(): boolean {
+        return this.requestCount >= this.hardLimit;
+    }
 
     getUserAgent() {
         return this.userAgent;
     }
 
     async safeFetch(url: string, options: FetcherOptions = {}) {
-        if (this.requestCount >= this.maxRequests) {
+        if (this.requestCount >= this.hardLimit) {
             throw new Error('REQ_LIMIT');
         }
         
