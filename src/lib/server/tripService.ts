@@ -19,6 +19,7 @@ export type TripRecord = {
   createdAt: string;
   updatedAt?: string;
   deletedAt?: string;
+  deleted?: boolean; // [!code ++] Added for Soft Delete
   [key: string]: any;
 };
 
@@ -53,7 +54,6 @@ export function makeTripService(
     return tripIndexDO.get(id);
   };
 
-  // [!code fix] Expanded Summary to include ALL fields needed for Dashboard/Edit
   const toSummary = (trip: TripRecord) => ({
       id: trip.id,
       userId: trip.userId,
@@ -73,7 +73,7 @@ export function makeTripService(
       maintenanceCost: trip.maintenanceCost,
       suppliesCost: trip.suppliesCost,
 
-      // Itemized Lists (Critical for Edit Page)
+      // Itemized Lists
       maintenanceItems: trip.maintenanceItems,
       supplyItems: trip.supplyItems,
       suppliesItems: trip.suppliesItems, 
@@ -85,15 +85,18 @@ export function makeTripService(
       totalTime: trip.totalTime,
       stopsCount: trip.stops?.length || 0,
       
-      // Stops (Critical for List View)
+      // Stops
       stops: trip.stops, 
 
       createdAt: trip.createdAt,
-      updatedAt: trip.updatedAt
+      updatedAt: trip.updatedAt,
+      
+      // [!code ++] Critical for Delta Sync
+      deleted: trip.deleted 
   });
 
   async function indexTripData(trip: TripRecord) {
-    if (!placesKV) return;
+    if (!placesKV || trip.deleted) return; // [!code ++] Don't index deleted items
     
     const uniquePlaces = new Map<string, { lat?: number, lng?: number }>();
     
@@ -160,7 +163,8 @@ export function makeTripService(
         return await res.json() as { allowed: boolean, count: number };
     },
 
-    async list(userId: string): Promise<TripRecord[]> {
+    // [!code fix] Added 'since' parameter for delta sync
+    async list(userId: string, since?: string): Promise<TripRecord[]> {
       const stub = getIndexStub(userId);
       const res = await stub.fetch('http://internal/list');
       const data = await res.json() as any;
@@ -188,7 +192,17 @@ export function makeTripService(
           return out;
       }
 
-      return data as TripRecord[];
+      const trips = data as TripRecord[];
+
+      // [!code ++] Handle Delta Sync vs Full Sync
+      if (since) {
+          const sinceDate = new Date(since);
+          // Return everything (including tombstones) that changed after 'since'
+          return trips.filter(t => new Date(t.updatedAt || t.createdAt) > sinceDate);
+      } else {
+          // Full Sync: Return ONLY active records (exclude tombstones)
+          return trips.filter(t => !t.deleted);
+      }
     },
 
     async get(userId: string, tripId: string) {
@@ -199,6 +213,9 @@ export function makeTripService(
 
     async put(trip: TripRecord) {
       trip.updatedAt = new Date().toISOString();
+      // Ensure we clear the deleted flag on put/restore
+      delete trip.deleted;
+      delete trip.deletedAt;
       
       // 1. Save Full Data to KV
       await kv.put(`trip:${trip.userId}:${trip.id}`, JSON.stringify(trip));
@@ -215,26 +232,8 @@ export function makeTripService(
       });
     },
 
+    // [!code fix] Soft Delete + Scrub Implementation
     async delete(userId: string, tripId: string) {
-      const stub = getIndexStub(userId);
-      await stub.fetch('http://internal/delete', {
-          method: 'POST',
-          body: JSON.stringify({ id: tripId })
-      });
-
-      const date = new Date();
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      await stub.fetch('http://internal/billing/decrement', {
-          method: 'POST',
-          body: JSON.stringify({ monthKey })
-      });
-
-      if (!trashKV) {
-        const key = `trip:${userId}:${tripId}`;
-        await kv.delete(key);
-        return;
-      }
-
       const key = `trip:${userId}:${tripId}`;
       const raw = await kv.get(key);
       if (!raw) return; 
@@ -243,23 +242,49 @@ export function makeTripService(
       const now = new Date();
       const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); 
 
-      trip.deletedAt = now.toISOString();
+      // 1. Copy to Trash KV (Full Backup)
+      if (trashKV) {
+        const metadata: TrashMetadata = {
+          deletedAt: now.toISOString(),
+          deletedBy: userId,
+          originalKey: key,
+          expiresAt: expiresAt.toISOString()
+        };
 
-      const metadata: TrashMetadata = {
-        deletedAt: now.toISOString(),
-        deletedBy: userId,
-        originalKey: key,
-        expiresAt: expiresAt.toISOString()
+        const trashKey = `trash:${userId}:${tripId}`;
+        await trashKV.put(
+          trashKey, 
+          JSON.stringify({ trip, metadata }),
+          { expirationTtl: 30 * 24 * 60 * 60 }
+        );
+      }
+
+      // 2. Overwrite Main KV with SCRUBBED Tombstone
+      // This wipes the data but keeps the ID so sync works.
+      const tombstone = {
+          id: trip.id,
+          userId: trip.userId,
+          deleted: true,
+          deletedAt: now.toISOString(),
+          updatedAt: now.toISOString(),
+          createdAt: trip.createdAt // Keep sort order
       };
 
-      const trashKey = `trash:${userId}:${tripId}`;
-      await trashKV.put(
-        trashKey, 
-        JSON.stringify({ trip, metadata }),
-        { expirationTtl: 30 * 24 * 60 * 60 }
-      );
+      await kv.put(key, JSON.stringify(tombstone));
 
-      await kv.delete(key);
+      // 3. Update Index (DO) with Tombstone summary
+      const stub = getIndexStub(userId);
+      await stub.fetch('http://internal/put', {
+          method: 'POST',
+          body: JSON.stringify(toSummary(tombstone as TripRecord))
+      });
+
+      // 4. Handle Billing
+      const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      await stub.fetch('http://internal/billing/decrement', {
+          method: 'POST',
+          body: JSON.stringify({ monthKey })
+      });
     },
 
     async listTrash(userId: string): Promise<TrashItem[]> {
@@ -303,7 +328,9 @@ export function makeTripService(
 
       const { trip, metadata } = JSON.parse(raw);
 
+      // Remove deleted flags and revive data
       delete trip.deletedAt;
+      delete trip.deleted;
       trip.updatedAt = new Date().toISOString();
 
       const activeKey = `trip:${userId}:${tripId}`;

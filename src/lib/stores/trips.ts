@@ -270,8 +270,20 @@ function createTripsStore() {
                 const store = tx.objectStore('trips');
                 
                 let updateCount = 0;
+                let deleteCount = 0;
 
                 for (const cloudTrip of cloudTrips) {
+                    // [!code ++] Handle Soft Deletes (Tombstones)
+                    if (cloudTrip.deleted) {
+                        const local = await store.get(cloudTrip.id);
+                        if (local) {
+                            await store.delete(cloudTrip.id);
+                            deleteCount++;
+                            console.log('🗑️ Applying server deletion for:', cloudTrip.id);
+                        }
+                        continue;
+                    }
+
                     if (trashIds.has(cloudTrip.id)) {
                         console.log('Skipping synced trip because it is in local trash:', cloudTrip.id);
                         continue;
@@ -291,7 +303,7 @@ function createTripsStore() {
                 await tx.done;
                 
                 storage.setLastSync(new Date().toISOString());
-                console.log(`✅ Processed ${cloudTrips.length} updates. Applied ${updateCount}.`);
+                console.log(`✅ Processed ${cloudTrips.length} changes. Updated: ${updateCount}, Deleted: ${deleteCount}.`);
 
                 await this.load(userId);
             } catch (err) {
