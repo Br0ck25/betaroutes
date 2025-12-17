@@ -1,82 +1,39 @@
-// src/routes/api/verify/+server.ts
-import { redirect } from '@sveltejs/kit';
+// src/routes/api/verify/resend/+server.ts
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { createUser } from '$lib/server/userService';
-import { randomUUID } from 'node:crypto';
-import { dev } from '$app/environment';
+import { sendVerificationEmail } from '$lib/server/email';
+import { checkRateLimit } from '$lib/server/rateLimit';
 
-export const GET: RequestHandler = async ({ url, platform, cookies }) => {
-    const token = url.searchParams.get('token');
-    
+export const POST: RequestHandler = async ({ request, platform, url, getClientAddress }) => {
     const usersKV = platform?.env?.BETA_USERS_KV;
-    // [!code fix] Get access to SESSIONS_KV to store the session correctly
-    const sessionsKV = platform?.env?.BETA_SESSIONS_KV;
-    
-    if (!token || !usersKV || !sessionsKV) {
-        throw redirect(303, '/login?error=invalid_verification');
+    if (!usersKV) return json({ message: 'DB Error' }, { status: 500 });
+
+    // 1. Rate Limit
+    const clientIp = request.headers.get('CF-Connecting-IP') || getClientAddress();
+    const limitRes = await checkRateLimit(usersKV, clientIp, 'resend_limit', 5, 3600);
+    if (!limitRes.allowed) {
+        return json({ message: 'Too many requests. Please wait.' }, { status: 429 });
     }
 
-    // 1. Get Pending Data
-    const pendingKey = `pending_verify:${token}`;
-    const pendingDataRaw = await usersKV.get(pendingKey);
+    const { email } = await request.json();
+    if (!email) return json({ message: 'Email required' }, { status: 400 });
 
-    if (!pendingDataRaw) {
-        throw redirect(303, '/login?error=expired_verification');
+    const normEmail = email.toLowerCase().trim();
+
+    // 2. Find the Pending Token via Lookup Index
+    const token = await usersKV.get(`lookup:pending:${normEmail}`);
+
+    if (!token) {
+        // Generic success to prevent email enumeration
+        return json({ success: true, message: 'If a pending registration exists, an email has been sent.' });
     }
 
-    const pendingData = JSON.parse(pendingDataRaw);
+    // 3. Resend
+    const emailSent = await sendVerificationEmail(normEmail, token, url.origin);
 
-    // 2. Create Real User
-    const user = await createUser(usersKV, {
-        username: pendingData.username,
-        email: pendingData.email,
-        password: pendingData.password, 
-        plan: 'free',
-        tripsThisMonth: 0,
-        maxTrips: 10,
-        name: pendingData.username,
-        resetDate: new Date().toISOString()
-    });
+    if (!emailSent) {
+        return json({ message: 'Failed to send email provider error.' }, { status: 500 });
+    }
 
-    // 3. Login Immediately
-    const sessionId = randomUUID();
-    
-    const sessionData = {
-        id: user.id,
-        name: user.username,
-        email: user.email,
-        plan: user.plan,
-        tripsThisMonth: user.tripsThisMonth,
-        maxTrips: user.maxTrips,
-        resetDate: user.resetDate,
-        role: 'user'
-    };
-
-    // [!code fix] Store session in SESSIONS_KV (not USERS_KV)
-    // [!code fix] Sync TTL with Cookie (30 Days = 2592000 seconds)
-    await sessionsKV.put(sessionId, JSON.stringify(sessionData), {
-        expirationTtl: 60 * 60 * 24 * 30
-    });
-
-    // [!code fix] Set 'session_id' cookie (Matches hooks.server.ts)
-    cookies.set('session_id', sessionId, {
-        path: '/',
-        httpOnly: true,
-        sameSite: 'lax',
-        secure: !dev,
-        maxAge: 60 * 60 * 24 * 30 // 30 days
-    });
-
-    // 4. Cleanup
-    // [!code fix] Remove all pending keys:
-    // - The pending user data
-    // - The username reservation (unlocks the name, now owned by real user)
-    // - The pending email index (used for resending emails)
-    await Promise.all([
-        usersKV.delete(pendingKey),
-        usersKV.delete(`reservation:username:${pendingData.username.toLowerCase()}`),
-        usersKV.delete(`idx:pending_email:${pendingData.email.toLowerCase()}`)
-    ]);
-
-    throw redirect(303, '/dashboard?welcome=true');
+    return json({ success: true, message: 'Verification email resent.' });
 };
