@@ -768,10 +768,17 @@ export class HughesNetService {
                     }
                 }
 
-                await this.createTripForDate(
+                const created = await this.createTripForDate(
                     userId, date, ordersByDate[date], settingsId,
                     installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge, tripService
                 );
+                
+                // If trip creation failed due to limits, stop and batch
+                if (!created) {
+                    this.log(`[Trips] Trip creation failed for ${date}, will retry in next batch`);
+                    incomplete = true;
+                    break;
+                }
             }
 
             if (incomplete) {
@@ -946,12 +953,22 @@ export class HughesNetService {
             }
             
             if (startAddr && eAddr !== startAddr) {
+                // Check soft limit before calculating commute route
+                if (this.fetcher.shouldBatch()) {
+                    this.warn(`[Trip ${date}] Soft limit reached before commute calculation`);
+                    return false;
+                }
+                
                 try {
                     const leg = await this.router.getRouteInfo(startAddr, eAddr);
                     if (leg && leg.duration && isFinite(leg.duration)) {
                         commuteMins = Math.round(leg.duration / 60);
                     }
-                } catch(e) {
+                } catch(e: any) {
+                    if (e.message === 'REQ_LIMIT') {
+                        this.warn(`[Trip ${date}] Hard limit reached during commute calculation`);
+                        return false;
+                    }
                     console.warn('Failed to get route info:', e);
                 }
             }
@@ -997,35 +1014,38 @@ export class HughesNetService {
         }
 
         let totalMins = 0, totalMeters = 0;
-        const legPromises = [];
         
+        // Calculate routes one at a time, checking limits as we go
         for (let i = 0; i < points.length - 1; i++) {
-            if (points[i] !== points[i+1]) {
-                legPromises.push(this.router.getRouteInfo(points[i], points[i+1])); 
-            } else {
-                legPromises.push(Promise.resolve(null));
+            // Check soft limit before each route request
+            if (this.fetcher.shouldBatch()) {
+                this.warn(`[Trip ${date}] Soft limit reached during route calculation, will retry in next batch`);
+                return false; // Don't create partial trip
             }
-        }
-
-        try {
-            const results = await Promise.all(legPromises);
-            results.forEach((leg) => {
-                if (leg && leg.duration && isFinite(leg.duration)) {
-                    const mins = Math.round(leg.duration / 60);
-                    if (isFinite(mins) && mins >= 0) {
-                        totalMins += mins;
+            
+            if (points[i] !== points[i+1]) {
+                try {
+                    const leg = await this.router.getRouteInfo(points[i], points[i+1]);
+                    if (leg && leg.duration && isFinite(leg.duration)) {
+                        const mins = Math.round(leg.duration / 60);
+                        if (isFinite(mins) && mins >= 0) {
+                            totalMins += mins;
+                        }
                     }
-                }
-                if (leg && leg.distance && isFinite(leg.distance)) {
-                    const meters = leg.distance;
-                    if (isFinite(meters) && meters >= 0) {
-                        totalMeters += meters;
+                    if (leg && leg.distance && isFinite(leg.distance)) {
+                        const meters = leg.distance;
+                        if (isFinite(meters) && meters >= 0) {
+                            totalMeters += meters;
+                        }
                     }
+                } catch (e: any) {
+                    if (e.message === 'REQ_LIMIT') {
+                        this.warn(`[Trip ${date}] Hard limit reached during route calculation`);
+                        return false; // Don't create partial trip
+                    }
+                    console.warn('Failed to get route leg:', e);
                 }
-            });
-        } catch (e: any) {
-            if (e.message === 'REQ_LIMIT') return false;
-            console.warn('Failed to get route legs:', e);
+            }
         }
         
         // Validate totalMins
