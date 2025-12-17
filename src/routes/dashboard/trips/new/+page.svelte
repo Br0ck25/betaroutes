@@ -6,6 +6,7 @@
   import { user } from '$lib/stores/auth';
   import { page } from '$app/stores';
   import { autocomplete } from '$lib/utils/autocomplete'; 
+  import { optimizeRoute } from '$lib/services/maps';
 
   export let data;
   $: API_KEY = data.googleMapsApiKey;
@@ -64,11 +65,9 @@
     return `kv_route_${s}_to_${e}`;
   }
 
-  // [!code changed] Only check LocalStorage, then ask Server API
   async function fetchRouteSegment(start: string, end: string) {
     if (!start || !end) return null;
     
-    // 1. LOCAL STORAGE CHECK (Fastest)
     const localKey = generateRouteKey(start, end);
     const cached = localStorage.getItem(localKey);
     if (cached) {
@@ -76,7 +75,6 @@
       return JSON.parse(cached);
     }
 
-    // 2. SERVER API (Proxies to Google if needed)
     try {
         console.log("Local Miss. Asking Server...");
         const res = await fetch(`/api/directions/cache?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
@@ -84,22 +82,39 @@
 
         if (result.data) {
             console.log(`Server Hit (${result.source})`);
-            
-            // CONVERT Meters/Seconds (Server) -> Miles/Minutes (Client)
             const mappedResult = {
                 distance: result.data.distance * 0.000621371,
                 duration: result.data.duration / 60
             };
-
-            // Save to Local for next time
             localStorage.setItem(localKey, JSON.stringify(mappedResult));
             return mappedResult;
-        } else {
-            throw new Error(result.error || 'Route not found');
         }
     } catch (err) {
         console.error("Routing failed:", err);
-        return null;
+    }
+    return null;
+  }
+
+  // Helper to traverse the entire list and update every leg
+  async function recalculateAllLegs() {
+    isCalculating = true;
+    try {
+        let prevAddress = tripData.startAddress;
+        
+        for (let i = 0; i < tripData.stops.length; i++) {
+            const currentStop = tripData.stops[i];
+            if (prevAddress && currentStop.address) {
+                const leg = await fetchRouteSegment(prevAddress, currentStop.address);
+                if (leg) {
+                    currentStop.distanceFromPrev = leg.distance;
+                    currentStop.timeFromPrev = leg.duration;
+                }
+            }
+            prevAddress = currentStop.address;
+        }
+        await recalculateTotals();
+    } finally {
+        isCalculating = false;
     }
   }
 
@@ -121,16 +136,65 @@
 
     tripData.totalMiles = parseFloat(miles.toFixed(1));
     tripData.estimatedTime = Math.round(mins);
+    // [!code ++] Force reactivity update
+    tripData = { ...tripData };
+  }
+
+  async function handleOptimize() {
+    if (!tripData.startAddress) return alert("Please enter a start address first.");
+    if (tripData.stops.length < 2) return alert("Add at least 2 stops to optimize.");
+
+    isCalculating = true;
+    try {
+      const result = await optimizeRoute(
+        tripData.startAddress,
+        tripData.endAddress,
+        tripData.stops
+      );
+
+      if (result.optimizedOrder) {
+        const currentStops = [...tripData.stops];
+        let orderedStops = [];
+
+        if (!tripData.endAddress) {
+           const movingStops = currentStops.slice(0, -1);
+           const fixedLast = currentStops[currentStops.length - 1];
+           orderedStops = result.optimizedOrder.map((i: number) => movingStops[i]);
+           orderedStops.push(fixedLast);
+        } else {
+           orderedStops = result.optimizedOrder.map((i: number) => currentStops[i]);
+        }
+
+        tripData.stops = orderedStops;
+        
+        if (result.legs) {
+           tripData.stops.forEach((stop, i) => {
+             if (result.legs[i]) {
+                stop.distanceFromPrev = result.legs[i].distance.value * 0.000621371;
+                stop.timeFromPrev = result.legs[i].duration.value / 60;
+             }
+           });
+        }
+        await recalculateTotals();
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert("Optimization failed: " + e.message);
+    } finally {
+      isCalculating = false;
+    }
   }
 
   async function handleStopChange(index: number, placeOrEvent: any) {
     const val = placeOrEvent?.formatted_address || placeOrEvent?.name || tripData.stops[index].address;
-    if (!val || val === tripData.stops[index].address) return;
+    if (!val) return;
 
+    // [!code changed] Removed the equality check to force recalc on blur even if bind updated value
     tripData.stops[index].address = val;
     isCalculating = true;
 
     try {
+        // 1. Update leg coming INTO this stop
         const prevLoc = index === 0 ? tripData.startAddress : tripData.stops[index - 1].address;
         if (prevLoc) {
             const legIn = await fetchRouteSegment(prevLoc, val);
@@ -140,6 +204,7 @@
             }
         }
 
+        // 2. Update leg going OUT of this stop
         const nextStop = tripData.stops[index + 1];
         if (nextStop) {
             const legOut = await fetchRouteSegment(val, nextStop.address);
@@ -157,6 +222,7 @@
   async function handleMainAddressChange(type: 'start' | 'end', placeOrEvent: any) {
     const val = placeOrEvent?.formatted_address || placeOrEvent?.name || (type === 'start' ? tripData.startAddress : tripData.endAddress);
     
+    // [!code changed] Removed strict equality check to allow manual typing updates
     if (type === 'start') tripData.startAddress = val;
     else tripData.endAddress = val;
 
@@ -176,135 +242,84 @@
     }
   }
 
-  // --- ACTIONS ---
+  // Auto-calculate on new stop selection
+  async function handleNewStopSelect(e: CustomEvent) {
+    const place = e.detail;
+    if (place?.formatted_address || place?.name) {
+        newStop.address = place.formatted_address || place.name;
+        await addStop();
+    }
+  }
 
   async function addStop() {
     if (!newStop.address) return;
-    let segmentStart = tripData.stops.length > 0 
-      ? tripData.stops[tripData.stops.length - 1].address 
-      : tripData.startAddress;
+    let segmentStart = tripData.stops.length > 0 ? tripData.stops[tripData.stops.length - 1].address : tripData.startAddress;
+    if (!segmentStart) { alert("Please enter a Starting Address first."); return; }
     
-    if (!segmentStart) {
-      alert("Please enter a Starting Address for the trip before adding stops.");
-      return;
-    }
-
     isCalculating = true;
     try {
       const segmentData: any = await fetchRouteSegment(segmentStart, newStop.address);
-      if (!segmentData) throw new Error("Could not calculate route to new stop");
-
+      if (!segmentData) throw new Error("Could not calculate route.");
+      
       tripData.stops = [...tripData.stops, { 
         ...newStop, 
-        id: crypto.randomUUID(),
-        distanceFromPrev: segmentData.distance,
-        timeFromPrev: segmentData.duration
+        id: crypto.randomUUID(), 
+        distanceFromPrev: segmentData.distance, 
+        timeFromPrev: segmentData.duration 
       }];
-
+      
       await recalculateTotals();
       newStop = { address: '', earnings: 0, notes: '' };
-    } catch (e) {
-      console.error(e);
-      alert("Error calculating route. Please check the address.");
-    } finally {
-      isCalculating = false;
-    }
+    } catch (e) { alert("Error calculating route."); } finally { isCalculating = false; }
   }
 
   function removeStop(id: string) { 
       tripData.stops = tripData.stops.filter(s => s.id !== id);
-      recalculateTotals(); 
+      recalculateAllLegs(); // Force full recalc to bridge gap
   }
 
-  function handleDragStart(event: DragEvent, index: number) {
-      dragItemIndex = index;
-      if(event.dataTransfer) {
-          event.dataTransfer.effectAllowed = 'move';
-          event.dataTransfer.dropEffect = 'move';
-          event.dataTransfer.setData('text/plain', index.toString());
-      }
+  function handleDragStart(event: DragEvent, index: number) { 
+      dragItemIndex = index; 
+      if(event.dataTransfer) { 
+          event.dataTransfer.effectAllowed = 'move'; 
+          event.dataTransfer.dropEffect = 'move'; 
+          event.dataTransfer.setData('text/plain', index.toString()); 
+      } 
   }
+  
   function handleDragOver(event: DragEvent) { event.preventDefault(); return false; }
-  function handleDrop(event: DragEvent, dropIndex: number) {
+  
+  async function handleDrop(event: DragEvent, dropIndex: number) {
       event.preventDefault();
       if (dragItemIndex === null) return;
+      
       const item = tripData.stops[dragItemIndex];
       const newStops = tripData.stops.filter((_, i) => i !== dragItemIndex);
       newStops.splice(dropIndex, 0, item);
       tripData.stops = newStops;
       dragItemIndex = null;
-      recalculateTotals(); 
+      
+      await recalculateAllLegs();
   }
   
-  function addMaintenanceItem(type: string) { 
-    tripData.maintenanceItems = [...tripData.maintenanceItems, { id: crypto.randomUUID(), type, cost: 0 }];
-  }
-  function removeMaintenanceItem(id: string) { 
-    tripData.maintenanceItems = tripData.maintenanceItems.filter(m => m.id !== id);
-  }
+  // ... (Rest of functions: addMaintenanceItem, etc. unchanged) ...
+  function addMaintenanceItem(type: string) { tripData.maintenanceItems = [...tripData.maintenanceItems, { id: crypto.randomUUID(), type, cost: 0 }]; }
+  function removeMaintenanceItem(id: string) { tripData.maintenanceItems = tripData.maintenanceItems.filter(m => m.id !== id); }
+  function addCustomMaintenance() { if (!newMaintenanceItem.trim()) return; const item = newMaintenanceItem.trim(); addMaintenanceItem(item); if (!maintenanceOptions.includes(item)) { maintenanceOptions = [...maintenanceOptions, item]; localStorage.setItem('maintenanceOptions', JSON.stringify(maintenanceOptions)); } newMaintenanceItem = ''; showAddMaintenance = false; }
+  function deleteMaintenanceOption(option: string) { if (confirm(`Delete "${option}"?`)) { maintenanceOptions = maintenanceOptions.filter(o => o !== option); localStorage.setItem('maintenanceOptions', JSON.stringify(maintenanceOptions)); } }
   
-  function addCustomMaintenance() { 
-    if (!newMaintenanceItem.trim()) return; 
-    const item = newMaintenanceItem.trim();
-    addMaintenanceItem(item);
-    if (!maintenanceOptions.includes(item)) {
-        maintenanceOptions = [...maintenanceOptions, item];
-        localStorage.setItem('maintenanceOptions', JSON.stringify(maintenanceOptions));
-    }
-    newMaintenanceItem = ''; 
-    showAddMaintenance = false;
-  }
-
-  function deleteMaintenanceOption(option: string) { 
-    if (confirm(`Delete "${option}"?`)) { 
-      maintenanceOptions = maintenanceOptions.filter(o => o !== option);
-      localStorage.setItem('maintenanceOptions', JSON.stringify(maintenanceOptions)); 
-    } 
-  }
+  function addSupplyItem(type: string) { tripData.suppliesItems = [...tripData.suppliesItems, { id: crypto.randomUUID(), type, cost: 0 }]; }
+  function removeSupplyItem(id: string) { tripData.suppliesItems = tripData.suppliesItems.filter(s => s.id !== id); }
+  function addCustomSupply() { if (!newSupplyItem.trim()) return; const item = newSupplyItem.trim(); addSupplyItem(item); if (!suppliesOptions.includes(item)) { suppliesOptions = [...suppliesOptions, item]; localStorage.setItem('suppliesOptions', JSON.stringify(suppliesOptions)); } newSupplyItem = ''; showAddSupply = false; }
+  function deleteSupplyOption(option: string) { if (confirm(`Delete "${option}"?`)) { suppliesOptions = suppliesOptions.filter(o => o !== option); localStorage.setItem('suppliesOptions', JSON.stringify(suppliesOptions)); } }
   
-  function addSupplyItem(type: string) { tripData.suppliesItems = [...tripData.suppliesItems, { id: crypto.randomUUID(), type, cost: 0 }];
-  }
-  function removeSupplyItem(id: string) { tripData.suppliesItems = tripData.suppliesItems.filter(s => s.id !== id);
-  }
-  
-  function addCustomSupply() { 
-    if (!newSupplyItem.trim()) return; 
-    const item = newSupplyItem.trim();
-    addSupplyItem(item);
-    if (!suppliesOptions.includes(item)) {
-        suppliesOptions = [...suppliesOptions, item];
-        localStorage.setItem('suppliesOptions', JSON.stringify(suppliesOptions));
-    }
-    newSupplyItem = ''; 
-    showAddSupply = false;
-  }
-
-  function deleteSupplyOption(option: string) { if (confirm(`Delete "${option}"?`)) { suppliesOptions = suppliesOptions.filter(o => o !== option); localStorage.setItem('suppliesOptions', JSON.stringify(suppliesOptions));
-  } }
-  
-  $: {
-    if (tripData.totalMiles && tripData.mpg && tripData.gasPrice) {
-      const gallons = tripData.totalMiles / tripData.mpg;
-      tripData.fuelCost = Math.round(gallons * tripData.gasPrice * 100) / 100;
-    } else {
-      tripData.fuelCost = 0;
-    }
-  }
-  
+  $: { if (tripData.totalMiles && tripData.mpg && tripData.gasPrice) { const gallons = tripData.totalMiles / tripData.mpg; tripData.fuelCost = Math.round(gallons * tripData.gasPrice * 100) / 100; } else { tripData.fuelCost = 0; } }
   $: totalEarnings = tripData.stops.reduce((sum, stop) => sum + (parseFloat(stop.earnings) || 0), 0);
   $: totalMaintenanceCost = tripData.maintenanceItems.reduce((sum, item) => sum + (item.cost || 0), 0);
   $: totalSuppliesCost = tripData.suppliesItems.reduce((sum, item) => sum + (item.cost || 0), 0);
   $: totalCosts = (tripData.fuelCost || 0) + totalMaintenanceCost + totalSuppliesCost;
   $: totalProfit = totalEarnings - totalCosts;
-  $: {
-    if (tripData.startTime && tripData.endTime) {
-      const [startHour, startMin] = tripData.startTime.split(':').map(Number);
-      const [endHour, endMin] = tripData.endTime.split(':').map(Number);
-      let diff = (endHour * 60 + endMin) - (startHour * 60 + startMin);
-      if (diff < 0) diff += 24 * 60;
-      tripData.hoursWorked = Math.round((diff / 60) * 10) / 10;
-    }
-  }
+  $: { if (tripData.startTime && tripData.endTime) { const [startHour, startMin] = tripData.startTime.split(':').map(Number); const [endHour, endMin] = tripData.endTime.split(':').map(Number); let diff = (endHour * 60 + endMin) - (startHour * 60 + startMin); if (diff < 0) diff += 24 * 60; tripData.hoursWorked = Math.round((diff / 60) * 10) / 10; } }
 
   function nextStep() { if (step < 4) step++; }
   function prevStep() { if (step > 1) step--; }
@@ -312,8 +327,7 @@
   async function saveTrip() {
     const currentUser = $page.data.user || $user;
     let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
-
-    if (!userId) { alert("Authentication error: User ID missing."); return; }
+    if (!userId) { alert("Authentication error."); return; }
     
     const tripToSave = {
       ...tripData,
@@ -322,66 +336,30 @@
       netProfit: totalProfit,
       totalMileage: tripData.totalMiles,
       fuelCost: tripData.fuelCost,
-      stops: tripData.stops.map((stop, index) => ({
-        ...stop,
-        earnings: Number(stop.earnings),
-        order: index
-      })),
-      destinations: tripData.stops.map(stop => ({
-        address: stop.address,
-        earnings: stop.earnings,
-        notes: stop.notes || ''
-      })),
+      stops: tripData.stops.map((stop, index) => ({ ...stop, earnings: Number(stop.earnings), order: index })),
+      destinations: tripData.stops.map(stop => ({ address: stop.address, earnings: stop.earnings, notes: stop.notes || '' })),
       lastModified: new Date().toISOString()
     };
-    try {
-      await trips.create(tripToSave, userId);
-      goto('/dashboard/trips');
-    } catch (err) {
-      console.error('Failed to create trip:', err);
-      alert('Failed to create trip. Please try again.');
-    }
+    try { await trips.create(tripToSave, userId); goto('/dashboard/trips'); } 
+    catch (err) { alert('Failed to create trip.'); }
   }
   
-  function formatCurrency(amount: number): string {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency', currency: 'USD', minimumFractionDigits: 2
-    }).format(amount);
-  }
-  
-  function formatDateLocal(dateString: string): string {
-    if (!dateString) return '';
-    const [year, month, day] = dateString.split('-').map(Number);
-    const date = new Date(year, month - 1, day);
-    return date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
-  }
+  function formatCurrency(amount: number) { return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(amount); }
+  function formatDateLocal(dateString: string) { if (!dateString) return ''; const [y, m, d] = dateString.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' }); }
 </script>
-
-<svelte:head>
-  <title>New Trip - Go Route Yourself</title>
-</svelte:head>
 
 <div class="trip-form">
   <div class="page-header">
-    <div>
-      <h1 class="page-title">New Trip</h1>
-      <p class="page-subtitle">Plan details & earnings</p>
-    </div>
+    <div><h1 class="page-title">New Trip</h1><p class="page-subtitle">Plan details & earnings</p></div>
     <a href="/dashboard/trips" class="btn-back">
-      <svg width="24" height="24" viewBox="0 0 20 20" fill="none">
-        <path d="M12 4L6 10L12 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      Back
+      <svg width="24" height="24" viewBox="0 0 20 20" fill="none"><path d="M12 4L6 10L12 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Back
     </a>
   </div>
   
   <div class="progress-steps">
-    <div class="step-item" class:active={step >= 1} class:completed={step > 1}><div class="step-circle">{step > 1 ? '✓' : '1'}</div><div class="step-label">Route</div></div>
-    <div class="step-line" class:completed={step > 1}></div>
-    <div class="step-item" class:active={step >= 2} class:completed={step > 2}><div class="step-circle">{step > 2 ? '✓' : '2'}</div><div class="step-label">Basics</div></div>
-    <div class="step-line" class:completed={step > 2}></div>
-    <div class="step-item" class:active={step >= 3} class:completed={step > 3}><div class="step-circle">{step > 3 ? '✓' : '3'}</div><div class="step-label">Costs</div></div>
-    <div class="step-line" class:completed={step > 3}></div>
+    <div class="step-item" class:active={step >= 1} class:completed={step > 1}><div class="step-circle">{step > 1 ? '✓' : '1'}</div><div class="step-label">Route</div></div><div class="step-line" class:completed={step > 1}></div>
+    <div class="step-item" class:active={step >= 2} class:completed={step > 2}><div class="step-circle">{step > 2 ? '✓' : '2'}</div><div class="step-label">Basics</div></div><div class="step-line" class:completed={step > 2}></div>
+    <div class="step-item" class:active={step >= 3} class:completed={step > 3}><div class="step-circle">{step > 3 ? '✓' : '3'}</div><div class="step-label">Costs</div></div><div class="step-line" class:completed={step > 3}></div>
     <div class="step-item" class:active={step >= 4}><div class="step-circle">4</div><div class="step-label">Review</div></div>
   </div>
   
@@ -390,200 +368,61 @@
       <div class="form-card">
         <div class="card-header">
           <h2 class="card-title">Route & Stops</h2>
+          <button class="btn-small primary" on:click={handleOptimize} type="button" disabled={isCalculating || tripData.stops.length < 2} title="Reorder stops efficiently">{isCalculating ? 'Optimizing...' : 'Optimize'}</button>
         </div>
         
         <div class="form-group">
           <label for="start-address">Starting Address</label>
-          <input 
-            type="text" 
-            bind:value={tripData.startAddress}
-            placeholder="Enter start address..."
-            use:autocomplete={{ apiKey: API_KEY }}
-            on:place-selected={(e) => handleMainAddressChange('start', e.detail)}
-            on:blur={(e) => handleMainAddressChange('start', { formatted_address: tripData.startAddress })}
-            autocomplete="off"
-            id="start-address"
-            class="address-input"
-          />
+          <input id="start-address" type="text" bind:value={tripData.startAddress} use:autocomplete={{ apiKey: API_KEY }} on:place-selected={(e) => handleMainAddressChange('start', e.detail)} on:blur={(e) => handleMainAddressChange('start', { formatted_address: tripData.startAddress })} class="address-input" placeholder="Enter start address..." />
         </div>
         
         <div class="stops-container">
-          <div class="stops-header">
-            <h3>Stops</h3>
-            <span class="count">{tripData.stops.length} added</span>
-          </div>
-          
+          <div class="stops-header"><h3>Stops</h3><span class="count">{tripData.stops.length} added</span></div>
           {#if tripData.stops.length > 0}
             <div class="stops-list">
               {#each tripData.stops as stop, i (stop.id)}
-                <div 
-                  class="stop-card" 
-                  draggable="true" 
-                  on:dragstart={(e) => handleDragStart(e, i)} 
-                  on:drop={(e) => handleDrop(e, i)} 
-                  on:dragover={handleDragOver}
-                  role="listitem"
-                >
-                  <div class="stop-header">
-                    <div class="stop-number">{i + 1}</div>
-                    <div class="stop-actions">
-                        <button class="btn-icon delete" on:click={() => removeStop(stop.id)} type="button">✕</button>
-                        <div class="drag-handle">☰</div>
-                    </div>
-                  </div>
+                <div class="stop-card" draggable="true" on:dragstart={(e) => handleDragStart(e, i)} on:drop={(e) => handleDrop(e, i)} on:dragover={handleDragOver}>
+                  <div class="stop-header"><div class="stop-number">{i + 1}</div><div class="stop-actions"><button class="btn-icon delete" on:click={() => removeStop(stop.id)}>✕</button><div class="drag-handle">☰</div></div></div>
                   <div class="stop-inputs">
-                    <input 
-                      type="text" 
-                      bind:value={stop.address}
-                      placeholder="Stop address"
-                      use:autocomplete={{ apiKey: API_KEY }}
-                      on:place-selected={(e) => handleStopChange(i, e.detail)}
-                      on:blur={() => handleStopChange(i, { formatted_address: stop.address })}
-                      autocomplete="off"
-                      class="address-input"
-                    />
-                    <div class="input-money-wrapper">
-                        <span class="symbol">$</span>
-                        <input type="number" class="input-money" bind:value={stop.earnings} placeholder="Earnings" step="0.01" min="0" />
-                    </div>
+                    <input type="text" bind:value={stop.address} use:autocomplete={{ apiKey: API_KEY }} on:place-selected={(e) => handleStopChange(i, e.detail)} on:blur={() => handleStopChange(i, { formatted_address: stop.address })} class="address-input" placeholder="Stop address" />
+                    <div class="input-money-wrapper"><span class="symbol">$</span><input type="number" class="input-money" bind:value={stop.earnings} step="0.01" placeholder="Earnings" /></div>
                   </div>
                 </div>
               {/each}
             </div>
           {/if}
-          
           <div class="add-stop-form">
             <div class="stop-inputs new">
-              <input 
-                type="text"
-                bind:value={newStop.address}
-                placeholder="New stop address..."
-                use:autocomplete={{ apiKey: API_KEY }}
-                autocomplete="off"
-                class="address-input"
-              />
-              <div class="input-money-wrapper">
-                  <span class="symbol">$</span>
-                  <input type="number" class="input-money" placeholder="0.00" bind:value={newStop.earnings} step="0.01" min="0" />
-              </div>
+              <input type="text" bind:value={newStop.address} placeholder="New stop address..." use:autocomplete={{ apiKey: API_KEY }} on:place-selected={handleNewStopSelect} class="address-input" />
+              <div class="input-money-wrapper"><span class="symbol">$</span><input type="number" class="input-money" placeholder="0.00" bind:value={newStop.earnings} step="0.01" min="0" /></div>
             </div>
-            <button class="btn-add full-width" on:click={addStop} type="button" disabled={isCalculating}>
-                {#if isCalculating} Calculating... {:else} + Add Stop {/if}
-            </button>
+            <button class="btn-add full-width" on:click={addStop} disabled={isCalculating}>{isCalculating ? 'Calculating...' : '+ Add Stop'}</button>
           </div>
         </div>
         
         <div class="form-group">
           <label for="end-address">End Address (Optional)</label>
-          <input 
-            type="text" 
-            bind:value={tripData.endAddress}
-            placeholder="Same as start if empty"
-            use:autocomplete={{ apiKey: API_KEY }}
-            on:place-selected={(e) => handleMainAddressChange('end', e.detail)}
-            on:blur={(e) => handleMainAddressChange('end', { formatted_address: tripData.endAddress })}
-            autocomplete="off"
-            id="end-address"
-            class="address-input"
-          />
+          <input id="end-address" type="text" bind:value={tripData.endAddress} use:autocomplete={{ apiKey: API_KEY }} on:place-selected={(e) => handleMainAddressChange('end', e.detail)} on:blur={(e) => handleMainAddressChange('end', { formatted_address: tripData.endAddress })} class="address-input" placeholder="Same as start if empty" />
         </div>
 
-        <div class="form-row">
-            <div class="form-group">
-                <label for="total-miles">Total Miles</label>
-                <input id="total-miles" type="number" bind:value={tripData.totalMiles} step="0.1" min="0" placeholder="0.0" />
-            </div>
-            <div class="form-group">
-                <label for="drive-time">Drive Time <span class="hint">(Est)</span></label>
-                <div id="drive-time" class="readonly-field">{formatDuration(tripData.estimatedTime)}</div>
-            </div>
-        </div>
-        
-        <div class="form-actions">
-          <button class="btn-primary full-width" on:click={nextStep} type="button">Continue</button>
-        </div>
+        <div class="form-row"><div class="form-group"><label for="total-miles">Total Miles</label><input id="total-miles" type="number" bind:value={tripData.totalMiles} step="0.1" /></div><div class="form-group"><label for="drive-time">Drive Time <span class="hint">(Est)</span></label><div id="drive-time" class="readonly-field">{formatDuration(tripData.estimatedTime)}</div></div></div>
+        <div class="form-actions"><button class="btn-primary full-width" on:click={nextStep}>Continue</button></div>
       </div>
     {/if}
     
-    {#if step === 2}
-      <div class="form-card">
-        <div class="card-header"><h2 class="card-title">Basic Information</h2></div>
-        <div class="form-grid">
-          <div class="form-group"><label for="trip-date">Date</label><input id="trip-date" type="date" bind:value={tripData.date} required /></div>
-          <div class="form-row">
-            <div class="form-group"><label for="start-time">Start Time</label><input id="start-time" type="time" bind:value={tripData.startTime} /></div>
-            <div class="form-group"><label for="end-time">End Time</label><input id="end-time" type="time" bind:value={tripData.endTime} /></div>
-          </div>
-          <div class="form-group"><label for="hours-display">Hours Worked</label><div id="hours-display" class="readonly-field">{tripData.hoursWorked.toFixed(1)} hours</div></div>
-        </div>
-        <div class="form-actions"><button class="btn-secondary" on:click={prevStep} type="button">Back</button><button class="btn-primary" on:click={nextStep} type="button">Continue</button></div>
-      </div>
-    {/if}
-    
-    {#if step === 3}
-      <div class="form-card">
-        <div class="card-header"><h2 class="card-title">Costs</h2></div>
-        <div class="form-row">
-            <div class="form-group"><label for="mpg">MPG</label><input id="mpg" type="number" bind:value={tripData.mpg} step="0.1" /></div>
-            <div class="form-group"><label for="gas-price">Gas Price</label><div class="input-money-wrapper"><span class="symbol">$</span><input id="gas-price" type="number" bind:value={tripData.gasPrice} step="0.01" /></div></div>
-        </div>
-        <div class="summary-box" style="margin: 40px 0;"><span>Estimated Fuel Cost</span><strong>{formatCurrency(tripData.fuelCost)}</strong></div>
-        
-        <div class="section-group">
-            <div class="section-top"><h3>Maintenance</h3><button class="btn-text" on:click={() => showAddMaintenance = !showAddMaintenance}>+ Custom</button></div>
-            {#if showAddMaintenance}
-                <div class="add-custom-row"><input type="text" bind:value={newMaintenanceItem} placeholder="Item name..." /><button class="btn-small primary" on:click={addCustomMaintenance}>Add</button></div>
-            {/if}
-            <div class="chips-row">{#each maintenanceOptions as option}<div class="option-badge"><button class="badge-btn" on:click={() => addMaintenanceItem(option)}>{option}</button><button class="badge-delete" on:click={() => deleteMaintenanceOption(option)}>✕</button></div>{/each}</div>
-            {#each tripData.maintenanceItems as item}<div class="expense-row"><span class="name">{item.type}</span><div class="input-money-wrapper small"><span class="symbol">$</span><input type="number" bind:value={item.cost} placeholder="0.00" /></div><button class="btn-icon delete" on:click={() => removeMaintenanceItem(item.id)}>✕</button></div>{/each}
-        </div>
-
-        <div class="section-group">
-            <div class="section-top"><h3>Supplies</h3><button class="btn-text" on:click={() => showAddSupply = !showAddSupply}>+ Custom</button></div>
-            {#if showAddSupply}
-                <div class="add-custom-row"><input type="text" bind:value={newSupplyItem} placeholder="Item name..." /><button class="btn-small primary" on:click={addCustomSupply}>Add</button></div>
-            {/if}
-            <div class="chips-row">{#each suppliesOptions as option}<div class="option-badge"><button class="badge-btn" on:click={() => addSupplyItem(option)}>{option}</button><button class="badge-delete" on:click={() => deleteSupplyOption(option)}>✕</button></div>{/each}</div>
-            {#each tripData.suppliesItems as item}<div class="expense-row"><span class="name">{item.type}</span><div class="input-money-wrapper small"><span class="symbol">$</span><input type="number" bind:value={item.cost} placeholder="0.00" /></div><button class="btn-icon delete" on:click={() => removeSupplyItem(item.id)}>✕</button></div>{/each}
-        </div>
-        
-        <div class="form-group"><label for="notes">Notes</label><textarea id="notes" bind:value={tripData.notes} rows="3" placeholder="Trip details..."></textarea></div>
-        <div class="form-actions"><button class="btn-secondary" on:click={prevStep} type="button">Back</button><button class="btn-primary" on:click={nextStep} type="button">Review</button></div>
-      </div>
-    {/if}
-    
-    {#if step === 4}
-      <div class="form-card">
-        <div class="card-header"><h2 class="card-title">Review</h2></div>
-        <div class="review-grid">
-            <div class="review-tile"><span class="review-label">Date</span><div>{formatDateLocal(tripData.date)}</div></div>
-            <div class="review-tile"><span class="review-label">Total Time</span><div>{tripData.hoursWorked.toFixed(1)} hrs</div></div>
-            <div class="review-tile"><span class="review-label">Drive Time</span><div>{formatDuration(tripData.estimatedTime)}</div></div>
-            <div class="review-tile"><span class="review-label">Hours Worked</span><div>{Math.max(0, tripData.hoursWorked - (tripData.estimatedTime / 60)).toFixed(1)} hrs</div></div>
-            <div class="review-tile"><span class="review-label">Distance</span><div>{tripData.totalMiles} mi</div></div>
-            <div class="review-tile"><span class="review-label">Stops</span><div>{tripData.stops.length}</div></div>
-        </div>
-        <div class="financial-summary">
-            <div class="row"><span>Earnings</span> <span class="val positive">{formatCurrency(totalEarnings)}</span></div>
-            <div class="row subheader"><span>Expenses Breakdown</span></div>
-            {#if tripData.fuelCost > 0}<div class="row detail"><span>Fuel</span> <span class="val">{formatCurrency(tripData.fuelCost)}</span></div>{/if}
-            {#each tripData.maintenanceItems as item}<div class="row detail"><span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span></div>{/each}
-            {#each tripData.suppliesItems as item}<div class="row detail"><span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span></div>{/each}
-            <div class="row total-expenses"><span>Total Expenses</span> <span class="val negative">-{formatCurrency(totalCosts)}</span></div>
-            <div class="row total"><span>Net Profit</span> <span class="val" class:positive={totalProfit >= 0}>{formatCurrency(totalProfit)}</span></div>
-        </div>
-        <div class="form-actions"><button class="btn-secondary" on:click={prevStep} type="button">Back</button><button class="btn-primary" on:click={saveTrip} type="button">Save Trip</button></div>
-      </div>
-    {/if}
+    {#if step === 2} <div class="form-card"><div class="card-header"><h2 class="card-title">Basic Information</h2></div><div class="form-grid"><div class="form-group"><label for="trip-date">Date</label><input id="trip-date" type="date" bind:value={tripData.date} required /></div><div class="form-row"><div class="form-group"><label for="start-time">Start Time</label><input id="start-time" type="time" bind:value={tripData.startTime} /></div><div class="form-group"><label for="end-time">End Time</label><input id="end-time" type="time" bind:value={tripData.endTime} /></div></div><div class="form-group"><label for="hours-display">Hours Worked</label><div id="hours-display" class="readonly-field">{tripData.hoursWorked.toFixed(1)} hours</div></div></div><div class="form-actions"><button class="btn-secondary" on:click={prevStep}>Back</button><button class="btn-primary" on:click={nextStep}>Continue</button></div></div> {/if}
+    {#if step === 3} <div class="form-card"><div class="card-header"><h2 class="card-title">Costs</h2></div><div class="form-row"><div class="form-group"><label for="mpg">MPG</label><input id="mpg" type="number" bind:value={tripData.mpg} step="0.1" /></div><div class="form-group"><label for="gas-price">Gas Price</label><div class="input-money-wrapper"><span class="symbol">$</span><input id="gas-price" type="number" bind:value={tripData.gasPrice} step="0.01" /></div></div></div><div class="summary-box" style="margin: 40px 0;"><span>Estimated Fuel Cost</span><strong>{formatCurrency(tripData.fuelCost)}</strong></div><div class="section-group"><div class="section-top"><h3>Maintenance</h3><button class="btn-text" on:click={() => showAddMaintenance = !showAddMaintenance}>+ Custom</button></div>{#if showAddMaintenance}<div class="add-custom-row"><input type="text" bind:value={newMaintenanceItem} placeholder="Item name..." /><button class="btn-small primary" on:click={addCustomMaintenance}>Add</button></div>{/if}<div class="chips-row">{#each maintenanceOptions as option}<div class="option-badge"><button class="badge-btn" on:click={() => addMaintenanceItem(option)}>{option}</button><button class="badge-delete" on:click={() => deleteMaintenanceOption(option)}>✕</button></div>{/each}</div>{#each tripData.maintenanceItems as item}<div class="expense-row"><span class="name">{item.type}</span><div class="input-money-wrapper small"><span class="symbol">$</span><input type="number" bind:value={item.cost} placeholder="0.00" /></div><button class="btn-icon delete" on:click={() => removeMaintenanceItem(item.id)}>✕</button></div>{/each}</div><div class="section-group"><div class="section-top"><h3>Supplies</h3><button class="btn-text" on:click={() => showAddSupply = !showAddSupply}>+ Custom</button></div>{#if showAddSupply}<div class="add-custom-row"><input type="text" bind:value={newSupplyItem} placeholder="Item name..." /><button class="btn-small primary" on:click={addCustomSupply}>Add</button></div>{/if}<div class="chips-row">{#each suppliesOptions as option}<div class="option-badge"><button class="badge-btn" on:click={() => addSupplyItem(option)}>{option}</button><button class="badge-delete" on:click={() => deleteSupplyOption(option)}>✕</button></div>{/each}</div>{#each tripData.suppliesItems as item}<div class="expense-row"><span class="name">{item.type}</span><div class="input-money-wrapper small"><span class="symbol">$</span><input type="number" bind:value={item.cost} placeholder="0.00" /></div><button class="btn-icon delete" on:click={() => removeSupplyItem(item.id)}>✕</button></div>{/each}</div><div class="form-group"><label for="notes">Notes</label><textarea id="notes" bind:value={tripData.notes} rows="3" placeholder="Trip details..."></textarea></div><div class="form-actions"><button class="btn-secondary" on:click={prevStep}>Back</button><button class="btn-primary" on:click={nextStep}>Review</button></div></div> {/if}
+    {#if step === 4} <div class="form-card"><div class="card-header"><h2 class="card-title">Review</h2></div><div class="review-grid"><div class="review-tile"><span class="review-label">Date</span><div>{formatDateLocal(tripData.date)}</div></div><div class="review-tile"><span class="review-label">Total Time</span><div>{tripData.hoursWorked.toFixed(1)} hrs</div></div><div class="review-tile"><span class="review-label">Drive Time</span><div>{formatDuration(tripData.estimatedTime)}</div></div><div class="review-tile"><span class="review-label">Hours Worked</span><div>{Math.max(0, tripData.hoursWorked - (tripData.estimatedTime / 60)).toFixed(1)} hrs</div></div><div class="review-tile"><span class="review-label">Distance</span><div>{tripData.totalMiles} mi</div></div><div class="review-tile"><span class="review-label">Stops</span><div>{tripData.stops.length}</div></div></div><div class="financial-summary"><div class="row"><span>Earnings</span> <span class="val positive">{formatCurrency(totalEarnings)}</span></div><div class="row subheader"><span>Expenses Breakdown</span></div>{#if tripData.fuelCost > 0}<div class="row detail"><span>Fuel</span> <span class="val">{formatCurrency(tripData.fuelCost)}</span></div>{/if}{#each tripData.maintenanceItems as item}<div class="row detail"><span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span></div>{/each}{#each tripData.suppliesItems as item}<div class="row detail"><span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span></div>{/each}<div class="row total-expenses"><span>Total Expenses</span> <span class="val negative">-{formatCurrency(totalCosts)}</span></div><div class="row total"><span>Net Profit</span> <span class="val" class:positive={totalProfit >= 0}>{formatCurrency(totalProfit)}</span></div></div><div class="form-actions"><button class="btn-secondary" on:click={prevStep}>Back</button><button class="btn-primary" on:click={saveTrip}>Save Trip</button></div></div> {/if}
   </div>
 </div>
 
 <style>
+  /* Use styles from New Trip page for consistency */
   .trip-form { max-width: 1300px; margin: 0 auto; padding: 4px; padding-bottom: 90px; }
   .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 26px; padding: 0 8px; }
   .page-title { font-size: 28px; font-weight: 800; color: #111827; margin: 0; }
-  .page-subtitle { font-size: 16px; color: #6B7280; display: none; }
-  .btn-back { display: flex; align-items: center; gap: 8px; font-weight: 600; color: #6B7280; text-decoration: none; font-size: 16px; }
+  .page-subtitle { font-size: 14px; color: #6B7280; display: none; }
+  .btn-back { display: flex; align-items: center; gap: 8px; font-weight: 600; color: #6B7280; text-decoration: none; font-size: 14px; }
   .progress-steps { display: flex; align-items: center; justify-content: space-between; margin-bottom: 26px; padding: 0 8px; }
   .step-item { display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 1; }
   .step-circle { width: 42px; height: 42px; border-radius: 50%; background: #F3F4F6; color: #9CA3AF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; border: 2px solid #fff; }

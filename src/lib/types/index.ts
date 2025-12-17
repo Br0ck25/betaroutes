@@ -127,3 +127,10 @@ export interface Settings {
 	maintenanceCategories: string[];
 	supplyCategories: string[];
 }
+
+export interface RouteResult {
+    totalMiles: number;
+    totalMinutes: number;
+    route: google.maps.DirectionsResult;
+    optimizedOrder?: number[]; // [!code ++]
+}

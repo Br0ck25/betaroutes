@@ -109,7 +109,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       try {
         const startTime = performance.now();
         
-        // Always fetch from our API (Proxies to Google if needed)
+        // Always fetch from our API (Proxies to Photon/Google if needed)
         const kvUrl = `/api/autocomplete?q=${encodeURIComponent(value)}`;
         const kvRes = await fetch(kvUrl);
         const data = await kvRes.json();
@@ -119,12 +119,13 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
         
         if (validData.length > 0) {
           // Identify source based on data properties
-          // 'google_proxy' is set by the server when it hits the Google API
-          const isGoogle = validData[0].source === 'google_proxy';
-          const source = isGoogle ? 'google' : 'kv';
+          // 'google_proxy' and 'photon' are set by the server
+          let source: 'kv' | 'google' | 'photon' = 'kv';
+          if (validData[0].source === 'google_proxy') source = 'google';
+          if (validData[0].source === 'photon') source = 'photon';
 
-          // [!code ++] If results came from Google, cache them for next time
-          if (isGoogle) {
+          // If results came from external APIs (Google/Photon), cache them for next time
+          if (source !== 'kv') {
              // Remove the 'source' tag so the cache sees them as clean KV objects next time
              const cleanResults = validData.map(({ source, ...rest }) => rest);
              cacheToKV(value, cleanResults);
@@ -140,7 +141,6 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     }, 300);
   }
   
-  // [!code ++] Updated to actually send data to the cache endpoint
   async function cacheToKV(query: string, results: any[]) {
     try {
       fetch('/api/autocomplete/cache', {
@@ -151,7 +151,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     } catch (e) { /* silent fail */ }
   }
 
-  // [!code ++] Save a fully selected place (with geometry) to KV
+  // Save a fully selected place (with geometry) to KV
   async function savePlaceToKV(place: any) {
     try {
       fetch('/api/autocomplete', {
@@ -162,13 +162,22 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     } catch (e) { console.error('Failed to save place details', e); }
   }
   
-  function renderResults(items: any[], source: 'kv' | 'google' = 'kv', timing?: number) {
+  function renderResults(items: any[], source: 'kv' | 'google' | 'photon' = 'kv', timing?: number) {
     if (!dropdown) return;
     dropdown.innerHTML = '';
     
     const header = document.createElement('div');
-    const sourceLabel = source === 'kv' ? '⚡ Fast Cache' : '🌐 Google Live';
-    const sourceColor = source === 'kv' ? '#10B981' : '#4285F4';
+    
+    let sourceLabel = '⚡ Fast Cache';
+    let sourceColor = '#10B981'; // Green
+
+    if (source === 'google') {
+        sourceLabel = '🌐 Google Live';
+        sourceColor = '#4285F4'; // Blue
+    } else if (source === 'photon') {
+        sourceLabel = '🌍 OpenMap';
+        sourceColor = '#F59E0B'; // Orange/Amber
+    }
     
     header.innerHTML = `
       <span style="color: ${sourceColor}; font-weight: 500;">${sourceLabel}</span>
@@ -245,15 +254,14 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
   
   function renderError() { /* ... */ }
   
-  async function selectItem(item: any, source: 'kv' | 'google') {
+  async function selectItem(item: any, source: 'kv' | 'google' | 'photon') {
     if (dropdown) dropdown.style.display = 'none';
     isSelecting = true;
 
     // Check if we need to fetch details (geometry)
-    // If it came from KV cache, it likely has geometry. 
-    // If it came from Google Proxy, it definitely DOES NOT have geometry yet.
+    // Photon and KV usually have geometry. Google Proxy usually does not.
     if (!item.geometry || !item.geometry.location) {
-        if (item.place_id) {
+        if (item.place_id && source === 'google') {
             try {
                 // Proxy 'Get Details' through our API
                 const res = await fetch(`/api/autocomplete?placeid=${item.place_id}`);
@@ -267,7 +275,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
                         geometry: details.geometry
                     };
                     
-                    // [!code ++] Save the FULL item (with geometry) to KV for next time
+                    // Save the FULL item (with geometry) to KV for next time
                     savePlaceToKV(fullItem);
                     
                     commitSelection(fullItem);
@@ -280,8 +288,11 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
         // Fallback: commit what we have (might miss Lat/Lng)
         commitSelection(item);
     } else {
-        // If it came from KV, it might be an older incomplete record, but usually it's full.
-        // We could optionally update `lastUsed` here if we wanted.
+        // If it came from KV or Photon, we likely have geometry already.
+        // We ensure we save it to KV so it gets "promoted" from 'photon' source to 'kv' cache
+        if (source === 'photon') {
+             savePlaceToKV(item);
+        }
         commitSelection(item);
     }
   }

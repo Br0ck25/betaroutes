@@ -7,6 +7,24 @@ function generateKey(start: string, end: string) {
     return `dir:${start.toLowerCase().trim()}_to_${end.toLowerCase().trim()}`;
 }
 
+/**
+ * Helper to geocode address to [lon, lat] using Photon
+ */
+async function geocodePhoton(address: string): Promise<[number, number] | null> {
+    try {
+        const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(address)}&limit=1`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.features && data.features.length > 0) {
+            return data.features[0].geometry.coordinates as [number, number];
+        }
+        return null;
+    } catch (e) {
+        console.warn('Photon geocode failed', e);
+        return null;
+    }
+}
+
 export const GET: RequestHandler = async ({ url, platform, locals }) => {
     // 1. Security: Ensure user is logged in
     if (!locals.user) {
@@ -21,7 +39,6 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
     }
 
     const kv = platform?.env?.BETA_DIRECTIONS_KV as KVNamespace;
-    // [!code fix] Use Private Key
     const apiKey = platform?.env?.PRIVATE_GOOGLE_MAPS_API_KEY;
     const key = generateKey(start, end);
 
@@ -34,7 +51,39 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
         }
     }
 
-    // 3. Fallback: Call Google Directions API (Server-Side)
+    // 3. Try OSRM (Free)
+    // Requires Geocoding first (Address -> Coords)
+    try {
+        const startCoords = await geocodePhoton(start);
+        const endCoords = await geocodePhoton(end);
+
+        if (startCoords && endCoords) {
+            // OSRM expects: lon,lat;lon,lat
+            const osrmUrl = `http://router.project-osrm.org/route/v1/driving/${startCoords.join(',')};${endCoords.join(',')}?overview=false`;
+            
+            const res = await fetch(osrmUrl);
+            const data = await res.json();
+
+            if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+                const route = data.routes[0];
+                const result = {
+                    distance: route.distance, // meters
+                    duration: route.duration  // seconds
+                };
+
+                // Save to KV (1 Year Cache)
+                if (kv) {
+                    await kv.put(key, JSON.stringify(result), { expirationTtl: 31536000 });
+                }
+
+                return json({ source: 'osrm', data: result });
+            }
+        }
+    } catch (e) {
+        console.warn('OSRM/Photon routing failed, falling back to Google', e);
+    }
+
+    // 4. Fallback: Call Google Directions API (Server-Side)
     if (!apiKey) {
         console.error('PRIVATE_GOOGLE_MAPS_API_KEY is missing');
         return json({ error: 'Server configuration error' }, { status: 500 });
@@ -57,7 +106,7 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
 
             // Save to KV (1 Year Cache)
             if (kv) {
-                await kv.put(key, JSON.stringify(result), { expirationTtl: 60 * 60 * 24 * 365 });
+                await kv.put(key, JSON.stringify(result), { expirationTtl: 31536000 });
             }
 
             return json({ source: 'google', data: result });

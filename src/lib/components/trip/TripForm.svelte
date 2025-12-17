@@ -16,7 +16,7 @@
 
   // Svelte 5 Props using Runes
   let { googleApiKey = '', loading = false } = $props();
-  
+   
   const settings = get(userSettings);
   const API_KEY = googleApiKey || 'dummy_key';
 
@@ -24,18 +24,18 @@
   let date = $state(new Date().toISOString().split('T')[0]);
   let startTime = $state('');
   let endTime = $state('');
-  
+   
   let startAddress = $state(settings.startLocation || storage.getSetting('defaultStartAddress') || '');
   let endAddress = $state(settings.endLocation || storage.getSetting('defaultEndAddress') || '');
-  
+   
   // Coordinates State
   let startLocation = $state<LatLng | undefined>(undefined);
   let endLocation = $state<LatLng | undefined>(undefined);
-  
+   
   let mpg = $state(settings.defaultMPG ?? storage.getSetting('defaultMPG') ?? 25);
   let gasPrice = $state(settings.defaultGasPrice ?? storage.getSetting('defaultGasPrice') ?? 3.5);
   let distanceUnit = $state(settings.distanceUnit || 'mi');
-  
+   
   // Destinations State
   let destinations = $state<Destination[]>([{ address: '', earnings: 0 }]);
   let notes = $state('');
@@ -44,14 +44,14 @@
   let calculating = $state(false);
   let calculated = $state(false);
   let calculationError = $state('');
-  
+   
   let totalMileage = $state(0);
   let totalTime = $state('');
   let fuelCost = $state(0);
   let netProfit = $state(0);
 
   // --- Auto-Calculation Effect ---
-  // [!code ++] Watches for changes and auto-calculates after delay
+  // Watches for changes and auto-calculates after delay
   $effect(() => {
     // 1. Register dependencies to watch
     const _deps = { startAddress, endAddress, destinations, mpg, gasPrice };
@@ -92,7 +92,6 @@
         endAddress = val;
         endLocation = location;
     }
-    // Note: The $effect above will see this change and trigger calculation automatically
   }
 
   // [!code changed] Added 'silent' parameter to suppress toasts on auto-calc
@@ -106,7 +105,7 @@
     calculationError = '';
     
     try {
-        // [!code ++] Round Trip Logic: If End is empty, use Start
+        // Round Trip Logic: If End is empty, use Start
         const effectiveEndAddress = endAddress ? endAddress : startAddress;
 
         // Note: 'destinations' is a Proxy in Svelte 5 state. 
@@ -135,17 +134,94 @@
         calculated = true;
 
         if (!silent) toasts.success("Route calculated successfully!");
+        
+        // Return routeData for use in optimize
+        return routeData;
 
     } catch (err: any) {
         console.error("Calculation Error:", err);
         // Only show error if it wasn't a silent auto-calc, OR if it's a critical API failure
-        // We suppress "ZERO_RESULTS" on auto-calc to avoid annoying user while typing incomplete address
         const msg = err.message || "Failed to calculate route.";
         
         if (!silent || !msg.includes('ZERO_RESULTS')) {
              calculationError = msg;
              if (!silent) toasts.error(msg);
         }
+        return null;
+    } finally {
+        calculating = false;
+    }
+  }
+  
+  // [!code ++] New Optimize Handler
+  async function handleOptimize() {
+    if (!startAddress) {
+        toasts.error("Please enter a start address first.");
+        return;
+    }
+
+    // 1. Check if we have enough stops to optimize
+    // Need at least 2 stops to have something to reorder, 
+    // unless there is no end address (where last stop is fixed), then we need 3.
+    const validDests = destinations.filter(d => d.address && d.address.trim() !== '');
+    if (validDests.length < 2) {
+        toasts.error("Need at least 2 stops to optimize.");
+        return;
+    }
+
+    calculating = true;
+
+    try {
+        // 2. Perform Calculation (Forces API call with optimizeWaypoints: true)
+        // handleCalculate returns the routeData including optimizedOrder
+        const result = await handleCalculate(true); // Silent calculation
+        
+        if (result && result.optimizedOrder && result.optimizedOrder.length > 0) {
+            const currentDestinations = $state.snapshot(destinations);
+            const validDestinations = currentDestinations.filter(d => d.address && d.address.trim() !== '');
+            const emptyDestinations = currentDestinations.filter(d => !d.address || d.address.trim() === '');
+            
+            let waypointsToReorder: Destination[] = [];
+            let fixedEnd: Destination | null = null;
+
+            // Match logic in maps.ts:
+            // If NO end address, the LAST valid destination was used as the destination 
+            // and removed from the waypoints array sent to Google.
+            // Google only reorders the intermediate waypoints.
+            if (!endAddress) {
+                fixedEnd = validDestinations[validDestinations.length - 1];
+                waypointsToReorder = validDestinations.slice(0, -1);
+            } else {
+                // If End Address exists, ALL destinations were sent as intermediate waypoints.
+                waypointsToReorder = validDestinations;
+            }
+
+            // Apply the new order
+            // result.optimizedOrder contains indices [2, 0, 1] referring to the waypoints array sent to Google
+            const reorderedWaypoints = result.optimizedOrder.map((index: number) => waypointsToReorder[index]);
+
+            // Reconstruct the list
+            let newDestinations = [...reorderedWaypoints];
+            
+            // Add back the fixed end stop if it existed
+            if (fixedEnd) {
+                newDestinations.push(fixedEnd);
+            }
+
+            // Append any empty rows that were there before (optional UX choice)
+            newDestinations = [...newDestinations, ...emptyDestinations];
+
+            // Update state
+            destinations = newDestinations;
+            
+            toasts.success("Stops optimized for fastest route!");
+        } else {
+            toasts.info("Route is already optimized or could not be improved.");
+        }
+
+    } catch (e: any) {
+        console.error("Optimization failed:", e);
+        toasts.error("Failed to optimize stops.");
     } finally {
         calculating = false;
     }
@@ -327,7 +403,7 @@
     </div>
   {/if}
 
-  <div class="flex gap-3">
+  <div class="flex gap-3 mt-6">
     {#if loading}
         <Skeleton height="48px" width="160px" className="rounded-lg" />
     {:else}
@@ -337,6 +413,15 @@
           disabled={calculating}
         >
           {calculating ? 'Calculating...' : 'Recalculate Route'}
+        </button>
+        
+        <button 
+          class="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          on:click={handleOptimize} 
+          disabled={calculating || destinations.length < 2}
+          title="Reorder stops for fastest route"
+        >
+          Optimize Stops
         </button>
     {/if}
   </div>

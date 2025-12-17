@@ -1,12 +1,47 @@
 // src/lib/services/maps.ts
 import type { Destination } from '$lib/types';
 
-interface RouteResult {
+export interface RouteResult {
     totalMiles: number;
     totalMinutes: number;
     route: google.maps.DirectionsResult;
+    optimizedOrder?: number[];
 }
 
+/**
+ * Optimizes the route order using the Server API.
+ * Strategies: KV Cache -> OSRM -> Google
+ */
+export async function optimizeRoute(
+    startAddress: string,
+    endAddress: string,
+    destinations: Destination[]
+) {
+    // Call the server endpoint which handles the KV/OSRM/Google fallback chain
+    const res = await fetch('/api/directions/optimize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            startAddress,
+            endAddress,
+            stops: destinations
+        })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+        throw new Error(data.error || 'Failed to optimize route');
+    }
+
+    return data;
+}
+
+/**
+ * Calculates a route (Client-Side). 
+ * Note: If your public API key does not allow Directions API, this will fail.
+ * For the dashboard "New Trip" and "Edit Trip" pages, we use fetchRouteSegment (Server-Side) instead.
+ */
 export async function calculateRoute(
     startAddress: string,
     endAddress: string,
@@ -26,7 +61,6 @@ export async function calculateRoute(
     const directionsService = new google.maps.DirectionsService();
 
     // 2. Prepare Waypoints
-    // Filter empty addresses
     const validDestinations = destinations.filter(d => d.address && d.address.trim() !== '');
     
     const waypoints = validDestinations.map(d => ({
@@ -51,7 +85,7 @@ export async function calculateRoute(
         origin: origin,
         destination: destination,
         waypoints: waypoints,
-        optimizeWaypoints: true,
+        optimizeWaypoints: true, // This attempts client-side optimization
         travelMode: google.maps.TravelMode.DRIVING,
         unitSystem: distanceUnit === 'km' ? google.maps.UnitSystem.METRIC : google.maps.UnitSystem.IMPERIAL
     };
@@ -75,9 +109,12 @@ export async function calculateRoute(
                 resolve({
                     totalMiles: parseFloat(totalMiles.toFixed(1)),
                     totalMinutes: Math.round(totalMinutes),
-                    route: result
+                    route: result,
+                    optimizedOrder: route.waypoint_order 
                 });
             } else {
+                // If client-side fails (e.g. REQUEST_DENIED), we reject.
+                // The UI should catch this or prefer optimizeRoute() for optimization tasks.
                 reject(new Error(`Directions request failed: ${status}`));
             }
         });

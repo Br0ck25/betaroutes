@@ -7,16 +7,17 @@ import { generatePlaceKey } from '$lib/utils/keys';
 /**
  * GET Handler
  * Mode A: ?placeid=... -> Returns Google Place Details (Lat/Lng)
- * Mode B: ?q=...       -> Returns Autocomplete Suggestions (Cache -> Google)
+ * Mode B: ?q=...       -> Returns Autocomplete Suggestions (KV -> Photon -> Google)
  */
 export const GET: RequestHandler = async ({ url, platform }) => {
 	const query = url.searchParams.get('q');
 	const placeId = url.searchParams.get('placeid');
 	
-	// Use the PRIVATE key for server-side calls to prevent leaking it
 	const apiKey = platform?.env?.PRIVATE_GOOGLE_MAPS_API_KEY;
 
 	// --- MODE A: PLACE DETAILS (Get Lat/Lng) ---
+	// Kept primarily for Google Place IDs. 
+	// (Photon results usually include lat/lon directly, bypassing this need)
 	if (placeId) {
 		if (!apiKey) return json({ error: 'Server key missing' }, { status: 500 });
 
@@ -39,15 +40,15 @@ export const GET: RequestHandler = async ({ url, platform }) => {
 		return json([]);
 	}
 
+	const kv = platform?.env?.BETA_PLACES_KV;
+	// Normalize query for cache key
+	const normalizedQuery = query.toLowerCase().replace(/\s+/g, '');
+	const searchPrefix = normalizedQuery.substring(0, 10);
+	const bucketKey = `prefix:${searchPrefix}`;
+
 	try {
-		const kv = platform?.env?.BETA_PLACES_KV;
-		
-		// 1. Try KV Cache First (Free)
+		// 1. Try KV Cache First
 		if (kv) {
-			const normalizedQuery = query.toLowerCase().replace(/\s+/g, '');
-			const searchPrefix = normalizedQuery.substring(0, 10);
-			
-			const bucketKey = `prefix:${searchPrefix}`;
 			const bucketRaw = await kv.get(bucketKey);
 
 			if (bucketRaw) {
@@ -63,9 +64,59 @@ export const GET: RequestHandler = async ({ url, platform }) => {
 			}
 		}
 
-		// 2. Google Fallback (Cost: $2.83/1000 reqs)
+		// 2. Try Photon (OpenStreetMap) - Free
+		try {
+			// Limit to 5 results, prioritize US (using bias logic if needed, but Photon handles standard queries well)
+			const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5`; 
+			const pRes = await fetch(photonUrl);
+			const pData = await pRes.json();
+
+			if (pData.features && pData.features.length > 0) {
+				const results = pData.features.map((f: any) => {
+					const p = f.properties;
+					
+					// Logic: Always start with name, append context only if not duplicate
+					const parts = [p.name];
+					
+					// Add City (if not same as name)
+					if (p.city && p.city !== p.name) parts.push(p.city);
+					// Add State/Administrative (if not same as city or name)
+					if (p.state && p.state !== p.city && p.state !== p.name) parts.push(p.state);
+					// Add Country
+					if (p.country && p.country !== p.state) parts.push(p.country);
+
+					const formatted = parts.filter(Boolean).join(', ');
+
+					return {
+						formatted_address: formatted,
+						name: p.name,
+						secondary_text: [p.city, p.state, p.country].filter(Boolean).join(', '),
+						// Use Lat,Lng as ID for Photon to avoid Mode A lookup if client supports it, 
+						// or stick to a unique string
+						place_id: `photon:${f.geometry.coordinates[1]},${f.geometry.coordinates[0]}`, 
+						geometry: {
+							location: {
+								lat: f.geometry.coordinates[1],
+								lng: f.geometry.coordinates[0]
+							}
+						},
+						source: 'photon'
+					};
+				});
+
+				// Save to KV
+				if (kv && results.length > 0) {
+					await kv.put(bucketKey, JSON.stringify(results), { expirationTtl: 86400 }); // Cache for 24h
+				}
+
+				return json(results);
+			}
+		} catch (photonErr) {
+			console.warn('Photon lookup failed, falling back to Google', photonErr);
+		}
+
+		// 3. Google Fallback (Cost: $)
 		if (!apiKey) {
-			// Cannot fallback to Google without the private key
 			return json([]);
 		}
 
@@ -82,6 +133,12 @@ export const GET: RequestHandler = async ({ url, platform }) => {
 				place_id: p.place_id,
 				source: 'google_proxy'
 			}));
+
+			// Save to KV
+			if (kv && results.length > 0) {
+				await kv.put(bucketKey, JSON.stringify(results), { expirationTtl: 86400 });
+			}
+
 			return json(results);
 		}
 
@@ -95,7 +152,7 @@ export const GET: RequestHandler = async ({ url, platform }) => {
 
 /**
  * POST Handler
- * Caches a user selection to the KV store to save money on future searches.
+ * Caches a user selection to the KV store.
  */
 export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	// 1. Security: Block unauthenticated writes
@@ -118,7 +175,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 
 		const keyText = place.formatted_address || place.name;
 		
-		// [!code fix] Use Hashed Key to prevent 512-byte limit errors
+		// Use Hashed Key
 		const key = await generatePlaceKey(keyText);
 
 		// Save to KV with TTL (60 days)
