@@ -12,92 +12,71 @@ import {
 } from '$lib/server/rateLimit';
 import {
 	validateAndSanitizeRequest,
-	createSafeErrorMessage,
 	sanitizeQueryParam
 } from '$lib/server/sanitize';
 
 const latLngSchema = z.object({
-    lat: z.number(),
-    lng: z.number()
+	lat: z.number(),
+	lng: z.number()
 }).optional();
 
 const destinationSchema = z.object({
-    address: z.string().max(500).optional().default(''),
-    earnings: z.number().optional().default(0),
-    location: latLngSchema
+	address: z.string().max(500).optional().default(''),
+	earnings: z.number().optional().default(0),
+	location: latLngSchema
 });
 
 const stopSchema = z.object({
-    id: z.string().optional(),
-    address: z.string().max(500).optional(),
-    earnings: z.number().optional(),
-    notes: z.string().max(1000).optional(),
-    order: z.number().optional(),
-    location: latLngSchema
+	id: z.string().optional(),
+	address: z.string().max(500).optional(),
+	earnings: z.number().optional(),
+	notes: z.string().max(1000).optional(),
+	order: z.number().optional(),
+	location: latLngSchema
 });
 
 const costItemSchema = z.object({
-    type: z.string().max(100).optional(),
-    cost: z.number().optional()
+	type: z.string().max(100).optional(),
+	cost: z.number().optional()
 });
 
 const tripSchema = z.object({
-    id: z.string().uuid().optional(),
-    date: z.string().optional(),
-    startTime: z.string().optional(),
-    endTime: z.string().optional(),
-    hoursWorked: z.number().optional(),
-    startAddress: z.string().max(500).optional(),
-    startLocation: latLngSchema,
-    endAddress: z.string().max(500).optional(),
-    endLocation: latLngSchema,
-    totalMiles: z.number().nonnegative().optional(),
-    estimatedTime: z.number().optional(), 
-    totalTime: z.string().optional(),      
-    mpg: z.number().positive().optional(),
-    gasPrice: z.number().nonnegative().optional(),
-    fuelCost: z.number().optional(),
-    maintenanceCost: z.number().optional(),
-    suppliesCost: z.number().optional(),
-    totalEarnings: z.number().optional(),
-    netProfit: z.number().optional(),
-    notes: z.string().max(1000).optional(),
-    stops: z.array(stopSchema).optional(),
-    destinations: z.array(destinationSchema).optional(),
-    maintenanceItems: z.array(costItemSchema).optional(),
-    suppliesItems: z.array(costItemSchema).optional(),
-    lastModified: z.string().optional()
+	id: z.string().uuid().optional(),
+	date: z.string().optional(),
+	startTime: z.string().optional(),
+	endTime: z.string().optional(),
+	hoursWorked: z.number().optional(),
+	startAddress: z.string().max(500).optional(),
+	startLocation: latLngSchema,
+	endAddress: z.string().max(500).optional(),
+	endLocation: latLngSchema,
+	totalMiles: z.number().nonnegative().optional(),
+	estimatedTime: z.number().optional(),
+	totalTime: z.string().optional(),
+	mpg: z.number().positive().optional(),
+	gasPrice: z.number().nonnegative().optional(),
+	fuelCost: z.number().optional(),
+	maintenanceCost: z.number().optional(),
+	suppliesCost: z.number().optional(),
+	totalEarnings: z.number().optional(),
+	netProfit: z.number().optional(),
+	notes: z.string().max(1000).optional(),
+	stops: z.array(stopSchema).optional(),
+	destinations: z.array(destinationSchema).optional(),
+	maintenanceItems: z.array(costItemSchema).optional(),
+	suppliesItems: z.array(costItemSchema).optional(),
+	lastModified: z.string().optional()
 });
 
-function getEnv(platform: any) {
-    const env = platform?.env;
-    
-    // Check for critical bindings. Note: PLACES_INDEX_DO is critical for new writes but maybe optional for reads if handling gracefully
-    if (platform && (!env?.BETA_LOGS_KV || !env?.TRIP_INDEX_DO)) {
-        console.error("CRITICAL: Missing BETA_LOGS_KV or TRIP_INDEX_DO bindings");
-        throw new Error('Database bindings missing');
-    }
+function getEnv(platform: App.Platform | undefined): App.Env {
+	const env = platform?.env;
 
-    if (!env?.BETA_LOGS_KV) {
-        // Mock env for local/build if needed
-        return {
-            kv: { get: async () => null, put: async () => {}, delete: async () => {}, list: async () => ({ keys: [] }) },
-            trashKV: { get: async () => null, put: async () => {}, delete: async () => {}, list: async () => ({ keys: [] }) },
-            placesKV: { get: async () => null, put: async () => {}, delete: async () => {}, list: async () => ({ keys: [] }) },
-            usersKV: { get: async () => null },
-            tripIndexDO: { idFromName: () => ({ name: 'fake' }), get: () => ({ fetch: async () => new Response(JSON.stringify({ allowed: true, count: 0, needsMigration: false })) }) },
-            placesIndexDO: { idFromName: () => ({ name: 'fake' }), get: () => ({ fetch: async () => new Response('OK') }) }
-        };
-    }
+	if (!env || !env.BETA_LOGS_KV || !env.TRIP_INDEX_DO) {
+		console.error("CRITICAL: Missing BETA_LOGS_KV or TRIP_INDEX_DO bindings");
+		throw new Error('Database bindings missing');
+	}
 
-    return {
-        kv: env.BETA_LOGS_KV,
-        trashKV: env.BETA_LOGS_TRASH_KV,
-        placesKV: env.BETA_PLACES_KV,
-        usersKV: env.BETA_USERS_KV,
-        tripIndexDO: env.TRIP_INDEX_DO,
-        placesIndexDO: env.PLACES_INDEX_DO // [!code ++]
-    };
+	return env;
 }
 
 export const GET: RequestHandler = async (event) => {
@@ -105,19 +84,17 @@ export const GET: RequestHandler = async (event) => {
 		const user = event.locals.user;
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
-		// Rate Limiting
-		let env;
+		let env: App.Env;
 		try {
 			env = getEnv(event.platform);
 		} catch (e) {
 			return new Response('Service Unavailable', { status: 503 });
 		}
 
-		const sessionsKV = event.platform?.env?.BETA_SESSIONS_KV;
+		const sessionsKV = env.BETA_SESSIONS_KV;
 		if (sessionsKV) {
 			const identifier = getClientIdentifier(event.request, event.locals);
 			const authenticated = isAuthenticated(event.locals);
-
 			const config = authenticated ? RATE_LIMITS.TRIPS_AUTH : RATE_LIMITS.TRIPS_ANON;
 
 			const rateLimitResult = await checkRateLimitEnhanced(
@@ -149,30 +126,24 @@ export const GET: RequestHandler = async (event) => {
 		}
 
 		const storageId = user.name || user.token;
-
 		const sinceParam = sanitizeQueryParam(event.url.searchParams.get('since'), 50);
-		const sinceDate = sinceParam ? new Date(sinceParam) : null;
+		
+		const limitParam = event.url.searchParams.get('limit');
+		const offsetParam = event.url.searchParams.get('offset');
+		const limit = limitParam ? parseInt(limitParam) : undefined;
+		const offset = offsetParam ? parseInt(offsetParam) : undefined;
 
-		const { kv, trashKV, placesKV, tripIndexDO, placesIndexDO } = env;
 		const svc = makeTripService(
-            kv as any, 
-            trashKV as any, 
-            placesKV as any, 
-            tripIndexDO as any, 
-            placesIndexDO as any // [!code ++]
-        );
+			env.BETA_LOGS_KV,
+			env.BETA_LOGS_TRASH_KV,
+			env.BETA_PLACES_KV,
+			env.TRIP_INDEX_DO,
+			env.PLACES_INDEX_DO
+		);
 
-		const allTrips = await svc.list(storageId);
+		const allTrips = await svc.list(storageId, { since: sinceParam, limit, offset });
 
-		let tripsToReturn = allTrips;
-		if (sinceDate && !isNaN(sinceDate.getTime())) {
-			tripsToReturn = allTrips.filter((t) => {
-				const recordDate = new Date(t.updatedAt || t.createdAt);
-				return recordDate > sinceDate;
-			});
-		}
-
-		return new Response(JSON.stringify(tripsToReturn), {
+		return new Response(JSON.stringify(allTrips), {
 			status: 200,
 			headers: { 'Content-Type': 'application/json' }
 		});
@@ -190,12 +161,17 @@ export const POST: RequestHandler = async (event) => {
 		const sessionUser = event.locals.user;
 		if (!sessionUser) return new Response('Unauthorized', { status: 401 });
 
-		// Rate Limiting
-		const sessionsKV = event.platform?.env?.BETA_SESSIONS_KV;
+		let env: App.Env;
+		try {
+			env = getEnv(event.platform);
+		} catch (e) {
+			return new Response(JSON.stringify({ error: 'Service Unavailable' }), { status: 503 });
+		}
+
+		const sessionsKV = env.BETA_SESSIONS_KV;
 		if (sessionsKV) {
 			const identifier = getClientIdentifier(event.request, event.locals);
 			const authenticated = isAuthenticated(event.locals);
-
 			const config = authenticated ? RATE_LIMITS.TRIPS_AUTH : RATE_LIMITS.TRIPS_ANON;
 
 			const rateLimitResult = await checkRateLimitEnhanced(
@@ -254,21 +230,13 @@ export const POST: RequestHandler = async (event) => {
 			);
 		}
 
-		let env;
-		try {
-			env = getEnv(event.platform);
-		} catch (e) {
-			return new Response(JSON.stringify({ error: 'Service Unavailable' }), { status: 503 });
-		}
-
-		const { kv, trashKV, placesKV, usersKV, tripIndexDO, placesIndexDO } = env;
 		const svc = makeTripService(
-            kv as any, 
-            trashKV as any, 
-            placesKV as any, 
-            tripIndexDO as any, 
-            placesIndexDO as any // [!code ++]
-        );
+			env.BETA_LOGS_KV,
+			env.BETA_LOGS_TRASH_KV,
+			env.BETA_PLACES_KV,
+			env.TRIP_INDEX_DO,
+			env.PLACES_INDEX_DO
+		);
 
 		const validData = parseResult.data;
 		const id = validData.id || crypto.randomUUID();
@@ -279,9 +247,9 @@ export const POST: RequestHandler = async (event) => {
 		}
 
 		let currentPlan = sessionUser.plan;
-		if (usersKV && usersKV.get) {
+		if (env.BETA_USERS_KV) {
 			try {
-				const freshUser = await findUserById(usersKV as any, sessionUser.id);
+				const freshUser = await findUserById(env.BETA_USERS_KV, sessionUser.id);
 				if (freshUser) currentPlan = freshUser.plan;
 			} catch (e) {
 				console.error('Failed to fetch fresh plan', e);

@@ -1,5 +1,6 @@
 // src/lib/server/expenseService.ts
-import type { KVNamespace } from '@cloudflare/workers-types';
+import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
+import { DO_ORIGIN } from '$lib/constants';
 
 export interface ExpenseRecord {
   id: string;
@@ -14,29 +15,52 @@ export interface ExpenseRecord {
   [key: string]: any;
 }
 
-// Update factory to accept the Trash KV
-export function makeExpenseService(kv: KVNamespace, trashKV?: KVNamespace) {
+export function makeExpenseService(
+    kv: KVNamespace, 
+    tripIndexDO: DurableObjectNamespace, 
+    trashKV?: KVNamespace
+) {
   
-  function getKey(userId: string, id: string) {
-    return `expense:${userId}:${id}`;
-  }
+  const getIndexStub = (userId: string) => {
+    const id = tripIndexDO.idFromName(userId);
+    return tripIndexDO.get(id);
+  };
 
   return {
     async list(userId: string, since?: string): Promise<ExpenseRecord[]> {
-      const prefix = `expense:${userId}:`;
-      const list = await kv.list({ prefix });
-      const expenses: ExpenseRecord[] = [];
+      const stub = getIndexStub(userId);
+      
+      // 1. Check migration status (Lazy Migration)
+      const statusRes = await stub.fetch(`${DO_ORIGIN}/expenses/status`);
+      if (statusRes.ok) {
+          const status = await statusRes.json() as { needsMigration: boolean };
 
-      for (const key of list.keys) {
-        const raw = await kv.get(key.name);
-        if (raw) {
-          const item = JSON.parse(raw);
-          // Filter out soft-deleted items unless syncing
-          if (!item.deleted || since) {
-            expenses.push(item);
+          if (status.needsMigration) {
+              console.log(`[ExpenseService] Migrating expenses for ${userId} to SQL...`);
+              const prefix = `expense:${userId}:`;
+              const list = await kv.list({ prefix });
+              const expenses: ExpenseRecord[] = [];
+              for (const key of list.keys) {
+                const raw = await kv.get(key.name);
+                if (raw) expenses.push(JSON.parse(raw));
+              }
+
+              // Bulk Insert to DO
+              await stub.fetch(`${DO_ORIGIN}/expenses/migrate`, {
+                  method: 'POST',
+                  body: JSON.stringify(expenses) // Even empty list marks migration complete
+              });
           }
-        }
       }
+
+      // 2. Fetch from SQL (Fast)
+      const res = await stub.fetch(`${DO_ORIGIN}/expenses/list`);
+      if (!res.ok) {
+          console.error(`[ExpenseService] DO Error: ${res.status}`);
+          return [];
+      }
+      
+      const expenses = await res.json() as ExpenseRecord[];
 
       // Delta Sync Logic
       if (since) {
@@ -48,59 +72,55 @@ export function makeExpenseService(kv: KVNamespace, trashKV?: KVNamespace) {
     },
 
     async get(userId: string, id: string) {
-      const raw = await kv.get(getKey(userId, id));
-      return raw ? JSON.parse(raw) as ExpenseRecord : null;
+      // Optimistic fetch from list (since SQL is fast)
+      // Ideally we'd add a GET /expenses/item endpoint later
+      const all = await this.list(userId);
+      return all.find(e => e.id === id) || null;
     },
 
     async put(expense: ExpenseRecord) {
       expense.updatedAt = new Date().toISOString();
-      delete expense.deleted; // Ensure it's active
+      delete expense.deleted;
       delete expense.deletedAt;
-      await kv.put(getKey(expense.userId, expense.id), JSON.stringify(expense));
+
+      const stub = getIndexStub(expense.userId);
+      await stub.fetch(`${DO_ORIGIN}/expenses/put`, {
+          method: 'POST',
+          body: JSON.stringify(expense)
+      });
     },
 
     async delete(userId: string, id: string) {
-      const key = getKey(userId, id);
-      const raw = await kv.get(key);
+      const stub = getIndexStub(userId);
       
-      if (raw) {
-        const expense = JSON.parse(raw);
-        const now = new Date();
+      // 1. Fetch item for Trash logic
+      const item = await this.get(userId, id);
+      if (!item) return;
 
-        // 1. Move to Trash KV if available
-        if (trashKV) {
-             const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days expiry
-             const metadata = {
-                deletedAt: now.toISOString(),
-                deletedBy: userId,
-                originalKey: key,
-                expiresAt: expiresAt.toISOString()
-             };
-             
-             // Wrap in standard trash structure
-             const trashItem = {
-                type: 'expense',
-                data: expense,
-                metadata
-             };
-             
-             const trashKey = `trash:${userId}:${id}`;
-             await trashKV.put(
-                trashKey, 
-                JSON.stringify(trashItem),
-                { expirationTtl: 30 * 24 * 60 * 60 }
-             );
-        }
+      const now = new Date();
 
-        // 2. Soft delete tombstone in Main KV
-        const tombstone = {
-          ...expense,
-          deleted: true,
-          deletedAt: now.toISOString(),
-          updatedAt: now.toISOString()
-        };
-        await kv.put(key, JSON.stringify(tombstone));
+      // 2. Move to Trash KV
+      if (trashKV) {
+           const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+           const metadata = {
+              deletedAt: now.toISOString(),
+              deletedBy: userId,
+              originalKey: `expense:${userId}:${id}`,
+              expiresAt: expiresAt.toISOString()
+           };
+           const trashItem = { type: 'expense', data: item, metadata };
+           await trashKV.put(`trash:${userId}:${id}`, JSON.stringify(trashItem), { expirationTtl: 30 * 24 * 60 * 60 });
       }
+
+      // 3. Delete from SQL
+      await stub.fetch(`${DO_ORIGIN}/expenses/delete`, {
+          method: 'POST',
+          body: JSON.stringify({ id })
+      });
+      
+      // 4. Clean up old KV (Eventual consistency cleanup)
+      // This ensures we don't leave stale data in the old system
+      await kv.delete(`expense:${userId}:${id}`);
     }
   };
 }

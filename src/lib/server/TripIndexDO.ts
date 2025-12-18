@@ -9,6 +9,18 @@ interface TripSummary {
     [key: string]: any;
 }
 
+interface ExpenseRecord {
+    id: string;
+    userId: string;
+    date: string;
+    category: string;
+    amount: number;
+    description?: string;
+    createdAt: string;
+    updatedAt: string;
+    [key: string]: any;
+}
+
 export class TripIndexDO {
     state: DurableObjectState;
     env: any;
@@ -25,9 +37,17 @@ export class TripIndexDO {
                 createdAt TEXT,
                 data TEXT
             );
+            
+            CREATE TABLE IF NOT EXISTS expenses (
+                id TEXT PRIMARY KEY,
+                date TEXT,
+                category TEXT,
+                createdAt TEXT,
+                data TEXT
+            );
         `);
 
-        // 2. Migration Logic: Move legacy KV data to SQLite
+        // 2. Trip Migration Logic (Legacy KV -> SQLite)
         this.state.blockConcurrencyWhile(async () => {
             const legacyTrips = await this.state.storage.get<TripSummary[]>("trips");
             if (legacyTrips && Array.isArray(legacyTrips) && legacyTrips.length > 0) {
@@ -48,22 +68,44 @@ export class TripIndexDO {
         const path = url.pathname;
 
         try {
-            // --- INDEXING OPERATIONS ---
+            // --- TRIP OPERATIONS ---
 
-            // GET /list - Return all trips (sorted)
             if (path === "/list") {
-                const cursor = this.state.storage.sql.exec(`
-                    SELECT data FROM trips 
-                    ORDER BY date DESC, createdAt DESC
-                `);
+                const limitParam = url.searchParams.get('limit');
+                const offsetParam = url.searchParams.get('offset');
+
+                let query = `SELECT data FROM trips ORDER BY date DESC, createdAt DESC`;
+                const params: (string | number)[] = [];
+
+                if (limitParam) {
+                    const limit = parseInt(limitParam) || 50;
+                    const offset = parseInt(offsetParam || '0') || 0;
+                    query += ` LIMIT ? OFFSET ?`;
+                    params.push(limit, offset);
+                }
+
+                const cursor = this.state.storage.sql.exec(query, ...params);
+                
+                // Get total count
+                const countRes = this.state.storage.sql.exec("SELECT COUNT(*) as total FROM trips");
+                // @ts-ignore
+                const total = countRes.one().total as number;
+
                 const trips = [];
                 for (const row of cursor) {
                     trips.push(JSON.parse(row.data as string));
                 }
-                return new Response(JSON.stringify(trips));
+
+                return new Response(JSON.stringify({
+                    trips,
+                    pagination: {
+                        total,
+                        limit: limitParam ? parseInt(limitParam) : trips.length,
+                        offset: offsetParam ? parseInt(offsetParam) : 0
+                    }
+                }));
             }
 
-            // POST /migrate - Receive bulk data from KV to initialize
             if (path === "/migrate") {
                 const trips = await request.json() as TripSummary[];
                 const stmt = this.state.storage.sql.prepare(`
@@ -76,7 +118,6 @@ export class TripIndexDO {
                 return new Response("OK");
             }
 
-            // POST /put - Add or Update a trip
             if (path === "/put") {
                 const trip = await request.json() as TripSummary;
                 if (!trip || !trip.id) return new Response("Invalid Data", { status: 400 });
@@ -89,14 +130,68 @@ export class TripIndexDO {
                 return new Response("OK");
             }
 
-            // POST /delete - Remove a trip
             if (path === "/delete") {
                 const { id } = await request.json() as { id: string };
                 this.state.storage.sql.exec("DELETE FROM trips WHERE id = ?", id);
                 return new Response("OK");
             }
 
-            // --- BILLING ATOMIC COUNTERS ---
+            // --- EXPENSE OPERATIONS ---
+
+            if (path === "/expenses/list") {
+                const cursor = this.state.storage.sql.exec(`
+                    SELECT data FROM expenses 
+                    ORDER BY date DESC, createdAt DESC
+                `);
+                const expenses = [];
+                for (const row of cursor) {
+                    expenses.push(JSON.parse(row.data as string));
+                }
+                return new Response(JSON.stringify(expenses));
+            }
+
+            if (path === "/expenses/put") {
+                const item = await request.json() as ExpenseRecord;
+                if (!item || !item.id) return new Response("Invalid Data", { status: 400 });
+
+                this.state.storage.sql.exec(`
+                    INSERT OR REPLACE INTO expenses (id, date, category, createdAt, data)
+                    VALUES (?, ?, ?, ?, ?)
+                `, item.id, item.date, item.category, item.createdAt, JSON.stringify(item));
+                
+                return new Response("OK");
+            }
+
+            if (path === "/expenses/delete") {
+                const { id } = await request.json() as { id: string };
+                this.state.storage.sql.exec("DELETE FROM expenses WHERE id = ?", id);
+                return new Response("OK");
+            }
+
+            if (path === "/expenses/migrate") {
+                const items = await request.json() as ExpenseRecord[];
+                const stmt = this.state.storage.sql.prepare(`
+                    INSERT OR REPLACE INTO expenses (id, date, category, createdAt, data) 
+                    VALUES (?, ?, ?, ?, ?)
+                `);
+                for (const item of items) {
+                    stmt.run(item.id, item.date, item.category, item.createdAt, JSON.stringify(item));
+                }
+                await this.state.storage.put("expenses_migrated", true);
+                return new Response("OK");
+            }
+
+            if (path === "/expenses/status") {
+                const countRes = this.state.storage.sql.exec("SELECT COUNT(*) as c FROM expenses");
+                // @ts-ignore
+                const count = countRes.one().c as number;
+                const migrated = await this.state.storage.get("expenses_migrated");
+                return new Response(JSON.stringify({ 
+                    needsMigration: !migrated && count === 0 
+                }));
+            }
+
+            // --- BILLING COUNTERS ---
 
             if (path === "/billing/check-increment") {
                 const { monthKey, limit } = await request.json() as { monthKey: string, limit: number };
@@ -124,9 +219,7 @@ export class TripIndexDO {
             return new Response("Not Found", { status: 404 });
 
         } catch (err) {
-            // [!code fix] Log internal error details privately
             console.error("[TripIndexDO] Error:", err);
-            // Return safe, generic error to client
             return new Response(JSON.stringify({ error: "Internal Server Error" }), { status: 500 });
         }
     }

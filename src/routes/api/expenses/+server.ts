@@ -6,20 +6,22 @@ import { z } from 'zod';
 const expenseSchema = z.object({
     id: z.string().uuid().optional(),
     date: z.string(),
-    // [!code change] Changed to string to allow custom categories and prevent validation errors
     category: z.string(),
     amount: z.number(),
     description: z.string().optional(),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
-    // [!code ++] Allow 'store' property passed by SyncManager so validation doesn't fail
     store: z.string().optional()
 });
 
-function getKV(platform: any) {
-    const kv = platform?.env?.BETA_LOGS_KV;
-    if (!kv) throw new Error('KV binding missing');
-    return kv;
+// Helper for Strict Environment
+function getEnv(platform: App.Platform | undefined): App.Env {
+    const env = platform?.env;
+    if (!env || !env.BETA_LOGS_KV || !env.TRIP_INDEX_DO) {
+        console.error("CRITICAL: Missing BETA_LOGS_KV or TRIP_INDEX_DO bindings");
+        throw new Error('Database bindings missing');
+    }
+    return env;
 }
 
 export const GET: RequestHandler = async (event) => {
@@ -27,18 +29,19 @@ export const GET: RequestHandler = async (event) => {
         const user = event.locals.user;
         if (!user) return new Response('Unauthorized', { status: 401 });
 
+        const env = getEnv(event.platform);
         const storageId = user.name || user.token;
         const since = event.url.searchParams.get('since') || undefined;
         
         console.log(`[API] Fetching expenses for ${storageId} (Since: ${since || 'All Time'})`);
 
-        const svc = makeExpenseService(getKV(event.platform));
+        // Inject DO Binding
+        const svc = makeExpenseService(env.BETA_LOGS_KV, env.TRIP_INDEX_DO, env.BETA_LOGS_TRASH_KV);
         const expenses = await svc.list(storageId, since);
 
         return new Response(JSON.stringify(expenses), {
             headers: {
                 'Content-Type': 'application/json',
-                // [!code ++] Critical: Prevent browser caching so other devices see updates immediately
                 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
                 'Pragma': 'no-cache',
                 'Expires': '0',
@@ -55,6 +58,7 @@ export const POST: RequestHandler = async (event) => {
         const user = event.locals.user;
         if (!user) return new Response('Unauthorized', { status: 401 });
         const storageId = user.name || user.token;
+        const env = getEnv(event.platform);
 
         const body = await event.request.json();
         
@@ -65,7 +69,9 @@ export const POST: RequestHandler = async (event) => {
             return new Response(JSON.stringify({ error: 'Invalid Data' }), { status: 400 });
         }
 
-        const svc = makeExpenseService(getKV(event.platform));
+        // Inject DO Binding
+        const svc = makeExpenseService(env.BETA_LOGS_KV, env.TRIP_INDEX_DO, env.BETA_LOGS_TRASH_KV);
+        
         const expense = {
             ...parseResult.data,
             id: parseResult.data.id || crypto.randomUUID(),
@@ -74,7 +80,6 @@ export const POST: RequestHandler = async (event) => {
             updatedAt: new Date().toISOString()
         };
 
-        // [!code ++] Remove 'store' property before saving to DB
         const { store, ...savedExpense } = expense as any;
 
         await svc.put(savedExpense);
