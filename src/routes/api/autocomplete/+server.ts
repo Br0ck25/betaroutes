@@ -3,16 +3,62 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { KVNamespace } from '@cloudflare/workers-types';
 import { generatePlaceKey } from '$lib/utils/keys';
+import {
+	checkRateLimitEnhanced,
+	createRateLimitHeaders,
+	getClientIdentifier,
+	isAuthenticated,
+	RATE_LIMITS
+} from '$lib/server/rateLimit';
+import { sanitizeQueryParam, sanitizeString } from '$lib/server/sanitize';
 
 /**
  * GET Handler
  * Mode A: ?placeid=... -> Returns Google Place Details (Lat/Lng)
  * Mode B: ?q=...       -> Returns Autocomplete Suggestions (KV -> Photon -> Google)
  */
-export const GET: RequestHandler = async ({ url, platform }) => {
-	const query = url.searchParams.get('q');
-	const placeId = url.searchParams.get('placeid');
-	
+export const GET: RequestHandler = async ({ url, platform, request, locals }) => {
+	// ← NEW: Rate Limiting
+	const sessionsKV = platform?.env?.BETA_SESSIONS_KV;
+	if (sessionsKV) {
+		const identifier = getClientIdentifier(request, locals);
+		const authenticated = isAuthenticated(locals);
+
+		// Use different limits for authenticated vs anonymous users
+		const config = authenticated ? RATE_LIMITS.AUTOCOMPLETE_AUTH : RATE_LIMITS.AUTOCOMPLETE_ANON;
+
+		const rateLimitResult = await checkRateLimitEnhanced(
+			sessionsKV,
+			identifier,
+			'autocomplete',
+			config.limit,
+			config.windowMs
+		);
+
+		// Add rate limit headers to response
+		const headers = createRateLimitHeaders(rateLimitResult);
+
+		if (!rateLimitResult.allowed) {
+			return json(
+				{
+					error: 'Too many requests. Please try again later.',
+					limit: rateLimitResult.limit,
+					resetAt: rateLimitResult.resetAt
+				},
+				{
+					status: 429,
+					headers
+				}
+			);
+		}
+
+		// If allowed, we'll add headers to successful response later
+	}
+
+	// ← NEW: Sanitize query parameters to prevent injection
+	const query = sanitizeQueryParam(url.searchParams.get('q'), 200);
+	const placeId = sanitizeQueryParam(url.searchParams.get('placeid'), 200);
+
 	const apiKey = platform?.env?.PRIVATE_GOOGLE_MAPS_API_KEY;
 
 	// --- MODE A: PLACE DETAILS (Get Lat/Lng) ---
@@ -160,8 +206,39 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}
 
+	// ← NEW: Rate Limiting for cache writes
+	const sessionsKV = platform?.env?.BETA_SESSIONS_KV;
+	if (sessionsKV) {
+		const identifier = getClientIdentifier(request, locals);
+
+		// Stricter rate limit for POST (cache writes)
+		const rateLimitResult = await checkRateLimitEnhanced(
+			sessionsKV,
+			identifier,
+			'autocomplete:write',
+			30, // 30 writes per minute
+			60000
+		);
+
+		const headers = createRateLimitHeaders(rateLimitResult);
+
+		if (!rateLimitResult.allowed) {
+			return json(
+				{
+					error: 'Too many cache writes. Please slow down.',
+					limit: rateLimitResult.limit,
+					resetAt: rateLimitResult.resetAt
+				},
+				{
+					status: 429,
+					headers
+				}
+			);
+		}
+	}
+
 	try {
-		const place = await request.json();
+		const rawPlace = await request.json();
 		const placesKV = platform?.env?.BETA_PLACES_KV as KVNamespace;
 
 		if (!placesKV) {
@@ -169,25 +246,38 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 			return json({ success: false });
 		}
 
-		if (!place || (!place.formatted_address && !place.name)) {
+		if (!rawPlace || (!rawPlace.formatted_address && !rawPlace.name)) {
 			return json({ success: false, error: 'Invalid data' });
 		}
 
+		// ← NEW: Sanitize place data to prevent XSS
+		const place = {
+			formatted_address: sanitizeString(rawPlace.formatted_address, 500),
+			name: sanitizeString(rawPlace.name, 200),
+			secondary_text: sanitizeString(rawPlace.secondary_text, 300),
+			place_id: sanitizeString(rawPlace.place_id, 200),
+			geometry: rawPlace.geometry, // Keep geometry as-is (numbers)
+			source: sanitizeString(rawPlace.source, 50)
+		};
+
 		const keyText = place.formatted_address || place.name;
-		
+
 		// Use Hashed Key
 		const key = await generatePlaceKey(keyText);
 
 		// Save to KV with TTL (60 days)
-		await placesKV.put(key, JSON.stringify({
-			...place,
-			cachedAt: new Date().toISOString(),
-			source: 'autocomplete_selection',
-			contributedBy: locals.user.id
-		}), { expirationTtl: 5184000 });
+		await placesKV.put(
+			key,
+			JSON.stringify({
+				...place,
+				cachedAt: new Date().toISOString(),
+				source: 'autocomplete_selection',
+				contributedBy: locals.user.id
+			}),
+			{ expirationTtl: 5184000 }
+		);
 
 		return json({ success: true });
-
 	} catch (e) {
 		console.error('Cache Error:', e);
 		return json({ success: false, error: String(e) }, { status: 500 });

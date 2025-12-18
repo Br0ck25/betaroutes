@@ -3,6 +3,18 @@ import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
 import { findUserById } from '$lib/server/userService';
 import { z } from 'zod';
+import {
+	checkRateLimitEnhanced,
+	createRateLimitHeaders,
+	getClientIdentifier,
+	isAuthenticated,
+	RATE_LIMITS
+} from '$lib/server/rateLimit';
+import {
+	validateAndSanitizeRequest,
+	createSafeErrorMessage,
+	sanitizeQueryParam
+} from '$lib/server/sanitize';
 
 const latLngSchema = z.object({
     lat: z.number(),
@@ -85,125 +97,225 @@ function getEnv(platform: any) {
 }
 
 export const GET: RequestHandler = async (event) => {
-    try {
-        const user = event.locals.user;
-        if (!user) return new Response('Unauthorized', { status: 401 });
+	try {
+		const user = event.locals.user;
+		if (!user) return new Response('Unauthorized', { status: 401 });
 
-        const storageId = user.name || user.token; 
-        const sinceParam = event.url.searchParams.get('since');
-        const sinceDate = sinceParam ? new Date(sinceParam) : null;
+		// ← NEW: Rate Limiting
+		let env;
+		try {
+			env = getEnv(event.platform);
+		} catch (e) {
+			return new Response('Service Unavailable', { status: 503 });
+		}
 
-        let env;
-        try {
-            env = getEnv(event.platform);
-        } catch (e) {
-            return new Response('Service Unavailable', { status: 503 });
-        }
+		const sessionsKV = event.platform?.env?.BETA_SESSIONS_KV;
+		if (sessionsKV) {
+			const identifier = getClientIdentifier(event.request, event.locals);
+			const authenticated = isAuthenticated(event.locals);
 
-        const { kv, trashKV, placesKV, tripIndexDO } = env;
-        const svc = makeTripService(kv as any, trashKV as any, placesKV as any, tripIndexDO as any);
+			// Use different limits for authenticated vs anonymous users
+			const config = authenticated ? RATE_LIMITS.TRIPS_AUTH : RATE_LIMITS.TRIPS_ANON;
 
-        const allTrips = await svc.list(storageId);
+			const rateLimitResult = await checkRateLimitEnhanced(
+				sessionsKV,
+				identifier,
+				'trips:read',
+				config.limit,
+				config.windowMs
+			);
 
-        let tripsToReturn = allTrips;
-        if (sinceDate && !isNaN(sinceDate.getTime())) {
-            tripsToReturn = allTrips.filter(t => {
-                const recordDate = new Date(t.updatedAt || t.createdAt);
-                return recordDate > sinceDate;
-            });
-        }
+			const headers = createRateLimitHeaders(rateLimitResult);
 
-        return new Response(JSON.stringify(tripsToReturn), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
-        });
-    } catch (err) {
-        console.error('GET /api/trips error', err);
-        return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
-    }
+			if (!rateLimitResult.allowed) {
+				return new Response(
+					JSON.stringify({
+						error: 'Too many requests. Please try again later.',
+						limit: rateLimitResult.limit,
+						resetAt: rateLimitResult.resetAt
+					}),
+					{
+						status: 429,
+						headers: {
+							'Content-Type': 'application/json',
+							...headers
+						}
+					}
+				);
+			}
+		}
+
+		const storageId = user.name || user.token;
+
+		// ← NEW: Sanitize query parameter to prevent injection
+		const sinceParam = sanitizeQueryParam(event.url.searchParams.get('since'), 50);
+		const sinceDate = sinceParam ? new Date(sinceParam) : null;
+
+		const { kv, trashKV, placesKV, tripIndexDO } = env;
+		const svc = makeTripService(kv as any, trashKV as any, placesKV as any, tripIndexDO as any);
+
+		const allTrips = await svc.list(storageId);
+
+		let tripsToReturn = allTrips;
+		if (sinceDate && !isNaN(sinceDate.getTime())) {
+			tripsToReturn = allTrips.filter((t) => {
+				const recordDate = new Date(t.updatedAt || t.createdAt);
+				return recordDate > sinceDate;
+			});
+		}
+
+		return new Response(JSON.stringify(tripsToReturn), {
+			status: 200,
+			headers: { 'Content-Type': 'application/json' }
+		});
+	} catch (err) {
+		console.error('GET /api/trips error', err);
+		return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
+			status: 500,
+			headers: { 'Content-Type': 'application/json' }
+		});
+	}
 };
 
 export const POST: RequestHandler = async (event) => {
-    try {
-        const sessionUser = event.locals.user;
-        if (!sessionUser) return new Response('Unauthorized', { status: 401 });
+	try {
+		const sessionUser = event.locals.user;
+		if (!sessionUser) return new Response('Unauthorized', { status: 401 });
 
-        const storageId = sessionUser.name || sessionUser.token;
-        const body = await event.request.json();
+		// ← NEW: Rate Limiting for trip creation/updates
+		const sessionsKV = event.platform?.env?.BETA_SESSIONS_KV;
+		if (sessionsKV) {
+			const identifier = getClientIdentifier(event.request, event.locals);
+			const authenticated = isAuthenticated(event.locals);
 
-        const parseResult = tripSchema.safeParse(body);
-        if (!parseResult.success) {
-            return new Response(JSON.stringify({
-                error: 'Invalid Data',
-                details: parseResult.error.flatten()
-            }), { status: 400 });
-        }
+			// Use different limits for authenticated vs anonymous users
+			const config = authenticated ? RATE_LIMITS.TRIPS_AUTH : RATE_LIMITS.TRIPS_ANON;
 
-        let env;
-        try {
-            env = getEnv(event.platform);
-        } catch (e) {
-            return new Response(JSON.stringify({ error: 'Service Unavailable' }), { status: 503 });
-        }
+			const rateLimitResult = await checkRateLimitEnhanced(
+				sessionsKV,
+				identifier,
+				'trips:write',
+				config.limit,
+				config.windowMs
+			);
 
-        const { kv, trashKV, placesKV, usersKV, tripIndexDO } = env;
-        const svc = makeTripService(kv as any, trashKV as any, placesKV as any, tripIndexDO as any);
-        
-        const validData = parseResult.data;
-        const id = validData.id || crypto.randomUUID();
-        let existingTrip = null;
+			const headers = createRateLimitHeaders(rateLimitResult);
 
-        if (validData.id) {
-            existingTrip = await svc.get(storageId, id);
-        }
+			if (!rateLimitResult.allowed) {
+				return new Response(
+					JSON.stringify({
+						error: 'Too many requests. Please try again later.',
+						limit: rateLimitResult.limit,
+						resetAt: rateLimitResult.resetAt
+					}),
+					{
+						status: 429,
+						headers: {
+							'Content-Type': 'application/json',
+							...headers
+						}
+					}
+				);
+			}
+		}
 
-        let currentPlan = sessionUser.plan;
-        if (usersKV && usersKV.get) {
-            try {
-                const freshUser = await findUserById(usersKV as any, sessionUser.id);
-                if (freshUser) currentPlan = freshUser.plan;
-            } catch(e) { console.error('Failed to fetch fresh plan', e); }
-        }
+		const storageId = sessionUser.name || sessionUser.token;
+		const rawBody = await event.request.json();
 
-        if (!existingTrip) {
-            const limit = currentPlan === 'free' ? 10 : 999999;
-            const quota = await svc.checkMonthlyQuota(storageId, limit);
-            
-            if (!quota.allowed) {
-                return new Response(JSON.stringify({
-                    error: 'Limit Reached',
-                    message: `You have reached your free monthly limit of 10 trips. (Used: ${quota.count})`
-                }), { status: 403, headers: { 'Content-Type': 'application/json' } });
-            }
-        }
+		// ← NEW: Sanitize input to prevent XSS and injection attacks
+		let sanitizedBody;
+		try {
+			sanitizedBody = validateAndSanitizeRequest(rawBody, true);
+		} catch (sanitizeError) {
+			console.error('Sanitization error:', sanitizeError);
+			return new Response(
+				JSON.stringify({
+					error: 'Invalid input data',
+					message: 'The submitted data contains invalid or potentially harmful content'
+				}),
+				{ status: 400, headers: { 'Content-Type': 'application/json' } }
+			);
+		}
 
-        const now = new Date().toISOString();
-        const trip = {
-            ...validData,
-            id,
-            userId: storageId,
-            createdAt: existingTrip ? existingTrip.createdAt : now,
-            updatedAt: now
-        };
+		// Validate with Zod schema (now using sanitized data)
+		const parseResult = tripSchema.safeParse(sanitizedBody);
+		if (!parseResult.success) {
+			return new Response(
+				JSON.stringify({
+					error: 'Invalid Data',
+					details: parseResult.error.flatten()
+				}),
+				{ status: 400 }
+			);
+		}
 
-        await svc.put(trip);
-        
-        if (!existingTrip) {
-            await svc.incrementUserCounter(sessionUser.token, 1);
-        }
+		let env;
+		try {
+			env = getEnv(event.platform);
+		} catch (e) {
+			return new Response(JSON.stringify({ error: 'Service Unavailable' }), { status: 503 });
+		}
 
-        return new Response(JSON.stringify(trip), {
-            status: 201,
-            headers: { 'Content-Type': 'application/json' }
-        });
-    } catch (err) {
-        console.error('POST /api/trips error', err);
-        return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-        });
-    }
+		const { kv, trashKV, placesKV, usersKV, tripIndexDO } = env;
+		const svc = makeTripService(kv as any, trashKV as any, placesKV as any, tripIndexDO as any);
+
+		const validData = parseResult.data;
+		const id = validData.id || crypto.randomUUID();
+		let existingTrip = null;
+
+		if (validData.id) {
+			existingTrip = await svc.get(storageId, id);
+		}
+
+		let currentPlan = sessionUser.plan;
+		if (usersKV && usersKV.get) {
+			try {
+				const freshUser = await findUserById(usersKV as any, sessionUser.id);
+				if (freshUser) currentPlan = freshUser.plan;
+			} catch (e) {
+				console.error('Failed to fetch fresh plan', e);
+			}
+		}
+
+		if (!existingTrip) {
+			const limit = currentPlan === 'free' ? 10 : 999999;
+			const quota = await svc.checkMonthlyQuota(storageId, limit);
+
+			if (!quota.allowed) {
+				return new Response(
+					JSON.stringify({
+						error: 'Limit Reached',
+						message: `You have reached your free monthly limit of 10 trips. (Used: ${quota.count})`
+					}),
+					{ status: 403, headers: { 'Content-Type': 'application/json' } }
+				);
+			}
+		}
+
+		const now = new Date().toISOString();
+		const trip = {
+			...validData,
+			id,
+			userId: storageId,
+			createdAt: existingTrip ? existingTrip.createdAt : now,
+			updatedAt: now
+		};
+
+		await svc.put(trip);
+
+		if (!existingTrip) {
+			await svc.incrementUserCounter(sessionUser.token, 1);
+		}
+
+		return new Response(JSON.stringify(trip), {
+			status: 201,
+			headers: { 'Content-Type': 'application/json' }
+		});
+	} catch (err) {
+		console.error('POST /api/trips error', err);
+		return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
+			status: 500,
+			headers: { 'Content-Type': 'application/json' }
+		});
+	}
 };

@@ -531,6 +531,13 @@ export class HughesNetService {
                     }
 
                     const links = parser.extractMenuLinks(html).filter(l => l.url.includes('SoSearch') || l.url.includes('forms/'));
+
+                    // [!code ++] Add manual search link to ensure it is always scanned
+                    links.push({
+                        url: 'https://dwayinstalls.hns.com/CROF/SoSearch.jsp?action=submit',
+                        text: 'Manual Search'
+                    });
+
                     this.log(`[Scan] Found ${links.length} menu links to scan...`);
                     
                     for (const link of links) {

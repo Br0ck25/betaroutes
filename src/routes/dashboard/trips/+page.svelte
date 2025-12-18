@@ -1,30 +1,18 @@
 <script lang="ts">
   import { trips, isLoading } from '$lib/stores/trips';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
+  import AsyncErrorBoundary from '$lib/components/AsyncErrorBoundary.svelte'; // ← NEW
   import { goto } from '$app/navigation';
   import { user } from '$lib/stores/auth';
   import { page } from '$app/stores';
   import { toasts } from '$lib/stores/toast';
   import { userSettings } from '$lib/stores/userSettings';
   import Modal from '$lib/components/ui/Modal.svelte';
+  import { onMount } from 'svelte'; // ← NEW
 
-  // [!code fix] BRIDGE: Server Stream -> Client Store
-  // This listens for the streamed promise and updates your existing store
-  export let data;
-  $: if (data.streamed?.tripsPromise) {
-      trips.setLoading(true); // Show skeletons immediately
-      
-      data.streamed.tripsPromise
-          .then((loadedTrips: any[]) => {
-              trips.set(loadedTrips);
-              trips.setLoading(false); // Hide skeletons when done
-          })
-          .catch((err: any) => {
-              console.error("Failed to stream trips", err);
-              trips.setLoading(false);
-              toasts.error("Failed to load trips.");
-          });
-  }
+  // ← NEW: Error boundary reference
+  let tripsBoundary: any;
+  let hasLoadedOnce = false;
 
   let searchQuery = '';
   let sortBy = 'date';
@@ -52,6 +40,32 @@
   $: if (searchQuery || sortBy || sortOrder || filterProfit || startDate || endDate) {
       currentPage = 1;
   }
+
+  // ← NEW: Enhanced loading function with error handling
+  async function loadTrips() {
+    try {
+      if (!hasLoadedOnce) {
+        tripsBoundary?.setLoading();
+      }
+
+      await trips.load();
+      
+      hasLoadedOnce = true;
+      tripsBoundary?.setSuccess();
+    } catch (error) {
+      console.error('Failed to load trips:', error);
+      tripsBoundary?.setError(error as Error);
+      
+      // Show user-friendly toast
+      toasts.error('Failed to load trips. Click retry to try again.');
+      throw error; // Re-throw so boundary catches it
+    }
+  }
+
+  // ← NEW: Load trips on mount
+  onMount(() => {
+    loadTrips();
+  });
 
   // Derived: All filtered results (for metrics/export)
   $: allFilteredTrips = $trips
@@ -437,33 +451,12 @@
   }
 </script>
 
-{#if $isLoading}
-    <div class="trip-list-cards">
-      {#each Array(3) as _}
-        <div class="trip-card">
-          <div class="card-top">
-            <div style="flex: 1">
-              <Skeleton height="16px" width="30%" className="mb-2" />
-              <Skeleton height="20px" width="60%" />
-            </div>
-            <Skeleton height="24px" width="60px" />
-          </div>
-          <div class="card-stats">
-            {#each Array(5) as _}
-              <div class="stat-item">
-                 <Skeleton height="10px" width="40px" className="mb-1" />
-                 <Skeleton height="14px" width="30px" />
-              </div>
-            {/each}
-          </div>
-        </div>
-      {/each}
-    </div>
-{/if}
-
 <svelte:head>
   <title>Trip History - Go Route Yourself</title>
 </svelte:head>
+
+<!-- ← NEW: Wrap entire page content with AsyncErrorBoundary -->
+<AsyncErrorBoundary bind:this={tripsBoundary} onRetry={loadTrips}>
 
 <div class="trip-history">
   <div class="page-header">
@@ -473,14 +466,14 @@
     </div>
     
     <div class="header-actions">
-        <button class="btn-secondary" on:click={() => goto('/dashboard/trash')} aria-label="View Trash">
+        <button class="btn-secondary" onclick={() => goto('/dashboard/trash')} aria-label="View Trash">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
             </svg>
         </button>
 
-        <button class="btn-secondary" on:click={() => isManageCategoriesOpen = true} aria-label="Manage Categories">
+        <button class="btn-secondary" onclick={() => isManageCategoriesOpen = true} aria-label="Manage Categories">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.39a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
         </button>
 
@@ -552,7 +545,7 @@
         <option value="miles">By Miles</option>
       </select>
       
-      <button class="sort-btn" aria-label="Toggle sort order" on:click={() => sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'}>
+      <button class="sort-btn" aria-label="Toggle sort order" onclick={() => sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'}>
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="transform: rotate({sortOrder === 'asc' ? '180deg' : '0deg'})" aria-hidden="true">
             <path d="M10 3V17M10 17L4 11M10 17L16 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
@@ -563,7 +556,7 @@
   {#if visibleTrips.length > 0}
     <div class="batch-header" class:visible={allFilteredTrips.length > 0}>
         <label class="checkbox-container">
-            <input type="checkbox" checked={allSelected} on:change={toggleSelectAll} />
+            <input type="checkbox" checked={allSelected} onchange={toggleSelectAll} />
             <span class="checkmark"></span>
             Select All ({allFilteredTrips.length})
         </label>
@@ -591,8 +584,8 @@
               id={'trip-' + trip.id}
               class:expanded={isExpanded} 
               class:selected={isSelected}
-              on:click={() => toggleExpand(trip.id)}
-              on:keydown={(e) => handleKeydown(e, trip.id)}
+              onclick={() => toggleExpand(trip.id)}
+              onkeydown={(e) => handleKeydown(e, trip.id)}
               role="button"
               tabindex="0"
               aria-expanded={isExpanded}
@@ -602,9 +595,9 @@
               }}
             >
               <div class="card-top">
-                 <div class="selection-box" on:click|stopPropagation on:keydown|stopPropagation role="none">
+                 <div class="selection-box" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="none">
                     <label class="checkbox-container">
-                        <input type="checkbox" checked={isSelected} on:change={() => toggleSelection(trip.id)} />
+                        <input type="checkbox" checked={isSelected} onchange={() => toggleSelection(trip.id)} />
                         <span class="checkmark"></span>
                     </label>
                 </div>
@@ -657,7 +650,7 @@
               </div>
               
               {#if isExpanded}
-                <div class="expanded-details" on:click|stopPropagation on:keydown|stopPropagation role="group">
+                <div class="expanded-details" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="group">
                   <div class="detail-section">
                     <h4 class="section-heading">Stops & Addresses</h4>
                     <div class="address-list">
@@ -715,11 +708,11 @@
                   {/if}
                   
                   <div class="action-buttons-footer">
-                    <button class="action-btn-lg edit-btn" on:click={() => editTrip(trip.id)}>
+                    <button class="action-btn-lg edit-btn" onclick={() => editTrip(trip.id)}>
                       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11 2L14 5L5 14H2V11L11 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         Edit
                     </button>
-                    <button class="action-btn-lg delete-btn" on:click={() => deleteTrip(trip.id)}>
+                    <button class="action-btn-lg delete-btn" onclick={() => deleteTrip(trip.id)}>
                       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4H14M12 4V13C12 13.5304 11.7893 14.0391 11.4142 14.4142C11.0391 14.7893 10.5304 15 10 15H6C5.46957 15 4.96086 14.7893 4.58579 14.4142C4.21071 14.0391 4 13.5304 4 13V4M5 4V3C5 2.46957 5.21071 1.96086 5.58579 1.58579C5.96086 1.21071 6.46957 1 7 1H9C9.53043 1 10.0391 1.21071 10.4142 1.58579C10.7893 1.96086 11 2.46957 11 3V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         Trash
                     </button>
@@ -733,11 +726,11 @@
 
     {#if totalPages > 1}
       <div class="pagination-controls">
-          <button class="page-btn" disabled={currentPage === 1} on:click={() => changePage(currentPage - 1)}>
+          <button class="page-btn" disabled={currentPage === 1} onclick={() => changePage(currentPage - 1)}>
             &larr; Prev
           </button>
           <span class="page-status">Page {currentPage} of {totalPages}</span>
-          <button class="page-btn" disabled={currentPage === totalPages} on:click={() => changePage(currentPage + 1)}>
+          <button class="page-btn" disabled={currentPage === totalPages} onclick={() => changePage(currentPage + 1)}>
             Next &rarr;
           </button>
       </div>
@@ -755,12 +748,12 @@
         <div class="action-bar">
             <span class="selected-count">{selectedTrips.size} Selected</span>
             <div class="action-buttons">
-                <button class="action-pill secondary" on:click={() => selectedTrips = new Set()}>Cancel</button>
-                <button class="action-pill export" on:click={exportSelected}>
+                <button class="action-pill secondary" onclick={() => selectedTrips = new Set()}>Cancel</button>
+                <button class="action-pill export" onclick={exportSelected}>
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12V14H14V12M8 2V10M8 10L4 6M8 10L12 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     Export CSV
                 </button>
-                <button class="action-pill danger" on:click={deleteSelected}>
+                <button class="action-pill danger" onclick={deleteSelected}>
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 4H14M5 4V3C5 2.4 5.4 2 6 2H10C10.6 2 11 2.4 11 3V4M6 8V12M10 8V12" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     Delete
                 </button>
@@ -769,20 +762,117 @@
     </div>
 {/if}
 
+<!-- ← NEW: Custom loading snippet -->
+{#snippet loading()}
+  <div class="trips-loading">
+    <div class="loading-header">
+      <div class="skeleton skeleton-title"></div>
+      <div class="skeleton skeleton-button"></div>
+    </div>
+    
+    <div class="loading-stats">
+      {#each Array(4) as _}
+        <div class="skeleton skeleton-stat"></div>
+      {/each}
+    </div>
+
+    <div class="loading-filters">
+      <div class="skeleton skeleton-input"></div>
+      <div class="skeleton skeleton-select"></div>
+    </div>
+
+    <div class="trip-list-cards">
+      {#each Array(6) as _}
+        <div class="trip-skeleton">
+          <div class="skeleton-top">
+            <div class="skeleton skeleton-text" style="width: 30%; height: 14px;"></div>
+            <div class="skeleton skeleton-text" style="width: 60%; height: 18px; margin-top: 8px;"></div>
+          </div>
+          <div class="skeleton-stats-grid">
+            {#each Array(5) as _}
+              <div>
+                <div class="skeleton skeleton-text" style="width: 80%; height: 10px; margin-bottom: 4px;"></div>
+                <div class="skeleton skeleton-text" style="width: 50%; height: 14px;"></div>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/each}
+    </div>
+  </div>
+{/snippet}
+
+<!-- ← NEW: Custom error snippet -->
+{#snippet error({ error, retry })}
+  <div class="trips-error">
+    <div class="error-content">
+      <div class="error-icon">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+      </div>
+
+      <h2>Failed to Load Trips</h2>
+      
+      <p class="error-message">
+        {#if error.message.includes('fetch') || error.message.includes('Failed to fetch')}
+          Unable to connect to the server. Please check your internet connection and try again.
+        {:else if error.message.includes('401') || error.message.includes('Unauthorized')}
+          Your session has expired. Please <a href="/login">log in again</a>.
+        {:else if error.message.includes('403') || error.message.includes('Forbidden')}
+          You don't have permission to view trips. Please contact support if this persists.
+        {:else if error.message.includes('500')}
+          A server error occurred. Our team has been notified. Please try again in a few moments.
+        {:else}
+          {error.message}
+        {/if}
+      </p>
+
+      <div class="error-actions">
+        <button onclick={retry} class="btn-primary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"/>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+          Try Again
+        </button>
+
+        <a href="/dashboard" class="btn-secondary">
+          Go to Dashboard
+        </a>
+      </div>
+
+      <details class="error-details">
+        <summary>Technical Details</summary>
+        <pre><code>{JSON.stringify({
+          message: error.message,
+          time: new Date().toISOString(),
+          path: $page.url.pathname,
+          userAgent: navigator.userAgent
+        }, null, 2)}</code></pre>
+      </details>
+    </div>
+  </div>
+{/snippet}
+
+</AsyncErrorBoundary>
+
 <Modal bind:open={isManageCategoriesOpen} title="Manage Categories">
     <div class="categories-manager">
         <div class="tabs">
             <button 
                 class="tab-btn" 
                 class:active={activeCategoryType === 'maintenance'}
-                on:click={() => activeCategoryType = 'maintenance'}
+                onclick={() => activeCategoryType = 'maintenance'}
             >
                 Maintenance
             </button>
             <button 
                 class="tab-btn" 
                 class:active={activeCategoryType === 'supplies'}
-                on:click={() => activeCategoryType = 'supplies'}
+                onclick={() => activeCategoryType = 'supplies'}
             >
                 Supplies
             </button>
@@ -796,7 +886,7 @@
             {#each activeCategories as cat}
                 <div class="cat-item">
                     <span class="cat-badge">{cat}</span>
-                    <button class="cat-delete" on:click={() => removeCategory(cat)} aria-label="Delete Category">
+                    <button class="cat-delete" onclick={() => removeCategory(cat)} aria-label="Delete Category">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
                 </div>
@@ -811,19 +901,19 @@
                 bind:value={newCategoryName} 
                 placeholder="New {activeCategoryType} category..." 
                 class="input-field"
-                on:keydown={(e) => e.key === 'Enter' && addCategory()}
+                onkeydown={(e) => e.key === 'Enter' && addCategory()}
             />
-            <button class="btn-secondary" on:click={addCategory}>Add</button>
+            <button class="btn-secondary" onclick={addCategory}>Add</button>
         </div>
         
         <div class="modal-actions mt-6">
-            <button class="btn-cancel w-full" on:click={() => isManageCategoriesOpen = false}>Done</button>
+            <button class="btn-cancel w-full" onclick={() => isManageCategoriesOpen = false}>Done</button>
         </div>
     </div>
 </Modal>
 
 <style>
-  /* ... (Keep existing styles) ... */
+  /* ... (Keep all existing styles) ... */
   .trip-history { max-width: 1200px; margin: 0 auto; padding: 12px; padding-bottom: 80px; }
   .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
   .page-title { font-size: 24px; font-weight: 800; color: #111827; margin: 0; }
@@ -833,14 +923,13 @@
   .btn-primary { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; 
     background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; border: none; 
     border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; 
-    box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); transition: transform 0.1s; }
+    box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); transition: transform 0.1s; cursor: pointer; }
   .btn-primary:active { transform: translateY(1px); }
 
   .btn-secondary { display: inline-flex; align-items: center; justify-content: center; padding: 10px; 
     background: white; border: 1px solid #E5E7EB; color: #374151; border-radius: 8px; 
-    font-weight: 600; font-size: 14px; cursor: pointer; transition: background 0.2s; }
+    font-weight: 600; font-size: 14px; cursor: pointer; transition: background 0.2s; text-decoration: none; }
 
-  /* UPDATED: Wrap hover states in media query to prevent sticky hover on mobile */
   @media (hover: hover) {
     .btn-secondary:hover { background: #F9FAFB; }
     .cat-delete:hover { background: #EF4444; color: white; }
@@ -869,7 +958,6 @@
   .modal-actions .btn-cancel { background: white; border: 1px solid #E5E7EB; color: #374151; padding: 12px; 
     border-radius: 8px; font-weight: 600; cursor: pointer; width: 100%; }
 
-  /* ... (Keep existing styles below) ... */
   .stats-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
   .summary-card { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; text-align: center; }
   .summary-label { font-size: 12px; color: #6B7280; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -884,7 +972,7 @@
   .date-sep { color: #9CA3AF; font-weight: bold; }
   .filter-group { display: flex; flex-direction: row; gap: 8px; width: 100%; }
   .filter-select { flex: 1; min-width: 0; padding: 12px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 14px; background: white; color: #374151; }
-  .sort-btn { flex: 0 0 48px; display: flex; align-items: center; justify-content: center; border: 1px solid #E5E7EB; border-radius: 10px; background: white; color: #6B7280; }
+  .sort-btn { flex: 0 0 48px; display: flex; align-items: center; justify-content: center; border: 1px solid #E5E7EB; border-radius: 10px; background: white; color: #6B7280; cursor: pointer; }
   .batch-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 0 4px; color: #6B7280; font-size: 13px; font-weight: 500; }
   .checkbox-container { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: #4B5563; position: relative; padding-left: 28px; user-select: none; }
   .checkbox-container input { position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0; }
@@ -949,6 +1037,185 @@
   .page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .page-status { font-size: 14px; color: #4B5563; font-weight: 500; }
 
+  /* ← NEW: Loading state styles */
+  .trips-loading {
+    padding: 2rem;
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .loading-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+  }
+
+  .loading-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .loading-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .skeleton {
+    background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 0.5rem;
+  }
+
+  .skeleton-title {
+    width: 200px;
+    height: 2rem;
+  }
+
+  .skeleton-button {
+    width: 120px;
+    height: 2.5rem;
+  }
+
+  .skeleton-stat {
+    height: 80px;
+    border-radius: 12px;
+  }
+
+  .skeleton-input {
+    flex: 1;
+    height: 2.5rem;
+  }
+
+  .skeleton-select {
+    width: 150px;
+    height: 2.5rem;
+  }
+
+  .trip-skeleton {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+  }
+
+  .skeleton-top {
+    margin-bottom: 1rem;
+  }
+
+  .skeleton-text {
+    height: 1rem;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 0.25rem;
+  }
+
+  .skeleton-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* ← NEW: Error state styles */
+  .trips-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    padding: 2rem;
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  .error-content {
+    text-align: center;
+    max-width: 500px;
+  }
+
+  .error-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 80px;
+    height: 80px;
+    background: #fee2e2;
+    border-radius: 50%;
+    color: #dc2626;
+    margin-bottom: 1.5rem;
+  }
+
+  .trips-error h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #111827;
+    margin: 0 0 0.5rem;
+  }
+
+  .error-message {
+    color: #6b7280;
+    margin: 0 0 2rem;
+    line-height: 1.6;
+  }
+
+  .error-message a {
+    color: #FF7F50;
+    text-decoration: underline;
+    font-weight: 600;
+  }
+
+  .error-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 2rem;
+  }
+
+  .error-details {
+    margin-top: 2rem;
+    padding: 1rem;
+    background: #f9fafb;
+    border-radius: 0.5rem;
+    text-align: left;
+  }
+
+  .error-details summary {
+    cursor: pointer;
+    color: #6b7280;
+    font-size: 0.875rem;
+    font-weight: 500;
+    user-select: none;
+  }
+
+  .error-details summary:hover {
+    color: #374151;
+  }
+
+  .error-details pre {
+    margin-top: 0.5rem;
+    padding: 0.75rem;
+    background: #1f2937;
+    color: #f3f4f6;
+    border-radius: 0.375rem;
+    overflow-x: auto;
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+
   @media (min-width: 640px) {
     .filters-bar { flex-direction: row; justify-content: space-between; align-items: center; }
     .search-box { max-width: 300px; }
@@ -957,6 +1224,10 @@
     .filter-select { width: 140px; flex: none; }
     .stats-summary { grid-template-columns: repeat(2, 1fr); }
     .card-stats { grid-template-columns: repeat(5, 1fr); }
+    .error-actions { flex-direction: row; justify-content: center; }
+    .loading-stats { grid-template-columns: repeat(4, 1fr); }
+    .loading-filters { flex-direction: row; }
+    .skeleton-stats-grid { grid-template-columns: repeat(5, 1fr); }
   }
   @media (min-width: 1024px) {
     .stats-summary { grid-template-columns: repeat(4, 1fr); }
