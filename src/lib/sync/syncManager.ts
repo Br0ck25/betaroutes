@@ -1,3 +1,4 @@
+// src/lib/sync/syncManager.ts
 import { getDB } from '$lib/db/indexedDB';
 import { syncStatus } from '$lib/stores/sync';
 import type { SyncQueueItem } from '$lib/db/types';
@@ -111,7 +112,8 @@ class SyncManager {
 
       for (const item of queue) {
         try {
-          if ((item.action === 'create' || item.action === 'update') && item.data) {
+          // Enrich data only if it's a trip (checking for trip-specific fields or store name)
+          if ((item.action === 'create' || item.action === 'update') && item.data && (!item.data.store || item.data.store === 'trips')) {
              await this.enrichTripData(item.data);
           }
 
@@ -191,18 +193,35 @@ class SyncManager {
 
   private async processSyncItem(item: SyncQueueItem) {
     const { action, tripId, data } = item;
-    const url = action === 'create' ? '/api/trips' : 
-                action.includes('delete') ? `/api/trips/${tripId}` : 
-                `/api/trips/${tripId}`;
 
-    if (action === 'create') await this.apiCall(url, 'POST', data, 'trips', tripId);
-    else if (action === 'update') await this.apiCall(url, 'PUT', data, 'trips', tripId);
+    // [!code ++] Determine which store/API to use
+    // Default to 'trips' for backward compatibility
+    const storeName = data?.store || 'trips';
+    
+    // Construct base URL based on store
+    const baseUrl = storeName === 'expenses' ? '/api/expenses' : '/api/trips';
+    
+    // Construct Full URL
+    const url = action === 'create' ? baseUrl : 
+                action.includes('delete') ? `${baseUrl}/${tripId}` : 
+                `${baseUrl}/${tripId}`;
+
+    // Map store name to IndexedDB store name for local marking
+    // 'trips' -> 'trips', 'expenses' -> 'expenses'
+    let targetStore: 'trips' | 'expenses' | 'trash' | null = storeName === 'expenses' ? 'expenses' : 'trips';
+    
+    if (action === 'delete') targetStore = 'trash';
+    if (action === 'permanentDelete') targetStore = null;
+
+    if (action === 'create') await this.apiCall(url, 'POST', data, targetStore, tripId);
+    else if (action === 'update') await this.apiCall(url, 'PUT', data, targetStore, tripId);
     else if (action === 'delete') await this.apiCall(url, 'DELETE', null, 'trash', tripId);
     else if (action === 'restore') await this.apiCall(`/api/trash/${tripId}`, 'POST', null, 'trips', tripId);
     else if (action === 'permanentDelete') await this.apiCall(`/api/trash/${tripId}`, 'DELETE', null, null, tripId);
   }
 
-  private async apiCall(url: string, method: string, body: any, updateStore: 'trips' | 'trash' | null, id: string) {
+  // [!code change] Updated signature to allow 'expenses'
+  private async apiCall(url: string, method: string, body: any, updateStore: 'trips' | 'expenses' | 'trash' | null, id: string) {
       const res = await fetch(url, {
           method,
           keepalive: true,
@@ -222,7 +241,8 @@ class SyncManager {
       if (updateStore) await this.markAsSynced(updateStore, id);
   }
 
-  private async markAsSynced(store: 'trips' | 'trash', tripId: string) {
+  // [!code change] Updated signature to allow 'expenses'
+  private async markAsSynced(store: 'trips' | 'expenses' | 'trash', tripId: string) {
     const db = await getDB();
     const tx = db.transaction(store, 'readwrite');
     const objectStore = tx.objectStore(store);
