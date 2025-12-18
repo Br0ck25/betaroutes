@@ -253,6 +253,7 @@
   /* --- Mobile Header --- */
   .mobile-header {
     display: flex;
+    /* Default to visible for mobile */
     position: fixed;
     top: 0;
     left: 0;
@@ -295,8 +296,8 @@
     border-right: 1px solid #E5E7EB;
     display: flex;
     flex-direction: column;
-    z-index: 1001; /* UPDATED: Higher z-index than bottom nav */
-    transform: translateX(-100%);
+    z-index: 1001;
+    transform: translateX(-100%); /* Hidden on mobile */
     transition: transform 0.3s ease;
   }
   
@@ -316,6 +317,7 @@
     height: 40px;
   }
   
+  /* Sync Indicator in Sidebar */
   .sidebar-sync {
     padding: 16px 20px;
     border-bottom: 1px solid #E5E7EB;
@@ -448,7 +450,9 @@
   /* --- Main Content --- */
   .main-content {
     margin-left: 0;
+    /* Default 0 for mobile */
     padding: calc(var(--mobile-header-height) + 20px) 16px 100px 16px;
+    /* Top padding for header, Bottom for nav bar */
     flex: 1;
     min-height: 100dvh; /* UPDATED: Dynamic viewport height */
   }
@@ -461,7 +465,7 @@
     right: 0;
     bottom: 0;
     background: rgba(0, 0, 0, 0.5);
-    z-index: 1000; /* UPDATED: Higher than bottom nav (900) but lower than sidebar (1001) */
+    z-index: 1000;
     backdrop-filter: blur(4px);
   }
 
@@ -482,6 +486,7 @@
     right: 0;
     background: white;
     border-top: 1px solid #E5E7EB;
+    /* Respect iPhone Home Indicator area */
     padding-bottom: env(safe-area-inset-bottom, 20px); 
     height: calc(60px + env(safe-area-inset-bottom, 20px));
     z-index: 900;
@@ -521,6 +526,7 @@
     
     .sidebar {
       transform: translateX(0);
+      /* Always visible */
     }
     
     .main-content {
@@ -540,4 +546,4 @@
       display: none;
     }
   }
-</style
+</style>
