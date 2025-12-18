@@ -12,8 +12,10 @@ const settingsSchema = z.object({
   distanceUnit: z.enum(['mi', 'km']).optional(),
   currency: z.enum(['USD', 'EUR', 'GBP', 'JPY']).optional(), 
   theme: z.enum(['light', 'dark', 'system']).optional(),
-  // [!code ++] Allow array of strings for categories
-  expenseCategories: z.array(z.string()).optional() 
+  expenseCategories: z.array(z.string()).optional(),
+  // [!code ++] Add new arrays to schema
+  maintenanceCategories: z.array(z.string()).optional(),
+  supplyCategories: z.array(z.string()).optional()
 });
 
 export const GET: RequestHandler = async ({ locals, platform }) => {
@@ -43,9 +45,7 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
   try {
       const body = await request.json();
       
-      // Unwrap 'settings' if sent by the frontend helper
       const payload = body.settings || body;
-
       const result = settingsSchema.safeParse(payload);
       
       if (!result.success) {
@@ -59,7 +59,6 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
       const existingRaw = await kv.get(key);
       const existing = existingRaw ? JSON.parse(existingRaw) : {};
 
-      // Merge and save
       const updated = { ...existing, ...result.data };
       await kv.put(key, JSON.stringify(updated));
 

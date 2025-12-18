@@ -7,17 +7,36 @@
   import { page } from '$app/stores';
   import { autocomplete } from '$lib/utils/autocomplete'; 
   import { optimizeRoute } from '$lib/services/maps';
+  // [!code ++] Import Modal and Toast
+  import Modal from '$lib/components/ui/Modal.svelte';
+  import { toasts } from '$lib/stores/toast';
 
   export let data;
   $: API_KEY = data.googleMapsApiKey;
   let step = 1;
   let dragItemIndex: number | null = null;
-  let maintenanceOptions = ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement'];
-  let suppliesOptions = ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental'];
   
+  // [!code change] Use userSettings for options instead of local variables
+  $: maintenanceOptions = $userSettings.maintenanceCategories?.length > 0 
+      ? $userSettings.maintenanceCategories 
+      : ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement'];
+
+  $: suppliesOptions = $userSettings.supplyCategories?.length > 0 
+      ? $userSettings.supplyCategories 
+      : ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental'];
+
+  // [!code ++] State for Dropdowns
+  let selectedMaintenance = '';
+  let selectedSupply = '';
+
+  // [!code ++] State for Modal
+  let isManageCategoriesOpen = false;
+  let activeCategoryType: 'maintenance' | 'supplies' = 'maintenance';
+  let newCategoryName = '';
+  $: activeCategories = activeCategoryType === 'maintenance' ? maintenanceOptions : suppliesOptions;
+
   let isCalculating = false;
   
-  // [!code ++] Helper function to get local date (fixes "tomorrow" bug)
   function getLocalDate() {
     const now = new Date();
     return new Date(now.getTime() - (now.getTimezoneOffset() * 60000))
@@ -25,16 +44,8 @@
       .split('T')[0];
   }
   
-  onMount(() => {
-    const savedMaintenance = localStorage.getItem('maintenanceOptions');
-    const savedSupplies = localStorage.getItem('suppliesOptions');
-    if (savedMaintenance) maintenanceOptions = JSON.parse(savedMaintenance);
-    if (savedSupplies) suppliesOptions = JSON.parse(savedSupplies);
-  });
-
   let tripData = {
     id: crypto.randomUUID(),
-    // [!code change] Use getLocalDate() instead of direct UTC conversion
     date: getLocalDate(),
     startTime: '09:00',
     endTime: '17:00',
@@ -53,11 +64,8 @@
   };
 
   let newStop = { address: '', earnings: 0, notes: '' };
-  let newMaintenanceItem = '';
-  let newSupplyItem = '';
-  let showAddMaintenance = false;
-  let showAddSupply = false;
 
+  // ... (Keep existing routing helpers: formatDuration, generateRouteKey, fetchRouteSegment, recalculateAllLegs, recalculateTotals) ...
   function formatDuration(minutes: number): string {
     if (!minutes) return '0 min';
     const h = Math.floor(minutes / 60);
@@ -65,8 +73,6 @@
     if (h > 0) return `${h} hr ${m} min`;
     return `${m} min`;
   }
-
-  // --- ROUTING LOGIC ---
 
   function generateRouteKey(start: string, end: string) {
     const s = start.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
@@ -76,21 +82,14 @@
 
   async function fetchRouteSegment(start: string, end: string) {
     if (!start || !end) return null;
-    
     const localKey = generateRouteKey(start, end);
     const cached = localStorage.getItem(localKey);
-    if (cached) {
-      console.log("Local Hit:", localKey);
-      return JSON.parse(cached);
-    }
+    if (cached) return JSON.parse(cached);
 
     try {
-        console.log("Local Miss. Asking Server...");
         const res = await fetch(`/api/directions/cache?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
         const result = await res.json();
-
         if (result.data) {
-            console.log(`Server Hit (${result.source})`);
             const mappedResult = {
                 distance: result.data.distance * 0.000621371,
                 duration: result.data.duration / 60
@@ -104,12 +103,10 @@
     return null;
   }
 
-  // Helper to traverse the entire list and update every leg
   async function recalculateAllLegs() {
     isCalculating = true;
     try {
         let prevAddress = tripData.startAddress;
-        
         for (let i = 0; i < tripData.stops.length; i++) {
             const currentStop = tripData.stops[i];
             if (prevAddress && currentStop.address) {
@@ -134,7 +131,6 @@
     const lastStop = tripData.stops[tripData.stops.length - 1];
     const startPoint = lastStop ? lastStop.address : tripData.startAddress;
     const endPoint = tripData.endAddress || tripData.startAddress;
-
     if (startPoint && endPoint) {
         const finalLeg = await fetchRouteSegment(startPoint, endPoint);
         if (finalLeg) {
@@ -145,26 +141,20 @@
 
     tripData.totalMiles = parseFloat(miles.toFixed(1));
     tripData.estimatedTime = Math.round(mins);
-    // Force reactivity update
     tripData = { ...tripData };
   }
 
+  // ... (Keep optimize, drag & drop, stop handling logic) ...
   async function handleOptimize() {
     if (!tripData.startAddress) return alert("Please enter a start address first.");
     if (tripData.stops.length < 2) return alert("Add at least 2 stops to optimize.");
 
     isCalculating = true;
     try {
-      const result = await optimizeRoute(
-        tripData.startAddress,
-        tripData.endAddress,
-        tripData.stops
-      );
-
+      const result = await optimizeRoute(tripData.startAddress, tripData.endAddress, tripData.stops);
       if (result.optimizedOrder) {
         const currentStops = [...tripData.stops];
         let orderedStops = [];
-
         if (!tripData.endAddress) {
            const movingStops = currentStops.slice(0, -1);
            const fixedLast = currentStops[currentStops.length - 1];
@@ -175,7 +165,6 @@
         }
 
         tripData.stops = orderedStops;
-        
         if (result.legs) {
            tripData.stops.forEach((stop, i) => {
              if (result.legs[i]) {
@@ -194,16 +183,13 @@
     }
   }
 
+  // ... (Keep handleStopChange, handleMainAddressChange, handleNewStopSelect, addStop, removeStop, drag handlers) ...
   async function handleStopChange(index: number, placeOrEvent: any) {
     const val = placeOrEvent?.formatted_address || placeOrEvent?.name || tripData.stops[index].address;
     if (!val) return;
-
-    // Removed the equality check to force recalc on blur even if bind updated value
     tripData.stops[index].address = val;
     isCalculating = true;
-
     try {
-        // 1. Update leg coming INTO this stop
         const prevLoc = index === 0 ? tripData.startAddress : tripData.stops[index - 1].address;
         if (prevLoc) {
             const legIn = await fetchRouteSegment(prevLoc, val);
@@ -212,8 +198,6 @@
                 tripData.stops[index].timeFromPrev = legIn.duration;
             }
         }
-
-        // 2. Update leg going OUT of this stop
         const nextStop = tripData.stops[index + 1];
         if (nextStop) {
             const legOut = await fetchRouteSegment(val, nextStop.address);
@@ -230,8 +214,6 @@
 
   async function handleMainAddressChange(type: 'start' | 'end', placeOrEvent: any) {
     const val = placeOrEvent?.formatted_address || placeOrEvent?.name || (type === 'start' ? tripData.startAddress : tripData.endAddress);
-    
-    // Removed strict equality check to allow manual typing updates
     if (type === 'start') tripData.startAddress = val;
     else tripData.endAddress = val;
 
@@ -251,7 +233,6 @@
     }
   }
 
-  // Auto-calculate on new stop selection
   async function handleNewStopSelect(e: CustomEvent) {
     const place = e.detail;
     if (place?.formatted_address || place?.name) {
@@ -276,23 +257,23 @@
         distanceFromPrev: segmentData.distance, 
         timeFromPrev: segmentData.duration 
       }];
-      
       await recalculateTotals();
       newStop = { address: '', earnings: 0, notes: '' };
-    } catch (e) { alert("Error calculating route."); } finally { isCalculating = false; }
+    } catch (e) { alert("Error calculating route.");
+    } finally { isCalculating = false; }
   }
 
   function removeStop(id: string) { 
       tripData.stops = tripData.stops.filter(s => s.id !== id);
-      recalculateAllLegs(); // Force full recalc to bridge gap
+      recalculateAllLegs();
   }
 
   function handleDragStart(event: DragEvent, index: number) { 
-      dragItemIndex = index; 
+      dragItemIndex = index;
       if(event.dataTransfer) { 
           event.dataTransfer.effectAllowed = 'move'; 
           event.dataTransfer.dropEffect = 'move'; 
-          event.dataTransfer.setData('text/plain', index.toString()); 
+          event.dataTransfer.setData('text/plain', index.toString());
       } 
   }
   
@@ -301,34 +282,100 @@
   async function handleDrop(event: DragEvent, dropIndex: number) {
       event.preventDefault();
       if (dragItemIndex === null) return;
-      
       const item = tripData.stops[dragItemIndex];
       const newStops = tripData.stops.filter((_, i) => i !== dragItemIndex);
       newStops.splice(dropIndex, 0, item);
       tripData.stops = newStops;
       dragItemIndex = null;
-      
       await recalculateAllLegs();
   }
   
-  // ... (Rest of functions: addMaintenanceItem, etc. unchanged) ...
-  function addMaintenanceItem(type: string) { tripData.maintenanceItems = [...tripData.maintenanceItems, { id: crypto.randomUUID(), type, cost: 0 }]; }
-  function removeMaintenanceItem(id: string) { tripData.maintenanceItems = tripData.maintenanceItems.filter(m => m.id !== id); }
-  function addCustomMaintenance() { if (!newMaintenanceItem.trim()) return; const item = newMaintenanceItem.trim(); addMaintenanceItem(item); if (!maintenanceOptions.includes(item)) { maintenanceOptions = [...maintenanceOptions, item]; localStorage.setItem('maintenanceOptions', JSON.stringify(maintenanceOptions)); } newMaintenanceItem = ''; showAddMaintenance = false; }
-  function deleteMaintenanceOption(option: string) { if (confirm(`Delete "${option}"?`)) { maintenanceOptions = maintenanceOptions.filter(o => o !== option); localStorage.setItem('maintenanceOptions', JSON.stringify(maintenanceOptions)); } }
+  // [!code change] New Expense Logic using Dropdowns & Settings
   
-  function addSupplyItem(type: string) { tripData.suppliesItems = [...tripData.suppliesItems, { id: crypto.randomUUID(), type, cost: 0 }]; }
-  function removeSupplyItem(id: string) { tripData.suppliesItems = tripData.suppliesItems.filter(s => s.id !== id); }
-  function addCustomSupply() { if (!newSupplyItem.trim()) return; const item = newSupplyItem.trim(); addSupplyItem(item); if (!suppliesOptions.includes(item)) { suppliesOptions = [...suppliesOptions, item]; localStorage.setItem('suppliesOptions', JSON.stringify(suppliesOptions)); } newSupplyItem = ''; showAddSupply = false; }
-  function deleteSupplyOption(option: string) { if (confirm(`Delete "${option}"?`)) { suppliesOptions = suppliesOptions.filter(o => o !== option); localStorage.setItem('suppliesOptions', JSON.stringify(suppliesOptions)); } }
+  function addMaintenanceItem() {
+      if (!selectedMaintenance) return;
+      tripData.maintenanceItems = [...tripData.maintenanceItems, { id: crypto.randomUUID(), type: selectedMaintenance, cost: 0 }];
+      // Don't clear selection so they can add multiple of same type if needed, or clear it? 
+      // Clearing it feels better for "action completed"
+      selectedMaintenance = '';
+  }
+
+  function removeMaintenanceItem(id: string) {
+      tripData.maintenanceItems = tripData.maintenanceItems.filter(m => m.id !== id);
+  }
   
-  $: { if (tripData.totalMiles && tripData.mpg && tripData.gasPrice) { const gallons = tripData.totalMiles / tripData.mpg; tripData.fuelCost = Math.round(gallons * tripData.gasPrice * 100) / 100; } else { tripData.fuelCost = 0; } }
+  function addSupplyItem() {
+      if (!selectedSupply) return;
+      tripData.suppliesItems = [...tripData.suppliesItems, { id: crypto.randomUUID(), type: selectedSupply, cost: 0 }];
+      selectedSupply = '';
+  }
+
+  function removeSupplyItem(id: string) {
+      tripData.suppliesItems = tripData.suppliesItems.filter(s => s.id !== id);
+  }
+
+  // --- MODAL & SETTINGS LOGIC ---
+  function openSettings(type: 'maintenance' | 'supplies') {
+      activeCategoryType = type;
+      isManageCategoriesOpen = true;
+  }
+
+  async function updateCategories(newCategories: string[]) {
+      const updateData: any = {};
+      if (activeCategoryType === 'maintenance') {
+          userSettings.update(s => ({ ...s, maintenanceCategories: newCategories }));
+          updateData.maintenanceCategories = newCategories;
+      } else {
+          userSettings.update(s => ({ ...s, supplyCategories: newCategories }));
+          updateData.supplyCategories = newCategories;
+      }
+
+      try {
+          await fetch('/api/settings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updateData)
+          });
+      } catch (e) {
+          console.error('Failed to sync settings', e);
+          toasts.error('Saved locally, but sync failed');
+      }
+  }
+
+  async function addCategory() {
+      if (!newCategoryName.trim()) return;
+      const val = newCategoryName.trim().toLowerCase(); // Normalize for check? Or keep case? Keeping case usually better for display.
+      // Check case-insensitive dupes
+      if (activeCategories.some(c => c.toLowerCase() === val.toLowerCase())) {
+          toasts.error('Category already exists');
+          return;
+      }
+      const updated = [...activeCategories, newCategoryName.trim()];
+      await updateCategories(updated);
+      newCategoryName = '';
+      toasts.success('Category added');
+  }
+
+  async function removeCategory(cat: string) {
+      if (!confirm(`Delete "${cat}" category?`)) return;
+      const updated = activeCategories.filter(c => c !== cat);
+      await updateCategories(updated);
+      toasts.success('Category removed');
+  }
+
+  // ... (Calculations) ...
+  $: { if (tripData.totalMiles && tripData.mpg && tripData.gasPrice) { const gallons = tripData.totalMiles / tripData.mpg;
+    tripData.fuelCost = Math.round(gallons * tripData.gasPrice * 100) / 100; } else { tripData.fuelCost = 0;
+  } }
   $: totalEarnings = tripData.stops.reduce((sum, stop) => sum + (parseFloat(stop.earnings) || 0), 0);
   $: totalMaintenanceCost = tripData.maintenanceItems.reduce((sum, item) => sum + (item.cost || 0), 0);
   $: totalSuppliesCost = tripData.suppliesItems.reduce((sum, item) => sum + (item.cost || 0), 0);
   $: totalCosts = (tripData.fuelCost || 0) + totalMaintenanceCost + totalSuppliesCost;
   $: totalProfit = totalEarnings - totalCosts;
-  $: { if (tripData.startTime && tripData.endTime) { const [startHour, startMin] = tripData.startTime.split(':').map(Number); const [endHour, endMin] = tripData.endTime.split(':').map(Number); let diff = (endHour * 60 + endMin) - (startHour * 60 + startMin); if (diff < 0) diff += 24 * 60; tripData.hoursWorked = Math.round((diff / 60) * 10) / 10; } }
+  $: { if (tripData.startTime && tripData.endTime) { const [startHour, startMin] = tripData.startTime.split(':').map(Number); const [endHour, endMin] = tripData.endTime.split(':').map(Number);
+    let diff = (endHour * 60 + endMin) - (startHour * 60 + startMin);
+    if (diff < 0) diff += 24 * 60; tripData.hoursWorked = Math.round((diff / 60) * 10) / 10;
+  } }
 
   function nextStep() { if (step < 4) step++; }
   function prevStep() { if (step > 1) step--; }
@@ -354,7 +401,9 @@
   }
   
   function formatCurrency(amount: number) { return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(amount); }
-  function formatDateLocal(dateString: string) { if (!dateString) return ''; const [y, m, d] = dateString.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' }); }
+  function formatDateLocal(dateString: string) { if (!dateString) return ''; const [y, m, d] = dateString.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
+  }
 </script>
 
 <div class="trip-form">
@@ -379,19 +428,17 @@
           <h2 class="card-title">Route & Stops</h2>
           <button class="btn-small primary" on:click={handleOptimize} type="button" disabled={isCalculating || tripData.stops.length < 2} title="Reorder stops efficiently">{isCalculating ? 'Optimizing...' : 'Optimize'}</button>
         </div>
-        
         <div class="form-group">
           <label for="start-address">Starting Address</label>
           <input id="start-address" type="text" bind:value={tripData.startAddress} use:autocomplete={{ apiKey: API_KEY }} on:place-selected={(e) => handleMainAddressChange('start', e.detail)} on:blur={(e) => handleMainAddressChange('start', { formatted_address: tripData.startAddress })} class="address-input" placeholder="Enter start address..." />
         </div>
-        
         <div class="stops-container">
           <div class="stops-header"><h3>Stops</h3><span class="count">{tripData.stops.length} added</span></div>
           {#if tripData.stops.length > 0}
             <div class="stops-list">
               {#each tripData.stops as stop, i (stop.id)}
                 <div class="stop-card" draggable="true" on:dragstart={(e) => handleDragStart(e, i)} on:drop={(e) => handleDrop(e, i)} on:dragover={handleDragOver}>
-                  <div class="stop-header"><div class="stop-number">{i + 1}</div><div class="stop-actions"><button class="btn-icon delete" on:click={() => removeStop(stop.id)}>✕</button><div class="drag-handle">☰</div></div></div>
+                   <div class="stop-header"><div class="stop-number">{i + 1}</div><div class="stop-actions"><button class="btn-icon delete" on:click={() => removeStop(stop.id)}>✕</button><div class="drag-handle">☰</div></div></div>
                   <div class="stop-inputs">
                     <input type="text" bind:value={stop.address} use:autocomplete={{ apiKey: API_KEY }} on:place-selected={(e) => handleStopChange(i, e.detail)} on:blur={() => handleStopChange(i, { formatted_address: stop.address })} class="address-input" placeholder="Stop address" />
                     <div class="input-money-wrapper"><span class="symbol">$</span><input type="number" class="input-money" bind:value={stop.earnings} step="0.01" placeholder="Earnings" /></div>
@@ -408,25 +455,132 @@
             <button class="btn-add full-width" on:click={addStop} disabled={isCalculating}>{isCalculating ? 'Calculating...' : '+ Add Stop'}</button>
           </div>
         </div>
-        
         <div class="form-group">
           <label for="end-address">End Address (Optional)</label>
           <input id="end-address" type="text" bind:value={tripData.endAddress} use:autocomplete={{ apiKey: API_KEY }} on:place-selected={(e) => handleMainAddressChange('end', e.detail)} on:blur={(e) => handleMainAddressChange('end', { formatted_address: tripData.endAddress })} class="address-input" placeholder="Same as start if empty" />
         </div>
-
         <div class="form-row"><div class="form-group"><label for="total-miles">Total Miles</label><input id="total-miles" type="number" bind:value={tripData.totalMiles} step="0.1" /></div><div class="form-group"><label for="drive-time">Drive Time <span class="hint">(Est)</span></label><div id="drive-time" class="readonly-field">{formatDuration(tripData.estimatedTime)}</div></div></div>
         <div class="form-actions"><button class="btn-primary full-width" on:click={nextStep}>Continue</button></div>
       </div>
     {/if}
     
-    {#if step === 2} <div class="form-card"><div class="card-header"><h2 class="card-title">Basic Information</h2></div><div class="form-grid"><div class="form-group"><label for="trip-date">Date</label><input id="trip-date" type="date" bind:value={tripData.date} required /></div><div class="form-row"><div class="form-group"><label for="start-time">Start Time</label><input id="start-time" type="time" bind:value={tripData.startTime} /></div><div class="form-group"><label for="end-time">End Time</label><input id="end-time" type="time" bind:value={tripData.endTime} /></div></div><div class="form-group"><label for="hours-display">Hours Worked</label><div id="hours-display" class="readonly-field">{tripData.hoursWorked.toFixed(1)} hours</div></div></div><div class="form-actions"><button class="btn-secondary" on:click={prevStep}>Back</button><button class="btn-primary" on:click={nextStep}>Continue</button></div></div> {/if}
-    {#if step === 3} <div class="form-card"><div class="card-header"><h2 class="card-title">Costs</h2></div><div class="form-row"><div class="form-group"><label for="mpg">MPG</label><input id="mpg" type="number" bind:value={tripData.mpg} step="0.1" /></div><div class="form-group"><label for="gas-price">Gas Price</label><div class="input-money-wrapper"><span class="symbol">$</span><input id="gas-price" type="number" bind:value={tripData.gasPrice} step="0.01" /></div></div></div><div class="summary-box" style="margin: 40px 0;"><span>Estimated Fuel Cost</span><strong>{formatCurrency(tripData.fuelCost)}</strong></div><div class="section-group"><div class="section-top"><h3>Maintenance</h3><button class="btn-text" on:click={() => showAddMaintenance = !showAddMaintenance}>+ Custom</button></div>{#if showAddMaintenance}<div class="add-custom-row"><input type="text" bind:value={newMaintenanceItem} placeholder="Item name..." /><button class="btn-small primary" on:click={addCustomMaintenance}>Add</button></div>{/if}<div class="chips-row">{#each maintenanceOptions as option}<div class="option-badge"><button class="badge-btn" on:click={() => addMaintenanceItem(option)}>{option}</button><button class="badge-delete" on:click={() => deleteMaintenanceOption(option)}>✕</button></div>{/each}</div>{#each tripData.maintenanceItems as item}<div class="expense-row"><span class="name">{item.type}</span><div class="input-money-wrapper small"><span class="symbol">$</span><input type="number" bind:value={item.cost} placeholder="0.00" /></div><button class="btn-icon delete" on:click={() => removeMaintenanceItem(item.id)}>✕</button></div>{/each}</div><div class="section-group"><div class="section-top"><h3>Supplies</h3><button class="btn-text" on:click={() => showAddSupply = !showAddSupply}>+ Custom</button></div>{#if showAddSupply}<div class="add-custom-row"><input type="text" bind:value={newSupplyItem} placeholder="Item name..." /><button class="btn-small primary" on:click={addCustomSupply}>Add</button></div>{/if}<div class="chips-row">{#each suppliesOptions as option}<div class="option-badge"><button class="badge-btn" on:click={() => addSupplyItem(option)}>{option}</button><button class="badge-delete" on:click={() => deleteSupplyOption(option)}>✕</button></div>{/each}</div>{#each tripData.suppliesItems as item}<div class="expense-row"><span class="name">{item.type}</span><div class="input-money-wrapper small"><span class="symbol">$</span><input type="number" bind:value={item.cost} placeholder="0.00" /></div><button class="btn-icon delete" on:click={() => removeSupplyItem(item.id)}>✕</button></div>{/each}</div><div class="form-group"><label for="notes">Notes</label><textarea id="notes" bind:value={tripData.notes} rows="3" placeholder="Trip details..."></textarea></div><div class="form-actions"><button class="btn-secondary" on:click={prevStep}>Back</button><button class="btn-primary" on:click={nextStep}>Review</button></div></div> {/if}
-    {#if step === 4} <div class="form-card"><div class="card-header"><h2 class="card-title">Review</h2></div><div class="review-grid"><div class="review-tile"><span class="review-label">Date</span><div>{formatDateLocal(tripData.date)}</div></div><div class="review-tile"><span class="review-label">Total Time</span><div>{tripData.hoursWorked.toFixed(1)} hrs</div></div><div class="review-tile"><span class="review-label">Drive Time</span><div>{formatDuration(tripData.estimatedTime)}</div></div><div class="review-tile"><span class="review-label">Hours Worked</span><div>{Math.max(0, tripData.hoursWorked - (tripData.estimatedTime / 60)).toFixed(1)} hrs</div></div><div class="review-tile"><span class="review-label">Distance</span><div>{tripData.totalMiles} mi</div></div><div class="review-tile"><span class="review-label">Stops</span><div>{tripData.stops.length}</div></div></div><div class="financial-summary"><div class="row"><span>Earnings</span> <span class="val positive">{formatCurrency(totalEarnings)}</span></div><div class="row subheader"><span>Expenses Breakdown</span></div>{#if tripData.fuelCost > 0}<div class="row detail"><span>Fuel</span> <span class="val">{formatCurrency(tripData.fuelCost)}</span></div>{/if}{#each tripData.maintenanceItems as item}<div class="row detail"><span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span></div>{/each}{#each tripData.suppliesItems as item}<div class="row detail"><span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span></div>{/each}<div class="row total-expenses"><span>Total Expenses</span> <span class="val negative">-{formatCurrency(totalCosts)}</span></div><div class="row total"><span>Net Profit</span> <span class="val" class:positive={totalProfit >= 0}>{formatCurrency(totalProfit)}</span></div></div><div class="form-actions"><button class="btn-secondary" on:click={prevStep}>Back</button><button class="btn-primary" on:click={saveTrip}>Save Trip</button></div></div> {/if}
+    {#if step === 2} 
+        <div class="form-card"><div class="card-header"><h2 class="card-title">Basic Information</h2></div><div class="form-grid"><div class="form-group"><label for="trip-date">Date</label><input id="trip-date" type="date" bind:value={tripData.date} required /></div><div class="form-row"><div class="form-group"><label for="start-time">Start Time</label><input id="start-time" type="time" bind:value={tripData.startTime} /></div><div class="form-group"><label for="end-time">End Time</label><input id="end-time" type="time" bind:value={tripData.endTime} /></div></div><div class="form-group"><label for="hours-display">Hours Worked</label><div id="hours-display" class="readonly-field">{tripData.hoursWorked.toFixed(1)} hours</div></div></div><div class="form-actions"><button class="btn-secondary" on:click={prevStep}>Back</button><button class="btn-primary" on:click={nextStep}>Continue</button></div></div> 
+    {/if}
+
+    {#if step === 3} 
+        <div class="form-card">
+            <div class="card-header"><h2 class="card-title">Costs</h2></div>
+            <div class="form-row">
+                <div class="form-group"><label for="mpg">MPG</label><input id="mpg" type="number" bind:value={tripData.mpg} step="0.1" /></div>
+                <div class="form-group"><label for="gas-price">Gas Price</label><div class="input-money-wrapper"><span class="symbol">$</span><input id="gas-price" type="number" bind:value={tripData.gasPrice} step="0.01" /></div></div>
+            </div>
+            <div class="summary-box" style="margin: 40px 0;"><span>Estimated Fuel Cost</span><strong>{formatCurrency(tripData.fuelCost)}</strong></div>
+            
+            <div class="section-group">
+                <div class="section-top">
+                    <h3>Maintenance</h3>
+                    <button class="btn-icon gear" on:click={() => openSettings('maintenance')} title="Manage Options">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    </button>
+                </div>
+                
+                <div class="add-row">
+                    <select bind:value={selectedMaintenance} class="select-input">
+                        <option value="" disabled selected>Select Item...</option>
+                        {#each maintenanceOptions as option}
+                            <option value={option}>{option}</option>
+                        {/each}
+                    </select>
+                    <button class="btn-small primary" on:click={addMaintenanceItem} disabled={!selectedMaintenance}>Add</button>
+                </div>
+
+                {#each tripData.maintenanceItems as item}
+                    <div class="expense-row">
+                        <span class="name">{item.type}</span>
+                        <div class="input-money-wrapper small">
+                            <span class="symbol">$</span>
+                            <input type="number" bind:value={item.cost} placeholder="0.00" />
+                        </div>
+                        <button class="btn-icon delete" on:click={() => removeMaintenanceItem(item.id)}>✕</button>
+                    </div>
+                {/each}
+            </div>
+
+            <div class="section-group">
+                <div class="section-top">
+                    <h3>Supplies</h3>
+                    <button class="btn-icon gear" on:click={() => openSettings('supplies')} title="Manage Options">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    </button>
+                </div>
+                
+                <div class="add-row">
+                    <select bind:value={selectedSupply} class="select-input">
+                        <option value="" disabled selected>Select Item...</option>
+                        {#each suppliesOptions as option}
+                            <option value={option}>{option}</option>
+                        {/each}
+                    </select>
+                    <button class="btn-small primary" on:click={addSupplyItem} disabled={!selectedSupply}>Add</button>
+                </div>
+
+                {#each tripData.suppliesItems as item}
+                    <div class="expense-row">
+                        <span class="name">{item.type}</span>
+                        <div class="input-money-wrapper small">
+                            <span class="symbol">$</span>
+                            <input type="number" bind:value={item.cost} placeholder="0.00" />
+                        </div>
+                        <button class="btn-icon delete" on:click={() => removeSupplyItem(item.id)}>✕</button>
+                    </div>
+                {/each}
+            </div>
+
+            <div class="form-group"><label for="notes">Notes</label><textarea id="notes" bind:value={tripData.notes} rows="3" placeholder="Trip details..."></textarea></div>
+            <div class="form-actions"><button class="btn-secondary" on:click={prevStep}>Back</button><button class="btn-primary" on:click={nextStep}>Review</button></div>
+        </div> 
+    {/if}
+
+    {#if step === 4} 
+        <div class="form-card"><div class="card-header"><h2 class="card-title">Review</h2></div><div class="review-grid"><div class="review-tile"><span class="review-label">Date</span><div>{formatDateLocal(tripData.date)}</div></div><div class="review-tile"><span class="review-label">Total Time</span><div>{tripData.hoursWorked.toFixed(1)} hrs</div></div><div class="review-tile"><span class="review-label">Drive Time</span><div>{formatDuration(tripData.estimatedTime)}</div></div><div class="review-tile"><span class="review-label">Hours Worked</span><div>{Math.max(0, tripData.hoursWorked - (tripData.estimatedTime / 60)).toFixed(1)} hrs</div></div><div class="review-tile"><span class="review-label">Distance</span><div>{tripData.totalMiles} mi</div></div><div class="review-tile"><span class="review-label">Stops</span><div>{tripData.stops.length}</div></div></div><div class="financial-summary"><div class="row"><span>Earnings</span> <span class="val positive">{formatCurrency(totalEarnings)}</span></div><div class="row subheader"><span>Expenses Breakdown</span></div>{#if tripData.fuelCost > 0}<div class="row detail"><span>Fuel</span> <span class="val">{formatCurrency(tripData.fuelCost)}</span></div>{/if}{#each tripData.maintenanceItems as item}<div class="row detail"><span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span></div>{/each}{#each tripData.suppliesItems as item}<div class="row detail"><span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span></div>{/each}<div class="row total-expenses"><span>Total Expenses</span> <span class="val negative">-{formatCurrency(totalCosts)}</span></div><div class="row total"><span>Net Profit</span> <span class="val" class:positive={totalProfit >= 0}>{formatCurrency(totalProfit)}</span></div></div><div class="form-actions"><button class="btn-secondary" on:click={prevStep}>Back</button><button class="btn-primary" on:click={saveTrip}>Save Trip</button></div></div> 
+    {/if}
   </div>
 </div>
 
+<Modal bind:open={isManageCategoriesOpen} title="Manage Options">
+    <div class="categories-manager">
+        <div class="tabs">
+            <button class="tab-btn" class:active={activeCategoryType === 'maintenance'} on:click={() => activeCategoryType = 'maintenance'}>Maintenance</button>
+            <button class="tab-btn" class:active={activeCategoryType === 'supplies'} on:click={() => activeCategoryType = 'supplies'}>Supplies</button>
+        </div>
+
+        <div class="cat-list">
+            {#each activeCategories as cat}
+                <div class="cat-item">
+                    <span class="cat-badge">{cat}</span>
+                    <button class="cat-delete" on:click={() => removeCategory(cat)} aria-label="Delete Category">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+            {:else}
+                <div class="text-sm text-gray-400 italic text-center py-4">No categories defined.</div>
+            {/each}
+        </div>
+
+        <div class="add-cat-form">
+            <input type="text" bind:value={newCategoryName} placeholder="New Item Name..." class="input-field" on:keydown={(e) => e.key === 'Enter' && addCategory()} />
+            <button class="btn-secondary" on:click={addCategory}>Add</button>
+        </div>
+        
+        <div class="modal-actions mt-6">
+            <button class="btn-cancel w-full" on:click={() => isManageCategoriesOpen = false}>Done</button>
+        </div>
+    </div>
+</Modal>
+
 <style>
-  /* Use styles from New Trip page for consistency */
+  /* ... (Keep existing styles) ... */
   .trip-form { max-width: 1300px; margin: 0 auto; padding: 4px; padding-bottom: 90px; }
   .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 26px; padding: 0 8px; }
   .page-title { font-size: 28px; font-weight: 800; color: #111827; margin: 0; }
@@ -476,6 +630,10 @@
   .btn-add { background: #2563EB; color: white; margin-top: 14px; font-size: 17px; padding: 16px; }
   .btn-icon { background: none; border: none; font-size: 22px; cursor: pointer; color: #9CA3AF; padding: 6px; }
   .btn-icon.delete:hover { color: #DC2626; }
+  /* [!code ++] Gear Icon Style */
+  .btn-icon.gear { color: #6B7280; font-size: 18px; padding: 4px; transition: color 0.2s; }
+  .btn-icon.gear:hover { color: #374151; }
+  
   .btn-text { background: none; border: none; color: #2563EB; font-weight: 600; font-size: 16px; cursor: pointer; }
   .btn-small { padding: 12px 18px; border-radius: 8px; border: none; font-weight: 600; font-size: 15px; cursor: pointer; }
   .btn-small.primary { background: #10B981; color: white; }
@@ -483,14 +641,11 @@
   .section-group { margin-bottom: 36px; }
   .section-top { display: flex; justify-content: space-between; margin-bottom: 18px; align-items: center; }
   .section-top h3 { font-size: 18px; font-weight: 700; margin: 0; }
-  .add-custom-row { display: flex; gap: 14px; margin-bottom: 18px; }
-  .add-custom-row input { flex: 1; padding: 14px; }
-  .chips-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
-  .option-badge { display: inline-flex; align-items: stretch; background: white; border: 1px solid #E5E7EB; border-radius: 12px; overflow: hidden; }
-  .badge-btn { padding: 10px 14px; border: none; background: transparent; font-size: 15px; font-weight: 500; color: #4B5563; cursor: pointer; border-right: 1px solid #E5E7EB; }
-  .badge-btn:hover { background: #F9FAFB; color: #FF7F50; }
-  .badge-delete { padding: 0 10px; border: none; background: #FEF2F2; color: #DC2626; cursor: pointer; font-size: 16px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
-  .badge-delete:hover { background: #FCA5A5; color: white; }
+  
+  /* [!code ++] New Dropdown Styles */
+  .add-row { display: flex; gap: 12px; margin-bottom: 18px; }
+  .select-input { flex: 1; padding: 12px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 16px; background: white; color: #374151; }
+  
   .expense-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 0; border-bottom: 1px solid #F3F4F6; }
   .expense-row .name { font-size: 17px; font-weight: 500; flex: 1; }
   .expense-row .input-money-wrapper { width: 120px; }
@@ -506,6 +661,21 @@
   .financial-summary .total { border-top: 2px solid #D1D5DB; margin-top: 18px; padding-top: 18px; font-weight: 800; font-size: 20px; }
   .val.positive { color: #059669; }
   .val.negative { color: #DC2626; }
+  
+  /* Modal Specific Styles */
+  .categories-manager { padding: 4px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid #E5E7EB; }
+  .tab-btn { padding: 8px 16px; background: none; border: none; border-bottom: 2px solid transparent; font-weight: 600; color: #6B7280; cursor: pointer; transition: all 0.2s; }
+  .tab-btn.active { color: #FF7F50; border-bottom-color: #FF7F50; }
+  .cat-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; max-height: 200px; overflow-y: auto; }
+  .cat-item { display: flex; align-items: center; gap: 4px; background: #F3F4F6; padding: 4px 4px 4px 10px; border-radius: 20px; border: 1px solid #E5E7EB; }
+  .cat-badge { font-size: 13px; font-weight: 500; text-transform: capitalize; padding: 0 4px; }
+  .cat-delete { border: none; background: #E5E7EB; color: #6B7280; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
+  .cat-delete:hover { background: #EF4444; color: white; }
+  .add-cat-form { display: flex; gap: 8px; }
+  .add-cat-form .input-field { flex: 1; padding: 10px; border: 1px solid #E5E7EB; border-radius: 8px; }
+  .modal-actions .btn-cancel { background: white; border: 1px solid #E5E7EB; color: #374151; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; width: 100%; }
+
   @media (min-width: 768px) {
     .page-subtitle { display: block; }
     .form-card { padding: 48px; }
