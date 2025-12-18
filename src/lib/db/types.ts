@@ -55,7 +55,7 @@ export interface ExpenseRecord {
   userId: string;
   
   date: string;
-  category: string; // [!code change] Changed from union to string to support custom categories
+  category: string; 
   amount: number;
   description?: string;
   
@@ -69,11 +69,15 @@ export interface ExpenseRecord {
 /**
  * Trash item stored in IndexedDB
  */
-export interface TrashRecord extends TripRecord {
+// [!code change] Updated to support both Trip and Expense fields
+export interface TrashRecord extends Partial<TripRecord>, Partial<ExpenseRecord> {
+  id: string;
+  userId: string;
   deletedAt: string;
   deletedBy: string;
   expiresAt: string;
   originalKey: string;
+  recordType: 'trip' | 'expense'; // Added discriminator
 }
 
 /**

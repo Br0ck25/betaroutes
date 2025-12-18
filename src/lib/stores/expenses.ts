@@ -20,11 +20,16 @@ function createExpensesStore() {
             update(items => {
                 const index = items.findIndex(e => e.id === expense.id);
                 if (index !== -1) {
+                    // Update existing
                     const newItems = [...items];
                     newItems[index] = { ...newItems[index], ...expense };
                     return newItems;
+                } else {
+                    // [!code ++] Insert new (Upsert) - useful for restores/sync
+                    return [expense, ...items].sort((a, b) => 
+                        new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime()
+                    );
                 }
-                return items;
             });
         },
 

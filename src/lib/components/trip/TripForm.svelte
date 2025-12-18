@@ -51,32 +51,24 @@
   let netProfit = $state(0);
 
   // --- Auto-Calculation Effect ---
-  // Watches for changes and auto-calculates after delay
   $effect(() => {
-    // 1. Register dependencies to watch
     const _deps = { startAddress, endAddress, destinations, mpg, gasPrice };
-
-    // 2. Validate basic requirements before calculating
     const hasStart = startAddress && startAddress.length > 3;
     const hasDest = destinations.length > 0 && destinations[0].address.length > 3;
 
     if (hasStart && hasDest) {
-        // 3. Debounce: Wait 1.5s after last change before hitting API
         const timer = setTimeout(() => {
-            handleCalculate(true); // true = silent mode (no success toast)
+            handleCalculate(true); // true = silent mode
         }, 1500);
-
         return () => clearTimeout(timer);
     }
   });
 
   // --- Handlers ---
-
   function handleAddressSelect(field: 'start' | 'end', e: CustomEvent) {
     const place = e.detail;
     const val = place.formatted_address || place.name || '';
     
-    // Extract Geometry
     let location: LatLng | undefined;
     if (place.geometry && place.geometry.location) {
         const lat = typeof place.geometry.location.lat === 'function' ?
@@ -94,7 +86,6 @@
     }
   }
 
-  // [!code changed] Added 'silent' parameter to suppress toasts on auto-calc
   async function handleCalculate(silent = false) {
     if (!startAddress) {
         if (!silent) toasts.error("Please enter a start address.");
@@ -105,11 +96,7 @@
     calculationError = '';
     
     try {
-        // Round Trip Logic: If End is empty, use Start
         const effectiveEndAddress = endAddress ? endAddress : startAddress;
-
-        // Note: 'destinations' is a Proxy in Svelte 5 state. 
-        // We clone it to strip Proxy wrapper for the API call to avoid issues.
         const destsCopy = $state.snapshot(destinations);
 
         const routeData = await getRouteData(startAddress, effectiveEndAddress, destsCopy, distanceUnit as 'mi'|'km');
@@ -135,12 +122,10 @@
 
         if (!silent) toasts.success("Route calculated successfully!");
         
-        // Return routeData for use in optimize
         return routeData;
 
     } catch (err: any) {
         console.error("Calculation Error:", err);
-        // Only show error if it wasn't a silent auto-calc, OR if it's a critical API failure
         const msg = err.message || "Failed to calculate route.";
         
         if (!silent || !msg.includes('ZERO_RESULTS')) {
@@ -153,16 +138,12 @@
     }
   }
   
-  // [!code ++] New Optimize Handler
   async function handleOptimize() {
     if (!startAddress) {
         toasts.error("Please enter a start address first.");
         return;
     }
 
-    // 1. Check if we have enough stops to optimize
-    // Need at least 2 stops to have something to reorder, 
-    // unless there is no end address (where last stop is fixed), then we need 3.
     const validDests = destinations.filter(d => d.address && d.address.trim() !== '');
     if (validDests.length < 2) {
         toasts.error("Need at least 2 stops to optimize.");
@@ -172,9 +153,7 @@
     calculating = true;
 
     try {
-        // 2. Perform Calculation (Forces API call with optimizeWaypoints: true)
-        // handleCalculate returns the routeData including optimizedOrder
-        const result = await handleCalculate(true); // Silent calculation
+        const result = await handleCalculate(true); 
         
         if (result && result.optimizedOrder && result.optimizedOrder.length > 0) {
             const currentDestinations = $state.snapshot(destinations);
@@ -184,34 +163,21 @@
             let waypointsToReorder: Destination[] = [];
             let fixedEnd: Destination | null = null;
 
-            // Match logic in maps.ts:
-            // If NO end address, the LAST valid destination was used as the destination 
-            // and removed from the waypoints array sent to Google.
-            // Google only reorders the intermediate waypoints.
             if (!endAddress) {
                 fixedEnd = validDestinations[validDestinations.length - 1];
                 waypointsToReorder = validDestinations.slice(0, -1);
             } else {
-                // If End Address exists, ALL destinations were sent as intermediate waypoints.
                 waypointsToReorder = validDestinations;
             }
 
-            // Apply the new order
-            // result.optimizedOrder contains indices [2, 0, 1] referring to the waypoints array sent to Google
             const reorderedWaypoints = result.optimizedOrder.map((index: number) => waypointsToReorder[index]);
-
-            // Reconstruct the list
             let newDestinations = [...reorderedWaypoints];
             
-            // Add back the fixed end stop if it existed
             if (fixedEnd) {
                 newDestinations.push(fixedEnd);
             }
 
-            // Append any empty rows that were there before (optional UX choice)
             newDestinations = [...newDestinations, ...emptyDestinations];
-
-            // Update state
             destinations = newDestinations;
             
             toasts.success("Stops optimized for fastest route!");
@@ -228,7 +194,6 @@
   }
 
   // --- Draft Logic ---
-
   function loadDraft(draft: Partial<Trip>) {
     if (!draft || typeof draft !== 'object') return;
     if (draft.date) date = draft.date;
@@ -236,10 +201,8 @@
     if (draft.endTime) endTime = draft.endTime;
     if (draft.startAddress) startAddress = draft.startAddress;
     if (draft.endAddress) endAddress = draft.endAddress;
-    
     if (draft.startLocation) startLocation = draft.startLocation;
     if (draft.endLocation) endLocation = draft.endLocation;
-
     if (draft.mpg) mpg = draft.mpg;
     if (draft.gasPrice) gasPrice = draft.gasPrice;
     if (draft.destinations && Array.isArray(draft.destinations)) destinations = draft.destinations;
@@ -248,17 +211,8 @@
 
   function saveDraft() {
     const draftData: Partial<Trip> = { 
-      date, 
-      startTime, 
-      endTime, 
-      startAddress, 
-      endAddress, 
-      startLocation,
-      endLocation,
-      destinations, 
-      mpg, 
-      gasPrice, 
-      notes 
+      date, startTime, endTime, startAddress, endAddress, 
+      startLocation, endLocation, destinations, mpg, gasPrice, notes 
     };
     draftTrip.save(draftData);
   }
@@ -273,34 +227,38 @@
   });
 </script>
 
-<div class="max-w-4xl mx-auto p-5">
+<div class="max-w-4xl mx-auto p-4 md:p-6">
   <h2 class="text-2xl font-bold mb-6">Plan Your Trip</h2>
   
   <TripDebug />
 
-  <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6 space-y-6">
+  <div class="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 mb-6 space-y-6">
     
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-            <label class="block font-semibold mb-2">Date</label>
+            <label class="block font-semibold mb-2 text-sm text-gray-700">Date</label>
             {#if loading}
-              <Skeleton height="42px" className="rounded" />
+              <Skeleton height="48px" className="rounded-lg" />
             {:else}
-              <input type="date" bind:value={date} class="w-full p-2 border rounded" />
+              <input 
+                type="date" 
+                bind:value={date} 
+                class="w-full p-3 text-base border-gray-300 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all" 
+              />
             {/if}
         </div>
     </div>
 
     <div>
-      <label class="block font-semibold mb-2">Start Address</label>
+      <label class="block font-semibold mb-2 text-sm text-gray-700">Start Address</label>
       {#if loading}
-        <Skeleton height="42px" className="rounded" />
+        <Skeleton height="48px" className="rounded-lg" />
       {:else}
         <input 
             type="text" 
             bind:value={startAddress} 
             placeholder="Enter start location" 
-            class="w-full p-2 border rounded"
+            class="w-full p-3 text-base border-gray-300 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
             autocomplete="off" 
             use:autocomplete={{ apiKey: API_KEY }}
             on:place-selected={(e) => handleAddressSelect('start', e)}
@@ -310,9 +268,9 @@
 
     {#if loading}
         <div class="space-y-3">
-             <label class="block font-semibold">Destinations</label>
-             <Skeleton height="50px" className="rounded" />
-             <Skeleton height="50px" className="rounded" />
+             <label class="block font-semibold text-sm text-gray-700">Destinations</label>
+             <Skeleton height="50px" className="rounded-lg" />
+             <Skeleton height="50px" className="rounded-lg" />
         </div>
     {:else}
         <DestinationList 
@@ -322,15 +280,15 @@
     {/if}
 
     <div>
-      <label class="block font-semibold mb-2">End Address (Optional)</label>
+      <label class="block font-semibold mb-2 text-sm text-gray-700">End Address (Optional)</label>
       {#if loading}
-         <Skeleton height="42px" className="rounded" />
+         <Skeleton height="48px" className="rounded-lg" />
       {:else}
           <input 
             type="text" 
             bind:value={endAddress} 
             placeholder="Leave empty to return to Start" 
-            class="w-full p-2 border rounded"
+            class="w-full p-3 text-base border-gray-300 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
             autocomplete="off"
             use:autocomplete={{ apiKey: API_KEY }}
             on:place-selected={(e) => handleAddressSelect('end', e)}
@@ -340,45 +298,67 @@
 
     <div class="grid grid-cols-2 gap-4">
       <div>
-        <label class="block font-semibold mb-2">MPG</label>
+        <label class="block font-semibold mb-2 text-sm text-gray-700">MPG</label>
         {#if loading}
-           <Skeleton height="42px" className="rounded" />
+           <Skeleton height="48px" className="rounded-lg" />
         {:else}
-           <input type="number" bind:value={mpg} step="0.1" class="w-full p-2 border rounded" />
+           <input 
+             type="number" 
+             bind:value={mpg} 
+             step="0.1" 
+             class="w-full p-3 text-base border-gray-300 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all" 
+           />
         {/if}
       </div>
       <div>
-        <label class="block font-semibold mb-2">Gas Price ($)</label>
+        <label class="block font-semibold mb-2 text-sm text-gray-700">Gas Price ($)</label>
         {#if loading}
-           <Skeleton height="42px" className="rounded" />
+           <Skeleton height="48px" className="rounded-lg" />
         {:else}
-           <input type="number" bind:value={gasPrice} step="0.01" class="w-full p-2 border rounded" />
+           <input 
+             type="number" 
+             bind:value={gasPrice} 
+             step="0.01" 
+             class="w-full p-3 text-base border-gray-300 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all" 
+           />
         {/if}
       </div>
       <div>
-        <label class="block font-semibold mb-2">Start Time</label>
+        <label class="block font-semibold mb-2 text-sm text-gray-700">Start Time</label>
         {#if loading}
-           <Skeleton height="42px" className="rounded" />
+           <Skeleton height="48px" className="rounded-lg" />
         {:else}
-           <input type="time" bind:value={startTime} class="w-full p-2 border rounded" />
+           <input 
+             type="time" 
+             bind:value={startTime} 
+             class="w-full p-3 text-base border-gray-300 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all" 
+           />
         {/if}
       </div>
       <div>
-        <label class="block font-semibold mb-2">End Time</label>
+        <label class="block font-semibold mb-2 text-sm text-gray-700">End Time</label>
         {#if loading}
-           <Skeleton height="42px" className="rounded" />
+           <Skeleton height="48px" className="rounded-lg" />
         {:else}
-           <input type="time" bind:value={endTime} class="w-full p-2 border rounded" />
+           <input 
+             type="time" 
+             bind:value={endTime} 
+             class="w-full p-3 text-base border-gray-300 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all" 
+           />
         {/if}
       </div>
     </div>
 
     <div>
-      <label class="block font-semibold mb-2">Notes</label>
+      <label class="block font-semibold mb-2 text-sm text-gray-700">Notes</label>
       {#if loading}
-         <Skeleton height="80px" className="rounded" />
+         <Skeleton height="100px" className="rounded-lg" />
       {:else}
-         <textarea bind:value={notes} rows="3" class="w-full p-2 border rounded"></textarea>
+         <textarea 
+           bind:value={notes} 
+           rows="3" 
+           class="w-full p-3 text-base border-gray-300 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
+         ></textarea>
       {/if}
     </div>
   </div>
@@ -403,12 +383,12 @@
     </div>
   {/if}
 
-  <div class="flex gap-3 mt-6">
+  <div class="flex flex-col sm:flex-row gap-3 mt-6">
     {#if loading}
         <Skeleton height="48px" width="160px" className="rounded-lg" />
     {:else}
         <button 
-          class="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          class="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
           on:click={() => handleCalculate(false)} 
           disabled={calculating}
         >
@@ -416,7 +396,7 @@
         </button>
         
         <button 
-          class="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          class="w-full sm:w-auto px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
           on:click={handleOptimize} 
           disabled={calculating || destinations.length < 2}
           title="Reorder stops for fastest route"

@@ -1,5 +1,6 @@
 // src/lib/server/expenseService.ts
 import type { KVNamespace } from '@cloudflare/workers-types';
+import type { TrashMetadata } from './tripService'; // Reuse metadata type if possible, or redefine
 
 export interface ExpenseRecord {
   id: string;
@@ -11,9 +12,11 @@ export interface ExpenseRecord {
   createdAt: string;
   updatedAt: string;
   deleted?: boolean;
+  [key: string]: any;
 }
 
-export function makeExpenseService(kv: KVNamespace) {
+// [!code change] Accept trashKV
+export function makeExpenseService(kv: KVNamespace, trashKV?: KVNamespace) {
   
   function getKey(userId: string, id: string) {
     return `expense:${userId}:${id}`;
@@ -54,6 +57,7 @@ export function makeExpenseService(kv: KVNamespace) {
     async put(expense: ExpenseRecord) {
       expense.updatedAt = new Date().toISOString();
       delete expense.deleted; // Ensure it's active
+      delete expense.deletedAt;
       await kv.put(getKey(expense.userId, expense.id), JSON.stringify(expense));
     },
 
@@ -62,11 +66,39 @@ export function makeExpenseService(kv: KVNamespace) {
       const raw = await kv.get(key);
       if (raw) {
         const expense = JSON.parse(raw);
-        // Soft delete tombstone
+        const now = new Date();
+
+        // [!code ++] 1. Move to Trash KV if available
+        if (trashKV) {
+             const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+             const metadata = {
+                deletedAt: now.toISOString(),
+                deletedBy: userId,
+                originalKey: key,
+                expiresAt: expiresAt.toISOString()
+             };
+             
+             // Wrap in standard trash structure with type
+             const trashItem = {
+                type: 'expense',
+                data: expense,
+                metadata
+             };
+             
+             const trashKey = `trash:${userId}:${id}`;
+             await trashKV.put(
+                trashKey, 
+                JSON.stringify(trashItem),
+                { expirationTtl: 30 * 24 * 60 * 60 }
+             );
+        }
+
+        // 2. Soft delete tombstone
         const tombstone = {
           ...expense,
           deleted: true,
-          updatedAt: new Date().toISOString()
+          deletedAt: now.toISOString(),
+          updatedAt: now.toISOString()
         };
         await kv.put(key, JSON.stringify(tombstone));
       }

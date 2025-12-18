@@ -4,7 +4,7 @@
   import { auth, user } from '$lib/stores/auth';
   import { goto } from '$app/navigation';
   import { trips } from '$lib/stores/trips';
-  import { expenses } from '$lib/stores/expenses'; // Added expenses store
+  import { expenses } from '$lib/stores/expenses';
   import { trash } from '$lib/stores/trash';
   import { syncManager } from '$lib/sync/syncManager';
   import SyncIndicator from '$lib/components/SyncIndicator.svelte';
@@ -34,7 +34,7 @@
       await fetch('/api/logout', { method: 'POST' });
       auth.logout();
       trips.clear();
-      expenses.clear(); // Clear expenses on logout
+      expenses.clear();
       trash.clear();
       goto('/login');
     }
@@ -43,30 +43,24 @@
   const navItems = [
     { 
       href: '/dashboard', 
-      icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 9L10 2L17 9V17C17 17.5304 16.7893 18.0391 16.4142 18.4142C16.0391 18.7893 15.5304 18 15 18H5C4.46957 18 3.96086 17.7893 3.58579 17.4142C3.21071 17.0391 3 16.5304 3 16V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-      label: 'Dashboard', 
+      icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 9L10 2L17 9V17C17 17.5304 16.7893 18.0391 16.4142 18.4142C16.0391 18.7893 15.5304 18 15 18H5C4.46957 18 3.96086 17.7893 3.58579 17.4142C3.21071 17.0391 3 16.5304 3 16V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+      label: 'Home', 
       exact: true 
     },
     { 
       href: '/dashboard/expenses', 
-      icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M15.5 16H4.5C3.67157 16 3 15.3284 3 14.5V4.5C3 3.67157 3.67157 3 4.5 3H12L17 8V14.5C17 15.3284 16.3284 16 15.5 16Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 3V8H17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 13H12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 10H12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+      icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 1V23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M17 5H9.5C8.57174 5 7.6815 5.36875 7.02513 6.02513C6.36875 6.6815 6 7.57174 6 8.5C6 9.42826 6.36875 10.3185 7.02513 10.9749C7.6815 11.6313 8.57174 12 9.5 12H14.5C15.4283 12 16.3185 12.3688 16.9749 13.0251C17.6313 13.6815 18 14.5717 18 15.5C18 16.4283 17.6313 17.3185 16.9749 17.9749C16.3185 18.6313 15.4283 19 14.5 19H6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
       label: 'Expenses' 
     },
-
     { 
       href: '/dashboard/trips', 
-      icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M9 2C13.97 2 18 6.03 18 11C18 15.97 13.97 20 9 20H2V13C2 8.03 6.03 4 11 4H18V11C18 6.03 13.97 2 9 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-      label: 'Trip History',
+      icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M9 2C13.97 2 18 6.03 18 11C18 15.97 13.97 20 9 20H2V13C2 8.03 6.03 4 11 4H18V11C18 6.03 13.97 2 9 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+      label: 'History',
       exclude: ['/dashboard/trips/new']
     },
     { 
-      href: '/dashboard/trash', 
-      icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M2 4H18M16 4V16C16 17.1046 15.1046 18 14 18H6C4.89543 18 4 17.1046 4 16V4M7 4V2C7 0.89543 7.89543 0 9 0H11C12.1046 0 13 0.89543 13 2V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-      label: 'Trash'
-    },
-    { 
       href: '/dashboard/settings', 
-      icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 12C11.1046 12 12 11.1046 12 10C12 8.89543 11.1046 8 10 8C8.89543 8 8 8.89543 8 10C8 11.1046 8.89543 12 10 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M16.2 12C16.1 12.5 16.3 13 16.7 13.3L16.8 13.4C17.1 13.7 17.3 14.1 17.3 14.5C17.3 14.9 17.1 15.3 16.8 15.6C16.5 15.9 16.1 16.1 15.7 16.1C15.3 16.1 14.9 15.9 14.6 15.6L14.5 15.5C14.2 15.1 13.7 14.9 13.2 15C12.7 15.1 12.4 15.5 12.3 16V16.2C12.3 17.1 11.6 17.8 10.7 17.8C9.8 17.8 9.1 17.1 9.1 16.2V16.1C9 15.5 8.6 15.1 8 15H7.9C7.4 15 6.9 15.2 6.6 15.6L6.5 15.7C6.2 16 5.8 16.2 5.4 16.2C5 16.2 4.6 16 4.3 15.7C4 15.4 3.8 15 3.8 14.6C3.8 14.2 4 13.8 4.3 13.5L4.4 13.4C4.8 13.1 5 12.6 4.9 12.1C4.8 11.6 4.4 11.3 3.9 11.2H3.7C2.8 11.2 2.1 10.5 2.1 9.6C2.1 8.7 2.8 8 3.7 8H3.8C4.4 7.9 4.8 7.5 4.9 6.9V6.8C4.9 6.3 4.7 5.8 4.3 5.5L4.2 5.4C3.9 5.1 3.7 4.7 3.7 4.3C3.7 3.9 3.9 3.5 4.2 3.2C4.5 2.9 4.9 2.7 5.3 2.7C5.7 2.7 6.1 2.9 6.4 3.2L6.5 3.3C6.8 3.7 7.3 3.9 7.8 3.8H8C8.5 3.8 8.8 3.4 8.9 2.9V2.7C8.9 1.8 9.6 1.1 10.5 1.1C11.4 1.1 12.1 1.8 12.1 2.7V2.8C12.1 3.4 12.5 3.8 13.1 3.9C13.6 4 14.1 3.8 14.4 3.4L14.5 3.3C14.8 3 15.2 2.8 15.6 2.8C16 2.8 16.4 3 16.7 3.3C17 3.6 17.2 4 17.2 4.4C17.2 4.8 17 5.2 16.7 5.5L16.6 5.6C16.2 5.9 16 6.4 16.1 6.9C16.2 7.4 16.6 7.7 17.1 7.8H17.3C18.2 7.8 18.9 8.5 18.9 9.4C18.9 10.3 18.2 11 17.3 11H17.2C16.6 11.1 16.2 11.5 16.1 12.1L16.2 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+      icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19.4 15C20.4 14.3 21 13.2 21 12C21 10.8 20.4 9.7 19.4 9L20 8C20.5 7.2 20.2 6.1 19.4 5.6L18.4 5C17.6 4.5 16.6 4.8 16.1 5.6L15.5 6.6C14.5 5.9 13.3 5.5 12 5.5C10.7 5.5 9.5 5.9 8.5 6.6L7.9 5.6C7.4 4.8 6.4 4.5 5.6 5L4.6 5.6C3.8 6.1 3.5 7.2 4 8L4.6 9C3.6 9.7 3 10.8 3 12C3 13.2 3.6 14.3 4.6 15L4 16C3.5 16.8 3.8 17.9 4.6 18.4L5.6 19C6.4 19.5 7.4 19.2 7.9 18.4L8.5 17.4C9.5 18.1 10.7 18.5 12 18.5C13.3 18.5 14.5 18.1 15.5 17.4L16.1 18.4C16.6 19.2 17.6 19.5 18.4 19L19.4 18.4C20.2 17.9 20.5 16.8 20 16L19.4 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
       label: 'Settings' 
     },
   ];
@@ -114,13 +108,13 @@
         // Load all data
         await Promise.all([
             trips.load(userId),
-            expenses.load(userId), // Load expenses
+            expenses.load(userId),
             trash.load(userId)
         ]);
 
         // Sync background
         trips.syncFromCloud(userId);
-        expenses.syncFromCloud(userId); // Sync expenses
+        expenses.syncFromCloud(userId);
         
         console.log('[DASHBOARD LAYOUT] ✅ Data loaded successfully!');
       } catch (err) {
@@ -140,17 +134,10 @@
 
 <div class="layout">
   <header class="mobile-header">
-    <button class="menu-btn" on:click={toggleSidebar} aria-label="Toggle menu">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-        <path d="M3 12H21M3 6H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      </svg>
-    </button>
-    
     <img src="/logo.png" alt="Go Route Yourself" class="mobile-logo" />
     
     <div class="mobile-actions">
       <SyncIndicator />
-      
       {#if $user}
         <a href="/dashboard/settings" class="mobile-user" aria-label="Profile Settings">
           <div class="user-avatar small">
@@ -224,6 +211,19 @@
   <main class="main-content">
     <slot />
   </main>
+
+  <nav class="bottom-nav">
+    {#each navItems as item}
+      <a 
+        href={item.href} 
+        class="bottom-nav-item" 
+        class:active={isActive(item.href, item.exact, item.exclude)}
+      >
+        <span class="bottom-nav-icon">{@html item.icon}</span>
+        <span class="bottom-nav-label">{item.label}</span>
+      </a>
+    {/each}
+  </nav>
 </div>
 
 <style>
@@ -248,17 +248,17 @@
     background: #F9FAFB;
   }
   
-  /* Mobile Header */
+  /* --- Mobile Header --- */
   .mobile-header {
-    display: none;
+    display: flex; /* Default to visible for mobile */
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
-    height: 64px;
+    height: 60px;
     background: white;
     border-bottom: 1px solid #E5E7EB;
-    padding: 0 20px;
+    padding: 0 16px;
     align-items: center;
     justify-content: space-between;
     z-index: 100;
@@ -270,25 +270,8 @@
     gap: 12px;
   }
   
-  .menu-btn,
-  .close-btn {
-    background: none;
-    border: none;
-    padding: 8px;
-    cursor: pointer;
-    color: #374151;
-    border-radius: 8px;
-    transition: all 0.2s;
-  }
-  
-  .menu-btn:hover,
-  .close-btn:hover {
-    background: #F3F4F6;
-    color: var(--orange);
-  }
-  
   .mobile-logo {
-    height: 36px;
+    height: 32px;
   }
   
   .mobile-user {
@@ -299,7 +282,7 @@
     cursor: pointer;
   }
   
-  /* Sidebar */
+  /* --- Sidebar (Hidden by default on mobile) --- */
   .sidebar {
     position: fixed;
     left: 0;
@@ -311,9 +294,14 @@
     display: flex;
     flex-direction: column;
     z-index: 200;
+    transform: translateX(-100%); /* Hidden on mobile */
     transition: transform 0.3s ease;
   }
   
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
   .sidebar-header {
     padding: 24px 20px;
     border-bottom: 1px solid #E5E7EB;
@@ -324,10 +312,6 @@
   
   .sidebar-logo {
     height: 40px;
-  }
-  
-  .close-btn {
-    display: none;
   }
   
   /* Sync Indicator in Sidebar */
@@ -366,18 +350,6 @@
     background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%);
     color: white;
     box-shadow: 0 4px 12px rgba(255, 127, 80, 0.3);
-  }
-  
-  .nav-item.active::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 3px;
-    height: 24px;
-    background: white;
-    border-radius: 0 2px 2px 0;
   }
   
   .nav-icon {
@@ -447,7 +419,7 @@
     text-overflow: ellipsis;
   }
   
-.user-plan {
+  .user-plan {
     font-size: 12px;
     color: #6B7280;
     text-transform: capitalize;
@@ -471,21 +443,14 @@
     font-family: inherit;
   }
   
-  .logout-btn:hover {
-    background: #FEF2F2;
-    border-color: #FEE2E2;
-    color: #DC2626;
-  }
-  
-  /* Main Content */
+  /* --- Main Content --- */
   .main-content {
-    margin-left: var(--sidebar-width);
+    margin-left: 0; /* Default 0 for mobile */
+    padding: 80px 16px 100px 16px; /* Top padding for header, Bottom for nav bar */
     flex: 1;
     min-height: 100vh;
-    padding: 32px;
   }
   
-  /* Overlay */
   .overlay {
     display: none;
     position: fixed;
@@ -497,56 +462,81 @@
     z-index: 150;
     backdrop-filter: blur(4px);
   }
-  
-  /* Scrollbar */
-  .nav::-webkit-scrollbar {
-    width: 6px;
+
+  .close-btn {
+    background: none;
+    border: none;
+    padding: 8px;
+    cursor: pointer;
+    color: #374151;
+  }
+
+  /* --- Bottom Navigation (Mobile) --- */
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    border-top: 1px solid #E5E7EB;
+    /* Respect iPhone Home Indicator area */
+    padding-bottom: env(safe-area-inset-bottom, 20px); 
+    height: calc(60px + env(safe-area-inset-bottom, 20px));
+    z-index: 900;
+    justify-content: space-around;
+    align-items: flex-start;
+    padding-top: 8px;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.03);
+  }
+
+  .bottom-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    color: #9CA3AF;
+    font-size: 10px;
+    font-weight: 500;
+    width: 100%;
+    gap: 4px;
+  }
+
+  .bottom-nav-item.active {
+    color: var(--orange);
+  }
+
+  .bottom-nav-icon :global(svg) {
+    width: 24px;
+    height: 24px;
   }
   
-  .nav::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  
-  .nav::-webkit-scrollbar-thumb {
-    background: #E5E7EB;
-    border-radius: 3px;
-  }
-  
-  .nav::-webkit-scrollbar-thumb:hover {
-    background: #D1D5DB;
-  }
-  
-  /* Responsive */
-  @media (max-width: 1024px) {
+  /* --- Desktop Overrides --- */
+  @media (min-width: 1024px) {
     .mobile-header {
-      display: flex;
+      display: none;
     }
     
     .sidebar {
-      transform: translateX(-100%);
+      transform: translateX(0); /* Always visible */
     }
     
-    .sidebar.open {
-      transform: translateX(0);
+    .main-content {
+      margin-left: var(--sidebar-width);
+      padding: 32px;
+    }
+    
+    .bottom-nav {
+      display: none;
     }
     
     .close-btn {
-      display: block;
+      display: none;
     }
     
     .overlay {
-      display: block;
-    }
-    
-    .main-content {
-      margin-left: 0;
-      padding-top: 96px;
-    }
-  }
-  
-  @media (max-width: 640px) {
-    .main-content {
-      padding: 80px 16px 16px;
+      display: none;
     }
   }
 </style>

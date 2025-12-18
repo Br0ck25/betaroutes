@@ -16,7 +16,7 @@
   let filterCategory = 'all';
   let startDate = '';
   let endDate = '';
-  
+   
   // Selection State
   let selectedExpenses = new Set<string>();
 
@@ -83,7 +83,7 @@
 
   // --- COMBINE & FILTER ---
   $: allExpenses = [...$expenses, ...tripExpenses];
-  
+   
   // Reset selection when filters change
   $: if (searchQuery || sortBy || sortOrder || filterCategory || startDate || endDate) {
       selectedExpenses = new Set();
@@ -153,7 +153,8 @@
 
   async function deleteExpense(id: string, e?: MouseEvent) {
     if (e) e.stopPropagation();
-    if (!confirm('Are you sure you want to delete this expense?')) return;
+    // [!code change] Changed prompt to reflect Trash functionality
+    if (!confirm('Move this expense to trash? You can restore it later.')) return;
     
     // Check if it's a trip log
     if (id.startsWith('trip-')) {
@@ -166,14 +167,15 @@
     if (userId) {
       try {
         await expenses.deleteExpense(id, userId);
-        toasts.success('Expense deleted');
+        // [!code change] Updated Toast
+        toasts.success('Expense moved to trash');
         if (selectedExpenses.has(id)) {
             selectedExpenses.delete(id);
             selectedExpenses = selectedExpenses;
         }
       } catch (err) {
         console.error(err);
-        toasts.error('Failed to delete');
+        toasts.error('Failed to move to trash');
       }
     }
   }
@@ -200,7 +202,8 @@
           return;
       }
 
-      if (!confirm(`Delete ${manualExpenses.length} expenses? ${tripLogs > 0 ? `(${tripLogs} trip logs will be skipped)` : ''}`)) return;
+      // [!code change] Updated Prompt
+      if (!confirm(`Move ${manualExpenses.length} expenses to trash? ${tripLogs > 0 ? `(${tripLogs} trip logs will be skipped)` : ''}`)) return;
 
       const currentUser = $page.data.user || $user;
       const userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
@@ -217,7 +220,8 @@
           }
       }
       
-      toasts.success(`Deleted ${successCount} expenses.`);
+      // [!code change] Updated Toast
+      toasts.success(`Moved ${successCount} expenses to trash.`);
       selectedExpenses = new Set();
   }
 
@@ -367,8 +371,15 @@
       <h1 class="page-title">Expenses</h1>
       <p class="page-subtitle">Track maintenance, supplies, and other costs</p>
     </div>
-    
+     
     <div class="header-actions">
+        <button class="btn-secondary" on:click={() => goto('/dashboard/trash')} aria-label="View Trash">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+        </button>
+
         <button class="btn-secondary" on:click={() => isManageCategoriesOpen = true} aria-label="Manage Categories">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.39a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
         </button>
@@ -381,20 +392,20 @@
         </button>
     </div>
   </div>
-  
+   
   <div class="stats-summary">
     <div class="summary-card">
       <div class="summary-label">Total Expenses</div>
       <div class="summary-value">{filteredExpenses.length}</div>
     </div>
-    
+     
     <div class="summary-card">
       <div class="summary-label">Total Cost</div>
       <div class="summary-value">
         {formatCurrency(totalAmount)}
       </div>
     </div>
-    
+     
     {#if categories[0]}
         <div class="summary-card hidden-mobile">
         <div class="summary-label">{getCategoryLabel(categories[0])}</div>
@@ -421,27 +432,27 @@
       </svg>
       <input type="text" placeholder="Search expenses..." bind:value={searchQuery} />
     </div>
-    
+     
     <div class="filter-group date-group">
         <input type="date" bind:value={startDate} class="date-input" aria-label="Start Date" />
         <span class="date-sep">-</span>
         <input type="date" bind:value={endDate} class="date-input" aria-label="End Date" />
     </div>
-    
+     
     <div class="filter-group">
       <select bind:value={filterCategory} class="filter-select">
         <option value="all">All Categories</option>
         {#each categories as cat}
-             <option value={cat}>{getCategoryLabel(cat)}</option>
+              <option value={cat}>{getCategoryLabel(cat)}</option>
         {/each}
         <option value="fuel">Fuel (Trips)</option>
       </select>
-      
+       
       <select bind:value={sortBy} class="filter-select">
         <option value="date">By Date</option>
         <option value="amount">By Cost</option>
       </select>
-      
+       
       <button class="sort-btn" on:click={() => sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'}>
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="transform: rotate({sortOrder === 'asc' ? '180deg' : '0deg'})">
             <path d="M10 3V17M10 17L4 11M10 17L16 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -449,7 +460,7 @@
       </button>
     </div>
   </div>
-  
+   
   {#if filteredExpenses.length > 0}
     <div class="batch-header" class:visible={filteredExpenses.length > 0}>
         <label class="checkbox-container">
@@ -484,7 +495,7 @@
             {#if expense.source !== 'trip'}
                 <div class="swipe-bg">
                     <div class="swipe-action edit"><span>Edit</span></div>
-                    <div class="swipe-action delete"><span>Delete</span></div>
+                    <div class="swipe-action delete"><span>Trash</span></div>
                 </div>
             {/if}
 
@@ -558,7 +569,7 @@
     <div class="action-bar-container">
         <div class="action-bar">
             <span class="selected-count">{selectedExpenses.size} Selected</span>
-            
+             
             <div class="action-buttons">
                 <button class="action-pill secondary" on:click={() => selectedExpenses = new Set()}>
                     Cancel
@@ -569,7 +580,7 @@
                 </button>
                 <button class="action-pill danger" on:click={deleteSelected}>
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 4H14M5 4V3C5 2.4 5.4 2 6 2H10C10.6 2 11 2.4 11 3V4M6 8V12M10 8V12" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    Delete
+                    Trash
                 </button>
             </div>
         </div>
@@ -645,7 +656,7 @@
   .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #9CA3AF; pointer-events: none; }
   .search-box input { width: 100%; padding: 12px 16px 12px 42px; border: 1px solid #E5E7EB; 
     border-radius: 10px; font-size: 15px; background: white; box-sizing: border-box; }
-  
+   
   .date-group, .filter-group { display: flex; gap: 8px; align-items: center; }
   .filter-group { width: 100%; }
   .date-input, .filter-select { flex: 1; padding: 12px; border: 1px solid #E5E7EB; 
@@ -671,7 +682,7 @@
   /* Expense List & Cards (Styled like Trips) */
   .expense-list-cards { display: flex; flex-direction: column; gap: 12px; }
   .card-wrapper { position: relative; overflow: hidden; border-radius: 12px; background: #F3F4F6; }
-  
+   
   .swipe-bg { position: absolute; inset: 0; display: flex; justify-content: space-between; align-items: center; 
     padding: 0 20px; z-index: 0; }
   .swipe-action { font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
@@ -683,24 +694,24 @@
   .expense-card:active { background-color: #F9FAFB; }
   .expense-card.read-only { border-left: 4px solid #3B82F6; background: #FAFAFA; }
   .expense-card.selected { background-color: #FFF7ED; border-color: #FF7F50; }
-  
+   
   .card-top { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 12px; 
     padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #F3F4F6; }
-  
+   
   .selection-box { display: flex; align-items: center; justify-content: center; padding-right: 4px; }
-  
+   
   .expense-main-info { overflow: hidden; }
   .expense-date-display { display: block; font-size: 12px; font-weight: 600; color: #6B7280; margin-bottom: 4px; }
   .expense-desc-title { font-size: 16px; font-weight: 700; color: #111827; margin: 0; 
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .expense-amount-display { font-size: 18px; font-weight: 800; color: #111827; white-space: nowrap; }
-  
+   
   .nav-icon { color: #9CA3AF; }
 
   .card-stats { display: flex; align-items: center; }
   .stat-badge-container { display: flex; gap: 8px; flex-wrap: wrap; }
-  
+   
   .category-badge { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 100px; 
     text-transform: capitalize; border: 1px solid; display: inline-flex; align-items: center; }
   .source-badge { font-size: 11px; font-weight: 700; color: #3B82F6; background: #EFF6FF; 

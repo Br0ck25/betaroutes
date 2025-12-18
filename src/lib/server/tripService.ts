@@ -19,7 +19,7 @@ export type TripRecord = {
   createdAt: string;
   updatedAt?: string;
   deletedAt?: string;
-  deleted?: boolean; // [!code ++] Added for Soft Delete
+  deleted?: boolean; 
   [key: string]: any;
 };
 
@@ -30,8 +30,14 @@ export type TrashMetadata = {
   expiresAt: string;
 };
 
-export type TrashItem = TripRecord & {
-  metadata: TrashMetadata;
+// [!code change] Generic Trash Item
+export type TrashItem = {
+    // Flattened structure for client consumption
+    id: string;
+    userId: string;
+    recordType: 'trip' | 'expense';
+    metadata: TrashMetadata;
+    [key: string]: any;
 };
 
 function prefixForUser(userId: string) {
@@ -48,6 +54,7 @@ export function makeTripService(
   placesKV: KVNamespace | undefined,
   tripIndexDO: DurableObjectNamespace
 ) {
+  // ... (keep getIndexStub, toSummary, indexTripData, checkMonthlyQuota, list, get, put)
   
   const getIndexStub = (userId: string) => {
     const id = tripIndexDO.idFromName(userId);
@@ -61,45 +68,31 @@ export function makeTripService(
       title: trip.title,
       startAddress: trip.startAddress,
       endAddress: trip.endAddress,
-      
-      // Time
       startTime: trip.startTime,
       endTime: trip.endTime,
-
-      // Financials
       netProfit: trip.netProfit,
       totalEarnings: trip.totalEarnings, 
       fuelCost: trip.fuelCost,
       maintenanceCost: trip.maintenanceCost,
       suppliesCost: trip.suppliesCost,
-
-      // Itemized Lists
       maintenanceItems: trip.maintenanceItems,
       supplyItems: trip.supplyItems,
       suppliesItems: trip.suppliesItems, 
-
-      // Stats
       totalMiles: trip.totalMiles,
       hoursWorked: trip.hoursWorked,      
       estimatedTime: trip.estimatedTime,  
       totalTime: trip.totalTime,
       stopsCount: trip.stops?.length || 0,
-      
-      // Stops
       stops: trip.stops, 
-
       createdAt: trip.createdAt,
       updatedAt: trip.updatedAt,
-      
-      // [!code ++] Critical for Delta Sync
       deleted: trip.deleted 
   });
 
   async function indexTripData(trip: TripRecord) {
-    if (!placesKV || trip.deleted) return; // [!code ++] Don't index deleted items
-    
+      // ... (implementation hidden for brevity, unchanged)
+    if (!placesKV || trip.deleted) return;
     const uniquePlaces = new Map<string, { lat?: number, lng?: number }>();
-    
     const add = (addr?: string, loc?: { lat: number, lng: number }) => {
         if (!addr || addr.length < 3) return;
         const normalized = addr.toLowerCase().trim();
@@ -107,20 +100,15 @@ export function makeTripService(
             uniquePlaces.set(normalized, loc || {});
         }
     };
-
     add(trip.startAddress, trip.startLocation);
     add(trip.endAddress, trip.endLocation);
-    
     if (Array.isArray(trip.stops)) {
       trip.stops.forEach(s => add(s.address, s.location));
     }
-    
     if (Array.isArray(trip.destinations)) {
       trip.destinations.forEach((d: any) => add(d.address, d.location));
     }
-
     const writePromises: Promise<void>[] = [];
-
     for (const [addrKey, data] of uniquePlaces.entries()) {
        if (data.lat !== undefined && data.lng !== undefined) {
            const safeKey = await generatePlaceKey(addrKey);
@@ -132,7 +120,6 @@ export function makeTripService(
            };
            writePromises.push(placesKV.put(safeKey, JSON.stringify(payload)));
        }
-
        const prefixKey = generatePrefixKey(addrKey);
        const updatePrefixBucket = async () => {
            const existingList = await placesKV!.get(prefixKey, 'json') as string[] | null;
@@ -152,18 +139,15 @@ export function makeTripService(
     async checkMonthlyQuota(userId: string, limit: number): Promise<{ allowed: boolean, count: number }> {
         const date = new Date();
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        
         const stub = getIndexStub(userId);
         const res = await stub.fetch('http://internal/billing/check-increment', {
             method: 'POST',
             body: JSON.stringify({ monthKey, limit })
         });
-        
         if (!res.ok) return { allowed: false, count: limit }; 
         return await res.json() as { allowed: boolean, count: number };
     },
 
-    // [!code fix] Added 'since' parameter for delta sync
     async list(userId: string, since?: string): Promise<TripRecord[]> {
       const stub = getIndexStub(userId);
       const res = await stub.fetch('http://internal/list');
@@ -174,33 +158,25 @@ export function makeTripService(
           const prefix = prefixForUser(userId);
           const list = await kv.list({ prefix });
           const out: TripRecord[] = [];
-
           for (const k of list.keys) {
             const raw = await kv.get(k.name);
             if (!raw) continue;
             const t = JSON.parse(raw);
             out.push(t);
           }
-          
           const summaries = out.map(toSummary);
           await stub.fetch('http://internal/migrate', {
               method: 'POST',
               body: JSON.stringify(summaries)
           });
-
           out.sort((a,b) => b.createdAt.localeCompare(a.createdAt));
           return out;
       }
-
       const trips = data as TripRecord[];
-
-      // [!code ++] Handle Delta Sync vs Full Sync
       if (since) {
           const sinceDate = new Date(since);
-          // Return everything (including tombstones) that changed after 'since'
           return trips.filter(t => new Date(t.updatedAt || t.createdAt) > sinceDate);
       } else {
-          // Full Sync: Return ONLY active records (exclude tombstones)
           return trips.filter(t => !t.deleted);
       }
     },
@@ -213,26 +189,19 @@ export function makeTripService(
 
     async put(trip: TripRecord) {
       trip.updatedAt = new Date().toISOString();
-      // Ensure we clear the deleted flag on put/restore
       delete trip.deleted;
       delete trip.deletedAt;
-      
-      // 1. Save Full Data to KV
       await kv.put(`trip:${trip.userId}:${trip.id}`, JSON.stringify(trip));
-      
-      // 2. Update Index via DO using the COMPLETE summary
       const stub = getIndexStub(trip.userId);
       await stub.fetch('http://internal/put', {
           method: 'POST',
           body: JSON.stringify(toSummary(trip))
       });
-
       indexTripData(trip).catch(e => {
         console.error('[TripService] Failed to index trip data:', e);
       });
     },
 
-    // [!code fix] Soft Delete + Scrub Implementation
     async delete(userId: string, tripId: string) {
       const key = `trip:${userId}:${tripId}`;
       const raw = await kv.get(key);
@@ -242,7 +211,7 @@ export function makeTripService(
       const now = new Date();
       const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); 
 
-      // 1. Copy to Trash KV (Full Backup)
+      // 1. Copy to Trash KV
       if (trashKV) {
         const metadata: TrashMetadata = {
           deletedAt: now.toISOString(),
@@ -252,22 +221,29 @@ export function makeTripService(
         };
 
         const trashKey = `trash:${userId}:${tripId}`;
+        
+        // [!code change] Save with type info
+        const trashPayload = {
+            type: 'trip', // Explicit type
+            data: trip,
+            metadata
+        };
+        
         await trashKV.put(
           trashKey, 
-          JSON.stringify({ trip, metadata }),
+          JSON.stringify(trashPayload),
           { expirationTtl: 30 * 24 * 60 * 60 }
         );
       }
 
       // 2. Overwrite Main KV with SCRUBBED Tombstone
-      // This wipes the data but keeps the ID so sync works.
       const tombstone = {
           id: trip.id,
           userId: trip.userId,
           deleted: true,
           deletedAt: now.toISOString(),
           updatedAt: now.toISOString(),
-          createdAt: trip.createdAt // Keep sort order
+          createdAt: trip.createdAt 
       };
 
       await kv.put(key, JSON.stringify(tombstone));
@@ -287,6 +263,7 @@ export function makeTripService(
       });
     },
 
+    // [!code change] Updated to handle both trips and expenses
     async listTrash(userId: string): Promise<TrashItem[]> {
       if (!trashKV) return [];
       const prefix = trashPrefixForUser(userId);
@@ -296,11 +273,34 @@ export function makeTripService(
       for (const k of list.keys) {
         const raw = await trashKV.get(k.name);
         if (!raw) continue;
-        const { trip, metadata } = JSON.parse(raw);
-        out.push({ ...trip, metadata });
+        const parsed = JSON.parse(raw);
+        
+        // Handle Legacy/Trip Format vs New Generic Format
+        let item: any;
+        let type: 'trip' | 'expense' = 'trip';
+        
+        if (parsed.trip) {
+            // Legacy format: { trip: ..., metadata: ... }
+            item = parsed.trip;
+            type = 'trip';
+        } else if (parsed.type && parsed.data) {
+            // New format: { type: 'expense'|'trip', data: ..., metadata: ... }
+            item = parsed.data;
+            type = parsed.type;
+        } else {
+            // Fallback
+            item = parsed;
+        }
+
+        // Add flattened metadata + discriminator
+        out.push({ 
+            ...item, 
+            metadata: parsed.metadata,
+            recordType: type 
+        });
       }
 
-      out.sort((a,b)=>b.metadata.deletedAt.localeCompare(a.metadata.deletedAt));
+      out.sort((a,b)=> (b.metadata?.deletedAt || '').localeCompare(a.metadata?.deletedAt || ''));
       return out;
     },
 
@@ -318,38 +318,56 @@ export function makeTripService(
       return count;
     },
 
-    async restore(userId: string, tripId: string) {
+    async restore(userId: string, itemId: string) {
       if (!trashKV) throw new Error('Trash KV not available');
 
-      const trashKey = `trash:${userId}:${tripId}`;
+      const trashKey = `trash:${userId}:${itemId}`;
       const raw = await trashKV.get(trashKey);
 
-      if (!raw) throw new Error('Trip not found in trash');
+      if (!raw) throw new Error('Item not found in trash');
 
-      const { trip, metadata } = JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      
+      // Determine Type and Data
+      let item: any;
+      let type: 'trip' | 'expense' = 'trip';
+      
+      if (parsed.trip) {
+          item = parsed.trip;
+          type = 'trip';
+      } else if (parsed.type && parsed.data) {
+          item = parsed.data;
+          type = parsed.type;
+      }
 
-      // Remove deleted flags and revive data
-      delete trip.deletedAt;
-      delete trip.deleted;
-      trip.updatedAt = new Date().toISOString();
+      // Cleanup Deleted Flags
+      delete item.deletedAt;
+      delete item.deleted;
+      item.updatedAt = new Date().toISOString();
 
-      const activeKey = `trip:${userId}:${tripId}`;
-      await kv.put(activeKey, JSON.stringify(trip));
-
-      // Update Index via DO with restored summary
-      const stub = getIndexStub(userId);
-      await stub.fetch('http://internal/put', {
-          method: 'POST',
-          body: JSON.stringify(toSummary(trip))
-      });
+      if (type === 'trip') {
+          // Restore Trip
+          const activeKey = `trip:${userId}:${item.id}`;
+          await kv.put(activeKey, JSON.stringify(item));
+          
+          const stub = getIndexStub(userId);
+          await stub.fetch('http://internal/put', {
+              method: 'POST',
+              body: JSON.stringify(toSummary(item))
+          });
+      } else if (type === 'expense') {
+          // [!code ++] Restore Expense
+          const activeKey = `expense:${userId}:${item.id}`;
+          await kv.put(activeKey, JSON.stringify(item));
+      }
 
       await trashKV.delete(trashKey);
-      return trip;
+      return item;
     },
 
-    async permanentDelete(userId: string, tripId: string) {
+    async permanentDelete(userId: string, itemId: string) {
       if (!trashKV) throw new Error('Trash KV not available');
-      const trashKey = `trash:${userId}:${tripId}`;
+      const trashKey = `trash:${userId}:${itemId}`;
       await trashKV.delete(trashKey);
     },
 

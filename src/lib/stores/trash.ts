@@ -27,7 +27,6 @@ function createTrashStore() {
 		},
 
 		async restore(id: string, userId: string) {
-            // ... (keep existing restore logic) ...
             try {
 				const db = await getDB();
 				const trashTx = db.transaction('trash', 'readonly');
@@ -36,18 +35,28 @@ function createTrashStore() {
 				if (!trashItem) throw new Error('Item not found in trash');
 				if (trashItem.userId !== userId) throw new Error('Unauthorized');
 
-				const restoredTrip = { ...trashItem };
-				delete (restoredTrip as any).deletedAt;
-				delete (restoredTrip as any).deletedBy;
-				delete (restoredTrip as any).expiresAt;
-				delete (restoredTrip as any).originalKey;
+				const restoredItem = { ...trashItem };
+				delete (restoredItem as any).deletedAt;
+				delete (restoredItem as any).deletedBy;
+				delete (restoredItem as any).expiresAt;
+				const originalKey = restoredItem.originalKey;
+                delete (restoredItem as any).originalKey;
+                delete (restoredItem as any).recordType;
 
-				restoredTrip.updatedAt = new Date().toISOString();
-				restoredTrip.syncStatus = 'pending';
+				restoredItem.updatedAt = new Date().toISOString();
+				restoredItem.syncStatus = 'pending';
 
-				const tripsTx = db.transaction('trips', 'readwrite');
-				await tripsTx.objectStore('trips').put(restoredTrip);
-				await tripsTx.done;
+                // [!code change] Detect type and restore to correct store
+                if (originalKey && originalKey.startsWith('expense:')) {
+                    const tx = db.transaction('expenses', 'readwrite');
+				    await tx.objectStore('expenses').put(restoredItem);
+				    await tx.done;
+                } else {
+                    // Default to trips
+                    const tx = db.transaction('trips', 'readwrite');
+				    await tx.objectStore('trips').put(restoredItem);
+				    await tx.done;
+                }
 
 				const deleteTx = db.transaction('trash', 'readwrite');
 				await deleteTx.objectStore('trash').delete(id);
@@ -56,13 +65,14 @@ function createTrashStore() {
 				update((items) => items.filter((item) => item.id !== id));
 				await syncManager.addToQueue({ action: 'restore', tripId: id });
 
-				return restoredTrip;
+				return restoredItem;
 			} catch (err) {
-				console.error('❌ Failed to restore trip:', err);
+				console.error('❌ Failed to restore item:', err);
 				throw err;
 			}
 		},
 
+        // ... (keep permanentDelete, emptyTrash as is)
 		async permanentDelete(id: string, userId: string) {
 			const db = await getDB();
             const tx = db.transaction('trash', 'readwrite');
@@ -73,7 +83,6 @@ function createTrashStore() {
 		},
 
 		async emptyTrash(userId: string) {
-			// ... (keep existing emptyTrash logic) ...
             const db = await getDB();
             const userItems = await db.getAllFromIndex('trash', 'userId', userId);
             if (userItems.length === 0) return 0;
@@ -89,7 +98,6 @@ function createTrashStore() {
             return userItems.length;
 		},
 
-        // --- UPDATED SYNC LOGIC ---
 		async syncFromCloud(userId: string) {
 			try {
 				if (!navigator.onLine) return;
@@ -101,23 +109,37 @@ function createTrashStore() {
 				const cloudIds = new Set<string>();
 
 				const db = await getDB();
-				
-                // Transaction 1: Update Trash Store
 				const tx = db.transaction('trash', 'readwrite');
 				
 				for (const rawItem of cloudTrash) {
                     // Normalize Item
 					let flatItem: any = { ...rawItem };
+                    
+                    // [!code change] Handle generic 'data' wrapper if present from new API
+                    if (flatItem.data) {
+                         // Merge data up
+                         flatItem = { ...flatItem.data, ...flatItem };
+                         delete flatItem.data;
+                    }
+                    // Handle legacy 'trip' wrapper
 					if (flatItem.trip) flatItem = { ...flatItem.trip, ...flatItem };
                     delete flatItem.trip;
 
 					if (flatItem.metadata) {
 						flatItem.deletedAt = flatItem.metadata.deletedAt || flatItem.deletedAt;
 						flatItem.expiresAt = flatItem.metadata.expiresAt || flatItem.expiresAt;
+                        flatItem.originalKey = flatItem.metadata.originalKey || flatItem.originalKey;
 						delete flatItem.metadata;
 					}
                     
                     if (!flatItem.id) continue;
+                    
+                    // Determine Record Type
+                    if (!flatItem.recordType) {
+                        if (flatItem.originalKey?.startsWith('expense:')) flatItem.recordType = 'expense';
+                        else flatItem.recordType = 'trip';
+                    }
+
                     cloudIds.add(flatItem.id);
 
 					const local = await tx.store.get(flatItem.id);
@@ -141,23 +163,25 @@ function createTrashStore() {
 				}
 				await tx.done;
 
-                // Transaction 2: CLEAN UP ACTIVE TRIPS
-                // If an item is in Trash, it MUST NOT be in Trips
-                const cleanupTx = db.transaction(['trash', 'trips'], 'readwrite');
+                // Cleanup Active Stores (Safety Check)
+                const cleanupTx = db.transaction(['trash', 'trips', 'expenses'], 'readwrite');
                 const allTrash = await cleanupTx.objectStore('trash').getAll();
                 const tripStore = cleanupTx.objectStore('trips');
+                const expenseStore = cleanupTx.objectStore('expenses');
                 
                 for(const trashItem of allTrash) {
-                    const existsInTrips = await tripStore.get(trashItem.id);
-                    if(existsInTrips) {
-                        console.log(`🗑️ Removing active trip ${trashItem.id} because it exists in trash`);
+                    // Remove from active trips
+                    if (await tripStore.get(trashItem.id)) {
                         await tripStore.delete(trashItem.id);
+                    }
+                    // Remove from active expenses
+                    if (await expenseStore.get(trashItem.id)) {
+                         await expenseStore.delete(trashItem.id);
                     }
                 }
                 await cleanupTx.done;
 
 				await this.load(userId);
-                
 			} catch (err) {
 				console.error('❌ Failed to sync trash:', err);
 			}
