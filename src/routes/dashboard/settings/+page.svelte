@@ -8,7 +8,7 @@
 
   export let data; 
   $: API_KEY = data.googleMapsApiKey;
-  
+
   // --- REMOTE SYNC LOGIC START ---
   let settings = { ...$userSettings };
   $: if (data.remoteSettings?.settings) {
@@ -38,13 +38,14 @@
   }
   // --- REMOTE SYNC LOGIC END ---
 
+  // ... (Keep monthlyUsage logic) ...
   $: monthlyUsage = $trips.filter(t => {
       if (!t.date) return false;
       const tripDate = new Date(t.date);
       const now = new Date();
       return tripDate.getMonth() === now.getMonth() && tripDate.getFullYear() === now.getFullYear();
   }).length;
-  
+
   let showSuccess = false;
   let successMessage = '';
   
@@ -56,8 +57,7 @@
   let deletePassword = '';
   let deleteError = '';
   let isDeleting = false;
-  
-  // Handler for the Autocomplete selection
+
   function handleAddressSelect(field: 'start' | 'end', e: CustomEvent) {
     const val = e.detail.formatted_address || e.detail.name;
     if (field === 'start') settings.defaultStartAddress = val;
@@ -70,13 +70,35 @@
     showSuccessMsg('Default values saved and synced!');
   }
 
+  // [!code change] Update function to call the new /api/user endpoint
   async function saveProfile() {
+    // 1. Update local UI state immediately
     auth.updateProfile({
         name: profile.name,
         email: profile.email
     });
-    await syncToCloud('profile', profile);
-    showSuccessMsg('Profile updated successfully!');
+
+    try {
+        // 2. Persist to User KV (Fixes the reset on logout issue)
+        const res = await fetch('/api/user', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: profile.name,
+                email: profile.email
+            })
+        });
+
+        if (res.ok) {
+            showSuccessMsg('Profile updated successfully!');
+        } else {
+            console.error('Failed to save profile to server');
+            showSuccessMsg('Saved locally (Server error)');
+        }
+    } catch (e) {
+        console.error('Save error:', e);
+        showSuccessMsg('Saved locally (Network error)');
+    }
   }
   
   function showSuccessMsg(msg: string) {
@@ -85,6 +107,7 @@
     setTimeout(() => showSuccess = false, 3000);
   }
   
+  // ... (Rest of the file remains unchanged) ...
   async function changePassword() {
     if (passwordData.new !== passwordData.confirm) {
       passwordError = 'Passwords do not match';
@@ -146,7 +169,6 @@
     }
   }
 
-  // --- DATA MANAGEMENT: JSON (Full Backup) ---
   function exportData() {
     const data = {
       settings: $userSettings,
@@ -203,8 +225,7 @@
     input.click();
   }
 
-  // --- DATA MANAGEMENT: CSV (Detailed) ---
-  
+  // ... (Keep the rest of the CSV logic and HTML) ...
   function formatDuration(minutes: number): string {
     if (!minutes) return '0m';
     const h = Math.floor(minutes / 60);
@@ -221,7 +242,6 @@
     
     if (hoursMatch) minutes += parseInt(hoursMatch[1]) * 60;
     if (minsMatch) minutes += parseInt(minsMatch[1]);
-    // Fallback if just a number
     if (!hoursMatch && !minsMatch && !isNaN(parseInt(durationStr))) {
         minutes = parseInt(durationStr);
     }
@@ -277,12 +297,11 @@
       const revenue = trip.stops?.reduce((sum: number, stop: any) => sum + (stop.earnings || 0), 0) || 0;
       const fuel = trip.fuelCost || 0;
       
-      // Maintenance
       const maint = trip.maintenanceCost || 0;
       const maintItemsStr = trip.maintenanceItems 
         ? `"${trip.maintenanceItems.map((i: any) => `${i.type}:${i.cost}`).join(' | ')}"` 
         : '""';
-      // Supplies
+      
       const supplies = trip.suppliesCost || 0;
       const supplyItemsStr = trip.suppliesItems
         ? `"${trip.suppliesItems.map((i: any) => `${i.type}:${i.cost}`).join(' | ')}"`
@@ -604,7 +623,7 @@
     <div class="settings-card">
       <div class="card-header">
         <div class="card-icon teal">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
              <path d="M13 3H7C4.79086 3 3 4.79086 3 7V13C3 15.2091 4.79086 17 7 17H13C15.2091 17 17 15.2091 17 13V7C17 4.79086 15.2091 3 13 3Z" stroke="currentColor" stroke-width="2"/>
              <path d="M7 8.5H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
              <path d="M7 11.5H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -629,7 +648,7 @@
                 <div class="action-subtitle">Configure satellite integration</div>
              </div>
              <div style="margin-left: auto;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                    <polyline points="9 18 15 12 9 6"></polyline>
                 </svg>
              </div>
@@ -637,6 +656,7 @@
         </a>
       </div>
     </div>
+    
     <div class="settings-card">
       <div class="card-header">
         <div class="card-icon purple">
@@ -668,7 +688,7 @@
     
     <div class="settings-card">
       <div class="card-header">
-        <div class="card-icon navy">
+       <div class="card-icon navy">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
             <path d="M17 2H3C2.46957 2 1.96086 2.21071 1.58579 2.58579C1.21071 2.96086 1 3.46957 1 4V16C1 16.5304 1.21071 17.0391 1.58579 17.4142C1.96086 17.7893 2.46957 18 3 18H17C17.5304 18 18.0391 17.7893 18.4142 17.4142C18.7893 17.0391 19 16.5304 19 16V4C19 3.46957 18.7893 2.96086 18.4142 2.58579C18.0391 2.21071 17.5304 2 17 2Z" stroke="currentColor" stroke-width="2"/>
             <path d="M1 8H19M6 1V3M14 1V3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -747,6 +767,7 @@
             <p class="delete-warning">To verify, please enter your password:</p>
             <input type="password" bind:value={deletePassword} placeholder="Enter your password" class="delete-input" />
             {#if deleteError}<p class="error-text">{deleteError}</p>{/if}
+            
             <div class="button-group">
               <button class="btn-delete-confirm" on:click={handleDeleteAccount} disabled={isDeleting}>
                 {isDeleting ? 'Deleting...' : 'Permanently Delete Account'}
@@ -782,7 +803,6 @@
   .card-icon.purple { background: linear-gradient(135deg, var(--purple) 0%, #764a89 100%); }
   .card-icon.navy { background: linear-gradient(135deg, var(--navy) 0%, #1a3a5c 100%); }
   .card-icon.red { background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%); }
-  /* [!code ++] New Teal Color for Integrations */
   .card-icon.teal { background: linear-gradient(135deg, #14B8A6 0%, #0D9488 100%); }
   
   .card-title { font-size: 18px; font-weight: 700; color: #111827; margin-bottom: 4px; }
@@ -799,7 +819,8 @@
     display: block; box-sizing: border-box;
   }
   .form-group input:focus, .form-group select:focus { 
-    outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255, 127, 80, 0.1); 
+    outline: none; border-color: var(--orange);
+    box-shadow: 0 0 0 3px rgba(255, 127, 80, 0.1); 
   }
   .form-group input:disabled { background: #F9FAFB; color: #9CA3AF; cursor: not-allowed; }
   

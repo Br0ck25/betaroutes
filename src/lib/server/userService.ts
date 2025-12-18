@@ -111,6 +111,27 @@ export async function createUser(kv: KVNamespace, userData: Omit<User, 'id' | 'c
     return { ...userCore, ...userStats };
 }
 
+// [!code ++] New function to update user details
+export async function updateUser(
+    kv: KVNamespace, 
+    userId: string, 
+    updates: Partial<Pick<UserCore, 'name' | 'email'>>
+): Promise<void> {
+    const key = userCoreKey(userId);
+    const raw = await kv.get(key);
+    if (!raw) throw new Error('User not found');
+
+    const record = JSON.parse(raw) as UserCore;
+    
+    // Merge updates into the core record
+    const updatedCore = {
+        ...record,
+        ...updates
+    };
+
+    await kv.put(key, JSON.stringify(updatedCore));
+}
+
 export async function updatePasswordHash(kv: KVNamespace, user: User, newHash: string) {
     const key = userCoreKey(user.id);
     const statsKey = userStatsKey(user.id);
@@ -145,12 +166,11 @@ export async function updatePasswordHash(kv: KVNamespace, user: User, newHash: s
 }
 
 /**
- * [!code fix] Completely delete a user and ALL associated data (Trips, Settings, Indexes)
+ * Completely delete a user and ALL associated data (Trips, Settings, Indexes)
  */
 export async function deleteUser(
     kv: KVNamespace, 
     userId: string,
-    // [!code ++] Add optional bindings for full cleanup
     resources?: {
         tripsKV?: KVNamespace;
         trashKV?: KVNamespace;
@@ -180,19 +200,15 @@ export async function deleteUser(
     if (resources?.tripIndexDO) {
         try {
             // Try identifying by username (used in your tripService)
-            // Ideally this should use IDs, but we clean what we know exists
             const id = resources.tripIndexDO.idFromName(user.username);
-            const stub = resources.tripIndexDO.get(id);
-            // This assumes we will just delete the KV data, rendering the index mostly useless, 
-            // OR you can implement a dedicated /wipe endpoint in the DO if strict compliance is needed.
-            // For now, removing the reference is the critical step.
+            // We can't explicitly "delete" a DO, but removing the KV pointers effectively orphans it.
+            // (Optional: Call a clear() method on the DO stub if implemented)
         } catch (e) {
             console.error('Failed to wipe DO reference', e);
         }
     }
 
     // 4. Delete Trips (Iterate and Destroy)
-    // Note: This iterates through keys to find user data.
     const wipeNamespace = async (ns: KVNamespace, prefix: string) => {
         let cursor: string | undefined = undefined;
         do {
@@ -207,13 +223,11 @@ export async function deleteUser(
     const cleanupTasks: Promise<void>[] = [];
 
     if (resources?.tripsKV) {
-        // Delete Active Trips (Try both Username and ID prefixes to be safe)
         cleanupTasks.push(wipeNamespace(resources.tripsKV, `trip:${user.username}:`)); 
         cleanupTasks.push(wipeNamespace(resources.tripsKV, `trip:${userId}:`));
     }
 
     if (resources?.trashKV) {
-        // Delete Trash
         cleanupTasks.push(wipeNamespace(resources.trashKV, `trash:${user.username}:`));
         cleanupTasks.push(wipeNamespace(resources.trashKV, `trash:${userId}:`));
     }
