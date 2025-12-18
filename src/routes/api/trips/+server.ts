@@ -72,18 +72,21 @@ const tripSchema = z.object({
 function getEnv(platform: any) {
     const env = platform?.env;
     
+    // Check for critical bindings. Note: PLACES_INDEX_DO is critical for new writes but maybe optional for reads if handling gracefully
     if (platform && (!env?.BETA_LOGS_KV || !env?.TRIP_INDEX_DO)) {
         console.error("CRITICAL: Missing BETA_LOGS_KV or TRIP_INDEX_DO bindings");
         throw new Error('Database bindings missing');
     }
 
     if (!env?.BETA_LOGS_KV) {
+        // Mock env for local/build if needed
         return {
             kv: { get: async () => null, put: async () => {}, delete: async () => {}, list: async () => ({ keys: [] }) },
             trashKV: { get: async () => null, put: async () => {}, delete: async () => {}, list: async () => ({ keys: [] }) },
             placesKV: { get: async () => null, put: async () => {}, delete: async () => {}, list: async () => ({ keys: [] }) },
             usersKV: { get: async () => null },
-            tripIndexDO: { idFromName: () => ({ name: 'fake' }), get: () => ({ fetch: async () => new Response(JSON.stringify({ allowed: true, count: 0, needsMigration: false })) }) }
+            tripIndexDO: { idFromName: () => ({ name: 'fake' }), get: () => ({ fetch: async () => new Response(JSON.stringify({ allowed: true, count: 0, needsMigration: false })) }) },
+            placesIndexDO: { idFromName: () => ({ name: 'fake' }), get: () => ({ fetch: async () => new Response('OK') }) }
         };
     }
 
@@ -92,7 +95,8 @@ function getEnv(platform: any) {
         trashKV: env.BETA_LOGS_TRASH_KV,
         placesKV: env.BETA_PLACES_KV,
         usersKV: env.BETA_USERS_KV,
-        tripIndexDO: env.TRIP_INDEX_DO
+        tripIndexDO: env.TRIP_INDEX_DO,
+        placesIndexDO: env.PLACES_INDEX_DO // [!code ++]
     };
 }
 
@@ -101,7 +105,7 @@ export const GET: RequestHandler = async (event) => {
 		const user = event.locals.user;
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
-		// ← NEW: Rate Limiting
+		// Rate Limiting
 		let env;
 		try {
 			env = getEnv(event.platform);
@@ -114,7 +118,6 @@ export const GET: RequestHandler = async (event) => {
 			const identifier = getClientIdentifier(event.request, event.locals);
 			const authenticated = isAuthenticated(event.locals);
 
-			// Use different limits for authenticated vs anonymous users
 			const config = authenticated ? RATE_LIMITS.TRIPS_AUTH : RATE_LIMITS.TRIPS_ANON;
 
 			const rateLimitResult = await checkRateLimitEnhanced(
@@ -147,12 +150,17 @@ export const GET: RequestHandler = async (event) => {
 
 		const storageId = user.name || user.token;
 
-		// ← NEW: Sanitize query parameter to prevent injection
 		const sinceParam = sanitizeQueryParam(event.url.searchParams.get('since'), 50);
 		const sinceDate = sinceParam ? new Date(sinceParam) : null;
 
-		const { kv, trashKV, placesKV, tripIndexDO } = env;
-		const svc = makeTripService(kv as any, trashKV as any, placesKV as any, tripIndexDO as any);
+		const { kv, trashKV, placesKV, tripIndexDO, placesIndexDO } = env;
+		const svc = makeTripService(
+            kv as any, 
+            trashKV as any, 
+            placesKV as any, 
+            tripIndexDO as any, 
+            placesIndexDO as any // [!code ++]
+        );
 
 		const allTrips = await svc.list(storageId);
 
@@ -182,13 +190,12 @@ export const POST: RequestHandler = async (event) => {
 		const sessionUser = event.locals.user;
 		if (!sessionUser) return new Response('Unauthorized', { status: 401 });
 
-		// ← NEW: Rate Limiting for trip creation/updates
+		// Rate Limiting
 		const sessionsKV = event.platform?.env?.BETA_SESSIONS_KV;
 		if (sessionsKV) {
 			const identifier = getClientIdentifier(event.request, event.locals);
 			const authenticated = isAuthenticated(event.locals);
 
-			// Use different limits for authenticated vs anonymous users
 			const config = authenticated ? RATE_LIMITS.TRIPS_AUTH : RATE_LIMITS.TRIPS_ANON;
 
 			const rateLimitResult = await checkRateLimitEnhanced(
@@ -222,7 +229,6 @@ export const POST: RequestHandler = async (event) => {
 		const storageId = sessionUser.name || sessionUser.token;
 		const rawBody = await event.request.json();
 
-		// ← NEW: Sanitize input to prevent XSS and injection attacks
 		let sanitizedBody;
 		try {
 			sanitizedBody = validateAndSanitizeRequest(rawBody, true);
@@ -237,7 +243,6 @@ export const POST: RequestHandler = async (event) => {
 			);
 		}
 
-		// Validate with Zod schema (now using sanitized data)
 		const parseResult = tripSchema.safeParse(sanitizedBody);
 		if (!parseResult.success) {
 			return new Response(
@@ -256,8 +261,14 @@ export const POST: RequestHandler = async (event) => {
 			return new Response(JSON.stringify({ error: 'Service Unavailable' }), { status: 503 });
 		}
 
-		const { kv, trashKV, placesKV, usersKV, tripIndexDO } = env;
-		const svc = makeTripService(kv as any, trashKV as any, placesKV as any, tripIndexDO as any);
+		const { kv, trashKV, placesKV, usersKV, tripIndexDO, placesIndexDO } = env;
+		const svc = makeTripService(
+            kv as any, 
+            trashKV as any, 
+            placesKV as any, 
+            tripIndexDO as any, 
+            placesIndexDO as any // [!code ++]
+        );
 
 		const validData = parseResult.data;
 		const id = validData.id || crypto.randomUUID();

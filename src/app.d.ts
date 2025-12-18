@@ -25,8 +25,9 @@ declare global {
 				BETA_DIRECTIONS_KV: KVNamespace;
 				BETA_SESSIONS_KV: KVNamespace;
 
-                // [!code ++] Add the Durable Object Binding
+                // [!code ++] Add the Durable Object Bindings
                 TRIP_INDEX_DO: DurableObjectNamespace;
+                PLACES_INDEX_DO: DurableObjectNamespace;
                 
                 // Secrets & Config
                 HNS_ENCRYPTION_KEY: string;

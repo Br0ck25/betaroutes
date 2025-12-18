@@ -2,7 +2,7 @@
 import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
 import { generatePrefixKey, generatePlaceKey } from '$lib/utils/keys';
 
-// [!code ++] Define a constant for the DO base URL to avoid magic strings
+// Define a constant for the DO base URL to avoid magic strings
 const DO_ORIGIN = 'http://internal';
 
 export type Stop = {
@@ -55,9 +55,10 @@ export function makeTripService(
   kv: KVNamespace,
   trashKV: KVNamespace | undefined,
   placesKV: KVNamespace | undefined,
-  tripIndexDO: DurableObjectNamespace
+  tripIndexDO: DurableObjectNamespace,
+  // [!code ++] Inject the new PlacesIndexDO
+  placesIndexDO: DurableObjectNamespace
 ) {
-  // ... (keep getIndexStub, toSummary, indexTripData, checkMonthlyQuota, list, get, put)
   
   const getIndexStub = (userId: string) => {
     const id = tripIndexDO.idFromName(userId);
@@ -93,8 +94,9 @@ export function makeTripService(
   });
 
   async function indexTripData(trip: TripRecord) {
-      // ... (implementation hidden for brevity, unchanged)
     if (!placesKV || trip.deleted) return;
+    
+    // 1. Gather Unique Addresses
     const uniquePlaces = new Map<string, { lat?: number, lng?: number }>();
     const add = (addr?: string, loc?: { lat: number, lng: number }) => {
         if (!addr || addr.length < 3) return;
@@ -103,6 +105,7 @@ export function makeTripService(
             uniquePlaces.set(normalized, loc || {});
         }
     };
+    
     add(trip.startAddress, trip.startLocation);
     add(trip.endAddress, trip.endLocation);
     if (Array.isArray(trip.stops)) {
@@ -111,8 +114,11 @@ export function makeTripService(
     if (Array.isArray(trip.destinations)) {
       trip.destinations.forEach((d: any) => add(d.address, d.location));
     }
+
     const writePromises: Promise<void>[] = [];
+    
     for (const [addrKey, data] of uniquePlaces.entries()) {
+       // A. Store Detailed Place Data (Direct KV is fine here as it's idempotent)
        if (data.lat !== undefined && data.lng !== undefined) {
            const safeKey = await generatePlaceKey(addrKey);
            const payload = { 
@@ -123,18 +129,24 @@ export function makeTripService(
            };
            writePromises.push(placesKV.put(safeKey, JSON.stringify(payload)));
        }
+
+       // B. Update Autocomplete Lists via Durable Object
+       // This fixes the race condition by serializing updates through the DO
        const prefixKey = generatePrefixKey(addrKey);
-       const updatePrefixBucket = async () => {
-           const existingList = await placesKV!.get(prefixKey, 'json') as string[] | null;
-           const list = existingList || [];
-           if (!list.includes(addrKey)) {
-               list.push(addrKey);
-               if (list.length > 50) list.shift();
-               await placesKV!.put(prefixKey, JSON.stringify(list));
-           }
-       };
-       writePromises.push(updatePrefixBucket());
+       
+       // Get stub for this specific prefix bucket
+       const stub = placesIndexDO.get(placesIndexDO.idFromName(prefixKey));
+       
+       // Fire and forget call to DO
+       // We pass the key so the DO knows where to write back to KV
+       const doUpdate = stub.fetch(`${DO_ORIGIN}/add?key=${encodeURIComponent(prefixKey)}`, {
+           method: 'POST',
+           body: JSON.stringify({ address: addrKey })
+       });
+       
+       writePromises.push(doUpdate.then(() => {}));
     }
+    
     await Promise.allSettled(writePromises);
   }
 
@@ -144,7 +156,6 @@ export function makeTripService(
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
         const stub = getIndexStub(userId);
         
-        // [!code fix] Use DO_ORIGIN constant
         const res = await stub.fetch(`${DO_ORIGIN}/billing/check-increment`, {
             method: 'POST',
             body: JSON.stringify({ monthKey, limit })
@@ -155,7 +166,6 @@ export function makeTripService(
 
     async list(userId: string, since?: string): Promise<TripRecord[]> {
       const stub = getIndexStub(userId);
-      // [!code fix] Use DO_ORIGIN constant
       const res = await stub.fetch(`${DO_ORIGIN}/list`);
       const data = await res.json() as any;
 
@@ -172,7 +182,6 @@ export function makeTripService(
           }
           const summaries = out.map(toSummary);
           
-          // [!code fix] Use DO_ORIGIN constant
           await stub.fetch(`${DO_ORIGIN}/migrate`, {
               method: 'POST',
               body: JSON.stringify(summaries)
@@ -202,7 +211,6 @@ export function makeTripService(
       await kv.put(`trip:${trip.userId}:${trip.id}`, JSON.stringify(trip));
       const stub = getIndexStub(trip.userId);
       
-      // [!code fix] Use DO_ORIGIN constant
       await stub.fetch(`${DO_ORIGIN}/put`, {
           method: 'POST',
           body: JSON.stringify(toSummary(trip))
@@ -221,7 +229,6 @@ export function makeTripService(
       const now = new Date();
       const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); 
 
-      // 1. Copy to Trash KV
       if (trashKV) {
         const metadata: TrashMetadata = {
           deletedAt: now.toISOString(),
@@ -231,10 +238,8 @@ export function makeTripService(
         };
 
         const trashKey = `trash:${userId}:${tripId}`;
-        
-        // Save with type info
         const trashPayload = {
-            type: 'trip', // Explicit type
+            type: 'trip', 
             data: trip,
             metadata
         };
@@ -246,7 +251,6 @@ export function makeTripService(
         );
       }
 
-      // 2. Overwrite Main KV with SCRUBBED Tombstone
       const tombstone = {
           id: trip.id,
           userId: trip.userId,
@@ -258,26 +262,19 @@ export function makeTripService(
 
       await kv.put(key, JSON.stringify(tombstone));
 
-      // 3. Update Index (DO) with Tombstone summary
       const stub = getIndexStub(userId);
-      
-      // [!code fix] Use DO_ORIGIN constant
       await stub.fetch(`${DO_ORIGIN}/put`, {
           method: 'POST',
           body: JSON.stringify(toSummary(tombstone as TripRecord))
       });
 
-      // 4. Handle Billing
       const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      
-      // [!code fix] Use DO_ORIGIN constant
       await stub.fetch(`${DO_ORIGIN}/billing/decrement`, {
           method: 'POST',
           body: JSON.stringify({ monthKey })
       });
     },
 
-    // Updated to handle both trips and expenses
     async listTrash(userId: string): Promise<TrashItem[]> {
       if (!trashKV) return [];
       const prefix = trashPrefixForUser(userId);
@@ -289,24 +286,19 @@ export function makeTripService(
         if (!raw) continue;
         const parsed = JSON.parse(raw);
         
-        // Handle Legacy/Trip Format vs New Generic Format
         let item: any;
         let type: 'trip' | 'expense' = 'trip';
         
         if (parsed.trip) {
-            // Legacy format: { trip: ..., metadata: ... }
             item = parsed.trip;
             type = 'trip';
         } else if (parsed.type && parsed.data) {
-            // New format: { type: 'expense'|'trip', data: ..., metadata: ... }
             item = parsed.data;
             type = parsed.type;
         } else {
-            // Fallback
             item = parsed;
         }
 
-        // Add flattened metadata + discriminator
         out.push({ 
             ...item, 
             metadata: parsed.metadata,
@@ -342,7 +334,6 @@ export function makeTripService(
 
       const parsed = JSON.parse(raw);
       
-      // Determine Type and Data
       let item: any;
       let type: 'trip' | 'expense' = 'trip';
       
@@ -354,25 +345,20 @@ export function makeTripService(
           type = parsed.type;
       }
 
-      // Cleanup Deleted Flags
       delete item.deletedAt;
       delete item.deleted;
       item.updatedAt = new Date().toISOString();
 
       if (type === 'trip') {
-          // Restore Trip
           const activeKey = `trip:${userId}:${item.id}`;
           await kv.put(activeKey, JSON.stringify(item));
           
           const stub = getIndexStub(userId);
-          
-          // [!code fix] Use DO_ORIGIN constant
           await stub.fetch(`${DO_ORIGIN}/put`, {
               method: 'POST',
               body: JSON.stringify(toSummary(item))
           });
       } else if (type === 'expense') {
-          // Restore Expense
           const activeKey = `expense:${userId}:${item.id}`;
           await kv.put(activeKey, JSON.stringify(item));
       }

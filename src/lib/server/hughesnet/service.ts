@@ -1034,27 +1034,53 @@ export class HughesNetService {
         }
 
         const ordersWithMeta: OrderWithMeta[] = orders.map((o: OrderData): OrderWithMeta => {
-            let sortTime = o.arrivalTimestamp || 0;
+            // [!code ++] DATE MISMATCH LOGIC
+            // If the order has a Departure Incomplete timestamp that is NOT on the scheduled date,
+            // we strip all timestamps. This treats it as a "fresh" order for the scheduled date.
+            
+            let effectiveArrival = o.arrivalTimestamp;
+            let effectiveDepartureComplete = o.departureCompleteTimestamp;
+            let effectiveDepartureIncomplete = o.departureIncompleteTimestamp;
+
+            if (effectiveDepartureIncomplete) {
+                const incompleteDate = extractDateFromTs(effectiveDepartureIncomplete);
+                // Compare with the trip date string (YYYY-MM-DD)
+                if (incompleteDate && incompleteDate !== date) {
+                    // Mismatch: Ignore these timestamps for this specific trip calculation
+                    effectiveArrival = undefined;
+                    effectiveDepartureComplete = undefined;
+                    effectiveDepartureIncomplete = undefined;
+                }
+            }
+
+            // Create a temporary object for calculation purposes
+            const calcOrder = {
+                ...o,
+                arrivalTimestamp: effectiveArrival,
+                departureCompleteTimestamp: effectiveDepartureComplete,
+                departureIncompleteTimestamp: effectiveDepartureIncomplete
+            };
+
+            let sortTime = calcOrder.arrivalTimestamp || 0;
             if (!sortTime) {
                 let dateObj = parseDateOnly(o.confirmScheduleDate) || parseDateOnly(date);
                 if (dateObj) sortTime = dateObj.getTime() + (parseTime(o.beginTime) * 60000);
             }
 
-            // Pay Logic (Fixed):
-            // 1. If has departureCompleteTimestamp -> PAID (even if incomplete timestamp also exists)
-            // 2. Else if has departureIncompleteTimestamp -> NOT PAID
-            // 3. Else (future job) -> ESTIMATE PAY
-            const isPaid = !!o.departureCompleteTimestamp || !o.departureIncompleteTimestamp;
+            // Pay Logic:
+            // 1. Paid if Departure Complete exists
+            // 2. NOT paid if Departure Incomplete exists
+            // 3. Estimated if neither (future job)
+            const isPaid = !!calcOrder.departureCompleteTimestamp || !calcOrder.departureIncompleteTimestamp;
 
             // Calculate actual duration based on timestamps
             let actualDuration: number;
             
-            // Prioritize Departure Incomplete over Departure Complete for time calculations
-            const endTs = o.departureIncompleteTimestamp || o.departureCompleteTimestamp;
+            const endTs = calcOrder.departureIncompleteTimestamp || calcOrder.departureCompleteTimestamp;
 
-            if (o.arrivalTimestamp && endTs) {
+            if (calcOrder.arrivalTimestamp && endTs) {
                 // Use actual time
-                const dur = Math.round((endTs - o.arrivalTimestamp) / 60000);
+                const dur = Math.round((endTs - calcOrder.arrivalTimestamp) / 60000);
                 if (dur > MIN_JOB_DURATION_MINS && dur < MAX_JOB_DURATION_MINS) {
                     actualDuration = dur;
                 } else {
