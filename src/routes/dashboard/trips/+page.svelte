@@ -40,7 +40,7 @@
     .filter(trip => {
       const query = searchQuery.toLowerCase();
       
-      // [!code change] Enhanced Search Logic
+      // Enhanced Search Logic
       const supplies = trip.supplyItems || trip.suppliesItems || [];
       const matchesSearch = !query || 
         // 1. Basic Text Fields
@@ -645,7 +645,7 @@
                     <div class="address-list">
                         <p><strong>Start:</strong> {trip.startAddress}</p>
                         {#if trip.stops}
-                           {#each trip.stops as stop, i}
+                            {#each trip.stops as stop, i}
                               <p><strong>Stop {i + 1}:</strong> {stop.address}</p>
                           {/each}
                         {/if}
@@ -821,7 +821,16 @@
   .btn-secondary { display: inline-flex; align-items: center; justify-content: center; padding: 10px; 
     background: white; border: 1px solid #E5E7EB; color: #374151; border-radius: 8px; 
     font-weight: 600; font-size: 14px; cursor: pointer; transition: background 0.2s; }
-  .btn-secondary:hover { background: #F9FAFB; }
+
+  /* UPDATED: Wrap hover states in media query to prevent sticky hover on mobile */
+  @media (hover: hover) {
+    .btn-secondary:hover { background: #F9FAFB; }
+    .cat-delete:hover { background: #EF4444; color: white; }
+    .action-pill.secondary:hover { background: #4B5563; }
+    .action-pill.export:hover { background: #F3F4F6; }
+    .action-pill.danger:hover { background: #DC2626; }
+    .page-btn:hover:not(:disabled) { border-color: #FF7F50; color: #FF7F50; }
+  }
 
   /* Modal Styles */
   .categories-manager { padding: 4px; }
@@ -836,8 +845,7 @@
   .cat-badge { font-size: 13px; font-weight: 500; text-transform: capitalize; padding: 0 4px; }
   .cat-delete { border: none; background: #E5E7EB; color: #6B7280; border-radius: 50%; width: 24px; height: 24px; 
     display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
-  .cat-delete:hover { background: #EF4444; color: white; }
-
+  
   .add-cat-form { display: flex; gap: 8px; }
   .add-cat-form .input-field { flex: 1; padding: 10px; border: 1px solid #E5E7EB; border-radius: 8px; }
   .modal-actions .btn-cancel { background: white; border: 1px solid #E5E7EB; color: #374151; padding: 12px; 
@@ -915,15 +923,11 @@
   .action-buttons { display: flex; gap: 8px; }
   .action-pill { border: none; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
   .action-pill.secondary { background: #374151; color: #E5E7EB; }
-  .action-pill.secondary:hover { background: #4B5563; }
   .action-pill.export { background: #E5E7EB; color: #1F2937; }
-  .action-pill.export:hover { background: #F3F4F6; }
   .action-pill.danger { background: #EF4444; color: white; }
-  .action-pill.danger:hover { background: #DC2626; }
   @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
   .pagination-controls { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 32px; }
   .page-btn { padding: 8px 16px; background: white; border: 1px solid #E5E7EB; border-radius: 8px; font-weight: 600; font-size: 14px; color: #374151; cursor: pointer; transition: all 0.2s; }
-  .page-btn:hover:not(:disabled) { border-color: #FF7F50; color: #FF7F50; }
   .page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .page-status { font-size: 14px; color: #4B5563; font-weight: 500; }
 

@@ -7,14 +7,13 @@
   export let apiKey: string;
 
   const dispatch = createEventDispatcher();
-
   function handlePlaceSelect(index: number, e: CustomEvent) {
     const place = e.detail;
     destinations[index].address = place.formatted_address || place.name || '';
-    
-    // [!code ++] Extract Lat/Lng
+    // Extract Lat/Lng
     if (place.geometry && place.geometry.location) {
-        const lat = typeof place.geometry.location.lat === 'function' ? place.geometry.location.lat() : place.geometry.location.lat;
+        const lat = typeof place.geometry.location.lat === 'function' ?
+            place.geometry.location.lat() : place.geometry.location.lat;
         const lng = typeof place.geometry.location.lng === 'function' ? place.geometry.location.lng() : place.geometry.location.lng;
         destinations[index].location = { lat, lng };
     }
@@ -53,15 +52,14 @@
 </script>
 
 <div class="destinations-container">
-  <label class="block font-semibold mb-4">Destinations</label>
+  <label class="block font-semibold mb-4 text-sm text-gray-700">Destinations</label>
   
   {#each destinations as dest, i}
-    <div class="dest-row flex gap-2 mb-2">
-      <input 
+    <div class="dest-row flex gap-2 mb-3"> <input 
         type="text" 
         bind:value={dest.address} 
         placeholder="Destination address" 
-        class="flex-2 w-full p-2 border border-gray-300 rounded"
+        class="flex-2 w-full p-3 text-base border border-gray-300 rounded-lg" 
         autocomplete="off"
         use:autocomplete={{ apiKey }}
         on:place-selected={(e) => handlePlaceSelect(i, e)}
@@ -71,16 +69,15 @@
         bind:value={dest.earnings} 
         placeholder="$" 
         step="0.01"
-        class="flex-1 w-24 p-2 border border-gray-300 rounded"
+        class="flex-1 w-24 p-3 text-base border border-gray-300 rounded-lg"
       />
-      
       <div class="flex gap-1">
-        <button type="button" on:click={() => moveUp(i)} disabled={i === 0} class="p-2 bg-gray-100 rounded disabled:opacity-50">↑</button>
-        <button type="button" on:click={() => moveDown(i)} disabled={i === destinations.length - 1} class="p-2 bg-gray-100 rounded disabled:opacity-50">↓</button>
-        <button type="button" on:click={() => removeDestination(i)} disabled={destinations.length === 1} class="p-2 bg-red-50 text-red-600 rounded disabled:opacity-50">✕</button>
+        <button type="button" on:click={() => moveUp(i)} disabled={i === 0} class="p-3 bg-gray-100 rounded-lg disabled:opacity-50 active:bg-gray-200 transition-colors">↑</button>
+        <button type="button" on:click={() => moveDown(i)} disabled={i === destinations.length - 1} class="p-3 bg-gray-100 rounded-lg disabled:opacity-50 active:bg-gray-200 transition-colors">↓</button>
+        <button type="button" on:click={() => removeDestination(i)} disabled={destinations.length === 1} class="p-3 bg-red-50 text-red-600 rounded-lg disabled:opacity-50 active:bg-red-100 transition-colors">✕</button>
       </div>
     </div>
   {/each}
 
-  <button type="button" on:click={addDestination} class="mt-2 text-blue-600 font-semibold text-sm hover:underline">+ Add Destination</button>
+  <button type="button" on:click={addDestination} class="mt-2 text-blue-600 font-semibold text-sm hover:underline py-2">+ Add Destination</button>
 </div>
