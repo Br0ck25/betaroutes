@@ -13,9 +13,10 @@ function createTripsStore() {
 
     return {
         subscribe,
+        set, // [!code ++] EXPOSE THIS METHOD
+        update, // [!code ++] EXPOSE THIS METHOD (Good practice)
 
         // New Method: Updates local store without DB write
-        // Used by SyncManager to reflect background changes (like offline calc) in the UI instantly
         updateLocal(trip: TripRecord) {
             update(items => {
                 const index = items.findIndex(t => t.id === trip.id);
@@ -273,7 +274,6 @@ function createTripsStore() {
                 let deleteCount = 0;
 
                 for (const cloudTrip of cloudTrips) {
-                    // [!code ++] Handle Soft Deletes (Tombstones)
                     if (cloudTrip.deleted) {
                         const local = await store.get(cloudTrip.id);
                         if (local) {
@@ -336,7 +336,6 @@ function createTripsStore() {
 
 export const trips = createTripsStore();
 
-// Register Store Listener for Background Sync Updates
 syncManager.setStoreUpdater((trip) => trips.updateLocal(trip));
 
 function createDraftStore() {

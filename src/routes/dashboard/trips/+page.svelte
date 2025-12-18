@@ -8,6 +8,24 @@
   import { userSettings } from '$lib/stores/userSettings';
   import Modal from '$lib/components/ui/Modal.svelte';
 
+  // [!code fix] BRIDGE: Server Stream -> Client Store
+  // This listens for the streamed promise and updates your existing store
+  export let data;
+  $: if (data.streamed?.tripsPromise) {
+      trips.setLoading(true); // Show skeletons immediately
+      
+      data.streamed.tripsPromise
+          .then((loadedTrips: any[]) => {
+              trips.set(loadedTrips);
+              trips.setLoading(false); // Hide skeletons when done
+          })
+          .catch((err: any) => {
+              console.error("Failed to stream trips", err);
+              trips.setLoading(false);
+              toasts.error("Failed to load trips.");
+          });
+  }
+
   let searchQuery = '';
   let sortBy = 'date';
   let sortOrder = 'desc';

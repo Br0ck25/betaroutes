@@ -5,6 +5,13 @@ import { PRIVATE_GOOGLE_MAPS_API_KEY } from '$env/static/private';
 
 const DB_FILE = path.resolve('.kv-mock.json');
 
+// Helper for safe sorting to prevent runtime crashes (matches TripIndexDO logic)
+function getSortValue(t: any): string {
+    if (!t) return "";
+    const val = t.date || t.createdAt;
+    return typeof val === 'string' ? val : "";
+}
+
 // Initial state
 let mockDB: Record<string, any> = {
 	USERS: {},
@@ -110,9 +117,9 @@ function createMockDOStub(id: string) {
 				if (idx >= 0) storage.trips[idx] = trip;
 				else storage.trips.push(trip);
 				
-				// Sort desc
+				// Safe Sort desc
 				storage.trips.sort((a: any, b: any) => 
-                    (b.date || b.createdAt).localeCompare(a.date || a.createdAt)
+                    getSortValue(b).localeCompare(getSortValue(a))
                 );
 				saveDB();
 				return new Response("OK");
