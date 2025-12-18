@@ -52,11 +52,7 @@
       icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M15.5 16H4.5C3.67157 16 3 15.3284 3 14.5V4.5C3 3.67157 3.67157 3 4.5 3H12L17 8V14.5C17 15.3284 16.3284 16 15.5 16Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 3V8H17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 13H12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 10H12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
       label: 'Expenses' 
     },
-    { 
-      href: '/dashboard/trips/new', 
-      icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-      label: 'New Trip' 
-    },
+
     { 
       href: '/dashboard/trips', 
       icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M9 2C13.97 2 18 6.03 18 11C18 15.97 13.97 20 9 20H2V13C2 8.03 6.03 4 11 4H18V11C18 6.03 13.97 2 9 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
