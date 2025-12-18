@@ -5,16 +5,7 @@
   import { user } from '$lib/stores/auth';
   import { page } from '$app/stores';
   import { toasts } from '$lib/stores/toast';
-  import Modal from '$lib/components/ui/Modal.svelte';
-  import { autocomplete } from '$lib/utils/autocomplete';
-  import { optimizeRoute } from '$lib/services/maps';
-  import { userSettings } from '$lib/stores/userSettings';
-  import { onMount } from 'svelte';
 
-  export let data;
-  $: API_KEY = data?.googleMapsApiKey || '';
-
-  // --- EXISTING PAGE STATE ---
   let searchQuery = '';
   let sortBy = 'date';
   let sortOrder = 'desc';
@@ -29,311 +20,12 @@
   // --- SELECTION STATE ---
   let selectedTrips = new Set<string>();
 
-  // --- NEW TRIP MODAL STATE & LOGIC ---
-  let isNewTripModalOpen = false;
-  let step = 1;
-  let dragItemIndex: number | null = null;
-  let maintenanceOptions = ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement'];
-  let suppliesOptions = ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental'];
-  let isCalculating = false;
-  
-  let newMaintenanceItem = '';
-  let newSupplyItem = '';
-  let showAddMaintenance = false;
-  let showAddSupply = false;
-
-  function getLocalDate() {
-    const now = new Date();
-    return new Date(now.getTime() - (now.getTimezoneOffset() * 60000))
-      .toISOString()
-      .split('T')[0];
-  }
-
-  let tripData = getInitialTripData();
-  let newStop = { address: '', earnings: 0, notes: '' };
-
-  function getInitialTripData() {
-    return {
-        id: crypto.randomUUID(),
-        date: getLocalDate(),
-        startTime: '09:00',
-        endTime: '17:00',
-        hoursWorked: 0,
-        startAddress: $userSettings.defaultStartAddress || '',
-        endAddress: $userSettings.defaultEndAddress || '',
-        stops: [] as any[],
-        totalMiles: 0,
-        estimatedTime: 0,
-        mpg: $userSettings.defaultMPG || 25,
-        gasPrice: $userSettings.defaultGasPrice || 3.50,
-        fuelCost: 0,
-        maintenanceItems: [] as any[],
-        suppliesItems: [] as any[],
-        notes: ''
-    };
-  }
-
-  function openNewTripModal() {
-      tripData = getInitialTripData();
-      step = 1;
-      isNewTripModalOpen = true;
-  }
-
-  onMount(() => {
-    const savedMaintenance = localStorage.getItem('maintenanceOptions');
-    const savedSupplies = localStorage.getItem('suppliesOptions');
-    if (savedMaintenance) maintenanceOptions = JSON.parse(savedMaintenance);
-    if (savedSupplies) suppliesOptions = JSON.parse(savedSupplies);
-  });
-
-  // --- ROUTING LOGIC (From new/+page.svelte) ---
-  function generateRouteKey(start: string, end: string) {
-    const s = start.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
-    const e = end.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
-    return `kv_route_${s}_to_${e}`;
-  }
-
-  async function fetchRouteSegment(start: string, end: string) {
-    if (!start || !end) return null;
-    const localKey = generateRouteKey(start, end);
-    const cached = localStorage.getItem(localKey);
-    if (cached) return JSON.parse(cached);
-
-    try {
-        const res = await fetch(`/api/directions/cache?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
-        const result = await res.json();
-        if (result.data) {
-            const mappedResult = {
-                distance: result.data.distance * 0.000621371,
-                duration: result.data.duration / 60
-            };
-            localStorage.setItem(localKey, JSON.stringify(mappedResult));
-            return mappedResult;
-        }
-    } catch (err) { console.error("Routing failed:", err); }
-    return null;
-  }
-
-  async function recalculateAllLegs() {
-    isCalculating = true;
-    try {
-        let prevAddress = tripData.startAddress;
-        for (let i = 0; i < tripData.stops.length; i++) {
-            const currentStop = tripData.stops[i];
-            if (prevAddress && currentStop.address) {
-                const leg = await fetchRouteSegment(prevAddress, currentStop.address);
-                if (leg) {
-                    currentStop.distanceFromPrev = leg.distance;
-                    currentStop.timeFromPrev = leg.duration;
-                }
-            }
-            prevAddress = currentStop.address;
-        }
-        await recalculateTotals();
-    } finally { isCalculating = false; }
-  }
-
-  async function recalculateTotals() {
-    let miles = tripData.stops.reduce((acc, s) => acc + (s.distanceFromPrev || 0), 0);
-    let mins = tripData.stops.reduce((acc, s) => acc + (s.timeFromPrev || 0), 0);
-    const lastStop = tripData.stops[tripData.stops.length - 1];
-    const startPoint = lastStop ? lastStop.address : tripData.startAddress;
-    const endPoint = tripData.endAddress || tripData.startAddress;
-    
-    if (startPoint && endPoint) {
-        const finalLeg = await fetchRouteSegment(startPoint, endPoint);
-        if (finalLeg) {
-            miles += finalLeg.distance;
-            mins += finalLeg.duration;
-        }
-    }
-    tripData.totalMiles = parseFloat(miles.toFixed(1));
-    tripData.estimatedTime = Math.round(mins);
-    tripData = { ...tripData };
-  }
-
-  async function handleOptimize() {
-    if (!tripData.startAddress) return alert("Please enter a start address first.");
-    if (tripData.stops.length < 2) return alert("Add at least 2 stops to optimize.");
-    isCalculating = true;
-    try {
-      const result = await optimizeRoute(tripData.startAddress, tripData.endAddress, tripData.stops);
-      if (result.optimizedOrder) {
-        const currentStops = [...tripData.stops];
-        let orderedStops = [];
-        if (!tripData.endAddress) {
-           const movingStops = currentStops.slice(0, -1);
-           const fixedLast = currentStops[currentStops.length - 1];
-           orderedStops = result.optimizedOrder.map((i: number) => movingStops[i]);
-           orderedStops.push(fixedLast);
-        } else {
-           orderedStops = result.optimizedOrder.map((i: number) => currentStops[i]);
-        }
-        tripData.stops = orderedStops;
-        if (result.legs) {
-           tripData.stops.forEach((stop, i) => {
-             if (result.legs[i]) {
-                stop.distanceFromPrev = result.legs[i].distance.value * 0.000621371;
-                stop.timeFromPrev = result.legs[i].duration.value / 60;
-             }
-           });
-        }
-        await recalculateTotals();
-      }
-    } catch (e: any) { alert("Optimization failed: " + e.message);
-    } finally { isCalculating = false; }
-  }
-
-  async function handleStopChange(index: number, placeOrEvent: any) {
-    const val = placeOrEvent?.formatted_address || placeOrEvent?.name || tripData.stops[index].address;
-    if (!val) return;
-    tripData.stops[index].address = val;
-    isCalculating = true;
-    try {
-        const prevLoc = index === 0 ? tripData.startAddress : tripData.stops[index - 1].address;
-        if (prevLoc) {
-            const legIn = await fetchRouteSegment(prevLoc, val);
-            if (legIn) {
-                tripData.stops[index].distanceFromPrev = legIn.distance;
-                tripData.stops[index].timeFromPrev = legIn.duration;
-            }
-        }
-        const nextStop = tripData.stops[index + 1];
-        if (nextStop) {
-            const legOut = await fetchRouteSegment(val, nextStop.address);
-            if (legOut) {
-                tripData.stops[index + 1].distanceFromPrev = legOut.distance;
-                tripData.stops[index + 1].timeFromPrev = legOut.duration;
-            }
-        }
-        await recalculateTotals();
-    } finally { isCalculating = false; }
-  }
-
-  async function handleMainAddressChange(type: 'start' | 'end', placeOrEvent: any) {
-    const val = placeOrEvent?.formatted_address || placeOrEvent?.name || (type === 'start' ? tripData.startAddress : tripData.endAddress);
-    if (type === 'start') tripData.startAddress = val;
-    else tripData.endAddress = val;
-    isCalculating = true;
-    try {
-        if (type === 'start' && tripData.stops.length > 0) {
-            const firstStop = tripData.stops[0];
-            const leg = await fetchRouteSegment(val, firstStop.address);
-            if (leg) {
-                firstStop.distanceFromPrev = leg.distance;
-                firstStop.timeFromPrev = leg.duration;
-            }
-        }
-        await recalculateTotals();
-    } finally { isCalculating = false; }
-  }
-
-  async function handleNewStopSelect(e: CustomEvent) {
-    const place = e.detail;
-    if (place?.formatted_address || place?.name) {
-        newStop.address = place.formatted_address || place.name;
-        await addStop();
-    }
-  }
-
-  async function addStop() {
-    if (!newStop.address) return;
-    let segmentStart = tripData.stops.length > 0 ? tripData.stops[tripData.stops.length - 1].address : tripData.startAddress;
-    if (!segmentStart) { alert("Please enter a Starting Address first."); return; }
-    isCalculating = true;
-    try {
-      const segmentData: any = await fetchRouteSegment(segmentStart, newStop.address);
-      if (!segmentData) throw new Error("Could not calculate route.");
-      tripData.stops = [...tripData.stops, { 
-        ...newStop, 
-        id: crypto.randomUUID(), 
-        distanceFromPrev: segmentData.distance, 
-        timeFromPrev: segmentData.duration 
-      }];
-      await recalculateTotals();
-      newStop = { address: '', earnings: 0, notes: '' };
-    } catch (e) { alert("Error calculating route.");
-    } finally { isCalculating = false; }
-  }
-
-  function removeStop(id: string) { 
-      tripData.stops = tripData.stops.filter(s => s.id !== id);
-      recalculateAllLegs();
-  }
-
-  function handleDragStart(event: DragEvent, index: number) { 
-      dragItemIndex = index;
-      if(event.dataTransfer) { 
-          event.dataTransfer.effectAllowed = 'move'; 
-          event.dataTransfer.dropEffect = 'move'; 
-          event.dataTransfer.setData('text/plain', index.toString());
-      } 
-  }
-  function handleDragOver(event: DragEvent) { event.preventDefault(); return false; }
-  async function handleDrop(event: DragEvent, dropIndex: number) {
-      event.preventDefault();
-      if (dragItemIndex === null) return;
-      const item = tripData.stops[dragItemIndex];
-      const newStops = tripData.stops.filter((_, i) => i !== dragItemIndex);
-      newStops.splice(dropIndex, 0, item);
-      tripData.stops = newStops;
-      dragItemIndex = null;
-      await recalculateAllLegs();
-  }
-  
-  function addMaintenanceItem(type: string) { tripData.maintenanceItems = [...tripData.maintenanceItems, { id: crypto.randomUUID(), type, cost: 0 }]; }
-  function removeMaintenanceItem(id: string) { tripData.maintenanceItems = tripData.maintenanceItems.filter(m => m.id !== id); }
-  function addCustomMaintenance() { if (!newMaintenanceItem.trim()) return; const item = newMaintenanceItem.trim(); addMaintenanceItem(item); if (!maintenanceOptions.includes(item)) { maintenanceOptions = [...maintenanceOptions, item]; localStorage.setItem('maintenanceOptions', JSON.stringify(maintenanceOptions)); } newMaintenanceItem = ''; showAddMaintenance = false; }
-  function deleteMaintenanceOption(option: string) { if (confirm(`Delete "${option}"?`)) { maintenanceOptions = maintenanceOptions.filter(o => o !== option); localStorage.setItem('maintenanceOptions', JSON.stringify(maintenanceOptions)); } }
-  
-  function addSupplyItem(type: string) { tripData.suppliesItems = [...tripData.suppliesItems, { id: crypto.randomUUID(), type, cost: 0 }]; }
-  function removeSupplyItem(id: string) { tripData.suppliesItems = tripData.suppliesItems.filter(s => s.id !== id); }
-  function addCustomSupply() { if (!newSupplyItem.trim()) return; const item = newSupplyItem.trim(); addSupplyItem(item); if (!suppliesOptions.includes(item)) { suppliesOptions = [...suppliesOptions, item]; localStorage.setItem('suppliesOptions', JSON.stringify(suppliesOptions)); } newSupplyItem = ''; showAddSupply = false; }
-  function deleteSupplyOption(option: string) { if (confirm(`Delete "${option}"?`)) { suppliesOptions = suppliesOptions.filter(o => o !== option); localStorage.setItem('suppliesOptions', JSON.stringify(suppliesOptions)); } }
-  
-  // Reactivity for calculations
-  $: { if (tripData.totalMiles && tripData.mpg && tripData.gasPrice) { const gallons = tripData.totalMiles / tripData.mpg; tripData.fuelCost = Math.round(gallons * tripData.gasPrice * 100) / 100; } else { tripData.fuelCost = 0; } }
-  $: totalEarnings = tripData.stops.reduce((sum, stop) => sum + (parseFloat(stop.earnings) || 0), 0);
-  $: totalMaintenanceCost = tripData.maintenanceItems.reduce((sum, item) => sum + (item.cost || 0), 0);
-  $: totalSuppliesCost = tripData.suppliesItems.reduce((sum, item) => sum + (item.cost || 0), 0);
-  $: totalCosts = (tripData.fuelCost || 0) + totalMaintenanceCost + totalSuppliesCost;
-  $: totalProfit = totalEarnings - totalCosts;
-  $: { if (tripData.startTime && tripData.endTime) { const [startHour, startMin] = tripData.startTime.split(':').map(Number); const [endHour, endMin] = tripData.endTime.split(':').map(Number); let diff = (endHour * 60 + endMin) - (startHour * 60 + startMin); if (diff < 0) diff += 24 * 60; tripData.hoursWorked = Math.round((diff / 60) * 10) / 10; } }
-
-  function nextStep() { if (step < 4) step++; }
-  function prevStep() { if (step > 1) step--; }
-  
-  async function saveTrip() {
-    const currentUser = $page.data.user || $user;
-    let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
-    if (!userId) { alert("Authentication error."); return; }
-    
-    const tripToSave = {
-      ...tripData,
-      maintenanceCost: totalMaintenanceCost,
-      suppliesCost: totalSuppliesCost,
-      netProfit: totalProfit,
-      totalMileage: tripData.totalMiles,
-      fuelCost: tripData.fuelCost,
-      stops: tripData.stops.map((stop, index) => ({ ...stop, earnings: Number(stop.earnings), order: index })),
-      destinations: tripData.stops.map(stop => ({ address: stop.address, earnings: stop.earnings, notes: stop.notes || '' })),
-      lastModified: new Date().toISOString()
-    };
-    try { 
-        await trips.create(tripToSave, userId); 
-        isNewTripModalOpen = false;
-        toasts.success("Trip saved successfully!");
-    } 
-    catch (err) { alert('Failed to create trip.'); }
-  }
-
-  // --- EXISTING LOGIC ---
   // Reset selection and page when filters change
   $: if (searchQuery || sortBy || sortOrder || filterProfit || startDate || endDate) {
       currentPage = 1;
   }
 
-  // Derived: All filtered results
+  // Derived: All filtered results (for metrics/export)
   $: allFilteredTrips = $trips
     .filter(trip => {
       const query = searchQuery.toLowerCase();
@@ -341,7 +33,9 @@
         trip.startAddress?.toLowerCase().includes(query) ||
         trip.stops?.some(stop => stop.address?.toLowerCase().includes(query)) ||
         trip.notes?.toLowerCase().includes(query);
+      
       if (!matchesSearch) return false;
+      
       if (filterProfit !== 'all') {
         const earnings = trip.stops?.reduce((sum, stop) => sum + (stop.earnings || 0), 0) || 0;
         const costs = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);
@@ -349,6 +43,7 @@
         if (filterProfit === 'positive' && profit <= 0) return false;
         if (filterProfit === 'negative' && profit >= 0) return false;
       }
+
       if (trip.date) {
         const tripDate = new Date(trip.date);
         tripDate.setHours(0, 0, 0, 0);
@@ -389,19 +84,28 @@
       return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
     });
 
+  // Derived: Visible trips for current page
   $: totalPages = Math.ceil(allFilteredTrips.length / itemsPerPage);
   $: visibleTrips = allFilteredTrips.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   $: allSelected = allFilteredTrips.length > 0 && selectedTrips.size === allFilteredTrips.length;
 
   function toggleSelection(id: string) {
-      if (selectedTrips.has(id)) selectedTrips.delete(id);
-      else selectedTrips.add(id);
-      selectedTrips = selectedTrips;
+      if (selectedTrips.has(id)) {
+          selectedTrips.delete(id);
+      } else {
+          selectedTrips.add(id);
+      }
+      selectedTrips = selectedTrips; // Trigger reactivity
   }
 
   function toggleSelectAll() {
-      if (allSelected) selectedTrips = new Set();
-      else selectedTrips = new Set(allFilteredTrips.map(t => t.id));
+      if (allSelected) {
+          selectedTrips = new Set();
+      } else {
+          // Select ALL filtered trips, not just visible ones
+          selectedTrips = new Set(allFilteredTrips.map(t => t.id));
+      }
   }
 
   function changePage(newPage: number) {
@@ -411,20 +115,30 @@
       }
   }
 
+  // --- BULK ACTIONS ---
   async function deleteSelected() {
       const count = selectedTrips.size;
       if (!confirm(`Are you sure you want to delete ${count} trip(s)?`)) return;
+
       const currentUser = $page.data.user || $user;
       let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
-      if (!userId) { toasts.error('User identity missing. Cannot delete.'); return; }
+      
+      if (!userId) {
+          toasts.error('User identity missing. Cannot delete.');
+          return;
+      }
+
       let successCount = 0;
       const ids = Array.from(selectedTrips);
       for (const id of ids) {
           try {
               await trips.deleteTrip(id, userId);
               successCount++;
-          } catch (err) { console.error(`Failed to delete trip ${id}`, err); }
+          } catch (err) {
+              console.error(`Failed to delete trip ${id}`, err);
+          }
       }
+
       toasts.success(`Moved ${successCount} trips to trash.`);
       selectedTrips = new Set();
   }
@@ -432,6 +146,7 @@
   function exportSelected() {
       const selectedData = allFilteredTrips.filter(t => selectedTrips.has(t.id));
       if (selectedData.length === 0) return;
+
       const headers = ['Date', 'Start', 'End', 'Miles', 'Profit', 'Notes'];
       const rows = selectedData.map(t => {
           const profit = calculateNetProfit(t);
@@ -444,6 +159,7 @@
               `"${(t.notes || '').replace(/"/g, '""')}"`
           ].join(',');
       });
+
       const csvContent = [headers.join(','), ...rows].join('\n');
       const blob = new Blob([csvContent], { type: 'text/csv' });
       const url = window.URL.createObjectURL(blob);
@@ -451,41 +167,51 @@
       a.href = url;
       a.download = `trips_export_${new Date().toISOString().split('T')[0]}.csv`;
       a.click();
+      
       toasts.success(`Exported ${selectedData.length} trips.`);
       selectedTrips = new Set();
   }
 
   function formatCurrency(amount: number): string {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(amount);
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency', currency: 'USD', minimumFractionDigits: 2
+    }).format(amount);
   }
   
   function formatDate(dateString: string): string {
     const date = new Date(dateString);
-    return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(date);
-  }
-
-  // Format date helper for the form (local timezone)
-  function formatDateLocal(dateString: string) { 
-      if (!dateString) return ''; 
-      const [y, m, d] = dateString.split('-').map(Number);
-      return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric',
+      timeZone: 'UTC' 
+    }).format(date);
   }
 
   function formatTime(time: string): string {
     if (!time) return '';
-    if (time.toLowerCase().includes('am') || time.toLowerCase().includes('pm')) return time;
+
+    // If time is already in 12-hour format (e.g. "5:11 PM"), return as is.
+    if (time.toLowerCase().includes('am') || time.toLowerCase().includes('pm')) {
+      return time;
+    }
+
     const [h, m] = time.split(':').map(Number);
     if (isNaN(h)) return time;
+    
     const ampm = h >= 12 ? 'PM' : 'AM';
     const h12 = h % 12 || 12;
+    
+    // Ensure m is a number before calling toString
     const mStr = !isNaN(m) ? m.toString().padStart(2, '0') : '00';
+    
     return `${h12}:${mStr} ${ampm}`;
   }
 
   function formatDuration(minutes: number): string {
     if (!minutes) return '-';
     const h = Math.floor(minutes / 60);
-    const m = Math.round(minutes % 60);
+    const m = minutes % 60;
     if (h > 0) return `${h}h ${m}m`;
     return `${m}m`;
   }
@@ -496,10 +222,12 @@
         const trip = $trips.find(t => t.id === id);
         const currentUser = $page.data.user || $user;
         let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
+        
         if (trip && currentUser) {
             if (trip.userId === currentUser.name) userId = currentUser.name;
             else if (trip.userId === currentUser.token) userId = currentUser.token;
         }
+        
         if (userId) await trips.deleteTrip(id, userId);
       } catch (err) {
         if (!skipConfirm) toasts.error('Failed to delete trip. Changes reverted.');
@@ -507,6 +235,14 @@
     }
   }
 
+  async function deleteAllTrips() {
+      if (!confirm('WARNING: Are you sure you want to delete ALL trips? This cannot be undone.')) return;
+      const tripsToDelete = [...$trips];
+      for (const trip of tripsToDelete) {
+          await deleteTrip(trip.id, true);
+      }
+  }
+  
   function editTrip(id: string) {
     goto(`/dashboard/trips/edit/${id}`);
   }
@@ -539,14 +275,21 @@
 
   // Deep Link Handling
   let deepLinkHandled = false;
+  
   $: if (!$isLoading && allFilteredTrips.length > 0 && !deepLinkHandled) {
       const id = $page.url.searchParams.get('id');
+      
       if (id) {
           const index = allFilteredTrips.findIndex(t => t.id === id);
           if (index !== -1) {
+              // 1. Calculate and set the correct page
               currentPage = Math.floor(index / itemsPerPage) + 1;
+              
+              // 2. Expand the card
               expandedTrips.add(id);
               expandedTrips = expandedTrips;
+              
+              // 3. Scroll to the card (wait for render)
               setTimeout(() => {
                   const element = document.getElementById('trip-' + id);
                   if (element) {
@@ -556,46 +299,70 @@
               }, 200);
           }
       }
-      deepLinkHandled = true;
+      deepLinkHandled = true; // Mark handled so we don't re-run
   }
 
-  // Swipe Action
+  // Swipe Action for Mobile
   function swipeable(node: HTMLElement, { onEdit, onDelete }: { onEdit: () => void, onDelete: () => void }) {
     let startX = 0;
+    let startY = 0;
     let x = 0;
     let swiping = false;
+
     function handleTouchStart(e: TouchEvent) {
         startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
         x = 0;
-        node.style.transition = 'none';
+        node.style.transition = 'none'; // Disable transition for drag
     }
+
     function handleTouchMove(e: TouchEvent) {
         const dx = e.touches[0].clientX - startX;
+        const dy = e.touches[0].clientY - startY;
+
+        // If scrolling vertically, ignore swipe
+        if (Math.abs(dy) > Math.abs(dx)) return;
         swiping = true;
+        
+        // Limit swipe range (-120px for delete, 120px for edit)
         if (dx < -120) x = -120;
         else if (dx > 120) x = 120;
         else x = dx;
+
         node.style.transform = `translateX(${x}px)`;
+        // Prevent accidental scrolling while swiping hard
         if (Math.abs(x) > 10) e.preventDefault();
     }
+
     function handleTouchEnd() {
         if (!swiping) return;
         swiping = false;
-        node.style.transition = 'transform 0.2s ease-out';
-        if (x < -80) onDelete();
-        else if (x > 80) onEdit();
+        node.style.transition = 'transform 0.2s ease-out'; // Smooth snap back
+
+        // Threshold to trigger action
+        if (x < -80) {
+            onDelete();
+        } else if (x > 80) {
+            onEdit();
+        }
+        
+        // Always reset position
         node.style.transform = 'translateX(0)';
     }
+
+    // Prevent click if we were just swiping
     function handleClick(e: MouseEvent) {
         if (Math.abs(x) > 10) {
             e.stopPropagation();
             e.preventDefault();
         }
     }
+
     node.addEventListener('touchstart', handleTouchStart, { passive: false });
     node.addEventListener('touchmove', handleTouchMove, { passive: false });
     node.addEventListener('touchend', handleTouchEnd);
     node.addEventListener('click', handleClick, { capture: true });
+
     return {
         destroy() {
             node.removeEventListener('touchstart', handleTouchStart);
@@ -644,12 +411,12 @@
     </div>
     
     <div class="header-actions">
-        <button class="btn-primary" on:click={openNewTripModal} aria-label="Create New Trip">
+        <a href="/dashboard/trips/new" class="btn-primary" aria-label="Create New Trip">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           New Trip
-        </button>
+        </a>
     </div>
   </div>
   
@@ -793,7 +560,7 @@
                 </div>
                 
                 <div class="profit-display-large" class:positive={profit >= 0} class:negative={profit < 0}>
-                    {formatCurrency(profit)}
+                   {formatCurrency(profit)}
                 </div>
                 
                 <svg class="expand-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
@@ -864,9 +631,10 @@
                             </div>
                           {/each}
                         {/if}
+                        
                         {#if supplies.length > 0}
                           {#each supplies as item}
-                             <div class="expense-row">
+                            <div class="expense-row">
                               <span>{item.type}</span>
                               <span>{formatCurrency(item.cost)}</span>
                             </div>
@@ -893,7 +661,7 @@
                         Edit
                     </button>
                     <button class="action-btn-lg delete-btn" on:click={() => deleteTrip(trip.id)}>
-                       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4H14M12 4V13C12 13.5304 11.7893 14.0391 11.4142 14.4142C11.0391 14.7893 10.5304 15 10 15H6C5.46957 15 4.96086 14.7893 4.58579 14.4142C4.21071 14.0391 4 13.5304 4 13V4M5 4V3C5 2.46957 5.21071 1.96086 5.58579 1.58579C5.96086 1.21071 6.46957 1 7 1H9C9.53043 1 10.0391 1.21071 10.4142 1.58579C10.7893 1.96086 11 2.46957 11 3V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4H14M12 4V13C12 13.5304 11.7893 14.0391 11.4142 14.4142C11.0391 14.7893 10.5304 15 10 15H6C5.46957 15 4.96086 14.7893 4.58579 14.4142C4.21071 14.0391 4 13.5304 4 13V4M5 4V3C5 2.46957 5.21071 1.96086 5.58579 1.58579C5.96086 1.21071 6.46957 1 7 1H9C9.53043 1 10.0391 1.21071 10.4142 1.58579C10.7893 1.96086 11 2.46957 11 3V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         Trash
                     </button>
                   </div>
@@ -922,7 +690,7 @@
             on:click={() => changePage(currentPage + 1)}
           >
             Next &rarr;
-         </button>
+          </button>
       </div>
     {/if}
 
@@ -955,72 +723,6 @@
     </div>
 {/if}
 
-<Modal bind:open={isNewTripModalOpen} title="New Trip">
-    <div class="new-trip-wizard-container">
-      <div class="progress-steps">
-        <div class="step-item" class:active={step >= 1} class:completed={step > 1}><div class="step-circle">{step > 1 ? '✓' : '1'}</div><div class="step-label">Route</div></div><div class="step-line" class:completed={step > 1}></div>
-        <div class="step-item" class:active={step >= 2} class:completed={step > 2}><div class="step-circle">{step > 2 ? '✓' : '2'}</div><div class="step-label">Basics</div></div><div class="step-line" class:completed={step > 2}></div>
-        <div class="step-item" class:active={step >= 3} class:completed={step > 3}><div class="step-circle">{step > 3 ? '✓' : '3'}</div><div class="step-label">Costs</div></div><div class="step-line" class:completed={step > 3}></div>
-        <div class="step-item" class:active={step >= 4}><div class="step-circle">4</div><div class="step-label">Review</div></div>
-      </div>
-      
-      <div class="form-content-scroll">
-        {#if step === 1}
-          <div class="modal-form-section">
-            <div class="card-header-modal">
-              <h2 class="card-title-modal">Route & Stops</h2>
-              <button class="btn-small primary" on:click={handleOptimize} type="button" disabled={isCalculating || tripData.stops.length < 2} title="Reorder stops efficiently">{isCalculating ? 'Optimizing...' : 'Optimize'}</button>
-            </div>
-            
-            <div class="form-group">
-              <label for="start-address">Starting Address</label>
-              <input id="start-address" type="text" bind:value={tripData.startAddress} use:autocomplete={{ apiKey: API_KEY }} on:place-selected={(e) => handleMainAddressChange('start', e.detail)} on:blur={(e) => handleMainAddressChange('start', { formatted_address: tripData.startAddress })} class="address-input" placeholder="Enter start address..." />
-            </div>
-            
-            <div class="stops-container">
-              <div class="stops-header"><h3>Stops</h3><span class="count">{tripData.stops.length} added</span></div>
-              {#if tripData.stops.length > 0}
-                <div class="stops-list">
-                  {#each tripData.stops as stop, i (stop.id)}
-                    <div class="stop-card" draggable="true" on:dragstart={(e) => handleDragStart(e, i)} on:drop={(e) => handleDrop(e, i)} on:dragover={handleDragOver}>
-                      <div class="stop-header"><div class="stop-number">{i + 1}</div><div class="stop-actions"><button class="btn-icon delete" on:click={() => removeStop(stop.id)}>✕</button><div class="drag-handle">☰</div></div></div>
-                      <div class="stop-inputs">
-                        <input type="text" bind:value={stop.address} use:autocomplete={{ apiKey: API_KEY }} on:place-selected={(e) => handleStopChange(i, e.detail)} on:blur={() => handleStopChange(i, { formatted_address: stop.address })} class="address-input" placeholder="Stop address" />
-                        <div class="input-money-wrapper"><span class="symbol">$</span><input type="number" class="input-money" bind:value={stop.earnings} step="0.01" placeholder="Earnings" /></div>
-                      </div>
-                    </div>
-                  {/each}
-                </div>
-              {/if}
-              <div class="add-stop-form">
-                <div class="stop-inputs new">
-                  <input type="text" bind:value={newStop.address} placeholder="New stop address..." use:autocomplete={{ apiKey: API_KEY }} on:place-selected={handleNewStopSelect} class="address-input" />
-                  <div class="input-money-wrapper"><span class="symbol">$</span><input type="number" class="input-money" placeholder="0.00" bind:value={newStop.earnings} step="0.01" min="0" /></div>
-                </div>
-                <button class="btn-add full-width" on:click={addStop} disabled={isCalculating}>{isCalculating ? 'Calculating...' : '+ Add Stop'}</button>
-              </div>
-            </div>
-            
-            <div class="form-group">
-              <label for="end-address">End Address (Optional)</label>
-              <input id="end-address" type="text" bind:value={tripData.endAddress} use:autocomplete={{ apiKey: API_KEY }} on:place-selected={(e) => handleMainAddressChange('end', e.detail)} on:blur={(e) => handleMainAddressChange('end', { formatted_address: tripData.endAddress })} class="address-input" placeholder="Same as start if empty" />
-            </div>
-
-            <div class="form-row">
-                <div class="form-group"><label for="total-miles">Total Miles</label><input id="total-miles" type="number" bind:value={tripData.totalMiles} step="0.1" /></div>
-                <div class="form-group"><label for="drive-time">Drive Time <span class="hint">(Est)</span></label><div id="drive-time" class="readonly-field">{formatDuration(tripData.estimatedTime)}</div></div>
-            </div>
-            <div class="form-actions-modal"><button class="btn-primary full-width" on:click={nextStep}>Continue</button></div>
-          </div>
-        {/if}
-        
-        {#if step === 2} <div class="modal-form-section"><div class="card-header-modal"><h2 class="card-title-modal">Basic Information</h2></div><div class="form-grid"><div class="form-group"><label for="trip-date">Date</label><input id="trip-date" type="date" bind:value={tripData.date} required /></div><div class="form-row"><div class="form-group"><label for="start-time">Start Time</label><input id="start-time" type="time" bind:value={tripData.startTime} /></div><div class="form-group"><label for="end-time">End Time</label><input id="end-time" type="time" bind:value={tripData.endTime} /></div></div><div class="form-group"><label for="hours-display">Hours Worked</label><div id="hours-display" class="readonly-field">{tripData.hoursWorked.toFixed(1)} hours</div></div></div><div class="form-actions-modal"><button class="btn-secondary" on:click={prevStep}>Back</button><button class="btn-primary" on:click={nextStep}>Continue</button></div></div> {/if}
-        {#if step === 3} <div class="modal-form-section"><div class="card-header-modal"><h2 class="card-title-modal">Costs</h2></div><div class="form-row"><div class="form-group"><label for="mpg">MPG</label><input id="mpg" type="number" bind:value={tripData.mpg} step="0.1" /></div><div class="form-group"><label for="gas-price">Gas Price</label><div class="input-money-wrapper"><span class="symbol">$</span><input id="gas-price" type="number" bind:value={tripData.gasPrice} step="0.01" /></div></div></div><div class="summary-box" style="margin: 40px 0;"><span>Estimated Fuel Cost</span><strong>{formatCurrency(tripData.fuelCost)}</strong></div><div class="section-group"><div class="section-top"><h3>Maintenance</h3><button class="btn-text" on:click={() => showAddMaintenance = !showAddMaintenance}>+ Custom</button></div>{#if showAddMaintenance}<div class="add-custom-row"><input type="text" bind:value={newMaintenanceItem} placeholder="Item name..." /><button class="btn-small primary" on:click={addCustomMaintenance}>Add</button></div>{/if}<div class="chips-row">{#each maintenanceOptions as option}<div class="option-badge"><button class="badge-btn" on:click={() => addMaintenanceItem(option)}>{option}</button><button class="badge-delete" on:click={() => deleteMaintenanceOption(option)}>✕</button></div>{/each}</div>{#each tripData.maintenanceItems as item}<div class="expense-row"><span class="name">{item.type}</span><div class="input-money-wrapper small"><span class="symbol">$</span><input type="number" bind:value={item.cost} placeholder="0.00" /></div><button class="btn-icon delete" on:click={() => removeMaintenanceItem(item.id)}>✕</button></div>{/each}</div><div class="section-group"><div class="section-top"><h3>Supplies</h3><button class="btn-text" on:click={() => showAddSupply = !showAddSupply}>+ Custom</button></div>{#if showAddSupply}<div class="add-custom-row"><input type="text" bind:value={newSupplyItem} placeholder="Item name..." /><button class="btn-small primary" on:click={addCustomSupply}>Add</button></div>{/if}<div class="chips-row">{#each suppliesOptions as option}<div class="option-badge"><button class="badge-btn" on:click={() => addSupplyItem(option)}>{option}</button><button class="badge-delete" on:click={() => deleteSupplyOption(option)}>✕</button></div>{/each}</div>{#each tripData.suppliesItems as item}<div class="expense-row"><span class="name">{item.type}</span><div class="input-money-wrapper small"><span class="symbol">$</span><input type="number" bind:value={item.cost} placeholder="0.00" /></div><button class="btn-icon delete" on:click={() => removeSupplyItem(item.id)}>✕</button></div>{/each}</div><div class="form-group"><label for="notes">Notes</label><textarea id="notes" bind:value={tripData.notes} rows="3" placeholder="Trip details..."></textarea></div><div class="form-actions-modal"><button class="btn-secondary" on:click={prevStep}>Back</button><button class="btn-primary" on:click={nextStep}>Review</button></div></div> {/if}
-        {#if step === 4} <div class="modal-form-section"><div class="card-header-modal"><h2 class="card-title-modal">Review</h2></div><div class="review-grid"><div class="review-tile"><span class="review-label">Date</span><div>{formatDateLocal(tripData.date)}</div></div><div class="review-tile"><span class="review-label">Total Time</span><div>{tripData.hoursWorked.toFixed(1)} hrs</div></div><div class="review-tile"><span class="review-label">Drive Time</span><div>{formatDuration(tripData.estimatedTime)}</div></div><div class="review-tile"><span class="review-label">Hours Worked</span><div>{Math.max(0, tripData.hoursWorked - (tripData.estimatedTime / 60)).toFixed(1)} hrs</div></div><div class="review-tile"><span class="review-label">Distance</span><div>{tripData.totalMiles} mi</div></div><div class="review-tile"><span class="review-label">Stops</span><div>{tripData.stops.length}</div></div></div><div class="financial-summary"><div class="row"><span>Earnings</span> <span class="val positive">{formatCurrency(totalEarnings)}</span></div><div class="row subheader"><span>Expenses Breakdown</span></div>{#if tripData.fuelCost > 0}<div class="row detail"><span>Fuel</span> <span class="val">{formatCurrency(tripData.fuelCost)}</span></div>{/if}{#each tripData.maintenanceItems as item}<div class="row detail"><span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span></div>{/each}{#each tripData.suppliesItems as item}<div class="row detail"><span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span></div>{/each}<div class="row total-expenses"><span>Total Expenses</span> <span class="val negative">-{formatCurrency(totalCosts)}</span></div><div class="row total"><span>Net Profit</span> <span class="val" class:positive={totalProfit >= 0}>{formatCurrency(totalProfit)}</span></div></div><div class="form-actions-modal"><button class="btn-secondary" on:click={prevStep}>Back</button><button class="btn-primary" on:click={saveTrip}>Save Trip</button></div></div> {/if}
-      </div>
-    </div>
-</Modal>
-
 <style>
   .trip-history { max-width: 1200px; margin: 0 auto; padding: 12px; padding-bottom: 80px; }
 
@@ -1030,7 +732,7 @@
   }
 
   .pagination-controls { 
-      display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 32px;
+      display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 32px; 
   }
   .page-btn {
       padding: 8px 16px; background: white; border: 1px solid #E5E7EB; border-radius: 8px;
@@ -1045,7 +747,7 @@
   .page-title { font-size: 24px; font-weight: 800; color: #111827; margin: 0; }
   .page-subtitle { font-size: 14px; color: #6B7280; margin: 0; }
   .header-actions { display: flex; gap: 12px; align-items: center; }
-  .btn-primary { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); cursor: pointer; }
+  .btn-primary { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); }
   
   .stats-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
   .summary-card { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; text-align: center; }
@@ -1056,11 +758,15 @@
   
   /* Sticky Filters Style */
   .sticky-bar {
-      position: sticky; top: 0; z-index: 10;
+      position: sticky;
+      top: 0;
+      z-index: 10;
       background: #F9FAFB; /* Match page bg */
-      padding-top: 10px; padding-bottom: 10px;
+      padding-top: 10px;
+      padding-bottom: 10px;
       margin: -12px -12px 10px -12px; /* Pull out of parent padding */
-      padding-left: 12px; padding-right: 12px;
+      padding-left: 12px;
+      padding-right: 12px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.02); /* Subtle separation */
   }
 
@@ -1088,13 +794,43 @@
   .trip-list-cards { display: flex; flex-direction: column; gap: 12px; }
   
   /* Swipe Wrapper & Backgrounds */
-  .trip-card-wrapper { position: relative; overflow: hidden; border-radius: 12px; background: #F3F4F6; }
-  .swipe-bg { position: absolute; inset: 0; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; z-index: 0; }
-  .swipe-action { font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+  .trip-card-wrapper {
+      position: relative;
+      overflow: hidden;
+      border-radius: 12px;
+      /* Background colors for swipes */
+      background: #F3F4F6; 
+  }
+
+  .swipe-bg {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 20px;
+      z-index: 0;
+  }
+  
+  .swipe-action {
+      font-weight: 700;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+  }
   .swipe-action.edit { color: #2563EB; }
   .swipe-action.delete { color: #DC2626; }
 
-  .trip-card { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; cursor: pointer; transition: all 0.2s; position: relative; z-index: 1; }
+  .trip-card { 
+      background: white; 
+      border: 1px solid #E5E7EB; 
+      border-radius: 12px; 
+      padding: 16px; 
+      cursor: pointer; 
+      transition: all 0.2s; 
+      position: relative; 
+      z-index: 1; /* Sit above the swipe actions */
+  }
   .trip-card:active { background-color: #F9FAFB; }
   .trip-card.expanded { border-color: #FF7F50; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
   .trip-card.selected { background-color: #FFF7ED; border-color: #FF7F50; }
@@ -1105,7 +841,9 @@
       70% { border-color: #FF7F50; box-shadow: 0 0 0 10px rgba(255, 127, 80, 0); }
       100% { border-color: #E5E7EB; box-shadow: 0 0 0 0 rgba(255, 127, 80, 0); }
   }
-  :global(.highlight-pulse) { animation: pulse-border 2s ease-out; }
+  :global(.highlight-pulse) {
+      animation: pulse-border 2s ease-out;
+  }
 
   .card-top { display: grid; grid-template-columns: auto 1fr auto 20px; align-items: center; gap: 12px; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #F3F4F6; }
   .selection-box { display: flex; align-items: center; justify-content: center; }
@@ -1165,95 +903,5 @@
   @media (min-width: 1024px) {
     .stats-summary { grid-template-columns: repeat(4, 1fr); }
     .search-box { max-width: 300px; }
-  }
-
-  /* --- MODAL WIZARD STYLES (Adapted from new/+page.svelte) --- */
-  .new-trip-wizard-container { width: 100%; display: flex; flex-direction: column; height: 70vh; /* Fixed height for modal content */ }
-  
-  .progress-steps { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; padding: 0 4px; flex-shrink: 0; }
-  .step-item { display: flex; flex-direction: column; align-items: center; gap: 4px; z-index: 1; }
-  .step-circle { width: 32px; height: 32px; border-radius: 50%; background: #F3F4F6; color: #9CA3AF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; border: 2px solid #fff; }
-  .step-item.active .step-circle { background: #FF7F50; color: white; }
-  .step-item.completed .step-circle { background: #10B981; color: white; }
-  .step-label { font-size: 12px; font-weight: 600; color: #9CA3AF; }
-  .step-item.active .step-label { color: #111827; }
-  .step-line { flex: 1; height: 2px; background: #E5E7EB; margin: 0 -4px 18px -4px; position: relative; z-index: 0; }
-  .step-line.completed { background: #10B981; }
-
-  .form-content-scroll { flex: 1; overflow-y: auto; padding-right: 4px; }
-  .modal-form-section { display: flex; flex-direction: column; gap: 16px; }
-
-  .card-header-modal { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-  .card-title-modal { font-size: 18px; font-weight: 700; color: #111827; margin: 0; }
-  
-  .form-grid { display: flex; flex-direction: column; gap: 16px; }
-  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .form-group { display: flex; flex-direction: column; gap: 6px; }
-  label { font-size: 14px; font-weight: 600; color: #374151; }
-  .hint { color: #9CA3AF; font-weight: 400; }
-  input, textarea { width: 100%; padding: 12px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 15px; background: white; box-sizing: border-box; }
-  input:focus, textarea:focus { outline: none; border-color: #FF7F50; }
-  .readonly-field { background: #F9FAFB; padding: 12px; border-radius: 10px; border: 1px solid #E5E7EB; color: #6B7280; font-weight: 500; font-size: 15px; }
-  .address-input { padding-top: 14px; padding-bottom: 14px; }
-  
-  .input-money-wrapper { position: relative; width: 100%; }
-  .input-money-wrapper .symbol { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #6B7280; font-weight: 600; font-size: 15px; }
-  .input-money-wrapper input { padding-left: 28px; }
-  .input-money-wrapper.small input { padding: 8px 8px 8px 24px; font-size: 14px; }
-  .input-money-wrapper.small .symbol { left: 10px; font-size: 14px; }
-
-  .stops-container { margin: 16px 0; border: 1px solid #E5E7EB; border-radius: 12px; padding: 12px; background: #F9FAFB; }
-  .stops-header { display: flex; justify-content: space-between; margin-bottom: 12px; align-items: center; }
-  .stops-header h3 { font-size: 16px; font-weight: 700; margin: 0; }
-  .stops-header .count { font-size: 12px; color: #6B7280; background: #E5E7EB; padding: 4px 10px; border-radius: 8px; }
-  .stops-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
-  .stop-card { background: white; border: 1px solid #E5E7EB; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
-  .stop-header { display: flex; justify-content: space-between; align-items: center; }
-  .stop-number { background: #FF7F50; color: white; width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
-  .stop-actions { display: flex; gap: 12px; align-items: center; color: #9CA3AF; }
-  .stop-inputs { display: flex; flex-direction: column; gap: 8px; width: 100%; }
-  .stop-inputs.new { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
-
-  .form-actions-modal { display: flex; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #E5E7EB; }
-  .btn-add { background: #2563EB; color: white; margin-top: 8px; font-size: 14px; padding: 12px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; width: 100%; }
-  .btn-icon { background: none; border: none; font-size: 18px; cursor: pointer; color: #9CA3AF; padding: 4px; }
-  .btn-icon.delete:hover { color: #DC2626; }
-  .btn-text { background: none; border: none; color: #2563EB; font-weight: 600; font-size: 14px; cursor: pointer; }
-  .btn-small { padding: 8px 12px; border-radius: 6px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; }
-  .btn-small.primary { background: #10B981; color: white; }
-  .btn-secondary { background: white; border: 1px solid #E5E7EB; color: #374151; }
-
-  .summary-box { background: #ECFDF5; border: 1px solid #A7F3D0; padding: 16px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; color: #065F46; margin-bottom: 24px; font-size: 16px; }
-  .section-group { margin-bottom: 24px; }
-  .section-top { display: flex; justify-content: space-between; margin-bottom: 12px; align-items: center; }
-  .section-top h3 { font-size: 16px; font-weight: 700; margin: 0; }
-  .add-custom-row { display: flex; gap: 8px; margin-bottom: 12px; }
-  .add-custom-row input { flex: 1; padding: 10px; }
-  .chips-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-  .option-badge { display: inline-flex; align-items: stretch; background: white; border: 1px solid #E5E7EB; border-radius: 8px; overflow: hidden; }
-  .badge-btn { padding: 6px 10px; border: none; background: transparent; font-size: 13px; font-weight: 500; color: #4B5563; cursor: pointer; border-right: 1px solid #E5E7EB; }
-  .badge-btn:hover { background: #F9FAFB; color: #FF7F50; }
-  .badge-delete { padding: 0 8px; border: none; background: #FEF2F2; color: #DC2626; cursor: pointer; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
-  .badge-delete:hover { background: #FCA5A5; color: white; }
-  
-  .review-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
-  .review-tile { background: #F9FAFB; padding: 12px; border-radius: 10px; border: 1px solid #E5E7EB; }
-  .review-tile .review-label { display: block; font-size: 11px; color: #6B7280; text-transform: uppercase; margin-bottom: 2px; }
-  .review-tile div { font-weight: 700; font-size: 15px; color: #111827; }
-  .financial-summary { background: #F9FAFB; padding: 16px; border-radius: 12px; border: 1px solid #E5E7EB; }
-  .financial-summary .row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 15px; }
-  .financial-summary .row.subheader { font-weight: 700; color: #374151; margin-top: 12px; border-bottom: 1px solid #E5E7EB; padding-bottom: 4px; margin-bottom: 6px; font-size: 13px; }
-  .financial-summary .row.detail { font-size: 13px; color: #6B7280; }
-  .financial-summary .row.total-expenses { font-weight: 600; color: #4B5563; border-top: 1px dashed #D1D5DB; padding-top: 6px; }
-  .financial-summary .total { border-top: 2px solid #D1D5DB; margin-top: 12px; padding-top: 12px; font-weight: 800; font-size: 18px; }
-  .val.positive { color: #059669; }
-  .val.negative { color: #DC2626; }
-  
-  .full-width { width: 100%; }
-
-  @media (min-width: 640px) {
-    .stop-card { flex-direction: row; align-items: center; }
-    .stop-inputs { display: grid; grid-template-columns: 1fr 140px; }
-    .stop-inputs.new { display: grid; grid-template-columns: 1fr 140px; }
   }
 </style>
