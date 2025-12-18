@@ -6,23 +6,25 @@ compatibility_flags = ["nodejs_compat"]
 # 1. Trip Index DO Definition
 [[durable_objects.bindings]]
 name = "TRIP_INDEX_DO"
-class_name = "TripIndexDO"
+class_name = "TripIndexSQL"
 
 # 2. Places Index DO Definition
 [[durable_objects.bindings]]
 name = "PLACES_INDEX_DO"
-class_name = "PlacesIndexDO"
+class_name = "PlacesIndexSQL"
 
 # --- MIGRATIONS ---
 
-# Migration v1: Initializes the original TripIndexDO
-# (If this was already run, Cloudflare will skip it automatically)
+# Previous migrations (safe to keep)
 [[migrations]]
 tag = "v1"
 new_classes = ["TripIndexDO"]
 
-# Migration v2: Adds the new PlacesIndexDO
-# (This is the new step that fixes your error)
 [[migrations]]
 tag = "v2"
 new_classes = ["PlacesIndexDO"]
+
+# [!code fix] Ensure this tag is present to force SQLite
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["TripIndexSQL", "PlacesIndexSQL"]
