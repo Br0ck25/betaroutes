@@ -14,7 +14,7 @@ export const DELETE: RequestHandler = async (event) => {
     const user = event.locals.user;
     if (!user) return new Response('Unauthorized', { status: 401 });
 
-    // [!code change] Pass Trash KV
+    // Pass both the Main KV and Trash KV to the service
     const svc = makeExpenseService(getKV(event.platform), getTrashKV(event.platform));
     await svc.delete(user.name || user.token, event.params.id);
 

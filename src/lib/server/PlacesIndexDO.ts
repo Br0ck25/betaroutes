@@ -37,7 +37,10 @@ export class PlacesIndexDO {
                 }
                 return new Response("OK");
             } catch (err) {
-                return new Response((err as Error).message, { status: 500 });
+                // [!code fix] Log internal error details privately
+                console.error("[PlacesIndexDO] Error:", err);
+                // Return safe, generic error to client
+                return new Response(JSON.stringify({ error: "Internal Server Error" }), { status: 500 });
             }
         }
         return new Response("Not Found", { status: 404 });

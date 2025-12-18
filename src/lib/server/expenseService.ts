@@ -1,6 +1,5 @@
 // src/lib/server/expenseService.ts
 import type { KVNamespace } from '@cloudflare/workers-types';
-import type { TrashMetadata } from './tripService'; // Reuse metadata type if possible, or redefine
 
 export interface ExpenseRecord {
   id: string;
@@ -15,7 +14,7 @@ export interface ExpenseRecord {
   [key: string]: any;
 }
 
-// [!code change] Accept trashKV
+// Update factory to accept the Trash KV
 export function makeExpenseService(kv: KVNamespace, trashKV?: KVNamespace) {
   
   function getKey(userId: string, id: string) {
@@ -24,7 +23,6 @@ export function makeExpenseService(kv: KVNamespace, trashKV?: KVNamespace) {
 
   return {
     async list(userId: string, since?: string): Promise<ExpenseRecord[]> {
-      // Simple prefix list for expenses (no IndexDO needed for now)
       const prefix = `expense:${userId}:`;
       const list = await kv.list({ prefix });
       const expenses: ExpenseRecord[] = [];
@@ -64,13 +62,14 @@ export function makeExpenseService(kv: KVNamespace, trashKV?: KVNamespace) {
     async delete(userId: string, id: string) {
       const key = getKey(userId, id);
       const raw = await kv.get(key);
+      
       if (raw) {
         const expense = JSON.parse(raw);
         const now = new Date();
 
-        // [!code ++] 1. Move to Trash KV if available
+        // 1. Move to Trash KV if available
         if (trashKV) {
-             const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+             const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days expiry
              const metadata = {
                 deletedAt: now.toISOString(),
                 deletedBy: userId,
@@ -78,7 +77,7 @@ export function makeExpenseService(kv: KVNamespace, trashKV?: KVNamespace) {
                 expiresAt: expiresAt.toISOString()
              };
              
-             // Wrap in standard trash structure with type
+             // Wrap in standard trash structure
              const trashItem = {
                 type: 'expense',
                 data: expense,
@@ -93,7 +92,7 @@ export function makeExpenseService(kv: KVNamespace, trashKV?: KVNamespace) {
              );
         }
 
-        // 2. Soft delete tombstone
+        // 2. Soft delete tombstone in Main KV
         const tombstone = {
           ...expense,
           deleted: true,

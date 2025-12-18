@@ -18,8 +18,6 @@ export class TripIndexDO {
         this.env = env;
 
         // 1. Initialize SQLite Schema
-        // This is safe to run on every startup; it only creates if missing.
-        // We use 'data' to store the full JSON object.
         this.state.storage.sql.exec(`
             CREATE TABLE IF NOT EXISTS trips (
                 id TEXT PRIMARY KEY,
@@ -30,7 +28,6 @@ export class TripIndexDO {
         `);
 
         // 2. Migration Logic: Move legacy KV data to SQLite
-        // If we find the old "trips" array in KV storage, we move it to the SQL table.
         this.state.blockConcurrencyWhile(async () => {
             const legacyTrips = await this.state.storage.get<TripSummary[]>("trips");
             if (legacyTrips && Array.isArray(legacyTrips) && legacyTrips.length > 0) {
@@ -41,7 +38,6 @@ export class TripIndexDO {
                 for (const trip of legacyTrips) {
                     stmt.run(trip.id, trip.date || "", trip.createdAt || "", JSON.stringify(trip));
                 }
-                // Clear old KV data to free space
                 await this.state.storage.delete("trips");
             }
         });
@@ -52,8 +48,10 @@ export class TripIndexDO {
         const path = url.pathname;
 
         try {
+            // --- INDEXING OPERATIONS ---
+
+            // GET /list - Return all trips (sorted)
             if (path === "/list") {
-                // Efficient SQL Query for sorting
                 const cursor = this.state.storage.sql.exec(`
                     SELECT data FROM trips 
                     ORDER BY date DESC, createdAt DESC
@@ -65,24 +63,7 @@ export class TripIndexDO {
                 return new Response(JSON.stringify(trips));
             }
 
-            if (path === "/put") {
-                const trip = await request.json() as TripSummary;
-                if (!trip || !trip.id) return new Response("Invalid Data", { status: 400 });
-
-                this.state.storage.sql.exec(`
-                    INSERT OR REPLACE INTO trips (id, date, createdAt, data)
-                    VALUES (?, ?, ?, ?)
-                `, trip.id, trip.date || "", trip.createdAt || "", JSON.stringify(trip));
-                
-                return new Response("OK");
-            }
-
-            if (path === "/delete") {
-                const { id } = await request.json() as { id: string };
-                this.state.storage.sql.exec("DELETE FROM trips WHERE id = ?", id);
-                return new Response("OK");
-            }
-
+            // POST /migrate - Receive bulk data from KV to initialize
             if (path === "/migrate") {
                 const trips = await request.json() as TripSummary[];
                 const stmt = this.state.storage.sql.prepare(`
@@ -95,7 +76,28 @@ export class TripIndexDO {
                 return new Response("OK");
             }
 
-            // --- Billing Counters (KV is fine here) ---
+            // POST /put - Add or Update a trip
+            if (path === "/put") {
+                const trip = await request.json() as TripSummary;
+                if (!trip || !trip.id) return new Response("Invalid Data", { status: 400 });
+
+                this.state.storage.sql.exec(`
+                    INSERT OR REPLACE INTO trips (id, date, createdAt, data)
+                    VALUES (?, ?, ?, ?)
+                `, trip.id, trip.date || "", trip.createdAt || "", JSON.stringify(trip));
+                
+                return new Response("OK");
+            }
+
+            // POST /delete - Remove a trip
+            if (path === "/delete") {
+                const { id } = await request.json() as { id: string };
+                this.state.storage.sql.exec("DELETE FROM trips WHERE id = ?", id);
+                return new Response("OK");
+            }
+
+            // --- BILLING ATOMIC COUNTERS ---
+
             if (path === "/billing/check-increment") {
                 const { monthKey, limit } = await request.json() as { monthKey: string, limit: number };
                 const key = `count:${monthKey}`;
@@ -122,7 +124,10 @@ export class TripIndexDO {
             return new Response("Not Found", { status: 404 });
 
         } catch (err) {
-            return new Response(JSON.stringify({ error: (err as Error).message }), { status: 500 });
+            // [!code fix] Log internal error details privately
+            console.error("[TripIndexDO] Error:", err);
+            // Return safe, generic error to client
+            return new Response(JSON.stringify({ error: "Internal Server Error" }), { status: 500 });
         }
     }
 }
