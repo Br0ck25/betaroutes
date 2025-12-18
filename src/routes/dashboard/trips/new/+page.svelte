@@ -17,6 +17,14 @@
   
   let isCalculating = false;
   
+  // [!code ++] Helper function to get local date (fixes "tomorrow" bug)
+  function getLocalDate() {
+    const now = new Date();
+    return new Date(now.getTime() - (now.getTimezoneOffset() * 60000))
+      .toISOString()
+      .split('T')[0];
+  }
+  
   onMount(() => {
     const savedMaintenance = localStorage.getItem('maintenanceOptions');
     const savedSupplies = localStorage.getItem('suppliesOptions');
@@ -26,7 +34,8 @@
 
   let tripData = {
     id: crypto.randomUUID(),
-    date: new Date().toISOString().split('T')[0],
+    // [!code change] Use getLocalDate() instead of direct UTC conversion
+    date: getLocalDate(),
     startTime: '09:00',
     endTime: '17:00',
     hoursWorked: 0,
@@ -136,7 +145,7 @@
 
     tripData.totalMiles = parseFloat(miles.toFixed(1));
     tripData.estimatedTime = Math.round(mins);
-    // [!code ++] Force reactivity update
+    // Force reactivity update
     tripData = { ...tripData };
   }
 
@@ -189,7 +198,7 @@
     const val = placeOrEvent?.formatted_address || placeOrEvent?.name || tripData.stops[index].address;
     if (!val) return;
 
-    // [!code changed] Removed the equality check to force recalc on blur even if bind updated value
+    // Removed the equality check to force recalc on blur even if bind updated value
     tripData.stops[index].address = val;
     isCalculating = true;
 
@@ -222,7 +231,7 @@
   async function handleMainAddressChange(type: 'start' | 'end', placeOrEvent: any) {
     const val = placeOrEvent?.formatted_address || placeOrEvent?.name || (type === 'start' ? tripData.startAddress : tripData.endAddress);
     
-    // [!code changed] Removed strict equality check to allow manual typing updates
+    // Removed strict equality check to allow manual typing updates
     if (type === 'start') tripData.startAddress = val;
     else tripData.endAddress = val;
 
