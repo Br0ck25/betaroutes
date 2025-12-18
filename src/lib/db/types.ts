@@ -69,7 +69,6 @@ export interface ExpenseRecord {
 /**
  * Trash item stored in IndexedDB
  */
-// [!code change] Updated to support both Trip and Expense fields
 export interface TrashRecord extends Partial<TripRecord>, Partial<ExpenseRecord> {
   id: string;
   userId: string;
@@ -77,7 +76,8 @@ export interface TrashRecord extends Partial<TripRecord>, Partial<ExpenseRecord>
   deletedBy: string;
   expiresAt: string;
   originalKey: string;
-  recordType: 'trip' | 'expense'; // Added discriminator
+  recordType?: 'trip' | 'expense'; // Added discriminator
+  [key: string]: any;
 }
 
 /**

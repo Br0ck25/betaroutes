@@ -21,7 +21,7 @@
   let upgradePay: number;
   let wifiExtenderPay: number;
   let voipPay: number;
-  let driveTimeBonus: number; // [!code ++]
+  let driveTimeBonus: number;
   
   // Supply Costs
   let poleCost: number;
@@ -79,7 +79,7 @@
               upgradePay = data.settings.upgradePay;
               wifiExtenderPay = data.settings.wifiExtenderPay;
               voipPay = data.settings.voipPay;
-              driveTimeBonus = data.settings.driveTimeBonus; // [!code ++]
+              driveTimeBonus = data.settings.driveTimeBonus;
               poleCost = data.settings.poleCost;
               concreteCost = data.settings.concreteCost;
               poleCharge = data.settings.poleCharge;
@@ -105,7 +105,7 @@
           upgradePay,
           wifiExtenderPay,
           voipPay,
-          driveTimeBonus, // [!code ++]
+          driveTimeBonus,
           poleCost,
           concreteCost,
           poleCharge,
@@ -130,7 +130,6 @@
 
   // Reactive Watcher
   $: if (isConfigLoaded) {
-      // [!code ++] Added driveTimeBonus
       const _ = [installPay, repairPay, upgradePay, wifiExtenderPay, voipPay, driveTimeBonus, poleCost, concreteCost, poleCharge, installTime, repairTime];
       if (saveTimeout) clearTimeout(saveTimeout);
       saveTimeout = setTimeout(() => {
@@ -240,7 +239,7 @@
                 upgradePay: upgradePay || 0,
                 wifiExtenderPay: wifiExtenderPay || 0,
                 voipPay: voipPay || 0,
-                driveTimeBonus: driveTimeBonus || 0, // [!code ++]
+                driveTimeBonus: driveTimeBonus || 0,
                 poleCost: poleCost || 0,
                 concreteCost: concreteCost || 0,
                 poleCharge: poleCharge || 0, 
@@ -450,10 +449,10 @@
     <div class="settings-card">
       <div class="card-header">
         <div class="card-icon orange">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
              <path d="M10 12C11.1046 12 12 11.1046 12 10C12 8.89543 11.1046 8 10 8C8.89543 8 8 8.89543 8 10C8 11.1046 8.89543 12 10 12Z" stroke="currentColor" stroke-width="2"/>
-            <path d="M16.2 12C16.1 12.5 16.3 13 16.7 13.3L16.8 13.4C17.1 13.7 17.3 14.1 17.3 14.5C17.3 14.9 17.1 15.3 16.8 15.6C16.5 15.9 16.1 16.1 15.7 16.1C15.3 16.1 14.9 15.9 14.6 15.6L14.5 15.5C14.2 15.1 13.7 14.9 13.2 15C12.7 15.1 12.4 15.5 12.3 16V16.2C12.3 17.1 11.6 17.8 10.7 17.8C9.8 17.8 9.1 17.1 9.1 16.2V16.1C9 15.5 8.6 15.1 8 15C7.5 15 7 15.2 6.7 15.6L6.6 15.7C6.3 16 5.9 16.2 5.5 16.2C5.1 16.2 4.7 16 4.4 15.7C4.1 15.4 3.9 15 3.9 14.6C3.9 14.2 4.1 13.8 4.4 13.5L4.5 13.4C4.9 13.1 5.1 12.6 5 12.1C4.9 11.6 4.5 11.3 4 11.2H3.8C2.9 11.2 2.2 10.5 2.2 9.6C2.2 8.7 2.9 8 3.8 8H3.9C4.5 7.9 4.9 7.5 5 6.9C5 6.4 4.8 5.9 4.4 5.6L4.3 5.5C4 5.2 3.8 4.8 3.8 4.4C3.8 4 4 3.6 4.3 3.3C4.6 3 5 2.8 5.4 2.8C5.8 2.8 6.2 3 6.5 3.3L6.6 3.4C7 3.8 7.5 4 8 3.9C8.5 3.9 8.8 3.4 8.9 2.9V2.7C8.9 1.8 9.6 1.1 10.5 1.1C11.4 1.1 12.1 1.8 12.1 2.7V2.8C12.1 3.4 12.5 3.8 13.1 3.9C13.6 4 14.1 3.8 14.4 3.4L14.5 3.3C14.8 3 15.2 2.8 15.6 2.8C16 2.8 16.4 3 16.7 3.3C17 3.6 17.2 4 17.2 4.4C17.2 4.8 17 5.2 16.7 5.5L16.6 5.6C16.2 5.9 16 6.4 16.1 6.9C16.2 7.4 16.6 7.7 17.1 7.8H17.3C18.2 7.8 18.9 8.5 18.9 9.4C18.9 10.3 18.2 11 17.3 11H17.2C16.6 11.1 16.2 11.5 16.1 12.1L16.2 12Z" stroke="currentColor" stroke-width="2"/>
-          </svg>
+             <path d="M16.2 12C16.1 12.5 16.3 13 16.7 13.3L16.8 13.4C17.1 13.7 17.3 14.1 17.3 14.5C17.3 14.9 17.1 15.3 16.8 15.6C16.5 15.9 16.1 16.1 15.7 16.1C15.3 16.1 14.9 15.9 14.6 15.6L14.5 15.5C14.2 15.1 13.7 14.9 13.2 15C12.7 15.1 12.4 15.5 12.3 16V16.2C12.3 17.1 11.6 17.8 10.7 17.8C9.8 17.8 9.1 17.1 9.1 16.2V16.1C9 15.5 8.6 15.1 8 15C7.5 15 7 15.2 6.7 15.6L6.6 15.7C6.3 16 5.9 16.2 5.5 16.2C5.1 16.2 4.7 16 4.4 15.7C4.1 15.4 3.9 15 3.9 14.6C3.9 14.2 4.1 13.8 4.4 13.5L4.5 13.4C4.9 13.1 5.1 12.6 5 12.1C4.9 11.6 4.5 11.3 4 11.2H3.8C2.9 11.2 2.2 10.5 2.2 9.6C2.2 8.7 2.9 8 3.8 8H3.9C4.5 7.9 4.9 7.5 5 6.9C5 6.4 4.8 5.9 4.4 5.6L4.3 5.5C4 5.2 3.8 4.8 3.8 4.4C3.8 4 4 3.6 4.3 3.3C4.6 3 5 2.8 5.4 2.8C5.8 2.8 6.2 3 6.5 3.3L6.6 3.4C7 3.8 7.5 4 8 3.9C8.5 3.9 8.8 3.4 8.9 2.9V2.7C8.9 1.8 9.6 1.1 10.5 1.1C11.4 1.1 12.1 1.8 12.1 2.7V2.8C12.1 3.4 12.5 3.8 13.1 3.9C13.6 4 14.1 3.8 14.4 3.4L14.5 3.3C14.8 3 15.2 2.8 15.6 2.8C16 2.8 16.4 3 16.7 3.3C17 3.6 17.2 4 17.2 4.4C17.2 4.8 17 5.2 16.7 5.5L16.6 5.6C16.2 5.9 16 6.4 16.1 6.9C16.2 7.4 16.6 7.7 17.1 7.8H17.3C18.2 7.8 18.9 8.5 18.9 9.4C18.9 10.3 18.2 11 17.3 11H17.2C16.6 11.1 16.2 11.5 16.1 12.1L16.2 12Z" stroke="currentColor" stroke-width="2"/>
+           </svg>
         </div>
         <div>
           <h2 class="card-title">Configuration</h2>
@@ -624,21 +623,54 @@
 </div>
 
 <style>
-  .settings { max-width: 1200px; margin: 0 auto; padding: 20px; }
+  /* Mobile First Container */
+  .settings { 
+    max-width: 1200px; 
+    margin: 0 auto; 
+    padding: 16px; 
+  }
+
   .page-header { margin-bottom: 32px; }
-  .page-title { font-size: 32px; font-weight: 800; color: #111827; margin-bottom: 4px; }
+  
+  .page-title { 
+    font-size: 24px; 
+    font-weight: 800; 
+    color: #111827; 
+    margin-bottom: 4px; 
+  }
+  
   .page-subtitle { font-size: 16px; color: #6B7280; }
   
   .alert { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-radius: 12px; font-size: 14px; font-weight: 500; margin-bottom: 24px; }
   .alert.success { background: #F0FDF4; color: #166534; border: 1px solid #BBF7D0; }
   
-  .settings-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
-  .settings-card { background: white; border: 1px solid #E5E7EB; border-radius: 16px; padding: 24px; }
-  .settings-card.full-width { grid-column: span 2; }
+  /* Mobile First Grid System */
+  .settings-grid { 
+    display: grid; 
+    grid-template-columns: 1fr; /* Default to 1 column */
+    gap: 16px; 
+  }
   
-  @media (max-width: 768px) {
-    .settings-grid { grid-template-columns: 1fr; }
-    .settings-card.full-width { grid-column: span 1; }
+  .settings-card { 
+    background: white; 
+    border: 1px solid #E5E7EB; 
+    border-radius: 16px; 
+    padding: 16px; 
+  }
+  
+  .settings-card.full-width { grid-column: span 1; }
+
+  /* Desktop Overrides */
+  @media (min-width: 1024px) {
+    .settings { padding: 20px; }
+    .page-title { font-size: 32px; }
+    
+    .settings-grid { 
+        grid-template-columns: repeat(2, 1fr); 
+        gap: 24px; 
+    }
+    .settings-card { padding: 24px; }
+    .settings-card.full-width { grid-column: span 2; }
   }
 
   .card-header { display: flex; gap: 16px; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid #E5E7EB; }
@@ -666,7 +698,19 @@
 
   .help-text { font-size: 11px; color: #9CA3AF; margin-top: 4px; display: block; }
   
-  .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  /* Mobile First Config Grid */
+  .config-grid { 
+    display: grid; 
+    grid-template-columns: 1fr; /* Stack vertically on mobile */
+    gap: 16px; 
+  }
+  
+  @media (min-width: 640px) {
+    .config-grid { 
+        grid-template-columns: 1fr 1fr; 
+        gap: 20px; 
+    }
+  }
   
   .section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #9CA3AF; margin-bottom: 12px; letter-spacing: 0.05em; margin-top: 8px; }
   .section-label.text-red { color: #EF4444; }
@@ -682,7 +726,19 @@
   .btn-secondary:hover { border-color: var(--orange); color: var(--orange); }
   .btn-secondary.danger-hover:hover { border-color: #DC2626; color: #DC2626; }
   
-  .button-group { display: flex; gap: 12px; }
+  /* Mobile First Button Group */
+  .button-group { 
+    display: flex; 
+    flex-direction: column; /* Stack buttons on mobile */
+    gap: 12px; 
+  }
+  
+  @media (min-width: 640px) {
+    .button-group { 
+        flex-direction: row; 
+    }
+  }
+  
   .mt-4 { margin-top: 16px; }
 
   /* SYNC PROGRESS STYLES */
@@ -716,8 +772,20 @@
   .tip-text { font-size: 13px; color: #6B7280; font-style: italic; margin-top: 10px; }
 
   .orders-list { display: grid; gap: 12px; max-height: 400px; overflow-y: auto; }
-  .order-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border: 1px solid #E5E7EB; border-radius: 10px; background: #F9FAFB; }
-  .order-main { display: flex; align-items: center; gap: 10px; }
+  
+  /* Mobile First Order Item */
+  .order-item { 
+    display: flex; 
+    flex-direction: column; /* Stack content vertically */
+    align-items: flex-start; 
+    padding: 12px 16px; 
+    border: 1px solid #E5E7EB; 
+    border-radius: 10px; 
+    background: #F9FAFB;
+    gap: 8px;
+  }
+  
+  .order-main { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .order-id { font-weight: 700; color: #111827; }
   .order-badge { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
   .order-badge.blue { background: #DBEAFE; color: #1E40AF; }
@@ -727,11 +795,33 @@
   .order-badge.wifi { background: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7; }
   .order-badge.voip { background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D; }
   
-  .order-details { flex: 1; margin: 0 16px; }
+  .order-details { flex: 1; margin: 0; width: 100%; }
   .order-addr { font-size: 14px; color: #374151; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .order-meta { font-size: 12px; color: #6B7280; }
   
-  .order-time { text-align: right; }
+  .order-time { 
+    text-align: left; /* Left align on mobile */
+    display: flex; 
+    gap: 12px; 
+  }
+  
+  /* Desktop overrides for Order List */
+  @media (min-width: 640px) {
+    .order-item { 
+        flex-direction: row; 
+        align-items: center; 
+        gap: 0;
+    }
+    .order-details { 
+        margin: 0 16px; 
+        width: auto;
+    }
+    .order-time { 
+        text-align: right; 
+        display: block; 
+    }
+  }
+  
   .date { font-weight: 700; color: #059669; font-size: 13px; }
   .time { color: #6B7280; font-size: 12px; }
 

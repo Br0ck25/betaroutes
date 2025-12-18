@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { trash } from '$lib/stores/trash';
   import { trips } from '$lib/stores/trips';
+  import { expenses } from '$lib/stores/expenses';
   import { goto } from '$app/navigation';
   import { user } from '$lib/stores/auth';
   import { getDB } from '$lib/db/indexedDB';
@@ -63,10 +64,18 @@
     
     try {
       await trash.restore(id, item.userId);
-      await trips.load(item.userId);
+      
+      // Reload the correct store based on type
+      if (item.recordType === 'expense' || item.originalKey?.startsWith('expense:')) {
+          await expenses.load(item.userId);
+      } else {
+          await trips.load(item.userId);
+      }
+      
       await loadTrash();
     } catch (err) {
-      alert('Failed to restore trip.');
+      alert('Failed to restore item.');
+      console.error(err);
     } finally {
       restoring.delete(id);
       restoring = restoring;
@@ -81,7 +90,10 @@
     try {
         await Promise.all(trashedTrips.map(trip => trash.restore(trip.id, trip.userId)));
         const userId = $user?.name || $user?.token;
-        if (userId) await trips.load(userId);
+        if (userId) {
+             await trips.load(userId);
+             await expenses.load(userId);
+        }
         await loadTrash();
     } catch (err) {
         console.error('Failed to restore all:', err);
@@ -89,9 +101,9 @@
         loading = false;
     }
   }
-  
+
   async function permanentDelete(id: string) {
-    if (!confirm('Permanently delete this trip? Cannot be undone.')) return;
+    if (!confirm('Permanently delete this item? Cannot be undone.')) return;
     const item = trashedTrips.find(t => t.id === id);
     if (!item) return;
     if (deleting.has(id)) return;
@@ -101,7 +113,7 @@
       await trash.permanentDelete(id, item.userId);
       await loadTrash();
     } catch (err) {
-      alert('Failed to delete trip.');
+      alert('Failed to delete item.');
     } finally {
       deleting.delete(id);
       deleting = deleting;
@@ -122,7 +134,7 @@
       alert('Failed to empty trash.');
     }
   }
-  
+
   function formatDate(dateString: string | undefined): string {
     if (!dateString) return 'Unknown';
     const date = new Date(dateString);
@@ -155,7 +167,7 @@
       {#if trashedTrips.length > 0}
         <button class="btn-success" on:click={restoreAll}>
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                <path d="M4 4V9H4.58579M4.58579 9H9M4.58579 9L9 4.41421M16 16V11H15.4142M15.4142 11H11M15.4142 11L11 15.5858" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                 <path d="M4 4V9H4.58579M4.58579 9H9M4.58579 9L9 4.41421M16 16V11H15.4142M15.4142 11H11M15.4142 11L11 15.5858" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             Restore All
         </button>
@@ -185,7 +197,7 @@
         <path d="M16 16H48M44 16V52C44 54.2091 42.2091 56 40 56H24C21.7909 56 20 54.2091 20 52V16M26 16V12C26 9.79086 27.7909 8 30 8H34C36.2091 8 38 9.79086 38 12V16" stroke="#9CA3AF" stroke-width="4" stroke-linecap="round"/>
       </svg>
       <h2>Trash is empty</h2>
-      <p>Deleted trips will appear here</p>
+      <p>Deleted items will appear here</p>
     </div>
   {:else}
     <div class="trash-list">
@@ -193,14 +205,20 @@
         {@const expiresAt = trip.expiresAt || (trip as any).metadata?.expiresAt}
         {@const deletedAt = trip.deletedAt || (trip as any).metadata?.deletedAt}
         {@const daysLeft = getDaysUntilExpiration(expiresAt)}
+        {@const isExpense = trip.recordType === 'expense' || trip.originalKey?.startsWith('expense:')}
         
         <div class="trash-item">
           <div class="trip-info">
             <div class="trip-header">
               <h3 class="trip-title">
-                {trip.startAddress?.split(',')[0] || 'Unknown'} 
-                {#if trip.stops && trip.stops.length > 0}
-                  → {trip.stops[trip.stops.length - 1].address?.split(',')[0]}
+                {#if isExpense}
+                    <span class="badge-expense">Expense</span> 
+                    <span class="expense-category">{trip.category || 'Uncategorized'}</span>
+                {:else}
+                    {trip.startAddress?.split(',')[0] || 'Unknown Trip'} 
+                    {#if trip.stops && trip.stops.length > 0}
+                    → {trip.stops[trip.stops.length - 1].address?.split(',')[0]}
+                    {/if}
                 {/if}
               </h3>
               <div class="trip-meta">
@@ -212,9 +230,15 @@
             </div>
             
             <div class="trip-details">
-              <span class="detail">{new Date(trip.date || '').toLocaleDateString()}</span>
-              <span class="detail">{trip.stops?.length || 0} stops</span>
-              {#if trip.totalMiles}<span class="detail">{trip.totalMiles.toFixed(1)} mi</span>{/if}
+              {#if isExpense}
+                   <span class="detail amount">${trip.amount?.toFixed(2)}</span>
+                   {#if trip.description}<span class="detail">{trip.description}</span>{/if}
+                   <span class="detail">{new Date(trip.date || '').toLocaleDateString()}</span>
+              {:else}
+                  <span class="detail">{new Date(trip.date || '').toLocaleDateString()}</span>
+                  <span class="detail">{trip.stops?.length || 0} stops</span>
+                  {#if trip.totalMiles}<span class="detail">{trip.totalMiles.toFixed(1)} mi</span>{/if}
+              {/if}
             </div>
           </div>
 
@@ -233,53 +257,28 @@
 </div>
 
 <style>
-  /* Mobile-First */
   .trash-page { padding: 16px; max-width: 1200px; margin: 0 auto; }
-  
   .page-header { display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; }
   .page-title { font-size: 24px; font-weight: 800; color: #111827; margin: 0 0 4px 0; }
   .page-subtitle { font-size: 14px; color: #6B7280; margin: 0; line-height: 1.4; }
-  
   .header-actions { display: flex; gap: 12px; width: 100%; }
-
-  /* Top-level Buttons - Matched to Trips Page */
+  
   .btn-danger, .btn-success, .btn-secondary {
     display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 16px;
-    border: none; border-radius: 8px; font-weight: 600; font-size: 14px; 
-    cursor: pointer; transition: all 0.2s; flex: 1; text-decoration: none;
+    border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer;
+    transition: all 0.2s; flex: 1; text-decoration: none;
   }
-
-  .btn-danger {
-    background: #DC2626; color: white;
-    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
-  }
+  .btn-danger { background: #DC2626; color: white; box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3); }
   .btn-danger:hover { background: #B91C1C; }
-
-  .btn-success {
-    background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white;
-    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
-  }
+  .btn-success { background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3); }
   .btn-success:hover { filter: brightness(1.1); }
-
-  .btn-secondary {
-    background: white; color: #374151; border: 1px solid #E5E7EB;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  }
+  .btn-secondary { background: white; color: #374151; border: 1px solid #E5E7EB; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); }
   .btn-secondary:hover { background: #F9FAFB; border-color: #D1D5DB; }
 
-  /* List Styling */
   .trash-list { display: flex; flex-direction: column; gap: 16px; }
-  
-  .trash-item { 
-    display: flex; flex-direction: column; /* Stack on mobile */
-    gap: 16px; padding: 16px; 
-    background: white; border: 1px solid #E5E7EB; border-radius: 12px;
-    transition: all 0.2s; 
-  }
-  
+  .trash-item { display: flex; flex-direction: column; gap: 16px; padding: 16px; background: white; border: 1px solid #E5E7EB; border-radius: 12px; transition: all 0.2s; }
   .trip-info { flex: 1; }
   .trip-title { font-size: 16px; font-weight: 700; color: #111827; margin: 0 0 8px 0; line-height: 1.3; }
-  
   .trip-meta { display: flex; gap: 12px; font-size: 12px; flex-wrap: wrap; }
   .deleted-date { color: #6B7280; }
   .expiration { color: #10B981; font-weight: 600; }
@@ -289,27 +288,31 @@
   .detail { display: flex; align-items: center; background: #F3F4F6; padding: 2px 8px; border-radius: 4px; }
   
   .trip-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
-  
-  /* Item Action Buttons (Smaller) */
-  .btn-restore-item, .btn-delete-item { 
-    display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 16px;
-    border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s;
-  }
-  
+  .btn-restore-item, .btn-delete-item { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 16px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; }
   .btn-restore-item { background: #DCFCE7; color: #166534; }
   .btn-delete-item { background: #FEF2F2; color: #DC2626; }
 
   .empty-state { text-align: center; padding: 40px 20px; }
   .empty-state svg { margin-bottom: 16px; }
   
-  /* Tablet/Desktop */
+  .badge-expense {
+      background-color: #DBEAFE;
+      color: #1E40AF;
+      font-size: 0.8em;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-right: 6px;
+      vertical-align: middle;
+      font-weight: 600;
+  }
+  .expense-category { text-transform: capitalize; }
+  .amount { color: #111827; font-weight: 700; }
+
   @media (min-width: 640px) {
     .page-header { flex-direction: row; align-items: flex-start; justify-content: space-between; }
     .header-actions { width: auto; }
-    
     .trash-item { flex-direction: row; align-items: center; }
     .trip-actions { width: auto; display: flex; }
-    
     .btn-danger, .btn-success, .btn-secondary { width: auto; flex: none; }
   }
 </style>

@@ -30,7 +30,7 @@ export type TrashMetadata = {
   expiresAt: string;
 };
 
-// [!code change] Generic Trash Item
+// Generic Trash Item
 export type TrashItem = {
     // Flattened structure for client consumption
     id: string;
@@ -222,7 +222,7 @@ export function makeTripService(
 
         const trashKey = `trash:${userId}:${tripId}`;
         
-        // [!code change] Save with type info
+        // Save with type info
         const trashPayload = {
             type: 'trip', // Explicit type
             data: trip,
@@ -263,7 +263,7 @@ export function makeTripService(
       });
     },
 
-    // [!code change] Updated to handle both trips and expenses
+    // Updated to handle both trips and expenses
     async listTrash(userId: string): Promise<TrashItem[]> {
       if (!trashKV) return [];
       const prefix = trashPrefixForUser(userId);
@@ -356,7 +356,7 @@ export function makeTripService(
               body: JSON.stringify(toSummary(item))
           });
       } else if (type === 'expense') {
-          // [!code ++] Restore Expense
+          // Restore Expense
           const activeKey = `expense:${userId}:${item.id}`;
           await kv.put(activeKey, JSON.stringify(item));
       }

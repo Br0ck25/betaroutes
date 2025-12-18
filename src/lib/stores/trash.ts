@@ -46,7 +46,7 @@ function createTrashStore() {
 				restoredItem.updatedAt = new Date().toISOString();
 				restoredItem.syncStatus = 'pending';
 
-                // [!code change] Detect type and restore to correct store
+                // Detect type and restore to correct store
                 if (originalKey && originalKey.startsWith('expense:')) {
                     const tx = db.transaction('expenses', 'readwrite');
 				    await tx.objectStore('expenses').put(restoredItem);
@@ -72,7 +72,6 @@ function createTrashStore() {
 			}
 		},
 
-        // ... (keep permanentDelete, emptyTrash as is)
 		async permanentDelete(id: string, userId: string) {
 			const db = await getDB();
             const tx = db.transaction('trash', 'readwrite');
@@ -115,7 +114,7 @@ function createTrashStore() {
                     // Normalize Item
 					let flatItem: any = { ...rawItem };
                     
-                    // [!code change] Handle generic 'data' wrapper if present from new API
+                    // Handle generic 'data' wrapper if present from new API
                     if (flatItem.data) {
                          // Merge data up
                          flatItem = { ...flatItem.data, ...flatItem };
