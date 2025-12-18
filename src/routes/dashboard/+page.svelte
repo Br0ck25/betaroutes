@@ -1,16 +1,15 @@
 <script lang="ts">
   import { trips } from '$lib/stores/trips';
-  import { expenses } from '$lib/stores/expenses';
+  import { expenses } from '$lib/stores/expenses'; // [!code ++]
   import { calculateDashboardStats, formatCurrency, formatDate, type TimeRange } from '$lib/utils/dashboardLogic';
   
-  // Default range
   let selectedRange: TimeRange = '30d';
 
-  // Reactive assignment - updates when $trips OR $expenses OR selectedRange changes
+  // [!code change] Pass $expenses to the calculator
   $: stats = calculateDashboardStats($trips, $expenses, selectedRange);
 
-  // Helper for display text
   const rangeLabels = {
+    // ... existing labels
     '30d': 'Last 30 days',
     '60d': 'Last 60 days',
     '90d': 'Last 90 days',
