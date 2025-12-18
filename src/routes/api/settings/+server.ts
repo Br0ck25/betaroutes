@@ -13,7 +13,6 @@ const settingsSchema = z.object({
   currency: z.enum(['USD', 'EUR', 'GBP', 'JPY']).optional(), 
   theme: z.enum(['light', 'dark', 'system']).optional(),
   expenseCategories: z.array(z.string()).optional(),
-  // [!code ++] Add new arrays to schema
   maintenanceCategories: z.array(z.string()).optional(),
   supplyCategories: z.array(z.string()).optional()
 });
@@ -26,6 +25,7 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
   if (!kv) return json({}); 
 
   try {
+      // [!code fix] Ensure consistency with write key
       const raw = await kv.get(`settings:${user.id}`);
       const settings = raw ? JSON.parse(raw) : {};
       return json(settings);
@@ -45,6 +45,7 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
   try {
       const body = await request.json();
       
+      // Handle both wrapped { settings: {...} } and flat payloads
       const payload = body.settings || body;
       const result = settingsSchema.safeParse(payload);
       
@@ -55,6 +56,7 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
           }, { status: 400 });
       }
 
+      // [!code fix] Use the namespaced key
       const key = `settings:${user.id}`;
       const existingRaw = await kv.get(key);
       const existing = existingRaw ? JSON.parse(existingRaw) : {};

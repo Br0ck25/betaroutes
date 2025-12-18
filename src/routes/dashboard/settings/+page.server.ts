@@ -4,14 +4,14 @@ import type { PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ locals, platform, parent }) => {
     const parentData = await parent();
     
-    let remoteSettings = {};
+    let settingsData = {};
 
     if (locals.user && platform?.env?.BETA_USER_SETTINGS_KV) {
         try {
-            // Use user.id
-            const raw = await platform.env.BETA_USER_SETTINGS_KV.get(locals.user.id);
+            // [!code fix] Use 'settings:' prefix to match the API write path
+            const raw = await platform.env.BETA_USER_SETTINGS_KV.get(`settings:${locals.user.id}`);
             if (raw) {
-                remoteSettings = JSON.parse(raw);
+                settingsData = JSON.parse(raw);
             }
         } catch (e) {
             console.error('Failed to load remote settings:', e);
@@ -20,6 +20,9 @@ export const load: PageServerLoad = async ({ locals, platform, parent }) => {
 
     return {
         ...parentData,
-        remoteSettings
+        // [!code fix] Wrap in 'settings' property to match frontend expectation (data.remoteSettings.settings)
+        remoteSettings: {
+            settings: settingsData
+        }
     };
 };
