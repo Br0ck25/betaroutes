@@ -13,6 +13,6 @@
 		{type}
 		bind:value
 		{placeholder}
-		class="w-full p-3 border border-neutral-border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-green"
+		class="w-full p-3 text-base border border-neutral-border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-green"
 	/>
 </label>

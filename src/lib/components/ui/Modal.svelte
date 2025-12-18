@@ -1,7 +1,6 @@
 <script lang="ts">
   // Use $bindable for two-way binding on 'open'
   let { open = $bindable(false), title, children } = $props();
-  
   let dialog: HTMLDialogElement;
 
   // Sync Svelte state with the Native DOM API
@@ -23,7 +22,8 @@
   // Close when clicking the backdrop
   function handleBackdropClick(e: MouseEvent) {
     // In a native dialog, the backdrop is considered part of the dialog element
-    // but the content is inside. If the target is the dialog itself, it's a backdrop click.
+    // but the content is inside.
+    // If the target is the dialog itself, it's a backdrop click.
     if (e.target === dialog) {
         dialog.close();
     }
@@ -41,9 +41,10 @@
     closed:animate-out closed:fade-out-0 closed:zoom-out-95
     border border-neutral-200
   "
+  style="max-height: calc(85vh - env(safe-area-inset-bottom, 20px));"
 >
-  <div class="relative flex flex-col max-h-[85vh]">
-    <div class="flex items-center justify-between px-6 py-4 border-b border-neutral-100">
+  <div class="relative flex flex-col h-full overflow-hidden">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-neutral-100 shrink-0">
       <h3 class="text-lg font-semibold text-neutral-900 leading-none tracking-tight">
         {title || 'Dialog'}
       </h3>

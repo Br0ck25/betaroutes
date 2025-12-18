@@ -11,7 +11,6 @@
   import type { LayoutData } from './$types';
 
   export let data: LayoutData;
-
   $: if (data?.user) {
     auth.hydrate(data.user);
   }
@@ -67,7 +66,6 @@
 
   function isActive(href: string, exact = false, exclude: string[] = []): boolean {
     const path = $page.url.pathname;
-    
     if (exclude.length > 0) {
       if (exclude.some(e => path.startsWith(e))) {
         return false;
@@ -228,7 +226,6 @@
 
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
   :root {
     --orange: #FF7F50;
     --blue: #29ABE2;
@@ -236,10 +233,16 @@
     --green: #8DC63F;
     --purple: #8B5A9E;
     --sidebar-width: 280px;
+    --mobile-header-height: 60px; /* UPDATED: CSS Variable for height */
   }
   
   :global(body) {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  /* UPDATED: Add scroll padding so anchor links aren't hidden by the header */
+  :global(html) {
+    scroll-padding-top: var(--mobile-header-height);
   }
   
   .layout {
@@ -250,12 +253,13 @@
   
   /* --- Mobile Header --- */
   .mobile-header {
-    display: flex; /* Default to visible for mobile */
+    display: flex;
+    /* Default to visible for mobile */
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
-    height: 60px;
+    height: var(--mobile-header-height); /* UPDATED: Uses variable */
     background: white;
     border-bottom: 1px solid #E5E7EB;
     padding: 0 16px;
@@ -445,8 +449,11 @@
   
   /* --- Main Content --- */
   .main-content {
-    margin-left: 0; /* Default 0 for mobile */
-    padding: 80px 16px 100px 16px; /* Top padding for header, Bottom for nav bar */
+    margin-left: 0;
+    /* Default 0 for mobile */
+    /* UPDATED: Dynamic top padding using calc() and CSS Variable */
+    padding: calc(var(--mobile-header-height) + 20px) 16px 100px 16px;
+    /* Top padding for header, Bottom for nav bar */
     flex: 1;
     min-height: 100vh;
   }
@@ -519,7 +526,8 @@
     }
     
     .sidebar {
-      transform: translateX(0); /* Always visible */
+      transform: translateX(0);
+      /* Always visible */
     }
     
     .main-content {

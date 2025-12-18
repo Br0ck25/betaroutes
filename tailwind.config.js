@@ -60,7 +60,6 @@ module.exports = {
         10: "4rem"
       },
       screens: {
-        mobile: "0px",
         tablet: "768px",
         desktop: "1024px",
         wide: "1440px"
