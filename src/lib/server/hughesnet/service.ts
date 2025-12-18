@@ -114,7 +114,6 @@ function validateSyncConfig(config: SyncConfig): void {
     if (!isFinite(voipPay) || voipPay < 0) {
         throw new Error('Phone pay must be a positive finite number');
     }
-    // [!code ++] Validate driveTimeBonus
     if (!isFinite(driveTimeBonus) || driveTimeBonus < 0) {
         throw new Error('Drive Time Bonus must be a positive finite number');
     }
@@ -401,7 +400,7 @@ export class HughesNetService {
                 poleCharge: settings.poleCharge,
                 wifiExtenderPay: settings.wifiExtenderPay,
                 voipPay: settings.voipPay,
-                driveTimeBonus: settings.driveTimeBonus // [!code ++]
+                driveTimeBonus: settings.driveTimeBonus 
             });
 
             // Add manual validation for times
@@ -429,8 +428,9 @@ export class HughesNetService {
         poleCharge: number,
         wifiExtenderPay: number,
         voipPay: number,
-        driveTimeBonus: number, // [!code ++] Added
-        skipScan: boolean
+        driveTimeBonus: number, 
+        skipScan: boolean,
+        recentOnly: boolean = false // [!code ++] New parameter
     ): Promise<SyncResult> {
         // Validate input
         validateSyncConfig({ installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge, wifiExtenderPay, voipPay, driveTimeBonus });
@@ -448,7 +448,8 @@ export class HughesNetService {
 
             const result = await this.performSync(
                 userId, settingsId, installPay, repairPay, upgradePay, 
-                poleCost, concreteCost, poleCharge, wifiExtenderPay, voipPay, driveTimeBonus, skipScan
+                poleCost, concreteCost, poleCharge, wifiExtenderPay, voipPay, 
+                driveTimeBonus, skipScan, recentOnly // [!code ++] Pass param
             );
             
             return result;
@@ -471,8 +472,9 @@ export class HughesNetService {
         poleCharge: number,
         wifiExtenderPay: number,
         voipPay: number, 
-        driveTimeBonus: number, // [!code ++] Added
-        skipScan: boolean
+        driveTimeBonus: number,
+        skipScan: boolean,
+        recentOnly: boolean // [!code ++] New parameter
     ): Promise<SyncResult> {
         this.fetcher.resetCount();
         this.lastSessionRefresh = Date.now();
@@ -658,7 +660,8 @@ export class HughesNetService {
                     }
 
                     // Backward scan
-                    if (!this.fetcher.shouldBatch()) {
+                    // [!code change] SKIP backward scan if recentOnly is true
+                    if (!this.fetcher.shouldBatch() && !recentOnly) {
                         this.log('[Discovery] Scanning backward...');
                         let failures = 0, current = minId - 1, checks = 0;
                         while(failures < DISCOVERY_MAX_FAILURES && checks < DISCOVERY_MAX_CHECKS) { 
@@ -672,6 +675,8 @@ export class HughesNetService {
                               checks++;
                               await new Promise(r => setTimeout(r, DELAY_BETWEEN_BACKWARD_SCANS_MS));
                         }
+                    } else if (recentOnly) {
+                        this.log('[Discovery] Skipping backward scan (Quick Sync active)');
                     }
                 } catch (e: any) {
                     if (e.message === 'REQ_LIMIT') {
@@ -1085,13 +1090,13 @@ export class HughesNetService {
                     actualDuration = dur;
                 } else {
                     // Invalid duration, fall back to type-based default
-                    // [!code change] Handle Re-Install default
+                    // [!code change] Handle Re-Install default (90 mins)
                     actualDuration = (o.type === 'Install' || o.type === 'Re-Install') ? 90 : 60;
                 }
             } else {
                 // Future jobs / Missing timestamps -> use type-based default
                 // Install: 90 mins, Repair/Upgrade: 60 mins
-                // [!code change] Handle Re-Install default
+                // [!code change] Handle Re-Install default (90 mins)
                 actualDuration = (o.type === 'Install' || o.type === 'Re-Install') ? 90 : 60;
             }
 
@@ -1285,7 +1290,8 @@ export class HughesNetService {
                     if (poleCost > 0) supplyItems.push({ type: 'Pole', cost: poleCost });
                     if (concreteCost > 0) supplyItems.push({ type: 'Concrete', cost: concreteCost });
                 } else {
-                    if (o.type === 'Install') basePay = installPay;
+                    // [!code change] Pay Re-Install identical to Install
+                    if (o.type === 'Install' || o.type === 'Re-Install') basePay = installPay;
                     else if (o.type === 'Upgrade') basePay = upgradePay;
                     else basePay = repairPay;
                 }

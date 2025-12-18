@@ -62,8 +62,9 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
             const poleCharge = Number(body.poleCharge) || 0;
             const wifiExtenderPay = Number(body.wifiExtenderPay) || 0; 
             const voipPay = Number(body.voipPay) || 0;
-            const driveTimeBonus = Number(body.driveTimeBonus) || 0; // [!code ++]
+            const driveTimeBonus = Number(body.driveTimeBonus) || 0; 
             const skipScan = body.skipScan === true;
+            const recentOnly = body.recentOnly === true; // [!code ++] Extract param
 
             // Note: Times (installTime, repairTime) are saved via 'save_settings' 
             // and read from KV during sync generation inside the service.
@@ -78,8 +79,9 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
                 poleCharge,
                 wifiExtenderPay,
                 voipPay,
-                driveTimeBonus, // [!code ++]
-                skipScan
+                driveTimeBonus,
+                skipScan,
+                recentOnly // [!code ++] Pass param
             );
             
             return json({ 

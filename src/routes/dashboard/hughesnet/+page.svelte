@@ -15,7 +15,6 @@
   // Console Visibility State
   let showConsole = false;
 
-  // [!code ++] FIX: Initialize all variables to 0 to prevent validation errors on save
   // Configuration State
   let installPay: number = 0;
   let repairPay: number = 0;
@@ -87,7 +86,6 @@
               poleCharge = data.settings.poleCharge ?? 0;
               installTime = data.settings.installTime ?? 90;
               repairTime = data.settings.repairTime ?? 60;
-              // [!code ++] Load overrideTimes
               overrideTimes = data.settings.overrideTimes ?? false;
               
               addLog('Settings loaded from cloud.');
@@ -117,7 +115,6 @@
           poleCharge,
           installTime,
           repairTime,
-          // [!code ++] Include overrideTimes in save
           overrideTimes
       };
 
@@ -144,7 +141,6 @@
   }
 
   // Reactive Watcher
-  // [!code ++] Added overrideTimes to dependency array
   $: if (isConfigLoaded) {
       const _ = [installPay, repairPay, upgradePay, wifiExtenderPay, voipPay, driveTimeBonus, poleCost, concreteCost, poleCharge, installTime, repairTime, overrideTimes];
       if (saveTimeout) clearTimeout(saveTimeout);
@@ -153,8 +149,6 @@
       }, 1000);
   }
 
-  // ... (Keep existing loadOrders, handleConnect, etc. exactly as they were) ...
-  
   async function loadOrders() {
     addLog('Checking cache for existing orders...');
     try {
@@ -232,7 +226,8 @@
     }
   }
 
-  async function handleSync(batchCount = 1) {
+  // [!code change] Add recentOnly parameter
+  async function handleSync(batchCount = 1, recentOnly = false) {
     loading = true;
     currentBatch = batchCount;
     statusMessage = `Syncing Batch ${batchCount}...`;
@@ -240,7 +235,7 @@
     const skipScan = batchCount > 1;
     let data: any = null;
     if (batchCount === 1) {
-        addLog(`Starting Full Sync...`);
+        addLog(recentOnly ? `Starting Quick Sync (New Only)...` : `Starting Full History Scan...`);
         showConsole = true;
     } else {
         addLog(`Continuing Sync (Batch ${batchCount})...`);
@@ -263,7 +258,8 @@
                 installTime: installTime || 0,
                 repairTime: repairTime || 0,
                 overrideTimes,
-                skipScan 
+                skipScan,
+                recentOnly // [!code ++] Pass recentOnly flag
             })
         });
         const contentType = res.headers.get('content-type');
@@ -288,7 +284,7 @@
              if (data.incomplete) {
                  addLog(`Batch ${batchCount} complete. Starting next batch automatically...`);
                  await new Promise(r => setTimeout(r, 1500)); 
-                 await handleSync(batchCount + 1);
+                 await handleSync(batchCount + 1, recentOnly); // [!code change] Pass recentOnly to recursive call
                  return;
              }
 
@@ -443,12 +439,17 @@
              </div>
           {:else}
               <div class="button-group mt-4">
-                   <button class="btn-primary" on:click={() => handleSync(1)} disabled={loading}>
+                   <button class="btn-primary" on:click={() => handleSync(1, true)} disabled={loading}>
+                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                     Quick Sync (New Only)
+                   </button>
+
+                   <button class="btn-secondary" on:click={() => handleSync(1, false)} disabled={loading}>
                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                     {statusMessage}
+                     Full History Scan
                    </button>
                    
-                   <button class="btn-secondary" on:click={handleDisconnect} disabled={loading}>
+                   <button class="btn-secondary danger-hover" on:click={handleDisconnect} disabled={loading}>
                      Disconnect
                    </button>
 
