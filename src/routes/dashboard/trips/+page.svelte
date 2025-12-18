@@ -5,7 +5,6 @@
   import { user } from '$lib/stores/auth';
   import { page } from '$app/stores';
   import { toasts } from '$lib/stores/toast';
-  // [!code ++] Imports for settings
   import { userSettings } from '$lib/stores/userSettings';
   import Modal from '$lib/components/ui/Modal.svelte';
 
@@ -23,12 +22,10 @@
   let selectedTrips = new Set<string>();
   
   // --- MODAL STATE (Category Management) ---
-  // [!code ++]
   let isManageCategoriesOpen = false;
   let activeCategoryType: 'maintenance' | 'supplies' = 'maintenance';
   let newCategoryName = '';
 
-  // [!code ++] Reactive active list based on type
   $: activeCategories = activeCategoryType === 'maintenance' 
       ? ($userSettings.maintenanceCategories || ['oil change', 'repair'])
       : ($userSettings.supplyCategories || ['water', 'snacks']);
@@ -38,15 +35,39 @@
       currentPage = 1;
   }
 
-  // ... (Keep all derived stores: allFilteredTrips, totalPages, visibleTrips, allSelected) ...
   // Derived: All filtered results (for metrics/export)
   $: allFilteredTrips = $trips
     .filter(trip => {
       const query = searchQuery.toLowerCase();
+      
+      // [!code change] Enhanced Search Logic
+      const supplies = trip.supplyItems || trip.suppliesItems || [];
       const matchesSearch = !query || 
+        // 1. Basic Text Fields
+        trip.date?.includes(query) ||
         trip.startAddress?.toLowerCase().includes(query) ||
-        trip.stops?.some(stop => stop.address?.toLowerCase().includes(query)) ||
-        trip.notes?.toLowerCase().includes(query);
+        trip.endAddress?.toLowerCase().includes(query) ||
+        trip.notes?.toLowerCase().includes(query) ||
+        
+        // 2. Numeric Fields
+        trip.totalMiles?.toString().includes(query) ||
+        trip.fuelCost?.toString().includes(query) ||
+        
+        // 3. Stops (Address & Earnings)
+        trip.stops?.some(stop => 
+            stop.address?.toLowerCase().includes(query) || 
+            stop.earnings?.toString().includes(query)
+        ) ||
+
+        // 4. Expenses (Maintenance & Supplies)
+        trip.maintenanceItems?.some(item => 
+            item.type?.toLowerCase().includes(query) || 
+            item.cost?.toString().includes(query)
+        ) ||
+        supplies.some(item => 
+            item.type?.toLowerCase().includes(query) || 
+            item.cost?.toString().includes(query)
+        );
       
       if (!matchesSearch) return false;
       
@@ -102,7 +123,6 @@
   $: visibleTrips = allFilteredTrips.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   $: allSelected = allFilteredTrips.length > 0 && selectedTrips.size === allFilteredTrips.length;
 
-  // ... (Keep existing selection and page functions) ...
   function toggleSelection(id: string) {
       if (selectedTrips.has(id)) {
           selectedTrips.delete(id);
@@ -127,7 +147,7 @@
       }
   }
 
-  // --- CATEGORY MANAGEMENT LOGIC [!code ++] ---
+  // --- CATEGORY MANAGEMENT LOGIC ---
   async function updateCategories(newCategories: string[]) {
       const updateData: any = {};
       if (activeCategoryType === 'maintenance') {
@@ -170,7 +190,6 @@
       toasts.success('Category removed');
   }
 
-  // ... (Keep deleteSelected, exportSelected, formatters, deleteTrip, etc.) ...
   async function deleteSelected() {
       const count = selectedTrips.size;
       if (!confirm(`Are you sure you want to delete ${count} trip(s)?`)) return;
@@ -425,13 +444,13 @@
 {/if}
 
 <svelte:head>
-  <title>Trip Log - Go Route Yourself</title>
+  <title>Trip History - Go Route Yourself</title>
 </svelte:head>
 
 <div class="trip-history">
   <div class="page-header">
     <div class="header-text">
-      <h1 class="page-title">Trip Log</h1>
+      <h1 class="page-title">Trip History</h1>
       <p class="page-subtitle">View and manage all your trips</p>
     </div>
     
@@ -799,7 +818,6 @@
     box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); transition: transform 0.1s; }
   .btn-primary:active { transform: translateY(1px); }
 
-  /* [!code ++] New Styles */
   .btn-secondary { display: inline-flex; align-items: center; justify-content: center; padding: 10px; 
     background: white; border: 1px solid #E5E7EB; color: #374151; border-radius: 8px; 
     font-weight: 600; font-size: 14px; cursor: pointer; transition: background 0.2s; }

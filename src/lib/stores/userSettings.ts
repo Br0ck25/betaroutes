@@ -11,8 +11,10 @@ const defaultSettings = {
   defaultGasPrice: 3.50,
   distanceUnit: 'mi',
   timeFormat: '12h',
-  // [!code ++] Default categories (can be deleted by user)
-  expenseCategories: ['maintenance', 'insurance', 'supplies', 'other'] 
+  expenseCategories: ['maintenance', 'insurance', 'supplies', 'other'],
+  // [!code ++] Add defaults for Trip Items
+  maintenanceCategories: ['oil change', 'tire rotation', 'repair', 'inspection', 'wash'],
+  supplyCategories: ['water', 'snacks', 'cleaning', 'office', 'equipment']
 };
 
 // 1. Start with defaults (Server matches Client initially)
@@ -21,7 +23,7 @@ export const userSettings = writable(defaultSettings);
 // 2. Hydrate from Storage ONLY in the browser
 if (browser) {
     try {
-        const saved = storage.getSettings(); // This now returns partial object
+        const saved = storage.getSettings(); 
         // Merge defaults with saved to ensure integrity
         userSettings.set({ ...defaultSettings, ...saved });
 
