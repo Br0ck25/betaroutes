@@ -9,8 +9,31 @@
 		"resolveJsonModule": true,
 		"skipLibCheck": true,
 		"sourceMap": true,
+		"moduleResolution": "bundler",
+		
+		// ← ENHANCED: Comprehensive strict mode flags
 		"strict": true,
-		"moduleResolution": "bundler"
+		"strictNullChecks": true,
+		"strictFunctionTypes": true,
+		"strictBindCallApply": true,
+		"strictPropertyInitialization": true,
+		"noImplicitAny": true,
+		"noImplicitThis": true,
+		"alwaysStrict": true,
+		
+		// ← NEW: Additional safety checks
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"noImplicitReturns": true,
+		"noFallthroughCasesInSwitch": true,
+		"noUncheckedIndexedAccess": true,
+		"noImplicitOverride": true,
+		"noPropertyAccessFromIndexSignature": true,
+		
+		// ← NEW: Better error reporting
+		"exactOptionalPropertyTypes": false,
+		"allowUnreachableCode": false,
+		"allowUnusedLabels": false
 	}
 	// Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias
 	// except $lib which is handled by https://svelte.dev/docs/kit/configuration#files

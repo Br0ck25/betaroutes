@@ -1,5 +1,6 @@
 // src/lib/server/rateLimit.ts
 import type { KVNamespace } from '@cloudflare/workers-types';
+import type { RateLimitResult, RateLimitData, User } from '$lib/types';
 
 export interface RateLimitResult {
 	allowed: boolean;
@@ -51,10 +52,7 @@ export async function checkRateLimitEnhanced(
 
 	try {
 		// Get current rate limit data
-		const data = await kv.get<{
-			count: number;
-			windowStart: number;
-		}>(key, 'json');
+		const data = await kv.get<RateLimitData>(key, 'json');
 
 		// Check if window has expired or this is first request
 		if (!data || data.windowStart < windowStart) {
@@ -147,7 +145,7 @@ export function createRateLimitHeaders(result: RateLimitResult): Record<string, 
  */
 export function getClientIdentifier(
 	request: Request,
-	locals?: { user?: { id?: string; token?: string; name?: string } }
+	locals?: { user?: Partial<User> | null }
 ): string {
 	// Prefer user ID/name if authenticated
 	if (locals?.user?.id) {
@@ -177,7 +175,7 @@ export function getClientIdentifier(
 /**
  * Check if user is authenticated
  */
-export function isAuthenticated(locals?: { user?: any }): boolean {
+export function isAuthenticated(locals?: { user?: Partial<User> | null }): boolean {
 	return !!(locals?.user?.id || locals?.user?.token || locals?.user?.name);
 }
 
