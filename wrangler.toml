@@ -21,7 +21,7 @@ id = "3fb03d50a94e4b2cb4fc3f54bdfd45d7"
  [[env.production.durable_objects.bindings]]
  name = "PLACES_INDEX_DO"
  class_name = "PlacesIndexDO"
- script_name = "places-index-worker"
+ script_name = "trip-index-worker"
 
 [env.production.vars]
 # Production KV Namespaces

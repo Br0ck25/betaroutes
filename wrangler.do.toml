@@ -1,13 +1,28 @@
 name = "trip-index-worker"
 main = "src/do-worker.ts"
 compatibility_date = "2024-12-05"
+compatibility_flags = ["nodejs_compat"]
 
-# Define the Durable Object Class here
+# 1. Trip Index DO Definition
 [[durable_objects.bindings]]
 name = "TRIP_INDEX_DO"
 class_name = "TripIndexDO"
 
-# Migrations are allowed here (unlike in Pages)
+# 2. Places Index DO Definition
+[[durable_objects.bindings]]
+name = "PLACES_INDEX_DO"
+class_name = "PlacesIndexDO"
+
+# --- MIGRATIONS ---
+
+# Migration v1: Initializes the original TripIndexDO
+# (If this was already run, Cloudflare will skip it automatically)
 [[migrations]]
 tag = "v1"
 new_classes = ["TripIndexDO"]
+
+# Migration v2: Adds the new PlacesIndexDO
+# (This is the new step that fixes your error)
+[[migrations]]
+tag = "v2"
+new_classes = ["PlacesIndexDO"]

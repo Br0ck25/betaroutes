@@ -1085,12 +1085,14 @@ export class HughesNetService {
                     actualDuration = dur;
                 } else {
                     // Invalid duration, fall back to type-based default
-                    actualDuration = o.type === 'Install' ? 90 : 60;
+                    // [!code change] Handle Re-Install default
+                    actualDuration = (o.type === 'Install' || o.type === 'Re-Install') ? 90 : 60;
                 }
             } else {
                 // Future jobs / Missing timestamps -> use type-based default
                 // Install: 90 mins, Repair/Upgrade: 60 mins
-                actualDuration = o.type === 'Install' ? 90 : 60;
+                // [!code change] Handle Re-Install default
+                actualDuration = (o.type === 'Install' || o.type === 'Re-Install') ? 90 : 60;
             }
 
             return { ...o, _sortTime: sortTime, _isPaid: isPaid, _actualDuration: actualDuration };

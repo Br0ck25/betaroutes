@@ -182,16 +182,20 @@ export function parseOrderPage(html: string, id: string): OrderData {
     // --- Type Parsing (Prioritize Repair/Upgrade) ---
     const bodyText = $('body').text();
     
-    const typeLabelMatch = bodyText.match(/(?:Order|Service)\s*Type\s*[:\.]?\s*(Install|Repair|Upgrade)/i);
+    // [!code ++] Updated regex to capture Re-Install
+    const typeLabelMatch = bodyText.match(/(?:Order|Service)\s*Type\s*[:\.]?\s*(Re-Install|Install|Repair|Upgrade)/i);
     
     if (typeLabelMatch) {
         const found = typeLabelMatch[1].toLowerCase();
-        if (found.includes('install')) { out.type = 'Install'; out.jobDuration = 90; }
+        if (found.includes('re-install')) { out.type = 'Re-Install'; out.jobDuration = 90; } // [!code ++]
+        else if (found.includes('install')) { out.type = 'Install'; out.jobDuration = 90; }
         else if (found.includes('upgrade')) { out.type = 'Upgrade'; out.jobDuration = 60; }
         else { out.type = 'Repair'; out.jobDuration = 60; }
     } 
     else if (bodyText.includes('Service Order #')) {
-        if (bodyText.match(/Upgrade/i)) { out.type = 'Upgrade'; out.jobDuration = 60; }
+        // [!code ++] Add Re-Install check
+        if (bodyText.match(/Re-Install/i)) { out.type = 'Re-Install'; out.jobDuration = 90; }
+        else if (bodyText.match(/Upgrade/i)) { out.type = 'Upgrade'; out.jobDuration = 60; }
         else if (bodyText.match(/Repair/i)) { out.type = 'Repair'; out.jobDuration = 60; }
         else if (bodyText.match(/Install/i)) { out.type = 'Install'; out.jobDuration = 90; }
     }
@@ -205,7 +209,7 @@ export function parseOrderPage(html: string, id: string): OrderData {
         out.hasWifiExtender = true;
     }
 
-    // [!code ++] Check for VOIP Phone task
+    // Check for VOIP Phone task
     if (bodyText.includes('Install, VOIP Phone [Task]')) {
         out.hasVoip = true;
     }

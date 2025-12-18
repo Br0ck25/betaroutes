@@ -1,13 +1,15 @@
 // src/do-worker.ts
-// We use a relative path here to ensure Wrangler can resolve it without SvelteKit aliases
+// Import both Durable Object classes
+// We use relative paths to ensure resolution without SvelteKit aliases
 import { TripIndexDO } from './lib/server/TripIndexDO';
+import { PlacesIndexDO } from './lib/server/PlacesIndexDO';
 
-// Export the class so Cloudflare sees it
-export { TripIndexDO };
+// Export the classes so Cloudflare sees them
+export { TripIndexDO, PlacesIndexDO };
 
-// A Durable Object worker must have a default export handler
+// Default export for the Worker itself
 export default {
   async fetch(request: Request, env: any) {
-    return new Response("Trip Index Durable Object Worker is Running", { status: 200 });
+    return new Response("Data Worker (Trips + Places) is Running", { status: 200 });
   }
 };
