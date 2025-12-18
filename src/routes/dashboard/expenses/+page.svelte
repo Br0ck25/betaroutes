@@ -16,6 +16,10 @@
   let filterCategory = 'all';
   let startDate = '';
   let endDate = '';
+const now = new Date();
+  let date = new Date(now.getTime() - (now.getTimezoneOffset() * 60000))
+    .toISOString()
+    .split('T')[0];
 
   // Use categories from settings, default to basic if empty
   $: categories = $userSettings.expenseCategories?.length > 0 
