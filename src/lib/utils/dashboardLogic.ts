@@ -12,168 +12,195 @@ export function formatCurrency(amount: number): string {
 }
 
 export function formatDate(dateString: string): string {
-    // Handle 'YYYY-MM' format (Month grouping)
     if (/^\d{4}-\d{2}$/.test(dateString)) {
         const [y, m] = dateString.split('-').map(Number);
         const date = new Date(y, m - 1, 1);
-        return new Intl.DateTimeFormat('en-US', {
-            month: 'short',
-            year: 'numeric'
-        }).format(date);
+        return new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' }).format(date);
     }
-    
-    // Handle 'YYYY-MM-DD' format
-    // Append T00:00:00 to force local time interpretation
     const date = new Date(dateString.includes('T') ? dateString : dateString + 'T00:00:00');
-    return new Intl.DateTimeFormat('en-US', {
-        month: 'short',
-        day: 'numeric'
-    }).format(date);
+    return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date);
 }
 
-export function calculateDashboardStats(allTrips: any[], range: TimeRange = '30d') {
-    const now = new Date();
-    // Set to end of today to include all trips from today
-    now.setHours(23, 59, 59, 999);
+// Helper to assign consistent colors to categories
+function getCategoryColor(category: string): string {
+    const map: Record<string, string> = {
+        fuel: '#FF7F50',        // Orange
+        maintenance: '#29ABE2', // Blue
+        supplies: '#8DC63F',    // Green
+        insurance: '#9333EA',   // Purple
+        other: '#6B7280'        // Gray
+    };
+    if (map[category.toLowerCase()]) return map[category.toLowerCase()];
     
+    // Generate pastel color for custom categories
+    let hash = 0;
+    for (let i = 0; i < category.length; i++) {
+        hash = category.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const h = Math.abs(hash) % 360;
+    return `hsl(${h}, 70%, 60%)`;
+}
+
+export function calculateDashboardStats(allTrips: any[], allExpenses: any[] = [], range: TimeRange = '30d') {
+    const now = new Date();
+    now.setHours(23, 59, 59, 999);
     const currentYear = now.getFullYear();
     
-    // 1. Determine Date Ranges & Grouping Strategy
+    // 1. Determine Date Ranges
     let startDate: Date;
     let prevStartDate: Date; 
     let groupBy: 'day' | 'month' = 'day';
 
     switch (range) {
         case '30d':
-            startDate = new Date(now);
-            startDate.setDate(now.getDate() - 30);
-            prevStartDate = new Date(startDate);
-            prevStartDate.setDate(startDate.getDate() - 30);
+            startDate = new Date(now); startDate.setDate(now.getDate() - 30);
+            prevStartDate = new Date(startDate); prevStartDate.setDate(startDate.getDate() - 30);
             break;
         case '60d':
-            startDate = new Date(now);
-            startDate.setDate(now.getDate() - 60);
-            prevStartDate = new Date(startDate);
-            prevStartDate.setDate(startDate.getDate() - 60);
+            startDate = new Date(now); startDate.setDate(now.getDate() - 60);
+            prevStartDate = new Date(startDate); prevStartDate.setDate(startDate.getDate() - 60);
             break;
         case '90d':
-            startDate = new Date(now);
-            startDate.setDate(now.getDate() - 90);
-            prevStartDate = new Date(startDate);
-            prevStartDate.setDate(startDate.getDate() - 90);
+            startDate = new Date(now); startDate.setDate(now.getDate() - 90);
+            prevStartDate = new Date(startDate); prevStartDate.setDate(startDate.getDate() - 90);
             break;
         case '1y':
-            // Current Year (Year to Date)
-            startDate = new Date(currentYear, 0, 1); // Jan 1st of current year
-            prevStartDate = new Date(currentYear - 1, 0, 1); // Jan 1st of last year
+            startDate = new Date(currentYear, 0, 1);
+            prevStartDate = new Date(currentYear - 1, 0, 1);
             groupBy = 'month';
             break;
         case 'all':
-            startDate = new Date(0); // 1970
+            startDate = new Date(0);
             prevStartDate = new Date(0);
-            groupBy = 'month'; // Group by month for all time to avoid crowding
+            groupBy = 'month';
             break;
         default:
-             startDate = new Date(now);
-             startDate.setDate(now.getDate() - 30);
-             prevStartDate = new Date(startDate);
-             prevStartDate.setDate(startDate.getDate() - 30);
+             startDate = new Date(now); startDate.setDate(now.getDate() - 30);
+             prevStartDate = new Date(startDate); prevStartDate.setDate(startDate.getDate() - 30);
     }
 
-    // 2. Initialize Chart Data (Map of Date Key -> Profit)
     const chartDataMap = new Map<string, number>();
     
-    // Fill empty buckets if range is fixed (not 'all')
+    // Fill buckets
     if (range !== 'all') {
         const d = new Date(startDate);
-        // Loop until d is past 'now'
         while (d <= now) {
             let key: string;
-            
             if (groupBy === 'month') {
-                // Key: YYYY-MM
                 key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                // Advance 1 month
                 d.setMonth(d.getMonth() + 1);
             } else {
-                // Key: YYYY-MM-DD
                 key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                // Advance 1 day
                 d.setDate(d.getDate() + 1);
             }
-            
-            // Set initial 0 if not exists
-            if (!chartDataMap.has(key)) {
-                chartDataMap.set(key, 0);
-            }
+            if (!chartDataMap.has(key)) chartDataMap.set(key, 0);
         }
     }
 
-    // 3. Process Trips
     const currentTrips: any[] = [];
     let totalProfit = 0;
-    let totalMiles = 0;
-    let fuel = 0;
-    let maintenance = 0;
-    let supplies = 0;
     let prevTotalProfit = 0;
+    let totalMiles = 0;
 
+    // Track costs by category (e.g., fuel: 100, insurance: 50)
+    const categoryTotals: Record<string, number> = {
+        fuel: 0,
+        maintenance: 0,
+        supplies: 0
+    };
+
+    // 2. Process Trips
     for (const trip of allTrips) {
         if (!trip.date) continue;
-        
-        // Force local time interpretation for trip date to match our buckets
         const d = new Date(trip.date.includes('T') ? trip.date : trip.date + 'T00:00:00');
         const tTime = d.getTime();
         
-        // Calc Profit
         const earnings = trip.stops?.reduce((s: number, stop: any) => s + (Number(stop.earnings) || 0), 0) || 0;
-        const costs = (Number(trip.fuelCost) || 0) + (Number(trip.maintenanceCost) || 0) + (Number(trip.suppliesCost) || 0);
-        const tripProfit = earnings - costs;
+        const fuelCost = Number(trip.fuelCost) || 0;
+        const maintCost = Number(trip.maintenanceCost) || 0;
+        const supplyCost = Number(trip.suppliesCost) || 0;
+        
+        const tripCosts = fuelCost + maintCost + supplyCost;
+        const tripProfit = earnings - tripCosts;
 
-        // Current Range Logic
+        // Current Range
         if (tTime >= startDate.getTime() && tTime <= now.getTime()) {
             currentTrips.push(trip);
-            
             totalProfit += tripProfit;
             totalMiles += (Number(trip.totalMiles) || 0);
             
-            fuel += (Number(trip.fuelCost) || 0);
-            maintenance += (Number(trip.maintenanceCost) || 0);
-            supplies += (Number(trip.suppliesCost) || 0);
+            categoryTotals.fuel += fuelCost;
+            categoryTotals.maintenance += maintCost;
+            categoryTotals.supplies += supplyCost;
 
-            // Add to Chart Map
+            // Chart Data
             let key: string;
             if (groupBy === 'month') {
                 key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
             } else {
                 key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
             }
-            
-            // For 'all' range, we might encounter keys not pre-filled
             const currentVal = chartDataMap.get(key) || 0;
             chartDataMap.set(key, currentVal + tripProfit);
         }
         
-        // Previous Range Logic (for comparison)
+        // Previous Range
         if (range !== 'all' && tTime >= prevStartDate.getTime() && tTime < startDate.getTime()) {
             prevTotalProfit += tripProfit;
         }
     }
 
+    // 3. Process General Expenses
+    for (const exp of allExpenses) {
+        if (!exp.date) continue;
+        const d = new Date(exp.date.includes('T') ? exp.date : exp.date + 'T00:00:00');
+        const tTime = d.getTime();
+        const amount = Number(exp.amount) || 0;
+        const category = (exp.category || 'other').toLowerCase();
+
+        if (tTime >= startDate.getTime() && tTime <= now.getTime()) {
+            totalProfit -= amount; // Deduct expense from profit
+            
+            // Add to Cost Breakdown
+            categoryTotals[category] = (categoryTotals[category] || 0) + amount;
+
+            // Deduct from Chart Data (Daily Profit)
+            let key: string;
+            if (groupBy === 'month') {
+                key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            } else {
+                key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            }
+            // For 'all' range with month grouping, key might not exist yet if only expense exists
+            if (!chartDataMap.has(key) && range === 'all') chartDataMap.set(key, 0);
+            
+            if (chartDataMap.has(key)) {
+                chartDataMap.set(key, chartDataMap.get(key)! - amount);
+            }
+        }
+
+        if (range !== 'all' && tTime >= prevStartDate.getTime() && tTime < startDate.getTime()) {
+            prevTotalProfit -= amount;
+        }
+    }
+
     // 4. Final Shaping
-    
-    // Convert Map to Sorted Array
     const chartData = Array.from(chartDataMap.entries())
         .sort((a, b) => a[0].localeCompare(b[0]))
         .map(([date, profit]) => ({ date, profit }));
 
-    // Cost Breakdown
-    const totalCost = fuel + maintenance + supplies;
-    const costBreakdown = {
-        fuel: { amount: fuel, percentage: totalCost > 0 ? (fuel / totalCost) * 100 : 0, color: '#FF7F50' },
-        maintenance: { amount: maintenance, percentage: totalCost > 0 ? (maintenance / totalCost) * 100 : 0, color: '#29ABE2' },
-        supplies: { amount: supplies, percentage: totalCost > 0 ? (supplies / totalCost) * 100 : 0, color: '#8DC63F' }
-    };
+    // Generate Dynamic Cost Breakdown Array
+    const totalCost = Object.values(categoryTotals).reduce((a, b) => a + b, 0);
+    
+    const costBreakdown = Object.entries(categoryTotals)
+        .filter(([_, amount]) => amount > 0)
+        .map(([category, amount]) => ({
+            category,
+            amount,
+            percentage: totalCost > 0 ? (amount / totalCost) * 100 : 0,
+            color: getCategoryColor(category)
+        }))
+        .sort((a, b) => b.amount - a.amount); // Largest first
 
     // Comparison Stats
     let change = 0;
@@ -192,7 +219,6 @@ export function calculateDashboardStats(allTrips: any[], range: TimeRange = '30d
         isPositive: change >= 0
     };
     
-    // Sort recent trips (newest first)
     const sortedCurrentTrips = [...currentTrips].sort((a, b) => 
         new Date(b.date).getTime() - new Date(a.date).getTime()
     );
@@ -204,7 +230,8 @@ export function calculateDashboardStats(allTrips: any[], range: TimeRange = '30d
         totalMiles,
         avgProfitPerTrip: currentTrips.length > 0 ? totalProfit / currentTrips.length : 0,
         chartData,
-        costBreakdown,
+        costBreakdown, // Now an array of objects
+        totalCost,
         periodComparison
     };
 }

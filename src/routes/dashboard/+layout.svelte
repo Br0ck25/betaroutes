@@ -4,6 +4,7 @@
   import { auth, user } from '$lib/stores/auth';
   import { goto } from '$app/navigation';
   import { trips } from '$lib/stores/trips';
+  import { expenses } from '$lib/stores/expenses'; // Added expenses store
   import { trash } from '$lib/stores/trash';
   import { syncManager } from '$lib/sync/syncManager';
   import SyncIndicator from '$lib/components/SyncIndicator.svelte';
@@ -33,6 +34,7 @@
       await fetch('/api/logout', { method: 'POST' });
       auth.logout();
       trips.clear();
+      expenses.clear(); // Clear expenses on logout
       trash.clear();
       goto('/login');
     }
@@ -46,6 +48,11 @@
       exact: true 
     },
     { 
+      href: '/dashboard/expenses', 
+      icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M15.5 16H4.5C3.67157 16 3 15.3284 3 14.5V4.5C3 3.67157 3.67157 3 4.5 3H12L17 8V14.5C17 15.3284 16.3284 16 15.5 16Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 3V8H17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 13H12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 10H12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+      label: 'Expenses' 
+    },
+    { 
       href: '/dashboard/trips/new', 
       icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
       label: 'New Trip' 
@@ -54,7 +61,6 @@
       href: '/dashboard/trips', 
       icon: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M9 2C13.97 2 18 6.03 18 11C18 15.97 13.97 20 9 20H2V13C2 8.03 6.03 4 11 4H18V11C18 6.03 13.97 2 9 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
       label: 'Trip History',
-      // FIX: Don't highlight history when we are on the "New Trip" page
       exclude: ['/dashboard/trips/new']
     },
     { 
@@ -69,23 +75,19 @@
     },
   ];
 
-  // FIX: Added optional 'exclude' parameter to handle overlapping paths
   function isActive(href: string, exact = false, exclude: string[] = []): boolean {
     const path = $page.url.pathname;
     
-    // 1. Check exclusions first
     if (exclude.length > 0) {
       if (exclude.some(e => path.startsWith(e))) {
         return false;
       }
     }
 
-    // 2. Check exact match
     if (exact) {
       return path === href;
     }
 
-    // 3. Check partial match (default behavior)
     return path.startsWith(href);
   }
   
@@ -93,10 +95,9 @@
     return name ? name.charAt(0).toUpperCase() : 'U';
   }
 
-onMount(async () => {
+  onMount(async () => {
     console.log('[DASHBOARD LAYOUT] Initializing...');
     
-    // --- FIX: Pass API Key to SyncManager ---
     const apiKey = data.googleMapsApiKey; 
     
     let userId = data?.user?.name || $user?.name || data?.user?.token || $user?.token;
@@ -112,12 +113,18 @@ onMount(async () => {
       try {
         console.log('[DASHBOARD LAYOUT] Loading data for:', userId);
         
-        // --- FIX: Pass the key here ---
         await syncManager.initialize(apiKey);
         
-        await trips.load(userId);
-        await trash.load(userId);
-        await trips.syncFromCloud(userId);
+        // Load all data
+        await Promise.all([
+            trips.load(userId),
+            expenses.load(userId), // Load expenses
+            trash.load(userId)
+        ]);
+
+        // Sync background
+        trips.syncFromCloud(userId);
+        expenses.syncFromCloud(userId); // Sync expenses
         
         console.log('[DASHBOARD LAYOUT] ✅ Data loaded successfully!');
       } catch (err) {

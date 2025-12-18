@@ -48,6 +48,25 @@ export interface StopRecord {
 }
 
 /**
+ * General Expense record (Maintenance, Insurance, etc.)
+ */
+export interface ExpenseRecord {
+  id: string;
+  userId: string;
+  
+  date: string;
+  category: string; // [!code change] Changed from union to string to support custom categories
+  amount: number;
+  description?: string;
+  
+  // Metadata
+  createdAt: string;
+  updatedAt: string;
+  syncStatus: SyncStatus;
+  lastSyncedAt?: string;
+}
+
+/**
  * Trash item stored in IndexedDB
  */
 export interface TrashRecord extends TripRecord {
@@ -73,5 +92,5 @@ export interface SyncQueueItem {
 /**
  * Database schema version
  */
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 export const DB_NAME = 'go-route-yourself';

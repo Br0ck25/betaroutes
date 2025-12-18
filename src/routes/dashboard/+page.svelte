@@ -1,12 +1,13 @@
 <script lang="ts">
   import { trips } from '$lib/stores/trips';
+  import { expenses } from '$lib/stores/expenses';
   import { calculateDashboardStats, formatCurrency, formatDate, type TimeRange } from '$lib/utils/dashboardLogic';
   
   // Default range
   let selectedRange: TimeRange = '30d';
 
-  // Reactive assignment - updates when $trips OR selectedRange changes
-  $: stats = calculateDashboardStats($trips, selectedRange);
+  // Reactive assignment - updates when $trips OR $expenses OR selectedRange changes
+  $: stats = calculateDashboardStats($trips, $expenses, selectedRange);
 
   // Helper for display text
   const rangeLabels = {
@@ -133,15 +134,16 @@
       </div>
       
       <div class="chart-container">
-        {#if stats.chartData.some(d => d.profit > 0)}
-          {@const maxProfit = Math.max(...stats.chartData.map(d => d.profit), 1)}
+        {#if stats.chartData.some(d => d.profit !== 0)}
+          {@const maxProfit = Math.max(...stats.chartData.map(d => Math.abs(d.profit)), 1)}
           <div class="bar-chart">
             {#each stats.chartData as day}
-              {@const height = (day.profit / maxProfit) * 100}
+              {@const height = (Math.abs(day.profit) / maxProfit) * 100}
               <div class="bar-wrapper">
                 <div 
                   class="bar" 
-                  style="height: {height}%"
+                  class:negative={day.profit < 0}
+                  style="height: {height}%; opacity: {day.profit === 0 ? 0 : 1}"
                   title="{formatDate(day.date)}: {formatCurrency(day.profit)}"
                 ></div>
               </div>
@@ -167,51 +169,41 @@
       </div>
       
       <div class="chart-container">
-        {#if stats.costBreakdown.fuel.amount + stats.costBreakdown.maintenance.amount + stats.costBreakdown.supplies.amount > 0}
+        {#if stats.totalCost > 0}
           {#key stats.costBreakdown}
             {@const radius = 70}
             {@const circumference = 2 * Math.PI * radius}
-            {@const fuelLength = (stats.costBreakdown.fuel.percentage / 100) * circumference}
-            {@const maintenanceLength = (stats.costBreakdown.maintenance.percentage / 100) * circumference}
-            {@const suppliesLength = (stats.costBreakdown.supplies.percentage / 100) * circumference}
-            {@const maintenanceOffset = fuelLength}
-            {@const suppliesOffset = maintenanceOffset + maintenanceLength}
-             
+            
             <div class="donut-chart">
               <svg viewBox="0 0 200 200">
-                <circle cx="100" cy="100" r={radius} fill="none" stroke={stats.costBreakdown.fuel.color} stroke-width="30"
-                  stroke-dasharray="{fuelLength} {circumference}" stroke-dashoffset="0" transform="rotate(-90 100 100)" />
-                
-                <circle cx="100" cy="100" r={radius} fill="none" stroke={stats.costBreakdown.maintenance.color} stroke-width="30"
-                  stroke-dasharray="{maintenanceLength} {circumference}" stroke-dashoffset={-maintenanceOffset} transform="rotate(-90 100 100)" />
-                
-                <circle cx="100" cy="100" r={radius} fill="none" stroke={stats.costBreakdown.supplies.color} stroke-width="30"
-                  stroke-dasharray="{suppliesLength} {circumference}" stroke-dashoffset={-suppliesOffset} transform="rotate(-90 100 100)" />
-                </svg>
+                {#each stats.costBreakdown as item, i}
+                    {@const prevItems = stats.costBreakdown.slice(0, i)}
+                    {@const offset = prevItems.reduce((acc, curr) => acc + (curr.percentage / 100) * circumference, 0)}
+                    {@const length = (item.percentage / 100) * circumference}
+                    
+                    <circle 
+                        cx="100" cy="100" r={radius} 
+                        fill="none" 
+                        stroke={item.color} 
+                        stroke-width="30"
+                        stroke-dasharray="{length} {circumference}" 
+                        stroke-dashoffset={-offset} 
+                        transform="rotate(-90 100 100)" 
+                    />
+                {/each}
+              </svg>
               
                <div class="donut-legend">
-                <div class="legend-item">
-                  <div class="legend-dot" style="background: {stats.costBreakdown.fuel.color}"></div>
-                  <div class="legend-text">
-                    <span class="legend-label">Fuel</span>
-                    <span class="legend-value">{formatCurrency(stats.costBreakdown.fuel.amount)}</span>
-                  </div>
-                </div>
-                <div class="legend-item">
-                  <div class="legend-dot" style="background: {stats.costBreakdown.maintenance.color}"></div>
-                  <div class="legend-text">
-                      <span class="legend-label">Maintenance</span>
-                    <span class="legend-value">{formatCurrency(stats.costBreakdown.maintenance.amount)}</span>
-                  </div>
-                </div>
-                <div class="legend-item">
-                   <div class="legend-dot" style="background: {stats.costBreakdown.supplies.color}"></div>
-                  <div class="legend-text">
-                    <span class="legend-label">Supplies</span>
-                    <span class="legend-value">{formatCurrency(stats.costBreakdown.supplies.amount)}</span>
-                  </div>
-                </div>
-              </div>
+                  {#each stats.costBreakdown as item}
+                    <div class="legend-item">
+                      <div class="legend-dot" style="background: {item.color}"></div>
+                      <div class="legend-text">
+                        <span class="legend-label" style="text-transform: capitalize">{item.category}</span>
+                        <span class="legend-value">{formatCurrency(item.amount)}</span>
+                      </div>
+                    </div>
+                  {/each}
+               </div>
             </div>
           {/key}
         {:else}
@@ -251,7 +243,7 @@
           <a href="/dashboard/trips?id={trip.id}" class="trip-item">
             <div class="trip-icon">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                 <path d="M17 9L9 2L1 9V17C1 17.5304 1.21071 18.0391 1.58579 18.4142C1.96086 18.7893 2.46957 19 3 19H15C15.5304 19 16.0391 18.7893 16.4142 18.4142C16.7893 18.0391 17 17.5304 17 17V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M17 9L9 2L1 9V17C1 17.5304 1.21071 18.0391 1.58579 18.4142C1.96086 18.7893 2.46957 19 3 19H15C15.5304 19 16.0391 18.7893 16.4142 18.4142C16.7893 18.0391 17 17.5304 17 17V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </div>
             
@@ -284,7 +276,7 @@
       </div>
     {:else}
       <div class="empty-state-large">
-        <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+         <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
           <path d="M8 24L32 8L56 24V48C56 49.0609 55.5786 50.0783 54.8284 50.8284C54.0783 51.5786 53.0609 52 52 52H12C10.9391 52 9.92172 51.5786 9.17157 50.8284C8.42143 50.0783 8 49.0609 8 48V24Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M24 52V32H40V52" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
@@ -302,496 +294,104 @@
 </div>
 
 <style>
-  .dashboard {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 16px;
+  .bar.negative {
+      background: linear-gradient(180deg, #EF4444 0%, #DC2626 100%);
   }
   
-  .page-header {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-
-  /* Header Layout for Mobile */
-  .header-actions {
-      display: flex;
-      gap: 12px;
-      width: 100%;
-  }
-
-  .range-select {
-      flex: 1;
-      padding: 10px;
-      border-radius: 10px;
-      border: 1px solid #E5E7EB;
-      background: white;
-      font-size: 14px;
-      color: #374151;
-      cursor: pointer;
-  }
-
+  .dashboard { max-width: 1400px; margin: 0 auto; padding: 16px; }
+  .page-header { display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; }
+  .header-actions { display: flex; gap: 12px; width: 100%; }
+  .range-select { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid #E5E7EB; background: white; font-size: 14px; color: #374151; cursor: pointer; }
   @media (min-width: 640px) {
-    .page-header {
-        flex-direction: row;
-        justify-content: space-between;
-        align-items: center;
-    }
-    .header-actions {
-        width: auto;
-    }
-    .range-select {
-        width: 160px;
-        flex: none;
-    }
+    .page-header { flex-direction: row; justify-content: space-between; align-items: center; }
+    .header-actions { width: auto; }
+    .range-select { width: 160px; flex: none; }
   }
-  
-  .page-title {
-    font-size: 24px;
-    font-weight: 800;
-    color: #111827;
-    margin-bottom: 4px;
-    margin-top: 0;
-  }
-  
-  .page-subtitle {
-    font-size: 14px;
-    color: #6B7280;
-    margin: 0;
-  }
-
-  .highlight-text {
-      color: var(--orange);
-      font-weight: 600;
-  }
-  
-  .btn-primary {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 12px 16px;
-    background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%);
-    color: white;
-    border: none;
-    border-radius: 10px;
-    font-weight: 600;
-    font-size: 14px;
-    text-decoration: none;
-    cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: 0 4px 12px rgba(255, 127, 80, 0.3);
-    white-space: nowrap;
-  }
-  
-  .btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 16px rgba(255, 127, 80, 0.4);
-  }
-  
-  .btn-secondary {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 16px;
-    background: white;
-    color: #6B7280;
-    border: 1px solid #E5E7EB;
-    border-radius: 8px;
-    font-weight: 600;
-    font-size: 14px;
-    text-decoration: none;
-    transition: all 0.2s;
-  }
-  
-  .btn-secondary:hover {
-    border-color: var(--orange);
-    color: var(--orange);
-  }
-  
-  /* Stats Grid */
-  .stats-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-  
-  .stat-card {
-    background: white;
-    border: 1px solid #E5E7EB;
-    border-radius: 16px;
-    padding: 20px;
-    transition: all 0.2s;
-  }
-  
-  .stat-card:hover {
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-    transform: translateY(-2px);
-  }
-  
-  .stat-card.featured {
-    background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%);
-    color: white;
-    border: none;
-    box-shadow: 0 8px 24px rgba(255, 127, 80, 0.3);
-  }
-  
-  .stat-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 12px;
-  }
-  
-  .stat-icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-  }
-  
+  .page-title { font-size: 24px; font-weight: 800; color: #111827; margin-bottom: 4px; margin-top: 0; }
+  .page-subtitle { font-size: 14px; color: #6B7280; margin: 0; }
+  .highlight-text { color: var(--orange); font-weight: 600; }
+  .btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 16px; background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%); color: white; border: none; border-radius: 10px; font-weight: 600; font-size: 14px; text-decoration: none; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(255, 127, 80, 0.3); white-space: nowrap; }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(255, 127, 80, 0.4); }
+  .btn-secondary { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; background: white; color: #6B7280; border: 1px solid #E5E7EB; border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; transition: all 0.2s; }
+  .btn-secondary:hover { border-color: var(--orange); color: var(--orange); }
+  .stats-grid { display: grid; grid-template-columns: 1fr; gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: white; border: 1px solid #E5E7EB; border-radius: 16px; padding: 20px; transition: all 0.2s; }
+  .stat-card:hover { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); transform: translateY(-2px); }
+  .stat-card.featured { background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%); color: white; border: none; box-shadow: 0 8px 24px rgba(255, 127, 80, 0.3); }
+  .stat-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .stat-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; }
   .stat-icon.orange { background: rgba(255, 127, 80, 0.2); }
   .stat-icon.blue { background: linear-gradient(135deg, var(--blue) 0%, #1E9BCF 100%); }
   .stat-icon.green { background: linear-gradient(135deg, var(--green) 0%, #7AB82E 100%); }
   .stat-icon.purple { background: linear-gradient(135deg, var(--purple) 0%, #764a89 100%); }
-  
   .stat-card.featured .stat-icon { background: rgba(255, 255, 255, 0.2); }
-  
-  .stat-label {
-    font-size: 14px;
-    font-weight: 600;
-    color: #6B7280;
-  }
-  
+  .stat-label { font-size: 14px; font-weight: 600; color: #6B7280; }
   .stat-card.featured .stat-label { color: rgba(255, 255, 255, 0.9); }
-  
-  .stat-value {
-    font-size: 28px;
-    font-weight: 800;
-    color: #111827;
-    margin-bottom: 4px;
-  }
-  
+  .stat-value { font-size: 28px; font-weight: 800; color: #111827; margin-bottom: 4px; }
   .stat-card.featured .stat-value { color: white; }
-  
-  .stat-change {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    font-weight: 600;
-  }
-  
+  .stat-change { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
   .stat-change.positive { color: rgba(255, 255, 255, 0.9); }
   .stat-change.negative { color: rgba(255, 255, 255, 0.8); }
-  
   .stat-info { font-size: 13px; color: #9CA3AF; }
-  
-  /* Charts Grid */
-  .charts-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 24px;
-    margin-bottom: 32px;
-  }
-  
-  .chart-card {
-    background: white;
-    border: 1px solid #E5E7EB;
-    border-radius: 16px;
-    padding: 20px;
-  }
-  
-  .chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-  
-  .chart-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: #111827;
-    margin: 0 0 4px 0;
-  }
-  
-  .chart-subtitle {
-    font-size: 14px;
-    color: #6B7280;
-    margin: 0;
-  }
-  
+  .charts-grid { display: grid; grid-template-columns: 1fr; gap: 24px; margin-bottom: 32px; }
+  .chart-card { background: white; border: 1px solid #E5E7EB; border-radius: 16px; padding: 20px; }
+  .chart-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+  .chart-title { font-size: 18px; font-weight: 700; color: #111827; margin: 0 0 4px 0; }
+  .chart-subtitle { font-size: 14px; color: #6B7280; margin: 0; }
   .chart-legend { display: flex; gap: 16px; }
-  
-  .legend-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    color: #6B7280;
-  }
-  
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #6B7280; }
   .legend-dot { width: 12px; height: 12px; border-radius: 50%; }
   .legend-dot.orange { background: var(--orange); }
-  
-  .chart-container {
-    height: 240px;
-    position: relative;
-  }
-  
-  /* Bar Chart */
-  .bar-chart {
-    display: flex;
-    align-items: flex-end;
-    gap: 2px;
-    height: 100%;
-    padding: 12px 0;
-  }
-  
-  .bar-wrapper {
-    flex: 1;
-    height: 100%;
-    display: flex;
-    align-items: flex-end;
-  }
-  
-  .bar {
-    width: 100%;
-    background: linear-gradient(180deg, var(--orange) 0%, #FF6A3D 100%);
-    border-radius: 4px 4px 0 0;
-    min-height: 4px;
-    transition: all 0.2s;
-    cursor: pointer;
-  }
-  
+  .chart-container { height: 240px; position: relative; }
+  .bar-chart { display: flex; align-items: flex-end; gap: 2px; height: 100%; padding: 12px 0; }
+  .bar-wrapper { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+  .bar { width: 100%; background: linear-gradient(180deg, var(--orange) 0%, #FF6A3D 100%); border-radius: 4px 4px 0 0; min-height: 4px; transition: all 0.2s; cursor: pointer; }
   .bar:hover { opacity: 0.8; }
-  
-  /* Donut Chart */
-  .donut-chart {
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-    align-items: center;
-    height: 100%;
-    justify-content: center;
-  }
-  
-  .donut-chart svg {
-    width: 180px;
-    height: 180px;
-  }
-  
-  .donut-legend {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  
-  .donut-legend .legend-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    width: 100%;
-  }
-  
-  .donut-legend .legend-dot {
-    width: 16px;
-    height: 16px;
-    border-radius: 4px;
-    flex-shrink: 0;
-  }
-  
-  .legend-text {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-  }
-  
+  .donut-chart { display: flex; flex-direction: column; gap: 24px; align-items: center; height: 100%; justify-content: center; }
+  .donut-chart svg { width: 180px; height: 180px; }
+  .donut-legend { width: 100%; display: flex; flex-direction: column; gap: 12px; }
+  .donut-legend .legend-item { display: flex; align-items: center; gap: 12px; width: 100%; }
+  .donut-legend .legend-dot { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; }
+  .legend-text { display: flex; align-items: center; justify-content: space-between; width: 100%; }
   .legend-label { font-size: 14px; color: #6B7280; }
   .legend-value { font-size: 16px; font-weight: 700; color: #111827; }
-  
-  /* Section Card */
-  .section-card {
-    background: white;
-    border: 1px solid #E5E7EB;
-    border-radius: 16px;
-    padding: 20px;
-  }
-  
-  .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-  }
-  
-  .section-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: #111827;
-    margin: 0 0 4px 0;
-  }
-  
-  .section-subtitle {
-    font-size: 14px;
-    color: #6B7280;
-    margin: 0;
-  }
-  
-  /* Trips List */
-  .trips-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  
-  .trip-item {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding: 16px;
-    background: #F9FAFB;
-    border: 1px solid #E5E7EB;
-    border-radius: 12px;
-    text-decoration: none;
-    transition: all 0.2s;
-  }
-  
-  .trip-item:hover {
-    border-color: var(--orange);
-    background: white;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  }
-  
-  .trip-icon {
-    width: 40px;
-    height: 40px;
-    background: white;
-    border: 1px solid #E5E7EB;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--orange);
-    flex-shrink: 0;
-    align-self: flex-start;
-  }
-  
-  .trip-info {
-    flex: 1;
-    min-width: 0;
-    width: 100%;
-  }
-  
-  .trip-route {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 600;
-    color: #111827;
-    margin-bottom: 4px;
-    flex-wrap: wrap;
-  }
-  
+  .section-card { background: white; border: 1px solid #E5E7EB; border-radius: 16px; padding: 20px; }
+  .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .section-title { font-size: 18px; font-weight: 700; color: #111827; margin: 0 0 4px 0; }
+  .section-subtitle { font-size: 14px; color: #6B7280; margin: 0; }
+  .trips-list { display: flex; flex-direction: column; gap: 12px; }
+  .trip-item { display: flex; flex-direction: column; gap: 12px; padding: 16px; background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; text-decoration: none; transition: all 0.2s; }
+  .trip-item:hover { border-color: var(--orange); background: white; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); }
+  .trip-icon { width: 40px; height: 40px; background: white; border: 1px solid #E5E7EB; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--orange); flex-shrink: 0; align-self: flex-start; }
+  .trip-info { flex: 1; min-width: 0; width: 100%; }
+  .trip-route { display: flex; align-items: center; gap: 8px; font-weight: 600; color: #111827; margin-bottom: 4px; flex-wrap: wrap; }
   .trip-route svg { color: #9CA3AF; flex-shrink: 0; }
-  
-  .trip-start,
-  .trip-destination {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
-  }
-  
-  .trip-meta {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    color: #6B7280;
-  }
-  
-  .trip-profit {
-    font-size: 18px;
-    font-weight: 700;
-    flex-shrink: 0;
-    align-self: flex-end;
-  }
-  
+  .trip-start, .trip-destination { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .trip-meta { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #6B7280; }
+  .trip-profit { font-size: 18px; font-weight: 700; flex-shrink: 0; align-self: flex-end; }
   .trip-profit.positive { color: var(--green); }
   .trip-profit.negative { color: #DC2626; }
-  
-  /* Empty States */
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    color: #9CA3AF;
-    text-align: center;
-  }
-  
+  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #9CA3AF; text-align: center; }
   .empty-state svg { margin-bottom: 12px; color: #D1D5DB; }
   .empty-state p { font-size: 14px; color: #6B7280; }
-  
   .empty-state-large { padding: 48px 24px; text-align: center; }
   .empty-state-large svg { color: #D1D5DB; margin: 0 auto 24px; }
   .empty-state-large h4 { font-size: 18px; font-weight: 700; color: #111827; margin-bottom: 8px; }
   .empty-state-large p { font-size: 15px; color: #6B7280; margin-bottom: 24px; }
-  
-  /* --- RESPONSIVE BREAKPOINTS --- */
   @media (min-width: 640px) {
     .page-title { font-size: 32px; }
     .page-subtitle { font-size: 16px; }
     .btn-primary { padding: 12px 24px; font-size: 15px; }
-
-    .stats-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
-    
-    .trip-item {
-      flex-direction: row;
-      align-items: center;
-    }
-    
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .trip-item { flex-direction: row; align-items: center; }
     .trip-icon { align-self: center; }
     .trip-profit { align-self: center; }
   }
-  
   @media (min-width: 1024px) {
-    .stats-grid {
-      grid-template-columns: repeat(4, 1fr);
-    }
-    
-    .charts-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
-    
-    .donut-chart {
-      flex-direction: row;
-      justify-content: flex-start;
-    }
-    
-    .donut-chart svg {
-      width: 200px;
-      height: 200px;
-    }
-    
-    .legend-text {
-      flex-direction: column;
-      align-items: flex-start;
-    }
+    .stats-grid { grid-template-columns: repeat(4, 1fr); }
+    .charts-grid { grid-template-columns: repeat(2, 1fr); }
+    .donut-chart { flex-direction: row; justify-content: flex-start; }
+    .donut-chart svg { width: 200px; height: 200px; }
+    .legend-text { flex-direction: column; align-items: flex-start; }
   }
 </style>

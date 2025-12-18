@@ -10,9 +10,10 @@ const settingsSchema = z.object({
   defaultGasPrice: z.number().nonnegative().nullish(),
   vehicleName: z.string().max(100).optional(),
   distanceUnit: z.enum(['mi', 'km']).optional(),
-  // [!code ++] Add this line so Currency saves to the cloud
   currency: z.enum(['USD', 'EUR', 'GBP', 'JPY']).optional(), 
-  theme: z.enum(['light', 'dark', 'system']).optional()
+  theme: z.enum(['light', 'dark', 'system']).optional(),
+  // [!code ++] Allow array of strings for categories
+  expenseCategories: z.array(z.string()).optional() 
 });
 
 export const GET: RequestHandler = async ({ locals, platform }) => {

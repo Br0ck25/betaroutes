@@ -10,7 +10,9 @@ const defaultSettings = {
   defaultMPG: 25,
   defaultGasPrice: 3.50,
   distanceUnit: 'mi',
-  timeFormat: '12h'
+  timeFormat: '12h',
+  // [!code ++] Default categories (can be deleted by user)
+  expenseCategories: ['maintenance', 'insurance', 'supplies', 'other'] 
 };
 
 // 1. Start with defaults (Server matches Client initially)

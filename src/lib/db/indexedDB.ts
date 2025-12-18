@@ -1,7 +1,7 @@
 // src/lib/db/indexedDB.ts
 import { openDB, type IDBPDatabase } from 'idb';
 import { DB_NAME, DB_VERSION } from './types';
-import type { TripRecord, TrashRecord, SyncQueueItem } from './types';
+import type { TripRecord, TrashRecord, SyncQueueItem, ExpenseRecord } from './types';
 
 /**
  * Database interface with typed stores
@@ -14,6 +14,15 @@ export interface AppDB {
       userId: string;
       syncStatus: string;
       updatedAt: string;
+    };
+  };
+  expenses: { // [!code ++] New Store
+    key: string;
+    value: ExpenseRecord;
+    indexes: {
+      userId: string;
+      syncStatus: string;
+      date: string;
     };
   };
   trash: {
@@ -41,10 +50,10 @@ let dbPromise: Promise<IDBPDatabase<AppDB>> | null = null;
 
 /**
  * Open or create the IndexedDB database
- * 
- * This creates 3 object stores:
+ * * This creates 4 object stores:
  * - trips: Active trips
- * - trash: Deleted trips (30-day retention)
+ * - expenses: Active expenses
+ * - trash: Deleted items (30-day retention)
  * - syncQueue: Pending changes to sync to cloud
  */
 export async function getDB(): Promise<IDBPDatabase<AppDB>> {
@@ -67,6 +76,19 @@ export async function getDB(): Promise<IDBPDatabase<AppDB>> {
         tripStore.createIndex('updatedAt', 'updatedAt', { unique: false });
         
         console.log('✅ Created "trips" store with indexes');
+      }
+
+      // [!code ++] Create expenses store
+      if (!db.objectStoreNames.contains('expenses')) {
+        console.log('Creating "expenses" object store...');
+        const expenseStore = db.createObjectStore('expenses', { keyPath: 'id' });
+        
+        // Indexes for efficient queries
+        expenseStore.createIndex('userId', 'userId', { unique: false });
+        expenseStore.createIndex('syncStatus', 'syncStatus', { unique: false });
+        expenseStore.createIndex('date', 'date', { unique: false });
+        
+        console.log('✅ Created "expenses" store with indexes');
       }
 
       // Create trash store
@@ -120,10 +142,12 @@ export async function getDB(): Promise<IDBPDatabase<AppDB>> {
 export async function clearDatabase(): Promise<void> {
   const db = await getDB();
   
-  const tx = db.transaction(['trips', 'trash', 'syncQueue'], 'readwrite');
+  // [!code ++] Added expenses to transaction
+  const tx = db.transaction(['trips', 'expenses', 'trash', 'syncQueue'], 'readwrite');
   
   await Promise.all([
     tx.objectStore('trips').clear(),
+    tx.objectStore('expenses').clear(),
     tx.objectStore('trash').clear(),
     tx.objectStore('syncQueue').clear(),
   ]);
@@ -139,16 +163,19 @@ export async function clearDatabase(): Promise<void> {
 export async function getDBStats() {
   const db = await getDB();
   
-  const tx = db.transaction(['trips', 'trash', 'syncQueue'], 'readonly');
+  // [!code ++] Added expenses
+  const tx = db.transaction(['trips', 'expenses', 'trash', 'syncQueue'], 'readonly');
   
-  const [tripCount, trashCount, queueCount] = await Promise.all([
+  const [tripCount, expenseCount, trashCount, queueCount] = await Promise.all([
     tx.objectStore('trips').count(),
+    tx.objectStore('expenses').count(),
     tx.objectStore('trash').count(),
     tx.objectStore('syncQueue').count(),
   ]);
   
   return {
     trips: tripCount,
+    expenses: expenseCount,
     trash: trashCount,
     pendingSync: queueCount,
   };
@@ -160,16 +187,19 @@ export async function getDBStats() {
 export async function exportData() {
   const db = await getDB();
   
-  const tx = db.transaction(['trips', 'trash', 'syncQueue'], 'readonly');
+  // [!code ++] Added expenses
+  const tx = db.transaction(['trips', 'expenses', 'trash', 'syncQueue'], 'readonly');
   
-  const [trips, trash, syncQueue] = await Promise.all([
+  const [trips, expenses, trash, syncQueue] = await Promise.all([
     tx.objectStore('trips').getAll(),
+    tx.objectStore('expenses').getAll(),
     tx.objectStore('trash').getAll(),
     tx.objectStore('syncQueue').getAll(),
   ]);
   
   return {
     trips,
+    expenses,
     trash,
     syncQueue,
     exportedAt: new Date().toISOString(),
@@ -181,18 +211,27 @@ export async function exportData() {
  */
 export async function importData(data: {
   trips?: TripRecord[];
+  expenses?: ExpenseRecord[]; // [!code ++]
   trash?: TrashRecord[];
   syncQueue?: SyncQueueItem[];
 }) {
   const db = await getDB();
   
-  const tx = db.transaction(['trips', 'trash', 'syncQueue'], 'readwrite');
+  const tx = db.transaction(['trips', 'expenses', 'trash', 'syncQueue'], 'readwrite');
   
   // Import trips
   if (data.trips) {
     const tripStore = tx.objectStore('trips');
     for (const trip of data.trips) {
       await tripStore.put(trip);
+    }
+  }
+
+  // [!code ++] Import expenses
+  if (data.expenses) {
+    const expenseStore = tx.objectStore('expenses');
+    for (const expense of data.expenses) {
+      await expenseStore.put(expense);
     }
   }
   
