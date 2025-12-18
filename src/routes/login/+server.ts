@@ -21,7 +21,7 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
         }
 
         // 2. Rate Limiting (Prevent Credential Stuffing)
-        // [!code fix] Skip this check in dev mode to prevent localhost lockouts
+        // Skip this check in dev mode to prevent localhost lockouts
         if (kv && !dev) {
             const clientIp = request.headers.get('CF-Connecting-IP') || getClientAddress();
             
@@ -54,13 +54,14 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
         // 6. Prepare Session Data
         const sessionData = {
             id: authResult.id,
-            name: authResult.username,
+            // [!code fix] Use the display name (e.g. "James") if available, otherwise fallback to username
+            name: fullUser?.name || authResult.username,
             email: authResult.email,
             plan: fullUser?.plan || 'free',
             tripsThisMonth: fullUser?.tripsThisMonth || 0,
             maxTrips: fullUser?.maxTrips || 10,
             resetDate: fullUser?.resetDate || now,
-            role: fullUser?.role || 'user'
+            role: (fullUser as any)?.role || 'user'
         };
 
         // 7. Create Session in SESSIONS_KV
