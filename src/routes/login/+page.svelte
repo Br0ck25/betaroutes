@@ -153,7 +153,7 @@
             
             {#if registrationSuccess}
                 <div style="text-align: center;">
-                     <div class="alert success" style="display: block; text-align: center; background: #F0FDF4; border-color: #BBF7D0;">
+                      <div class="alert success" style="display: block; text-align: center; background: #F0FDF4; border-color: #BBF7D0;">
                         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2" style="margin: 0 auto 16px auto; display: block;">
                             <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
@@ -176,7 +176,7 @@
                 </div>
                 
                 <form on:submit|preventDefault={submitHandler}>
-                     <div class="form-fields">
+                      <div class="form-fields">
                         <div class="field-group">
                             <label for="username">
                                 {isLogin ? 'Username or Email' : 'Username'}
@@ -187,7 +187,7 @@
                                     <path d="M10 10C12.7614 10 15 7.76142 15 5C15 2.23858 12.7614 0 10 0C7.23858 0 5 2.23858 5 5C5 7.76142 7.23858 10 10 10Z" fill="currentColor"/>
                                     <path d="M10 12C4.47715 12 0 15.3579 0 19.5C0 19.7761 0.223858 20 0.5 20H19.5C19.7761 20 20 19.7761 20 19.5C20 15.3579 15.5228 12 10 12Z" fill="currentColor"/>
                                 </svg>
-                                <input	
+                                 <input	
                                     type="text"	
                                     id="username"	
                                     bind:value={username}	
@@ -209,7 +209,7 @@
                                         <path d="M2 4C2 3.44772 2.44772 3 3 3H17C17.5523 3 18 3.44772 18 4V16C18 16.5523 17.5523 17 17 17H3C2.44772 17 2 16.5523 2 16V4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                          <path d="M18 4L10 10.5L2 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                     </svg>
-                                    <input	
+                                     <input	
                                         type="email"	
                                         id="email"	
                                         bind:value={email}	
@@ -217,7 +217,7 @@
                                         placeholder="Enter your email address"
                                         autocomplete="email"
                                     />
-                                 </div>
+                                </div>
                             </div>
                         {/if}
                         
@@ -244,7 +244,7 @@
                         {#if !isLogin}
                             <div class="field-group">
                                 <label for="confirmPassword">
-                                    Confirm Password
+                                     Confirm Password
                                     <span class="required">*</span>
                                 </label>
                                 <div class="input-wrapper">
@@ -264,7 +264,7 @@
                         {/if}
                         
                         {#if isLogin}
-                             <div class="form-options">
+                              <div class="form-options">
                                 <label class="checkbox-label">
                                     <input type="checkbox" name="remember" />
                                      <span>Remember me</span>
@@ -274,20 +274,20 @@
                         {/if}
                     </div>
                     
-                     {#if responseError}
+                      {#if responseError}
                         <div class="alert error">
                             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                                 <path d="M10 0C4.48 0 0 4.48 0 10C0 15.52 4.48 20 10 20C15.52 20 20 15.52 20 10C20 4.48 15.52 0 10 0ZM11 15H9V13H11V15ZM11 11H9V5H11V11Z" fill="currentColor"/>
                             </svg>
                             {responseError}
-                         </div>
+                          </div>
                     {/if}
                     
                     <button type="submit" class="btn-submit" disabled={loading}>
                         {#if loading}
                              <svg class="spinner" width="20" height="20" viewBox="0 0 20 20" fill="none">
                                 <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2" opacity="0.25"/>
-                                <path d="M10 2C10 2 10 2 10 2C14.4183 2 18 5.58172 18 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                 <path d="M10 2C10 2 10 2 10 2C14.4183 2 18 5.58172 18 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             </svg>
                             Processing...
                         {:else}
@@ -328,12 +328,13 @@
 		font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 		display: grid;
 		grid-template-columns: 45% 55%;
-		min-height: 100vh;
+        /* UPDATED: Dynamic viewport height */
+		min-height: 100dvh;
 	}
 	
 	/* Left Side - Branding */
 	.auth-brand {
-		background: var(--gray-50); /* CHANGED: from navy gradient to light gray */
+		background: var(--gray-50); 
 		position: relative;
 		overflow: hidden;
 		padding: 48px;
@@ -343,7 +344,6 @@
 	}
 	
 	.auth-brand::after {
-        /* Removed the radial gradient overlay to keep it clean */
 		display: none;
 	}
 	
@@ -372,14 +372,14 @@
 	.brand-text h1 {
 		font-size: 36px;
 		font-weight: 800;
-		color: var(--navy); /* CHANGED: from white to navy */
+		color: var(--navy); 
 		margin-bottom: 16px;
 		line-height: 1.2;
 	}
 	
 	.brand-text p {
 		font-size: 18px;
-		color: var(--gray-600); /* CHANGED: from white transparent to gray */
+		color: var(--gray-600); 
 		line-height: 1.6;
 	}
 	
@@ -399,7 +399,7 @@
 	.feature-icon {
 		width: 48px;
 		height: 48px;
-		background: white; /* CHANGED: from transparent white to solid white */
+		background: white; 
 		border: 1px solid var(--gray-100);
 		border-radius: 12px;
 		display: flex;
@@ -413,20 +413,20 @@
 	.feature-text h3 {
 		font-size: 16px;
 		font-weight: 600;
-		color: var(--navy); /* CHANGED: from white to navy */
+		color: var(--navy); 
 		margin-bottom: 4px;
 	}
 	
 	.feature-text p {
 		font-size: 14px;
-		color: var(--gray-600); /* CHANGED: from white transparent to gray */
+		color: var(--gray-600); 
 	}
 	
 	.brand-stats {
 		display: flex;
 		gap: 48px;
 		padding-top: 48px;
-		border-top: 1px solid var(--gray-200); /* CHANGED: border color */
+		border-top: 1px solid var(--gray-200); 
 	}
 	
 	.stat {
@@ -436,18 +436,18 @@
 	.stat-value {
 		font-size: 24px;
 		font-weight: 800;
-		color: var(--navy); /* CHANGED: from white to navy */
+		color: var(--navy); 
 		margin-bottom: 4px;
 	}
 	
 	.stat-label {
 		font-size: 13px;
-		color: var(--gray-600); /* CHANGED: from white transparent to gray */
+		color: var(--gray-600); 
 	}
 	
 	/* Right Side - Form */
 	.auth-form {
-		background: white; /* Changed from #F9FAFB to white for contrast against the now-gray sidebar */
+		background: white; 
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -527,7 +527,8 @@
 		padding: 14px 16px 14px 48px;
 		border: 2px solid #E5E7EB;
 		border-radius: 12px;
-		font-size: 15px;
+        /* UPDATED: Increased font size to prevent iOS zoom */
+		font-size: 16px;
 		font-family: inherit;
 		background: white;
 		transition: all 0.2s;
@@ -567,9 +568,12 @@
 		font-weight: 600;
 	}
 	
-	.forgot-link:hover {
-		text-decoration: underline;
-	}
+    /* UPDATED: Wrap hover in media query */
+    @media (hover: hover) {
+        .forgot-link:hover {
+            text-decoration: underline;
+        }
+    }
 	
 	.alert {
 		display: flex;
@@ -609,11 +613,14 @@
 		gap: 8px;
 	}
 	
-	.btn-submit:hover:not(:disabled) {
-		background: #FF6A3D;
-		transform: translateY(-1px);
-		box-shadow: 0 8px 16px rgba(255, 127, 80, 0.3);
-	}
+    /* UPDATED: Wrap hover in media query */
+    @media (hover: hover) {
+        .btn-submit:hover:not(:disabled) {
+            background: #FF6A3D;
+            transform: translateY(-1px);
+            box-shadow: 0 8px 16px rgba(255, 127, 80, 0.3);
+        }
+    }
 	
 	.btn-submit:disabled {
 		opacity: 0.6;
@@ -645,9 +652,12 @@
 		font-weight: 500;
 	}
 	
-	.form-footer a:hover {
-		text-decoration: underline;
-	}
+    /* UPDATED: Wrap hover in media query */
+    @media (hover: hover) {
+        .form-footer a:hover {
+            text-decoration: underline;
+        }
+    }
 	
 	/* Responsive */
 	@media (max-width: 1024px) {

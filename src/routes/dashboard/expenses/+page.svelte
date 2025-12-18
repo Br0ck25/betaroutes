@@ -153,7 +153,6 @@
 
   async function deleteExpense(id: string, e?: MouseEvent) {
     if (e) e.stopPropagation();
-    // [!code change] Changed prompt to reflect Trash functionality
     if (!confirm('Move this expense to trash? You can restore it later.')) return;
     
     // Check if it's a trip log
@@ -167,7 +166,6 @@
     if (userId) {
       try {
         await expenses.deleteExpense(id, userId);
-        // [!code change] Updated Toast
         toasts.success('Expense moved to trash');
         if (selectedExpenses.has(id)) {
             selectedExpenses.delete(id);
@@ -202,7 +200,6 @@
           return;
       }
 
-      // [!code change] Updated Prompt
       if (!confirm(`Move ${manualExpenses.length} expenses to trash? ${tripLogs > 0 ? `(${tripLogs} trip logs will be skipped)` : ''}`)) return;
 
       const currentUser = $page.data.user || $user;
@@ -220,7 +217,6 @@
           }
       }
       
-      // [!code change] Updated Toast
       toasts.success(`Moved ${successCount} expenses to trash.`);
       selectedExpenses = new Set();
   }
@@ -547,7 +543,7 @@
                 <div class="card-stats">
                      <div class="stat-badge-container">
                         <span class={`category-badge ${getCategoryColor(expense.category)}`}>
-                            {getCategoryLabel(expense.category)}
+                             {getCategoryLabel(expense.category)}
                         </span>
                         {#if expense.source === 'trip'}
                             <span class="source-badge">Trip Log</span>
@@ -639,7 +635,15 @@
   .btn-secondary { display: inline-flex; align-items: center; justify-content: center; padding: 10px; 
     background: white; border: 1px solid #E5E7EB; color: #374151; border-radius: 8px; 
     font-weight: 600; font-size: 14px; cursor: pointer; transition: background 0.2s; }
-  .btn-secondary:hover { background: #F9FAFB; }
+
+  /* UPDATED: Wrap hover in media query */
+  @media (hover: hover) {
+    .btn-secondary:hover { background: #F9FAFB; }
+    .cat-delete:hover { background: #EF4444; color: white; }
+    .action-pill.secondary:hover { background: #4B5563; }
+    .action-pill.export:hover { background: #F3F4F6; }
+    .action-pill.danger:hover { background: #DC2626; }
+  }
 
   /* Stats Summary */
   .stats-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
@@ -655,12 +659,12 @@
   .search-box { position: relative; width: 100%; }
   .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #9CA3AF; pointer-events: none; }
   .search-box input { width: 100%; padding: 12px 16px 12px 42px; border: 1px solid #E5E7EB; 
-    border-radius: 10px; font-size: 15px; background: white; box-sizing: border-box; }
+    border-radius: 10px; font-size: 16px; /* UPDATED: 16px to prevent zoom */ background: white; box-sizing: border-box; }
    
   .date-group, .filter-group { display: flex; gap: 8px; align-items: center; }
   .filter-group { width: 100%; }
   .date-input, .filter-select { flex: 1; padding: 12px; border: 1px solid #E5E7EB; 
-    border-radius: 10px; font-size: 14px; background: white; min-width: 0; }
+    border-radius: 10px; font-size: 16px; /* UPDATED: 16px to prevent zoom */ background: white; min-width: 0; }
   .date-sep { color: #9CA3AF; font-weight: bold; }
   .sort-btn { flex: 0 0 48px; display: flex; align-items: center; justify-content: center; 
     border: 1px solid #E5E7EB; border-radius: 10px; background: white; color: #6B7280; }
@@ -673,7 +677,10 @@
   .checkbox-container { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: #4B5563; position: relative; padding-left: 28px; user-select: none; }
   .checkbox-container input { position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0; }
   .checkmark { position: absolute; top: 0; left: 0; height: 20px; width: 20px; background-color: white; border: 2px solid #D1D5DB; border-radius: 6px; transition: all 0.2s; }
-  .checkbox-container:hover input ~ .checkmark { border-color: #9CA3AF; }
+  /* UPDATED: Wrap hover */
+  @media (hover: hover) {
+    .checkbox-container:hover input ~ .checkmark { border-color: #9CA3AF; }
+  }
   .checkbox-container input:checked ~ .checkmark { background-color: #FF7F50; border-color: #FF7F50; }
   .checkmark:after { content: ""; position: absolute; display: none; }
   .checkbox-container input:checked ~ .checkmark:after { display: block; }
@@ -726,11 +733,8 @@
   .action-buttons { display: flex; gap: 8px; }
   .action-pill { border: none; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
   .action-pill.secondary { background: #374151; color: #E5E7EB; }
-  .action-pill.secondary:hover { background: #4B5563; }
   .action-pill.export { background: #E5E7EB; color: #1F2937; }
-  .action-pill.export:hover { background: #F3F4F6; }
   .action-pill.danger { background: #EF4444; color: white; }
-  .action-pill.danger:hover { background: #DC2626; }
   @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
   /* Categories Manager Modal Styles */
@@ -742,7 +746,6 @@
     border: none; background: transparent; }
   .cat-delete { border: none; background: #E5E7EB; color: #6B7280; border-radius: 50%; width: 24px; height: 24px; 
     display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
-  .cat-delete:hover { background: #EF4444; color: white; }
 
   .add-cat-form { display: flex; gap: 8px; }
   .add-cat-form .input-field { flex: 1; padding: 10px; border: 1px solid #E5E7EB; border-radius: 8px; }

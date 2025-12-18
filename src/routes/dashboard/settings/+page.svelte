@@ -70,7 +70,7 @@
     showSuccessMsg('Default values saved and synced!');
   }
 
-  // [!code change] Update function to call the new /api/user endpoint
+  // Update function to call the new /api/user endpoint
   async function saveProfile() {
     // 1. Update local UI state immediately
     auth.updateProfile({
@@ -592,44 +592,6 @@
           </svg>
         </div>
         <div>
-          <h2 class="card-title">Preferences</h2>
-          <p class="card-subtitle">Customize your experience</p>
-        </div>
-      </div>
-      
-      <div class="form-group">
-        <label for="distance-unit">Distance Unit</label>
-        <select id="distance-unit" bind:value={settings.distanceUnit}>
-          <option value="mi">Miles</option> 
-          <option value="km">Kilometers</option>
-        </select>
-      </div>
-      
-      <div class="form-group">
-        <label for="currency">Currency</label>
-        <select id="currency" bind:value={settings.currency}>
-          <option value="USD">USD ($)</option>
-          <option value="EUR">EUR (€)</option>
-          <option value="GBP">GBP (£)</option>
-          <option value="JPY">JPY (¥)</option>
-        </select>
-      </div>
-      
-      <button class="btn-primary" on:click={saveDefaultSettings}>
-        Save Preferences
-      </button>
-    </div>
-
-    <div class="settings-card">
-      <div class="card-header">
-        <div class="card-icon teal">
-           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-             <path d="M13 3H7C4.79086 3 3 4.79086 3 7V13C3 15.2091 4.79086 17 7 17H13C15.2091 17 17 15.2091 17 13V7C17 4.79086 15.2091 3 13 3Z" stroke="currentColor" stroke-width="2"/>
-             <path d="M7 8.5H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-             <path d="M7 11.5H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-        </div>
-        <div>
           <h2 class="card-title">Integrations</h2>
           <p class="card-subtitle">Connect external services</p>
         </div>
@@ -815,7 +777,8 @@
     width: 100%; max-width: 450px; 
     padding: 12px 16px; 
     border: 2px solid #E5E7EB;
-    border-radius: 10px; font-size: 15px; font-family: inherit; background: white; transition: all 0.2s;
+    /* UPDATED: 16px to prevent zoom */
+    border-radius: 10px; font-size: 16px; font-family: inherit; background: white; transition: all 0.2s;
     display: block; box-sizing: border-box;
   }
   .form-group input:focus, .form-group select:focus { 
@@ -832,7 +795,10 @@
   .plan-row { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
   .plan-badge { display: inline-block; padding: 6px 12px; background: #F3F4F6; color: #374151; border-radius: 8px; font-weight: 600; font-size: 14px; }
   .upgrade-link { color: var(--orange); font-size: 14px; font-weight: 600; text-decoration: none; }
-  .upgrade-link:hover { text-decoration: underline; }
+  /* UPDATED: Wrap hover */
+  @media (hover: hover) {
+    .upgrade-link:hover { text-decoration: underline; }
+  }
   .usage-stats { margin-top: 16px; }
   .usage-header { display: flex; justify-content: space-between; font-size: 13px; color: #6B7280; margin-bottom: 6px; }
   .progress-bar { height: 8px; background: #E5E7EB; border-radius: 4px; overflow: hidden; }
@@ -843,26 +809,30 @@
       width: 100%; padding: 14px; border-radius: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 15px;
   }
   .btn-primary { background: linear-gradient(135deg, var(--orange) 0%, #FF6A3D 100%); color: white; border: none; }
-  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(255, 127, 80, 0.3); }
   .btn-secondary { background: white; color: #374151; border: 2px solid #E5E7EB; }
-  .btn-secondary:hover { border-color: var(--orange); color: var(--orange); }
   .btn-logout { background: white; color: #DC2626; border: 2px solid #FEE2E2; }
-  .btn-logout:hover { background: #FEF2F2; border-color: #FCA5A5; }
+  
+  /* UPDATED: Wrap hover states */
+  @media (hover: hover) {
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(255, 127, 80, 0.3); }
+    .btn-secondary:hover { border-color: var(--orange); color: var(--orange); }
+    .btn-logout:hover { background: #FEF2F2; border-color: #FCA5A5; }
+    .btn-delete:hover { color: #B91C1C; }
+    .btn-delete-confirm:hover { background: #B91C1C; }
+    .action-btn:hover { border-color: var(--orange); background: white; }
+    .action-btn.danger:hover { border-color: #DC2626; background: white; }
+  }
   
   .btn-delete { background: transparent; color: #DC2626; border: none; margin-top: 12px; font-size: 14px; text-decoration: underline; }
-  .btn-delete:hover { color: #B91C1C; }
   .delete-confirmation { margin-top: 16px; padding: 16px; background: white; border-radius: 10px; border: 1px solid #FECACA; }
   .delete-warning { font-size: 14px; color: #374151; margin-bottom: 12px; font-weight: 500; }
   .delete-input { width: 100%; padding: 10px; border: 1px solid #E5E7EB; border-radius: 8px; margin-bottom: 12px; }
   .error-text { color: #DC2626; font-size: 13px; margin-bottom: 12px; }
   .btn-delete-confirm { background: #DC2626; color: white; border: none; margin-bottom: 8px; }
-  .btn-delete-confirm:hover { background: #B91C1C; }
 
   .button-group { display: flex; flex-direction: column; gap: 8px; }
   .data-actions { display: flex; flex-direction: column; gap: 12px; }
   .action-btn { display: flex; align-items: center; gap: 16px; padding: 16px; background: #F9FAFB; border: 2px solid #E5E7EB; border-radius: 12px; cursor: pointer; text-align: left; width: 100%; }
-  .action-btn:hover { border-color: var(--orange); background: white; }
-  .action-btn.danger:hover { border-color: #DC2626; background: white; }
   .action-title { font-size: 15px; font-weight: 600; color: #111827; }
   .action-subtitle { font-size: 13px; color: #6B7280; }
 
