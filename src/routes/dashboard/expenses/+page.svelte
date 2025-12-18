@@ -16,22 +16,29 @@
   let filterCategory = 'all';
   let startDate = '';
   let endDate = '';
-const now = new Date();
-  let date = new Date(now.getTime() - (now.getTimezoneOffset() * 60000))
-    .toISOString()
-    .split('T')[0];
 
   // Use categories from settings, default to basic if empty
   $: categories = $userSettings.expenseCategories?.length > 0 
       ? $userSettings.expenseCategories 
       : ['maintenance', 'insurance', 'supplies', 'other'];
 
+  // --- HELPER: Get Local Date (YYYY-MM-DD) ---
+  // Fixes the issue where "new Date().toISOString()" returns tomorrow's date in the evening
+  function getLocalDate() {
+    const now = new Date();
+    return new Date(now.getTime() - (now.getTimezoneOffset() * 60000))
+      .toISOString()
+      .split('T')[0];
+  }
+
   // --- MODAL STATE ---
   let isModalOpen = false;
   let isManageCategoriesOpen = false;
   let editingId: string | null = null;
+  
+  // [!code change] Use getLocalDate() for correct default
   let formData = {
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalDate(),
     category: '',
     amount: '',
     description: ''
@@ -50,7 +57,7 @@ const now = new Date();
               date: date,
               category: 'fuel',
               amount: trip.fuelCost,
-              description: 'Fuel (Trip Log)', // [!code change] Matches other trip items
+              description: 'Fuel (Trip Log)',
               source: 'trip',
               tripId: trip.id
           });
@@ -155,8 +162,9 @@ const now = new Date();
       };
     } else {
       editingId = null;
+      // [!code change] Use getLocalDate() for correct default
       formData = {
-        date: new Date().toISOString().split('T')[0],
+        date: getLocalDate(),
         category: categories[0] || 'other',
         amount: '',
         description: ''
