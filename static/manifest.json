@@ -4,7 +4,8 @@
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#2563eb",
+  /* [!code change] Set to white to remove the blue bar */
+  "theme_color": "#ffffff",
   "description": "Offline-first mileage tracking and route management",
   "icons": [
     {
