@@ -6,14 +6,11 @@
     import { syncManager } from '$lib/sync/syncManager';
     import { trips } from '$lib/stores/trips';
     import { env } from '$env/dynamic/public';
-    // [!code ++] Import page store to check current route
     import { page } from '$app/stores';
-
     let { data, children } = $props();
 
 	// 1. Initialize Context
 	const userState = setUserContext(data.user);
-
 	// 2. Keep user state synced
 	$effect(() => {
 		userState.setUser(data.user);
@@ -27,7 +24,8 @@
         if (data.user) {
             // Connect SyncManager to the UI Store
             syncManager.setStoreUpdater((enrichedTrip) => {
-                trips.updateLocal(enrichedTrip);
+              
+              trips.updateLocal(enrichedTrip);
             });
 
             // Access key safely via dynamic env object
@@ -35,6 +33,7 @@
             
             if (apiKey) {
                 syncManager.initialize(apiKey);
+          
             } else {
                 console.warn('Google Maps API Key missing in environment variables.');
             }
@@ -42,7 +41,7 @@
     });
 </script>
 
-<div class="flex flex-col min-h-screen bg-neutral-bg-primary font-inter text-neutral-primary">
+<div class="flex flex-col min-h-dvh bg-neutral-bg-primary font-inter text-neutral-primary">
 	<main class="flex-grow w-full">
 		{@render children()}
 	</main>

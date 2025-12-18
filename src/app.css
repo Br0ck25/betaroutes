@@ -1,3 +1,8 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* UPDATED: Disable grey tap highlight on mobile */
+html {
+  -webkit-tap-highlight-color: transparent;
+}

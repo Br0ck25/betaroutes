@@ -233,33 +233,31 @@
     --green: #8DC63F;
     --purple: #8B5A9E;
     --sidebar-width: 280px;
-    --mobile-header-height: 60px; /* UPDATED: CSS Variable for height */
+    --mobile-header-height: 60px;
   }
   
   :global(body) {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
 
-  /* UPDATED: Add scroll padding so anchor links aren't hidden by the header */
   :global(html) {
     scroll-padding-top: var(--mobile-header-height);
   }
   
   .layout {
     display: flex;
-    min-height: 100vh;
+    min-height: 100dvh; /* UPDATED: Dynamic viewport height */
     background: #F9FAFB;
   }
   
   /* --- Mobile Header --- */
   .mobile-header {
     display: flex;
-    /* Default to visible for mobile */
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
-    height: var(--mobile-header-height); /* UPDATED: Uses variable */
+    height: var(--mobile-header-height);
     background: white;
     border-bottom: 1px solid #E5E7EB;
     padding: 0 16px;
@@ -297,8 +295,8 @@
     border-right: 1px solid #E5E7EB;
     display: flex;
     flex-direction: column;
-    z-index: 200;
-    transform: translateX(-100%); /* Hidden on mobile */
+    z-index: 1001; /* UPDATED: Higher z-index than bottom nav */
+    transform: translateX(-100%);
     transition: transform 0.3s ease;
   }
   
@@ -318,7 +316,6 @@
     height: 40px;
   }
   
-  /* Sync Indicator in Sidebar */
   .sidebar-sync {
     padding: 16px 20px;
     border-bottom: 1px solid #E5E7EB;
@@ -328,6 +325,7 @@
     flex: 1;
     padding: 24px 16px;
     overflow-y: auto;
+    overscroll-behavior: contain; /* UPDATED: Prevent chaining */
   }
   
   .nav-item {
@@ -450,12 +448,9 @@
   /* --- Main Content --- */
   .main-content {
     margin-left: 0;
-    /* Default 0 for mobile */
-    /* UPDATED: Dynamic top padding using calc() and CSS Variable */
     padding: calc(var(--mobile-header-height) + 20px) 16px 100px 16px;
-    /* Top padding for header, Bottom for nav bar */
     flex: 1;
-    min-height: 100vh;
+    min-height: 100dvh; /* UPDATED: Dynamic viewport height */
   }
   
   .overlay {
@@ -466,7 +461,7 @@
     right: 0;
     bottom: 0;
     background: rgba(0, 0, 0, 0.5);
-    z-index: 150;
+    z-index: 1000; /* UPDATED: Higher than bottom nav (900) but lower than sidebar (1001) */
     backdrop-filter: blur(4px);
   }
 
@@ -487,7 +482,6 @@
     right: 0;
     background: white;
     border-top: 1px solid #E5E7EB;
-    /* Respect iPhone Home Indicator area */
     padding-bottom: env(safe-area-inset-bottom, 20px); 
     height: calc(60px + env(safe-area-inset-bottom, 20px));
     z-index: 900;
@@ -527,7 +521,6 @@
     
     .sidebar {
       transform: translateX(0);
-      /* Always visible */
     }
     
     .main-content {
@@ -547,4 +540,4 @@
       display: none;
     }
   }
-</style>
+</style
