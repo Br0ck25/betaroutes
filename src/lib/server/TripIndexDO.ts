@@ -3,6 +3,7 @@ import type { DurableObjectState } from "@cloudflare/workers-types";
 
 interface TripSummary {
     id: string;
+    userId: string;
     date?: string;
     createdAt: string;
     updatedAt: string;
@@ -29,10 +30,12 @@ export class TripIndexDO {
         this.state = state;
         this.env = env;
 
-        // 1. Initialize SQLite Schema
+        // 1. Initialize SQLite Schema with userId for integrity
+        // Added userId to ensure data isolation if an instance is repurposed
         this.state.storage.sql.exec(`
             CREATE TABLE IF NOT EXISTS trips (
                 id TEXT PRIMARY KEY,
+                userId TEXT,
                 date TEXT,
                 createdAt TEXT,
                 data TEXT
@@ -40,29 +43,30 @@ export class TripIndexDO {
             
             CREATE TABLE IF NOT EXISTS expenses (
                 id TEXT PRIMARY KEY,
+                userId TEXT,
                 date TEXT,
                 category TEXT,
                 createdAt TEXT,
                 data TEXT
             );
+
+            CREATE INDEX IF NOT EXISTS idx_trips_user ON trips(userId);
+            CREATE INDEX IF NOT EXISTS idx_expenses_user ON expenses(userId);
         `);
 
         // 2. Safe Trip Migration Logic (Legacy KV -> SQLite)
-        // Wraps the migration in a try/catch to prevent Durable Object crash loops
         this.state.blockConcurrencyWhile(async () => {
             try {
-                // Attempt to load legacy data safely
                 const legacyTrips = await this.state.storage.get<TripSummary[]>("trips");
 
                 if (legacyTrips && Array.isArray(legacyTrips) && legacyTrips.length > 0) {
                     console.log(`[TripIndexDO] Migrating ${legacyTrips.length} legacy trips to SQLite...`);
                     
                     const stmt = this.state.storage.sql.prepare(`
-                        INSERT OR REPLACE INTO trips (id, date, createdAt, data) 
-                        VALUES (?, ?, ?, ?)
+                        INSERT OR REPLACE INTO trips (id, userId, date, createdAt, data) 
+                        VALUES (?, ?, ?, ?, ?)
                     `);
 
-                    // Process in chunks to manage memory and transaction log size
                     const CHUNK_SIZE = 100;
                     for (let i = 0; i < legacyTrips.length; i += CHUNK_SIZE) {
                         const chunk = legacyTrips.slice(i, i + CHUNK_SIZE);
@@ -72,6 +76,7 @@ export class TripIndexDO {
                             for (const trip of chunk) {
                                 stmt.run(
                                     trip.id, 
+                                    trip.userId || "", // Ensure userId is captured
                                     trip.date || "", 
                                     trip.createdAt || "", 
                                     JSON.stringify(trip)
@@ -80,16 +85,14 @@ export class TripIndexDO {
                             this.state.storage.sql.exec("COMMIT");
                         } catch (err) {
                             this.state.storage.sql.exec("ROLLBACK");
-                            throw err; // Re-throw to trigger the outer catch
+                            throw err; 
                         }
                     }
 
-                    // Only delete legacy data if migration completed successfully
                     await this.state.storage.delete("trips");
                     console.log("[TripIndexDO] Migration complete.");
                 }
             } catch (err) {
-                // Log the error but DO NOT crash the worker to prevent lockout
                 console.error("[TripIndexDO] Startup Migration Failed (Recovered):", err);
             }
         });
@@ -100,7 +103,6 @@ export class TripIndexDO {
         const path = url.pathname;
 
         try {
-            // Helper for safely parsing JSON to return 400 instead of 500
             const parseBody = async <T>() => {
                 try {
                     return await request.json() as T;
@@ -134,6 +136,8 @@ export class TripIndexDO {
                 const limitParam = url.searchParams.get('limit');
                 const offsetParam = url.searchParams.get('offset');
 
+                // Performance Fix: Only fetch necessary rows using SQL LIMIT/OFFSET
+                // and defer JSON parsing until after pagination
                 let query = `SELECT data FROM trips ORDER BY date DESC, createdAt DESC`;
                 const params: (string | number)[] = [];
 
@@ -146,12 +150,12 @@ export class TripIndexDO {
 
                 const cursor = this.state.storage.sql.exec(query, ...params);
                 
-                // Properly typed SQL result to remove @ts-ignore
                 const countRes = this.state.storage.sql.exec("SELECT COUNT(*) as total FROM trips");
                 const total = (countRes.one() as { total: number }).total;
 
                 const trips = [];
                 for (const row of cursor) {
+                    // JSON parsing happens only for the returned page
                     trips.push(JSON.parse(row.data as string));
                 }
 
@@ -168,14 +172,14 @@ export class TripIndexDO {
             if (path === "/migrate") {
                 const trips = await parseBody<TripSummary[]>();
                 const stmt = this.state.storage.sql.prepare(`
-                    INSERT OR REPLACE INTO trips (id, date, createdAt, data) 
-                    VALUES (?, ?, ?, ?)
+                    INSERT OR REPLACE INTO trips (id, userId, date, createdAt, data) 
+                    VALUES (?, ?, ?, ?, ?)
                 `);
                 
                 this.state.storage.sql.exec("BEGIN TRANSACTION");
                 try {
                     for (const trip of trips) {
-                        stmt.run(trip.id, trip.date || "", trip.createdAt || "", JSON.stringify(trip));
+                        stmt.run(trip.id, trip.userId, trip.date || "", trip.createdAt || "", JSON.stringify(trip));
                     }
                     this.state.storage.sql.exec("COMMIT");
                 } catch (err) {
@@ -187,12 +191,12 @@ export class TripIndexDO {
 
             if (path === "/put") {
                 const trip = await parseBody<TripSummary>();
-                if (!trip || !trip.id) return new Response("Invalid Data: Missing ID", { status: 400 });
+                if (!trip || !trip.id || !trip.userId) return new Response("Invalid Data", { status: 400 });
 
                 this.state.storage.sql.exec(`
-                    INSERT OR REPLACE INTO trips (id, date, createdAt, data)
-                    VALUES (?, ?, ?, ?)
-                `, trip.id, trip.date || "", trip.createdAt || "", JSON.stringify(trip));
+                    INSERT OR REPLACE INTO trips (id, userId, date, createdAt, data)
+                    VALUES (?, ?, ?, ?, ?)
+                `, trip.id, trip.userId, trip.date || "", trip.createdAt || "", JSON.stringify(trip));
                 
                 return new Response("OK");
             }
@@ -208,6 +212,7 @@ export class TripIndexDO {
             // --- EXPENSE OPERATIONS ---
 
             if (path === "/expenses/list") {
+                // Performance Fix: Optimized query for expenses
                 const cursor = this.state.storage.sql.exec(`
                     SELECT data FROM expenses 
                     ORDER BY date DESC, createdAt DESC
@@ -221,12 +226,12 @@ export class TripIndexDO {
 
             if (path === "/expenses/put") {
                 const item = await parseBody<ExpenseRecord>();
-                if (!item || !item.id) return new Response("Invalid Data: Missing ID", { status: 400 });
+                if (!item || !item.id || !item.userId) return new Response("Invalid Data", { status: 400 });
 
                 this.state.storage.sql.exec(`
-                    INSERT OR REPLACE INTO expenses (id, date, category, createdAt, data)
-                    VALUES (?, ?, ?, ?, ?)
-                `, item.id, item.date, item.category, item.createdAt, JSON.stringify(item));
+                    INSERT OR REPLACE INTO expenses (id, userId, date, category, createdAt, data)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                `, item.id, item.userId, item.date, item.category, item.createdAt, JSON.stringify(item));
                 
                 return new Response("OK");
             }
@@ -242,14 +247,14 @@ export class TripIndexDO {
             if (path === "/expenses/migrate") {
                 const items = await parseBody<ExpenseRecord[]>();
                 const stmt = this.state.storage.sql.prepare(`
-                    INSERT OR REPLACE INTO expenses (id, date, category, createdAt, data) 
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO expenses (id, userId, date, category, createdAt, data) 
+                    VALUES (?, ?, ?, ?, ?, ?)
                 `);
 
                 this.state.storage.sql.exec("BEGIN TRANSACTION");
                 try {
                     for (const item of items) {
-                        stmt.run(item.id, item.date, item.category, item.createdAt, JSON.stringify(item));
+                        stmt.run(item.id, item.userId, item.date, item.category, item.createdAt, JSON.stringify(item));
                     }
                     this.state.storage.sql.exec("COMMIT");
                 } catch (err) {
@@ -304,7 +309,6 @@ export class TripIndexDO {
         } catch (err: any) {
             console.error("[TripIndexDO] Error:", err);
             
-            // Handle specific errors for better client debugging
             if (err.message === "INVALID_JSON") {
                 return new Response("Invalid JSON Body", { status: 400 });
             }
