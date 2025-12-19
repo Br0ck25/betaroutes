@@ -111,7 +111,7 @@ export async function createUser(kv: KVNamespace, userData: Omit<User, 'id' | 'c
     return { ...userCore, ...userStats };
 }
 
-// [!code ++] New function to update user details
+// [!code fix] FIXED: Handle index updates when email changes
 export async function updateUser(
     kv: KVNamespace, 
     userId: string, 
@@ -123,6 +123,24 @@ export async function updateUser(
 
     const record = JSON.parse(raw) as UserCore;
     
+    // Handle Email Change: Update Indexes
+    if (updates.email && updates.email.toLowerCase() !== record.email.toLowerCase()) {
+        const newEmail = updates.email.toLowerCase();
+        const oldEmail = record.email.toLowerCase();
+
+        // 1. Check if new email is taken
+        const existingId = await kv.get(emailKey(newEmail));
+        if (existingId) {
+            throw new Error('Email already in use');
+        }
+
+        // 2. Create new index BEFORE deleting old one (safety)
+        await kv.put(emailKey(newEmail), userId);
+        
+        // 3. Delete old index
+        await kv.delete(emailKey(oldEmail));
+    }
+
     // Merge updates into the core record
     const updatedCore = {
         ...record,
@@ -196,19 +214,25 @@ export async function deleteUser(
         authPromises.push(resources.settingsKV.delete(`settings:${userId}`));
     }
 
-    // 3. Delete Durable Object Index (Billing/Stats/Trip List)
+    // 3. [!code fix] WIPE SQLITE DATA in Durable Object
     if (resources?.tripIndexDO) {
         try {
-            // Try identifying by username (used in your tripService)
+            // Identify the specific DO instance for this user
             const id = resources.tripIndexDO.idFromName(user.username);
-            // We can't explicitly "delete" a DO, but removing the KV pointers effectively orphans it.
-            // (Optional: Call a clear() method on the DO stub if implemented)
+            const stub = resources.tripIndexDO.get(id);
+            
+            // Call the new WIPE endpoint
+            await stub.fetch('http://internal/admin/wipe-user', {
+                method: 'POST'
+            });
+            console.log(`[UserService] Sent WIPE command to DO for ${user.username}`);
         } catch (e) {
-            console.error('Failed to wipe DO reference', e);
+            console.error('[UserService] Failed to wipe DO data:', e);
         }
     }
 
     // 4. Delete Trips (Iterate and Destroy)
+    // We keep this for backward compatibility during migration
     const wipeNamespace = async (ns: KVNamespace, prefix: string) => {
         let cursor: string | undefined = undefined;
         do {

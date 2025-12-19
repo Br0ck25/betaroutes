@@ -108,6 +108,28 @@ export class TripIndexDO {
                 }
             };
 
+            // --- ADMIN OPERATIONS ---
+            
+            if (path === "/admin/wipe-user") {
+                 if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+
+                 // DROP Tables to completely reset the Durable Object storage for this user
+                 this.state.storage.sql.exec("BEGIN TRANSACTION");
+                 try {
+                     this.state.storage.sql.exec("DELETE FROM trips");
+                     this.state.storage.sql.exec("DELETE FROM expenses");
+                     // Optional: If you want to reset auto-increment counters:
+                     // this.state.storage.sql.exec("DELETE FROM sqlite_sequence"); 
+                     this.state.storage.sql.exec("COMMIT");
+                 } catch (err) {
+                     this.state.storage.sql.exec("ROLLBACK");
+                     console.error("[TripIndexDO] Wipe Failed:", err);
+                     return new Response("Wipe Failed", { status: 500 });
+                 }
+                 
+                 return new Response("Account Data Wiped");
+            }
+
             // --- TRIP OPERATIONS ---
 
             if (path === "/list") {
