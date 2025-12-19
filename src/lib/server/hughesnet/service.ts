@@ -12,7 +12,7 @@ import type { OrderData, OrderWithMeta, Trip, TripStop, SupplyItem, SyncConfig, 
 const DISCOVERY_GAP_MAX_SIZE = 50;
 const DISCOVERY_MAX_FAILURES = 50;
 const DISCOVERY_MAX_CHECKS = 100;
-const USER_MODIFICATION_BUFFER_MS = 120000; // 2 minutes
+const USER_MODIFICATION_BUFFER_MS = 150000; // 15 seconds
 const MIN_JOB_DURATION_MINS = 10;
 const MAX_JOB_DURATION_MINS = 600;
 
