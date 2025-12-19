@@ -36,7 +36,9 @@ const stopSchema = z.object({
 });
 
 const costItemSchema = z.object({
+	id: z.string().optional(), // Added ID support
 	type: z.string().max(100).optional(),
+	item: z.string().max(100).optional(), // Added item support (for maintenance)
 	cost: z.number().optional()
 });
 
@@ -272,12 +274,15 @@ export const POST: RequestHandler = async (event) => {
 		}
 
 		const now = new Date().toISOString();
+		
+		// [!code ++] FORCE lastModified to mark this as a manual user update
 		const trip = {
 			...validData,
 			id,
 			userId: storageId,
 			createdAt: existingTrip ? existingTrip.createdAt : now,
-			updatedAt: now
+			updatedAt: now,
+			lastModified: now // Critical for conflict detection
 		};
 
 		await svc.put(trip);
