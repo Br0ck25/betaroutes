@@ -48,9 +48,10 @@ export class TripIndexDO {
         `);
 
         // 2. Safe Trip Migration Logic (Legacy KV -> SQLite)
+        // Wraps the migration in a try/catch to prevent Durable Object crash loops
         this.state.blockConcurrencyWhile(async () => {
             try {
-                // Attempt to load legacy data.
+                // Attempt to load legacy data safely
                 const legacyTrips = await this.state.storage.get<TripSummary[]>("trips");
 
                 if (legacyTrips && Array.isArray(legacyTrips) && legacyTrips.length > 0) {
@@ -88,7 +89,7 @@ export class TripIndexDO {
                     console.log("[TripIndexDO] Migration complete.");
                 }
             } catch (err) {
-                // Log the error but DO NOT crash the worker. 
+                // Log the error but DO NOT crash the worker to prevent lockout
                 console.error("[TripIndexDO] Startup Migration Failed (Recovered):", err);
             }
         });
@@ -99,7 +100,7 @@ export class TripIndexDO {
         const path = url.pathname;
 
         try {
-            // Helper for safely parsing JSON
+            // Helper for safely parsing JSON to return 400 instead of 500
             const parseBody = async <T>() => {
                 try {
                     return await request.json() as T;
@@ -113,13 +114,10 @@ export class TripIndexDO {
             if (path === "/admin/wipe-user") {
                  if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
 
-                 // DROP Tables to completely reset the Durable Object storage for this user
                  this.state.storage.sql.exec("BEGIN TRANSACTION");
                  try {
                      this.state.storage.sql.exec("DELETE FROM trips");
                      this.state.storage.sql.exec("DELETE FROM expenses");
-                     // Optional: If you want to reset auto-increment counters:
-                     // this.state.storage.sql.exec("DELETE FROM sqlite_sequence"); 
                      this.state.storage.sql.exec("COMMIT");
                  } catch (err) {
                      this.state.storage.sql.exec("ROLLBACK");
@@ -148,7 +146,7 @@ export class TripIndexDO {
 
                 const cursor = this.state.storage.sql.exec(query, ...params);
                 
-                // Get total count (Typed safely)
+                // Properly typed SQL result to remove @ts-ignore
                 const countRes = this.state.storage.sql.exec("SELECT COUNT(*) as total FROM trips");
                 const total = (countRes.one() as { total: number }).total;
 
@@ -174,7 +172,6 @@ export class TripIndexDO {
                     VALUES (?, ?, ?, ?)
                 `);
                 
-                // Wrap bulk inserts in a transaction for performance
                 this.state.storage.sql.exec("BEGIN TRANSACTION");
                 try {
                     for (const trip of trips) {
@@ -190,7 +187,6 @@ export class TripIndexDO {
 
             if (path === "/put") {
                 const trip = await parseBody<TripSummary>();
-                // Explicit validation
                 if (!trip || !trip.id) return new Response("Invalid Data: Missing ID", { status: 400 });
 
                 this.state.storage.sql.exec(`
@@ -250,7 +246,6 @@ export class TripIndexDO {
                     VALUES (?, ?, ?, ?, ?)
                 `);
 
-                // Wrap bulk inserts in a transaction
                 this.state.storage.sql.exec("BEGIN TRANSACTION");
                 try {
                     for (const item of items) {
@@ -268,7 +263,6 @@ export class TripIndexDO {
 
             if (path === "/expenses/status") {
                 const countRes = this.state.storage.sql.exec("SELECT COUNT(*) as c FROM expenses");
-                // Typed safely
                 const count = (countRes.one() as { c: number }).c;
                 const migrated = await this.state.storage.get("expenses_migrated");
                 return new Response(JSON.stringify({ 

@@ -244,10 +244,10 @@
     const skipScan = batchCount > 1;
     let data: any = null;
     if (batchCount === 1) {
-        addLog(recentOnly ? `Starting Quick Sync (New Only)...` : `Starting Full History Scan...`);
+        addLog(recentOnly ? `🚀 Starting Quick Sync (Last 7 Days)...` : `📡 Starting Full History Scan...`);
         showConsole = true;
     } else {
-        addLog(`Continuing Sync (Batch ${batchCount})...`);
+        addLog(`📦 Continuing Sync (Batch ${batchCount})...`);
     }
 
     try {
@@ -298,7 +298,7 @@
              }
 
              if (data.incomplete) {
-                 addLog(`Batch ${batchCount} complete. Starting next batch automatically...`);
+                 addLog(`✓ Batch ${batchCount} complete. Starting next batch...`);
                  await new Promise(r => setTimeout(r, 1500)); 
                  await handleSync(batchCount + 1, recentOnly, forceOverrideDates); 
                  return;
@@ -306,24 +306,25 @@
 
              // Check for conflicts AFTER all batches complete
              if (conflictDates.length > 0 && forceOverrideDates.length === 0) {
+                 addLog(`⚠️ Found ${conflictDates.length} user-modified trip(s) - awaiting decision...`);
                  startConflictTimer();
                  return;
              }
 
-             addLog(`Sync Complete! Processed ${newOrders.length} orders total.`);
+             addLog(`✅ Sync Complete! Processed ${newOrders.length} orders total.`);
              showSuccessMsg(`Synced ${newOrders.length} orders!`);
              statusMessage = 'Sync Complete';
              currentBatch = 0; 
              
              const userId = $user?.name || $user?.token;
              if (userId) {
-                addLog('Downloading generated trips...');
+                addLog('⬇️ Downloading generated trips...');
                 await trips.syncFromCloud(userId);
-                addLog('Trips updated locally.');
+                addLog('✅ Trips updated locally.');
              }
 
         } else {
-            addLog('Sync Failed: ' + data.error);
+            addLog('❌ Sync Failed: ' + data.error);
             if (data.error && (data.error.includes('login') || data.error.includes('Session expired'))) {
                 addLog('⚠️ Session expired. Please disconnect and reconnect.');
                 alert('Your HughesNet session expired. Please disconnect and reconnect.');
@@ -333,7 +334,7 @@
             currentBatch = 0;
         }
     } catch (e: any) {
-        addLog('Sync Error: ' + e.message);
+        addLog('❌ Sync Error: ' + e.message);
         if (e.message.includes('JSON')) {
             addLog('❌ Server returned invalid response. Session may have expired.');
             alert('Session error. Please disconnect and reconnect.');
@@ -342,7 +343,7 @@
         statusMessage = 'Sync Failed';
         currentBatch = 0;
     } finally {
-        if (!data || !data.incomplete && !showConflictModal) {
+        if (!data || (!data.incomplete && !showConflictModal)) {
             loading = false;
             statusMessage = 'Sync Now';
         }
@@ -353,7 +354,7 @@
       if (!confirm('Are you sure you want to delete ALL HughesNet trips? This cannot be undone.')) return;
       loading = true;
       statusMessage = 'Clearing...';
-      addLog('Clearing HNS trips...');
+      addLog('🗑️ Clearing HNS trips...');
       try {
           const res = await fetch('/api/hughesnet', {
               method: 'POST',
@@ -362,19 +363,19 @@
           const data = await res.json();
           processServerLogs(data.logs);
 
-          addLog(`Cleared ${data.count} trips.`);
+          addLog(`✅ Cleared ${data.count} trips.`);
           showSuccessMsg(`Cleared ${data.count} trips.`);
           
           const userId = $user?.name || $user?.token;
           if (userId) {
-              addLog('Syncing removal with local database...');
+              addLog('🔄 Syncing removal with local database...');
               await trash.syncFromCloud(userId);
-              addLog('Local trips cleaned up.');
+              addLog('✅ Local trips cleaned up.');
           }
 
           await loadOrders();
       } catch (e: any) {
-          addLog('Clear Error: ' + e.message);
+          addLog('❌ Clear Error: ' + e.message);
       } finally {
           loading = false;
           statusMessage = 'Sync Now';
@@ -390,7 +391,7 @@
       conflictInterval = setInterval(() => {
           conflictTimer--;
           if (conflictTimer <= 0) {
-              // [!code change] Default action is SKIP (cancel override)
+              // Default action is SKIP (preserve user edits)
               cancelOverride();
           }
       }, 1000);
@@ -398,15 +399,14 @@
 
   function confirmOverride() {
       stopConflictTimer();
-      addLog(`Overwriting ${conflictDates.length} modified trips...`);
-      // Re-run sync specifically to target these dates (can use recentOnly=true to speed it up)
+      addLog(`🔄 Force overwriting ${conflictDates.length} user-modified trip(s)...`);
+      // Re-run sync specifically to target these dates
       handleSync(1, true, conflictDates);
   }
 
   function cancelOverride() {
       stopConflictTimer();
-      // [!code change] Updated log message
-      addLog(`Skipped updates for ${conflictDates.length} user-modified trips.`);
+      addLog(`✅ Preserved ${conflictDates.length} user-modified trip(s) (skipped HNS updates)`);
       conflictDates = [];
       loading = false;
       statusMessage = 'Sync Complete';
@@ -643,7 +643,7 @@
              <div class="order-item">
                  <div class="order-main">
                      <span class="order-id">#{order.id}</span>
-                     <span class="order-badge {order.type === 'Install' ? 'blue' : (order.type === 'Upgrade' ? 'green' : 'purple')}">
+                     <span class="order-badge {order.type === 'Install' || order.type === 'Re-Install' ? 'blue' : (order.type === 'Upgrade' ? 'green' : 'purple')}">
                         {order.type || 'Unknown'}
                      </span>
                      {#if order.hasPoleMount}
@@ -701,23 +701,37 @@
 <div class="modal-overlay">
     <div class="modal-content">
         <div class="modal-header">
-            <h3>⚠️ Modifications Detected</h3>
+            <h3>⚠️ User Modifications Detected</h3>
         </div>
         <div class="modal-body">
-            <p>We found <strong>{conflictDates.length}</strong> trip(s) in the last 7 days that you manually edited.</p>
-            <p class="dates-list">
-                {conflictDates.join(', ')}
-            </p>
-            <p>Do you want to overwrite your manual edits with data from HughesNet?</p>
+            <p>Found <strong>{conflictDates.length}</strong> trip(s) you manually edited in the last 7 days:</p>
+            <div class="dates-list">
+                {#each conflictDates as date}
+                    <div class="conflict-date">{date}</div>
+                {/each}
+            </div>
+            <p class="conflict-question">Overwrite your manual changes with HughesNet data?</p>
             
             <div class="timer-bar">
                 <div class="timer-fill" style="width: {(conflictTimer / 30) * 100}%"></div>
             </div>
-            <p class="timer-text">Skipping updates in <strong>{conflictTimer}s</strong>...</p>
+            <p class="timer-text">
+                {#if conflictTimer > 0}
+                    Auto-skipping in <strong>{conflictTimer}s</strong>...
+                {:else}
+                    Preserving your edits...
+                {/if}
+            </p>
         </div>
         <div class="modal-actions">
-            <button class="btn-secondary" on:click={cancelOverride}>Skip (Keep My Edits)</button>
-            <button class="btn-primary" on:click={confirmOverride}>Overwrite</button>
+            <button class="btn-primary safe" on:click={cancelOverride}>
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                Keep My Edits (Skip)
+            </button>
+            <button class="btn-secondary danger" on:click={confirmOverride}>
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                Overwrite with HNS
+            </button>
         </div>
     </div>
 </div>
@@ -943,24 +957,99 @@
   .log-msg.server { color: #60A5FA; } 
   .log-line.muted { color: #4B5563; font-style: italic; }
 
+  .w-4 { width: 16px; }
+  .h-4 { height: 16px; }
+  .mr-2 { margin-right: 8px; }
+
   /* Modal Styles */
   .modal-overlay {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(0,0,0,0.5); z-index: 9999;
       display: flex; align-items: center; justify-content: center;
       backdrop-filter: blur(2px);
+      padding: 16px;
   }
   .modal-content {
-      background: white; width: 90%; max-width: 400px;
+      background: white; width: 100%; max-width: 500px;
       border-radius: 16px; padding: 24px;
       box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
       text-align: center;
   }
-  .modal-header h3 { font-size: 18px; font-weight: 700; color: #111827; margin: 0 0 12px 0; }
-  .modal-body p { font-size: 14px; color: #4B5563; margin-bottom: 12px; }
-  .dates-list { font-family: monospace; background: #F3F4F6; padding: 8px; border-radius: 6px; }
-  .timer-text { font-size: 13px; color: #EA580C; font-weight: 600; margin-top: 8px; }
-  .timer-bar { width: 100%; height: 4px; background: #FED7AA; border-radius: 2px; overflow: hidden; margin: 12px 0; }
-  .timer-fill { height: 100%; background: #EA580C; transition: width 1s linear; }
-  .modal-actions { display: flex; gap: 12px; margin-top: 24px; }
+  .modal-header h3 { font-size: 20px; font-weight: 700; color: #111827; margin: 0 0 16px 0; }
+  .modal-body p { font-size: 14px; color: #4B5563; margin-bottom: 12px; line-height: 1.5; }
+  .dates-list { 
+      background: #FEF3C7; 
+      padding: 12px; 
+      border-radius: 8px; 
+      margin: 12px 0;
+      max-height: 120px;
+      overflow-y: auto;
+  }
+  .conflict-date {
+      background: #FEF3C7;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 13px;
+      color: #92400E;
+      margin: 4px 0;
+      border: 1px solid #FCD34D;
+  }
+  .conflict-question { 
+      font-weight: 600; 
+      color: #DC2626; 
+      margin-top: 16px;
+      font-size: 15px;
+  }
+  .timer-text { 
+      font-size: 13px; 
+      color: #EA580C; 
+      font-weight: 600; 
+      margin-top: 8px; 
+  }
+  .timer-bar { 
+      width: 100%; 
+      height: 6px; 
+      background: #FED7AA; 
+      border-radius: 3px; 
+      overflow: hidden; 
+      margin: 12px 0; 
+  }
+  .timer-fill { 
+      height: 100%; 
+      background: linear-gradient(90deg, #EA580C, #DC2626);
+      transition: width 1s linear; 
+  }
+  .modal-actions { 
+      display: flex; 
+      gap: 12px; 
+      margin-top: 24px;
+      flex-direction: column;
+  }
+
+  @media (min-width: 640px) {
+      .modal-actions {
+          flex-direction: row;
+      }
+  }
+
+  .btn-primary.safe {
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  }
+  .btn-primary.safe:hover {
+      box-shadow: 0 8px 16px rgba(5, 150, 105, 0.3);
+  }
+
+  .btn-secondary.danger {
+      border-color: #DC2626;
+      color: #DC2626;
+  }
+  .btn-secondary.danger:hover {
+      background: #DC2626;
+      color: white;
+  }
+
+  .flex { display: flex; }
+  .items-center { align-items: center; }
+  .gap-2 { gap: 8px; }
 </style>

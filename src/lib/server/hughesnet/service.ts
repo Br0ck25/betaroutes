@@ -502,18 +502,34 @@ export class HughesNetService {
                     const lastSys = new Date(existingTrip.updatedAt || existingTrip.createdAt).getTime();
                     const lastUser = existingTrip.lastModified ? new Date(existingTrip.lastModified).getTime() : 0;
                     
-                    if (lastUser > lastSys - USER_MODIFICATION_BUFFER_MS) {
+                    // FIXED: User modified AFTER system (with buffer to account for timing)
+                    if (lastUser > lastSys + USER_MODIFICATION_BUFFER_MS) {
                         if (forceDates.includes(date)) {
-                            this.log(`  ${date}: Overwriting user modifications (Force Sync)`);
-                        } 
-                        else if (isWithinDays(date, 7)) {
-                            this.log(`  ${date}: Conflict detected. User modified at ${new Date(lastUser).toLocaleTimeString()}.`);
-                            conflicts.push(date);
-                            continue; 
+                            this.log(`  ${date}: ✓ Overwriting user modifications (Force Sync)`);
                         } 
                         else {
-                            this.log(`  ${date}: Skipped (user modified, older than 7 days)`);
-                            continue;
+                            // Check if it's within the last 7 days
+                            const dateObj = parseDateOnly(date);
+                            const now = new Date();
+                            now.setHours(0, 0, 0, 0);
+                            
+                            if (dateObj) {
+                                const targetDate = new Date(dateObj);
+                                targetDate.setHours(0, 0, 0, 0);
+                                const diffDays = Math.floor((now.getTime() - targetDate.getTime()) / (1000 * 60 * 60 * 24));
+                                
+                                if (diffDays <= 7) {
+                                    this.log(`  ${date}: ⚠️ CONFLICT - User edited at ${new Date(lastUser).toLocaleString()}`);
+                                    conflicts.push(date);
+                                    continue;
+                                } else {
+                                    this.log(`  ${date}: ⏭️ Skipped (user modified, older than 7 days)`);
+                                    continue;
+                                }
+                            } else {
+                                this.log(`  ${date}: ⏭️ Skipped (user modified, date parse failed)`);
+                                continue;
+                            }
                         }
                     }
                 }

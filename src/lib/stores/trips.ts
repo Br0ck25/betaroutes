@@ -88,12 +88,15 @@ function createTripsStore() {
                     }
                 }
 
+                const now = new Date().toISOString();
+
                 const trip: TripRecord = {
                     ...tripData,
                     id: tripData.id || crypto.randomUUID(),
                     userId,
-                    createdAt: tripData.createdAt || new Date().toISOString(),
-                    updatedAt: tripData.updatedAt || new Date().toISOString(),
+                    createdAt: tripData.createdAt || now,
+                    updatedAt: tripData.updatedAt || now,
+                    lastModified: now, // Mark as user-created
                     syncStatus: 'pending'
                 } as TripRecord;
 
@@ -134,12 +137,15 @@ function createTripsStore() {
                 if (!existing) throw new Error('Trip not found');
                 if (existing.userId !== userId) throw new Error('Unauthorized');
 
+                const now = new Date().toISOString();
+
                 const updated: TripRecord = {
                     ...existing,
                     ...changes,
                     id,
                     userId,
-                    updatedAt: new Date().toISOString(),
+                    updatedAt: now,
+                    lastModified: now, // CRITICAL: Mark this as user-edited for conflict detection
                     syncStatus: 'pending'
                 };
 
@@ -273,7 +279,7 @@ function createTripsStore() {
                 let deleteCount = 0;
 
                 for (const cloudTrip of cloudTrips) {
-                    // [!code ++] Handle Soft Deletes (Tombstones)
+                    // Handle Soft Deletes (Tombstones)
                     if (cloudTrip.deleted) {
                         const local = await store.get(cloudTrip.id);
                         if (local) {

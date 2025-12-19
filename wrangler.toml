@@ -12,18 +12,16 @@ id = "3fb03d50a94e4b2cb4fc3f54bdfd45d7"
 # ---------------------------------------------------
 [env.production]
 
- [[env.production.durable_objects.bindings]]
- name = "TRIP_INDEX_DO"
- class_name = "TripIndexSQL" # <--- Updated to match new export
- script_name = "trip-index-worker"
+[[env.production.durable_objects.bindings]]
+name = "TRIP_INDEX_DO"
+class_name = "TripIndexSQL"
+script_name = "trip-index-worker"
 
- [[env.production.durable_objects.bindings]]
- name = "PLACES_INDEX_DO"
- class_name = "PlacesIndexSQL" # <--- Updated to match new export
- script_name = "trip-index-worker"
+[[env.production.durable_objects.bindings]]
+name = "PLACES_INDEX_DO"
+class_name = "PlacesIndexSQL"
+script_name = "trip-index-worker"
 
-[env.production.vars]
-# Production KV Namespaces
 [[env.production.kv_namespaces]]
 binding = "BETA_LOGS_KV"
 id = "9551bf35d9cc4f75a5210c52d906da24"
@@ -61,18 +59,16 @@ id = "d395b64dcd0641f5a44d94c5ef5628eb"
 # ---------------------------------------------------
 [env.preview]
 
- [[env.preview.durable_objects.bindings]]
- name = "TRIP_INDEX_DO"
- class_name = "TripIndexSQL" # <--- Updated
- script_name = "trip-index-worker"
+[[env.preview.durable_objects.bindings]]
+name = "TRIP_INDEX_DO"
+class_name = "TripIndexSQL"
+script_name = "trip-index-worker"
 
- [[env.preview.durable_objects.bindings]]
- name = "PLACES_INDEX_DO"
- class_name = "PlacesIndexSQL" # <--- Updated
- script_name = "trip-index-worker" # <--- Fixed (was places-index-worker)
+[[env.preview.durable_objects.bindings]]
+name = "PLACES_INDEX_DO"
+class_name = "PlacesIndexSQL"
+script_name = "trip-index-worker"
 
-[env.preview.vars]
-# Preview KV Namespaces
 [[env.preview.kv_namespaces]]
 binding = "BETA_LOGS_KV"
 id = "babfd9307ecd4a1993a382ebe30c5a16"

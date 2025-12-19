@@ -3,19 +3,18 @@ main = "src/do-worker.ts"
 compatibility_date = "2024-12-05"
 compatibility_flags = ["nodejs_compat"]
 
-# 1. Trip Index DO Definition
+# 1. Trip Index DO Binding
 [[durable_objects.bindings]]
 name = "TRIP_INDEX_DO"
 class_name = "TripIndexSQL"
 
-# 2. Places Index DO Definition
+# 2. Places Index DO Binding
 [[durable_objects.bindings]]
 name = "PLACES_INDEX_DO"
 class_name = "PlacesIndexSQL"
 
 # --- MIGRATIONS ---
 
-# Previous migrations (safe to keep)
 [[migrations]]
 tag = "v1"
 new_classes = ["TripIndexDO"]
@@ -24,7 +23,7 @@ new_classes = ["TripIndexDO"]
 tag = "v2"
 new_classes = ["PlacesIndexDO"]
 
-# [!code fix] Ensure this tag is present to force SQLite
+# Force provisioning of SQLite storage for the new class names
 [[migrations]]
 tag = "v3"
 new_sqlite_classes = ["TripIndexSQL", "PlacesIndexSQL"]

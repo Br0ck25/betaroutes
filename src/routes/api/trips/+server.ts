@@ -275,7 +275,7 @@ export const POST: RequestHandler = async (event) => {
 
 		const now = new Date().toISOString();
 		
-		// [!code ++] FORCE lastModified to mark this as a manual user update
+		// Set lastModified to mark this as a manual user update
 		const trip = {
 			...validData,
 			id,
@@ -304,7 +304,7 @@ export const POST: RequestHandler = async (event) => {
 	}
 };
 
-// [!code ++] ADDED PUT Handler for Updating existing trips
+// PUT Handler for Updating existing trips
 export const PUT: RequestHandler = async (event) => {
 	try {
 		const sessionUser = event.locals.user;
@@ -388,7 +388,7 @@ export const PUT: RequestHandler = async (event) => {
 
 		const now = new Date().toISOString();
 		
-		// [!code ++] CRITICAL: Force lastModified on Edit to trigger conflict detection next sync
+		// CRITICAL: Force lastModified on Edit to trigger conflict detection next sync
 		const trip = {
 			...existingTrip, // Preserve original creation date etc.
 			...validData,    // Apply new edits
