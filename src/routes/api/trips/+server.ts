@@ -36,9 +36,9 @@ const stopSchema = z.object({
 });
 
 const costItemSchema = z.object({
-	id: z.string().optional(), // Added ID support
+	id: z.string().optional(),
 	type: z.string().max(100).optional(),
-	item: z.string().max(100).optional(), // Added item support (for maintenance)
+	item: z.string().max(100).optional(),
 	cost: z.number().optional()
 });
 
@@ -297,6 +297,114 @@ export const POST: RequestHandler = async (event) => {
 		});
 	} catch (err) {
 		console.error('POST /api/trips error', err);
+		return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
+			status: 500,
+			headers: { 'Content-Type': 'application/json' }
+		});
+	}
+};
+
+// [!code ++] ADDED PUT Handler for Updating existing trips
+export const PUT: RequestHandler = async (event) => {
+	try {
+		const sessionUser = event.locals.user;
+		if (!sessionUser) return new Response('Unauthorized', { status: 401 });
+
+		let env: App.Env;
+		try {
+			env = getEnv(event.platform);
+		} catch (e) {
+			return new Response(JSON.stringify({ error: 'Service Unavailable' }), { status: 503 });
+		}
+
+		// Rate Limiting (Same as POST)
+		const sessionsKV = env.BETA_SESSIONS_KV;
+		if (sessionsKV) {
+			const identifier = getClientIdentifier(event.request, event.locals);
+			const authenticated = isAuthenticated(event.locals);
+			const config = authenticated ? RATE_LIMITS.TRIPS_AUTH : RATE_LIMITS.TRIPS_ANON;
+
+			const rateLimitResult = await checkRateLimitEnhanced(
+				sessionsKV,
+				identifier,
+				'trips:write',
+				config.limit,
+				config.windowMs
+			);
+
+			if (!rateLimitResult.allowed) {
+				return new Response(
+					JSON.stringify({
+						error: 'Too many requests.',
+						limit: rateLimitResult.limit,
+						resetAt: rateLimitResult.resetAt
+					}),
+					{ status: 429, headers: { 'Content-Type': 'application/json' } }
+				);
+			}
+		}
+
+		const storageId = sessionUser.name || sessionUser.token;
+		const rawBody = await event.request.json();
+
+		let sanitizedBody;
+		try {
+			sanitizedBody = validateAndSanitizeRequest(rawBody, true);
+		} catch (sanitizeError) {
+			return new Response(
+				JSON.stringify({ error: 'Invalid input data' }),
+				{ status: 400, headers: { 'Content-Type': 'application/json' } }
+			);
+		}
+
+		const parseResult = tripSchema.safeParse(sanitizedBody);
+		if (!parseResult.success) {
+			return new Response(
+				JSON.stringify({
+					error: 'Invalid Data',
+					details: parseResult.error.flatten()
+				}),
+				{ status: 400 }
+			);
+		}
+
+		const svc = makeTripService(
+			env.BETA_LOGS_KV,
+			env.BETA_LOGS_TRASH_KV,
+			env.BETA_PLACES_KV,
+			env.TRIP_INDEX_DO,
+			env.PLACES_INDEX_DO
+		);
+
+		const validData = parseResult.data;
+		if (!validData.id) {
+			return new Response(JSON.stringify({ error: 'Trip ID required for updates' }), { status: 400 });
+		}
+
+		const existingTrip = await svc.get(storageId, validData.id);
+		if (!existingTrip) {
+			return new Response(JSON.stringify({ error: 'Trip not found' }), { status: 404 });
+		}
+
+		const now = new Date().toISOString();
+		
+		// [!code ++] CRITICAL: Force lastModified on Edit to trigger conflict detection next sync
+		const trip = {
+			...existingTrip, // Preserve original creation date etc.
+			...validData,    // Apply new edits
+			userId: storageId,
+			updatedAt: now,
+			lastModified: now // <--- Tag this update as user-initiated
+		};
+
+		await svc.put(trip);
+
+		return new Response(JSON.stringify(trip), {
+			status: 200,
+			headers: { 'Content-Type': 'application/json' }
+		});
+	} catch (err) {
+		console.error('PUT /api/trips error', err);
 		return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
 			status: 500,
 			headers: { 'Content-Type': 'application/json' }

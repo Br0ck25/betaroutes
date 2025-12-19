@@ -1,19 +1,29 @@
 // src/lib/server/hughesnet/utils.ts
-import { RESYNC_WINDOW_MS } from './constants';
+import { RESYNC_WINDOW_MS, RESYNC_WINDOW_DAYS } from './constants';
 import type { SyncConfig, OrderData } from './types';
 
-// --- Date Helpers ---
+// --- Date & Time Helpers ---
 
-export function parseDateOnly(dateStr: string): Date | null {
+export function parseAnyDate(dateStr: string): Date | null {
     if (!dateStr) return null;
-    const m = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
-    if (!m) return null;
-    let y = m[3];
-    if (y.length === 2) y = '20' + y;
-    return new Date(parseInt(y), parseInt(m[1]) - 1, parseInt(m[2]));
+    const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoMatch) {
+        return new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
+    }
+    const slashMatch = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if (slashMatch) {
+        let y = slashMatch[3];
+        if (y.length === 2) y = '20' + y;
+        return new Date(parseInt(y), parseInt(slashMatch[1]) - 1, parseInt(slashMatch[2]));
+    }
+    return null;
 }
 
-export function toIsoDate(dateStr: string) {
+export function parseDateOnly(dateStr: string): Date | null {
+    return parseAnyDate(dateStr);
+}
+
+export function toIsoDate(dateStr: string): string | null {
     const d = parseDateOnly(dateStr);
     if (!d) return null;
     const y = d.getFullYear();
@@ -51,7 +61,23 @@ export function formatTimestamp(ts: number): string {
     return minutesToTime(d.getHours() * 60 + d.getMinutes());
 }
 
-// --- Validation & Business Logic Helpers ---
+export function isWithinDays(dateStr: string, days: number): boolean {
+    const d = parseAnyDate(dateStr);
+    if (!d) return false;
+    
+    const now = new Date();
+    now.setHours(0,0,0,0);
+    
+    const target = new Date(d);
+    target.setHours(0,0,0,0);
+    
+    const diffTime = now.getTime() - target.getTime();
+    const diffDays = diffTime / (1000 * 3600 * 24);
+    
+    return diffDays <= days; 
+}
+
+// --- Address & Validation Helpers ---
 
 export function validateSyncConfig(config: SyncConfig): void {
     const { installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge, wifiExtenderPay, voipPay, driveTimeBonus } = config;
@@ -82,6 +108,8 @@ export function buildAddress(o: OrderData): string {
     return parts.join(', ');
 }
 
+// --- Sync Status Helpers ---
+
 export function determineOrderSyncStatus(order: OrderData): { syncStatus: 'complete' | 'incomplete' | 'future'; needsResync: boolean; } {
     const now = Date.now();
     if (order.departureCompleteTimestamp) return { syncStatus: 'complete', needsResync: false };
@@ -99,10 +127,6 @@ export function checkIncompleteToComplete(oldOrder: OrderData | undefined, newOr
     if (!oldOrder.departureIncompleteTimestamp) return false;
     if (!oldOrder.lastSyncTimestamp) return false;
     const daysSinceSync = (Date.now() - oldOrder.lastSyncTimestamp) / (1000 * 60 * 60 * 24);
-    if (daysSinceSync > 7) return false; // Hardcoded 7 days check from original
+    if (daysSinceSync > RESYNC_WINDOW_DAYS) return false;
     return true;
-}
-
-export function shouldMarkAsRemoved(order: OrderData): boolean {
-    return !!(order.arrivalTimestamp && order.departureIncompleteTimestamp);
 }
