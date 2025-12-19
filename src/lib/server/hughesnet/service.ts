@@ -12,7 +12,7 @@ import type { OrderData, OrderWithMeta, Trip, TripStop, SupplyItem, SyncConfig, 
 const DISCOVERY_GAP_MAX_SIZE = 50;
 const DISCOVERY_MAX_FAILURES = 50;
 const DISCOVERY_MAX_CHECKS = 100;
-const USER_MODIFICATION_BUFFER_MS = 150000; // 15 seconds
+const USER_MODIFICATION_BUFFER_MS = 1000; // 1 second
 const MIN_JOB_DURATION_MINS = 10;
 const MAX_JOB_DURATION_MINS = 600;
 
@@ -36,13 +36,30 @@ const RESYNC_WINDOW_MS = RESYNC_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
 // --- HELPERS ---
 
-function parseDateOnly(dateStr: string): Date | null {
+// [!code ++] Robust Date Parser
+function parseAnyDate(dateStr: string): Date | null {
     if (!dateStr) return null;
-    const m = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
-    if (!m) return null;
-    let y = m[3];
-    if (y.length === 2) y = '20' + y;
-    return new Date(parseInt(y), parseInt(m[1]) - 1, parseInt(m[2]));
+    
+    // Try YYYY-MM-DD first (ISO format used in keys/db)
+    const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoMatch) {
+        return new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
+    }
+
+    // Try MM/DD/YYYY (HughesNet format)
+    const slashMatch = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if (slashMatch) {
+        let y = slashMatch[3];
+        if (y.length === 2) y = '20' + y;
+        return new Date(parseInt(y), parseInt(slashMatch[1]) - 1, parseInt(slashMatch[2]));
+    }
+
+    return null;
+}
+
+// Wrapper for existing calls, using the robust parser
+function parseDateOnly(dateStr: string): Date | null {
+    return parseAnyDate(dateStr);
 }
 
 function toIsoDate(dateStr: string) {
@@ -835,6 +852,7 @@ export class HughesNetService {
             }
 
             // STAGE 3: CREATE TRIPS
+            // Refresh session before trip creation
             const ordersByDate = this.groupOrdersByDate(orderDb);
             let sortedDates = Object.keys(ordersByDate).sort();
 
@@ -850,7 +868,8 @@ export class HughesNetService {
                     // Always include dates requested for force update
                     if (forceDates.includes(dateStr)) return true;
 
-                    const d = parseDateOnly(dateStr);
+                    // [!code change] Use robust date parser to handle YYYY-MM-DD
+                    const d = parseAnyDate(dateStr);
                     // Keep if date is valid AND (is today/future OR is within last 7 days)
                     return d && d >= cutoffDate;
                 });
@@ -893,8 +912,8 @@ export class HughesNetService {
                     const lastSys = new Date(existingTrip.updatedAt || existingTrip.createdAt).getTime();
                     const lastUser = existingTrip.lastModified ? new Date(existingTrip.lastModified).getTime() : 0;
                     
-                    // Check if modified by user
-                    if (lastUser > lastSys + USER_MODIFICATION_BUFFER_MS) {
+                    // Check if modified by user (using the 1s buffer)
+                    if (lastUser > lastSys - USER_MODIFICATION_BUFFER_MS) {
                         
                         // 1. If explicit force requested, allow it
                         if (forceDates.includes(date)) {
@@ -955,7 +974,8 @@ export class HughesNetService {
 
     // [!code ++] Helper for date check
     private isWithinDays(dateStr: string, days: number): boolean {
-        const d = parseDateOnly(dateStr);
+        // [!code change] Use robust parser here too
+        const d = parseAnyDate(dateStr);
         if (!d) return false;
         
         const now = new Date();
