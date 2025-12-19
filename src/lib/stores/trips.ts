@@ -319,6 +319,66 @@ function createTripsStore() {
             }
         },
 
+        async syncPendingToCloud(userId: string) {
+            try {
+                if (!navigator.onLine) return { synced: 0, failed: 0 };
+                
+                console.log('⬆️ Syncing pending local changes to cloud...');
+                
+                const db = await getDB();
+                const tx = db.transaction('trips', 'readonly');
+                const index = tx.objectStore('trips').index('userId');
+                const allTrips = await index.getAll(userId);
+                await tx.done;
+                
+                // Find trips with pending sync status
+                const pendingTrips = allTrips.filter(t => t.syncStatus === 'pending');
+                
+                if (pendingTrips.length === 0) {
+                    console.log('✅ No pending changes to sync');
+                    return { synced: 0, failed: 0 };
+                }
+                
+                console.log(`📤 Uploading ${pendingTrips.length} pending trip(s)...`);
+                
+                let synced = 0;
+                let failed = 0;
+                
+                for (const trip of pendingTrips) {
+                    try {
+                        // Use PUT if trip already exists in cloud, POST if new
+                        const method = trip.createdAt !== trip.updatedAt ? 'PUT' : 'POST';
+                        const response = await fetch('/api/trips', {
+                            method,
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(trip)
+                        });
+                        
+                        if (response.ok) {
+                            // Mark as synced in local DB
+                            const updateTx = db.transaction('trips', 'readwrite');
+                            const updatedTrip = { ...trip, syncStatus: 'synced' as const };
+                            await updateTx.objectStore('trips').put(updatedTrip);
+                            await updateTx.done;
+                            synced++;
+                        } else {
+                            console.error('Failed to sync trip:', trip.id, await response.text());
+                            failed++;
+                        }
+                    } catch (err) {
+                        console.error('Error syncing trip:', trip.id, err);
+                        failed++;
+                    }
+                }
+                
+                console.log(`✅ Synced ${synced} trips, ${failed} failed`);
+                return { synced, failed };
+            } catch (err) {
+                console.error('❌ Failed to sync pending changes:', err);
+                return { synced: 0, failed: 0 };
+            }
+        },
+
         async migrateOfflineTrips(tempUserId: string, realUserId: string) {
             if (!tempUserId || !realUserId || tempUserId === realUserId) return;
             const db = await getDB();

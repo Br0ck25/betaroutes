@@ -246,6 +246,27 @@
     if (batchCount === 1) {
         addLog(recentOnly ? `🚀 Starting Quick Sync (Last 7 Days)...` : `📡 Starting Full History Scan...`);
         showConsole = true;
+        
+        // CRITICAL: Sync local changes to cloud BEFORE HughesNet sync
+        // This ensures any manual edits are uploaded so conflict detection works
+        const userId = $user?.name || $user?.token;
+        if (userId) {
+            addLog('⬆️ Uploading local changes first...');
+            try {
+                // Force sync any pending local changes to cloud
+                const result = await trips.syncPendingToCloud(userId);
+                if (result.synced > 0) {
+                    addLog(`✅ Uploaded ${result.synced} local change(s) to cloud`);
+                } else {
+                    addLog('✅ No pending local changes');
+                }
+                if (result.failed > 0) {
+                    addLog(`⚠️ Warning: ${result.failed} change(s) failed to upload`);
+                }
+            } catch (e: any) {
+                addLog('⚠️ Warning: Could not sync local changes - ' + e.message);
+            }
+        }
     } else {
         addLog(`📦 Continuing Sync (Batch ${batchCount})...`);
     }

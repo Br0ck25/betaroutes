@@ -499,35 +499,29 @@ export class HughesNetService {
                 const existingTrip = await tripService.get(userId, tripId);
                 
                 if (existingTrip) {
-                    const lastSys = new Date(existingTrip.updatedAt || existingTrip.createdAt).getTime();
-                    const lastUser = existingTrip.lastModified ? new Date(existingTrip.lastModified).getTime() : 0;
-                    
-                    // FIXED: User modified AFTER system (with buffer to account for timing)
-                    if (lastUser > lastSys + USER_MODIFICATION_BUFFER_MS) {
-                        if (forceDates.includes(date)) {
-                            this.log(`  ${date}: ✓ Overwriting user modifications (Force Sync)`);
-                        } 
-                        else {
-                            // Check if it's within the last 7 days
-                            const dateObj = parseDateOnly(date);
+                    // Conflict Detection: Check if user has manually edited this trip
+                    // HughesNet-created trips don't have lastModified set
+                    // Only user edits via the UI/API set lastModified
+                    if (existingTrip.lastModified) {
+                        // Check if it's within the last 7 days
+                        const dateObj = parseDateOnly(date);
+                        if (dateObj) {
                             const now = new Date();
                             now.setHours(0, 0, 0, 0);
+                            const targetDate = new Date(dateObj);
+                            targetDate.setHours(0, 0, 0, 0);
+                            const diffDays = Math.floor((now.getTime() - targetDate.getTime()) / (1000 * 60 * 60 * 24));
                             
-                            if (dateObj) {
-                                const targetDate = new Date(dateObj);
-                                targetDate.setHours(0, 0, 0, 0);
-                                const diffDays = Math.floor((now.getTime() - targetDate.getTime()) / (1000 * 60 * 60 * 24));
-                                
-                                if (diffDays <= 7) {
-                                    this.log(`  ${date}: ⚠️ CONFLICT - User edited at ${new Date(lastUser).toLocaleString()}`);
-                                    conflicts.push(date);
-                                    continue;
+                            if (diffDays <= 7) {
+                                if (forceDates.includes(date)) {
+                                    this.log(`  ${date}: ✓ Force overwriting user modifications (User Approved)`);
                                 } else {
-                                    this.log(`  ${date}: ⏭️ Skipped (user modified, older than 7 days)`);
+                                    this.log(`  ${date}: ⚠️ CONFLICT - User edited at ${new Date(existingTrip.lastModified).toLocaleString()}`);
+                                    conflicts.push(date);
                                     continue;
                                 }
                             } else {
-                                this.log(`  ${date}: ⏭️ Skipped (user modified, date parse failed)`);
+                                this.log(`  ${date}: ⏭️ Skipped (user modified, older than 7 days)`);
                                 continue;
                             }
                         }
