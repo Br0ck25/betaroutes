@@ -15,8 +15,9 @@
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
 
   // Svelte 5 Props using Runes
-  let { googleApiKey = '', loading = false } = $props();
-   
+  // [!code ++] Added 'trip' prop to allow editing existing trips directly
+  let { googleApiKey = '', loading = false, trip = null } = $props();
+    
   const settings = get(userSettings);
   const API_KEY = googleApiKey || 'dummy_key';
 
@@ -24,30 +25,41 @@
   let date = $state(new Date().toISOString().split('T')[0]);
   let startTime = $state('');
   let endTime = $state('');
-   
+    
   let startAddress = $state(settings.startLocation || storage.getSetting('defaultStartAddress') || '');
   let endAddress = $state(settings.endLocation || storage.getSetting('defaultEndAddress') || '');
-   
+    
   // Coordinates State
   let startLocation = $state<LatLng | undefined>(undefined);
   let endLocation = $state<LatLng | undefined>(undefined);
-   
+    
   let mpg = $state(settings.defaultMPG ?? storage.getSetting('defaultMPG') ?? 25);
   let gasPrice = $state(settings.defaultGasPrice ?? storage.getSetting('defaultGasPrice') ?? 3.5);
   let distanceUnit = $state(settings.distanceUnit || 'mi');
-   
+    
   // Destinations State
   let destinations = $state<Destination[]>([{ address: '', earnings: 0 }]);
   let notes = $state('');
+
+  // [!code ++] Financials State (Runes)
+  let supplies = $state<{ id: string; type: string; cost: number }[]>([]);
+  let maintenance = $state<{ id: string; item: string; cost: number }[]>([]);
+  let showFinancials = $state(true);
 
   // --- Calculation State (Runes) ---
   let calculating = $state(false);
   let calculated = $state(false);
   let calculationError = $state('');
-   
+    
   let totalMileage = $state(0);
   let totalTime = $state('');
   let fuelCost = $state(0);
+  
+  // [!code ++] Computed Costs
+  let suppliesCost = $derived(supplies.reduce((sum, item) => sum + (Number(item.cost) || 0), 0));
+  let maintenanceCost = $derived(maintenance.reduce((sum, item) => sum + (Number(item.cost) || 0), 0));
+  
+  // [!code change] Net Profit now subtracts supplies and maintenance
   let netProfit = $state(0);
 
   // --- Auto-Calculation Effect ---
@@ -86,6 +98,20 @@
     }
   }
 
+  // [!code ++] Financial Handlers
+  function addSupply() {
+      supplies = [...supplies, { id: crypto.randomUUID(), type: '', cost: 0 }];
+  }
+  function removeSupply(index: number) {
+      supplies = supplies.filter((_, i) => i !== index);
+  }
+  function addMaintenance() {
+      maintenance = [...maintenance, { id: crypto.randomUUID(), item: '', cost: 0 }];
+  }
+  function removeMaintenance(index: number) {
+      maintenance = maintenance.filter((_, i) => i !== index);
+  }
+
   async function handleCalculate(silent = false) {
     if (!startAddress) {
         if (!silent) toasts.error("Please enter a start address.");
@@ -116,8 +142,19 @@
         );
 
         totalTime = totals.totalTime || '';
-        fuelCost = totals.fuelCost || 0;
-        netProfit = totals.netProfit || 0;
+        
+        // [!code change] Respect existing fuel cost if editing a sync trip, otherwise calc
+        if (trip && trip.fuelCost && !startLocation) {
+             // Keep existing fuel cost logic if simple edit
+             fuelCost = trip.fuelCost;
+        } else {
+             fuelCost = totals.fuelCost || 0;
+        }
+
+        // [!code change] Net Profit Calculation including supplies
+        const grossEarnings = destsCopy.reduce((acc: number, d: Destination) => acc + (Number(d.earnings) || 0), 0);
+        netProfit = grossEarnings - (fuelCost + suppliesCost + maintenanceCost);
+        
         calculated = true;
 
         if (!silent) toasts.success("Route calculated successfully!");
@@ -207,28 +244,50 @@
     if (draft.gasPrice) gasPrice = draft.gasPrice;
     if (draft.destinations && Array.isArray(draft.destinations)) destinations = draft.destinations;
     if (draft.notes) notes = draft.notes;
+    
+    // [!code ++] Load Supplies from Draft/Trip
+    // Check both 'suppliesItems' (internal) and 'supplyItems' (HNS Sync format)
+    if (draft.suppliesItems && Array.isArray(draft.suppliesItems)) {
+        supplies = draft.suppliesItems;
+    } else if ((draft as any).supplyItems && Array.isArray((draft as any).supplyItems)) {
+        supplies = (draft as any).supplyItems;
+    }
+
+    if (draft.maintenanceItems && Array.isArray(draft.maintenanceItems)) maintenance = draft.maintenanceItems;
   }
 
   function saveDraft() {
     const draftData: Partial<Trip> = { 
       date, startTime, endTime, startAddress, endAddress, 
-      startLocation, endLocation, destinations, mpg, gasPrice, notes 
+      startLocation, endLocation, destinations, mpg, gasPrice, notes,
+      suppliesItems: supplies, // [!code ++] Save supplies
+      maintenanceItems: maintenance // [!code ++] Save maintenance
     };
     draftTrip.save(draftData);
   }
 
   onMount(() => {
-    const rawDraft = draftTrip.load();
-    if (rawDraft && confirm('Resume your last unsaved trip?')) {
-        loadDraft(rawDraft as Partial<Trip>);
+    // [!code ++] Support loading trip via prop (Edit Mode)
+    if (trip) {
+        loadDraft(trip);
+        // If editing a saved trip, calculate totals immediately
+        if (trip.totalMiles) totalMileage = trip.totalMiles;
+        if (trip.fuelCost) fuelCost = trip.fuelCost;
+        // Don't ask to resume draft if we are explicitly editing a trip
+    } else {
+        const rawDraft = draftTrip.load();
+        if (rawDraft && confirm('Resume your last unsaved trip?')) {
+            loadDraft(rawDraft as Partial<Trip>);
+        }
     }
+    
     const interval = setInterval(saveDraft, 5000);
     return () => clearInterval(interval);
   });
 </script>
 
 <div class="max-w-4xl mx-auto p-4 md:p-6">
-  <h2 class="text-2xl font-bold mb-6">Plan Your Trip</h2>
+  <h2 class="text-2xl font-bold mb-6">{trip ? 'Edit Trip' : 'Plan Your Trip'}</h2>
   
   <TripDebug />
 
@@ -349,16 +408,60 @@
       </div>
     </div>
 
+    <div class="border-t border-gray-100 pt-4">
+        <div class="flex justify-between items-center mb-4">
+             <label class="block font-semibold text-sm text-gray-700">Expenses & Supplies</label>
+             <button type="button" class="text-sm text-blue-600" on:click={() => showFinancials = !showFinancials}>
+                 {showFinancials ? 'Hide' : 'Show'}
+             </button>
+        </div>
+
+        {#if showFinancials}
+             <div transition:slide class="space-y-4 bg-gray-50 p-4 rounded-lg">
+                 <div>
+                     <div class="flex justify-between items-center mb-2">
+                         <span class="text-xs font-semibold text-gray-500 uppercase">Supplies (Pole, Concrete)</span>
+                         <button type="button" on:click={addSupply} class="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100">+ Add</button>
+                     </div>
+                     {#each supplies as item, i}
+                         <div class="flex gap-2 mb-2 items-center">
+                             <input type="text" placeholder="Item Type" bind:value={item.type} class="w-full p-2 text-sm border rounded" />
+                             <input type="number" placeholder="$" step="0.01" bind:value={item.cost} class="w-24 p-2 text-sm border rounded" />
+                             <button type="button" on:click={() => removeSupply(i)} class="text-red-400 hover:text-red-600">✕</button>
+                         </div>
+                     {/each}
+                     {#if supplies.length > 0}
+                        <div class="text-right text-xs text-gray-600 font-medium">Subtotal: ${suppliesCost.toFixed(2)}</div>
+                     {/if}
+                 </div>
+
+                 <div>
+                     <div class="flex justify-between items-center mb-2">
+                         <span class="text-xs font-semibold text-gray-500 uppercase">Vehicle / Other</span>
+                         <button type="button" on:click={addMaintenance} class="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100">+ Add</button>
+                     </div>
+                     {#each maintenance as item, i}
+                         <div class="flex gap-2 mb-2 items-center">
+                             <input type="text" placeholder="Description" bind:value={item.item} class="w-full p-2 text-sm border rounded" />
+                             <input type="number" placeholder="$" step="0.01" bind:value={item.cost} class="w-24 p-2 text-sm border rounded" />
+                             <button type="button" on:click={() => removeMaintenance(i)} class="text-red-400 hover:text-red-600">✕</button>
+                         </div>
+                     {/each}
+                 </div>
+             </div>
+        {/if}
+    </div>
+
     <div>
       <label class="block font-semibold mb-2 text-sm text-gray-700">Notes</label>
       {#if loading}
-         <Skeleton height="100px" className="rounded-lg" />
+          <Skeleton height="100px" className="rounded-lg" />
       {:else}
-         <textarea 
-           bind:value={notes} 
-           rows="3" 
-           class="w-full p-3 text-base border-gray-300 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
-         ></textarea>
+          <textarea 
+            bind:value={notes} 
+            rows="3" 
+            class="w-full p-3 text-base border-gray-300 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
+          ></textarea>
       {/if}
     </div>
   </div>
