@@ -47,18 +47,49 @@ export class TripIndexDO {
             );
         `);
 
-        // 2. Trip Migration Logic (Legacy KV -> SQLite)
+        // 2. Safe Trip Migration Logic (Legacy KV -> SQLite)
         this.state.blockConcurrencyWhile(async () => {
-            const legacyTrips = await this.state.storage.get<TripSummary[]>("trips");
-            if (legacyTrips && Array.isArray(legacyTrips) && legacyTrips.length > 0) {
-                const stmt = this.state.storage.sql.prepare(`
-                    INSERT OR REPLACE INTO trips (id, date, createdAt, data) 
-                    VALUES (?, ?, ?, ?)
-                `);
-                for (const trip of legacyTrips) {
-                    stmt.run(trip.id, trip.date || "", trip.createdAt || "", JSON.stringify(trip));
+            try {
+                // Attempt to load legacy data.
+                const legacyTrips = await this.state.storage.get<TripSummary[]>("trips");
+
+                if (legacyTrips && Array.isArray(legacyTrips) && legacyTrips.length > 0) {
+                    console.log(`[TripIndexDO] Migrating ${legacyTrips.length} legacy trips to SQLite...`);
+                    
+                    const stmt = this.state.storage.sql.prepare(`
+                        INSERT OR REPLACE INTO trips (id, date, createdAt, data) 
+                        VALUES (?, ?, ?, ?)
+                    `);
+
+                    // Process in chunks to manage memory and transaction log size
+                    const CHUNK_SIZE = 100;
+                    for (let i = 0; i < legacyTrips.length; i += CHUNK_SIZE) {
+                        const chunk = legacyTrips.slice(i, i + CHUNK_SIZE);
+                        
+                        this.state.storage.sql.exec("BEGIN TRANSACTION");
+                        try {
+                            for (const trip of chunk) {
+                                stmt.run(
+                                    trip.id, 
+                                    trip.date || "", 
+                                    trip.createdAt || "", 
+                                    JSON.stringify(trip)
+                                );
+                            }
+                            this.state.storage.sql.exec("COMMIT");
+                        } catch (err) {
+                            this.state.storage.sql.exec("ROLLBACK");
+                            throw err; // Re-throw to trigger the outer catch
+                        }
+                    }
+
+                    // Only delete legacy data if migration completed successfully
+                    await this.state.storage.delete("trips");
+                    console.log("[TripIndexDO] Migration complete.");
                 }
-                await this.state.storage.delete("trips");
+            } catch (err) {
+                // Log the error but DO NOT crash the worker. 
+                console.error("[TripIndexDO] Startup Migration Failed (Recovered):", err);
             }
         });
     }
@@ -68,6 +99,15 @@ export class TripIndexDO {
         const path = url.pathname;
 
         try {
+            // Helper for safely parsing JSON
+            const parseBody = async <T>() => {
+                try {
+                    return await request.json() as T;
+                } catch {
+                    throw new Error("INVALID_JSON");
+                }
+            };
+
             // --- TRIP OPERATIONS ---
 
             if (path === "/list") {
@@ -86,10 +126,9 @@ export class TripIndexDO {
 
                 const cursor = this.state.storage.sql.exec(query, ...params);
                 
-                // Get total count
+                // Get total count (Typed safely)
                 const countRes = this.state.storage.sql.exec("SELECT COUNT(*) as total FROM trips");
-                // @ts-ignore
-                const total = countRes.one().total as number;
+                const total = (countRes.one() as { total: number }).total;
 
                 const trips = [];
                 for (const row of cursor) {
@@ -107,20 +146,30 @@ export class TripIndexDO {
             }
 
             if (path === "/migrate") {
-                const trips = await request.json() as TripSummary[];
+                const trips = await parseBody<TripSummary[]>();
                 const stmt = this.state.storage.sql.prepare(`
                     INSERT OR REPLACE INTO trips (id, date, createdAt, data) 
                     VALUES (?, ?, ?, ?)
                 `);
-                for (const trip of trips) {
-                    stmt.run(trip.id, trip.date || "", trip.createdAt || "", JSON.stringify(trip));
+                
+                // Wrap bulk inserts in a transaction for performance
+                this.state.storage.sql.exec("BEGIN TRANSACTION");
+                try {
+                    for (const trip of trips) {
+                        stmt.run(trip.id, trip.date || "", trip.createdAt || "", JSON.stringify(trip));
+                    }
+                    this.state.storage.sql.exec("COMMIT");
+                } catch (err) {
+                    this.state.storage.sql.exec("ROLLBACK");
+                    throw err;
                 }
                 return new Response("OK");
             }
 
             if (path === "/put") {
-                const trip = await request.json() as TripSummary;
-                if (!trip || !trip.id) return new Response("Invalid Data", { status: 400 });
+                const trip = await parseBody<TripSummary>();
+                // Explicit validation
+                if (!trip || !trip.id) return new Response("Invalid Data: Missing ID", { status: 400 });
 
                 this.state.storage.sql.exec(`
                     INSERT OR REPLACE INTO trips (id, date, createdAt, data)
@@ -131,7 +180,9 @@ export class TripIndexDO {
             }
 
             if (path === "/delete") {
-                const { id } = await request.json() as { id: string };
+                const { id } = await parseBody<{ id: string }>();
+                if (!id) return new Response("Missing ID", { status: 400 });
+
                 this.state.storage.sql.exec("DELETE FROM trips WHERE id = ?", id);
                 return new Response("OK");
             }
@@ -151,8 +202,8 @@ export class TripIndexDO {
             }
 
             if (path === "/expenses/put") {
-                const item = await request.json() as ExpenseRecord;
-                if (!item || !item.id) return new Response("Invalid Data", { status: 400 });
+                const item = await parseBody<ExpenseRecord>();
+                if (!item || !item.id) return new Response("Invalid Data: Missing ID", { status: 400 });
 
                 this.state.storage.sql.exec(`
                     INSERT OR REPLACE INTO expenses (id, date, category, createdAt, data)
@@ -163,28 +214,40 @@ export class TripIndexDO {
             }
 
             if (path === "/expenses/delete") {
-                const { id } = await request.json() as { id: string };
+                const { id } = await parseBody<{ id: string }>();
+                if (!id) return new Response("Missing ID", { status: 400 });
+
                 this.state.storage.sql.exec("DELETE FROM expenses WHERE id = ?", id);
                 return new Response("OK");
             }
 
             if (path === "/expenses/migrate") {
-                const items = await request.json() as ExpenseRecord[];
+                const items = await parseBody<ExpenseRecord[]>();
                 const stmt = this.state.storage.sql.prepare(`
                     INSERT OR REPLACE INTO expenses (id, date, category, createdAt, data) 
                     VALUES (?, ?, ?, ?, ?)
                 `);
-                for (const item of items) {
-                    stmt.run(item.id, item.date, item.category, item.createdAt, JSON.stringify(item));
+
+                // Wrap bulk inserts in a transaction
+                this.state.storage.sql.exec("BEGIN TRANSACTION");
+                try {
+                    for (const item of items) {
+                        stmt.run(item.id, item.date, item.category, item.createdAt, JSON.stringify(item));
+                    }
+                    this.state.storage.sql.exec("COMMIT");
+                } catch (err) {
+                    this.state.storage.sql.exec("ROLLBACK");
+                    throw err;
                 }
+
                 await this.state.storage.put("expenses_migrated", true);
                 return new Response("OK");
             }
 
             if (path === "/expenses/status") {
                 const countRes = this.state.storage.sql.exec("SELECT COUNT(*) as c FROM expenses");
-                // @ts-ignore
-                const count = countRes.one().c as number;
+                // Typed safely
+                const count = (countRes.one() as { c: number }).c;
                 const migrated = await this.state.storage.get("expenses_migrated");
                 return new Response(JSON.stringify({ 
                     needsMigration: !migrated && count === 0 
@@ -194,7 +257,9 @@ export class TripIndexDO {
             // --- BILLING COUNTERS ---
 
             if (path === "/billing/check-increment") {
-                const { monthKey, limit } = await request.json() as { monthKey: string, limit: number };
+                const { monthKey, limit } = await parseBody<{ monthKey: string, limit: number }>();
+                if (!monthKey || typeof limit !== 'number') return new Response("Invalid Payload", { status: 400 });
+
                 const key = `count:${monthKey}`;
                 const current = await this.state.storage.get<number>(key) || 0;
                 
@@ -208,7 +273,9 @@ export class TripIndexDO {
             }
 
             if (path === "/billing/decrement") {
-                const { monthKey } = await request.json() as { monthKey: string };
+                const { monthKey } = await parseBody<{ monthKey: string }>();
+                if (!monthKey) return new Response("Invalid Payload", { status: 400 });
+
                 const key = `count:${monthKey}`;
                 const current = await this.state.storage.get<number>(key) || 0;
                 const newCount = Math.max(0, current - 1);
@@ -218,8 +285,17 @@ export class TripIndexDO {
 
             return new Response("Not Found", { status: 404 });
 
-        } catch (err) {
+        } catch (err: any) {
             console.error("[TripIndexDO] Error:", err);
+            
+            // Handle specific errors for better client debugging
+            if (err.message === "INVALID_JSON") {
+                return new Response("Invalid JSON Body", { status: 400 });
+            }
+            if (err.message && err.message.includes("constraint")) {
+                return new Response(JSON.stringify({ error: "Conflict: Data constraint violation" }), { status: 409 });
+            }
+            
             return new Response(JSON.stringify({ error: "Internal Server Error" }), { status: 500 });
         }
     }

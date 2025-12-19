@@ -4,30 +4,27 @@ import { HughesNetService } from '$lib/server/hughesnet/service';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, platform, locals }) => {
-    // Check for required bindings
     if (!platform?.env?.BETA_HUGHESNET_KV || !platform?.env?.TRIP_INDEX_DO) {
         return json({ success: false, error: 'Database configuration missing (KV or DO)' }, { status: 500 });
     }
 
     try {
         const body = await request.json();
-        // Resolve User ID
         const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
         const settingsId = locals.user?.id;
 
         console.log(`[API] HughesNet Action: ${body.action} for ${userId}`);
 
-        // Initialize Service with your specific environment bindings
         const service = new HughesNetService(
-            platform.env.BETA_HUGHESNET_KV,           // 1. Main DB
-            platform.env.HNS_ENCRYPTION_KEY,         // 2. Encryption
-            platform.env.BETA_LOGS_KV,               // 3. Logs KV
-            platform.env.BETA_LOGS_TRASH_KV,         // 4. Trash
-            platform.env.BETA_USER_SETTINGS_KV,      // 5. Settings
-            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY,// 6. Google Maps Key
-            platform.env.BETA_DIRECTIONS_KV,         // 7. Directions Cache
-            platform.env.BETA_LOGS_KV,               // 8. Trip Storage (Using LOGS_KV per config)
-            platform.env.TRIP_INDEX_DO               // 9. Durable Object Index
+            platform.env.BETA_HUGHESNET_KV, 
+            platform.env.HNS_ENCRYPTION_KEY,
+            platform.env.BETA_LOGS_KV,
+            platform.env.BETA_LOGS_TRASH_KV,
+            platform.env.BETA_USER_SETTINGS_KV,
+            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY,
+            platform.env.BETA_DIRECTIONS_KV,
+            platform.env.BETA_LOGS_KV,
+            platform.env.TRIP_INDEX_DO
         );
 
         if (body.action === 'save_settings') {
@@ -64,10 +61,9 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
             const voipPay = Number(body.voipPay) || 0;
             const driveTimeBonus = Number(body.driveTimeBonus) || 0; 
             const skipScan = body.skipScan === true;
-            const recentOnly = body.recentOnly === true; // [!code ++] Extract param
+            const recentOnly = body.recentOnly === true;
+            const forceDates = Array.isArray(body.forceDates) ? body.forceDates : []; // [!code ++] Extract forceDates
 
-            // Note: Times (installTime, repairTime) are saved via 'save_settings' 
-            // and read from KV during sync generation inside the service.
             const result = await service.sync(
                 userId, 
                 settingsId, 
@@ -81,13 +77,15 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
                 voipPay,
                 driveTimeBonus,
                 skipScan,
-                recentOnly // [!code ++] Pass param
+                recentOnly,
+                forceDates // [!code ++] Pass param
             );
             
             return json({ 
                 success: true, 
                 orders: result.orders, 
                 incomplete: result.incomplete, 
+                conflicts: result.conflicts, // [!code ++] Return conflicts
                 logs: service.logs 
             });
         }

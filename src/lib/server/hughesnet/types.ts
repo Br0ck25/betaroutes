@@ -89,13 +89,14 @@ export interface SyncConfig {
     poleCharge: number;
     wifiExtenderPay: number;
     voipPay: number;
-    driveTimeBonus: number; // [!code ++] Changed from adminBonus
+    driveTimeBonus: number; 
 }
 
 // Type for sync result
 export interface SyncResult {
     orders: OrderData[];
     incomplete: boolean;
+    conflicts?: string[]; // [!code ++] Added conflicts array
 }
 
 // Issue #1: Type for distributed lock

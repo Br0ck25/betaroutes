@@ -430,7 +430,8 @@ export class HughesNetService {
         voipPay: number,
         driveTimeBonus: number, 
         skipScan: boolean,
-        recentOnly: boolean = false // [!code ++] New parameter
+        recentOnly: boolean = false,
+        forceDates: string[] = [] // [!code ++] New parameter
     ): Promise<SyncResult> {
         // Validate input
         validateSyncConfig({ installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge, wifiExtenderPay, voipPay, driveTimeBonus });
@@ -449,7 +450,7 @@ export class HughesNetService {
             const result = await this.performSync(
                 userId, settingsId, installPay, repairPay, upgradePay, 
                 poleCost, concreteCost, poleCharge, wifiExtenderPay, voipPay, 
-                driveTimeBonus, skipScan, recentOnly // [!code ++] Pass param
+                driveTimeBonus, skipScan, recentOnly, forceDates // [!code ++] Pass param
             );
             
             return result;
@@ -474,7 +475,8 @@ export class HughesNetService {
         voipPay: number, 
         driveTimeBonus: number,
         skipScan: boolean,
-        recentOnly: boolean // [!code ++] New parameter
+        recentOnly: boolean,
+        forceDates: string[] // [!code ++] New parameter
     ): Promise<SyncResult> {
         this.fetcher.resetCount();
         this.lastSessionRefresh = Date.now();
@@ -507,6 +509,7 @@ export class HughesNetService {
         
         let dbDirty = false;
         let incomplete = false;
+        let conflicts: string[] = []; // [!code ++] Track conflicts
         
         try {
             // STAGE 1: SCANNING
@@ -660,7 +663,7 @@ export class HughesNetService {
                     }
 
                     // Backward scan
-                    // [!code change] SKIP backward scan if recentOnly is true
+                    // SKIP backward scan if recentOnly is true
                     if (!this.fetcher.shouldBatch() && !recentOnly) {
                         this.log('[Discovery] Scanning backward...');
                         let failures = 0, current = minId - 1, checks = 0;
@@ -867,19 +870,36 @@ export class HughesNetService {
                 const tripId = `hns_${userId}_${date}`;
                 const existingTrip = await tripService.get(userId, tripId);
                 
+                // [!code ++] MODIFIED CONFLICT LOGIC
                 if (existingTrip) {
                     const lastSys = new Date(existingTrip.updatedAt || existingTrip.createdAt).getTime();
                     const lastUser = existingTrip.lastModified ? new Date(existingTrip.lastModified).getTime() : 0;
+                    
+                    // Check if modified by user
                     if (lastUser > lastSys + USER_MODIFICATION_BUFFER_MS) {
-                        this.log(`  ${date}: Skipped (user modified)`);
-                        continue;
+                        
+                        // 1. If explicit force requested, allow it
+                        if (forceDates.includes(date)) {
+                            this.log(`  ${date}: Overwriting user modifications (Force Sync)`);
+                        } 
+                        // 2. If recent (last 7 days), flag as conflict
+                        else if (this.isWithinDays(date, 7)) {
+                            this.log(`  ${date}: Conflict detected (User Modified). Pending confirmation.`);
+                            conflicts.push(date);
+                            continue; // Skip processing this date for now
+                        } 
+                        // 3. Old history - skip silently
+                        else {
+                            this.log(`  ${date}: Skipped (user modified, older than 7 days)`);
+                            continue;
+                        }
                     }
                 }
 
                 const created = await this.createTripForDate(
                     userId, date, ordersByDate[date], settingsId,
                     installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge, 
-                    wifiExtenderPay, voipPay, driveTimeBonus, // [!code ++]
+                    wifiExtenderPay, voipPay, driveTimeBonus, 
                     tripService
                 );
                 
@@ -895,7 +915,7 @@ export class HughesNetService {
                 this.log(`[Trips] Batching with ${this.fetcher.getRequestCount()} requests used`);
             }
 
-            return { orders: Object.values(orderDb), incomplete };
+            return { orders: Object.values(orderDb), incomplete, conflicts }; // [!code ++] Return conflicts
             
         } catch (error) {
             // Issue #8: Enhanced rollback
@@ -915,6 +935,16 @@ export class HughesNetService {
         }
     }
 
+    // [!code ++] Helper for date check
+    private isWithinDays(dateStr: string, days: number): boolean {
+        const d = parseDateOnly(dateStr);
+        if (!d) return false;
+        const diff = Date.now() - d.getTime();
+        return diff >= 0 && diff < (days * 24 * 60 * 60 * 1000);
+    }
+
+    // ... (rest of methods: groupOrdersByDate, processOrderData, scanUrl, createTripForDate) ...
+    // Note: ensure createTripForDate has all the parameters passed correctly in previous files
     private groupOrdersByDate(orderDb: Record<string, OrderData>): Record<string, OrderData[]> {
         const ordersByDate: Record<string, OrderData[]> = {};
         
@@ -1018,9 +1048,12 @@ export class HughesNetService {
         poleCharge: number,
         wifiExtenderPay: number, 
         voipPay: number,
-        driveTimeBonus: number, // [!code ++]
+        driveTimeBonus: number,
         tripService: any
     ): Promise<boolean> {
+        // ... (existing logic from previous steps) ...
+        // Re-pasted here for completeness since user asked for "completed updated code"
+        
         let defaultStart = '', defaultEnd = '', mpg = 25, gas = 3.50;
         
         try {
@@ -1039,26 +1072,20 @@ export class HughesNetService {
         }
 
         const ordersWithMeta: OrderWithMeta[] = orders.map((o: OrderData): OrderWithMeta => {
-            // [!code ++] DATE MISMATCH LOGIC
-            // If the order has a Departure Incomplete timestamp that is NOT on the scheduled date,
-            // we strip all timestamps. This treats it as a "fresh" order for the scheduled date.
-            
+            // DATE MISMATCH LOGIC
             let effectiveArrival = o.arrivalTimestamp;
             let effectiveDepartureComplete = o.departureCompleteTimestamp;
             let effectiveDepartureIncomplete = o.departureIncompleteTimestamp;
 
             if (effectiveDepartureIncomplete) {
                 const incompleteDate = extractDateFromTs(effectiveDepartureIncomplete);
-                // Compare with the trip date string (YYYY-MM-DD)
                 if (incompleteDate && incompleteDate !== date) {
-                    // Mismatch: Ignore these timestamps for this specific trip calculation
                     effectiveArrival = undefined;
                     effectiveDepartureComplete = undefined;
                     effectiveDepartureIncomplete = undefined;
                 }
             }
 
-            // Create a temporary object for calculation purposes
             const calcOrder = {
                 ...o,
                 arrivalTimestamp: effectiveArrival,
@@ -1072,31 +1099,19 @@ export class HughesNetService {
                 if (dateObj) sortTime = dateObj.getTime() + (parseTime(o.beginTime) * 60000);
             }
 
-            // Pay Logic:
-            // 1. Paid if Departure Complete exists
-            // 2. NOT paid if Departure Incomplete exists
-            // 3. Estimated if neither (future job)
             const isPaid = !!calcOrder.departureCompleteTimestamp || !calcOrder.departureIncompleteTimestamp;
 
-            // Calculate actual duration based on timestamps
             let actualDuration: number;
-            
             const endTs = calcOrder.departureIncompleteTimestamp || calcOrder.departureCompleteTimestamp;
 
             if (calcOrder.arrivalTimestamp && endTs) {
-                // Use actual time
                 const dur = Math.round((endTs - calcOrder.arrivalTimestamp) / 60000);
                 if (dur > MIN_JOB_DURATION_MINS && dur < MAX_JOB_DURATION_MINS) {
                     actualDuration = dur;
                 } else {
-                    // Invalid duration, fall back to type-based default
-                    // [!code change] Handle Re-Install default (90 mins)
                     actualDuration = (o.type === 'Install' || o.type === 'Re-Install') ? 90 : 60;
                 }
             } else {
-                // Future jobs / Missing timestamps -> use type-based default
-                // Install: 90 mins, Repair/Upgrade: 60 mins
-                // [!code change] Handle Re-Install default (90 mins)
                 actualDuration = (o.type === 'Install' || o.type === 'Re-Install') ? 90 : 60;
             }
 
@@ -1105,10 +1120,9 @@ export class HughesNetService {
 
         ordersWithMeta.sort((a, b) => a._sortTime - b._sortTime);
 
-        // RESYNC SYSTEM: Check if any orders just transitioned incomplete→complete
         const hasPaymentUpdates = ordersWithMeta.some(o => 
             o.lastPaymentUpdate && 
-            (Date.now() - o.lastPaymentUpdate) < 60000 // Within last minute
+            (Date.now() - o.lastPaymentUpdate) < 60000 
         );
 
         if (hasPaymentUpdates) {
@@ -1141,7 +1155,6 @@ export class HughesNetService {
             }
             
             if (startAddr && eAddr !== startAddr) {
-                // Check soft limit before calculating commute route
                 if (this.fetcher.shouldBatch()) {
                     this.warn(`[Trip ${date}] Soft limit reached before commute calculation`);
                     return false;
@@ -1161,7 +1174,6 @@ export class HughesNetService {
                 }
             }
             
-            // Ensure commuteMins is valid
             if (isNaN(commuteMins) || !isFinite(commuteMins) || commuteMins < 0) {
                 commuteMins = 0;
             }
@@ -1186,9 +1198,8 @@ export class HughesNetService {
             }
         }
         
-        // Ensure startMins is valid and positive
         if (isNaN(startMins) || !isFinite(startMins) || startMins < 0 || startMins > 1440) {
-            startMins = 9 * 60; // Fallback to 9 AM
+            startMins = 9 * 60; 
         }
 
         const points: string[] = [startAddr];
@@ -1196,19 +1207,16 @@ export class HughesNetService {
             const addr = buildAddress(o);
             if (addr) points.push(addr);
         }
-        // Issue #6: Validate endAddr
         if (endAddr && endAddr.trim()) {
             points.push(endAddr);
         }
 
         let totalMins = 0, totalMeters = 0;
         
-        // Calculate routes one at a time, checking limits as we go
         for (let i = 0; i < points.length - 1; i++) {
-            // Check soft limit before each route request
             if (this.fetcher.shouldBatch()) {
                 this.warn(`[Trip ${date}] Soft limit reached during route calculation, will retry in next batch`);
-                return false; // Don't create partial trip
+                return false; 
             }
             
             if (points[i] !== points[i+1]) {
@@ -1229,14 +1237,13 @@ export class HughesNetService {
                 } catch (e: any) {
                     if (e.message === 'REQ_LIMIT') {
                         this.warn(`[Trip ${date}] Hard limit reached during route calculation`);
-                        return false; // Don't create partial trip
+                        return false; 
                     }
                     console.warn('Failed to get route leg:', e);
                 }
             }
         }
         
-        // Validate totalMins
         if (isNaN(totalMins) || !isFinite(totalMins) || totalMins < 0) {
             this.warn(`[Trip ${date}] Invalid totalMins: ${totalMins}, resetting to 0`);
             totalMins = 0;
@@ -1251,7 +1258,6 @@ export class HughesNetService {
             return sum;
         }, 0);
         
-        // Validate jobMins
         if (isNaN(jobMins) || !isFinite(jobMins) || jobMins < 0) {
             this.warn(`[Trip ${date}] Invalid jobMins: ${jobMins}`);
             return false;
@@ -1259,7 +1265,6 @@ export class HughesNetService {
         
         const totalWorkMins = totalMins + jobMins;
         
-        // Ensure totalWorkMins is valid
         if (isNaN(totalWorkMins) || !isFinite(totalWorkMins) || totalWorkMins < 0) {
             this.warn(`[Trip ${date}] Invalid totalWorkMins calculated: ${totalWorkMins}`);
             return false;
@@ -1272,7 +1277,6 @@ export class HughesNetService {
         let totalSuppliesCost = 0;
         const suppliesMap = new Map<string, number>();
 
-        // [!code ++] Drive Time Bonus Condition
         const applyDriveBonus = totalMins > 330;
 
         const stops: TripStop[] = ordersWithMeta.map((o: OrderWithMeta, i: number): TripStop => {
@@ -1281,7 +1285,6 @@ export class HughesNetService {
             let supplyItems: { type: string, cost: number }[] = [];
             
             if (!o._isPaid) {
-                // Didn't complete the job - no pay, but time still counts
                 notes += ` [INCOMPLETE: $0]`;
             } else {
                 if (o.hasPoleMount) {
@@ -1290,25 +1293,21 @@ export class HughesNetService {
                     if (poleCost > 0) supplyItems.push({ type: 'Pole', cost: poleCost });
                     if (concreteCost > 0) supplyItems.push({ type: 'Concrete', cost: concreteCost });
                 } else {
-                    // [!code change] Pay Re-Install identical to Install
                     if (o.type === 'Install' || o.type === 'Re-Install') basePay = installPay;
                     else if (o.type === 'Upgrade') basePay = upgradePay;
                     else basePay = repairPay;
                 }
 
-                // Wi-Fi Extender Pay Logic
                 if (o.hasWifiExtender) {
                     basePay += wifiExtenderPay;
                     notes += ` [WIFI: $${wifiExtenderPay}]`;
                 }
 
-                // VOIP Pay Logic
                 if (o.hasVoip) {
                     basePay += voipPay;
                     notes += ` [VOIP: $${voipPay}]`;
                 }
 
-                // [!code ++] Drive Time Bonus Logic
                 if (applyDriveBonus && driveTimeBonus > 0) {
                     basePay += driveTimeBonus;
                     notes += ` [DRIVE BONUS: $${driveTimeBonus}]`;
