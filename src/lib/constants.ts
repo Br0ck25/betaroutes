@@ -1,9 +1,14 @@
 // src/lib/constants.ts
 
 // The internal URL scheme for Cloudflare Durable Objects.
-// DOs are accessed via stub.fetch(), and the protocol/host is often arbitrary
-// but 'http://internal' is the standard convention.
 export const DO_ORIGIN = 'http://internal';
 
-// Add other shared constants here if needed
 export const APP_NAME = 'Go Route Yourself';
+
+/**
+ * Centralized Retention and TTL Policies (in seconds)
+ */
+export const RETENTION = {
+    THIRTY_DAYS: 30 * 24 * 60 * 60, // 2,592,000 seconds
+    SESSION_TTL: 24 * 60 * 60      // 86,400 seconds
+};

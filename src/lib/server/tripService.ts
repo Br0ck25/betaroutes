@@ -1,7 +1,7 @@
 // src/lib/server/tripService.ts
 import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
 import { generatePrefixKey, generatePlaceKey } from '$lib/utils/keys';
-import { DO_ORIGIN } from '$lib/constants';
+import { DO_ORIGIN, RETENTION } from '$lib/constants';
 
 export type Stop = {
   id: string;
@@ -88,53 +88,69 @@ export function makeTripService(
       deleted: trip.deleted 
   });
 
+  /**
+   * Reliability Fix: Refactored indexing logic.
+   * Uses try-catch and allSettled to ensure that one failed API call 
+   * doesn't corrupt the entire indexing process or crash the put() operation.
+   */
   async function indexTripData(trip: TripRecord) {
     if (!placesKV || trip.deleted) return;
     
-    const uniquePlaces = new Map<string, { lat?: number, lng?: number }>();
-    const add = (addr?: string, loc?: { lat: number, lng: number }) => {
-        if (!addr || addr.length < 3) return;
-        const normalized = addr.toLowerCase().trim();
-        if (!uniquePlaces.has(normalized) || loc) {
-            uniquePlaces.set(normalized, loc || {});
+    try {
+        const uniquePlaces = new Map<string, { lat?: number, lng?: number }>();
+        const add = (addr?: string, loc?: { lat: number, lng: number }) => {
+            if (!addr || addr.length < 3) return;
+            const normalized = addr.toLowerCase().trim();
+            if (!uniquePlaces.has(normalized) || loc) {
+                uniquePlaces.set(normalized, loc || {});
+            }
+        };
+        
+        add(trip.startAddress, trip.startLocation);
+        add(trip.endAddress, trip.endLocation);
+        if (Array.isArray(trip.stops)) {
+          trip.stops.forEach(s => add(s.address, s.location));
         }
-    };
-    
-    add(trip.startAddress, trip.startLocation);
-    add(trip.endAddress, trip.endLocation);
-    if (Array.isArray(trip.stops)) {
-      trip.stops.forEach(s => add(s.address, s.location));
-    }
-    if (Array.isArray(trip.destinations)) {
-      trip.destinations.forEach((d: any) => add(d.address, d.location));
-    }
+        if (Array.isArray(trip.destinations)) {
+          trip.destinations.forEach((d: any) => add(d.address, d.location));
+        }
 
-    const writePromises: Promise<void>[] = [];
-    
-    for (const [addrKey, data] of uniquePlaces.entries()) {
-       if (data.lat !== undefined && data.lng !== undefined) {
-           const safeKey = await generatePlaceKey(addrKey);
-           const payload = { 
-             lastSeen: new Date().toISOString(),
-             formatted_address: addrKey,
-             lat: data.lat,
-             lng: data.lng
-           };
-           writePromises.push(placesKV.put(safeKey, JSON.stringify(payload)));
-       }
+        const writePromises: Promise<any>[] = [];
+        
+        for (const [addrKey, data] of uniquePlaces.entries()) {
+           // 1. Update individual place metadata if coordinates exist
+           if (data.lat !== undefined && data.lng !== undefined) {
+               const safeKey = await generatePlaceKey(addrKey);
+               const payload = { 
+                 lastSeen: new Date().toISOString(),
+                 formatted_address: addrKey,
+                 lat: data.lat,
+                 lng: data.lng
+               };
+               writePromises.push(placesKV.put(safeKey, JSON.stringify(payload)));
+           }
 
-       const prefixKey = generatePrefixKey(addrKey);
-       const stub = placesIndexDO.get(placesIndexDO.idFromName(prefixKey));
-       
-       const doUpdate = stub.fetch(`${DO_ORIGIN}/add?key=${encodeURIComponent(prefixKey)}`, {
-           method: 'POST',
-           body: JSON.stringify({ address: addrKey })
-       });
-       
-       writePromises.push(doUpdate.then(() => {}));
+           // 2. Update search index Durable Object
+           const prefixKey = generatePrefixKey(addrKey);
+           const stub = placesIndexDO.get(placesIndexDO.idFromName(prefixKey));
+           
+           writePromises.push(
+               stub.fetch(`${DO_ORIGIN}/add?key=${encodeURIComponent(prefixKey)}`, {
+                   method: 'POST',
+                   body: JSON.stringify({ address: addrKey })
+               })
+           );
+        }
+        
+        // Ensure allSettled so one failure doesn't stop the others
+        const results = await Promise.allSettled(writePromises);
+        const rejected = results.filter(r => r.status === 'rejected');
+        if (rejected.length > 0) {
+            console.error(`[TripService] Indexing had ${rejected.length} failures for trip ${trip.id}`);
+        }
+    } catch (err) {
+        console.error('[TripService] Critical error in indexTripData:', err);
     }
-    
-    await Promise.allSettled(writePromises);
   }
 
   return {
@@ -167,7 +183,6 @@ export function makeTripService(
           return [];
       }
 
-      // [!code fix] improved typing
       const data = await res.json() as { trips: TripRecord[], needsMigration?: boolean } | TripRecord[];
 
       let trips: TripRecord[] = [];
@@ -184,8 +199,6 @@ export function makeTripService(
           console.log(`[TripService] Migrating index for user ${userId} to Durable Object...`);
           const prefix = prefixForUser(userId);
           
-          // [!code fix] PAGINATION SUPPORT
-          // kv.list defaults to 1000 items. We must loop to get everything.
           const out: TripRecord[] = [];
           let list = await kv.list({ prefix });
           let keys = list.keys;
@@ -204,7 +217,6 @@ export function makeTripService(
           
           const summaries = out.map(toSummary);
           
-          // Send to DO for storage
           await stub.fetch(`${DO_ORIGIN}/migrate`, {
               method: 'POST',
               body: JSON.stringify(summaries)
@@ -240,8 +252,6 @@ export function makeTripService(
           body: JSON.stringify(toSummary(trip))
       });
       
-      // [!code fix] Await the index operation to ensure it completes before response.
-      // Failing to await in a Worker (without ctx.waitUntil) causes cancellation.
       try {
         await indexTripData(trip);
       } catch (e) {
@@ -256,7 +266,8 @@ export function makeTripService(
 
       const trip = JSON.parse(raw);
       const now = new Date();
-      const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); 
+      // Reliability Fix: Use RETENTION constant
+      const expiresAt = new Date(now.getTime() + (RETENTION.THIRTY_DAYS * 1000)); 
 
       // 1. Copy to Trash KV
       if (trashKV) {
@@ -277,7 +288,7 @@ export function makeTripService(
         await trashKV.put(
           trashKey, 
           JSON.stringify(trashPayload),
-          { expirationTtl: 30 * 24 * 60 * 60 }
+          { expirationTtl: RETENTION.THIRTY_DAYS }
         );
       }
 
@@ -291,8 +302,7 @@ export function makeTripService(
           createdAt: trip.createdAt 
       };
 
-      const THIRTY_DAYS = 30 * 24 * 60 * 60;
-      await kv.put(key, JSON.stringify(tombstone), { expirationTtl: THIRTY_DAYS });
+      await kv.put(key, JSON.stringify(tombstone), { expirationTtl: RETENTION.THIRTY_DAYS });
 
       // 3. Update Index (DO) with DELETE command
       const stub = getIndexStub(userId);
