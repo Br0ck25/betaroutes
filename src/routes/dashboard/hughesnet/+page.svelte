@@ -51,7 +51,7 @@
   let conflictTrips: any[] = [];
   let selectedConflicts: Set<string> = new Set(); // Track which trips to overwrite
   let showConflictModal = false;
-  let conflictTimer = 30;
+  let conflictTimer = 60;
   let conflictInterval: any;
 
   function showSuccessMsg(msg: string) {
@@ -409,7 +409,7 @@
   // Conflict Logic
   function startConflictTimer() {
       showConflictModal = true;
-      conflictTimer = 30;
+      conflictTimer = 60;
       selectedConflicts = new Set(); // Reset selection
       if (conflictInterval) clearInterval(conflictInterval);
       
@@ -845,7 +845,7 @@
             </p>
             
             <div class="timer-bar">
-                <div class="timer-fill" style="width: {(conflictTimer / 30) * 100}%"></div>
+                <div class="timer-fill" style="width: {(conflictTimer / 60) * 100}%"></div>
             </div>
             <p class="timer-text">
                 {#if conflictTimer > 0}
