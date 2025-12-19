@@ -1,150 +1,185 @@
-// src/lib/server/hughesnet/utils.ts
-import { RESYNC_WINDOW_MS } from './constants';
-import type { SyncConfig, OrderData } from './types';
+// src/lib/server/hughesnet/auth.ts
+import type { KVNamespace } from '@cloudflare/workers-types';
+import type { HughesNetFetcher } from './fetcher';
+import { BASE_URL } from './parser';
 
-// --- Date Helpers ---
+const LOGIN_URL = 'https://dwayinstalls.hns.com/start/login.jsp?UsrAction=submit';
+const HOME_URL = 'https://dwayinstalls.hns.com/start/Home.jsp';
 
-/**
- * Robust date parser that handles:
- * 1. MM/DD/YYYY (HughesNet format)
- * 2. YYYY-MM-DD (Internal System format)
- */
-export function parseAnyDate(dateStr: string): Date | null {
-    if (!dateStr) return null;
-    
-    // Try YYYY-MM-DD first (ISO format used in internal keys)
-    const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (isoMatch) {
-        return new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
+export class HughesNetAuth {
+    constructor(
+        private kv: KVNamespace,
+        private encryptionKey: string,
+        private fetcher: HughesNetFetcher
+    ) {}
+
+    /**
+     * Performs a fresh connection/login and stores encrypted credentials.
+     */
+    async connect(userId: string, username: string, password: string): Promise<boolean> {
+        // Store credentials encrypted for future auto-logins
+        const payload = { 
+            username, 
+            password, 
+            loginUrl: LOGIN_URL, 
+            createdAt: new Date().toISOString() 
+        };
+        
+        const enc = await this.encrypt(JSON.stringify(payload));
+        if (!enc) return false;
+        
+        await this.kv.put(`hns:cred:${userId}`, enc);
+
+        // Perform actual login
+        const cookie = await this.loginAndStoreSession(userId, username, password);
+        if (!cookie) return false;
+
+        // Verify the session actually works by hitting the Home page
+        try {
+            const verifyRes = await this.fetcher.safeFetch(HOME_URL, { 
+                headers: { 'Cookie': cookie }
+            });
+            const verifyHtml = await verifyRes.text();
+            
+            // If we see a password field or a login link, the session is invalid
+            if (verifyHtml.includes('name="Password"') || verifyHtml.includes('login.jsp')) {
+                return false;
+            }
+            return true;
+        } catch (e) { 
+            return false; 
+        }
     }
 
-    // Try MM/DD/YYYY (HughesNet slash format)
-    const slashMatch = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
-    if (slashMatch) {
-        let y = slashMatch[3];
-        if (y.length === 2) y = '20' + y;
-        return new Date(parseInt(y), parseInt(slashMatch[1]) - 1, parseInt(slashMatch[2]));
+    /**
+     * Clears all session data and stored credentials for a user.
+     */
+    async disconnect(userId: string): Promise<boolean> {
+        await Promise.all([
+            this.kv.delete(`hns:session:${userId}`),
+            this.kv.delete(`hns:cred:${userId}`),
+            this.kv.delete(`hns:db:${userId}`)
+        ]);
+        return true;
     }
 
-    return null;
-}
+    /**
+     * Returns a valid session cookie, logging in again if necessary.
+     */
+    async ensureSessionCookie(userId: string): Promise<string | null> {
+        // 1. Try to get existing session
+        const session = await this.kv.get(`hns:session:${userId}`);
+        if (session) return session;
 
-export function parseDateOnly(dateStr: string): Date | null {
-    return parseAnyDate(dateStr);
-}
+        // 2. If expired, try to re-login using stored credentials
+        const enc = await this.kv.get(`hns:cred:${userId}`);
+        if (!enc) return null;
 
-export function toIsoDate(dateStr: string): string | null {
-    const d = parseDateOnly(dateStr);
-    if (!d) return null;
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-}
+        const credsJson = await this.decrypt(enc);
+        if (!credsJson) return null;
 
-export function extractDateFromTs(ts: number): string | null {
-    if (!ts) return null;
-    const d = new Date(ts);
-    return toIsoDate(`${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`);
-}
-
-export function parseTime(timeStr: string): number {
-    if (!timeStr) return 0;
-    const match = timeStr.match(/\b(\d{1,2}:\d{2})/);
-    if (!match) return 0;
-    const [h, m] = match[1].split(':').map(Number);
-    return h * 60 + m;
-}
-
-export function minutesToTime(minutes: number): string {
-    if (!isFinite(minutes) || isNaN(minutes)) return '12:00 PM';
-    if (minutes < 0) minutes += 1440;
-    let h = Math.floor(minutes / 60) % 24;
-    const m = Math.floor(minutes % 60);
-    const suffix = h >= 12 ? 'PM' : 'AM';
-    h = h % 12 || 12;
-    return `${h}:${m.toString().padStart(2, '0')} ${suffix}`;
-}
-
-export function formatTimestamp(ts: number): string {
-    const d = new Date(ts);
-    return minutesToTime(d.getHours() * 60 + d.getMinutes());
-}
-
-/**
- * Checks if a date string is within the last X days relative to today.
- * Returns true if date is today, in the future, or within the lookback window.
- */
-export function isWithinDays(dateStr: string, days: number): boolean {
-    const d = parseAnyDate(dateStr);
-    if (!d) return false;
-    
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    
-    const target = new Date(d);
-    target.setHours(0, 0, 0, 0);
-    
-    const diffTime = now.getTime() - target.getTime();
-    const diffDays = diffTime / (1000 * 3600 * 24);
-    
-    // Within window if difference is less than or equal to 'days' 
-    // (Future dates result in negative diffDays, which are also included)
-    return diffDays <= days; 
-}
-
-// --- Validation & Business Logic Helpers ---
-
-export function validateSyncConfig(config: SyncConfig): void {
-    const { installPay, repairPay, upgradePay, poleCost, concreteCost, poleCharge, wifiExtenderPay, voipPay, driveTimeBonus } = config;
-    if (!isFinite(installPay) || installPay < 0) throw new Error('Install pay must be a positive finite number');
-    if (!isFinite(repairPay) || repairPay < 0) throw new Error('Repair pay must be a positive finite number');
-    if (!isFinite(upgradePay) || upgradePay < 0) throw new Error('Upgrade pay must be a positive finite number');
-    if (!isFinite(poleCost) || poleCost < 0) throw new Error('Pole cost must be a positive finite number');
-    if (!isFinite(concreteCost) || concreteCost < 0) throw new Error('Concrete cost must be a positive finite number');
-    if (!isFinite(poleCharge) || poleCharge < 0) throw new Error('Pole charge must be a positive finite number');
-    if (!isFinite(wifiExtenderPay) || wifiExtenderPay < 0) throw new Error('WiFi Extender pay must be a positive finite number');
-    if (!isFinite(voipPay) || voipPay < 0) throw new Error('Phone pay must be a positive finite number');
-    if (!isFinite(driveTimeBonus) || driveTimeBonus < 0) throw new Error('Drive Time Bonus must be a positive finite number');
-}
-
-export function isValidAddress(order: OrderData): boolean {
-    const trimmedAddress = order.address?.trim();
-    const trimmedCity = order.city?.trim();
-    const trimmedState = order.state?.trim();
-    return !!(trimmedAddress || (trimmedCity && trimmedState));
-}
-
-export function buildAddress(o: OrderData): string {
-    const parts = [o.address, o.city, o.state, o.zip]
-        .filter(Boolean)
-        .map(s => s.trim())
-        .filter(s => s.length > 0);
-    if (parts.length === 0) return '';
-    return parts.join(', ');
-}
-
-export function determineOrderSyncStatus(order: OrderData): { syncStatus: 'complete' | 'incomplete' | 'future'; needsResync: boolean; } {
-    const now = Date.now();
-    if (order.departureCompleteTimestamp) return { syncStatus: 'complete', needsResync: false };
-    if (order.departureIncompleteTimestamp) {
-        const withinWindow = order.lastSyncTimestamp && (now - order.lastSyncTimestamp) < RESYNC_WINDOW_MS;
-        return { syncStatus: 'incomplete', needsResync: withinWindow };
+        try {
+            const creds = JSON.parse(credsJson);
+            return this.loginAndStoreSession(userId, creds.username, creds.password);
+        } catch (e) {
+            return null;
+        }
     }
-    return { syncStatus: 'future', needsResync: true };
-}
 
-export function checkIncompleteToComplete(oldOrder: OrderData | undefined, newOrder: OrderData): boolean {
-    if (!oldOrder) return false;
-    if (oldOrder.syncStatus !== 'incomplete') return false;
-    if (!newOrder.departureCompleteTimestamp) return false;
-    if (!oldOrder.departureIncompleteTimestamp) return false;
-    if (!oldOrder.lastSyncTimestamp) return false;
-    const daysSinceSync = (Date.now() - oldOrder.lastSyncTimestamp) / (1000 * 60 * 60 * 24);
-    if (daysSinceSync > 7) return false; 
-    return true;
-}
+    private async loginAndStoreSession(userId: string, username: string, password: string): Promise<string | null> {
+        const form = new URLSearchParams();
+        form.append('User', username);
+        form.append('Password', password);
+        form.append('Submit', 'Log In');
+        form.append('ScreenSize', 'MED');
+        form.append('AuthSystem', 'HNS');
+        
+        // Initial POST attempt
+        const res = await this.fetcher.safeFetch(LOGIN_URL, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, 
+            body: form.toString(), 
+            redirect: 'manual' 
+        });
+        
+        let cookie = this.extractCookie(res);
+        
+        // Handle 302 Redirect logic which is common in HNS auth flow
+        if (!cookie && res.status === 302) {
+            const location = res.headers.get('location');
+            const nextUrl = location ? (location.startsWith('http') ? location : `${BASE_URL}${location}`) : HOME_URL;
+            
+            const res2 = await this.fetcher.safeFetch(nextUrl, { 
+                method: 'GET', 
+                headers: { 'Referer': LOGIN_URL },
+                redirect: 'manual' 
+            });
+            cookie = this.extractCookie(res2);
+        }
+        
+        // Store session for 2 days if successful
+        if (cookie) {
+            await this.kv.put(`hns:session:${userId}`, cookie, { expirationTtl: 60 * 60 * 24 * 2 });
+        }
+        
+        return cookie;
+    }
 
-export function shouldMarkAsRemoved(order: OrderData): boolean {
-    return !!(order.arrivalTimestamp && order.departureIncompleteTimestamp);
+    private extractCookie(res: Response): string | null {
+        const h = res.headers.get('set-cookie');
+        if (!h) return null;
+        // Standard parser for Cloudflare Response headers
+        return h.split(/,(?=[^;]+=)/g)
+                .map(p => p.split(';')[0].trim())
+                .filter(Boolean)
+                .join('; ');
+    }
+
+    // --- Encryption ---
+
+    private async encrypt(plain: string): Promise<string | null> {
+        if (!this.encryptionKey) return plain;
+        try {
+            const keyRaw = Uint8Array.from(atob(this.encryptionKey), c => c.charCodeAt(0));
+            const key = await crypto.subtle.importKey('raw', keyRaw, 'AES-GCM', false, ['encrypt']);
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const enc = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(plain));
+            
+            const combined = new Uint8Array(iv.byteLength + enc.byteLength);
+            combined.set(iv, 0);
+            combined.set(new Uint8Array(enc), iv.byteLength);
+            
+            // Helper to convert binary to string for b64
+            let binary = '';
+            const bytes = new Uint8Array(combined);
+            for (let i = 0; i < bytes.byteLength; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return btoa(binary);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    private async decrypt(cipherB64: string): Promise<string | null> {
+        if (!this.encryptionKey) return cipherB64;
+        try {
+            const binary = atob(cipherB64);
+            const combined = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                combined[i] = binary.charCodeAt(i);
+            }
+
+            const iv = combined.slice(0, 12);
+            const data = combined.slice(12);
+            
+            const keyRaw = Uint8Array.from(atob(this.encryptionKey), c => c.charCodeAt(0));
+            const key = await crypto.subtle.importKey('raw', keyRaw, 'AES-GCM', false, ['decrypt']);
+            const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+            
+            return new TextDecoder().decode(dec);
+        } catch (e) { 
+            return null; 
+        }
+    }
 }
