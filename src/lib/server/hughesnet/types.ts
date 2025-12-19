@@ -92,11 +92,20 @@ export interface SyncConfig {
     driveTimeBonus: number; 
 }
 
+// Type for conflict information
+export interface ConflictInfo {
+    date: string;
+    address: string;
+    earnings: number;
+    stops: number;
+    lastModified: string;
+}
+
 // Type for sync result
 export interface SyncResult {
     orders: OrderData[];
     incomplete: boolean;
-    conflicts?: string[]; // [!code ++] Added conflicts array
+    conflicts?: ConflictInfo[];
 }
 
 // Issue #1: Type for distributed lock

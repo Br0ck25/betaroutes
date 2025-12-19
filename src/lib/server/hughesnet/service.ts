@@ -5,7 +5,7 @@ import { HughesNetFetcher } from './fetcher';
 import { HughesNetAuth } from './auth';
 import { HughesNetRouter } from './router';
 import * as parser from './parser';
-import type { OrderData, SyncConfig, SyncResult, DistributedLock } from './types';
+import type { OrderData, SyncConfig, SyncResult, DistributedLock, ConflictInfo } from './types';
 
 import { 
     DISCOVERY_GAP_MAX_SIZE, DISCOVERY_MAX_FAILURES, DISCOVERY_MAX_CHECKS, 
@@ -257,7 +257,7 @@ export class HughesNetService {
         
         let dbDirty = false;
         let incomplete = false;
-        let conflicts: string[] = [];
+        let conflicts: ConflictInfo[] = [];
         
         try {
             // STAGE 1: SCANNING
@@ -517,7 +517,13 @@ export class HughesNetService {
                                     this.log(`  ${date}: ✓ Force overwriting user modifications (User Approved)`);
                                 } else {
                                     this.log(`  ${date}: ⚠️ CONFLICT - User edited at ${new Date(existingTrip.lastModified).toLocaleString()}`);
-                                    conflicts.push(date);
+                                    conflicts.push({
+                                        date,
+                                        address: existingTrip.startAddress || 'No address',
+                                        earnings: existingTrip.totalEarnings || 0,
+                                        stops: existingTrip.stops?.length || 0,
+                                        lastModified: existingTrip.lastModified
+                                    });
                                     continue;
                                 }
                             } else {

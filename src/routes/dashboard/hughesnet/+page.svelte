@@ -48,7 +48,7 @@
   let isSaving = false;
 
   // Conflict Management State
-  let conflictDates: string[] = [];
+  let conflictTrips: any[] = [];
   let showConflictModal = false;
   let conflictTimer = 30;
   let conflictInterval: any;
@@ -238,7 +238,7 @@
     
     // Reset conflicts on first batch if not a force run
     if (batchCount === 1 && forceOverrideDates.length === 0) {
-        conflictDates = []; 
+        conflictTrips = []; 
     }
 
     const skipScan = batchCount > 1;
@@ -314,8 +314,10 @@
              
              // Collect conflicts
              if (data.conflicts && Array.isArray(data.conflicts)) {
-                 // Merge unique dates
-                 conflictDates = [...new Set([...conflictDates, ...data.conflicts])];
+                 // Merge unique conflicts by date
+                 const existingDates = new Set(conflictTrips.map(c => c.date));
+                 const newConflicts = data.conflicts.filter(c => !existingDates.has(c.date));
+                 conflictTrips = [...conflictTrips, ...newConflicts];
              }
 
              if (data.incomplete) {
@@ -326,8 +328,8 @@
              }
 
              // Check for conflicts AFTER all batches complete
-             if (conflictDates.length > 0 && forceOverrideDates.length === 0) {
-                 addLog(`⚠️ Found ${conflictDates.length} user-modified trip(s) - awaiting decision...`);
+             if (conflictTrips.length > 0 && forceOverrideDates.length === 0) {
+                 addLog(`⚠️ Found ${conflictTrips.length} user-modified trip(s) - awaiting decision...`);
                  startConflictTimer();
                  return;
              }
@@ -420,15 +422,15 @@
 
   function confirmOverride() {
       stopConflictTimer();
-      addLog(`🔄 Force overwriting ${conflictDates.length} user-modified trip(s)...`);
-      // Re-run sync specifically to target these dates
-      handleSync(1, true, conflictDates);
+      const forceDates = conflictTrips.map(c => c.date);
+      addLog(`🔄 Force overwriting ${conflictTrips.length} user-modified trip(s)...`);
+      handleSync(1, true, forceDates); // Re-sync with force dates
   }
 
   function cancelOverride() {
       stopConflictTimer();
-      addLog(`✅ Preserved ${conflictDates.length} user-modified trip(s) (skipped HNS updates)`);
-      conflictDates = [];
+      addLog(`✅ Preserved ${conflictTrips.length} user-modified trip(s) (skipped HNS updates)`);
+      conflictTrips = [];
       loading = false;
       statusMessage = 'Sync Complete';
   }
@@ -725,10 +727,20 @@
             <h3>⚠️ User Modifications Detected</h3>
         </div>
         <div class="modal-body">
-            <p>Found <strong>{conflictDates.length}</strong> trip(s) you manually edited in the last 7 days:</p>
-            <div class="dates-list">
-                {#each conflictDates as date}
-                    <div class="conflict-date">{date}</div>
+            <p>Found <strong>{conflictTrips.length}</strong> trip(s) you manually edited in the last 7 days:</p>
+            <div class="conflicts-list">
+                {#each conflictTrips as conflict}
+                    <div class="conflict-card">
+                        <div class="conflict-header">
+                            <span class="conflict-date">{conflict.date}</span>
+                            <span class="conflict-stops">{conflict.stops} stop{conflict.stops !== 1 ? 's' : ''}</span>
+                        </div>
+                        <div class="conflict-address">{conflict.address}</div>
+                        <div class="conflict-footer">
+                            <span class="conflict-earnings">${conflict.earnings.toFixed(2)}</span>
+                            <span class="conflict-modified">Edited: {new Date(conflict.lastModified).toLocaleString()}</span>
+                        </div>
+                    </div>
                 {/each}
             </div>
             <p class="conflict-question">Overwrite your manual changes with HughesNet data?</p>
@@ -985,48 +997,118 @@
   /* Modal Styles */
   .modal-overlay {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.5); z-index: 9999;
+      background: rgba(0,0,0,0.6); z-index: 9999;
       display: flex; align-items: center; justify-content: center;
-      backdrop-filter: blur(2px);
+      backdrop-filter: blur(4px);
       padding: 16px;
   }
   .modal-content {
-      background: white; width: 100%; max-width: 500px;
+      background: white; width: 100%; max-width: 600px;
       border-radius: 16px; padding: 24px;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-      text-align: center;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
   }
-  .modal-header h3 { font-size: 20px; font-weight: 700; color: #111827; margin: 0 0 16px 0; }
-  .modal-body p { font-size: 14px; color: #4B5563; margin-bottom: 12px; line-height: 1.5; }
-  .dates-list { 
-      background: #FEF3C7; 
-      padding: 12px; 
-      border-radius: 8px; 
-      margin: 12px 0;
-      max-height: 120px;
+  .modal-header h3 { 
+      font-size: 20px; 
+      font-weight: 700; 
+      color: #111827; 
+      margin: 0 0 16px 0; 
+  }
+  .modal-body p { 
+      font-size: 14px; 
+      color: #4B5563; 
+      margin-bottom: 16px; 
+      line-height: 1.5; 
+  }
+  
+  .conflicts-list { 
+      background: #F9FAFB;
+      border: 1px solid #E5E7EB;
+      border-radius: 12px; 
+      padding: 16px; 
+      margin: 16px 0;
+      max-height: 300px;
       overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
   }
+  
+  .conflict-card {
+      background: white;
+      border: 1px solid #E5E7EB;
+      border-radius: 8px;
+      padding: 12px 16px;
+      transition: all 0.2s;
+  }
+  
+  .conflict-card:hover {
+      border-color: #D97706;
+      box-shadow: 0 2px 8px rgba(217, 119, 6, 0.1);
+  }
+  
+  .conflict-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+  }
+  
   .conflict-date {
-      background: #FEF3C7;
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-family: monospace;
-      font-size: 13px;
-      color: #92400E;
-      margin: 4px 0;
-      border: 1px solid #FCD34D;
+      font-weight: 700;
+      color: #111827;
+      font-size: 15px;
   }
+  
+  .conflict-stops {
+      background: #DBEAFE;
+      color: #1E40AF;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 12px;
+      text-transform: uppercase;
+  }
+  
+  .conflict-address {
+      font-size: 14px;
+      color: #6B7280;
+      margin-bottom: 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+  }
+  
+  .conflict-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+  }
+  
+  .conflict-earnings {
+      font-weight: 700;
+      color: #059669;
+      font-size: 14px;
+  }
+  
+  .conflict-modified {
+      color: #9CA3AF;
+      font-style: italic;
+  }
+  
   .conflict-question { 
       font-weight: 600; 
       color: #DC2626; 
       margin-top: 16px;
       font-size: 15px;
+      text-align: center;
   }
   .timer-text { 
       font-size: 13px; 
       color: #EA580C; 
       font-weight: 600; 
       margin-top: 8px; 
+      text-align: center;
   }
   .timer-bar { 
       width: 100%; 
