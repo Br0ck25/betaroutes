@@ -99,6 +99,10 @@ export interface ConflictInfo {
     earnings: number;
     stops: number;
     lastModified: string;
+    // HughesNet data (what would be synced)
+    hnsEarnings: number;
+    hnsStops: number;
+    hnsAddress: string;
 }
 
 // Type for sync result

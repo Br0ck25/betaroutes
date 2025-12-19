@@ -49,6 +49,7 @@
 
   // Conflict Management State
   let conflictTrips: any[] = [];
+  let selectedConflicts: Set<string> = new Set(); // Track which trips to overwrite
   let showConflictModal = false;
   let conflictTimer = 30;
   let conflictInterval: any;
@@ -409,28 +410,59 @@
   function startConflictTimer() {
       showConflictModal = true;
       conflictTimer = 30;
+      selectedConflicts = new Set(); // Reset selection
       if (conflictInterval) clearInterval(conflictInterval);
       
       conflictInterval = setInterval(() => {
           conflictTimer--;
           if (conflictTimer <= 0) {
-              // Default action is SKIP (preserve user edits)
+              // Default action is SKIP (preserve all user edits)
               cancelOverride();
           }
       }, 1000);
   }
 
+  function toggleConflict(date: string) {
+      if (selectedConflicts.has(date)) {
+          selectedConflicts.delete(date);
+      } else {
+          selectedConflicts.add(date);
+      }
+      selectedConflicts = selectedConflicts; // Trigger reactivity
+  }
+
+  function selectAll() {
+      selectedConflicts = new Set(conflictTrips.map(c => c.date));
+  }
+
+  function selectNone() {
+      selectedConflicts = new Set();
+  }
+
   function confirmOverride() {
       stopConflictTimer();
-      const forceDates = conflictTrips.map(c => c.date);
-      addLog(`🔄 Force overwriting ${conflictTrips.length} user-modified trip(s)...`);
-      handleSync(1, true, forceDates); // Re-sync with force dates
+      
+      if (selectedConflicts.size === 0) {
+          // No trips selected, keep all edits
+          addLog(`✅ No trips selected - preserved all user edits`);
+          conflictTrips = [];
+          loading = false;
+          statusMessage = 'Sync Complete';
+          return;
+      }
+      
+      const forceDates = Array.from(selectedConflicts);
+      const keepCount = conflictTrips.length - selectedConflicts.size;
+      
+      addLog(`🔄 Overwriting ${selectedConflicts.size} trip(s), keeping ${keepCount} user edit(s)...`);
+      handleSync(1, true, forceDates);
   }
 
   function cancelOverride() {
       stopConflictTimer();
       addLog(`✅ Preserved ${conflictTrips.length} user-modified trip(s) (skipped HNS updates)`);
       conflictTrips = [];
+      selectedConflicts = new Set();
       loading = false;
       statusMessage = 'Sync Complete';
   }
@@ -727,43 +759,110 @@
             <h3>⚠️ User Modifications Detected</h3>
         </div>
         <div class="modal-body">
-            <p>Found <strong>{conflictTrips.length}</strong> trip(s) you manually edited in the last 7 days:</p>
+            <p>Found <strong>{conflictTrips.length}</strong> trip(s) you manually edited in the last 7 days.</p>
+            <p class="modal-instruction">Select which trips to overwrite with HughesNet data:</p>
+            
+            <div class="selection-controls">
+                <button class="select-btn" on:click={selectAll}>Select All</button>
+                <button class="select-btn" on:click={selectNone}>Select None</button>
+                <span class="selected-count">{selectedConflicts.size} of {conflictTrips.length} selected</span>
+            </div>
+            
             <div class="conflicts-list">
                 {#each conflictTrips as conflict}
-                    <div class="conflict-card">
-                        <div class="conflict-header">
-                            <span class="conflict-date">{conflict.date}</span>
-                            <span class="conflict-stops">{conflict.stops} stop{conflict.stops !== 1 ? 's' : ''}</span>
-                        </div>
-                        <div class="conflict-address">{conflict.address}</div>
-                        <div class="conflict-footer">
-                            <span class="conflict-earnings">${conflict.earnings.toFixed(2)}</span>
-                            <span class="conflict-modified">Edited: {new Date(conflict.lastModified).toLocaleString()}</span>
-                        </div>
+                    <div class="conflict-card" class:selected={selectedConflicts.has(conflict.date)}>
+                        <label class="conflict-checkbox-label">
+                            <input 
+                                type="checkbox" 
+                                checked={selectedConflicts.has(conflict.date)}
+                                on:change={() => toggleConflict(conflict.date)}
+                            />
+                            <div class="conflict-content">
+                                <div class="conflict-header">
+                                    <span class="conflict-date">{conflict.date}</span>
+                                    <span class="conflict-modified">Edited: {new Date(conflict.lastModified).toLocaleString()}</span>
+                                </div>
+                                
+                                <div class="conflict-comparison">
+                                    <div class="comparison-side your-version">
+                                        <div class="comparison-label">Your Version</div>
+                                        <div class="comparison-details">
+                                            <div class="detail-row">
+                                                <span class="detail-label">Stops:</span>
+                                                <span class="detail-value">{conflict.stops}</span>
+                                            </div>
+                                            <div class="detail-row">
+                                                <span class="detail-label">Earnings:</span>
+                                                <span class="detail-value earnings">${conflict.earnings.toFixed(2)}</span>
+                                            </div>
+                                            <div class="detail-row address-row">
+                                                <span class="detail-label">Address:</span>
+                                                <span class="detail-value address">{conflict.address}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="comparison-arrow">→</div>
+                                    
+                                    <div class="comparison-side hns-version">
+                                        <div class="comparison-label">HughesNet Data</div>
+                                        <div class="comparison-details">
+                                            <div class="detail-row" class:changed={conflict.stops !== conflict.hnsStops}>
+                                                <span class="detail-label">Stops:</span>
+                                                <span class="detail-value">{conflict.hnsStops}</span>
+                                                {#if conflict.stops !== conflict.hnsStops}
+                                                    <span class="diff-badge">{conflict.hnsStops - conflict.stops > 0 ? '+' : ''}{conflict.hnsStops - conflict.stops}</span>
+                                                {/if}
+                                            </div>
+                                            <div class="detail-row" class:changed={conflict.earnings !== conflict.hnsEarnings}>
+                                                <span class="detail-label">Earnings:</span>
+                                                <span class="detail-value earnings">${conflict.hnsEarnings.toFixed(2)}</span>
+                                                {#if conflict.earnings !== conflict.hnsEarnings}
+                                                    <span class="diff-badge">${(conflict.hnsEarnings - conflict.earnings).toFixed(2)}</span>
+                                                {/if}
+                                            </div>
+                                            <div class="detail-row address-row" class:changed={conflict.address !== conflict.hnsAddress}>
+                                                <span class="detail-label">Address:</span>
+                                                <span class="detail-value address">{conflict.hnsAddress}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </label>
                     </div>
                 {/each}
             </div>
-            <p class="conflict-question">Overwrite your manual changes with HughesNet data?</p>
+            
+            <p class="conflict-question">
+                {#if selectedConflicts.size === 0}
+                    Click "Keep All My Edits" to preserve all changes, or select trips to overwrite.
+                {:else if selectedConflicts.size === conflictTrips.length}
+                    All trips selected - will overwrite all with HughesNet data.
+                {:else}
+                    {selectedConflicts.size} trip(s) selected - will overwrite selected, keep others.
+                {/if}
+            </p>
             
             <div class="timer-bar">
                 <div class="timer-fill" style="width: {(conflictTimer / 30) * 100}%"></div>
             </div>
             <p class="timer-text">
                 {#if conflictTimer > 0}
-                    Auto-skipping in <strong>{conflictTimer}s</strong>...
+                    Auto-keeping all edits in <strong>{conflictTimer}s</strong>...
                 {:else}
-                    Preserving your edits...
+                    Keeping your edits...
                 {/if}
             </p>
         </div>
         <div class="modal-actions">
             <button class="btn-primary safe" on:click={cancelOverride}>
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                Keep My Edits (Skip)
+                Keep All My Edits
             </button>
-            <button class="btn-secondary danger" on:click={confirmOverride}>
+            <button class="btn-secondary danger" on:click={confirmOverride} disabled={selectedConflicts.size === 0}>
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                Overwrite with HNS
+                {selectedConflicts.size === 0 ? 'Select Trips to Overwrite' : `Overwrite ${selectedConflicts.size} Selected`}
             </button>
         </div>
     </div>
@@ -1003,9 +1102,11 @@
       padding: 16px;
   }
   .modal-content {
-      background: white; width: 100%; max-width: 600px;
+      background: white; width: 100%; max-width: 800px;
       border-radius: 16px; padding: 24px;
       box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+      max-height: 90vh;
+      overflow-y: auto;
   }
   .modal-header h3 { 
       font-size: 20px; 
@@ -1016,8 +1117,48 @@
   .modal-body p { 
       font-size: 14px; 
       color: #4B5563; 
-      margin-bottom: 16px; 
+      margin-bottom: 12px; 
       line-height: 1.5; 
+  }
+  
+  .modal-instruction {
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 16px !important;
+  }
+  
+  .selection-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding: 12px;
+      background: #F9FAFB;
+      border-radius: 8px;
+  }
+  
+  .select-btn {
+      padding: 6px 12px;
+      background: white;
+      border: 1px solid #D1D5DB;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #374151;
+      cursor: pointer;
+      transition: all 0.2s;
+  }
+  
+  .select-btn:hover {
+      border-color: #F97316;
+      color: #F97316;
+  }
+  
+  .selected-count {
+      margin-left: auto;
+      font-size: 13px;
+      font-weight: 600;
+      color: #6B7280;
   }
   
   .conflicts-list { 
@@ -1026,7 +1167,7 @@
       border-radius: 12px; 
       padding: 16px; 
       margin: 16px 0;
-      max-height: 300px;
+      max-height: 400px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
@@ -1035,73 +1176,175 @@
   
   .conflict-card {
       background: white;
-      border: 1px solid #E5E7EB;
+      border: 2px solid #E5E7EB;
       border-radius: 8px;
-      padding: 12px 16px;
       transition: all 0.2s;
   }
   
-  .conflict-card:hover {
-      border-color: #D97706;
-      box-shadow: 0 2px 8px rgba(217, 119, 6, 0.1);
+  .conflict-card.selected {
+      border-color: #F97316;
+      background: #FFF7ED;
+  }
+  
+  .conflict-checkbox-label {
+      display: block;
+      cursor: pointer;
+      padding: 16px;
+  }
+  
+  .conflict-checkbox-label input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      margin-right: 12px;
+      cursor: pointer;
+      accent-color: #F97316;
+      float: left;
+      margin-top: 4px;
+  }
+  
+  .conflict-content {
+      overflow: hidden;
   }
   
   .conflict-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 8px;
+      margin-bottom: 16px;
   }
   
   .conflict-date {
       font-weight: 700;
       color: #111827;
-      font-size: 15px;
-  }
-  
-  .conflict-stops {
-      background: #DBEAFE;
-      color: #1E40AF;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 2px 8px;
-      border-radius: 12px;
-      text-transform: uppercase;
-  }
-  
-  .conflict-address {
-      font-size: 14px;
-      color: #6B7280;
-      margin-bottom: 8px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-  }
-  
-  .conflict-footer {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 12px;
-  }
-  
-  .conflict-earnings {
-      font-weight: 700;
-      color: #059669;
-      font-size: 14px;
+      font-size: 16px;
   }
   
   .conflict-modified {
       color: #9CA3AF;
+      font-size: 12px;
       font-style: italic;
+  }
+  
+  .conflict-comparison {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 16px;
+      align-items: center;
+  }
+  
+  @media (max-width: 640px) {
+      .conflict-comparison {
+          grid-template-columns: 1fr;
+          gap: 12px;
+      }
+      .comparison-arrow {
+          display: none;
+      }
+  }
+  
+  .comparison-side {
+      background: #F9FAFB;
+      border-radius: 6px;
+      padding: 12px;
+  }
+  
+  .comparison-side.your-version {
+      border: 2px solid #10B981;
+  }
+  
+  .comparison-side.hns-version {
+      border: 2px solid #3B82F6;
+  }
+  
+  .comparison-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+  }
+  
+  .your-version .comparison-label {
+      color: #10B981;
+  }
+  
+  .hns-version .comparison-label {
+      color: #3B82F6;
+  }
+  
+  .comparison-arrow {
+      font-size: 24px;
+      color: #9CA3AF;
+      text-align: center;
+  }
+  
+  .comparison-details {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+  }
+  
+  .detail-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      position: relative;
+  }
+  
+  .detail-row.changed {
+      background: #FEF3C7;
+      padding: 4px 6px;
+      border-radius: 4px;
+      margin: -2px -6px;
+  }
+  
+  .detail-row.address-row {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+  }
+  
+  .detail-label {
+      font-weight: 600;
+      color: #6B7280;
+  }
+  
+  .detail-value {
+      color: #111827;
+      font-weight: 500;
+  }
+  
+  .detail-value.earnings {
+      color: #059669;
+      font-weight: 700;
+  }
+  
+  .detail-value.address {
+      color: #4B5563;
+      font-size: 12px;
+      word-break: break-word;
+  }
+  
+  .diff-badge {
+      background: #FEE2E2;
+      color: #991B1B;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 10px;
+      margin-left: 6px;
   }
   
   .conflict-question { 
       font-weight: 600; 
-      color: #DC2626; 
+      color: #374151; 
       margin-top: 16px;
-      font-size: 15px;
+      font-size: 14px;
       text-align: center;
+      padding: 12px;
+      background: #F9FAFB;
+      border-radius: 8px;
   }
   .timer-text { 
       font-size: 13px; 
@@ -1147,9 +1390,13 @@
       border-color: #DC2626;
       color: #DC2626;
   }
-  .btn-secondary.danger:hover {
+  .btn-secondary.danger:hover:not(:disabled) {
       background: #DC2626;
       color: white;
+  }
+  .btn-secondary.danger:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
   }
 
   .flex { display: flex; }

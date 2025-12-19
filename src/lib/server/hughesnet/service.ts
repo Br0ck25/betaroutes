@@ -517,12 +517,39 @@ export class HughesNetService {
                                     this.log(`  ${date}: ✓ Force overwriting user modifications (User Approved)`);
                                 } else {
                                     this.log(`  ${date}: ⚠️ CONFLICT - User edited at ${new Date(existingTrip.lastModified).toLocaleString()}`);
+                                    
+                                    // Calculate what HughesNet would sync
+                                    const ordersForDate = ordersByDate[date] || [];
+                                    let hnsEarnings = 0;
+                                    let hnsStops = ordersForDate.length;
+                                    const applyDriveBonus = false; // Would need full route calc, simplified here
+                                    
+                                    for (const order of ordersForDate) {
+                                        const isPaid = !!order.departureCompleteTimestamp || !order.departureIncompleteTimestamp;
+                                        if (!isPaid) continue;
+                                        
+                                        let basePay = 0;
+                                        if (order.hasPoleMount) {
+                                            basePay = installPay + poleCharge;
+                                        } else {
+                                            if (order.type === 'Install' || order.type === 'Re-Install') basePay = installPay;
+                                            else if (order.type === 'Upgrade') basePay = upgradePay;
+                                            else basePay = repairPay;
+                                        }
+                                        if (order.hasWifiExtender) basePay += wifiExtenderPay;
+                                        if (order.hasVoip) basePay += voipPay;
+                                        hnsEarnings += basePay;
+                                    }
+                                    
                                     conflicts.push({
                                         date,
                                         address: existingTrip.startAddress || 'No address',
                                         earnings: existingTrip.totalEarnings || 0,
                                         stops: existingTrip.stops?.length || 0,
-                                        lastModified: existingTrip.lastModified
+                                        lastModified: existingTrip.lastModified,
+                                        hnsEarnings,
+                                        hnsStops,
+                                        hnsAddress: ordersForDate[0]?.address || existingTrip.startAddress || 'Unknown'
                                     });
                                     continue;
                                 }
