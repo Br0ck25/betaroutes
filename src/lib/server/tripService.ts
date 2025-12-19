@@ -167,31 +167,49 @@ export function makeTripService(
           return [];
       }
 
-      const data = await res.json() as any;
+      // [!code fix] improved typing
+      const data = await res.json() as { trips: TripRecord[], needsMigration?: boolean } | TripRecord[];
 
       let trips: TripRecord[] = [];
+      let needsMigration = false;
       
       if (Array.isArray(data)) {
           trips = data;
-      } else if (data.trips) {
-          trips = data.trips;
-      } else if (data.needsMigration) {
+      } else {
+          trips = data.trips || [];
+          needsMigration = !!data.needsMigration;
+      }
+
+      if (needsMigration) {
           console.log(`[TripService] Migrating index for user ${userId} to Durable Object...`);
           const prefix = prefixForUser(userId);
-          const list = await kv.list({ prefix });
+          
+          // [!code fix] PAGINATION SUPPORT
+          // kv.list defaults to 1000 items. We must loop to get everything.
           const out: TripRecord[] = [];
-          for (const k of list.keys) {
+          let list = await kv.list({ prefix });
+          let keys = list.keys;
+
+          while (!list.list_complete && list.cursor) {
+              list = await kv.list({ prefix, cursor: list.cursor });
+              keys = keys.concat(list.keys);
+          }
+          
+          for (const k of keys) {
             const raw = await kv.get(k.name);
             if (!raw) continue;
             const t = JSON.parse(raw);
             out.push(t);
           }
+          
           const summaries = out.map(toSummary);
           
+          // Send to DO for storage
           await stub.fetch(`${DO_ORIGIN}/migrate`, {
               method: 'POST',
               body: JSON.stringify(summaries)
           });
+          
           out.sort((a,b) => b.createdAt.localeCompare(a.createdAt));
           return out;
       }
@@ -221,9 +239,14 @@ export function makeTripService(
           method: 'POST',
           body: JSON.stringify(toSummary(trip))
       });
-      indexTripData(trip).catch(e => {
+      
+      // [!code fix] Await the index operation to ensure it completes before response.
+      // Failing to await in a Worker (without ctx.waitUntil) causes cancellation.
+      try {
+        await indexTripData(trip);
+      } catch (e) {
         console.error('[TripService] Failed to index trip data:', e);
-      });
+      }
     },
 
     async delete(userId: string, tripId: string) {
@@ -268,7 +291,6 @@ export function makeTripService(
           createdAt: trip.createdAt 
       };
 
-      // [!code ++] Set expiration to 30 days (in seconds) for the tombstone
       const THIRTY_DAYS = 30 * 24 * 60 * 60;
       await kv.put(key, JSON.stringify(tombstone), { expirationTtl: THIRTY_DAYS });
 

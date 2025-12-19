@@ -38,9 +38,19 @@ export function makeExpenseService(
           if (status.needsMigration) {
               console.log(`[ExpenseService] Migrating expenses for ${userId} to SQL...`);
               const prefix = `expense:${userId}:`;
-              const list = await kv.list({ prefix });
+              
+              // [!code fix] PAGINATION SUPPORT
+              // Ensure we fetch ALL keys, not just the first 1000
               const expenses: ExpenseRecord[] = [];
-              for (const key of list.keys) {
+              let list = await kv.list({ prefix });
+              let keys = list.keys;
+
+              while (!list.list_complete && list.cursor) {
+                  list = await kv.list({ prefix, cursor: list.cursor });
+                  keys = keys.concat(list.keys);
+              }
+
+              for (const key of keys) {
                 const raw = await kv.get(key.name);
                 if (raw) expenses.push(JSON.parse(raw));
               }
@@ -48,7 +58,7 @@ export function makeExpenseService(
               // Bulk Insert to DO
               await stub.fetch(`${DO_ORIGIN}/expenses/migrate`, {
                   method: 'POST',
-                  body: JSON.stringify(expenses) // Even empty list marks migration complete
+                  body: JSON.stringify(expenses) 
               });
           }
       }

@@ -390,7 +390,8 @@
       conflictInterval = setInterval(() => {
           conflictTimer--;
           if (conflictTimer <= 0) {
-              confirmOverride();
+              // [!code change] Default action is SKIP (cancel override)
+              cancelOverride();
           }
       }, 1000);
   }
@@ -404,7 +405,8 @@
 
   function cancelOverride() {
       stopConflictTimer();
-      addLog(`Kept user modifications for ${conflictDates.join(', ')}.`);
+      // [!code change] Updated log message
+      addLog(`Skipped updates for ${conflictDates.length} user-modified trips.`);
       conflictDates = [];
       loading = false;
       statusMessage = 'Sync Complete';
@@ -711,11 +713,11 @@
             <div class="timer-bar">
                 <div class="timer-fill" style="width: {(conflictTimer / 30) * 100}%"></div>
             </div>
-            <p class="timer-text">Overwriting in <strong>{conflictTimer}s</strong>...</p>
+            <p class="timer-text">Skipping updates in <strong>{conflictTimer}s</strong>...</p>
         </div>
         <div class="modal-actions">
-            <button class="btn-secondary" on:click={cancelOverride}>Keep My Edits</button>
-            <button class="btn-primary" on:click={confirmOverride}>Overwrite Now</button>
+            <button class="btn-secondary" on:click={cancelOverride}>Skip (Keep My Edits)</button>
+            <button class="btn-primary" on:click={confirmOverride}>Overwrite</button>
         </div>
     </div>
 </div>

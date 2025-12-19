@@ -835,10 +835,31 @@ export class HughesNetService {
             }
 
             // STAGE 3: CREATE TRIPS
-            // Refresh session before trip creation
-            const sortedDates = Object.keys(this.groupOrdersByDate(orderDb)).sort();
+            const ordersByDate = this.groupOrdersByDate(orderDb);
+            let sortedDates = Object.keys(ordersByDate).sort();
+
+            // [!code ++] QUICK SYNC FILTER
+            // If recentOnly is true, filtering dates to only the last 7 days (and future)
+            if (recentOnly) {
+                const cutoffDate = new Date();
+                cutoffDate.setDate(cutoffDate.getDate() - 7);
+                cutoffDate.setHours(0, 0, 0, 0); // Start of day 7 days ago
+
+                const totalDates = sortedDates.length;
+                sortedDates = sortedDates.filter(dateStr => {
+                    // Always include dates requested for force update
+                    if (forceDates.includes(dateStr)) return true;
+
+                    const d = parseDateOnly(dateStr);
+                    // Keep if date is valid AND (is today/future OR is within last 7 days)
+                    return d && d >= cutoffDate;
+                });
+                
+                this.log(`[Trips] Quick Sync: Filtered from ${totalDates} dates to ${sortedDates.length} recent dates.`);
+            }
+
             if (sortedDates.length > 0) {
-                this.log('[Trips] Starting trip creation...');
+                this.log(`[Trips] Building routes for ${sortedDates.length} dates...`);
                 
                 // Check soft limit before trips
                 if (this.fetcher.shouldBatch()) {
@@ -854,9 +875,6 @@ export class HughesNetService {
                 }
             }
             
-            this.log(`[Trips] Building routes for ${sortedDates.length} dates...`);
-            
-            const ordersByDate = this.groupOrdersByDate(orderDb);
             const tripService = makeTripService(this.tripKV, this.trashKV, undefined, this.tripIndexDO);
 
             for (const date of sortedDates) {
@@ -939,8 +957,18 @@ export class HughesNetService {
     private isWithinDays(dateStr: string, days: number): boolean {
         const d = parseDateOnly(dateStr);
         if (!d) return false;
-        const diff = Date.now() - d.getTime();
-        return diff >= 0 && diff < (days * 24 * 60 * 60 * 1000);
+        
+        const now = new Date();
+        now.setHours(0,0,0,0);
+        
+        const target = new Date(d);
+        target.setHours(0,0,0,0);
+        
+        const diffTime = now.getTime() - target.getTime();
+        const diffDays = diffTime / (1000 * 3600 * 24);
+        
+        // Return true if it's within the past 'days' OR in the future
+        return diffDays <= days; 
     }
 
     // ... (rest of methods: groupOrdersByDate, processOrderData, scanUrl, createTripForDate) ...
@@ -1051,9 +1079,6 @@ export class HughesNetService {
         driveTimeBonus: number,
         tripService: any
     ): Promise<boolean> {
-        // ... (existing logic from previous steps) ...
-        // Re-pasted here for completeness since user asked for "completed updated code"
-        
         let defaultStart = '', defaultEnd = '', mpg = 25, gas = 3.50;
         
         try {
