@@ -1,4 +1,3 @@
-// src/routes/api/stripe/checkout/+server.ts
 import { json, error } from '@sveltejs/kit';
 import { getStripe } from '$lib/server/stripe';
 import { env } from '$env/dynamic/private';
@@ -10,7 +9,7 @@ export async function POST({ locals, url }) {
     }
 
     const stripe = getStripe();
-    const priceId = env.STRIPE_PRICE_ID_PRO; // e.g. price_12345
+    const priceId = env.STRIPE_PRICE_ID_PRO;
 
     if (!priceId) {
         console.error('Missing STRIPE_PRICE_ID_PRO env var');
@@ -20,7 +19,11 @@ export async function POST({ locals, url }) {
     try {
         const session = await stripe.checkout.sessions.create({
             mode: 'subscription',
-            payment_method_types: ['card'],
+            
+            // Reverting to explicit types to fix "unknown parameter" error
+            // 'card' includes Apple Pay and Google Pay automatically
+            payment_method_types: ['card', 'link', 'cashapp'],
+            
             line_items: [
                 {
                     price: priceId,
@@ -32,7 +35,7 @@ export async function POST({ locals, url }) {
                 userId: user.id,
                 username: user.username
             },
-            // Customer email pre-fill
+            // Customer email pre-fill allows One-Click Link checkout
             customer_email: user.email,
             success_url: `${url.origin}/dashboard/settings?payment=success`,
             cancel_url: `${url.origin}/dashboard/settings?payment=cancelled`,
