@@ -46,6 +46,14 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
         return json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // 2. Check Plan - Disable Optimization for Free Tier
+    if (locals.user.plan === 'free') {
+        return json({ 
+            error: 'Plan Limit', 
+            message: 'Route optimization is a Pro feature. You can manually reorder stops by dragging them.' 
+        }, { status: 403 });
+    }
+
     const { startAddress, endAddress, stops } = await request.json();
     
     if (!startAddress || !stops || stops.length < 2) {
@@ -56,7 +64,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
     const apiKey = platform?.env?.PRIVATE_GOOGLE_MAPS_API_KEY;
     const cacheKey = generateOptimizationKey(startAddress, endAddress || '', stops.map((s: any) => s.address));
 
-    // 2. Check KV Cache
+    // 3. Check KV Cache
     if (kv) {
         const cached = await kv.get(cacheKey);
         if (cached) {
@@ -69,7 +77,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
     const allAddresses = [startAddress, ...stopAddresses];
     if (endAddress) allAddresses.push(endAddress);
 
-    // 3. Try OSRM (Free)
+    // 4. Try OSRM (Free)
     try {
         // Geocode all points first
         const coords = await Promise.all(allAddresses.map(addr => geocodePhoton(addr)));
@@ -124,7 +132,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
         console.warn('OSRM Optimization failed, falling back to Google', e);
     }
 
-    // 4. Google Fallback (Server-Side)
+    // 5. Google Fallback (Server-Side)
     if (!apiKey) {
         return json({ error: 'Optimization service unavailable' }, { status: 500 });
     }

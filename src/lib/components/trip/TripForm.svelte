@@ -7,41 +7,46 @@
   import { storage } from '$lib/utils/storage';
   import { draftTrip } from '$lib/stores/trips';
   import { autocomplete } from '$lib/utils/autocomplete';
-  import { calculateRoute as getRouteData } from '$lib/services/maps';
+  import { calculateRoute as getRouteData, optimizeRoute } from '$lib/services/maps';
   import DestinationList from './DestinationList.svelte';
   import TripSummary from './TripSummary.svelte';
   import TripDebug from './TripDebug.svelte';
   import { toasts } from '$lib/stores/toast';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
+  import Modal from '$lib/components/ui/Modal.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
+  import { getUserState } from '$lib/stores/user.svelte';
 
   // Svelte 5 Props using Runes
-  // [!code ++] Added 'trip' prop to allow editing existing trips directly
   let { googleApiKey = '', loading = false, trip = null } = $props();
-    
+
   const settings = get(userSettings);
   const API_KEY = googleApiKey || 'dummy_key';
+  
+  const userState = getUserState();
 
   // --- Form State (Runes) ---
   let date = $state(new Date().toISOString().split('T')[0]);
   let startTime = $state('');
   let endTime = $state('');
-    
+  
   let startAddress = $state(settings.startLocation || storage.getSetting('defaultStartAddress') || '');
   let endAddress = $state(settings.endLocation || storage.getSetting('defaultEndAddress') || '');
-    
+
   // Coordinates State
   let startLocation = $state<LatLng | undefined>(undefined);
   let endLocation = $state<LatLng | undefined>(undefined);
-    
+
   let mpg = $state(settings.defaultMPG ?? storage.getSetting('defaultMPG') ?? 25);
   let gasPrice = $state(settings.defaultGasPrice ?? storage.getSetting('defaultGasPrice') ?? 3.5);
+  
   let distanceUnit = $state(settings.distanceUnit || 'mi');
     
   // Destinations State
   let destinations = $state<Destination[]>([{ address: '', earnings: 0 }]);
   let notes = $state('');
 
-  // [!code ++] Financials State (Runes)
+  // Financials State (Runes)
   let supplies = $state<{ id: string; type: string; cost: number }[]>([]);
   let maintenance = $state<{ id: string; item: string; cost: number }[]>([]);
   let showFinancials = $state(true);
@@ -50,17 +55,34 @@
   let calculating = $state(false);
   let calculated = $state(false);
   let calculationError = $state('');
-    
+
   let totalMileage = $state(0);
   let totalTime = $state('');
   let fuelCost = $state(0);
-  
-  // [!code ++] Computed Costs
+
+  // Computed Costs
   let suppliesCost = $derived(supplies.reduce((sum, item) => sum + (Number(item.cost) || 0), 0));
   let maintenanceCost = $derived(maintenance.reduce((sum, item) => sum + (Number(item.cost) || 0), 0));
-  
-  // [!code change] Net Profit now subtracts supplies and maintenance
+
   let netProfit = $state(0);
+
+  // ← ENHANCED: Upgrade Modal State with specific reason tracking
+  let showUpgradeModal = $state(false);
+  let upgradeReason = $state<'stops' | 'optimize' | 'trips' | 'general'>('general');
+  
+  // Computed upgrade message based on reason
+  let upgradeMessage = $derived(() => {
+    switch (upgradeReason) {
+      case 'stops':
+        return "You've hit the 10-stop limit for Free plans. Upgrade to Pro for unlimited stops per trip!";
+      case 'optimize':
+        return "Route Optimization is a Pro feature. Upgrade to automatically reorder your stops for the fastest route!";
+      case 'trips':
+        return `You've reached your monthly trip limit (${userState.value?.maxTrips || 10} trips). Upgrade to Pro for unlimited trips!`;
+      default:
+        return "Upgrade to Pro to unlock all features!";
+    }
+  });
 
   // --- Auto-Calculation Effect ---
   $effect(() => {
@@ -72,6 +94,7 @@
         const timer = setTimeout(() => {
             handleCalculate(true); // true = silent mode
         }, 1500);
+        
         return () => clearTimeout(timer);
     }
   });
@@ -83,8 +106,7 @@
     
     let location: LatLng | undefined;
     if (place.geometry && place.geometry.location) {
-        const lat = typeof place.geometry.location.lat === 'function' ?
-            place.geometry.location.lat() : place.geometry.location.lat;
+        const lat = typeof place.geometry.location.lat === 'function' ? place.geometry.location.lat() : place.geometry.location.lat;
         const lng = typeof place.geometry.location.lng === 'function' ? place.geometry.location.lng() : place.geometry.location.lng;
         location = { lat, lng };
     }
@@ -98,7 +120,7 @@
     }
   }
 
-  // [!code ++] Financial Handlers
+  // Financial Handlers
   function addSupply() {
       supplies = [...supplies, { id: crypto.randomUUID(), type: '', cost: 0 }];
   }
@@ -118,9 +140,18 @@
         return;
     }
 
+    // ← ENHANCED: Stop Limit Check with better modal
+    if (!silent) {
+        const validStopCount = destinations.filter(d => d.address && d.address.trim().length > 0).length;
+        if (userState.value?.plan === 'free' && validStopCount > 10) {
+            upgradeReason = 'stops';
+            showUpgradeModal = true;
+            return;
+        }
+    }
+
     calculating = true;
     calculationError = '';
-    
     try {
         const effectiveEndAddress = endAddress ? endAddress : startAddress;
         const destsCopy = $state.snapshot(destinations);
@@ -128,7 +159,7 @@
         const routeData = await getRouteData(startAddress, effectiveEndAddress, destsCopy, distanceUnit as 'mi'|'km');
         
         totalMileage = routeData.totalMiles;
-        
+
         const totals = calculateTripTotals(
             totalMileage,
             routeData.totalMinutes,
@@ -143,15 +174,12 @@
 
         totalTime = totals.totalTime || '';
         
-        // [!code change] Respect existing fuel cost if editing a sync trip, otherwise calc
         if (trip && trip.fuelCost && !startLocation) {
-             // Keep existing fuel cost logic if simple edit
              fuelCost = trip.fuelCost;
         } else {
              fuelCost = totals.fuelCost || 0;
         }
 
-        // [!code change] Net Profit Calculation including supplies
         const grossEarnings = destsCopy.reduce((acc: number, d: Destination) => acc + (Number(d.earnings) || 0), 0);
         netProfit = grossEarnings - (fuelCost + suppliesCost + maintenanceCost);
         
@@ -160,14 +188,20 @@
         if (!silent) toasts.success("Route calculated successfully!");
         
         return routeData;
-
     } catch (err: any) {
         console.error("Calculation Error:", err);
-        const msg = err.message || "Failed to calculate route.";
+        const msg = (err.message || '').toLowerCase();
         
-        if (!silent || !msg.includes('ZERO_RESULTS')) {
-             calculationError = msg;
-             if (!silent) toasts.error(msg);
+        // ← ENHANCED: Better plan limit detection
+        if (msg.includes('plan limit') || msg.includes('pro feature') || msg.includes('trip limit')) {
+             upgradeReason = 'general';
+             showUpgradeModal = true;
+             return null;
+        }
+        
+        if (!silent || !msg.includes('zero_results')) {
+             calculationError = err.message;
+             if (!silent) toasts.error(err.message);
         }
         return null;
     } finally {
@@ -181,6 +215,13 @@
         return;
     }
 
+    // ← ENHANCED: Better optimization limit check
+    if (userState.value?.plan === 'free') {
+        upgradeReason = 'optimize';
+        showUpgradeModal = true;
+        return;
+    }
+
     const validDests = destinations.filter(d => d.address && d.address.trim() !== '');
     if (validDests.length < 2) {
         toasts.error("Need at least 2 stops to optimize.");
@@ -190,13 +231,13 @@
     calculating = true;
 
     try {
-        const result = await handleCalculate(true); 
+        const result = await optimizeRoute(startAddress, endAddress || '', validDests);
         
         if (result && result.optimizedOrder && result.optimizedOrder.length > 0) {
             const currentDestinations = $state.snapshot(destinations);
             const validDestinations = currentDestinations.filter(d => d.address && d.address.trim() !== '');
             const emptyDestinations = currentDestinations.filter(d => !d.address || d.address.trim() === '');
-            
+
             let waypointsToReorder: Destination[] = [];
             let fixedEnd: Destination | null = null;
 
@@ -208,6 +249,7 @@
             }
 
             const reorderedWaypoints = result.optimizedOrder.map((index: number) => waypointsToReorder[index]);
+            
             let newDestinations = [...reorderedWaypoints];
             
             if (fixedEnd) {
@@ -216,18 +258,54 @@
 
             newDestinations = [...newDestinations, ...emptyDestinations];
             destinations = newDestinations;
-            
+
             toasts.success("Stops optimized for fastest route!");
+            handleCalculate(true);
         } else {
             toasts.info("Route is already optimized or could not be improved.");
         }
 
     } catch (e: any) {
-        console.error("Optimization failed:", e);
-        toasts.error("Failed to optimize stops.");
+        const msg = (e.message || '').toLowerCase();
+
+        // ← ENHANCED: Catch ALL potential plan limit indicators
+        const isPlanLimit = 
+            e.code === 'PLAN_LIMIT' || 
+            msg.includes('plan limit') || 
+            msg.includes('pro feature') ||
+            msg.includes('upgrade');
+
+        if (isPlanLimit) {
+            upgradeReason = 'optimize';
+            showUpgradeModal = true;
+        } else {
+            console.error("Optimization failed:", e);
+            toasts.error(`Optimization failed: ${e.message}`);
+        }
     } finally {
         calculating = false;
     }
+  }
+
+  // ← NEW: Check trip limit before allowing save
+  async function checkTripLimit(): Promise<boolean> {
+    if (!userState.value) return true; // No user state, allow
+    
+    const { plan, tripsThisMonth, maxTrips } = userState.value;
+    
+    // Pro/Premium users have unlimited trips
+    if (plan === 'pro' || plan === 'premium' || plan === 'business') {
+        return true;
+    }
+    
+    // Free users: check limit
+    if (plan === 'free' && tripsThisMonth >= maxTrips) {
+        upgradeReason = 'trips';
+        showUpgradeModal = true;
+        return false;
+    }
+    
+    return true;
   }
 
   // --- Draft Logic ---
@@ -244,9 +322,7 @@
     if (draft.gasPrice) gasPrice = draft.gasPrice;
     if (draft.destinations && Array.isArray(draft.destinations)) destinations = draft.destinations;
     if (draft.notes) notes = draft.notes;
-    
-    // [!code ++] Load Supplies from Draft/Trip
-    // Check both 'suppliesItems' (internal) and 'supplyItems' (HNS Sync format)
+    // Load Supplies from Draft/Trip
     if (draft.suppliesItems && Array.isArray(draft.suppliesItems)) {
         supplies = draft.suppliesItems;
     } else if ((draft as any).supplyItems && Array.isArray((draft as any).supplyItems)) {
@@ -260,20 +336,18 @@
     const draftData: Partial<Trip> = { 
       date, startTime, endTime, startAddress, endAddress, 
       startLocation, endLocation, destinations, mpg, gasPrice, notes,
-      suppliesItems: supplies, // [!code ++] Save supplies
-      maintenanceItems: maintenance // [!code ++] Save maintenance
+      suppliesItems: supplies,
+      maintenanceItems: maintenance
     };
     draftTrip.save(draftData);
   }
 
   onMount(() => {
-    // [!code ++] Support loading trip via prop (Edit Mode)
+    // Support loading trip via prop (Edit Mode)
     if (trip) {
         loadDraft(trip);
-        // If editing a saved trip, calculate totals immediately
         if (trip.totalMiles) totalMileage = trip.totalMiles;
         if (trip.fuelCost) fuelCost = trip.fuelCost;
-        // Don't ask to resume draft if we are explicitly editing a trip
     } else {
         const rawDraft = draftTrip.load();
         if (rawDraft && confirm('Resume your last unsaved trip?')) {
@@ -284,6 +358,11 @@
     const interval = setInterval(saveDraft, 5000);
     return () => clearInterval(interval);
   });
+
+  // ← NEW: Expose trip limit check for parent component
+  export function canSaveTrip(): Promise<boolean> {
+    return checkTripLimit();
+  }
 </script>
 
 <div class="max-w-4xl mx-auto p-4 md:p-6">
@@ -335,7 +414,7 @@
         <DestinationList 
             bind:destinations 
             apiKey={API_KEY} 
-        />
+         />
     {/if}
 
     <div>
@@ -356,7 +435,7 @@
     </div>
 
     <div class="grid grid-cols-2 gap-4">
-      <div>
+       <div>
         <label class="block font-semibold mb-2 text-sm text-gray-700">MPG</label>
         {#if loading}
            <Skeleton height="48px" className="rounded-lg" />
@@ -409,28 +488,28 @@
     </div>
 
     <div class="border-t border-gray-100 pt-4">
-        <div class="flex justify-between items-center mb-4">
+         <div class="flex justify-between items-center mb-4">
              <label class="block font-semibold text-sm text-gray-700">Expenses & Supplies</label>
-             <button type="button" class="text-sm text-blue-600" on:click={() => showFinancials = !showFinancials}>
+             <button type="button" class="text-sm text-blue-600" onclick={() => showFinancials = !showFinancials}>
                  {showFinancials ? 'Hide' : 'Show'}
              </button>
         </div>
 
         {#if showFinancials}
-             <div transition:slide class="space-y-4 bg-gray-50 p-4 rounded-lg">
+             <div class="space-y-4 bg-gray-50 p-4 rounded-lg">
                  <div>
                      <div class="flex justify-between items-center mb-2">
-                         <span class="text-xs font-semibold text-gray-500 uppercase">Supplies (Pole, Concrete)</span>
-                         <button type="button" on:click={addSupply} class="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100">+ Add</button>
+                          <span class="text-xs font-semibold text-gray-500 uppercase">Supplies (Pole, Concrete)</span>
+                         <button type="button" onclick={addSupply} class="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100">+ Add</button>
                      </div>
                      {#each supplies as item, i}
                          <div class="flex gap-2 mb-2 items-center">
                              <input type="text" placeholder="Item Type" bind:value={item.type} class="w-full p-2 text-sm border rounded" />
                              <input type="number" placeholder="$" step="0.01" bind:value={item.cost} class="w-24 p-2 text-sm border rounded" />
-                             <button type="button" on:click={() => removeSupply(i)} class="text-red-400 hover:text-red-600">✕</button>
+                             <button type="button" onclick={() => removeSupply(i)} class="text-red-400 hover:text-red-600">✕</button>
                          </div>
                      {/each}
-                     {#if supplies.length > 0}
+                      {#if supplies.length > 0}
                         <div class="text-right text-xs text-gray-600 font-medium">Subtotal: ${suppliesCost.toFixed(2)}</div>
                      {/if}
                  </div>
@@ -438,13 +517,13 @@
                  <div>
                      <div class="flex justify-between items-center mb-2">
                          <span class="text-xs font-semibold text-gray-500 uppercase">Vehicle / Other</span>
-                         <button type="button" on:click={addMaintenance} class="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100">+ Add</button>
+                         <button type="button" onclick={addMaintenance} class="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100">+ Add</button>
                      </div>
                      {#each maintenance as item, i}
                          <div class="flex gap-2 mb-2 items-center">
                              <input type="text" placeholder="Description" bind:value={item.item} class="w-full p-2 text-sm border rounded" />
                              <input type="number" placeholder="$" step="0.01" bind:value={item.cost} class="w-24 p-2 text-sm border rounded" />
-                             <button type="button" on:click={() => removeMaintenance(i)} class="text-red-400 hover:text-red-600">✕</button>
+                             <button type="button" onclick={() => removeMaintenance(i)} class="text-red-400 hover:text-red-600">✕</button>
                          </div>
                      {/each}
                  </div>
@@ -492,20 +571,109 @@
     {:else}
         <button 
           class="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-          on:click={() => handleCalculate(false)} 
+          onclick={() => handleCalculate(false)} 
           disabled={calculating}
         >
-          {calculating ? 'Calculating...' : 'Recalculate Route'}
+         {calculating ? 'Calculating...' : 'Recalculate Route'}
         </button>
         
         <button 
           class="w-full sm:w-auto px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-          on:click={handleOptimize} 
+          onclick={handleOptimize} 
           disabled={calculating || destinations.length < 2}
-          title="Reorder stops for fastest route"
+          title={userState.value?.plan === 'free' ? 'Pro Feature - Upgrade to Unlock' : 'Reorder stops for fastest route'}
         >
-          Optimize Stops
+          {#if userState.value?.plan === 'free'}
+            🔒 Optimize Stops (Pro)
+          {:else}
+            Optimize Stops
+          {/if}
         </button>
     {/if}
   </div>
 </div>
+
+<!-- ← ENHANCED: Better Upgrade Modal with Dynamic Content -->
+<Modal bind:open={showUpgradeModal} title="Upgrade to Pro">
+    <div class="space-y-6 text-center py-4">
+        <!-- Icon changes based on reason -->
+        <div class="mx-auto w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mb-4">
+            {#if upgradeReason === 'stops'}
+                <span class="text-3xl">📍</span>
+            {:else if upgradeReason === 'optimize'}
+                <span class="text-3xl">🚀</span>
+            {:else if upgradeReason === 'trips'}
+                <span class="text-3xl">📊</span>
+            {:else}
+                <span class="text-3xl">⭐</span>
+            {/if}
+        </div>
+        
+        <h3 class="text-xl font-bold text-gray-900">
+            {#if upgradeReason === 'stops'}
+                Too Many Stops
+            {:else if upgradeReason === 'optimize'}
+                Pro Feature Required
+            {:else if upgradeReason === 'trips'}
+                Monthly Limit Reached
+            {:else}
+                Unlock Pro Features
+            {/if}
+        </h3>
+        
+        <p class="text-gray-600 text-base leading-relaxed">
+            {upgradeMessage()}
+        </p>
+
+        <!-- Current Plan Status (for trip limits) -->
+        {#if upgradeReason === 'trips' && userState.value}
+            <div class="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm">
+                <div class="font-semibold text-orange-900">Your Free Plan Status:</div>
+                <div class="text-orange-700 mt-1">
+                    {userState.value.tripsThisMonth} / {userState.value.maxTrips} trips used this month
+                </div>
+            </div>
+        {/if}
+
+        <!-- Benefits List -->
+        <div class="bg-gray-50 p-4 rounded-lg text-left text-sm space-y-2 border border-gray-100">
+            <div class="font-semibold text-gray-900 mb-3">Pro Plan Includes:</div>
+            <div class="flex items-center gap-2">
+                <span class="text-green-500 text-lg">✓</span>
+                <span class="text-gray-700"><strong>Unlimited</strong> Stops per Trip</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-green-500 text-lg">✓</span>
+                <span class="text-gray-700"><strong>One-Click</strong> Route Optimization</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-green-500 text-lg">✓</span>
+                <span class="text-gray-700"><strong>Unlimited</strong> Monthly Trips</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-green-500 text-lg">✓</span>
+                <span class="text-gray-700"><strong>Priority</strong> Support</span>
+            </div>
+        </div>
+
+        <!-- Pricing -->
+        <div class="bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg p-4">
+            <div class="text-sm opacity-90">Only</div>
+            <div class="text-3xl font-bold">$9.99<span class="text-lg font-normal">/mo</span></div>
+            <div class="text-sm opacity-90">Cancel anytime</div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex gap-3 justify-center pt-2">
+            <Button variant="outline" onclick={() => showUpgradeModal = false}>
+                Maybe Later
+            </Button>
+            <a 
+                href="/dashboard/settings" 
+                class="inline-flex items-center justify-center rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600 transition-all"
+            >
+                Upgrade to Pro →
+            </a>
+        </div>
+    </div>
+</Modal>

@@ -17,7 +17,6 @@ export async function optimizeRoute(
     endAddress: string,
     destinations: Destination[]
 ) {
-    // Call the server endpoint which handles the KV/OSRM/Google fallback chain
     const res = await fetch('/api/directions/optimize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -29,6 +28,14 @@ export async function optimizeRoute(
     });
 
     const data = await res.json();
+
+    // [!code highlight] Explicitly handle 403 Forbidden (Plan Limits)
+    if (res.status === 403) {
+        // Pass the server's specific message ("Route optimization is a Pro feature...")
+        const error = new Error(data.message || data.error || 'Plan Limit Reached');
+        (error as any).code = 'PLAN_LIMIT'; 
+        throw error;
+    }
 
     if (!res.ok) {
         throw new Error(data.error || 'Failed to optimize route');
@@ -113,8 +120,6 @@ export async function calculateRoute(
                     optimizedOrder: route.waypoint_order 
                 });
             } else {
-                // If client-side fails (e.g. REQUEST_DENIED), we reject.
-                // The UI should catch this or prefer optimizeRoute() for optimization tasks.
                 reject(new Error(`Directions request failed: ${status}`));
             }
         });

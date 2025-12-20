@@ -7,36 +7,35 @@
   import { page } from '$app/stores';
   import { autocomplete } from '$lib/utils/autocomplete'; 
   import { optimizeRoute } from '$lib/services/maps';
-  // [!code ++] Import Modal and Toast
   import Modal from '$lib/components/ui/Modal.svelte';
   import { toasts } from '$lib/stores/toast';
+  import Button from '$lib/components/ui/Button.svelte';
 
   export let data;
   $: API_KEY = data.googleMapsApiKey;
   let step = 1;
   let dragItemIndex: number | null = null;
   
-  // [!code change] Use userSettings for options instead of local variables
   $: maintenanceOptions = $userSettings.maintenanceCategories?.length > 0 
       ? $userSettings.maintenanceCategories 
       : ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement'];
-
   $: suppliesOptions = $userSettings.supplyCategories?.length > 0 
       ? $userSettings.supplyCategories 
       : ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental'];
-
-  // [!code ++] State for Dropdowns
+  
   let selectedMaintenance = '';
   let selectedSupply = '';
-
-  // [!code ++] State for Modal
+  
   let isManageCategoriesOpen = false;
   let activeCategoryType: 'maintenance' | 'supplies' = 'maintenance';
   let newCategoryName = '';
   $: activeCategories = activeCategoryType === 'maintenance' ? maintenanceOptions : suppliesOptions;
 
+  // Upgrade Modal State
+  let showUpgradeModal = false;
+  let upgradeMessage = '';
+
   let isCalculating = false;
-  
   function getLocalDate() {
     const now = new Date();
     return new Date(now.getTime() - (now.getTimezoneOffset() * 60000))
@@ -62,10 +61,8 @@
     suppliesItems: [] as any[],
     notes: ''
   };
-
   let newStop = { address: '', earnings: 0, notes: '' };
-
-  // ... (Keep existing routing helpers: formatDuration, generateRouteKey, fetchRouteSegment, recalculateAllLegs, recalculateTotals) ...
+  
   function formatDuration(minutes: number): string {
     if (!minutes) return '0 min';
     const h = Math.floor(minutes / 60);
@@ -85,7 +82,6 @@
     const localKey = generateRouteKey(start, end);
     const cached = localStorage.getItem(localKey);
     if (cached) return JSON.parse(cached);
-
     try {
         const res = await fetch(`/api/directions/cache?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
         const result = await res.json();
@@ -144,10 +140,16 @@
     tripData = { ...tripData };
   }
 
-  // ... (Keep optimize, drag & drop, stop handling logic) ...
   async function handleOptimize() {
-    if (!tripData.startAddress) return alert("Please enter a start address first.");
-    if (tripData.stops.length < 2) return alert("Add at least 2 stops to optimize.");
+    if (!tripData.startAddress) return toasts.error("Please enter a start address first.");
+    
+    if ($user?.plan === 'free') {
+        upgradeMessage = "Route Optimization is a Pro feature. Upgrade now to save time and fuel automatically!";
+        showUpgradeModal = true;
+        return;
+    }
+
+    if (tripData.stops.length < 2) return toasts.error("Add at least 2 stops to optimize.");
 
     isCalculating = true;
     try {
@@ -174,16 +176,22 @@
            });
         }
         await recalculateTotals();
+        toasts.success("Route optimized!");
       }
     } catch (e: any) {
       console.error(e);
-      alert("Optimization failed: " + e.message);
+      const msg = (e.message || '').toLowerCase();
+      if (e.code === 'PLAN_LIMIT' || msg.includes('plan limit') || msg.includes('pro feature')) {
+          upgradeMessage = e.message || "Route Optimization is a Pro feature.";
+          showUpgradeModal = true;
+      } else {
+          toasts.error("Optimization failed: " + e.message);
+      }
     } finally {
       isCalculating = false;
     }
   }
 
-  // ... (Keep handleStopChange, handleMainAddressChange, handleNewStopSelect, addStop, removeStop, drag handlers) ...
   async function handleStopChange(index: number, placeOrEvent: any) {
     const val = placeOrEvent?.formatted_address || placeOrEvent?.name || tripData.stops[index].address;
     if (!val) return;
@@ -216,7 +224,6 @@
     const val = placeOrEvent?.formatted_address || placeOrEvent?.name || (type === 'start' ? tripData.startAddress : tripData.endAddress);
     if (type === 'start') tripData.startAddress = val;
     else tripData.endAddress = val;
-
     isCalculating = true;
     try {
         if (type === 'start' && tripData.stops.length > 0) {
@@ -243,8 +250,15 @@
 
   async function addStop() {
     if (!newStop.address) return;
+
+    if ($user?.plan === 'free' && tripData.stops.length >= 10) {
+        upgradeMessage = "The Free plan is limited to 10 stops per trip. Upgrade to Pro for unlimited stops!";
+        showUpgradeModal = true;
+        return;
+    }
+
     let segmentStart = tripData.stops.length > 0 ? tripData.stops[tripData.stops.length - 1].address : tripData.startAddress;
-    if (!segmentStart) { alert("Please enter a Starting Address first."); return; }
+    if (!segmentStart) { toasts.error("Please enter a Starting Address first."); return; }
     
     isCalculating = true;
     try {
@@ -259,7 +273,7 @@
       }];
       await recalculateTotals();
       newStop = { address: '', earnings: 0, notes: '' };
-    } catch (e) { alert("Error calculating route.");
+    } catch (e) { toasts.error("Error calculating route.");
     } finally { isCalculating = false; }
   }
 
@@ -290,36 +304,27 @@
       await recalculateAllLegs();
   }
   
-  // [!code change] New Expense Logic using Dropdowns & Settings
-  
   function addMaintenanceItem() {
       if (!selectedMaintenance) return;
       tripData.maintenanceItems = [...tripData.maintenanceItems, { id: crypto.randomUUID(), type: selectedMaintenance, cost: 0 }];
-      // Don't clear selection so they can add multiple of same type if needed, or clear it? 
-      // Clearing it feels better for "action completed"
       selectedMaintenance = '';
   }
-
   function removeMaintenanceItem(id: string) {
       tripData.maintenanceItems = tripData.maintenanceItems.filter(m => m.id !== id);
   }
-  
   function addSupplyItem() {
       if (!selectedSupply) return;
       tripData.suppliesItems = [...tripData.suppliesItems, { id: crypto.randomUUID(), type: selectedSupply, cost: 0 }];
       selectedSupply = '';
   }
-
   function removeSupplyItem(id: string) {
       tripData.suppliesItems = tripData.suppliesItems.filter(s => s.id !== id);
   }
 
-  // --- MODAL & SETTINGS LOGIC ---
   function openSettings(type: 'maintenance' | 'supplies') {
       activeCategoryType = type;
       isManageCategoriesOpen = true;
   }
-
   async function updateCategories(newCategories: string[]) {
       const updateData: any = {};
       if (activeCategoryType === 'maintenance') {
@@ -329,7 +334,6 @@
           userSettings.update(s => ({ ...s, supplyCategories: newCategories }));
           updateData.supplyCategories = newCategories;
       }
-
       try {
           await fetch('/api/settings', {
               method: 'POST',
@@ -341,11 +345,9 @@
           toasts.error('Saved locally, but sync failed');
       }
   }
-
   async function addCategory() {
       if (!newCategoryName.trim()) return;
-      const val = newCategoryName.trim().toLowerCase(); // Normalize for check? Or keep case? Keeping case usually better for display.
-      // Check case-insensitive dupes
+      const val = newCategoryName.trim().toLowerCase(); 
       if (activeCategories.some(c => c.toLowerCase() === val.toLowerCase())) {
           toasts.error('Category already exists');
           return;
@@ -355,7 +357,6 @@
       newCategoryName = '';
       toasts.success('Category added');
   }
-
   async function removeCategory(cat: string) {
       if (!confirm(`Delete "${cat}" category?`)) return;
       const updated = activeCategories.filter(c => c !== cat);
@@ -363,10 +364,8 @@
       toasts.success('Category removed');
   }
 
-  // ... (Calculations) ...
   $: { if (tripData.totalMiles && tripData.mpg && tripData.gasPrice) { const gallons = tripData.totalMiles / tripData.mpg;
-    tripData.fuelCost = Math.round(gallons * tripData.gasPrice * 100) / 100; } else { tripData.fuelCost = 0;
-  } }
+    tripData.fuelCost = Math.round(gallons * tripData.gasPrice * 100) / 100; } else { tripData.fuelCost = 0; } }
   $: totalEarnings = tripData.stops.reduce((sum, stop) => sum + (parseFloat(stop.earnings) || 0), 0);
   $: totalMaintenanceCost = tripData.maintenanceItems.reduce((sum, item) => sum + (item.cost || 0), 0);
   $: totalSuppliesCost = tripData.suppliesItems.reduce((sum, item) => sum + (item.cost || 0), 0);
@@ -383,7 +382,7 @@
   async function saveTrip() {
     const currentUser = $page.data.user || $user;
     let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
-    if (!userId) { alert("Authentication error."); return; }
+    if (!userId) { toasts.error("Authentication error."); return; }
     
     const tripToSave = {
       ...tripData,
@@ -396,8 +395,22 @@
       destinations: tripData.stops.map(stop => ({ address: stop.address, earnings: stop.earnings, notes: stop.notes || '' })),
       lastModified: new Date().toISOString()
     };
-    try { await trips.create(tripToSave, userId); goto('/dashboard/trips'); } 
-    catch (err) { alert('Failed to create trip.'); }
+    
+    // [!code change] Capture Limit Reached Error on Save
+    try { 
+        await trips.create(tripToSave, userId); 
+        goto('/dashboard/trips'); 
+    } catch (err: any) { 
+        console.error('Save failed:', err);
+        const msg = (err.message || '').toLowerCase();
+        
+        if (msg.includes('limit reached') || msg.includes('monthly limit')) {
+             upgradeMessage = "You have reached your monthly trip limit. Upgrade to Pro for unlimited trips!";
+             showUpgradeModal = true;
+        } else {
+             toasts.error('Failed to create trip: ' + err.message); 
+        }
+    }
   }
   
   function formatCurrency(amount: number) { return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(amount); }
@@ -554,7 +567,6 @@
             <button class="tab-btn" class:active={activeCategoryType === 'maintenance'} on:click={() => activeCategoryType = 'maintenance'}>Maintenance</button>
             <button class="tab-btn" class:active={activeCategoryType === 'supplies'} on:click={() => activeCategoryType = 'supplies'}>Supplies</button>
         </div>
-
         <div class="cat-list">
             {#each activeCategories as cat}
                 <div class="cat-item">
@@ -567,20 +579,56 @@
                 <div class="text-sm text-gray-400 italic text-center py-4">No categories defined.</div>
             {/each}
         </div>
-
         <div class="add-cat-form">
             <input type="text" bind:value={newCategoryName} placeholder="New Item Name..." class="input-field" on:keydown={(e) => e.key === 'Enter' && addCategory()} />
             <button class="btn-secondary" on:click={addCategory}>Add</button>
         </div>
-        
         <div class="modal-actions mt-6">
             <button class="btn-cancel w-full" on:click={() => isManageCategoriesOpen = false}>Done</button>
         </div>
     </div>
 </Modal>
 
+<Modal bind:open={showUpgradeModal} title="Upgrade to Pro">
+    <div class="space-y-6 text-center py-4">
+        <div class="mx-auto w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mb-4">
+            <span class="text-3xl">🚀</span>
+        </div>
+        
+        <h3 class="text-xl font-bold text-gray-900">Unlock Pro Features</h3>
+        
+        <p class="text-gray-600">
+            {upgradeMessage || "You've hit the limits of the Free plan."}
+        </p>
+
+        <div class="bg-gray-50 p-4 rounded-lg text-left text-sm space-y-2 border border-gray-100">
+            <div class="flex items-center gap-2">
+                <span class="text-green-500">✓</span>
+                <span>Unlimited Stops per Trip</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-green-500">✓</span>
+                <span>One-Click Route Optimization</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-green-500">✓</span>
+                <span>Unlimited Monthly Trips</span>
+            </div>
+        </div>
+
+        <div class="flex gap-3 justify-center pt-2">
+            <Button variant="outline" on:click={() => showUpgradeModal = false}>
+                Maybe Later
+            </Button>
+            <a href="/dashboard/settings" class="inline-flex items-center justify-center rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600">
+                Upgrade Now
+            </a>
+        </div>
+    </div>
+</Modal>
+
 <style>
-  /* ... (Keep existing styles) ... */
+  /* Use styles from New Trip page for consistency */
   .trip-form { max-width: 1300px; margin: 0 auto; padding: 4px; padding-bottom: 90px; }
   .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 26px; padding: 0 8px; }
   .page-title { font-size: 28px; font-weight: 800; color: #111827; margin: 0; }
@@ -630,10 +678,8 @@
   .btn-add { background: #2563EB; color: white; margin-top: 14px; font-size: 17px; padding: 16px; }
   .btn-icon { background: none; border: none; font-size: 22px; cursor: pointer; color: #9CA3AF; padding: 6px; }
   .btn-icon.delete:hover { color: #DC2626; }
-  /* [!code ++] Gear Icon Style */
   .btn-icon.gear { color: #6B7280; font-size: 18px; padding: 4px; transition: color 0.2s; }
   .btn-icon.gear:hover { color: #374151; }
-  
   .btn-text { background: none; border: none; color: #2563EB; font-weight: 600; font-size: 16px; cursor: pointer; }
   .btn-small { padding: 12px 18px; border-radius: 8px; border: none; font-weight: 600; font-size: 15px; cursor: pointer; }
   .btn-small.primary { background: #10B981; color: white; }
@@ -641,11 +687,8 @@
   .section-group { margin-bottom: 36px; }
   .section-top { display: flex; justify-content: space-between; margin-bottom: 18px; align-items: center; }
   .section-top h3 { font-size: 18px; font-weight: 700; margin: 0; }
-  
-  /* [!code ++] New Dropdown Styles */
   .add-row { display: flex; gap: 12px; margin-bottom: 18px; }
   .select-input { flex: 1; padding: 12px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 16px; background: white; color: #374151; }
-  
   .expense-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 0; border-bottom: 1px solid #F3F4F6; }
   .expense-row .name { font-size: 17px; font-weight: 500; flex: 1; }
   .expense-row .input-money-wrapper { width: 120px; }
@@ -661,7 +704,6 @@
   .financial-summary .total { border-top: 2px solid #D1D5DB; margin-top: 18px; padding-top: 18px; font-weight: 800; font-size: 20px; }
   .val.positive { color: #059669; }
   .val.negative { color: #DC2626; }
-  
   /* Modal Specific Styles */
   .categories-manager { padding: 4px; }
   .tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid #E5E7EB; }

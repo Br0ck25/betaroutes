@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
 import { findUserById } from '$lib/server/userService';
 import { z } from 'zod';
+import { PLAN_LIMITS } from '$lib/constants';
 import {
 	checkRateLimitEnhanced,
 	createRateLimitHeaders,
@@ -128,7 +129,19 @@ export const GET: RequestHandler = async (event) => {
 		}
 
 		const storageId = user.name || user.token;
-		const sinceParam = sanitizeQueryParam(event.url.searchParams.get('since'), 50);
+		let sinceParam = sanitizeQueryParam(event.url.searchParams.get('since'), 50);
+
+        // --- ENFORCE DATA RETENTION FOR FREE USERS ---
+        if (user.plan === 'free') {
+            const retentionDate = new Date();
+            retentionDate.setDate(retentionDate.getDate() - PLAN_LIMITS.FREE.RETENTION_DAYS);
+            const retentionIso = retentionDate.toISOString();
+            
+            // If client asks for data older than retention allows (or asks for "all time"), override it
+            if (!sinceParam || sinceParam < retentionIso) {
+                sinceParam = retentionIso;
+            }
+        }
 		
 		const limitParam = event.url.searchParams.get('limit');
 		const offsetParam = event.url.searchParams.get('offset');
@@ -258,15 +271,30 @@ export const POST: RequestHandler = async (event) => {
 			}
 		}
 
+        // --- ENFORCE STOP LIMIT FOR FREE USERS ---
+        if (currentPlan === 'free') {
+            const stopCount = validData.stops ? validData.stops.length : 0;
+            if (stopCount > PLAN_LIMITS.FREE.MAX_STOPS) {
+                return new Response(
+                    JSON.stringify({
+                        error: 'Plan Limit Exceeded',
+                        message: `The Free plan is limited to ${PLAN_LIMITS.FREE.MAX_STOPS} stops per trip. Please upgrade to add more.`
+                    }),
+                    { status: 403, headers: { 'Content-Type': 'application/json' } }
+                );
+            }
+        }
+
 		if (!existingTrip) {
-			const limit = currentPlan === 'free' ? 10 : 999999;
+            // --- ENFORCE MONTHLY QUOTA ---
+			const limit = currentPlan === 'free' ? PLAN_LIMITS.FREE.MAX_TRIPS_PER_MONTH : 999999;
 			const quota = await svc.checkMonthlyQuota(storageId, limit);
 
 			if (!quota.allowed) {
 				return new Response(
 					JSON.stringify({
 						error: 'Limit Reached',
-						message: `You have reached your free monthly limit of 10 trips. (Used: ${quota.count})`
+						message: `You have reached your free monthly limit of ${quota.limit} trips. (Used: ${quota.count})`
 					}),
 					{ status: 403, headers: { 'Content-Type': 'application/json' } }
 				);
@@ -380,6 +408,20 @@ export const PUT: RequestHandler = async (event) => {
 		if (!validData.id) {
 			return new Response(JSON.stringify({ error: 'Trip ID required for updates' }), { status: 400 });
 		}
+
+        // --- ENFORCE STOP LIMIT ON UPDATES ---
+        if (sessionUser.plan === 'free') {
+            const stopCount = validData.stops ? validData.stops.length : 0;
+            if (stopCount > PLAN_LIMITS.FREE.MAX_STOPS) {
+                return new Response(
+                    JSON.stringify({
+                        error: 'Plan Limit Exceeded',
+                        message: `The Free plan is limited to ${PLAN_LIMITS.FREE.MAX_STOPS} stops per trip.`
+                    }),
+                    { status: 403, headers: { 'Content-Type': 'application/json' } }
+                );
+            }
+        }
 
 		const existingTrip = await svc.get(storageId, validData.id);
 		if (!existingTrip) {
