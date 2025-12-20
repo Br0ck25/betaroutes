@@ -5,9 +5,9 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { autocomplete } from '$lib/utils/autocomplete';
-  import { currentUser } from '$lib/stores/currentUser'; // [!code ++]
-  import Modal from '$lib/components/ui/Modal.svelte'; // [!code ++]
-  import Button from '$lib/components/ui/Button.svelte'; // [!code ++]
+  import { currentUser } from '$lib/stores/currentUser';
+  import Modal from '$lib/components/ui/Modal.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
 
   export let data; 
   $: API_KEY = data.googleMapsApiKey;
@@ -59,9 +59,11 @@
   let deleteError = '';
   let isDeleting = false;
   
-  // [!code ++] Pro Plan Check & Modal State
+  // Pro Plan Check & Modal State
   $: isPro = ['pro', 'business', 'premium', 'enterprise'].includes($currentUser?.plan || '');
   let isUpgradeModalOpen = false;
+  let isCheckingOut = false;
+  let isOpeningPortal = false; // [!code ++] New state
 
   function handleAddressSelect(field: 'start' | 'end', e: CustomEvent) {
     const val = e.detail.formatted_address || e.detail.name;
@@ -110,6 +112,42 @@
     setTimeout(() => showSuccess = false, 3000);
   }
   
+  // --- STRIPE CHECKOUT LOGIC ---
+  async function handleCheckout() {
+    if (isCheckingOut) return;
+    isCheckingOut = true;
+    try {
+        const res = await fetch('/api/stripe/checkout', { method: 'POST' });
+        const data = await res.json();
+        
+        if (!res.ok) throw new Error(data.message || 'Checkout failed');
+        
+        if (data.url) {
+            window.location.href = data.url;
+        }
+    } catch (e) {
+        console.error('Checkout error:', e);
+        alert('Failed to start checkout. Please try again.');
+        isCheckingOut = false;
+    }
+  }
+
+  // [!code ++] Handle Portal Click
+  async function handlePortal() {
+      if (isOpeningPortal) return;
+      isOpeningPortal = true;
+      try {
+          const res = await fetch('/api/stripe/portal', { method: 'POST' });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.message || 'Failed to open portal');
+          if (data.url) window.location.href = data.url;
+      } catch (e) {
+          console.error(e);
+          alert('Could not open billing portal. If you just upgraded, try refreshing the page.');
+          isOpeningPortal = false;
+      }
+  }
+
   // ... (Rest of the file remains unchanged) ...
   async function changePassword() {
     if (passwordData.new !== passwordData.confirm) {
@@ -264,7 +302,7 @@
   }
 
   function exportCSV() {
-    // [!code ++] Pro Guard
+    // Pro Guard
     if (!isPro) {
         isUpgradeModalOpen = true;
         return;
@@ -508,10 +546,22 @@
               {$auth.user?.plan || 'free'} Plan
             </div>
             
-            {#if !$auth.user?.plan || $auth.user?.plan === 'free'}
-              <a href="/#pricing" class="upgrade-link">Upgrade to Pro</a>
-            {:else if $auth.user?.plan === 'pro'}
-              <a href="/contact" class="upgrade-link">Upgrade to Business</a>
+            {#if isPro}
+                <button 
+                    class="upgrade-link-btn" 
+                    on:click={handlePortal}
+                    disabled={isOpeningPortal}
+                >
+                    {isOpeningPortal ? 'Loading...' : 'Manage Subscription'}
+                </button>
+            {:else}
+              <button 
+                class="upgrade-link-btn" 
+                on:click={handleCheckout} 
+                disabled={isCheckingOut}
+              >
+                {isCheckingOut ? 'Loading...' : 'Upgrade to Pro'}
+              </button>
             {/if}
           </div>
         </div>
@@ -785,15 +835,16 @@
         </div>
 
         <div class="flex gap-3 justify-center pt-2">
-            <Button variant="outline" onclick={() => isUpgradeModalOpen = false}>
+            <Button variant="outline" on:click={() => isUpgradeModalOpen = false}>
                 Maybe Later
             </Button>
-            <a 
-                href="/dashboard/settings" 
+            <button 
                 class="inline-flex items-center justify-center rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600 transition-all"
+                on:click={handleCheckout}
+                disabled={isCheckingOut}
             >
-                Upgrade Now
-            </a>
+                {isCheckingOut ? 'Loading...' : 'Upgrade Now'}
+            </button>
         </div>
     </div>
 </Modal>
@@ -849,9 +900,12 @@
   .plan-row { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
   .plan-badge { display: inline-block; padding: 6px 12px; background: #F3F4F6; color: #374151; border-radius: 8px; font-weight: 600; font-size: 14px; }
   .upgrade-link { color: var(--orange); font-size: 14px; font-weight: 600; text-decoration: none; }
-  /* UPDATED: Wrap hover */
+  
+  /* Styles for the new button */
+  .upgrade-link-btn { background: none; border: none; color: var(--orange); font-size: 14px; font-weight: 600; cursor: pointer; padding: 0; text-decoration: none; }
+  
   @media (hover: hover) {
-    .upgrade-link:hover { text-decoration: underline; }
+    .upgrade-link:hover, .upgrade-link-btn:hover { text-decoration: underline; }
   }
   .usage-stats { margin-top: 16px; }
   .usage-header { display: flex; justify-content: space-between; font-size: 13px; color: #6B7280; margin-bottom: 6px; }
@@ -866,7 +920,6 @@
   .btn-secondary { background: white; color: #374151; border: 2px solid #E5E7EB; }
   .btn-logout { background: white; color: #DC2626; border: 2px solid #FEE2E2; }
   
-  /* UPDATED: Wrap hover states */
   @media (hover: hover) {
     .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(255, 127, 80, 0.3); }
     .btn-secondary:hover { border-color: var(--orange); color: var(--orange); }

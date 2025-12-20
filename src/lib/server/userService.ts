@@ -11,6 +11,7 @@ export type UserCore = {
     plan: string;
     name: string;
     createdAt: string;
+    stripeCustomerId?: string; // [!code ++] Added this field
 };
 
 export type UserStats = {
@@ -65,6 +66,7 @@ export async function findUserById(kv: KVNamespace, userId: string): Promise<Use
         plan: core.plan,
         name: core.name,
         createdAt: core.createdAt,
+        stripeCustomerId: core.stripeCustomerId, // [!code ++] Return it
         ...stats
     };
 }
@@ -111,7 +113,7 @@ export async function createUser(kv: KVNamespace, userData: Omit<User, 'id' | 'c
     return { ...userCore, ...userStats };
 }
 
-// [!code fix] FIXED: Handle index updates when email changes
+// FIXED: Handle index updates when email changes
 export async function updateUser(
     kv: KVNamespace, 
     userId: string, 
@@ -150,6 +152,42 @@ export async function updateUser(
     await kv.put(key, JSON.stringify(updatedCore));
 }
 
+// [!code ++] NEW: Upgrade User Plan (For Stripe Webhooks)
+export async function updateUserPlan(
+    kv: KVNamespace, 
+    userId: string, 
+    plan: string,
+    stripeCustomerId?: string // [!code ++] Optional customer ID
+): Promise<void> {
+    const coreKey = userCoreKey(userId);
+    const statsKey = userStatsKey(userId);
+
+    const [coreRaw, statsRaw] = await Promise.all([
+        kv.get(coreKey),
+        kv.get(statsKey)
+    ]);
+
+    if (!coreRaw) throw new Error('User not found');
+
+    // 1. Update Plan in Core
+    const core = JSON.parse(coreRaw) as UserCore;
+    core.plan = plan;
+    // [!code ++] Save Stripe Customer ID if provided
+    if (stripeCustomerId) {
+        core.stripeCustomerId = stripeCustomerId;
+    }
+    await kv.put(coreKey, JSON.stringify(core));
+
+    // 2. Update Limits in Stats (Unlimited for Pro)
+    if (statsRaw) {
+        const stats = JSON.parse(statsRaw) as UserStats;
+        if (plan === 'pro' || plan === 'business') {
+            stats.maxTrips = 999999; // Effectively unlimited
+        }
+        await kv.put(statsKey, JSON.stringify(stats));
+    }
+}
+
 export async function updatePasswordHash(kv: KVNamespace, user: User, newHash: string) {
     const key = userCoreKey(user.id);
     const statsKey = userStatsKey(user.id);
@@ -177,7 +215,8 @@ export async function updatePasswordHash(kv: KVNamespace, user: User, newHash: s
         password: newHash,
         plan: record.plan,
         name: record.name,
-        createdAt: record.createdAt
+        createdAt: record.createdAt,
+        stripeCustomerId: record.stripeCustomerId // Preserve existing ID
     };
     
     await kv.put(key, JSON.stringify(core));
@@ -214,7 +253,7 @@ export async function deleteUser(
         authPromises.push(resources.settingsKV.delete(`settings:${userId}`));
     }
 
-    // 3. [!code fix] WIPE SQLITE DATA in Durable Object
+    // 3. WIPE SQLITE DATA in Durable Object
     if (resources?.tripIndexDO) {
         try {
             // Identify the specific DO instance for this user
@@ -232,7 +271,6 @@ export async function deleteUser(
     }
 
     // 4. Delete Trips (Iterate and Destroy)
-    // We keep this for backward compatibility during migration
     const wipeNamespace = async (ns: KVNamespace, prefix: string) => {
         let cursor: string | undefined = undefined;
         do {
@@ -256,10 +294,7 @@ export async function deleteUser(
         cleanupTasks.push(wipeNamespace(resources.trashKV, `trash:${userId}:`));
     }
 
-    // Wait for auth deletion (Critical)
     await Promise.all(authPromises);
-    
-    // Wait for bulk data deletion
     await Promise.all(cleanupTasks);
 
     console.log(`[UserService] ✅ FINISHED Account Wipe for ${userId}`);
