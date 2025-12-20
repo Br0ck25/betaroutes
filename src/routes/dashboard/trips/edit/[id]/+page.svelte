@@ -278,6 +278,10 @@
                 <span class="text-green-500">✓</span>
                 <span>Unlimited Monthly Trips</span>
             </div>
+            <div class="flex items-center gap-2">
+                <span class="text-green-500">✓</span>
+                <span>Data Export</span>
+            </div>
         </div>
 
         <div class="flex gap-3 justify-center pt-2">

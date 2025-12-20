@@ -1,11 +1,15 @@
 <script lang="ts">
   import { trips } from '$lib/stores/trips';
+  import { currentUser } from '$lib/stores/currentUser';
+  import Modal from '$lib/components/ui/Modal.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
   
   let exportFormat = 'csv';
   let dateFrom = '';
   let dateTo = '';
   let selectedTrips = new Set<string>();
   let selectAll = false;
+  let isUpgradeModalOpen = false;
 
   // Reactive filter logic
   $: filteredTrips = $trips.filter(trip => {
@@ -23,6 +27,9 @@
     selectAll = true;
   }
   
+  // Check Pro Status
+  $: isPro = ['pro', 'business', 'premium', 'enterprise'].includes($currentUser?.plan || '');
+
   function toggleSelectAll() {
     if (selectAll) selectedTrips = new Set();
     else selectedTrips = new Set(filteredTrips.map(t => t.id));
@@ -42,9 +49,14 @@
   // --- NEW: EXPORT LOGIC STARTS HERE ---
 
   function handleExport() {
-    // 1. Get the actual trip objects based on the selected IDs
-    const tripsToExport = filteredTrips.filter(t => selectedTrips.has(t.id));
+    // 1. Gate Feature for Pro Users
+    if (!isPro) {
+        isUpgradeModalOpen = true;
+        return;
+    }
 
+    // 2. Get the actual trip objects based on the selected IDs
+    const tripsToExport = filteredTrips.filter(t => selectedTrips.has(t.id));
     if (tripsToExport.length === 0) {
       alert("No trips selected to export.");
       return;
@@ -58,10 +70,9 @@
   }
 
   function generateCSV(data: any[]) {
-    // 2. Define headers matching your data structure
+    // 3. Define headers matching your data structure
     const headers = ['Date', 'Miles', 'Start Address', 'End Address', 'Purpose', 'Vehicle'];
-    
-    // 3. Map trips to CSV rows
+    // 4. Map trips to CSV rows
     const rows = data.map(trip => {
       const date = trip.date ? new Date(trip.date).toLocaleDateString() : '';
       const miles = trip.totalMiles || 0;
@@ -69,7 +80,8 @@
       // Escape commas in addresses to prevent breaking CSV format
       const start = `"${(trip.startAddress || '').replace(/"/g, '""')}"`; 
       const end = trip.stops && trip.stops.length > 0
-        ? `"${(trip.stops[trip.stops.length - 1].address || '').replace(/"/g, '""')}"` 
+        ? `"${(trip.stops[trip.stops.length - 1].address || 
+          '').replace(/"/g, '""')}"` 
         : '"End"';
       
       const purpose = `"${(trip.purpose || '').replace(/"/g, '""')}"`;
@@ -77,11 +89,9 @@
 
       return [date, miles, start, end, purpose, vehicle].join(',');
     });
-
-    // 4. Combine headers and rows
+    // 5. Combine headers and rows
     const csvContent = [headers.join(','), ...rows].join('\n');
-
-    // 5. Create a download link programmatically
+    // 6. Create a download link programmatically
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -121,8 +131,13 @@
       </div>
     </div>
     
-    <button class="btn-action" on:click={handleExport} disabled={selectedTrips.size === 0}>
-      Export {selectedTrips.size} Trip{selectedTrips.size !== 1 ? 's' : ''}
+    <button 
+      class="btn-action" 
+      on:click={handleExport} 
+      disabled={selectedTrips.size === 0}
+      title={!isPro ? "Upgrade to Export" : "Export Data"}
+    >
+      {#if !isPro}🔒{/if} Export {selectedTrips.size} Trip{selectedTrips.size !== 1 ? 's' : ''}
     </button>
   </div>
   
@@ -156,8 +171,54 @@
   </div>
 </div>
 
+<Modal bind:open={isUpgradeModalOpen} title="Upgrade to Pro">
+  <div class="space-y-6 text-center py-4">
+        <div class="mx-auto w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mb-4">
+            <span class="text-3xl">🚀</span>
+        </div>
+        
+        <h3 class="text-xl font-bold text-gray-900">
+            Unlock Pro Features
+        </h3>
+        
+        <p class="text-gray-600 text-base leading-relaxed">
+            Data Export is a Pro feature. Upgrade now to download your trip history for taxes!
+        </p>
+
+        <div class="bg-gray-50 p-4 rounded-lg text-left text-sm space-y-2 border border-gray-100">
+            <div class="flex items-center gap-2">
+                <span class="text-green-500 text-lg">✓</span>
+                <span class="text-gray-700">Unlimited Stops per Trip</span>
+             </div>
+            <div class="flex items-center gap-2">
+                <span class="text-green-500 text-lg">✓</span>
+                <span class="text-gray-700">One-Click Route Optimization</span>
+            </div>
+            <div class="flex items-center gap-2">
+                 <span class="text-green-500 text-lg">✓</span>
+                <span class="text-gray-700">Unlimited Monthly Trips</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-green-500 text-lg">✓</span>
+                <span class="text-gray-700">Data Export</span>
+            </div>
+        </div>
+
+        <div class="flex gap-3 justify-center pt-2">
+            <Button variant="outline" on:click={() => isUpgradeModalOpen = false}>
+                Maybe Later
+            </Button>
+            <a 
+                href="/dashboard/settings" 
+                class="inline-flex items-center justify-center rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600 transition-all"
+            >
+                Upgrade Now
+            </a>
+        </div>
+    </div>
+</Modal>
+
 <style>
-  /* Reuse styles from your Export page */
   .export-grid { display: grid; grid-template-columns: 1fr; gap: 24px; }
   .options-card, .selection-card { background: white; border: 1px solid #E5E7EB; border-radius: 16px; padding: 20px; }
   .card-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; color: #111827; }

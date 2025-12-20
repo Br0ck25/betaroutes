@@ -5,10 +5,12 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { autocomplete } from '$lib/utils/autocomplete';
+  import { currentUser } from '$lib/stores/currentUser'; // [!code ++]
+  import Modal from '$lib/components/ui/Modal.svelte'; // [!code ++]
+  import Button from '$lib/components/ui/Button.svelte'; // [!code ++]
 
   export let data; 
   $: API_KEY = data.googleMapsApiKey;
-
   // --- REMOTE SYNC LOGIC START ---
   let settings = { ...$userSettings };
   $: if (data.remoteSettings?.settings) {
@@ -45,7 +47,6 @@
       const now = new Date();
       return tripDate.getMonth() === now.getMonth() && tripDate.getFullYear() === now.getFullYear();
   }).length;
-
   let showSuccess = false;
   let successMessage = '';
   
@@ -57,6 +58,10 @@
   let deletePassword = '';
   let deleteError = '';
   let isDeleting = false;
+  
+  // [!code ++] Pro Plan Check & Modal State
+  $: isPro = ['pro', 'business', 'premium', 'enterprise'].includes($currentUser?.plan || '');
+  let isUpgradeModalOpen = false;
 
   function handleAddressSelect(field: 'start' | 'end', e: CustomEvent) {
     const val = e.detail.formatted_address || e.detail.name;
@@ -77,7 +82,6 @@
         name: profile.name,
         email: profile.email
     });
-
     try {
         // 2. Persist to User KV (Fixes the reset on logout issue)
         const res = await fetch('/api/user', {
@@ -88,7 +92,6 @@
                 email: profile.email
             })
         });
-
         if (res.ok) {
             showSuccessMsg('Profile updated successfully!');
         } else {
@@ -261,6 +264,12 @@
   }
 
   function exportCSV() {
+    // [!code ++] Pro Guard
+    if (!isPro) {
+        isUpgradeModalOpen = true;
+        return;
+    }
+
     const data = $trips;
     if (data.length === 0) {
       alert("No trips to export.");
@@ -301,7 +310,6 @@
       const maintItemsStr = trip.maintenanceItems 
         ? `"${trip.maintenanceItems.map((i: any) => `${i.type}:${i.cost}`).join(' | ')}"` 
         : '""';
-      
       const supplies = trip.suppliesCost || 0;
       const supplyItemsStr = trip.suppliesItems
         ? `"${trip.suppliesItems.map((i: any) => `${i.type}:${i.cost}`).join(' | ')}"`
@@ -665,7 +673,7 @@
       <div class="data-actions">
         <button class="action-btn" on:click={exportCSV}>
           <div>
-            <div class="action-title">Export All Trips (CSV)</div>
+            <div class="action-title">{!isPro ? '🔒 ' : ''}Export All Trips (CSV)</div>
             <div class="action-subtitle">Download detailed spreadsheet of all trips</div>
           </div>
         </button>
@@ -743,6 +751,53 @@
   </div>
 </div>
 
+<Modal bind:open={isUpgradeModalOpen} title="Upgrade to Pro">
+  <div class="space-y-6 text-center py-4">
+        <div class="mx-auto w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mb-4">
+            <span class="text-3xl">🚀</span>
+        </div>
+        
+        <h3 class="text-xl font-bold text-gray-900">
+            Unlock Pro Features
+        </h3>
+        
+        <p class="text-gray-600 text-base leading-relaxed">
+            Data Export is a Pro feature. Upgrade now to download your trip history for taxes!
+        </p>
+
+        <div class="bg-gray-50 p-4 rounded-lg text-left text-sm space-y-2 border border-gray-100">
+            <div class="flex items-center gap-2">
+                <span class="text-green-500 text-lg">✓</span>
+                <span class="text-gray-700">Unlimited Stops per Trip</span>
+             </div>
+            <div class="flex items-center gap-2">
+                <span class="text-green-500 text-lg">✓</span>
+                <span class="text-gray-700">One-Click Route Optimization</span>
+            </div>
+            <div class="flex items-center gap-2">
+                 <span class="text-green-500 text-lg">✓</span>
+                <span class="text-gray-700">Unlimited Monthly Trips</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-green-500 text-lg">✓</span>
+                <span class="text-gray-700">Data Export</span>
+            </div>
+        </div>
+
+        <div class="flex gap-3 justify-center pt-2">
+            <Button variant="outline" onclick={() => isUpgradeModalOpen = false}>
+                Maybe Later
+            </Button>
+            <a 
+                href="/dashboard/settings" 
+                class="inline-flex items-center justify-center rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600 transition-all"
+            >
+                Upgrade Now
+            </a>
+        </div>
+    </div>
+</Modal>
+
 <style>
   .settings { max-width: 1200px; margin: 0 auto; padding: 20px; }
   .page-header { margin-bottom: 32px; }
@@ -775,8 +830,7 @@
   
   .form-group input, .form-group select { 
     width: 100%; max-width: 450px; 
-    padding: 12px 16px; 
-    border: 2px solid #E5E7EB;
+    padding: 12px 16px; border: 2px solid #E5E7EB;
     /* UPDATED: 16px to prevent zoom */
     border-radius: 10px; font-size: 16px; font-family: inherit; background: white; transition: all 0.2s;
     display: block; box-sizing: border-box;

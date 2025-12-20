@@ -9,13 +9,11 @@ function toTitleCase(str: string) {
     return str.toLowerCase().replace(/\b\w/g, s => s.toUpperCase());
 }
 
-// Hybrid approach: Use Cheerio for structure, regex for parsing
-function findEventTimestamp($: cheerio.CheerioAPI, eventLabel: string): number | null {
-    let foundTs: number | null = null;
+// [!code changed] Helper to find ALL timestamps for a specific label
+function findEventTimestamps($: cheerio.CheerioAPI, eventLabel: string): number[] {
+    const foundTs: number[] = [];
     
-    // Regex updated: 
-    // 1. \s* instead of \s+ (handles missing space between date/time)
-    // 2. Looks for seconds optionally
+    // Regex: 1. \s* handles missing space, 2. Looks for optional seconds
     const tsRegex = /(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/;
     
     $('.SearchUtilData').each((i, elem) => {
@@ -36,7 +34,6 @@ function findEventTimestamp($: cheerio.CheerioAPI, eventLabel: string): number |
 
             if (match) {
                 const [_, month, day, year, hour, min, sec] = match;
-                
                 const date = new Date(
                     parseInt(year), 
                     parseInt(month) - 1, 
@@ -47,8 +44,7 @@ function findEventTimestamp($: cheerio.CheerioAPI, eventLabel: string): number |
                 );
                 
                 if (!isNaN(date.getTime())) {
-                    foundTs = date.getTime();
-                    return false; // Break loop
+                    foundTs.push(date.getTime());
                 }
             }
         }
@@ -142,15 +138,11 @@ export function parseOrderPage(html: string, id: string): OrderData {
     // --- Date Parsing ---
     out.confirmScheduleDate = getVal('f_sched_date') || scanForward(html, 'Confirm Schedule Date', /(\d{1,2}\/\d{1,2}\/\d{2,4})/) || scanForward(html, 'Date:', /(\d{1,2}\/\d{1,2}\/\d{2,4})/);
     
-    // --- Time Parsing (Updated) ---
-    // Helper to clean text (removes &nbsp; and trims)
+    // --- Time Parsing ---
     const cleanText = (text: string) => text.replace(/[\u00A0\s]+/g, ' ').trim();
-
     let arrivalTime = '';
     let schdBeginTime = '';
 
-    // 1. Try to find "Arrival Time" or "Arrival Window"
-    // We look for the label, then get the text of the NEXT sibling cell
     const arrivalLabel = $('td.displaytextlbl').filter((_, el) => {
         const t = $(el).text();
         return t.includes('Arrival Time') || t.includes('Arrival Window');
@@ -158,42 +150,35 @@ export function parseOrderPage(html: string, id: string): OrderData {
 
     if (arrivalLabel.length > 0) {
         const rawArrival = cleanText(arrivalLabel.next('td.displaytext').text());
-        // Extract HH:MM, ignore (24hr) or AM/PM for now, just grab the digits
         const match = rawArrival.match(/(\d{1,2}:\d{2})/);
         if (match) arrivalTime = match[1];
     }
 
-    // 2. Try to find "Schd Est. Begin Time" (Fallback)
     const beginLabel = $('td.displaytextlbl').filter((_, el) => $(el).text().includes('Schd Est. Begin Time'));
     
     if (beginLabel.length > 0) {
         const rawBegin = cleanText(beginLabel.next('td.displaytext').text());
-        // Matches "11:00" from "11:00 (24hr)"
         const match = rawBegin.match(/(\d{1,2}:\d{2})/);
         if (match) schdBeginTime = match[1];
     }
 
-    // Priority: Form Input -> Arrival Time -> Schd Est. Begin Time -> Legacy Scan
     out.beginTime = getVal('f_begin_time') || 
                     arrivalTime || 
                     schdBeginTime || 
                     scanForward(html, 'Time:', /(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
 
-    // --- Type Parsing (Prioritize Repair/Upgrade) ---
+    // --- Type Parsing ---
     const bodyText = $('body').text();
-    
-    // [!code ++] Updated regex to capture Re-Install
     const typeLabelMatch = bodyText.match(/(?:Order|Service)\s*Type\s*[:\.]?\s*(Re-Install|Install|Repair|Upgrade)/i);
     
     if (typeLabelMatch) {
         const found = typeLabelMatch[1].toLowerCase();
-        if (found.includes('re-install')) { out.type = 'Re-Install'; out.jobDuration = 90; } // [!code ++]
+        if (found.includes('re-install')) { out.type = 'Re-Install'; out.jobDuration = 90; }
         else if (found.includes('install')) { out.type = 'Install'; out.jobDuration = 90; }
         else if (found.includes('upgrade')) { out.type = 'Upgrade'; out.jobDuration = 60; }
         else { out.type = 'Repair'; out.jobDuration = 60; }
     } 
     else if (bodyText.includes('Service Order #')) {
-        // [!code ++] Add Re-Install check
         if (bodyText.match(/Re-Install/i)) { out.type = 'Re-Install'; out.jobDuration = 90; }
         else if (bodyText.match(/Upgrade/i)) { out.type = 'Upgrade'; out.jobDuration = 60; }
         else if (bodyText.match(/Repair/i)) { out.type = 'Repair'; out.jobDuration = 60; }
@@ -203,29 +188,53 @@ export function parseOrderPage(html: string, id: string): OrderData {
     if (bodyText.includes('CON NON-STD CHARGE NEW POLE')) {
         out.hasPoleMount = true;
     }
-
-    // Check for WI-FI INSTALLATION task
     if (bodyText.includes('WI-FI INSTALLATION [Task]')) {
         out.hasWifiExtender = true;
     }
-
-    // Check for VOIP Phone task
     if (bodyText.includes('Install, VOIP Phone [Task]')) {
         out.hasVoip = true;
     }
 
-    // --- Timestamp & Duration ---
-    out.arrivalTimestamp = findEventTimestamp($, 'Arrival On Site');
-    out.departureCompleteTimestamp = findEventTimestamp($, 'Departure Complete');
-    out.departureIncompleteTimestamp = findEventTimestamp($, 'Departure Incomplete');
+    // --- Timestamp & Duration (Updated for Split Visits) ---
+    // 1. Get ALL timestamps
+    const arrivalTimestamps = findEventTimestamps($, 'Arrival On Site');
+    const completeTimestamps = findEventTimestamps($, 'Departure Complete');
+    const incompleteTimestamps = findEventTimestamps($, 'Departure Incomplete');
 
-    // Prioritize Departure Incomplete for duration calculation
+    // 2. Determine Reference Date 
+    // We sort all activities descending to find the "latest" relevant date (Today)
+    const allActivity = [...arrivalTimestamps, ...completeTimestamps, ...incompleteTimestamps].sort((a, b) => b - a);
+    let referenceDateString = '';
+    
+    if (allActivity.length > 0) {
+        const d = new Date(allActivity[0]);
+        referenceDateString = d.toDateString(); 
+    }
+
+    const isSameDate = (ts: number) => new Date(ts).toDateString() === referenceDateString;
+
+    // 3. Select Best Timestamps based on Reference Date
+    // Departure Complete: Use the LATEST one on the reference date
+    out.departureCompleteTimestamp = completeTimestamps.filter(isSameDate).sort((a, b) => b - a)[0] || null;
+
+    // Departure Incomplete: Use the LATEST one on the reference date
+    out.departureIncompleteTimestamp = incompleteTimestamps.filter(isSameDate).sort((a, b) => b - a)[0] || null;
+
+    // Arrival: Use the EARLIEST one on the reference date
+    // [!code note] This fixes the sorting issue. We ignore the late arrival (after incomplete).
+    out.arrivalTimestamp = arrivalTimestamps.filter(isSameDate).sort((a, b) => a - b)[0] || null;
+
+    // Fallback if no specific date matched
+    if (!out.arrivalTimestamp && arrivalTimestamps.length > 0) {
+         out.arrivalTimestamp = arrivalTimestamps[0]; 
+    }
+
+    // 4. Calculate Duration
+    // [!code note] Prioritize Departure Incomplete for duration calculation
     const endTimestamp = out.departureIncompleteTimestamp || out.departureCompleteTimestamp;
 
-    // Calculate duration only if we have valid timestamps
     if (out.arrivalTimestamp && endTimestamp) {
         const durationMins = Math.round((endTimestamp - out.arrivalTimestamp) / 60000);
-        // Sanity check: duration between 10 mins and 10 hours
         if (durationMins > 10 && durationMins < 600) {
             out.jobDuration = durationMins;
         }

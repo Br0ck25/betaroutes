@@ -1,19 +1,20 @@
 <script lang="ts">
   import { trips, isLoading } from '$lib/stores/trips';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
-  import AsyncErrorBoundary from '$lib/components/AsyncErrorBoundary.svelte'; // ← NEW
+  import AsyncErrorBoundary from '$lib/components/AsyncErrorBoundary.svelte';
   import { goto } from '$app/navigation';
   import { user } from '$lib/stores/auth';
+  import { currentUser } from '$lib/stores/currentUser';
   import { page } from '$app/stores';
   import { toasts } from '$lib/stores/toast';
   import { userSettings } from '$lib/stores/userSettings';
   import Modal from '$lib/components/ui/Modal.svelte';
-  import { onMount } from 'svelte'; // ← NEW
+  import Button from '$lib/components/ui/Button.svelte';
+  import { onMount } from 'svelte';
 
-  // ← NEW: Error boundary reference
+  // Error boundary reference
   let tripsBoundary: any;
   let hasLoadedOnce = false;
-
   let searchQuery = '';
   let sortBy = 'date';
   let sortOrder = 'desc';
@@ -26,22 +27,25 @@
   const itemsPerPage = 20;
   // --- SELECTION STATE ---
   let selectedTrips = new Set<string>();
-  
-  // --- MODAL STATE (Category Management) ---
+  // --- MODAL STATE ---
   let isManageCategoriesOpen = false;
+  let isUpgradeModalOpen = false;
   let activeCategoryType: 'maintenance' | 'supplies' = 'maintenance';
   let newCategoryName = '';
+
+  // Check Pro Status
+  $: isPro = ['pro', 'business', 'premium', 'enterprise'].includes($currentUser?.plan || '');
 
   $: activeCategories = activeCategoryType === 'maintenance' 
       ? ($userSettings.maintenanceCategories || ['oil change', 'repair'])
       : ($userSettings.supplyCategories || ['water', 'snacks']);
-
+  
   // Reset selection and page when filters change
   $: if (searchQuery || sortBy || sortOrder || filterProfit || startDate || endDate) {
       currentPage = 1;
   }
 
-  // ← NEW: Enhanced loading function with error handling
+  // Enhanced loading function with error handling
   async function loadTrips() {
     try {
       if (!hasLoadedOnce) {
@@ -55,52 +59,39 @@
     } catch (error) {
       console.error('Failed to load trips:', error);
       tripsBoundary?.setError(error as Error);
-      
-      // Show user-friendly toast
       toasts.error('Failed to load trips. Click retry to try again.');
-      throw error; // Re-throw so boundary catches it
+      throw error;
     }
   }
 
-  // ← NEW: Load trips on mount
   onMount(() => {
     loadTrips();
   });
 
-  // Derived: All filtered results (for metrics/export)
+  // Derived: All filtered results
   $: allFilteredTrips = $trips
     .filter(trip => {
       const query = searchQuery.toLowerCase();
-      
-      // Enhanced Search Logic
       const supplies = trip.supplyItems || trip.suppliesItems || [];
       const matchesSearch = !query || 
-        // 1. Basic Text Fields
         trip.date?.includes(query) ||
         trip.startAddress?.toLowerCase().includes(query) ||
         trip.endAddress?.toLowerCase().includes(query) ||
         trip.notes?.toLowerCase().includes(query) ||
-        
-        // 2. Numeric Fields
         trip.totalMiles?.toString().includes(query) ||
         trip.fuelCost?.toString().includes(query) ||
-        
-        // 3. Stops (Address & Earnings)
         trip.stops?.some(stop => 
             stop.address?.toLowerCase().includes(query) || 
             stop.earnings?.toString().includes(query)
         ) ||
-
-        // 4. Expenses (Maintenance & Supplies)
         trip.maintenanceItems?.some(item => 
-            item.type?.toLowerCase().includes(query) || 
+            item.type?.toLowerCase().includes(query) ||
             item.cost?.toString().includes(query)
         ) ||
         supplies.some(item => 
             item.type?.toLowerCase().includes(query) || 
             item.cost?.toString().includes(query)
         );
-      
       if (!matchesSearch) return false;
       
       if (filterProfit !== 'all') {
@@ -249,6 +240,11 @@
   }
 
   function exportSelected() {
+      if (!isPro) {
+        isUpgradeModalOpen = true; // Open the upgrade modal
+        return;
+      }
+
       const selectedData = allFilteredTrips.filter(t => selectedTrips.has(t.id));
       if (selectedData.length === 0) return;
 
@@ -392,7 +388,6 @@
       deepLinkHandled = true;
   }
 
-  // Swipe Action
   function swipeable(node: HTMLElement, { onEdit, onDelete }: { onEdit: () => void, onDelete: () => void }) {
     let startX = 0;
     let startY = 0;
@@ -455,7 +450,6 @@
   <title>Trip History - Go Route Yourself</title>
 </svelte:head>
 
-<!-- ← NEW: Wrap entire page content with AsyncErrorBoundary -->
 <AsyncErrorBoundary bind:this={tripsBoundary} onRetry={loadTrips}>
 
 <div class="trip-history">
@@ -479,7 +473,7 @@
 
         <a href="/dashboard/trips/new" class="btn-primary" aria-label="Create New Trip">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+             <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           New Trip
         </a>
@@ -520,7 +514,7 @@
   <div class="filters-bar sticky-bar">
     <div class="search-box">
       <svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-        <path d="M9 17C13.4183 17 17 13.4183 17 9C17 4.58172 13.4183 1 9 1C4.58172 1 1 4.58172 1 9C1 13.4183 4.58172 17 9 17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+         <path d="M9 17C13.4183 17 17 13.4183 17 9C17 4.58172 13.4183 1 9 1C4.58172 1 1 4.58172 1 9C1 13.4183 4.58172 17 9 17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M19 19L14.65 14.65" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
       <input type="text" placeholder="Search trips..." bind:value={searchQuery} aria-label="Search trips" />
@@ -567,7 +561,7 @@
     <div class="trip-list-cards">
       {#each visibleTrips as trip (trip.id)}
         {@const profit = calculateNetProfit(trip)}
-        {@const hourlyPay = calculateHourlyPay(trip)}
+         {@const hourlyPay = calculateHourlyPay(trip)}
         {@const isExpanded = expandedTrips.has(trip.id)}
         {@const totalCosts = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0)}
         {@const isSelected = selectedTrips.has(trip.id)}
@@ -580,7 +574,7 @@
             </div>
 
             <div 
-              class="trip-card" 
+               class="trip-card" 
               id={'trip-' + trip.id}
               class:expanded={isExpanded} 
               class:selected={isSelected}
@@ -593,7 +587,7 @@
                   onEdit: () => editTrip(trip.id),
                   onDelete: () => deleteTrip(trip.id)
               }}
-            >
+           >
               <div class="card-top">
                  <div class="selection-box" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="none">
                     <label class="checkbox-container">
@@ -604,12 +598,13 @@
 
                 <div class="trip-route-date">
                   <span class="trip-date-display">
-                      {formatDate(trip.date || '')}
+                     {formatDate(trip.date || '')}
                       {#if trip.startTime}
                          <span class="time-range">• {formatTime(trip.startTime)} - {formatTime(trip.endTime || '17:00')}</span>
                       {/if}
                   </span>
-                  <h3 class="trip-route-title">
+      
+                   <h3 class="trip-route-title">
                     {trip.startAddress?.split(',')[0] || 'Unknown'} 
                     {#if trip.stops && trip.stops.length > 0}
                       → {trip.stops[trip.stops.length - 1].address?.split(',')[0] || 'Stop'}
@@ -618,12 +613,12 @@
                 </div>
                 
                 <div class="profit-display-large" class:positive={profit >= 0} class:negative={profit < 0}>
-                    {formatCurrency(profit)}
+                   {formatCurrency(profit)}
                 </div>
                 
                 <svg class="expand-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                   <path d="M6 15L10 11L14 15M14 5L10 9L6 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                </svg>
+               </svg>
               </div>
 
               <div class="card-stats">
@@ -643,7 +638,8 @@
                   <span class="stat-label">Drive</span>
                   <span class="stat-value">{formatDuration(trip.estimatedTime)}</span>
                 </div>
-                <div class="stat-item">
+             
+                 <div class="stat-item">
                   <span class="stat-label">$/Hr</span>
                   <span class="stat-value hourly-pay">{trip.hoursWorked > 0 ? formatCurrency(hourlyPay) : '-'}</span>
                 </div>
@@ -651,15 +647,15 @@
               
               {#if isExpanded}
                 <div class="expanded-details" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="group">
-                  <div class="detail-section">
+                   <div class="detail-section">
                     <h4 class="section-heading">Stops & Addresses</h4>
                     <div class="address-list">
                         <p><strong>Start:</strong> {trip.startAddress}</p>
                         {#if trip.stops}
-                            {#each trip.stops as stop, i}
+                           {#each trip.stops as stop, i}
                               <p><strong>Stop {i + 1}:</strong> {stop.address}</p>
                           {/each}
-                        {/if}
+                       {/if}
                         {#if trip.endAddress && trip.endAddress !== trip.startAddress}
                             <p><strong>End:</strong> {trip.endAddress}</p>
                         {/if}
@@ -672,35 +668,36 @@
                       <div class="expense-list">
                         {#if trip.fuelCost > 0}
                           <div class="expense-row">
-                            <span>Fuel</span>
+                             <span>Fuel</span>
                             <span>{formatCurrency(trip.fuelCost)}</span>
                           </div>
                         {/if}
-                        {#if trip.maintenanceItems}
+                
+                         {#if trip.maintenanceItems}
                            {#each trip.maintenanceItems as item}
                             <div class="expense-row">
                               <span>{item.type}</span>
-                              <span>{formatCurrency(item.cost)}</span>
+                               <span>{formatCurrency(item.cost)}</span>
                             </div>
                           {/each}
-                        {/if}
+                       {/if}
                         {#if supplies.length > 0}
                           {#each supplies as item}
                             <div class="expense-row">
-                              <span>{item.type}</span>
+                               <span>{item.type}</span>
                               <span>{formatCurrency(item.cost)}</span>
                             </div>
                            {/each}
                         {/if}
                         <div class="expense-row total">
                           <span>Total Costs</span>
-                          <span>{formatCurrency(totalCosts)}</span>
+                           <span>{formatCurrency(totalCosts)}</span>
                         </div>
                       </div>
                     </div>
                   {/if}
 
-                  {#if trip.notes}
+                   {#if trip.notes}
                     <div class="detail-section">
                       <h4 class="section-heading">Notes</h4>
                       <p class="trip-notes">{trip.notes}</p>
@@ -709,13 +706,13 @@
                   
                   <div class="action-buttons-footer">
                     <button class="action-btn-lg edit-btn" onclick={() => editTrip(trip.id)}>
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11 2L14 5L5 14H2V11L11 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11 2L14 5L5 14H2V11L11 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         Edit
                     </button>
                     <button class="action-btn-lg delete-btn" onclick={() => deleteTrip(trip.id)}>
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4H14M12 4V13C12 13.5304 11.7893 14.0391 11.4142 14.4142C11.0391 14.7893 10.5304 15 10 15H6C5.46957 15 4.96086 14.7893 4.58579 14.4142C4.21071 14.0391 4 13.5304 4 13V4M5 4V3C5 2.46957 5.21071 1.96086 5.58579 1.58579C5.96086 1.21071 6.46957 1 7 1H9C9.53043 1 10.0391 1.21071 10.4142 1.58579C10.7893 1.96086 11 2.46957 11 3V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4H14M12 4V13C12 13.5304 11.7893 14.0391 11.4142 14.4142C11.0391 14.7893 10.5304 15 10 15H6C5.46957 15 4.96086 14.7893 4.58579 14.4142C4.21071 14.0391 4 13.5304 4 13V4M5 4V3C5 2.46957 5.21071 1.96086 5.58579 1.58579C5.96086 1.21071 6.46957 1 7 1H9C9.53043 1 10.0391 1.21071 10.4142 1.58579C10.7893 1.96086 11 2.46957 11 3V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         Trash
-                    </button>
+                     </button>
                   </div>
                 </div>
               {/if}
@@ -726,13 +723,13 @@
 
     {#if totalPages > 1}
       <div class="pagination-controls">
-          <button class="page-btn" disabled={currentPage === 1} onclick={() => changePage(currentPage - 1)}>
+           <button class="page-btn" disabled={currentPage === 1} onclick={() => changePage(currentPage - 1)}>
             &larr; Prev
           </button>
           <span class="page-status">Page {currentPage} of {totalPages}</span>
           <button class="page-btn" disabled={currentPage === totalPages} onclick={() => changePage(currentPage + 1)}>
             Next &rarr;
-          </button>
+</button>
       </div>
     {/if}
 
@@ -750,19 +747,67 @@
             <div class="action-buttons">
                 <button class="action-pill secondary" onclick={() => selectedTrips = new Set()}>Cancel</button>
                 <button class="action-pill export" onclick={exportSelected}>
+                  {#if !isPro}🔒{/if}
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12V14H14V12M8 2V10M8 10L4 6M8 10L12 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     Export CSV
                 </button>
+    
                 <button class="action-pill danger" onclick={deleteSelected}>
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 4H14M5 4V3C5 2.4 5.4 2 6 2H10C10.6 2 11 2.4 11 3V4M6 8V12M10 8V12" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     Delete
                 </button>
-            </div>
+             </div>
         </div>
     </div>
 {/if}
 
-<!-- ← NEW: Custom loading snippet -->
+<Modal bind:open={isUpgradeModalOpen} title="Upgrade to Pro">
+  <div class="space-y-6 text-center py-4">
+        <div class="mx-auto w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mb-4">
+            <span class="text-3xl">🚀</span>
+        </div>
+        
+        <h3 class="text-xl font-bold text-gray-900">
+            Unlock Pro Features
+        </h3>
+        
+        <p class="text-gray-600 text-base leading-relaxed">
+            Data Export is a Pro feature. Upgrade now to download your trip history for taxes!
+        </p>
+
+        <div class="bg-gray-50 p-4 rounded-lg text-left text-sm space-y-2 border border-gray-100">
+            <div class="flex items-center gap-2">
+                <span class="text-green-500 text-lg">✓</span>
+                <span class="text-gray-700">Unlimited Stops per Trip</span>
+             </div>
+            <div class="flex items-center gap-2">
+                <span class="text-green-500 text-lg">✓</span>
+                <span class="text-gray-700">One-Click Route Optimization</span>
+            </div>
+            <div class="flex items-center gap-2">
+                 <span class="text-green-500 text-lg">✓</span>
+                <span class="text-gray-700">Unlimited Monthly Trips</span>
+            </div>
+            <div class="flex items-center gap-2">
+                 <span class="text-green-500 text-lg">✓</span>
+                <span class="text-gray-700">Data Export</span>
+            </div>
+        </div>
+
+        <div class="flex gap-3 justify-center pt-2">
+            <Button variant="outline" onclick={() => isUpgradeModalOpen = false}>
+                Maybe Later
+            </Button>
+            <a 
+                href="/dashboard/settings" 
+                class="inline-flex items-center justify-center rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600 transition-all"
+            >
+                Upgrade Now
+            </a>
+        </div>
+    </div>
+</Modal>
+
 {#snippet loading()}
   <div class="trips-loading">
     <div class="loading-header">
@@ -777,7 +822,7 @@
     </div>
 
     <div class="loading-filters">
-      <div class="skeleton skeleton-input"></div>
+       <div class="skeleton skeleton-input"></div>
       <div class="skeleton skeleton-select"></div>
     </div>
 
@@ -802,13 +847,12 @@
   </div>
 {/snippet}
 
-<!-- ← NEW: Custom error snippet -->
 {#snippet error({ error, retry })}
   <div class="trips-error">
     <div class="error-content">
       <div class="error-icon">
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
+           <circle cx="12" cy="12" r="10"/>
           <line x1="12" y1="8" x2="12" y2="12"/>
           <line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
@@ -835,7 +879,7 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="23 4 23 10 17 10"/>
             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-          </svg>
+           </svg>
           Try Again
         </button>
 
@@ -848,7 +892,7 @@
         <summary>Technical Details</summary>
         <pre><code>{JSON.stringify({
           message: error.message,
-          time: new Date().toISOString(),
+           time: new Date().toISOString(),
           path: $page.url.pathname,
           userAgent: navigator.userAgent
         }, null, 2)}</code></pre>
@@ -864,13 +908,13 @@
         <div class="tabs">
             <button 
                 class="tab-btn" 
-                class:active={activeCategoryType === 'maintenance'}
+                 class:active={activeCategoryType === 'maintenance'}
                 onclick={() => activeCategoryType = 'maintenance'}
             >
                 Maintenance
             </button>
             <button 
-                class="tab-btn" 
+                 class="tab-btn" 
                 class:active={activeCategoryType === 'supplies'}
                 onclick={() => activeCategoryType = 'supplies'}
             >
@@ -878,20 +922,20 @@
             </button>
         </div>
 
-        <p class="text-sm text-gray-500 mb-4">
+         <p class="text-sm text-gray-500 mb-4">
             Add or remove categories for {activeCategoryType}.
-        </p>
+</p>
         
         <div class="cat-list">
             {#each activeCategories as cat}
                 <div class="cat-item">
                     <span class="cat-badge">{cat}</span>
                     <button class="cat-delete" onclick={() => removeCategory(cat)} aria-label="Delete Category">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
                 </div>
             {:else}
-                <div class="text-sm text-gray-400 italic text-center py-4">No categories defined.</div>
+                 <div class="text-sm text-gray-400 italic text-center py-4">No categories defined.</div>
             {/each}
         </div>
 
@@ -899,7 +943,7 @@
             <input 
                 type="text" 
                 bind:value={newCategoryName} 
-                placeholder="New {activeCategoryType} category..." 
+                 placeholder="New {activeCategoryType} category..." 
                 class="input-field"
                 onkeydown={(e) => e.key === 'Enter' && addCategory()}
             />
@@ -907,7 +951,7 @@
         </div>
         
         <div class="modal-actions mt-6">
-            <button class="btn-cancel w-full" onclick={() => isManageCategoriesOpen = false}>Done</button>
+             <button class="btn-cancel w-full" onclick={() => isManageCategoriesOpen = false}>Done</button>
         </div>
     </div>
 </Modal>
@@ -923,12 +967,14 @@
   .btn-primary { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; 
     background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; border: none; 
     border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; 
-    box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); transition: transform 0.1s; cursor: pointer; }
+    box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); transition: transform 0.1s; cursor: pointer;
+}
   .btn-primary:active { transform: translateY(1px); }
 
   .btn-secondary { display: inline-flex; align-items: center; justify-content: center; padding: 10px; 
     background: white; border: 1px solid #E5E7EB; color: #374151; border-radius: 8px; 
-    font-weight: 600; font-size: 14px; cursor: pointer; transition: background 0.2s; text-decoration: none; }
+    font-weight: 600; font-size: 14px; cursor: pointer; transition: background 0.2s; text-decoration: none;
+}
 
   @media (hover: hover) {
     .btn-secondary:hover { background: #F9FAFB; }
@@ -1037,7 +1083,7 @@
   .page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .page-status { font-size: 14px; color: #4B5563; font-weight: 500; }
 
-  /* ← NEW: Loading state styles */
+  /* Loading state styles */
   .trips-loading {
     padding: 2rem;
     animation: fadeIn 0.3s ease-out;
@@ -1132,7 +1178,7 @@
     100% { background-position: -200% 0; }
   }
 
-  /* ← NEW: Error state styles */
+  /* Error state styles */
   .trips-error {
     display: flex;
     align-items: center;
