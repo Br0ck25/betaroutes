@@ -11,7 +11,7 @@ export type UserCore = {
     plan: string;
     name: string;
     createdAt: string;
-    stripeCustomerId?: string; // [!code ++] Added this field
+    stripeCustomerId?: string; // Added field
 };
 
 export type UserStats = {
@@ -66,7 +66,7 @@ export async function findUserById(kv: KVNamespace, userId: string): Promise<Use
         plan: core.plan,
         name: core.name,
         createdAt: core.createdAt,
-        stripeCustomerId: core.stripeCustomerId, // [!code ++] Return it
+        stripeCustomerId: core.stripeCustomerId, // Return it
         ...stats
     };
 }
@@ -152,12 +152,12 @@ export async function updateUser(
     await kv.put(key, JSON.stringify(updatedCore));
 }
 
-// [!code ++] NEW: Upgrade User Plan (For Stripe Webhooks)
+// NEW: Upgrade User Plan (For Stripe Webhooks)
 export async function updateUserPlan(
     kv: KVNamespace, 
     userId: string, 
     plan: string,
-    stripeCustomerId?: string // [!code ++] Optional customer ID
+    stripeCustomerId?: string // Added param
 ): Promise<void> {
     const coreKey = userCoreKey(userId);
     const statsKey = userStatsKey(userId);
@@ -172,10 +172,11 @@ export async function updateUserPlan(
     // 1. Update Plan in Core
     const core = JSON.parse(coreRaw) as UserCore;
     core.plan = plan;
-    // [!code ++] Save Stripe Customer ID if provided
+    
     if (stripeCustomerId) {
         core.stripeCustomerId = stripeCustomerId;
     }
+
     await kv.put(coreKey, JSON.stringify(core));
 
     // 2. Update Limits in Stats (Unlimited for Pro)
@@ -216,7 +217,7 @@ export async function updatePasswordHash(kv: KVNamespace, user: User, newHash: s
         plan: record.plan,
         name: record.name,
         createdAt: record.createdAt,
-        stripeCustomerId: record.stripeCustomerId // Preserve existing ID
+        stripeCustomerId: record.stripeCustomerId
     };
     
     await kv.put(key, JSON.stringify(core));

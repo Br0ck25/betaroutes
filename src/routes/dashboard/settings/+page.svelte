@@ -63,7 +63,7 @@
   $: isPro = ['pro', 'business', 'premium', 'enterprise'].includes($currentUser?.plan || '');
   let isUpgradeModalOpen = false;
   let isCheckingOut = false;
-  let isOpeningPortal = false; // [!code ++] New state
+  let isOpeningPortal = false; // New state for portal loading
 
   function handleAddressSelect(field: 'start' | 'end', e: CustomEvent) {
     const val = e.detail.formatted_address || e.detail.name;
@@ -132,7 +132,7 @@
     }
   }
 
-  // [!code ++] Handle Portal Click
+  // --- STRIPE PORTAL LOGIC ---
   async function handlePortal() {
       if (isOpeningPortal) return;
       isOpeningPortal = true;
@@ -143,7 +143,7 @@
           if (data.url) window.location.href = data.url;
       } catch (e) {
           console.error(e);
-          alert('Could not open billing portal. If you just upgraded, try refreshing the page.');
+          alert('Could not open billing portal. If you recently upgraded, try refreshing the page.');
           isOpeningPortal = false;
       }
   }
