@@ -66,7 +66,7 @@
 
   let netProfit = $state(0);
 
-  // ← ENHANCED: Upgrade Modal State with specific reason tracking
+  // Upgrade Modal State with specific reason tracking
   let showUpgradeModal = $state(false);
   let upgradeReason = $state<'stops' | 'optimize' | 'trips' | 'general'>('general');
   
@@ -140,7 +140,7 @@
         return;
     }
 
-    // ← ENHANCED: Stop Limit Check with better modal
+    // Stop Limit Check
     if (!silent) {
         const validStopCount = destinations.filter(d => d.address && d.address.trim().length > 0).length;
         if (userState.value?.plan === 'free' && validStopCount > 10) {
@@ -192,7 +192,7 @@
         console.error("Calculation Error:", err);
         const msg = (err.message || '').toLowerCase();
         
-        // ← ENHANCED: Better plan limit detection
+        // Plan limit detection
         if (msg.includes('plan limit') || msg.includes('pro feature') || msg.includes('trip limit')) {
              upgradeReason = 'general';
              showUpgradeModal = true;
@@ -215,7 +215,7 @@
         return;
     }
 
-    // ← ENHANCED: Better optimization limit check
+    // Optimization limit check
     if (userState.value?.plan === 'free') {
         upgradeReason = 'optimize';
         showUpgradeModal = true;
@@ -268,7 +268,7 @@
     } catch (e: any) {
         const msg = (e.message || '').toLowerCase();
 
-        // ← ENHANCED: Catch ALL potential plan limit indicators
+        // Catch ALL potential plan limit indicators
         const isPlanLimit = 
             e.code === 'PLAN_LIMIT' || 
             msg.includes('plan limit') || 
@@ -285,27 +285,6 @@
     } finally {
         calculating = false;
     }
-  }
-
-  // ← NEW: Check trip limit before allowing save
-  async function checkTripLimit(): Promise<boolean> {
-    if (!userState.value) return true; // No user state, allow
-    
-    const { plan, tripsThisMonth, maxTrips } = userState.value;
-    
-    // Pro/Premium users have unlimited trips
-    if (plan === 'pro' || plan === 'premium' || plan === 'business') {
-        return true;
-    }
-    
-    // Free users: check limit
-    if (plan === 'free' && tripsThisMonth >= maxTrips) {
-        upgradeReason = 'trips';
-        showUpgradeModal = true;
-        return false;
-    }
-    
-    return true;
   }
 
   // --- Draft Logic ---
@@ -358,11 +337,6 @@
     const interval = setInterval(saveDraft, 5000);
     return () => clearInterval(interval);
   });
-
-  // ← NEW: Expose trip limit check for parent component
-  export function canSaveTrip(): Promise<boolean> {
-    return checkTripLimit();
-  }
 </script>
 
 <div class="max-w-4xl mx-auto p-4 md:p-6">
@@ -490,23 +464,23 @@
     <div class="border-t border-gray-100 pt-4">
          <div class="flex justify-between items-center mb-4">
              <label class="block font-semibold text-sm text-gray-700">Expenses & Supplies</label>
-             <button type="button" class="text-sm text-blue-600" onclick={() => showFinancials = !showFinancials}>
+             <button type="button" class="text-sm text-blue-600" on:click={() => showFinancials = !showFinancials}>
                  {showFinancials ? 'Hide' : 'Show'}
              </button>
         </div>
 
         {#if showFinancials}
-             <div class="space-y-4 bg-gray-50 p-4 rounded-lg">
+             <div transition:slide class="space-y-4 bg-gray-50 p-4 rounded-lg">
                  <div>
                      <div class="flex justify-between items-center mb-2">
                           <span class="text-xs font-semibold text-gray-500 uppercase">Supplies (Pole, Concrete)</span>
-                         <button type="button" onclick={addSupply} class="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100">+ Add</button>
+                         <button type="button" on:click={addSupply} class="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100">+ Add</button>
                      </div>
                      {#each supplies as item, i}
                          <div class="flex gap-2 mb-2 items-center">
                              <input type="text" placeholder="Item Type" bind:value={item.type} class="w-full p-2 text-sm border rounded" />
                              <input type="number" placeholder="$" step="0.01" bind:value={item.cost} class="w-24 p-2 text-sm border rounded" />
-                             <button type="button" onclick={() => removeSupply(i)} class="text-red-400 hover:text-red-600">✕</button>
+                             <button type="button" on:click={() => removeSupply(i)} class="text-red-400 hover:text-red-600">✕</button>
                          </div>
                      {/each}
                       {#if supplies.length > 0}
@@ -517,13 +491,13 @@
                  <div>
                      <div class="flex justify-between items-center mb-2">
                          <span class="text-xs font-semibold text-gray-500 uppercase">Vehicle / Other</span>
-                         <button type="button" onclick={addMaintenance} class="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100">+ Add</button>
+                         <button type="button" on:click={addMaintenance} class="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100">+ Add</button>
                      </div>
                      {#each maintenance as item, i}
                          <div class="flex gap-2 mb-2 items-center">
                              <input type="text" placeholder="Description" bind:value={item.item} class="w-full p-2 text-sm border rounded" />
                              <input type="number" placeholder="$" step="0.01" bind:value={item.cost} class="w-24 p-2 text-sm border rounded" />
-                             <button type="button" onclick={() => removeMaintenance(i)} class="text-red-400 hover:text-red-600">✕</button>
+                             <button type="button" on:click={() => removeMaintenance(i)} class="text-red-400 hover:text-red-600">✕</button>
                          </div>
                      {/each}
                  </div>
@@ -571,7 +545,7 @@
     {:else}
         <button 
           class="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-          onclick={() => handleCalculate(false)} 
+          on:click={() => handleCalculate(false)} 
           disabled={calculating}
         >
          {calculating ? 'Calculating...' : 'Recalculate Route'}
@@ -579,8 +553,8 @@
         
         <button 
           class="w-full sm:w-auto px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-          onclick={handleOptimize} 
-          disabled={calculating || destinations.length < 2}
+          on:click={handleOptimize} 
+          disabled={calculating}
           title={userState.value?.plan === 'free' ? 'Pro Feature - Upgrade to Unlock' : 'Reorder stops for fastest route'}
         >
           {#if userState.value?.plan === 'free'}
@@ -593,10 +567,8 @@
   </div>
 </div>
 
-<!-- ← ENHANCED: Better Upgrade Modal with Dynamic Content -->
 <Modal bind:open={showUpgradeModal} title="Upgrade to Pro">
     <div class="space-y-6 text-center py-4">
-        <!-- Icon changes based on reason -->
         <div class="mx-auto w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mb-4">
             {#if upgradeReason === 'stops'}
                 <span class="text-3xl">📍</span>
@@ -625,7 +597,6 @@
             {upgradeMessage()}
         </p>
 
-        <!-- Current Plan Status (for trip limits) -->
         {#if upgradeReason === 'trips' && userState.value}
             <div class="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm">
                 <div class="font-semibold text-orange-900">Your Free Plan Status:</div>
@@ -635,7 +606,6 @@
             </div>
         {/if}
 
-        <!-- Benefits List -->
         <div class="bg-gray-50 p-4 rounded-lg text-left text-sm space-y-2 border border-gray-100">
             <div class="font-semibold text-gray-900 mb-3">Pro Plan Includes:</div>
             <div class="flex items-center gap-2">
@@ -656,16 +626,14 @@
             </div>
         </div>
 
-        <!-- Pricing -->
         <div class="bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg p-4">
             <div class="text-sm opacity-90">Only</div>
             <div class="text-3xl font-bold">$9.99<span class="text-lg font-normal">/mo</span></div>
             <div class="text-sm opacity-90">Cancel anytime</div>
         </div>
 
-        <!-- Action Buttons -->
         <div class="flex gap-3 justify-center pt-2">
-            <Button variant="outline" onclick={() => showUpgradeModal = false}>
+            <Button variant="outline" on:click={() => showUpgradeModal = false}>
                 Maybe Later
             </Button>
             <a 
