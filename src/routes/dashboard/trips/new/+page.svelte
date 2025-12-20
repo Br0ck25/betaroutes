@@ -396,7 +396,6 @@
       lastModified: new Date().toISOString()
     };
     
-    // [!code change] Capture Limit Reached Error on Save
     try { 
         await trips.create(tripToSave, userId); 
         goto('/dashboard/trips'); 
@@ -439,7 +438,7 @@
       <div class="form-card">
         <div class="card-header">
           <h2 class="card-title">Route & Stops</h2>
-          <button class="btn-small primary" on:click={handleOptimize} type="button" disabled={isCalculating || tripData.stops.length < 2} title="Reorder stops efficiently">{isCalculating ? 'Optimizing...' : 'Optimize'}</button>
+          <button class="btn-small primary" on:click={handleOptimize} type="button" disabled={isCalculating} title="Reorder stops efficiently">{isCalculating ? 'Optimizing...' : 'Optimize'}</button>
         </div>
         <div class="form-group">
           <label for="start-address">Starting Address</label>
@@ -680,6 +679,7 @@
   .btn-icon.delete:hover { color: #DC2626; }
   .btn-icon.gear { color: #6B7280; font-size: 18px; padding: 4px; transition: color 0.2s; }
   .btn-icon.gear:hover { color: #374151; }
+  
   .btn-text { background: none; border: none; color: #2563EB; font-weight: 600; font-size: 16px; cursor: pointer; }
   .btn-small { padding: 12px 18px; border-radius: 8px; border: none; font-weight: 600; font-size: 15px; cursor: pointer; }
   .btn-small.primary { background: #10B981; color: white; }
@@ -687,8 +687,10 @@
   .section-group { margin-bottom: 36px; }
   .section-top { display: flex; justify-content: space-between; margin-bottom: 18px; align-items: center; }
   .section-top h3 { font-size: 18px; font-weight: 700; margin: 0; }
+  
   .add-row { display: flex; gap: 12px; margin-bottom: 18px; }
   .select-input { flex: 1; padding: 12px; border: 1px solid #E5E7EB; border-radius: 10px; font-size: 16px; background: white; color: #374151; }
+  
   .expense-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 0; border-bottom: 1px solid #F3F4F6; }
   .expense-row .name { font-size: 17px; font-weight: 500; flex: 1; }
   .expense-row .input-money-wrapper { width: 120px; }
@@ -704,7 +706,7 @@
   .financial-summary .total { border-top: 2px solid #D1D5DB; margin-top: 18px; padding-top: 18px; font-weight: 800; font-size: 20px; }
   .val.positive { color: #059669; }
   .val.negative { color: #DC2626; }
-  /* Modal Specific Styles */
+  
   .categories-manager { padding: 4px; }
   .tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid #E5E7EB; }
   .tab-btn { padding: 8px 16px; background: none; border: none; border-bottom: 2px solid transparent; font-weight: 600; color: #6B7280; cursor: pointer; transition: all 0.2s; }
