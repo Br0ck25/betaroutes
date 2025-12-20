@@ -60,7 +60,7 @@ id = "d395b64dcd0641f5a44d94c5ef5628eb"
 [env.preview]
 
 [env.preview.vars]
-PUBLIC_GOOGLE_MAPS_API_KEY=AIzaSyC_M5PjI9-Dix0dOr_Sg2bKkXhNAIbr2Xs
+PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyC_M5PjI9-Dix0dOr_Sg2bKkXhNAIbr2Xs"
 
 [[env.preview.durable_objects.bindings]]
 name = "TRIP_INDEX_DO"
