@@ -154,7 +154,8 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
   // Save a fully selected place (with geometry) to KV
   async function savePlaceToKV(place: any) {
     try {
-      fetch('/api/autocomplete', {
+      // [!code fix] Changed from '/api/autocomplete' to '/api/places/cache' to match server handler
+      fetch('/api/places/cache', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(place)
