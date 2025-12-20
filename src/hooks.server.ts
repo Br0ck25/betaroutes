@@ -12,10 +12,10 @@ export const handle: Handle = async ({ event, resolve }) => {
     // 2. User auth logic: Check for 'session_id' cookie
     const sessionId = event.cookies.get('session_id');
 
-    // [!code fix] Regex for UUID v4 validation (Strict)
+    // Regex for UUID v4 validation (Strict)
     const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-    // [!code fix] Validate format before trusting the cookie to avoid wasting KV reads
+    // Validate format before trusting the cookie to avoid wasting KV reads
     // If no cookie or invalid format, skip KV lookup entirely
     if (!sessionId || !UUID_REGEX.test(sessionId)) {
         event.locals.user = null;
@@ -23,7 +23,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     }
 
     try {
-        // [!code fix] Use BETA_SESSIONS_KV to find the active session
+        // Use BETA_SESSIONS_KV to find the active session
         // (Matched to your wrangler.toml binding)
         const sessionKV = event.platform?.env?.BETA_SESSIONS_KV;
 
@@ -41,7 +41,8 @@ export const handle: Handle = async ({ event, resolve }) => {
                     maxTrips: session.maxTrips ?? 10,
                     resetDate: session.resetDate ?? new Date().toISOString(),
                     name: session.name,
-                    email: session.email
+                    email: session.email,
+                    stripeCustomerId: session.stripeCustomerId // [!code ++] Pass this to the app for Portal access
                 };
             } else {
                 // Session ID cookie exists, but data is gone from KV (expired/deleted)
