@@ -63,6 +63,14 @@
       label: 'Settings' 
     },
   ];
+
+  // UPDATED: Helper to handle navigation manually
+  function handleNav(e: MouseEvent, href: string) {
+    e.preventDefault();
+    closeSidebar();
+    goto(href);
+  }
+
   function isActive(href: string, exact = false, exclude: string[] = []): boolean {
     const path = $page.url.pathname;
     if (exclude.length > 0) {
@@ -96,7 +104,6 @@
         }
     }
 
-  
     if (userId) {
       try {
         console.log('[DASHBOARD LAYOUT] Loading data for:', userId);
@@ -137,7 +144,7 @@
     <div class="mobile-actions">
       <SyncIndicator />
       {#if $user}
-        <a href="/dashboard/settings" class="mobile-user" aria-label="Profile Settings">
+        <a href="/dashboard/settings" class="mobile-user" aria-label="Profile Settings" on:click={(e) => handleNav(e, '/dashboard/settings')}>
           <div class="user-avatar small">
             {getInitial($user.name || $user.email || '')}
           </div>
@@ -166,7 +173,7 @@
           href={item.href} 
           class="nav-item" 
           class:active={isActive(item.href, item.exact, item.exclude)}
-          on:click={closeSidebar}
+          on:click={(e) => handleNav(e, item.href)}
         >
           <span class="nav-icon">{@html item.icon}</span>
           <span class="nav-label">{item.label}</span>
@@ -176,7 +183,7 @@
     
     <div class="sidebar-footer">
       {#if $user}
-        <a href="/dashboard/settings" class="user-card" on:click={closeSidebar}>
+        <a href="/dashboard/settings" class="user-card" on:click={(e) => handleNav(e, '/dashboard/settings')}>
           <div class="user-avatar">
             {getInitial($user.name || $user.email || '')}
           </div>
@@ -216,6 +223,7 @@
         href={item.href} 
         class="bottom-nav-item" 
         class:active={isActive(item.href, item.exact, item.exclude)}
+        on:click={(e) => handleNav(e, item.href)}
       >
         <span class="bottom-nav-icon">{@html item.icon}</span>
         <span class="bottom-nav-label">{item.label}</span>
@@ -246,14 +254,13 @@
   
   .layout {
     display: flex;
-    min-height: 100dvh; /* UPDATED: Dynamic viewport height */
+    min-height: 100dvh;
     background: #F9FAFB;
   }
   
   /* --- Mobile Header --- */
   .mobile-header {
     display: flex;
-    /* Default to visible for mobile */
     position: fixed;
     top: 0;
     left: 0;
@@ -297,7 +304,7 @@
     display: flex;
     flex-direction: column;
     z-index: 1001;
-    transform: translateX(-100%); /* Hidden on mobile */
+    transform: translateX(-100%);
     transition: transform 0.3s ease;
   }
   
@@ -327,7 +334,7 @@
     flex: 1;
     padding: 24px 16px;
     overflow-y: auto;
-    overscroll-behavior: contain; /* UPDATED: Prevent chaining */
+    overscroll-behavior: contain;
   }
   
   .nav-item {
@@ -343,6 +350,7 @@
     margin-bottom: 4px;
     transition: all 0.2s;
     position: relative;
+    cursor: pointer; /* Ensure pointer for buttons */
   }
   
   .nav-item:hover {
@@ -383,6 +391,7 @@
     text-decoration: none;
     color: inherit;
     transition: background-color 0.2s ease;
+    cursor: pointer;
   }
 
   .user-card:hover {
@@ -450,12 +459,9 @@
   /* --- Main Content --- */
   .main-content {
     margin-left: 0;
-    /* Default 0 for mobile */
     padding: calc(var(--mobile-header-height) + 20px) 16px 100px 16px;
-    /* Top padding for header, Bottom for nav bar */
     flex: 1;
     min-height: 100dvh;
-    /* UPDATED: Dynamic viewport height */
   }
   
   .overlay {
@@ -487,7 +493,6 @@
     right: 0;
     background: white;
     border-top: 1px solid #E5E7EB;
-    /* Respect iPhone Home Indicator area */
     padding-bottom: env(safe-area-inset-bottom, 20px); 
     height: calc(60px + env(safe-area-inset-bottom, 20px));
     z-index: 900;
@@ -508,6 +513,7 @@
     font-weight: 500;
     width: 100%;
     gap: 4px;
+    cursor: pointer;
   }
 
   .bottom-nav-item.active {
@@ -527,7 +533,6 @@
     
     .sidebar {
       transform: translateX(0);
-      /* Always visible */
     }
     
     .main-content {
