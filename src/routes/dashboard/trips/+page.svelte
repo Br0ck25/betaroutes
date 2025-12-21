@@ -4,13 +4,13 @@
   import AsyncErrorBoundary from '$lib/components/AsyncErrorBoundary.svelte';
   import { goto } from '$app/navigation';
   import { user } from '$lib/stores/auth';
-  import { currentUser } from '$lib/stores/currentUser';
   import { page } from '$app/stores';
   import { toasts } from '$lib/stores/toast';
   import { userSettings } from '$lib/stores/userSettings';
   import Modal from '$lib/components/ui/Modal.svelte';
   import Button from '$lib/components/ui/Button.svelte';
   import { onMount } from 'svelte';
+  import { autocomplete } from '$lib/utils/autocomplete';
 
   // Error boundary reference
   let tripsBoundary: any;
@@ -27,33 +27,112 @@
   const itemsPerPage = 20;
   // --- SELECTION STATE ---
   let selectedTrips = new Set<string>();
-  // --- MODAL STATE ---
-  let isManageCategoriesOpen = false;
+  
+  // --- MODAL & SETTINGS STATE ---
+  let isSettingsOpen = false; // Unified settings modal
+  let settingsTab: 'defaults' | 'categories' = 'defaults'; // Tab switcher
   let isUpgradeModalOpen = false;
+  
+  // Category State
   let activeCategoryType: 'maintenance' | 'supplies' = 'maintenance';
   let newCategoryName = '';
 
+  // Defaults State
+  let settings = { ...$userSettings };
+  
+  // Keep local settings in sync with store updates
+  $: if ($userSettings) {
+      settings = { ...$userSettings };
+  }
+
   // Check Pro Status
-  $: isPro = ['pro', 'business', 'premium', 'enterprise'].includes($currentUser?.plan || '');
+  $: isPro = ['pro', 'business', 'premium', 'enterprise'].includes($user?.plan || '');
+
+  // API Key for Autocomplete
+  $: API_KEY = $page.data.googleMapsApiKey;
 
   $: activeCategories = activeCategoryType === 'maintenance' 
       ? ($userSettings.maintenanceCategories || ['oil change', 'repair'])
       : ($userSettings.supplyCategories || ['water', 'snacks']);
-  
+    
   // Reset selection and page when filters change
   $: if (searchQuery || sortBy || sortOrder || filterProfit || startDate || endDate) {
       currentPage = 1;
   }
 
-  // Enhanced loading function with error handling
+  // --- SETTINGS LOGIC ---
+
+  function handleAddressSelect(field: 'start' | 'end', e: CustomEvent) {
+    const val = e.detail.formatted_address || e.detail.name;
+    if (field === 'start') settings.defaultStartAddress = val;
+    if (field === 'end') settings.defaultEndAddress = val;
+  }
+
+  async function saveDefaultSettings() {
+    userSettings.set(settings);
+    try {
+        const res = await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ settings: settings })
+        });
+        if (!res.ok) throw new Error('Failed to sync');
+        toasts.success('Default values saved!');
+    } catch (e) {
+        console.error('Sync error:', e);
+        toasts.error('Saved locally, but cloud sync failed');
+    }
+  }
+
+  async function updateCategories(newCategories: string[]) {
+      const updateData: any = {};
+      if (activeCategoryType === 'maintenance') {
+          userSettings.update(s => ({ ...s, maintenanceCategories: newCategories }));
+          updateData.maintenanceCategories = newCategories;
+      } else {
+          userSettings.update(s => ({ ...s, supplyCategories: newCategories }));
+          updateData.supplyCategories = newCategories;
+      }
+
+      try {
+          await fetch('/api/settings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updateData)
+          });
+      } catch (e) {
+          console.error('Failed to sync settings', e);
+          toasts.error('Saved locally, but sync failed');
+      }
+  }
+
+  async function addCategory() {
+      if (!newCategoryName.trim()) return;
+      const val = newCategoryName.trim().toLowerCase();
+      if (activeCategories.includes(val)) {
+          toasts.error('Category already exists');
+          return;
+      }
+      const updated = [...activeCategories, val];
+      await updateCategories(updated);
+      newCategoryName = '';
+      toasts.success('Category added');
+  }
+
+  async function removeCategory(cat: string) {
+      if (!confirm(`Delete "${cat}" category?`)) return;
+      const updated = activeCategories.filter(c => c !== cat);
+      await updateCategories(updated);
+      toasts.success('Category removed');
+  }
+
+  // --- LOADING LOGIC ---
   async function loadTrips() {
     try {
       if (!hasLoadedOnce) {
         tripsBoundary?.setLoading();
       }
-
       await trips.load();
-      
       hasLoadedOnce = true;
       tripsBoundary?.setSuccess();
     } catch (error) {
@@ -68,7 +147,7 @@
     loadTrips();
   });
 
-  // Derived: All filtered results
+  // --- TRIP FILTERING & SORTING ---
   $: allFilteredTrips = $trips
     .filter(trip => {
       const query = searchQuery.toLowerCase();
@@ -147,20 +226,14 @@
   $: allSelected = allFilteredTrips.length > 0 && selectedTrips.size === allFilteredTrips.length;
 
   function toggleSelection(id: string) {
-      if (selectedTrips.has(id)) {
-          selectedTrips.delete(id);
-      } else {
-          selectedTrips.add(id);
-      }
+      if (selectedTrips.has(id)) selectedTrips.delete(id);
+      else selectedTrips.add(id);
       selectedTrips = selectedTrips; 
   }
 
   function toggleSelectAll() {
-      if (allSelected) {
-          selectedTrips = new Set();
-      } else {
-          selectedTrips = new Set(allFilteredTrips.map(t => t.id));
-      }
+      if (allSelected) selectedTrips = new Set();
+      else selectedTrips = new Set(allFilteredTrips.map(t => t.id));
   }
 
   function changePage(newPage: number) {
@@ -168,49 +241,6 @@
           currentPage = newPage;
           window.scrollTo({ top: 0, behavior: 'smooth' });
       }
-  }
-
-  // --- CATEGORY MANAGEMENT LOGIC ---
-  async function updateCategories(newCategories: string[]) {
-      const updateData: any = {};
-      if (activeCategoryType === 'maintenance') {
-          userSettings.update(s => ({ ...s, maintenanceCategories: newCategories }));
-          updateData.maintenanceCategories = newCategories;
-      } else {
-          userSettings.update(s => ({ ...s, supplyCategories: newCategories }));
-          updateData.supplyCategories = newCategories;
-      }
-
-      try {
-          await fetch('/api/settings', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(updateData)
-          });
-      } catch (e) {
-          console.error('Failed to sync settings', e);
-          toasts.error('Saved locally, but sync failed');
-      }
-  }
-
-  async function addCategory() {
-      if (!newCategoryName.trim()) return;
-      const val = newCategoryName.trim().toLowerCase();
-      if (activeCategories.includes(val)) {
-          toasts.error('Category already exists');
-          return;
-      }
-      const updated = [...activeCategories, val];
-      await updateCategories(updated);
-      newCategoryName = '';
-      toasts.success('Category added');
-  }
-
-  async function removeCategory(cat: string) {
-      if (!confirm(`Delete "${cat}" category?`)) return;
-      const updated = activeCategories.filter(c => c !== cat);
-      await updateCategories(updated);
-      toasts.success('Category removed');
   }
 
   async function deleteSelected() {
@@ -241,7 +271,7 @@
 
   function exportSelected() {
       if (!isPro) {
-        isUpgradeModalOpen = true; // Open the upgrade modal
+        isUpgradeModalOpen = true; 
         return;
       }
 
@@ -328,14 +358,6 @@
     }
   }
 
-  async function deleteAllTrips() {
-      if (!confirm('WARNING: Are you sure you want to delete ALL trips? This cannot be undone.')) return;
-      const tripsToDelete = [...$trips];
-      for (const trip of tripsToDelete) {
-          await deleteTrip(trip.id, true);
-      }
-  }
-  
   function editTrip(id: string) {
     goto(`/dashboard/trips/edit/${id}`);
   }
@@ -366,7 +388,47 @@
     }
   }
 
-  // Deep Link Handling
+  function openGoogleMaps(e: MouseEvent, trip: any) {
+    e.stopPropagation(); 
+    const origin = encodeURIComponent(trip.startAddress || '');
+    const destination = encodeURIComponent(trip.endAddress || trip.startAddress || '');
+    
+    let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}`;
+    
+    if (trip.stops && trip.stops.length > 0) {
+        const waypoints = trip.stops
+            .map((s: any) => encodeURIComponent(s.address || ''))
+            .filter((a: string) => a.length > 0)
+            .join('|');
+        if (waypoints) {
+            url += `&waypoints=${waypoints}`;
+        }
+    }
+    window.open(url, '_blank');
+  }
+
+  function openMapToStop(e: MouseEvent, trip: any, stopIndex: number) {
+    e.stopPropagation();
+    const origin = encodeURIComponent(trip.startAddress || '');
+    const targetStop = trip.stops[stopIndex];
+    const destination = encodeURIComponent(targetStop.address || '');
+
+    const previousStops = trip.stops.slice(0, stopIndex);
+    
+    let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}`;
+
+    if (previousStops.length > 0) {
+        const waypoints = previousStops
+            .map((s: any) => encodeURIComponent(s.address || ''))
+            .filter((a: string) => a.length > 0)
+            .join('|');
+        if (waypoints) {
+            url += `&waypoints=${waypoints}`;
+        }
+    }
+    window.open(url, '_blank');
+  }
+
   let deepLinkHandled = false;
   $: if (!$isLoading && allFilteredTrips.length > 0 && !deepLinkHandled) {
       const id = $page.url.searchParams.get('id');
@@ -448,6 +510,9 @@
 
 <svelte:head>
   <title>Trip History - Go Route Yourself</title>
+  <style>
+    .pac-container { z-index: 10000 !important; }
+  </style>
 </svelte:head>
 
 <AsyncErrorBoundary bind:this={tripsBoundary} onRetry={loadTrips}>
@@ -467,8 +532,11 @@
             </svg>
         </button>
 
-        <button class="btn-secondary" onclick={() => isManageCategoriesOpen = true} aria-label="Manage Categories">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.39a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        <button class="btn-secondary" onclick={() => isSettingsOpen = true} aria-label="Trip Settings">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.39a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+            </svg>
         </button>
 
         <a href="/dashboard/trips/new" class="btn-primary" aria-label="Create New Trip">
@@ -574,7 +642,7 @@
             </div>
 
             <div 
-               class="trip-card" 
+                class="trip-card" 
               id={'trip-' + trip.id}
               class:expanded={isExpanded} 
               class:selected={isSelected}
@@ -598,18 +666,32 @@
 
                 <div class="trip-route-date">
                   <span class="trip-date-display">
-                     {formatDate(trip.date || '')}
+                      {formatDate(trip.date || '')}
                       {#if trip.startTime}
                          <span class="time-range">• {formatTime(trip.startTime)} - {formatTime(trip.endTime || '17:00')}</span>
                       {/if}
                   </span>
       
-                   <h3 class="trip-route-title">
-                    {trip.startAddress?.split(',')[0] || 'Unknown'} 
-                    {#if trip.stops && trip.stops.length > 0}
-                      → {trip.stops[trip.stops.length - 1].address?.split(',')[0] || 'Stop'}
-                    {/if}
-                  </h3>
+                  <div class="trip-title-row">
+                       <h3 class="trip-route-title">
+                        {trip.startAddress?.split(',')[0] || 'Unknown'} 
+                        {#if trip.stops && trip.stops.length > 0}
+                          → {trip.stops[trip.stops.length - 1].address?.split(',')[0] || 'Stop'}
+                        {/if}
+                      </h3>
+                      
+                      <button 
+                        class="map-link-btn" 
+                        onclick={(e) => openGoogleMaps(e, trip)} 
+                        title="View Route in Google Maps"
+                        aria-label="View Route in Google Maps"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"></path>
+                            <path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z"></path>
+                        </svg>
+                      </button>
+                  </div>
                 </div>
                 
                 <div class="profit-display-large" class:positive={profit >= 0} class:negative={profit < 0}>
@@ -650,14 +732,38 @@
                    <div class="detail-section">
                     <h4 class="section-heading">Stops & Addresses</h4>
                     <div class="address-list">
-                        <p><strong>Start:</strong> {trip.startAddress}</p>
+                        <div class="address-row">
+                             <span class="address-text"><strong>Start:</strong> {trip.startAddress}</span>
+                        </div>
                         {#if trip.stops}
                            {#each trip.stops as stop, i}
-                              <p><strong>Stop {i + 1}:</strong> {stop.address}</p>
+                              <div class="address-row">
+                                  <span class="address-text"><strong>Stop {i + 1}:</strong> {stop.address}</span>
+                                  <button 
+                                    class="mini-map-btn" 
+                                    onclick={(e) => openMapToStop(e, trip, i)}
+                                    title="Map route from Start to here"
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+                                    </svg>
+                                  </button>
+                              </div>
                           {/each}
                        {/if}
                         {#if trip.endAddress && trip.endAddress !== trip.startAddress}
-                            <p><strong>End:</strong> {trip.endAddress}</p>
+                             <div class="address-row">
+                                <span class="address-text"><strong>End:</strong> {trip.endAddress}</span>
+                                <button 
+                                    class="mini-map-btn" 
+                                    onclick={(e) => openGoogleMaps(e, trip)}
+                                    title="Map full route"
+                                >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+                                    </svg>
+                                </button>
+                            </div>
                         {/if}
                     </div>
                   </div>
@@ -676,14 +782,14 @@
                          {#if trip.maintenanceItems}
                            {#each trip.maintenanceItems as item}
                             <div class="expense-row">
-                              <span>{item.type}</span>
+                               <span>{item.type}</span>
                                <span>{formatCurrency(item.cost)}</span>
                             </div>
                           {/each}
                        {/if}
                         {#if supplies.length > 0}
                           {#each supplies as item}
-                            <div class="expense-row">
+                             <div class="expense-row">
                                <span>{item.type}</span>
                               <span>{formatCurrency(item.cost)}</span>
                             </div>
@@ -724,11 +830,11 @@
     {#if totalPages > 1}
       <div class="pagination-controls">
            <button class="page-btn" disabled={currentPage === 1} onclick={() => changePage(currentPage - 1)}>
-            &larr; Prev
+            ← Prev
           </button>
           <span class="page-status">Page {currentPage} of {totalPages}</span>
           <button class="page-btn" disabled={currentPage === totalPages} onclick={() => changePage(currentPage + 1)}>
-            Next &rarr;
+            Next →
 </button>
       </div>
     {/if}
@@ -780,13 +886,13 @@
                 <span class="text-green-500 text-lg">✓</span>
                 <span class="text-gray-700">Unlimited Stops per Trip</span>
              </div>
-            <div class="flex items-center gap-2">
+             <div class="flex items-center gap-2">
                 <span class="text-green-500 text-lg">✓</span>
                 <span class="text-gray-700">One-Click Route Optimization</span>
             </div>
             <div class="flex items-center gap-2">
                  <span class="text-green-500 text-lg">✓</span>
-                <span class="text-gray-700">Unlimited Monthly Trips</span>
+                 <span class="text-gray-700">Unlimited Monthly Trips</span>
             </div>
             <div class="flex items-center gap-2">
                  <span class="text-green-500 text-lg">✓</span>
@@ -830,7 +936,7 @@
       {#each Array(6) as _}
         <div class="trip-skeleton">
           <div class="skeleton-top">
-            <div class="skeleton skeleton-text" style="width: 30%; height: 14px;"></div>
+             <div class="skeleton skeleton-text" style="width: 30%; height: 14px;"></div>
             <div class="skeleton skeleton-text" style="width: 60%; height: 18px; margin-top: 8px;"></div>
           </div>
           <div class="skeleton-stats-grid">
@@ -852,7 +958,7 @@
     <div class="error-content">
       <div class="error-icon">
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-           <circle cx="12" cy="12" r="10"/>
+            <circle cx="12" cy="12" r="10"/>
           <line x1="12" y1="8" x2="12" y2="12"/>
           <line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
@@ -903,56 +1009,128 @@
 
 </AsyncErrorBoundary>
 
-<Modal bind:open={isManageCategoriesOpen} title="Manage Categories">
-    <div class="categories-manager">
-        <div class="tabs">
+<Modal bind:open={isSettingsOpen} title="Trip Settings">
+    <div class="settings-modal-content">
+        <div class="top-tabs">
             <button 
-                class="tab-btn" 
-                 class:active={activeCategoryType === 'maintenance'}
-                onclick={() => activeCategoryType = 'maintenance'}
+                class="top-tab-btn" 
+                class:active={settingsTab === 'defaults'} 
+                onclick={() => settingsTab = 'defaults'}
             >
-                Maintenance
+                Default Values
             </button>
             <button 
-                 class="tab-btn" 
-                class:active={activeCategoryType === 'supplies'}
-                onclick={() => activeCategoryType = 'supplies'}
+                class="top-tab-btn" 
+                class:active={settingsTab === 'categories'} 
+                onclick={() => settingsTab = 'categories'}
             >
-                Supplies
+                Categories
             </button>
         </div>
 
-         <p class="text-sm text-gray-500 mb-4">
-            Add or remove categories for {activeCategoryType}.
-</p>
-        
-        <div class="cat-list">
-            {#each activeCategories as cat}
-                <div class="cat-item">
-                    <span class="cat-badge">{cat}</span>
-                    <button class="cat-delete" onclick={() => removeCategory(cat)} aria-label="Delete Category">
-                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        {#if settingsTab === 'defaults'}
+            <div class="settings-form space-y-4">
+                <p class="text-sm text-gray-500 mb-2">Pre-fill new trips with these values.</p>
+                
+                <div class="form-group">
+                    <label for="default-mpg" class="block text-sm font-medium text-gray-700 mb-1">Default MPG</label>
+                    <input id="default-mpg" type="number" bind:value={settings.defaultMPG} placeholder="25" min="1" step="0.1" class="w-full p-2 border rounded-lg" />
+                </div>
+                
+                <div class="form-group">
+                    <label for="default-gas" class="block text-sm font-medium text-gray-700 mb-1">Default Gas Price</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                        <input id="default-gas" type="number" bind:value={settings.defaultGasPrice} placeholder="3.50" min="0" step="0.01" class="w-full p-2 pl-7 border rounded-lg" />
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="default-start" class="block text-sm font-medium text-gray-700 mb-1">Default Start Address</label>
+                    <input 
+                        id="default-start"
+                        type="text" 
+                        bind:value={settings.defaultStartAddress}
+                        placeholder="Start typing address..."
+                        autocomplete="off"
+                        use:autocomplete={{ apiKey: API_KEY }}
+                        onplace-selected={(e) => handleAddressSelect('start', e)}
+                        class="w-full p-2 border rounded-lg"
+                    />
+                </div>
+                
+                <div class="form-group">
+                    <label for="default-end" class="block text-sm font-medium text-gray-700 mb-1">Default End Address</label>
+                    <input 
+                        id="default-end"
+                        type="text" 
+                        bind:value={settings.defaultEndAddress}
+                        placeholder="Start typing address..."
+                        autocomplete="off"
+                        use:autocomplete={{ apiKey: API_KEY }}
+                        onplace-selected={(e) => handleAddressSelect('end', e)}
+                        class="w-full p-2 border rounded-lg"
+                    />
+                </div>
+                
+                <div class="modal-actions pt-4">
+                    <button class="btn-primary w-full" onclick={saveDefaultSettings}>Save Defaults</button>
+                </div>
+            </div>
+        {/if}
+
+        {#if settingsTab === 'categories'}
+            <div class="categories-manager">
+                <div class="tabs sub-tabs">
+                    <button 
+                        class="tab-btn" 
+                        class:active={activeCategoryType === 'maintenance'}
+                        onclick={() => activeCategoryType = 'maintenance'}
+                    >
+                        Maintenance
+                    </button>
+                    <button 
+                        class="tab-btn" 
+                        class:active={activeCategoryType === 'supplies'}
+                        onclick={() => activeCategoryType = 'supplies'}
+                    >
+                        Supplies
                     </button>
                 </div>
-            {:else}
-                 <div class="text-sm text-gray-400 italic text-center py-4">No categories defined.</div>
-            {/each}
-        </div>
 
-        <div class="add-cat-form">
-            <input 
-                type="text" 
-                bind:value={newCategoryName} 
-                 placeholder="New {activeCategoryType} category..." 
-                class="input-field"
-                onkeydown={(e) => e.key === 'Enter' && addCategory()}
-            />
-            <button class="btn-secondary" onclick={addCategory}>Add</button>
-        </div>
-        
-        <div class="modal-actions mt-6">
-             <button class="btn-cancel w-full" onclick={() => isManageCategoriesOpen = false}>Done</button>
-        </div>
+                <p class="text-sm text-gray-500 mb-4">
+                    Manage {activeCategoryType} options.
+                </p>
+                
+                <div class="cat-list">
+                    {#each activeCategories as cat}
+                        <div class="cat-item">
+                            <span class="cat-badge">{cat}</span>
+                            <button class="cat-delete" onclick={() => removeCategory(cat)} aria-label="Delete Category">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            </button>
+                        </div>
+                    {:else}
+                        <div class="text-sm text-gray-400 italic text-center py-4">No categories defined.</div>
+                    {/each}
+                </div>
+
+                <div class="add-cat-form">
+                    <input 
+                        type="text" 
+                        bind:value={newCategoryName} 
+                        placeholder="New category..." 
+                        class="input-field"
+                        onkeydown={(e) => e.key === 'Enter' && addCategory()}
+                    />
+                    <button class="btn-secondary" onclick={addCategory}>Add</button>
+                </div>
+                
+                <div class="modal-actions mt-6">
+                    <button class="btn-cancel w-full" onclick={() => isSettingsOpen = false}>Done</button>
+                </div>
+            </div>
+        {/if}
     </div>
 </Modal>
 
@@ -987,7 +1165,15 @@
 
   /* Modal Styles */
   .categories-manager { padding: 4px; }
-  .tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid #E5E7EB; }
+  
+  /* Top Tabs for Modal */
+  .top-tabs { display: flex; border-bottom: 2px solid #E5E7EB; margin-bottom: 20px; }
+  .top-tab-btn { flex: 1; padding: 12px; font-weight: 600; color: #6B7280; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+  .top-tab-btn.active { color: #FF7F50; border-bottom-color: #FF7F50; }
+
+  /* Sub Tabs for Categories */
+  .sub-tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid #E5E7EB; }
+  
   .tab-btn { padding: 8px 16px; background: none; border: none; border-bottom: 2px solid transparent; 
       font-weight: 600; color: #6B7280; cursor: pointer; transition: all 0.2s; }
   .tab-btn.active { color: #FF7F50; border-bottom-color: #FF7F50; }
@@ -1003,6 +1189,8 @@
   .add-cat-form .input-field { flex: 1; padding: 10px; border: 1px solid #E5E7EB; border-radius: 8px; }
   .modal-actions .btn-cancel { background: white; border: 1px solid #E5E7EB; color: #374151; padding: 12px; 
     border-radius: 8px; font-weight: 600; cursor: pointer; width: 100%; }
+
+  .settings-form input:focus { outline: none; border-color: #FF7F50; ring: 2px solid rgba(255, 127, 80, 0.1); }
 
   .stats-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
   .summary-card { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; text-align: center; }
@@ -1045,7 +1233,84 @@
   .trip-route-date { overflow: hidden; }
   .trip-date-display { display: block; font-size: 12px; font-weight: 600; color: #6B7280; margin-bottom: 4px; }
   .time-range { color: #4B5563; margin-left: 4px; font-weight: 500; }
-  .trip-route-title { font-size: 16px; font-weight: 700; color: #111827; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  
+  /* New wrapper for title and button */
+  .trip-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+  }
+  
+  .trip-route-title { 
+      font-size: 16px; 
+      font-weight: 700; 
+      color: #111827; 
+      margin: 0; 
+      white-space: nowrap; 
+      overflow: hidden; 
+      text-overflow: ellipsis; 
+      flex: 1; /* Allow title to take available space */
+  }
+
+  .map-link-btn {
+      background: none;
+      border: 1px solid #E5E7EB;
+      color: #6B7280;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      flex-shrink: 0;
+      height: 24px;
+      width: 24px;
+  }
+  
+  .map-link-btn:hover {
+      color: #FF7F50;
+      border-color: #FF7F50;
+      background: #FFF7ED;
+  }
+
+  /* NEW STYLES FOR ADDRESS ROWS */
+  .address-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: #374151;
+      margin: 4px 0;
+  }
+  
+  .address-text {
+      flex: 1;
+      min-width: 0;
+      word-break: break-word;
+  }
+  
+  .mini-map-btn {
+      background: none;
+      border: 1px solid #E5E7EB;
+      color: #9CA3AF;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      flex-shrink: 0;
+  }
+  
+  .mini-map-btn:hover {
+      color: #FF7F50;
+      border-color: #FF7F50;
+      background: #FFF7ED;
+  }
+
   .profit-display-large { font-size: 18px; font-weight: 800; white-space: nowrap; }
   .profit-display-large.positive { color: #10B981; }
   .profit-display-large.negative { color: #DC2626; }

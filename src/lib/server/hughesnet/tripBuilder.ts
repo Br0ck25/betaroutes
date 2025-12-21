@@ -94,7 +94,19 @@ export async function createTripForDate(
         }
         if (isNaN(commuteMins) || !isFinite(commuteMins) || commuteMins < 0) commuteMins = 0;
 
+        // [!code changed] Only use arrival timestamp if it matches the trip date
+        let useArrivalTimestamp = false;
         if (anchorOrder.arrivalTimestamp) {
+            const arrDate = extractDateFromTs(anchorOrder.arrivalTimestamp);
+            // Assuming 'date' format matches 'MM/DD/YYYY' or similar returned by extractDateFromTs
+            // We do a loose check or exact check depending on format. 
+            // Since 'date' is passed from sync logic (which usually uses the same util), this comparison should work.
+            if (arrDate === date) {
+                useArrivalTimestamp = true;
+            }
+        }
+
+        if (useArrivalTimestamp && anchorOrder.arrivalTimestamp) {
             const d = new Date(anchorOrder.arrivalTimestamp);
             const arrivalMins = d.getHours() * 60 + d.getMinutes();
             if (!isNaN(arrivalMins) && isFinite(arrivalMins)) {
@@ -102,6 +114,7 @@ export async function createTripForDate(
                 if (!isNaN(calculatedStart) && isFinite(calculatedStart)) startMins = calculatedStart;
             }
         } else {
+            // [!code changed] Fallback to scheduled time if arrival is missing OR on a different date
             const schedMins = parseTime(anchorOrder.beginTime);
             if (schedMins > 0 && isFinite(schedMins)) {
                 const calculatedStart = schedMins - commuteMins;

@@ -2,15 +2,19 @@
   import { userSettings } from '$lib/stores/userSettings';
   import { auth, user } from '$lib/stores/auth';
   import { trips } from '$lib/stores/trips';
+  import { expenses } from '$lib/stores/expenses';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { autocomplete } from '$lib/utils/autocomplete';
   import { currentUser } from '$lib/stores/currentUser';
   import Modal from '$lib/components/ui/Modal.svelte';
   import Button from '$lib/components/ui/Button.svelte';
+  import { jsPDF } from 'jspdf';
+  import autoTable from 'jspdf-autotable';
 
   export let data; 
   $: API_KEY = data.googleMapsApiKey;
+  
   // --- REMOTE SYNC LOGIC START ---
   let settings = { ...$userSettings };
   $: if (data.remoteSettings?.settings) {
@@ -40,13 +44,13 @@
   }
   // --- REMOTE SYNC LOGIC END ---
 
-  // ... (Keep monthlyUsage logic) ...
   $: monthlyUsage = $trips.filter(t => {
       if (!t.date) return false;
       const tripDate = new Date(t.date);
       const now = new Date();
       return tripDate.getMonth() === now.getMonth() && tripDate.getFullYear() === now.getFullYear();
   }).length;
+
   let showSuccess = false;
   let successMessage = '';
   
@@ -60,13 +64,37 @@
   let isDeleting = false;
   
   // Pro Plan Check & Modal State
-  // [!code fix] Use $auth.user to ensure UI matches the badge status
   $: isPro = ['pro', 'business', 'premium', 'enterprise'].includes($auth.user?.plan || '');
   
   let isUpgradeModalOpen = false;
-  let upgradeSource: 'generic' | 'export' = 'generic'; // Track source of upgrade click
+  let upgradeSource: 'generic' | 'export' | 'advanced-export' = 'generic';
   let isCheckingOut = false;
-  let isOpeningPortal = false; // New state for portal loading
+  let isOpeningPortal = false;
+
+  // Advanced Export State
+  let showAdvancedExport = false;
+  let exportDataType: 'trips' | 'expenses' | 'tax-bundle' = 'trips';
+  let exportFormat: 'csv' | 'pdf' = 'csv';
+  let exportDateFrom = '';
+  let exportDateTo = '';
+  let exportIncludeSummary = true;
+
+  // Filter trips/expenses by date for export
+  $: filteredTrips = $trips.filter(trip => {
+    if (!trip.date) return false;
+    const tripDate = new Date(trip.date);
+    if (exportDateFrom && tripDate < new Date(exportDateFrom)) return false;
+    if (exportDateTo && tripDate > new Date(exportDateTo)) return false;
+    return true;
+  });
+
+  $: filteredExpenses = $expenses.filter(expense => {
+    if (!expense.date) return false;
+    const expenseDate = new Date(expense.date);
+    if (exportDateFrom && expenseDate < new Date(exportDateFrom)) return false;
+    if (exportDateTo && expenseDate > new Date(exportDateTo)) return false;
+    return true;
+  });
 
   function handleAddressSelect(field: 'start' | 'end', e: CustomEvent) {
     const val = e.detail.formatted_address || e.detail.name;
@@ -80,15 +108,12 @@
     showSuccessMsg('Default values saved and synced!');
   }
 
-  // Update function to call the new /api/user endpoint
   async function saveProfile() {
-    // 1. Update local UI state immediately
     auth.updateProfile({
         name: profile.name,
         email: profile.email
     });
     try {
-        // 2. Persist to User KV (Fixes the reset on logout issue)
         const res = await fetch('/api/user', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -115,7 +140,6 @@
     setTimeout(() => showSuccess = false, 3000);
   }
   
-  // --- STRIPE CHECKOUT LOGIC ---
   async function handleCheckout() {
     if (isCheckingOut) return;
     isCheckingOut = true;
@@ -135,7 +159,6 @@
     }
   }
 
-  // --- STRIPE PORTAL LOGIC ---
   async function handlePortal() {
       if (isOpeningPortal) return;
       isOpeningPortal = true;
@@ -151,7 +174,6 @@
       }
   }
 
-  // ... (Rest of the file remains unchanged) ...
   async function changePassword() {
     if (passwordData.new !== passwordData.confirm) {
       passwordError = 'Passwords do not match';
@@ -213,6 +235,1326 @@
     }
   }
 
+  function formatDate(dateStr: string): string {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString();
+  }
+
+  function formatCurrency(amount: number): string {
+    return `$${amount.toFixed(2)}`;
+  }
+
+  // Helper functions for duration
+  function formatDuration(minutes: number): string {
+    if (!minutes) return '0m';
+    const h = Math.floor(minutes / 60);
+    const m = Math.round(minutes % 60);
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  }
+
+  function parseDuration(durationStr: string): number {
+    if (!durationStr) return 0;
+    let minutes = 0;
+    const hoursMatch = durationStr.match(/(\d+)h/);
+    const minsMatch = durationStr.match(/(\d+)m/);
+    
+    if (hoursMatch) minutes += parseInt(hoursMatch[1]) * 60;
+    if (minsMatch) minutes += parseInt(minsMatch[1]);
+    if (!hoursMatch && !minsMatch && !isNaN(parseInt(durationStr))) {
+        minutes = parseInt(durationStr);
+    }
+    return minutes;
+  }
+
+  function parseItemString(str: string): any[] {
+    if (!str || !str.trim()) return [];
+    return str.split('|').map(part => {
+        const [name, costStr] = part.split(':');
+        return {
+            id: crypto.randomUUID(),
+            type: name ? name.trim() : 'Unknown',
+            cost: parseFloat(costStr) || 0
+        };
+    }).filter(i => i.type && i.cost >= 0);
+  }
+
+  // ===== ADVANCED EXPORT FUNCTIONS =====
+  
+  function openAdvancedExport() {
+    if (!isPro) {
+      upgradeSource = 'advanced-export';
+      isUpgradeModalOpen = true;
+      return;
+    }
+    showAdvancedExport = true;
+    exportDataType = 'trips';
+    exportFormat = 'csv';
+    exportDateFrom = '';
+    exportDateTo = '';
+  }
+
+  function exportTripsCSV(): string | null {
+    const data = filteredTrips;
+    if (data.length === 0) return null;
+
+    const headers = [
+      'Date', 'Start Address', 'Intermediate Stops', 'End Address',
+      'Total Miles', 'Drive Time', 'Hours Worked', 'Hourly Pay ($/hr)',
+      'Total Revenue', 'Fuel Cost', 
+      'Maintenance Cost', 'Maintenance Items',
+      'Supply Cost', 'Supply Items',
+      'Total Expenses', 'Net Profit', 'Notes'
+    ];
+
+    const rows = data.map(trip => {
+      const date = trip.date ? new Date(trip.date).toLocaleDateString() : '';
+      const start = `"${(trip.startAddress || '').replace(/"/g, '""')}"`;
+      
+      // Intermediate stops (all stops except possibly the last one if it matches end address)
+      const intermediateStops = trip.stops && trip.stops.length > 0
+        ? trip.stops.map((s: any) => `${s.address} ($${(s.earnings || 0).toFixed(2)})`).join(' | ')
+        : '';
+      const stopsStr = `"${intermediateStops.replace(/"/g, '""')}"`;
+
+      // End address - use endAddress if set, otherwise use last stop, otherwise use start
+      const rawEnd = trip.endAddress || 
+                     (trip.stops && trip.stops.length > 0 ? trip.stops[trip.stops.length - 1].address : '') ||
+                     trip.startAddress;
+      const end = `"${(rawEnd || '').replace(/"/g, '""')}"`;
+
+      const miles = (trip.totalMiles || 0).toFixed(1);
+      const driveTime = `"${formatDuration(trip.estimatedTime || 0)}"`;
+      const hoursWorked = (trip.hoursWorked || 0).toFixed(1);
+
+      const revenue = trip.stops?.reduce((sum: number, stop: any) => sum + (stop.earnings || 0), 0) || 0;
+      const fuel = trip.fuelCost || 0;
+      
+      const maint = trip.maintenanceCost || 0;
+      const maintItemsStr = trip.maintenanceItems 
+        ? `"${trip.maintenanceItems.map((i: any) => `${i.type}:${i.cost}`).join(' | ')}"` 
+        : '""';
+
+      const supplies = trip.suppliesCost || 0;
+      const sItems = trip.suppliesItems || trip.supplyItems;
+      const supplyItemsStr = sItems
+        ? `"${sItems.map((i: any) => `${i.type}:${i.cost}`).join(' | ')}"`
+        : '""';
+        
+      const totalExpenses = fuel + maint + supplies;
+      const netProfit = revenue - totalExpenses;
+      const hourlyPay = trip.hoursWorked > 0 ? (netProfit / trip.hoursWorked) : 0;
+      const notes = `"${(trip.notes || '').replace(/"/g, '""')}"`;
+
+      return [
+        date, start, stopsStr, end, miles, driveTime, hoursWorked, 
+        hourlyPay.toFixed(2), revenue.toFixed(2), fuel.toFixed(2), 
+        maint.toFixed(2), maintItemsStr, 
+        supplies.toFixed(2), supplyItemsStr, 
+        totalExpenses.toFixed(2), netProfit.toFixed(2), notes
+      ].join(',');
+    });
+
+    if (exportIncludeSummary) {
+      const totalMiles = data.reduce((sum, t) => sum + (t.totalMiles || 0), 0);
+      const totalRevenue = data.reduce((sum, t) => 
+        sum + (t.stops?.reduce((s: number, stop: any) => s + (stop.earnings || 0), 0) || 0), 0);
+      const totalExpenses = data.reduce((sum, t) => 
+        sum + (t.fuelCost || 0) + (t.maintenanceCost || 0) + (t.suppliesCost || 0), 0);
+      const netProfit = totalRevenue - totalExpenses;
+
+      rows.push('');
+      rows.push([
+        'TOTALS', '', '', '', totalMiles.toFixed(1), '', '', '', 
+        totalRevenue.toFixed(2), '', '', '', '', '', 
+        totalExpenses.toFixed(2), netProfit.toFixed(2), ''
+      ].join(','));
+    }
+
+    return [headers.join(','), ...rows].join('\n');
+  }
+
+  function exportExpensesCSV(): string | null {
+    // Merge trip-level expenses with standalone expenses from expense store
+    const allExpenses: Array<{
+      date: string;
+      category: string;
+      amount: number;
+      description: string;
+    }> = [];
+
+    // 1. Add expenses from expense store
+    filteredExpenses.forEach(expense => {
+      allExpenses.push({
+        date: expense.date,
+        category: expense.category,
+        amount: expense.amount,
+        description: expense.description || ''
+      });
+    });
+
+    // 2. Add trip-level expenses
+    filteredTrips.forEach(trip => {
+      // Fuel expenses
+      if (trip.fuelCost && trip.fuelCost > 0) {
+        allExpenses.push({
+          date: trip.date || '',
+          category: 'Fuel',
+          amount: trip.fuelCost,
+          description: 'From trip'
+        });
+      }
+
+      // Maintenance expenses
+      if (trip.maintenanceItems && trip.maintenanceItems.length > 0) {
+        trip.maintenanceItems.forEach((item: any) => {
+          allExpenses.push({
+            date: trip.date || '',
+            category: 'Maintenance',
+            amount: item.cost,
+            description: item.type
+          });
+        });
+      } else if (trip.maintenanceCost && trip.maintenanceCost > 0) {
+        allExpenses.push({
+          date: trip.date || '',
+          category: 'Maintenance',
+          amount: trip.maintenanceCost,
+          description: 'From trip'
+        });
+      }
+
+      // Supply expenses
+      const sItems = trip.suppliesItems || trip.supplyItems;
+      if (sItems && sItems.length > 0) {
+        sItems.forEach((item: any) => {
+          allExpenses.push({
+            date: trip.date || '',
+            category: 'Supplies',
+            amount: item.cost,
+            description: item.type
+          });
+        });
+      } else if (trip.suppliesCost && trip.suppliesCost > 0) {
+        allExpenses.push({
+          date: trip.date || '',
+          category: 'Supplies',
+          amount: trip.suppliesCost,
+          description: 'From trip'
+        });
+      }
+    });
+
+    if (allExpenses.length === 0) return null;
+
+    // Sort by date
+    allExpenses.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    // HORIZONTAL LAYOUT - Group by date, categories as columns
+    const expensesByDate: Record<string, Record<string, number>> = {};
+    const categories = new Set<string>();
+    
+    allExpenses.forEach(exp => {
+      const dateKey = exp.date ? formatDate(exp.date) : 'Unknown';
+      if (!expensesByDate[dateKey]) {
+        expensesByDate[dateKey] = {};
+      }
+      categories.add(exp.category);
+      
+      if (!expensesByDate[dateKey][exp.category]) {
+        expensesByDate[dateKey][exp.category] = 0;
+      }
+      expensesByDate[dateKey][exp.category] += exp.amount;
+    });
+
+    // Sort categories alphabetically for consistent columns
+    const categoryList = Array.from(categories).sort();
+    
+    // Build CSV headers: Date, Category1, Category2, ..., Daily Total
+    let csv = 'Date,' + categoryList.join(',') + ',Daily Total\n';
+    
+    // Track totals for each category
+    const categoryTotals: Record<string, number> = {};
+    categoryList.forEach(cat => categoryTotals[cat] = 0);
+    let grandTotal = 0;
+
+    // Add data rows - one row per date
+    Object.entries(expensesByDate).forEach(([date, cats]) => {
+      const row: string[] = [date];
+      let dailyTotal = 0;
+      
+      categoryList.forEach(category => {
+        const amount = cats[category] || 0;
+        row.push(amount.toFixed(2));
+        categoryTotals[category] += amount;
+        dailyTotal += amount;
+      });
+      
+      row.push(dailyTotal.toFixed(2));
+      grandTotal += dailyTotal;
+      csv += row.join(',') + '\n';
+    });
+
+    if (exportIncludeSummary) {
+      csv += '\n';
+      const totalRow = [
+        'TOTALS',
+        ...categoryList.map(cat => categoryTotals[cat].toFixed(2)),
+        grandTotal.toFixed(2)
+      ];
+      csv += totalRow.join(',') + '\n';
+    }
+
+    return csv;
+  }
+
+  function exportTaxBundle() {
+    const tripsToExport = filteredTrips;
+    const expensesToExport: Array<{
+      date: string;
+      category: string;
+      amount: number;
+      description: string;
+    }> = [];
+
+    // Collect all expenses (from store + from trips)
+    filteredExpenses.forEach(exp => {
+      expensesToExport.push({
+        date: exp.date,
+        category: exp.category,
+        amount: exp.amount,
+        description: exp.description || ''
+      });
+    });
+
+    filteredTrips.forEach(trip => {
+      if (trip.fuelCost && trip.fuelCost > 0) {
+        expensesToExport.push({
+          date: trip.date || '',
+          category: 'Fuel',
+          amount: trip.fuelCost,
+          description: 'From trip'
+        });
+      }
+
+      if (trip.maintenanceItems && trip.maintenanceItems.length > 0) {
+        trip.maintenanceItems.forEach((item: any) => {
+          expensesToExport.push({
+            date: trip.date || '',
+            category: 'Maintenance',
+            amount: item.cost,
+            description: item.type
+          });
+        });
+      } else if (trip.maintenanceCost && trip.maintenanceCost > 0) {
+        expensesToExport.push({
+          date: trip.date || '',
+          category: 'Maintenance',
+          amount: trip.maintenanceCost,
+          description: 'From trip'
+        });
+      }
+
+      const sItems = trip.suppliesItems || trip.supplyItems;
+      if (sItems && sItems.length > 0) {
+        sItems.forEach((item: any) => {
+          expensesToExport.push({
+            date: trip.date || '',
+            category: 'Supplies',
+            amount: item.cost,
+            description: item.type
+          });
+        });
+      } else if (trip.suppliesCost && trip.suppliesCost > 0) {
+        expensesToExport.push({
+          date: trip.date || '',
+          category: 'Supplies',
+          amount: trip.suppliesCost,
+          description: 'From trip'
+        });
+      }
+    });
+
+    if (tripsToExport.length === 0 && expensesToExport.length === 0) {
+      alert('No data available in the selected date range');
+      return;
+    }
+    
+    // 1. Mileage Log CSV
+    let mileageCSV = 'Date,Start Time,End Time,Start Address,Intermediate Stops,End Address,Purpose,Miles,Notes\n';
+    let totalMiles = 0;
+    
+    tripsToExport.forEach(trip => {
+      const intermediateStops = trip.stops && trip.stops.length > 0
+        ? trip.stops.map((s: any) => s.address).join(' | ')
+        : '';
+      
+      const destination = trip.endAddress || 
+                         (trip.stops && trip.stops.length > 0 ? trip.stops[trip.stops.length - 1].address : '') ||
+                         trip.startAddress || '';
+      
+      mileageCSV += [
+        formatDate(trip.date || ''),
+        trip.startTime || '',
+        trip.endTime || '',
+        `"${trip.startAddress || ''}"`,
+        `"${intermediateStops}"`,
+        `"${destination}"`,
+        'Business',
+        trip.totalMiles?.toFixed(2) || '0.00',
+        `"${trip.notes || ''}"`
+      ].join(',') + '\n';
+      
+      totalMiles += trip.totalMiles || 0;
+    });
+    
+    // 2. Expense Log CSV
+    expensesToExport.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    let expenseCSV = 'Date,Category,Amount,Description\n';
+    let totalByCategory: Record<string, number> = {};
+    let grandTotal = 0;
+    
+    expensesToExport.forEach(expense => {
+      const label = expense.description 
+        ? `${expense.category} - ${expense.description}`
+        : expense.category;
+      
+      expenseCSV += [
+        formatDate(expense.date),
+        `"${label}"`,
+        expense.amount.toFixed(2),
+        `"${expense.description}"`
+      ].join(',') + '\n';
+      
+      if (!totalByCategory[expense.category]) totalByCategory[expense.category] = 0;
+      totalByCategory[expense.category] += expense.amount;
+      grandTotal += expense.amount;
+    });
+    
+    // 3. Tax Summary Text
+    const period = exportDateFrom && exportDateTo 
+      ? `${formatDate(exportDateFrom)} to ${formatDate(exportDateTo)}`
+      : exportDateFrom 
+        ? `From ${formatDate(exportDateFrom)}`
+        : exportDateTo 
+          ? `Through ${formatDate(exportDateTo)}`
+          : 'All Records';
+    
+    let summary = `TAX SUMMARY REPORT
+Generated: ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}
+Period: ${period}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MILEAGE DEDUCTION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Total Business Miles: ${totalMiles.toFixed(2)} miles
+Number of Trips: ${tripsToExport.length}
+
+Standard Mileage Rate (2024): $0.67/mile
+Estimated Deduction: ${formatCurrency(totalMiles * 0.67)}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUSINESS EXPENSES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+`;
+    
+    if (Object.keys(totalByCategory).length > 0) {
+      Object.entries(totalByCategory).forEach(([category, total]) => {
+        summary += `${category.padEnd(30)} ${formatCurrency(total).padStart(12)}\n`;
+      });
+      summary += `\n${'Total Expenses'.padEnd(30)} ${formatCurrency(grandTotal).padStart(12)}\n`;
+    } else {
+      summary += 'No expenses recorded for this period\n';
+    }
+    
+    summary += `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TOTAL TAX DEDUCTIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Mileage Deduction:   ${formatCurrency(totalMiles * 0.67).padStart(12)}
+Business Expenses:   ${formatCurrency(grandTotal).padStart(12)}
+                     ${'─'.repeat(12)}
+Total Deductions:    ${formatCurrency((totalMiles * 0.67) + grandTotal).padStart(12)}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️  IMPORTANT IRS NOTICE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+IF YOU USE THE STANDARD MILEAGE DEDUCTION, YOU CANNOT 
+ALSO DEDUCT ACTUAL VEHICLE EXPENSES!
+
+You must choose ONE method:
+
+Option 1: Standard Mileage Rate ($0.67/mile for 2024)
+  ✓ Deduct: Mileage only
+  ✗ Cannot deduct: Fuel, oil changes, repairs, maintenance
+
+Option 2: Actual Expenses Method
+  ✓ Deduct: Fuel, maintenance, repairs, insurance, etc.
+  ✗ Cannot deduct: Standard mileage rate
+
+This report shows BOTH for informational purposes only.
+Consult your tax professional to determine which method
+is more beneficial for your specific situation.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+NOTES:
+• This report is for informational purposes only
+• Consult with a tax professional for specific advice
+• Keep all receipts and documentation for 7 years
+• Standard mileage rate may change annually
+
+Generated by Go Route Yourself - Professional Route Tracking
+`;
+    
+    // Download all three files
+    const timestamp = Date.now();
+    
+    const mileageBlob = new Blob([mileageCSV], { type: 'text/csv' });
+    const mileageUrl = URL.createObjectURL(mileageBlob);
+    const mileageLink = document.createElement('a');
+    mileageLink.href = mileageUrl;
+    mileageLink.download = `mileage-log-${timestamp}.csv`;
+    mileageLink.click();
+    URL.revokeObjectURL(mileageUrl);
+    
+    setTimeout(() => {
+      const expenseBlob = new Blob([expenseCSV], { type: 'text/csv' });
+      const expenseUrl = URL.createObjectURL(expenseBlob);
+      const expenseLink = document.createElement('a');
+      expenseLink.href = expenseUrl;
+      expenseLink.download = `expense-log-${timestamp}.csv`;
+      expenseLink.click();
+      URL.revokeObjectURL(expenseUrl);
+    }, 100);
+    
+    setTimeout(() => {
+      const summaryBlob = new Blob([summary], { type: 'text/plain' });
+      const summaryUrl = URL.createObjectURL(summaryBlob);
+      const summaryLink = document.createElement('a');
+      summaryLink.href = summaryUrl;
+      summaryLink.download = `tax-summary-${timestamp}.txt`;
+      summaryLink.click();
+      URL.revokeObjectURL(summaryUrl);
+    }, 200);
+
+    showSuccessMsg('Tax bundle exported successfully!');
+    showAdvancedExport = false;
+  }
+
+  async function exportToPDF() {
+    if (exportDataType === 'trips') {
+      await exportTripsPDF();
+    } else if (exportDataType === 'expenses') {
+      await exportExpensesPDF();
+    } else {
+      await exportTaxBundlePDF();
+    }
+  }
+
+  async function exportTripsPDF() {
+    const doc = new jsPDF();
+    const timestamp = Date.now();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    // Header with logo area and title
+    doc.setFillColor(255, 127, 80); // Orange
+    doc.rect(0, 0, pageWidth, 35, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(24);
+    doc.setFont(undefined, 'bold');
+    doc.text('Trip Report', pageWidth / 2, 15, { align: 'center' });
+    
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'normal');
+    doc.text('Go Route Yourself - Professional Route Tracking', pageWidth / 2, 23, { align: 'center' });
+    
+    // Report metadata
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(9);
+    const dateRange = exportDateFrom && exportDateTo 
+      ? `${formatDate(exportDateFrom)} - ${formatDate(exportDateTo)}`
+      : exportDateFrom 
+        ? `From ${formatDate(exportDateFrom)}`
+        : exportDateTo 
+          ? `Through ${formatDate(exportDateTo)}`
+          : 'All Records';
+    doc.text(`Period: ${dateRange}`, 14, 42);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 47);
+    doc.text(`Total Trips: ${filteredTrips.length}`, pageWidth - 14, 42, { align: 'right' });
+    
+    // Summary statistics box
+    const totalMiles = filteredTrips.reduce((sum, t) => sum + (t.totalMiles || 0), 0);
+    const totalRevenue = filteredTrips.reduce((sum, t) => 
+      sum + (t.stops?.reduce((s: number, stop: any) => s + (stop.earnings || 0), 0) || 0), 0);
+    const totalExpenses = filteredTrips.reduce((sum, t) => 
+      sum + (t.fuelCost || 0) + (t.maintenanceCost || 0) + (t.suppliesCost || 0), 0);
+    const netProfit = totalRevenue - totalExpenses;
+    
+    doc.setFillColor(248, 250, 252); // Light gray background
+    doc.roundedRect(14, 52, pageWidth - 28, 28, 3, 3, 'FD');
+    
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'bold');
+    const statY = 60;
+    const colWidth = (pageWidth - 28) / 4;
+    
+    doc.text('Total Miles', 14 + colWidth * 0.5, statY, { align: 'center' });
+    doc.text('Total Revenue', 14 + colWidth * 1.5, statY, { align: 'center' });
+    doc.text('Total Expenses', 14 + colWidth * 2.5, statY, { align: 'center' });
+    doc.text('Net Profit', 14 + colWidth * 3.5, statY, { align: 'center' });
+    
+    doc.setFontSize(14);
+    doc.setTextColor(255, 127, 80);
+    doc.text(totalMiles.toFixed(1), 14 + colWidth * 0.5, statY + 10, { align: 'center' });
+    doc.setTextColor(34, 197, 94); // Green
+    doc.text(formatCurrency(totalRevenue), 14 + colWidth * 1.5, statY + 10, { align: 'center' });
+    doc.setTextColor(239, 68, 68); // Red
+    doc.text(formatCurrency(totalExpenses), 14 + colWidth * 2.5, statY + 10, { align: 'center' });
+    doc.setTextColor(netProfit >= 0 ? 34 : 239, netProfit >= 0 ? 197 : 68, netProfit >= 0 ? 94 : 68);
+    doc.text(formatCurrency(netProfit), 14 + colWidth * 3.5, statY + 10, { align: 'center' });
+    
+    doc.setTextColor(0, 0, 0);
+    
+    // Detailed trip table
+    const tableData = filteredTrips.map(trip => {
+      const intermediateStops = trip.stops && trip.stops.length > 0
+        ? trip.stops.map((s: any) => s.address).join('\n')
+        : 'None';
+      
+      const endAddr = trip.endAddress || 
+                      (trip.stops && trip.stops.length > 0 ? trip.stops[trip.stops.length - 1].address : '') ||
+                      trip.startAddress || '';
+      
+      const revenue = trip.stops?.reduce((sum: number, stop: any) => sum + (stop.earnings || 0), 0) || 0;
+      const expenses = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);
+      const profit = revenue - expenses;
+      
+      return [
+        formatDate(trip.date || ''),
+        trip.startAddress || '',
+        intermediateStops,
+        endAddr,
+        (trip.totalMiles || 0).toFixed(1) + ' mi',
+        formatDuration(trip.estimatedTime || 0),
+        (trip.hoursWorked || 0).toFixed(1) + ' hr',
+        formatCurrency(revenue),
+        formatCurrency(expenses),
+        formatCurrency(profit)
+      ];
+    });
+
+    autoTable(doc, {
+      startY: 85,
+      head: [['Date', 'Start', 'Stops', 'End', 'Miles', 'Drive Time', 'Hours', 'Revenue', 'Expenses', 'Profit']],
+      body: tableData,
+      theme: 'striped',
+      headStyles: { 
+        fillColor: [255, 127, 80],
+        textColor: [255, 255, 255],
+        fontSize: 9,
+        fontStyle: 'bold',
+        halign: 'center'
+      },
+      styles: {
+        fontSize: 8,
+        cellPadding: 3,
+        overflow: 'linebreak',
+        lineColor: [229, 231, 235],
+        lineWidth: 0.1
+      },
+      columnStyles: {
+        0: { cellWidth: 20 },
+        1: { cellWidth: 30 },
+        2: { cellWidth: 30 },
+        3: { cellWidth: 30 },
+        4: { halign: 'right', cellWidth: 15 },
+        5: { halign: 'center', cellWidth: 18 },
+        6: { halign: 'right', cellWidth: 15 },
+        7: { halign: 'right', cellWidth: 20, textColor: [34, 197, 94] },
+        8: { halign: 'right', cellWidth: 20, textColor: [239, 68, 68] },
+        9: { halign: 'right', cellWidth: 20, fontStyle: 'bold' }
+      },
+      alternateRowStyles: {
+        fillColor: [249, 250, 251]
+      },
+      margin: { left: 14, right: 14 },
+      didDrawPage: function(data: any) {
+        // Footer on each page
+        const pageCount = doc.internal.pages.length - 1;
+        doc.setFontSize(8);
+        doc.setTextColor(128, 128, 128);
+        doc.text(
+          `Page ${data.pageNumber} of ${pageCount}`,
+          pageWidth / 2,
+          doc.internal.pageSize.getHeight() - 10,
+          { align: 'center' }
+        );
+        doc.text(
+          'Go Route Yourself - Professional Route Tracking',
+          pageWidth - 14,
+          doc.internal.pageSize.getHeight() - 10,
+          { align: 'right' }
+        );
+      }
+    });
+
+    doc.save(`trips-report-${timestamp}.pdf`);
+    showSuccessMsg('PDF exported successfully!');
+    showAdvancedExport = false;
+  }
+
+  async function exportExpensesPDF() {
+    const doc = new jsPDF();
+    const timestamp = Date.now();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    // Collect all expenses
+    const allExpenses: Array<any> = [];
+    
+    // From expense store
+    filteredExpenses.forEach(exp => allExpenses.push({
+      date: exp.date,
+      category: exp.category,
+      amount: exp.amount,
+      description: exp.description || '',
+      source: 'Expense Log'
+    }));
+    
+    // From trips
+    filteredTrips.forEach(trip => {
+      if (trip.fuelCost && trip.fuelCost > 0) {
+        allExpenses.push({
+          date: trip.date || '',
+          category: 'Fuel',
+          amount: trip.fuelCost,
+          description: 'From trip',
+          source: 'Trip'
+        });
+      }
+      
+      if (trip.maintenanceItems && trip.maintenanceItems.length > 0) {
+        trip.maintenanceItems.forEach((item: any) => {
+          allExpenses.push({
+            date: trip.date || '',
+            category: 'Maintenance',
+            amount: item.cost,
+            description: item.type,
+            source: 'Trip'
+          });
+        });
+      } else if (trip.maintenanceCost && trip.maintenanceCost > 0) {
+        allExpenses.push({
+          date: trip.date || '',
+          category: 'Maintenance',
+          amount: trip.maintenanceCost,
+          description: 'From trip',
+          source: 'Trip'
+        });
+      }
+      
+      const sItems = trip.suppliesItems || trip.supplyItems;
+      if (sItems && sItems.length > 0) {
+        sItems.forEach((item: any) => {
+          allExpenses.push({
+            date: trip.date || '',
+            category: 'Supplies',
+            amount: item.cost,
+            description: item.type,
+            source: 'Trip'
+          });
+        });
+      } else if (trip.suppliesCost && trip.suppliesCost > 0) {
+        allExpenses.push({
+          date: trip.date || '',
+          category: 'Supplies',
+          amount: trip.suppliesCost,
+          description: 'From trip',
+          source: 'Trip'
+        });
+      }
+    });
+    
+    // Sort by date
+    allExpenses.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    // Header
+    doc.setFillColor(255, 127, 80);
+    doc.rect(0, 0, pageWidth, 35, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(24);
+    doc.setFont(undefined, 'bold');
+    doc.text('Expense Report', pageWidth / 2, 15, { align: 'center' });
+    
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'normal');
+    doc.text('Go Route Yourself - Professional Route Tracking', pageWidth / 2, 23, { align: 'center' });
+    
+    // Report metadata
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(9);
+    const dateRange = exportDateFrom && exportDateTo 
+      ? `${formatDate(exportDateFrom)} - ${formatDate(exportDateTo)}`
+      : exportDateFrom 
+        ? `From ${formatDate(exportDateFrom)}`
+        : exportDateTo 
+          ? `Through ${formatDate(exportDateTo)}`
+          : 'All Records';
+    doc.text(`Period: ${dateRange}`, 14, 42);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 47);
+    doc.text(`Total Expenses: ${allExpenses.length}`, pageWidth - 14, 42, { align: 'right' });
+    
+    // Calculate category totals
+    const categoryTotals: Record<string, number> = {};
+    let grandTotal = 0;
+    
+    allExpenses.forEach(exp => {
+      if (!categoryTotals[exp.category]) categoryTotals[exp.category] = 0;
+      categoryTotals[exp.category] += exp.amount;
+      grandTotal += exp.amount;
+    });
+    
+    // Summary by category
+    doc.setFillColor(248, 250, 252);
+    const categoryCount = Object.keys(categoryTotals).length;
+    const boxHeight = 12 + (categoryCount * 6) + 8;
+    doc.roundedRect(14, 52, pageWidth - 28, boxHeight, 3, 3, 'FD');
+    
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.text('Summary by Category', 20, 60);
+    
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'normal');
+    let yPos = 68;
+    
+    Object.entries(categoryTotals).forEach(([category, total]) => {
+      doc.text(category, 20, yPos);
+      doc.text(formatCurrency(total), pageWidth - 20, yPos, { align: 'right' });
+      yPos += 6;
+    });
+    
+    // Grand total line
+    doc.setDrawColor(229, 231, 235);
+    doc.line(20, yPos, pageWidth - 20, yPos);
+    yPos += 6;
+    
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(10);
+    doc.text('Total Expenses', 20, yPos);
+    doc.setTextColor(239, 68, 68);
+    doc.text(formatCurrency(grandTotal), pageWidth - 20, yPos, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+    
+    // Detailed expense table
+    const tableData = allExpenses.map(exp => {
+      const label = exp.description 
+        ? `${exp.category} - ${exp.description}`
+        : exp.category;
+      
+      return [
+        formatDate(exp.date),
+        label,
+        formatCurrency(exp.amount),
+        exp.source
+      ];
+    });
+
+    autoTable(doc, {
+      startY: 52 + boxHeight + 8,
+      head: [['Date', 'Expense', 'Amount', 'Source']],
+      body: tableData,
+      theme: 'striped',
+      headStyles: { 
+        fillColor: [255, 127, 80],
+        textColor: [255, 255, 255],
+        fontSize: 9,
+        fontStyle: 'bold',
+        halign: 'center'
+      },
+      styles: {
+        fontSize: 9,
+        cellPadding: 3,
+        overflow: 'linebreak',
+        lineColor: [229, 231, 235],
+        lineWidth: 0.1
+      },
+      columnStyles: {
+        0: { cellWidth: 25 },
+        1: { cellWidth: 90 },
+        2: { halign: 'right', cellWidth: 30, textColor: [239, 68, 68], fontStyle: 'bold' },
+        3: { halign: 'center', cellWidth: 30 }
+      },
+      alternateRowStyles: {
+        fillColor: [249, 250, 251]
+      },
+      margin: { left: 14, right: 14 },
+      didDrawPage: function(data: any) {
+        const pageCount = doc.internal.pages.length - 1;
+        doc.setFontSize(8);
+        doc.setTextColor(128, 128, 128);
+        doc.text(
+          `Page ${data.pageNumber} of ${pageCount}`,
+          pageWidth / 2,
+          doc.internal.pageSize.getHeight() - 10,
+          { align: 'center' }
+        );
+        doc.text(
+          'Go Route Yourself - Professional Route Tracking',
+          pageWidth - 14,
+          doc.internal.pageSize.getHeight() - 10,
+          { align: 'right' }
+        );
+      }
+    });
+
+    doc.save(`expenses-report-${timestamp}.pdf`);
+    showSuccessMsg('PDF exported successfully!');
+    showAdvancedExport = false;
+  }
+
+  async function exportTaxBundlePDF() {
+    // First generate the CSV files
+    exportTaxBundle();
+    
+    // Then create a comprehensive PDF summary
+    const doc = new jsPDF();
+    const timestamp = Date.now();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    // Calculate all totals
+    const totalMiles = filteredTrips.reduce((sum, t) => sum + (t.totalMiles || 0), 0);
+    const mileageDeduction = totalMiles * 0.67;
+    
+    // Collect expenses
+    const allExpenses: Array<any> = [];
+    filteredExpenses.forEach(exp => allExpenses.push(exp));
+    filteredTrips.forEach(trip => {
+      if (trip.fuelCost && trip.fuelCost > 0) {
+        allExpenses.push({ category: 'Fuel', amount: trip.fuelCost });
+      }
+      if (trip.maintenanceItems && trip.maintenanceItems.length > 0) {
+        trip.maintenanceItems.forEach((item: any) => {
+          allExpenses.push({ category: 'Maintenance', amount: item.cost });
+        });
+      } else if (trip.maintenanceCost && trip.maintenanceCost > 0) {
+        allExpenses.push({ category: 'Maintenance', amount: trip.maintenanceCost });
+      }
+      const sItems = trip.suppliesItems || trip.supplyItems;
+      if (sItems && sItems.length > 0) {
+        sItems.forEach((item: any) => {
+          allExpenses.push({ category: 'Supplies', amount: item.cost });
+        });
+      } else if (trip.suppliesCost && trip.suppliesCost > 0) {
+        allExpenses.push({ category: 'Supplies', amount: trip.suppliesCost });
+      }
+    });
+    
+    const categoryTotals: Record<string, number> = {};
+    let totalExpenses = 0;
+    allExpenses.forEach(exp => {
+      if (!categoryTotals[exp.category]) categoryTotals[exp.category] = 0;
+      categoryTotals[exp.category] += exp.amount;
+      totalExpenses += exp.amount;
+    });
+    
+    const totalDeductions = mileageDeduction + totalExpenses;
+    
+    // Page 1: Cover Page
+    doc.setFillColor(255, 127, 80);
+    doc.rect(0, 0, pageWidth, 100, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(32);
+    doc.setFont(undefined, 'bold');
+    doc.text('TAX SUMMARY', pageWidth / 2, 40, { align: 'center' });
+    doc.text('REPORT', pageWidth / 2, 55, { align: 'center' });
+    
+    doc.setFontSize(14);
+    doc.setFont(undefined, 'normal');
+    doc.text('Go Route Yourself', pageWidth / 2, 75, { align: 'center' });
+    doc.text('Professional Route Tracking', pageWidth / 2, 85, { align: 'center' });
+    
+    // Report info box
+    doc.setTextColor(0, 0, 0);
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(30, 110, pageWidth - 60, 60, 3, 3, 'FD');
+    
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.text('Report Information', 40, 122);
+    
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(10);
+    
+    const dateRange = exportDateFrom && exportDateTo 
+      ? `${formatDate(exportDateFrom)} - ${formatDate(exportDateTo)}`
+      : exportDateFrom 
+        ? `From ${formatDate(exportDateFrom)}`
+        : exportDateTo 
+          ? `Through ${formatDate(exportDateTo)}`
+          : 'All Records';
+    
+    doc.text('Tax Period:', 40, 135);
+    doc.text(dateRange, 80, 135);
+    
+    doc.text('Generated:', 40, 145);
+    doc.text(new Date().toLocaleString(), 80, 145);
+    
+    doc.text('Total Trips:', 40, 155);
+    doc.text(filteredTrips.length.toString(), 80, 155);
+    
+    doc.text('Total Expenses:', 40, 165);
+    doc.text(allExpenses.length.toString(), 80, 165);
+    
+    // Total deductions (without box - cleaner design)
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(14);
+    doc.setFont(undefined, 'bold');
+    doc.text('TOTAL TAX DEDUCTIONS', pageWidth / 2, 185, { align: 'center' });
+    
+    doc.setFontSize(32);
+    doc.setTextColor(34, 197, 94);
+    doc.text(formatCurrency(totalDeductions), pageWidth / 2, 205, { align: 'center' });
+    
+    // IRS Warning Box - PROMINENT
+    doc.setTextColor(0, 0, 0);
+    doc.setFillColor(255, 243, 205); // Light orange/yellow warning color
+    doc.setDrawColor(255, 127, 80); // Orange border
+    doc.setLineWidth(1);
+    doc.roundedRect(20, 220, pageWidth - 40, 55, 3, 3, 'FD');
+    
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(239, 68, 68); // Red for warning
+    doc.text('IRS NOTICE: CHOOSE ONE METHOD ONLY', pageWidth / 2, 232, { align: 'center' });
+    
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(0, 0, 0);
+    const warning1 = 'Standard Mileage Rate OR Actual Expenses - You cannot claim both!';
+    const warning2 = 'If using standard mileage ($0.67/mi), you CANNOT deduct fuel, maintenance, or repairs.';
+    const warning3 = 'This report shows both for comparison. Consult your tax professional.';
+    doc.text(warning1, pageWidth / 2, 244, { align: 'center', maxWidth: pageWidth - 50 });
+    doc.text(warning2, pageWidth / 2, 254, { align: 'center', maxWidth: pageWidth - 50 });
+    doc.text(warning3, pageWidth / 2, 264, { align: 'center', maxWidth: pageWidth - 50 });
+    
+    // Disclaimer
+    doc.setTextColor(120, 120, 120);
+    doc.setFontSize(7);
+    doc.setFont(undefined, 'italic');
+    const disclaimer = 'This report is for informational purposes only. Consult with a tax professional for specific advice.';
+    doc.text(disclaimer, pageWidth / 2, 280, { align: 'center', maxWidth: pageWidth - 60 });
+    
+    // Page 2: Mileage Details
+    doc.addPage();
+    doc.setTextColor(0, 0, 0);
+    
+    // Section header
+    doc.setFillColor(255, 127, 80);
+    doc.rect(0, 0, pageWidth, 25, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(18);
+    doc.setFont(undefined, 'bold');
+    doc.text('MILEAGE DEDUCTION', pageWidth / 2, 15, { align: 'center' });
+    
+    doc.setTextColor(0, 0, 0);
+    
+    // Mileage summary boxes
+    const boxY = 35;
+    const boxWidth = (pageWidth - 40) / 3;
+    
+    // Total Miles Box
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(14, boxY, boxWidth - 4, 35, 3, 3, 'FD');
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'bold');
+    doc.text('Total Business Miles', 14 + (boxWidth - 4) / 2, boxY + 12, { align: 'center' });
+    doc.setFontSize(16);
+    doc.setTextColor(255, 127, 80);
+    doc.text(totalMiles.toFixed(2), 14 + (boxWidth - 4) / 2, boxY + 26, { align: 'center' });
+    
+    // Rate Box
+    doc.setTextColor(0, 0, 0);
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(14 + boxWidth, boxY, boxWidth - 4, 35, 3, 3, 'FD');
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'bold');
+    doc.text('2024 IRS Rate', 14 + boxWidth + (boxWidth - 4) / 2, boxY + 12, { align: 'center' });
+    doc.setFontSize(16);
+    doc.setTextColor(255, 127, 80);
+    doc.text('$0.67/mile', 14 + boxWidth + (boxWidth - 4) / 2, boxY + 26, { align: 'center' });
+    
+    // Deduction Box
+    doc.setTextColor(0, 0, 0);
+    doc.setFillColor(248, 250, 252); // Light gray like the others
+    doc.roundedRect(14 + boxWidth * 2, boxY, boxWidth - 4, 35, 3, 3, 'FD');
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'bold');
+    doc.text('Mileage Deduction', 14 + boxWidth * 2 + (boxWidth - 4) / 2, boxY + 12, { align: 'center' });
+    doc.setFontSize(16);
+    doc.setTextColor(34, 197, 94); // Green
+    doc.text(formatCurrency(mileageDeduction), 14 + boxWidth * 2 + (boxWidth - 4) / 2, boxY + 26, { align: 'center' });
+    
+    doc.setTextColor(0, 0, 0);
+    
+    // Trip breakdown table
+    const tripData = filteredTrips.map(trip => {
+      const intermediateStops = trip.stops && trip.stops.length > 0
+        ? trip.stops.map((s: any) => s.address).join(', ')
+        : 'None';
+      
+      const endAddr = trip.endAddress || 
+                      (trip.stops && trip.stops.length > 0 ? trip.stops[trip.stops.length - 1].address : '') ||
+                      trip.startAddress || '';
+      
+      return [
+        formatDate(trip.date || ''),
+        trip.startAddress || '',
+        intermediateStops,
+        endAddr,
+        (trip.totalMiles || 0).toFixed(2),
+        formatCurrency((trip.totalMiles || 0) * 0.67)
+      ];
+    });
+    
+    autoTable(doc, {
+      startY: 80,
+      head: [['Date', 'Start', 'Stops', 'End', 'Miles', 'Deduction']],
+      body: tripData,
+      theme: 'striped',
+      headStyles: { 
+        fillColor: [255, 127, 80],
+        textColor: [255, 255, 255],
+        fontSize: 9,
+        fontStyle: 'bold'
+      },
+      styles: {
+        fontSize: 8,
+        cellPadding: 2
+      },
+      columnStyles: {
+        0: { cellWidth: 20 },
+        1: { cellWidth: 40 },
+        2: { cellWidth: 40 },
+        3: { cellWidth: 40 },
+        4: { halign: 'right', cellWidth: 20 },
+        5: { halign: 'right', cellWidth: 28, textColor: [34, 197, 94] }
+      }
+    });
+    
+    // Page 3: Expense Details
+    doc.addPage();
+    
+    // Section header
+    doc.setFillColor(255, 127, 80);
+    doc.rect(0, 0, pageWidth, 25, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(18);
+    doc.setFont(undefined, 'bold');
+    doc.text('BUSINESS EXPENSES', pageWidth / 2, 15, { align: 'center' });
+    
+    doc.setTextColor(0, 0, 0);
+    
+    // Category breakdown chart
+    let chartY = 35;
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.text('Expense Summary by Category', 14, chartY);
+    
+    chartY += 10;
+    const maxBarWidth = pageWidth - 100;
+    
+    Object.entries(categoryTotals).forEach(([category, amount]) => {
+      const percentage = (amount / totalExpenses) * 100;
+      const barWidth = (amount / totalExpenses) * maxBarWidth;
+      
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text(category, 14, chartY);
+      
+      // Bar
+      doc.setFillColor(255, 127, 80);
+      doc.rect(70, chartY - 5, barWidth, 8, 'F');
+      
+      // Amount
+      doc.setFont(undefined, 'bold');
+      doc.text(formatCurrency(amount), 70 + maxBarWidth + 5, chartY);
+      doc.setFont(undefined, 'normal');
+      doc.setFontSize(8);
+      doc.text(`(${percentage.toFixed(1)}%)`, 70 + maxBarWidth + 35, chartY);
+      
+      chartY += 12;
+    });
+    
+    // Total line
+    chartY += 5;
+    doc.setDrawColor(229, 231, 235);
+    doc.line(14, chartY, pageWidth - 14, chartY);
+    chartY += 8;
+    
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.text('Total Business Expenses', 14, chartY);
+    doc.setTextColor(239, 68, 68);
+    doc.text(formatCurrency(totalExpenses), pageWidth - 14, chartY, { align: 'right' });
+    
+    doc.setTextColor(0, 0, 0);
+    
+    // Page 4: Summary & Notes
+    doc.addPage();
+    
+    // Section header
+    doc.setFillColor(255, 127, 80);
+    doc.rect(0, 0, pageWidth, 25, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(18);
+    doc.setFont(undefined, 'bold');
+    doc.text('DEDUCTION SUMMARY', pageWidth / 2, 15, { align: 'center' });
+    
+    doc.setTextColor(0, 0, 0);
+    
+    // Final summary table
+    const summaryY = 40;
+    
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.text('Component', 30, summaryY);
+    doc.text('Amount', pageWidth - 30, summaryY, { align: 'right' });
+    
+    doc.setDrawColor(229, 231, 235);
+    doc.line(30, summaryY + 2, pageWidth - 30, summaryY + 2);
+    
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    
+    let summaryRowY = summaryY + 12;
+    
+    doc.text('Mileage Deduction', 30, summaryRowY);
+    doc.setTextColor(34, 197, 94);
+    doc.text(formatCurrency(mileageDeduction), pageWidth - 30, summaryRowY, { align: 'right' });
+    summaryRowY += 10;
+    
+    doc.setTextColor(0, 0, 0);
+    doc.text('Business Expenses', 30, summaryRowY);
+    doc.setTextColor(239, 68, 68);
+    doc.text(formatCurrency(totalExpenses), pageWidth - 30, summaryRowY, { align: 'right' });
+    summaryRowY += 10;
+    
+    doc.setTextColor(0, 0, 0);
+    doc.setDrawColor(229, 231, 235);
+    doc.line(30, summaryRowY, pageWidth - 30, summaryRowY);
+    summaryRowY += 10;
+    
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.text('TOTAL DEDUCTIONS', 30, summaryRowY);
+    doc.setTextColor(34, 197, 94);
+    doc.text(formatCurrency(totalDeductions), pageWidth - 30, summaryRowY, { align: 'right' });
+    
+    doc.setTextColor(0, 0, 0);
+    
+    // Important notes section
+    const notesY = summaryRowY + 30;
+    doc.setFillColor(254, 243, 199); // Light yellow
+    doc.roundedRect(20, notesY, pageWidth - 40, 80, 3, 3, 'FD');
+    
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.text('Important Tax Notes:', 30, notesY + 12);
+    
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'normal');
+    const notes = [
+      '• Keep all receipts and documentation for at least 7 years',
+      '• The standard mileage rate may change annually - verify with IRS',
+      '• Only business-related expenses are deductible',
+      '• Consult with a tax professional for specific advice',
+      '• This report is for informational purposes only',
+      '• Separate personal and business use of vehicles',
+      '• Document the business purpose of each trip'
+    ];
+    
+    let noteY = notesY + 22;
+    notes.forEach(note => {
+      doc.text(note, 30, noteY, { maxWidth: pageWidth - 60 });
+      noteY += 7;
+    });
+    
+    // Footer on all pages
+    const pageCount = doc.internal.pages.length - 1;
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(128, 128, 128);
+      doc.text(
+        `Page ${i} of ${pageCount}`,
+        pageWidth / 2,
+        doc.internal.pageSize.getHeight() - 10,
+        { align: 'center' }
+      );
+    }
+    
+    setTimeout(() => {
+      doc.save(`tax-summary-${timestamp}.pdf`);
+    }, 400);
+  }
+
+  function handleAdvancedExport() {
+    if (exportFormat === 'pdf') {
+      exportToPDF();
+    } else {
+      // CSV export
+      if (exportDataType === 'tax-bundle') {
+        exportTaxBundle();
+      } else if (exportDataType === 'trips') {
+        const csv = exportTripsCSV();
+        if (csv) {
+          const blob = new Blob([csv], { type: 'text/csv' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `trips-export-${Date.now()}.csv`;
+          a.click();
+          URL.revokeObjectURL(url);
+          showSuccessMsg('Trips exported successfully!');
+          showAdvancedExport = false;
+        }
+      } else if (exportDataType === 'expenses') {
+        const csv = exportExpensesCSV();
+        if (csv) {
+          const blob = new Blob([csv], { type: 'text/csv' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `expenses-export-${Date.now()}.csv`;
+          a.click();
+          URL.revokeObjectURL(url);
+          showSuccessMsg('Expenses exported successfully!');
+          showAdvancedExport = false;
+        }
+      }
+    }
+  }
+
+  // Old export function (kept for backward compatibility but now shows upgrade modal)
+  function exportCSV() {
+    upgradeSource = 'export';
+    isUpgradeModalOpen = true;
+  }
+
   function exportData() {
     const data = {
       settings: $userSettings,
@@ -267,124 +1609,6 @@
       reader.readAsText(file);
     };
     input.click();
-  }
-
-  // ... (Keep the rest of the CSV logic and HTML) ...
-  function formatDuration(minutes: number): string {
-    if (!minutes) return '0m';
-    const h = Math.floor(minutes / 60);
-    const m = Math.round(minutes % 60);
-    if (h > 0) return `${h}h ${m}m`;
-    return `${m}m`;
-  }
-
-  function parseDuration(durationStr: string): number {
-    if (!durationStr) return 0;
-    let minutes = 0;
-    const hoursMatch = durationStr.match(/(\d+)h/);
-    const minsMatch = durationStr.match(/(\d+)m/);
-    
-    if (hoursMatch) minutes += parseInt(hoursMatch[1]) * 60;
-    if (minsMatch) minutes += parseInt(minsMatch[1]);
-    if (!hoursMatch && !minsMatch && !isNaN(parseInt(durationStr))) {
-        minutes = parseInt(durationStr);
-    }
-    return minutes;
-  }
-
-  function parseItemString(str: string): any[] {
-    if (!str || !str.trim()) return [];
-    return str.split('|').map(part => {
-        const [name, costStr] = part.split(':');
-        return {
-            id: crypto.randomUUID(),
-            type: name ? name.trim() : 'Unknown',
-            cost: parseFloat(costStr) || 0
-        };
-    }).filter(i => i.type && i.cost >= 0);
-  }
-
-  function exportCSV() {
-    // Pro Guard
-    if (!isPro) {
-        upgradeSource = 'export';
-        isUpgradeModalOpen = true;
-        return;
-    }
-
-    const data = $trips;
-    if (data.length === 0) {
-      alert("No trips to export.");
-      return;
-    }
-
-    const headers = [
-      'Date', 'Start Address', 'Stop Addresses', 'End Address', 'Stops Count',
-      'Total Miles', 'Drive Time', 'Hours Worked', 'Hourly Pay ($/hr)',
-      'Total Revenue', 'Fuel Cost', 
-      'Maintenance Cost', 'Maintenance Items',
-      'Supply Cost', 'Supply Items',
-      'Total Expenses', 'Net Profit', 'Notes'
-    ];
-    const rows = data.map(trip => {
-      const date = trip.date ? new Date(trip.date).toLocaleDateString() : '';
-      const start = `"${(trip.startAddress || '').replace(/"/g, '""')}"`; 
-      
-      const stopsList = trip.stops && trip.stops.length > 0 
-          ? trip.stops.map((s: any) => s.address).join(' | ') 
-          : '';
-      const stopAddresses = `"${stopsList.replace(/"/g, '""')}"`;
-
-      const rawEnd = trip.endAddress ? trip.endAddress : trip.startAddress;
-      const end = `"${(rawEnd || '').replace(/"/g, '""')}"`;
-
-      const stopsCount = trip.stops?.length || 0;
-      const miles = (trip.totalMiles || 0).toFixed(1);
-      
-      const driveTime = `"${formatDuration(trip.estimatedTime || 0)}"`; 
-      
-      const hoursWorked = (trip.hoursWorked || 0).toFixed(1);
-
-      const revenue = trip.stops?.reduce((sum: number, stop: any) => sum + (stop.earnings || 0), 0) || 0;
-      const fuel = trip.fuelCost || 0;
-      
-      const maint = trip.maintenanceCost || 0;
-      const maintItemsStr = trip.maintenanceItems 
-        ? `"${trip.maintenanceItems.map((i: any) => `${i.type}:${i.cost}`).join(' | ')}"` 
-        : '""';
-      const supplies = trip.suppliesCost || 0;
-      
-      // FIX: Check both suppliesItems and supplyItems to ensure data isn't missed
-      const sItems = trip.suppliesItems || trip.supplyItems;
-      const supplyItemsStr = sItems
-        ? `"${sItems.map((i: any) => `${i.type}:${i.cost}`).join(' | ')}"`
-        : '""';
-        
-      const totalExpenses = fuel + maint + supplies;
-      const netProfit = revenue - totalExpenses;
-      const hourlyPay = trip.hoursWorked > 0 ? (netProfit / trip.hoursWorked) : 0;
-      const notes = `"${(trip.notes || '').replace(/"/g, '""')}"`;
-
-      return [
-        date, start, stopAddresses, end, stopsCount, miles, driveTime, hoursWorked, 
-        hourlyPay.toFixed(2), revenue.toFixed(2), fuel.toFixed(2), 
-        maint.toFixed(2), maintItemsStr, 
-        supplies.toFixed(2), supplyItemsStr, 
-        totalExpenses.toFixed(2), netProfit.toFixed(2), notes
-      ].join(',');
-    });
-
-    const csvContent = [headers.join(','), ...rows].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `trips_export_full_${new Date().toISOString().slice(0, 10)}.csv`);
-    link.style.visibility = 'hidden';
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   }
 
   function importCSV() {
@@ -518,6 +1742,7 @@
   {/if}
   
   <div class="settings-grid">
+    <!-- Profile Card -->
     <div class="settings-card">
       <div class="card-header">
         <div class="card-icon orange">
@@ -595,6 +1820,7 @@
       </div>
     </div>
     
+    <!-- Default Values Card -->
     <div class="settings-card">
       <div class="card-header">
         <div class="card-icon blue">
@@ -652,6 +1878,7 @@
       </button>
     </div>
     
+    <!-- Integrations Card -->
     <div class="settings-card">
       <div class="card-header">
         <div class="card-icon green">
@@ -688,6 +1915,7 @@
       </div>
     </div>
     
+    <!-- Security Card -->
     <div class="settings-card">
       <div class="card-header">
         <div class="card-icon purple">
@@ -717,6 +1945,7 @@
       {/if}
     </div>
     
+    <!-- Data Management Card with Advanced Export -->
     <div class="settings-card">
       <div class="card-header">
        <div class="card-icon navy">
@@ -727,17 +1956,26 @@
         </div>
         <div>
           <h2 class="card-title">Data Management</h2>
-          <p class="card-subtitle">Export, import, or delete your data</p>
+          <p class="card-subtitle">Export, import, and manage your data</p>
         </div>
       </div>
       
       <div class="data-actions">
-        <button class="action-btn" on:click={exportCSV}>
+        <!-- Pro Advanced Export -->
+        <button class="action-btn featured" on:click={openAdvancedExport}>
+          <div class="featured-badge">PRO</div>
           <div>
-            <div class="action-title">{!isPro ? '🔒 ' : ''}Export All Trips (CSV)</div>
-            <div class="action-subtitle">Download detailed spreadsheet of all trips</div>
+            <div class="action-title">
+              {!isPro ? '🔒 ' : '⭐ '}Advanced Export
+            </div>
+            <div class="action-subtitle">
+              Export trips, expenses, or tax bundle with date filters & PDF
+            </div>
           </div>
         </button>
+
+        <div class="divider"></div>
+
         <button class="action-btn" on:click={importCSV}>
           <div>
             <div class="action-title">Import CSV</div>
@@ -753,6 +1991,7 @@
             <div class="action-subtitle">Save settings and trips backup</div>
           </div>
         </button>
+        
         <button class="action-btn" on:click={importData}>
           <div>
             <div class="action-title">Restore Backup (JSON)</div>
@@ -771,6 +2010,7 @@
       </div>
     </div>
     
+    <!-- Account Actions Card -->
     <div class="settings-card danger-card">
       <div class="card-header">
         <div class="card-icon red">
@@ -812,6 +2052,166 @@
   </div>
 </div>
 
+<!-- Advanced Export Modal -->
+<Modal bind:open={showAdvancedExport} title="Advanced Export">
+  <div class="export-modal">
+    <!-- Data Type Selection -->
+    <div class="export-section">
+      <label class="export-label">Data Type</label>
+      <div class="type-buttons">
+        <button 
+          class="type-btn" 
+          class:active={exportDataType === 'trips'}
+          on:click={() => exportDataType = 'trips'}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+          </svg>
+          <span>Trips</span>
+        </button>
+        
+        <button 
+          class="type-btn" 
+          class:active={exportDataType === 'expenses'}
+          on:click={() => exportDataType = 'expenses'}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
+          </svg>
+          <span>Expenses</span>
+        </button>
+        
+        <button 
+          class="type-btn tax" 
+          class:active={exportDataType === 'tax-bundle'}
+          on:click={() => exportDataType = 'tax-bundle'}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+          <span>Tax Bundle ⭐</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- IRS Warning for Tax Bundle -->
+    {#if exportDataType === 'tax-bundle'}
+      <div style="background: #FFF3CD; border: 2px solid #FF6B35; border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+        <div style="display: flex; align-items: start; gap: 12px;">
+          <div style="font-size: 24px; line-height: 1;">⚠️</div>
+          <div>
+            <div style="font-weight: 700; font-size: 14px; color: #DC2626; margin-bottom: 8px;">
+              IMPORTANT IRS RULE
+            </div>
+            <div style="font-size: 13px; color: #374151; line-height: 1.5;">
+              <strong>You must choose ONE deduction method:</strong>
+              <br/>
+              <span style="color: #059669;">✓ Standard Mileage ($0.67/mile)</span> - Deduct mileage ONLY
+              <br/>
+              <span style="color: #DC2626;">✗ Cannot also deduct:</span> Fuel, oil changes, repairs, maintenance
+              <br/><br/>
+              <strong>OR</strong>
+              <br/>
+              <span style="color: #059669;">✓ Actual Expenses</span> - Deduct fuel, maintenance, repairs
+              <br/>
+              <span style="color: #DC2626;">✗ Cannot also deduct:</span> Standard mileage rate
+              <br/><br/>
+              <em style="font-size: 12px; color: #6B7280;">This report shows both for comparison. Consult your tax professional to choose the better option.</em>
+            </div>
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    <!-- Format Selection -->
+    <div class="export-section">
+      <label class="export-label">Format</label>
+      <div class="format-buttons">
+        <button 
+          class="format-btn" 
+          class:active={exportFormat === 'csv'}
+          on:click={() => exportFormat = 'csv'}
+        >
+          CSV
+        </button>
+        <button 
+          class="format-btn" 
+          class:active={exportFormat === 'pdf'}
+          on:click={() => exportFormat = 'pdf'}
+        >
+          PDF
+        </button>
+      </div>
+    </div>
+
+    <!-- Date Range -->
+    <div class="export-section">
+      <label class="export-label">Date Range (Optional)</label>
+      <div class="date-range">
+        <input type="date" bind:value={exportDateFrom} placeholder="From" />
+        <span>to</span>
+        <input type="date" bind:value={exportDateTo} placeholder="To" />
+      </div>
+    </div>
+
+    <!-- Preview Stats -->
+    {#if exportDataType === 'tax-bundle'}
+      <div class="export-preview">
+        <div class="preview-item">
+          <div class="preview-label">Trips</div>
+          <div class="preview-value">{filteredTrips.length}</div>
+        </div>
+        <div class="preview-item">
+          <div class="preview-label">Expenses</div>
+          <div class="preview-value">{filteredExpenses.length}</div>
+        </div>
+        <div class="preview-item highlight">
+          <div class="preview-label">Estimated Deduction</div>
+          <div class="preview-value">
+            {formatCurrency(
+              (filteredTrips.reduce((sum, t) => sum + (t.totalMiles || 0), 0) * 0.67) +
+              filteredExpenses.reduce((sum, e) => sum + e.amount, 0)
+            )}
+          </div>
+        </div>
+      </div>
+    {:else}
+      <div class="export-preview">
+        <div class="preview-item">
+          <div class="preview-label">
+            {exportDataType === 'trips' ? 'Trips' : 'Expenses'} Found
+          </div>
+          <div class="preview-value">
+            {exportDataType === 'trips' ? filteredTrips.length : filteredExpenses.length}
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    {#if exportDataType !== 'tax-bundle' && exportFormat === 'csv'}
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={exportIncludeSummary} />
+        Include summary totals
+      </label>
+    {/if}
+
+    <div class="modal-actions">
+      <button class="btn-secondary" on:click={() => showAdvancedExport = false}>
+        Cancel
+      </button>
+      <button 
+        class="btn-primary" 
+        on:click={handleAdvancedExport}
+        disabled={exportDataType === 'trips' ? filteredTrips.length === 0 : exportDataType === 'expenses' ? filteredExpenses.length === 0 : (filteredTrips.length === 0 && filteredExpenses.length === 0)}
+      >
+        {exportDataType === 'tax-bundle' ? `Export Bundle (${exportFormat.toUpperCase()})` : `Export ${exportFormat.toUpperCase()}`}
+      </button>
+    </div>
+  </div>
+</Modal>
+
+<!-- Upgrade Modal -->
 <Modal bind:open={isUpgradeModalOpen} title="Upgrade to Pro">
   <div class="space-y-6 text-center py-4">
         <div class="mx-auto w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mb-4">
@@ -819,16 +2219,16 @@
         </div>
         
         <h3 class="text-xl font-bold text-gray-900">
-            {#if upgradeSource === 'export'}
-                Unlock Data Exports
+            {#if upgradeSource === 'export' || upgradeSource === 'advanced-export'}
+                Unlock Advanced Exports
             {:else}
                 Unlock Pro Features
             {/if}
         </h3>
         
         <p class="text-gray-600 text-base leading-relaxed">
-            {#if upgradeSource === 'export'}
-                Exporting data is a Pro feature. Upgrade now to download your full trip history for taxes and accounting!
+            {#if upgradeSource === 'export' || upgradeSource === 'advanced-export'}
+                Advanced export features including tax bundles, PDF exports, and comprehensive expense tracking are Pro features. Upgrade now to unlock professional-grade data exports!
             {:else}
                 Take your business to the next level. Get unlimited trips, powerful route optimization, and tax-ready data exports.
             {/if}
@@ -849,7 +2249,11 @@
             </div>
             <div class="flex items-center gap-2">
                 <span class="text-green-500 text-lg">✓</span>
-                <span class="text-gray-700">Data Export (CSV/JSON)</span>
+                <span class="text-gray-700">Advanced Exports (CSV/PDF)</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-green-500 text-lg">✓</span>
+                <span class="text-gray-700">Tax Bundle Generation</span>
             </div>
         </div>
 
@@ -901,7 +2305,6 @@
   .form-group input, .form-group select { 
     width: 100%; max-width: 450px; 
     padding: 12px 16px; border: 2px solid #E5E7EB;
-    /* UPDATED: 16px to prevent zoom */
     border-radius: 10px; font-size: 16px; font-family: inherit; background: white; transition: all 0.2s;
     display: block; box-sizing: border-box;
   }
@@ -918,14 +2321,13 @@
   .divider { height: 1px; background: #E5E7EB; margin: 24px 0; }
   .plan-row { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
   .plan-badge { display: inline-block; padding: 6px 12px; background: #F3F4F6; color: #374151; border-radius: 8px; font-weight: 600; font-size: 14px; }
-  .upgrade-link { color: var(--orange); font-size: 14px; font-weight: 600; text-decoration: none; }
   
-  /* Styles for the new button */
   .upgrade-link-btn { background: none; border: none; color: var(--orange); font-size: 14px; font-weight: 600; cursor: pointer; padding: 0; text-decoration: none; }
   
   @media (hover: hover) {
-    .upgrade-link:hover, .upgrade-link-btn:hover { text-decoration: underline; }
+    .upgrade-link-btn:hover { text-decoration: underline; }
   }
+  
   .usage-stats { margin-top: 16px; }
   .usage-header { display: flex; justify-content: space-between; font-size: 13px; color: #6B7280; margin-bottom: 6px; }
   .progress-bar { height: 8px; background: #E5E7EB; border-radius: 4px; overflow: hidden; }
@@ -958,11 +2360,51 @@
 
   .button-group { display: flex; flex-direction: column; gap: 8px; }
   .data-actions { display: flex; flex-direction: column; gap: 12px; }
-  .action-btn { display: flex; align-items: center; gap: 16px; padding: 16px; background: #F9FAFB; border: 2px solid #E5E7EB; border-radius: 12px; cursor: pointer; text-align: left; width: 100%; }
+  .action-btn { display: flex; align-items: center; gap: 16px; padding: 16px; background: #F9FAFB; border: 2px solid #E5E7EB; border-radius: 12px; cursor: pointer; text-align: left; width: 100%; position: relative; }
+  .action-btn.featured { background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%); border-color: #FB923C; }
+  .featured-badge { position: absolute; top: 8px; right: 8px; background: var(--orange); color: white; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; }
   .action-title { font-size: 15px; font-weight: 600; color: #111827; }
   .action-subtitle { font-size: 13px; color: #6B7280; }
 
+  /* Export Modal Styles */
+  .export-modal { padding: 20px 0; }
+  .export-section { margin-bottom: 24px; }
+  .export-label { display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 12px; }
+  
+  .type-buttons, .format-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .format-buttons { grid-template-columns: repeat(2, 1fr); }
+  
+  .type-btn, .format-btn { 
+    display: flex; flex-direction: column; align-items: center; gap: 8px; 
+    padding: 16px; background: white; border: 2px solid #E5E7EB; border-radius: 12px; 
+    cursor: pointer; transition: all 0.2s; font-size: 14px; font-weight: 500;
+  }
+  .type-btn.active, .format-btn.active { background: #FFF7ED; border-color: var(--orange); color: var(--orange); }
+  .type-btn.tax.active { background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%); }
+  
+  @media (hover: hover) {
+    .type-btn:hover, .format-btn:hover { border-color: var(--orange); }
+  }
+  
+  .date-range { display: flex; align-items: center; gap: 12px; }
+  .date-range input { flex: 1; padding: 10px; border: 2px solid #E5E7EB; border-radius: 8px; font-size: 14px; }
+  .date-range span { color: #6B7280; font-size: 14px; }
+  
+  .export-preview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 16px; background: #F9FAFB; border-radius: 12px; margin-bottom: 20px; }
+  .preview-item { text-align: center; }
+  .preview-item.highlight { background: #FFF7ED; padding: 12px; border-radius: 8px; }
+  .preview-label { font-size: 12px; color: #6B7280; margin-bottom: 4px; }
+  .preview-value { font-size: 20px; font-weight: 700; color: #111827; }
+  
+  .checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #374151; margin-bottom: 20px; }
+  .checkbox-label input { width: 18px; height: 18px; cursor: pointer; }
+  
+  .modal-actions { display: flex; gap: 12px; margin-top: 24px; }
+  .modal-actions button { flex: 1; }
+
   @media (max-width: 1024px) {
     .settings-grid { grid-template-columns: 1fr; }
+    .export-preview { grid-template-columns: 1fr; }
+    .type-buttons { grid-template-columns: 1fr; }
   }
 </style>
