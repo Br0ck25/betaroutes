@@ -126,9 +126,18 @@
   // --- LOADING LOGIC ---
   async function loadTrips() {
     try {
+      // [!code ++] GUARD: Check if trips are already loaded in the store
+      if ($trips.length > 0) {
+        // Data exists! Show success immediately and skip network call
+        tripsBoundary?.setSuccess();
+        return; 
+      }
+
+      // Only show skeleton if we have NO data
       if (!hasLoadedOnce) {
         tripsBoundary?.setLoading();
       }
+      
       await trips.load();
       hasLoadedOnce = true;
       tripsBoundary?.setSuccess();
@@ -158,7 +167,7 @@ onMount(() => {
   document.body.classList.remove('has-selections');
   // Mark as mounted so reactive statement can now run
   isMounted = true;
-  
+   
   loadTrips();
 });
 
@@ -277,12 +286,12 @@ onDestroy(() => {
       let successCount = 0;
       const ids = Array.from(selectedTrips);
       for (const id of ids) {
-          try {
-              await trips.deleteTrip(id, userId);
-              successCount++;
-          } catch (err) {
-              console.error(`Failed to delete trip ${id}`, err);
-          }
+        try {
+            await trips.deleteTrip(id, userId);
+            successCount++;
+        } catch (err) {
+            console.error(`Failed to delete trip ${id}`, err);
+        }
       }
 
       toasts.success(`Moved ${successCount} trips to trash.`);
@@ -327,7 +336,7 @@ onDestroy(() => {
       style: 'currency', currency: 'USD', minimumFractionDigits: 2
     }).format(amount);
   }
-  
+   
   function formatDate(dateString: string): string {
     const date = new Date(dateString);
     return new Intl.DateTimeFormat('en-US', {
@@ -358,7 +367,7 @@ onDestroy(() => {
     if (h > 0) return `${h}h ${m}m`;
     return `${m}m`;
   }
-  
+   
   async function deleteTrip(id: string, skipConfirm = false) {
     if (skipConfirm || confirm('Move trip to trash?')) {
       try {
@@ -380,7 +389,7 @@ onDestroy(() => {
   function editTrip(id: string) {
     goto(`/dashboard/trips/edit/${id}`);
   }
-  
+   
   function calculateNetProfit(trip: any): number {
     const earnings = trip.stops?.reduce((s: number, stop: any) => s + (stop.earnings || 0), 0) || 0;
     const costs = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);
@@ -392,7 +401,7 @@ onDestroy(() => {
     const hours = trip.hoursWorked || 0;
     return hours > 0 ? profit / hours : 0;
   }
-  
+   
   let expandedTrips = new Set<string>();
   function toggleExpand(id: string) {
     if (expandedTrips.has(id)) expandedTrips.delete(id);
@@ -564,7 +573,7 @@ onDestroy(() => {
         </a>
     </div>
   </div>
-  
+   
   <div class="stats-summary">
     <div class="summary-card">
       <div class="summary-label">Total Trips</div>
@@ -631,7 +640,7 @@ onDestroy(() => {
       </button>
     </div>
   </div>
-  
+   
   {#if visibleTrips.length > 0}
     <div class="batch-header" class:visible={allFilteredTrips.length > 0}>
         <label class="checkbox-container">
@@ -672,7 +681,7 @@ onDestroy(() => {
                   onEdit: () => editTrip(trip.id),
                   onDelete: () => deleteTrip(trip.id)
               }}
-           >
+            >
               <div class="card-top">
                  <div class="selection-box" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="none">
                     <label class="checkbox-container">
@@ -688,33 +697,33 @@ onDestroy(() => {
                          <span class="time-range">• {formatTime(trip.startTime)} - {formatTime(trip.endTime || '17:00')}</span>
                       {/if}
                   </span>
-      
+       
                   <div class="trip-title-row">
-                       <h3 class="trip-route-title">
-                        {trip.startAddress?.split(',')[0] || 'Unknown'} 
-                        {#if trip.stops && trip.stops.length > 0}
-                          → {trip.stops[trip.stops.length - 1].address?.split(',')[0] || 'Stop'}
-                        {/if}
-                      </h3>
-                      
-                      <button 
-                        class="map-link-btn" 
-                        onclick={(e) => openGoogleMaps(e, trip)} 
-                        title="View Route in Google Maps"
-                        aria-label="View Route in Google Maps"
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"></path>
-                            <path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z"></path>
-                        </svg>
-                      </button>
-                   </div>
+                        <h3 class="trip-route-title">
+                         {trip.startAddress?.split(',')[0] || 'Unknown'} 
+                         {#if trip.stops && trip.stops.length > 0}
+                           → {trip.stops[trip.stops.length - 1].address?.split(',')[0] || 'Stop'}
+                         {/if}
+                       </h3>
+                       
+                       <button 
+                         class="map-link-btn" 
+                         onclick={(e) => openGoogleMaps(e, trip)} 
+                         title="View Route in Google Maps"
+                         aria-label="View Route in Google Maps"
+                       >
+                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                             <path d="M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"></path>
+                             <path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z"></path>
+                         </svg>
+                       </button>
+                    </div>
                 </div>
                 
                 <div class="profit-display-large" class:positive={profit >= 0} class:negative={profit < 0}>
                    {formatCurrency(profit)}
                 </div>
-                 
+                  
                 <svg class="expand-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                   <path d="M6 15L10 11L14 15M14 5L10 9L6 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                </svg>
@@ -737,7 +746,7 @@ onDestroy(() => {
                   <span class="stat-label">Drive</span>
                   <span class="stat-value">{formatDuration(trip.estimatedTime)}</span>
                 </div>
-             
+              
                  <div class="stat-item">
                   <span class="stat-label">$/Hr</span>
                   <span class="stat-value hourly-pay">{trip.hoursWorked > 0 ? formatCurrency(hourlyPay) : '-'}</span>
@@ -765,11 +774,11 @@ onDestroy(() => {
                                          <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
                                     </svg>
                                   </button>
-                              </div>
-                          {/each}
-                       {/if}
+                             </div>
+                           {/each}
+                        {/if}
             
-                        {#if trip.endAddress && trip.endAddress !== trip.startAddress}
+                         {#if trip.endAddress && trip.endAddress !== trip.startAddress}
                              <div class="address-row">
                                 <span class="address-text"><strong>End:</strong> {trip.endAddress}</span>
                                  <button 
@@ -782,7 +791,7 @@ onDestroy(() => {
                                     </svg>
                                  </button>
                             </div>
-                        {/if}
+                         {/if}
                     </div>
                    </div>
 
@@ -967,7 +976,7 @@ Upgrade now to download your trip history for taxes!
       <div class="skeleton skeleton-title"></div>
       <div class="skeleton skeleton-button"></div>
     </div>
-     
+      
     <div class="loading-stats">
       {#each Array(4) as _}
         <div class="skeleton skeleton-stat"></div>
@@ -1554,60 +1563,6 @@ Upgrade now to download your trip history for taxes!
     }
   }
   
-  .pagination-controls { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 32px; }
-  .page-btn { padding: 8px 16px; background: white; border: 1px solid #E5E7EB; border-radius: 8px; font-weight: 600; font-size: 14px; color: #374151; cursor: pointer; transition: all 0.2s; }
-  .page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .page-status { font-size: 14px; color: #4B5563; font-weight: 500; }
-
-  /* Loading state styles */
-  .trips-loading { padding: 2rem; animation: fadeIn 0.3s ease-out; }
-  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-  .loading-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-  .loading-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
-  .loading-filters { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
-  .skeleton { background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 0.5rem; }
-  .skeleton-title { width: 200px; height: 2rem; }
-  .skeleton-button { width: 120px; height: 2.5rem; }
-  .skeleton-stat { height: 80px; border-radius: 12px; }
-  .skeleton-input { flex: 1; height: 2.5rem; }
-  .skeleton-select { width: 150px; height: 2.5rem; }
-  .trip-skeleton { background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid #e5e7eb; }
-  .skeleton-top { margin-bottom: 1rem; }
-  .skeleton-text { height: 1rem; margin-bottom: 0.5rem; background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 0.25rem; }
-  .skeleton-stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-
-  /* Error state styles */
-  .trips-error { display: flex; align-items: center; justify-content: center; min-height: 60vh; padding: 2rem; animation: fadeIn 0.3s ease-out; }
-  .error-content { text-align: center; max-width: 500px; }
-  .error-icon { display: inline-flex; align-items: center; justify-content: center; width: 80px; height: 80px; background: #fee2e2; border-radius: 50%; color: #dc2626; margin-bottom: 1.5rem; }
-  .trips-error h2 { font-size: 1.5rem; font-weight: 600; color: #111827; margin: 0 0 0.5rem; }
-  .error-message { color: #6b7280; margin: 0 0 2rem; line-height: 1.6; }
-  .error-message a { color: #FF7F50; text-decoration: underline; font-weight: 600; }
-  .error-actions { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 2rem; }
-  .error-details { margin-top: 2rem; padding: 1rem; background: #f9fafb; border-radius: 0.5rem; text-align: left; }
-  .error-details summary { cursor: pointer; color: #6b7280; font-size: 0.875rem; font-weight: 500; user-select: none; }
-  .error-details summary:hover { color: #374151; }
-  .error-details pre { margin-top: 0.5rem; padding: 0.75rem; background: #1f2937; color: #f3f4f6; border-radius: 0.375rem; overflow-x: auto; font-size: 0.75rem; line-height: 1.5; }
-
-  @media (min-width: 640px) {
-    .filters-bar { flex-direction: row; justify-content: space-between; align-items: center; }
-    .search-box { max-width: 300px; }
-    .date-group { width: auto; }
-    .filter-group { width: auto; flex-wrap: nowrap; }
-    .filter-select { width: 140px; flex: none; }
-    .stats-summary { grid-template-columns: repeat(2, 1fr); }
-    .card-stats { grid-template-columns: repeat(5, 1fr); }
-    .error-actions { flex-direction: row; justify-content: center; }
-    .loading-stats { grid-template-columns: repeat(4, 1fr); }
-    .loading-filters { flex-direction: row; }
-    .skeleton-stats-grid { grid-template-columns: repeat(5, 1fr); }
-  }
-  @media (min-width: 1024px) {
-    .stats-summary { grid-template-columns: repeat(4, 1fr); }
-    .search-box { max-width: 300px; }
-  }
-    
   .pagination-controls { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 32px; }
   .page-btn { padding: 8px 16px; background: white; border: 1px solid #E5E7EB; border-radius: 8px; font-weight: 600; font-size: 14px; color: #374151; cursor: pointer; transition: all 0.2s; }
   .page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
