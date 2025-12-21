@@ -9,7 +9,6 @@
   import { userSettings } from '$lib/stores/userSettings';
   import Modal from '$lib/components/ui/Modal.svelte';
   import Button from '$lib/components/ui/Button.svelte';
-  import { onMount } from 'svelte';
   import { onMount, onDestroy } from 'svelte';
   import { autocomplete } from '$lib/utils/autocomplete';
 
