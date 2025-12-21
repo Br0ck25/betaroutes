@@ -18,7 +18,7 @@
   let searchQuery = '';
   let sortBy = 'date';
   let sortOrder = 'desc';
-  let filterProfit = 'all'; 
+  let filterProfit = 'all';
   let startDate = '';
   let endDate = '';
 
@@ -27,19 +27,16 @@
   const itemsPerPage = 20;
   // --- SELECTION STATE ---
   let selectedTrips = new Set<string>();
-  
   // --- MODAL & SETTINGS STATE ---
-  let isSettingsOpen = false; // Unified settings modal
+  let isSettingsOpen = false;
+  // Unified settings modal
   let settingsTab: 'defaults' | 'categories' = 'defaults'; // Tab switcher
   let isUpgradeModalOpen = false;
-  
   // Category State
   let activeCategoryType: 'maintenance' | 'supplies' = 'maintenance';
   let newCategoryName = '';
-
   // Defaults State
   let settings = { ...$userSettings };
-  
   // Keep local settings in sync with store updates
   $: if ($userSettings) {
       settings = { ...$userSettings };
@@ -47,20 +44,25 @@
 
   // Check Pro Status
   $: isPro = ['pro', 'business', 'premium', 'enterprise'].includes($user?.plan || '');
-
   // API Key for Autocomplete
   $: API_KEY = $page.data.googleMapsApiKey;
-
   $: activeCategories = activeCategoryType === 'maintenance' 
       ? ($userSettings.maintenanceCategories || ['oil change', 'repair'])
       : ($userSettings.supplyCategories || ['water', 'snacks']);
-    
   // Reset selection and page when filters change
   $: if (searchQuery || sortBy || sortOrder || filterProfit || startDate || endDate) {
       currentPage = 1;
   }
 
   // --- SETTINGS LOGIC ---
+
+$: if (typeof document !== 'undefined') {
+    if (selectedTrips.size > 0) {
+      document.body.classList.add('has-selections');
+    } else {
+      document.body.classList.remove('has-selections');
+    }
+  }
 
   function handleAddressSelect(field: 'start' | 'end', e: CustomEvent) {
     const val = e.detail.formatted_address || e.detail.name;
@@ -146,7 +148,6 @@
   onMount(() => {
     loadTrips();
   });
-
   // --- TRIP FILTERING & SORTING ---
   $: allFilteredTrips = $trips
     .filter(trip => {
@@ -220,15 +221,13 @@
       }
       return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
     });
-
   $: totalPages = Math.ceil(allFilteredTrips.length / itemsPerPage);
   $: visibleTrips = allFilteredTrips.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   $: allSelected = allFilteredTrips.length > 0 && selectedTrips.size === allFilteredTrips.length;
-
   function toggleSelection(id: string) {
       if (selectedTrips.has(id)) selectedTrips.delete(id);
       else selectedTrips.add(id);
-      selectedTrips = selectedTrips; 
+      selectedTrips = selectedTrips;
   }
 
   function toggleSelectAll() {
@@ -271,13 +270,12 @@
 
   function exportSelected() {
       if (!isPro) {
-        isUpgradeModalOpen = true; 
+        isUpgradeModalOpen = true;
         return;
       }
 
       const selectedData = allFilteredTrips.filter(t => selectedTrips.has(t.id));
       if (selectedData.length === 0) return;
-
       const headers = ['Date', 'Start', 'End', 'Miles', 'Profit', 'Notes'];
       const rows = selectedData.map(t => {
           const profit = calculateNetProfit(t);
@@ -389,12 +387,11 @@
   }
 
   function openGoogleMaps(e: MouseEvent, trip: any) {
-    e.stopPropagation(); 
+    e.stopPropagation();
     const origin = encodeURIComponent(trip.startAddress || '');
     const destination = encodeURIComponent(trip.endAddress || trip.startAddress || '');
     
     let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}`;
-    
     if (trip.stops && trip.stops.length > 0) {
         const waypoints = trip.stops
             .map((s: any) => encodeURIComponent(s.address || ''))
@@ -416,7 +413,6 @@
     const previousStops = trip.stops.slice(0, stopIndex);
     
     let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}`;
-
     if (previousStops.length > 0) {
         const waypoints = previousStops
             .map((s: any) => encodeURIComponent(s.address || ''))
@@ -582,7 +578,7 @@
   <div class="filters-bar sticky-bar">
     <div class="search-box">
       <svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-         <path d="M9 17C13.4183 17 17 13.4183 17 9C17 4.58172 13.4183 1 9 1C4.58172 1 1 4.58172 1 9C1 13.4183 4.58172 17 9 17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M9 17C13.4183 17 17 13.4183 17 9C17 4.58172 13.4183 1 9 1C4.58172 1 1 4.58172 1 9C1 13.4183 4.58172 17 9 17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M19 19L14.65 14.65" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
       <input type="text" placeholder="Search trips..." bind:value={searchQuery} aria-label="Search trips" />
@@ -629,7 +625,7 @@
     <div class="trip-list-cards">
       {#each visibleTrips as trip (trip.id)}
         {@const profit = calculateNetProfit(trip)}
-         {@const hourlyPay = calculateHourlyPay(trip)}
+        {@const hourlyPay = calculateHourlyPay(trip)}
         {@const isExpanded = expandedTrips.has(trip.id)}
         {@const totalCosts = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0)}
         {@const isSelected = selectedTrips.has(trip.id)}
@@ -642,7 +638,7 @@
             </div>
 
             <div 
-                class="trip-card" 
+                 class="trip-card" 
               id={'trip-' + trip.id}
               class:expanded={isExpanded} 
               class:selected={isSelected}
@@ -691,13 +687,13 @@
                             <path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z"></path>
                         </svg>
                       </button>
-                  </div>
+                   </div>
                 </div>
                 
                 <div class="profit-display-large" class:positive={profit >= 0} class:negative={profit < 0}>
                    {formatCurrency(profit)}
                 </div>
-                
+                 
                 <svg class="expand-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                   <path d="M6 15L10 11L14 15M14 5L10 9L6 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                </svg>
@@ -733,11 +729,11 @@
                     <h4 class="section-heading">Stops & Addresses</h4>
                     <div class="address-list">
                         <div class="address-row">
-                             <span class="address-text"><strong>Start:</strong> {trip.startAddress}</span>
+                          <span class="address-text"><strong>Start:</strong> {trip.startAddress}</span>
                         </div>
                         {#if trip.stops}
                            {#each trip.stops as stop, i}
-                              <div class="address-row">
+                               <div class="address-row">
                                   <span class="address-text"><strong>Stop {i + 1}:</strong> {stop.address}</span>
                                   <button 
                                     class="mini-map-btn" 
@@ -745,16 +741,17 @@
                                     title="Map route from Start to here"
                                   >
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+                                         <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
                                     </svg>
                                   </button>
                               </div>
                           {/each}
                        {/if}
+            
                         {#if trip.endAddress && trip.endAddress !== trip.startAddress}
                              <div class="address-row">
                                 <span class="address-text"><strong>End:</strong> {trip.endAddress}</span>
-                                <button 
+                                 <button 
                                     class="mini-map-btn" 
                                     onclick={(e) => openGoogleMaps(e, trip)}
                                     title="Map full route"
@@ -762,11 +759,11 @@
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
                                     </svg>
-                                </button>
+                                 </button>
                             </div>
                         {/if}
                     </div>
-                  </div>
+                   </div>
 
                   {#if totalCosts > 0}
                     <div class="detail-section">
@@ -775,29 +772,29 @@
                         {#if trip.fuelCost > 0}
                           <div class="expense-row">
                              <span>Fuel</span>
-                            <span>{formatCurrency(trip.fuelCost)}</span>
+                             <span>{formatCurrency(trip.fuelCost)}</span>
                           </div>
                         {/if}
                 
-                         {#if trip.maintenanceItems}
+                        {#if trip.maintenanceItems}
                            {#each trip.maintenanceItems as item}
                             <div class="expense-row">
                                <span>{item.type}</span>
                                <span>{formatCurrency(item.cost)}</span>
                             </div>
                           {/each}
-                       {/if}
+                        {/if}
                         {#if supplies.length > 0}
                           {#each supplies as item}
                              <div class="expense-row">
-                               <span>{item.type}</span>
+                                <span>{item.type}</span>
                               <span>{formatCurrency(item.cost)}</span>
                             </div>
                            {/each}
                         {/if}
                         <div class="expense-row total">
                           <span>Total Costs</span>
-                           <span>{formatCurrency(totalCosts)}</span>
+                            <span>{formatCurrency(totalCosts)}</span>
                         </div>
                       </div>
                     </div>
@@ -807,18 +804,18 @@
                     <div class="detail-section">
                       <h4 class="section-heading">Notes</h4>
                       <p class="trip-notes">{trip.notes}</p>
-                    </div>
+                   </div>
                   {/if}
                   
                   <div class="action-buttons-footer">
                     <button class="action-btn-lg edit-btn" onclick={() => editTrip(trip.id)}>
-                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11 2L14 5L5 14H2V11L11 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11 2L14 5L5 14H2V11L11 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         Edit
                     </button>
                     <button class="action-btn-lg delete-btn" onclick={() => deleteTrip(trip.id)}>
-                       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4H14M12 4V13C12 13.5304 11.7893 14.0391 11.4142 14.4142C11.0391 14.7893 10.5304 15 10 15H6C5.46957 15 4.96086 14.7893 4.58579 14.4142C4.21071 14.0391 4 13.5304 4 13V4M5 4V3C5 2.46957 5.21071 1.96086 5.58579 1.58579C5.96086 1.21071 6.46957 1 7 1H9C9.53043 1 10.0391 1.21071 10.4142 1.58579C10.7893 1.96086 11 2.46957 11 3V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4H14M12 4V13C12 13.5304 11.7893 14.0391 11.4142 14.4142C11.0391 14.7893 10.5304 15 10 15H6C5.46957 15 4.96086 14.7893 4.58579 14.4142C4.21071 14.0391 4 13.5304 4 13V4M5 4V3C5 2.46957 5.21071 1.96086 5.58579 1.58579C5.96086 1.21071 6.46957 1 7 1H9C9.53043 1 10.0391 1.21071 10.4142 1.58579C10.7893 1.96086 11 2.46957 11 3V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         Trash
-                     </button>
+                      </button>
                   </div>
                 </div>
               {/if}
@@ -828,7 +825,7 @@
     </div>
 
     {#if totalPages > 1}
-      <div class="pagination-controls">
+       <div class="pagination-controls">
            <button class="page-btn" disabled={currentPage === 1} onclick={() => changePage(currentPage - 1)}>
             ← Prev
           </button>
@@ -847,22 +844,50 @@
 </div>
 
 {#if selectedTrips.size > 0}
-    <div class="action-bar-container">
+    <div class="action-bar-container" data-has-selections="true">
         <div class="action-bar">
-            <span class="selected-count">{selectedTrips.size} Selected</span>
-            <div class="action-buttons">
-                <button class="action-pill secondary" onclick={() => selectedTrips = new Set()}>Cancel</button>
+            <div class="action-bar-left">
+                <div class="selection-indicator">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    <span class="selected-count">{selectedTrips.size} {selectedTrips.size === 1 ? 'trip' : 'trips'} selected</span>
+                </div>
+            </div>
+            
+            <div class="action-bar-right">
+                <button class="action-pill secondary" onclick={() => selectedTrips = new Set()}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    <span class="action-text">Cancel</span>
+                </button>
+                
                 <button class="action-pill export" onclick={exportSelected}>
-                  {#if !isPro}🔒{/if}
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12V14H14V12M8 2V10M8 10L4 6M8 10L12 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    Export CSV
+                    {#if !isPro}
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                        </svg>
+                    {:else}
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                    {/if}
+                    <span class="action-text">Export</span>
                 </button>
     
                 <button class="action-pill danger" onclick={deleteSelected}>
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 4H14M5 4V3C5 2.4 5.4 2 6 2H10C10.6 2 11 2.4 11 3V4M6 8V12M10 8V12" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    Delete
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                    <span class="action-text">Delete</span>
                 </button>
-             </div>
+            </div>
         </div>
     </div>
 {/if}
@@ -878,7 +903,8 @@
         </h3>
         
         <p class="text-gray-600 text-base leading-relaxed">
-            Data Export is a Pro feature. Upgrade now to download your trip history for taxes!
+            Data Export is a Pro feature.
+Upgrade now to download your trip history for taxes!
         </p>
 
         <div class="bg-gray-50 p-4 rounded-lg text-left text-sm space-y-2 border border-gray-100">
@@ -892,7 +918,7 @@
             </div>
             <div class="flex items-center gap-2">
                  <span class="text-green-500 text-lg">✓</span>
-                 <span class="text-gray-700">Unlimited Monthly Trips</span>
+                  <span class="text-gray-700">Unlimited Monthly Trips</span>
             </div>
             <div class="flex items-center gap-2">
                  <span class="text-green-500 text-lg">✓</span>
@@ -900,7 +926,7 @@
             </div>
         </div>
 
-        <div class="flex gap-3 justify-center pt-2">
+         <div class="flex gap-3 justify-center pt-2">
             <Button variant="outline" onclick={() => isUpgradeModalOpen = false}>
                 Maybe Later
             </Button>
@@ -920,7 +946,7 @@
       <div class="skeleton skeleton-title"></div>
       <div class="skeleton skeleton-button"></div>
     </div>
-    
+     
     <div class="loading-stats">
       {#each Array(4) as _}
         <div class="skeleton skeleton-stat"></div>
@@ -936,7 +962,7 @@
       {#each Array(6) as _}
         <div class="trip-skeleton">
           <div class="skeleton-top">
-             <div class="skeleton skeleton-text" style="width: 30%; height: 14px;"></div>
+              <div class="skeleton skeleton-text" style="width: 30%; height: 14px;"></div>
             <div class="skeleton skeleton-text" style="width: 60%; height: 18px; margin-top: 8px;"></div>
           </div>
           <div class="skeleton-stats-grid">
@@ -958,7 +984,7 @@
     <div class="error-content">
       <div class="error-icon">
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
+             <circle cx="12" cy="12" r="10"/>
           <line x1="12" y1="8" x2="12" y2="12"/>
           <line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
@@ -998,7 +1024,7 @@
         <summary>Technical Details</summary>
         <pre><code>{JSON.stringify({
           message: error.message,
-           time: new Date().toISOString(),
+          time: new Date().toISOString(),
           path: $page.url.pathname,
           userAgent: navigator.userAgent
         }, null, 2)}</code></pre>
@@ -1013,7 +1039,7 @@
     <div class="settings-modal-content">
         <div class="top-tabs">
             <button 
-                class="top-tab-btn" 
+                 class="top-tab-btn" 
                 class:active={settingsTab === 'defaults'} 
                 onclick={() => settingsTab = 'defaults'}
             >
@@ -1033,7 +1059,7 @@
                 <p class="text-sm text-gray-500 mb-2">Pre-fill new trips with these values.</p>
                 
                 <div class="form-group">
-                    <label for="default-mpg" class="block text-sm font-medium text-gray-700 mb-1">Default MPG</label>
+                   <label for="default-mpg" class="block text-sm font-medium text-gray-700 mb-1">Default MPG</label>
                     <input id="default-mpg" type="number" bind:value={settings.defaultMPG} placeholder="25" min="1" step="0.1" class="w-full p-2 border rounded-lg" />
                 </div>
                 
@@ -1060,7 +1086,7 @@
                 </div>
                 
                 <div class="form-group">
-                    <label for="default-end" class="block text-sm font-medium text-gray-700 mb-1">Default End Address</label>
+                     <label for="default-end" class="block text-sm font-medium text-gray-700 mb-1">Default End Address</label>
                     <input 
                         id="default-end"
                         type="text" 
@@ -1073,7 +1099,7 @@
                     />
                 </div>
                 
-                <div class="modal-actions pt-4">
+                 <div class="modal-actions pt-4">
                     <button class="btn-primary w-full" onclick={saveDefaultSettings}>Save Defaults</button>
                 </div>
             </div>
@@ -1099,13 +1125,13 @@
                 </div>
 
                 <p class="text-sm text-gray-500 mb-4">
-                    Manage {activeCategoryType} options.
+                   Manage {activeCategoryType} options.
                 </p>
                 
                 <div class="cat-list">
                     {#each activeCategories as cat}
                         <div class="cat-item">
-                            <span class="cat-badge">{cat}</span>
+                             <span class="cat-badge">{cat}</span>
                             <button class="cat-delete" onclick={() => removeCategory(cat)} aria-label="Delete Category">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                             </button>
@@ -1146,20 +1172,18 @@
     background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; border: none; 
     border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; 
     box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); transition: transform 0.1s; cursor: pointer;
-}
+  }
   .btn-primary:active { transform: translateY(1px); }
 
   .btn-secondary { display: inline-flex; align-items: center; justify-content: center; padding: 10px; 
     background: white; border: 1px solid #E5E7EB; color: #374151; border-radius: 8px; 
     font-weight: 600; font-size: 14px; cursor: pointer; transition: background 0.2s; text-decoration: none;
-}
+  }
 
   @media (hover: hover) {
     .btn-secondary:hover { background: #F9FAFB; }
     .cat-delete:hover { background: #EF4444; color: white; }
-    .action-pill.secondary:hover { background: #4B5563; }
-    .action-pill.export:hover { background: #F3F4F6; }
-    .action-pill.danger:hover { background: #DC2626; }
+    
     .page-btn:hover:not(:disabled) { border-color: #FF7F50; color: #FF7F50; }
   }
 
@@ -1168,7 +1192,8 @@
   
   /* Top Tabs for Modal */
   .top-tabs { display: flex; border-bottom: 2px solid #E5E7EB; margin-bottom: 20px; }
-  .top-tab-btn { flex: 1; padding: 12px; font-weight: 600; color: #6B7280; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+  .top-tab-btn { flex: 1; padding: 12px; font-weight: 600; color: #6B7280; border: none; background: none; cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -2px; }
   .top-tab-btn.active { color: #FF7F50; border-bottom-color: #FF7F50; }
 
   /* Sub Tabs for Categories */
@@ -1216,6 +1241,7 @@
   .checkmark:after { content: ""; position: absolute; display: none; }
   .checkbox-container input:checked ~ .checkmark:after { display: block; }
   .checkbox-container .checkmark:after { left: 6px; top: 2px; width: 5px; height: 10px; border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  
   .trip-list-cards { display: flex; flex-direction: column; gap: 12px; }
   .trip-card-wrapper { position: relative; overflow: hidden; border-radius: 12px; background: #F3F4F6; }
   .swipe-bg { position: absolute; inset: 0; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; z-index: 0; }
@@ -1226,101 +1252,40 @@
   .trip-card:active { background-color: #F9FAFB; }
   .trip-card.expanded { border-color: #FF7F50; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
   .trip-card.selected { background-color: #FFF7ED; border-color: #FF7F50; }
+  
   @keyframes pulse-border { 0% { border-color: #FF7F50; box-shadow: 0 0 0 0 rgba(255, 127, 80, 0.4); } 70% { border-color: #FF7F50; box-shadow: 0 0 0 10px rgba(255, 127, 80, 0); } 100% { border-color: #E5E7EB; box-shadow: 0 0 0 0 rgba(255, 127, 80, 0); } }
   :global(.highlight-pulse) { animation: pulse-border 2s ease-out; }
+  
   .card-top { display: grid; grid-template-columns: auto 1fr auto 20px; align-items: center; gap: 12px; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #F3F4F6; }
   .selection-box { display: flex; align-items: center; justify-content: center; }
   .trip-route-date { overflow: hidden; }
   .trip-date-display { display: block; font-size: 12px; font-weight: 600; color: #6B7280; margin-bottom: 4px; }
   .time-range { color: #4B5563; margin-left: 4px; font-weight: 500; }
   
-  /* New wrapper for title and button */
-  .trip-title-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      min-width: 0;
-  }
-  
-  .trip-route-title { 
-      font-size: 16px; 
-      font-weight: 700; 
-      color: #111827; 
-      margin: 0; 
-      white-space: nowrap; 
-      overflow: hidden; 
-      text-overflow: ellipsis; 
-      flex: 1; /* Allow title to take available space */
-  }
+  .trip-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .trip-route-title { font-size: 16px; font-weight: 700; color: #111827; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
 
-  .map-link-btn {
-      background: none;
-      border: 1px solid #E5E7EB;
-      color: #6B7280;
-      cursor: pointer;
-      padding: 4px;
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s;
-      flex-shrink: 0;
-      height: 24px;
-      width: 24px;
-  }
-  
-  .map-link-btn:hover {
-      color: #FF7F50;
-      border-color: #FF7F50;
-      background: #FFF7ED;
-  }
+  .map-link-btn { background: none; border: 1px solid #E5E7EB; color: #6B7280; cursor: pointer; padding: 4px; border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; height: 24px; width: 24px; }
+  .map-link-btn:hover { color: #FF7F50; border-color: #FF7F50; background: #FFF7ED; }
 
-  /* NEW STYLES FOR ADDRESS ROWS */
-  .address-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 14px;
-      color: #374151;
-      margin: 4px 0;
-  }
+  .address-row { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #374151; margin: 4px 0; }
+  .address-text { flex: 1; min-width: 0; word-break: break-word; }
   
-  .address-text {
-      flex: 1;
-      min-width: 0;
-      word-break: break-word;
-  }
-  
-  .mini-map-btn {
-      background: none;
-      border: 1px solid #E5E7EB;
-      color: #9CA3AF;
-      cursor: pointer;
-      padding: 4px;
-      border-radius: 4px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s;
-      flex-shrink: 0;
-  }
-  
-  .mini-map-btn:hover {
-      color: #FF7F50;
-      border-color: #FF7F50;
-      background: #FFF7ED;
-  }
+  .mini-map-btn { background: none; border: 1px solid #E5E7EB; color: #9CA3AF; cursor: pointer; padding: 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }
+  .mini-map-btn:hover { color: #FF7F50; border-color: #FF7F50; background: #FFF7ED; }
 
   .profit-display-large { font-size: 18px; font-weight: 800; white-space: nowrap; }
   .profit-display-large.positive { color: #10B981; }
   .profit-display-large.negative { color: #DC2626; }
   .expand-icon { color: #9CA3AF; transition: transform 0.2s; }
   .trip-card.expanded .expand-icon { transform: rotate(180deg); }
+  
   .card-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
   .stat-item { display: flex; flex-direction: column; align-items: center; }
   .stat-label { font-size: 11px; color: #9CA3AF; text-transform: uppercase; }
   .stat-value { font-size: 14px; font-weight: 600; color: #4B5563; }
   .hourly-pay { color: #059669; }
+  
   .expanded-details { display: flex; flex-direction: column; gap: 16px; padding-top: 16px; border-top: 1px dashed #E5E7EB; margin-top: 16px; }
   .detail-section { background: #F9FAFB; padding: 12px; border-radius: 8px; }
   .section-heading { font-size: 13px; font-weight: 700; color: #1F2937; margin-bottom: 8px; border-bottom: 1px solid #E5E7EB; padding-bottom: 6px; }
@@ -1329,203 +1294,283 @@
   .expense-row { display: flex; justify-content: space-between; font-size: 13px; color: #4B5563; }
   .expense-row.total { border-top: 1px solid #E5E7EB; margin-top: 4px; padding-top: 4px; font-weight: 700; color: #111827; }
   .trip-notes { font-style: italic; font-size: 14px; color: #4B5563; line-height: 1.4; }
+  
   .action-buttons-footer { display: flex; gap: 12px; }
   .action-btn-lg { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-radius: 8px; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 0.2s; border: 2px solid; font-size: 14px; }
   .edit-btn { background: #EFF6FF; color: #2563EB; border-color: #2563EB; }
   .delete-btn { background: #FEF2F2; color: #DC2626; border-color: #DC2626; }
+  
   .empty-state { text-align: center; padding: 40px 20px; color: #6B7280; font-size: 15px; }
-  .action-bar-container { position: fixed; bottom: 20px; left: 0; right: 0; display: flex; justify-content: center; z-index: 50; padding: 0 16px; animation: slideUp 0.3s ease-out; }
-  .action-bar { background: #1F2937; color: white; padding: 8px 16px; border-radius: 100px; display: flex; align-items: center; gap: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
-  .selected-count { font-weight: 700; font-size: 14px; }
-  .action-buttons { display: flex; gap: 8px; }
-  .action-pill { border: none; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
-  .action-pill.secondary { background: #374151; color: #E5E7EB; }
-  .action-pill.export { background: #E5E7EB; color: #1F2937; }
-  .action-pill.danger { background: #EF4444; color: white; }
-  @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  
+  /* Hide footer when selections are active - using body class */
+  :global(body.has-selections .mobile-footer),
+  :global(body.has-selections footer),
+  :global(body.has-selections nav[class*="mobile"]),
+  :global(body.has-selections .bottom-nav) {
+    transform: translateY(100%);
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* ACTION BAR STYLES - REPLACES FOOTER ON MOBILE */
+  .action-bar-container { 
+    position: fixed; 
+    bottom: 0;
+    left: 0; 
+    right: 0; 
+    display: flex; 
+    justify-content: center; 
+    z-index: 1000;
+    padding: 0;
+    animation: slideUpFade 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+  }
+
+  .action-bar { 
+    background: white;
+    padding: 12px 16px;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+    max-width: 100%;
+    width: 100%;
+    pointer-events: auto;
+    border-top: 1px solid #E5E7EB;
+  }
+
+  .action-bar-left {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .selection-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #FF7F50;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 6px 12px;
+    background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
+    border-radius: 10px;
+    border: 1px solid #FED7AA;
+  }
+
+  .selection-indicator svg {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+  }
+
+  .selected-count { 
+    color: #C2410C;
+    white-space: nowrap;
+  }
+
+  .action-bar-right { 
+    display: flex; 
+    gap: 6px;
+    justify-content: center;
+  }
+
+  .action-pill { 
+    border: 2px solid transparent;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: inherit;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  }
+
+  .action-pill svg {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+  }
+
+  /* Hide text on very small screens */
+  .action-text {
+    display: none;
+  }
+
+  .action-pill.secondary { 
+    background: white;
+    color: #6B7280;
+    border-color: #E5E7EB;
+  }
+
+  .action-pill.export { 
+    background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
+    color: #C2410C;
+    border-color: #FED7AA;
+  }
+
+  .action-pill.danger { 
+    background: linear-gradient(135deg, #FEE2E2 0%, #FECACA 100%);
+    color: #DC2626;
+    border-color: #FCA5A5;
+  }
+
+  .action-pill:active {
+    transform: scale(0.95);
+  }
+
+  @media (hover: hover) {
+    .action-pill.secondary:hover { 
+      background: #F9FAFB;
+      border-color: #D1D5DB;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .action-pill.export:hover { 
+      background: linear-gradient(135deg, #FFEDD5 0%, #FED7AA 100%);
+      border-color: #FDBA74;
+      box-shadow: 0 2px 4px rgba(251,146,60,0.15);
+    }
+    
+    .action-pill.danger:hover { 
+      background: linear-gradient(135deg, #FECACA 0%, #FCA5A5 100%);
+      border-color: #F87171;
+      box-shadow: 0 2px 4px rgba(220,38,38,0.15);
+    }
+  }
+
+  @keyframes slideUpFade { 
+    from { 
+      transform: translateY(100%);
+      opacity: 0;
+    } 
+    to { 
+      transform: translateY(0);
+      opacity: 1;
+    } 
+  }
+
+  /* Show text on slightly larger mobile screens */
+  @media (min-width: 380px) {
+    .action-text {
+      display: inline;
+    }
+    
+    .action-pill {
+      padding: 10px 14px;
+    }
+  }
+
+  /* Tablet and up - floating style */
+  @media (min-width: 640px) {
+    .action-bar-container {
+      bottom: 30px;
+      padding: 0 16px;
+    }
+    
+    .action-bar { 
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      max-width: 700px;
+      gap: 16px;
+      border-radius: 16px;
+      border: 1px solid #E5E7EB;
+      box-shadow: 
+        0 0 0 1px rgba(0,0,0,0.05),
+        0 10px 25px -5px rgba(0,0,0,0.1),
+        0 8px 10px -6px rgba(0,0,0,0.1);
+    }
+    
+    .action-bar-left {
+      justify-content: flex-start;
+    }
+    
+    .selection-indicator {
+      font-size: 14px;
+      padding: 8px 14px;
+    }
+    
+    .action-bar-right {
+      gap: 8px;
+    }
+    
+    .action-pill {
+      flex: 0 0 auto;
+      min-width: auto;
+      padding: 10px 18px;
+      font-size: 14px;
+    }
+    
+    .action-text {
+      display: inline;
+    }
+  }
+
+  /* Desktop */
+  @media (min-width: 1024px) {
+    .action-bar {
+      max-width: 800px;
+      padding: 16px 24px;
+    }
+    
+    .selection-indicator {
+      font-size: 15px;
+      padding: 8px 16px;
+    }
+    
+    .action-pill {
+      padding: 12px 24px;
+      font-size: 15px;
+    }
+  }
+  
   .pagination-controls { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 32px; }
   .page-btn { padding: 8px 16px; background: white; border: 1px solid #E5E7EB; border-radius: 8px; font-weight: 600; font-size: 14px; color: #374151; cursor: pointer; transition: all 0.2s; }
   .page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .page-status { font-size: 14px; color: #4B5563; font-weight: 500; }
 
   /* Loading state styles */
-  .trips-loading {
-    padding: 2rem;
-    animation: fadeIn 0.3s ease-out;
-  }
-
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
-  .loading-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-  }
-
-  .loading-stats {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-    margin-bottom: 24px;
-  }
-
-  .loading-filters {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin-bottom: 20px;
-  }
-
-  .skeleton {
-    background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
-    background-size: 200% 100%;
-    animation: shimmer 1.5s infinite;
-    border-radius: 0.5rem;
-  }
-
-  .skeleton-title {
-    width: 200px;
-    height: 2rem;
-  }
-
-  .skeleton-button {
-    width: 120px;
-    height: 2.5rem;
-  }
-
-  .skeleton-stat {
-    height: 80px;
-    border-radius: 12px;
-  }
-
-  .skeleton-input {
-    flex: 1;
-    height: 2.5rem;
-  }
-
-  .skeleton-select {
-    width: 150px;
-    height: 2.5rem;
-  }
-
-  .trip-skeleton {
-    background: white;
-    padding: 1.5rem;
-    border-radius: 12px;
-    border: 1px solid #e5e7eb;
-  }
-
-  .skeleton-top {
-    margin-bottom: 1rem;
-  }
-
-  .skeleton-text {
-    height: 1rem;
-    margin-bottom: 0.5rem;
-    background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
-    background-size: 200% 100%;
-    animation: shimmer 1.5s infinite;
-    border-radius: 0.25rem;
-  }
-
-  .skeleton-stats-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-  }
-
-  @keyframes shimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
+  .trips-loading { padding: 2rem; animation: fadeIn 0.3s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .loading-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .loading-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
+  .loading-filters { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+  .skeleton { background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 0.5rem; }
+  .skeleton-title { width: 200px; height: 2rem; }
+  .skeleton-button { width: 120px; height: 2.5rem; }
+  .skeleton-stat { height: 80px; border-radius: 12px; }
+  .skeleton-input { flex: 1; height: 2.5rem; }
+  .skeleton-select { width: 150px; height: 2.5rem; }
+  .trip-skeleton { background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid #e5e7eb; }
+  .skeleton-top { margin-bottom: 1rem; }
+  .skeleton-text { height: 1rem; margin-bottom: 0.5rem; background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 0.25rem; }
+  .skeleton-stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
   /* Error state styles */
-  .trips-error {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 60vh;
-    padding: 2rem;
-    animation: fadeIn 0.3s ease-out;
-  }
-
-  .error-content {
-    text-align: center;
-    max-width: 500px;
-  }
-
-  .error-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 80px;
-    height: 80px;
-    background: #fee2e2;
-    border-radius: 50%;
-    color: #dc2626;
-    margin-bottom: 1.5rem;
-  }
-
-  .trips-error h2 {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: #111827;
-    margin: 0 0 0.5rem;
-  }
-
-  .error-message {
-    color: #6b7280;
-    margin: 0 0 2rem;
-    line-height: 1.6;
-  }
-
-  .error-message a {
-    color: #FF7F50;
-    text-decoration: underline;
-    font-weight: 600;
-  }
-
-  .error-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    margin-bottom: 2rem;
-  }
-
-  .error-details {
-    margin-top: 2rem;
-    padding: 1rem;
-    background: #f9fafb;
-    border-radius: 0.5rem;
-    text-align: left;
-  }
-
-  .error-details summary {
-    cursor: pointer;
-    color: #6b7280;
-    font-size: 0.875rem;
-    font-weight: 500;
-    user-select: none;
-  }
-
-  .error-details summary:hover {
-    color: #374151;
-  }
-
-  .error-details pre {
-    margin-top: 0.5rem;
-    padding: 0.75rem;
-    background: #1f2937;
-    color: #f3f4f6;
-    border-radius: 0.375rem;
-    overflow-x: auto;
-    font-size: 0.75rem;
-    line-height: 1.5;
-  }
+  .trips-error { display: flex; align-items: center; justify-content: center; min-height: 60vh; padding: 2rem; animation: fadeIn 0.3s ease-out; }
+  .error-content { text-align: center; max-width: 500px; }
+  .error-icon { display: inline-flex; align-items: center; justify-content: center; width: 80px; height: 80px; background: #fee2e2; border-radius: 50%; color: #dc2626; margin-bottom: 1.5rem; }
+  .trips-error h2 { font-size: 1.5rem; font-weight: 600; color: #111827; margin: 0 0 0.5rem; }
+  .error-message { color: #6b7280; margin: 0 0 2rem; line-height: 1.6; }
+  .error-message a { color: #FF7F50; text-decoration: underline; font-weight: 600; }
+  .error-actions { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 2rem; }
+  .error-details { margin-top: 2rem; padding: 1rem; background: #f9fafb; border-radius: 0.5rem; text-align: left; }
+  .error-details summary { cursor: pointer; color: #6b7280; font-size: 0.875rem; font-weight: 500; user-select: none; }
+  .error-details summary:hover { color: #374151; }
+  .error-details pre { margin-top: 0.5rem; padding: 0.75rem; background: #1f2937; color: #f3f4f6; border-radius: 0.375rem; overflow-x: auto; font-size: 0.75rem; line-height: 1.5; }
 
   @media (min-width: 640px) {
     .filters-bar { flex-direction: row; justify-content: space-between; align-items: center; }
@@ -1544,4 +1589,514 @@
     .stats-summary { grid-template-columns: repeat(4, 1fr); }
     .search-box { max-width: 300px; }
   }
+  
+/* ACTION BAR STYLES - MOBILE OPTIMIZED */
+.action-bar-container { 
+  position: fixed; 
+  bottom: 80px; /* Moved up to clear mobile footer nav */
+  left: 0; 
+  right: 0; 
+  display: flex; 
+  justify-content: center; 
+  z-index: 100;
+  padding: 8px 12px 16px 12px;
+  background: linear-gradient(to top, rgba(0,0,0,0.05) 0%, transparent 100%);
+  animation: slideUpFade 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.action-bar { 
+  background: white;
+  padding: 12px;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 
+    0 0 0 1px rgba(0,0,0,0.05),
+    0 10px 25px -5px rgba(0,0,0,0.1),
+    0 8px 10px -6px rgba(0,0,0,0.1);
+  max-width: 100%;
+  width: 100%;
+  pointer-events: auto;
+}
+
+.action-bar-left {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.selection-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #FF7F50;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 6px 12px;
+  background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
+  border-radius: 10px;
+  border: 1px solid #FED7AA;
+}
+
+.selection-indicator svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.selected-count { 
+  color: #C2410C;
+  white-space: nowrap;
+}
+
+.action-bar-right { 
+  display: flex; 
+  gap: 6px;
+  justify-content: center;
+}
+
+.action-pill { 
+  border: 2px solid transparent;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.action-pill svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+/* Hide text on very small screens */
+.action-text {
+  display: none;
+}
+
+.action-pill.secondary { 
+  background: white;
+  color: #6B7280;
+  border-color: #E5E7EB;
+}
+
+.action-pill.export { 
+  background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
+  color: #C2410C;
+  border-color: #FED7AA;
+}
+
+.action-pill.danger { 
+  background: linear-gradient(135deg, #FEE2E2 0%, #FECACA 100%);
+  color: #DC2626;
+  border-color: #FCA5A5;
+}
+
+.action-pill:active {
+  transform: scale(0.95);
+}
+
+@media (hover: hover) {
+  .action-pill.secondary:hover { 
+    background: #F9FAFB;
+    border-color: #D1D5DB;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  
+  .action-pill.export:hover { 
+    background: linear-gradient(135deg, #FFEDD5 0%, #FED7AA 100%);
+    border-color: #FDBA74;
+    box-shadow: 0 2px 4px rgba(251,146,60,0.15);
+  }
+  
+  .action-pill.danger:hover { 
+    background: linear-gradient(135deg, #FECACA 0%, #FCA5A5 100%);
+    border-color: #F87171;
+    box-shadow: 0 2px 4px rgba(220,38,38,0.15);
+  }
+}
+
+@keyframes slideUpFade { 
+  from { 
+    transform: translateY(20px);
+    opacity: 0;
+  } 
+  to { 
+    transform: translateY(0);
+    opacity: 1;
+  } 
+}
+
+/* Show text on slightly larger mobile screens */
+@media (min-width: 380px) {
+  .action-text {
+    display: inline;
+  }
+  
+  .action-pill {
+    padding: 10px 14px;
+  }
+}
+
+/* Tablet and up */
+@media (min-width: 640px) {
+  .action-bar-container {
+    bottom: 30px; /* Desktop doesn't need as much clearance */
+    padding: 0 16px;
+  }
+  
+  .action-bar { 
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    max-width: 700px;
+    gap: 16px;
+  }
+  
+  .action-bar-left {
+    justify-content: flex-start;
+  }
+  
+  .selection-indicator {
+    font-size: 14px;
+    padding: 8px 14px;
+  }
+  
+  .action-bar-right {
+    gap: 8px;
+  }
+  
+  .action-pill {
+    flex: 0 0 auto;
+    min-width: auto;
+    padding: 10px 18px;
+    font-size: 14px;
+  }
+  
+  .action-text {
+    display: inline;
+  }
+}
+
+/* Desktop */
+@media (min-width: 1024px) {
+  .action-bar {
+    max-width: 800px;
+    padding: 16px 24px;
+  }
+  
+  .selection-indicator {
+    font-size: 15px;
+    padding: 8px 16px;
+  }
+  
+  .action-pill {
+    padding: 12px 24px;
+    font-size: 15px;
+  }
+}  
+  @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  
+  .pagination-controls { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 32px; }
+  .page-btn { padding: 8px 16px; background: white; border: 1px solid #E5E7EB; border-radius: 8px; font-weight: 600; font-size: 14px; color: #374151; cursor: pointer; transition: all 0.2s; }
+  .page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .page-status { font-size: 14px; color: #4B5563; font-weight: 500; }
+
+  /* Loading state styles */
+  .trips-loading { padding: 2rem; animation: fadeIn 0.3s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .loading-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .loading-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
+  .loading-filters { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+  .skeleton { background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 0.5rem; }
+  .skeleton-title { width: 200px; height: 2rem; }
+  .skeleton-button { width: 120px; height: 2.5rem; }
+  .skeleton-stat { height: 80px; border-radius: 12px; }
+  .skeleton-input { flex: 1; height: 2.5rem; }
+  .skeleton-select { width: 150px; height: 2.5rem; }
+  .trip-skeleton { background: white; padding: 1.5rem; border-radius: 12px; border: 1px solid #e5e7eb; }
+  .skeleton-top { margin-bottom: 1rem; }
+  .skeleton-text { height: 1rem; margin-bottom: 0.5rem; background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 0.25rem; }
+  .skeleton-stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  /* Error state styles */
+  .trips-error { display: flex; align-items: center; justify-content: center; min-height: 60vh; padding: 2rem; animation: fadeIn 0.3s ease-out; }
+  .error-content { text-align: center; max-width: 500px; }
+  .error-icon { display: inline-flex; align-items: center; justify-content: center; width: 80px; height: 80px; background: #fee2e2; border-radius: 50%; color: #dc2626; margin-bottom: 1.5rem; }
+  .trips-error h2 { font-size: 1.5rem; font-weight: 600; color: #111827; margin: 0 0 0.5rem; }
+  .error-message { color: #6b7280; margin: 0 0 2rem; line-height: 1.6; }
+  .error-message a { color: #FF7F50; text-decoration: underline; font-weight: 600; }
+  .error-actions { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 2rem; }
+  .error-details { margin-top: 2rem; padding: 1rem; background: #f9fafb; border-radius: 0.5rem; text-align: left; }
+  .error-details summary { cursor: pointer; color: #6b7280; font-size: 0.875rem; font-weight: 500; user-select: none; }
+  .error-details summary:hover { color: #374151; }
+  .error-details pre { margin-top: 0.5rem; padding: 0.75rem; background: #1f2937; color: #f3f4f6; border-radius: 0.375rem; overflow-x: auto; font-size: 0.75rem; line-height: 1.5; }
+
+  @media (min-width: 640px) {
+    .filters-bar { flex-direction: row; justify-content: space-between; align-items: center; }
+    .search-box { max-width: 300px; }
+    .date-group { width: auto; }
+    .filter-group { width: auto; flex-wrap: nowrap; }
+    .filter-select { width: 140px; flex: none; }
+    .stats-summary { grid-template-columns: repeat(2, 1fr); }
+    .card-stats { grid-template-columns: repeat(5, 1fr); }
+    .error-actions { flex-direction: row; justify-content: center; }
+    .loading-stats { grid-template-columns: repeat(4, 1fr); }
+    .loading-filters { flex-direction: row; }
+    .skeleton-stats-grid { grid-template-columns: repeat(5, 1fr); }
+    
+    /* Reset action bar for desktop */
+    .action-bar-container { bottom: 30px; }
+  }
+  @media (min-width: 1024px) {
+    .stats-summary { grid-template-columns: repeat(4, 1fr); }
+    .search-box { max-width: 300px; }
+  }
+
+/* Hide footer when selections are active */
+:global(body:has([data-has-selections="true"]) .mobile-footer),
+:global(body:has([data-has-selections="true"]) footer) {
+  transform: translateY(100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ACTION BAR STYLES - REPLACES FOOTER ON MOBILE */
+.action-bar-container { 
+  position: fixed; 
+  bottom: 0;
+  left: 0; 
+  right: 0; 
+  display: flex; 
+  justify-content: center; 
+  z-index: 100;
+  padding: 0;
+  animation: slideUpFade 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.action-bar { 
+  background: white;
+  padding: 12px 16px;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 
+    0 -2px 10px rgba(0,0,0,0.1);
+  max-width: 100%;
+  width: 100%;
+  pointer-events: auto;
+  border-top: 1px solid #E5E7EB;
+}
+
+.action-bar-left {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.selection-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #FF7F50;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 6px 12px;
+  background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
+  border-radius: 10px;
+  border: 1px solid #FED7AA;
+}
+
+.selection-indicator svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.selected-count { 
+  color: #C2410C;
+  white-space: nowrap;
+}
+
+.action-bar-right { 
+  display: flex; 
+  gap: 6px;
+  justify-content: center;
+}
+
+.action-pill { 
+  border: 2px solid transparent;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.action-pill svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+/* Hide text on very small screens */
+.action-text {
+  display: none;
+}
+
+.action-pill.secondary { 
+  background: white;
+  color: #6B7280;
+  border-color: #E5E7EB;
+}
+
+.action-pill.export { 
+  background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
+  color: #C2410C;
+  border-color: #FED7AA;
+}
+
+.action-pill.danger { 
+  background: linear-gradient(135deg, #FEE2E2 0%, #FECACA 100%);
+  color: #DC2626;
+  border-color: #FCA5A5;
+}
+
+.action-pill:active {
+  transform: scale(0.95);
+}
+
+@media (hover: hover) {
+  .action-pill.secondary:hover { 
+    background: #F9FAFB;
+    border-color: #D1D5DB;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  
+  .action-pill.export:hover { 
+    background: linear-gradient(135deg, #FFEDD5 0%, #FED7AA 100%);
+    border-color: #FDBA74;
+    box-shadow: 0 2px 4px rgba(251,146,60,0.15);
+  }
+  
+  .action-pill.danger:hover { 
+    background: linear-gradient(135deg, #FECACA 0%, #FCA5A5 100%);
+    border-color: #F87171;
+    box-shadow: 0 2px 4px rgba(220,38,38,0.15);
+  }
+}
+
+@keyframes slideUpFade { 
+  from { 
+    transform: translateY(100%);
+    opacity: 0;
+  } 
+  to { 
+    transform: translateY(0);
+    opacity: 1;
+  } 
+}
+
+/* Show text on slightly larger mobile screens */
+@media (min-width: 380px) {
+  .action-text {
+    display: inline;
+  }
+  
+  .action-pill {
+    padding: 10px 14px;
+  }
+}
+
+/* Tablet and up - floating style */
+@media (min-width: 640px) {
+  .action-bar-container {
+    bottom: 30px;
+    padding: 0 16px;
+  }
+  
+  .action-bar { 
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    max-width: 700px;
+    gap: 16px;
+    border-radius: 16px;
+    border: 1px solid #E5E7EB;
+    box-shadow: 
+      0 0 0 1px rgba(0,0,0,0.05),
+      0 10px 25px -5px rgba(0,0,0,0.1),
+      0 8px 10px -6px rgba(0,0,0,0.1);
+  }
+  
+  .action-bar-left {
+    justify-content: flex-start;
+  }
+  
+  .selection-indicator {
+    font-size: 14px;
+    padding: 8px 14px;
+  }
+  
+  .action-bar-right {
+    gap: 8px;
+  }
+  
+  .action-pill {
+    flex: 0 0 auto;
+    min-width: auto;
+    padding: 10px 18px;
+    font-size: 14px;
+  }
+  
+  .action-text {
+    display: inline;
+  }
+}
+
+/* Desktop */
+@media (min-width: 1024px) {
+  .action-bar {
+    max-width: 800px;
+    padding: 16px 24px;
+  }
+  
+  .selection-indicator {
+    font-size: 15px;
+    padding: 8px 16px;
+  }
+  
+  .action-pill {
+    padding: 12px 24px;
+    font-size: 15px;
+  }
+}
 </style>
