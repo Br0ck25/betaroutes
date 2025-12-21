@@ -2,7 +2,7 @@
 import { dev } from '$app/environment';
 import type { Handle } from '@sveltejs/kit';
 // [!code ++] Import the user finder to check real-time status
-import { findUserById } from '$lib/server/userService';
+import { findUserById } from '$lib/server/userService'; 
 
 export const handle: Handle = async ({ event, resolve }) => {
     // 1. Ensure KV bindings exist (mock in dev using FILE store)
@@ -18,6 +18,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
     // Validate format before trusting the cookie to avoid wasting KV reads
+    // If no cookie or invalid format, skip KV lookup entirely
     if (!sessionId || !UUID_REGEX.test(sessionId)) {
         event.locals.user = null;
         return resolve(event);
@@ -25,6 +26,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
     try {
         // [!code fix] Get both Session KV and Users KV
+        // (Matched to your wrangler.toml binding)
         const sessionKV = event.platform?.env?.BETA_SESSIONS_KV;
         const usersKV = event.platform?.env?.BETA_USERS_KV;
 

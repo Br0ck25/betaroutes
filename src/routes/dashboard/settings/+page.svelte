@@ -60,7 +60,9 @@
   let isDeleting = false;
   
   // Pro Plan Check & Modal State
-  $: isPro = ['pro', 'business', 'premium', 'enterprise'].includes($currentUser?.plan || '');
+  // [!code fix] Use $auth.user to ensure UI matches the badge status
+  $: isPro = ['pro', 'business', 'premium', 'enterprise'].includes($auth.user?.plan || '');
+  
   let isUpgradeModalOpen = false;
   let isCheckingOut = false;
   let isOpeningPortal = false; // New state for portal loading
