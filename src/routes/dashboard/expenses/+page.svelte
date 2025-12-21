@@ -858,16 +858,13 @@
 
   .empty-state { text-align: center; padding: 40px; color: #6B7280; font-size: 15px; }
 
-  /* Hide footer when selections are active - using body class */
-  :global(body.has-selections .mobile-footer),
-  :global(body.has-selections footer),
-  :global(body.has-selections nav[class*="mobile"]),
-  :global(body.has-selections .bottom-nav) {
-    transform: translateY(100%);
-    opacity: 0;
-    pointer-events: none;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
+/* Hide footer when selections are active - using body class */
+:global(body.has-selections .mobile-footer),
+:global(body.has-selections footer),
+:global(body.has-selections nav[class*="mobile"]),
+:global(body.has-selections .bottom-nav) {
+  display: none !important;
+}
 
   /* ACTION BAR STYLES - REPLACES FOOTER ON MOBILE */
 .action-bar-container { 
