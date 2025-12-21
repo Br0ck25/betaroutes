@@ -56,13 +56,19 @@
 
   // --- SETTINGS LOGIC ---
 
-  $: if (typeof document !== 'undefined') {
-    if (selectedTrips.size > 0) {
+let lastHadSelections = false;
+
+$: if (typeof document !== 'undefined') {
+  const hasSelections = selectedTrips.size > 0;
+  if (hasSelections !== lastHadSelections) {
+    if (hasSelections) {
       document.body.classList.add('has-selections');
     } else {
       document.body.classList.remove('has-selections');
     }
+    lastHadSelections = hasSelections;
   }
+}
 
   // Clean up body class when component is destroyed
   onDestroy(() => {
