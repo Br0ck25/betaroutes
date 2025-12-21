@@ -21,6 +21,8 @@
   let filterProfit = 'all';
   let startDate = '';
   let endDate = '';
+  let lastHadSelections = false;
+  let isMounted = false;
 
   // --- PAGINATION STATE ---
   let currentPage = 1;
@@ -55,27 +57,6 @@
   }
 
   // --- SETTINGS LOGIC ---
-
-let lastHadSelections = false;
-
-$: if (typeof document !== 'undefined') {
-  const hasSelections = selectedTrips.size > 0;
-  if (hasSelections !== lastHadSelections) {
-    if (hasSelections) {
-      document.body.classList.add('has-selections');
-    } else {
-      document.body.classList.remove('has-selections');
-    }
-    lastHadSelections = hasSelections;
-  }
-}
-
-  // Clean up body class when component is destroyed
-  onDestroy(() => {
-    if (typeof document !== 'undefined') {
-      document.body.classList.remove('has-selections');
-    }
-  });
 
 
   function handleAddressSelect(field: 'start' | 'end', e: CustomEvent) {
@@ -158,6 +139,35 @@ $: if (typeof document !== 'undefined') {
       throw error;
     }
   }
+
+// Only run reactive statement after component is mounted
+$: if (typeof document !== 'undefined' && isMounted) {
+  const hasSelections = selectedTrips.size > 0;
+  if (hasSelections !== lastHadSelections) {
+    if (hasSelections) {
+      document.body.classList.add('has-selections');
+    } else {
+      document.body.classList.remove('has-selections');
+    }
+    lastHadSelections = hasSelections;
+  }
+}
+
+onMount(() => {
+  // Clean up any stale class from previous page
+  document.body.classList.remove('has-selections');
+  // Mark as mounted so reactive statement can now run
+  isMounted = true;
+  
+  loadTrips();
+});
+
+onDestroy(() => {
+  if (typeof document !== 'undefined') {
+    document.body.classList.remove('has-selections');
+  }
+  isMounted = false;
+});
 
   onMount(() => {
     loadTrips();

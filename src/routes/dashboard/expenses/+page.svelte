@@ -17,18 +17,22 @@
   let filterCategory = 'all';
   let startDate = '';
   let endDate = '';
+  let lastHadSelections = false;
    
   // Selection State
   let selectedExpenses = new Set<string>();
 
-  // Add reactive statement to toggle body class for hiding footer
-  $: if (typeof document !== 'undefined') {
-    if (selectedExpenses.size > 0) {
+$: if (typeof document !== 'undefined') {
+  const hasSelections = selectedExpenses.size > 0;
+  if (hasSelections !== lastHadSelections) {
+    if (hasSelections) {
       document.body.classList.add('has-selections');
     } else {
       document.body.classList.remove('has-selections');
     }
+    lastHadSelections = hasSelections;
   }
+}
 
   // Clean up body class when component is destroyed
   onDestroy(() => {
