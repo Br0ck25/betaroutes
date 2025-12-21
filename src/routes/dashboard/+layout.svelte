@@ -52,7 +52,7 @@
       label: 'Expenses' 
     },
     { 
-      href: '/dashboard/trips', 
+      href: '/dashboard/trips/', 
       icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M9 2C13.97 2 18 6.03 18 11C18 15.97 13.97 20 9 20H2V13C2 8.03 6.03 4 11 4H18V11C18 6.03 13.97 2 9 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
       label: 'Trips',
       exclude: ['/dashboard/trips/new']
