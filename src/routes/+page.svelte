@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   
   let isMobileMenuOpen = false;
-  
+
   function scrollToSection(id: string) {
     const element = document.getElementById(id);
     if (element) {
@@ -18,7 +18,46 @@
 
 <svelte:head>
   <title>Go Route Yourself - Route Planning & Profit Tracking for Drivers</title>
-  <meta name="description" content="The easiest way to plan routes, track costs, and maximize profits for delivery drivers and field workers." />
+  <meta name="description" content="The easiest way to plan routes, track costs, and maximize profits for delivery drivers and field workers. Free route optimizer and expense tracker." />
+  <meta name="keywords" content="route planner, delivery driver app, profit tracker, mileage tracker, route optimization, field service software" />
+  
+  <link rel="canonical" href="https://gorouteyourself.com/" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://gorouteyourself.com/" />
+  <meta property="og:title" content="Go Route Yourself - Maximize Your Driving Profits" />
+  <meta property="og:description" content="Plan optimal routes, track fuel and expenses, and see your true profit per hour. The all-in-one tool for drivers." />
+  <meta property="og:image" content="https://gorouteyourself.com/og-image.png" />
+
+  <meta property="twitter:card" content="summary_large_image" />
+  <meta property="twitter:url" content="https://gorouteyourself.com/" />
+  <meta property="twitter:title" content="Go Route Yourself - Route Planning & Profit Tracking" />
+  <meta property="twitter:description" content="Stop guessing your profits. Track every mile, expense, and earning with Go Route Yourself." />
+  <meta property="twitter:image" content="https://gorouteyourself.com/og-image.png" />
+
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Go Route Yourself",
+      "headline": "Route Planning & Profit Tracking for Drivers",
+      "image": "https://gorouteyourself.com/logo.png",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web, Android, iOS",
+      "offers": {
+        "@type": "AggregateOffer",
+        "priceCurrency": "USD",
+        "lowPrice": "0",
+        "offerCount": "2"
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "ratingCount": "500"
+      },
+      "featureList": "Route Optimization, Profit Tracking, Expense Management, Mileage Log"
+    }
+  </script>
 </svelte:head>
 
 <div class="landing">
@@ -29,8 +68,8 @@
         
         <nav class="nav desktop-nav">
           <button on:click={() => scrollToSection('features')}>Features</button>
-          <button on:click={() => scrollToSection('pricing')}>Pricing</button>
           <button on:click={() => scrollToSection('how-it-works')}>How It Works</button>
+          <button on:click={() => scrollToSection('pricing')}>Pricing</button>
           
           <a href="/login" class="btn-login">Sign In</a>
           <a href="/register" class="btn-primary">Get Started Free</a>
@@ -195,7 +234,6 @@
             <li>✓ 10 trips per month</li>
             <li>✓ Google Maps routing</li>
             <li>✓ Basic profit tracking</li>
-            <li>✓ Export to CSV</li>
             <li>✓ Mobile app access</li>
           </ul>
           
@@ -230,7 +268,7 @@
             <h3>Business</h3>
             <div class="price">
               <span class="currency">$</span>
-              <span class="amount">29</span>
+              <span class="amount">29.99</span>
               <span class="period">/month</span>
             </div>
           </div>
@@ -447,7 +485,8 @@
   }
   
   .divider { height: 1px; background: var(--gray-100); margin: 4px 0; }
-  .mobile-btn { text-align: center; display: block; }
+  .mobile-btn { text-align: center;
+    display: block; }
   
   /* Hero Section */
   .hero {

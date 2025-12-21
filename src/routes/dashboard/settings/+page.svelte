@@ -353,9 +353,13 @@
         ? `"${trip.maintenanceItems.map((i: any) => `${i.type}:${i.cost}`).join(' | ')}"` 
         : '""';
       const supplies = trip.suppliesCost || 0;
-      const supplyItemsStr = trip.suppliesItems
-        ? `"${trip.suppliesItems.map((i: any) => `${i.type}:${i.cost}`).join(' | ')}"`
+      
+      // FIX: Check both suppliesItems and supplyItems to ensure data isn't missed
+      const sItems = trip.suppliesItems || trip.supplyItems;
+      const supplyItemsStr = sItems
+        ? `"${sItems.map((i: any) => `${i.type}:${i.cost}`).join(' | ')}"`
         : '""';
+        
       const totalExpenses = fuel + maint + supplies;
       const netProfit = revenue - totalExpenses;
       const hourlyPay = trip.hoursWorked > 0 ? (netProfit / trip.hoursWorked) : 0;
