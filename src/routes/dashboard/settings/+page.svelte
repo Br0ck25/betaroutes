@@ -64,6 +64,7 @@
   $: isPro = ['pro', 'business', 'premium', 'enterprise'].includes($auth.user?.plan || '');
   
   let isUpgradeModalOpen = false;
+  let upgradeSource: 'generic' | 'export' = 'generic'; // Track source of upgrade click
   let isCheckingOut = false;
   let isOpeningPortal = false; // New state for portal loading
 
@@ -306,6 +307,7 @@
   function exportCSV() {
     // Pro Guard
     if (!isPro) {
+        upgradeSource = 'export';
         isUpgradeModalOpen = true;
         return;
     }
@@ -559,7 +561,10 @@
             {:else}
               <button 
                 class="upgrade-link-btn" 
-                on:click={handleCheckout} 
+                on:click={() => { 
+                  upgradeSource = 'generic'; 
+                  isUpgradeModalOpen = true; 
+                }} 
                 disabled={isCheckingOut}
               >
                 {isCheckingOut ? 'Loading...' : 'Upgrade to Pro'}
@@ -671,7 +676,7 @@
              </div>
              <div style="margin-left: auto;">
                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                   <polyline points="9 18 15 12 9 6"></polyline>
+                    <polyline points="9 18 15 12 9 6"></polyline>
                 </svg>
              </div>
           </div>
@@ -810,11 +815,19 @@
         </div>
         
         <h3 class="text-xl font-bold text-gray-900">
-            Unlock Pro Features
+            {#if upgradeSource === 'export'}
+                Unlock Data Exports
+            {:else}
+                Unlock Pro Features
+            {/if}
         </h3>
         
         <p class="text-gray-600 text-base leading-relaxed">
-            Data Export is a Pro feature. Upgrade now to download your trip history for taxes!
+            {#if upgradeSource === 'export'}
+                Exporting data is a Pro feature. Upgrade now to download your full trip history for taxes and accounting!
+            {:else}
+                Take your business to the next level. Get unlimited trips, powerful route optimization, and tax-ready data exports.
+            {/if}
         </p>
 
         <div class="bg-gray-50 p-4 rounded-lg text-left text-sm space-y-2 border border-gray-100">
@@ -828,11 +841,11 @@
             </div>
             <div class="flex items-center gap-2">
                  <span class="text-green-500 text-lg">✓</span>
-                <span class="text-gray-700">Unlimited Monthly Trips</span>
+                 <span class="text-gray-700">Unlimited Monthly Trips</span>
             </div>
             <div class="flex items-center gap-2">
                 <span class="text-green-500 text-lg">✓</span>
-                <span class="text-gray-700">Data Export</span>
+                <span class="text-gray-700">Data Export (CSV/JSON)</span>
             </div>
         </div>
 

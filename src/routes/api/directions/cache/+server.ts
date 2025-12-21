@@ -1,11 +1,6 @@
 // src/routes/api/directions/cache/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import type { KVNamespace } from '@cloudflare/workers-types';
-
-function generateKey(start: string, end: string) {
-    return `dir:${start.toLowerCase().trim()}_to_${end.toLowerCase().trim()}`;
-}
 
 /**
  * Helper to geocode address to [lon, lat] using Photon
@@ -38,20 +33,9 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
         return json({ error: 'Missing start or end address' }, { status: 400 });
     }
 
-    const kv = platform?.env?.BETA_DIRECTIONS_KV as KVNamespace;
     const apiKey = platform?.env?.PRIVATE_GOOGLE_MAPS_API_KEY;
-    const key = generateKey(start, end);
 
-    // 2. Try Cloudflare KV Cache (Free & Fast)
-    if (kv) {
-        const cachedRaw = await kv.get(key);
-        if (cachedRaw) {
-            const data = JSON.parse(cachedRaw);
-            return json({ source: 'cache', data });
-        }
-    }
-
-    // 3. Try OSRM (Free)
+    // 2. Try OSRM (Free)
     // Requires Geocoding first (Address -> Coords)
     try {
         const startCoords = await geocodePhoton(start);
@@ -71,11 +55,6 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
                     duration: route.duration  // seconds
                 };
 
-                // Save to KV (1 Year Cache)
-                if (kv) {
-                    await kv.put(key, JSON.stringify(result), { expirationTtl: 31536000 });
-                }
-
                 return json({ source: 'osrm', data: result });
             }
         }
@@ -83,7 +62,7 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
         console.warn('OSRM/Photon routing failed, falling back to Google', e);
     }
 
-    // 4. Fallback: Call Google Directions API (Server-Side)
+    // 3. Fallback: Call Google Directions API (Server-Side)
     if (!apiKey) {
         console.error('PRIVATE_GOOGLE_MAPS_API_KEY is missing');
         return json({ error: 'Server configuration error' }, { status: 500 });
@@ -103,11 +82,6 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
                 distance: leg.distance.value, 
                 duration: leg.duration.value 
             };
-
-            // Save to KV (1 Year Cache)
-            if (kv) {
-                await kv.put(key, JSON.stringify(result), { expirationTtl: 31536000 });
-            }
 
             return json({ source: 'google', data: result });
         }

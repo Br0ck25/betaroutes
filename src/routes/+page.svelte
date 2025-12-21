@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   
   let isMobileMenuOpen = false;
+  
   function scrollToSection(id: string) {
     const element = document.getElementById(id);
     if (element) {
@@ -357,7 +358,7 @@
   
   /* Desktop Navigation */
   .desktop-nav {
-    display: flex;
+    display: none; /* Changed from flex to none */
     align-items: center;
     gap: 24px;
   }
@@ -397,7 +398,26 @@
 
   /* Mobile Controls Container (Hidden on Desktop) */
   .mobile-nav-controls {
-    display: none;
+    display: flex; /* Changed from none to flex */
+    align-items: center;
+    gap: 16px;
+  }
+
+  .mobile-signin {
+    text-decoration: none;
+    color: var(--navy);
+    font-weight: 600;
+    font-size: 15px;
+  }
+
+  .hamburger-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--gray-600);
+    display: flex;
+    align-items: center;
+    padding: 4px;
   }
 
   /* Mobile Dropdown Menu */
@@ -427,8 +447,7 @@
   }
   
   .divider { height: 1px; background: var(--gray-100); margin: 4px 0; }
-  .mobile-btn { text-align: center;
-    display: block; }
+  .mobile-btn { text-align: center; display: block; }
   
   /* Hero Section */
   .hero {
@@ -452,7 +471,8 @@
   }
   
   .hero-subtitle {
-    font-size: 18px; /* Slightly smaller for mobile */
+    font-size: 18px;
+    /* Slightly smaller for mobile */
     max-width: 700px;
     margin: 0 auto 40px;
     opacity: 0.95;
@@ -460,7 +480,8 @@
   
   .hero-buttons {
     display: flex;
-    flex-direction: column; /* Stack buttons on mobile */
+    flex-direction: column;
+    /* Stack buttons on mobile */
     gap: 16px;
     justify-content: center;
     margin-bottom: 60px;
@@ -501,7 +522,8 @@
   
   .hero-stats {
     display: flex;
-    flex-direction: column; /* Stack stats on mobile */
+    flex-direction: column;
+    /* Stack stats on mobile */
     justify-content: center;
     gap: 32px;
   }
@@ -528,7 +550,8 @@
   }
   
   .section-title {
-    font-size: 32px; /* Smaller mobile title */
+    font-size: 32px;
+    /* Smaller mobile title */
     font-weight: 800;
     text-align: center;
     margin-bottom: 16px;
@@ -544,7 +567,8 @@
   
   .features-grid {
     display: grid;
-    grid-template-columns: 1fr; /* 1 column on mobile */
+    grid-template-columns: 1fr;
+    /* 1 column on mobile */
     gap: 32px;
   }
   
@@ -596,10 +620,12 @@
   
   .step {
     display: flex;
-    flex-direction: column; /* Stack vertical on mobile */
+    flex-direction: column;
+    /* Stack vertical on mobile */
     gap: 24px;
     margin-bottom: 60px;
-    align-items: center; /* Center align items */
+    align-items: center;
+    /* Center align items */
     text-align: center;
   }
   

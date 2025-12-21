@@ -464,7 +464,7 @@
               <input type="text" bind:value={newStop.address} placeholder="New stop address..." use:autocomplete={{ apiKey: API_KEY }} on:place-selected={handleNewStopSelect} class="address-input" />
               <div class="input-money-wrapper"><span class="symbol">$</span><input type="number" class="input-money" placeholder="0.00" bind:value={newStop.earnings} step="0.01" min="0" /></div>
             </div>
-            <button class="btn-add full-width" on:click={addStop} disabled={isCalculating}>{isCalculating ? 'Calculating...' : '+ Add Stop'}</button>
+
           </div>
         </div>
         <div class="form-group">
