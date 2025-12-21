@@ -169,9 +169,6 @@ onDestroy(() => {
   isMounted = false;
 });
 
-  onMount(() => {
-    loadTrips();
-  });
   // --- TRIP FILTERING & SORTING ---
   $: allFilteredTrips = $trips
     .filter(trip => {
