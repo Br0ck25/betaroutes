@@ -1,4 +1,6 @@
 <script lang="ts">
+  export let form; // [!code ++]
+
   let isMobileMenuOpen = false;
 
   function toggleMenu() {
@@ -31,7 +33,7 @@
     <div class="container">
       <div class="header-content">
         <a href="/" class="logo-link">
-            <img src="/logo.png" alt="Go Route Yourself" class="logo" />
+          <img src="/logo.png" alt="Go Route Yourself" class="logo" />
         </a>
         
         <nav class="nav desktop-nav">
@@ -76,7 +78,8 @@
         <div class="text-column">
             <h1>Contact Sales</h1>
             <p class="subtitle">
-                Ready to scale your delivery operations? Let's talk about how Go Route Yourself can help your team save time and maximize profits.
+                Ready to scale your delivery operations?
+                Let's talk about how Go Route Yourself can help your team save time and maximize profits.
             </p>
             
             <div class="contact-info">
@@ -92,30 +95,30 @@
         </div>
 
         <div class="form-column">
-            <form class="contact-form" method="POST">
-                <div class="form-group">
+            {#if form?.success} <div class="success-message"> <h2>Message Sent! 🚀</h2> <p>Thanks for reaching out. Our team will get back to you shortly.</p> <button class="btn-primary" on:click={() => window.location.reload()}>Send Another</button> </div> {:else} <form class="contact-form" method="POST">
+                {#if form?.error} <div class="error-banner">{form.error}</div> {/if} <div class="form-group">
                     <label for="name">Name</label>
-                    <input type="text" id="name" name="name" required placeholder="Your name" />
+                    <input type="text" id="name" name="name" required placeholder="Your name" value={form?.name ?? ''} />
                 </div>
                 
                 <div class="form-group">
                     <label for="email">Work Email</label>
-                    <input type="email" id="email" name="email" required placeholder="you@company.com" />
+                    <input type="email" id="email" name="email" required placeholder="you@company.com" value={form?.email ?? ''} />
                 </div>
 
                 <div class="form-group">
                     <label for="company">Company Name</label>
-                    <input type="text" id="company" name="company" placeholder="Your company" />
+                    <input type="text" id="company" name="company" placeholder="Your company" value={form?.company ?? ''} />
                 </div>
                 
                 <div class="form-group">
                     <label for="message">How can we help?</label>
-                    <textarea id="message" name="message" rows="4" required placeholder="Tell us about your team size and needs..."></textarea>
+                    <textarea id="message" name="message" rows="4" required placeholder="Tell us about your team size and needs...">{form?.message ?? ''}</textarea>
                 </div>
 
                 <button type="submit" class="btn-submit">Send Message</button>
             </form>
-        </div>
+            {/if} </div>
       </div>
     </div>
   </main>
@@ -183,7 +186,8 @@
     .hamburger-btn { background: none; border: none; cursor: pointer; color: var(--gray-600); padding: 4px; display: flex; align-items: center;}
 
     .mobile-menu {
-        position: absolute; top: 100%; left: 0; width: 100%; background: white;
+        position: absolute; top: 100%; left: 0;
+        width: 100%; background: white;
         border-bottom: 1px solid var(--gray-100); padding: 16px; display: flex; flex-direction: column; gap: 16px;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
@@ -221,7 +225,7 @@
     label { display: block; margin-bottom: 8px; font-weight: 600; color: var(--navy); }
     
     input, textarea {
-        width: 100%; 
+        width: 100%;
         padding: 12px; 
         border: 1px solid #e5e7eb; 
         border-radius: 8px; 
@@ -230,13 +234,13 @@
     }
     
     input:focus, textarea:focus { 
-        outline: 2px solid var(--blue); 
+        outline: 2px solid var(--blue);
         border-color: transparent; 
     }
 
     .btn-submit {
         width: 100%; 
-        background: var(--navy); 
+        background: var(--navy);
         color: white; 
         padding: 14px; 
         border: none; 
@@ -247,6 +251,25 @@
         transition: background 0.2s;
     }
     .btn-submit:hover { background: var(--blue); }
+
+    /* New Success/Error Styles */
+    .success-message {
+      background: var(--gray-100);
+      padding: 32px;
+      border-radius: 16px;
+      text-align: center;
+    }
+    .success-message h2 { color: var(--navy); margin-bottom: 16px; }
+    .success-message p { color: var(--gray-600); margin-bottom: 24px; font-size: 18px; }
+    .error-banner {
+      background: #fee2e2;
+      color: #991b1b;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-weight: 500;
+      border: 1px solid #fecaca;
+    }
 
     @media (min-width: 768px) {
         .desktop-nav { display: flex; }

@@ -138,6 +138,29 @@ function getPasswordResetHtml(resetUrl: string) {
     `;
 }
 
+function getContactInquiryHtml(data: { name: string; email: string; company?: string; message: string }) {
+    const brandColor = '#FF7F50';
+    
+    return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>New Sales Inquiry</title>
+</head>
+<body style="font-family: sans-serif; padding: 20px; color: #333;">
+    <h1 style="color: ${brandColor};">New Sales Inquiry</h1>
+    <p><strong>Name:</strong> ${data.name}</p>
+    <p><strong>Email:</strong> ${data.email}</p>
+    <p><strong>Company:</strong> ${data.company || 'N/A'}</p>
+    <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+    <h3 style="margin-bottom: 10px;">Message:</h3>
+    <p style="white-space: pre-wrap; background: #f9f9f9; padding: 15px; border-radius: 5px;">${data.message}</p>
+</body>
+</html>
+    `;
+}
+
 // --- Main Send Functions ---
 
 /**
@@ -261,5 +284,62 @@ export async function sendPasswordResetEmail(
     } catch (e) {
         console.error('❌ Email send failed:', e);
         throw e; // Re-throw so caller can handle
+    }
+}
+
+/**
+ * Send contact form inquiry to sales
+ * @param data - The form data object
+ * @param apiKey - Resend API key
+ */
+export async function sendContactInquiryEmail(
+    data: { name: string; email: string; company?: string; message: string },
+    apiKey?: string
+) {
+    // 1. Dev Mode
+    if (dev) {
+        console.log('\n================ [DEV EMAIL] ================');
+        console.log(`To: sales@gorouteyourself.com`);
+        console.log(`Reply-To: ${data.email}`);
+        console.log(`Subject: New Inquiry: ${data.company || data.name}`);
+        console.log(`Message: ${data.message}`);
+        console.log('=============================================\n');
+        return true;
+    }
+
+    // 2. Check for API key
+    const resolvedApiKey = apiKey || env.RESEND_API_KEY;
+    
+    if (!resolvedApiKey) {
+        console.error('❌ Missing RESEND_API_KEY');
+        throw new Error('Email service not configured');
+    }
+
+    try {
+        const res = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${resolvedApiKey}`
+            },
+            body: JSON.stringify({
+                from: 'Go Route Yourself Contact <noreply@gorouteyourself.com>',
+                to: 'sales@gorouteyourself.com',
+                reply_to: data.email,
+                subject: `Inquiry from ${data.name} ${data.company ? `(${data.company})` : ''}`,
+                html: getContactInquiryHtml(data)
+            })
+        });
+
+        if (!res.ok) {
+            const errorText = await res.text();
+            console.error('❌ Resend API Error:', res.status, errorText);
+            throw new Error(`Resend API error: ${res.status} - ${errorText}`);
+        }
+
+        return true;
+    } catch (e) {
+        console.error('❌ Contact email send failed:', e);
+        throw e;
     }
 }
