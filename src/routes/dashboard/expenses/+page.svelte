@@ -8,6 +8,7 @@
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
+  import { onMount } from 'svelte';
   import { onMount, onDestroy } from 'svelte';
 
   // --- STATE ---
