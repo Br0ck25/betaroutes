@@ -63,7 +63,6 @@
       label: 'Settings' 
     },
   ];
-
   function isActive(href: string, exact = false, exclude: string[] = []): boolean {
     const path = $page.url.pathname;
     if (exclude.length > 0) {
@@ -97,6 +96,7 @@
         }
     }
 
+  
     if (userId) {
       try {
         console.log('[DASHBOARD LAYOUT] Loading data for:', userId);
@@ -454,7 +454,8 @@
     padding: calc(var(--mobile-header-height) + 20px) 16px 100px 16px;
     /* Top padding for header, Bottom for nav bar */
     flex: 1;
-    min-height: 100dvh; /* UPDATED: Dynamic viewport height */
+    min-height: 100dvh;
+    /* UPDATED: Dynamic viewport height */
   }
   
   .overlay {
