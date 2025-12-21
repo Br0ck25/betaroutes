@@ -12,9 +12,37 @@ const defaultSettings = {
   distanceUnit: 'mi',
   timeFormat: '12h',
   expenseCategories: ['maintenance', 'insurance', 'supplies', 'other'],
-  // [!code ++] Add defaults for Trip Items
   maintenanceCategories: ['oil change', 'tire rotation', 'repair', 'inspection', 'wash'],
-  supplyCategories: ['water', 'snacks', 'cleaning', 'office', 'equipment']
+  supplyCategories: ['water', 'snacks', 'cleaning', 'office', 'equipment'],
+  
+  // Business Information
+  companyName: '',
+  companyAddress: '',
+  companyPhone: '',
+  companyEmail: '',
+  companyLogo: '', // base64 image data
+  
+  // Vehicle Information (for tax purposes)
+  vehicleMake: '',
+  vehicleModel: '',
+  vehicleYear: '',
+  vehicleOdometerStart: 0,
+  businessUsePercentage: 100,
+  
+  // Service Types (for revenue tracking)
+  serviceTypes: ['HughesNet', 'Starlink', 'Dish', 'Security Camera', 'Other'],
+  
+  // Export Customization
+  pdfPrimaryColor: '#FF7F50', // Orange
+  pdfSecondaryColor: '#34C759', // Green
+  includeCharts: true,
+  includeAnalytics: true,
+  
+  // Automation Settings
+  autoExportEnabled: false,
+  autoExportFrequency: 'monthly', // 'weekly', 'monthly', 'quarterly'
+  autoExportEmail: '',
+  autoExportTypes: ['tax-bundle'] // which exports to auto-generate
 };
 
 // 1. Start with defaults (Server matches Client initially)
