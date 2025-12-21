@@ -28,6 +28,12 @@
     if (e.key === 'Escape') closeSidebar();
   }
   
+  // [!code ++] Helper to force client-side navigation
+  function handleNav(url: string) {
+    closeSidebar();
+    goto(url);
+  }
+
   async function handleLogout() {
     if (confirm('Are you sure you want to logout?')) {
       await fetch('/api/logout', { method: 'POST' });
@@ -52,7 +58,7 @@
       label: 'Expenses' 
     },
     { 
-      href: '/dashboard/trips/', 
+      href: '/dashboard/trips', 
       icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M9 2C13.97 2 18 6.03 18 11C18 15.97 13.97 20 9 20H2V13C2 8.03 6.03 4 11 4H18V11C18 6.03 13.97 2 9 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
       label: 'Trips',
       exclude: ['/dashboard/trips/new']
@@ -63,13 +69,6 @@
       label: 'Settings' 
     },
   ];
-
-  // UPDATED: Helper to handle navigation manually
-  function handleNav(e: MouseEvent, href: string) {
-    e.preventDefault();
-    closeSidebar();
-    goto(href);
-  }
 
   function isActive(href: string, exact = false, exclude: string[] = []): boolean {
     const path = $page.url.pathname;
@@ -104,6 +103,7 @@
         }
     }
 
+  
     if (userId) {
       try {
         console.log('[DASHBOARD LAYOUT] Loading data for:', userId);
@@ -144,7 +144,12 @@
     <div class="mobile-actions">
       <SyncIndicator />
       {#if $user}
-        <a href="/dashboard/settings" class="mobile-user" aria-label="Profile Settings" on:click={(e) => handleNav(e, '/dashboard/settings')}>
+        <a 
+          href="/dashboard/settings" 
+          class="mobile-user" 
+          aria-label="Profile Settings"
+          on:click|preventDefault={() => goto('/dashboard/settings')}
+        >
           <div class="user-avatar small">
             {getInitial($user.name || $user.email || '')}
           </div>
@@ -173,7 +178,7 @@
           href={item.href} 
           class="nav-item" 
           class:active={isActive(item.href, item.exact, item.exclude)}
-          on:click={(e) => handleNav(e, item.href)}
+          on:click|preventDefault={() => handleNav(item.href)}
         >
           <span class="nav-icon">{@html item.icon}</span>
           <span class="nav-label">{item.label}</span>
@@ -183,7 +188,11 @@
     
     <div class="sidebar-footer">
       {#if $user}
-        <a href="/dashboard/settings" class="user-card" on:click={(e) => handleNav(e, '/dashboard/settings')}>
+        <a 
+          href="/dashboard/settings" 
+          class="user-card" 
+          on:click|preventDefault={() => handleNav('/dashboard/settings')}
+        >
           <div class="user-avatar">
             {getInitial($user.name || $user.email || '')}
           </div>
@@ -223,7 +232,7 @@
         href={item.href} 
         class="bottom-nav-item" 
         class:active={isActive(item.href, item.exact, item.exclude)}
-        on:click={(e) => handleNav(e, item.href)}
+        on:click|preventDefault={() => goto(item.href)}
       >
         <span class="bottom-nav-icon">{@html item.icon}</span>
         <span class="bottom-nav-label">{item.label}</span>
@@ -233,6 +242,7 @@
 </div>
 
 <style>
+  /* ... (Existing styles unchanged) ... */
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
   :root {
     --orange: #FF7F50;
@@ -258,7 +268,6 @@
     background: #F9FAFB;
   }
   
-  /* --- Mobile Header --- */
   .mobile-header {
     display: flex;
     position: fixed;
@@ -292,7 +301,6 @@
     cursor: pointer;
   }
   
-  /* --- Sidebar (Hidden by default on mobile) --- */
   .sidebar {
     position: fixed;
     left: 0;
@@ -324,7 +332,6 @@
     height: 40px;
   }
   
-  /* Sync Indicator in Sidebar */
   .sidebar-sync {
     padding: 16px 20px;
     border-bottom: 1px solid #E5E7EB;
@@ -350,7 +357,7 @@
     margin-bottom: 4px;
     transition: all 0.2s;
     position: relative;
-    cursor: pointer; /* Ensure pointer for buttons */
+    cursor: pointer;
   }
   
   .nav-item:hover {
@@ -456,7 +463,6 @@
     font-family: inherit;
   }
   
-  /* --- Main Content --- */
   .main-content {
     margin-left: 0;
     padding: calc(var(--mobile-header-height) + 20px) 16px 100px 16px;
@@ -484,7 +490,6 @@
     color: #374151;
   }
 
-  /* --- Bottom Navigation (Mobile) --- */
   .bottom-nav {
     display: flex;
     position: fixed;
@@ -525,7 +530,6 @@
     height: 24px;
   }
   
-  /* --- Desktop Overrides --- */
   @media (min-width: 1024px) {
     .mobile-header {
       display: none;
