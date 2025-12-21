@@ -8,6 +8,7 @@
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
+  import { onMount, onDestroy } from 'svelte';
 
   // --- STATE ---
   let searchQuery = '';
@@ -28,6 +29,13 @@
       document.body.classList.remove('has-selections');
     }
   }
+
+  // Clean up body class when component is destroyed
+  onDestroy(() => {
+    if (typeof document !== 'undefined') {
+      document.body.classList.remove('has-selections');
+    }
+  });
 
   // Use categories from settings, default to basic if empty
   $: categories = $userSettings.expenseCategories?.length > 0 

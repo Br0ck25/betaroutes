@@ -10,6 +10,7 @@
   import Modal from '$lib/components/ui/Modal.svelte';
   import Button from '$lib/components/ui/Button.svelte';
   import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { autocomplete } from '$lib/utils/autocomplete';
 
   // Error boundary reference
@@ -56,13 +57,21 @@
 
   // --- SETTINGS LOGIC ---
 
-$: if (typeof document !== 'undefined') {
+  $: if (typeof document !== 'undefined') {
     if (selectedTrips.size > 0) {
       document.body.classList.add('has-selections');
     } else {
       document.body.classList.remove('has-selections');
     }
   }
+
+  // Clean up body class when component is destroyed
+  onDestroy(() => {
+    if (typeof document !== 'undefined') {
+      document.body.classList.remove('has-selections');
+    }
+  });
+
 
   function handleAddressSelect(field: 'start' | 'end', e: CustomEvent) {
     const val = e.detail.formatted_address || e.detail.name;
