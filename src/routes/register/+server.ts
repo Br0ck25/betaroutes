@@ -43,7 +43,7 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
         const clientIp = request.headers.get('CF-Connecting-IP') || getClientAddress();
         let limitResult = { allowed: true };
         try {
-             limitResult = await checkRateLimit(usersKV, clientIp, 'register_attempt', 10, 3600);
+             limitResult = await checkRateLimit(usersKV, clientIp, 'register_attempt', 15, 3600);
         } catch (e) {
              console.warn('[Register] Rate limit check failed (ignoring):', e);
         }
