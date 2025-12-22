@@ -39,21 +39,45 @@ export async function generateRegistrationOptions(
   console.log('[WebAuthn Core] RP ID:', rpID);
   console.log('[WebAuthn Core] Existing authenticators:', user.authenticators?.length || 0);
 
-  const excludeCredentials = (user.authenticators || [])
-    .filter(auth => auth.credentialID && typeof auth.credentialID === 'string')
-    .map((auth) => {
-      try {
-        return {
-          id: isoBase64URL.toBuffer(auth.credentialID),
-          type: 'public-key' as const,
-          transports: auth.transports || [],
-        };
-      } catch (error) {
-        console.error('[WebAuthn Core] Failed to decode credential, skipping:', auth.credentialID, error);
-        return null;
-      }
-    })
-    .filter((cred): cred is NonNullable<typeof cred> => cred !== null);
+  // Filter and validate credentials before attempting to decode
+  const validAuthenticators = (user.authenticators || []).filter(auth => {
+    if (!auth.credentialID) {
+      console.warn('[WebAuthn Core] Skipping authenticator with no credentialID');
+      return false;
+    }
+    if (typeof auth.credentialID !== 'string') {
+      console.warn('[WebAuthn Core] Skipping authenticator with non-string credentialID:', typeof auth.credentialID);
+      return false;
+    }
+    if (auth.credentialID.length < 20) {
+      console.warn('[WebAuthn Core] Skipping authenticator with suspiciously short credentialID:', auth.credentialID);
+      return false;
+    }
+    // Check if it's valid base64url (only contains A-Z, a-z, 0-9, -, _)
+    if (!/^[A-Za-z0-9_-]+$/.test(auth.credentialID)) {
+      console.warn('[WebAuthn Core] Skipping authenticator with invalid base64url characters:', auth.credentialID);
+      return false;
+    }
+    return true;
+  });
+
+  console.log('[WebAuthn Core] Valid authenticators after filtering:', validAuthenticators.length);
+
+  const excludeCredentials = validAuthenticators.map((auth) => {
+    console.log('[WebAuthn Core] Attempting to decode:', auth.credentialID, 'length:', auth.credentialID.length);
+    try {
+      const buffer = isoBase64URL.toBuffer(auth.credentialID);
+      console.log('[WebAuthn Core] Successfully decoded, buffer length:', buffer.length);
+      return {
+        id: buffer,
+        type: 'public-key' as const,
+        transports: auth.transports || [],
+      };
+    } catch (error) {
+      console.error('[WebAuthn Core] Failed to decode credential:', auth.credentialID, error);
+      return null;
+    }
+  }).filter((cred): cred is NonNullable<typeof cred> => cred !== null);
 
   console.log('[WebAuthn Core] Excluding credentials:', excludeCredentials.length);
 
