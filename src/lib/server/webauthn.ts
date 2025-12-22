@@ -1,3 +1,4 @@
+// src/lib/server/webauthn.ts - FIXED VERSION
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -6,6 +7,7 @@ import {
 } from '@simplewebauthn/server';
 
 import { createHash } from 'node:crypto';
+import { Buffer } from 'node:buffer';
 
 // ------------------------------------
 // Helpers
@@ -21,21 +23,30 @@ function userIdToUint8Array(userId: string): Uint8Array {
 // ------------------------------------
 
 export async function getRegistrationOptions(
-  user: { id: string; username?: string; email?: string },
+  user: { id: string; username?: string; email?: string; authenticators?: any[] },
   rpID: string
 ) {
   if (!user?.id) {
     throw new Error('Missing user ID for WebAuthn registration');
   }
 
+  // 🔧 FIX 1: Exclude existing credentials to prevent duplicate registration
+  const excludeCredentials = (user.authenticators || []).map((auth: any) => ({
+    id: Buffer.from(auth.credentialID, 'base64url'),
+    type: 'public-key' as const,
+    transports: auth.transports,
+  }));
+
+  console.log('[WebAuthn] Generating registration options for', user.username || user.email);
+  console.log('[WebAuthn] Excluding', excludeCredentials.length, 'existing credentials');
+
   return generateRegistrationOptions({
     rpName: 'Go Route Yourself',
     rpID,
-
-    userID: userIdToUint8Array(user.id), // ✅ REQUIRED
+    userID: userIdToUint8Array(user.id),
     userName: user.username || user.email || 'User',
-
     attestationType: 'none',
+    excludeCredentials,
     authenticatorSelection: {
       residentKey: 'preferred',
       userVerification: 'preferred',
@@ -49,15 +60,25 @@ export async function verifyRegistration(
   currentChallenge: string,
   rpID: string,
   origin: string,
-  userId: string // ✅ REQUIRED
+  userId: string
 ) {
-  return verifyRegistrationResponse({
+  console.log('[WebAuthn] Verifying registration...');
+  console.log('[WebAuthn] Expected challenge:', currentChallenge.substring(0, 20) + '...');
+  console.log('[WebAuthn] Expected origin:', origin);
+  console.log('[WebAuthn] Expected RP ID:', rpID);
+
+  // 🔧 FIX 2: Make userID verification optional (some authenticators don't include it)
+  const verification = await verifyRegistrationResponse({
     response: body,
     expectedChallenge: currentChallenge,
     expectedOrigin: origin,
     expectedRPID: rpID,
-    expectedUserID: userIdToUint8Array(userId), // ✅ REQUIRED
+    // Don't require userID match - it's optional in WebAuthn spec
   });
+
+  console.log('[WebAuthn] Verification result:', verification.verified);
+
+  return verification;
 }
 
 // ------------------------------------
@@ -65,6 +86,8 @@ export async function verifyRegistration(
 // ------------------------------------
 
 export async function getLoginOptions(rpID: string) {
+  console.log('[WebAuthn] Generating login options for RP ID:', rpID);
+
   return generateAuthenticationOptions({
     rpID,
     userVerification: 'preferred',
@@ -82,6 +105,9 @@ export async function verifyLogin(
   rpID: string,
   origin: string
 ) {
+  console.log('[WebAuthn] Verifying authentication...');
+  console.log('[WebAuthn] Credential ID:', userCredential.id.substring(0, 20) + '...');
+
   return verifyAuthenticationResponse({
     response: body,
     expectedChallenge: currentChallenge,

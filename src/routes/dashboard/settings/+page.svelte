@@ -212,47 +212,90 @@
   // [!code ++] Passkey Registration Handler
 
 async function registerPasskey() {
-  if (isRegisteringPasskey) return;
-  isRegisteringPasskey = true;
-  try {
-    const resp = await fetch('/api/auth/webauthn?type=register');
-    if (!resp.ok) {
-      throw new Error('Failed to get registration options');
+    registering = true;
+    
+    try {
+      // 🔧 STEP 1: Get registration options from server
+      console.log('[Passkey] Fetching registration options...');
+      
+      const optionsRes = await fetch('/api/auth/webauthn?type=register');
+      
+      if (!optionsRes.ok) {
+        const error = await optionsRes.json();
+        throw new Error(error.error || 'Failed to get registration options');
+      }
+
+      const options = await optionsRes.json();
+      console.log('[Passkey] Options received:', options);
+
+      // 🔧 STEP 2: Prompt user to create passkey
+      console.log('[Passkey] Starting registration ceremony...');
+      
+      const credential = await startRegistration(options);
+      console.log('[Passkey] Credential created:', credential);
+
+      // 🔧 STEP 3: Send credential to server for verification
+      console.log('[Passkey] Verifying with server...');
+      
+      const verifyRes = await fetch('/api/auth/webauthn?type=register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credential)
+      });
+
+      const verifyResult = await verifyRes.json();
+
+      if (!verifyRes.ok) {
+        throw new Error(verifyResult.error || 'Registration failed');
+      }
+
+      console.log('[Passkey] Registration successful!');
+      toasts.success('Passkey registered successfully! You can now sign in with your fingerprint or face.');
+
+    } catch (error: any) {
+      console.error('[Passkey] Registration error:', error);
+      
+      // User-friendly error messages
+      let message = 'Failed to register passkey';
+      
+      if (error.name === 'NotAllowedError') {
+        message = 'Registration was cancelled or timed out';
+      } else if (error.name === 'NotSupportedError') {
+        message = 'Your device does not support passkeys';
+      } else if (error.message) {
+        message = error.message;
+      }
+      
+      toasts.error(message);
+    } finally {
+      registering = false;
     }
-
-    const options = await resp.json();
-
-    // UPDATED: Wrap 'options' in an object with the 'optionsJSON' key
-    const attestationResponse = await startRegistration({ optionsJSON: options });
-
-    const verifyResp = await fetch('/api/auth/webauthn?type=register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(attestationResponse),
-    });
-
-    if (!verifyResp.ok) {
-      throw new Error('Verification failed');
-    }
-
-    const result = await verifyResp.json();
-
-    if (!result.verified) {
-      throw new Error('Passkey not verified');
-    }
-
-    alert('✅ Passkey registered successfully!');
-  } catch (e) {
-    console.error('Passkey registration error:', e);
-    alert(
-      'Failed to register device. Ensure your device supports Face ID, Touch ID, or Windows Hello.'
-    );
-  } finally {
-    isRegisteringPasskey = false;
   }
-}
+</script>
 
+<div class="passkey-registration">
+  <h3>Enable Biometric Sign-In</h3>
+  <p class="description">
+    Register your fingerprint or face as a passkey for faster, more secure sign-in.
+  </p>
 
+  <button 
+    class="btn-primary" 
+    onclick={registerPasskey}
+    disabled={registering}
+  >
+    {#if registering}
+      <span class="spinner"></span>
+      Registering...
+    {:else}
+      🔐 Register Passkey
+    {/if}
+  </button>
+
+  <p class="note">
+    Your biometric data stays on your device and is never sent to our servers.
+  </p>
+</div>
 
   async function handleDeleteAccount() {
     if (!deletePassword) {
