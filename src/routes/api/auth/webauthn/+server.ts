@@ -10,6 +10,7 @@ import {
 // 🔧 Dynamic RP ID and Origin based on environment
 function getRpID(request: Request): string {
   const hostname = new URL(request.url).hostname;
+  console.log('[WebAuthn] Hostname:', hostname);
   
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return 'localhost';
@@ -18,25 +19,31 @@ function getRpID(request: Request): string {
 }
 
 function getOrigin(request: Request): string {
-  return new URL(request.url).origin;
+  const url = new URL(request.url);
+  console.log('[WebAuthn] Origin:', url.origin);
+  return url.origin;
 }
 
 // GET: Generate registration options
 export const GET: RequestHandler = async ({ url, locals, cookies, platform }) => {
   try {
     const type = url.searchParams.get('type');
+    console.log('[WebAuthn] GET request - Type:', type);
     
     if (type !== 'register') {
+      console.error('[WebAuthn] Invalid type:', type);
       return json({ error: 'Invalid request type' }, { status: 400 });
     }
 
     const user = locals.user;
     if (!user || !user.email) {
+      console.error('[WebAuthn] No authenticated user');
       return json({ error: 'Not authenticated' }, { status: 401 });
     }
 
     const env = platform?.env;
     if (!env || !env.BETA_USERS_KV) {
+      console.error('[WebAuthn] KV namespace not available');
       return json({ error: 'Service Unavailable' }, { status: 503 });
     }
 
@@ -44,7 +51,9 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
 
     // Get existing authenticators from KV
     const authenticators = await getUserAuthenticators(env.BETA_USERS_KV, user.id);
-    
+    console.log('[WebAuthn] Existing authenticators:', authenticators.length);
+
+    // Create user object with authenticators for options generation
     const userWithAuth = {
       id: user.id,
       email: user.email,
@@ -52,21 +61,28 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
       authenticators
     };
 
+    // Generate registration options
     const options = await generateRegistrationOptions(userWithAuth);
     
     if (!options || !options.challenge) {
+      console.error('[WebAuthn] Failed to generate options or missing challenge');
       return json({ error: 'Failed to generate options' }, { status: 500 });
     }
 
-    console.log('[WebAuthn] Challenge stored in cookie');
+    console.log('[WebAuthn] Options generated successfully');
+    console.log('[WebAuthn] Challenge length:', options.challenge.length);
+    console.log('[WebAuthn] Challenge (first 20 chars):', options.challenge.substring(0, 20));
 
+    // 🔧 CRITICAL: Store challenge in cookie with proper settings
     cookies.set('webauthn-challenge', options.challenge, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 300
+      maxAge: 300 // 5 minutes
     });
+
+    console.log('[WebAuthn] Challenge stored in cookie');
 
     return json(options);
   } catch (error) {
@@ -80,39 +96,65 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
 
 // POST: Verify registration response
 export const POST: RequestHandler = async ({ request, locals, cookies, platform }) => {
+  console.log('========== POST REQUEST RECEIVED ==========');
+  console.log('[WebAuthn] Raw request URL:', request.url);
+  
   try {
     const type = new URL(request.url).searchParams.get('type');
+    console.log('[WebAuthn] POST request - Type:', type);
     
     if (type !== 'register') {
+      console.error('[WebAuthn] Invalid type:', type);
       return json({ error: 'Invalid request type' }, { status: 400 });
     }
 
     const user = locals.user;
     if (!user || !user.email) {
+      console.error('[WebAuthn] No authenticated user');
       return json({ error: 'Not authenticated' }, { status: 401 });
     }
 
     const env = platform?.env;
     if (!env || !env.BETA_USERS_KV) {
+      console.error('[WebAuthn] KV namespace not available');
       return json({ error: 'Service Unavailable' }, { status: 503 });
     }
 
+    console.log('[WebAuthn] Verifying registration for:', user.email);
+
+    // 🔧 CRITICAL: Retrieve challenge from cookie
     const expectedChallenge = cookies.get('webauthn-challenge');
     
+    console.log('[WebAuthn] Looking for challenge cookie...');
+    console.log('[WebAuthn] All cookies:', Object.keys(cookies.getAll()));
+    
     if (!expectedChallenge) {
-      console.error('[WebAuthn] No challenge found');
+      console.error('[WebAuthn] No challenge found in cookies');
       return json({ 
-        error: 'Challenge expired or not found. Please try again.'
+        error: 'Challenge expired or not found. Please try again.',
+        hint: 'The registration process must be completed within 5 minutes.'
       }, { status: 400 });
     }
 
     console.log('[WebAuthn] Challenge retrieved from cookie ✅');
+    console.log('[WebAuthn] Challenge length:', expectedChallenge.length);
+    console.log('[WebAuthn] Challenge (first 20 chars):', expectedChallenge.substring(0, 20));
 
+    // Get credential from request body
+    console.log('[WebAuthn] Reading request body...');
     const credential = await request.json();
-    
+    console.log('[WebAuthn] Credential received');
+    console.log('[WebAuthn] Credential ID:', credential.id);
+    console.log('[WebAuthn] Credential type:', credential.type);
+
+    // 🔧 Get origin and rpID dynamically
     const expectedOrigin = getOrigin(request);
     const expectedRPID = getRpID(request);
 
+    console.log('[WebAuthn] Expected origin:', expectedOrigin);
+    console.log('[WebAuthn] Expected RP ID:', expectedRPID);
+
+    // Verify the registration response
     console.log('[WebAuthn] Starting verification...');
     
     const verification = await verifyRegistrationResponse(
@@ -122,16 +164,25 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       expectedRPID
     );
 
+    console.log('[WebAuthn] Verification result:', verification.verified);
+
     if (!verification.verified || !verification.registrationInfo) {
+      console.error('[WebAuthn] Verification failed');
       return json({ 
-        error: 'Verification failed'
+        error: 'Verification failed',
+        details: 'The credential could not be verified. Please try again.'
       }, { status: 400 });
     }
 
     console.log('[WebAuthn] Verification successful! ✅');
 
+    // Save the authenticator to KV
     const { credentialPublicKey, credentialID, counter } = verification.registrationInfo;
     
+    console.log('[WebAuthn] Saving authenticator to KV...');
+    console.log('[WebAuthn] Credential ID (base64url):', credentialID);
+    console.log('[WebAuthn] Counter:', counter);
+
     await addAuthenticator(env.BETA_USERS_KV, user.id, {
       credentialID: Buffer.from(credentialID).toString('base64url'),
       credentialPublicKey: Buffer.from(credentialPublicKey).toString('base64url'),
@@ -141,7 +192,9 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
 
     console.log('[WebAuthn] Saved to KV! ✅');
 
+    // 🔧 Clear the challenge cookie after successful registration
     cookies.delete('webauthn-challenge', { path: '/' });
+    console.log('[WebAuthn] Challenge cookie cleared');
 
     return json({ 
       success: true,
@@ -152,7 +205,12 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
   } catch (error) {
     console.error('[WebAuthn] POST Error:', error);
     
+    // Provide detailed error information
     if (error instanceof Error) {
+      console.error('[WebAuthn] Error name:', error.name);
+      console.error('[WebAuthn] Error message:', error.message);
+      console.error('[WebAuthn] Error stack:', error.stack);
+      
       return json({ 
         error: 'Registration failed',
         details: error.message
