@@ -134,20 +134,21 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       }
 
       const registrationInfo = verification.registrationInfo;
-      const credentialID = registrationInfo.credential?.id || registrationInfo.credentialID;
-      const credentialPublicKey = registrationInfo.credential?.publicKey || registrationInfo.credentialPublicKey;
-      const counter = registrationInfo.credential?.counter ?? registrationInfo.counter ?? 0;
+const credentialID = registrationInfo.credential?.id || registrationInfo.credentialID;
+const credentialPublicKey = registrationInfo.credential?.publicKey || registrationInfo.credentialPublicKey;
+const counter = registrationInfo.credential?.counter ?? registrationInfo.counter ?? 0;
 
-      if (!credentialID || !credentialPublicKey) {
-        return json({ error: 'Invalid credential data' }, { status: 400 });
-      }
+if (!credentialID || !credentialPublicKey) {
+  return json({ error: 'Invalid credential data' }, { status: 400 });
+}
 
-      await addAuthenticator(env.BETA_USERS_KV, user.id, {
-        credentialID: Buffer.from(credentialID).toString('base64url'),
-        credentialPublicKey: Buffer.from(credentialPublicKey).toString('base64url'),
-        counter: counter,
-        transports: credential.response.transports || []
-      });
+// 🔧 FIX: Use isoBase64URL.fromBuffer for Cloudflare Workers compatibility
+await addAuthenticator(env.BETA_USERS_KV, user.id, {
+  credentialID: isoBase64URL.fromBuffer(credentialID),
+  credentialPublicKey: isoBase64URL.fromBuffer(credentialPublicKey),
+  counter: counter,
+  transports: credential.response.transports || []
+});
 
       cookies.delete('webauthn-challenge', { path: '/' });
 
