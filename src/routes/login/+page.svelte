@@ -1,6 +1,9 @@
 <script lang="ts">
     import { goto } from '$app/navigation';
     import { page } from '$app/stores';
+    // [!code ++] Import WebAuthn helper
+    import { startAuthentication } from '@simplewebauthn/browser';
+
     let username = '';
     let email = '';
     let password = '';
@@ -22,6 +25,50 @@
         username = ''; email = ''; password = ''; confirmPassword = '';
         responseError = null;
         registrationSuccess = false;
+    }
+
+    // [!code ++] Biometric Login Handler
+    async function handleBiometricLogin() {
+        loading = true;
+        responseError = null;
+
+        try {
+            // 1. Request challenge from your server
+            const resp = await fetch('/api/auth/webauthn');
+            if (!resp.ok) throw new Error('Biometric login not available');
+            const options = await resp.json();
+
+            // 2. Prompt user for FaceID/TouchID (Browser Native Modal)
+            const authResp = await startAuthentication(options);
+
+            // 3. Verify signature with server
+            const verificationResp = await fetch('/api/auth/webauthn', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(authResp),
+            });
+
+            if (!verificationResp.ok) {
+                const err = await verificationResp.json();
+                throw new Error(err.error || 'Verification failed');
+            }
+
+            const verificationJSON = await verificationResp.json();
+
+            if (verificationJSON.verified) {
+                await goto('/dashboard', { invalidateAll: true });
+            } else {
+                responseError = 'Biometric verification failed.';
+            }
+        } catch (e: any) {
+            console.error('Biometric error:', e);
+            // Don't show error if user just cancelled the dialog
+            if (e.name !== 'NotAllowedError') {
+                responseError = e.message || 'Biometric login failed.';
+            }
+        } finally {
+            loading = false;
+        }
     }
 
     async function submitHandler() {
@@ -153,7 +200,7 @@
             
             {#if registrationSuccess}
                 <div style="text-align: center;">
-                      <div class="alert success" style="display: block; text-align: center; background: #F0FDF4; border-color: #BBF7D0;">
+                    <div class="alert success" style="display: block; text-align: center; background: #F0FDF4; border-color: #BBF7D0;">
                         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2" style="margin: 0 auto 16px auto; display: block;">
                             <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
@@ -176,7 +223,21 @@
                 </div>
                 
                 <form on:submit|preventDefault={submitHandler}>
-                      <div class="form-fields">
+                    {#if isLogin}
+                        <button type="button" class="btn-biometric" on:click={handleBiometricLogin} disabled={loading}>
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                                <path d="M2 12C2 6.48 6.48 2 12 2s10 4.48 10 10-4.48 10-10 10S2 17.52 2 12zm10 6c3.31 0 6-2.69 6-6s-2.69-6-6-6-6 2.69-6 6 2.69 6 6 6z" stroke-opacity="0.3"/> 
+                            </svg>
+                            Sign in with Face ID / Touch ID
+                        </button>
+                        
+                        <div class="divider">
+                            <span>OR</span>
+                        </div>
+                    {/if}
+
+                    <div class="form-fields">
                         <div class="field-group">
                             <label for="username">
                                 {isLogin ? 'Username or Email' : 'Username'}
@@ -277,10 +338,10 @@
                       {#if responseError}
                         <div class="alert error">
                             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <path d="M10 0C4.48 0 0 4.48 0 10C0 15.52 4.48 20 10 20C15.52 20 20 15.52 20 10C20 4.48 15.52 0 10 0ZM11 15H9V13H11V15ZM11 11H9V5H11V11Z" fill="currentColor"/>
+                                 <path d="M10 0C4.48 0 0 4.48 0 10C0 15.52 4.48 20 10 20C15.52 20 20 15.52 20 10C20 4.48 15.52 0 10 0ZM11 15H9V13H11V15ZM11 11H9V5H11V11Z" fill="currentColor"/>
                             </svg>
                             {responseError}
-                          </div>
+                           </div>
                     {/if}
                     
                     <button type="submit" class="btn-submit" disabled={loading}>
@@ -659,6 +720,57 @@
         }
     }
 	
+    /* [!code ++] New Styles for Biometrics */
+    .btn-biometric {
+        width: 100%;
+        padding: 14px;
+        background: white;
+        color: var(--gray-900);
+        border: 2px solid #E5E7EB;
+        border-radius: 12px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        margin-bottom: 24px;
+        transition: all 0.2s;
+        font-family: inherit;
+    }
+
+    @media (hover: hover) {
+        .btn-biometric:hover:not(:disabled) {
+            background: var(--gray-50);
+            border-color: #D1D5DB;
+        }
+    }
+
+    .divider {
+        display: flex;
+        align-items: center;
+        text-align: center;
+        margin-bottom: 24px;
+        color: #6B7280;
+        font-size: 13px;
+        font-weight: 500;
+    }
+
+    .divider::before,
+    .divider::after {
+        content: '';
+        flex: 1;
+        border-bottom: 1px solid #E5E7EB;
+    }
+
+    .divider span {
+        padding: 0 12px;
+        color: #9CA3AF;
+        font-weight: 600;
+        font-size: 12px;
+    }
+
 	/* Responsive */
 	@media (max-width: 1024px) {
 		.auth-page {

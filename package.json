@@ -48,6 +48,8 @@
   },
   "dependencies": {
     "@googlemaps/js-api-loader": "^2.0.2",
+    "@simplewebauthn/browser": "^13.2.2",
+    "@simplewebauthn/server": "^13.2.2",
     "bcryptjs": "^3.0.3",
     "cheerio": "^1.1.2",
     "date-fns": "^4.1.0",

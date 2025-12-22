@@ -4,7 +4,7 @@ import { dev } from '$app/environment';
 
 // --- Email Template Helpers ---
 
-function getVerificationHtml(verifyUrl: string) {
+function getVerificationHtml(verifyUrl: string, logoUrl: string) {
     const brandColor = '#FF7F50';
     const accentColor = '#FF6A3D';
     
@@ -23,9 +23,7 @@ function getVerificationHtml(verifyUrl: string) {
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width: 500px; background-color: #ffffff; border-radius: 12px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
                     <tr>
                         <td style="padding: 30px 40px; text-align: center; border-bottom: 1px solid #f3f4f6;">
-                            <h1 style="margin: 0; font-size: 20px; font-weight: 800; color: ${brandColor}; letter-spacing: -0.5px;">
-                                Go Route Yourself
-                            </h1>
+                            <img src="${logoUrl}" alt="Go Route Yourself" width="180" style="display: block; margin: 0 auto; max-width: 100%; height: auto; border: 0;" />
                         </td>
                     </tr>
                     <tr>
@@ -71,7 +69,7 @@ function getVerificationHtml(verifyUrl: string) {
     `;
 }
 
-function getPasswordResetHtml(resetUrl: string) {
+function getPasswordResetHtml(resetUrl: string, logoUrl: string) {
     const brandColor = '#FF7F50';
     const accentColor = '#FF6A3D';
     
@@ -90,9 +88,7 @@ function getPasswordResetHtml(resetUrl: string) {
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width: 500px; background-color: #ffffff; border-radius: 12px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
                     <tr>
                         <td style="padding: 30px 40px; text-align: center; border-bottom: 1px solid #f3f4f6;">
-                            <h1 style="margin: 0; font-size: 20px; font-weight: 800; color: ${brandColor}; letter-spacing: -0.5px;">
-                                Go Route Yourself
-                            </h1>
+                            <img src="${logoUrl}" alt="Go Route Yourself" width="180" style="display: block; margin: 0 auto; max-width: 100%; height: auto; border: 0;" />
                         </td>
                     </tr>
                     <tr>
@@ -177,6 +173,7 @@ export async function sendVerificationEmail(
     apiKey?: string
 ) {
     const verifyUrl = `${baseUrl}/api/verify?token=${token}`;
+    const logoUrl = `${baseUrl}/logo.png`;
 
     // 1. Dev Mode: Skip actual sending to save API credits and ease debugging
     if (dev) {
@@ -184,6 +181,7 @@ export async function sendVerificationEmail(
         console.log(`To: ${email}`);
         console.log(`Subject: Verify your account`);
         console.log(`🔗 Link: ${verifyUrl}`);
+        console.log(`🖼️ Logo: ${logoUrl}`);
         console.log('=============================================\n');
         return true;
     }
@@ -207,7 +205,7 @@ export async function sendVerificationEmail(
                 from: 'Go Route Yourself <noreply@gorouteyourself.com>',
                 to: email,
                 subject: 'Verify your account',
-                html: getVerificationHtml(verifyUrl)
+                html: getVerificationHtml(verifyUrl, logoUrl)
             })
         });
 
@@ -239,6 +237,7 @@ export async function sendPasswordResetEmail(
     apiKey?: string
 ) {
     const resetUrl = `${baseUrl}/reset-password?token=${token}`;
+    const logoUrl = `${baseUrl}/logo.png`;
 
     // 1. Dev Mode: Skip actual sending
     if (dev) {
@@ -246,6 +245,7 @@ export async function sendPasswordResetEmail(
         console.log(`To: ${email}`);
         console.log(`Subject: Reset your password`);
         console.log(`🔗 Link: ${resetUrl}`);
+        console.log(`🖼️ Logo: ${logoUrl}`);
         console.log('=============================================\n');
         return true;
     }
@@ -269,7 +269,7 @@ export async function sendPasswordResetEmail(
                 from: 'Go Route Yourself <noreply@gorouteyourself.com>',
                 to: email,
                 subject: 'Reset your password',
-                html: getPasswordResetHtml(resetUrl)
+                html: getPasswordResetHtml(resetUrl, logoUrl)
             })
         });
 

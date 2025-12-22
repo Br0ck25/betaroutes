@@ -3,6 +3,15 @@ import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-ty
 import { randomUUID } from 'node:crypto';
 
 // 1. Define Split Types
+
+// [!code ++] New Type for Passkeys/WebAuthn
+export type Authenticator = {
+    credentialID: string;
+    credentialPublicKey: string; // Base64URL encoded
+    counter: number;
+    transports?: string[]; 
+};
+
 export type UserCore = {
     id: string;
     username: string;
@@ -11,7 +20,8 @@ export type UserCore = {
     plan: string;
     name: string;
     createdAt: string;
-    stripeCustomerId?: string; // Added field
+    stripeCustomerId?: string;
+    authenticators?: Authenticator[]; // [!code ++] Added field
 };
 
 export type UserStats = {
@@ -40,6 +50,11 @@ function emailKey(email: string): string {
     return `idx:email:${email.toLowerCase()}`;
 }
 
+// [!code ++] New Index for WebAuthn Login
+function credentialKey(credentialId: string): string {
+    return `idx:credential:${credentialId}`;
+}
+
 // --- Lookup Functions ---
 
 export async function findUserById(kv: KVNamespace, userId: string): Promise<User | null> {
@@ -66,7 +81,8 @@ export async function findUserById(kv: KVNamespace, userId: string): Promise<Use
         plan: core.plan,
         name: core.name,
         createdAt: core.createdAt,
-        stripeCustomerId: core.stripeCustomerId, // Return it
+        stripeCustomerId: core.stripeCustomerId,
+        authenticators: core.authenticators || [], // [!code ++] Return empty array if undefined
         ...stats
     };
 }
@@ -83,6 +99,13 @@ export async function findUserByUsername(kv: KVNamespace, username: string): Pro
     return findUserById(kv, userId);
 }
 
+// [!code ++] New Lookup for Biometric Login
+export async function findUserByCredentialId(kv: KVNamespace, credentialId: string): Promise<User | null> {
+    const userId = await kv.get(credentialKey(credentialId));
+    if (!userId) return null;
+    return findUserById(kv, userId);
+}
+
 // --- Write/Update/Delete Functions ---
 
 export async function createUser(kv: KVNamespace, userData: Omit<User, 'id' | 'createdAt'>): Promise<User> {
@@ -95,6 +118,7 @@ export async function createUser(kv: KVNamespace, userData: Omit<User, 'id' | 'c
         ...coreData,
         id: userId,
         createdAt: now,
+        authenticators: [] // [!code ++] Initialize empty
     };
 
     const userStats: UserStats = {
@@ -111,6 +135,31 @@ export async function createUser(kv: KVNamespace, userData: Omit<User, 'id' | 'c
     ]);
 
     return { ...userCore, ...userStats };
+}
+
+// [!code ++] New Function to Register a Passkey
+export async function saveAuthenticator(kv: KVNamespace, userId: string, authenticator: Authenticator) {
+    const key = userCoreKey(userId);
+    const raw = await kv.get(key);
+    if (!raw) throw new Error('User not found');
+
+    const core = JSON.parse(raw) as UserCore;
+    const authenticators = core.authenticators || [];
+    
+    // Avoid duplicates or update existing
+    const existingIndex = authenticators.findIndex(a => a.credentialID === authenticator.credentialID);
+    if (existingIndex >= 0) {
+        authenticators[existingIndex] = authenticator; // Update counter etc.
+    } else {
+        authenticators.push(authenticator);
+    }
+
+    core.authenticators = authenticators;
+
+    await Promise.all([
+        kv.put(key, JSON.stringify(core)),
+        kv.put(credentialKey(authenticator.credentialID), userId) // Create Index
+    ]);
 }
 
 // FIXED: Handle index updates when email changes
@@ -157,7 +206,7 @@ export async function updateUserPlan(
     kv: KVNamespace, 
     userId: string, 
     plan: string,
-    stripeCustomerId?: string // Added param
+    stripeCustomerId?: string
 ): Promise<void> {
     const coreKey = userCoreKey(userId);
     const statsKey = userStatsKey(userId);
@@ -217,7 +266,8 @@ export async function updatePasswordHash(kv: KVNamespace, user: User, newHash: s
         plan: record.plan,
         name: record.name,
         createdAt: record.createdAt,
-        stripeCustomerId: record.stripeCustomerId
+        stripeCustomerId: record.stripeCustomerId,
+        authenticators: record.authenticators || [] // Preserve authenticators
     };
     
     await kv.put(key, JSON.stringify(core));
@@ -248,6 +298,13 @@ export async function deleteUser(
         kv.delete(`idx:username:${user.username.toLowerCase()}`),
         kv.delete(`idx:email:${user.email.toLowerCase()}`)
     ];
+
+    // [!code ++] Delete Credential Indexes (WebAuthn)
+    if (user.authenticators) {
+        for (const auth of user.authenticators) {
+            authPromises.push(kv.delete(credentialKey(auth.credentialID)));
+        }
+    }
 
     // 2. Delete Settings
     if (resources?.settingsKV) {
