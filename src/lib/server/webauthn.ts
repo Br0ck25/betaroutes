@@ -6,22 +6,22 @@ import {
   verifyAuthenticationResponse,
 } from '@simplewebauthn/server';
 
-// Helper to determine RP ID from hostname (removes port if present)
-// Note: WebAuthn requires a valid domain, not an IP address (unless localhost)
+// Ensure crypto is available (Node 18+ or Cloudflare Workers)
+const getUUID = () => crypto.randomUUID();
 
 // --- Registration (Sign Up / Add Device) ---
 export async function getRegistrationOptions(
-    user: { id: string; username: string }, 
+    user: { id: string; username: string; email: string }, 
     rpID: string
 ) {
-  // Fallback for user.id
-  const userID = user.id || crypto.randomUUID();
-  
+  const userID = user.id || getUUID();
+  const userName = user.username || user.email || 'User'; // Fallback to email
+
   return await generateRegistrationOptions({
     rpName: 'Go Route Yourself',
     rpID,
     userID,
-    userName: user.username,
+    userName,
     attestationType: 'none',
     authenticatorSelection: {
       residentKey: 'preferred',
