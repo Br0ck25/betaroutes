@@ -28,9 +28,6 @@ export interface AuthenticatorForAuth {
   transports?: AuthenticatorTransport[];
 }
 
-/**
- * Generate registration options for a user
- */
 export async function generateRegistrationOptions(
   user: UserWithAuthenticators,
   rpID: string
@@ -71,9 +68,6 @@ export async function generateRegistrationOptions(
   return options;
 }
 
-/**
- * Generate authentication options
- */
 export async function generateAuthenticationOptionsForUser(
   authenticators: AuthenticatorForAuth[],
   rpID: string
@@ -101,9 +95,6 @@ export async function generateAuthenticationOptionsForUser(
   return options;
 }
 
-/**
- * Verify registration response from authenticator
- */
 export async function verifyRegistrationResponse(
   credential: any,
   expectedChallenge: string,
@@ -136,9 +127,6 @@ export async function verifyRegistrationResponse(
   return verification;
 }
 
-/**
- * Verify authentication response from authenticator
- */
 export async function verifyAuthenticationResponseForUser(
   credential: any,
   expectedChallenge: string,
