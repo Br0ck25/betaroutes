@@ -7,7 +7,6 @@ import {
 
 const RP_NAME = 'Go Route Yourself';
 
-// ✅ Define the user type inline instead of importing from non-existent db
 interface UserWithAuthenticators {
   id: string;
   email: string;
@@ -27,7 +26,6 @@ export async function generateRegistrationOptions(user: UserWithAuthenticators) 
   console.log('[WebAuthn Core] User email:', user.email);
   console.log('[WebAuthn Core] Existing authenticators:', user.authenticators?.length || 0);
 
-  // 🔧 Map existing authenticators to exclude them
   const excludeCredentials = (user.authenticators || []).map((auth) => ({
     id: Buffer.from(auth.credentialID, 'base64url'),
     type: 'public-key' as const,
@@ -38,8 +36,8 @@ export async function generateRegistrationOptions(user: UserWithAuthenticators) 
 
   const opts: GenerateRegistrationOptionsOpts = {
     rpName: RP_NAME,
-    rpID: 'gorouteyourself.com', // Will be overridden dynamically by server
-    userID: user.id.toString(),
+    rpID: 'gorouteyourself.com',
+    userID: new TextEncoder().encode(user.id), // ✅ FIXED - Convert to bytes
     userName: user.email,
     userDisplayName: user.name || user.email,
     attestationType: 'none',
@@ -47,7 +45,7 @@ export async function generateRegistrationOptions(user: UserWithAuthenticators) 
     authenticatorSelection: {
       residentKey: 'preferred',
       userVerification: 'preferred',
-      authenticatorAttachment: 'platform', // Prefer platform authenticators (Face ID, Touch ID)
+      authenticatorAttachment: 'platform',
     },
   };
 
@@ -97,7 +95,6 @@ export async function verifyRegistrationResponse(
       expectedChallenge,
       expectedOrigin,
       expectedRPID,
-      // 🔧 CRITICAL: Do NOT require userID - some authenticators don't include it
       requireUserVerification: false,
     };
 
