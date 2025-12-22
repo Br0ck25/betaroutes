@@ -214,22 +214,17 @@
 async function registerPasskey() {
   if (isRegisteringPasskey) return;
   isRegisteringPasskey = true;
-
   try {
-    // 1️⃣ Get options from server
     const resp = await fetch('/api/auth/webauthn?type=register');
     if (!resp.ok) {
       throw new Error('Failed to get registration options');
     }
 
-    const serverOptions = await resp.json();
+    const options = await resp.json();
 
-    // ✅ 2️⃣ REQUIRED SHAPE FOR SIMPLEWEBAUTHN
-    const attestationResponse = await startRegistration({
-      publicKey: serverOptions,
-    });
+    // UPDATED: Wrap 'options' in an object with the 'optionsJSON' key
+    const attestationResponse = await startRegistration({ optionsJSON: options });
 
-    // 3️⃣ Send response back to server
     const verifyResp = await fetch('/api/auth/webauthn?type=register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -247,12 +242,7 @@ async function registerPasskey() {
     }
 
     alert('✅ Passkey registered successfully!');
-  } catch (e: any) {
-    if (e?.name === 'NotAllowedError') {
-      console.info('Passkey registration cancelled by user');
-      return;
-    }
-
+  } catch (e) {
     console.error('Passkey registration error:', e);
     alert(
       'Failed to register device. Ensure your device supports Face ID, Touch ID, or Windows Hello.'
