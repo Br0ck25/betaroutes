@@ -18,7 +18,7 @@
   let startDate = '';
   let endDate = '';
   let lastHadSelections = false;
-   
+    
   // Selection State
   let selectedExpenses = new Set<string>();
 
@@ -104,7 +104,7 @@ $: if (typeof document !== 'undefined') {
 
   // --- COMBINE & FILTER ---
   $: allExpenses = [...$expenses, ...tripExpenses];
-   
+    
   // Reset selection when filters change
   $: if (searchQuery || sortBy || sortOrder || filterCategory || startDate || endDate) {
       selectedExpenses = new Set();
@@ -230,12 +230,12 @@ $: if (typeof document !== 'undefined') {
 
       let successCount = 0;
       for (const id of manualExpenses) {
-          try {
-              await expenses.deleteExpense(id, userId);
-              successCount++;
-          } catch (err) {
-              console.error(`Failed to delete ${id}`, err);
-          }
+        try {
+            await expenses.deleteExpense(id, userId);
+            successCount++;
+        } catch (err) {
+            console.error(`Failed to delete ${id}`, err);
+        }
       }
       
       toasts.success(`Moved ${successCount} expenses to trash.`);
@@ -388,7 +388,7 @@ $: if (typeof document !== 'undefined') {
       <h1 class="page-title">Expenses</h1>
       <p class="page-subtitle">Track maintenance, supplies, and other costs</p>
     </div>
-     
+      
     <div class="header-actions">
         <button class="btn-secondary" on:click={() => goto('/dashboard/trash')} aria-label="View Trash">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -409,20 +409,20 @@ $: if (typeof document !== 'undefined') {
         </button>
     </div>
   </div>
-   
+    
   <div class="stats-summary">
     <div class="summary-card">
       <div class="summary-label">Total Expenses</div>
       <div class="summary-value">{filteredExpenses.length}</div>
     </div>
-     
+      
     <div class="summary-card">
       <div class="summary-label">Total Cost</div>
       <div class="summary-value">
         {formatCurrency(totalAmount)}
       </div>
     </div>
-     
+      
     {#if categories[0]}
         <div class="summary-card hidden-mobile">
         <div class="summary-label">{getCategoryLabel(categories[0])}</div>
@@ -449,13 +449,13 @@ $: if (typeof document !== 'undefined') {
       </svg>
       <input type="text" placeholder="Search expenses..." bind:value={searchQuery} />
     </div>
-     
+      
     <div class="filter-group date-group">
         <input type="date" bind:value={startDate} class="date-input" aria-label="Start Date" />
         <span class="date-sep">-</span>
         <input type="date" bind:value={endDate} class="date-input" aria-label="End Date" />
     </div>
-     
+      
     <div class="filter-group">
       <select bind:value={filterCategory} class="filter-select">
         <option value="all">All Categories</option>
@@ -464,12 +464,12 @@ $: if (typeof document !== 'undefined') {
         {/each}
         <option value="fuel">Fuel (Trips)</option>
       </select>
-       
+        
       <select bind:value={sortBy} class="filter-select">
         <option value="date">By Date</option>
         <option value="amount">By Cost</option>
       </select>
-       
+        
       <button class="sort-btn" on:click={() => sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'}>
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="transform: rotate({sortOrder === 'asc' ? '180deg' : '0deg'})">
             <path d="M10 3V17M10 17L4 11M10 17L16 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -477,7 +477,7 @@ $: if (typeof document !== 'undefined') {
       </button>
     </div>
   </div>
-   
+    
   {#if filteredExpenses.length > 0}
     <div class="batch-header" class:visible={filteredExpenses.length > 0}>
         <label class="checkbox-container">
@@ -562,14 +562,14 @@ $: if (typeof document !== 'undefined') {
                 </div>
 
                 <div class="card-stats">
-                     <div class="stat-badge-container">
+                      <div class="stat-badge-container">
                         <span class={`category-badge ${getCategoryColor(expense.category)}`}>
                              {getCategoryLabel(expense.category)}
                         </span>
                         {#if expense.source === 'trip'}
                             <span class="source-badge">Trip Log</span>
                         {/if}
-                     </div>
+                      </div>
                 </div>
             </div>
         </div>
@@ -676,10 +676,10 @@ $: if (typeof document !== 'undefined') {
   }
 
   /* Page Headers & Actions */
-  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
   .page-title { font-size: 24px; font-weight: 800; color: #111827; margin: 0; }
   .page-subtitle { font-size: 14px; color: #6B7280; margin: 0; }
-  .header-actions { display: flex; gap: 8px; }
+  .header-actions { display: flex; gap: 8px; align-items: center; }
 
   .btn-primary { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; 
     background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; border: none; 
@@ -733,7 +733,7 @@ $: if (typeof document !== 'undefined') {
     font-size: 16px; 
     background: white;
   }
-   
+    
   .date-group, .filter-group { display: flex; gap: 8px; align-items: center; width: 100%; max-width: 100%; }
   .filter-group { width: 100%; }
   
@@ -782,7 +782,7 @@ $: if (typeof document !== 'undefined') {
   /* Expense List & Cards (Styled like Trips) */
   .expense-list-cards { display: flex; flex-direction: column; gap: 12px; max-width: 100%; }
   .card-wrapper { position: relative; overflow: hidden; border-radius: 12px; background: #F3F4F6; max-width: 100%; }
-   
+    
   .swipe-bg { position: absolute; inset: 0; display: flex; justify-content: space-between; align-items: center; 
     padding: 0 20px; z-index: 0; }
   .swipe-action { font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
@@ -803,7 +803,7 @@ $: if (typeof document !== 'undefined') {
   .expense-card:active { background-color: #F9FAFB; }
   .expense-card.read-only { border-left: 4px solid #3B82F6; background: #FAFAFA; }
   .expense-card.selected { background-color: #FFF7ED; border-color: #FF7F50; }
-   
+    
   .card-top { 
     display: grid; 
     grid-template-columns: auto 1fr auto auto; 
@@ -814,9 +814,9 @@ $: if (typeof document !== 'undefined') {
     border-bottom: 1px solid #F3F4F6;
     max-width: 100%;
   }
-   
+    
   .selection-box { display: flex; align-items: center; justify-content: center; padding-right: 4px; }
-   
+    
   .expense-main-info { overflow: hidden; min-width: 0; }
   .expense-date-display { display: block; font-size: 12px; font-weight: 600; color: #6B7280; margin-bottom: 4px; }
   .expense-desc-title { 
@@ -830,12 +830,12 @@ $: if (typeof document !== 'undefined') {
   }
 
   .expense-amount-display { font-size: 18px; font-weight: 800; color: #111827; white-space: nowrap; }
-   
+    
   .nav-icon { color: #9CA3AF; flex-shrink: 0; }
 
   .card-stats { display: flex; align-items: center; max-width: 100%; overflow-x: auto; }
   .stat-badge-container { display: flex; gap: 8px; flex-wrap: wrap; }
-   
+    
   .category-badge { 
     font-size: 12px; 
     font-weight: 600; 
