@@ -4,21 +4,31 @@ import {
   type GenerateRegistrationOptionsOpts,
   type VerifyRegistrationResponseOpts,
 } from '@simplewebauthn/server';
-import type { User } from '$lib/server/db/schema';
 
 const RP_NAME = 'Go Route Yourself';
+
+// ✅ Define the user type inline instead of importing from non-existent db
+interface UserWithAuthenticators {
+  id: string;
+  email: string;
+  name?: string;
+  authenticators?: Array<{
+    credentialID: string;
+    transports?: AuthenticatorTransport[];
+  }>;
+}
 
 /**
  * Generate registration options for a user
  */
-export async function generateRegistrationOptions(user: User & { authenticators?: any[] }) {
+export async function generateRegistrationOptions(user: UserWithAuthenticators) {
   console.log('[WebAuthn Core] Generating registration options');
   console.log('[WebAuthn Core] User ID:', user.id);
   console.log('[WebAuthn Core] User email:', user.email);
   console.log('[WebAuthn Core] Existing authenticators:', user.authenticators?.length || 0);
 
   // 🔧 Map existing authenticators to exclude them
-  const excludeCredentials = (user.authenticators || []).map((auth: any) => ({
+  const excludeCredentials = (user.authenticators || []).map((auth) => ({
     id: Buffer.from(auth.credentialID, 'base64url'),
     type: 'public-key' as const,
     transports: auth.transports || [],
