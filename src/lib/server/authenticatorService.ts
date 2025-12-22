@@ -52,8 +52,10 @@ export async function addAuthenticator(
   
   await kv.put(key, JSON.stringify(updated));
   
-  // 🔑 Create credential index for authentication lookups
+  // Create credential index for authentication lookups
   await kv.put(`credential:${authenticator.credentialID}`, userId);
+  
+  console.log('[AuthService] Authenticator saved and indexed');
   
   return newAuthenticator;
 }
@@ -111,7 +113,7 @@ export async function deleteAuthenticator(
     await kv.put(key, JSON.stringify(filtered));
   }
   
-  // 🔑 Delete credential index
+  // Delete credential index
   await kv.delete(`credential:${credentialID}`);
 }
 
@@ -125,7 +127,7 @@ export async function deleteAllUserAuthenticators(
   const key = `authenticators:${userId}`;
   const authenticators = await getUserAuthenticators(kv, userId);
   
-  // 🔑 Delete all credential indexes
+  // Delete all credential indexes
   for (const auth of authenticators) {
     await kv.delete(`credential:${auth.credentialID}`);
   }

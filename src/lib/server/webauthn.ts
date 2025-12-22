@@ -39,27 +39,13 @@ export async function generateRegistrationOptions(
   console.log('[WebAuthn Core] RP ID:', rpID);
   console.log('[WebAuthn Core] Existing authenticators:', user.authenticators?.length || 0);
 
-  // 🔧 DEBUG: Log what we're actually getting
-  if (user.authenticators && user.authenticators.length > 0) {
-    console.log('[WebAuthn Core] First authenticator:', JSON.stringify(user.authenticators[0]));
-    console.log('[WebAuthn Core] CredentialID type:', typeof user.authenticators[0].credentialID);
-  }
-
-  // 🔧 FIX: Ensure credentialID is a string
   const excludeCredentials = (user.authenticators || [])
     .filter(auth => auth.credentialID && typeof auth.credentialID === 'string')
-    .map((auth) => {
-      try {
-        return {
-          id: isoBase64URL.toBuffer(auth.credentialID),
-          type: 'public-key' as const,
-          transports: auth.transports || [],
-        };
-      } catch (error) {
-        console.error('[WebAuthn Core] Failed to decode credential:', auth.credentialID, error);
-        throw error;
-      }
-    });
+    .map((auth) => ({
+      id: isoBase64URL.toBuffer(auth.credentialID),
+      type: 'public-key' as const,
+      transports: auth.transports || [],
+    }));
 
   console.log('[WebAuthn Core] Excluding credentials:', excludeCredentials.length);
 

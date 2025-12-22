@@ -1,4 +1,3 @@
-// src/routes/api/auth/webauthn/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { 
@@ -13,6 +12,7 @@ import {
   updateAuthenticatorCounter,
   getUserIdByCredentialID
 } from '$lib/server/authenticatorService';
+import { isoBase64URL } from '@simplewebauthn/server/helpers';
 
 function getRpID(context: { url: URL }): string {
   const hostname = context.url.hostname;
@@ -134,24 +134,29 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       }
 
       const registrationInfo = verification.registrationInfo;
-const credentialID = registrationInfo.credential?.id || registrationInfo.credentialID;
-const credentialPublicKey = registrationInfo.credential?.publicKey || registrationInfo.credentialPublicKey;
-const counter = registrationInfo.credential?.counter ?? registrationInfo.counter ?? 0;
+      const credentialID = registrationInfo.credential?.id || registrationInfo.credentialID;
+      const credentialPublicKey = registrationInfo.credential?.publicKey || registrationInfo.credentialPublicKey;
+      const counter = registrationInfo.credential?.counter ?? registrationInfo.counter ?? 0;
 
-if (!credentialID || !credentialPublicKey) {
-  return json({ error: 'Invalid credential data' }, { status: 400 });
-}
+      if (!credentialID || !credentialPublicKey) {
+        return json({ error: 'Invalid credential data' }, { status: 400 });
+      }
 
-// 🔧 FIX: Use isoBase64URL.fromBuffer for Cloudflare Workers compatibility
-await addAuthenticator(env.BETA_USERS_KV, user.id, {
-  credentialID: isoBase64URL.fromBuffer(credentialID),
-  credentialPublicKey: isoBase64URL.fromBuffer(credentialPublicKey),
-  counter: counter,
-  transports: credential.response.transports || []
-});
+      console.log('[WebAuthn] Saving authenticator...');
+      console.log('[WebAuthn] Credential ID type:', typeof credentialID);
+      console.log('[WebAuthn] Public key type:', typeof credentialPublicKey);
+
+      // Use isoBase64URL.fromBuffer for Cloudflare Workers compatibility
+      await addAuthenticator(env.BETA_USERS_KV, user.id, {
+        credentialID: isoBase64URL.fromBuffer(credentialID),
+        credentialPublicKey: isoBase64URL.fromBuffer(credentialPublicKey),
+        counter: counter,
+        transports: credential.response.transports || []
+      });
 
       cookies.delete('webauthn-challenge', { path: '/' });
 
+      console.log('[WebAuthn] Registration complete!');
       return json({ success: true, verified: true, message: 'Passkey registered!' });
     } else {
       const env = platform?.env;
@@ -167,16 +172,22 @@ await addAuthenticator(env.BETA_USERS_KV, user.id, {
       const credential = await request.json();
       const credentialID = credential.id;
 
+      console.log('[WebAuthn] Looking up credential:', credentialID);
+
       const userId = await getUserIdByCredentialID(env.BETA_USERS_KV, credentialID);
       
       if (!userId) {
+        console.error('[WebAuthn] Credential not found in index');
         return json({ error: 'Passkey not found' }, { status: 404 });
       }
+
+      console.log('[WebAuthn] Found user:', userId);
 
       const authenticators = await getUserAuthenticators(env.BETA_USERS_KV, userId);
       const authenticator = authenticators.find(auth => auth.credentialID === credentialID);
 
       if (!authenticator) {
+        console.error('[WebAuthn] Authenticator not in user list');
         return json({ error: 'Authenticator not found' }, { status: 404 });
       }
 
@@ -192,6 +203,7 @@ await addAuthenticator(env.BETA_USERS_KV, user.id, {
       );
 
       if (!verification.verified) {
+        console.error('[WebAuthn] Verification failed');
         return json({ error: 'Authentication failed' }, { status: 400 });
       }
 
@@ -202,6 +214,7 @@ await addAuthenticator(env.BETA_USERS_KV, user.id, {
 
       cookies.delete('webauthn-challenge', { path: '/' });
 
+      console.log('[WebAuthn] Authentication successful!');
       return json({ 
         success: true, 
         verified: true,
