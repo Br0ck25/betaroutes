@@ -181,3 +181,6 @@ export async function POST({ request, cookies, platform, locals }) {
     return json(
       { error: e.message || 'WebAuthn verification failed' },
       { status: 400 }
+    );
+  }
+}
