@@ -6,47 +6,71 @@ import {
   verifyAuthenticationResponse,
 } from '@simplewebauthn/server';
 
-// [!code ++] Explicitly handle crypto for some environments
-const getUUID = () => {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-        return crypto.randomUUID();
-    }
-    // Fallback if randomUUID is missing (rare in modern envs but possible)
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
-};
+/**
+ * WebAuthn requires:
+ * - a persistent, stable user ID
+ * - a correct RP ID (domain only)
+ * - an HTTPS origin
+ *
+ * Any violation will cause cryptic 500 errors.
+ */
+
+// -----------------------------
+// Registration (Passkey Setup)
+// -----------------------------
 
 export async function getRegistrationOptions(
-    user: { id: string; username: string; email: string }, 
-    rpID: string
+  user: {
+    id: string;
+    username?: string;
+    email?: string;
+  },
+  rpID: string
 ) {
-  const userID = user.id || getUUID();
-  // Ensure username is never null/undefined
-  const userName = user.username || user.email || 'User'; 
+  if (!user?.id) {
+    throw new Error('WebAuthn registration requires a persistent user.id');
+  }
 
-  return await generateRegistrationOptions({
+  if (!rpID) {
+    throw new Error('Missing rpID for WebAuthn registration');
+  }
+
+  const userName = user.username || user.email || 'User';
+
+  return generateRegistrationOptions({
     rpName: 'Go Route Yourself',
     rpID,
-    userID,
+    userID: user.id, // MUST be stable
     userName,
     attestationType: 'none',
     authenticatorSelection: {
       residentKey: 'preferred',
       userVerification: 'preferred',
-      authenticatorAttachment: 'platform',
+      // authenticatorAttachment intentionally omitted
+      // to allow both platform + cross-platform keys
     },
   });
 }
 
 export async function verifyRegistration(
-    body: any, 
-    currentChallenge: string,
-    rpID: string,
-    origin: string
+  body: any,
+  currentChallenge: string,
+  rpID: string,
+  origin: string
 ) {
-  return await verifyRegistrationResponse({
+  if (!currentChallenge) {
+    throw new Error('Missing registration challenge');
+  }
+
+  if (!rpID || !origin) {
+    throw new Error('Missing RP configuration');
+  }
+
+  if (!origin.startsWith('https://')) {
+    throw new Error('WebAuthn requires HTTPS origin');
+  }
+
+  return verifyRegistrationResponse({
     response: body,
     expectedChallenge: currentChallenge,
     expectedOrigin: origin,
@@ -54,22 +78,49 @@ export async function verifyRegistration(
   });
 }
 
-// --- Authentication (Login) ---
+// -----------------------------
+// Authentication (Login)
+// -----------------------------
+
 export async function getLoginOptions(rpID: string) {
-  return await generateAuthenticationOptions({
+  if (!rpID) {
+    throw new Error('Missing rpID for WebAuthn login');
+  }
+
+  return generateAuthenticationOptions({
     rpID,
     userVerification: 'preferred',
   });
 }
 
 export async function verifyLogin(
-    body: any, 
-    currentChallenge: string, 
-    userCredential: { id: string; publicKey: Uint8Array; counter: number },
-    rpID: string,
-    origin: string
+  body: any,
+  currentChallenge: string,
+  userCredential: {
+    id: string;
+    publicKey: Uint8Array;
+    counter: number;
+  },
+  rpID: string,
+  origin: string
 ) {
-  return await verifyAuthenticationResponse({
+  if (!currentChallenge) {
+    throw new Error('Missing authentication challenge');
+  }
+
+  if (!userCredential?.id) {
+    throw new Error('Missing authenticator credential');
+  }
+
+  if (!rpID || !origin) {
+    throw new Error('Missing RP configuration');
+  }
+
+  if (!origin.startsWith('https://')) {
+    throw new Error('WebAuthn requires HTTPS origin');
+  }
+
+  return verifyAuthenticationResponse({
     response: body,
     expectedChallenge: currentChallenge,
     expectedOrigin: origin,
