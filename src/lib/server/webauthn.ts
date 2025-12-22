@@ -6,16 +6,25 @@ import {
   verifyAuthenticationResponse,
 } from '@simplewebauthn/server';
 
-// Ensure crypto is available (Node 18+ or Cloudflare Workers)
-const getUUID = () => crypto.randomUUID();
+// [!code ++] Explicitly handle crypto for some environments
+const getUUID = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    // Fallback if randomUUID is missing (rare in modern envs but possible)
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+};
 
-// --- Registration (Sign Up / Add Device) ---
 export async function getRegistrationOptions(
     user: { id: string; username: string; email: string }, 
     rpID: string
 ) {
   const userID = user.id || getUUID();
-  const userName = user.username || user.email || 'User'; // Fallback to email
+  // Ensure username is never null/undefined
+  const userName = user.username || user.email || 'User'; 
 
   return await generateRegistrationOptions({
     rpName: 'Go Route Yourself',
@@ -26,7 +35,7 @@ export async function getRegistrationOptions(
     authenticatorSelection: {
       residentKey: 'preferred',
       userVerification: 'preferred',
-      authenticatorAttachment: 'platform', // Forces FaceID/TouchID
+      authenticatorAttachment: 'platform',
     },
   });
 }
