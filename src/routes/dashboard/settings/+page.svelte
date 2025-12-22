@@ -229,7 +229,10 @@
       // 🔧 STEP 2: Prompt user to create passkey
       console.log('[Passkey] Starting registration ceremony...');
       
-      const credential = await startRegistration(options);
+const credential = await startRegistration(options);
+console.log('[Passkey] Credential created:', credential);
+console.log('[Passkey] Credential.response exists?', !!credential.response);
+console.log('[Passkey] Credential structure:', JSON.stringify(credential, null, 2));
       console.log('[Passkey] Credential created:', credential);
 
       // 🔧 STEP 3: Send credential to server for verification
