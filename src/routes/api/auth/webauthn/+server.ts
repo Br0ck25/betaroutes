@@ -1,3 +1,4 @@
+// src/routes/api/auth/webauthn/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { 
@@ -10,20 +11,98 @@ import {
   getUserAuthenticators, 
   addAuthenticator,
   updateAuthenticatorCounter,
-  getUserIdByCredentialID  // 🔑 ADD THIS
+  getUserIdByCredentialID
 } from '$lib/server/authenticatorService';
 
-// ... (keep all the existing GET handler code) ...
+function getRpID(context: { url: URL }): string {
+  const hostname = context.url.hostname;
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'localhost';
+  }
+  return 'gorouteyourself.com';
+}
 
-// POST: Verify response (registration OR authentication)
+function getOrigin(request: Request): string {
+  return new URL(request.url).origin;
+}
+
+export const GET: RequestHandler = async ({ url, locals, cookies, platform }) => {
+  try {
+    const type = url.searchParams.get('type');
+    
+    if (type === 'register') {
+      const user = locals.user;
+      if (!user || !user.email) {
+        return json({ error: 'Not authenticated' }, { status: 401 });
+      }
+
+      const env = platform?.env;
+      if (!env || !env.BETA_USERS_KV) {
+        return json({ error: 'Service Unavailable' }, { status: 503 });
+      }
+
+      const authenticators = await getUserAuthenticators(env.BETA_USERS_KV, user.id);
+      
+      const userWithAuth = {
+        id: user.id,
+        email: user.email,
+        name: user.name || user.email,
+        authenticators
+      };
+
+      const rpID = getRpID({ url });
+      const options = await generateRegistrationOptions(userWithAuth, rpID);
+      
+      if (!options || !options.challenge) {
+        return json({ error: 'Failed to generate options' }, { status: 500 });
+      }
+
+      cookies.set('webauthn-challenge', options.challenge, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 300
+      });
+
+      return json(options);
+    } else {
+      const env = platform?.env;
+      if (!env || !env.BETA_USERS_KV) {
+        return json({ error: 'Service Unavailable' }, { status: 503 });
+      }
+
+      const rpID = getRpID({ url });
+      const options = await generateAuthenticationOptionsForUser([], rpID);
+      
+      if (!options || !options.challenge) {
+        return json({ error: 'Failed to generate options' }, { status: 500 });
+      }
+
+      cookies.set('webauthn-challenge', options.challenge, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 300
+      });
+
+      return json(options);
+    }
+  } catch (error) {
+    console.error('[WebAuthn] GET Error:', error);
+    return json({ 
+      error: 'Failed to generate options',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+};
+
 export const POST: RequestHandler = async ({ request, locals, cookies, platform }) => {
   try {
     const type = new URL(request.url).searchParams.get('type');
     
-    // REGISTRATION VERIFICATION
     if (type === 'register') {
-      console.log('[WebAuthn] POST - Registration verification');
-      
       const user = locals.user;
       if (!user || !user.email) {
         return json({ error: 'Not authenticated' }, { status: 401 });
@@ -36,7 +115,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
 
       const expectedChallenge = cookies.get('webauthn-challenge');
       if (!expectedChallenge) {
-        return json({ error: 'Challenge expired. Please try again.' }, { status: 400 });
+        return json({ error: 'Challenge expired' }, { status: 400 });
       }
 
       const credential = await request.json();
@@ -72,14 +151,8 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
 
       cookies.delete('webauthn-challenge', { path: '/' });
 
-      console.log('[WebAuthn] Registration successful!');
-      return json({ success: true, verified: true, message: 'Passkey registered successfully!' });
-    }
-    
-    // AUTHENTICATION VERIFICATION
-    else {
-      console.log('[WebAuthn] POST - Authentication verification');
-      
+      return json({ success: true, verified: true, message: 'Passkey registered!' });
+    } else {
       const env = platform?.env;
       if (!env || !env.BETA_USERS_KV) {
         return json({ error: 'Service Unavailable' }, { status: 503 });
@@ -87,28 +160,20 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
 
       const expectedChallenge = cookies.get('webauthn-challenge');
       if (!expectedChallenge) {
-        return json({ error: 'Challenge expired. Please try again.' }, { status: 400 });
+        return json({ error: 'Challenge expired' }, { status: 400 });
       }
 
       const credential = await request.json();
       const credentialID = credential.id;
-      
-      console.log('[WebAuthn] Looking for credential:', credentialID);
 
-      // 🔑 Use the credential index to find the user
       const userId = await getUserIdByCredentialID(env.BETA_USERS_KV, credentialID);
       
       if (!userId) {
-        console.error('[WebAuthn] Credential not found in index');
         return json({ error: 'Passkey not found' }, { status: 404 });
       }
 
-      console.log('[WebAuthn] Found user:', userId);
-
       const authenticators = await getUserAuthenticators(env.BETA_USERS_KV, userId);
-      const authenticator = authenticators.find(
-        auth => auth.credentialID === credentialID
-      );
+      const authenticator = authenticators.find(auth => auth.credentialID === credentialID);
 
       if (!authenticator) {
         return json({ error: 'Authenticator not found' }, { status: 404 });
@@ -129,24 +194,13 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
         return json({ error: 'Authentication failed' }, { status: 400 });
       }
 
-      // Update counter to prevent replay attacks
       const authInfo = verification.authenticationInfo;
       const newCounter = authInfo.newCounter ?? authInfo.counter ?? authenticator.counter + 1;
       
-      await updateAuthenticatorCounter(
-        env.BETA_USERS_KV,
-        userId,
-        credentialID,
-        newCounter
-      );
-
-      // 🔧 TODO: Create session for the user
-      // Get user data and create session
-      // For now, returning success with userId
+      await updateAuthenticatorCounter(env.BETA_USERS_KV, userId, credentialID, newCounter);
 
       cookies.delete('webauthn-challenge', { path: '/' });
 
-      console.log('[WebAuthn] Authentication successful!');
       return json({ 
         success: true, 
         verified: true,
@@ -154,7 +208,6 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
         message: 'Authentication successful!' 
       });
     }
-    
   } catch (error) {
     console.error('[WebAuthn] POST Error:', error);
     
@@ -165,6 +218,6 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       }, { status: 400 });
     }
     
-    return json({ error: 'An unexpected error occurred' }, { status: 500 });
+    return json({ error: 'Unexpected error' }, { status: 500 });
   }
 };
