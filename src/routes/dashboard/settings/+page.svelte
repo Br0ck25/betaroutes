@@ -207,40 +207,55 @@
   }
 
   // [!code ++] Passkey Registration Handler
+
   async function registerPasskey() {
     try {
-        // 1. Get registration options from server
-        const resp = await fetch('/api/auth/webauthn?type=register');
-        if (!resp.ok) throw new Error('Failed to get registration options');
-        const options = await resp.json();
+      // 1️⃣ Get registration options
+      const resp = await fetch('/api/auth/webauthn?type=register', {
+        credentials: 'include'
+      });
 
-        // 2. Prompt browser for biometric/security key
-        const attResp = await startRegistration(options);
+      if (!resp.ok) {
+        throw new Error('Failed to get registration options');
+      }
 
-        // 3. Verify and save credential
-        const verificationResp = await fetch('/api/auth/webauthn?type=register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(attResp),
-        });
+      const optionsJSON = await resp.json();
 
-        if (!verificationResp.ok) throw new Error('Verification failed');
-        
-        const verificationJSON = await verificationResp.json();
+      // 2️⃣ START REGISTRATION (✅ correct API)
+      const attestationResponse = await startRegistration({
+        optionsJSON
+      });
 
-        if (verificationJSON.verified) {
-            showSuccessMsg('Face ID / Touch ID registered successfully!');
-        } else {
-            alert('Registration failed');
+      // 3️⃣ Send response to server for verification
+      const verificationResp = await fetch(
+        '/api/auth/webauthn?type=register',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(attestationResponse)
         }
+      );
+
+      if (!verificationResp.ok) {
+        throw new Error('Verification failed');
+      }
+
+      const verificationResult = await verificationResp.json();
+
+      if (!verificationResult.verified) {
+        throw new Error('Passkey registration rejected');
+      }
+
+      alert('✅ Face ID / Touch ID registered successfully!');
     } catch (e) {
-        console.error('Passkey registration error:', e);
-        // Clean up error message for user
-        const msg = e instanceof Error ? e.message : 'Unknown error';
-        if (msg.includes('The user rejected')) return; // Ignore cancellations
-        alert('Failed to register device. Ensure your device supports Face ID, Touch ID, or Windows Hello.');
+      console.error('Passkey registration error:', e);
+      alert(
+        '❌ Failed to register device. Ensure your device supports Face ID, Touch ID, or Windows Hello.'
+      );
     }
   }
+
 
   async function handleDeleteAccount() {
     if (!deletePassword) {

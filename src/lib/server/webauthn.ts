@@ -1,29 +1,88 @@
-import { startRegistration } from '@simplewebauthn/browser';
+import {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse,
+} from '@simplewebauthn/server';
 
-async function registerPasskey() {
-  // 1. Get options from server
-  const res = await fetch('/api/auth/webauthn?type=register');
-  if (!res.ok) {
-    throw new Error('Failed to get registration options');
+import { createHash } from 'node:crypto';
+
+// Convert string user ID → stable Uint8Array
+function userIdToUint8Array(userId: string): Uint8Array {
+  return createHash('sha256').update(userId).digest();
+}
+
+// -----------------------------
+// Registration
+// -----------------------------
+
+export async function getRegistrationOptions(
+  user: { id: string; username?: string; email?: string },
+  rpID: string
+) {
+  if (!user?.id) {
+    throw new Error('Missing user ID');
   }
 
-  const optionsJSON = await res.json();
-
-  // 2. Start WebAuthn (THIS IS THE FIX)
-  const attestation = await startRegistration({
-    optionsJSON
+  return generateRegistrationOptions({
+    rpName: 'Go Route Yourself',
+    rpID,
+    userID: userIdToUint8Array(user.id),
+    userName: user.username || user.email || 'User',
+    attestationType: 'none',
+    authenticatorSelection: {
+      residentKey: 'preferred',
+      userVerification: 'preferred',
+      authenticatorAttachment: 'platform',
+    },
   });
+}
 
-  // 3. Send response back to server
-  const verifyRes = await fetch('/api/auth/webauthn?type=register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(attestation),
+export function verifyRegistration(
+  body: any,
+  challenge: string,
+  rpID: string,
+  origin: string
+) {
+  return verifyRegistrationResponse({
+    response: body,
+    expectedChallenge: challenge,
+    expectedOrigin: origin,
+    expectedRPID: rpID,
   });
+}
 
-  if (!verifyRes.ok) {
-    throw new Error('Verification failed');
-  }
+// -----------------------------
+// Login
+// -----------------------------
 
-  return verifyRes.json();
+export function getLoginOptions(rpID: string) {
+  return generateAuthenticationOptions({
+    rpID,
+    userVerification: 'preferred',
+  });
+}
+
+export function verifyLogin(
+  body: any,
+  challenge: string,
+  authenticator: {
+    id: string;
+    publicKey: Uint8Array;
+    counter: number;
+  },
+  rpID: string,
+  origin: string
+) {
+  return verifyAuthenticationResponse({
+    response: body,
+    expectedChallenge: challenge,
+    expectedOrigin: origin,
+    expectedRPID: rpID,
+    authenticator: {
+      credentialID: authenticator.id,
+      credentialPublicKey: authenticator.publicKey,
+      counter: authenticator.counter,
+    },
+  });
 }
