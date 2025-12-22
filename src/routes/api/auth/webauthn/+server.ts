@@ -1,101 +1,191 @@
-// src/routes/api/auth/webauthn/+server.ts
 import { json } from '@sveltejs/kit';
-import { getRegistrationOptions, verifyRegistration, getLoginOptions, verifyLogin } from '$lib/server/webauthn';
-import { findUserByCredentialId, saveAuthenticator, type Authenticator } from '$lib/server/userService';
+import {
+  getRegistrationOptions,
+  verifyRegistration,
+  getLoginOptions,
+  verifyLogin
+} from '$lib/server/webauthn';
+import {
+  findUserByCredentialId,
+  saveAuthenticator,
+  type Authenticator
+} from '$lib/server/userService';
 import { createSession } from '$lib/server/sessionService';
-import { Buffer } from 'node:buffer'; 
+import { Buffer } from 'node:buffer';
+
+// -----------------------------
+// Helpers
+// -----------------------------
 
 function getRpID(url: URL) {
-    return url.hostname; 
+  // 🔒 FORCE canonical RP ID
+  return 'gorouteyourself.com';
 }
+
+function setChallenge(cookies: any, challenge: string) {
+  cookies.set('webauthn_challenge', challenge, {
+    path: '/',
+    httpOnly: true,
+    secure: true,
+    sameSite: 'strict',
+    maxAge: 60 * 5 // 5 minutes
+  });
+}
+
+function clearChallenge(cookies: any) {
+  cookies.delete('webauthn_challenge', { path: '/' });
+}
+
+// -----------------------------
+// GET (options)
+// -----------------------------
 
 export async function GET({ url, cookies, locals }) {
-    try { // [!code ++] Add try block
-        const type = url.searchParams.get('type');
-        const rpID = getRpID(url);
+  try {
+    const type = url.searchParams.get('type');
+    const rpID = getRpID(url);
 
-        if (type === 'register') {
-            if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+    if (type === 'register') {
+      if (!locals.user) {
+        return json({ error: 'Unauthorized' }, { status: 401 });
+      }
 
-            // This is likely where it fails
-            const options = await getRegistrationOptions(locals.user, rpID);
-            cookies.set('webauthn_challenge', options.challenge, { path: '/' });
-            return json(options);
-        } 
-        else {
-            const options = await getLoginOptions(rpID);
-            cookies.set('webauthn_challenge', options.challenge, { path: '/' });
-            return json(options);
-        }
-    } catch (e: any) { // [!code ++] Catch and return error
-        console.error('WebAuthn GET Error:', e);
-        return json({ error: e.message || 'Server error generating options' }, { status: 500 });
+      const options = await getRegistrationOptions(locals.user, rpID);
+      setChallenge(cookies, options.challenge);
+      return json(options);
     }
+
+    // login
+    const options = await getLoginOptions(rpID);
+    setChallenge(cookies, options.challenge);
+    return json(options);
+
+  } catch (e: any) {
+    console.error('[WebAuthn GET]', e);
+    return json(
+      { error: e.message || 'Failed to generate WebAuthn options' },
+      { status: 500 }
+    );
+  }
 }
 
-// ... POST handler remains the same ...
+// -----------------------------
+// POST (verify)
+// -----------------------------
+
 export async function POST({ request, cookies, platform, locals }) {
-    // ... (Keep existing POST logic)
-    const body = await request.json();
-    const challenge = cookies.get('webauthn_challenge');
-    
-    const url = new URL(request.url);
-    const rpID = getRpID(url);
-    const origin = url.origin;
+  const body = await request.json();
+  const challenge = cookies.get('webauthn_challenge');
 
-    const type = url.searchParams.get('type');
+  if (!challenge) {
+    return json({ error: 'Missing WebAuthn challenge' }, { status: 400 });
+  }
 
-    if (!challenge) return json({ error: 'No challenge found' }, { status: 400 });
+  const url = new URL(request.url);
+  const rpID = getRpID(url);
+  const origin = 'https://gorouteyourself.com';
+  const type = url.searchParams.get('type');
 
-    try {
-        if (type === 'register') {
-            if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    // -----------------------------
+    // REGISTER
+    // -----------------------------
+    if (type === 'register') {
+      if (!locals.user) {
+        return json({ error: 'Unauthorized' }, { status: 401 });
+      }
 
-            const verification = await verifyRegistration(body, challenge, rpID, origin);
+      const verification = await verifyRegistration(
+        body,
+        challenge,
+        rpID,
+        origin
+      );
 
-            if (verification.verified && verification.registrationInfo) {
-                const { credentialID, credentialPublicKey, counter } = verification.registrationInfo;
+      if (!verification.verified || !verification.registrationInfo) {
+        throw new Error('Registration verification failed');
+      }
 
-                const newAuthenticator: Authenticator = {
-                    credentialID: Buffer.from(credentialID).toString('base64url'),
-                    credentialPublicKey: Buffer.from(credentialPublicKey).toString('base64url'),
-                    counter,
-                    transports: body.response.transports,
-                };
+      const { credentialID, credentialPublicKey, counter } =
+        verification.registrationInfo;
 
-                await saveAuthenticator(platform.env.KV, locals.user.id, newAuthenticator);
-                return json({ verified: true });
-            }
-        } else {
-            const user = await findUserByCredentialId(platform.env.KV, body.id);
-            if (!user || !user.authenticators) return json({ error: 'User not found' }, { status: 400 });
+      const authenticator: Authenticator = {
+        credentialID: Buffer.from(credentialID).toString('base64url'),
+        credentialPublicKey: Buffer.from(credentialPublicKey).toString('base64url'),
+        counter,
+        transports: body.response?.transports ?? []
+      };
 
-            const authenticator = user.authenticators.find(a => a.credentialID === body.id);
-            if (!authenticator) return json({ error: 'Authenticator not found' }, { status: 400 });
+      await saveAuthenticator(
+        platform.env.KV,
+        locals.user.id,
+        authenticator
+      );
 
-            const userCredential = {
-                id: body.id,
-                publicKey: Buffer.from(authenticator.credentialPublicKey, 'base64url'),
-                counter: authenticator.counter
-            };
-
-            const verification = await verifyLogin(body, challenge, userCredential, rpID, origin);
-
-            if (verification.verified) {
-                const session = await createSession(platform.env.KV, user);
-                cookies.set('session_id', session.id, { 
-                    path: '/',
-                    httpOnly: true,
-                    secure: process.env.NODE_ENV === 'production',
-                    maxAge: 60 * 60 * 24 * 7 
-                });
-                return json({ verified: true });
-            }
-        }
-    } catch (e: any) {
-        console.error('WebAuthn POST Error:', e);
-        return json({ error: e.message || 'Verification failed' }, { status: 400 });
+      clearChallenge(cookies);
+      return json({ verified: true });
     }
 
-    return json({ verified: false }, { status: 400 });
+    // -----------------------------
+    // LOGIN
+    // -----------------------------
+    const credentialID = body.id;
+    if (!credentialID) {
+      return json({ error: 'Missing credential ID' }, { status: 400 });
+    }
+
+    const user = await findUserByCredentialId(
+      platform.env.KV,
+      credentialID
+    );
+
+    if (!user || !user.authenticators) {
+      return json({ error: 'User not found' }, { status: 400 });
+    }
+
+    const authenticator = user.authenticators.find(
+      a => a.credentialID === credentialID
+    );
+
+    if (!authenticator) {
+      return json({ error: 'Authenticator not found' }, { status: 400 });
+    }
+
+    const verification = await verifyLogin(
+      body,
+      challenge,
+      {
+        id: credentialID,
+        publicKey: Buffer.from(authenticator.credentialPublicKey, 'base64url'),
+        counter: authenticator.counter
+      },
+      rpID,
+      origin
+    );
+
+    if (!verification.verified) {
+      throw new Error('Authentication failed');
+    }
+
+    const session = await createSession(platform.env.KV, user);
+
+    cookies.set('session_id', session.id, {
+      path: '/',
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7
+    });
+
+    clearChallenge(cookies);
+    return json({ verified: true });
+
+  } catch (e: any) {
+    console.error('[WebAuthn POST]', e);
+    clearChallenge(cookies);
+    return json(
+      { error: e.message || 'WebAuthn verification failed' },
+      { status: 400 }
+    );
+  }
 }
