@@ -5,61 +5,70 @@ import {
   generateAuthenticationOptions,
   verifyAuthenticationResponse,
 } from '@simplewebauthn/server';
-import { env } from '$env/dynamic/private';
 
-const RP_ID = 'localhost'; // CHANGE THIS to your production domain (e.g., 'gorouteyourself.com')
-const ORIGIN = `http://${RP_ID}:5173`; // CHANGE THIS to https://your-domain.com in production
+// Helper to determine RP ID from hostname (removes port if present)
+// Note: WebAuthn requires a valid domain, not an IP address (unless localhost)
 
-// --- Registration (Sign Up with FaceID) ---
-
-export async function getRegistrationOptions(user: { id: string; username: string }) {
-  const options = await generateRegistrationOptions({
+// --- Registration (Sign Up / Add Device) ---
+export async function getRegistrationOptions(
+    user: { id: string; username: string }, 
+    rpID: string
+) {
+  // Fallback for user.id
+  const userID = user.id || crypto.randomUUID();
+  
+  return await generateRegistrationOptions({
     rpName: 'Go Route Yourself',
-    rpID: RP_ID,
-    userID: user.id,
+    rpID,
+    userID,
     userName: user.username,
-    // Don't prompt if they already have a passkey
     attestationType: 'none',
     authenticatorSelection: {
       residentKey: 'preferred',
       userVerification: 'preferred',
-      authenticatorAttachment: 'platform', // Forces TouchID/FaceID/Windows Hello
+      authenticatorAttachment: 'platform', // Forces FaceID/TouchID
     },
   });
-  return options;
 }
 
-export async function verifyRegistration(body: any, currentChallenge: string) {
-  const verification = await verifyRegistrationResponse({
+export async function verifyRegistration(
+    body: any, 
+    currentChallenge: string,
+    rpID: string,
+    origin: string
+) {
+  return await verifyRegistrationResponse({
     response: body,
     expectedChallenge: currentChallenge,
-    expectedOrigin: ORIGIN,
-    expectedRPID: RP_ID,
+    expectedOrigin: origin,
+    expectedRPID: rpID,
   });
-  return verification;
 }
 
-// --- Authentication (Login with FaceID) ---
-
-export async function getLoginOptions() {
-  const options = await generateAuthenticationOptions({
-    rpID: RP_ID,
+// --- Authentication (Login) ---
+export async function getLoginOptions(rpID: string) {
+  return await generateAuthenticationOptions({
+    rpID,
     userVerification: 'preferred',
   });
-  return options;
 }
 
-export async function verifyLogin(body: any, currentChallenge: string, userCredential: { id: string; publicKey: Uint8Array; counter: number }) {
-  const verification = await verifyAuthenticationResponse({
+export async function verifyLogin(
+    body: any, 
+    currentChallenge: string, 
+    userCredential: { id: string; publicKey: Uint8Array; counter: number },
+    rpID: string,
+    origin: string
+) {
+  return await verifyAuthenticationResponse({
     response: body,
     expectedChallenge: currentChallenge,
-    expectedOrigin: ORIGIN,
-    expectedRPID: RP_ID,
+    expectedOrigin: origin,
+    expectedRPID: rpID,
     authenticator: {
       credentialID: userCredential.id,
       credentialPublicKey: userCredential.publicKey,
       counter: userCredential.counter,
     },
   });
-  return verification;
 }
