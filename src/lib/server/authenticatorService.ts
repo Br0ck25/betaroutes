@@ -1,13 +1,12 @@
-// src/lib/server/authenticatorService.ts
 /**
  * Service for managing WebAuthn authenticators in Cloudflare KV
  */
 
 export interface Authenticator {
-  id: string; // Unique ID for this authenticator
+  id: string;
   userId: string;
-  credentialID: string; // base64url encoded
-  credentialPublicKey: string; // base64url encoded
+  credentialID: string;
+  credentialPublicKey: string;
   counter: number;
   transports?: AuthenticatorTransport[];
   createdAt: string;
@@ -40,10 +39,8 @@ export async function addAuthenticator(
 ): Promise<Authenticator> {
   const key = `authenticators:${userId}`;
   
-  // Get existing authenticators
   const existing = await getUserAuthenticators(kv, userId);
   
-  // Create new authenticator with metadata
   const newAuthenticator: Authenticator = {
     id: crypto.randomUUID(),
     userId,
@@ -51,10 +48,8 @@ export async function addAuthenticator(
     createdAt: new Date().toISOString()
   };
   
-  // Add to array
   const updated = [...existing, newAuthenticator];
   
-  // Save back to KV
   await kv.put(key, JSON.stringify(updated));
   
   return newAuthenticator;
@@ -97,7 +92,6 @@ export async function deleteAuthenticator(
   );
   
   if (filtered.length === 0) {
-    // No authenticators left, delete the key
     await kv.delete(key);
   } else {
     await kv.put(key, JSON.stringify(filtered));

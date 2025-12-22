@@ -20,10 +20,14 @@ interface UserWithAuthenticators {
 /**
  * Generate registration options for a user
  */
-export async function generateRegistrationOptions(user: UserWithAuthenticators) {
+export async function generateRegistrationOptions(
+  user: UserWithAuthenticators,
+  rpID: string
+) {
   console.log('[WebAuthn Core] Generating registration options');
   console.log('[WebAuthn Core] User ID:', user.id);
   console.log('[WebAuthn Core] User email:', user.email);
+  console.log('[WebAuthn Core] RP ID:', rpID);
   console.log('[WebAuthn Core] Existing authenticators:', user.authenticators?.length || 0);
 
   const excludeCredentials = (user.authenticators || []).map((auth) => ({
@@ -36,8 +40,8 @@ export async function generateRegistrationOptions(user: UserWithAuthenticators) 
 
   const opts: GenerateRegistrationOptionsOpts = {
     rpName: RP_NAME,
-    rpID: 'gorouteyourself.com',
-    userID: new TextEncoder().encode(user.id), // ✅ FIXED - Convert to bytes
+    rpID: rpID,
+    userID: new TextEncoder().encode(user.id),
     userName: user.email,
     userDisplayName: user.name || user.email,
     attestationType: 'none',
@@ -106,14 +110,22 @@ export async function verifyRegistrationResponse(
     console.log('[WebAuthn Core] Verification complete');
     console.log('[WebAuthn Core] Verified:', verification.verified);
     
-    if (verification.registrationInfo) {
-      console.log('[WebAuthn Core] Registration info present');
-      console.log('[WebAuthn Core] Credential ID length:', verification.registrationInfo.credentialID.length);
-      console.log('[WebAuthn Core] Public key length:', verification.registrationInfo.credentialPublicKey.length);
-      console.log('[WebAuthn Core] Counter:', verification.registrationInfo.counter);
-    } else {
-      console.log('[WebAuthn Core] No registration info');
-    }
+if (verification.registrationInfo) {
+  console.log('[WebAuthn Core] Registration info present');
+  console.log('[WebAuthn Core] Credential ID:', verification.registrationInfo.credentialID ? 'Present' : 'Missing');
+  console.log('[WebAuthn Core] Public key:', verification.registrationInfo.credentialPublicKey ? 'Present' : 'Missing');
+  console.log('[WebAuthn Core] Counter:', verification.registrationInfo.counter);
+  
+  // Safe length checks
+  if (verification.registrationInfo.credentialID) {
+    console.log('[WebAuthn Core] Credential ID length:', verification.registrationInfo.credentialID.length);
+  }
+  if (verification.registrationInfo.credentialPublicKey) {
+    console.log('[WebAuthn Core] Public key length:', verification.registrationInfo.credentialPublicKey.length);
+  }
+} else {
+  console.log('[WebAuthn Core] No registration info');
+}
 
     return verification;
   } catch (error) {

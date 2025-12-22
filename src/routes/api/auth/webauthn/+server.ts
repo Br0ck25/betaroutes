@@ -1,4 +1,3 @@
-// src/routes/api/auth/webauthn/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { generateRegistrationOptions, verifyRegistrationResponse } from '$lib/server/webauthn';
@@ -8,8 +7,8 @@ import {
 } from '$lib/server/authenticatorService';
 
 // 🔧 Dynamic RP ID and Origin based on environment
-function getRpID(request: Request): string {
-  const hostname = new URL(request.url).hostname;
+function getRpID(context: { url: URL }): string {
+  const hostname = context.url.hostname;
   console.log('[WebAuthn] Hostname:', hostname);
   
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
@@ -53,7 +52,6 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
     const authenticators = await getUserAuthenticators(env.BETA_USERS_KV, user.id);
     console.log('[WebAuthn] Existing authenticators:', authenticators.length);
 
-    // Create user object with authenticators for options generation
     const userWithAuth = {
       id: user.id,
       email: user.email,
@@ -61,8 +59,12 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
       authenticators
     };
 
-    // Generate registration options
-    const options = await generateRegistrationOptions(userWithAuth);
+    // Get dynamic RP ID based on environment
+    const rpID = getRpID({ url });
+    console.log('[WebAuthn] Using RP ID:', rpID);
+
+    // Pass RP ID to generation function
+    const options = await generateRegistrationOptions(userWithAuth, rpID);
     
     if (!options || !options.challenge) {
       console.error('[WebAuthn] Failed to generate options or missing challenge');
@@ -73,13 +75,13 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
     console.log('[WebAuthn] Challenge length:', options.challenge.length);
     console.log('[WebAuthn] Challenge (first 20 chars):', options.challenge.substring(0, 20));
 
-    // 🔧 CRITICAL: Store challenge in cookie with proper settings
+    // Store challenge in cookie
     cookies.set('webauthn-challenge', options.challenge, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 300 // 5 minutes
+      maxAge: 300
     });
 
     console.log('[WebAuthn] Challenge stored in cookie');
@@ -122,7 +124,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
 
     console.log('[WebAuthn] Verifying registration for:', user.email);
 
-    // 🔧 CRITICAL: Retrieve challenge from cookie
+    // Retrieve challenge from cookie
     const expectedChallenge = cookies.get('webauthn-challenge');
     
     console.log('[WebAuthn] Looking for challenge cookie...');
@@ -147,9 +149,9 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
     console.log('[WebAuthn] Credential ID:', credential.id);
     console.log('[WebAuthn] Credential type:', credential.type);
 
-    // 🔧 Get origin and rpID dynamically
+    // Get origin and rpID dynamically
     const expectedOrigin = getOrigin(request);
-    const expectedRPID = getRpID(request);
+    const expectedRPID = getRpID({ url: new URL(request.url) });
 
     console.log('[WebAuthn] Expected origin:', expectedOrigin);
     console.log('[WebAuthn] Expected RP ID:', expectedRPID);
@@ -177,11 +179,19 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
     console.log('[WebAuthn] Verification successful! ✅');
 
     // Save the authenticator to KV
-    const { credentialPublicKey, credentialID, counter } = verification.registrationInfo;
-    
-    console.log('[WebAuthn] Saving authenticator to KV...');
-    console.log('[WebAuthn] Credential ID (base64url):', credentialID);
-    console.log('[WebAuthn] Counter:', counter);
+// SimpleWebAuthn v10+ uses different property names
+const registrationInfo = verification.registrationInfo!;
+
+console.log('[WebAuthn] Full registration info:', JSON.stringify(registrationInfo, null, 2));
+
+const credentialID = registrationInfo.credential?.id || registrationInfo.credentialID;
+const credentialPublicKey = registrationInfo.credential?.publicKey || registrationInfo.credentialPublicKey;
+const counter = registrationInfo.credential?.counter ?? registrationInfo.counter ?? 0;
+
+console.log('[WebAuthn] Extracted values:');
+console.log('[WebAuthn] Credential ID:', credentialID ? 'Present' : 'Missing');
+console.log('[WebAuthn] Public key:', credentialPublicKey ? 'Present' : 'Missing');
+console.log('[WebAuthn] Counter:', counter);
 
     await addAuthenticator(env.BETA_USERS_KV, user.id, {
       credentialID: Buffer.from(credentialID).toString('base64url'),
@@ -192,7 +202,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
 
     console.log('[WebAuthn] Saved to KV! ✅');
 
-    // 🔧 Clear the challenge cookie after successful registration
+    // Clear the challenge cookie
     cookies.delete('webauthn-challenge', { path: '/' });
     console.log('[WebAuthn] Challenge cookie cleared');
 
@@ -205,7 +215,6 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
   } catch (error) {
     console.error('[WebAuthn] POST Error:', error);
     
-    // Provide detailed error information
     if (error instanceof Error) {
       console.error('[WebAuthn] Error name:', error.name);
       console.error('[WebAuthn] Error message:', error.message);
