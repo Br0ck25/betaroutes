@@ -13,6 +13,7 @@
   import autoTable from 'jspdf-autotable';
   // [!code ++] Import WebAuthn registration helper
   import { startRegistration } from '@simplewebauthn/browser';
+  
 
   export let data; 
   $: API_KEY = data.googleMapsApiKey;
@@ -64,6 +65,8 @@
   let deletePassword = '';
   let deleteError = '';
   let isDeleting = false;
+  let isRegisteringPasskey = false;
+
    
   // Pro Plan Check & Modal State
   $: isPro = ['pro', 'business', 'premium', 'enterprise'].includes($auth.user?.plan || '');
@@ -208,53 +211,46 @@
 
   // [!code ++] Passkey Registration Handler
 
-  async function registerPasskey() {
-    try {
-      // 1️⃣ Get registration options
-      const resp = await fetch('/api/auth/webauthn?type=register', {
-        credentials: 'include'
-      });
+async function registerPasskey() {
+  if (isRegisteringPasskey) return;
+  isRegisteringPasskey = true;
 
-      if (!resp.ok) {
-        throw new Error('Failed to get registration options');
-      }
-
-      const optionsJSON = await resp.json();
-
-      // 2️⃣ START REGISTRATION (✅ correct API)
-      const attestationResponse = await startRegistration({
-        optionsJSON
-      });
-
-      // 3️⃣ Send response to server for verification
-      const verificationResp = await fetch(
-        '/api/auth/webauthn?type=register',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(attestationResponse)
-        }
-      );
-
-      if (!verificationResp.ok) {
-        throw new Error('Verification failed');
-      }
-
-      const verificationResult = await verificationResp.json();
-
-      if (!verificationResult.verified) {
-        throw new Error('Passkey registration rejected');
-      }
-
-      alert('✅ Face ID / Touch ID registered successfully!');
-    } catch (e) {
-      console.error('Passkey registration error:', e);
-      alert(
-        '❌ Failed to register device. Ensure your device supports Face ID, Touch ID, or Windows Hello.'
-      );
+  try {
+    const resp = await fetch('/api/auth/webauthn?type=register');
+    if (!resp.ok) {
+      throw new Error('Failed to get registration options');
     }
+
+    const options = await resp.json();
+
+    const attestationResponse = await startRegistration(options);
+
+    const verifyResp = await fetch('/api/auth/webauthn?type=register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(attestationResponse),
+    });
+
+    if (!verifyResp.ok) {
+      throw new Error('Verification failed');
+    }
+
+    const result = await verifyResp.json();
+
+    if (!result.verified) {
+      throw new Error('Passkey not verified');
+    }
+
+    alert('✅ Passkey registered successfully!');
+  } catch (e) {
+    console.error('Passkey registration error:', e);
+    alert(
+      'Failed to register device. Ensure your device supports Face ID, Touch ID, or Windows Hello.'
+    );
+  } finally {
+    isRegisteringPasskey = false;
   }
+}
 
 
   async function handleDeleteAccount() {
