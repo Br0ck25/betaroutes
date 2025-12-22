@@ -3,31 +3,39 @@ import { json } from '@sveltejs/kit';
 import { getRegistrationOptions, verifyRegistration, getLoginOptions, verifyLogin } from '$lib/server/webauthn';
 import { findUserByCredentialId, saveAuthenticator, type Authenticator } from '$lib/server/userService';
 import { createSession } from '$lib/server/sessionService';
-import { Buffer } from 'node:buffer'; // Required for Cloudflare/Node compatibility
+import { Buffer } from 'node:buffer'; 
 
 function getRpID(url: URL) {
     return url.hostname; 
 }
 
 export async function GET({ url, cookies, locals }) {
-    const type = url.searchParams.get('type');
-    const rpID = getRpID(url);
+    try { // [!code ++] Add try block
+        const type = url.searchParams.get('type');
+        const rpID = getRpID(url);
 
-    if (type === 'register') {
-        if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+        if (type === 'register') {
+            if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
 
-        const options = await getRegistrationOptions(locals.user, rpID);
-        cookies.set('webauthn_challenge', options.challenge, { path: '/' });
-        return json(options);
-    } 
-    else {
-        const options = await getLoginOptions(rpID);
-        cookies.set('webauthn_challenge', options.challenge, { path: '/' });
-        return json(options);
+            // This is likely where it fails
+            const options = await getRegistrationOptions(locals.user, rpID);
+            cookies.set('webauthn_challenge', options.challenge, { path: '/' });
+            return json(options);
+        } 
+        else {
+            const options = await getLoginOptions(rpID);
+            cookies.set('webauthn_challenge', options.challenge, { path: '/' });
+            return json(options);
+        }
+    } catch (e: any) { // [!code ++] Catch and return error
+        console.error('WebAuthn GET Error:', e);
+        return json({ error: e.message || 'Server error generating options' }, { status: 500 });
     }
 }
 
+// ... POST handler remains the same ...
 export async function POST({ request, cookies, platform, locals }) {
+    // ... (Keep existing POST logic)
     const body = await request.json();
     const challenge = cookies.get('webauthn_challenge');
     
@@ -85,7 +93,7 @@ export async function POST({ request, cookies, platform, locals }) {
             }
         }
     } catch (e: any) {
-        console.error('WebAuthn Error:', e);
+        console.error('WebAuthn POST Error:', e);
         return json({ error: e.message || 'Verification failed' }, { status: 400 });
     }
 
