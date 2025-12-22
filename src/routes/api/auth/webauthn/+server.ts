@@ -13,17 +13,20 @@ import {
 import { createSession } from '$lib/server/sessionService';
 import { Buffer } from 'node:buffer';
 
-// -----------------------------
-// Helpers
-// -----------------------------
+// ------------------------------------
+// Constants (DO NOT DERIVE DYNAMICALLY)
+// ------------------------------------
 
-function getRpID(url: URL) {
-  // 🔒 FORCE canonical RP ID
-  return 'gorouteyourself.com';
-}
+const RP_ID = 'gorouteyourself.com';
+const ORIGIN = 'https://gorouteyourself.com';
+const CHALLENGE_COOKIE = 'webauthn_challenge';
+
+// ------------------------------------
+// Cookie helpers
+// ------------------------------------
 
 function setChallenge(cookies: any, challenge: string) {
-  cookies.set('webauthn_challenge', challenge, {
+  cookies.set(CHALLENGE_COOKIE, challenge, {
     path: '/',
     httpOnly: true,
     secure: true,
@@ -33,63 +36,73 @@ function setChallenge(cookies: any, challenge: string) {
 }
 
 function clearChallenge(cookies: any) {
-  cookies.delete('webauthn_challenge', { path: '/' });
+  cookies.delete(CHALLENGE_COOKIE, { path: '/' });
 }
 
-// -----------------------------
-// GET (options)
-// -----------------------------
+// ------------------------------------
+// GET — Generate options
+// ------------------------------------
 
 export async function GET({ url, cookies, locals }) {
+  console.log('[WebAuthn GET] start');
+
   try {
     const type = url.searchParams.get('type');
-    const rpID = getRpID(url);
+    console.log('[WebAuthn GET] type:', type);
+    console.log('[WebAuthn GET] user:', locals.user?.id);
 
     if (type === 'register') {
       if (!locals.user) {
         return json({ error: 'Unauthorized' }, { status: 401 });
       }
 
-      const options = await getRegistrationOptions(locals.user, rpID);
+      const options = await getRegistrationOptions(locals.user, RP_ID);
       setChallenge(cookies, options.challenge);
+
+      console.log('[WebAuthn GET] registration options OK');
       return json(options);
     }
 
-    // login
-    const options = await getLoginOptions(rpID);
+    // LOGIN
+    const options = await getLoginOptions(RP_ID);
     setChallenge(cookies, options.challenge);
+
+    console.log('[WebAuthn GET] login options OK');
     return json(options);
 
-  } catch (e: any) {
-    console.error('[WebAuthn GET]', e);
+  } catch (err: any) {
+    console.error('[WebAuthn GET ERROR]', err);
     return json(
-      { error: e.message || 'Failed to generate WebAuthn options' },
+      { error: err?.message || 'Failed to generate WebAuthn options' },
       { status: 500 }
     );
   }
 }
 
-// -----------------------------
-// POST (verify)
-// -----------------------------
+// ------------------------------------
+// POST — Verify response
+// ------------------------------------
 
 export async function POST({ request, cookies, platform, locals }) {
-  const body = await request.json();
-  const challenge = cookies.get('webauthn_challenge');
+  const challenge = cookies.get(CHALLENGE_COOKIE);
 
   if (!challenge) {
     return json({ error: 'Missing WebAuthn challenge' }, { status: 400 });
   }
 
-  const url = new URL(request.url);
-  const rpID = getRpID(url);
-  const origin = 'https://gorouteyourself.com';
-  const type = url.searchParams.get('type');
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  const type = new URL(request.url).searchParams.get('type');
 
   try {
-    // -----------------------------
+    // -----------------------
     // REGISTER
-    // -----------------------------
+    // -----------------------
     if (type === 'register') {
       if (!locals.user) {
         return json({ error: 'Unauthorized' }, { status: 401 });
@@ -98,8 +111,8 @@ export async function POST({ request, cookies, platform, locals }) {
       const verification = await verifyRegistration(
         body,
         challenge,
-        rpID,
-        origin
+        RP_ID,
+        ORIGIN
       );
 
       if (!verification.verified || !verification.registrationInfo) {
@@ -123,13 +136,14 @@ export async function POST({ request, cookies, platform, locals }) {
       );
 
       clearChallenge(cookies);
+      console.log('[WebAuthn POST] registration verified');
       return json({ verified: true });
     }
 
-    // -----------------------------
+    // -----------------------
     // LOGIN
-    // -----------------------------
-    const credentialID = body.id;
+    // -----------------------
+    const credentialID = body?.id;
     if (!credentialID) {
       return json({ error: 'Missing credential ID' }, { status: 400 });
     }
@@ -159,8 +173,8 @@ export async function POST({ request, cookies, platform, locals }) {
         publicKey: Buffer.from(authenticator.credentialPublicKey, 'base64url'),
         counter: authenticator.counter
       },
-      rpID,
-      origin
+      RP_ID,
+      ORIGIN
     );
 
     if (!verification.verified) {
@@ -178,13 +192,14 @@ export async function POST({ request, cookies, platform, locals }) {
     });
 
     clearChallenge(cookies);
+    console.log('[WebAuthn POST] login verified');
     return json({ verified: true });
 
-  } catch (e: any) {
-    console.error('[WebAuthn POST]', e);
+  } catch (err: any) {
+    console.error('[WebAuthn POST ERROR]', err);
     clearChallenge(cookies);
     return json(
-      { error: e.message || 'WebAuthn verification failed' },
+      { error: err?.message || 'WebAuthn verification failed' },
       { status: 400 }
     );
   }
