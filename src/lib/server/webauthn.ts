@@ -7,28 +7,34 @@ import {
 
 import { createHash } from 'node:crypto';
 
-// Convert string user ID → stable Uint8Array
+// ------------------------------------
+// Helpers
+// ------------------------------------
+
+// MUST be stable + identical everywhere
 function userIdToUint8Array(userId: string): Uint8Array {
   return createHash('sha256').update(userId).digest();
 }
 
-// -----------------------------
+// ------------------------------------
 // Registration
-// -----------------------------
+// ------------------------------------
 
 export async function getRegistrationOptions(
   user: { id: string; username?: string; email?: string },
   rpID: string
 ) {
   if (!user?.id) {
-    throw new Error('Missing user ID');
+    throw new Error('Missing user ID for WebAuthn registration');
   }
 
   return generateRegistrationOptions({
     rpName: 'Go Route Yourself',
     rpID,
-    userID: userIdToUint8Array(user.id),
+
+    userID: userIdToUint8Array(user.id), // ✅ REQUIRED
     userName: user.username || user.email || 'User',
+
     attestationType: 'none',
     authenticatorSelection: {
       residentKey: 'preferred',
@@ -38,35 +44,37 @@ export async function getRegistrationOptions(
   });
 }
 
-export function verifyRegistration(
+export async function verifyRegistration(
   body: any,
-  challenge: string,
+  currentChallenge: string,
   rpID: string,
-  origin: string
+  origin: string,
+  userId: string // ✅ REQUIRED
 ) {
   return verifyRegistrationResponse({
     response: body,
-    expectedChallenge: challenge,
+    expectedChallenge: currentChallenge,
     expectedOrigin: origin,
     expectedRPID: rpID,
+    expectedUserID: userIdToUint8Array(userId), // ✅ REQUIRED
   });
 }
 
-// -----------------------------
-// Login
-// -----------------------------
+// ------------------------------------
+// Authentication (Login)
+// ------------------------------------
 
-export function getLoginOptions(rpID: string) {
+export async function getLoginOptions(rpID: string) {
   return generateAuthenticationOptions({
     rpID,
     userVerification: 'preferred',
   });
 }
 
-export function verifyLogin(
+export async function verifyLogin(
   body: any,
-  challenge: string,
-  authenticator: {
+  currentChallenge: string,
+  userCredential: {
     id: string;
     publicKey: Uint8Array;
     counter: number;
@@ -76,13 +84,13 @@ export function verifyLogin(
 ) {
   return verifyAuthenticationResponse({
     response: body,
-    expectedChallenge: challenge,
+    expectedChallenge: currentChallenge,
     expectedOrigin: origin,
     expectedRPID: rpID,
     authenticator: {
-      credentialID: authenticator.id,
-      credentialPublicKey: authenticator.publicKey,
-      counter: authenticator.counter,
+      credentialID: userCredential.id,
+      credentialPublicKey: userCredential.publicKey,
+      counter: userCredential.counter,
     },
   });
 }
