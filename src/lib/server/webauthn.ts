@@ -1,12 +1,8 @@
 import {
   generateRegistrationOptions as generateOptions,
   verifyRegistrationResponse as verifyResponse,
-  generateAuthenticationOptions,
-  verifyAuthenticationResponse,
   type GenerateRegistrationOptionsOpts,
   type VerifyRegistrationResponseOpts,
-  type GenerateAuthenticationOptionsOpts,
-  type VerifyAuthenticationResponseOpts,
 } from '@simplewebauthn/server';
 
 const RP_NAME = 'Go Route Yourself';
@@ -19,13 +15,6 @@ interface UserWithAuthenticators {
     credentialID: string;
     transports?: AuthenticatorTransport[];
   }>;
-}
-
-export interface AuthenticatorForAuth {
-  credentialID: string;
-  credentialPublicKey: string;
-  counter: number;
-  transports?: AuthenticatorTransport[];
 }
 
 /**
@@ -64,39 +53,12 @@ export async function generateRegistrationOptions(
     },
   };
 
+  console.log('[WebAuthn Core] Options configured');
+
   const options = await generateOptions(opts);
   
-  console.log('[WebAuthn Core] Registration options generated');
-  
-  return options;
-}
-
-/**
- * Generate authentication options
- */
-export async function generateAuthenticationOptionsForUser(
-  authenticators: AuthenticatorForAuth[],
-  rpID: string
-) {
-  console.log('[WebAuthn Core] Generating authentication options');
-  console.log('[WebAuthn Core] RP ID:', rpID);
-  console.log('[WebAuthn Core] Authenticators:', authenticators.length);
-
-  const allowCredentials = authenticators.map((auth) => ({
-    id: Buffer.from(auth.credentialID, 'base64url'),
-    type: 'public-key' as const,
-    transports: auth.transports || [],
-  }));
-
-  const opts: GenerateAuthenticationOptionsOpts = {
-    rpID: rpID,
-    allowCredentials,
-    userVerification: 'preferred',
-  };
-
-  const options = await generateAuthenticationOptions(opts);
-  
-  console.log('[WebAuthn Core] Authentication options generated');
+  console.log('[WebAuthn Core] Options generated');
+  console.log('[WebAuthn Core] Challenge:', options.challenge ? 'Present' : 'Missing');
   
   return options;
 }
@@ -110,70 +72,62 @@ export async function verifyRegistrationResponse(
   expectedOrigin: string,
   expectedRPID: string
 ) {
-  console.log('[WebAuthn Core] Starting registration verification');
-
-  if (!expectedChallenge) {
-    throw new Error('Challenge is required for verification');
-  }
-
-  if (!credential || !credential.response) {
-    throw new Error('Credential response is required');
-  }
-
-  const opts: VerifyRegistrationResponseOpts = {
-    response: credential,
-    expectedChallenge,
-    expectedOrigin,
-    expectedRPID,
-    requireUserVerification: false,
-  };
-
-  const verification = await verifyResponse(opts);
-
-  console.log('[WebAuthn Core] Registration verification complete');
-  console.log('[WebAuthn Core] Verified:', verification.verified);
-
-  return verification;
-}
-
-/**
- * Verify authentication response from authenticator
- */
-export async function verifyAuthenticationResponseForUser(
-  credential: any,
-  expectedChallenge: string,
-  authenticator: AuthenticatorForAuth,
-  expectedOrigin: string,
-  expectedRPID: string
-) {
-  console.log('[WebAuthn Core] Starting authentication verification');
+  console.log('[WebAuthn Core] Starting verification');
+  console.log('[WebAuthn Core] Expected challenge:', expectedChallenge ? 'Present' : 'Missing');
+  console.log('[WebAuthn Core] Expected origin:', expectedOrigin);
+  console.log('[WebAuthn Core] Expected RP ID:', expectedRPID);
   console.log('[WebAuthn Core] Credential ID:', credential.id);
 
   if (!expectedChallenge) {
+    console.error('[WebAuthn Core] ERROR: No challenge provided');
     throw new Error('Challenge is required for verification');
   }
 
-  if (!credential || !credential.response) {
+  if (!credential) {
+    console.error('[WebAuthn Core] ERROR: No credential provided');
+    throw new Error('Credential is required for verification');
+  }
+
+  if (!credential.response) {
+    console.error('[WebAuthn Core] ERROR: Credential missing response');
     throw new Error('Credential response is required');
   }
 
-  const opts: VerifyAuthenticationResponseOpts = {
-    response: credential,
-    expectedChallenge,
-    expectedOrigin,
-    expectedRPID,
-    authenticator: {
-      credentialID: Buffer.from(authenticator.credentialID, 'base64url'),
-      credentialPublicKey: Buffer.from(authenticator.credentialPublicKey, 'base64url'),
-      counter: authenticator.counter,
-    },
-    requireUserVerification: false,
-  };
+  try {
+    const opts: VerifyRegistrationResponseOpts = {
+      response: credential,
+      expectedChallenge,
+      expectedOrigin,
+      expectedRPID,
+      requireUserVerification: false,
+    };
 
-  const verification = await verifyAuthenticationResponse(opts);
+    console.log('[WebAuthn Core] Verification options configured');
+    console.log('[WebAuthn Core] Calling verifyResponse...');
 
-  console.log('[WebAuthn Core] Authentication verification complete');
-  console.log('[WebAuthn Core] Verified:', verification.verified);
+    const verification = await verifyResponse(opts);
 
-  return verification;
+    console.log('[WebAuthn Core] Verification complete');
+    console.log('[WebAuthn Core] Verified:', verification.verified);
+    
+    // Log the entire registrationInfo to see its structure
+    if (verification.registrationInfo) {
+      console.log('[WebAuthn Core] Registration info present');
+      console.log('[WebAuthn Core] Full registrationInfo:', JSON.stringify(verification.registrationInfo, null, 2));
+    } else {
+      console.log('[WebAuthn Core] No registration info');
+    }
+
+    return verification;
+  } catch (error) {
+    console.error('[WebAuthn Core] Verification error:', error);
+    
+    if (error instanceof Error) {
+      console.error('[WebAuthn Core] Error name:', error.name);
+      console.error('[WebAuthn Core] Error message:', error.message);
+      console.error('[WebAuthn Core] Error stack:', error.stack);
+    }
+    
+    throw error;
+  }
 }
