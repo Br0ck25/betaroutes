@@ -8,6 +8,8 @@ import {
   type GenerateAuthenticationOptionsOpts,
   type VerifyAuthenticationResponseOpts,
 } from '@simplewebauthn/server';
+// 🔧 ADD THIS IMPORT
+import { isoBase64URL } from '@simplewebauthn/server/helpers';
 
 const RP_NAME = 'Go Route Yourself';
 
@@ -38,8 +40,9 @@ export async function generateRegistrationOptions(
   console.log('[WebAuthn Core] RP ID:', rpID);
   console.log('[WebAuthn Core] Existing authenticators:', user.authenticators?.length || 0);
 
+  // 🔧 FIX: Use isoBase64URL.toBuffer instead of Buffer.from
   const excludeCredentials = (user.authenticators || []).map((auth) => ({
-    id: Buffer.from(auth.credentialID, 'base64url'),
+    id: isoBase64URL.toBuffer(auth.credentialID),
     type: 'public-key' as const,
     transports: auth.transports || [],
   }));
@@ -76,8 +79,9 @@ export async function generateAuthenticationOptionsForUser(
   console.log('[WebAuthn Core] RP ID:', rpID);
   console.log('[WebAuthn Core] Authenticators:', authenticators.length);
 
+  // 🔧 FIX: Use isoBase64URL.toBuffer instead of Buffer.from
   const allowCredentials = authenticators.map((auth) => ({
-    id: Buffer.from(auth.credentialID, 'base64url'),
+    id: isoBase64URL.toBuffer(auth.credentialID),
     type: 'public-key' as const,
     transports: auth.transports || [],
   }));
@@ -145,14 +149,15 @@ export async function verifyAuthenticationResponseForUser(
     throw new Error('Credential response is required');
   }
 
+  // 🔧 FIX: Use isoBase64URL.toBuffer instead of Buffer.from
   const opts: VerifyAuthenticationResponseOpts = {
     response: credential,
     expectedChallenge,
     expectedOrigin,
     expectedRPID,
     authenticator: {
-      credentialID: Buffer.from(authenticator.credentialID, 'base64url'),
-      credentialPublicKey: Buffer.from(authenticator.credentialPublicKey, 'base64url'),
+      credentialID: isoBase64URL.toBuffer(authenticator.credentialID),
+      credentialPublicKey: isoBase64URL.toBuffer(authenticator.credentialPublicKey),
       counter: authenticator.counter,
     },
     requireUserVerification: false,
