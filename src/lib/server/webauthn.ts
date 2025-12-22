@@ -11,17 +11,22 @@ import { createHash } from 'node:crypto';
 // Helpers
 // ------------------------------------
 
-// Convert string user ID → stable Uint8Array
+// Convert a string user ID into a stable Uint8Array
+// REQUIRED by @simplewebauthn/server (strings are no longer allowed)
 function userIdToUint8Array(userId: string): Uint8Array {
   return createHash('sha256').update(userId).digest();
 }
 
 // ------------------------------------
-// Registration
+// Registration (Passkey Creation)
 // ------------------------------------
 
 export async function getRegistrationOptions(
-  user: { id: string; username?: string; email?: string },
+  user: {
+    id: string;
+    username?: string;
+    email?: string;
+  },
   rpID: string
 ) {
   if (!user?.id) {
@@ -35,7 +40,8 @@ export async function getRegistrationOptions(
     rpName: 'Go Route Yourself',
     rpID,
 
-    userID,            // ✅ Uint8Array (FIX)
+    // 🔑 MUST be Uint8Array
+    userID,
     userName,
 
     attestationType: 'none',
@@ -62,7 +68,7 @@ export async function verifyRegistration(
 }
 
 // ------------------------------------
-// Authentication (Login)
+// Authentication (Passkey Login)
 // ------------------------------------
 
 export async function getLoginOptions(rpID: string) {
