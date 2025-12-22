@@ -41,11 +41,19 @@ export async function generateRegistrationOptions(
 
   const excludeCredentials = (user.authenticators || [])
     .filter(auth => auth.credentialID && typeof auth.credentialID === 'string')
-    .map((auth) => ({
-      id: isoBase64URL.toBuffer(auth.credentialID),
-      type: 'public-key' as const,
-      transports: auth.transports || [],
-    }));
+    .map((auth) => {
+      try {
+        return {
+          id: isoBase64URL.toBuffer(auth.credentialID),
+          type: 'public-key' as const,
+          transports: auth.transports || [],
+        };
+      } catch (error) {
+        console.error('[WebAuthn Core] Failed to decode credential, skipping:', auth.credentialID, error);
+        return null;
+      }
+    })
+    .filter((cred): cred is NonNullable<typeof cred> => cred !== null);
 
   console.log('[WebAuthn Core] Excluding credentials:', excludeCredentials.length);
 
