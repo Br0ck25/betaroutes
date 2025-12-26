@@ -31,8 +31,19 @@
     if (selected.size === orders.length) selected.clear(); else orders.forEach(o => selected.add(o.id));
   }
 
-  async function restoreSelected() {
-    if (selected.size === 0) return;
+  // Modal control
+  let showConfirm = false;
+  let confirmAction: 'restore' | 'restore_sync' = 'restore';
+
+  function openConfirm() {
+    showConfirm = true;
+    confirmAction = 'restore';
+  }
+
+  function closeConfirm() { showConfirm = false; }
+
+  async function confirmRestore() {
+    if (selected.size === 0) { closeConfirm(); return; }
     loading = true; successMsg = null; error = null;
     try {
       const res = await fetch('/api/hughesnet/archived/import', {
@@ -42,10 +53,14 @@
       const body = await res.json();
       if (body.success) {
         successMsg = `Imported ${body.imported.length} orders. ${body.skipped.length} skipped.`;
-        // Reload parent UI counts
-        dispatch('restored', { imported: body.imported });
+        // Notify parent about imported ids and dates
+        dispatch('restored', { imported: body.imported, importedDates: body.importedDates || [] });
+        if (confirmAction === 'restore_sync' && body.importedDates && body.importedDates.length > 0) {
+          dispatch('restoreAndSync', { dates: body.importedDates });
+        }
         await load();
         selected.clear();
+        closeConfirm();
       } else {
         error = body.error || 'Import failed';
       }
@@ -71,7 +86,7 @@
     {:else}
       <div class="controls">
         <button class="btn-small" on:click={selectAll}>{selected.size === orders.length ? 'Unselect All' : 'Select All'}</button>
-        <button class="btn-primary" disabled={selected.size === 0} on:click={restoreSelected}>Restore Selected</button>
+        <button class="btn-primary" disabled={selected.size === 0} on:click={openConfirm}>Restore Selected</button>
       </div>
 
       <ul class="list">
@@ -85,6 +100,23 @@
           </li>
         {/each}
       </ul>
+
+      {#if showConfirm}
+        <div class="modal-overlay">
+          <div class="modal">
+            <h4>Restore {selected.size} archived order(s)?</h4>
+            <p>Would you like to just restore them, or restore and run a HughesNet sync now to create trips for those dates?</p>
+            <div class="modal-actions">
+              <button class="btn-secondary" on:click={() => { confirmAction = 'restore'; confirmRestore(); }}>Restore Only</button>
+              <button class="btn-primary" on:click={() => { confirmAction = 'restore_sync'; confirmRestore(); }}>Restore & Sync Now</button>
+              <button class="btn-small" on:click={closeConfirm}>Cancel</button>
+            </div>
+            {#if confirmAction === 'restore_sync'}
+              <p class="help">⚠️ Restoring and syncing will create trips for the imported dates and may overwrite existing trips for those dates.</p>
+            {/if}
+          </div>
+        </div>
+      {/if}
     {/if}
   {/if}
 </div>
@@ -102,4 +134,9 @@
 .info { color:#6B7280; font-size:12px; }
 .success { background:#ECFDF5; border:1px solid #BBF7D0; padding:8px; border-radius:8px; margin-bottom:8px }
 .error { background:#FEF2F2; border:1px solid #FECACA; padding:8px; border-radius:8px; margin-bottom:8px }
+  .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:50; }
+  .modal { background: white; padding: 20px; border-radius: 10px; max-width: 480px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+  .modal h4 { margin-top:0; }
+  .modal-actions { display:flex; gap:8px; margin-top:12px; }
+  .help { margin-top:8px; color:#92400E; font-size:13px; }
 </style>

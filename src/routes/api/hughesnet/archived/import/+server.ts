@@ -1,6 +1,8 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
+import { toIsoDate, extractDateFromTs } from '$lib/server/hughesnet/utils';
+
 export const POST: RequestHandler = async ({ platform, locals, request }) => {
     if (!platform?.env?.BETA_HUGHESNET_ORDERS_KV || !platform?.env?.BETA_HUGHESNET_KV) {
         return json({ success: false, error: 'Orders KV or HNS KV not configured' }, { status: 500 });
@@ -41,6 +43,7 @@ export const POST: RequestHandler = async ({ platform, locals, request }) => {
 
         const imported: string[] = [];
         const skipped: string[] = [];
+        const importedDates: string[] = [];
 
         for (const id of ids) {
             try {
@@ -52,6 +55,10 @@ export const POST: RequestHandler = async ({ platform, locals, request }) => {
                 const order = { ...wrapper.order, restoredFromArchive: true, lastSyncTimestamp: Date.now() };
                 orderDb[id] = order;
                 imported.push(id);
+
+                // Compute import date (ISO) for trip sync
+                const iso = (order.confirmScheduleDate && toIsoDate(order.confirmScheduleDate)) || (order.arrivalTimestamp && extractDateFromTs(order.arrivalTimestamp));
+                if (iso) importedDates.push(iso);
             } catch (e) {
                 skipped.push(id);
             }
@@ -61,7 +68,10 @@ export const POST: RequestHandler = async ({ platform, locals, request }) => {
             await hnsKV.put(`hns:db:${userId}`, JSON.stringify(orderDb));
         }
 
-        return json({ success: true, imported, skipped });
+        // Deduplicate dates
+        const uniqueDates = Array.from(new Set(importedDates));
+
+        return json({ success: true, imported, skipped, importedDates: uniqueDates });
 
     } catch (e: any) {
         return json({ success: false, error: e.message || 'Server error' }, { status: 500 });

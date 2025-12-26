@@ -22,14 +22,17 @@ describe('HughesNet archived import API', () => {
         const hns = platform.env.BETA_HUGHESNET_KV;
         const owner = 'import_user';
         const orderId = '9001';
-        const wrapper = { ownerId: owner, storedAt: Date.now(), order: { id: orderId, address: '9001 Test Pl' } };
+        const wrapper = { ownerId: owner, storedAt: Date.now(), order: { id: orderId, address: '9001 Test Pl', confirmScheduleDate: '12/31/2025' } };
         await kv.put(`hns:order:${orderId}`, JSON.stringify(wrapper));
+        // Ensure user's hns db is clean
+        await hns.delete(`hns:db:${owner}`);
 
         const event: any = { platform, locals: { user: { name: owner } }, request: makeReq({ ids: [orderId] }) };
         const res = await POST(event as any);
         const body = await res.json();
         expect(body.success).toBe(true);
         expect(body.imported).toContain(orderId);
+        expect(body.importedDates).toContain('2025-12-31');
 
         const dbRaw = await hns.get(`hns:db:${owner}`);
         expect(dbRaw).toBeTruthy();

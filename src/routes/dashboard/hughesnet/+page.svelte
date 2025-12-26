@@ -472,6 +472,8 @@
       showConflictModal = false;
   }
 
+  import ArchivedRestore from '$lib/components/hughesnet/ArchivedRestore.svelte';
+
   onMount(() => {
     loadSettings();
     loadOrders();
@@ -576,6 +578,24 @@
     </div>
 
     {#if isConnected}
+    <div class="settings-card">
+      <div class="card-header">
+        <div class="card-icon green">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M5 10.5L8.5 14L15 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="card-title">Archived Orders</h2>
+          <p class="card-subtitle">Restore previously synced HughesNet orders</p>
+        </div>
+      </div>
+
+      <div style="padding:12px;">
+        <ArchivedRestore on:restored={(e) => { if (e.detail?.imported) { addLog(`Imported ${e.detail.imported.length} archived orders`); } }} on:restoreAndSync={(e) => { if (e.detail?.dates) { addLog(`Imported orders for ${e.detail.dates.join(', ')}, syncing...`); handleSync(1, true, e.detail.dates); } }} />
+      </div>
+    </div>
+
     <div class="settings-card">
       <div class="card-header">
         <div class="card-icon orange">
