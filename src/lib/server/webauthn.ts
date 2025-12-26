@@ -9,6 +9,7 @@ import {
   type VerifyAuthenticationResponseOpts,
 } from '@simplewebauthn/server';
 import { isoBase64URL } from '@simplewebauthn/server/helpers';
+import { normalizeCredentialID } from '$lib/server/webauthn-utils';
 
 const RP_NAME = 'Go Route Yourself';
 
@@ -62,8 +63,6 @@ export async function generateRegistrationOptions(
   });
 
   console.log('[WebAuthn Core] Valid authenticators after filtering:', validAuthenticators.length);
-
-import { normalizeCredentialID } from '$lib/server/webauthn-utils';
 
   const excludeCredentials = validAuthenticators.map((auth) => {
     console.log('[WebAuthn Core] Attempting to prepare exclude credential ID:', auth.credentialID);
