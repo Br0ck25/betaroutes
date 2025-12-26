@@ -189,7 +189,30 @@ export async function verifyAuthenticationResponseForUser(
     requireUserVerification: false,
   };
 
-  const verification = await verifyAuthenticationResponse(opts);
+  let verification;
+  try {
+    console.log('[WebAuthn Core] verifyAuthenticationResponse opts:', {
+      authenticator: {
+        credentialIDType: typeof opts.authenticator?.credentialID,
+        credentialIDLength: opts.authenticator?.credentialID?.length,
+        credentialPublicKeyType: typeof opts.authenticator?.credentialPublicKey,
+        credentialPublicKeyLength: (opts.authenticator?.credentialPublicKey as any)?.length,
+        counterType: typeof opts.authenticator?.counter,
+        counter: opts.authenticator?.counter
+      },
+      expectedChallengeType: typeof opts.expectedChallenge
+    });
+
+    verification = await verifyAuthenticationResponse(opts);
+  } catch (e) {
+    console.error('[WebAuthn Core] verifyAuthenticationResponse threw:', e);
+    console.error('[WebAuthn Core] verifyAuthenticationResponse opts (summary):', {
+      credentialIDPresent: !!opts.authenticator?.credentialID,
+      credentialPublicKeyLength: (opts.authenticator?.credentialPublicKey as any)?.length,
+      counter: opts.authenticator?.counter
+    });
+    throw e;
+  }
 
   console.log('[WebAuthn Core] Authentication verification complete');
   console.log('[WebAuthn Core] Verified:', verification.verified);
