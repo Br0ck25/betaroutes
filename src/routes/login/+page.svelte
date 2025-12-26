@@ -1,6 +1,9 @@
 <script lang="ts">
     import { goto } from '$app/navigation';
     import { page } from '$app/stores';
+    import { onMount } from 'svelte';
+    import { toasts } from '$lib/stores/toast';
+    // See Documentation/Simple Web Auth and Documentation/Svelte 5 for guidance on quick-sign and biometric flows
     // [!code ++] Import WebAuthn helper
     import { startAuthentication } from '@simplewebauthn/browser';
 
@@ -12,6 +15,10 @@
     let loading = false;
     let registrationSuccess = false;
     let submittedEmail = '';
+
+    // Quick sign-in state: read from localStorage key 'passkey:preferred' (credentialID/email/name)
+    let quickPasskey: { credentialID: string, email?: string, name?: string } | null = null;
+    let quickLoading = false;
     
     // Check if we are in register mode based on URL query param
     $: isLogin = $page.url.searchParams.get('view') !== 'register';
@@ -77,7 +84,7 @@
             }
 
             // 1. Request challenge from your server
-            const optionsResp = await fetch(`/api/auth/webauthn${requestedCredential ? `?credential=${encodeURIComponent(requestedCredential)}` : ''}`);
+            const optionsResp = await fetch(`/api/auth/webauthn${requestedCredential ? `?credential=${encodeURIComponent(requestedCredential)}` : ''}`, { credentials: 'same-origin' });
             const rawText = await optionsResp.text();
             let optionsJson: any;
             try {
@@ -166,6 +173,96 @@
             }
         } finally {
             loading = false;
+        }
+    }
+
+    // Load any preferred passkey saved on this device
+    onMount(() => {
+        const raw = localStorage.getItem('passkey:preferred');
+        if (raw) {
+            try { quickPasskey = JSON.parse(raw); } catch (e) { quickPasskey = null; }
+        }
+    });
+
+    async function quickSignIn() {
+        if (!quickPasskey) return;
+        quickLoading = true;
+        responseError = null;
+        try {
+            const requestedCredential = quickPasskey.credentialID;
+            const optionsResp = await fetch(`/api/auth/webauthn?credential=${encodeURIComponent(requestedCredential)}`, { credentials: 'same-origin' });
+            if (optionsResp.status === 401) {
+                toasts.error('Session expired. Please sign in with password.');
+                quickLoading = false;
+                return;
+            }
+            const rawText = await optionsResp.text();
+            let optionsJson: any;
+            try { optionsJson = JSON.parse(rawText); } catch (e) { console.error('[Passkey] Failed to parse auth options JSON:', rawText); throw new Error('Invalid authentication options response'); }
+
+            if (!optionsResp.ok) {
+                throw new Error(optionsJson?.error || 'Biometric login not available');
+            }
+
+            const options: any = optionsJson;
+            if (!options.challenge) throw new Error('Authentication options missing challenge');
+            if (typeof options.challenge !== 'string') {
+                const bytes = options.challenge instanceof Uint8Array ? options.challenge : new Uint8Array(options.challenge);
+                let binary = '';
+                for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(Number(bytes[i] ?? 0));
+                options.challenge = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            }
+
+            if (Array.isArray(options.allowCredentials)) {
+                options.allowCredentials = options.allowCredentials.map((c: any) => ({ ...c, id: String(c.id) }));
+            }
+
+            const authResp = await startAuthentication({ optionsJSON: options as any });
+
+            function bufferToBase64Url(buffer: ArrayBuffer | Uint8Array) {
+                const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+                let binary = '';
+                for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(Number(bytes[i] ?? 0));
+                return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            }
+
+            const normalised: any = { ...authResp } as any;
+            if (normalised.rawId && (normalised.rawId instanceof ArrayBuffer || ArrayBuffer.isView(normalised.rawId))) {
+                normalised.rawId = bufferToBase64Url(normalised.rawId as ArrayBuffer);
+            }
+            const resp = normalised.response || {};
+            if (resp.authenticatorData && (resp.authenticatorData instanceof ArrayBuffer || ArrayBuffer.isView(resp.authenticatorData))) resp.authenticatorData = bufferToBase64Url(resp.authenticatorData);
+            if (resp.clientDataJSON && (resp.clientDataJSON instanceof ArrayBuffer || ArrayBuffer.isView(resp.clientDataJSON))) resp.clientDataJSON = bufferToBase64Url(resp.clientDataJSON);
+            if (resp.signature && (resp.signature instanceof ArrayBuffer || ArrayBuffer.isView(resp.signature))) resp.signature = bufferToBase64Url(resp.signature);
+            if (resp.userHandle && (resp.userHandle instanceof ArrayBuffer || ArrayBuffer.isView(resp.userHandle))) resp.userHandle = bufferToBase64Url(resp.userHandle);
+
+            const verificationResp = await fetch('/api/auth/webauthn', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(normalised),
+            });
+
+            if (!verificationResp.ok) {
+                const err: any = await verificationResp.json().catch(() => ({ error: 'Verification failed' }));
+                throw new Error(err.error || 'Verification failed');
+            }
+
+            const verificationJSON: any = await verificationResp.json();
+
+            if (verificationJSON.verified) {
+                await goto('/dashboard', { invalidateAll: true });
+            } else {
+                responseError = 'Biometric verification failed.';
+            }
+        } catch (e: any) {
+            console.error('Quick Biometric error:', e);
+            if (e.name !== 'NotAllowedError') {
+                toasts.error(e.message || 'Biometric login failed.');
+                responseError = e.message || 'Biometric login failed.';
+            }
+        } finally {
+            quickLoading = false;
         }
     }
 
@@ -323,6 +420,15 @@
                 
                 <form on:submit|preventDefault={submitHandler}>
                     {#if isLogin}
+                        {#if quickPasskey && (!username || username === quickPasskey.email)}
+                          <button type="button" class="btn-secondary" on:click={quickSignIn} disabled={quickLoading} style="margin-bottom:8px; display:flex; align-items:center; justify-content:center;">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px;">
+                                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                              </svg>
+                              {quickLoading ? 'Signing in...' : `Quick sign-in${quickPasskey?.name ? ' (' + quickPasskey.name + ')' : ''}`}
+                          </button>
+                        {/if}
+
                         <button type="button" class="btn-biometric" on:click={handleBiometricLogin} disabled={loading}>
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>

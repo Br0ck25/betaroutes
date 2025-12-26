@@ -582,6 +582,19 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       };
 
       const sessionId = await createSession(sessionKv, sessionData);
+
+      // Persist lastUsedCredentialID into the session object so devices can detect quick-sign preference
+      try {
+        const existing = await sessionKv.get(sessionId);
+        if (existing) {
+          const obj = typeof existing === 'string' ? JSON.parse(existing) : existing;
+          obj.lastUsedCredentialID = credentialID;
+          await sessionKv.put(sessionId, JSON.stringify(obj));
+          console.log('[WebAuthn] Stored lastUsedCredentialID on session:', credentialID);
+        }
+      } catch (e) {
+        console.warn('[WebAuthn] Failed to persist lastUsedCredentialID on session:', e);
+      }
       
       cookies.set('session_id', sessionId, {
         path: '/',
