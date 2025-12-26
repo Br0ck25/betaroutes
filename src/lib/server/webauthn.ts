@@ -166,7 +166,36 @@ export async function verifyAuthenticationResponseForUser(
   expectedRPID: string
 ) {
   console.log('[WebAuthn Core] Starting authentication verification');
-  console.log('[WebAuthn Core] Credential ID:', credential.id);
+  console.log('[WebAuthn Core] Credential ID:', credential?.id);
+
+  // Diagnostic: log credential response shapes
+  try {
+    console.log('[WebAuthn Core] Credential keys:', Object.keys(credential || {}));
+    console.log('[WebAuthn Core] Credential.response keys:', Object.keys(credential?.response || {}));
+    const resp = credential?.response || {};
+    function maybeLen(v: any) {
+      if (!v) return 0;
+      if (typeof v === 'string') return v.length;
+      if (v instanceof ArrayBuffer) return v.byteLength;
+      if (ArrayBuffer.isView(v)) return (v as any).byteLength || (v as any).length || 0;
+      if (v && typeof v.length === 'number') return v.length;
+      return 0;
+    }
+    console.log('[WebAuthn Core] Credential response types/lengths:', {
+      rawIdType: typeof credential?.rawId,
+      rawIdLength: maybeLen(credential?.rawId),
+      authenticatorDataType: typeof resp.authenticatorData,
+      authenticatorDataLength: maybeLen(resp.authenticatorData),
+      clientDataJSONType: typeof resp.clientDataJSON,
+      clientDataJSONLength: maybeLen(resp.clientDataJSON),
+      signatureType: typeof resp.signature,
+      signatureLength: maybeLen(resp.signature),
+      userHandleType: typeof resp.userHandle,
+      userHandleLength: maybeLen(resp.userHandle)
+    });
+  } catch (e) {
+    console.error('[WebAuthn Core] Failed to introspect credential:', e);
+  }
 
   if (!expectedChallenge) {
     throw new Error('Challenge is required for verification');
