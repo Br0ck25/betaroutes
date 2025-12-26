@@ -275,13 +275,29 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       }
 
       console.log('[WebAuthn] Saving authenticator...');
-      console.log('[WebAuthn] Credential ID type:', typeof credentialID);
-      console.log('[WebAuthn] Public key type:', typeof credentialPublicKey);
+      console.log('[WebAuthn] Credential ID raw type:', typeof credentialID, credentialID && credentialID.constructor ? credentialID.constructor.name : undefined);
+      console.log('[WebAuthn] Public key raw type:', typeof credentialPublicKey, credentialPublicKey && credentialPublicKey.constructor ? credentialPublicKey.constructor.name : undefined);
 
-      // Use isoBase64URL.fromBuffer for Cloudflare Workers compatibility
+      // Normalize to base64url strings using our safe helper (avoid runtime-specific isoBase64URL.fromBuffer)
+      let storedCredentialID: string;
+      let storedPublicKey: string;
+      try {
+        storedCredentialID = typeof credentialID === 'string' ? credentialID : toBase64Url(credentialID);
+      } catch (e) {
+        console.error('[WebAuthn] Failed to normalize credential ID:', e);
+        return json({ error: 'Invalid credential ID', details: e instanceof Error ? e.message : String(e) }, { status: 400 });
+      }
+
+      try {
+        storedPublicKey = typeof credentialPublicKey === 'string' ? credentialPublicKey : toBase64Url(credentialPublicKey);
+      } catch (e) {
+        console.error('[WebAuthn] Failed to normalize credential public key:', e);
+        return json({ error: 'Invalid credential public key', details: e instanceof Error ? e.message : String(e) }, { status: 400 });
+      }
+
       await addAuthenticator(env.BETA_USERS_KV, user.id, {
-        credentialID: isoBase64URL.fromBuffer(credentialID),
-        credentialPublicKey: isoBase64URL.fromBuffer(credentialPublicKey),
+        credentialID: storedCredentialID,
+        credentialPublicKey: storedPublicKey,
         counter: counter,
         transports: credential.response.transports || []
       });
@@ -302,9 +318,17 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       }
 
       const credential = await request.json();
-      const credentialID = credential.id;
+      const rawCredentialID = credential.id;
 
-      console.log('[WebAuthn] Looking up credential:', credentialID);
+      let credentialID: string;
+      try {
+        credentialID = typeof rawCredentialID === 'string' ? rawCredentialID : toBase64Url(rawCredentialID);
+      } catch (e) {
+        console.error('[WebAuthn] Invalid credential id in request:', e);
+        return json({ error: 'Invalid credential id' }, { status: 400 });
+      }
+
+      console.log('[WebAuthn] Looking up credential (normalized):', credentialID);
 
       const userId = await getUserIdByCredentialID(env.BETA_USERS_KV, credentialID);
       
