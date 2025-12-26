@@ -205,7 +205,57 @@ export async function verifyAuthenticationResponseForUser(
     throw new Error('Credential response is required');
   }
 
+  // Normalize credential response fields (convert base64url strings to Buffers)
+  const normalizedCredential: any = { ...credential };
+  const resp: any = normalizedCredential.response || {};
+  try {
+    if (typeof normalizedCredential.rawId === 'string') {
+      normalizedCredential.rawId = isoBase64URL.toBuffer(normalizedCredential.rawId);
+    }
+    if (typeof resp.authenticatorData === 'string') {
+      resp.authenticatorData = isoBase64URL.toBuffer(resp.authenticatorData);
+    }
+    if (typeof resp.clientDataJSON === 'string') {
+      resp.clientDataJSON = isoBase64URL.toBuffer(resp.clientDataJSON);
+    }
+    if (typeof resp.signature === 'string') {
+      resp.signature = isoBase64URL.toBuffer(resp.signature);
+    }
+    if (typeof resp.userHandle === 'string') {
+      resp.userHandle = isoBase64URL.toBuffer(resp.userHandle);
+    }
+    normalizedCredential.response = resp;
+    console.log('[WebAuthn Core] Normalized credential response types:', {
+      rawIdType: typeof normalizedCredential.rawId,
+      rawIdLength: (normalizedCredential.rawId as any)?.length,
+      authenticatorDataType: typeof resp.authenticatorData,
+      authenticatorDataLength: (resp.authenticatorData as any)?.length,
+      clientDataJSONType: typeof resp.clientDataJSON,
+      clientDataJSONLength: (resp.clientDataJSON as any)?.length,
+      signatureType: typeof resp.signature,
+      signatureLength: (resp.signature as any)?.length,
+      userHandleType: typeof resp.userHandle,
+      userHandleLength: (resp.userHandle as any)?.length,
+    });
+  } catch (e) {
+    console.warn('[WebAuthn Core] Failed to convert credential response fields to buffers', e);
+  }
+
+  // Validate binary fields are present
+  function isBufferLike(v: any) {
+    return v instanceof ArrayBuffer || ArrayBuffer.isView(v) || (v && typeof v.buffer === 'object' && typeof v.byteLength === 'number');
+  }
+  if (!isBufferLike(resp.authenticatorData) || !isBufferLike(resp.clientDataJSON) || !isBufferLike(resp.signature)) {
+    console.error('[WebAuthn Core] Credential response fields are not binary as expected', {
+      authenticatorDataType: typeof resp.authenticatorData,
+      clientDataJSONType: typeof resp.clientDataJSON,
+      signatureType: typeof resp.signature
+    });
+    throw new Error('Invalid credential response shape');
+  }
+
   const opts: VerifyAuthenticationResponseOpts = {
+    response: normalizedCredential,
     response: credential,
     expectedChallenge,
     expectedOrigin,
