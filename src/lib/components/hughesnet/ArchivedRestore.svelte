@@ -6,7 +6,7 @@
 
   let loading = false;
   let orders: Array<any> = [];
-  let selected = new Set<string>();
+  let selected: string[] = [];
   let error: string | null = null;
   let successMsg: string | null = null;
 
@@ -24,11 +24,17 @@
   onMount(load);
 
   function toggle(id: string) {
-    if (selected.has(id)) selected.delete(id); else selected.add(id);
+    const idx = selected.indexOf(id);
+    if (idx >= 0) {
+      selected = [...selected.slice(0, idx), ...selected.slice(idx + 1)];
+    } else {
+      selected = [...selected, id];
+    }
   }
 
   function selectAll() {
-    if (selected.size === orders.length) selected.clear(); else orders.forEach(o => selected.add(o.id));
+    if (selected.length === orders.length) selected = [];
+    else selected = orders.map(o => o.id);
   }
 
   // Modal control
@@ -43,7 +49,7 @@
   function closeConfirm() { showConfirm = false; }
 
   async function confirmRestore() {
-    if (selected.size === 0) { closeConfirm(); return; }
+    if (selected.length === 0) { closeConfirm(); return; }
     loading = true; successMsg = null; error = null;
     try {
       const res = await fetch('/api/hughesnet/archived/import', {
@@ -59,7 +65,7 @@
           dispatch('restoreAndSync', { dates: body.importedDates });
         }
         await load();
-        selected.clear();
+        selected = [];
         closeConfirm();
       } else {
         error = body.error || 'Import failed';
@@ -85,9 +91,8 @@
       <p>No archived orders found.</p>
     {:else}
       <div class="controls">
-        <button class="btn-small" on:click={selectAll}>{selected.size === orders.length ? 'Unselect All' : 'Select All'}</button>
-        <button class="btn-primary" disabled={selected.size === 0} on:click={openConfirm}>Restore Selected</button>
-      </div>
+        <button class="btn-small" on:click={selectAll}>{selected.length === orders.length ? 'Unselect All' : 'Select All'}</button>
+        <button class="btn-primary" disabled={selected.length === 0} on:click={openConfirm}>Restore Selected</button>
 
       <ul class="list">
         {#each orders as o}
@@ -104,7 +109,7 @@
       {#if showConfirm}
         <div class="modal-overlay">
           <div class="modal">
-            <h4>Restore {selected.size} archived order(s)?</h4>
+            <h4>Restore {selected.length} archived order(s)?</h4>
             <p>Would you like to just restore them, or restore and run a HughesNet sync now to create trips for those dates?</p>
             <div class="modal-actions">
               <button class="btn-secondary" on:click={() => { confirmAction = 'restore'; confirmRestore(); }}>Restore Only</button>
