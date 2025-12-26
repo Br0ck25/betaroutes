@@ -4,8 +4,7 @@ import {
   generateRegistrationOptions, 
   verifyRegistrationResponse,
   generateAuthenticationOptions,
-  verifyAuthenticationResponse,
-  isoBase64URL
+  verifyAuthenticationResponse
 } from '@simplewebauthn/server';
 import type { AuthenticatorTransport } from '@simplewebauthn/types';
 import { 
@@ -269,27 +268,27 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
 
       const { registrationInfo } = verification;
       
-      // Library returns credentialID and credentialPublicKey as Uint8Arrays
-      const credentialID = registrationInfo.credentialID;
+      // CRITICAL: Use credential.id from browser (already base64url)
+      // This ensures exact match during authentication
+      const storedCredentialID = credential.id;
+      
+      // Convert public key to base64url for storage
       const credentialPublicKey = registrationInfo.credentialPublicKey;
       const counter = registrationInfo.counter ?? 0;
 
-      if (!credentialID || !credentialPublicKey) {
+      if (!storedCredentialID || !credentialPublicKey) {
         return json({ error: 'Invalid credential data' }, { status: 400 });
       }
 
-      // Convert to base64url strings for storage using library's helper
-      let storedCredentialID: string;
       let storedPublicKey: string;
       try {
-        storedCredentialID = isoBase64URL.fromBuffer(credentialID);
-        storedPublicKey = isoBase64URL.fromBuffer(credentialPublicKey);
+        storedPublicKey = toBase64Url(credentialPublicKey);
       } catch (e) {
-        console.error('[WebAuthn] Failed to encode credentials:', e);
+        console.error('[WebAuthn] Failed to encode public key:', e);
         return json({ error: 'Failed to process credential' }, { status: 400 });
       }
 
-      console.log('[WebAuthn] Storing credential:', storedCredentialID);
+      console.log('[WebAuthn] Storing credential ID (from browser):', storedCredentialID);
       console.log('[WebAuthn] Will create index:', `credential:${storedCredentialID}`, '→', user.id);
 
       await addAuthenticator(env.BETA_USERS_KV, user.id, {
