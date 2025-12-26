@@ -63,10 +63,55 @@ export async function generateRegistrationOptions(
 
   console.log('[WebAuthn Core] Valid authenticators after filtering:', validAuthenticators.length);
 
-  const excludeCredentials = validAuthenticators.map((auth) => {
-    console.log('[WebAuthn Core] Attempting to decode:', auth.credentialID, 'length:', auth.credentialID.length);
+  // Helper: try to normalize credential ID into a base64url string
+  function normalizeCredentialID(input: any): string | null {
     try {
-      const buffer = isoBase64URL.toBuffer(auth.credentialID);
+      if (typeof input === 'string') {
+        // already a string - validate base64url chars
+        const s = input;
+        if (/^[A-Za-z0-9_-]+$/.test(s) && s.length > 8) return s;
+        return null;
+      }
+
+      // Node Buffer
+      if (typeof Buffer !== 'undefined' && Buffer.isBuffer(input)) {
+        const b64 = Buffer.from(input).toString('base64');
+        return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      }
+
+      // Uint8Array / ArrayBuffer / TypedArray
+      if (input instanceof Uint8Array || ArrayBuffer.isView(input) || input instanceof ArrayBuffer) {
+        const u = input instanceof Uint8Array ? input : new Uint8Array((input as any).buffer || input);
+        const buf = Buffer.from(u);
+        const b64 = buf.toString('base64');
+        return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      }
+
+      // Shapes like { type: 'Buffer', data: [...] }
+      if (input && typeof input === 'object' && Array.isArray((input as any).data)) {
+        const arr = (input as any).data as number[];
+        const buf = Buffer.from(arr);
+        const b64 = buf.toString('base64');
+        return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      }
+
+      return null;
+    } catch (e) {
+      console.warn('[WebAuthn Core] normalizeCredentialID failed', e);
+      return null;
+    }
+  }
+
+  const excludeCredentials = validAuthenticators.map((auth) => {
+    console.log('[WebAuthn Core] Attempting to prepare exclude credential ID:', auth.credentialID);
+    const normalized = normalizeCredentialID(auth.credentialID);
+    if (!normalized) {
+      console.warn('[WebAuthn Core] Skipping credential that cannot be normalized:', auth.credentialID);
+      return null;
+    }
+
+    try {
+      const buffer = isoBase64URL.toBuffer(normalized);
       console.log('[WebAuthn Core] Successfully decoded, buffer length:', buffer.length);
       return {
         id: buffer,
@@ -74,7 +119,7 @@ export async function generateRegistrationOptions(
         transports: auth.transports || [],
       };
     } catch (error) {
-      console.error('[WebAuthn Core] Failed to decode credential:', auth.credentialID, error);
+      console.error('[WebAuthn Core] Failed to decode credential after normalization:', normalized, error);
       return null;
     }
   }).filter((cred): cred is NonNullable<typeof cred> => cred !== null);

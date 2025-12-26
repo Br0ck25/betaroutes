@@ -28,10 +28,24 @@ function getOrigin(request: Request): string {
 
 // Convert ArrayBuffer/Uint8Array/Buffer-like values to base64url string safely.
 function toBase64Url(input: any) {
-  if (!input) return '';
+  if (input == null) return '';
   if (typeof input === 'string') return input;
 
-  let bytes: Uint8Array;
+  // Accept objects produced by some runtimes (e.g., { type: 'Buffer', data: [...] })
+  if (typeof input === 'object' && Array.isArray((input as any).data)) {
+    try {
+      const arr = (input as any).data as number[];
+      const bytes = new Uint8Array(arr);
+      if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      return (globalThis as any).btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    } catch (e) {
+      throw new Error('Unsupported input shape for base64url conversion');
+    }
+  }
+
+  let bytes: Uint8Array | undefined;
   if (input instanceof Uint8Array) {
     bytes = input;
   } else if (ArrayBuffer.isView(input)) {
@@ -45,12 +59,14 @@ function toBase64Url(input: any) {
     } catch (e) {
       throw new Error('Unsupported input type for base64url conversion');
     }
-  } else {
+  }
+
+  if (!bytes) {
     throw new Error('Unsupported input type for base64url conversion');
   }
 
   // Convert to regular base64
-  let base64: string;
+  let base64: any;
   if (typeof Buffer !== 'undefined') {
     base64 = Buffer.from(bytes).toString('base64');
   } else if (typeof btoa !== 'undefined') {
@@ -64,7 +80,14 @@ function toBase64Url(input: any) {
     base64 = (globalThis as any).btoa ? (globalThis as any).btoa(binary) : Buffer.from(binary, 'binary').toString('base64');
   }
 
-  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  // Ensure we have a string before calling replace
+  if (typeof base64 !== 'string') base64 = String(base64);
+
+  try {
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  } catch (e) {
+    throw new Error('Failed to convert to base64url: ' + (e && (e as Error).message));
+  }
 }
 
 export const GET: RequestHandler = async ({ url, locals, cookies, platform }) => {
@@ -84,15 +107,62 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
 
       const authenticators = await getUserAuthenticators(env.BETA_USERS_KV, user.id);
       
+      // Log diagnostics about stored authenticators (types/constructors/lengths) to help trace production failures
+      try {
+        const diag = (authenticators || []).map((a: any, i: number) => ({
+          idx: i,
+          hasCredential: !!a?.credentialID,
+          type: typeof a?.credentialID,
+          ctor: a?.credentialID && a.credentialID.constructor ? a.credentialID.constructor.name : undefined,
+          length: a?.credentialID ? (a.credentialID.byteLength || a.credentialID.length || (typeof a.credentialID === 'string' ? a.credentialID.length : undefined)) : undefined
+        }));
+        console.log('[webauthn] Stored authenticators diagnostics:', JSON.stringify(diag));
+      } catch (diagErr) {
+        console.warn('[webauthn] Failed to produce authenticators diagnostics', diagErr);
+      }
+
+      // Sanitize authenticators to ensure credential IDs are strings (base64url). If we encounter binary or
+      // unexpected shapes, coerce where possible, otherwise skip the authenticator so it doesn't break options generation.
+      const sanitizedAuthenticators = (authenticators || []).reduce((acc: any[], a: any) => {
+        if (!a || !a.credentialID) return acc;
+        if (typeof a.credentialID === 'string') {
+          acc.push({ credentialID: a.credentialID, transports: a.transports || [] });
+          return acc;
+        }
+        try {
+          const coerced = toBase64Url(a.credentialID);
+          if (typeof coerced === 'string' && /^[A-Za-z0-9_-]+$/.test(coerced) && coerced.length > 10) {
+            acc.push({ credentialID: coerced, transports: a.transports || [] });
+          } else {
+            console.warn('[webauthn] Skipping authenticator with invalid coerced id', coerced);
+          }
+        } catch (err) {
+          console.warn('[webauthn] Skipping authenticator that could not be coerced to base64url:', err);
+        }
+        return acc;
+      }, [] as any[]);
+
       const userWithAuth = {
         id: user.id,
         email: user.email,
         name: user.name || user.email,
-        authenticators
+        authenticators: sanitizedAuthenticators
       };
 
       const rpID = getRpID({ url });
-      const options = await generateRegistrationOptions(userWithAuth, rpID);
+
+      // Wrap generateRegistrationOptions to catch library/runtime errors and log diagnostics
+      let options: any;
+      try {
+        options = await generateRegistrationOptions(userWithAuth, rpID);
+      } catch (genErr) {
+        console.error('[webauthn] generateRegistrationOptions failed', {
+          error: genErr instanceof Error ? genErr.message : String(genErr),
+          stack: genErr instanceof Error ? genErr.stack : undefined,
+          sanitizedAuthenticatorsCount: sanitizedAuthenticators.length
+        });
+        return json({ error: 'Failed to generate options', details: 'Internal generation error' }, { status: 500 });
+      }
       
       if (!options || !options.challenge) {
         return json({ error: 'Failed to generate options' }, { status: 500 });
