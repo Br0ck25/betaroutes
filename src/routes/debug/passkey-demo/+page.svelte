@@ -21,7 +21,7 @@
       }
 
       // Call startRegistration
-      const cred = await startRegistration(options as any);
+      const cred = await startRegistration({ optionsJSON: options as any });
       console.log('Demo credential:', cred);
 
       // Normalize ArrayBuffer fields to base64url strings

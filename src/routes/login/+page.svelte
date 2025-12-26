@@ -93,7 +93,7 @@
             }
 
             // 2. Prompt user for FaceID/TouchID (Browser Native Modal)
-            const authResp = await startAuthentication(options as any);
+            const authResp = await startAuthentication({ optionsJSON: options as any });
 
             // 3. Verify signature with server (ensure credential.serializable fields are sent)
             function bufferToBase64Url(buffer: ArrayBuffer | Uint8Array) {

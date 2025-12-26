@@ -3,9 +3,9 @@ import type { RequestHandler } from './$types';
 import { 
   generateRegistrationOptions, 
   verifyRegistrationResponse,
-  generateAuthenticationOptions,
-  verifyAuthenticationResponse
+  generateAuthenticationOptions
 } from '@simplewebauthn/server';
+import { verifyAuthenticationResponseForUser } from '$lib/server/webauthn';
 import type { AuthenticatorTransport } from '@simplewebauthn/types';
 import { 
   getUserAuthenticators, 
@@ -480,13 +480,19 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
         console.log('[WebAuthn]   - authenticator.credentialPublicKey instanceof Uint8Array:', authData.credentialPublicKey instanceof Uint8Array);
         console.log('[WebAuthn]   - authenticator.counter type:', typeof authData.counter, '=', authData.counter);
         
-        verification = await verifyAuthenticationResponse({
-          response: credential,
+        // Use the local wrapper which accepts base64url strings and does proper Buffer conversion
+        verification = await verifyAuthenticationResponseForUser(
+          credential,
           expectedChallenge,
+          {
+            credentialID: authData.credentialID,
+            credentialPublicKey: toBase64Url(authData.credentialPublicKey),
+            counter: authData.counter,
+            transports: authData.transports
+          },
           expectedOrigin,
-          expectedRPID,
-          authenticator: authData
-        });
+          expectedRPID
+        );
       } catch (e) {
         console.error('[WebAuthn] Verification threw error:', e);
         console.error('[WebAuthn] Error message:', e instanceof Error ? e.message : String(e));
