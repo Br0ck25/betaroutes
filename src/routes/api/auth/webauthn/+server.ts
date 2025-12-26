@@ -275,15 +275,14 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       // This ensures exact match during authentication  
       const storedCredentialID = credential.id;
       
-      // Get credential public key from library's verification result
-      // This is the COSE-encoded public key needed for future verifications
-      const credentialPublicKey = registrationInfo.credentialPublicKey;
-      const counter = registrationInfo.counter ?? 0;
+      // Get public key from registrationInfo.credential.publicKey
+      // It's returned as an object with numeric indices, convert to Uint8Array
+      const credentialPublicKeyObj = registrationInfo.credential?.publicKey;
+      const counter = registrationInfo.credential?.counter ?? 0;
 
       console.log('[WebAuthn] Credential ID:', storedCredentialID);
-      console.log('[WebAuthn] credentialPublicKey type:', typeof credentialPublicKey);
-      console.log('[WebAuthn] credentialPublicKey is Uint8Array?', credentialPublicKey instanceof Uint8Array);
-      console.log('[WebAuthn] credentialPublicKey length:', credentialPublicKey?.length || credentialPublicKey?.byteLength || 'N/A');
+      console.log('[WebAuthn] credential.publicKey type:', typeof credentialPublicKeyObj);
+      console.log('[WebAuthn] credential.publicKey exists?', !!credentialPublicKeyObj);
       console.log('[WebAuthn] Counter:', counter);
       
       if (!storedCredentialID) {
@@ -291,11 +290,24 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
         return json({ error: 'Invalid credential ID' }, { status: 400 });
       }
       
-      if (!credentialPublicKey) {
-        console.error('[WebAuthn] Missing credentialPublicKey from registrationInfo');
-        console.error('[WebAuthn] Available registrationInfo fields:', Object.keys(registrationInfo));
-        console.error('[WebAuthn] registrationInfo:', registrationInfo);
-        return json({ error: 'Invalid credential public key - not provided by verification library' }, { status: 400 });
+      if (!credentialPublicKeyObj) {
+        console.error('[WebAuthn] Missing publicKey from registrationInfo.credential');
+        console.error('[WebAuthn] Available credential fields:', Object.keys(registrationInfo.credential || {}));
+        return json({ error: 'Invalid credential public key - not found in credential object' }, { status: 400 });
+      }
+      
+      // Convert object with numeric indices to Uint8Array
+      let credentialPublicKey: Uint8Array;
+      try {
+        const length = Object.keys(credentialPublicKeyObj).length;
+        credentialPublicKey = new Uint8Array(length);
+        for (let i = 0; i < length; i++) {
+          credentialPublicKey[i] = (credentialPublicKeyObj as any)[i];
+        }
+        console.log('[WebAuthn] Converted publicKey to Uint8Array, length:', credentialPublicKey.length);
+      } catch (e) {
+        console.error('[WebAuthn] Failed to convert publicKey to Uint8Array:', e);
+        return json({ error: 'Failed to convert public key' }, { status: 400 });
       }
 
       let storedPublicKey: string;
