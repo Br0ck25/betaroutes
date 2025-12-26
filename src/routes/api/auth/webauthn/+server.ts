@@ -401,6 +401,8 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       }
 
       console.log('[WebAuthn Auth] Received credential ID:', credentialID);
+      console.log('[WebAuthn Auth] Credential keys:', Object.keys(credential));
+      console.log('[WebAuthn Auth] Credential.response keys:', Object.keys(credential.response || {}));
       console.log('[WebAuthn Auth] Index key:', `credential:${credentialID}`);
 
       const userId = await getUserIdByCredentialID(env.BETA_USERS_KV, credentialID);
@@ -452,20 +454,32 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       }
 
       // Prepare authenticator data for verification
+      // credentialID stays as base64url string
       const authData = {
-        credentialID: authenticator.credentialID,
-        credentialPublicKey: credentialPublicKeyBytes,  // Use Uint8Array
-        counter: typeof authenticator.counter === 'number' ? authenticator.counter : 0
+        credentialID: authenticator.credentialID,  // Keep as string
+        credentialPublicKey: credentialPublicKeyBytes,  // Uint8Array
+        counter: typeof authenticator.counter === 'number' ? authenticator.counter : 0,
+        transports: authenticator.transports || []  // Add transports
       };
       
       console.log('[WebAuthn] Auth data prepared:', {
         credentialID: authData.credentialID,
         publicKeyLength: authData.credentialPublicKey.length,
-        counter: authData.counter
+        counter: authData.counter,
+        transports: authData.transports
       });
 
       let verification;
       try {
+        console.log('[WebAuthn] Calling verifyAuthenticationResponse with:');
+        console.log('[WebAuthn]   - response type:', typeof credential);
+        console.log('[WebAuthn]   - expectedChallenge:', expectedChallenge);
+        console.log('[WebAuthn]   - expectedOrigin:', expectedOrigin);
+        console.log('[WebAuthn]   - expectedRPID:', expectedRPID);
+        console.log('[WebAuthn]   - authenticator.credentialID type:', typeof authData.credentialID);
+        console.log('[WebAuthn]   - authenticator.credentialPublicKey instanceof Uint8Array:', authData.credentialPublicKey instanceof Uint8Array);
+        console.log('[WebAuthn]   - authenticator.counter type:', typeof authData.counter, '=', authData.counter);
+        
         verification = await verifyAuthenticationResponse({
           response: credential,
           expectedChallenge,
@@ -475,7 +489,17 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
         });
       } catch (e) {
         console.error('[WebAuthn] Verification threw error:', e);
+        console.error('[WebAuthn] Error message:', e instanceof Error ? e.message : String(e));
         console.error('[WebAuthn] Error stack:', e instanceof Error ? e.stack : 'N/A');
+        
+        // Log the full authData structure for debugging
+        console.error('[WebAuthn] authData that caused error:', JSON.stringify({
+          credentialID: authData.credentialID,
+          credentialPublicKeyLength: authData.credentialPublicKey.length,
+          counter: authData.counter,
+          transports: authData.transports
+        }));
+        
         return json({ error: 'Verification failed: ' + (e instanceof Error ? e.message : String(e)) }, { status: 400 });
       }
 
