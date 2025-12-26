@@ -92,7 +92,7 @@
       <ul class="list">
         {#each orders as o}
           <li class="item">
-            <input type="checkbox" bind:checked={selected.has(o.id)} on:change={() => toggle(o.id)} />
+            <input type="checkbox" checked={selected.has(o.id)} on:change={() => toggle(o.id)} />
             <div class="meta">
               <div class="addr">{o.order.address || 'No address'}</div>
               <div class="info">ID: {o.id} · Stored: {new Date(o.storedAt).toLocaleString()}</div>
