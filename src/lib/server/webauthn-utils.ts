@@ -1,198 +1,109 @@
-import {
-  generateRegistrationOptions as generateOptions,
-  verifyRegistrationResponse as verifyResponse,
-  generateAuthenticationOptions,
-  verifyAuthenticationResponse,
-  type GenerateRegistrationOptionsOpts,
-  type VerifyRegistrationResponseOpts,
-  type GenerateAuthenticationOptionsOpts,
-  type VerifyAuthenticationResponseOpts,
-} from '@simplewebauthn/server';
-import { isoBase64URL } from '@simplewebauthn/server/helpers';
+/**
+ * WebAuthn utility functions for credential normalization and conversion
+ */
 
-const RP_NAME = 'Go Route Yourself';
+/**
+ * Convert various input types to base64url string safely
+ */
+export function toBase64Url(input: any): string {
+  if (!input) return '';
+  if (typeof input === 'string') return input;
 
-interface UserWithAuthenticators {
-  id: string;
-  email: string;
-  name?: string;
-  authenticators?: Array<{
-    credentialID: string;
-    transports?: AuthenticatorTransport[];
-  }>;
+  let bytes: Uint8Array;
+  if (input instanceof Uint8Array) {
+    bytes = input;
+  } else if (ArrayBuffer.isView(input)) {
+    bytes = new Uint8Array(
+      (input as any).buffer,
+      (input as any).byteOffset || 0,
+      (input as any).byteLength || (input as any).length
+    );
+  } else if (input instanceof ArrayBuffer) {
+    bytes = new Uint8Array(input);
+  } else if ((input as any).buffer && (input as any).byteLength) {
+    // fallback for exotic typed shapes
+    try {
+      bytes = new Uint8Array((input as any).buffer);
+    } catch (e) {
+      throw new Error('Unsupported input type for base64url conversion');
+    }
+  } else {
+    throw new Error('Unsupported input type for base64url conversion');
+  }
+
+  // Convert to regular base64
+  let base64: string = '';
+
+  try {
+    if (typeof Buffer !== 'undefined') {
+      base64 = Buffer.from(bytes).toString('base64');
+    } else if (typeof btoa !== 'undefined') {
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      base64 = btoa(binary);
+    } else {
+      throw new Error('No base64 encoding method available');
+    }
+  } catch (e) {
+    console.error('[webauthn-utils] Base64 encoding failed:', e);
+    throw new Error('Failed to encode to base64');
+  }
+
+  if (typeof base64 !== 'string' || base64.length === 0) {
+    console.error('[webauthn-utils] toBase64Url produced invalid output:', typeof base64, base64);
+    throw new Error('Failed to convert to base64 string');
+  }
+
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-export interface AuthenticatorForAuth {
+/**
+ * Normalize credential ID to base64url string format
+ * Accepts strings (already base64url) or binary data
+ */
+export function normalizeCredentialID(credentialID: any): string {
+  if (typeof credentialID === 'string') {
+    // Already a string, validate it's base64url
+    if (!/^[A-Za-z0-9_-]+$/.test(credentialID)) {
+      throw new Error('Invalid base64url credential ID');
+    }
+    return credentialID;
+  }
+  
+  // Convert binary to base64url
+  return toBase64Url(credentialID);
+}
+
+/**
+ * Convert credential data to base64url format for storage
+ * Ensures both credentialID and credentialPublicKey are strings
+ */
+export function credentialToBase64urlForStorage(credential: {
+  credentialID?: any;
+  credentialPublicKey?: any;
+  id?: any;
+  publicKey?: any;
+  [key: string]: any;
+}): {
   credentialID: string;
   credentialPublicKey: string;
-  counter: number;
-  transports?: AuthenticatorTransport[];
-}
+  [key: string]: any;
+} {
+  const credID = credential.credentialID || credential.id;
+  const pubKey = credential.credentialPublicKey || credential.publicKey;
 
-export async function generateRegistrationOptions(
-  user: UserWithAuthenticators,
-  rpID: string
-) {
-  console.log('[WebAuthn Core] Generating registration options');
-  console.log('[WebAuthn Core] User ID:', user.id);
-  console.log('[WebAuthn Core] User email:', user.email);
-  console.log('[WebAuthn Core] RP ID:', rpID);
-  console.log('[WebAuthn Core] Existing authenticators:', user.authenticators?.length || 0);
-
-  // Filter and validate credentials before attempting to use them
-  const validAuthenticators = (user.authenticators || []).filter(auth => {
-    if (!auth.credentialID) {
-      console.warn('[WebAuthn Core] Skipping authenticator with no credentialID');
-      return false;
-    }
-    if (typeof auth.credentialID !== 'string') {
-      console.warn('[WebAuthn Core] Skipping authenticator with non-string credentialID:', typeof auth.credentialID);
-      return false;
-    }
-    if (auth.credentialID.length < 20) {
-      console.warn('[WebAuthn Core] Skipping authenticator with suspiciously short credentialID:', auth.credentialID);
-      return false;
-    }
-    // Check if it's valid base64url (only contains A-Z, a-z, 0-9, -, _)
-    if (!/^[A-Za-z0-9_-]+$/.test(auth.credentialID)) {
-      console.warn('[WebAuthn Core] Skipping authenticator with invalid base64url characters:', auth.credentialID);
-      return false;
-    }
-    return true;
-  });
-
-  console.log('[WebAuthn Core] Valid authenticators after filtering:', validAuthenticators.length);
-
-  // IMPORTANT: Pass credential IDs as base64url STRINGS, not Buffers
-  // The newer version of @simplewebauthn/server expects strings and will convert them internally
-  const excludeCredentials = validAuthenticators.map((auth) => {
-    console.log('[WebAuthn Core] Adding to exclude list:', auth.credentialID, 'length:', auth.credentialID.length);
-    return {
-      id: auth.credentialID,  // Keep as string - library will handle conversion
-      type: 'public-key' as const,
-      transports: auth.transports || [],
-    };
-  });
-
-  console.log('[WebAuthn Core] Excluding credentials:', excludeCredentials.length);
-
-  const opts: GenerateRegistrationOptionsOpts = {
-    rpName: RP_NAME,
-    rpID: rpID,
-    userID: user.id,  // Pass as string - library will encode it
-    userName: user.email,
-    userDisplayName: user.name || user.email,
-    attestationType: 'none',
-    excludeCredentials,
-    authenticatorSelection: {
-      residentKey: 'preferred',
-      userVerification: 'preferred',
-      authenticatorAttachment: 'platform',
-    },
-  };
-
-  const options = await generateOptions(opts);
-  
-  console.log('[WebAuthn Core] Registration options generated');
-  
-  return options;
-}
-
-export async function generateAuthenticationOptionsForUser(
-  authenticators: AuthenticatorForAuth[],
-  rpID: string
-) {
-  console.log('[WebAuthn Core] Generating authentication options');
-  console.log('[WebAuthn Core] RP ID:', rpID);
-  console.log('[WebAuthn Core] Authenticators:', authenticators.length);
-
-  // Pass credential IDs as base64url strings
-  const allowCredentials = authenticators.map((auth) => ({
-    id: auth.credentialID,  // Keep as string
-    type: 'public-key' as const,
-    transports: auth.transports || [],
-  }));
-
-  const opts: GenerateAuthenticationOptionsOpts = {
-    rpID: rpID,
-    allowCredentials,
-    userVerification: 'preferred',
-  };
-
-  const options = await generateAuthenticationOptions(opts);
-  
-  console.log('[WebAuthn Core] Authentication options generated');
-  
-  return options;
-}
-
-export async function verifyRegistrationResponse(
-  credential: any,
-  expectedChallenge: string,
-  expectedOrigin: string,
-  expectedRPID: string
-) {
-  console.log('[WebAuthn Core] Starting registration verification');
-
-  if (!expectedChallenge) {
-    throw new Error('Challenge is required for verification');
+  if (!credID) {
+    throw new Error('Missing credential ID');
+  }
+  if (!pubKey) {
+    throw new Error('Missing credential public key');
   }
 
-  if (!credential || !credential.response) {
-    throw new Error('Credential response is required');
-  }
-
-  const opts: VerifyRegistrationResponseOpts = {
-    response: credential,
-    expectedChallenge,
-    expectedOrigin,
-    expectedRPID,
-    requireUserVerification: false,
+  return {
+    ...credential,
+    credentialID: normalizeCredentialID(credID),
+    credentialPublicKey: toBase64Url(pubKey),
   };
-
-  const verification = await verifyResponse(opts);
-
-  console.log('[WebAuthn Core] Registration verification complete');
-  console.log('[WebAuthn Core] Verified:', verification.verified);
-
-  return verification;
-}
-
-export async function verifyAuthenticationResponseForUser(
-  credential: any,
-  expectedChallenge: string,
-  authenticator: AuthenticatorForAuth,
-  expectedOrigin: string,
-  expectedRPID: string
-) {
-  console.log('[WebAuthn Core] Starting authentication verification');
-  console.log('[WebAuthn Core] Credential ID:', credential.id);
-
-  if (!expectedChallenge) {
-    throw new Error('Challenge is required for verification');
-  }
-
-  if (!credential || !credential.response) {
-    throw new Error('Credential response is required');
-  }
-
-  const opts: VerifyAuthenticationResponseOpts = {
-    response: credential,
-    expectedChallenge,
-    expectedOrigin,
-    expectedRPID,
-    authenticator: {
-      credentialID: isoBase64URL.toBuffer(authenticator.credentialID),
-      credentialPublicKey: isoBase64URL.toBuffer(authenticator.credentialPublicKey),
-      counter: authenticator.counter,
-    },
-    requireUserVerification: false,
-  };
-
-  const verification = await verifyAuthenticationResponse(opts);
-
-  console.log('[WebAuthn Core] Authentication verification complete');
-  console.log('[WebAuthn Core] Verified:', verification.verified);
-
-  return verification;
 }
