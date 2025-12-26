@@ -246,68 +246,86 @@
   let unregistering = false;
   let sessionExpired = false; // Set when API returns 401 so UI can prompt the user to re-authenticate
 
-  async function loadAuthenticators() {
-    try {
-      const res = await fetch('/api/auth/webauthn/list', { credentials: 'same-origin' });
-      if (res.status === 401) {
-        // Retry once after a short delay (cookie may not be set yet)
-        await new Promise((r) => setTimeout(r, 400));
-        const retry = await fetch('/api/auth/webauthn/list', { credentials: 'same-origin' });
-        if (retry.status === 401) {
-          console.warn('[Passkey] Could not load authenticators: session expired');
-          authenticatorsList = [];
-          deviceRegistered = false;
-          deviceCredentialID = null;
-          sessionExpired = true; // Show UI hint
-          return;
-        } else if (!retry.ok) {
-          console.warn('[Passkey] Could not load authenticators (retry)');
-          authenticatorsList = [];
-          deviceRegistered = false;
-          deviceCredentialID = null;
-          return;
-        }
-        const retryJson = await retry.json();
-        const retryAuths = retryJson.authenticators || [];
-        authenticatorsList = retryAuths;
-        const matchRetry = retryAuths.find((a: any) => a.name === deviceName);
-        if (matchRetry) {
-          deviceRegistered = true;
-          deviceCredentialID = matchRetry.credentialID;
-        } else {
-          deviceRegistered = false;
-          deviceCredentialID = null;
-        }
-        sessionExpired = false;
-        return;
-      }
+  // Load the user's authenticators with robust handling.
+  // Accepts options { silent: boolean } — when silent is true the function will avoid setting
+  // `sessionExpired` so short-lived race conditions (like during registration) don't flip UI.
+  async function loadAuthenticators(opts: { silent?: boolean } = { silent: false }) {
+    const silent = !!opts.silent;
+    const maxAttempts = 5;
+    let attempt = 0;
 
-      if (!res.ok) {
-        console.warn('[Passkey] Could not load authenticators');
+    const attemptFetch = async (): Promise<boolean> => {
+      attempt += 1;
+      try {
+        const res = await fetch('/api/auth/webauthn/list', { credentials: 'same-origin' });
+
+        if (res.ok) {
+          const json = await res.json();
+          const auths = json.authenticators || [];
+          authenticatorsList = auths;
+          const match = auths.find((a: any) => a.name === deviceName);
+          if (match) {
+            deviceRegistered = true;
+            deviceCredentialID = match.credentialID;
+          } else {
+            deviceRegistered = false;
+            deviceCredentialID = null;
+          }
+          sessionExpired = false;
+          return true;
+        }
+
+        if (res.status === 401) {
+          // Distinguish between a transient cookie visibility issue and a real session expiry by
+          // checking the session endpoint first. If session is recognized, retry the list call.
+          try {
+            const s = await fetch('/api/auth/session', { credentials: 'same-origin' });
+            if (s.ok) {
+              // Server recognizes session — this was likely a timing/cookie issue. Retry.
+              console.debug('[Passkey] Session endpoint OK; will retry list fetch');
+            } else if (s.status === 401) {
+              console.debug('[Passkey] Session endpoint reports unauthorized');
+            }
+          } catch (e) {
+            console.debug('[Passkey] Session check failed (network), will retry');
+          }
+
+          if (attempt < maxAttempts) {
+            await new Promise((r) => setTimeout(r, 200 * attempt));
+            return attemptFetch();
+          }
+
+          // Exhausted retries
+          authenticatorsList = [];
+          deviceRegistered = false;
+          deviceCredentialID = null;
+          if (!silent) sessionExpired = true;
+          if (!silent) console.warn('[Passkey] Could not load authenticators: session expired');
+          return false;
+        }
+
+        // Other non-OK status codes
+        console.warn('[Passkey] Could not load authenticators (status ' + res.status + ')');
         authenticatorsList = [];
         deviceRegistered = false;
         deviceCredentialID = null;
-        return;
-      }
-
-      const json = await res.json();
-      const auths = json.authenticators || [];
-      authenticatorsList = auths;
-      // Try to find a matching authenticator for this device by name
-      const match = auths.find((a: any) => a.name === deviceName);
-      if (match) {
-        deviceRegistered = true;
-        deviceCredentialID = match.credentialID;
-      } else {
+        return false;
+      } catch (e) {
+        // Network / unexpected error: retry a few times before giving up
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, 200 * attempt));
+          return attemptFetch();
+        }
+        console.error('[Passkey] Failed to load authenticators', e);
+        authenticatorsList = [];
         deviceRegistered = false;
         deviceCredentialID = null;
+        if (!silent) sessionExpired = true;
+        return false;
       }
-    } catch (e) {
-      console.error('[Passkey] Failed to load authenticators', e);
-      authenticatorsList = [];
-      deviceRegistered = false;
-      deviceCredentialID = null;
-    }
+    };
+
+    await attemptFetch();
   }
 
   async function unregisterThisDevice() {
@@ -350,8 +368,8 @@
     try {
       // 🔧 STEP 1: Get registration options from server
       console.log('[Passkey] Fetching registration options...');
-      // Ensure we have latest list so we don't duplicate
-      await loadAuthenticators();
+      // Ensure we have latest list so we don't duplicate; be silent during registration so we don't set sessionExpired prematurely
+      await loadAuthenticators({ silent: true });
 
       
       const optionsRes = await fetch('/api/auth/webauthn?type=register', { credentials: 'same-origin' });
