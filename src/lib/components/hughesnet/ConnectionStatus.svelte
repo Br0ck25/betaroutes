@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import ArchivedRestore from './ArchivedRestore.svelte';
   
   export let isConnected = false;
   export let ordersCount = 0;
@@ -10,6 +11,9 @@
   let username = '';
   let password = '';
   const dispatch = createEventDispatcher();
+
+  // Local UI toggle for showing restore panel
+  let showRestore = false;
 
   function handleConnect() {
       dispatch('connect', { username, password });
@@ -79,10 +83,23 @@
                <button class="btn-secondary danger-hover" on:click={() => dispatch('clear')} disabled={loading}>
                    Delete HNS Trips
                </button>
+
+               <!-- Restore Archived Orders -->
+               <button class="btn-secondary" on:click={() => showRestore = !showRestore} disabled={loading}>
+                   {showRestore ? 'Hide Archived' : 'Restore Archived Orders'}
+               </button>
           </div>
+      {/if}
+
+      {#if $showRestore}
+        <div class="mt-4">
+          <ArchivedRestore on:restored={(e) => { dispatch('reloaded'); }} />
+        </div>
       {/if}
   {/if}
 </div>
+
+
 
 <style>
   .settings-card { background: white; border: 1px solid #E5E7EB; border-radius: 16px; padding: 24px; }
