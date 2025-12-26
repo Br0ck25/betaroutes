@@ -58,6 +58,13 @@
       dispatch('update', destinations);
     }
   }
+
+  // Action to listen for 'place-selected' events (used instead of mixing deprecated/new event syntaxes)
+  function placeSelector(node: HTMLElement, cb: (e: CustomEvent) => void) {
+    const handler = (ev: Event) => cb(ev as CustomEvent);
+    node.addEventListener('place-selected', handler);
+    return { destroy() { node.removeEventListener('place-selected', handler); } };
+  }
 </script>
 
 <div class="destinations-container">
@@ -71,7 +78,7 @@
         class="flex-2 w-full p-3 text-base border border-gray-300 rounded-lg" 
         autocomplete="off"
         use:autocomplete={{ apiKey }}
-        on:place-selected={(e) => handlePlaceSelect(i, e)}
+        use:placeSelector={(e: CustomEvent) => handlePlaceSelect(i, e)}
       />
       <input 
         type="number" 
@@ -81,12 +88,12 @@
         class="flex-1 w-24 p-3 text-base border border-gray-300 rounded-lg"
       />
       <div class="flex gap-1">
-        <button type="button" on:click={() => moveUp(i)} disabled={i === 0} class="p-3 bg-gray-100 rounded-lg disabled:opacity-50 active:bg-gray-200 transition-colors">↑</button>
-        <button type="button" on:click={() => moveDown(i)} disabled={i === destinations.length - 1} class="p-3 bg-gray-100 rounded-lg disabled:opacity-50 active:bg-gray-200 transition-colors">↓</button>
-        <button type="button" on:click={() => removeDestination(i)} disabled={destinations.length === 1} class="p-3 bg-red-50 text-red-600 rounded-lg disabled:opacity-50 active:bg-red-100 transition-colors">✕</button>
+        <button type="button" onclick={() => moveUp(i)} disabled={i === 0} class="p-3 bg-gray-100 rounded-lg disabled:opacity-50 active:bg-gray-200 transition-colors">↑</button>
+        <button type="button" onclick={() => moveDown(i)} disabled={i === destinations.length - 1} class="p-3 bg-gray-100 rounded-lg disabled:opacity-50 active:bg-gray-200 transition-colors">↓</button>
+        <button type="button" onclick={() => removeDestination(i)} disabled={destinations.length === 1} class="p-3 bg-red-50 text-red-600 rounded-lg disabled:opacity-50 active:bg-red-100 transition-colors">✕</button>
       </div>
     </div>
   {/each}
 
-  <button type="button" on:click={addDestination} class="mt-2 text-blue-600 font-semibold text-sm hover:underline py-2">+ Add Destination</button>
+  <button type="button" onclick={addDestination} class="mt-2 text-blue-600 font-semibold text-sm hover:underline py-2">+ Add Destination</button>
 </div>

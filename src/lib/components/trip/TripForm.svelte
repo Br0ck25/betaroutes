@@ -2,6 +2,7 @@
   import { userSettings } from '$lib/stores/userSettings';
   import { get } from 'svelte/store';
   import { onMount } from 'svelte';
+  import { slide } from 'svelte/transition';
   import type { Destination, Trip, LatLng } from '$lib/types';
   import { calculateTripTotals } from '$lib/utils/calculations';
   import { storage } from '$lib/utils/storage';
@@ -21,7 +22,7 @@
   let { googleApiKey = '', loading = false, trip = null } = $props();
 
   const settings = get(userSettings);
-  const API_KEY = googleApiKey || 'dummy_key';
+  let API_KEY = $derived(() => googleApiKey || 'dummy_key');
   
   const userState = getUserState();
 
@@ -48,7 +49,7 @@
 
   // Financials State (Runes)
   let supplies = $state<{ id: string; type: string; cost: number }[]>([]);
-  let maintenance = $state<{ id: string; item: string; cost: number }[]>([]);
+  let maintenance = $state<{ id: string; type: string; cost: number }[]>([]);
   let showFinancials = $state(true);
 
   // --- Calculation State (Runes) ---
@@ -87,8 +88,9 @@
   // --- Auto-Calculation Effect ---
   $effect(() => {
     const _deps = { startAddress, endAddress, destinations, mpg, gasPrice };
-    const hasStart = startAddress && startAddress.length > 3;
-    const hasDest = destinations.length > 0 && destinations[0].address.length > 3;
+    void _deps; // referenced intentionally to capture dependencies
+    const hasStart = !!(startAddress && startAddress.length > 3);
+    const hasDest = ((destinations?.length ?? 0) > 0) && ((destinations?.[0]?.address?.length ?? 0) > 3);
 
     if (hasStart && hasDest) {
         const timer = setTimeout(() => {
@@ -97,6 +99,8 @@
         
         return () => clearTimeout(timer);
     }
+
+    return; // ensure consistent return type for the effect
   });
 
   // --- Handlers ---
@@ -120,6 +124,13 @@
     }
   }
 
+  // Action to listen for 'place-selected' events dispatched by the autocomplete action
+  function placeSelector(node: HTMLElement, cb: (e: CustomEvent) => void) {
+    const handler = (ev: Event) => cb(ev as CustomEvent);
+    node.addEventListener('place-selected', handler);
+    return { destroy() { node.removeEventListener('place-selected', handler); } };
+  }
+
   // Financial Handlers
   function addSupply() {
       supplies = [...supplies, { id: crypto.randomUUID(), type: '', cost: 0 }];
@@ -128,16 +139,16 @@
       supplies = supplies.filter((_, i) => i !== index);
   }
   function addMaintenance() {
-      maintenance = [...maintenance, { id: crypto.randomUUID(), item: '', cost: 0 }];
+      maintenance = [...maintenance, { id: crypto.randomUUID(), type: '', cost: 0 }];
   }
   function removeMaintenance(index: number) {
       maintenance = maintenance.filter((_, i) => i !== index);
   }
 
-  async function handleCalculate(silent = false) {
+  async function handleCalculate(silent = false): Promise<any | null> {
     if (!startAddress) {
         if (!silent) toasts.error("Please enter a start address.");
-        return;
+        return null;
     }
 
     // Stop Limit Check
@@ -146,7 +157,7 @@
         if (userState.value?.plan === 'free' && validStopCount > 10) {
             upgradeReason = 'stops';
             showUpgradeModal = true;
-            return;
+            return null;
         }
     }
 
@@ -154,7 +165,7 @@
     calculationError = '';
     try {
         const effectiveEndAddress = endAddress ? endAddress : startAddress;
-        const destsCopy = $state.snapshot(destinations);
+        const destsCopy = $state.snapshot(destinations) as Destination[];
 
         const routeData = await getRouteData(startAddress, effectiveEndAddress, destsCopy, distanceUnit as 'mi'|'km');
         
@@ -231,10 +242,10 @@
     calculating = true;
 
     try {
-        const result = await optimizeRoute(startAddress, endAddress || '', validDests);
+        const result: any = await optimizeRoute(startAddress, endAddress || '', validDests);
         
-        if (result && result.optimizedOrder && result.optimizedOrder.length > 0) {
-            const currentDestinations = $state.snapshot(destinations);
+        if (result && (result as any).optimizedOrder && (result as any).optimizedOrder.length > 0) {
+            const currentDestinations = $state.snapshot(destinations) as Destination[];
             const validDestinations = currentDestinations.filter(d => d.address && d.address.trim() !== '');
             const emptyDestinations = currentDestinations.filter(d => !d.address || d.address.trim() === '');
 
@@ -242,13 +253,13 @@
             let fixedEnd: Destination | null = null;
 
             if (!endAddress) {
-                fixedEnd = validDestinations[validDestinations.length - 1];
+                fixedEnd = validDestinations[validDestinations.length - 1] ?? null;
                 waypointsToReorder = validDestinations.slice(0, -1);
             } else {
                 waypointsToReorder = validDestinations;
             }
 
-            const reorderedWaypoints = result.optimizedOrder.map((index: number) => waypointsToReorder[index]);
+            const reorderedWaypoints = (result as any).optimizedOrder.map((index: number) => waypointsToReorder[index]).filter(Boolean) as Destination[];
             
             let newDestinations = [...reorderedWaypoints];
             
@@ -301,14 +312,28 @@
     if (draft.gasPrice) gasPrice = draft.gasPrice;
     if (draft.destinations && Array.isArray(draft.destinations)) destinations = draft.destinations;
     if (draft.notes) notes = draft.notes;
-    // Load Supplies from Draft/Trip
+    // Load Supplies from Draft/Trip, normalize and ensure ids
     if (draft.suppliesItems && Array.isArray(draft.suppliesItems)) {
-        supplies = draft.suppliesItems;
+        supplies = (draft.suppliesItems as any[]).map(s => ({
+            id: s.id ?? crypto.randomUUID(),
+            type: s.type ?? (s.name ?? ''),
+            cost: Number(s.cost) || 0
+        }));
     } else if ((draft as any).supplyItems && Array.isArray((draft as any).supplyItems)) {
-        supplies = (draft as any).supplyItems;
+        supplies = ((draft as any).supplyItems as any[]).map(s => ({
+            id: s.id ?? crypto.randomUUID(),
+            type: s.type ?? (s.name ?? ''),
+            cost: Number(s.cost) || 0
+        }));
     }
 
-    if (draft.maintenanceItems && Array.isArray(draft.maintenanceItems)) maintenance = draft.maintenanceItems;
+    if (draft.maintenanceItems && Array.isArray(draft.maintenanceItems)) {
+        maintenance = (draft.maintenanceItems as any[]).map(m => ({
+            id: m.id ?? crypto.randomUUID(),
+            type: m.item ?? m.type ?? '',
+            cost: Number(m.cost) || 0
+        }));
+    }
   }
 
   function saveDraft() {
@@ -348,11 +373,12 @@
     
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-            <label class="block font-semibold mb-2 text-sm text-gray-700">Date</label>
+            <label for="trip-date" class="block font-semibold mb-2 text-sm text-gray-700">Date</label>
             {#if loading}
               <Skeleton height="48px" className="rounded-lg" />
             {:else}
               <input 
+                id="trip-date"
                 type="date" 
                 bind:value={date} 
                 class="w-full p-3 text-base border-gray-300 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all" 
@@ -362,59 +388,62 @@
     </div>
 
     <div>
-      <label class="block font-semibold mb-2 text-sm text-gray-700">Start Address</label>
+      <label for="start-address" class="block font-semibold mb-2 text-sm text-gray-700">Start Address</label>
       {#if loading}
         <Skeleton height="48px" className="rounded-lg" />
       {:else}
         <input 
+            id="start-address"
             type="text" 
             bind:value={startAddress} 
             placeholder="Enter start location" 
             class="w-full p-3 text-base border-gray-300 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
             autocomplete="off" 
-            use:autocomplete={{ apiKey: API_KEY }}
-            on:place-selected={(e) => handleAddressSelect('start', e)}
+            use:autocomplete={{ apiKey: API_KEY() }}
+            use:placeSelector={(e: CustomEvent) => handleAddressSelect('start', e)}
         />
       {/if}
     </div>
 
     {#if loading}
         <div class="space-y-3">
-             <label class="block font-semibold text-sm text-gray-700">Destinations</label>
+             <div class="block font-semibold text-sm text-gray-700">Destinations</div>
              <Skeleton height="50px" className="rounded-lg" />
              <Skeleton height="50px" className="rounded-lg" />
         </div>
     {:else}
         <DestinationList 
             bind:destinations 
-            apiKey={API_KEY} 
+            apiKey={API_KEY()} 
          />
     {/if}
 
     <div>
-      <label class="block font-semibold mb-2 text-sm text-gray-700">End Address (Optional)</label>
+      <label for="end-address" class="block font-semibold mb-2 text-sm text-gray-700">End Address (Optional)</label>
       {#if loading}
          <Skeleton height="48px" className="rounded-lg" />
       {:else}
           <input 
+            id="end-address"
             type="text" 
             bind:value={endAddress} 
             placeholder="Leave empty to return to Start" 
             class="w-full p-3 text-base border-gray-300 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
             autocomplete="off"
-            use:autocomplete={{ apiKey: API_KEY }}
-            on:place-selected={(e) => handleAddressSelect('end', e)}
+            use:autocomplete={{ apiKey: API_KEY() }}
+            use:placeSelector={(e: CustomEvent) => handleAddressSelect('end', e)}
           />
       {/if}
     </div>
 
     <div class="grid grid-cols-2 gap-4">
        <div>
-        <label class="block font-semibold mb-2 text-sm text-gray-700">MPG</label>
+        <label for="mpg" class="block font-semibold mb-2 text-sm text-gray-700">MPG</label>
         {#if loading}
            <Skeleton height="48px" className="rounded-lg" />
         {:else}
            <input 
+             id="mpg"
              type="number" 
              bind:value={mpg} 
              step="0.1" 
@@ -423,11 +452,12 @@
         {/if}
       </div>
       <div>
-        <label class="block font-semibold mb-2 text-sm text-gray-700">Gas Price ($)</label>
+        <label for="gas-price" class="block font-semibold mb-2 text-sm text-gray-700">Gas Price ($)</label>
         {#if loading}
            <Skeleton height="48px" className="rounded-lg" />
         {:else}
            <input 
+             id="gas-price"
              type="number" 
              bind:value={gasPrice} 
              step="0.01" 
@@ -436,11 +466,12 @@
         {/if}
       </div>
       <div>
-        <label class="block font-semibold mb-2 text-sm text-gray-700">Start Time</label>
+        <label for="start-time" class="block font-semibold mb-2 text-sm text-gray-700">Start Time</label>
         {#if loading}
            <Skeleton height="48px" className="rounded-lg" />
         {:else}
            <input 
+             id="start-time"
              type="time" 
              bind:value={startTime} 
              class="w-full p-3 text-base border-gray-300 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all" 
@@ -448,11 +479,12 @@
         {/if}
       </div>
       <div>
-        <label class="block font-semibold mb-2 text-sm text-gray-700">End Time</label>
+        <label for="end-time" class="block font-semibold mb-2 text-sm text-gray-700">End Time</label>
         {#if loading}
            <Skeleton height="48px" className="rounded-lg" />
         {:else}
            <input 
+             id="end-time"
              type="time" 
              bind:value={endTime} 
              class="w-full p-3 text-base border-gray-300 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all" 
@@ -463,8 +495,8 @@
 
     <div class="border-t border-gray-100 pt-4">
          <div class="flex justify-between items-center mb-4">
-             <label class="block font-semibold text-sm text-gray-700">Expenses & Supplies</label>
-             <button type="button" class="text-sm text-blue-600" on:click={() => showFinancials = !showFinancials}>
+             <div class="block font-semibold text-sm text-gray-700">Expenses & Supplies</div>
+                 <button type="button" class="text-sm text-blue-600" onclick={() => showFinancials = !showFinancials}>
                  {showFinancials ? 'Hide' : 'Show'}
              </button>
         </div>
@@ -474,13 +506,13 @@
                  <div>
                      <div class="flex justify-between items-center mb-2">
                           <span class="text-xs font-semibold text-gray-500 uppercase">Supplies (Pole, Concrete)</span>
-                         <button type="button" on:click={addSupply} class="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100">+ Add</button>
+                         <button type="button" onclick={addSupply} class="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100">+ Add</button>
                      </div>
                      {#each supplies as item, i}
                          <div class="flex gap-2 mb-2 items-center">
                              <input type="text" placeholder="Item Type" bind:value={item.type} class="w-full p-2 text-sm border rounded" />
                              <input type="number" placeholder="$" step="0.01" bind:value={item.cost} class="w-24 p-2 text-sm border rounded" />
-                             <button type="button" on:click={() => removeSupply(i)} class="text-red-400 hover:text-red-600">✕</button>
+                             <button type="button" onclick={() => removeSupply(i)} class="text-red-400 hover:text-red-600">✕</button>
                          </div>
                      {/each}
                       {#if supplies.length > 0}
@@ -491,13 +523,13 @@
                  <div>
                      <div class="flex justify-between items-center mb-2">
                          <span class="text-xs font-semibold text-gray-500 uppercase">Vehicle / Other</span>
-                         <button type="button" on:click={addMaintenance} class="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100">+ Add</button>
+                         <button type="button" onclick={addMaintenance} class="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100">+ Add</button>
                      </div>
                      {#each maintenance as item, i}
                          <div class="flex gap-2 mb-2 items-center">
-                             <input type="text" placeholder="Description" bind:value={item.item} class="w-full p-2 text-sm border rounded" />
+                             <input type="text" placeholder="Description" bind:value={item.type} class="w-full p-2 text-sm border rounded" />
                              <input type="number" placeholder="$" step="0.01" bind:value={item.cost} class="w-24 p-2 text-sm border rounded" />
-                             <button type="button" on:click={() => removeMaintenance(i)} class="text-red-400 hover:text-red-600">✕</button>
+                             <button type="button" onclick={() => removeMaintenance(i)} class="text-red-400 hover:text-red-600">✕</button>
                          </div>
                      {/each}
                  </div>
@@ -506,11 +538,12 @@
     </div>
 
     <div>
-      <label class="block font-semibold mb-2 text-sm text-gray-700">Notes</label>
+      <label for="notes" class="block font-semibold mb-2 text-sm text-gray-700">Notes</label>
       {#if loading}
           <Skeleton height="100px" className="rounded-lg" />
       {:else}
           <textarea 
+            id="notes"
             bind:value={notes} 
             rows="3" 
             class="w-full p-3 text-base border-gray-300 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
@@ -545,7 +578,7 @@
     {:else}
         <button 
           class="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-          on:click={() => handleCalculate(false)} 
+          onclick={() => handleCalculate(false)} 
           disabled={calculating}
         >
          {calculating ? 'Calculating...' : 'Recalculate Route'}
@@ -553,7 +586,7 @@
         
         <button 
           class="w-full sm:w-auto px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-          on:click={handleOptimize} 
+          onclick={handleOptimize} 
           disabled={calculating}
           title={userState.value?.plan === 'free' ? 'Pro Feature - Upgrade to Unlock' : 'Reorder stops for fastest route'}
         >

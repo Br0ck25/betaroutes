@@ -126,11 +126,11 @@ export class HughesNetAuth {
     }
 
     private extractCookie(res: Response): string | null {
-        const h = res.headers.get('set-cookie');
+        const h = res.headers?.get('set-cookie');
         if (!h) return null;
         // Standard parser for Cloudflare Response headers
         return h.split(/,(?=[^;]+=)/g)
-                .map(p => p.split(';')[0].trim())
+                .map(p => (p.split(';')[0] ?? '').trim())
                 .filter(Boolean)
                 .join('; ');
     }
@@ -144,16 +144,17 @@ export class HughesNetAuth {
             const key = await crypto.subtle.importKey('raw', keyRaw, 'AES-GCM', false, ['encrypt']);
             const iv = crypto.getRandomValues(new Uint8Array(12));
             const enc = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(plain));
+            const encBuf = enc as ArrayBuffer;
             
-            const combined = new Uint8Array(iv.byteLength + enc.byteLength);
+            const combined = new Uint8Array(iv.byteLength + encBuf.byteLength);
             combined.set(iv, 0);
-            combined.set(new Uint8Array(enc), iv.byteLength);
+            combined.set(new Uint8Array(encBuf), iv.byteLength);
             
             // Helper to convert binary to string for b64
             let binary = '';
             const bytes = new Uint8Array(combined);
             for (let i = 0; i < bytes.byteLength; i++) {
-                binary += String.fromCharCode(bytes[i]);
+                binary += String.fromCharCode(Number(bytes[i] ?? 0));
             }
             return btoa(binary);
         } catch (e) {

@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { cubicOut } from 'svelte/easing';
-
+  
   export let width = '100%';
   export let height = 'auto';
   export let className = '';

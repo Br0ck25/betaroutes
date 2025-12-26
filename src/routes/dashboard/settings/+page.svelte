@@ -209,6 +209,20 @@
   }
 
   // [!code ++] Passkey Registration Handler
+  function base64UrlToBuffer(base64url: any): Uint8Array {
+    if (!base64url) return new Uint8Array();
+    if (base64url instanceof ArrayBuffer) return new Uint8Array(base64url);
+    if (ArrayBuffer.isView(base64url)) return new Uint8Array((base64url as any).buffer, (base64url as any).byteOffset || 0, (base64url as any).byteLength || (base64url as any).length);
+    if (typeof base64url !== 'string') base64url = String(base64url);
+    const pad = '=='.slice(0, (4 - (base64url.length % 4)) % 4);
+    const b64 = (base64url.replace(/-/g, '+').replace(/_/g, '/') + pad);
+    const binary = atob(b64);
+    const len = binary.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+
   async function registerPasskey() {
     registering = true;
     
@@ -217,34 +231,91 @@
       console.log('[Passkey] Fetching registration options...');
       
       const optionsRes = await fetch('/api/auth/webauthn?type=register');
-      
-      if (!optionsRes.ok) {
-        const error = await optionsRes.json();
-        throw new Error(error.error || 'Failed to get registration options');
+      const rawText = await optionsRes.text();
+      let optionsJson: any;
+      try {
+        optionsJson = JSON.parse(rawText);
+      } catch (e) {
+        console.error('[Passkey] Failed to parse registration options JSON:', rawText);
+        throw new Error('Invalid registration options response');
       }
 
-      const options = await optionsRes.json();
-      console.log('[Passkey] Options received:', options);
+      if (!optionsRes.ok) {
+        console.error('[Passkey] Registration options request failed:', optionsRes.status, optionsJson);
+        throw new Error(optionsJson?.error || 'Failed to get registration options');
+      }
+
+      const options: any = optionsJson;
+      console.log('[Passkey] Options received (raw):', rawText);
+
+      // Validate options shape
+      if (!options || typeof options !== 'object') {
+        console.error('[Passkey] Invalid options payload from server:', optionsJson);
+        throw new Error('Invalid registration options from server');
+      }
+
+      // Defensive checks: ensure challenge exists and is a base64url string
+      if (!options.challenge) {
+        console.error('[Passkey] Missing challenge in registration options:', options);
+        throw new Error('Registration options missing challenge');
+      }
+
+      // The browser helper expects base64url strings for challenge/user.id. Don't convert to ArrayBuffer here.
+      if (typeof options.challenge !== 'string') {
+        console.warn('[Passkey] Unexpected challenge type; converting to base64url string');
+        const bytes = options.challenge instanceof Uint8Array ? options.challenge : new Uint8Array(options.challenge);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(Number(bytes[i] ?? 0));
+        options.challenge = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      }
+
+      if (options.user && options.user.id && typeof options.user.id !== 'string') {
+        console.warn('[Passkey] Unexpected user.id type; converting to base64url string');
+        const bytes = options.user.id instanceof Uint8Array ? options.user.id : new Uint8Array(options.user.id);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(Number(bytes[i] ?? 0));
+        options.user.id = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      }
+
+      // excludeCredentials should be base64url strings for ids; server now sends strings, so no conversion is necessary.
+      if (Array.isArray(options.excludeCredentials)) {
+        options.excludeCredentials = options.excludeCredentials.map((c: any) => ({ ...c, id: String(c.id) }));
+      }
 
       // 🔧 STEP 2: Prompt user to create passkey
       console.log('[Passkey] Starting registration ceremony...');
       
-const credential = await startRegistration(options);
-console.log('[Passkey] Credential created:', credential);
-console.log('[Passkey] Credential.response exists?', !!credential.response);
-console.log('[Passkey] Credential structure:', JSON.stringify(credential, null, 2));
+      const credential = await startRegistration(options as any);
+      console.log('[Passkey] Credential created:', credential);
+      console.log('[Passkey] Credential.response exists?', !!credential.response);
+      console.log('[Passkey] Credential structure:', JSON.stringify(credential, null, 2));
       console.log('[Passkey] Credential created:', credential);
 
       // 🔧 STEP 3: Send credential to server for verification
       console.log('[Passkey] Verifying with server...');
       
+      function bufferToBase64Url(buffer: ArrayBuffer | Uint8Array) {
+        const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(Number(bytes[i] ?? 0));
+        return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      }
+
+      const normalised: any = { ...credential } as any;
+      if (normalised.rawId && (normalised.rawId instanceof ArrayBuffer || ArrayBuffer.isView(normalised.rawId))) {
+        normalised.rawId = bufferToBase64Url(normalised.rawId as ArrayBuffer);
+      }
+      const resp = normalised.response || {};
+      if (resp.attestationObject && (resp.attestationObject instanceof ArrayBuffer || ArrayBuffer.isView(resp.attestationObject))) resp.attestationObject = bufferToBase64Url(resp.attestationObject);
+      if (resp.clientDataJSON && (resp.clientDataJSON instanceof ArrayBuffer || ArrayBuffer.isView(resp.clientDataJSON))) resp.clientDataJSON = bufferToBase64Url(resp.clientDataJSON);
+
       const verifyRes = await fetch('/api/auth/webauthn?type=register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credential)
+        body: JSON.stringify(normalised)
       });
 
-      const verifyResult = await verifyRes.json();
+      const verifyResult: any = await verifyRes.json();
 
       if (!verifyRes.ok) {
         throw new Error(verifyResult.error || 'Registration failed');

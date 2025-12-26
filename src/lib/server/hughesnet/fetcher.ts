@@ -20,7 +20,7 @@ export class HughesNetFetcher {
     constructor(hardLimit: number = HARD_REQUEST_LIMIT, softLimit: number = SOFT_REQUEST_LIMIT) {
         this.hardLimit = hardLimit;
         this.softLimit = softLimit;
-        this.userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+        this.userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)]!;
     }
 
     resetCount() {
@@ -58,10 +58,7 @@ export class HughesNetFetcher {
         
         this.requestCount++;
         
-        const headers = {
-            'User-Agent': this.userAgent,
-            ...options.headers
-        };
+        const headers: Record<string, string> = Object.assign({ 'User-Agent': this.userAgent }, options.headers || {});
 
         return fetch(url, { ...options, headers } as RequestInit);
     }

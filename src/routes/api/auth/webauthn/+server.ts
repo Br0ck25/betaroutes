@@ -57,13 +57,32 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
         return json({ error: 'Failed to generate options' }, { status: 500 });
       }
 
-      cookies.set('webauthn-challenge', options.challenge, {
+      // Convert binary fields to base64url strings for JSON serialization
+      try {
+        if (options.challenge && typeof options.challenge !== 'string') {
+          options.challenge = isoBase64URL.fromBuffer(options.challenge as ArrayBuffer);
+        }
+        if (Array.isArray(options.excludeCredentials)) {
+          options.excludeCredentials = options.excludeCredentials.map((c: any) => ({ ...c, id: typeof c.id === 'string' ? c.id : isoBase64URL.fromBuffer(c.id) }));
+        }
+      } catch (convErr) {
+        console.warn('[webauthn] Failed to convert registration options binary fields', convErr);
+      }
+
+      cookies.set('webauthn-challenge', String(options.challenge), {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         path: '/',
         maxAge: 300
       });
+
+      // Log the exact JSON we're about to send to the client to aid debugging
+      try {
+        console.log('[webauthn] Registration options payload:', JSON.stringify(options));
+      } catch (logErr) {
+        console.warn('[webauthn] Failed to stringify registration options for logging', logErr);
+      }
 
       return json(options);
     } else {
@@ -79,7 +98,19 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
         return json({ error: 'Failed to generate options' }, { status: 500 });
       }
 
-      cookies.set('webauthn-challenge', options.challenge, {
+      // Convert binary fields to base64url strings for JSON serialization
+      try {
+        if (options.challenge && typeof options.challenge !== 'string') {
+          options.challenge = isoBase64URL.fromBuffer(options.challenge as ArrayBuffer);
+        }
+        if (Array.isArray(options.allowCredentials)) {
+          options.allowCredentials = options.allowCredentials.map((c: any) => ({ ...c, id: typeof c.id === 'string' ? c.id : isoBase64URL.fromBuffer(c.id) }));
+        }
+      } catch (convErr) {
+        console.warn('[webauthn] Failed to convert authentication options binary fields', convErr);
+      }
+
+      cookies.set('webauthn-challenge', String(options.challenge), {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',

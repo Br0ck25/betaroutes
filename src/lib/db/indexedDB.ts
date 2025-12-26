@@ -62,7 +62,7 @@ export async function getDB(): Promise<IDBPDatabase<AppDB>> {
   }
 
   dbPromise = openDB<AppDB>(DB_NAME, DB_VERSION, {
-    upgrade(db, oldVersion, newVersion, transaction) {
+    upgrade(db, oldVersion, newVersion) {
       console.log(`📦 Upgrading database from v${oldVersion} to v${newVersion}`);
 
       // Create trips store

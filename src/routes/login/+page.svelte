@@ -28,32 +28,103 @@
     }
 
     // [!code ++] Biometric Login Handler
+    function base64UrlToBuffer(base64url: any): Uint8Array {
+        // If already an ArrayBuffer or TypedArray, return a Uint8Array view
+        if (!base64url) return new Uint8Array();
+        if (base64url instanceof ArrayBuffer) return new Uint8Array(base64url);
+        if (ArrayBuffer.isView(base64url)) return new Uint8Array((base64url as any).buffer, (base64url as any).byteOffset || 0, (base64url as any).byteLength || (base64url as any).length);
+
+        // Otherwise assume base64url string and decode
+        if (typeof base64url !== 'string') base64url = String(base64url);
+        const pad = '=='.slice(0, (4 - (base64url.length % 4)) % 4);
+        const b64 = (base64url.replace(/-/g, '+').replace(/_/g, '/') + pad);
+        const binary = atob(b64);
+        const len = binary.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+        return bytes;
+    }
+
     async function handleBiometricLogin() {
         loading = true;
         responseError = null;
 
         try {
             // 1. Request challenge from your server
-            const resp = await fetch('/api/auth/webauthn');
-            if (!resp.ok) throw new Error('Biometric login not available');
-            const options = await resp.json();
+            const optionsResp = await fetch('/api/auth/webauthn');
+            const rawText = await optionsResp.text();
+            let optionsJson: any;
+            try {
+                optionsJson = JSON.parse(rawText);
+            } catch (e) {
+                console.error('[Passkey] Failed to parse auth options JSON:', rawText);
+                throw new Error('Invalid authentication options response');
+            }
+
+            if (!optionsResp.ok) {
+                console.error('[Passkey] Auth options request failed:', optionsResp.status, optionsJson);
+                throw new Error(optionsJson?.error || 'Biometric login not available');
+            }
+
+            const options: any = optionsJson;
+
+            console.log('[Passkey] Auth options from server (raw):', rawText);
+            if (!options || typeof options !== 'object') {
+                console.error('[Passkey] Invalid auth options payload:', optionsJson);
+                throw new Error('Invalid authentication options from server');
+            }
+
+            if (!options.challenge) {
+                console.error('[Passkey] Missing challenge in auth options:', options);
+                throw new Error('Authentication options missing challenge');
+            }
+
+            // Ensure challenge is a base64url string (don't convert to ArrayBuffer; the helper will manage it)
+            if (typeof options.challenge !== 'string') {
+                console.warn('[Passkey] Unexpected challenge type; converting to base64url string');
+                const bytes = options.challenge instanceof Uint8Array ? options.challenge : new Uint8Array(options.challenge);
+                let binary = '';
+                for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(Number(bytes[i] ?? 0));
+                options.challenge = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            }
+
+            if (Array.isArray(options.allowCredentials)) {
+                options.allowCredentials = options.allowCredentials.map((c: any) => ({ ...c, id: String(c.id) }));
+            }
 
             // 2. Prompt user for FaceID/TouchID (Browser Native Modal)
-            const authResp = await startAuthentication(options);
+            const authResp = await startAuthentication(options as any);
 
-            // 3. Verify signature with server
+            // 3. Verify signature with server (ensure credential.serializable fields are sent)
+            function bufferToBase64Url(buffer: ArrayBuffer | Uint8Array) {
+                const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+                let binary = '';
+                for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(Number(bytes[i] ?? 0));
+                return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            }
+
+            const normalised: any = { ...authResp } as any;
+            if (normalised.rawId && (normalised.rawId instanceof ArrayBuffer || ArrayBuffer.isView(normalised.rawId))) {
+                normalised.rawId = bufferToBase64Url(normalised.rawId as ArrayBuffer);
+            }
+            const resp = normalised.response || {};
+            if (resp.authenticatorData && (resp.authenticatorData instanceof ArrayBuffer || ArrayBuffer.isView(resp.authenticatorData))) resp.authenticatorData = bufferToBase64Url(resp.authenticatorData);
+            if (resp.clientDataJSON && (resp.clientDataJSON instanceof ArrayBuffer || ArrayBuffer.isView(resp.clientDataJSON))) resp.clientDataJSON = bufferToBase64Url(resp.clientDataJSON);
+            if (resp.signature && (resp.signature instanceof ArrayBuffer || ArrayBuffer.isView(resp.signature))) resp.signature = bufferToBase64Url(resp.signature);
+            if (resp.userHandle && (resp.userHandle instanceof ArrayBuffer || ArrayBuffer.isView(resp.userHandle))) resp.userHandle = bufferToBase64Url(resp.userHandle);
+
             const verificationResp = await fetch('/api/auth/webauthn', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(authResp),
+                body: JSON.stringify(normalised),
             });
 
             if (!verificationResp.ok) {
-                const err = await verificationResp.json();
+                const err: any = await verificationResp.json();
                 throw new Error(err.error || 'Verification failed');
             }
 
-            const verificationJSON = await verificationResp.json();
+            const verificationJSON: any = await verificationResp.json();
 
             if (verificationJSON.verified) {
                 await goto('/dashboard', { invalidateAll: true });
@@ -96,7 +167,7 @@
                 body: JSON.stringify(payload)
             });
 
-            const result = await response.json();
+            const result: any = await response.json();
 
             if (response.ok) {
                 if (isLogin) {
@@ -121,7 +192,7 @@
 <svelte:head>
 	<title>{isLogin ? 'Sign In' : 'Sign Up'} - Go Route Yourself</title>
 	<link rel="preconnect" href="https://fonts.googleapis.com">
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
 	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </svelte:head>
 

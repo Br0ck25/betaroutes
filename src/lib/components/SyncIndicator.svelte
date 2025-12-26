@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { syncStatus, syncIcon, syncLabel, syncColor } from '$lib/stores/sync';
+  import { syncStatus, syncIcon, syncLabel } from '$lib/stores/sync';
   import { syncManager } from '$lib/sync/syncManager';
   let showDetails = false;
   

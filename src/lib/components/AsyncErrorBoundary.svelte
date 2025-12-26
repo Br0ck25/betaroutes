@@ -5,17 +5,15 @@
 	 */
 	import { onMount } from 'svelte';
 
-	interface Props {
-		children: import('svelte').Snippet;
-		loading?: import('svelte').Snippet;
-		error?: import('svelte').Snippet<[{ error: Error; retry: () => void }]>;
-		onRetry?: () => void | Promise<void>;
-	}
+	export let children: import('svelte').Snippet;
+	export let loading: import('svelte').Snippet | undefined;
+	export let error: import('svelte').Snippet<[{ error: Error; retry: () => void }]> | undefined;
+	export let onRetry: (() => void | Promise<void>) | undefined;
 
-	let { children, loading, error: errorSnippet, onRetry }: Props = $props();
+	const errorSnippet = error;
 
-	let state = $state<'idle' | 'loading' | 'success' | 'error'>('idle');
-	let errorMessage = $state<Error | null>(null);
+	let state: 'idle' | 'loading' | 'success' | 'error' = 'idle';
+	let errorMessage: Error | null = null;
 
 	function retry() {
 		state = 'loading';
