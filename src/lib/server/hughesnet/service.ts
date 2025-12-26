@@ -363,11 +363,14 @@ export class HughesNetService {
                             orderDb[String(targetId)] = parsed;
                             dbDirty = true;
                             try {
-                                if (this.ordersKV) await this.ordersKV.put(`hns:order:${targetId}`, JSON.stringify({
-                                    ownerId: userId,
-                                    storedAt: Date.now(),
-                                    order: parsed
-                                }));
+                                if (this.ordersKV) {
+                                    await this.ordersKV.put(`hns:order:${targetId}`, JSON.stringify({
+                                        ownerId: userId,
+                                        storedAt: Date.now(),
+                                        order: parsed
+                                    }));
+                                    this.log(`[OrdersKV] Persisted order ${targetId} for ${userId}`);
+                                }
                             } catch (e: any) { this.warn(`[OrdersKV] Failed to persist order ${targetId}: ${e}`); }
                             return true;
                         }
@@ -661,7 +664,10 @@ export class HughesNetService {
         
         orderDb[id] = updatedOrder;
         try {
-            if (this.ordersKV) await this.ordersKV.put(`hns:order:${id}`, JSON.stringify({ ownerId: ownerId || null, storedAt: Date.now(), order: updatedOrder }));
+            if (this.ordersKV) {
+                await this.ordersKV.put(`hns:order:${id}`, JSON.stringify({ ownerId: ownerId || null, storedAt: Date.now(), order: updatedOrder }));
+                this.log(`[OrdersKV] Persisted order ${id} for ${ownerId || 'unknown'}`);
+            }
         } catch (e: any) {
             this.warn(`[OrdersKV] Failed to persist order ${id}: ${e}`);
         }

@@ -30,8 +30,10 @@ export async function checkRateLimit(
 	}
 
 	// Increment
+	// Ensure minimum TTL (Cloudflare requires >= 60s in some environments)
+	const ttl = Math.max(60, windowSeconds);
 	// We set expirationTtl so the block clears automatically
-	await kv.put(key, (current + 1).toString(), { expirationTtl: windowSeconds });
+	await kv.put(key, (current + 1).toString(), { expirationTtl: ttl });
 
 	return { allowed: true, remaining: limit - (current + 1) };
 }
@@ -57,6 +59,8 @@ export async function checkRateLimitEnhanced(
 		// Check if window has expired or this is first request
 		if (!data || data.windowStart < windowStart) {
 			// Start new window
+			// Ensure minimum TTL (Cloudflare requires >= 60s in some environments)
+			const initialTtl = Math.max(60, Math.ceil(windowMs / 1000));
 			await kv.put(
 				key,
 				JSON.stringify({
@@ -64,7 +68,7 @@ export async function checkRateLimitEnhanced(
 					windowStart: now
 				}),
 				{
-					expirationTtl: Math.ceil(windowMs / 1000)
+					expirationTtl: initialTtl
 				}
 			);
 
@@ -88,6 +92,7 @@ export async function checkRateLimitEnhanced(
 
 		// Increment count
 		const newCount = data.count + 1;
+		const remainingTtl = Math.max(60, Math.ceil((data.windowStart + windowMs - now) / 1000));
 		await kv.put(
 			key,
 			JSON.stringify({
@@ -95,7 +100,7 @@ export async function checkRateLimitEnhanced(
 				windowStart: data.windowStart
 			}),
 			{
-				expirationTtl: Math.ceil((data.windowStart + windowMs - now) / 1000)
+				expirationTtl: remainingTtl
 			}
 		);
 
