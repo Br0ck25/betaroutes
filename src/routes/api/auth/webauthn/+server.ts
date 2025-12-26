@@ -268,24 +268,44 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
 
       const { registrationInfo } = verification;
       
+      console.log('[WebAuthn] Registration info keys:', Object.keys(registrationInfo));
+      console.log('[WebAuthn] Credential from browser - ID:', credential.id);
+      
       // CRITICAL: Use credential.id from browser (already base64url)
-      // This ensures exact match during authentication
+      // This ensures exact match during authentication  
       const storedCredentialID = credential.id;
       
-      // Convert public key to base64url for storage
+      // Get credential public key from library's verification result
+      // This is the COSE-encoded public key needed for future verifications
       const credentialPublicKey = registrationInfo.credentialPublicKey;
       const counter = registrationInfo.counter ?? 0;
 
-      if (!storedCredentialID || !credentialPublicKey) {
-        return json({ error: 'Invalid credential data' }, { status: 400 });
+      console.log('[WebAuthn] Credential ID:', storedCredentialID);
+      console.log('[WebAuthn] credentialPublicKey type:', typeof credentialPublicKey);
+      console.log('[WebAuthn] credentialPublicKey is Uint8Array?', credentialPublicKey instanceof Uint8Array);
+      console.log('[WebAuthn] credentialPublicKey length:', credentialPublicKey?.length || credentialPublicKey?.byteLength || 'N/A');
+      console.log('[WebAuthn] Counter:', counter);
+      
+      if (!storedCredentialID) {
+        console.error('[WebAuthn] Missing credential ID from browser');
+        return json({ error: 'Invalid credential ID' }, { status: 400 });
+      }
+      
+      if (!credentialPublicKey) {
+        console.error('[WebAuthn] Missing credentialPublicKey from registrationInfo');
+        console.error('[WebAuthn] Available registrationInfo fields:', Object.keys(registrationInfo));
+        console.error('[WebAuthn] registrationInfo:', registrationInfo);
+        return json({ error: 'Invalid credential public key - not provided by verification library' }, { status: 400 });
       }
 
       let storedPublicKey: string;
       try {
+        // Convert Uint8Array public key to base64url string for storage
         storedPublicKey = toBase64Url(credentialPublicKey);
+        console.log('[WebAuthn] Converted public key to base64url, length:', storedPublicKey.length);
       } catch (e) {
-        console.error('[WebAuthn] Failed to encode public key:', e);
-        return json({ error: 'Failed to process credential' }, { status: 400 });
+        console.error('[WebAuthn] Failed to convert public key to base64url:', e);
+        return json({ error: 'Failed to process credential public key' }, { status: 400 });
       }
 
       console.log('[WebAuthn] Storing credential ID (from browser):', storedCredentialID);
