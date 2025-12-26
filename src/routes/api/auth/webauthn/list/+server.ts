@@ -22,7 +22,8 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
     const sanitized = authenticators.map(auth => ({
       credentialID: auth.credentialID,
       transports: auth.transports || [],
-      // You could add createdAt if you store it
+      name: auth.name || null,
+      createdAt: auth.createdAt || null
     }));
 
     return json({ 

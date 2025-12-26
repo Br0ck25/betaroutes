@@ -50,8 +50,34 @@
         responseError = null;
 
         try {
+            // Optionally let user pick a named device first (better UX when multiple passkeys exist)
+            let requestedCredential: string | null = null;
+            if (username) {
+                try {
+                    const listResp = await fetch(`/api/auth/webauthn/list-for-email?email=${encodeURIComponent(username)}`);
+                    if (listResp.ok) {
+                        const json = await listResp.json();
+                        const auths = json.authenticators || [];
+                        if (auths.length > 1) {
+                            // Simple selection prompt (can be replaced with nicer UI)
+                            const choices = auths.map((a: any, i: number) => `${i + 1}. ${a.name || 'Unnamed'} (${a.transports?.join(', ') || 'device'})`).join('\n');
+                            const sel = prompt(`Choose a passkey:\n${choices}\nEnter the number to use:`);
+                            const idx = parseInt(String(sel || ''), 10);
+                            if (!isNaN(idx) && idx >= 1 && idx <= auths.length) {
+                                requestedCredential = auths[idx - 1].credentialID;
+                            }
+                        } else if (auths.length === 1) {
+                            // If only one passkey exists for this email, pre-select it
+                            requestedCredential = auths[0].credentialID;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Could not fetch passkey list for email', e);
+                }
+            }
+
             // 1. Request challenge from your server
-            const optionsResp = await fetch('/api/auth/webauthn');
+            const optionsResp = await fetch(`/api/auth/webauthn${requestedCredential ? `?credential=${encodeURIComponent(requestedCredential)}` : ''}`);
             const rawText = await optionsResp.text();
             let optionsJson: any;
             try {

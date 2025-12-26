@@ -42,10 +42,27 @@
 
       // POST to verification endpoint
       try {
-        const verifyRes = await fetch('/api/auth/webauthn?type=register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(normalised)
+// Compute device name to send to server (prefill using UA info)
+      function getDeviceName() {
+        const uaData = (navigator as any).userAgentData;
+        if (uaData && uaData.platform) {
+          const brand = (uaData.brands && uaData.brands[0] && uaData.brands[0].brand) || 'Browser';
+          return `${brand} on ${uaData.platform}`;
+        }
+        const ua = navigator.userAgent || '';
+        if (/Android/i.test(ua)) return 'Android device';
+        if (/Windows/i.test(ua)) return 'Windows device';
+        if (/Mac|Macintosh/i.test(ua)) return 'Mac device';
+        if (/iPhone|iPad/i.test(ua)) return 'iOS device';
+        return 'Unknown device';
+      }
+
+      const deviceName = getDeviceName();
+
+      const verifyRes = await fetch('/api/auth/webauthn?type=register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: normalised, deviceName })
         });
 
         const verifyJson = await verifyRes.json();

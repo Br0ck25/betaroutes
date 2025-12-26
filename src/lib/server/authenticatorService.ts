@@ -7,6 +7,8 @@ export interface StoredAuthenticator {
   credentialPublicKey: string;
   counter: number;
   transports?: AuthenticatorTransport[];
+  name?: string; // Friendly display name (e.g., "Windows laptop")
+  createdAt?: string;
 }
 
 /**
@@ -38,6 +40,8 @@ export async function addAuthenticator(
     credentialPublicKey: string;
     counter: number;
     transports?: AuthenticatorTransport[];
+    name?: string;
+    createdAt?: string;
   }
 ): Promise<void> {
   // Get existing authenticators

@@ -10,6 +10,8 @@ export type Authenticator = {
     credentialPublicKey: string; // Base64URL encoded
     counter: number;
     transports?: string[]; 
+    name?: string; // Friendly display name
+    createdAt?: string;
 };
 
 export type UserCore = {

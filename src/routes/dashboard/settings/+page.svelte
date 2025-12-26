@@ -309,10 +309,26 @@
       if (resp.attestationObject && (resp.attestationObject instanceof ArrayBuffer || ArrayBuffer.isView(resp.attestationObject))) resp.attestationObject = bufferToBase64Url(resp.attestationObject);
       if (resp.clientDataJSON && (resp.clientDataJSON instanceof ArrayBuffer || ArrayBuffer.isView(resp.clientDataJSON))) resp.clientDataJSON = bufferToBase64Url(resp.clientDataJSON);
 
+      function getDeviceName() {
+        const uaData = (navigator as any).userAgentData;
+        if (uaData && uaData.platform) {
+          const brand = (uaData.brands && uaData.brands[0] && uaData.brands[0].brand) || 'Browser';
+          return `${brand} on ${uaData.platform}`;
+        }
+        const ua = navigator.userAgent || '';
+        if (/Android/i.test(ua)) return 'Android device';
+        if (/Windows/i.test(ua)) return 'Windows device';
+        if (/Mac|Macintosh/i.test(ua)) return 'Mac device';
+        if (/iPhone|iPad/i.test(ua)) return 'iOS device';
+        return 'Unknown device';
+      }
+
+      const deviceName = getDeviceName();
+
       const verifyRes = await fetch('/api/auth/webauthn?type=register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(normalised)
+        body: JSON.stringify({ credential: normalised, deviceName })
       });
 
       const verifyResult: any = await verifyRes.json();

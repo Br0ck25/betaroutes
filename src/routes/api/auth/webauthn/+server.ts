@@ -209,13 +209,22 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
 
       const rpID = getRpID({ url });
       
-      // For passwordless authentication, we MUST use discoverable credentials
-      // Don't pass allowCredentials at all - browser will show all available passkeys
-      const options = await generateAuthenticationOptions({
+      // Optionally restrict authentication to a single credential when requested
+      const requestedCredential = url.searchParams.get('credential');
+
+      // For passwordless authentication, we can either allow discoverable credentials (no allowCredentials)
+      // or restrict to a single credential by including it in allowCredentials
+      const opts: any = {
         rpID,
         userVerification: 'preferred',
         timeout: 60000,
-      });
+      };
+
+      if (requestedCredential) {
+        opts.allowCredentials = [{ id: requestedCredential, type: 'public-key' }];
+      }
+
+      const options = await generateAuthenticationOptions(opts);
       
       if (!options || !options.challenge) {
         return json({ error: 'Failed to generate options' }, { status: 500 });
@@ -285,7 +294,10 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
         return json({ error: 'Challenge expired' }, { status: 400 });
       }
 
-      const credential = await request.json();
+      // Accept either raw credential JSON or a wrapper { credential, deviceName }
+      let body = await request.json();
+      let credential = body?.credential ?? body;
+      const deviceNameFromClient: string | undefined = body?.deviceName;
       const expectedOrigin = getOrigin(request);
       const expectedRPID = getRpID({ url: new URL(request.url) });
 
@@ -357,11 +369,34 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       console.log('[WebAuthn] Storing credential ID (from browser):', storedCredentialID);
       console.log('[WebAuthn] Will create index:', `credential:${storedCredentialID}`, '→', user.id);
 
+      // Compute friendly device name: prefer client-supplied name, otherwise infer from User-Agent
+      const deviceNameClient = (credential as any)?.deviceName || deviceNameFromClient;
+      const uaHeader = String(request.headers.get('user-agent') || '');
+      function inferDeviceNameFromUA(ua: string) {
+        if (!ua) return 'Unknown device';
+        let os = 'Device';
+        if (/Android/i.test(ua)) os = 'Android device';
+        else if (/Windows/i.test(ua)) os = 'Windows device';
+        else if (/Mac|Macintosh/i.test(ua)) os = 'Mac device';
+        else if (/iPhone|iPad/i.test(ua)) os = 'iOS device';
+        let browser = '';
+        if (/Chrome/i.test(ua) && !/Edg/i.test(ua)) browser = 'Chrome';
+        else if (/Firefox/i.test(ua)) browser = 'Firefox';
+        else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) browser = 'Safari';
+        else if (/Edg/i.test(ua)) browser = 'Edge';
+        return browser ? `${browser} on ${os}` : os;
+      }
+
+      const deviceName = deviceNameClient || inferDeviceNameFromUA(uaHeader);
+      const createdAt = new Date().toISOString();
+
       await addAuthenticator(env.BETA_USERS_KV, user.id, {
         credentialID: storedCredentialID,
         credentialPublicKey: storedPublicKey,
         counter: counter,
-        transports: credential.response.transports || []
+        transports: credential.response.transports || [],
+        name: deviceName,
+        createdAt
       });
 
       cookies.delete('webauthn-challenge', { path: '/' });
