@@ -1,0 +1,18 @@
+<!DOCTYPE HTML>
+<html lang="en">
+
+<!-- Mirrored from html.spec.whatwg.org/demos/workers/shared/003/test.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 26 Dec 2025 20:12:22 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=utf-8" /><!-- /Added by HTTrack -->
+<meta charset="utf-8">
+<title>Shared workers: demo 3</title>
+<pre id="log">Log:</pre>
+<script>
+  var worker = new SharedWorker('test.js');
+  var log = document.getElementById('log');
+  worker.port.addEventListener('message', function(e) {
+    log.textContent += '\n' + e.data;
+  }, false);
+  worker.port.start();
+  worker.port.postMessage('ping');
+</script>
+<iframe src="inner.html"></iframe>

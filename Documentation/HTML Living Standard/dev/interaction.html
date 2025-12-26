@@ -1,0 +1,1789 @@
+<!DOCTYPE html><html class=split lang=en-US-x-hixie><script src=../link-fixup.js defer=""></script>
+<!-- Mirrored from html.spec.whatwg.org/dev/interaction.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 26 Dec 2025 20:12:52 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=utf-8" /><!-- /Added by HTTrack -->
+<meta charset=utf-8><meta content="width=device-width, initial-scale=1, shrink-to-fit=no" name=viewport><title>HTML Standard, Edition for Web Developers</title><meta content=#3c790a name=theme-color><meta content="light dark" name=color-scheme><link rel=stylesheet href=../../resources.whatwg.org/standard-shared-with-dev.css crossorigin=""><link rel=icon href=https://resources.whatwg.org/logo.svg crossorigin=""><link rel=stylesheet href=styles.css crossorigin=""><script>
+   function toggleStatus(div) {
+     div.parentNode.classList.toggle('wrapped');
+   }
+   function setLinkFragment(link) {
+     link.hash = location.hash;
+   }
+  </script><body>
+  <script async="" src=search.js></script>
+  
+  
+  
+  <header id=head class="head with-buttons">
+   <a href=https://whatwg.org/ class=logo><img width=100 alt=WHATWG crossorigin="" class=darkmode-aware src=https://resources.whatwg.org/logo.svg height=100></a>
+   
+   <hgroup><h1><a rel=home href=index.html>HTML: The Living Standard</a></h1><p id=dev-edition-h2>Edition for Web Developers — Last Updated <span class=pubdate>17 December 2025</span></hgroup>
+   
+
+   <div id=search>
+    <input placeholder="Search. Press '/'" autocomplete=off name=query id=query type=search>
+    <ol id=results></ol>
+   </div>
+  </header>
+
+  
+
+  
+
+  
+
+  
+  
+
+  
+  
+
+  
+
+  <nav><a href=microdata.html>← 5 Microdata</a> — <a href=index.html>Table of Contents</a> — <a href=dnd.html>6.11 Drag and drop →</a></nav><ol class=toc><li><a href=interaction.html#editing><span class=secno>6</span> User interaction</a><ol><li><a href=interaction.html#the-hidden-attribute><span class=secno>6.1</span> The <code>hidden</code> attribute</a><li><a href=interaction.html#page-visibility><span class=secno>6.2</span> Page visibility</a><ol><li><a href=interaction.html#the-visibilitystateentry-interface><span class=secno>6.2.1</span> The <code>VisibilityStateEntry</code> interface</a></ol><li><a href=interaction.html#inert-subtrees><span class=secno>6.3</span> Inert subtrees</a><ol><li><a href=interaction.html#modal-dialogs-and-inert-subtrees><span class=secno>6.3.1</span> Modal dialogs and inert subtrees</a><li><a href=interaction.html#the-inert-attribute><span class=secno>6.3.2</span> The <code>inert</code> attribute</a></ol><li><a href=interaction.html#tracking-user-activation><span class=secno>6.4</span> Tracking user activation</a><ol><li><a href=interaction.html#the-useractivation-interface><span class=secno>6.4.1</span> The <code>UserActivation</code> interface</a></ol><li><a href=interaction.html#activation><span class=secno>6.5</span> Activation behavior of elements</a><ol><li><a href=interaction.html#the-toggleevent-interface><span class=secno>6.5.1</span> The <code>ToggleEvent</code> interface</a><li><a href=interaction.html#the-commandevent-interface><span class=secno>6.5.2</span> The <code>CommandEvent</code> interface</a></ol><li><a href=interaction.html#focus><span class=secno>6.6</span> Focus</a><ol><li><a href=interaction.html#introduction-7><span class=secno>6.6.1</span> Introduction</a><li><a href=interaction.html#data-model><span class=secno>6.6.2</span> Data model</a><li><a href=interaction.html#the-tabindex-attribute><span class=secno>6.6.3</span> The <code>tabindex</code> attribute</a><li><a href=interaction.html#focus-management-apis><span class=secno>6.6.4</span> Focus management APIs</a><li><a href=interaction.html#the-autofocus-attribute><span class=secno>6.6.5</span> The <code>autofocus</code> attribute</a></ol><li><a href=interaction.html#assigning-keyboard-shortcuts><span class=secno>6.7</span> Assigning keyboard shortcuts</a><ol><li><a href=interaction.html#introduction-8><span class=secno>6.7.1</span> Introduction</a><li><a href=interaction.html#the-accesskey-attribute><span class=secno>6.7.2</span> The <code>accesskey</code>
+  attribute</a></ol><li><a href=interaction.html#editing-2><span class=secno>6.8</span> Editing</a><ol><li><a href=interaction.html#contenteditable><span class=secno>6.8.1</span> Making document regions editable: The <code>contenteditable</code> content attribute</a><li><a href=interaction.html#making-entire-documents-editable:-the-designmode-idl-attribute><span class=secno>6.8.2</span> Making entire documents
+  editable: the <code>designMode</code> getter and setter</a><li><a href=interaction.html#best-practices-for-in-page-editors><span class=secno>6.8.3</span> Best practices for in-page editors</a><li><a href=interaction.html#spelling-and-grammar-checking><span class=secno>6.8.4</span> Spelling and grammar checking</a><li><a href=interaction.html#writing-suggestions><span class=secno>6.8.5</span> Writing suggestions</a><li><a href=interaction.html#autocapitalization><span class=secno>6.8.6</span> Autocapitalization</a><li><a href=interaction.html#autocorrection><span class=secno>6.8.7</span> Autocorrection</a><li><a href=interaction.html#input-modalities:-the-inputmode-attribute><span class=secno>6.8.8</span> Input modalities: the <code>inputmode</code> attribute</a><li><a href=interaction.html#input-modalities:-the-enterkeyhint-attribute><span class=secno>6.8.9</span> Input modalities: the <code>enterkeyhint</code>
+  attribute</a></ol><li><a href=interaction.html#find-in-page><span class=secno>6.9</span> Find-in-page</a><ol><li><a href=interaction.html#introduction-9><span class=secno>6.9.1</span> Introduction</a><li><a href="interaction.html#interaction-with-details-and-hidden=until-found"><span class=secno>6.9.2</span> Interaction with <code>details</code> and <code>hidden=until-found</code></a><li><a href=interaction.html#interaction-with-selection><span class=secno>6.9.3</span> Interaction with selection</a></ol><li><a href=interaction.html#close-requests-and-close-watchers><span class=secno>6.10</span> Close requests and close watchers</a><ol><li><a href=interaction.html#close-requests><span class=secno>6.10.1</span> Close requests</a><li><a href=interaction.html#the-closewatcher-interface><span class=secno>6.10.2</span> The <code>CloseWatcher</code> interface</a></ol></ol></ol><h2 id=editing><span class=secno>6</span> <dfn>User interaction</dfn><a href=#editing class=self-link></a></h2>
+
+
+  <h3 id=the-hidden-attribute><span class=secno>6.1</span> The <code id=the-hidden-attribute:attr-hidden><a href=#attr-hidden>hidden</a></code> attribute<a href=#the-hidden-attribute class=self-link></a></h3><div class="mdn-anno wrapped"><button onclick=toggleStatus(this) class=mdn-anno-btn><b title="Support in one engine only." class=less-than-two-engines-flag>⚠</b><span>MDN</span></button><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/hidden title="The hidden global attribute is an enumerated attribute indicating that the browser should not render the contents of the element. For example, it can be used to hide elements of the page that can't be used until the login process has been completed.">Global_attributes/hidden</a><p class=less-than-two-engines-text>Support in one engine only.<div class=support><span class="firefox no"><span>Firefox</span><span>No</span></span><span class="safari no"><span>Safari</span><span>No</span></span><span class="chrome yes"><span>Chrome</span><span>102+</span></span><hr><span class="opera no"><span>Opera</span><span>No</span></span><span class="edge_blink yes"><span>Edge</span><span>102+</span></span><hr><span class="edge unknown"><span>Edge (Legacy)</span><span>?</span></span><span class="ie no"><span>Internet Explorer</span><span>No</span></span><hr><span class="firefox_android unknown"><span>Firefox Android</span><span>?</span></span><span class="safari_ios unknown"><span>Safari iOS</span><span>?</span></span><span class="chrome_android unknown"><span>Chrome Android</span><span>?</span></span><span class="webview_android unknown"><span>WebView Android</span><span>?</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android unknown"><span>Opera Android</span><span>?</span></span></div></div><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/hidden title="The hidden global attribute is an enumerated attribute indicating that the browser should not render the contents of the element. For example, it can be used to hide elements of the page that can't be used until the login process has been completed.">Global_attributes/hidden</a><p class=all-engines-text>Support in all current engines.<div class=support><span class="firefox yes"><span>Firefox</span><span>4+</span></span><span class="safari yes"><span>Safari</span><span>5.1+</span></span><span class="chrome yes"><span>Chrome</span><span>10+</span></span><hr><span class="opera unknown"><span>Opera</span><span>?</span></span><span class="edge_blink yes"><span>Edge</span><span>79+</span></span><hr><span class="edge yes"><span>Edge (Legacy)</span><span>12+</span></span><span class="ie yes"><span>Internet Explorer</span><span>11</span></span><hr><span class="firefox_android unknown"><span>Firefox Android</span><span>?</span></span><span class="safari_ios unknown"><span>Safari iOS</span><span>?</span></span><span class="chrome_android unknown"><span>Chrome Android</span><span>?</span></span><span class="webview_android yes"><span>WebView Android</span><span>4+</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android unknown"><span>Opera Android</span><span>?</span></span></div></div></div>
+
+  <p>All <a id=the-hidden-attribute:html-elements href=infrastructure.html#html-elements>HTML elements</a> may have the <dfn data-dfn-for=html-global id=attr-hidden data-dfn-type=element-attr><code>hidden</code></dfn> content attribute set. The <code id=the-hidden-attribute:attr-hidden-2><a href=#attr-hidden>hidden</a></code> attribute is an <a id=the-hidden-attribute:enumerated-attribute href=common-microsyntaxes.html#enumerated-attribute>enumerated attribute</a> with the
+  following keywords and states:</p>
+
+  <table><thead><tr><th>Keyword
+     <th>State
+     <th>Brief description
+   <tbody><tr><td><dfn data-dfn-for=html-global/hidden id=attr-hidden-hidden data-dfn-type=attr-value><code>hidden</code></dfn>
+     <td><dfn id=attr-hidden-hidden-state>Hidden</dfn>
+     <td>Will not be rendered.
+    <tr><td><dfn data-dfn-for=html-global/hidden id=attr-hidden-until-found data-dfn-type=attr-value><code>until-found</code></dfn>
+     <td><dfn id=attr-hidden-until-found-state>Hidden Until Found</dfn>
+     <td>Will not be rendered, but content inside will be accessible to <a href=#find-in-page-2 id=the-hidden-attribute:find-in-page-2>find-in-page</a>
+     and <a href=browsing-the-web.html#navigate-fragid id=the-hidden-attribute:navigate-fragid>fragment navigation</a>.
+  </table>
+
+  <div data-algorithm="">
+  <p>The attribute's <i id=the-hidden-attribute:missing-value-default><a href=common-microsyntaxes.html#missing-value-default>missing value default</a></i> is the <dfn id=attr-hidden-not-hidden-state>Not Hidden</dfn> state, and its <i id=the-hidden-attribute:invalid-value-default><a href=common-microsyntaxes.html#invalid-value-default>invalid value default</a></i> and <i id=the-hidden-attribute:empty-value-default><a href=common-microsyntaxes.html#empty-value-default>empty value default</a></i> are
+  both the <a href=#attr-hidden-hidden-state id=the-hidden-attribute:attr-hidden-hidden-state>Hidden</a> state.</p>
+  </div>
+
+  <p>When an element has the <code id=the-hidden-attribute:attr-hidden-3><a href=#attr-hidden>hidden</a></code> attribute in the <a href=#attr-hidden-hidden-state id=the-hidden-attribute:attr-hidden-hidden-state-2>Hidden</a> state, it indicates that the element is not yet, or
+  is no longer, directly relevant to the page's current state, or that it is being used to declare
+  content to be reused by other parts of the page as opposed to being directly accessed by the user.
+  User agents should not render elements that are in the <a href=#attr-hidden-hidden-state id=the-hidden-attribute:attr-hidden-hidden-state-3>Hidden</a> state.</p>
+
+  
+
+  <p>When an element has the <code id=the-hidden-attribute:attr-hidden-4><a href=#attr-hidden>hidden</a></code> attribute in the <a href=#attr-hidden-until-found-state id=the-hidden-attribute:attr-hidden-until-found-state>Hidden Until Found</a> state, it indicates that the
+  element is hidden like the <a href=#attr-hidden-hidden-state id=the-hidden-attribute:attr-hidden-hidden-state-4>Hidden</a> state but the
+  content inside the element will be accessible to <a href=#find-in-page-2 id=the-hidden-attribute:find-in-page-2-2>find-in-page</a> and <a href=browsing-the-web.html#navigate-fragid id=the-hidden-attribute:navigate-fragid-2>fragment navigation</a>. When these features attempt to scroll to a
+  target which is in the element's subtree, the user agent will remove the <code id=the-hidden-attribute:attr-hidden-5><a href=#attr-hidden>hidden</a></code> attribute in order to reveal the content before scrolling to
+  it by running the <span>ancestor revealing algorithm</span> on the target node.</p>
+
+  
+
+
+  <div class=note>
+   <p>Because this attribute is typically implemented using CSS, it's also possible to override it
+   using CSS. For instance, a rule that applies 'display: block' to all elements will cancel the
+   effects of the <a href=#attr-hidden-hidden-state id=the-hidden-attribute:attr-hidden-hidden-state-5>Hidden</a> state. Authors therefore
+   have to take care when writing their style sheets to make sure that the attribute is still styled
+   as expected. In addition, legacy user agents which don't support the <a href=#attr-hidden-until-found-state id=the-hidden-attribute:attr-hidden-until-found-state-2>Hidden Until Found</a> state will have 'display: none'
+   instead of 'content-visibility: hidden', so authors are encouraged to make sure that their style
+   sheets don't change the 'display' or 'content-visibility' properties of <a href=#attr-hidden-until-found-state id=the-hidden-attribute:attr-hidden-until-found-state-3>Hidden Until Found</a> elements.</p>
+
+   <p>Since elements with the <code id=the-hidden-attribute:attr-hidden-6><a href=#attr-hidden>hidden</a></code> attribute in the <a href=#attr-hidden-until-found-state id=the-hidden-attribute:attr-hidden-until-found-state-4>Hidden Until Found</a> state use 'content-visibility:
+   hidden' instead of 'display: none', there are two caveats of the <a href=#attr-hidden-until-found-state id=the-hidden-attribute:attr-hidden-until-found-state-5>Hidden Until Found</a> state that make it different
+   from the <a href=#attr-hidden-hidden-state id=the-hidden-attribute:attr-hidden-hidden-state-6>Hidden</a> state:</p>
+
+   <ol><li><p>The element needs to be affected by <a id=the-hidden-attribute:layout-containment href=https://drafts.csswg.org/css-contain/#containment-layout data-x-internal=layout-containment>layout containment</a> in order to be
+    revealed by find-in-page. This means that if the element in the <a href=#attr-hidden-until-found-state id=the-hidden-attribute:attr-hidden-until-found-state-6>Hidden Until Found</a> state has a 'display' value of
+    'none', 'contents', or 'inline', then the element will not be revealed by find-in-page.<li><p>The element will still have a <a href=https://drafts.csswg.org/css2/#propdef-visibility id="the-hidden-attribute:'visibility'" data-x-internal="'visibility'">generated box</a> when in
+    the <a href=#attr-hidden-until-found-state id=the-hidden-attribute:attr-hidden-until-found-state-7>Hidden Until Found</a> state, which means
+    that borders, margin, and padding will still be rendered around the element.</ol>
+  </div>
+
+  <div class=example>
+
+   <p>In the following skeletal example, the attribute is used to hide the web game's main screen
+   until the user logs in:</p>
+
+   <pre><code class='html'>  <c- p>&lt;</c-><c- f>h1</c-><c- p>&gt;</c->The Example Game<c- p>&lt;/</c-><c- f>h1</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>section</c-> <c- e>id</c-><c- o>=</c-><c- s>&quot;login&quot;</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>h2</c-><c- p>&gt;</c->Login<c- p>&lt;/</c-><c- f>h2</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>form</c-><c- p>&gt;</c->
+    ...
+    <c- c>&lt;!-- calls login() once the user&apos;s credentials have been checked --&gt;</c->
+   <c- p>&lt;/</c-><c- f>form</c-><c- p>&gt;</c->
+   <c- p>&lt;</c-><c- f>script</c-><c- p>&gt;</c->
+    <c- a>function</c-> login<c- p>()</c-> <c- p>{</c->
+      <c- c1>// switch screens</c->
+      document<c- p>.</c->getElementById<c- p>(</c-><c- t>&apos;login&apos;</c-><c- p>).</c->hidden <c- o>=</c-> <c- kc>true</c-><c- p>;</c->
+      document<c- p>.</c->getElementById<c- p>(</c-><c- t>&apos;game&apos;</c-><c- p>).</c->hidden <c- o>=</c-> <c- kc>false</c-><c- p>;</c->
+    <c- p>}</c->
+   <c- p>&lt;/</c-><c- f>script</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>section</c-> <c- e>id</c-><c- o>=</c-><c- s>&quot;game&quot;</c-> <c- e>hidden</c-><c- p>&gt;</c->
+   ...
+  <c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+  <p>The <code id=the-hidden-attribute:attr-hidden-7><a href=#attr-hidden>hidden</a></code> attribute must not be used to hide content that
+  could legitimately be shown in another presentation. For example, it is incorrect to use <code id=the-hidden-attribute:attr-hidden-8><a href=#attr-hidden>hidden</a></code> to hide panels in a tabbed dialog, because the tabbed interface
+  is merely a kind of overflow presentation — one could equally well just show all the form
+  controls in one big page with a scrollbar. It is similarly incorrect to use this attribute to hide
+  content just from one presentation — if something is marked <code id=the-hidden-attribute:attr-hidden-9><a href=#attr-hidden>hidden</a></code>, it is hidden from all presentations, including, for instance,
+  screen readers.</p>
+
+  
+  
+
+  <p>Elements that are not themselves <code id=the-hidden-attribute:attr-hidden-10><a href=#attr-hidden>hidden</a></code> must not
+  <a id=the-hidden-attribute:hyperlink href=links.html#hyperlink>hyperlink</a> to elements that are <code id=the-hidden-attribute:attr-hidden-11><a href=#attr-hidden>hidden</a></code>. The <code>for</code> attributes of <code id=the-hidden-attribute:the-label-element><a href=forms.html#the-label-element>label</a></code> and <code id=the-hidden-attribute:the-output-element><a href=form-elements.html#the-output-element>output</a></code> elements that are not
+  themselves <code id=the-hidden-attribute:attr-hidden-12><a href=#attr-hidden>hidden</a></code> must similarly not refer to elements that are
+  <code id=the-hidden-attribute:attr-hidden-13><a href=#attr-hidden>hidden</a></code>. In both cases, such references would cause user
+  confusion.</p>
+
+  <p>Elements and scripts may, however, refer to elements that are <code id=the-hidden-attribute:attr-hidden-14><a href=#attr-hidden>hidden</a></code> in other contexts.</p>
+
+  <div class=example>
+
+   <p>For example, it would be incorrect to use the <code id=the-hidden-attribute:attr-hyperlink-href><a href=links.html#attr-hyperlink-href>href</a></code>
+   attribute to link to a section marked with the <code id=the-hidden-attribute:attr-hidden-15><a href=#attr-hidden>hidden</a></code> attribute.
+   If the content is not applicable or relevant, then there is no reason to link to it.</p>
+
+   <p>It would be fine, however, to use the ARIA <code id=the-hidden-attribute:attr-aria-describedby><a data-x-internal=attr-aria-describedby href=https://w3c.github.io/aria/#aria-describedby>aria-describedby</a></code> attribute to refer to descriptions that are
+   themselves <code id=the-hidden-attribute:attr-hidden-16><a href=#attr-hidden>hidden</a></code>. While hiding the descriptions implies that
+   they are not useful alone, they could be written in such a way that they are useful in the
+   specific context of being referenced from the elements that they describe.</p>
+
+   <p>Similarly, a <code id=the-hidden-attribute:the-canvas-element><a href=canvas.html#the-canvas-element>canvas</a></code> element with the <code id=the-hidden-attribute:attr-hidden-17><a href=#attr-hidden>hidden</a></code>
+   attribute could be used by a scripted graphics engine as an off-screen buffer, and a form control
+   could refer to a hidden <code id=the-hidden-attribute:the-form-element><a href=forms.html#the-form-element>form</a></code> element using its <code id=the-hidden-attribute:attr-fae-form><a href=form-control-infrastructure.html#attr-fae-form>form</a></code> attribute.</p>
+
+  </div>
+
+  <p>Elements in a section hidden by the <code id=the-hidden-attribute:attr-hidden-18><a href=#attr-hidden>hidden</a></code> attribute are still
+  active, e.g. scripts and form controls in such sections still execute and submit respectively.
+  Only their presentation to the user changes.</p>
+
+  
+
+  <h3 id=page-visibility><span class=secno>6.2</span> Page visibility<a href=#page-visibility class=self-link></a></h3>
+
+  <p>A <a id=page-visibility:traversable-navigable href=document-sequences.html#traversable-navigable>traversable navigable</a>'s <a id=page-visibility:system-visibility-state href=document-sequences.html#system-visibility-state>system visibility state</a>, including its
+  initial value upon creation, is determined by the user agent. It represents, for example, whether
+  the browser window is minimized, a browser tab is currently in the background, or a system
+  element such as a task switcher obscures the page.</p>
+
+  <div data-algorithm="">
+  <p>When a user agent determines that the <a id=page-visibility:system-visibility-state-2 href=document-sequences.html#system-visibility-state>system visibility state</a> for
+  <a id=page-visibility:traversable-navigable-2 href=document-sequences.html#traversable-navigable>traversable navigable</a> <var>traversable</var> has changed to <var>newState</var>, it
+  must run the following steps:</p>
+
+  <ol><li><p>Let <var>navigables</var> be the <a id=page-visibility:inclusive-descendant-navigables href=document-sequences.html#inclusive-descendant-navigables>inclusive descendant navigables</a> of
+   <var>traversable</var>'s <a href=document-sequences.html#nav-document id=page-visibility:nav-document>active document</a>.<li>
+    <p><a href=https://infra.spec.whatwg.org/#list-iterate id=page-visibility:list-iterate data-x-internal=list-iterate>For each</a> <var>navigable</var> of <var>navigables</var>
+    <span class=XXX>in what order?</span>:</p>
+
+    <ol><li><p>Let <var>document</var> be <var>navigable</var>'s <a href=document-sequences.html#nav-document id=page-visibility:nav-document-2>active
+     document</a>.<li><p><span>Queue a global task</span> on the <span>user interaction task source</span> given
+     <var>document</var>'s <span>relevant global object</span> to <a href=#update-the-visibility-state id=page-visibility:update-the-visibility-state>update the visibility
+     state</a> of <var>document</var> with <var>newState</var>.</ol>
+   </ol>
+  </div>
+
+  <p>A <code>Document</code> has a <dfn data-dfn-for=Document id=visibility-state data-export="">visibility state</dfn>, which is
+  either "<code>hidden</code>" or "<code>visible</code>", initially set to
+  "<code>hidden</code>".</p>
+
+  <div class="mdn-anno wrapped before"><button onclick=toggleStatus(this) class=mdn-anno-btn><b title="Support in all current engines." class=all-engines-flag>✔</b><span>MDN</span></button><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/API/Document/visibilityState title="The Document.visibilityState read-only property returns the visibility of the document, that is in which context this element is now visible. It is useful to know if the document is in the background or an invisible tab, or only loaded for pre-rendering.">Document/visibilityState</a><p class=all-engines-text>Support in all current engines.<div class=support><span class="firefox yes"><span>Firefox</span><span>18+</span></span><span class="safari yes"><span>Safari</span><span>7+</span></span><span class="chrome yes"><span>Chrome</span><span>33+</span></span><hr><span class="opera yes"><span>Opera</span><span>20+</span></span><span class="edge_blink yes"><span>Edge</span><span>79+</span></span><hr><span class="edge yes"><span>Edge (Legacy)</span><span>12+</span></span><span class="ie yes"><span>Internet Explorer</span><span>10+</span></span><hr><span class="firefox_android unknown"><span>Firefox Android</span><span>?</span></span><span class="safari_ios unknown"><span>Safari iOS</span><span>?</span></span><span class="chrome_android unknown"><span>Chrome Android</span><span>?</span></span><span class="webview_android yes"><span>WebView Android</span><span>4.4.3+</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android yes"><span>Opera Android</span><span>20+</span></span></div></div></div><div data-algorithm="">
+  <p>The <dfn data-dfn-for=Document id=dom-document-visibilitystate data-dfn-type=attribute><code>visibilityState</code></dfn> getter steps are to return
+  <a id=page-visibility:this href=https://webidl.spec.whatwg.org/#this data-x-internal=this>this</a>'s <a href=#visibility-state id=page-visibility:visibility-state>visibility state</a>.</p>
+  </div>
+
+  <div class="mdn-anno wrapped before"><button onclick=toggleStatus(this) class=mdn-anno-btn><b title="Support in all current engines." class=all-engines-flag>✔</b><span>MDN</span></button><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/API/Document/hidden title="The Document.hidden read-only property returns a Boolean value indicating if the page is considered hidden or not.">Document/hidden</a><p class=all-engines-text>Support in all current engines.<div class=support><span class="firefox yes"><span>Firefox</span><span>18+</span></span><span class="safari yes"><span>Safari</span><span>7+</span></span><span class="chrome yes"><span>Chrome</span><span>33+</span></span><hr><span class="opera yes"><span>Opera</span><span>12.1+</span></span><span class="edge_blink yes"><span>Edge</span><span>79+</span></span><hr><span class="edge yes"><span>Edge (Legacy)</span><span>12+</span></span><span class="ie yes"><span>Internet Explorer</span><span>10+</span></span><hr><span class="firefox_android unknown"><span>Firefox Android</span><span>?</span></span><span class="safari_ios unknown"><span>Safari iOS</span><span>?</span></span><span class="chrome_android unknown"><span>Chrome Android</span><span>?</span></span><span class="webview_android yes"><span>WebView Android</span><span>4.4.3+</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android yes"><span>Opera Android</span><span>12.1+</span></span></div></div></div><div data-algorithm="">
+  <p>The <dfn data-dfn-for=Document id=dom-document-hidden data-dfn-type=attribute><code>hidden</code></dfn> getter
+  steps are to return true if <a id=page-visibility:this-2 href=https://webidl.spec.whatwg.org/#this data-x-internal=this>this</a>'s <a href=#visibility-state id=page-visibility:visibility-state-2>visibility state</a> is
+  "<code>hidden</code>", otherwise false.</p>
+  </div>
+
+  <div data-algorithm="">
+  <p>To <dfn id=update-the-visibility-state>update the visibility state</dfn> of <code>Document</code> <var>document</var> to
+  <var>visibilityState</var>:</p>
+
+  <ol><li><p>If <var>document</var>'s <a href=#visibility-state id=page-visibility:visibility-state-3>visibility state</a> equals <var>visibilityState</var>,
+   then return.<li><p>Set <var>document</var>'s <a href=#visibility-state id=page-visibility:visibility-state-4>visibility state</a> to
+   <var>visibilityState</var>.<li><p><a href=https://w3c.github.io/performance-timeline/#queue-a-performanceentry id=page-visibility:queue-a-performance-entry data-x-internal=queue-a-performance-entry>Queue</a> a new
+   <code>VisibilityStateEntry</code> whose
+   <a href=#visibilitystateentry-state id=page-visibility:visibilitystateentry-state>visibility state</a> is
+   <var>visibilityState</var> and whose <a href=#visibilitystateentry-timestamp id=page-visibility:visibilitystateentry-timestamp>timestamp</a> is
+   the <a id=page-visibility:current-high-resolution-time href=https://w3c.github.io/hr-time/#dfn-current-high-resolution-time data-x-internal=current-high-resolution-time>current high resolution time</a> given <var>document</var>'s
+   <span>relevant global object</span>.</p>
+
+   <li><p>Run the <a id=page-visibility:screen-orientation-change-steps href=https://w3c.github.io/screen-orientation/#dfn-screen-orientation-change-steps data-x-internal=screen-orientation-change-steps>screen orientation change steps</a> with <var>document</var>.
+   <a href=references.html#refsSCREENORIENTATION>[SCREENORIENTATION]</a><li><p>Run the <a id=page-visibility:view-transition-page-visibility-change-steps href=https://drafts.csswg.org/css-view-transitions/#view-transition-page-visibility-change-steps data-x-internal=view-transition-page-visibility-change-steps>view transition page visibility change steps</a> with
+   <var>document</var>.<li>
+    <p>Run any <dfn id=page-visibility-change-steps data-export="">page visibility change steps</dfn> which may be defined in other
+    specifications, with <a href=#visibility-state id=page-visibility:visibility-state-5>visibility state</a> and <var>document</var>.</p>
+
+    <p class=XXX>It would be better if specification authors sent a pull request to add calls
+    from here into their specifications directly, instead of using the <a href=#page-visibility-change-steps id=page-visibility:page-visibility-change-steps>page visibility change
+    steps</a> hook, to ensure well-defined cross-specification call order. As of the time of
+    this writing the following specifications are known to have <a href=#page-visibility-change-steps id=page-visibility:page-visibility-change-steps-2>page visibility change
+    steps</a>, which will be run in an unspecified order: <cite>Device Posture API</cite> and
+    <cite>Web NFC</cite>. <a href=references.html#refsDEVICEPOSTURE>[DEVICEPOSTURE]</a> <a href=references.html#refsWEBNFC>[WEBNFC]</a></p>
+   <li><p><a href=https://dom.spec.whatwg.org/#concept-event-fire id=page-visibility:concept-event-fire data-x-internal=concept-event-fire>Fire an event</a> named <code id=page-visibility:event-visibilitychange><a href=indices.html#event-visibilitychange>visibilitychange</a></code> at
+   <var>document</var>, with its <code id=page-visibility:dom-event-bubbles><a data-x-internal=dom-event-bubbles href=https://dom.spec.whatwg.org/#dom-event-bubbles>bubbles</a></code> attribute
+   initialized to true.</ol>
+  </div>
+
+  <h4 id=the-visibilitystateentry-interface><span class=secno>6.2.1</span> The <code>VisibilityStateEntry</code> interface<a href=#the-visibilitystateentry-interface class=self-link></a></h4><div class="mdn-anno wrapped"><button onclick=toggleStatus(this) class=mdn-anno-btn><b title="Support in one engine only." class=less-than-two-engines-flag>⚠</b><span>MDN</span></button><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/API/VisibilityStateEntry title="The VisibilityStateEntry interface provides timings of page visibility state changes, i.e., when a tab changes from the foreground to the background or vice versa.">VisibilityStateEntry</a><p class=less-than-two-engines-text>Support in one engine only.<div class=support><span class="firefox no"><span>Firefox</span><span>No</span></span><span class="safari no"><span>Safari</span><span>No</span></span><span class="chrome yes"><span>Chrome</span><span>115+</span></span><hr><span class="opera unknown"><span>Opera</span><span>?</span></span><span class="edge_blink yes"><span>Edge</span><span>115+</span></span><hr><span class="edge unknown"><span>Edge (Legacy)</span><span>?</span></span><span class="ie no"><span>Internet Explorer</span><span>No</span></span><hr><span class="firefox_android unknown"><span>Firefox Android</span><span>?</span></span><span class="safari_ios unknown"><span>Safari iOS</span><span>?</span></span><span class="chrome_android unknown"><span>Chrome Android</span><span>?</span></span><span class="webview_android unknown"><span>WebView Android</span><span>?</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android unknown"><span>Opera Android</span><span>?</span></span></div></div></div>
+
+  <p>The <code>VisibilityStateEntry</code> interface exposes visibility changes to the document,
+  from the moment the document becomes active.</p>
+
+  <div class=example>For example, this allows JavaScript code in the page to examine correlation
+  between visibility changes and paint timing:
+
+  <pre><code class='js'><c- a>function</c-> wasHiddenBeforeFirstContentfulPaint<c- p>()</c-> <c- p>{</c->
+    <c- a>const</c-> fcpEntry <c- o>=</c-> performance<c- p>.</c->getEntriesByName<c- p>(</c-><c- u>&quot;first-contentful-paint&quot;</c-><c- p>)[</c-><c- mf>0</c-><c- p>];</c->
+    <c- a>const</c-> visibilityStateEntries <c- o>=</c-> performance<c- p>.</c->getEntriesByType<c- p>(</c-><c- u>&quot;visibility-state&quot;</c-><c- p>);</c->
+    <c- k>return</c-> visibilityStateEntries<c- p>.</c->some<c- p>(</c->e <c- p>=&gt;</c->
+                                            e<c- p>.</c->startTime <c- o>&lt;</c-> fcpEntry<c- p>.</c->startTime <c- o>&amp;&amp;</c->
+                                            e<c- p>.</c->name <c- o>===</c-> <c- u>&quot;hidden&quot;</c-><c- p>);</c->
+<c- p>}</c-></code></pre>
+  </div>
+
+  <p class=note>Since hiding a page can cause throttling of rendering and other user-agent
+  operations, it is common to use visibility changes as an indication that such throttling has
+  occurred. However, other things could also cause throttling in different browsers, such as
+  long periods of inactivity.</p>
+
+  
+
+  <p>The <code>VisibilityStateEntry</code> has an associated
+  <a id=the-visibilitystateentry-interface:domhighrestimestamp href=https://w3c.github.io/hr-time/#dom-domhighrestimestamp data-x-internal=domhighrestimestamp><code>DOMHighResTimeStamp</code></a>
+  <dfn id=visibilitystateentry-timestamp>timestamp</dfn>.</p>
+
+  <p>The <code>VisibilityStateEntry</code> has an associated "<code>visible</code>" or
+  "<code>hidden</code>" <dfn id=visibilitystateentry-state>visibility
+  state</dfn>.</p>
+
+  <div data-algorithm="">
+  <p>The <dfn data-dfn-for=VisibilityStateEntry id=visibilitystateentry-name data-dfn-type=attribute><code>name</code></dfn> getter steps are to return
+  <a id=the-visibilitystateentry-interface:this href=https://webidl.spec.whatwg.org/#this data-x-internal=this>this</a>'s <a href=#visibilitystateentry-state id=the-visibilitystateentry-interface:visibilitystateentry-state>visibility state</a>.</p>
+  </div>
+
+  <div data-algorithm="">
+  <p>The <dfn data-dfn-for=VisibilityStateEntry id=visibilitystateentry-entrytype data-dfn-type=attribute><code>entryType</code></dfn> getter steps are to return
+  "<code>visibility-state</code>".</p>
+  </div>
+
+  <div data-algorithm="">
+  <p>The <dfn data-dfn-for=VisibilityStateEntry id=visibilitystateentry-starttime data-dfn-type=attribute><code>startTime</code></dfn> getter steps are to return
+  <a id=the-visibilitystateentry-interface:this-2 href=https://webidl.spec.whatwg.org/#this data-x-internal=this>this</a>'s <a href=#visibilitystateentry-timestamp id=the-visibilitystateentry-interface:visibilitystateentry-timestamp>timestamp</a>.</p>
+  </div>
+
+  <div data-algorithm="">
+  <p>The <dfn data-dfn-for=VisibilityStateEntry id=visibilitystateentry-duration data-dfn-type=attribute><code>duration</code></dfn> getter steps are to return
+  zero.</p>
+  </div>
+
+
+  <h3 id=inert-subtrees><span class=secno>6.3</span> Inert subtrees<a href=#inert-subtrees class=self-link></a></h3>
+
+  <p class=note>See also <code id=inert-subtrees:the-inert-attribute><a href=#the-inert-attribute>inert</a></code> for an explanation of the
+  attribute of the same name.</p>
+
+  <p>A node (in particular elements and text nodes) can be <dfn id=inert>inert</dfn>. When a node is
+  <a href=#inert id=inert-subtrees:inert>inert</a>:</p>
+
+  <ul><li><p>Hit-testing must act as if the <a id="inert-subtrees:'pointer-events'" href=https://drafts.csswg.org/css-ui-4/#pointer-events-control data-x-internal="'pointer-events'">'pointer-events'</a> CSS property were set to
+   'none'.<li><p>Text selection functionality must act as if the <a id="inert-subtrees:'user-select'" href=https://drafts.csswg.org/css-ui-4/#content-selection data-x-internal="'user-select'">'user-select'</a> CSS property
+   were set to 'none'.<li><p>If it is <span>editable</span>, the node behaves as if it were non-editable.<li><p>The user agent should ignore the node for the purposes of <a href=#find-in-page-2 id=inert-subtrees:find-in-page-2>find-in-page</a>.</ul>
+
+  <p class=note>Inert nodes generally cannot be focused, and user agents do not expose the inert
+  nodes to accessibility APIs or assistive technologies. Inert nodes that are <a href=interactive-elements.html#concept-command id=inert-subtrees:concept-command>commands</a> will become inoperable to users, in the manner described
+  above.</p>
+
+  <p>User agents may allow the user to override the restrictions on <a href=#find-in-page-2 id=inert-subtrees:find-in-page-2-2>find-in-page</a> and
+  text selection, however.</p>
+
+  <p>By default, a node is not <a href=#inert id=inert-subtrees:inert-2>inert</a>.</p>
+
+  <h4 id=modal-dialogs-and-inert-subtrees><span class=secno>6.3.1</span> Modal dialogs and inert subtrees<a href=#modal-dialogs-and-inert-subtrees class=self-link></a></h4>
+
+  <div data-algorithm="">
+  <p>A <code>Document</code> <var>document</var> is <dfn id=blocked-by-a-modal-dialog>blocked by a modal dialog</dfn>
+  <var>subject</var> if <var>subject</var> is the topmost <code id=modal-dialogs-and-inert-subtrees:the-dialog-element><a href=interactive-elements.html#the-dialog-element>dialog</a></code> element in
+  <var>document</var>'s <a id=modal-dialogs-and-inert-subtrees:top-layer href=https://drafts.csswg.org/css-position-4/#document-top-layer data-x-internal=top-layer>top layer</a>. While <var>document</var> is so blocked, every node
+  that is <a id=modal-dialogs-and-inert-subtrees:connected href=https://dom.spec.whatwg.org/#connected data-x-internal=connected>connected</a> to <var>document</var>, with the exception of the
+  <var>subject</var> element and its <a id=modal-dialogs-and-inert-subtrees:flat-tree href=https://drafts.csswg.org/css-scoping/#flat-tree data-x-internal=flat-tree>flat tree</a> descendants, must become
+  <a href=#inert id=modal-dialogs-and-inert-subtrees:inert>inert</a>.</p>
+  </div>
+
+  <div data-algorithm="">
+  <p><var>subject</var> can additionally become <a href=#inert id=modal-dialogs-and-inert-subtrees:inert-2>inert</a> via the <code id=modal-dialogs-and-inert-subtrees:the-inert-attribute><a href=#the-inert-attribute>inert</a></code> attribute, but only if specified on <var>subject</var> itself
+  (i.e., <var>subject</var> escapes inertness of ancestors); <var>subject</var>'s <a id=modal-dialogs-and-inert-subtrees:flat-tree-2 href=https://drafts.csswg.org/css-scoping/#flat-tree data-x-internal=flat-tree>flat
+  tree</a> descendants can become <a href=#inert id=modal-dialogs-and-inert-subtrees:inert-3>inert</a> in a similar fashion.</p>
+  </div>
+
+  <p class=note>The <code id=modal-dialogs-and-inert-subtrees:the-dialog-element-2><a href=interactive-elements.html#the-dialog-element>dialog</a></code> element's <code id=modal-dialogs-and-inert-subtrees:dom-dialog-showmodal><a href=interactive-elements.html#dom-dialog-showmodal>showModal()</a></code> method causes this mechanism to trigger, by <a href=https://drafts.csswg.org/css-position-4/#add-an-element-to-the-top-layer id=modal-dialogs-and-inert-subtrees:add-an-element-to-the-top-layer data-x-internal=add-an-element-to-the-top-layer>adding</a> the <code id=modal-dialogs-and-inert-subtrees:the-dialog-element-3><a href=interactive-elements.html#the-dialog-element>dialog</a></code> element to its
+  <a id=modal-dialogs-and-inert-subtrees:node-document href=https://dom.spec.whatwg.org/#concept-node-document data-x-internal=node-document>node document</a>'s <a id=modal-dialogs-and-inert-subtrees:top-layer-2 href=https://drafts.csswg.org/css-position-4/#document-top-layer data-x-internal=top-layer>top layer</a>.</p>
+
+  <h4 id=the-inert-attribute><span class=secno>6.3.2</span> The <dfn><code>inert</code></dfn> attribute<a href=#the-inert-attribute class=self-link></a></h4><div class="mdn-anno wrapped"><button onclick=toggleStatus(this) class=mdn-anno-btn><b title="Support in all current engines." class=all-engines-flag>✔</b><span>MDN</span></button><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/inert title="The inert global attribute is a Boolean attribute indicating that the browser will ignore the element. With the inert attribute, all of the element's flat tree descendants (such as modal <dialog>s) that don't otherwise escape inertness are ignored. The inert attribute also makes the browser ignore input events sent by the user, including focus-related events and events from assistive technologies.">Global_attributes/inert</a><p class=all-engines-text>Support in all current engines.<div class=support><span class="firefox yes"><span>Firefox</span><span>112+</span></span><span class="safari yes"><span>Safari</span><span>15.5+</span></span><span class="chrome yes"><span>Chrome</span><span>102+</span></span><hr><span class="opera unknown"><span>Opera</span><span>?</span></span><span class="edge_blink yes"><span>Edge</span><span>102+</span></span><hr><span class="edge unknown"><span>Edge (Legacy)</span><span>?</span></span><span class="ie no"><span>Internet Explorer</span><span>No</span></span><hr><span class="firefox_android unknown"><span>Firefox Android</span><span>?</span></span><span class="safari_ios unknown"><span>Safari iOS</span><span>?</span></span><span class="chrome_android unknown"><span>Chrome Android</span><span>?</span></span><span class="webview_android unknown"><span>WebView Android</span><span>?</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android unknown"><span>Opera Android</span><span>?</span></span></div></div></div>
+
+  <p>The <code id=the-inert-attribute:the-inert-attribute><a href=#the-inert-attribute>inert</a></code> attribute is a <a id=the-inert-attribute:boolean-attribute href=common-microsyntaxes.html#boolean-attribute>boolean attribute</a> that
+  indicates, by its presence, that the element and all its <a id=the-inert-attribute:flat-tree href=https://drafts.csswg.org/css-scoping/#flat-tree data-x-internal=flat-tree>flat tree</a> descendants which
+  don't otherwise escape inertness (such as modal dialogs) are to be made <a href=#inert id=the-inert-attribute:inert>inert</a> by the
+  user agent.</p>
+
+  <p>An inert subtree should not contain any content or controls which are critical to
+  understanding or using aspects of the page which are not in the inert state. Content in an inert
+  subtree will not be perceivable by all users, or interactive. Authors should not specify elements
+  as inert unless the content they represent are also visually obscured in some way. In most cases,
+  authors should not specify the <code id=the-inert-attribute:inert-2><a href=#inert>inert</a></code> attribute on individual form controls. In these
+  instances, the <code id=the-inert-attribute:attr-fe-disabled><a href=form-control-infrastructure.html#attr-fe-disabled>disabled</a></code> attribute is probably more
+  appropriate.</p>
+
+  <div class=example>
+   <p>The following example shows how to mark partially loaded content, visually obscured by a
+   "loading" message, as inert.</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>section</c-> <c- e>aria-labelledby</c-><c- o>=</c-><c- s>s1</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>h3</c-> <c- e>id</c-><c- o>=</c-><c- s>s1</c-><c- p>&gt;</c->Population by City<c- p>&lt;/</c-><c- f>h3</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>div</c-> <c- e>class</c-><c- o>=</c-><c- s>container</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>div</c-> <c- e>class</c-><c- o>=</c-><c- s>loading</c-><c- p>&gt;&lt;</c-><c- f>p</c-><c- p>&gt;</c->Loading...<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;&lt;/</c-><c- f>div</c-><c- p>&gt;</c->
+    <c- p>&lt;</c-><c- f>div</c-> <c- e>inert</c-><c- p>&gt;</c->
+      <c- p>&lt;</c-><c- f>form</c-><c- p>&gt;</c->
+        <c- p>&lt;</c-><c- f>fieldset</c-><c- p>&gt;</c->
+          <c- p>&lt;</c-><c- f>legend</c-><c- p>&gt;</c->Date range<c- p>&lt;/</c-><c- f>legend</c-><c- p>&gt;</c->
+          <c- p>&lt;</c-><c- f>div</c-><c- p>&gt;</c->
+            <c- p>&lt;</c-><c- f>label</c-> <c- e>for</c-><c- o>=</c-><c- s>start</c-><c- p>&gt;</c->Start<c- p>&lt;/</c-><c- f>label</c-><c- p>&gt;</c->
+            <c- p>&lt;</c-><c- f>input</c-> <c- e>type</c-><c- o>=</c-><c- s>date</c-> <c- e>id</c-><c- o>=</c-><c- s>start</c-><c- p>&gt;</c->
+          <c- p>&lt;/</c-><c- f>div</c-><c- p>&gt;</c->
+          <c- p>&lt;</c-><c- f>div</c-><c- p>&gt;</c->
+            <c- p>&lt;</c-><c- f>label</c-> <c- e>for</c-><c- o>=</c-><c- s>end</c-><c- p>&gt;</c->End<c- p>&lt;/</c-><c- f>label</c-><c- p>&gt;</c->
+            <c- p>&lt;</c-><c- f>input</c-> <c- e>type</c-><c- o>=</c-><c- s>date</c-> <c- e>id</c-><c- o>=</c-><c- s>end</c-><c- p>&gt;</c->
+          <c- p>&lt;/</c-><c- f>div</c-><c- p>&gt;</c->
+          <c- p>&lt;</c-><c- f>div</c-><c- p>&gt;</c->
+            <c- p>&lt;</c-><c- f>button</c-><c- p>&gt;</c->Apply<c- p>&lt;/</c-><c- f>button</c-><c- p>&gt;</c->
+          <c- p>&lt;/</c-><c- f>div</c-><c- p>&gt;</c->
+        <c- p>&lt;/</c-><c- f>fieldset</c-><c- p>&gt;</c->
+      <c- p>&lt;/</c-><c- f>form</c-><c- p>&gt;</c->
+      <c- p>&lt;</c-><c- f>table</c-><c- p>&gt;</c->
+        <c- p>&lt;</c-><c- f>caption</c-><c- p>&gt;</c->From 20-- to 20--<c- p>&lt;/</c-><c- f>caption</c-><c- p>&gt;</c->
+        <c- p>&lt;</c-><c- f>thead</c-><c- p>&gt;</c->
+          <c- p>&lt;</c-><c- f>tr</c-><c- p>&gt;</c->
+            <c- p>&lt;</c-><c- f>th</c-><c- p>&gt;</c->City<c- p>&lt;/</c-><c- f>th</c-><c- p>&gt;</c->
+            <c- p>&lt;</c-><c- f>th</c-><c- p>&gt;</c->State<c- p>&lt;/</c-><c- f>th</c-><c- p>&gt;</c->
+            <c- p>&lt;</c-><c- f>th</c-><c- p>&gt;</c->20-- Population<c- p>&lt;/</c-><c- f>th</c-><c- p>&gt;</c->
+            <c- p>&lt;</c-><c- f>th</c-><c- p>&gt;</c->20-- Population<c- p>&lt;/</c-><c- f>th</c-><c- p>&gt;</c->
+            <c- p>&lt;</c-><c- f>th</c-><c- p>&gt;</c->Percentage change<c- p>&lt;/</c-><c- f>th</c-><c- p>&gt;</c->
+          <c- p>&lt;/</c-><c- f>tr</c-><c- p>&gt;</c->
+        <c- p>&lt;/</c-><c- f>thead</c-><c- p>&gt;</c->
+        <c- p>&lt;</c-><c- f>tbody</c-><c- p>&gt;</c->
+          <c- c>&lt;!-- ... --&gt;</c->
+        <c- p>&lt;/</c-><c- f>tbody</c-><c- p>&gt;</c->
+      <c- p>&lt;/</c-><c- f>table</c-><c- p>&gt;</c->
+    <c- p>&lt;/</c-><c- f>div</c-><c- p>&gt;</c->
+  <c- p>&lt;/</c-><c- f>div</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>section</c-><c- p>&gt;</c-></code></pre>
+
+   <img alt="Screenshot of Population by City content with an overlaid loading message which visually obscures the form controls and data table which have not fully rendered, and thus are in the inert state." src=../images/inert-example-loading-section.png width=947 height=243>
+
+   <p>The "loading" overlay obscures the inert content, making it visually apparent that the inert
+   content is not presently accessible. Notice that the heading and "loading" text are not
+   descendants of the element with the <code id=the-inert-attribute:inert-3><a href=#inert>inert</a></code> attribute. This will ensure this text is
+   accessible to all users, while the inert content cannot be interacted with by anyone.</p>
+  </div>
+
+  <div class=note>
+   <p>By default, there is no persistent visual indication of an element or its subtree being
+   inert. Appropriate visual styles for such content is often context-dependent. For instance, an
+   inert off-screen navigation panel would not require a default style, as its off-screen position
+   visually obscures the content. Similarly, a modal <code id=the-inert-attribute:the-dialog-element><a href=interactive-elements.html#the-dialog-element>dialog</a></code> element's backdrop will
+   serve as the means to visually obscure the inert content of the web page, rather than styling
+   the inert content specifically.</p>
+
+   <p>However, for many other situations authors are strongly encouraged to clearly mark what parts
+   of their document are active and which are inert, to avoid user confusion. In particular, it is
+   worth remembering that not all users can see all parts of a page at once; for example, users of
+   screen readers, users on small devices or with magnifiers, and even users using particularly
+   small windows might not be able to see the active part of a page and might get frustrated if
+   inert sections are not obviously inert.</p>
+  </div>
+
+  <h3 id=tracking-user-activation><span class=secno>6.4</span> Tracking <dfn data-export="">user activation</dfn><a href=#tracking-user-activation class=self-link></a></h3>
+
+  <p>To prevent abuse of certain APIs that could be annoying to users (e.g., opening popups or
+  vibrating phones), user agents allow these APIs only when the user is actively interacting with
+  the web page or has interacted with the page at least once. This "active interaction" state is
+  maintained through the mechanisms defined in this section.</p>
+
+  
+
+  <p>APIs that are dependent on user activation are classified into different levels:</p>
+
+  <dl><dt><dfn id=sticky-activation-gated-api data-lt="sticky activation-gated API" data-export="">Sticky activation-gated APIs</dfn><dd><p>These APIs require the <span>sticky activation</span> state to be true, so they are
+   blocked until the very first user activation.<dt><dfn id=transient-activation-gated-api data-lt="transient activation-gated
+   API" data-export="">Transient activation-gated APIs</dfn><dd><p>These APIs require the <span>transient activation</span> state to be true, but they don't
+   <span>consume</span> it, so multiple calls are allowed per user
+   activation until the transient state <span>expires</span>.<dt><dfn id=activation-consuming-api data-lt="transient activation-consuming API" data-export="">Transient activation-consuming APIs</dfn><dd><p>These APIs require the <span>transient activation</span> state to be true, and they
+   <span>consume user activation</span> in each call to prevent multiple calls per user
+   activation.<dt><dfn id=history-action-activation-consuming-api data-lt="history-action activation-consuming API" data-export="">History-action activation-consuming APIs</dfn><dd><p>These APIs require the <span>history-action activation</span> state to be true, and they
+   <span>consume history-action user activation</span> in each call to prevent multiple calls per
+   user activation.</dl>
+
+
+  <h4 id=the-useractivation-interface><span class=secno>6.4.1</span> The <code>UserActivation</code> interface<a href=#the-useractivation-interface class=self-link></a></h4><div class="mdn-anno wrapped"><button onclick=toggleStatus(this) class=mdn-anno-btn><span>MDN</span></button><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/API/UserActivation title="The UserActivation interface allows querying information about a window's user activation state.">UserActivation</a><div class=support><span class="firefox no"><span>Firefox</span><span>No</span></span><span class="safari yes"><span>Safari</span><span>16.4+</span></span><span class="chrome yes"><span>Chrome</span><span>72+</span></span><hr><span class="opera unknown"><span>Opera</span><span>?</span></span><span class="edge_blink yes"><span>Edge</span><span>79+</span></span><hr><span class="edge unknown"><span>Edge (Legacy)</span><span>?</span></span><span class="ie no"><span>Internet Explorer</span><span>No</span></span><hr><span class="firefox_android unknown"><span>Firefox Android</span><span>?</span></span><span class="safari_ios unknown"><span>Safari iOS</span><span>?</span></span><span class="chrome_android unknown"><span>Chrome Android</span><span>?</span></span><span class="webview_android unknown"><span>WebView Android</span><span>?</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android unknown"><span>Opera Android</span><span>?</span></span></div></div></div>
+
+  <div data-algorithm="">
+  <p>Each <code>Window</code> has an <dfn id=associated-useractivation>associated <code>UserActivation</code></dfn>, which is a
+  <code>UserActivation</code> object. Upon creation of the <code>Window</code> object, its
+  <a href=#associated-useractivation id=the-useractivation-interface:associated-useractivation>associated <code>UserActivation</code></a> must be set to a <a id=the-useractivation-interface:new href=https://webidl.spec.whatwg.org/#new data-x-internal=new>new</a>
+  <code>UserActivation</code> object created in the <code>Window</code> object's <span>relevant realm</span>.</p>
+  </div>
+
+  
+
+  <dl class=domintro><dt><code><span>navigator</span>.<span id=dom-navigator-useractivation>userActivation</span>.<span id=dom-useractivation-hasbeenactive>hasBeenActive</span></code><div class="mdn-anno wrapped before"><button onclick=toggleStatus(this) class=mdn-anno-btn><span>MDN</span></button><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/API/Navigator/userActivation title="The read-only userActivation property of the Navigator interface returns a UserActivation object which contains information about the current window's user activation state.">Navigator/userActivation</a><div class=support><span class="firefox no"><span>Firefox</span><span>No</span></span><span class="safari yes"><span>Safari</span><span>16.4+</span></span><span class="chrome yes"><span>Chrome</span><span>72+</span></span><hr><span class="opera unknown"><span>Opera</span><span>?</span></span><span class="edge_blink yes"><span>Edge</span><span>79+</span></span><hr><span class="edge unknown"><span>Edge (Legacy)</span><span>?</span></span><span class="ie no"><span>Internet Explorer</span><span>No</span></span><hr><span class="firefox_android unknown"><span>Firefox Android</span><span>?</span></span><span class="safari_ios unknown"><span>Safari iOS</span><span>?</span></span><span class="chrome_android unknown"><span>Chrome Android</span><span>?</span></span><span class="webview_android unknown"><span>WebView Android</span><span>?</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android unknown"><span>Opera Android</span><span>?</span></span></div></div><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/API/UserActivation/hasBeenActive title="The read-only hasBeenActive property of the UserActivation interface indicates whether the current window has sticky user activation (see sticky activation).">UserActivation/hasBeenActive</a><div class=support><span class="firefox no"><span>Firefox</span><span>No</span></span><span class="safari yes"><span>Safari</span><span>16.4+</span></span><span class="chrome yes"><span>Chrome</span><span>72+</span></span><hr><span class="opera unknown"><span>Opera</span><span>?</span></span><span class="edge_blink yes"><span>Edge</span><span>79+</span></span><hr><span class="edge unknown"><span>Edge (Legacy)</span><span>?</span></span><span class="ie no"><span>Internet Explorer</span><span>No</span></span><hr><span class="firefox_android unknown"><span>Firefox Android</span><span>?</span></span><span class="safari_ios unknown"><span>Safari iOS</span><span>?</span></span><span class="chrome_android unknown"><span>Chrome Android</span><span>?</span></span><span class="webview_android unknown"><span>WebView Android</span><span>?</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android unknown"><span>Opera Android</span><span>?</span></span></div></div></div><dd>
+    <p>Returns whether the window has <span>sticky activation</span>.</p>
+   <dt><code><span>navigator</span>.<a href=#dom-navigator-useractivation id=the-useractivation-interface:dom-navigator-useractivation>userActivation</a>.<span id=dom-useractivation-isactive>isActive</span></code><div class="mdn-anno wrapped before"><button onclick=toggleStatus(this) class=mdn-anno-btn><span>MDN</span></button><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/API/UserActivation/hasBeenActive title="The read-only hasBeenActive property of the UserActivation interface indicates whether the current window has sticky user activation (see sticky activation).">UserActivation/hasBeenActive</a><div class=support><span class="firefox no"><span>Firefox</span><span>No</span></span><span class="safari yes"><span>Safari</span><span>16.4+</span></span><span class="chrome yes"><span>Chrome</span><span>72+</span></span><hr><span class="opera unknown"><span>Opera</span><span>?</span></span><span class="edge_blink yes"><span>Edge</span><span>79+</span></span><hr><span class="edge unknown"><span>Edge (Legacy)</span><span>?</span></span><span class="ie no"><span>Internet Explorer</span><span>No</span></span><hr><span class="firefox_android unknown"><span>Firefox Android</span><span>?</span></span><span class="safari_ios unknown"><span>Safari iOS</span><span>?</span></span><span class="chrome_android unknown"><span>Chrome Android</span><span>?</span></span><span class="webview_android unknown"><span>WebView Android</span><span>?</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android unknown"><span>Opera Android</span><span>?</span></span></div></div></div><dd>
+    <p>Returns whether the window has <span>transient activation</span>.</p>
+   </dl>
+
+  
+
+
+  <h3 id=activation><span class=secno>6.5</span> Activation behavior of elements<a href=#activation class=self-link></a></h3>
+
+  <p>Certain elements in HTML have an <a id=activation:activation-behaviour href=https://dom.spec.whatwg.org/#eventtarget-activation-behavior data-x-internal=activation-behaviour>activation behavior</a>, which means that the user
+  can activate them. This is always caused by a <code id=activation:event-click><a data-x-internal=event-click href=https://w3c.github.io/uievents/#event-type-click>click</a></code> event.</p>
+
+  
+
+  
+
+  <dl class=domintro><dt><code><var>element</var>.<span id=dom-click>click</span>()</code><dd><p>Acts as if the element was clicked.</dl>
+
+  
+
+  <h4 id=the-toggleevent-interface><span class=secno>6.5.1</span> The <code>ToggleEvent</code> interface<a href=#the-toggleevent-interface class=self-link></a></h4>
+
+  
+
+  <dl class=domintro><dt><code><var>event</var>.<a href=#dom-toggleevent-oldstate-2 id=dom-toggleevent-oldstate>oldState</a></code><div class="mdn-anno wrapped before"><button onclick=toggleStatus(this) class=mdn-anno-btn><b title="Support in all current engines." class=all-engines-flag>✔</b><span>MDN</span></button><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/API/ToggleEvent/oldState title="The oldState read-only property of the ToggleEvent interface is a string representing the state the element is transitioning from.">ToggleEvent/oldState</a><p class=all-engines-text>Support in all current engines.<div class=support><span class="firefox yes"><span>Firefox</span><span title="Requires setting a user preference or runtime flag.">🔰 114+</span></span><span class="safari yes"><span>Safari</span><span>17+</span></span><span class="chrome yes"><span>Chrome</span><span>114+</span></span><hr><span class="opera unknown"><span>Opera</span><span>?</span></span><span class="edge_blink yes"><span>Edge</span><span>114+</span></span><hr><span class="edge unknown"><span>Edge (Legacy)</span><span>?</span></span><span class="ie no"><span>Internet Explorer</span><span>No</span></span><hr><span class="firefox_android unknown"><span>Firefox Android</span><span>?</span></span><span class="safari_ios unknown"><span>Safari iOS</span><span>?</span></span><span class="chrome_android unknown"><span>Chrome Android</span><span>?</span></span><span class="webview_android unknown"><span>WebView Android</span><span>?</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android unknown"><span>Opera Android</span><span>?</span></span></div></div></div><dd>
+    <p>Set to "<code>closed</code>" when transitioning from closed to open, or set to
+    "<code>open</code>" when transitioning from open to closed.</p>
+   <dt><code><var>event</var>.<a href=#dom-toggleevent-newstate-2 id=dom-toggleevent-newstate>newState</a></code><div class="mdn-anno wrapped before"><button onclick=toggleStatus(this) class=mdn-anno-btn><b title="Support in all current engines." class=all-engines-flag>✔</b><span>MDN</span></button><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/API/ToggleEvent/newState title="The newState read-only property of the ToggleEvent interface is a string representing the state the element is transitioning to.">ToggleEvent/newState</a><p class=all-engines-text>Support in all current engines.<div class=support><span class="firefox yes"><span>Firefox</span><span title="Requires setting a user preference or runtime flag.">🔰 114+</span></span><span class="safari yes"><span>Safari</span><span>17+</span></span><span class="chrome yes"><span>Chrome</span><span>114+</span></span><hr><span class="opera unknown"><span>Opera</span><span>?</span></span><span class="edge_blink yes"><span>Edge</span><span>114+</span></span><hr><span class="edge unknown"><span>Edge (Legacy)</span><span>?</span></span><span class="ie no"><span>Internet Explorer</span><span>No</span></span><hr><span class="firefox_android unknown"><span>Firefox Android</span><span>?</span></span><span class="safari_ios unknown"><span>Safari iOS</span><span>?</span></span><span class="chrome_android unknown"><span>Chrome Android</span><span>?</span></span><span class="webview_android unknown"><span>WebView Android</span><span>?</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android unknown"><span>Opera Android</span><span>?</span></span></div></div></div><dd>
+    <p>Set to "<code>open</code>" when transitioning from closed to open, or set to "<code>closed</code>" when transitioning from open to closed.</p>
+   <dt><code><var>event</var>.<a href=#dom-toggleevent-source-2 id=dom-toggleevent-source>source</a></code><dd>
+    <p>Set to the element which initiated the toggle, which can be set up with the <code id=the-toggleevent-interface:attr-popovertarget><a href=popover.html#attr-popovertarget>popovertarget</a></code> and <code id=the-toggleevent-interface:attr-button-commandfor><a href=form-elements.html#attr-button-commandfor>commandfor</a></code> attributes. If there is no source element,
+    then it is set to null.</p>
+   </dl>
+
+  <div data-algorithm="">
+  <p>The <dfn data-dfn-for=ToggleEvent id=dom-toggleevent-oldstate-2 data-dfn-type=attribute><code>oldState</code></dfn> and <dfn data-dfn-for=ToggleEvent id=dom-toggleevent-newstate-2 data-dfn-type=attribute><code>newState</code></dfn> attributes must return the values they are
+  initialized to.</p>
+  </div>
+
+  <div data-algorithm="">
+  <p>The <dfn data-dfn-for=ToggleEvent id=dom-toggleevent-source-2 data-dfn-type=attribute><code>source</code></dfn> getter steps are to return the result of
+  <a href=https://dom.spec.whatwg.org/#retarget id=the-toggleevent-interface:dom-retarget data-x-internal=dom-retarget>retargeting</a> <code id=the-toggleevent-interface:dom-toggleevent-source-2><a href=#dom-toggleevent-source-2>source</a></code> against <a id=the-toggleevent-interface:this href=https://webidl.spec.whatwg.org/#this data-x-internal=this>this</a>'s <code id=the-toggleevent-interface:dom-event-currenttarget><a data-x-internal=dom-event-currenttarget href=https://dom.spec.whatwg.org/#dom-event-currenttarget>currentTarget</a></code>.</p>
+  </div>
+
+  <p class=XXX><a href=https://github.com/whatwg/dom/issues/1328>DOM standard issue #1328</a>
+  tracks how to better standardize associated event data in a way which makes sense on Events.
+  Currently an event attribute initialized to a value cannot also have a getter, and so an internal
+  slot (or map of additional fields) is required to properly specify this.</p>
+
+  <p>A <dfn id=toggle-task-tracker>toggle task tracker</dfn> is a <a id=the-toggleevent-interface:struct href=https://infra.spec.whatwg.org/#struct data-x-internal=struct>struct</a> which has:</p>
+
+  <dl><dt><dfn id=toggle-task-task>task</dfn><dd>A <span>task</span> which fires a <code>ToggleEvent</code>.<dt><dfn id=toggle-task-old-state>old state</dfn><dd>A string which represents the <a href=#toggle-task-task id=the-toggleevent-interface:toggle-task-task>task</a>'s event's value for
+   the <code id=the-toggleevent-interface:dom-toggleevent-oldstate-2><a href=#dom-toggleevent-oldstate-2>oldState</a></code> attribute.</dl>
+
+  <h4 id=the-commandevent-interface><span class=secno>6.5.2</span> The <code>CommandEvent</code> interface<a href=#the-commandevent-interface class=self-link></a></h4>
+
+  
+
+  <dl class=domintro><dt><code><var>event</var>.<a href=#dom-commandevent-command-2 id=dom-commandevent-command>command</a></code><dd>
+    <p>Returns what action the element can take.</p>
+   <dt><code><var>event</var>.<a href=#dom-commandevent-source-2 id=dom-commandevent-source>source</a></code><dd>
+    <p>Returns the <code id=the-commandevent-interface:element><a data-x-internal=element href=https://dom.spec.whatwg.org/#interface-element>Element</a></code> that was interacted with in order to cause this event.</p>
+   </dl>
+
+  <div data-algorithm="">
+  <p>The <dfn data-dfn-for=CommandEvent id=dom-commandevent-command-2 data-dfn-type=attribute><code>command</code></dfn> attribute must return the value it was
+  initialized to.</p>
+  </div>
+
+  <div data-algorithm="">
+  <p>The <dfn data-dfn-for=CommandEvent id=dom-commandevent-source-2 data-dfn-type=attribute><code>source</code></dfn> getter steps are to
+  return the result of <a href=https://dom.spec.whatwg.org/#retarget id=the-commandevent-interface:dom-retarget data-x-internal=dom-retarget>retargeting</a> <code id=the-commandevent-interface:dom-commandevent-source-2><a href=#dom-commandevent-source-2>source</a></code> against <a id=the-commandevent-interface:this href=https://webidl.spec.whatwg.org/#this data-x-internal=this>this</a>'s <code id=the-commandevent-interface:dom-event-currenttarget><a data-x-internal=dom-event-currenttarget href=https://dom.spec.whatwg.org/#dom-event-currenttarget>currentTarget</a></code>.</p>
+  </div>
+
+  <p class=XXX><a href=https://github.com/whatwg/dom/issues/1328>DOM standard issue #1328</a>
+  tracks how to better standardize associated event data in a way which makes sense on Events.
+  Currently an event attribute initialized to a value cannot also have a getter, and so an internal
+  slot (or map of additional fields) is required to properly specify this.</p>
+
+  <h3 id=focus><span class=secno>6.6</span> Focus<a href=#focus class=self-link></a></h3>
+
+  
+  
+  
+  
+
+  
+
+  <h4 id=introduction-7><span class=secno>6.6.1</span> Introduction<a href=#introduction-7 class=self-link></a></h4>
+
+  
+
+  <p>An HTML user interface typically consists of multiple interactive widgets, such as form
+  controls, scrollable regions, links, dialog boxes, browser tabs, and so forth. These widgets form
+  a hierarchy, with some (e.g. browser tabs, dialog boxes) containing others (e.g. links, form
+  controls).</p>
+
+  <p>When interacting with an interface using a keyboard, key input is channeled from the system,
+  through the hierarchy of interactive widgets, to an active widget, which is said to be
+  <a href=#focused id=introduction-7:focused>focused</a>.</p>
+
+  <div class=example>
+
+   <p>Consider an HTML application running in a browser tab running in a graphical environment.
+   Suppose this application had a page with some text controls and links, and was currently showing
+   a modal dialog, which itself had a text control and a button.</p>
+
+   <p>The hierarchy of focusable widgets, in this scenario, would include the browser window, which
+   would have, amongst its children, the browser tab containing the HTML application. The tab itself
+   would have as its children the various links and text controls, as well as the dialog. The dialog
+   itself would have as its children the text control and the button.</p>
+
+   <p><img alt="" src=../images/focus-tree.png width=800 height=450> 
+
+   <p>If the widget with <a href=#focused id=introduction-7:focused-2>focus</a> in this example was the text control in
+   the dialog box, then key input would be channeled from the graphical system to ① the web
+   browser, then to ② the tab, then to ③ the dialog, and finally to ④ the text
+   control.</p>
+
+  </div>
+
+  <p>Keyboard <em>events</em> are always targeted at this <a href=#focused id=introduction-7:focused-3>focused</a> element.</p>
+
+
+  <h4 id=data-model><span class=secno>6.6.2</span> Data model<a href=#data-model class=self-link></a></h4>
+
+  <div data-algorithm="">
+  <p id=tlbc-system-focus>A <a id=data-model:top-level-traversable href=document-sequences.html#top-level-traversable>top-level traversable</a> has <dfn data-dfn-for="top-level
+  traversable" id=system-focus data-export="">system focus</dfn> when it can receive keyboard input channeled from the operating
+  system, possibly targeted at one of its <a href=document-sequences.html#nav-document id=data-model:nav-document>active document</a>'s
+  <a id=data-model:descendant-navigables href=document-sequences.html#descendant-navigables>descendant navigables</a>.</p>
+  </div>
+
+  <p>A <a id=data-model:top-level-traversable-2 href=document-sequences.html#top-level-traversable>top-level traversable</a> has <dfn data-dfn-for="top-level traversable" id=user-attention>user attention</dfn>
+  when its <a id=data-model:system-visibility-state href=document-sequences.html#system-visibility-state>system visibility state</a> is "<code>visible</code>", and it either
+  has <a href=#system-focus id=data-model:system-focus>system focus</a> or user agent widgets directly related to it can receive keyboard
+  input channeled from the operating system.</p>
+  
+
+  <p class=note>User attention is lost when a browser window loses focus, whereas system focus
+  might also be lost to other system widgets in the browser window such as a location bar.</p>
+
+  <div data-algorithm="">
+  <p>A <code>Document</code> <var>d</var> is a <dfn data-dfn-for=Document id=fully-active-descendant-of-a-top-level-traversable-with-user-attention data-export="">fully active descendant of
+  a top-level traversable with user attention</dfn> when <var>d</var> is <a id=data-model:fully-active href=document-sequences.html#fully-active>fully active</a>
+  and <var>d</var>'s <a id=data-model:node-navigable href=document-sequences.html#node-navigable>node navigable</a>'s <a href=document-sequences.html#nav-top id=data-model:nav-top>top-level
+  traversable</a> has <a href=#user-attention id=data-model:user-attention>user attention</a>.</p>
+  </div>
+
+  <p>The term <dfn id=focusable-area>focusable area</dfn> is used to refer to regions of the interface that can further become
+  the target of such keyboard input. Focusable areas can be elements, parts of elements, or other regions
+  managed by the user agent.</p>
+
+  <p>Each <a href=#focusable-area id=data-model:focusable-area>focusable area</a> has a <dfn id=dom-anchor>DOM anchor</dfn>, which is a <code id=data-model:node><a data-x-internal=node href=https://dom.spec.whatwg.org/#interface-node>Node</a></code> object
+  that represents the position of the <a href=#focusable-area id=data-model:focusable-area-2>focusable area</a> in the DOM. (When the <a href=#focusable-area id=data-model:focusable-area-3>focusable
+  area</a> is itself a <code id=data-model:node-2><a data-x-internal=node href=https://dom.spec.whatwg.org/#interface-node>Node</a></code>, it is its own <a href=#dom-anchor id=data-model:dom-anchor>DOM anchor</a>.) The <a href=#dom-anchor id=data-model:dom-anchor-2>DOM anchor</a> is
+  used in some APIs as a substitute for the <a href=#focusable-area id=data-model:focusable-area-4>focusable area</a> when there is no other DOM object
+  to represent the <a href=#focusable-area id=data-model:focusable-area-5>focusable area</a>.</p>
+
+  <p>The following table describes what objects can be <a href=#focusable-area id=data-model:focusable-area-6>focusable
+  areas</a>. The cells in the left column describe objects that can be <a href=#focusable-area id=data-model:focusable-area-7>focusable areas</a>; the cells in the right column describe the <a href=#dom-anchor id=data-model:dom-anchor-3>DOM
+  anchors</a> for those elements. (The cells that span both columns are non-normative examples.)</p>
+
+  <table id=table-fa><thead><tr><th id=th-fa-area><a href=#focusable-area id=data-model:focusable-area-8>Focusable area</a>
+     <th id=th-fa-dom-rep><a href=#dom-anchor id=data-model:dom-anchor-4>DOM anchor</a>
+    <tr><th colspan=2 id=th-fa-examples>Examples
+
+   <tbody><tr><th headers=th-fa-area id=td-fa-1 class=data-header>
+     Elements that meet all the following criteria:
+
+     <ul class=brief><li>the element's <span>tabindex value</span> is non-null, or the element is determined by the
+      user agent to be focusable;<li>the element is either not a <a id=data-model:shadow-host href=https://dom.spec.whatwg.org/#element-shadow-host data-x-internal=shadow-host>shadow host</a>, or has a <a href=https://dom.spec.whatwg.org/#concept-element-shadow-root id=data-model:concept-element-shadow-root data-x-internal=concept-element-shadow-root>shadow root</a> whose <a id=data-model:delegates-focus href=https://dom.spec.whatwg.org/#shadowroot-delegates-focus data-x-internal=delegates-focus>delegates focus</a> is
+      false;<li>the element is not <a href=semantics-other.html#concept-element-disabled id=data-model:concept-element-disabled>actually disabled</a>;<li>the element is not <a href=#inert id=data-model:inert>inert</a>;<li>the element is either <span>being rendered</span>, <span>delegating its rendering to its
+      children</span>, or <a id=data-model:being-used-as-relevant-canvas-fallback-content href=canvas.html#being-used-as-relevant-canvas-fallback-content>being used as relevant canvas fallback content</a>.</ul>
+     <td headers="td-fa-1 th-fa-dom-rep">
+     The element itself.
+    <tr><td headers="td-fa-1 th-fa-examples" colspan=2>
+     <p class=example><code id=data-model:the-iframe-element><a href=iframe-embed-object.html#the-iframe-element>iframe</a></code>, <code id=data-model:the-dialog-element><a href=interactive-elements.html#the-dialog-element>dialog</a></code>, <code id="data-model:text-(type=text)-state-and-search-state-(type=search)"><a href="input.html#text-(type=text)-state-and-search-state-(type=search)">&lt;input type=text></a></code>, sometimes <code id=data-model:the-a-element><a href=text-level-semantics.html#the-a-element>&lt;a
+     href=""></a></code> (depending on platform conventions).
+
+   <tbody><tr><th headers=th-fa-area id=td-fa-2 class=data-header>
+     The shapes of <code id=data-model:the-area-element><a href=image-maps.html#the-area-element>area</a></code> elements in an <a id=data-model:image-map href=image-maps.html#image-map>image map</a> associated with an
+     <code id=data-model:the-img-element><a href=embedded-content.html#the-img-element>img</a></code> element that is <span>being rendered</span> and is not <a href=#inert id=data-model:inert-2>inert</a>.
+     <td headers="td-fa-2 th-fa-dom-rep">
+     The <code id=data-model:the-img-element-2><a href=embedded-content.html#the-img-element>img</a></code> element.
+    <tr><td headers="td-fa-2 th-fa-examples" colspan=2>
+     <div class=example>
+      <p>In the following example, the <code id=data-model:the-area-element-2><a href=image-maps.html#the-area-element>area</a></code> element creates two shapes, one on each
+      image. The <a href=#dom-anchor id=data-model:dom-anchor-5>DOM anchor</a> of the first shape is the first <code id=data-model:the-img-element-3><a href=embedded-content.html#the-img-element>img</a></code> element, and the
+      <a href=#dom-anchor id=data-model:dom-anchor-6>DOM anchor</a> of the second shape is the second <code id=data-model:the-img-element-4><a href=embedded-content.html#the-img-element>img</a></code> element.</p>
+      <pre><code class='html'><c- p>&lt;</c-><c- f>map</c-> <c- e>id</c-><c- o>=</c-><c- s>wallmap</c-><c- p>&gt;&lt;</c-><c- f>area</c-> <c- e>alt</c-><c- o>=</c-><c- s>&quot;Enter Door&quot;</c-> <c- e>coords</c-><c- o>=</c-><c- s>&quot;10,10,100,200&quot;</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;door.html&quot;</c-><c- p>&gt;&lt;/</c-><c- f>map</c-><c- p>&gt;</c->
+...
+<c- p>&lt;</c-><c- f>img</c-> <c- e>src</c-><c- o>=</c-><c- s>&quot;images/innerwall.jpeg&quot;</c-> <c- e>alt</c-><c- o>=</c-><c- s>&quot;There is a white wall here, with a door.&quot;</c-> <c- e>usemap</c-><c- o>=</c-><c- s>&quot;#wallmap&quot;</c-><c- p>&gt;</c->
+...
+<c- p>&lt;</c-><c- f>img</c-> <c- e>src</c-><c- o>=</c-><c- s>&quot;images/outerwall.jpeg&quot;</c-> <c- e>alt</c-><c- o>=</c-><c- s>&quot;There is a red wall here, with a door.&quot;</c-> <c- e>usemap</c-><c- o>=</c-><c- s>&quot;#wallmap&quot;</c-><c- p>&gt;</c-></code></pre>
+     </div>
+
+   <tbody><tr><th headers=th-fa-area id=td-fa-3 class=data-header>
+     The user-agent provided subwidgets of elements that are <span>being rendered</span> and are not
+     <a href=semantics-other.html#concept-element-disabled id=data-model:concept-element-disabled-2>actually disabled</a> or <a href=#inert id=data-model:inert-3>inert</a>.
+     <td headers="td-fa-3 th-fa-dom-rep">
+     The element for which the <a href=#focusable-area id=data-model:focusable-area-9>focusable area</a> is a subwidget.
+    <tr><td headers="td-fa-3 th-fa-examples" colspan=2>
+     <p class=example>The <span>controls in the user
+     interface</span> for a <code id=data-model:the-video-element><a href=media.html#the-video-element>video</a></code> element, the up and down buttons in a spin-control
+     version of <code id="data-model:number-state-(type=number)"><a href="input.html#number-state-(type=number)">&lt;input type=number></a></code>, the part of a
+     <code id=data-model:the-details-element><a href=interactive-elements.html#the-details-element>details</a></code> element's rendering that enables the element to be opened or closed using
+     keyboard input.</p>
+
+   <tbody><tr><th headers=th-fa-area id=td-fa-4 class=data-header>
+     The scrollable regions of elements that are <span>being rendered</span> and are not
+     <a href=#inert id=data-model:inert-4>inert</a>. 
+     <td headers="td-fa-4 th-fa-dom-rep">
+     The element for which the box that the scrollable region scrolls was created.
+    <tr><td headers="td-fa-4 th-fa-examples" colspan=2>
+     <p class=example>The CSS <a id="data-model:'overflow'" href=https://drafts.csswg.org/css-overflow/#propdef-overflow data-x-internal="'overflow'">'overflow'</a> property's 'scroll' value typically creates
+     a scrollable region.</p>
+
+   <tbody><tr><th headers=th-fa-area id=td-fa-5 class=data-header>
+     The <a id=data-model:viewport href=https://drafts.csswg.org/css2/#viewport data-x-internal=viewport>viewport</a> of a <code>Document</code> that has a non-null <a href=document-sequences.html#concept-document-bc id=data-model:concept-document-bc>browsing context</a> and is not <a href=#inert id=data-model:inert-5>inert</a>.
+     <td headers="td-fa-5 th-fa-dom-rep">
+     The <code>Document</code> for which the <a id=data-model:viewport-2 href=https://drafts.csswg.org/css2/#viewport data-x-internal=viewport>viewport</a> was created.
+    <tr><td headers="td-fa-5 th-fa-examples" colspan=2>
+     <p class=example>The contents of an <code id=data-model:the-iframe-element-2><a href=iframe-embed-object.html#the-iframe-element>iframe</a></code>.</p>
+
+   <tbody><tr><th headers=th-fa-area id=td-fa-6 class=data-header>
+     Any other element or part of an element determined by the user agent to be a focusable area,
+     especially to aid with accessibility or to better match platform conventions.
+     <td headers="td-fa-6 th-fa-dom-rep">
+     The element.
+    <tr><td headers="td-fa-6 th-fa-examples" colspan=2>
+     <p class=example>A user agent could make all list item bullets <span>sequentially
+     focusable</span>, so that a user can more easily navigate lists.</p>
+     <p class=example>Similarly, a user agent could make all elements with <code id=data-model:attr-title><a href=dom.html#attr-title>title</a></code> attributes <span>sequentially focusable</span>, so that their
+     advisory information can be accessed.</p>
+
+  </table>
+
+  <p id=bc-focus-ergo-bcc-focus class=note><a href=#bc-focus-ergo-bcc-focus class=self-link></a>A <a id=data-model:navigable-container href=document-sequences.html#navigable-container>navigable container</a> (e.g. an
+  <code id=data-model:the-iframe-element-3><a href=iframe-embed-object.html#the-iframe-element>iframe</a></code>) is a <a href=#focusable-area id=data-model:focusable-area-10>focusable area</a>, but key events routed to a <a id=data-model:navigable-container-2 href=document-sequences.html#navigable-container>navigable
+  container</a> get immediately routed to its <a id=data-model:content-navigable href=document-sequences.html#content-navigable>content navigable</a>'s <a href=document-sequences.html#nav-document id=data-model:nav-document-2>active document</a>. Similarly, in sequential focus navigation a
+  <a id=data-model:navigable-container-3 href=document-sequences.html#navigable-container>navigable container</a> essentially acts merely as a placeholder for its <a id=data-model:content-navigable-2 href=document-sequences.html#content-navigable>content
+  navigable</a>'s <a href=document-sequences.html#nav-document id=data-model:nav-document-3>active document</a>.</p>
+
+  <hr>
+
+  <p>One <a href=#focusable-area id=data-model:focusable-area-11>focusable area</a> in each <code>Document</code> is designated the <dfn id=focused-area-of-the-document>focused
+  area of the document</dfn>. Which control is so designated changes over time, based on algorithms
+  in this specification.</p>
+
+  <p class=note>Even if a document is not <a id=data-model:fully-active-2 href=document-sequences.html#fully-active>fully active</a> and not shown to the user, it
+  can still have a <a href=#focused-area-of-the-document id=data-model:focused-area-of-the-document>focused area of the document</a>. If a document's <a id=data-model:fully-active-3 href=document-sequences.html#fully-active>fully
+  active</a> state changes, its <a href=#focused-area-of-the-document id=data-model:focused-area-of-the-document-2>focused area of the document</a> will stay the same.</p>
+
+  <div data-algorithm="">
+  <p id=currently-focused-area-of-a-top-level-browsing-context>The <dfn id=currently-focused-area-of-a-top-level-traversable>currently focused area of
+  a top-level traversable</dfn> <var>traversable</var> is the <a href=#focusable-area id=data-model:focusable-area-12>focusable area</a>-or-null
+  returned by this algorithm:</p>
+
+  <ol><li><p>If <var>traversable</var> does not have <a href=#system-focus id=data-model:system-focus-2>system focus</a>, then return
+   null.<li><p>Let <var>candidate</var> be <var>traversable</var>'s <a href=document-sequences.html#nav-document id=data-model:nav-document-4>active
+   document</a>.<li><p>While <var>candidate</var>'s <a href=#focused-area-of-the-document id=data-model:focused-area-of-the-document-3>focused
+   area</a> is a <a id=data-model:navigable-container-4 href=document-sequences.html#navigable-container>navigable container</a> with a non-null <a id=data-model:content-navigable-3 href=document-sequences.html#content-navigable>content
+   navigable</a>: set <var>candidate</var> to the <a href=document-sequences.html#nav-document id=data-model:nav-document-5>active
+   document</a> of that <a id=data-model:navigable-container-5 href=document-sequences.html#navigable-container>navigable container</a>'s <a id=data-model:content-navigable-4 href=document-sequences.html#content-navigable>content
+   navigable</a>.<li><p>If <var>candidate</var>'s <a href=#focused-area-of-the-document id=data-model:focused-area-of-the-document-4>focused area</a>
+   is non-null, set <var>candidate</var> to <var>candidate</var>'s <a href=#focused-area-of-the-document id=data-model:focused-area-of-the-document-5>focused area</a>.<li><p>Return <var>candidate</var>.</ol>
+  </div>
+
+  <div data-algorithm="">
+  <p id=current-focus-chain-of-a-top-level-browsing-context>The <dfn id=current-focus-chain-of-a-top-level-traversable>current focus chain of a
+  top-level traversable</dfn> <var>traversable</var> is the <span>focus chain</span> of the <a href=#currently-focused-area-of-a-top-level-traversable id=data-model:currently-focused-area-of-a-top-level-traversable>currently focused area</a> of
+  <var>traversable</var>, if <var>traversable</var> is non-null, or an empty list otherwise.</p>
+  </div>
+
+  <div data-algorithm="">
+  <p>An element that is the <a href=#dom-anchor id=data-model:dom-anchor-7>DOM anchor</a> of a <a href=#focusable-area id=data-model:focusable-area-13>focusable area</a> is said to
+  <dfn id=gains-focus>gain focus</dfn> when that <a href=#focusable-area id=data-model:focusable-area-14>focusable area</a> becomes the
+  <a href=#currently-focused-area-of-a-top-level-traversable id=data-model:currently-focused-area-of-a-top-level-traversable-2>currently focused area of a top-level traversable</a>. When an element is the <a href=#dom-anchor id=data-model:dom-anchor-8>DOM
+  anchor</a> of a <a href=#focusable-area id=data-model:focusable-area-15>focusable area</a> of the <a href=#currently-focused-area-of-a-top-level-traversable id=data-model:currently-focused-area-of-a-top-level-traversable-3>currently focused area of a top-level
+  traversable</a>, it is <dfn id=focused>focused</dfn>.</p>
+  </div>
+
+  
+
+  <h4 id=the-tabindex-attribute><span class=secno>6.6.3</span> The <code id=the-tabindex-attribute:attr-tabindex><a href=#attr-tabindex>tabindex</a></code> attribute<a href=#the-tabindex-attribute class=self-link></a></h4>
+
+  <div class="mdn-anno wrapped before"><button onclick=toggleStatus(this) class=mdn-anno-btn><b title="Support in all current engines." class=all-engines-flag>✔</b><span>MDN</span></button><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/tabindex title="The tabindex global attribute allows developers to make HTML elements focusable, allow or prevent them from being sequentially focusable (usually with the Tab key, hence the name) and determine their relative ordering for sequential focus navigation.">Global_attributes/tabindex</a><p class=all-engines-text>Support in all current engines.<div class=support><span class="firefox yes"><span>Firefox</span><span>1.5+</span></span><span class="safari yes"><span>Safari</span><span>4+</span></span><span class="chrome yes"><span>Chrome</span><span>1+</span></span><hr><span class="opera unknown"><span>Opera</span><span>?</span></span><span class="edge_blink yes"><span>Edge</span><span>79+</span></span><hr><span class="edge yes"><span>Edge (Legacy)</span><span>12+</span></span><span class="ie yes"><span>Internet Explorer</span><span>Yes</span></span><hr><span class="firefox_android unknown"><span>Firefox Android</span><span>?</span></span><span class="safari_ios unknown"><span>Safari iOS</span><span>?</span></span><span class="chrome_android unknown"><span>Chrome Android</span><span>?</span></span><span class="webview_android unknown"><span>WebView Android</span><span>?</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android unknown"><span>Opera Android</span><span>?</span></span></div></div></div><p>The <dfn data-dfn-for=htmlsvg-global id=attr-tabindex data-dfn-type=element-attr><code>tabindex</code></dfn>
+  content attribute allows authors to make an element and regions that have the element as its
+  <a href=#dom-anchor id=the-tabindex-attribute:dom-anchor>DOM anchor</a> be <a href=#focusable-area id=the-tabindex-attribute:focusable-area>focusable areas</a>, allow or prevent
+  them from being <span>sequentially focusable</span>, and determine their relative ordering for
+  <span>sequential focus navigation</span>.</p>
+
+  <p>The name "tab index" comes from the common use of the <kbd>Tab</kbd> key to navigate through
+  the focusable elements. The term "tabbing" refers to moving forward through <span>sequentially
+  focusable</span> <a href=#focusable-area id=the-tabindex-attribute:focusable-area-2>focusable areas</a>.</p>
+
+  <p>The <code id=the-tabindex-attribute:attr-tabindex-2><a href=#attr-tabindex>tabindex</a></code> attribute, if specified, must have a value
+  that is a <a id=the-tabindex-attribute:valid-integer href=common-microsyntaxes.html#valid-integer>valid integer</a>. Positive numbers specify the relative position of the
+  element's <a href=#focusable-area id=the-tabindex-attribute:focusable-area-3>focusable areas</a> in the <span>sequential focus
+  navigation order</span>, and negative numbers indicate that the control is not
+  <span>sequentially focusable</span>.</p>
+
+  <p>Developers should use caution when using values other than 0 or −1 for their <code id=the-tabindex-attribute:attr-tabindex-3><a href=#attr-tabindex>tabindex</a></code> attributes as this is complicated to do correctly.</p>
+
+  <div class=note>
+   <p>The following provides a  summary of the behaviors of the
+   possible <code id=the-tabindex-attribute:attr-tabindex-4><a href=#attr-tabindex>tabindex</a></code> attribute values.</p>
+
+   <dl><dt>omitted (or non-integer values)<dd>The user agent will decide whether the element is <span>focusable</span>, and if it is,
+    whether it is <span>sequentially focusable</span> or <span>click focusable</span> (or both).<dt>−1 (or other negative integer values)<dd>Causes the element to be <span>focusable</span>, and indicates that the author would prefer
+    the element to be <span>click focusable</span> but not <span>sequentially focusable</span>. The
+    user agent might ignore this preference for click and sequential focusability, e.g., for
+    specific element types according to platform conventions, or for keyboard-only users.<dt>0<dd>Causes the element to be <span>focusable</span>, and indicates that the author would prefer
+    the element to be both <span>click focusable</span> and <span>sequentially focusable</span>. The
+    user agent might ignore this preference for click and sequential focusability.<dt>positive integer values<dd>Behaves the same as 0, but in addition creates a relative ordering within a
+    <span>tabindex-ordered focus navigation scope</span>, so that elements with higher <code id=the-tabindex-attribute:attr-tabindex-5><a href=#attr-tabindex>tabindex</a></code> attribute value come later.</dl>
+
+   <p>Note that the <code id=the-tabindex-attribute:attr-tabindex-6><a href=#attr-tabindex>tabindex</a></code> attribute cannot be used to make
+   an element non-focusable. The only way a page author can do that is by <a href=semantics-other.html#concept-element-disabled id=the-tabindex-attribute:concept-element-disabled>disabling</a> the element, or making it
+   <a href=#inert id=the-tabindex-attribute:inert>inert</a>.</p>
+  </div>
+
+  
+
+
+  
+
+
+  <h4 id=focus-management-apis><span class=secno>6.6.4</span> Focus management APIs<a href=#focus-management-apis class=self-link></a></h4>
+
+  
+
+  <dl class=domintro><dt><code><var>documentOrShadowRoot</var>.<span id=dom-documentorshadowroot-activeelement>activeElement</span></code><dd>
+    <p>Returns the deepest element in <var>documentOrShadowRoot</var> through which or to which key
+    events are being routed. This is, roughly speaking, the focused element in the document.</p>
+
+    <p>For the purposes of this API, when a <a id=focus-management-apis:child-navigable href=document-sequences.html#child-navigable>child navigable</a> is focused, its <a href=document-sequences.html#nav-container id=focus-management-apis:nav-container>container</a> is <a href=#bc-focus-ergo-bcc-focus>focused</a>
+    within its <a href=document-sequences.html#nav-parent id=focus-management-apis:nav-parent>parent</a>'s <a href=document-sequences.html#nav-document id=focus-management-apis:nav-document>active
+    document</a>. For example, if the user moves the focus to a text control in an
+    <code id=focus-management-apis:the-iframe-element><a href=iframe-embed-object.html#the-iframe-element>iframe</a></code>, the <code id=focus-management-apis:the-iframe-element-2><a href=iframe-embed-object.html#the-iframe-element>iframe</a></code> is the element returned by the <code id=focus-management-apis:dom-documentorshadowroot-activeelement><a href=#dom-documentorshadowroot-activeelement>activeElement</a></code> API in the
+    <code id=focus-management-apis:the-iframe-element-3><a href=iframe-embed-object.html#the-iframe-element>iframe</a></code>'s <a id=focus-management-apis:node-document href=https://dom.spec.whatwg.org/#concept-node-document data-x-internal=node-document>node document</a>.</p>
+
+    <p>Similarly, when the focused element is in a different <a id=focus-management-apis:node-tree href=https://dom.spec.whatwg.org/#concept-node-tree data-x-internal=node-tree>node tree</a> than
+    <var>documentOrShadowRoot</var>, the element returned will be the <a href=https://dom.spec.whatwg.org/#concept-documentfragment-host id=focus-management-apis:concept-documentfragment-host data-x-internal=concept-documentfragment-host>host</a> that's located in the same <a id=focus-management-apis:node-tree-2 href=https://dom.spec.whatwg.org/#concept-node-tree data-x-internal=node-tree>node
+    tree</a> as <var>documentOrShadowRoot</var> if  <var>documentOrShadowRoot</var> is a
+    <a id=focus-management-apis:shadow-including-inclusive-ancestor href=https://dom.spec.whatwg.org/#concept-shadow-including-inclusive-ancestor data-x-internal=shadow-including-inclusive-ancestor>shadow-including inclusive ancestor</a> of the focused element, and null if not.</p>
+   <dt><code><var>document</var>.<span id=dom-document-hasfocus>hasFocus</span>()</code><dd>
+    <p>Returns true if key events are being routed through or to <var>document</var>; otherwise,
+    returns false. Roughly speaking, this corresponds to <var>document</var>, or a document nested
+    inside <var>document</var>, being focused.</p>
+   <dt><code><var>window</var>.<span id=dom-window-focus>focus</span>()</code><dd>
+    
+
+    <p>Moves the focus to <var>window</var>'s <span>navigable</span>, if
+    any.</p>
+   <dt><code><var>element</var>.<span id=dom-focus>focus</span>()</code><dt><code><var>element</var>.<a href=#dom-focus id=focus-management-apis:dom-focus>focus</a>({ <span>preventScroll</span>, <span>focusVisible</span> })</code><dd>
+    <p>Moves the focus to <var>element</var>.</p>
+
+    <p>If <var>element</var> is a <a id=focus-management-apis:navigable-container href=document-sequences.html#navigable-container>navigable container</a>, moves the focus to its
+    <a id=focus-management-apis:content-navigable href=document-sequences.html#content-navigable>content navigable</a> instead.</p>
+
+    <p>By default, this method also scrolls <var>element</var> into view. Providing the <code>preventScroll</code> option and setting it to true
+    prevents this behavior.</p>
+
+    <p>By default, user agents use <a id=focus-management-apis:implementation-defined href=https://infra.spec.whatwg.org/#implementation-defined data-x-internal=implementation-defined>implementation-defined</a> heuristics to determine
+    whether to <a id=focus-management-apis:indicate-focus href=https://drafts.csswg.org/selectors/#indicate-focus data-x-internal=indicate-focus>indicate focus</a> via a focus ring. Providing the <code>focusVisible</code> option and setting it to true will
+    ensure the focus ring is always visible.</p>
+   <dt><code><var>element</var>.<span id=dom-blur>blur</span>()</code><dd>
+    <p>Moves the focus to the <a id=focus-management-apis:viewport href=https://drafts.csswg.org/css2/#viewport data-x-internal=viewport>viewport</a>. Use of this method is discouraged; if you want
+    to focus the <a id=focus-management-apis:viewport-2 href=https://drafts.csswg.org/css2/#viewport data-x-internal=viewport>viewport</a>, call the <code id=focus-management-apis:dom-focus-2><a href=#dom-focus>focus()</a></code> method on
+    the <code>Document</code>'s <a id=focus-management-apis:document-element href=https://dom.spec.whatwg.org/#document-element data-x-internal=document-element>document element</a>.</p>
+
+    <p>Do not use this method to hide the focus ring if you find the focus ring unsightly. Instead,
+    use the <code id=focus-management-apis::focus-visible><a data-x-internal=:focus-visible href=https://drafts.csswg.org/selectors/#the-focus-visible-pseudo>:focus-visible</a></code> pseudo-class to override the <a id="focus-management-apis:'outline'" href=https://drafts.csswg.org/css-ui/#outline data-x-internal="'outline'">'outline'</a>
+    property, and provide a different way to show what element is focused. Be aware that if an
+    alternative focusing style isn't made available, the page will be significantly less usable for
+    people who primarily navigate pages using a keyboard, or those with reduced vision who use focus
+    outlines to help them navigate the page.</p>
+
+    
+
+    <div class=example>
+
+     <p>For example, to hide the outline from <code id=focus-management-apis:the-textarea-element><a href=form-elements.html#the-textarea-element>textarea</a></code> elements and instead use a
+     yellow background to indicate focus, you could use:</p>
+
+     <pre><code class='css'><c- f>textarea:focus-visible </c-><c- p>{</c-> <c- k>outline</c-><c- p>:</c-> none<c- p>;</c-> <c- k>background</c-><c- p>:</c-> yellow<c- p>;</c-> <c- k>color</c-><c- p>:</c-> black<c- p>;</c-> <c- p>}</c-></code></pre>
+
+    </div>
+   </dl>
+
+  
+
+
+  <h4 id=the-autofocus-attribute><span class=secno>6.6.5</span> <span id=autofocusing-a-form-control:-the-autofocus-attribute></span>The <code id=the-autofocus-attribute:attr-fe-autofocus><a href=#attr-fe-autofocus>autofocus</a></code> attribute<a href=#the-autofocus-attribute class=self-link></a></h4>
+
+  <p>The <dfn data-dfn-for=html-global id=attr-fe-autofocus data-dfn-type=element-attr><code>autofocus</code></dfn>
+  content attribute allows the author to indicate that an element is to be focused as soon as the
+  page is loaded, allowing the user to just start typing without having to manually focus the main
+  element.</p>
+
+  <p>When the <code id=the-autofocus-attribute:attr-fe-autofocus-2><a href=#attr-fe-autofocus>autofocus</a></code> attribute is specified on an element
+  inside <code id=the-autofocus-attribute:the-dialog-element><a href=interactive-elements.html#the-dialog-element>dialog</a></code> elements or <a id=the-autofocus-attribute:html-elements href=infrastructure.html#html-elements>HTML elements</a> whose <code id=the-autofocus-attribute:attr-popover><a href=popover.html#attr-popover>popover</a></code> attribute is set, then it will be focused when the dialog or
+  popover becomes shown.</p>
+
+  <p>The <code id=the-autofocus-attribute:attr-fe-autofocus-3><a href=#attr-fe-autofocus>autofocus</a></code> attribute is a <a id=the-autofocus-attribute:boolean-attribute href=common-microsyntaxes.html#boolean-attribute>boolean
+  attribute</a>.</p>
+
+  <div data-algorithm="">
+  <p>To find the <dfn id=nearest-ancestor-autofocus-scoping-root-element>nearest ancestor autofocus scoping root element</dfn> given an
+  <code id=the-autofocus-attribute:element><a data-x-internal=element href=https://dom.spec.whatwg.org/#interface-element>Element</a></code> <var>element</var>:</p>
+
+  <ol><li><p>If <var>element</var> is a <code id=the-autofocus-attribute:the-dialog-element-2><a href=interactive-elements.html#the-dialog-element>dialog</a></code> element, then return
+   <var>element</var>.<li><p>If <var>element</var>'s <code id=the-autofocus-attribute:attr-popover-2><a href=popover.html#attr-popover>popover</a></code> attribute is not in the
+   <a href=popover.html#attr-popover-none-state id=the-autofocus-attribute:attr-popover-none-state>No Popover</a> state, then return
+   <var>element</var>.<li><p>Let <var>ancestor</var> be <var>element</var>.<li>
+    <p>While <var>ancestor</var> has a <a id=the-autofocus-attribute:parent-element href=https://dom.spec.whatwg.org/#parent-element data-x-internal=parent-element>parent element</a>:</p>
+
+    <ol><li><p>Set <var>ancestor</var> to <var>ancestor</var>'s <a id=the-autofocus-attribute:parent-element-2 href=https://dom.spec.whatwg.org/#parent-element data-x-internal=parent-element>parent element</a>.<li><p>If <var>ancestor</var> is a <code id=the-autofocus-attribute:the-dialog-element-3><a href=interactive-elements.html#the-dialog-element>dialog</a></code> element, then return
+     <var>ancestor</var>.<li><p>If <var>ancestor</var>'s <code id=the-autofocus-attribute:attr-popover-3><a href=popover.html#attr-popover>popover</a></code> attribute is not in
+     the <a href=popover.html#attr-popover-none-state id=the-autofocus-attribute:attr-popover-none-state-2>No Popover</a> state, then return
+     <var>ancestor</var>.</ol>
+   <li><p>Return <var>ancestor</var>.</ol>
+  </div>
+
+  <p>There must not be two elements with the same <a href=#nearest-ancestor-autofocus-scoping-root-element id=the-autofocus-attribute:nearest-ancestor-autofocus-scoping-root-element>nearest ancestor autofocus scoping root
+  element</a> that both have the <code id=the-autofocus-attribute:attr-fe-autofocus-4><a href=#attr-fe-autofocus>autofocus</a></code> attribute
+  specified.</p>
+
+  
+
+  <div class=example>
+   <p>In the following snippet, the text control would be focused when
+   the document was loaded.</p>
+   <pre><code class='html'><c- p>&lt;</c-><c- f>input</c-> <c- e>maxlength</c-><c- o>=</c-><c- s>&quot;256&quot;</c-> <c- e>name</c-><c- o>=</c-><c- s>&quot;q&quot;</c-> <c- e>value</c-><c- o>=</c-><c- s>&quot;&quot;</c-> <c- e>autofocus</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>input</c-> <c- e>type</c-><c- o>=</c-><c- s>&quot;submit&quot;</c-> <c- e>value</c-><c- o>=</c-><c- s>&quot;Search&quot;</c-><c- p>&gt;</c-></code></pre>
+  </div>
+
+  <div class=example>
+   <p>The <code id=the-autofocus-attribute:attr-fe-autofocus-5><a href=#attr-fe-autofocus>autofocus</a></code> attribute applies to all elements, not
+   just to form controls. This allows examples such as the following:</p>
+   <pre><code class='html'><c- p>&lt;</c-><c- f>div</c-> <c- e>contenteditable</c-> <c- e>autofocus</c-><c- p>&gt;</c->Edit <c- p>&lt;</c-><c- f>strong</c-><c- p>&gt;</c->me!<c- p>&lt;/</c-><c- f>strong</c-><c- p>&gt;&lt;</c-><c- f>div</c-><c- p>&gt;</c-></code></pre>
+  </div>
+
+
+
+  <h3 id=assigning-keyboard-shortcuts><span class=secno>6.7</span> Assigning keyboard shortcuts<a href=#assigning-keyboard-shortcuts class=self-link></a></h3>
+
+  <h4 id=introduction-8><span class=secno>6.7.1</span> Introduction<a href=#introduction-8 class=self-link></a></h4>
+
+  
+
+  <p>Each element that can be activated or focused can be assigned a single key combination to
+  activate it, using the <code id=introduction-8:the-accesskey-attribute><a href=#the-accesskey-attribute>accesskey</a></code> attribute.</p>
+
+  <p>The exact shortcut is determined by the user agent, based on information about the user's
+  keyboard, what keyboard shortcuts already exist on the platform, and what other shortcuts have
+  been specified on the page, using the information provided in the <code id=introduction-8:the-accesskey-attribute-2><a href=#the-accesskey-attribute>accesskey</a></code> attribute as a guide.</p>
+
+  <p>In order to ensure that a relevant keyboard shortcut is available on a wide variety of input
+  devices, the author can provide a number of alternatives in the <code id=introduction-8:the-accesskey-attribute-3><a href=#the-accesskey-attribute>accesskey</a></code> attribute.</p>
+
+  <p>Each alternative consists of a single character, such as a letter or digit.</p>
+
+  <p>User agents can provide users with a list of the keyboard shortcuts, but authors are encouraged
+  to do so also. The <code>accessKeyLabel</code> IDL attribute returns a
+  string representing the actual key combination assigned by the user agent.</p>
+
+  <div class=example>
+
+   <p>In this example, an author has provided a button that can be invoked using a shortcut key. To
+   support full keyboards, the author has provided "C" as a possible key. To support devices
+   equipped only with numeric keypads, the author has provided "1" as another possible key.</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>input</c-> <c- e>type</c-><c- o>=</c-><c- s>button</c-> <c- e>value</c-><c- o>=</c-><c- s>Collect</c-> <c- e>onclick</c-><c- o>=</c-><c- s>&quot;collect()&quot;</c->
+       <strong><c- e>accesskey</c-><c- o>=</c-><c- s>&quot;C 1&quot;</c-></strong> <c- e>id</c-><c- o>=</c-><c- s>c</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+  <div class=example>
+
+   <p>To tell the user what the shortcut key is, the author has here opted to explicitly
+   add the key combination to the button's label:</p>
+
+   <pre><code class='js'><c- a>function</c-> addShortcutKeyLabel<c- p>(</c->button<c- p>)</c-> <c- p>{</c->
+<strong>  <c- k>if</c-> <c- p>(</c->button<c- p>.</c->accessKeyLabel <c- o>!=</c-> <c- t>&apos;&apos;</c-><c- p>)</c->
+    button<c- p>.</c->value <c- o>+=</c-> <c- t>&apos; (&apos;</c-> <c- o>+</c-> button<c- p>.</c->accessKeyLabel <c- o>+</c-> <c- t>&apos;)&apos;</c-><c- p>;</c-></strong>
+<c- p>}</c->
+addShortcutKeyLabel<c- p>(</c->document<c- p>.</c->getElementById<c- p>(</c-><c- t>&apos;c&apos;</c-><c- p>));</c-></code></pre>
+
+   <p>Browsers on different platforms will show different labels, even for the same key combination,
+   based on the convention prevalent on that platform. For example, if the key combination is the
+   Control key, the Shift key, and the letter C, a Windows browser might display
+   "<samp>Ctrl+Shift+C</samp>", whereas a Mac browser might display "<samp>^⇧C</samp>", while
+   an Emacs browser might just display "<samp>C-C</samp>". Similarly, if the key combination is the
+   Alt key and the Escape key, Windows might use "<samp>Alt+Esc</samp>", Mac might use
+   "<samp>⌥⎋</samp>", and an Emacs browser might use "<samp>M-ESC</samp>" or
+   "<samp>ESC ESC</samp>".</p>
+
+   <p>In general, therefore, it is unwise to attempt to parse the value returned from the <code>accessKeyLabel</code> IDL attribute.</p>
+
+  </div>
+
+
+  <h4 id=the-accesskey-attribute><span class=secno>6.7.2</span> The <dfn data-dfn-for=html-global data-dfn-type=element-attr><code>accesskey</code></dfn>
+  attribute<a href=#the-accesskey-attribute class=self-link></a></h4><div class="mdn-anno wrapped"><button onclick=toggleStatus(this) class=mdn-anno-btn><b title="Support in all current engines." class=all-engines-flag>✔</b><span>MDN</span></button><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/accesskey title="The accesskey global attribute provides a hint for generating a keyboard shortcut for the current element. The attribute value must consist of a single printable character (which includes accented and other characters that can be generated by the keyboard).">Global_attributes/accesskey</a><p class=all-engines-text>Support in all current engines.<div class=support><span class="firefox yes"><span>Firefox</span><span>1+</span></span><span class="safari yes"><span>Safari</span><span>4+</span></span><span class="chrome yes"><span>Chrome</span><span>1+</span></span><hr><span class="opera unknown"><span>Opera</span><span>?</span></span><span class="edge_blink yes"><span>Edge</span><span>79+</span></span><hr><span class="edge yes"><span>Edge (Legacy)</span><span>12+</span></span><span class="ie yes"><span>Internet Explorer</span><span>Yes</span></span><hr><span class="firefox_android unknown"><span>Firefox Android</span><span>?</span></span><span class="safari_ios unknown"><span>Safari iOS</span><span>?</span></span><span class="chrome_android unknown"><span>Chrome Android</span><span>?</span></span><span class="webview_android unknown"><span>WebView Android</span><span>?</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android unknown"><span>Opera Android</span><span>?</span></span></div></div></div>
+
+  <p>All <a id=the-accesskey-attribute:html-elements href=infrastructure.html#html-elements>HTML elements</a> may have the <code id=the-accesskey-attribute:the-accesskey-attribute><a href=#the-accesskey-attribute>accesskey</a></code>
+  content attribute set. The <code id=the-accesskey-attribute:the-accesskey-attribute-2><a href=#the-accesskey-attribute>accesskey</a></code> attribute's value is used
+  by the user agent as a guide for creating a keyboard shortcut that activates or focuses the
+  element.</p>
+
+  <p>If specified, the value must be an <a id=the-accesskey-attribute:ordered-set-of-unique-space-separated-tokens href=common-microsyntaxes.html#ordered-set-of-unique-space-separated-tokens>ordered set of unique space-separated tokens</a>
+  none of which are <a id=the-accesskey-attribute:identical-to href=https://infra.spec.whatwg.org/#string-is data-x-internal=identical-to>identical to</a> another token and each of which must be exactly one
+  code point in length.</p>
+
+  <div class=example>
+
+   <p>In the following example, a variety of links are given with access keys so that keyboard users
+   familiar with the site can more quickly navigate to the relevant pages:</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>nav</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>a</c-> <c- e>title</c-><c- o>=</c-><c- s>&quot;Consortium Activities&quot;</c-> <c- e>accesskey</c-><c- o>=</c-><c- s>&quot;A&quot;</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/Consortium/activities&quot;</c-><c- p>&gt;</c->Activities<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c-> |
+  <c- p>&lt;</c-><c- f>a</c-> <c- e>title</c-><c- o>=</c-><c- s>&quot;Technical Reports and Recommendations&quot;</c-> <c- e>accesskey</c-><c- o>=</c-><c- s>&quot;T&quot;</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/TR/&quot;</c-><c- p>&gt;</c->Technical Reports<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c-> |
+  <c- p>&lt;</c-><c- f>a</c-> <c- e>title</c-><c- o>=</c-><c- s>&quot;Alphabetical Site Index&quot;</c-> <c- e>accesskey</c-><c- o>=</c-><c- s>&quot;S&quot;</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/Consortium/siteindex&quot;</c-><c- p>&gt;</c->Site Index<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c-> |
+  <c- p>&lt;</c-><c- f>a</c-> <c- e>title</c-><c- o>=</c-><c- s>&quot;About This Site&quot;</c-> <c- e>accesskey</c-><c- o>=</c-><c- s>&quot;B&quot;</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/Consortium/&quot;</c-><c- p>&gt;</c->About Consortium<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c-> |
+  <c- p>&lt;</c-><c- f>a</c-> <c- e>title</c-><c- o>=</c-><c- s>&quot;Contact Consortium&quot;</c-> <c- e>accesskey</c-><c- o>=</c-><c- s>&quot;C&quot;</c-> <c- e>href</c-><c- o>=</c-><c- s>&quot;/Consortium/contact&quot;</c-><c- p>&gt;</c->Contact<c- p>&lt;/</c-><c- f>a</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>nav</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+  <div class=example>
+
+   <p>In the following example, the search field is given two possible access keys, "s" and "0" (in
+   that order). A user agent on a device with a full keyboard might pick <kbd><kbd>Ctrl</kbd> +
+   <kbd>Alt</kbd> + <kbd>S</kbd></kbd> as the shortcut key, while a user agent on a small device
+   with just a numeric keypad might pick just the plain unadorned key <kbd><kbd>0</kbd></kbd>:</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>form</c-> <c- e>action</c-><c- o>=</c-><c- s>&quot;/search&quot;</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>label</c-><c- p>&gt;</c->Search: <c- p>&lt;</c-><c- f>input</c-> <c- e>type</c-><c- o>=</c-><c- s>&quot;search&quot;</c-> <c- e>name</c-><c- o>=</c-><c- s>&quot;q&quot;</c-> <c- e>accesskey</c-><c- o>=</c-><c- s>&quot;s 0&quot;</c-><c- p>&gt;&lt;/</c-><c- f>label</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>input</c-> <c- e>type</c-><c- o>=</c-><c- s>&quot;submit&quot;</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>form</c-><c- p>&gt;</c-></code></pre>
+
+  </div>
+
+  <div class=example>
+
+   <p>In the following example, a button has possible access keys described. A script then tries to
+   update the button's label to advertise the key combination the user agent selected.</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>input</c-> <c- e>type</c-><c- o>=</c-><c- s>submit</c-> <c- e>accesskey</c-><c- o>=</c-><c- s>&quot;N @ 1&quot;</c-> <c- e>value</c-><c- o>=</c-><c- s>&quot;Compose&quot;</c-><c- p>&gt;</c->
+...
+<c- p>&lt;</c-><c- f>script</c-><c- p>&gt;</c->
+ <c- a>function</c-> labelButton<c- p>(</c->button<c- p>)</c-> <c- p>{</c->
+   <c- k>if</c-> <c- p>(</c->button<c- p>.</c->accessKeyLabel<c- p>)</c->
+     button<c- p>.</c->value <c- o>+=</c-> <c- t>&apos; (&apos;</c-> <c- o>+</c-> button<c- p>.</c->accessKeyLabel <c- o>+</c-> <c- t>&apos;)&apos;</c-><c- p>;</c->
+ <c- p>}</c->
+ <c- a>var</c-> inputs <c- o>=</c-> document<c- p>.</c->getElementsByTagName<c- p>(</c-><c- t>&apos;input&apos;</c-><c- p>);</c->
+ <c- k>for</c-> <c- p>(</c-><c- a>var</c-> i <c- o>=</c-> <c- mf>0</c-><c- p>;</c-> i <c- o>&lt;</c-> inputs<c- p>.</c->length<c- p>;</c-> i <c- o>+=</c-> <c- mf>1</c-><c- p>)</c-> <c- p>{</c->
+   <c- k>if</c-> <c- p>(</c->inputs<c- p>[</c->i<c- p>].</c->type <c- o>==</c-> <c- u>&quot;submit&quot;</c-><c- p>)</c->
+     labelButton<c- p>(</c->inputs<c- p>[</c->i<c- p>]);</c->
+ <c- p>}</c->
+<c- p>&lt;/</c-><c- f>script</c-><c- p>&gt;</c-></code></pre>
+
+   <p>On one user agent, the button's label might become "<samp>Compose (⌘N)</samp>". On
+   another, it might become "<samp>Compose (Alt+⇧+1)</samp>". If the user agent doesn't
+   assign a key, it will be just "<samp>Compose</samp>". The exact string depends on what the
+   <span>assigned access key</span> is, and on how the user agent represents that key
+   combination.</p>
+
+  </div>
+
+
+  
+
+
+
+  <h3 id=editing-2><span class=secno>6.8</span> Editing<a href=#editing-2 class=self-link></a></h3>
+
+  <h4 id=contenteditable><span class=secno>6.8.1</span> Making document regions editable: The <code id=contenteditable:attr-contenteditable><a href=#attr-contenteditable>contenteditable</a></code> content attribute<a href=#contenteditable class=self-link></a></h4><div class="mdn-anno wrapped"><button onclick=toggleStatus(this) class=mdn-anno-btn><b title="Support in all current engines." class=all-engines-flag>✔</b><span>MDN</span></button><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/contentEditable title="The contentEditable property of the HTMLElement interface specifies whether or not the element is editable.">HTMLElement/contentEditable</a><p class=all-engines-text>Support in all current engines.<div class=support><span class="firefox yes"><span>Firefox</span><span>3+</span></span><span class="safari yes"><span>Safari</span><span>3+</span></span><span class="chrome yes"><span>Chrome</span><span>1+</span></span><hr><span class="opera yes"><span>Opera</span><span>9+</span></span><span class="edge_blink yes"><span>Edge</span><span>79+</span></span><hr><span class="edge yes"><span>Edge (Legacy)</span><span>12+</span></span><span class="ie yes"><span>Internet Explorer</span><span>5.5+</span></span><hr><span class="firefox_android unknown"><span>Firefox Android</span><span>?</span></span><span class="safari_ios yes"><span>Safari iOS</span><span>1+</span></span><span class="chrome_android unknown"><span>Chrome Android</span><span>?</span></span><span class="webview_android unknown"><span>WebView Android</span><span>?</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android yes"><span>Opera Android</span><span>10.1+</span></span></div></div></div>
+
+  
+
+  <div class="mdn-anno wrapped before"><button onclick=toggleStatus(this) class=mdn-anno-btn><b title="Support in all current engines." class=all-engines-flag>✔</b><span>MDN</span></button><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/contenteditable title="The contenteditable global attribute is an enumerated attribute indicating if the element should be editable by the user. If so, the browser modifies its widget to allow editing.">Global_attributes/contenteditable</a><p class=all-engines-text>Support in all current engines.<div class=support><span class="firefox yes"><span>Firefox</span><span>3+</span></span><span class="safari yes"><span>Safari</span><span>4+</span></span><span class="chrome yes"><span>Chrome</span><span>1+</span></span><hr><span class="opera yes"><span>Opera</span><span>9+</span></span><span class="edge_blink yes"><span>Edge</span><span>79+</span></span><hr><span class="edge yes"><span>Edge (Legacy)</span><span>12+</span></span><span class="ie yes"><span>Internet Explorer</span><span>5.5+</span></span><hr><span class="firefox_android unknown"><span>Firefox Android</span><span>?</span></span><span class="safari_ios unknown"><span>Safari iOS</span><span>?</span></span><span class="chrome_android unknown"><span>Chrome Android</span><span>?</span></span><span class="webview_android unknown"><span>WebView Android</span><span>?</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android unknown"><span>Opera Android</span><span>?</span></span></div></div></div><p>The <dfn data-dfn-for=html-global id=attr-contenteditable data-dfn-type=element-attr><code>contenteditable</code></dfn> content attribute is an
+  <a id=contenteditable:enumerated-attribute href=common-microsyntaxes.html#enumerated-attribute>enumerated attribute</a> with the following keywords and states:</p>
+
+  <table><thead><tr><th>Keyword
+     <th>State
+     <th>Brief description
+   <tbody><tr><td><dfn data-dfn-for=html-global/contenteditable id=attr-contenteditable-true data-dfn-type=attr-value><code>true</code></dfn>
+     <td><dfn id=attr-contenteditable-true-state>True</dfn>
+     <td>The element is editable.
+    <tr><td><dfn data-dfn-for=html-global/contenteditable id=attr-contenteditable-false data-dfn-type=attr-value><code>false</code></dfn>
+     <td><dfn id=attr-contenteditable-false-state>False</dfn>
+     <td>The element is not editable.
+    <tr><td><dfn data-dfn-for=html-global/contenteditable id=attr-contenteditable-plaintextonly data-dfn-type=attr-value><code>plaintext-only</code></dfn>
+     <td><dfn id=attr-contenteditable-plaintextonly-state>Plaintext-Only</dfn>
+     <td>Only the element's raw text content is editable; rich formatting is disabled.
+  </table>
+
+
+  <div data-algorithm="">
+  <p>The attribute's <i id=contenteditable:missing-value-default><a href=common-microsyntaxes.html#missing-value-default>missing value default</a></i> and <i id=contenteditable:invalid-value-default><a href=common-microsyntaxes.html#invalid-value-default>invalid value default</a></i> are both the <dfn id=attr-contenteditable-inherit-state>Inherit</dfn> state. The inherit state indicates that
+  the element is editable (or not) based on the parent element's state. The attribute's <i id=contenteditable:empty-value-default><a href=common-microsyntaxes.html#empty-value-default>empty value default</a></i> is the <a href=#attr-contenteditable-true-state id=contenteditable:attr-contenteditable-true-state>True</a> state.</p>
+  </div>
+
+  <div class=example>
+   <p>For example, consider a page that has a <code id=contenteditable:the-form-element><a href=forms.html#the-form-element>form</a></code> and a <code id=contenteditable:the-textarea-element><a href=form-elements.html#the-textarea-element>textarea</a></code> to
+   publish a new article, where the user is expected to write the article using HTML:</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>form</c-> <c- e>method</c-><c- o>=</c-><c- s>POST</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>fieldset</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>legend</c-><c- p>&gt;</c->New article<c- p>&lt;/</c-><c- f>legend</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>textarea</c-> <c- e>name</c-><c- o>=</c-><c- s>article</c-><c- p>&gt;</c-><c- ni>&amp;lt;</c->p&gt;Hello world.<c- ni>&amp;lt;</c->/p&gt;<c- p>&lt;/</c-><c- f>textarea</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>fieldset</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>button</c-><c- p>&gt;</c->Publish<c- p>&lt;/</c-><c- f>button</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>form</c-><c- p>&gt;</c-></code></pre>
+
+   <p>When scripting is enabled, the <code id=contenteditable:the-textarea-element-2><a href=form-elements.html#the-textarea-element>textarea</a></code> element could be replaced with a rich
+   text control instead, using the <code id=contenteditable:attr-contenteditable-2><a href=#attr-contenteditable>contenteditable</a></code>
+   attribute:</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>form</c-> <c- e>method</c-><c- o>=</c-><c- s>POST</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>fieldset</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>legend</c-><c- p>&gt;</c->New article<c- p>&lt;/</c-><c- f>legend</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>textarea</c-> <c- e>id</c-><c- o>=</c-><c- s>textarea</c-> <c- e>name</c-><c- o>=</c-><c- s>article</c-><c- p>&gt;</c-><c- ni>&amp;lt;</c->p&gt;Hello world.<c- ni>&amp;lt;</c->/p&gt;<c- p>&lt;/</c-><c- f>textarea</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>div</c-> <c- e>id</c-><c- o>=</c-><c- s>div</c-> <c- e>style</c-><c- o>=</c-><c- s>&quot;white-space: pre-wrap&quot;</c-> <c- e>hidden</c-><c- p>&gt;&lt;</c-><c- f>p</c-><c- p>&gt;</c->Hello world.<c- p>&lt;/</c-><c- f>p</c-><c- p>&gt;&lt;/</c-><c- f>div</c-><c- p>&gt;</c->
+  <c- p>&lt;</c-><c- f>script</c-><c- p>&gt;</c->
+   <c- a>let</c-> textarea <c- o>=</c-> document<c- p>.</c->getElementById<c- p>(</c-><c- u>&quot;textarea&quot;</c-><c- p>);</c->
+   <c- a>let</c-> div <c- o>=</c-> document<c- p>.</c->getElementById<c- p>(</c-><c- u>&quot;div&quot;</c-><c- p>);</c->
+   textarea<c- p>.</c->hidden <c- o>=</c-> <c- kc>true</c-><c- p>;</c->
+   div<c- p>.</c->hidden <c- o>=</c-> <c- kc>false</c-><c- p>;</c->
+   div<c- p>.</c->contentEditable <c- o>=</c-> <c- u>&quot;true&quot;</c-><c- p>;</c->
+   div<c- p>.</c->oninput <c- o>=</c-> <c- p>(</c->e<c- p>)</c-> <c- p>=&gt;</c-> <c- p>{</c->
+     textarea<c- p>.</c->value <c- o>=</c-> div<c- p>.</c->innerHTML<c- p>;</c->
+   <c- p>};</c->
+  <c- p>&lt;/</c-><c- f>script</c-><c- p>&gt;</c->
+ <c- p>&lt;/</c-><c- f>fieldset</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>p</c-><c- p>&gt;&lt;</c-><c- f>button</c-><c- p>&gt;</c->Publish<c- p>&lt;/</c-><c- f>button</c-><c- p>&gt;&lt;/</c-><c- f>p</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>form</c-><c- p>&gt;</c-></code></pre>
+
+   <p>Features to enable, e.g., inserting links, can be implemented using the <code>document.execCommand()</code> API, or using
+   <code id=contenteditable:selection><a data-x-internal=selection href=https://w3c.github.io/selection-api/#selection-interface>Selection</a></code> APIs and other DOM APIs. <a href=references.html#refsEXECCOMMAND>[EXECCOMMAND]</a> <a href=references.html#refsSELECTION>[SELECTION]</a>
+   <a href=references.html#refsDOM>[DOM]</a></p>
+  </div>
+
+  <div class=example>
+   <p>The <code id=contenteditable:attr-contenteditable-3><a href=#attr-contenteditable>contenteditable</a></code> attribute can also be used to
+   great effect:</p>
+
+   <pre><code class='html'><c- cp>&lt;!doctype html&gt;</c->
+<c- p>&lt;</c-><c- f>html</c-> <c- e>lang</c-><c- o>=</c-><c- s>en</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>title</c-><c- p>&gt;</c->Live CSS editing!<c- p>&lt;/</c-><c- f>title</c-><c- p>&gt;</c->
+<c- p>&lt;</c-><c- f>style</c-> <c- e>style</c-><c- o>=</c-><c- s>white-space:pre</c-> <c- e>contenteditable</c-><c- p>&gt;</c->
+<c- f>html</c-> <c- p>{</c-> <c- k>margin</c-><c- p>:</c-><c- mf>.2</c-><c- b>em</c-><c- p>;</c-> <c- k>font-size</c-><c- p>:</c-><c- mi>2</c-><c- b>em</c-><c- p>;</c-> <c- k>color</c-><c- p>:</c-><c- kc>lime</c-><c- p>;</c-> <c- k>background</c-><c- p>:</c-><c- kc>purple</c-> <c- p>}</c->
+<c- f>head</c-><c- o>,</c-> <c- f>title</c-><c- o>,</c-> <c- f>style</c-> <c- p>{</c-> <c- k>display</c-><c- p>:</c-><c- kc>block</c-> <c- p>}</c->
+<c- f>body</c-> <c- p>{</c-> <c- k>display</c-><c- p>:</c-><c- kc>none</c-> <c- p>}</c->
+<c- p>&lt;/</c-><c- f>style</c-><c- p>&gt;</c-></code></pre>
+  </div>
+
+  <dl class=domintro><dt><code><var>element</var>.<span id=dom-contenteditable>contentEditable</span> [ = <var>value</var> ]</code><dd>
+    <p>Returns "<code>true</code>", "<code>plaintext-only</code>", "<code>false</code>", or "<code>inherit</code>",
+    based on the state of the <code id=contenteditable:attr-contenteditable-4><a href=#attr-contenteditable>contenteditable</a></code>
+    attribute.</p>
+
+    <p>Can be set, to change that state.</p>
+
+    <p>Throws a <a id=contenteditable:syntaxerror href=https://webidl.spec.whatwg.org/#syntaxerror data-x-internal=syntaxerror>"<code>SyntaxError</code>"</a> <code id=contenteditable:domexception><a data-x-internal=domexception href=https://webidl.spec.whatwg.org/#dfn-DOMException>DOMException</a></code> if the new value
+    isn't one of those strings.</p>
+   <dt><code><var>element</var>.<span id=dom-iscontenteditable>isContentEditable</span></code><dd><p>Returns true if the element is editable; otherwise, returns false.</dl>
+
+  
+
+
+
+  <h4 id=making-entire-documents-editable:-the-designmode-idl-attribute><span class=secno>6.8.2</span> Making entire documents
+  editable: the <code id=making-entire-documents-editable:-the-designmode-idl-attribute:dom-document-designmode><a href=#dom-document-designmode>designMode</a></code> getter and setter<a href=#making-entire-documents-editable:-the-designmode-idl-attribute class=self-link></a></h4>
+
+  <dl class=domintro><dt><code><var>document</var>.<span id=dom-document-designmode>designMode</span> [ = <var>value</var> ]</code><dd>
+    <p>Returns "<code>on</code>" if the document is editable, and "<code>off</code>" if it isn't.</p>
+
+    <p>Can be set, to change the document's current state. This focuses the document and resets the
+    selection in that document.</p>
+   </dl>
+
+  
+
+
+  <h4 id=best-practices-for-in-page-editors><span class=secno>6.8.3</span> Best practices for in-page editors<a href=#best-practices-for-in-page-editors class=self-link></a></h4>
+
+  <p>Authors are encouraged to set the <a id="best-practices-for-in-page-editors:'white-space'" href=https://drafts.csswg.org/css-text/#white-space-property data-x-internal="'white-space'">'white-space'</a> property on <span>editing hosts</span> and on markup that was originally created through these editing
+  mechanisms to the value 'pre-wrap'. Default HTML whitespace handling is not well suited to WYSIWYG
+  editing, and line wrapping will not work correctly in some corner cases if
+  <a id="best-practices-for-in-page-editors:'white-space'-2" href=https://drafts.csswg.org/css-text/#white-space-property data-x-internal="'white-space'">'white-space'</a> is left at its default value.</p>
+
+  <div class=example>
+
+   <p>As an example of problems that occur if the default 'normal' value is used instead, consider
+   the case of the user typing "<kbd>yellow␣␣ball</kbd>", with two spaces (here
+   represented by "␣") between the words. With the editing rules in place for the default
+   value of <a id="best-practices-for-in-page-editors:'white-space'-3" href=https://drafts.csswg.org/css-text/#white-space-property data-x-internal="'white-space'">'white-space'</a> ('normal'), the resulting markup will either consist of
+   "<samp>yellow&amp;nbsp; ball</samp>" or "<samp>yellow &amp;nbsp;ball</samp>"; i.e.,
+   there will be a non-breaking space between the two words in addition to the regular space. This
+   is necessary because the 'normal' value for <a id="best-practices-for-in-page-editors:'white-space'-4" href=https://drafts.csswg.org/css-text/#white-space-property data-x-internal="'white-space'">'white-space'</a> requires adjacent regular
+   spaces to be collapsed together.</p>
+
+   <p>In the former case, "<samp>yellow⍽</samp>" might wrap to the next line ("⍽"
+   being used here to represent a non-breaking space) even though "<samp>yellow</samp>" alone might
+   fit at the end of the line; in the latter case, "<samp>⍽ball</samp>", if wrapped to the
+   start of the line, would have visible indentation from the non-breaking space.</p>
+
+   <p>When <a id="best-practices-for-in-page-editors:'white-space'-5" href=https://drafts.csswg.org/css-text/#white-space-property data-x-internal="'white-space'">'white-space'</a> is set to 'pre-wrap', however, the editing rules will instead
+   simply put two regular spaces between the words, and should the two words be split at the end of
+   a line, the spaces would be neatly removed from the rendering.</p>
+
+  </div>
+
+  
+
+  <h4 id=spelling-and-grammar-checking><span class=secno>6.8.4</span> Spelling and grammar checking<a href=#spelling-and-grammar-checking class=self-link></a></h4>
+
+  
+
+  <div class="mdn-anno wrapped before"><button onclick=toggleStatus(this) class=mdn-anno-btn><b title="Support in all current engines." class=all-engines-flag>✔</b><span>MDN</span></button><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/spellcheck title="The spellcheck global attribute is an enumerated attribute that defines whether the element may be checked for spelling errors.">Global_attributes/spellcheck</a><p class=all-engines-text>Support in all current engines.<div class=support><span class="firefox yes"><span>Firefox</span><span>Yes</span></span><span class="safari yes"><span>Safari</span><span>Yes</span></span><span class="chrome yes"><span>Chrome</span><span>9+</span></span><hr><span class="opera yes"><span>Opera</span><span>Yes</span></span><span class="edge_blink yes"><span>Edge</span><span>79+</span></span><hr><span class="edge yes"><span>Edge (Legacy)</span><span>12+</span></span><span class="ie yes"><span>Internet Explorer</span><span>11</span></span><hr><span class="firefox_android yes"><span>Firefox Android</span><span>57+</span></span><span class="safari_ios yes"><span>Safari iOS</span><span>9.3+</span></span><span class="chrome_android yes"><span>Chrome Android</span><span>47+</span></span><span class="webview_android unknown"><span>WebView Android</span><span>?</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android yes"><span>Opera Android</span><span>37+</span></span></div></div></div><p>The <dfn data-dfn-for=html-global id=attr-spellcheck data-dfn-type=element-attr><code>spellcheck</code></dfn>
+  attribute is an <a id=spelling-and-grammar-checking:enumerated-attribute href=common-microsyntaxes.html#enumerated-attribute>enumerated attribute</a> with the following keywords and states:</p>
+
+  <table><thead><tr><th>Keyword
+     <th>State
+     <th>Brief description
+   <tbody><tr><td><dfn data-dfn-for=html-global/spellcheck id=attr-spellcheck-true data-dfn-type=attr-value><code>true</code></dfn>
+     <td><dfn id=attr-spellcheck-true-state>True</dfn>
+     <td>Spelling and grammar will be checked.
+    <tr><td><dfn data-dfn-for=html-global/spellcheck id=attr-spellcheck-false data-dfn-type=attr-value><code>false</code></dfn>
+     <td><dfn id=attr-spellcheck-false-state>False</dfn>
+     <td>Spelling and grammar will not be checked.
+  </table>
+
+  <div data-algorithm="">
+  <p>The attribute's <i id=spelling-and-grammar-checking:missing-value-default><a href=common-microsyntaxes.html#missing-value-default>missing value default</a></i> and <i id=spelling-and-grammar-checking:invalid-value-default><a href=common-microsyntaxes.html#invalid-value-default>invalid value default</a></i> are both the <dfn id=attr-spellcheck-default-state>Default</dfn> state. The default state indicates that the
+  element is to act according to a default behavior, possibly based on the parent element's own
+  <code id=spelling-and-grammar-checking:attr-spellcheck><a href=#attr-spellcheck>spellcheck</a></code> state, as defined below. The attribute's <i id=spelling-and-grammar-checking:empty-value-default><a href=common-microsyntaxes.html#empty-value-default>empty value default</a></i> is the <a href=#attr-spellcheck-true-state id=spelling-and-grammar-checking:attr-spellcheck-true-state>True</a> state.</p>
+  </div>
+
+  
+
+  <dl class=domintro><dt><code><var>element</var>.<span id=dom-spellcheck>spellcheck</span> [ = <var>value</var> ]</code><dd>
+    <p>Returns true if the element is to have its spelling and grammar checked; otherwise, returns
+    false.</p>
+
+    <p>Can be set, to override the default and set the <code id=spelling-and-grammar-checking:attr-spellcheck-2><a href=#attr-spellcheck>spellcheck</a></code> content attribute.</p>
+   </dl>
+
+  
+
+  <p class=note>This specification does not define the user interface for spelling and grammar
+  checkers. A user agent could offer on-demand checking, could perform continuous checking while the
+  checking is enabled, or could use other interfaces.</p>
+
+  <h4 id=writing-suggestions><span class=secno>6.8.5</span> Writing suggestions<a href=#writing-suggestions class=self-link></a></h4>
+
+  <p>User agents offer writing suggestions as users type into editable regions, either in form
+  controls (e.g., the <code id=writing-suggestions:the-textarea-element><a href=form-elements.html#the-textarea-element>textarea</a></code> element) or in elements in an <span> editing host</span>.</p>
+
+  <p>The <dfn data-dfn-for=html-global id=attr-writingsuggestions data-dfn-type=element-attr><code>writingsuggestions</code></dfn> content attribute is an
+  <a id=writing-suggestions:enumerated-attribute href=common-microsyntaxes.html#enumerated-attribute>enumerated attribute</a> with the following keywords and states:</p>
+
+  <table><thead><tr><th>Keyword
+     <th>State
+     <th>Brief description
+   <tbody><tr><td><dfn data-dfn-for=html-global/writingsuggestions id=attr-writingsuggestions-true data-dfn-type=attr-value><code>true</code></dfn>
+     <td><dfn id=attr-writingsuggestions-true-state>True</dfn>
+     <td>Writing suggestions should be offered on this element.
+    <tr><td><dfn data-dfn-for=html-global/writingsuggestions id=attr-writingsuggestions-false data-dfn-type=attr-value><code>false</code></dfn>
+     <td><dfn id=attr-writingsuggestions-false-state>False</dfn>
+     <td>Writing suggestions should not be offered on this element.
+    </table>
+
+  <div data-algorithm="">
+  <p>The attribute's <i id=writing-suggestions:missing-value-default><a href=common-microsyntaxes.html#missing-value-default>missing value default</a></i> is the <dfn id=attr-writingsuggestions-default-state>Default</dfn> state. The default state indicates
+  that the element is to act according to a default behavior, possibly based on the parent
+  element's own <code id=writing-suggestions:attr-writingsuggestions><a href=#attr-writingsuggestions>writingsuggestions</a></code> state, as defined
+  below.</p>
+  </div>
+
+  <div data-algorithm="">
+  <p>The attribute's <i id=writing-suggestions:invalid-value-default><a href=common-microsyntaxes.html#invalid-value-default>invalid value default</a></i> and <i id=writing-suggestions:empty-value-default><a href=common-microsyntaxes.html#empty-value-default>empty value default</a></i> are both the <a href=#attr-writingsuggestions-true-state id=writing-suggestions:attr-writingsuggestions-true-state>True</a> state.</p>
+  </div>
+
+  <dl class=domintro><dt><code><var>element</var>.<span id=dom-writingsuggestions>writingSuggestions</span> [ = <var>value</var> ]</code><dd>
+    <p>Returns "<code>true</code>" if the user agent is to offer writing suggestions under
+    the scope of the element; otherwise, returns "<code>false</code>".</p>
+
+    <p>Can be set, to override the default and set the <code id=writing-suggestions:attr-writingsuggestions-2><a href=#attr-writingsuggestions>
+    writingsuggestions</a></code> content attribute.</p>
+   </dl>
+
+  
+
+  <hr>
+
+  <div data-algorithm="">
+  <p>User agents should only offer suggestions within an element's scope if the
+  result of running the following algorithm given <var>element</var> returns true:</p>
+
+  <ol><li><p>If the user has disabled writing suggestions, then return false.<li>
+    <p>If none of the following conditions are true:</p>
+
+    <ul><li><p><var>element</var> is an <code id=writing-suggestions:the-input-element><a href=input.html#the-input-element>input</a></code> element whose <code id=writing-suggestions:attr-input-type><a href=input.html#attr-input-type>type</a></code> attribute is in either the <a href="input.html#text-(type=text)-state-and-search-state-(type=search)" id="writing-suggestions:text-(type=text)-state-and-search-state-(type=search)">Text</a>, <a href="input.html#text-(type=text)-state-and-search-state-(type=search)" id="writing-suggestions:text-(type=text)-state-and-search-state-(type=search)-2">Search</a>, <a href="input.html#telephone-state-(type=tel)" id="writing-suggestions:telephone-state-(type=tel)">Telephone</a>, <a href="input.html#url-state-(type=url)" id="writing-suggestions:url-state-(type=url)">URL</a>,
+     or <a href="input.html#email-state-(type=email)" id="writing-suggestions:email-state-(type=email)">Email</a> state and is <i id=writing-suggestions:concept-fe-mutable><a href=form-control-infrastructure.html#concept-fe-mutable>mutable</a></i>;<li><p><var>element</var> is a <code id=writing-suggestions:the-textarea-element-2><a href=form-elements.html#the-textarea-element>textarea</a></code> element that is <i id=writing-suggestions:concept-fe-mutable-2><a href=form-control-infrastructure.html#concept-fe-mutable>mutable</a></i>; or<li><p><var>element</var> is an <span>editing host</span> or is
+     <span>editable</span>,</ul>
+
+    <p>then return false.</p>
+   <li><p>If <var>element</var> has an <a id=writing-suggestions:inclusive-ancestor href=https://dom.spec.whatwg.org/#concept-tree-inclusive-ancestor data-x-internal=inclusive-ancestor>inclusive ancestor</a> with a <code id=writing-suggestions:attr-writingsuggestions-3><a href=#attr-writingsuggestions>writingsuggestions</a></code> content attribute that's not in the
+   <a href=#attr-writingsuggestions-default-state id=writing-suggestions:attr-writingsuggestions-default-state>Default</a> and the nearest such
+   ancestor's <code id=writing-suggestions:attr-writingsuggestions-4><a href=#attr-writingsuggestions>writingsuggestions</a></code> content attribute is
+   in the <a href=#attr-writingsuggestions-false-state id=writing-suggestions:attr-writingsuggestions-false-state>False</a> state, then return
+   false.<li><p>Otherwise, return true.</ol>
+  </div>
+
+  <p class=note>This specification does not define the user interface for writing suggestions.
+  A user agent could offer on-demand suggestions, continuous suggestions as the user types, inline
+  suggestions, autofill-like suggestions in a popup, or could use other interfaces.</p>
+
+  <h4 id=autocapitalization><span class=secno>6.8.6</span> Autocapitalization<a href=#autocapitalization class=self-link></a></h4>
+
+  <p>Some methods of entering text, for example virtual keyboards on mobile devices, and also voice
+  input, often assist users by automatically capitalizing the first letter of sentences (when
+  composing text in a language with this convention). A virtual keyboard that implements
+  autocapitalization might automatically switch to showing uppercase letters (but allow the user to
+  toggle it back to lowercase) when a letter that should be autocapitalized is about to be typed.
+  Other types of input, for example voice input, may perform autocapitalization in a way that does
+  not give users an option to intervene first. The <code id=autocapitalization:attr-autocapitalize><a href=#attr-autocapitalize>autocapitalize</a></code> attribute allows authors to control such
+  behavior.</p>
+
+  <p>The <code id=autocapitalization:attr-autocapitalize-2><a href=#attr-autocapitalize>autocapitalize</a></code> attribute, as typically
+  implemented, does not affect behavior when typing on a physical keyboard. (For this reason, as
+  well as the ability for users to override the autocapitalization behavior in some cases or edit
+  the text after initial input, the attribute must not be relied on for any sort of input
+  validation.)</p>
+
+  <p>The <code id=autocapitalization:attr-autocapitalize-3><a href=#attr-autocapitalize>autocapitalize</a></code> attribute can be used on an <span>editing host</span> to control autocapitalization behavior for the hosted
+  editable region, on an <code id=autocapitalization:the-input-element><a href=input.html#the-input-element>input</a></code> or <code id=autocapitalization:the-textarea-element><a href=form-elements.html#the-textarea-element>textarea</a></code> element to control the behavior
+  for inputting text into that element, or on a <code id=autocapitalization:the-form-element><a href=forms.html#the-form-element>form</a></code> element to control the default
+  behavior for all <a href=forms.html#category-autocapitalize id=autocapitalization:category-autocapitalize>autocapitalize-and-autocorrect inheriting
+  elements</a> associated with the <code id=autocapitalization:the-form-element-2><a href=forms.html#the-form-element>form</a></code> element.
+
+  <p>The <code id=autocapitalization:attr-autocapitalize-4><a href=#attr-autocapitalize>autocapitalize</a></code> attribute never causes
+  autocapitalization to be enabled for <code id=autocapitalization:the-input-element-2><a href=input.html#the-input-element>input</a></code> elements whose <code id=autocapitalization:attr-input-type><a href=input.html#attr-input-type>type</a></code> attribute is in one of the <a href="input.html#url-state-(type=url)" id="autocapitalization:url-state-(type=url)">URL</a>, <a href="input.html#email-state-(type=email)" id="autocapitalization:email-state-(type=email)">Email</a>, or <a href="input.html#password-state-(type=password)" id="autocapitalization:password-state-(type=password)">Password</a> states.</p>
+
+  <p>The autocapitalization processing model is based on selecting among five
+  <dfn id=autocapitalization-hint>autocapitalization hints</dfn>, defined as follows:</p>
+
+  <dl><dt><dfn id=autocap-hint-default>Default</dfn><dd><p>The user agent and input method should make their own determination of whether or not to
+   enable autocapitalization.<dt><dfn id=autocap-hint-none>None</dfn><dd><p>No autocapitalization should be applied (all letters should default to
+   lowercase).<dt><dfn id=autocap-hint-sentences>Sentences</dfn><dd><p>The first letter of each sentence should default to a capital letter; all other letters
+   should default to lowercase.<dt><dfn id=autocap-hint-words>Words</dfn><dd><p>The first letter of each word should default to a capital letter; all other letters should
+   default to lowercase.<dt><dfn id=autocap-hint-characters>Characters</dfn><dd><p>All letters should default to uppercase.</dl>
+
+  <div class="mdn-anno wrapped before"><button onclick=toggleStatus(this) class=mdn-anno-btn><b title="Support in all current engines." class=all-engines-flag>✔</b><span>MDN</span></button><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/autocapitalize title="The autocapitalize global attribute is an enumerated attribute that controls whether and how text input is automatically capitalized as it is entered/edited by the user.">Global_attributes/autocapitalize</a><p class=all-engines-text>Support in all current engines.<div class=support><span class="firefox yes"><span>Firefox</span><span>111+</span></span><span class="safari no"><span>Safari</span><span>No</span></span><span class="chrome yes"><span>Chrome</span><span>43+</span></span><hr><span class="opera unknown"><span>Opera</span><span>?</span></span><span class="edge_blink yes"><span>Edge</span><span>79+</span></span><hr><span class="edge unknown"><span>Edge (Legacy)</span><span>?</span></span><span class="ie unknown"><span>Internet Explorer</span><span>?</span></span><hr><span class="firefox_android unknown"><span>Firefox Android</span><span>?</span></span><span class="safari_ios yes"><span>Safari iOS</span><span>5+</span></span><span class="chrome_android unknown"><span>Chrome Android</span><span>?</span></span><span class="webview_android unknown"><span>WebView Android</span><span>?</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android unknown"><span>Opera Android</span><span>?</span></span></div></div></div><p>The <dfn data-dfn-for=html-global id=attr-autocapitalize data-dfn-type=element-attr><code>autocapitalize</code></dfn> attribute is an <a id=autocapitalization:enumerated-attribute href=common-microsyntaxes.html#enumerated-attribute>enumerated
+  attribute</a> whose states are the possible <a href=#autocapitalization-hint id=autocapitalization:autocapitalization-hint>autocapitalization hints</a>. The <a href=#autocapitalization-hint id=autocapitalization:autocapitalization-hint-2>autocapitalization hint</a> specified by the
+  attribute's state combines with other considerations to form the <span>used autocapitalization
+  hint</span>, which informs the behavior of the user agent. The keywords for this attribute and
+  their state mappings are as follows:</p>
+
+  <table><thead><tr><th> Keyword
+     <th> State
+   <tbody><tr><td><dfn data-dfn-for=html-global/autocapitalize id=attr-autocapitalize-off data-dfn-type=attr-value><code>off</code></dfn>
+
+     <td rowspan=2><a href=#autocap-hint-none id=autocapitalization:autocap-hint-none>None</a>
+    <tr><td><dfn data-dfn-for=html-global/autocapitalize id=attr-autocapitalize-none data-dfn-type=attr-value><code>none</code></dfn>
+    <tr><td><dfn data-dfn-for=html-global/autocapitalize id=attr-autocapitalize-on data-dfn-type=attr-value><code>on</code></dfn>
+
+     <td rowspan=2><a href=#autocap-hint-sentences id=autocapitalization:autocap-hint-sentences>Sentences</a>
+    <tr><td><dfn data-dfn-for=html-global/autocapitalize id=attr-autocapitalize-sentences data-dfn-type=attr-value><code>sentences</code></dfn>
+    <tr><td><dfn data-dfn-for=html-global/autocapitalize id=attr-autocapitalize-words data-dfn-type=attr-value><code>words</code></dfn>
+
+     <td><a href=#autocap-hint-words id=autocapitalization:autocap-hint-words>Words</a>
+    <tr><td><dfn data-dfn-for=html-global/autocapitalize id=attr-autocapitalize-characters data-dfn-type=attr-value><code>characters</code></dfn>
+
+     <td><a href=#autocap-hint-characters id=autocapitalization:autocap-hint-characters>Characters</a>
+  </table>
+
+  <div data-algorithm="">
+  <p>The attribute's <i id=autocapitalization:missing-value-default><a href=common-microsyntaxes.html#missing-value-default>missing value default</a></i> is the <a href=#autocap-hint-default id=autocapitalization:autocap-hint-default>Default</a> state, and its <i id=autocapitalization:invalid-value-default><a href=common-microsyntaxes.html#invalid-value-default>invalid value default</a></i> is the <a href=#autocap-hint-sentences id=autocapitalization:autocap-hint-sentences-2>Sentences</a>
+  state.
+  </div>
+
+  <dl class=domintro><dt><code><var>element</var>.<span id=dom-autocapitalize>autocapitalize</span> [ = <var>value</var> ]</code><dd>
+    <p>Returns the current autocapitalization state for the element, or an empty string if it hasn't
+    been set. Note that for <code id=autocapitalization:the-input-element-3><a href=input.html#the-input-element>input</a></code> and <code id=autocapitalization:the-textarea-element-2><a href=form-elements.html#the-textarea-element>textarea</a></code> elements that inherit their
+    state from a <code id=autocapitalization:the-form-element-3><a href=forms.html#the-form-element>form</a></code> element, this will return the autocapitalization state of the
+    <code id=autocapitalization:the-form-element-4><a href=forms.html#the-form-element>form</a></code> element, but for an element in an editable region, this will not return the
+    autocapitalization state of the editing host (unless this element is, in fact, the <span>editing
+    host</span>).</p>
+
+    <p>Can be set, to set the <code id=autocapitalization:attr-autocapitalize-5><a href=#attr-autocapitalize>autocapitalize</a></code> content
+    attribute (and thereby change the autocapitalization behavior for the element).</p>
+   </dl>
+
+  
+
+
+  <h4 id=autocorrection><span class=secno>6.8.7</span> Autocorrection<a href=#autocorrection class=self-link></a></h4>
+
+  <p>Some methods of entering text assist users by automatically correcting misspelled words while
+  typing, a process also known as autocorrection. User agents can support autocorrection of editable
+  text, either in form controls (such as the value of <code id=autocorrection:the-textarea-element><a href=form-elements.html#the-textarea-element>textarea</a></code> elements), or in
+  elements in an <span>editing host</span> (e.g., using <code id=autocorrection:attr-contenteditable><a href=#attr-contenteditable>contenteditable</a></code>). Autocorrection may be accompanied by user
+  interfaces indicating that text is about to be autocorrected or has been autocorrected, and is
+  commonly performed when inserting punctuation characters, spaces, or new paragraphs after
+  misspelled words. The <code id=autocorrection:attr-autocorrect><a href=#attr-autocorrect>autocorrect</a></code> attribute allows authors
+  to control such behavior.</p>
+
+  <p>The <code id=autocorrection:attr-autocorrect-2><a href=#attr-autocorrect>autocorrect</a></code> attribute can be used on an editing host
+  to control autocorrection behavior for the hosted editable region, on an <code id=autocorrection:the-input-element><a href=input.html#the-input-element>input</a></code> or
+  <code id=autocorrection:the-textarea-element-2><a href=form-elements.html#the-textarea-element>textarea</a></code> element to control the behavior when inserting text into that element, or on
+  a <code id=autocorrection:the-form-element><a href=forms.html#the-form-element>form</a></code> element to control the default behavior for all <a href=forms.html#category-autocapitalize id=autocorrection:category-autocapitalize>autocapitalize-and-autocorrect inheriting
+  elements</a> associated with the <code id=autocorrection:the-form-element-2><a href=forms.html#the-form-element>form</a></code> element.</p>
+
+  <p>The <code id=autocorrection:attr-autocorrect-3><a href=#attr-autocorrect>autocorrect</a></code> attribute never causes autocorrection to
+  be enabled for <code id=autocorrection:the-input-element-2><a href=input.html#the-input-element>input</a></code> elements whose <code id=autocorrection:attr-input-type><a href=input.html#attr-input-type>type</a></code>
+  attribute is in one of the <a href="input.html#url-state-(type=url)" id="autocorrection:url-state-(type=url)">URL</a>, <a href="input.html#email-state-(type=email)" id="autocorrection:email-state-(type=email)">Email</a>, or <a href="input.html#password-state-(type=password)" id="autocorrection:password-state-(type=password)">Password</a> states.</p>
+
+  <p>The <dfn data-dfn-for=html-global id=attr-autocorrect data-dfn-type=element-attr><code>autocorrect</code></dfn> attribute is an enumerated attribute with the
+  following keywords and states:</p>
+
+  <table><thead><tr><th>Keyword
+     <th>State
+     <th>Brief description
+   <tbody><tr><td><dfn data-dfn-for=html-global/autocorrect id=attr-autocorrect-on data-dfn-type=attr-value><code>on</code></dfn>
+     <td><dfn id=concept-autocorrection-on>On</dfn>
+     <td>The user agent is permitted to automatically correct spelling errors while the user types.
+     Whether spelling is automatically corrected while typing left is for the user agent to decide,
+     and may depend on the element as well as the user's preferences.
+    <tr><td><dfn data-dfn-for=html-global/autocorrect id=attr-autocorrect-off data-dfn-type=attr-value><code>off</code></dfn>
+     <td><dfn id=concept-autocorrection-off>Off</dfn>
+     <td>The user agent is not allowed to automatically correct spelling while the user types.
+  </table>
+
+  <div data-algorithm="">
+  <p>The attribute's <i id=autocorrection:invalid-value-default><a href=common-microsyntaxes.html#invalid-value-default>invalid value default</a></i>, <i id=autocorrection:missing-value-default><a href=common-microsyntaxes.html#missing-value-default>missing value default</a></i>, and <i id=autocorrection:empty-value-default><a href=common-microsyntaxes.html#empty-value-default>empty value
+  default</a></i> are all the <a href=#concept-autocorrection-on id=autocorrection:concept-autocorrection-on>On</a> state.</p>
+  </div>
+
+  <div data-algorithm="">
+  <p>The <dfn data-dfn-for=HTMLElement id=dom-autocorrect data-dfn-type=attribute><code>autocorrect</code></dfn>
+  getter steps are: return true if the element's <a href=#used-autocorrection-state id=autocorrection:used-autocorrection-state>used autocorrection state</a> is <a href=#concept-autocorrection-on id=autocorrection:concept-autocorrection-on-2>On</a> and false if the element's <a href=#used-autocorrection-state id=autocorrection:used-autocorrection-state-2>used autocorrection
+  state</a> is <a href=#concept-autocorrection-off id=autocorrection:concept-autocorrection-off>Off</a>. The setter steps are: if the
+  given value is true, then the element's <code id=autocorrection:attr-autocorrect-4><a href=#attr-autocorrect>autocorrect</a></code>
+  attribute must be set to "<code>on</code>"; otherwise it must be set to "<code>off</code>".</p>
+  </div>
+
+  <div data-algorithm="">
+  <p>To compute the <dfn id=used-autocorrection-state>used autocorrection state</dfn> of an element <var>element</var>, run these
+  steps:</p>
+
+  <ol><li><p>If <var>element</var> is an <code id=autocorrection:the-input-element-3><a href=input.html#the-input-element>input</a></code> element whose <code id=autocorrection:attr-input-type-2><a href=input.html#attr-input-type>type</a></code> attribute is in one of the <a href="input.html#url-state-(type=url)" id="autocorrection:url-state-(type=url)-2">URL</a>, <a href="input.html#email-state-(type=email)" id="autocorrection:email-state-(type=email)-2">Email</a>, or
+   <a href="input.html#password-state-(type=password)" id="autocorrection:password-state-(type=password)-2">Password</a> states, then return <a href=#concept-autocorrection-off id=autocorrection:concept-autocorrection-off-2>Off</a>.<li><p>If the <code id=autocorrection:attr-autocorrect-5><a href=#attr-autocorrect>autocorrect</a></code> content attribute is present on
+   <var>element</var>, then return the state of the attribute.<li><p>If <var>element</var> is an <a href=forms.html#category-autocapitalize id=autocorrection:category-autocapitalize-2>autocapitalize-and-autocorrect inheriting
+   element</a> and has a non-null <a id=autocorrection:form-owner href=form-control-infrastructure.html#form-owner>form owner</a>, then return the state of
+   <var>element</var>'s <a id=autocorrection:form-owner-2 href=form-control-infrastructure.html#form-owner>form owner</a>'s <code id=autocorrection:attr-autocorrect-6><a href=#attr-autocorrect>autocorrect</a></code>
+   attribute.<li><p>Return <a href=#concept-autocorrection-on id=autocorrection:concept-autocorrection-on-3>On</a>.</ol>
+  </div>
+
+  <dl class=domintro><dt><var>element</var> . <code id=dom-autocorrect-2><a href=#dom-autocorrect>autocorrect</a></code><dd><p>Returns the autocorrection behavior of the element. Note that for <a href=forms.html#category-autocapitalize id=autocorrection:category-autocapitalize-3>autocapitalize-and-autocorrect inheriting
+   elements</a> that inherit their state from a <code id=autocorrection:the-form-element-3><a href=forms.html#the-form-element>form</a></code> element, this will return the
+   autocorrection behavior of the <code id=autocorrection:the-form-element-4><a href=forms.html#the-form-element>form</a></code> element, but for an element in an editable
+   region, this will not return the autocorrection behavior of the <span>editing host</span> (unless
+   this element is, in fact, the <span>editing host</span>).<dt><var>element</var> . <code id=autocorrection:dom-autocorrect><a href=#dom-autocorrect>autocorrect</a></code> =
+   <var>value</var><dd><p>Updates the <code id=autocorrection:attr-autocorrect-7><a href=#attr-autocorrect>autocorrect</a></code> content attribute (and
+   thereby changes the autocorrection behavior of the element).</dl>
+
+  <div class=example>
+   <p>The <code id=autocorrection:the-input-element-4><a href=input.html#the-input-element>input</a></code> element in the following example would not allow autocorrection, since
+   it does not have an <code id=autocorrection:attr-autocorrect-8><a href=#attr-autocorrect>autocorrect</a></code> content attribute and
+   therefore inherits from the <code id=autocorrection:the-form-element-5><a href=forms.html#the-form-element>form</a></code> element, which has an attribute of "<code id=autocorrection:attr-autocorrect-off><a href=#attr-autocorrect-off>off</a></code>". However, the <code id=autocorrection:the-textarea-element-3><a href=form-elements.html#the-textarea-element>textarea</a></code> element would allow
+   autocorrection, since it has an <code id=autocorrection:attr-autocorrect-9><a href=#attr-autocorrect>autocorrect</a></code> content
+   attribute with a value of "<code id=autocorrection:attr-autocorrect-on><a href=#attr-autocorrect-on>on</a></code>".</p>
+
+   <pre><code class='html'><c- p>&lt;</c-><c- f>form</c-> <c- e>autocorrect</c-><c- o>=</c-><c- s>&quot;off&quot;</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>input</c-> <c- e>type</c-><c- o>=</c-><c- s>&quot;search&quot;</c-><c- p>&gt;</c->
+ <c- p>&lt;</c-><c- f>textarea</c-> <c- e>autocorrect</c-><c- o>=</c-><c- s>&quot;on&quot;</c-><c- p>&gt;&lt;/</c-><c- f>textarea</c-><c- p>&gt;</c->
+<c- p>&lt;/</c-><c- f>form</c-><c- p>&gt;</c-></code></pre>
+  </div>
+
+
+  <h4 id=input-modalities:-the-inputmode-attribute><span class=secno>6.8.8</span> Input modalities: the <code id=input-modalities:-the-inputmode-attribute:attr-inputmode><a href=#attr-inputmode>inputmode</a></code> attribute<a href=#input-modalities:-the-inputmode-attribute class=self-link></a></h4>
+
+  <p>User agents can support the <code id=input-modalities:-the-inputmode-attribute:attr-inputmode-2><a href=#attr-inputmode>inputmode</a></code> attribute on form
+  controls (such as the value of <code id=input-modalities:-the-inputmode-attribute:the-textarea-element><a href=form-elements.html#the-textarea-element>textarea</a></code> elements), or in elements in an <span>editing
+  host</span> (e.g., using <code id=input-modalities:-the-inputmode-attribute:attr-contenteditable><a href=#attr-contenteditable>contenteditable</a></code>).</p>
+
+  <div class="mdn-anno wrapped before"><button onclick=toggleStatus(this) class=mdn-anno-btn><b title="Support in all current engines." class=all-engines-flag>✔</b><span>MDN</span></button><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/inputmode title="The inputmode global attribute is an enumerated attribute that hints at the type of data that might be entered by the user while editing the element or its contents. This allows a browser to display an appropriate virtual keyboard.">Global_attributes/inputmode</a><p class=all-engines-text>Support in all current engines.<div class=support><span class="firefox yes"><span>Firefox</span><span>95+</span></span><span class="safari no"><span>Safari</span><span>No</span></span><span class="chrome yes"><span>Chrome</span><span>66+</span></span><hr><span class="opera unknown"><span>Opera</span><span>?</span></span><span class="edge_blink yes"><span>Edge</span><span>79+</span></span><hr><span class="edge unknown"><span>Edge (Legacy)</span><span>?</span></span><span class="ie no"><span>Internet Explorer</span><span>No</span></span><hr><span class="firefox_android yes"><span>Firefox Android</span><span>79+</span></span><span class="safari_ios yes"><span>Safari iOS</span><span>12.2+</span></span><span class="chrome_android unknown"><span>Chrome Android</span><span>?</span></span><span class="webview_android unknown"><span>WebView Android</span><span>?</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android unknown"><span>Opera Android</span><span>?</span></span></div></div></div><p>The <dfn data-dfn-for=html-global id=attr-inputmode data-dfn-type=element-attr><code>inputmode</code></dfn>
+  content attribute is an <a id=input-modalities:-the-inputmode-attribute:enumerated-attribute href=common-microsyntaxes.html#enumerated-attribute>enumerated attribute</a> that specifies what kind of input
+  mechanism would be most helpful for users entering content.</p>
+
+  <table><thead><tr><th> Keyword
+     <th> Description
+   <tbody><tr><td><dfn data-dfn-for=html-global/inputmode id=attr-inputmode-keyword-none data-dfn-type=attr-value><code>none</code></dfn>
+
+     <td>The user agent should not display a virtual keyboard. This keyword is useful for content
+     that renders its own keyboard control.
+    <tr><td><dfn data-dfn-for=html-global/inputmode id=attr-inputmode-keyword-text data-dfn-type=attr-value><code>text</code></dfn>
+
+     <td>The user agent should display a virtual keyboard capable of text input in the user's locale.
+    <tr><td><dfn data-dfn-for=html-global/inputmode id=attr-inputmode-keyword-tel data-dfn-type=attr-value><code>tel</code></dfn>
+
+     <td> The user agent should display a virtual keyboard capable of telephone number input. This
+     should including keys for the digits 0 to 9, the "#" character, and the "*" character. In some
+     locales, this can also include alphabetic mnemonic labels (e.g., in the US, the key labeled
+     "2" is historically also labeled with the letters A, B, and C).
+    <tr><td><dfn data-dfn-for=html-global/inputmode id=attr-inputmode-keyword-url data-dfn-type=attr-value><code>url</code></dfn>
+
+     <td>The user agent should display a virtual keyboard capable of text input in the user's locale,
+     with keys for aiding in the input of <a href=https://url.spec.whatwg.org/#concept-url id=input-modalities:-the-inputmode-attribute:url data-x-internal=url>URLs</a>, such as that for the "/"
+     and "." characters and for quick input of strings commonly found in domain names such as
+     "www." or ".com".
+    <tr><td><dfn data-dfn-for=html-global/inputmode id=attr-inputmode-keyword-email data-dfn-type=attr-value><code>email</code></dfn>
+
+     <td>The user agent should display a virtual keyboard capable of text input in the user's locale,
+     with keys for aiding in the input of email addresses, such as that for the "@" character
+     and the "." character.
+    <tr><td><dfn data-dfn-for=html-global/inputmode id=attr-inputmode-keyword-numeric data-dfn-type=attr-value><code>numeric</code></dfn>
+
+     <td> The user agent should display a virtual keyboard capable of numeric input. This keyword
+     is useful for PIN entry.
+    <tr><td><dfn data-dfn-for=html-global/inputmode id=attr-inputmode-keyword-decimal data-dfn-type=attr-value><code>decimal</code></dfn>
+
+     <td> The user agent should display a virtual keyboard capable of fractional numeric input.
+     Numeric keys and the format separator for the locale should be shown.
+    <tr><td><dfn data-dfn-for=html-global/inputmode id=attr-inputmode-keyword-search data-dfn-type=attr-value><code>search</code></dfn>
+
+     <td>The user agent should display a virtual keyboard optimized for search.
+  </table>
+
+  
+
+  <h4 id=input-modalities:-the-enterkeyhint-attribute><span class=secno>6.8.9</span> Input modalities: the <code id=input-modalities:-the-enterkeyhint-attribute:attr-enterkeyhint><a href=#attr-enterkeyhint>enterkeyhint</a></code>
+  attribute<a href=#input-modalities:-the-enterkeyhint-attribute class=self-link></a></h4>
+
+  <p>User agents can support the <code id=input-modalities:-the-enterkeyhint-attribute:attr-enterkeyhint-2><a href=#attr-enterkeyhint>enterkeyhint</a></code>
+  attribute on form controls (such as the value of <code id=input-modalities:-the-enterkeyhint-attribute:the-textarea-element><a href=form-elements.html#the-textarea-element>textarea</a></code> elements), or in elements
+  in an <span>editing host</span> (e.g., using <code id=input-modalities:-the-enterkeyhint-attribute:attr-contenteditable><a href=#attr-contenteditable>contenteditable</a></code>).</p>
+
+  <div class="mdn-anno wrapped before"><button onclick=toggleStatus(this) class=mdn-anno-btn><b title="Support in all current engines." class=all-engines-flag>✔</b><span>MDN</span></button><div class=feature><p><a href=https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/enterkeyhint title="The enterkeyhint global attribute is an enumerated attribute defining what action label (or icon) to present for the enter key on virtual keyboards.">Global_attributes/enterkeyhint</a><p class=all-engines-text>Support in all current engines.<div class=support><span class="firefox yes"><span>Firefox</span><span>94+</span></span><span class="safari yes"><span>Safari</span><span>13.1+</span></span><span class="chrome yes"><span>Chrome</span><span>77+</span></span><hr><span class="opera yes"><span>Opera</span><span>66+</span></span><span class="edge_blink yes"><span>Edge</span><span>79+</span></span><hr><span class="edge unknown"><span>Edge (Legacy)</span><span>?</span></span><span class="ie no"><span>Internet Explorer</span><span>No</span></span><hr><span class="firefox_android unknown"><span>Firefox Android</span><span>?</span></span><span class="safari_ios unknown"><span>Safari iOS</span><span>?</span></span><span class="chrome_android unknown"><span>Chrome Android</span><span>?</span></span><span class="webview_android unknown"><span>WebView Android</span><span>?</span></span><span class="samsunginternet_android unknown"><span>Samsung Internet</span><span>?</span></span><span class="opera_android yes"><span>Opera Android</span><span>57+</span></span></div></div></div><p>The <dfn data-dfn-for=html-global id=attr-enterkeyhint data-dfn-type=element-attr><code>enterkeyhint</code></dfn> content attribute is an <a id=input-modalities:-the-enterkeyhint-attribute:enumerated-attribute href=common-microsyntaxes.html#enumerated-attribute>enumerated
+  attribute</a> that specifies what action label (or icon) to present for the enter key on
+  virtual keyboards. This allows authors to customize the presentation of the enter key in order to
+  make it more helpful for users.</p>
+
+  <table><thead><tr><th> Keyword
+     <th> Description
+   <tbody><tr><td><dfn data-dfn-for=html-global/enterkeyhint id=attr-enterkeyhint-keyword-enter data-dfn-type=attr-value><code>enter</code></dfn>
+
+     <td>The user agent should present a cue for the operation 'enter', typically
+     inserting a new line.
+    <tr><td><dfn data-dfn-for=html-global/enterkeyhint id=attr-enterkeyhint-keyword-done data-dfn-type=attr-value><code>done</code></dfn>
+
+     <td>The user agent should present a cue for the operation 'done', typically
+     meaning there is nothing more to input and the input method editor (IME)
+     will be closed.
+    <tr><td><dfn data-dfn-for=html-global/enterkeyhint id=attr-enterkeyhint-keyword-go data-dfn-type=attr-value><code>go</code></dfn>
+
+     <td> The user agent should present a cue for the operation 'go', typically
+     meaning to take the user to the target of the text they typed.
+    <tr><td><dfn data-dfn-for=html-global/enterkeyhint id=attr-enterkeyhint-keyword-next data-dfn-type=attr-value><code>next</code></dfn>
+
+     <td>The user agent should present a cue for the operation 'next', typically
+     taking the user to the next field that will accept text.
+    <tr><td><dfn data-dfn-for=html-global/enterkeyhint id=attr-enterkeyhint-keyword-previous data-dfn-type=attr-value><code>previous</code></dfn>
+
+     <td>The user agent should present a cue for the operation 'previous', typically
+     taking the user to the previous field that will accept text.
+    <tr><td><dfn data-dfn-for=html-global/enterkeyhint id=attr-enterkeyhint-keyword-search data-dfn-type=attr-value><code>search</code></dfn>
+
+     <td>The user agent should present a cue for the operation 'search', typically
+     taking the user to the results of searching for the text they have typed.
+    <tr><td><dfn data-dfn-for=html-global/enterkeyhint id=attr-enterkeyhint-keyword-send data-dfn-type=attr-value><code>send</code></dfn>
+
+     <td> The user agent should present a cue for the operation 'send', typically
+     delivering the text to its target.
+  </table>
+
+  
+
+  <h3 id=find-in-page><span class=secno>6.9</span> Find-in-page<a href=#find-in-page class=self-link></a></h3>
+
+  <h4 id=introduction-9><span class=secno>6.9.1</span> Introduction<a href=#introduction-9 class=self-link></a></h4>
+
+  <p>This section defines <dfn id=find-in-page-2>find-in-page</dfn> — a common user-agent mechanism which allows users
+  to search through the contents of the page for particular information.</p>
+
+  <p>Access to the <a href=#find-in-page-2 id=introduction-9:find-in-page-2>find-in-page</a> feature is provided via a <dfn id=find-in-page-interface>find-in-page
+  interface</dfn>. This is a user-agent provided user interface, which allows the user to specify
+  input and the parameters of the search. This interface can appear as a result of a shortcut or a
+  menu selection.</p>
+
+  <p>A combination of text input and settings in the <a href=#find-in-page-interface id=introduction-9:find-in-page-interface>find-in-page interface</a> represents
+  the user <dfn id=fip-query>query</dfn>. This typically includes the text that the user wants
+  to search for, as well as optional settings (e.g., the ability to restrict the search to whole
+  words only).</p>
+
+  <p>The user-agent processes page contents for a given <a href=#fip-query id=introduction-9:fip-query>query</a>, and
+  identifies zero or more <dfn id=fip-matches>matches</dfn>, which are content ranges that
+  satisfy the user <a href=#fip-query id=introduction-9:fip-query-2>query</a>.</p>
+
+  <p>One of the <a href=#fip-matches id=introduction-9:fip-matches>matches</a> is identified to the user as the <dfn id=fip-active-match>active match</dfn>. It is highlighted and scrolled into view. The user
+  can navigate through the <a href=#fip-matches id=introduction-9:fip-matches-2>matches</a> by advancing the <a href=#fip-active-match id=introduction-9:fip-active-match>active match</a> using the <a href=#find-in-page-interface id=introduction-9:find-in-page-interface-2>find-in-page interface</a>.</p>
+
+  <p class=XXX><a href=https://github.com/whatwg/html/issues/3539>Issue #3539</a> tracks
+  standardizing how <a href=#find-in-page-2 id=introduction-9:find-in-page-2-2>find-in-page</a> underlies the currently-unspecified <code>window.find()</code> API.</p>
+
+  <h4 id="interaction-with-details-and-hidden=until-found"><span class=secno>6.9.2</span> Interaction with <code id="interaction-with-details-and-hidden=until-found:the-details-element"><a href=interactive-elements.html#the-details-element>details</a></code> and <code id="interaction-with-details-and-hidden=until-found:attr-hidden-until-found-state"><a href=#attr-hidden-until-found-state>hidden=until-found</a></code><a href="#interaction-with-details-and-hidden=until-found" class=self-link></a></h4>
+
+  <div data-algorithm="">
+  <p>When find-in-page begins searching for matches, all <code id="interaction-with-details-and-hidden=until-found:the-details-element-2"><a href=interactive-elements.html#the-details-element>details</a></code> elements in the page
+  which do not have their <code id="interaction-with-details-and-hidden=until-found:attr-details-open"><a href=interactive-elements.html#attr-details-open>open</a></code> attribute set should have the
+  <a href=https://drafts.csswg.org/css-contain/#skips-its-contents id="interaction-with-details-and-hidden=until-found:skips-its-contents" data-x-internal=skips-its-contents>skipped contents</a> of their second slot become accessible,
+  without modifying the <code id="interaction-with-details-and-hidden=until-found:attr-details-open-2"><a href=interactive-elements.html#attr-details-open>open</a></code> attribute, in order to make
+  find-in-page able to search through it. Similarly, all HTML elements with the <code id="interaction-with-details-and-hidden=until-found:attr-hidden"><a href=#attr-hidden>hidden</a></code> attribute in the <a href=#attr-hidden-until-found-state id="interaction-with-details-and-hidden=until-found:attr-hidden-until-found-state-2">Hidden Until Found</a> state should have their <a href=https://drafts.csswg.org/css-contain/#skips-its-contents id="interaction-with-details-and-hidden=until-found:skips-its-contents-2" data-x-internal=skips-its-contents>skipped contents</a> become accessible without modifying the <code id="interaction-with-details-and-hidden=until-found:attr-hidden-2"><a href=#attr-hidden>hidden</a></code> attribute in order to make find-in-page able to search through
+  them. After find-in-page finishes searching for matches, the <code id="interaction-with-details-and-hidden=until-found:the-details-element-3"><a href=interactive-elements.html#the-details-element>details</a></code> elements and the
+  elements with the <code id="interaction-with-details-and-hidden=until-found:attr-hidden-3"><a href=#attr-hidden>hidden</a></code> attribute in the <a href=#attr-hidden-until-found-state id="interaction-with-details-and-hidden=until-found:attr-hidden-until-found-state-3">Hidden Until Found</a> state should have their contents
+  become skipped again. This entire process must happen synchronously (and so is not observable to
+  users or to author code). <a href=references.html#refsCSSCONTAIN>[CSSCONTAIN]</a></p>
+  </div>
+
+  <div data-algorithm="">
+  <p>When find-in-page chooses a new <a href=#fip-active-match id="interaction-with-details-and-hidden=until-found:fip-active-match">active match</a>, perform
+  the following steps:</p>
+
+  <ol><li><p>Let <var>node</var> be the first node in the <a href=#fip-active-match id="interaction-with-details-and-hidden=until-found:fip-active-match-2">active
+   match</a>.<li><p><span>Queue a global task</span> on the <span>user interaction task source</span> given
+   <var>node</var>'s <span>relevant global object</span> to run the <span>ancestor revealing
+   algorithm</span> on <var>node</var>.</ol>
+  </div>
+
+  <p class=warning>
+  
+  When find-in-page auto-expands a <code id="interaction-with-details-and-hidden=until-found:the-details-element-4"><a href=interactive-elements.html#the-details-element>details</a></code> element like this, it will fire a <code id="interaction-with-details-and-hidden=until-found:event-toggle"><a href=indices.html#event-toggle>toggle</a></code> event. As with the separate <code id="interaction-with-details-and-hidden=until-found:event-scroll"><a data-x-internal=event-scroll href=https://drafts.csswg.org/cssom-view/#eventdef-document-scroll>scroll</a></code> event that find-in-page fires, this event could be used by the
+  page to discover what the user is typing into the find-in-page dialog. If the page creates a tiny
+  scrollable area with the current search term and every possible next character the user could type
+  separated by a gap, and observes which one the browser scrolls to, it can add that character to
+  the search term and update the scrollable area to incrementally build the search term. By wrapping
+  each possible next match in a closed <code id="interaction-with-details-and-hidden=until-found:the-details-element-5"><a href=interactive-elements.html#the-details-element>details</a></code> element, the page could listen to <code id="interaction-with-details-and-hidden=until-found:event-toggle-2"><a href=indices.html#event-toggle>toggle</a></code> events instead of <code id="interaction-with-details-and-hidden=until-found:event-scroll-2"><a data-x-internal=event-scroll href=https://drafts.csswg.org/cssom-view/#eventdef-document-scroll>scroll</a></code>
+  events. This attack could be addressed for both events by not acting on every character the user
+  types into the find-in-page dialog.</p>
+
+  <h4 id=interaction-with-selection><span class=secno>6.9.3</span> Interaction with selection<a href=#interaction-with-selection class=self-link></a></h4>
+
+  <p>The find-in-page process is invoked in the context of a document, and may have an effect on
+  the <a href=https://w3c.github.io/selection-api/#dfn-selection id=interaction-with-selection:document-selection data-x-internal=document-selection>selection</a> of that document. Specifically, the range
+  that defines the <a href=#fip-active-match id=interaction-with-selection:fip-active-match>active match</a> can dictate the current
+  selection. These selection updates, however, can happen at different times during the
+  find-in-page process (e.g. upon the <a href=#find-in-page-interface id=interaction-with-selection:find-in-page-interface>find-in-page interface</a> dismissal or upon a change
+  in the <a href=#fip-active-match id=interaction-with-selection:fip-active-match-2>active match</a> range).
+
+  
+
+
+  <h3 id=close-requests-and-close-watchers><span class=secno>6.10</span> Close requests and close watchers<a href=#close-requests-and-close-watchers class=self-link></a></h3>
+
+  <h4 id=close-requests><span class=secno>6.10.1</span> Close requests<a href=#close-requests class=self-link></a></h4>
+
+  <p>In an <a id=close-requests:implementation-defined href=https://infra.spec.whatwg.org/#implementation-defined data-x-internal=implementation-defined>implementation-defined</a> (and likely device-specific) manner, a user can send
+  a <dfn id=close-request data-export="">close request</dfn> to the user agent. This indicates that the user wishes to close
+  something that is currently being shown on the screen, such as a popover, menu, dialog, picker, or
+  display mode.</p>
+
+  <div class=example>
+   <p>Some example close requests are:</p>
+
+   <ul><li><p>The <kbd>Esc</kbd> key on desktop platforms.<li><p>The back button or gesture on certain mobile platforms such as Android.<li><p>Any assistive technology's dismiss gesture, such as iOS VoiceOver's two-finger scrub "z"
+    gesture.<li><p>A game controller's canonical "back" button, such as the circle button on a DualShock
+    gamepad.</ul>
+  </div>
+
+  
+
+  <p>On platforms where pressing the <kbd>Esc</kbd> key is interpreted as a <a href=#close-request id=close-requests:close-request>close
+  request</a>, the user agent must interpret the key being pressed <em>down</em> as the close
+  request, instead of the key being released. Thus, in the above algorithm, the "relevant events"
+  that are fired must be the single <code id=close-requests:event-keydown><a data-x-internal=event-keydown href=https://w3c.github.io/uievents/#event-type-keydown>keydown</a></code> event.</p>
+
+  <p class=example>On platforms where <kbd>Esc</kbd> is the <a href=#close-request id=close-requests:close-request-2>close request</a>, the user
+  agent will first fire an appropriately-initialized <code id=close-requests:event-keydown-2><a data-x-internal=event-keydown href=https://w3c.github.io/uievents/#event-type-keydown>keydown</a></code>
+  event. If the web developer cancels the event by calling <code id=close-requests:dom-event-preventdefault><a data-x-internal=dom-event-preventdefault href=https://dom.spec.whatwg.org/#dom-event-preventdefault>preventDefault()</a></code>, then nothing further happens. But if
+  the event fires without being canceled, then the user agent proceeds to <span>process close
+  watchers</span>.</p>
+
+  <p class=example>On platforms where a back button is a potential <a href=#close-request id=close-requests:close-request-3>close request</a>, no
+  event is involved, so when the back button is pressed, the user agent proceeds directly to
+  <span>process close watchers</span>. If there is an <span>active</span> <span>close watcher</span>, then that will get
+  triggered. If there is not, then the user agent can interpret the back button press in another
+  way, for example as a request to <a id=close-requests:traverse-the-history-by-a-delta href=browsing-the-web.html#traverse-the-history-by-a-delta>traverse the history by a delta</a> of −1.</p>
+
+
+  
+
+
+  <h4 id=the-closewatcher-interface><span class=secno>6.10.2</span> The <code>CloseWatcher</code> interface<a href=#the-closewatcher-interface class=self-link></a></h4>
+
+  
+
+  <dl class=domintro><dt><code><var>watcher</var> = new <span id=dom-closewatcher>CloseWatcher</span>()</code><dt><code><var>watcher</var> = new <a href=#dom-closewatcher id=the-closewatcher-interface:dom-closewatcher>CloseWatcher</a>({ <span id=dom-closewatcheroptions-signal>signal</span> })</code><dd>
+    <p>Creates a new <code>CloseWatcher</code> instance.</p>
+
+    <p>If the <code id=the-closewatcher-interface:dom-closewatcheroptions-signal><a href=#dom-closewatcheroptions-signal>signal</a></code> option is provided, then
+    <var>watcher</var> can be destroyed (as if by <code id=the-closewatcher-interface:dom-closewatcher-destroy><a href=#dom-closewatcher-destroy>watcher.destroy()</a></code>) by aborting the given
+    <code id=the-closewatcher-interface:abortsignal><a data-x-internal=abortsignal href=https://dom.spec.whatwg.org/#abortsignal>AbortSignal</a></code>.</p>
+
+    <p>If any <span>close watcher</span> is already active, and the <code>Window</code> does not
+    have <span>history-action activation</span>, then the resulting <code>CloseWatcher</code> will
+    be closed together with that already-active <span>close watcher</span> in response to any
+    <a href=#close-request id=the-closewatcher-interface:close-request>close request</a>. (This already-active <span>close watcher</span> does not
+    necessarily have to be a <code>CloseWatcher</code> object; it could be a modal
+    <code id=the-closewatcher-interface:the-dialog-element><a href=interactive-elements.html#the-dialog-element>dialog</a></code> element, or a popover generated by an element with the <code id=the-closewatcher-interface:attr-popover><a href=popover.html#attr-popover>popover</a></code> attribute.)</p>
+   <dt><code><var>watcher</var>.<span id=dom-closewatcher-requestclose>requestClose</span>()</code><dd>
+    <p>Acts as if a <a href=#close-request id=the-closewatcher-interface:close-request-2>close request</a> was sent targeting <var>watcher</var>, by first
+    firing a <code id=the-closewatcher-interface:event-cancel><a href=indices.html#event-cancel>cancel</a></code> event, and if that event is not canceled
+    with <code id=the-closewatcher-interface:dom-event-preventdefault><a data-x-internal=dom-event-preventdefault href=https://dom.spec.whatwg.org/#dom-event-preventdefault>preventDefault()</a></code>, proceeding to fire a
+    <code id=the-closewatcher-interface:event-close><a href=indices.html#event-close>close</a></code> event before deactivating the close watcher as if <code id=the-closewatcher-interface:dom-closewatcher-destroy-2><a href=#dom-closewatcher-destroy>watcher.destroy()</a></code> was called.</p>
+
+    <p>This is a helper utility that can be used to consolidate cancelation and closing logic into
+    the <code id=the-closewatcher-interface:event-cancel-2><a href=indices.html#event-cancel>cancel</a></code> and <code id=the-closewatcher-interface:event-close-2><a href=indices.html#event-close>close</a></code> event
+    handlers, by having all non-<a href=#close-request id=the-closewatcher-interface:close-request-3>close request</a> closing affordances call this method.</p>
+   <dt><code><var>watcher</var>.<span id=dom-closewatcher-close>close</span>()</code><dd>
+    <p>Immediately fires the <code id=the-closewatcher-interface:event-close-3><a href=indices.html#event-close>close</a></code> event, and then deactivates
+    the close watcher as if <code id=the-closewatcher-interface:dom-closewatcher-destroy-3><a href=#dom-closewatcher-destroy>watcher.destroy()</a></code> was
+    called.</p>
+
+    <p>This is a helper utility that can be used trigger the closing logic into the <code id=the-closewatcher-interface:event-close-4><a href=indices.html#event-close>close</a></code> event handler, skipping any logic in the <code id=the-closewatcher-interface:event-cancel-3><a href=indices.html#event-cancel>cancel</a></code> event handler.</p>
+   <dt><code><var>watcher</var>.<span id=dom-closewatcher-destroy>destroy</span>()</code><dd>
+    <p>Deactivates <var>watcher</var>, so that it will no longer receive <code id=the-closewatcher-interface:event-close-5><a href=indices.html#event-close>close</a></code> events and so that new independent <code>CloseWatcher</code>
+    instances can be constructed.</p>
+
+    <p>This is intended to be called if the relevant UI element is torn down in some other way than
+    being closed.</p>
+   </dl>
+
+  
+
+  <p>The following are the <a id=the-closewatcher-interface:event-handlers href=webappapis.html#event-handlers>event handlers</a> (and their corresponding <span>event handler event types</span>)  supported,
+  as <a id=the-closewatcher-interface:event-handler-idl-attributes href=webappapis.html#event-handler-idl-attributes>event handler IDL attributes</a>, by all objects implementing the
+  <code>CloseWatcher</code> interface:</p>
+
+  <table><thead><tr><th><a href=webappapis.html#event-handlers id=the-closewatcher-interface:event-handlers-2>Event handler</a> <th><span>Event handler event type</span>
+   <tbody><tr><td><dfn data-dfn-for=CloseWatcher id=handler-closewatcher-oncancel data-dfn-type=attribute><code>oncancel</code></dfn> <td> <code id=the-closewatcher-interface:event-cancel-4><a href=indices.html#event-cancel>cancel</a></code>
+    <tr><td><dfn data-dfn-for=CloseWatcher id=handler-closewatcher-onclose data-dfn-type=attribute><code>onclose</code></dfn> <td> <code id=the-closewatcher-interface:event-close-6><a href=indices.html#event-close>close</a></code>
+  </table>
+
+  <div id=example-CloseWatcher-basic class=example><a href=#example-CloseWatcher-basic class=self-link></a>
+   <p>If one wanted to implement a custom picker control, which closed itself on a user-provided
+   <a href=#close-request id=the-closewatcher-interface:close-request-4>close request</a> as well as when a close button is pressed, the following code shows how
+   one would use the <code>CloseWatcher</code> API to process close requests:</p>
+
+   <pre><code class='js'><c- a>const</c-> watcher <c- o>=</c-> <c- k>new</c-> CloseWatcher<c- p>();</c->
+<c- a>const</c-> picker <c- o>=</c-> setUpAndShowPickerDOMElement<c- p>();</c->
+
+<c- a>let</c-> chosenValue <c- o>=</c-> <c- kc>null</c-><c- p>;</c->
+
+watcher<c- p>.</c->onclose <c- o>=</c-> <c- p>()</c-> <c- p>=&gt;</c-> <c- p>{</c->
+  chosenValue <c- o>=</c-> picker<c- p>.</c->querySelector<c- p>(</c-><c- t>&apos;input&apos;</c-><c- p>).</c->value<c- p>;</c->
+  picker<c- p>.</c->remove<c- p>();</c->
+<c- p>};</c->
+
+picker<c- p>.</c->querySelector<c- p>(</c-><c- t>&apos;.close-button&apos;</c-><c- p>).</c->onclick <c- o>=</c-> <c- p>()</c-> <c- p>=&gt;</c-> watcher<c- p>.</c->requestClose<c- p>();</c-></code></pre>
+
+   <p>Note how the logic to gather the chosen value is centralized in the <code>CloseWatcher</code>
+   object's <code id=the-closewatcher-interface:event-close-7><a href=indices.html#event-close>close</a></code> event handler, with the <code id=the-closewatcher-interface:event-click><a data-x-internal=event-click href=https://w3c.github.io/uievents/#event-type-click>click</a></code> event handler for the close button delegating to that logic by
+   calling <code id=the-closewatcher-interface:dom-closewatcher-requestclose><a href=#dom-closewatcher-requestclose>requestClose()</a></code>.</p>
+  </div>
+
+  <div id=example-CloseWatcher-cancel class=example><a href=#example-CloseWatcher-cancel class=self-link></a>
+   <p>The <code id=the-closewatcher-interface:event-cancel-5><a href=indices.html#event-cancel>cancel</a></code> event on <code>CloseWatcher</code> objects can
+   be used to prevent the <code id=the-closewatcher-interface:event-close-8><a href=indices.html#event-close>close</a></code> event from firing, and the
+   <code>CloseWatcher</code> from being destroying. A typical use case is as follows:</p>
+
+   <pre><code class='js'>watcher<c- p>.</c->oncancel <c- o>=</c-> <c- k>async</c-> <c- p>(</c->e<c- p>)</c-> <c- p>=&gt;</c-> <c- p>{</c->
+  <c- k>if</c-> <c- p>(</c->hasUnsavedData <c- o>&amp;&amp;</c-> e<c- p>.</c->cancelable<c- p>)</c-> <c- p>{</c->
+    e<c- p>.</c->preventDefault<c- p>();</c->
+
+    <c- a>const</c-> userReallyWantsToClose <c- o>=</c-> <c- k>await</c-> askForConfirmation<c- p>(</c-><c- u>&quot;Are you sure you want to close?&quot;</c-><c- p>);</c->
+    <c- k>if</c-> <c- p>(</c->userReallyWantsToClose<c- p>)</c-> <c- p>{</c->
+      hasUnsavedData <c- o>=</c-> <c- kc>false</c-><c- p>;</c->
+      watcher<c- p>.</c->close<c- p>();</c->
+    <c- p>}</c->
+  <c- p>}</c->
+<c- p>};</c-></code></pre>
+
+   <p>For abuse prevention purposes, this event is only <code id=the-closewatcher-interface:dom-event-cancelable><a data-x-internal=dom-event-cancelable href=https://dom.spec.whatwg.org/#dom-event-cancelable>cancelable</a></code> if the page has <span>history-action
+   activation</span>, which will be lost after any given <a href=#close-request id=the-closewatcher-interface:close-request-5>close request</a>. This ensures
+   that if the user sends a close request twice in a row without any intervening user activation,
+   the request definitely succeeds; the second request ignores any <code id=the-closewatcher-interface:event-cancel-6><a href=indices.html#event-cancel>cancel</a></code> event handler's attempt to call <code id=the-closewatcher-interface:dom-event-preventdefault-2><a data-x-internal=dom-event-preventdefault href=https://dom.spec.whatwg.org/#dom-event-preventdefault>preventDefault()</a></code> and proceeds to close the
+   <code>CloseWatcher</code>.</p>
+  </div>
+
+  <p>Combined, the above two examples show how <code id=the-closewatcher-interface:dom-closewatcher-requestclose-2><a href=#dom-closewatcher-requestclose>requestClose()</a></code> and <code id=the-closewatcher-interface:dom-closewatcher-close><a href=#dom-closewatcher-close>close()</a></code> differ. Because we used <code id=the-closewatcher-interface:dom-closewatcher-requestclose-3><a href=#dom-closewatcher-requestclose>requestClose()</a></code> in the <code id=the-closewatcher-interface:event-click-2><a data-x-internal=event-click href=https://w3c.github.io/uievents/#event-type-click>click</a></code> event handler for the close button, clicking that button will
+  trigger the <code>CloseWatcher</code>'s <code id=the-closewatcher-interface:event-cancel-7><a href=indices.html#event-cancel>cancel</a></code> event, and thus
+  potentially ask the user for confirmation if there is unsaved data. If we had used <code id=the-closewatcher-interface:dom-closewatcher-close-2><a href=#dom-closewatcher-close>close()</a></code>, then this check would be skipped. Sometimes that
+  is appropriate, but usually <code id=the-closewatcher-interface:dom-closewatcher-requestclose-4><a href=#dom-closewatcher-requestclose>requestClose()</a></code> is
+  the better option for user-triggered close requests.</p>
+
+  <div id=example-CloseWatcher-grouping class=example><a href=#example-CloseWatcher-grouping class=self-link></a>
+   <p>In addition to the <a href=#tracking-user-activation id=the-closewatcher-interface:tracking-user-activation>user activation</a> restrictions for <code id=the-closewatcher-interface:event-cancel-8><a href=indices.html#event-cancel>cancel</a></code> events, there is a more subtle form of user activation gating
+   for <code>CloseWatcher</code> construction. If one creates more than one
+   <code>CloseWatcher</code> without user activation, then the newly-created one will get grouped
+   together with the most-recently-created <span>close watcher</span>, so that a single <a href=#close-request id=the-closewatcher-interface:close-request-6>close
+   request</a> will close them both:</p>
+
+   <pre><code class='js'>window<c- p>.</c->onload <c- o>=</c-> <c- p>()</c-> <c- p>=&gt;</c-> <c- p>{</c->
+  <c- c1>// This will work as normal: it is the first close watcher created without user activation.</c->
+  <c- p>(</c-><c- k>new</c-> CloseWatcher<c- p>()).</c->onclose <c- o>=</c-> <c- p>()</c-> <c- p>=&gt;</c-> <c- p>{</c-> <c- d>/* ... */</c-> <c- p>};</c->
+<c- p>};</c->
+
+button1<c- p>.</c->onclick <c- o>=</c-> <c- p>()</c-> <c- p>=&gt;</c-> <c- p>{</c->
+  <c- c1>// This will work as normal: the button click counts as user activation.</c->
+  <c- p>(</c-><c- k>new</c-> CloseWatcher<c- p>()).</c->onclose <c- o>=</c-> <c- p>()</c-> <c- p>=&gt;</c-> <c- p>{</c-> <c- d>/* ... */</c-> <c- p>};</c->
+<c- p>};</c->
+
+button2<c- p>.</c->onclick <c- o>=</c-> <c- p>()</c-> <c- p>=&gt;</c-> <c- p>{</c->
+  <c- c1>// These will be grouped together, and both will close in response to a single close request.</c->
+  <c- p>(</c-><c- k>new</c-> CloseWatcher<c- p>()).</c->onclose <c- o>=</c-> <c- p>()</c-> <c- p>=&gt;</c-> <c- p>{</c-> <c- d>/* ... */</c-> <c- p>};</c->
+  <c- p>(</c-><c- k>new</c-> CloseWatcher<c- p>()).</c->onclose <c- o>=</c-> <c- p>()</c-> <c- p>=&gt;</c-> <c- p>{</c-> <c- d>/* ... */</c-> <c- p>};</c->
+<c- p>};</c-></code></pre>
+
+   <p>This means that calling <code id=the-closewatcher-interface:dom-closewatcher-destroy-4><a href=#dom-closewatcher-destroy>destroy()</a></code>, <code id=the-closewatcher-interface:dom-closewatcher-close-3><a href=#dom-closewatcher-close>close()</a></code>, or <code id=the-closewatcher-interface:dom-closewatcher-requestclose-5><a href=#dom-closewatcher-requestclose>requestClose()</a></code> properly is important. Doing so is
+   the only way to get back the "free" ungrouped close watcher slot. Such close watchers created
+   without user activation are useful for cases like session inactivity timeout dialogs or urgent
+   notifications of server-triggered events, which are not generated in response to user
+   activation.</p>
+  </div>
+
+
+  <nav><a href=microdata.html>← 5 Microdata</a> — <a href=index.html>Table of Contents</a> — <a href=dnd.html>6.11 Drag and drop →</a></nav>

@@ -43,6 +43,10 @@ binding = "BETA_HUGHESNET_KV"
 id = "6a0e248bebff430f89b0de3b5dde8aee"
 
 [[env.production.kv_namespaces]]
+binding = "BETA_HUGHESNET_ORDERS_KV"
+id = "a827fef4c1a84512b7a41a1a167ffbc9"
+
+[[env.production.kv_namespaces]]
 binding = "BETA_PLACES_KV"
 id = "2030b20c6baa46fe8c7bb620aaf0f8c1"
 
@@ -91,6 +95,10 @@ id = "63469d2321704b1ebcc02d01a894e167"
 [[env.preview.kv_namespaces]]
 binding = "BETA_HUGHESNET_KV"
 id = "6a0e248bebff430f89b0de3b5dde8aee"
+
+[[env.preview.kv_namespaces]]
+binding = "BETA_HUGHESNET_ORDERS_KV"
+id = "a827fef4c1a84512b7a41a1a167ffbc9"
 
 [[env.preview.kv_namespaces]]
 binding = "BETA_PLACES_KV"

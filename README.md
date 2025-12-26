@@ -36,3 +36,16 @@ npm run build
 You can preview the production build with `npm run preview`.
 
 > To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+
+---
+
+## HughesNet Archived Orders API 🔧
+
+A new endpoint is available to inspect archived (previously synced) orders persisted from HughesNet:
+
+- GET /api/hughesnet/archived - returns a list of archived orders for the authenticated user
+- GET /api/hughesnet/archived?id=<ORDER_ID> - returns a single archived order if it belongs to the authenticated user
+
+This endpoint reads from `BETA_HUGHESNET_ORDERS_KV` and only returns records scoped to the requesting user.
+
+
