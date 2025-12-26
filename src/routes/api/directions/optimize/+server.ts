@@ -46,13 +46,6 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
         return json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // 2. Check Plan - Disable Optimization for Free Tier
-    if (locals.user.plan === 'free') {
-        return json({ 
-            error: 'Plan Limit', 
-            message: 'Route optimization is a Pro feature. You can manually reorder stops by dragging them.' 
-        }, { status: 403 });
-    }
 
     const { startAddress, endAddress, stops } = await request.json();
     

@@ -286,21 +286,19 @@ export const POST: RequestHandler = async (event) => {
         }
 
 		if (!existingTrip) {
-            // --- ENFORCE MONTHLY QUOTA ---
-			const limit = currentPlan === 'free' ? PLAN_LIMITS.FREE.MAX_TRIPS_PER_MONTH : 999999;
-			const quota = await svc.checkMonthlyQuota(storageId, limit);
-
-			if (!quota.allowed) {
-				return new Response(
-					JSON.stringify({
-						error: 'Limit Reached',
-						message: `You have reached your free monthly limit of ${quota.limit} trips. (Used: ${quota.count})`
-					}),
-					{ status: 403, headers: { 'Content-Type': 'application/json' } }
-				);
-			}
-		}
-
+            if (currentPlan === 'free') {
+                const windowDays = PLAN_LIMITS.FREE.WINDOW_DAYS || 30;
+                const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
+                const recentTrips = await svc.list(storageId, { since });
+                const allowed = PLAN_LIMITS.FREE.MAX_TRIPS_PER_MONTH || PLAN_LIMITS.FREE.MAX_TRIPS_IN_WINDOW || 10;
+                if (recentTrips.length >= allowed) {
+                    return new Response(JSON.stringify({
+                        error: 'Limit Reached',
+                        message: `You have reached your free limit of ${allowed} trips in the last ${windowDays} days (Used: ${recentTrips.length}).`
+                    }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+                }
+            }
+        }
 		const now = new Date().toISOString();
 		
 		// Set lastModified to mark this as a manual user update

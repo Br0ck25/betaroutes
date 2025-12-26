@@ -111,7 +111,7 @@
 <svelte:head>
   <title>Settings - Go Route Yourself</title>
   <style>
-    .pac-container { z-index: 10000 !important; }
+    .pac-container { z-index: 10000 !important; pointer-events: auto !important; }
     :root {
         --orange: #FF6A3D;
         --green: #22C55E;
@@ -154,14 +154,7 @@
         {isPro}
         on:success={(e) => showSuccessMsg(e.detail)}
         on:sync={(e) => syncToCloud(e.detail.type, e.detail.payload)}
-        on:openAdvancedExport={() => {
-            if (!isPro) {
-                 upgradeSource = 'advanced-export';
-                 isUpgradeModalOpen = true;
-            } else {
-                 showAdvancedExport = true;
-            }
-        }}
+        on:openAdvancedExport={() => { showAdvancedExport = true; }}
     />
     
     <div class="settings-card">

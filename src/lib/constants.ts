@@ -13,8 +13,17 @@ export const RETENTION = {
 // [!code ++]
 export const PLAN_LIMITS = {
     FREE: {
-        MAX_STOPS: 10,
-        MAX_TRIPS_PER_MONTH: 10,
-        RETENTION_DAYS: 60
+        // Max stops allowed per single trip for Free users
+        MAX_STOPS: 5,
+        // How many trips a Free user may create in a rolling window
+        MAX_TRIPS_PER_MONTH: 10, // kept for compatibility; interpreted as per WINDOW_DAYS
+        MAX_TRIPS_IN_WINDOW: 10,
+        // How many expenses a Free user may create in a rolling window
+        MAX_EXPENSES_PER_MONTH: 20, // kept for compatibility
+        MAX_EXPENSES_IN_WINDOW: 20,
+        // Rolling window length in days for the above limits
+        WINDOW_DAYS: 30,
+        // How many days of historical data to retain for Free users
+        RETENTION_DAYS: 30
     }
 };

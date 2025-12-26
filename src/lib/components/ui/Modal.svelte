@@ -14,25 +14,47 @@
     }
   });
 
-  // Handle native close events (e.g. Escape key) to update Svelte state
-  function handleClose() {
-    open = false;
-  }
+  // Handle native close events (e.g. Escape key) — implementation below to allow suppression during autocomplete selection.
 
   // Close when clicking the backdrop
   function handleBackdropClick(e: MouseEvent) {
+    // Debug: log composedPath in browsers where issues appear
+    try {
+      const path: any[] = (e as any).composedPath ? (e as any).composedPath() : [e.target];
+      const hasPac = path.some((el) => el && el.classList && el.classList.contains && el.classList.contains('pac-container'));
+      console.debug && console.debug('[modal] backdrop click', { target: e.target, hasPac, path });
+
+      // If the click originated inside the autocomplete dropdown, ignore it so
+      // selecting suggestions doesn't close the dialog.
+      if (hasPac) return;
+    } catch (err) { /* ignore debug errors */ }
+
     // In a native dialog, the backdrop is considered part of the dialog element
-    // but the content is inside.
-    // If the target is the dialog itself, it's a backdrop click.
+    // but the content is inside. If the target is the dialog itself, it's a backdrop click.
     if (e.target === dialog) {
         dialog.close();
     }
+  }
+
+  function onDialogClose() {
+    // If we have a temporary suppression flag set (by the autocomplete selection),
+    // reopen and clear it rather than letting the modal stay closed.
+    try {
+      if ((dialog as any).__suppressClose) {
+        (dialog as any).__suppressClose = false;
+        console.debug && console.debug('[modal] suppressed close - reopening');
+        try { dialog.showModal(); } catch(e) { /* ignore */ }
+        return;
+      }
+    } catch(e) { /* ignore */ }
+
+    open = false;
   }
 </script>
 
 <dialog
   bind:this={dialog}
-  onclose={handleClose}
+  onclose={() => onDialogClose()}
   onclick={handleBackdropClick}
   class="
     m-auto p-0 rounded-xl bg-white text-left shadow-xl w-full max-w-lg

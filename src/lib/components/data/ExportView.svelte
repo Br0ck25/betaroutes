@@ -91,11 +91,7 @@
   // --- EXPORT LOGIC ---
 
   function handleExport() {
-    // 1. Gate Feature for Pro Users
-    if (!isPro) {
-        isUpgradeModalOpen = true;
-        return;
-    }
+    // 1. Export is available to all users; quotas are enforced on creation of data
 
     if (exportFormat === 'pdf') {
         alert("PDF export requires a library like 'jspdf'. Please install it to enable PDF support.");

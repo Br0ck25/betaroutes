@@ -5,6 +5,7 @@ import { syncManager } from '$lib/sync/syncManager';
 import type { TripRecord } from '$lib/db/types';
 import { storage } from '$lib/utils/storage';
 import { auth } from '$lib/stores/auth';
+import { PLAN_LIMITS } from '$lib/constants';
 
 export const isLoading = writable(false);
 
@@ -73,18 +74,19 @@ function createTripsStore() {
                     const tx = db.transaction('trips', 'readonly');
                     const index = tx.objectStore('trips').index('userId');
                     const allUserTrips = await index.getAll(userId);
-                    
-                    const now = new Date();
-                    const currentMonth = now.getMonth();
-                    const currentYear = now.getFullYear();
-                    
-                    const tripsThisMonth = allUserTrips.filter(t => {
+
+                    const windowDays = PLAN_LIMITS.FREE.WINDOW_DAYS || 30;
+                    const windowMs = windowDays * 24 * 60 * 60 * 1000;
+                    const cutoff = new Date(Date.now() - windowMs);
+
+                    const recentCount = allUserTrips.filter(t => {
                         const d = new Date(t.date || t.createdAt);
-                        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+                        return d >= cutoff;
                     }).length;
 
-                    if (tripsThisMonth >= 10) {
-                        throw new Error('Free tier limit reached (10 trips/month). Please upgrade to Pro.');
+                    const allowed = PLAN_LIMITS.FREE.MAX_TRIPS_PER_MONTH || PLAN_LIMITS.FREE.MAX_TRIPS_IN_WINDOW || 10;
+                    if (recentCount >= allowed) {
+                        throw new Error(`Free tier limit reached (${allowed} trips per ${windowDays} days).`);
                     }
                 }
 

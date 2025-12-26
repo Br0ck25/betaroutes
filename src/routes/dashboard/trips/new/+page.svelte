@@ -10,6 +10,7 @@
   import Modal from '$lib/components/ui/Modal.svelte';
   import { toasts } from '$lib/stores/toast';
   import Button from '$lib/components/ui/Button.svelte';
+  import { PLAN_LIMITS } from '$lib/constants';
 
   export let data;
   $: API_KEY = data.googleMapsApiKey;
@@ -143,11 +144,6 @@
   async function handleOptimize() {
     if (!tripData.startAddress) return toasts.error("Please enter a start address first.");
     
-    if ($user?.plan === 'free') {
-        upgradeMessage = "Route Optimization is a Pro feature. Upgrade now to save time and fuel automatically!";
-        showUpgradeModal = true;
-        return;
-    }
 
     if (tripData.stops.length < 2) return toasts.error("Add at least 2 stops to optimize.");
 
@@ -251,9 +247,8 @@
   async function addStop() {
     if (!newStop.address) return;
 
-    if ($user?.plan === 'free' && tripData.stops.length >= 10) {
-        upgradeMessage = "The Free plan is limited to 10 stops per trip. Upgrade to Pro for unlimited stops!";
-        showUpgradeModal = true;
+    if (tripData.stops.length >= (PLAN_LIMITS.FREE.MAX_STOPS || 5) && ($user?.plan === 'free' || !$user?.plan)) {
+        toasts.error(`The Free plan is limited to ${PLAN_LIMITS.FREE.MAX_STOPS || 5} stops per trip.`);
         return;
     }
 
@@ -401,14 +396,8 @@
         goto('/dashboard/trips'); 
     } catch (err: any) { 
         console.error('Save failed:', err);
-        const msg = (err.message || '').toLowerCase();
-        
-        if (msg.includes('limit reached') || msg.includes('monthly limit')) {
-             upgradeMessage = "You have reached your monthly trip limit. Upgrade to Pro for unlimited trips!";
-             showUpgradeModal = true;
-        } else {
-             toasts.error('Failed to create trip: ' + err.message); 
-        }
+        const message = err?.message || 'Failed to create trip.';
+        toasts.error(message);
     }
   }
   

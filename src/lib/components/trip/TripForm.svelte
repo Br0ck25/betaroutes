@@ -17,6 +17,7 @@
   import Modal from '$lib/components/ui/Modal.svelte';
   import Button from '$lib/components/ui/Button.svelte';
   import { getUserState } from '$lib/stores/user.svelte';
+  import { PLAN_LIMITS } from '$lib/constants';
 
   // Svelte 5 Props using Runes
   let { googleApiKey = '', loading = false, trip = null } = $props();
@@ -75,13 +76,13 @@
   let upgradeMessage = $derived(() => {
     switch (upgradeReason) {
       case 'stops':
-        return "You've hit the 10-stop limit for Free plans. Upgrade to Pro for unlimited stops per trip!";
+        return `You've hit the ${PLAN_LIMITS.FREE.MAX_STOPS || 5}-stop limit for Free plans. Upgrade to Pro for unlimited stops per trip!`;
       case 'optimize':
-        return "Route Optimization is a Pro feature. Upgrade to automatically reorder your stops for the fastest route!";
+        return "Route Optimization is available to all users; free tier limits still apply to trip size.";
       case 'trips':
-        return `You've reached your monthly trip limit (${userState.value?.maxTrips || 10} trips). Upgrade to Pro for unlimited trips!`;
+        return `You've reached your limit (${PLAN_LIMITS.FREE.MAX_TRIPS_PER_MONTH || PLAN_LIMITS.FREE.MAX_TRIPS_IN_WINDOW || 10} trips per ${PLAN_LIMITS.FREE.WINDOW_DAYS || 30} days).`;
       default:
-        return "Upgrade to Pro to unlock all features!";
+        return "Upgrade to Pro to unlock additional conveniences and higher quotas.";
     }
   });
 
@@ -154,9 +155,8 @@
     // Stop Limit Check
     if (!silent) {
         const validStopCount = destinations.filter(d => d.address && d.address.trim().length > 0).length;
-        if (userState.value?.plan === 'free' && validStopCount > 10) {
-            upgradeReason = 'stops';
-            showUpgradeModal = true;
+        if (userState.value?.plan === 'free' && validStopCount > (PLAN_LIMITS.FREE.MAX_STOPS || 5)) {
+            toasts.error(`You've hit the ${PLAN_LIMITS.FREE.MAX_STOPS || 5}-stop limit for Free plans.`);
             return null;
         }
     }
@@ -226,12 +226,6 @@
         return;
     }
 
-    // Optimization limit check
-    if (userState.value?.plan === 'free') {
-        upgradeReason = 'optimize';
-        showUpgradeModal = true;
-        return;
-    }
 
     const validDests = destinations.filter(d => d.address && d.address.trim() !== '');
     if (validDests.length < 2) {

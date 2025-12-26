@@ -53,18 +53,23 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
   let dropdown: HTMLDivElement | null = null;
   let debounceTimer: any;
   let isSelecting = false;
+  // Event handlers for dropdown - declared here so cleanup can access the same references
+  let stop: (e: Event) => void;
+  let stopAndPrevent: (e: Event) => void;
   
   if (params.apiKey && params.apiKey !== 'undefined') {
     loadGoogleMaps(params.apiKey).catch(console.error);
   }
   
+  // Prefer appending the dropdown to the nearest <dialog> (modal) when present.
+  // This prevents native dialog backdrops from intercepting clicks on the dropdown.
   function initUI() {
     dropdown = document.createElement('div');
     dropdown.className = 'pac-container';
-    
+
     Object.assign(dropdown.style, {
-      position: 'absolute',
-      zIndex: '9999',
+      position: 'absolute', // may be changed to 'fixed' when appended to <body>
+      zIndex: '2147483647',
       backgroundColor: '#fff',
       borderTop: '1px solid #e6e6e6',
       fontFamily: '"Roboto", "Arial", sans-serif',
@@ -74,20 +79,57 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       display: 'none',
       borderRadius: '0 0 8px 8px',
       marginTop: '-2px',
-      paddingBottom: '8px'
+      paddingBottom: '8px',
+      pointerEvents: 'auto'
     });
-    
-    document.body.appendChild(dropdown);
+
+    // If the input is inside a native <dialog>, append the dropdown to that dialog
+    // so it sits above the backdrop and is selectable. Otherwise append to document.body
+    const dialogAncestor = node.closest && node.closest('dialog');
+    if (dialogAncestor) {
+      (dropdown as any).__autocompleteContainer = dialogAncestor; // store ref for cleanup
+      dialogAncestor.appendChild(dropdown);
+      // Keep position absolute (relative to the dialog)
+      dropdown.style.position = 'absolute';
+    } else {
+      document.body.appendChild(dropdown);
+      // Use fixed positioning when attached to body so it stays aligned to viewport
+      dropdown.style.position = 'fixed';
+    }
+
+    // Prevent clicks inside the dropdown from bubbling up to the <dialog> backdrop or other parent handlers
+    stop = (e: Event) => { e.stopPropagation(); };
+    stopAndPrevent = (e: Event) => { e.preventDefault(); e.stopPropagation(); };
+
+    dropdown.addEventListener('pointerdown', stopAndPrevent);
+    dropdown.addEventListener('pointerup', stop);
+    dropdown.addEventListener('mousedown', stopAndPrevent);
+    dropdown.addEventListener('mouseup', stop);
+    dropdown.addEventListener('touchstart', stopAndPrevent);
+    dropdown.addEventListener('touchend', stop);
+    dropdown.addEventListener('click', stop);
   }
 
   function updatePosition() {
     if (!dropdown) return;
     const rect = node.getBoundingClientRect();
-    Object.assign(dropdown.style, {
-      top: `${rect.bottom + window.scrollY}px`,
-      left: `${rect.left + window.scrollX}px`,
-      width: `${rect.width}px`
-    });
+
+    if ((dropdown as any).__autocompleteContainer && (dropdown as any).__autocompleteContainer instanceof Element) {
+      // Dropdown is inside a dialog; compute position relative to that dialog
+      const parentRect = ((dropdown as any).__autocompleteContainer as Element).getBoundingClientRect();
+      Object.assign(dropdown.style, {
+        top: `${rect.bottom - parentRect.top}px`,
+        left: `${rect.left - parentRect.left}px`,
+        width: `${rect.width}px`
+      });
+    } else {
+      // Dropdown is attached to body (fixed positioning)
+      Object.assign(dropdown.style, {
+        top: `${rect.bottom}px`,
+        left: `${rect.left}px`,
+        width: `${rect.width}px`
+      });
+    }
   }
 
   async function handleInput(e: Event) {
@@ -227,8 +269,10 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       
       row.addEventListener('mouseenter', () => { row.style.backgroundColor = '#e8f0fe'; });
       row.addEventListener('mouseleave', () => { row.style.backgroundColor = '#fff'; });
-      row.addEventListener('mousedown', (e) => {
+      // Use pointerdown and stop propagation to avoid dialog/backdrop clicks closing the modal
+      row.addEventListener('pointerdown', (e) => {
         e.preventDefault();
+        e.stopPropagation();
         selectItem(item, source);
       });
       
@@ -302,6 +346,30 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     node.value = data.formatted_address || data.name;
     node.dispatchEvent(new Event('input', { bubbles: true }));
     node.dispatchEvent(new CustomEvent('place-selected', { detail: data }));
+
+    // Ensure input regains focus so the modal doesn't get an unexpected focus shift
+    setTimeout(() => {
+      try { node.focus(); } catch (e) {}
+    }, 0);
+
+    // If the input lives inside a <dialog>, temporarily suppress its close handler
+    // to avoid races where backdrop click closes it during selection.
+    const dlg = node.closest && node.closest('dialog');
+    if (dlg) {
+      try {
+        (dlg as any).__suppressClose = true;
+        // Short timeout, long enough to survive the click/close event cycle
+        setTimeout(() => { try { (dlg as any).__suppressClose = false; } catch(e) {} }, 500);
+        console.debug && console.debug('[autocomplete] commitSelection: set __suppressClose on dialog', { open: (dlg as any).open });
+      } catch (e) { /* ignore */ }
+    }
+
+    // If it was closed synchronously, try to re-open it
+    if (dlg && !(dlg as HTMLDialogElement).open) {
+      try { (dlg as HTMLDialogElement).showModal(); } catch(e) { /* ignore */ }
+      // re-focus after re-opening
+      setTimeout(() => { try { node.focus(); } catch(e) {} }, 60);
+    }
   }
   
   initUI();
@@ -315,13 +383,28 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     }
   });
   node.addEventListener('blur', () => setTimeout(() => { if (dropdown) dropdown.style.display = 'none'; }, 200));
+
+  // Cleanup helpers (so we can remove the handlers we added above)
+  const _removeDropdownHandlers = () => {
+    if (!dropdown) return;
+    dropdown.removeEventListener('pointerdown', stopAndPrevent as any);
+    dropdown.removeEventListener('pointerup', stop as any);
+    dropdown.removeEventListener('mousedown', stopAndPrevent as any);
+    dropdown.removeEventListener('mouseup', stop as any);
+    dropdown.removeEventListener('touchstart', stopAndPrevent as any);
+    dropdown.removeEventListener('touchend', stop as any);
+    dropdown.removeEventListener('click', stop as any);
+  };
   
   window.addEventListener('scroll', updatePosition);
   window.addEventListener('resize', updatePosition);
   
   return {
     destroy() {
-      if (dropdown) dropdown.remove();
+      if (dropdown) {
+        _removeDropdownHandlers();
+        dropdown.remove();
+      }
       node.removeEventListener('input', handleInput);
       window.removeEventListener('scroll', updatePosition);
       window.removeEventListener('resize', updatePosition);

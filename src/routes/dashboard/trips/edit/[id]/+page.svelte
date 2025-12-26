@@ -10,6 +10,7 @@
   import Modal from '$lib/components/ui/Modal.svelte';
   import { toasts } from '$lib/stores/toast';
   import Button from '$lib/components/ui/Button.svelte';
+  import { PLAN_LIMITS } from '$lib/constants';
 
   export let data;
   $: API_KEY = data.googleMapsApiKey;
@@ -73,7 +74,6 @@
 
   async function handleOptimize() {
     if (!tripData.startAddress) { toasts.error("Please enter a start address first."); return; }
-    if ($user?.plan === 'free') { upgradeMessage = "Route Optimization is a Pro feature. Upgrade now to save time and fuel automatically!"; showUpgradeModal = true; return; }
     if (tripData.stops.length < 2) { toasts.error("Add at least 2 stops to optimize."); return; }
     isCalculating = true;
     try {
@@ -101,7 +101,7 @@
   
   async function addStop() {
     if (!newStop.address) return;
-    if ($user?.plan === 'free' && tripData.stops.length >= 10) { upgradeMessage = "The Free plan is limited to 10 stops per trip. Upgrade to Pro for unlimited stops!"; showUpgradeModal = true; return; }
+    if (tripData.stops.length >= (PLAN_LIMITS.FREE.MAX_STOPS || 5) && ($user?.plan === 'free' || !$user?.plan)) { toasts.error(`The Free plan is limited to ${PLAN_LIMITS.FREE.MAX_STOPS || 5} stops per trip.`); return; }
     let segmentStart = tripData.stops.length > 0 ? tripData.stops[tripData.stops.length - 1].address : tripData.startAddress;
     if (!segmentStart) { toasts.error("Please enter a Starting Address first."); return; }
     isCalculating = true;
@@ -156,13 +156,8 @@
         goto('/dashboard/trips');
     } catch (err: any) { 
         console.error('Update failed:', err);
-        const msg = (err.message || '').toLowerCase();
-        if (msg.includes('plan limit') || msg.includes('limit reached')) {
-             upgradeMessage = "You've hit the limit of the Free plan. Upgrade to continue!";
-             showUpgradeModal = true;
-        } else {
-             toasts.error('Failed to update trip: ' + err.message);
-        }
+        const message = err?.message || 'Failed to update trip.';
+        toasts.error(message);
     }
   }
   

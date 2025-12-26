@@ -80,6 +80,29 @@ export const POST: RequestHandler = async (event) => {
             updatedAt: new Date().toISOString()
         };
 
+        // --- FREE TIER EXPENSE QUOTA (rolling window) ---
+        let currentPlan = user.plan;
+        try {
+            // Attempt to fetch fresh user plan if available
+            const { findUserById } = await import('$lib/server/userService');
+            if (event.platform?.env?.BETA_USERS_KV) {
+                const fresh = await findUserById(event.platform.env.BETA_USERS_KV, user.id);
+                if (fresh && fresh.plan) currentPlan = fresh.plan;
+            }
+        } catch (e) {
+            // ignore and proceed with session plan
+        }
+
+        if (currentPlan === 'free') {
+            const windowDays = PLAN_LIMITS.FREE.WINDOW_DAYS || 30;
+            const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
+            const recentExpenses = await svc.list(storageId, since);
+            const allowed = PLAN_LIMITS.FREE.MAX_EXPENSES_PER_MONTH || PLAN_LIMITS.FREE.MAX_EXPENSES_IN_WINDOW || 20;
+            if (recentExpenses.length >= allowed) {
+                return new Response(JSON.stringify({ error: 'Limit Reached', message: `You have reached your free limit of ${allowed} expenses in the last ${windowDays} days (Used: ${recentExpenses.length}).` }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+            }
+        }
+
         const { store, ...savedExpense } = expense as any;
 
         await svc.put(savedExpense);

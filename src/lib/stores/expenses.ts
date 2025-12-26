@@ -5,6 +5,7 @@ import { syncManager } from '$lib/sync/syncManager';
 import type { ExpenseRecord } from '$lib/db/types';
 import { storage } from '$lib/utils/storage';
 import { auth } from '$lib/stores/auth';
+import { PLAN_LIMITS } from '$lib/constants';
 
 export const isLoading = writable(false);
 
@@ -69,7 +70,25 @@ function createExpensesStore() {
 
         async create(expenseData: Partial<ExpenseRecord>, userId: string) {
             try {
-                // Note: Removed Free Tier check for expenses (assuming no limit on expenses for now)
+                // Free Tier Check (rolling window)
+                const currentUser = get(auth).user;
+                const isFreeTier = !currentUser?.plan || currentUser.plan === 'free';
+                if (isFreeTier) {
+                    const db = await getDB();
+                    const tx = db.transaction('expenses', 'readonly');
+                    const index = tx.objectStore('expenses').index('userId');
+                    const allExpenses = await index.getAll(userId);
+
+                    const windowDays = PLAN_LIMITS.FREE.WINDOW_DAYS || 30;
+                    const windowMs = windowDays * 24 * 60 * 60 * 1000;
+                    const cutoff = new Date(Date.now() - windowMs);
+
+                    const recentCount = allExpenses.filter(e => new Date(e.date || e.createdAt) >= cutoff).length;
+                    const allowed = PLAN_LIMITS.FREE.MAX_EXPENSES_PER_MONTH || PLAN_LIMITS.FREE.MAX_EXPENSES_IN_WINDOW || 20;
+                    if (recentCount >= allowed) {
+                        throw new Error(`Free tier limit reached (${allowed} expenses per ${windowDays} days).`);
+                    }
+                }
 
                 const expense: ExpenseRecord = {
                     ...expenseData,
