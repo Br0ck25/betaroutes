@@ -80,6 +80,40 @@ function toBase64Url(input: any): string {
   return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+// Convert base64url string back to Uint8Array
+function fromBase64Url(base64url: string): Uint8Array {
+  if (!base64url) {
+    throw new Error('Empty base64url string');
+  }
+  
+  // Convert base64url to regular base64
+  let base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+  
+  // Add padding if needed
+  const padding = base64.length % 4;
+  if (padding) {
+    base64 += '='.repeat(4 - padding);
+  }
+  
+  try {
+    if (typeof Buffer !== 'undefined') {
+      return new Uint8Array(Buffer.from(base64, 'base64'));
+    } else if (typeof atob !== 'undefined') {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes;
+    } else {
+      throw new Error('No base64 decoding method available');
+    }
+  } catch (e) {
+    console.error('[webauthn] Base64 decoding failed:', e);
+    throw new Error('Failed to decode base64');
+  }
+}
+
 export const GET: RequestHandler = async ({ url, locals, cookies, platform }) => {
   try {
     const type = url.searchParams.get('type');
@@ -379,35 +413,84 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       console.log('[WebAuthn] Found user:', userId);
 
       const authenticators = await getUserAuthenticators(env.BETA_USERS_KV, userId);
+      console.log('[WebAuthn] User has', authenticators.length, 'authenticators');
+      
       const authenticator = authenticators.find(auth => auth.credentialID === credentialID);
 
       if (!authenticator) {
         console.error('[WebAuthn] Authenticator not in user list');
         return json({ error: 'Authenticator not found' }, { status: 404 });
       }
+      
+      console.log('[WebAuthn] Found authenticator, keys:', Object.keys(authenticator));
+      console.log('[WebAuthn] Authenticator structure:', {
+        hasCredentialID: !!authenticator.credentialID,
+        credentialPublicKey: typeof authenticator.credentialPublicKey,
+        credentialPublicKeyLength: authenticator.credentialPublicKey?.length,
+        hasCounter: 'counter' in authenticator,
+        counter: authenticator.counter,
+        hasTransports: !!authenticator.transports
+      });
 
       const expectedOrigin = getOrigin(request);
       const expectedRPID = getRpID({ url: new URL(request.url) });
 
-      const verification = await verifyAuthenticationResponse({
-        response: credential,
-        expectedChallenge,
-        expectedOrigin,
-        expectedRPID,
-        authenticator: {
-          credentialID: authenticator.credentialID,
-          credentialPublicKey: authenticator.credentialPublicKey,
-          counter: authenticator.counter
+      // Convert stored base64url public key back to Uint8Array
+      let credentialPublicKeyBytes: Uint8Array;
+      try {
+        if (!authenticator.credentialPublicKey || typeof authenticator.credentialPublicKey !== 'string') {
+          console.error('[WebAuthn] Invalid credentialPublicKey type:', typeof authenticator.credentialPublicKey);
+          return json({ error: 'Invalid stored public key format' }, { status: 500 });
         }
+        
+        credentialPublicKeyBytes = fromBase64Url(authenticator.credentialPublicKey);
+        console.log('[WebAuthn] Converted public key back to Uint8Array, length:', credentialPublicKeyBytes.length);
+      } catch (e) {
+        console.error('[WebAuthn] Failed to convert public key from base64url:', e);
+        console.error('[WebAuthn] Public key value:', authenticator.credentialPublicKey);
+        return json({ error: 'Invalid stored public key' }, { status: 500 });
+      }
+
+      // Prepare authenticator data for verification
+      const authData = {
+        credentialID: authenticator.credentialID,
+        credentialPublicKey: credentialPublicKeyBytes,  // Use Uint8Array
+        counter: typeof authenticator.counter === 'number' ? authenticator.counter : 0
+      };
+      
+      console.log('[WebAuthn] Auth data prepared:', {
+        credentialID: authData.credentialID,
+        publicKeyLength: authData.credentialPublicKey.length,
+        counter: authData.counter
       });
 
+      let verification;
+      try {
+        verification = await verifyAuthenticationResponse({
+          response: credential,
+          expectedChallenge,
+          expectedOrigin,
+          expectedRPID,
+          authenticator: authData
+        });
+      } catch (e) {
+        console.error('[WebAuthn] Verification threw error:', e);
+        console.error('[WebAuthn] Error stack:', e instanceof Error ? e.stack : 'N/A');
+        return json({ error: 'Verification failed: ' + (e instanceof Error ? e.message : String(e)) }, { status: 400 });
+      }
+
       if (!verification.verified) {
-        console.error('[WebAuthn] Verification failed');
+        console.error('[WebAuthn] Verification failed - not verified');
         return json({ error: 'Authentication failed' }, { status: 400 });
       }
 
+      console.log('[WebAuthn] Verification successful!');
+      console.log('[WebAuthn] authenticationInfo keys:', Object.keys(verification.authenticationInfo || {}));
+
       const authInfo = verification.authenticationInfo;
-      const newCounter = authInfo.newCounter ?? authInfo.counter ?? authenticator.counter + 1;
+      const newCounter = authInfo?.newCounter ?? authInfo?.counter ?? (authData.counter + 1);
+      
+      console.log('[WebAuthn] Updating counter from', authData.counter, 'to', newCounter);
       
       await updateAuthenticatorCounter(env.BETA_USERS_KV, userId, credentialID, newCounter);
 
