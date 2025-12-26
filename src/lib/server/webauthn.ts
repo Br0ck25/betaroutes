@@ -317,28 +317,28 @@ export async function verifyAuthenticationResponseForUser(
 
   const opts: VerifyAuthenticationResponseOpts = {
     response: normalizedCredential,
-    response: credential,
     expectedChallenge,
     expectedOrigin,
     expectedRPID,
-    authenticator: {
-      credentialID: isoBase64URL.toBuffer(authenticator.credentialID),
-      credentialPublicKey: isoBase64URL.toBuffer(authenticator.credentialPublicKey),
+    credential: {
+      id: isoBase64URL.toBuffer(authenticator.credentialID),
+      publicKey: isoBase64URL.toBuffer(authenticator.credentialPublicKey),
       counter: authenticator.counter,
-    },
+      transports: authenticator.transports || []
+    } as any,
     requireUserVerification: false,
   };
 
   let verification;
   try {
     console.log('[WebAuthn Core] verifyAuthenticationResponse opts:', {
-      authenticator: {
-        credentialIDType: typeof opts.authenticator?.credentialID,
-        credentialIDLength: opts.authenticator?.credentialID?.length,
-        credentialPublicKeyType: typeof opts.authenticator?.credentialPublicKey,
-        credentialPublicKeyLength: (opts.authenticator?.credentialPublicKey as any)?.length,
-        counterType: typeof opts.authenticator?.counter,
-        counter: opts.authenticator?.counter
+      credential: {
+        idType: typeof opts.credential?.id,
+        idLength: (opts.credential?.id as any)?.length,
+        publicKeyType: typeof opts.credential?.publicKey,
+        publicKeyLength: (opts.credential?.publicKey as any)?.length,
+        counterType: typeof opts.credential?.counter,
+        counter: opts.credential?.counter
       },
       expectedChallengeType: typeof opts.expectedChallenge
     });
@@ -351,35 +351,38 @@ export async function verifyAuthenticationResponseForUser(
 
     // Log concise summary
     console.error('[WebAuthn Core] verifyAuthenticationResponse opts (summary):', {
-      credentialIDPresent: !!opts.authenticator?.credentialID,
-      credentialPublicKeyLength: (opts.authenticator?.credentialPublicKey as any)?.length,
-      counter: opts.authenticator?.counter
+      credentialIDPresent: !!opts.credential?.id,
+      credentialPublicKeyLength: (opts.credential?.publicKey as any)?.length,
+      counter: opts.credential?.counter
     });
 
     // Fallback strategies: try different combinations of string vs Buffer for the two fields
     const attempts = [
       {
         name: 'ID-string / PublicKey-Buffer',
-        authenticator: {
-          credentialID: authenticator.credentialID, // original base64url string
-          credentialPublicKey: isoBase64URL.toBuffer(authenticator.credentialPublicKey),
+        credential: {
+          id: authenticator.credentialID, // base64url string
+          publicKey: isoBase64URL.toBuffer(authenticator.credentialPublicKey),
           counter: authenticator.counter,
+          transports: authenticator.transports || []
         },
       },
       {
         name: 'ID-Buffer / PublicKey-string',
-        authenticator: {
-          credentialID: isoBase64URL.toBuffer(authenticator.credentialID),
-          credentialPublicKey: authenticator.credentialPublicKey, // base64url string
+        credential: {
+          id: isoBase64URL.toBuffer(authenticator.credentialID),
+          publicKey: authenticator.credentialPublicKey, // base64url string
           counter: authenticator.counter,
+          transports: authenticator.transports || []
         },
       },
       {
         name: 'ID-string / PublicKey-string',
-        authenticator: {
-          credentialID: authenticator.credentialID,
-          credentialPublicKey: authenticator.credentialPublicKey,
+        credential: {
+          id: authenticator.credentialID,
+          publicKey: authenticator.credentialPublicKey,
           counter: authenticator.counter,
+          transports: authenticator.transports || []
         },
       }
     ];
@@ -387,11 +390,11 @@ export async function verifyAuthenticationResponseForUser(
     for (const attempt of attempts) {
       try {
         console.log('[WebAuthn Core] Fallback attempt:', attempt.name, {
-          credentialIDType: typeof attempt.authenticator.credentialID,
-          credentialIDLength: (attempt.authenticator.credentialID as any)?.length,
-          credentialPublicKeyType: typeof attempt.authenticator.credentialPublicKey,
-          credentialPublicKeyLength: (attempt.authenticator.credentialPublicKey as any)?.length,
-          counter: attempt.authenticator.counter
+          idType: typeof attempt.credential.id,
+          idLength: (attempt.credential.id as any)?.length,
+          publicKeyType: typeof attempt.credential.publicKey,
+          publicKeyLength: (attempt.credential.publicKey as any)?.length,
+          counter: attempt.credential.counter
         });
 
         const altOpts: VerifyAuthenticationResponseOpts = {
@@ -399,7 +402,7 @@ export async function verifyAuthenticationResponseForUser(
           expectedChallenge,
           expectedOrigin,
           expectedRPID,
-          authenticator: attempt.authenticator as any,
+          credential: attempt.credential as any,
           requireUserVerification: false,
         };
 
