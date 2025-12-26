@@ -579,8 +579,8 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       cookies.set('session_id', sessionId, {
         path: '/',
         httpOnly: true,
-        sameSite: 'lax',
-        secure: !dev,
+        sameSite: 'none', // Allow cookie on fetches; requires secure in production
+        secure: true,
         maxAge: 60 * 60 * 24 * 7
       });
 

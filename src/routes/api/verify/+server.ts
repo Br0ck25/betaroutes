@@ -65,8 +65,8 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
         cookies.set('session_id', sessionId, {
             path: '/',
             httpOnly: true,
-            sameSite: 'lax',
-            secure: !dev,
+            sameSite: 'none',
+            secure: true,
             maxAge: sessionTTL
         });
 

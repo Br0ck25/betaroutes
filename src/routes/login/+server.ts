@@ -72,8 +72,8 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
         cookies.set('session_id', sessionId, {
             path: '/',
             httpOnly: true,
-            sameSite: 'lax',
-            secure: !dev, 
+            sameSite: 'none',
+            secure: true,
             maxAge: 60 * 60 * 24 * 7 
         });
 
