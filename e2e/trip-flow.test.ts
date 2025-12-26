@@ -24,20 +24,7 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
     }
   });
 
-  // Mock Login API (server action at /login and legacy /api/login)
-  await page.route('**/login', async (route) => {
-    const method = route.request().method();
-    if (method === 'POST') {
-      await route.fulfill({
-        status: 200,
-        json: { token: 'fake-jwt', user: { id: 'u1', name: 'Test User', plan: 'pro' } }
-      });
-    } else {
-      await route.continue();
-    }
-  });
-
-  // Keep legacy api route stub just in case
+  // Mock Login API
   await page.route('/api/login', async (route) => {
     await route.fulfill({
       status: 200,
@@ -47,13 +34,12 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
 
   // --- 3. Mock Google Maps (Prevent external calls) ---
   await page.addInitScript(() => {
-    // Use bracket-access to avoid TypeScript-only casts inside the serialized script
-    window['google'] = {
+    window.google = {
       maps: {
         places: {
           Autocomplete: class {
             addListener() {}
-            getPlace() { return { geometry: { location: { lat: () => 40.7128, lng: () => -74.0060 } } }; }
+            getPlace() { return { geometry: { location: { lat: () => 40.7128, lng: () => -74.0060 } } } }; }
           },
           AutocompleteService: class {
             getPlacePredictions(req, cb) { cb([], 'OK'); }
@@ -81,7 +67,7 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
         DirectionsStatus: { OK: 'OK' },
         places: { PlacesServiceStatus: { OK: 'OK' } }
       }
-    };
+    } as any;
   });
 
   // --- TEST EXECUTION ---
@@ -91,13 +77,9 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
   // Fill dummy credentials (assuming standard login form exists)
   await page.getByLabel('Email').fill('test@example.com');
   await page.getByLabel('Password').fill('password');
-  // Submit and wait for navigation
-  await Promise.all([
-    page.waitForURL(/\/dashboard/),
-    page.getByRole('button', { name: 'Sign In', exact: true }).click()
-  ]);
+  await page.getByRole('button', { name: 'Sign in' }).click();
 
-  // Verify redirect to dashboard (redundant but explicit)
+  // Verify redirect to dashboard
   await expect(page).toHaveURL(/\/dashboard/);
 
   // 2. Start New Trip

@@ -3,9 +3,10 @@ import type { RequestHandler } from './$types';
 import { 
   generateRegistrationOptions, 
   verifyRegistrationResponse,
-  generateAuthenticationOptionsForUser,
-  verifyAuthenticationResponseForUser
-} from '$lib/server/webauthn';
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse
+} from '@simplewebauthn/server';
+import type { AuthenticatorTransport } from '@simplewebauthn/types';
 import { 
   getUserAuthenticators, 
   addAuthenticator,
@@ -104,7 +105,28 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
       };
 
       const rpID = getRpID({ url });
-      const options = await generateRegistrationOptions(userWithAuth, rpID);
+      
+      // Generate registration options using the library directly
+      const options = await generateRegistrationOptions({
+        rpName: 'Go Route Yourself',
+        rpID,
+        userID: new TextEncoder().encode(user.id), // CRITICAL: Must be Uint8Array
+        userName: user.email,
+        userDisplayName: user.name || user.email,
+        attestationType: 'none',
+        excludeCredentials: authenticators.map(auth => ({
+          id: auth.credentialID, // Keep as string - library handles conversion
+          type: 'public-key' as const,
+          transports: auth.transports as AuthenticatorTransport[] | undefined
+        })),
+        authenticatorSelection: {
+          authenticatorAttachment: 'platform',
+          residentKey: 'preferred',
+          userVerification: 'preferred',
+          requireResidentKey: false
+        },
+        timeout: 60000
+      });
       
       if (!options || !options.challenge) {
         return json({ error: 'Failed to generate options' }, { status: 500 });
@@ -152,9 +174,14 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
       }
 
       const rpID = getRpID({ url });
-      // Don't pass any allowCredentials - let browser show all available passkeys
-      // The credential response will identify which user it belongs to
-      const options = await generateAuthenticationOptionsForUser([], rpID);
+      
+      // For passwordless authentication, we MUST use discoverable credentials
+      // Don't pass allowCredentials at all - browser will show all available passkeys
+      const options = await generateAuthenticationOptions({
+        rpID,
+        userVerification: 'preferred',
+        timeout: 60000,
+      });
       
       if (!options || !options.challenge) {
         return json({ error: 'Failed to generate options' }, { status: 500 });
@@ -228,12 +255,12 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       const expectedOrigin = getOrigin(request);
       const expectedRPID = getRpID({ url: new URL(request.url) });
 
-      const verification = await verifyRegistrationResponse(
-        credential,
+      const verification = await verifyRegistrationResponse({
+        response: credential,
         expectedChallenge,
         expectedOrigin,
         expectedRPID
-      );
+      });
 
       if (!verification.verified || !verification.registrationInfo) {
         return json({ error: 'Verification failed' }, { status: 400 });
@@ -325,13 +352,17 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       const expectedOrigin = getOrigin(request);
       const expectedRPID = getRpID({ url: new URL(request.url) });
 
-      const verification = await verifyAuthenticationResponseForUser(
-        credential,
+      const verification = await verifyAuthenticationResponse({
+        response: credential,
         expectedChallenge,
-        authenticator,
         expectedOrigin,
-        expectedRPID
-      );
+        expectedRPID,
+        authenticator: {
+          credentialID: authenticator.credentialID,
+          credentialPublicKey: authenticator.credentialPublicKey,
+          counter: authenticator.counter
+        }
+      });
 
       if (!verification.verified) {
         console.error('[WebAuthn] Verification failed');
