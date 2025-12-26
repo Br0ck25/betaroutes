@@ -93,11 +93,12 @@
       <div class="controls">
         <button class="btn-small" on:click={selectAll}>{selected.length === orders.length ? 'Unselect All' : 'Select All'}</button>
         <button class="btn-primary" disabled={selected.length === 0} on:click={openConfirm}>Restore Selected</button>
+      </div>
 
       <ul class="list">
         {#each orders as o}
           <li class="item">
-            <input type="checkbox" checked={selected.has(o.id)} on:change={() => toggle(o.id)} />
+            <input type="checkbox" checked={selected.includes(o.id)} on:change={() => toggle(o.id)} aria-label={`Select order ${o.id}`} />
             <div class="meta">
               <div class="addr">{o.order.address || 'No address'}</div>
               <div class="info">ID: {o.id} · Stored: {new Date(o.storedAt).toLocaleString()}</div>
