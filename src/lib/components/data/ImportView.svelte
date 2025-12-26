@@ -8,9 +8,11 @@
   
   async function handleFileUpload(e: Event) {
     const input = e.target as HTMLInputElement;
-    if (!input.files?.length) return;
+    const files = input.files;
+    if (!files || files.length === 0) return;
     
-    const file = input.files[0];
+    const file = files.item(0);
+    if (!file) return;
     isProcessing = true;
 
     try {
@@ -30,21 +32,25 @@
   }
 
   function parseCSV(content: string) {
-    const lines = content.split(/\r?\n/);
+    const lines: string[] = content.split(/\r?\n/);
     if (lines.length < 2) return;
 
     const parsed: any[] = [];
 
-    for (let i = 1; i < lines.length; i++) {
-      if (!lines[i].trim()) continue;
-      
-      const row = lines[i].split(',').map(c => c.trim().replace(/"/g, ''));
-      
+    const dataLines = lines.slice(1);
+    for (const line of dataLines) {
+      const trimmed = (line || '').trim();
+      if (!trimmed) continue;
+
+      const row = trimmed.split(',').map((c) => (c ?? '').toString().trim().replace(/"/g, '')) as string[];
+
+      const dateStr = row[0] ?? '';
+      const milesStr = row[1] ?? '0';
       const trip: any = {
-        date: row[0] ? new Date(row[0]).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-        totalMiles: parseFloat(row[1]) || 0,
-        startAddress: row[2] || 'Unknown Start',
-        endAddress: row[3] || 'Unknown End',
+        date: dateStr ? new Date(String(dateStr)).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        totalMiles: parseFloat(String(milesStr)) || 0,
+        startAddress: row[2] ?? 'Unknown Start',
+        endAddress: row[3] ?? 'Unknown End',
         notes: 'Imported CSV',
         startTime: '09:00',
         endTime: '17:00',
@@ -61,7 +67,8 @@
   async function saveTrips() {
     if (previewTrips.length === 0) return;
     
-    let userId = $user?.name || $user?.token || localStorage.getItem('offline_user_id') || 'offline';
+    const maybeUserId = $user?.name ?? $user?.token ?? localStorage.getItem('offline_user_id');
+    const userId: string = maybeUserId ?? 'offline';
     
     try {
         for (const trip of previewTrips) {

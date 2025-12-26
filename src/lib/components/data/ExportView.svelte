@@ -57,7 +57,7 @@
   }
   
   // Check Pro Status
-  $: isPro = ['pro', 'business', 'premium', 'enterprise'].includes($currentUser?.plan || '');
+  $: isPro = ['pro', 'business', 'premium', 'enterprise'].includes(($currentUser?.plan ?? '') as string);
 
   function toggleSelectAll() {
     if (selectAll) {
@@ -300,7 +300,7 @@
                     </div>
                     <div class="trip-route">
                         {trip.startAddress?.split(',')[0] || 'Unknown'} → 
-                        {trip.stops && trip.stops.length > 0 ? trip.stops[trip.stops.length - 1].address?.split(',')[0] : 'End'}
+                        {trip.stops && trip.stops.length > 0 ? (trip.stops[trip.stops.length - 1]?.address?.split(',')[0] ?? 'End') : 'End'}
                     </div>
                     </div>
                 </label>

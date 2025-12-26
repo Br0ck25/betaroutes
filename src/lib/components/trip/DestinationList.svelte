@@ -1,21 +1,24 @@
 <script lang="ts">
-  import type { Destination } from '$lib/types';
+  import type { Destination, GeocodeResult } from '$lib/types';
   import { autocomplete } from '$lib/utils/autocomplete';
   import { createEventDispatcher } from 'svelte';
 
-  export let destinations: Destination[];
-  export let apiKey: string;
+  export let destinations: Destination[] = [{ address: '', earnings: 0 }];
+  export let apiKey: string = '';
 
   const dispatch = createEventDispatcher();
   function handlePlaceSelect(index: number, e: CustomEvent) {
-    const place = e.detail;
-    destinations[index].address = place.formatted_address || place.name || '';
+    const place = e.detail as GeocodeResult;
+    if (!destinations || !destinations[index]) return;
+    const dest = destinations[index]!;
+    dest.address = place.formatted_address || place.name || '';
     // Extract Lat/Lng
     if (place.geometry && place.geometry.location) {
-        const lat = typeof place.geometry.location.lat === 'function' ?
-            place.geometry.location.lat() : place.geometry.location.lat;
-        const lng = typeof place.geometry.location.lng === 'function' ? place.geometry.location.lng() : place.geometry.location.lng;
-        destinations[index].location = { lat, lng };
+        const latRaw = (place.geometry.location as any).lat;
+        const lngRaw = (place.geometry.location as any).lng;
+        const lat = typeof latRaw === 'function' ? (latRaw as unknown as () => number)() : (latRaw as number);
+        const lng = typeof lngRaw === 'function' ? (lngRaw as unknown as () => number)() : (lngRaw as number);
+        dest.location = { lat, lng };
     }
 
     // Trigger reactivity in parent
@@ -23,7 +26,7 @@
   }
 
   function addDestination() {
-    destinations = [...destinations, { address: '', earnings: 0 }];
+    destinations = [...(destinations || []), { address: '', earnings: 0 }];
     dispatch('update', destinations);
   }
 
@@ -35,16 +38,22 @@
   }
 
   function moveUp(index: number) {
-    if (index > 0) {
-      [destinations[index], destinations[index - 1]] = [destinations[index - 1], destinations[index]];
+    if (index > 0 && destinations && destinations[index] && destinations[index - 1]) {
+      const current = destinations[index] as Destination;
+      const prev = destinations[index - 1] as Destination;
+      destinations[index] = prev;
+      destinations[index - 1] = current;
       destinations = [...destinations]; // Trigger reactivity
       dispatch('update', destinations);
     }
   }
 
   function moveDown(index: number) {
-    if (index < destinations.length - 1) {
-      [destinations[index], destinations[index + 1]] = [destinations[index + 1], destinations[index]];
+    if (destinations && index < destinations.length - 1 && destinations[index] && destinations[index + 1]) {
+      const current = destinations[index] as Destination;
+      const next = destinations[index + 1] as Destination;
+      destinations[index] = next;
+      destinations[index + 1] = current;
       destinations = [...destinations];
       dispatch('update', destinations);
     }
@@ -52,7 +61,7 @@
 </script>
 
 <div class="destinations-container">
-  <label class="block font-semibold mb-4 text-sm text-gray-700">Destinations</label>
+  <h3 class="block font-semibold mb-4 text-sm text-gray-700">Destinations</h3>
   
   {#each destinations as dest, i}
     <div class="dest-row flex gap-2 mb-3"> <input 
