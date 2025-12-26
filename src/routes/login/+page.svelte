@@ -141,6 +141,7 @@
 
             const verificationResp = await fetch('/api/auth/webauthn', {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(normalised),
             });
@@ -189,6 +190,7 @@
         try {
             const response = await fetch(endpoint, {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });

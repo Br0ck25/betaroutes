@@ -2,11 +2,18 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getUserAuthenticators } from '$lib/server/authenticatorService';
 
-export const GET: RequestHandler = async ({ platform, locals }) => {
+export const GET: RequestHandler = async ({ platform, locals, cookies }) => {
   try {
     // Check if user is authenticated
-    const session = locals.session;
-    if (!session?.id) {
+    const user = locals.user;
+    if (!user?.id) {
+      // Log cookie value to help debug session mismatches in production
+      try {
+        const cookieVal = cookies.get('session_id');
+        console.debug('[WebAuthn List] Unauthorized request; session_id cookie:', cookieVal ? 'present' : 'missing');
+      } catch (e) {
+        // ignore
+      }
       return json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -16,7 +23,7 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
     }
 
     // Get user's authenticators
-    const authenticators = await getUserAuthenticators(env.BETA_USERS_KV, session.id);
+    const authenticators = await getUserAuthenticators(env.BETA_USERS_KV, user.id);
 
     // Return sanitized list (don't expose the public key)
     const sanitized = authenticators.map(auth => ({

@@ -5,8 +5,8 @@ import { removeAuthenticator } from '$lib/server/authenticatorService';
 export const POST: RequestHandler = async ({ request, platform, locals, cookies }) => {
   try {
     // Check if user is authenticated
-    const session = locals.session;
-    if (!session?.id) {
+    const user = locals.user;
+    if (!user?.id) {
       return json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -24,7 +24,7 @@ export const POST: RequestHandler = async ({ request, platform, locals, cookies 
     }
 
     // Remove the authenticator
-    await removeAuthenticator(env.BETA_USERS_KV, session.id, credentialID);
+    await removeAuthenticator(env.BETA_USERS_KV, user.id, credentialID);
 
     // If this credential was used to create the current session, remove it from session KV
     try {
