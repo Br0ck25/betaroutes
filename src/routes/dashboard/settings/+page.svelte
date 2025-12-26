@@ -247,7 +247,16 @@
 
   async function loadAuthenticators() {
     try {
-      const res = await fetch('/api/auth/webauthn/list');
+      const res = await fetch('/api/auth/webauthn/list', { credentials: 'same-origin' });
+      if (res.status === 401) {
+        console.warn('[Passkey] Could not load authenticators: session expired');
+        authenticatorsList = [];
+        deviceRegistered = false;
+        deviceCredentialID = null;
+        // Optionally prompt the user to reload or re-login
+        return;
+      }
+
       if (!res.ok) {
         console.warn('[Passkey] Could not load authenticators');
         authenticatorsList = [];
@@ -255,6 +264,7 @@
         deviceCredentialID = null;
         return;
       }
+
       const json = await res.json();
       const auths = json.authenticators || [];
       authenticatorsList = auths;
@@ -282,6 +292,7 @@
     try {
       const res = await fetch('/api/auth/webauthn/delete', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credentialID: deviceCredentialID })
       });
@@ -407,6 +418,7 @@
       // Use top-level deviceName variable
       const verifyRes = await fetch('/api/auth/webauthn?type=register', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credential: normalised, deviceName })
       });
