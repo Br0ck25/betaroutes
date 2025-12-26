@@ -152,6 +152,8 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
       }
 
       const rpID = getRpID({ url });
+      // Don't pass any allowCredentials - let browser show all available passkeys
+      // The credential response will identify which user it belongs to
       const options = await generateAuthenticationOptionsForUser([], rpID);
       
       if (!options || !options.challenge) {
