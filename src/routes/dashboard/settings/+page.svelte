@@ -250,12 +250,35 @@
     try {
       const res = await fetch('/api/auth/webauthn/list', { credentials: 'same-origin' });
       if (res.status === 401) {
-        console.warn('[Passkey] Could not load authenticators: session expired');
-        authenticatorsList = [];
-        deviceRegistered = false;
-        deviceCredentialID = null;
-        sessionExpired = true; // Show UI hint
-        // Optionally prompt the user to reload or re-login
+        // Retry once after a short delay (cookie may not be set yet)
+        await new Promise((r) => setTimeout(r, 400));
+        const retry = await fetch('/api/auth/webauthn/list', { credentials: 'same-origin' });
+        if (retry.status === 401) {
+          console.warn('[Passkey] Could not load authenticators: session expired');
+          authenticatorsList = [];
+          deviceRegistered = false;
+          deviceCredentialID = null;
+          sessionExpired = true; // Show UI hint
+          return;
+        } else if (!retry.ok) {
+          console.warn('[Passkey] Could not load authenticators (retry)');
+          authenticatorsList = [];
+          deviceRegistered = false;
+          deviceCredentialID = null;
+          return;
+        }
+        const retryJson = await retry.json();
+        const retryAuths = retryJson.authenticators || [];
+        authenticatorsList = retryAuths;
+        const matchRetry = retryAuths.find((a: any) => a.name === deviceName);
+        if (matchRetry) {
+          deviceRegistered = true;
+          deviceCredentialID = matchRetry.credentialID;
+        } else {
+          deviceRegistered = false;
+          deviceCredentialID = null;
+        }
+        sessionExpired = false;
         return;
       }
 
@@ -447,8 +470,20 @@
       console.log('[Passkey] Registration successful!');
       showSuccessMsg('Passkey registered successfully! You can now sign in with your fingerprint or face.');
 
-      // Refresh authenticators and update device state
-      await loadAuthenticators();
+      // If server returned the created authenticator, update UI immediately to avoid race on cookie
+      if (verifyResult?.authenticator) {
+        authenticatorsList = [ ...(authenticatorsList || []), verifyResult.authenticator ];
+        // If name matches our device, mark as registered
+        if (verifyResult.authenticator.name === deviceName) {
+          deviceRegistered = true;
+          deviceCredentialID = verifyResult.authenticator.credentialID;
+        }
+        // Background sync to ensure full state later
+        setTimeout(() => loadAuthenticators(), 1200);
+      } else {
+        // Fallback: refresh list
+        await loadAuthenticators();
+      }
 
 
     } catch (error: any) {

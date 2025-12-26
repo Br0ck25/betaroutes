@@ -402,11 +402,18 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       cookies.delete('webauthn-challenge', { path: '/' });
 
       console.log('[WebAuthn] Registration complete! Credential ID:', storedCredentialID);
+
+      // Return the created authenticator so the client can update UI immediately
       return json({ 
         success: true, 
         verified: true, 
         message: 'Passkey registered!',
-        credentialID: storedCredentialID // Return for debugging
+        authenticator: {
+          credentialID: storedCredentialID,
+          name: deviceName,
+          createdAt,
+          transports: credential.response.transports || []
+        }
       });
     } else {
       // AUTHENTICATION FLOW
