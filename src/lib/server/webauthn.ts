@@ -9,7 +9,6 @@ import {
   type VerifyAuthenticationResponseOpts,
 } from '@simplewebauthn/server';
 import { isoBase64URL } from '@simplewebauthn/server/helpers';
-import { normalizeCredentialID } from '$lib/server/webauthn-utils';
 
 const RP_NAME = 'Go Route Yourself';
 
@@ -40,7 +39,7 @@ export async function generateRegistrationOptions(
   console.log('[WebAuthn Core] RP ID:', rpID);
   console.log('[WebAuthn Core] Existing authenticators:', user.authenticators?.length || 0);
 
-  // Filter and validate credentials before attempting to decode
+  // Filter and validate credentials before attempting to use them
   const validAuthenticators = (user.authenticators || []).filter(auth => {
     if (!auth.credentialID) {
       console.warn('[WebAuthn Core] Skipping authenticator with no credentialID');
@@ -64,34 +63,23 @@ export async function generateRegistrationOptions(
 
   console.log('[WebAuthn Core] Valid authenticators after filtering:', validAuthenticators.length);
 
+  // IMPORTANT: Pass credential IDs as base64url STRINGS, not Buffers
+  // The newer version of @simplewebauthn/server expects strings and will convert them internally
   const excludeCredentials = validAuthenticators.map((auth) => {
-    console.log('[WebAuthn Core] Attempting to prepare exclude credential ID:', auth.credentialID);
-    const normalized = normalizeCredentialID(auth.credentialID);
-    if (!normalized) {
-      console.warn('[WebAuthn Core] Skipping credential that cannot be normalized:', auth.credentialID);
-      return null;
-    }
-
-    try {
-      const buffer = isoBase64URL.toBuffer(normalized);
-      console.log('[WebAuthn Core] Successfully decoded, buffer length:', buffer.length);
-      return {
-        id: buffer,
-        type: 'public-key' as const,
-        transports: auth.transports || [],
-      };
-    } catch (error) {
-      console.error('[WebAuthn Core] Failed to decode credential after normalization:', normalized, error);
-      return null;
-    }
-  }).filter((cred): cred is NonNullable<typeof cred> => cred !== null);
+    console.log('[WebAuthn Core] Adding to exclude list:', auth.credentialID, 'length:', auth.credentialID.length);
+    return {
+      id: auth.credentialID,  // Keep as string - library will handle conversion
+      type: 'public-key' as const,
+      transports: auth.transports || [],
+    };
+  });
 
   console.log('[WebAuthn Core] Excluding credentials:', excludeCredentials.length);
 
   const opts: GenerateRegistrationOptionsOpts = {
     rpName: RP_NAME,
     rpID: rpID,
-    userID: new TextEncoder().encode(user.id),
+    userID: user.id,  // Pass as string - library will encode it
     userName: user.email,
     userDisplayName: user.name || user.email,
     attestationType: 'none',
@@ -118,8 +106,9 @@ export async function generateAuthenticationOptionsForUser(
   console.log('[WebAuthn Core] RP ID:', rpID);
   console.log('[WebAuthn Core] Authenticators:', authenticators.length);
 
+  // Pass credential IDs as base64url strings
   const allowCredentials = authenticators.map((auth) => ({
-    id: isoBase64URL.toBuffer(auth.credentialID),
+    id: auth.credentialID,  // Keep as string
     type: 'public-key' as const,
     transports: auth.transports || [],
   }));
