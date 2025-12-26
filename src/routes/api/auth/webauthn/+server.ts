@@ -98,19 +98,48 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
         return json({ error: 'Failed to generate options' }, { status: 500 });
       }
 
-      // Convert binary fields to base64url strings for JSON serialization
-      try {
-        console.log('[webauthn] Pre-conversion challenge type:', typeof options.challenge, options.challenge && (options.challenge as any)?.constructor?.name);
-        if (options.challenge && typeof options.challenge !== 'string') {
-          options.challenge = toBase64Url(options.challenge);
+      // Convert binary fields to base64url strings for JSON serialization with per-field diagnostics
+      function fieldInfo(val: any) {
+        try {
+          return {
+            type: typeof val,
+            ctor: val && (val.constructor ? val.constructor.name : undefined),
+            length: (val && (val.byteLength || val.length)) || undefined
+          };
+        } catch (e) {
+          return { type: typeof val };
         }
+      }
+
+      try {
+        console.log('[webauthn] Pre-conversion challenge info:', fieldInfo(options.challenge));
+        if (options.challenge && typeof options.challenge !== 'string') {
+          try {
+            options.challenge = toBase64Url(options.challenge);
+            console.log('[webauthn] Converted challenge to base64url (len):', String(options.challenge).length);
+          } catch (err) {
+            console.error('[webauthn] Challenge conversion failed:', err);
+            return json({ error: 'Failed to generate options', details: err instanceof Error ? err.message : String(err), stack: process.env.NODE_ENV !== 'production' ? (err instanceof Error ? err.stack : undefined) : undefined }, { status: 500 });
+          }
+        }
+
         if (Array.isArray(options.excludeCredentials)) {
-          options.excludeCredentials = options.excludeCredentials.map((c: any) => ({ ...c, id: typeof c.id === 'string' ? c.id : toBase64Url(c.id) }));
+          const idsInfo = options.excludeCredentials.map((c: any) => ({ idInfo: fieldInfo(c.id) }));
+          console.log('[webauthn] Pre-conversion excludeCredentials ids info:', idsInfo);
+
+          options.excludeCredentials = options.excludeCredentials.map((c: any) => {
+            if (typeof c.id === 'string') return { ...c, id: c.id };
+            try {
+              return { ...c, id: toBase64Url(c.id) };
+            } catch (err) {
+              console.error('[webauthn] excludeCredential id conversion failed for one credential:', err);
+              throw err;
+            }
+          });
         }
       } catch (convErr) {
         console.warn('[webauthn] Failed to convert registration options binary fields', convErr);
-        // Bail with clear error so client sees details
-        return json({ error: 'Failed to generate options', details: convErr instanceof Error ? convErr.message : String(convErr) }, { status: 500 });
+        return json({ error: 'Failed to generate options', details: convErr instanceof Error ? convErr.message : String(convErr), stack: process.env.NODE_ENV !== 'production' ? (convErr instanceof Error ? convErr.stack : undefined) : undefined }, { status: 500 });
       }
 
       cookies.set('webauthn-challenge', String(options.challenge), {
@@ -142,18 +171,44 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
         return json({ error: 'Failed to generate options' }, { status: 500 });
       }
 
-      // Convert binary fields to base64url strings for JSON serialization
+      // Convert binary fields to base64url strings for JSON serialization (auth), with diagnostics
       try {
-        console.log('[webauthn] Pre-conversion auth challenge type:', typeof options.challenge, options.challenge && (options.challenge as any)?.constructor?.name);
-        if (options.challenge && typeof options.challenge !== 'string') {
-          options.challenge = toBase64Url(options.challenge);
+        function fieldInfo(val: any) {
+          try {
+            return { type: typeof val, ctor: val && (val.constructor ? val.constructor.name : undefined), length: (val && (val.byteLength || val.length)) || undefined };
+          } catch (e) {
+            return { type: typeof val };
+          }
         }
+
+        console.log('[webauthn] Pre-conversion auth challenge info:', fieldInfo(options.challenge));
+        if (options.challenge && typeof options.challenge !== 'string') {
+          try {
+            options.challenge = toBase64Url(options.challenge);
+            console.log('[webauthn] Converted auth challenge to base64url (len):', String(options.challenge).length);
+          } catch (err) {
+            console.error('[webauthn] Auth challenge conversion failed:', err);
+            return json({ error: 'Failed to generate options', details: err instanceof Error ? err.message : String(err), stack: process.env.NODE_ENV !== 'production' ? (err instanceof Error ? err.stack : undefined) : undefined }, { status: 500 });
+          }
+        }
+
         if (Array.isArray(options.allowCredentials)) {
-          options.allowCredentials = options.allowCredentials.map((c: any) => ({ ...c, id: typeof c.id === 'string' ? c.id : toBase64Url(c.id) }));
+          const idsInfo = options.allowCredentials.map((c: any) => ({ idInfo: fieldInfo(c.id) }));
+          console.log('[webauthn] Pre-conversion allowCredentials ids info:', idsInfo);
+
+          options.allowCredentials = options.allowCredentials.map((c: any) => {
+            if (typeof c.id === 'string') return { ...c, id: c.id };
+            try {
+              return { ...c, id: toBase64Url(c.id) };
+            } catch (err) {
+              console.error('[webauthn] allowCredential id conversion failed for one credential:', err);
+              throw err;
+            }
+          });
         }
       } catch (convErr) {
         console.warn('[webauthn] Failed to convert authentication options binary fields', convErr);
-        return json({ error: 'Failed to generate options', details: convErr instanceof Error ? convErr.message : String(convErr) }, { status: 500 });
+        return json({ error: 'Failed to generate options', details: convErr instanceof Error ? convErr.message : String(convErr), stack: process.env.NODE_ENV !== 'production' ? (convErr instanceof Error ? convErr.stack : undefined) : undefined }, { status: 500 });
       }
 
       cookies.set('webauthn-challenge', String(options.challenge), {
@@ -166,10 +221,11 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
       return json(options);
     }
   } catch (error) {
-    console.error('[WebAuthn] GET Error:', error);
+    console.error('[WebAuthn] GET Error:', error, error instanceof Error ? error.stack : undefined);
     return json({ 
       error: 'Failed to generate options',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      details: error instanceof Error ? error.message : 'Unknown error',
+      stack: process.env.NODE_ENV !== 'production' ? (error instanceof Error ? error.stack : undefined) : undefined
     }, { status: 500 });
   }
 };
