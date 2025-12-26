@@ -232,15 +232,78 @@ export async function verifyAuthenticationResponseForUser(
       expectedChallengeType: typeof opts.expectedChallenge
     });
 
+    // Primary attempt: Buffers for both ID and public key (what we expect)
     verification = await verifyAuthenticationResponse(opts);
   } catch (e) {
     console.error('[WebAuthn Core] verifyAuthenticationResponse threw:', e);
+    console.error('[WebAuthn Core] Attempting fallbacks for authenticator shape');
+
+    // Log concise summary
     console.error('[WebAuthn Core] verifyAuthenticationResponse opts (summary):', {
       credentialIDPresent: !!opts.authenticator?.credentialID,
       credentialPublicKeyLength: (opts.authenticator?.credentialPublicKey as any)?.length,
       counter: opts.authenticator?.counter
     });
-    throw e;
+
+    // Fallback strategies: try different combinations of string vs Buffer for the two fields
+    const attempts = [
+      {
+        name: 'ID-string / PublicKey-Buffer',
+        authenticator: {
+          credentialID: authenticator.credentialID, // original base64url string
+          credentialPublicKey: isoBase64URL.toBuffer(authenticator.credentialPublicKey),
+          counter: authenticator.counter,
+        },
+      },
+      {
+        name: 'ID-Buffer / PublicKey-string',
+        authenticator: {
+          credentialID: isoBase64URL.toBuffer(authenticator.credentialID),
+          credentialPublicKey: authenticator.credentialPublicKey, // base64url string
+          counter: authenticator.counter,
+        },
+      },
+      {
+        name: 'ID-string / PublicKey-string',
+        authenticator: {
+          credentialID: authenticator.credentialID,
+          credentialPublicKey: authenticator.credentialPublicKey,
+          counter: authenticator.counter,
+        },
+      }
+    ];
+
+    for (const attempt of attempts) {
+      try {
+        console.log('[WebAuthn Core] Fallback attempt:', attempt.name, {
+          credentialIDType: typeof attempt.authenticator.credentialID,
+          credentialIDLength: (attempt.authenticator.credentialID as any)?.length,
+          credentialPublicKeyType: typeof attempt.authenticator.credentialPublicKey,
+          credentialPublicKeyLength: (attempt.authenticator.credentialPublicKey as any)?.length,
+          counter: attempt.authenticator.counter
+        });
+
+        const altOpts: VerifyAuthenticationResponseOpts = {
+          response: credential,
+          expectedChallenge,
+          expectedOrigin,
+          expectedRPID,
+          authenticator: attempt.authenticator as any,
+          requireUserVerification: false,
+        };
+
+        verification = await verifyAuthenticationResponse(altOpts);
+        console.log('[WebAuthn Core] Fallback attempt succeeded:', attempt.name);
+        break;
+      } catch (err) {
+        console.error('[WebAuthn Core] Fallback attempt failed:', attempt.name, err instanceof Error ? err.message : String(err));
+      }
+    }
+
+    if (!verification) {
+      console.error('[WebAuthn Core] All fallback attempts failed');
+      throw e; // rethrow original error
+    }
   }
 
   console.log('[WebAuthn Core] Authentication verification complete');
