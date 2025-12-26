@@ -26,69 +26,7 @@ function getOrigin(request: Request): string {
   return new URL(request.url).origin;
 }
 
-// Convert ArrayBuffer/Uint8Array/Buffer-like values to base64url string safely.
-function toBase64Url(input: any) {
-  if (input == null) return '';
-  if (typeof input === 'string') return input;
-
-  // Accept objects produced by some runtimes (e.g., { type: 'Buffer', data: [...] })
-  if (typeof input === 'object' && Array.isArray((input as any).data)) {
-    try {
-      const arr = (input as any).data as number[];
-      const bytes = new Uint8Array(arr);
-      if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-      let binary = '';
-      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-      return (globalThis as any).btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    } catch (e) {
-      throw new Error('Unsupported input shape for base64url conversion');
-    }
-  }
-
-  let bytes: Uint8Array | undefined;
-  if (input instanceof Uint8Array) {
-    bytes = input;
-  } else if (ArrayBuffer.isView(input)) {
-    bytes = new Uint8Array((input as any).buffer, (input as any).byteOffset || 0, (input as any).byteLength || (input as any).length);
-  } else if (input instanceof ArrayBuffer) {
-    bytes = new Uint8Array(input);
-  } else if ((input as any).buffer && (input as any).byteLength) {
-    // fallback for exotic typed shapes
-    try {
-      bytes = new Uint8Array((input as any).buffer);
-    } catch (e) {
-      throw new Error('Unsupported input type for base64url conversion');
-    }
-  }
-
-  if (!bytes) {
-    throw new Error('Unsupported input type for base64url conversion');
-  }
-
-  // Convert to regular base64
-  let base64: any;
-  if (typeof Buffer !== 'undefined') {
-    base64 = Buffer.from(bytes).toString('base64');
-  } else if (typeof btoa !== 'undefined') {
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    base64 = btoa(binary);
-  } else {
-    // Last resort: manual conversion
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    base64 = (globalThis as any).btoa ? (globalThis as any).btoa(binary) : Buffer.from(binary, 'binary').toString('base64');
-  }
-
-  // Ensure we have a string before calling replace
-  if (typeof base64 !== 'string') base64 = String(base64);
-
-  try {
-    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  } catch (e) {
-    throw new Error('Failed to convert to base64url: ' + (e && (e as Error).message));
-  }
-}
+import { toBase64Url } from '$lib/server/webauthn-utils';
 
 export const GET: RequestHandler = async ({ url, locals, cookies, platform }) => {
   try {
