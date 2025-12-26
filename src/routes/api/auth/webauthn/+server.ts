@@ -26,6 +26,47 @@ function getOrigin(request: Request): string {
   return new URL(request.url).origin;
 }
 
+// Convert ArrayBuffer/Uint8Array/Buffer-like values to base64url string safely.
+function toBase64Url(input: any) {
+  if (!input) return '';
+  if (typeof input === 'string') return input;
+
+  let bytes: Uint8Array;
+  if (input instanceof Uint8Array) {
+    bytes = input;
+  } else if (ArrayBuffer.isView(input)) {
+    bytes = new Uint8Array((input as any).buffer, (input as any).byteOffset || 0, (input as any).byteLength || (input as any).length);
+  } else if (input instanceof ArrayBuffer) {
+    bytes = new Uint8Array(input);
+  } else if ((input as any).buffer && (input as any).byteLength) {
+    // fallback for exotic typed shapes
+    try {
+      bytes = new Uint8Array((input as any).buffer);
+    } catch (e) {
+      throw new Error('Unsupported input type for base64url conversion');
+    }
+  } else {
+    throw new Error('Unsupported input type for base64url conversion');
+  }
+
+  // Convert to regular base64
+  let base64: string;
+  if (typeof Buffer !== 'undefined') {
+    base64 = Buffer.from(bytes).toString('base64');
+  } else if (typeof btoa !== 'undefined') {
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    base64 = btoa(binary);
+  } else {
+    // Last resort: manual conversion
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    base64 = (globalThis as any).btoa ? (globalThis as any).btoa(binary) : Buffer.from(binary, 'binary').toString('base64');
+  }
+
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 export const GET: RequestHandler = async ({ url, locals, cookies, platform }) => {
   try {
     const type = url.searchParams.get('type');
@@ -59,14 +100,17 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
 
       // Convert binary fields to base64url strings for JSON serialization
       try {
+        console.log('[webauthn] Pre-conversion challenge type:', typeof options.challenge, options.challenge && (options.challenge as any)?.constructor?.name);
         if (options.challenge && typeof options.challenge !== 'string') {
-          options.challenge = isoBase64URL.fromBuffer(options.challenge as ArrayBuffer);
+          options.challenge = toBase64Url(options.challenge);
         }
         if (Array.isArray(options.excludeCredentials)) {
-          options.excludeCredentials = options.excludeCredentials.map((c: any) => ({ ...c, id: typeof c.id === 'string' ? c.id : isoBase64URL.fromBuffer(c.id) }));
+          options.excludeCredentials = options.excludeCredentials.map((c: any) => ({ ...c, id: typeof c.id === 'string' ? c.id : toBase64Url(c.id) }));
         }
       } catch (convErr) {
         console.warn('[webauthn] Failed to convert registration options binary fields', convErr);
+        // Bail with clear error so client sees details
+        return json({ error: 'Failed to generate options', details: convErr instanceof Error ? convErr.message : String(convErr) }, { status: 500 });
       }
 
       cookies.set('webauthn-challenge', String(options.challenge), {
@@ -100,14 +144,16 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
 
       // Convert binary fields to base64url strings for JSON serialization
       try {
+        console.log('[webauthn] Pre-conversion auth challenge type:', typeof options.challenge, options.challenge && (options.challenge as any)?.constructor?.name);
         if (options.challenge && typeof options.challenge !== 'string') {
-          options.challenge = isoBase64URL.fromBuffer(options.challenge as ArrayBuffer);
+          options.challenge = toBase64Url(options.challenge);
         }
         if (Array.isArray(options.allowCredentials)) {
-          options.allowCredentials = options.allowCredentials.map((c: any) => ({ ...c, id: typeof c.id === 'string' ? c.id : isoBase64URL.fromBuffer(c.id) }));
+          options.allowCredentials = options.allowCredentials.map((c: any) => ({ ...c, id: typeof c.id === 'string' ? c.id : toBase64Url(c.id) }));
         }
       } catch (convErr) {
         console.warn('[webauthn] Failed to convert authentication options binary fields', convErr);
+        return json({ error: 'Failed to generate options', details: convErr instanceof Error ? convErr.message : String(convErr) }, { status: 500 });
       }
 
       cookies.set('webauthn-challenge', String(options.challenge), {
@@ -117,7 +163,6 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
         path: '/',
         maxAge: 300
       });
-
       return json(options);
     }
   } catch (error) {
