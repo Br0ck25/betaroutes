@@ -26,58 +26,7 @@ function getOrigin(request: Request): string {
   return new URL(request.url).origin;
 }
 
-// Convert ArrayBuffer/Uint8Array/Buffer-like values to base64url string safely.
-function toBase64Url(input: any): string {
-  if (!input) return '';
-  if (typeof input === 'string') return input;
-
-  let bytes: Uint8Array;
-  if (input instanceof Uint8Array) {
-    bytes = input;
-  } else if (ArrayBuffer.isView(input)) {
-    bytes = new Uint8Array((input as any).buffer, (input as any).byteOffset || 0, (input as any).byteLength || (input as any).length);
-  } else if (input instanceof ArrayBuffer) {
-    bytes = new Uint8Array(input);
-  } else if ((input as any).buffer && (input as any).byteLength) {
-    // fallback for exotic typed shapes
-    try {
-      bytes = new Uint8Array((input as any).buffer);
-    } catch (e) {
-      throw new Error('Unsupported input type for base64url conversion');
-    }
-  } else {
-    throw new Error('Unsupported input type for base64url conversion');
-  }
-
-  // Convert to regular base64
-  let base64: string = '';
-  
-  try {
-    if (typeof Buffer !== 'undefined') {
-      base64 = Buffer.from(bytes).toString('base64');
-    } else if (typeof btoa !== 'undefined') {
-      let binary = '';
-      for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      base64 = btoa(binary);
-    } else {
-      // This shouldn't happen in modern environments
-      throw new Error('No base64 encoding method available');
-    }
-  } catch (e) {
-    console.error('[webauthn] Base64 encoding failed:', e);
-    throw new Error('Failed to encode to base64');
-  }
-
-  // Ensure base64 is a string before calling replace
-  if (typeof base64 !== 'string' || base64.length === 0) {
-    console.error('[webauthn] toBase64Url produced invalid output:', typeof base64, base64);
-    throw new Error('Failed to convert to base64 string');
-  }
-
-  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
+import { toBase64Url } from '$lib/server/webauthn-utils';
 
 export const GET: RequestHandler = async ({ url, locals, cookies, platform }) => {
   try {
@@ -96,15 +45,62 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
 
       const authenticators = await getUserAuthenticators(env.BETA_USERS_KV, user.id);
       
+      // Log diagnostics about stored authenticators (types/constructors/lengths) to help trace production failures
+      try {
+        const diag = (authenticators || []).map((a: any, i: number) => ({
+          idx: i,
+          hasCredential: !!a?.credentialID,
+          type: typeof a?.credentialID,
+          ctor: a?.credentialID && a.credentialID.constructor ? a.credentialID.constructor.name : undefined,
+          length: a?.credentialID ? (a.credentialID.byteLength || a.credentialID.length || (typeof a.credentialID === 'string' ? a.credentialID.length : undefined)) : undefined
+        }));
+        console.log('[webauthn] Stored authenticators diagnostics:', JSON.stringify(diag));
+      } catch (diagErr) {
+        console.warn('[webauthn] Failed to produce authenticators diagnostics', diagErr);
+      }
+
+      // Sanitize authenticators to ensure credential IDs are strings (base64url). If we encounter binary or
+      // unexpected shapes, coerce where possible, otherwise skip the authenticator so it doesn't break options generation.
+      const sanitizedAuthenticators = (authenticators || []).reduce((acc: any[], a: any) => {
+        if (!a || !a.credentialID) return acc;
+        if (typeof a.credentialID === 'string') {
+          acc.push({ credentialID: a.credentialID, transports: a.transports || [] });
+          return acc;
+        }
+        try {
+          const coerced = toBase64Url(a.credentialID);
+          if (typeof coerced === 'string' && /^[A-Za-z0-9_-]+$/.test(coerced) && coerced.length > 10) {
+            acc.push({ credentialID: coerced, transports: a.transports || [] });
+          } else {
+            console.warn('[webauthn] Skipping authenticator with invalid coerced id', coerced);
+          }
+        } catch (err) {
+          console.warn('[webauthn] Skipping authenticator that could not be coerced to base64url:', err);
+        }
+        return acc;
+      }, [] as any[]);
+
       const userWithAuth = {
         id: user.id,
         email: user.email,
         name: user.name || user.email,
-        authenticators
+        authenticators: sanitizedAuthenticators
       };
 
       const rpID = getRpID({ url });
-      const options = await generateRegistrationOptions(userWithAuth, rpID);
+
+      // Wrap generateRegistrationOptions to catch library/runtime errors and log diagnostics
+      let options: any;
+      try {
+        options = await generateRegistrationOptions(userWithAuth, rpID);
+      } catch (genErr) {
+        console.error('[webauthn] generateRegistrationOptions failed', {
+          error: genErr instanceof Error ? genErr.message : String(genErr),
+          stack: genErr instanceof Error ? genErr.stack : undefined,
+          sanitizedAuthenticatorsCount: sanitizedAuthenticators.length
+        });
+        return json({ error: 'Failed to generate options', details: 'Internal generation error' }, { status: 500 });
+      }
       
       if (!options || !options.challenge) {
         return json({ error: 'Failed to generate options' }, { status: 500 });
@@ -131,11 +127,7 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
             console.log('[webauthn] Converted challenge to base64url (len):', String(options.challenge).length);
           } catch (err) {
             console.error('[webauthn] Challenge conversion failed:', err);
-            return json({ 
-              error: 'Failed to generate options', 
-              details: err instanceof Error ? err.message : String(err), 
-              stack: process.env.NODE_ENV !== 'production' ? (err instanceof Error ? err.stack : undefined) : undefined 
-            }, { status: 500 });
+            return json({ error: 'Failed to generate options', details: err instanceof Error ? err.message : String(err), stack: process.env.NODE_ENV !== 'production' ? (err instanceof Error ? err.stack : undefined) : undefined }, { status: 500 });
           }
         }
 
@@ -155,11 +147,7 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
         }
       } catch (convErr) {
         console.warn('[webauthn] Failed to convert registration options binary fields', convErr);
-        return json({ 
-          error: 'Failed to generate options', 
-          details: convErr instanceof Error ? convErr.message : String(convErr), 
-          stack: process.env.NODE_ENV !== 'production' ? (convErr instanceof Error ? convErr.stack : undefined) : undefined 
-        }, { status: 500 });
+        return json({ error: 'Failed to generate options', details: convErr instanceof Error ? convErr.message : String(convErr), stack: process.env.NODE_ENV !== 'production' ? (convErr instanceof Error ? convErr.stack : undefined) : undefined }, { status: 500 });
       }
 
       cookies.set('webauthn-challenge', String(options.challenge), {
@@ -208,11 +196,7 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
             console.log('[webauthn] Converted auth challenge to base64url (len):', String(options.challenge).length);
           } catch (err) {
             console.error('[webauthn] Auth challenge conversion failed:', err);
-            return json({ 
-              error: 'Failed to generate options', 
-              details: err instanceof Error ? err.message : String(err), 
-              stack: process.env.NODE_ENV !== 'production' ? (err instanceof Error ? err.stack : undefined) : undefined 
-            }, { status: 500 });
+            return json({ error: 'Failed to generate options', details: err instanceof Error ? err.message : String(err), stack: process.env.NODE_ENV !== 'production' ? (err instanceof Error ? err.stack : undefined) : undefined }, { status: 500 });
           }
         }
 
@@ -232,11 +216,7 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
         }
       } catch (convErr) {
         console.warn('[webauthn] Failed to convert authentication options binary fields', convErr);
-        return json({ 
-          error: 'Failed to generate options', 
-          details: convErr instanceof Error ? convErr.message : String(convErr), 
-          stack: process.env.NODE_ENV !== 'production' ? (convErr instanceof Error ? convErr.stack : undefined) : undefined 
-        }, { status: 500 });
+        return json({ error: 'Failed to generate options', details: convErr instanceof Error ? convErr.message : String(convErr), stack: process.env.NODE_ENV !== 'production' ? (convErr instanceof Error ? convErr.stack : undefined) : undefined }, { status: 500 });
       }
 
       cookies.set('webauthn-challenge', String(options.challenge), {
