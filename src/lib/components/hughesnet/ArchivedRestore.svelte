@@ -24,6 +24,7 @@
   onMount(load);
 
   function toggle(id: string) {
+    console.log('[ArchivedRestore] toggle', id);
     const idx = selected.indexOf(id);
     if (idx >= 0) {
       selected = [...selected.slice(0, idx), ...selected.slice(idx + 1)];
@@ -33,8 +34,10 @@
   }
 
   function selectAll() {
+    console.log('[ArchivedRestore] selectAll before:', selected.length, 'orders:', orders.length);
     if (selected.length === orders.length) selected = [];
     else selected = orders.map(o => o.id);
+    console.log('[ArchivedRestore] selectAll after:', selected.length);
   }
 
   // Modal control
@@ -91,8 +94,8 @@
       <p>No archived orders found.</p>
     {:else}
       <div class="controls">
-        <button class="btn-small" on:click={selectAll}>{selected.length === orders.length ? 'Unselect All' : 'Select All'}</button>
-        <button class="btn-primary" disabled={selected.length === 0} on:click={openConfirm}>Restore Selected</button>
+        <button type="button" class="btn-small" on:click={selectAll}>{selected.length === orders.length ? 'Unselect All' : 'Select All'}</button>
+        <button type="button" class="btn-primary" disabled={selected.length === 0} on:click={openConfirm}>Restore Selected</button>
       </div>
 
       <ul class="list">
@@ -131,6 +134,7 @@
 .archive-card { padding: 12px; border: 1px solid #E5E7EB; border-radius: 10px; background: white; }
 .title { font-weight: 700; margin-bottom: 8px; }
 .controls { display:flex; gap:8px; margin-bottom:8px; }
+.controls button { pointer-events: auto; }
 .btn-primary { padding:6px 10px; background:#F97316; color:white; border-radius:8px; }
 .btn-small { padding:6px 10px; background:white; border:1px solid #E5E7EB; border-radius:8px }
 .list { list-style:none; padding:0; margin:0; max-height:240px; overflow:auto; }
