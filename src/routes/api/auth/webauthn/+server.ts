@@ -571,9 +571,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
         tripsThisMonth: fullUser?.tripsThisMonth || 0,
         maxTrips: fullUser?.maxTrips || 10,
         resetDate: fullUser?.resetDate || now,
-        role: (fullUser as any)?.role || 'user',
-        // Remember which credential was used to authenticate this session
-        lastUsedCredentialID: credentialID
+        role: (fullUser as any)?.role || 'user'
       };
 
       const sessionId = await createSession(sessionKv, sessionData);

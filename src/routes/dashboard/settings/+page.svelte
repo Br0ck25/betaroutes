@@ -66,15 +66,6 @@
   let deleteError = '';
   let isDeleting = false;
   let registering = false; // State for passkey registration
-  // Passkeys list UI state
-  let passkeys: Array<{ credentialID: string; name?: string | null; transports?: string[]; createdAt?: string | null }> = [];
-  let loadingPasskeys = false;
-  let passkeyError = '';
-  let renamingId: string | null = null;
-  let renameDraft: Record<string, string> = {};
-  // Session-level last used credential (used to know if current session is using a device passkey)
-  let sessionLastUsedCredential: string | null = null;
-  let isCurrentDeviceRegistered = false;
    
   // Pro Plan Check & Modal State
   $: isPro = ['pro', 'business', 'premium', 'enterprise'].includes($auth.user?.plan || '');
@@ -302,13 +293,6 @@
 
       // 🔧 STEP 3: Send credential to server for verification
       console.log('[Passkey] Verifying with server...');
-
-      // Refresh passkey list after successful registration
-      try {
-        await fetchPasskeys();
-      } catch (err) {
-        console.warn('[Passkey] Failed to refresh passkey list after registration', err);
-      }
       
       function bufferToBase64Url(buffer: ArrayBuffer | Uint8Array) {
         const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
@@ -343,7 +327,6 @@
 
       const verifyRes = await fetch('/api/auth/webauthn?type=register', {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credential: normalised, deviceName })
       });
@@ -354,13 +337,8 @@
         throw new Error(verifyResult.error || 'Registration failed');
       }
 
-      // Refresh passkeys list (if the UI is open)
-      try { await fetchPasskeys(); } catch (e) { console.warn('Failed to refresh passkeys after registration', e); }
-
       console.log('[Passkey] Registration successful!');
       showSuccessMsg('Passkey registered successfully! You can now sign in with your fingerprint or face.');
-      // update UI
-      await fetchPasskeys();
 
     } catch (error: any) {
       console.error('[Passkey] Registration error:', error);
@@ -382,105 +360,30 @@
     }
   }
 
-  // Fetch the user's passkeys for settings UI
-  async function fetchPasskeys() {
-    loadingPasskeys = true;
-    passkeyError = '';
-    try {
-      const res = await fetch('/api/auth/webauthn/list', { credentials: 'include' });
-      if (!res.ok) {
-        if (res.status === 401) {
-          passkeyError = 'Unauthorized — please sign in again.';
-          loadingPasskeys = false;
-          return;
-        }
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || 'Failed to fetch passkeys');
-      }
-      const j = await res.json();
-      passkeys = j.authenticators || [];
-      // initialize rename drafts
-      renameDraft = {};
-      passkeys.forEach(p => { if (p.name) renameDraft[p.credentialID] = p.name; });
+  async function handleDeleteAccount() {
+    if (!deletePassword) {
+      deleteError = 'Please enter your password to confirm.';
+      return;
+    }
+    
+    if (!confirm('FINAL WARNING: This will permanently delete your account and all data. This cannot be undone.')) {
+      return;
+    }
 
-      // Also fetch session info to see whether current session used a credential
-      try {
-        const sres = await fetch('/api/auth/session-info', { credentials: 'include' });
-        if (sres.ok) {
-          const sj = await sres.json();
-          sessionLastUsedCredential = sj.lastUsedCredentialID || null;
-          isCurrentDeviceRegistered = passkeys.some(pk => pk.credentialID === sessionLastUsedCredential);
-        } else {
-          sessionLastUsedCredential = null;
-          isCurrentDeviceRegistered = false;
-        }
-      } catch (err) {
-        console.warn('Failed to fetch session info', err);
-        sessionLastUsedCredential = null;
-        isCurrentDeviceRegistered = false;
+    isDeleting = true;
+    try {
+      const result = await auth.deleteAccount($user?.name || '', deletePassword);
+      if (result.success) {
+        goto('/');
+      } else {
+        deleteError = result.error || 'Failed to delete account';
+        isDeleting = false;
       }
-    } catch (e: any) {
-      console.error('[Passkey] Fetch error:', e);
-      passkeyError = e?.message || 'Failed to load passkeys';
-    } finally {
-      loadingPasskeys = false;
+    } catch (err) {
+      deleteError = 'An unexpected error occurred';
+      isDeleting = false;
     }
   }
-
-  async function savePasskeyName(credentialID: string) {
-    const name = renameDraft[credentialID] || '';
-    try {
-      const res = await fetch('/api/auth/webauthn/rename', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credentialID, name })
-      });
-      const j = await res.json();
-      if (!res.ok) {
-        if (res.status === 401) {
-          alert('Unauthorized — please sign in again.');
-          return;
-        }
-        throw new Error(j.error || 'Rename failed');
-      }
-      await fetchPasskeys();
-      showSuccessMsg('Passkey renamed');
-    } catch (e: any) {
-      console.error('Rename failed', e);
-      alert(e?.message || 'Failed to rename passkey');
-    }
-  }
-
-  async function deletePasskey(credentialID: string) {
-    if (!confirm('Remove this passkey from your account permanently?')) return;
-    try {
-      const res = await fetch('/api/auth/webauthn/delete', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credentialID })
-      });
-      const j = await res.json();
-      if (!res.ok) {
-        if (res.status === 401) {
-          alert('Unauthorized — please sign in again.');
-          return;
-        }
-        throw new Error(j.error || 'Delete failed');
-      }
-      await fetchPasskeys();
-      showSuccessMsg('Passkey removed');
-    } catch (e: any) {
-      console.error('Delete failed', e);
-      alert(e?.message || 'Failed to delete passkey');
-    }
-  }
-
-  // Load passkeys on mount (settings page)
-  onMount(() => {
-    fetchPasskeys();
-  });
 
   function formatDate(dateStr: string): string {
     if (!dateStr) return '';
@@ -2276,62 +2179,13 @@ Generated by Go Route Yourself - Professional Route Tracking
             <h3 style="font-size: 15px; font-weight: 600; color: #111827; margin-bottom: 4px;">Biometric Login</h3>
             <p style="font-size: 13px; color: #6B7280; margin-bottom: 12px;">Enable Face ID or Touch ID for faster login.</p>
         </div>
-        {#if isCurrentDeviceRegistered}
-          <button class="btn-secondary" on:click={() => deletePasskey(sessionLastUsedCredential!)} disabled={registering}>
-            Unregister This Device
-          </button>
-        {:else}
-          <button class="btn-secondary" on:click={registerPasskey} disabled={registering}>
+        <button class="btn-secondary" on:click={registerPasskey} disabled={registering}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
                 <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
             </svg>
             {registering ? 'Registering...' : 'Register Device'}
-          </button>
-        {/if}
+        </button>
       </div>
-
-      <!-- Passkeys List UI -->
-      <div class="passkeys-card" style="margin-top:12px;padding:12px;border:1px solid #eaeaea;border-radius:6px;background:#fff">
-        <h3 style="margin:0 0 8px 0;font-size:15px">Your Passkeys</h3>
-        {#if loadingPasskeys}
-          <div>Loading passkeys…</div>
-        {:else}
-          {#if passkeyError}
-            <div class="alert error">{passkeyError}</div>
-          {:else}
-            {#if passkeys.length === 0}
-              <div>No passkeys registered.</div>
-            {:else}
-              <table style="width:100%;border-collapse:collapse">
-                <thead>
-                  <tr style="text-align:left;border-bottom:1px solid #e6e6e6">
-                    <th style="padding:6px">Name</th>
-                    <th style="padding:6px">Transports</th>
-                    <th style="padding:6px">Added</th>
-                    <th style="padding:6px"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each passkeys as p}
-                    <tr style="border-bottom:1px solid #f6f6f6">
-                      <td style="padding:8px 6px;vertical-align:middle">
-                        <input class="input" style="width:100%;" type="text" bind:value={renameDraft[p.credentialID]} />
-                      </td>
-                      <td style="padding:8px 6px;vertical-align:middle">{(p.transports || []).join(', ')}</td>
-                      <td style="padding:8px 6px;vertical-align:middle">{p.createdAt ? new Date(p.createdAt).toLocaleString() : '—'}</td>
-                      <td style="padding:8px 6px;vertical-align:middle;text-align:right">
-                        <button class="btn" on:click={() => savePasskeyName(p.credentialID)} style="margin-right:8px">Save</button>
-                        <button class="btn btn-outline" on:click={() => deletePasskey(p.credentialID)}>Remove</button>
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            {/if}
-          {/if}
-        {/if}
-      </div>
-
     </div>
     
         

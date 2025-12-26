@@ -61,7 +61,8 @@
 
       const verifyRes = await fetch('/api/auth/webauthn?type=register', {
         method: 'POST',
-        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: normalised, deviceName })
         });
 
         const verifyJson = await verifyRes.json();

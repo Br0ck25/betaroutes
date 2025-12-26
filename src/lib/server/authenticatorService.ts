@@ -95,28 +95,6 @@ export async function updateAuthenticatorCounter(
 }
 
 /**
- * Update authenticator metadata (e.g., name, createdAt) for a user.
- */
-export async function updateAuthenticator(
-  kv: KVNamespace,
-  userId: string,
-  credentialID: string,
-  updates: Partial<Pick<StoredAuthenticator, 'name' | 'createdAt' | 'transports'>>
-): Promise<void> {
-  const authenticators = await getUserAuthenticators(kv, userId);
-
-  const updated = authenticators.map(auth => {
-    if (auth.credentialID === credentialID) {
-      return { ...auth, ...updates };
-    }
-    return auth;
-  });
-
-  await kv.put(`authenticators:${userId}`, JSON.stringify(updated));
-  console.log('[AuthenticatorService] Updated authenticator metadata:', credentialID, updates);
-}
-
-/**
  * Get user ID by credential ID (for authentication)
  * This uses the credential index created during registration
  */
