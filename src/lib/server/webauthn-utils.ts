@@ -7,7 +7,17 @@
  */
 export function toBase64Url(input: any): string {
   if (!input) return '';
-  if (typeof input === 'string') return input;
+  if (typeof input === 'string') {
+    // If the string is standard base64 (contains + / or =), convert it to base64url
+    if (/[+/=]/.test(input)) {
+      return String(input).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    // Already looks like base64url
+    if (/^[A-Za-z0-9_-]+$/.test(input)) return input;
+
+    throw new Error('Unsupported string format for base64url conversion');
+  }
 
   let bytes: Uint8Array;
   if (input instanceof Uint8Array) {
@@ -40,7 +50,7 @@ export function toBase64Url(input: any): string {
     } else if (typeof btoa !== 'undefined') {
       let binary = '';
       for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
+        binary += String.fromCharCode(Number(bytes[i] ?? 0));
       }
       base64 = btoa(binary);
     } else {
