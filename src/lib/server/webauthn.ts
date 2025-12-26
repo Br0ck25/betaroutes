@@ -79,7 +79,7 @@ export async function generateRegistrationOptions(
   const opts: GenerateRegistrationOptionsOpts = {
     rpName: RP_NAME,
     rpID: rpID,
-    userID: user.id,  // Pass as string - library will encode it
+    userID: new TextEncoder().encode(user.id),  // Must be Uint8Array
     userName: user.email,
     userDisplayName: user.name || user.email,
     attestationType: 'none',
