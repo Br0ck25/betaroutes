@@ -205,25 +205,13 @@ export async function verifyAuthenticationResponseForUser(
     throw new Error('Credential response is required');
   }
 
-  // Normalize credential response fields (convert base64url strings to Buffers)
+  // Normalize credential response fields
+  // IMPORTANT: leave typical response fields as base64url strings (the server library expects strings)
   const normalizedCredential: any = { ...credential };
   const resp: any = normalizedCredential.response || {};
   try {
-    if (typeof normalizedCredential.rawId === 'string') {
-      normalizedCredential.rawId = isoBase64URL.toBuffer(normalizedCredential.rawId);
-    }
-    if (typeof resp.authenticatorData === 'string') {
-      resp.authenticatorData = isoBase64URL.toBuffer(resp.authenticatorData);
-    }
-    if (typeof resp.clientDataJSON === 'string') {
-      resp.clientDataJSON = isoBase64URL.toBuffer(resp.clientDataJSON);
-    }
-    if (typeof resp.signature === 'string') {
-      resp.signature = isoBase64URL.toBuffer(resp.signature);
-    }
-    if (typeof resp.userHandle === 'string') {
-      resp.userHandle = isoBase64URL.toBuffer(resp.userHandle);
-    }
+    // Keep rawId, authenticatorData, clientDataJSON, signature, userHandle as strings if they're strings
+    // (clients typically send base64url strings after serializing ArrayBuffers). Do not coerce to Buffers here.
     normalizedCredential.response = resp;
     console.log('[WebAuthn Core] Normalized credential response types:', {
       rawIdType: typeof normalizedCredential.rawId,
@@ -238,15 +226,20 @@ export async function verifyAuthenticationResponseForUser(
       userHandleLength: (resp.userHandle as any)?.length,
     });
   } catch (e) {
-    console.warn('[WebAuthn Core] Failed to convert credential response fields to buffers', e);
+    console.warn('[WebAuthn Core] Failed to inspect credential response fields', e);
   }
 
-  // Validate binary fields are present
-  function isBufferLike(v: any) {
-    return v instanceof ArrayBuffer || ArrayBuffer.isView(v) || (v && typeof v.buffer === 'object' && typeof v.byteLength === 'number');
+  // Validate that these fields are either base64url strings or binary-like buffers
+  function isBinaryOrBase64urlString(v: any) {
+    if (!v) return false;
+    if (v instanceof ArrayBuffer) return true;
+    if (ArrayBuffer.isView(v)) return true;
+    if (typeof v === 'string' && /^[A-Za-z0-9\-_]+=*$/.test(v)) return true;
+    return false;
   }
-  if (!isBufferLike(resp.authenticatorData) || !isBufferLike(resp.clientDataJSON) || !isBufferLike(resp.signature)) {
-    console.error('[WebAuthn Core] Credential response fields are not binary as expected', {
+
+  if (!isBinaryOrBase64urlString(resp.authenticatorData) || !isBinaryOrBase64urlString(resp.clientDataJSON) || !isBinaryOrBase64urlString(resp.signature)) {
+    console.error('[WebAuthn Core] Credential response fields are not in an accepted format', {
       authenticatorDataType: typeof resp.authenticatorData,
       clientDataJSONType: typeof resp.clientDataJSON,
       signatureType: typeof resp.signature
