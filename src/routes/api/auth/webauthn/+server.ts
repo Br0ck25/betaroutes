@@ -12,7 +12,9 @@ import {
   updateAuthenticatorCounter,
   getUserIdByCredentialID
 } from '$lib/server/authenticatorService';
-import { isoBase64URL } from '@simplewebauthn/server/helpers';
+import { createSession } from '$lib/server/sessionService';
+import { findUserById } from '$lib/server/userService';
+import { dev } from '$app/environment';
 
 function getRpID(context: { url: URL }): string {
   const hostname = context.url.hostname;
@@ -62,7 +64,6 @@ function toBase64Url(input: any): string {
       }
       base64 = btoa(binary);
     } else {
-      // This shouldn't happen in modern environments
       throw new Error('No base64 encoding method available');
     }
   } catch (e) {
@@ -70,7 +71,6 @@ function toBase64Url(input: any): string {
     throw new Error('Failed to encode to base64');
   }
 
-  // Ensure base64 is a string before calling replace
   if (typeof base64 !== 'string' || base64.length === 0) {
     console.error('[webauthn] toBase64Url produced invalid output:', typeof base64, base64);
     throw new Error('Failed to convert to base64 string');
@@ -110,75 +110,42 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
         return json({ error: 'Failed to generate options' }, { status: 500 });
       }
 
-      // Convert binary fields to base64url strings for JSON serialization with per-field diagnostics
-      function fieldInfo(val: any) {
-        try {
-          return {
-            type: typeof val,
-            ctor: val && (val.constructor ? val.constructor.name : undefined),
-            length: (val && (val.byteLength || val.length)) || undefined
-          };
-        } catch (e) {
-          return { type: typeof val };
-        }
-      }
-
+      // Convert binary fields to base64url strings for JSON serialization
       try {
-        console.log('[webauthn] Pre-conversion challenge info:', fieldInfo(options.challenge));
         if (options.challenge && typeof options.challenge !== 'string') {
-          try {
-            options.challenge = toBase64Url(options.challenge);
-            console.log('[webauthn] Converted challenge to base64url (len):', String(options.challenge).length);
-          } catch (err) {
-            console.error('[webauthn] Challenge conversion failed:', err);
-            return json({ 
-              error: 'Failed to generate options', 
-              details: err instanceof Error ? err.message : String(err), 
-              stack: process.env.NODE_ENV !== 'production' ? (err instanceof Error ? err.stack : undefined) : undefined 
-            }, { status: 500 });
-          }
+          options.challenge = toBase64Url(options.challenge);
         }
 
         if (Array.isArray(options.excludeCredentials)) {
-          const idsInfo = options.excludeCredentials.map((c: any) => ({ idInfo: fieldInfo(c.id) }));
-          console.log('[webauthn] Pre-conversion excludeCredentials ids info:', idsInfo);
-
           options.excludeCredentials = options.excludeCredentials.map((c: any) => {
             if (typeof c.id === 'string') return { ...c, id: c.id };
             try {
               return { ...c, id: toBase64Url(c.id) };
             } catch (err) {
-              console.error('[webauthn] excludeCredential id conversion failed for one credential:', err);
+              console.error('[webauthn] excludeCredential id conversion failed:', err);
               throw err;
             }
           });
         }
       } catch (convErr) {
-        console.warn('[webauthn] Failed to convert registration options binary fields', convErr);
+        console.warn('[webauthn] Failed to convert registration options', convErr);
         return json({ 
           error: 'Failed to generate options', 
-          details: convErr instanceof Error ? convErr.message : String(convErr), 
-          stack: process.env.NODE_ENV !== 'production' ? (convErr instanceof Error ? convErr.stack : undefined) : undefined 
+          details: convErr instanceof Error ? convErr.message : String(convErr)
         }, { status: 500 });
       }
 
       cookies.set('webauthn-challenge', String(options.challenge), {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: !dev,
         sameSite: 'lax',
         path: '/',
         maxAge: 300
       });
 
-      // Log the exact JSON we're about to send to the client to aid debugging
-      try {
-        console.log('[webauthn] Registration options payload:', JSON.stringify(options));
-      } catch (logErr) {
-        console.warn('[webauthn] Failed to stringify registration options for logging', logErr);
-      }
-
       return json(options);
     } else {
+      // Authentication - generate options without requiring existing session
       const env = platform?.env;
       if (!env || !env.BETA_USERS_KV) {
         return json({ error: 'Service Unavailable' }, { status: 503 });
@@ -191,69 +158,46 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
         return json({ error: 'Failed to generate options' }, { status: 500 });
       }
 
-      // Convert binary fields to base64url strings for JSON serialization (auth), with diagnostics
+      // Convert binary fields to base64url strings
       try {
-        function fieldInfo(val: any) {
-          try {
-            return { type: typeof val, ctor: val && (val.constructor ? val.constructor.name : undefined), length: (val && (val.byteLength || val.length)) || undefined };
-          } catch (e) {
-            return { type: typeof val };
-          }
-        }
-
-        console.log('[webauthn] Pre-conversion auth challenge info:', fieldInfo(options.challenge));
         if (options.challenge && typeof options.challenge !== 'string') {
-          try {
-            options.challenge = toBase64Url(options.challenge);
-            console.log('[webauthn] Converted auth challenge to base64url (len):', String(options.challenge).length);
-          } catch (err) {
-            console.error('[webauthn] Auth challenge conversion failed:', err);
-            return json({ 
-              error: 'Failed to generate options', 
-              details: err instanceof Error ? err.message : String(err), 
-              stack: process.env.NODE_ENV !== 'production' ? (err instanceof Error ? err.stack : undefined) : undefined 
-            }, { status: 500 });
-          }
+          options.challenge = toBase64Url(options.challenge);
         }
 
         if (Array.isArray(options.allowCredentials)) {
-          const idsInfo = options.allowCredentials.map((c: any) => ({ idInfo: fieldInfo(c.id) }));
-          console.log('[webauthn] Pre-conversion allowCredentials ids info:', idsInfo);
-
           options.allowCredentials = options.allowCredentials.map((c: any) => {
             if (typeof c.id === 'string') return { ...c, id: c.id };
             try {
               return { ...c, id: toBase64Url(c.id) };
             } catch (err) {
-              console.error('[webauthn] allowCredential id conversion failed for one credential:', err);
+              console.error('[webauthn] allowCredential id conversion failed:', err);
               throw err;
             }
           });
         }
       } catch (convErr) {
-        console.warn('[webauthn] Failed to convert authentication options binary fields', convErr);
+        console.warn('[webauthn] Failed to convert authentication options', convErr);
         return json({ 
           error: 'Failed to generate options', 
-          details: convErr instanceof Error ? convErr.message : String(convErr), 
-          stack: process.env.NODE_ENV !== 'production' ? (convErr instanceof Error ? convErr.stack : undefined) : undefined 
+          details: convErr instanceof Error ? convErr.message : String(convErr)
         }, { status: 500 });
       }
 
       cookies.set('webauthn-challenge', String(options.challenge), {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: !dev,
         sameSite: 'lax',
         path: '/',
         maxAge: 300
       });
+      
       return json(options);
     }
   } catch (error) {
     console.error('[WebAuthn] GET Error:', error, error instanceof Error ? error.stack : undefined);
     return json({ 
       error: 'Failed to generate options',
-      details: error instanceof Error ? error.message : 'Unknown error',
-      stack: process.env.NODE_ENV !== 'production' ? (error instanceof Error ? error.stack : undefined) : undefined
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
 };
@@ -302,25 +246,20 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
         return json({ error: 'Invalid credential data' }, { status: 400 });
       }
 
-      console.log('[WebAuthn] Saving authenticator...');
-      console.log('[WebAuthn] Credential ID raw type:', typeof credentialID, credentialID && credentialID.constructor ? credentialID.constructor.name : undefined);
-      console.log('[WebAuthn] Public key raw type:', typeof credentialPublicKey, credentialPublicKey && credentialPublicKey.constructor ? credentialPublicKey.constructor.name : undefined);
-
-      // Normalize to base64url strings using our safe helper (avoid runtime-specific isoBase64URL.fromBuffer)
       let storedCredentialID: string;
       let storedPublicKey: string;
       try {
         storedCredentialID = typeof credentialID === 'string' ? credentialID : toBase64Url(credentialID);
       } catch (e) {
         console.error('[WebAuthn] Failed to normalize credential ID:', e);
-        return json({ error: 'Invalid credential ID', details: e instanceof Error ? e.message : String(e) }, { status: 400 });
+        return json({ error: 'Invalid credential ID' }, { status: 400 });
       }
 
       try {
         storedPublicKey = typeof credentialPublicKey === 'string' ? credentialPublicKey : toBase64Url(credentialPublicKey);
       } catch (e) {
         console.error('[WebAuthn] Failed to normalize credential public key:', e);
-        return json({ error: 'Invalid credential public key', details: e instanceof Error ? e.message : String(e) }, { status: 400 });
+        return json({ error: 'Invalid credential public key' }, { status: 400 });
       }
 
       await addAuthenticator(env.BETA_USERS_KV, user.id, {
@@ -335,9 +274,15 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       console.log('[WebAuthn] Registration complete!');
       return json({ success: true, verified: true, message: 'Passkey registered!' });
     } else {
+      // AUTHENTICATION FLOW
       const env = platform?.env;
       if (!env || !env.BETA_USERS_KV) {
         return json({ error: 'Service Unavailable' }, { status: 503 });
+      }
+
+      const sessionKv = env?.BETA_SESSIONS_KV;
+      if (!sessionKv) {
+        return json({ error: 'Session service unavailable' }, { status: 503 });
       }
 
       const expectedChallenge = cookies.get('webauthn-challenge');
@@ -356,7 +301,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
         return json({ error: 'Invalid credential id' }, { status: 400 });
       }
 
-      console.log('[WebAuthn] Looking up credential (normalized):', credentialID);
+      console.log('[WebAuthn] Looking up credential:', credentialID);
 
       const userId = await getUserIdByCredentialID(env.BETA_USERS_KV, credentialID);
       
@@ -396,13 +341,38 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       
       await updateAuthenticatorCounter(env.BETA_USERS_KV, userId, credentialID, newCounter);
 
+      // ✅ CREATE SESSION - just like password login does!
+      const fullUser = await findUserById(env.BETA_USERS_KV, userId);
+      const now = new Date().toISOString();
+      
+      const sessionData = {
+        id: userId,
+        name: fullUser?.name || fullUser?.username || 'User',
+        email: fullUser?.email || '',
+        plan: fullUser?.plan || 'free',
+        tripsThisMonth: fullUser?.tripsThisMonth || 0,
+        maxTrips: fullUser?.maxTrips || 10,
+        resetDate: fullUser?.resetDate || now,
+        role: (fullUser as any)?.role || 'user'
+      };
+
+      const sessionId = await createSession(sessionKv, sessionData);
+      
+      cookies.set('session_id', sessionId, {
+        path: '/',
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: !dev,
+        maxAge: 60 * 60 * 24 * 7
+      });
+
       cookies.delete('webauthn-challenge', { path: '/' });
 
-      console.log('[WebAuthn] Authentication successful!');
+      console.log('[WebAuthn] Authentication successful! Session created.');
       return json({ 
         success: true, 
         verified: true,
-        userId: userId,
+        user: sessionData,
         message: 'Authentication successful!' 
       });
     }

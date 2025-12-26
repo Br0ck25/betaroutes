@@ -67,7 +67,7 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
         DirectionsStatus: { OK: 'OK' },
         places: { PlacesServiceStatus: { OK: 'OK' } }
       }
-    } as any;
+    };
   });
 
   // --- TEST EXECUTION ---
