@@ -39,6 +39,7 @@ export class HughesNetService {
         private settingsKV: KVNamespace,
         googleApiKey: string | undefined,
         directionsKV: KVNamespace | undefined,
+        private ordersKV: KVNamespace,
         private tripKV: KVNamespace,
         private tripIndexDO: DurableObjectNamespace
     ) {
@@ -258,6 +259,27 @@ export class HughesNetService {
         let dbDirty = false;
         let incomplete = false;
         let conflicts: ConflictInfo[] = [];
+
+        // Restore missing order details from the persistent Orders KV when possible
+        if (this.ordersKV) {
+            for (const id of Object.keys(orderDb)) {
+                const o = orderDb[id];
+                if (o && !o.address) {
+                    try {
+                        const raw = await this.ordersKV.get(`hns:order:${id}`);
+                        if (raw) {
+                            const wrapper = JSON.parse(raw);
+                            if (wrapper && wrapper.ownerId === userId && wrapper.order) {
+                                orderDb[id] = { ...wrapper.order, lastSyncTimestamp: Date.now() };
+                                dbDirty = true;
+                                this.log(`[OrdersKV] Restored order ${id} from orders KV`);
+                            }
+                        }
+                    } catch (e: any) { this.warn(`[OrdersKV] Failed to read order ${id}: ${e}`); }
+                }
+            }
+            if (dbDirty) { await this.kv.put(`hns:db:${userId}`, JSON.stringify(orderDb)); dbDirty = false; }
+        }
         
         try {
             // STAGE 1: SCANNING
@@ -340,6 +362,13 @@ export class HughesNetService {
                             delete parsed._status;
                             orderDb[String(targetId)] = parsed;
                             dbDirty = true;
+                            try {
+                                if (this.ordersKV) await this.ordersKV.put(`hns:order:${targetId}`, JSON.stringify({
+                                    ownerId: userId,
+                                    storedAt: Date.now(),
+                                    order: parsed
+                                }));
+                            } catch (e: any) { this.warn(`[OrdersKV] Failed to persist order ${targetId}: ${e}`); }
                             return true;
                         }
                       } catch(e: any) {
@@ -440,11 +469,16 @@ export class HughesNetService {
                             const retryHtml = await retryRes.text();
                             if (retryHtml.includes('name="Password"')) throw new Error('Session expired. Please reconnect.');
                             const parsed = parser.parseOrderPage(retryHtml, id);
-                            if (parsed.address && (parsed.confirmScheduleDate || parsed.arrivalTimestamp)) dbDirty = this.processOrderData(orderDb, id, parsed) || dbDirty;
+                            if (parsed.address && (parsed.confirmScheduleDate || parsed.arrivalTimestamp)) {
+                                const changed = await this.processOrderData(orderDb, id, parsed, userId);
+                                dbDirty = changed || dbDirty;
+                            }
                         } else {
                             const parsed = parser.parseOrderPage(html, id);
-                            if (parsed.address && (parsed.confirmScheduleDate || parsed.arrivalTimestamp)) dbDirty = this.processOrderData(orderDb, id, parsed) || dbDirty;
-                            else if (!parsed.address) { orderDb[id]._status = 'failed'; dbDirty = true; }
+                            if (parsed.address && (parsed.confirmScheduleDate || parsed.arrivalTimestamp)) {
+                                const changed = await this.processOrderData(orderDb, id, parsed, userId);
+                                dbDirty = changed || dbDirty;
+                            } else if (!parsed.address) { orderDb[id]._status = 'failed'; dbDirty = true; }
                         }
                         await new Promise(r => setTimeout(r, DELAY_BETWEEN_DOWNLOADS_MS)); 
                     } catch (e: any) {
@@ -611,7 +645,7 @@ export class HughesNetService {
         return ordersByDate;
     }
 
-    private processOrderData(orderDb: Record<string, OrderData>, id: string, parsed: OrderData): boolean {
+    private async processOrderData(orderDb: Record<string, OrderData>, id: string, parsed: OrderData, ownerId?: string): Promise<boolean> {
         const existingOrder = orderDb[id];
         const { syncStatus, needsResync } = determineOrderSyncStatus(parsed);
         const wasIncompleteNowComplete = checkIncompleteToComplete(existingOrder, parsed);
@@ -626,6 +660,12 @@ export class HughesNetService {
         else if (wasResync && !nowComplete) this.log(`  ${id} [RESYNC] Still incomplete/future`);
         
         orderDb[id] = updatedOrder;
+        try {
+            if (this.ordersKV) await this.ordersKV.put(`hns:order:${id}`, JSON.stringify({ ownerId: ownerId || null, storedAt: Date.now(), order: updatedOrder }));
+        } catch (e: any) {
+            this.warn(`[OrdersKV] Failed to persist order ${id}: ${e}`);
+        }
+
         const ts = parsed.arrivalTimestamp ? `Arr:${formatTimestamp(parsed.arrivalTimestamp)}` : '';
         const pole = parsed.hasPoleMount ? '+POLE' : '';
         const wifi = parsed.hasWifiExtender ? '+WIFI' : ''; 

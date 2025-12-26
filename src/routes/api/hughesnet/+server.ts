@@ -23,6 +23,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
             platform.env.BETA_USER_SETTINGS_KV,
             platform.env.PRIVATE_GOOGLE_MAPS_API_KEY,
             platform.env.BETA_DIRECTIONS_KV,
+            platform.env.BETA_HUGHESNET_ORDERS_KV,
             platform.env.BETA_LOGS_KV,
             platform.env.TRIP_INDEX_DO
         );
@@ -116,6 +117,7 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
             platform.env.BETA_USER_SETTINGS_KV,
             platform.env.PRIVATE_GOOGLE_MAPS_API_KEY,
             platform.env.BETA_DIRECTIONS_KV,
+            platform.env.BETA_HUGHESNET_ORDERS_KV,
             platform.env.BETA_LOGS_KV,
             platform.env.TRIP_INDEX_DO
         );

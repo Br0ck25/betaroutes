@@ -20,6 +20,7 @@ let mockDB: Record<string, any> = {
 	TRASH: {},
 	SETTINGS: {},
 	HUGHESNET: {},
+	HUGHESNET_ORDERS: {},
 	PLACES: {},
 	INDEXES: {} // [!code ++] New storage for Trip Indexes
 };
@@ -32,7 +33,7 @@ try {
 		mockDB = { ...mockDB, ...loaded };
 		
 		// Ensure namespaces exist
-		['HUGHESNET', 'PLACES', 'SESSIONS', 'INDEXES'].forEach(ns => {
+		['HUGHESNET', 'HUGHESNET_ORDERS', 'PLACES', 'SESSIONS', 'INDEXES'].forEach(ns => {
 			if (!mockDB[ns]) mockDB[ns] = {};
 		});
 		
@@ -179,6 +180,7 @@ export function setupMockKV(event: any) {
 	if (!env.BETA_USER_SETTINGS_KV) env.BETA_USER_SETTINGS_KV = createMockKV('SETTINGS');
 	if (!env.BETA_PLACES_KV) env.BETA_PLACES_KV = createMockKV('PLACES');
 	if (!env.BETA_HUGHESNET_KV) env.BETA_HUGHESNET_KV = createMockKV('HUGHESNET');
+	if (!env.BETA_HUGHESNET_ORDERS_KV) env.BETA_HUGHESNET_ORDERS_KV = createMockKV('HUGHESNET_ORDERS');
 
 	// [!code ++] Mock Durable Object Binding
 	if (!env.TRIP_INDEX_DO) {
