@@ -478,8 +478,32 @@
           deviceRegistered = true;
           deviceCredentialID = verifyResult.authenticator.credentialID;
         }
-        // Background sync to ensure full state later
-        setTimeout(() => loadAuthenticators(), 1200);
+
+        // Poll session-check endpoint to ensure cookie/session is active before reloading the full list
+        let attempts = 0;
+        const maxAttempts = 5;
+        const poll = async () => {
+          attempts += 1;
+          try {
+            const s = await fetch('/api/auth/session', { credentials: 'same-origin' });
+            if (s.ok) {
+              // Session recognized, load full authenticators list
+              sessionExpired = false;
+              await loadAuthenticators();
+              return;
+            }
+          } catch (err) {
+            // ignore and retry
+          }
+          if (attempts < maxAttempts) {
+            await new Promise(r => setTimeout(r, 400));
+            return poll();
+          }
+          // If we get here, session wasn't recognized in time - fallback to showing warning
+          sessionExpired = true;
+        };
+
+        poll();
       } else {
         // Fallback: refresh list
         await loadAuthenticators();
