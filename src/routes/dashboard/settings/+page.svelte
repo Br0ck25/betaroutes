@@ -618,9 +618,31 @@
     }).filter(i => i.type && i.cost >= 0);
   }
 
-  onMount(() => {
+  // Check the session endpoint a few times before attempting to fetch the authenticator list.
+  // This avoids repeatedly calling /api/auth/webauthn/list and creating a storm of 401s when
+  // the session cookie is not yet visible to subsequent fetches (e.g., right after registration).
+  async function ensureSessionActive({ attempts = 3, delay = 250 } = {}) {
+    for (let i = 0; i < attempts; i++) {
+      try {
+        const s = await fetch('/api/auth/session', { credentials: 'same-origin' });
+        if (s.ok) return true;
+      } catch (e) {
+        // ignore network hiccups and retry
+      }
+      await new Promise(r => setTimeout(r, delay * (i + 1)));
+    }
+    return false;
+  }
+
+  onMount(async () => {
     deviceName = getDeviceName();
-    loadAuthenticators();
+    const active = await ensureSessionActive();
+    if (active) {
+      await loadAuthenticators();
+    } else {
+      sessionExpired = true;
+      console.debug('[Passkey] Session not active on mount; skipping authenticator list fetch.');
+    }
   });
 
   // ===== ADVANCED EXPORT FUNCTIONS =====
