@@ -225,6 +225,74 @@ export async function verifyAuthenticationResponseForUser(
       userHandleType: typeof resp.userHandle,
       userHandleLength: (resp.userHandle as any)?.length,
     });
+
+    // Try to decode clientDataJSON if it's a base64url string and log its parsed content
+    try {
+      function base64UrlToBuffer(s: string) {
+        if (!s) return null;
+        const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+        const padding = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
+        const norm = b64 + padding;
+        if (typeof Buffer !== 'undefined') return Buffer.from(norm, 'base64');
+        const binary = atob(norm);
+        const arr = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+        return arr;
+      }
+
+      let parsedClientData: any = null;
+      if (typeof resp.clientDataJSON === 'string') {
+        const buf = base64UrlToBuffer(resp.clientDataJSON);
+        try {
+          const jsonStr = (typeof Buffer !== 'undefined' && Buffer.isBuffer(buf)) ? buf.toString('utf8') : new TextDecoder().decode(buf as any);
+          parsedClientData = JSON.parse(jsonStr);
+        } catch (err) {
+          parsedClientData = { parseError: String(err) };
+        }
+      }
+
+      console.log('[WebAuthn Core] Parsed clientDataJSON:', parsedClientData);
+      if (parsedClientData && parsedClientData.challenge) {
+        console.log('[WebAuthn Core] clientDataJSON.challenge:', parsedClientData.challenge, 'expectedChallenge:', expectedChallenge);
+        console.log('[WebAuthn Core] challenge equality (raw compare):', parsedClientData.challenge === expectedChallenge);
+      }
+
+      // Truncated previews for raw values (helpful for debugging formats)
+      function truncate(s: any) { try { const str = String(s); return str.length > 100 ? str.slice(0,100) + '...' : str; } catch (e) { return String(s); } }
+      console.log('[WebAuthn Core] Credential raw previews:', {
+        id: truncate(credential?.id),
+        rawId: truncate(credential?.rawId),
+        authenticatorDataPreview: truncate(resp.authenticatorData),
+        clientDataJSONPreview: truncate(resp.clientDataJSON),
+        signaturePreview: truncate(resp.signature),
+        userHandlePreview: truncate(resp.userHandle)
+      });
+
+      // Helper to print authenticator in readable base64url form
+      function bufferToBase64Url(buf: any) {
+        if (!buf) return null;
+        if (typeof buf === 'string') return buf;
+        if (typeof Buffer !== 'undefined' && Buffer.isBuffer(buf)) {
+          return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+        if (ArrayBuffer.isView(buf) || buf instanceof ArrayBuffer) {
+          const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf as any);
+          let binary = '';
+          for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+          return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+        return String(buf);
+      }
+
+      const authPreview = {
+        credentialID: bufferToBase64Url(isoBase64URL.toBuffer(authenticator.credentialID)),
+        credentialPublicKey: bufferToBase64Url(isoBase64URL.toBuffer(authenticator.credentialPublicKey)),
+        counter: authenticator.counter
+      };
+      console.log('[WebAuthn Core] Authenticator preview (base64url):', authPreview);
+    } catch (e) {
+      console.warn('[WebAuthn Core] Failed to decode/inspect clientDataJSON', e);
+    }
   } catch (e) {
     console.warn('[WebAuthn Core] Failed to inspect credential response fields', e);
   }
