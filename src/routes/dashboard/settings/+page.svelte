@@ -340,6 +340,7 @@
 
       const verifyRes = await fetch('/api/auth/webauthn?type=register', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credential: normalised, deviceName })
       });
@@ -383,8 +384,13 @@
     loadingPasskeys = true;
     passkeyError = '';
     try {
-      const res = await fetch('/api/auth/webauthn/list');
+      const res = await fetch('/api/auth/webauthn/list', { credentials: 'include' });
       if (!res.ok) {
+        if (res.status === 401) {
+          passkeyError = 'Unauthorized — please sign in again.';
+          loadingPasskeys = false;
+          return;
+        }
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error || 'Failed to fetch passkeys');
       }
@@ -406,11 +412,18 @@
     try {
       const res = await fetch('/api/auth/webauthn/rename', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credentialID, name })
       });
       const j = await res.json();
-      if (!res.ok) throw new Error(j.error || 'Rename failed');
+      if (!res.ok) {
+        if (res.status === 401) {
+          alert('Unauthorized — please sign in again.');
+          return;
+        }
+        throw new Error(j.error || 'Rename failed');
+      }
       await fetchPasskeys();
       showSuccessMsg('Passkey renamed');
     } catch (e: any) {
@@ -424,11 +437,18 @@
     try {
       const res = await fetch('/api/auth/webauthn/delete', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credentialID })
       });
       const j = await res.json();
-      if (!res.ok) throw new Error(j.error || 'Delete failed');
+      if (!res.ok) {
+        if (res.status === 401) {
+          alert('Unauthorized — please sign in again.');
+          return;
+        }
+        throw new Error(j.error || 'Delete failed');
+      }
       await fetchPasskeys();
       showSuccessMsg('Passkey removed');
     } catch (e: any) {
