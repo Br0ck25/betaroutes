@@ -41,7 +41,8 @@ class GoogleMapsLoader {
             }
 
             const script = document.createElement('script');
-            script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+            // Use Google's recommended loading pattern to avoid the "loaded directly without loading=async" warning
+            script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async`;
             script.async = true;
             script.defer = true;
             

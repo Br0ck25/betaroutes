@@ -32,7 +32,8 @@ export async function loadGoogleMaps(apiKey: string): Promise<void> {
   loadingPromise = new Promise((resolve, reject) => {
     const script = document.createElement('script');
     // Note: We still load 'places' lib for types, but we won't call AutocompleteService
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry`;
+    // Use Google's recommended loading pattern to avoid the "loaded directly without loading=async" warning
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&loading=async`;
     script.async = true;
     script.defer = true;
     

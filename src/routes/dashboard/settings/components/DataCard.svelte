@@ -205,19 +205,14 @@
   </div>
   
   <div class="data-actions">
-    <button class="action-btn featured" on:click={openAdvancedExport}>
-      <div class="featured-badge">PRO</div>
+    <button class="action-btn" on:click={openAdvancedExport}>
       <div>
-        <div class="action-title">
-          {!isPro ? '🔒 ' : '⭐ '}Advanced Export
-        </div>
-        <div class="action-subtitle">
-          Export trips, expenses, or tax bundle with date filters & PDF
-        </div>
+        <div class="action-title">Advanced Export</div>
+        <div class="action-subtitle">Export trips, expenses, or tax bundle with date filters & PDF</div>
       </div>
     </button>
 
-    <div class="divider"></div>
+    <div class="divider"></div> 
 
     <button class="action-btn" on:click={importCSV}>
       <div>
@@ -263,8 +258,7 @@
   .data-actions { display: flex; flex-direction: column; gap: 12px; }
   .action-btn { display: flex; align-items: center; gap: 16px; padding: 16px; background: #F9FAFB; border: 2px solid #E5E7EB; border-radius: 12px; cursor: pointer; text-align: left; width: 100%; position: relative; }
   .action-btn:hover { border-color: var(--orange, #FF6A3D); background: white; }
-  .action-btn.featured { background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%); border-color: #FB923C; }
-  .featured-badge { position: absolute; top: 8px; right: 8px; background: var(--orange, #FF6A3D); color: white; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; }
+
   .action-title { font-size: 15px; font-weight: 600; color: #111827; }
   .action-subtitle { font-size: 13px; color: #6B7280; }
   .divider { height: 1px; background: #E5E7EB; margin: 24px 0; }
