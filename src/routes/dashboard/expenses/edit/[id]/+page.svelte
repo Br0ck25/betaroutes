@@ -43,8 +43,8 @@
       return;
     }
 
-    const currentUser = $page.data.user || $user;
-    const userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
+    const currentUser = ($page.data as any)['user'] || $user;
+    const userId = (currentUser as any)?.name || (currentUser as any)?.token || localStorage.getItem('offline_user_id');
     
     if (!userId) {
       toasts.error('User not identified. Cannot save.');
@@ -57,7 +57,7 @@
         amount: parseFloat(formData.amount)
       };
       
-      await expenses.updateExpense(expenseId, payload, userId);
+      await expenses.updateExpense(String(expenseId), payload, String(userId));
       toasts.success('Expense updated');
       goto('/dashboard/expenses');
     } catch (err) {

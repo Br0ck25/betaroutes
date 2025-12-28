@@ -62,11 +62,6 @@ export class TripIndexDO {
                 if (legacyTrips && Array.isArray(legacyTrips) && legacyTrips.length > 0) {
                     console.log(`[TripIndexDO] Migrating ${legacyTrips.length} legacy trips to SQLite...`);
                     
-                    const stmt = this.state.storage.sql.prepare(`
-                        INSERT OR REPLACE INTO trips (id, userId, date, createdAt, data) 
-                        VALUES (?, ?, ?, ?, ?)
-                    `);
-
                     const CHUNK_SIZE = 100;
                     for (let i = 0; i < legacyTrips.length; i += CHUNK_SIZE) {
                         const chunk = legacyTrips.slice(i, i + CHUNK_SIZE);
@@ -74,11 +69,12 @@ export class TripIndexDO {
                         this.state.storage.sql.exec("BEGIN TRANSACTION");
                         try {
                             for (const trip of chunk) {
-                                stmt.run(
-                                    trip.id, 
-                                    trip.userId || "", // Ensure userId is captured
-                                    trip.date || "", 
-                                    trip.createdAt || "", 
+                                this.state.storage.sql.exec(
+                                    "INSERT OR REPLACE INTO trips (id, userId, date, createdAt, data) VALUES (?, ?, ?, ?, ?)",
+                                    trip.id,
+                                    trip.userId || "",
+                                    trip.date || "",
+                                    trip.createdAt || "",
                                     JSON.stringify(trip)
                                 );
                             }
@@ -156,7 +152,7 @@ export class TripIndexDO {
                 const trips = [];
                 for (const row of cursor) {
                     // JSON parsing happens only for the returned page
-                    trips.push(JSON.parse(row.data as string));
+                    trips.push(JSON.parse((row as any)['data'] as string));
                 }
 
                 return new Response(JSON.stringify({
@@ -171,15 +167,17 @@ export class TripIndexDO {
 
             if (path === "/migrate") {
                 const trips = await parseBody<TripSummary[]>();
-                const stmt = this.state.storage.sql.prepare(`
-                    INSERT OR REPLACE INTO trips (id, userId, date, createdAt, data) 
-                    VALUES (?, ?, ?, ?, ?)
-                `);
-                
                 this.state.storage.sql.exec("BEGIN TRANSACTION");
                 try {
                     for (const trip of trips) {
-                        stmt.run(trip.id, trip.userId, trip.date || "", trip.createdAt || "", JSON.stringify(trip));
+                        this.state.storage.sql.exec(
+                            "INSERT OR REPLACE INTO trips (id, userId, date, createdAt, data) VALUES (?, ?, ?, ?, ?)",
+                            trip.id,
+                            trip.userId,
+                            trip.date || "",
+                            trip.createdAt || "",
+                            JSON.stringify(trip)
+                        );
                     }
                     this.state.storage.sql.exec("COMMIT");
                 } catch (err) {
@@ -219,7 +217,7 @@ export class TripIndexDO {
                 `);
                 const expenses = [];
                 for (const row of cursor) {
-                    expenses.push(JSON.parse(row.data as string));
+                    expenses.push(JSON.parse((row as any)['data'] as string));
                 }
                 return new Response(JSON.stringify(expenses));
             }
@@ -246,15 +244,18 @@ export class TripIndexDO {
 
             if (path === "/expenses/migrate") {
                 const items = await parseBody<ExpenseRecord[]>();
-                const stmt = this.state.storage.sql.prepare(`
-                    INSERT OR REPLACE INTO expenses (id, userId, date, category, createdAt, data) 
-                    VALUES (?, ?, ?, ?, ?, ?)
-                `);
-
                 this.state.storage.sql.exec("BEGIN TRANSACTION");
                 try {
                     for (const item of items) {
-                        stmt.run(item.id, item.userId, item.date, item.category, item.createdAt, JSON.stringify(item));
+                        this.state.storage.sql.exec(
+                            "INSERT OR REPLACE INTO expenses (id, userId, date, category, createdAt, data) VALUES (?, ?, ?, ?, ?, ?)",
+                            item.id,
+                            item.userId,
+                            item.date,
+                            item.category,
+                            item.createdAt,
+                            JSON.stringify(item)
+                        );
                     }
                     this.state.storage.sql.exec("COMMIT");
                 } catch (err) {

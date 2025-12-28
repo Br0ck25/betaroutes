@@ -1,10 +1,12 @@
 import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
 import { normalizeCredentialID, toBase64Url } from '$lib/server/webauthn-utils';
+import { safeKV } from '$lib/server/env';
 
 export const POST: RequestHandler = async ({ request, platform, url }) => {
-  const env = platform?.env;
-  const secret = env?.ADMIN_MIGRATE_SECRET;
+  const { getEnv } = await import('$lib/server/env');
+  const env = getEnv(platform);
+  const secret = (env as any)?.ADMIN_MIGRATE_SECRET;
   
   if (!secret) {
     return json({ error: 'Migration disabled (no secret configured)' }, { status: 403 });
@@ -17,7 +19,7 @@ export const POST: RequestHandler = async ({ request, platform, url }) => {
   
   try {
     // List authenticator keys
-    const kv = env.BETA_USERS_KV as KVNamespace;
+    const kv = safeKV(env, 'BETA_USERS_KV') as KVNamespace | undefined;
     if (!kv || !kv.list) {
       return json({ error: 'KV not available or unsupported in this environment' }, { status: 500 });
     }
@@ -29,7 +31,7 @@ export const POST: RequestHandler = async ({ request, platform, url }) => {
     let updatedUsers: string[] = [];
     
     do {
-      const res = await kv.list({ prefix, cursor, limit: 100 });
+      const res = await kv.list({ prefix, cursor, limit: 100 }) as any;
       cursor = res?.cursor;
       
       for (const item of res.keys) {

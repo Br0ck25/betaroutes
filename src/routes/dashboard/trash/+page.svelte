@@ -217,7 +217,8 @@
                 {:else}
                     {trip.startAddress?.split(',')[0] || 'Unknown Trip'} 
                     {#if trip.stops && trip.stops.length > 0}
-                    → {trip.stops[trip.stops.length - 1].address?.split(',')[0]}
+                        {@const lastStop = trip.stops[trip.stops.length - 1]}
+                        → {lastStop?.address?.split(',')[0] || 'Stop'}
                     {/if}
                 {/if}
               </h3>

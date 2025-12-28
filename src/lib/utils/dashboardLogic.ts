@@ -13,8 +13,10 @@ export function formatCurrency(amount: number): string {
 
 export function formatDate(dateString: string): string {
     if (/^\d{4}-\d{2}$/.test(dateString)) {
-        const [y, m] = dateString.split('-').map(Number);
-        const date = new Date(y, m - 1, 1);
+        const parts = dateString.split('-');
+        const y = Number(parts[0] || '0');
+        const m = Number(parts[1] || '1');
+        const date = new Date(y, (m || 1) - 1, 1);
         return new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' }).format(date);
     }
     const date = new Date(dateString.includes('T') ? dateString : dateString + 'T00:00:00');
@@ -30,7 +32,9 @@ function getCategoryColor(category: string): string {
         insurance: '#9333EA',   // Purple
         other: '#6B7280'        // Gray
     };
-    if (map[category.toLowerCase()]) return map[category.toLowerCase()];
+    const catKey = category.toLowerCase();
+    const mappedColor = map[catKey];
+    if (mappedColor) return mappedColor;
     
     // Generate pastel color for custom categories
     let hash = 0;
@@ -129,9 +133,9 @@ export function calculateDashboardStats(allTrips: any[], allExpenses: any[] = []
             totalProfit += tripProfit;
             totalMiles += (Number(trip.totalMiles) || 0);
             
-            categoryTotals.fuel += fuelCost;
-            categoryTotals.maintenance += maintCost;
-            categoryTotals.supplies += supplyCost;
+            categoryTotals['fuel'] = (categoryTotals['fuel'] || 0) + fuelCost;
+            categoryTotals['maintenance'] = (categoryTotals['maintenance'] || 0) + maintCost;
+            categoryTotals['supplies'] = (categoryTotals['supplies'] || 0) + supplyCost;
 
             // Chart Data
             let key: string;

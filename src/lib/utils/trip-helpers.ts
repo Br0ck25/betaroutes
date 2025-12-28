@@ -19,7 +19,7 @@ export function formatTime(time: string): string {
     if (time.toLowerCase().includes('am') || time.toLowerCase().includes('pm')) {
         return time;
     }
-    const [h, m] = time.split(':').map(Number);
+    const [h = 0, m = 0] = time.split(':').map(Number);
     if (isNaN(h)) return time;
     const ampm = h >= 12 ? 'PM' : 'AM';
     const h12 = h % 12 || 12;

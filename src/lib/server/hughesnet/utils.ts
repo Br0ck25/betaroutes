@@ -15,15 +15,16 @@ export function parseAnyDate(dateStr: string): Date | null {
     // Try YYYY-MM-DD first (ISO format used in internal keys)
     const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (isoMatch) {
-        return new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
+        const [, yy = '1970', mm = '1', dd = '1'] = isoMatch as string[];
+        return new Date(parseInt(yy, 10), parseInt(mm, 10) - 1, parseInt(dd, 10));
     }
 
     // Try MM/DD/YYYY (HughesNet slash format)
     const slashMatch = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
     if (slashMatch) {
-        let y = slashMatch[3];
+        let y = slashMatch[3] || '1970';
         if (y.length === 2) y = '20' + y;
-        return new Date(parseInt(y), parseInt(slashMatch[1]) - 1, parseInt(slashMatch[2]));
+        return new Date(parseInt(y, 10), parseInt(slashMatch[1] || '1', 10) - 1, parseInt(slashMatch[2] || '1', 10));
     }
 
     return null;
@@ -51,8 +52,10 @@ export function extractDateFromTs(ts: number): string | null {
 export function parseTime(timeStr: string): number {
     if (!timeStr) return 0;
     const match = timeStr.match(/\b(\d{1,2}:\d{2})/);
-    if (!match) return 0;
-    const [h, m] = match[1].split(':').map(Number);
+    const matched = match?.[1] || '0:00';
+    const parts = matched.split(':').map(Number);
+    const h = parts[0] || 0;
+    const m = parts[1] || 0;
     return h * 60 + m;
 }
 
@@ -128,7 +131,7 @@ export function determineOrderSyncStatus(order: OrderData): { syncStatus: 'compl
     const now = Date.now();
     if (order.departureCompleteTimestamp) return { syncStatus: 'complete', needsResync: false };
     if (order.departureIncompleteTimestamp) {
-        const withinWindow = order.lastSyncTimestamp && (now - order.lastSyncTimestamp) < RESYNC_WINDOW_MS;
+        const withinWindow = !!order.lastSyncTimestamp && (now - (order.lastSyncTimestamp as number)) < RESYNC_WINDOW_MS;
         return { syncStatus: 'incomplete', needsResync: withinWindow };
     }
     return { syncStatus: 'future', needsResync: true };

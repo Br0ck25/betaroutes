@@ -16,6 +16,8 @@ import {
 	sanitizeQueryParam
 } from '$lib/server/sanitize';
 
+import { safeKV, safeDO } from '$lib/server/env';
+
 const latLngSchema = z.object({
 	lat: z.number(),
 	lng: z.number()
@@ -71,10 +73,10 @@ const tripSchema = z.object({
 	lastModified: z.string().optional()
 });
 
-function getEnv(platform: App.Platform | undefined): App.Env {
-	const env = platform?.env;
+function getEnv(platform: App.Platform | undefined): any {
+	const env = (platform?.env as any);
 
-	if (!env || !env.BETA_LOGS_KV || !env.TRIP_INDEX_DO) {
+	if (!env || !env.BETA_LOGS_KV || !(env.TRIP_INDEX_DO || (env as any).TRIP_INDEX_DO)) {
 		console.error("CRITICAL: Missing BETA_LOGS_KV or TRIP_INDEX_DO bindings");
 		throw new Error('Database bindings missing');
 	}
@@ -94,7 +96,7 @@ export const GET: RequestHandler = async (event) => {
 			return new Response('Service Unavailable', { status: 503 });
 		}
 
-		const sessionsKV = env.BETA_SESSIONS_KV;
+		const sessionsKV = safeKV(env, 'BETA_SESSIONS_KV');
 		if (sessionsKV) {
 			const identifier = getClientIdentifier(event.request, event.locals);
 			const authenticated = isAuthenticated(event.locals);
@@ -128,7 +130,7 @@ export const GET: RequestHandler = async (event) => {
 			}
 		}
 
-		const storageId = user.name || user.token;
+		const storageId = (user as any).name || (user as any).token;
 		let sinceParam = sanitizeQueryParam(event.url.searchParams.get('since'), 50);
 
         // --- ENFORCE DATA RETENTION FOR FREE USERS ---
@@ -149,11 +151,11 @@ export const GET: RequestHandler = async (event) => {
 		const offset = offsetParam ? parseInt(offsetParam) : undefined;
 
 		const svc = makeTripService(
-			env.BETA_LOGS_KV,
-			env.BETA_LOGS_TRASH_KV,
-			env.BETA_PLACES_KV,
-			env.TRIP_INDEX_DO,
-			env.PLACES_INDEX_DO
+			safeKV(env, 'BETA_LOGS_KV')!,
+			safeKV(env, 'BETA_LOGS_TRASH_KV'),
+			safeKV(env, 'BETA_PLACES_KV'),
+			safeDO(env, 'TRIP_INDEX_DO')!,
+			safeDO(env, 'PLACES_INDEX_DO')!
 		);
 
 		const allTrips = await svc.list(storageId, { since: sinceParam, limit, offset });
@@ -183,7 +185,7 @@ export const POST: RequestHandler = async (event) => {
 			return new Response(JSON.stringify({ error: 'Service Unavailable' }), { status: 503 });
 		}
 
-		const sessionsKV = env.BETA_SESSIONS_KV;
+		const sessionsKV = safeKV(env, 'BETA_SESSIONS_KV');
 		if (sessionsKV) {
 			const identifier = getClientIdentifier(event.request, event.locals);
 			const authenticated = isAuthenticated(event.locals);
@@ -217,7 +219,7 @@ export const POST: RequestHandler = async (event) => {
 			}
 		}
 
-		const storageId = sessionUser.name || sessionUser.token;
+		const storageId = (sessionUser as any).name || sessionUser.token;
 		const rawBody = await event.request.json();
 
 		let sanitizedBody;
@@ -246,11 +248,11 @@ export const POST: RequestHandler = async (event) => {
 		}
 
 		const svc = makeTripService(
-			env.BETA_LOGS_KV,
-			env.BETA_LOGS_TRASH_KV,
-			env.BETA_PLACES_KV,
-			env.TRIP_INDEX_DO,
-			env.PLACES_INDEX_DO
+			safeKV(env, 'BETA_LOGS_KV')!,
+			safeKV(env, 'BETA_LOGS_TRASH_KV'),
+			safeKV(env, 'BETA_PLACES_KV'),
+			safeDO(env, 'TRIP_INDEX_DO')!,
+			safeDO(env, 'PLACES_INDEX_DO')!
 		);
 
 		const validData = parseResult.data;
@@ -261,10 +263,11 @@ export const POST: RequestHandler = async (event) => {
 			existingTrip = await svc.get(storageId, id);
 		}
 
-		let currentPlan = sessionUser.plan;
-		if (env.BETA_USERS_KV) {
+		let currentPlan: any = sessionUser.plan;
+		const usersKV = safeKV(env, 'BETA_USERS_KV');
+		if (usersKV) {
 			try {
-				const freshUser = await findUserById(env.BETA_USERS_KV, sessionUser.id);
+				const freshUser = await findUserById(usersKV, (sessionUser as any).id);
 				if (freshUser) currentPlan = freshUser.plan;
 			} catch (e) {
 				console.error('Failed to fetch fresh plan', e);
@@ -311,7 +314,8 @@ export const POST: RequestHandler = async (event) => {
 			lastModified: now // Critical for conflict detection
 		};
 
-		await svc.put(trip);
+		// Coerce to any because client-provided stops may omit 'id' field
+		await svc.put(trip as any);
 
 		if (!existingTrip) {
 			await svc.incrementUserCounter(sessionUser.token, 1);
@@ -370,7 +374,7 @@ export const PUT: RequestHandler = async (event) => {
 			}
 		}
 
-		const storageId = sessionUser.name || sessionUser.token;
+		const storageId = (sessionUser as any).name || sessionUser.token;
 		const rawBody = await event.request.json();
 
 		let sanitizedBody;
@@ -395,11 +399,11 @@ export const PUT: RequestHandler = async (event) => {
 		}
 
 		const svc = makeTripService(
-			env.BETA_LOGS_KV,
-			env.BETA_LOGS_TRASH_KV,
-			env.BETA_PLACES_KV,
-			env.TRIP_INDEX_DO,
-			env.PLACES_INDEX_DO
+			safeKV(env, 'BETA_LOGS_KV')!,
+			safeKV(env, 'BETA_LOGS_TRASH_KV'),
+			safeKV(env, 'BETA_PLACES_KV'),
+			safeDO(env, 'TRIP_INDEX_DO')!,
+			safeDO(env, 'PLACES_INDEX_DO')!
 		);
 
 		const validData = parseResult.data;
@@ -437,7 +441,7 @@ export const PUT: RequestHandler = async (event) => {
 			lastModified: now // <--- Tag this update as user-initiated
 		};
 
-		await svc.put(trip);
+		await svc.put(trip as any);
 
 		return new Response(JSON.stringify(trip), {
 			status: 200,

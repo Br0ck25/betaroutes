@@ -1,6 +1,6 @@
 // src/lib/server/rateLimit.ts
 import type { KVNamespace } from '@cloudflare/workers-types';
-import type { RateLimitResult, RateLimitData, User } from '$lib/types';
+import type { RateLimitData, User } from '$lib/types';
 
 export interface RateLimitResult {
 	allowed: boolean;
@@ -172,7 +172,7 @@ export function getClientIdentifier(
 	const xRealIp = request.headers.get('x-real-ip');
 
 	const ip =
-		cfConnectingIp || xForwardedFor?.split(',')[0].trim() || xRealIp || 'unknown';
+		cfConnectingIp || xForwardedFor?.split(',')[0]?.trim() || xRealIp || 'unknown';
 
 	return `ip:${ip}`;
 }

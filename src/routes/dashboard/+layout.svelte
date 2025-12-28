@@ -16,9 +16,6 @@
   }
 
   let sidebarOpen = false;
-  function toggleSidebar() {
-    sidebarOpen = !sidebarOpen;
-  }
   
   function closeSidebar() {
     sidebarOpen = false;
@@ -99,7 +96,7 @@
     
     const apiKey = data.googleMapsApiKey; 
     
-    let userId = data?.user?.name || $user?.name || data?.user?.token || $user?.token;
+    let userId = (data?.user as any)?.name || $user?.name || (data?.user as any)?.token || $user?.token;
 
     if (!userId) {
         userId = localStorage.getItem('offline_user_id');
@@ -137,7 +134,7 @@
 
 <svelte:head>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </svelte:head>
 

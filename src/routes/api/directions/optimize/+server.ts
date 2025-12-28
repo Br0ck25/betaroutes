@@ -11,7 +11,7 @@ async function geocodePhoton(address: string): Promise<[number, number] | null> 
     try {
         const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(address)}&limit=1`;
         const res = await fetch(url);
-        const data = await res.json();
+        const data: any = await res.json();
         if (data.features && data.features.length > 0) {
             return data.features[0].geometry.coordinates as [number, number];
         }
@@ -47,14 +47,15 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
     }
 
 
-    const { startAddress, endAddress, stops } = await request.json();
+    const __body: any = await request.json();
+    const { startAddress, endAddress, stops } = __body;
     
     if (!startAddress || !stops || stops.length < 2) {
         return json({ error: 'Not enough data to optimize' }, { status: 400 });
     }
 
-    const kv = platform?.env?.BETA_DIRECTIONS_KV as KVNamespace;
-    const apiKey = platform?.env?.PRIVATE_GOOGLE_MAPS_API_KEY;
+    const kv = (platform?.env as any)?.BETA_DIRECTIONS_KV as KVNamespace;
+    const apiKey = (platform?.env as any)?.PRIVATE_GOOGLE_MAPS_API_KEY;
     const cacheKey = generateOptimizationKey(startAddress, endAddress || '', stops.map((s: any) => s.address));
 
     // 3. Check KV Cache
@@ -93,7 +94,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
             }
 
             const res = await fetch(osrmUrl);
-            const data = await res.json();
+            const data: any = await res.json();
 
             if (data.code === 'Ok' && data.waypoints) {
                 // OSRM returns 'waypoints' sorted by their order in the Optimized Trip.
@@ -146,9 +147,9 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
         const gUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=optimize:true|${waypointsStr}&key=${apiKey}`;
         
         const gRes = await fetch(gUrl);
-        const gData = await gRes.json();
+        const gData: any = await gRes.json();
 
-        if (gData.status === 'OK' && gData.routes.length > 0) {
+        if (gData.status === 'OK' && gData.routes && gData.routes.length > 0) {
             const route = gData.routes[0];
             const result = {
                 source: 'google',

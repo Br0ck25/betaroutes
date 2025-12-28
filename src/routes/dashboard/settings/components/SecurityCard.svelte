@@ -47,10 +47,11 @@
                 newPassword: passwordData.new
             })
         });
-        const result = await response.json();
+        let result: any = {};
+        try { result = await response.json(); } catch (e) { result = {}; }
 
         if (!response.ok) {
-            passwordError = result.message || 'Failed to update password';
+            passwordError = result?.message || 'Failed to update password';
             return;
         }
 
@@ -123,8 +124,8 @@
       try {
         const res = await fetch('/api/auth/webauthn/list', { credentials: 'same-origin' });
         if (res.ok) {
-          const json = await res.json();
-          const auths = json.authenticators || [];
+          const json: any = await res.json();
+          const auths = json?.authenticators || [];
           authenticatorsList = auths;
           const match = auths.find((a: any) => a.name === deviceName);
           if (match) {
@@ -189,7 +190,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credentialID: deviceCredentialID })
       });
-      const json = await res.json();
+      const json: any = await res.json();
       if (!res.ok) {
         if (res.status === 401) {
           sessionExpired = true;

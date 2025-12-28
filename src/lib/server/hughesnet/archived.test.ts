@@ -24,13 +24,13 @@ describe('HughesNet archived orders API', () => {
 
         // fetch by id
         const resById = await GET({ platform, locals: { user: { name: ownerId } }, url: makeUrl(`id=${orderId}`) } as any);
-        const bodyById = await resById.json();
+        const bodyById: any = await resById.json();
         expect(bodyById.success).toBe(true);
         expect(bodyById.order.id).toBe(orderId);
 
         // list
         const resList = await GET({ platform, locals: { user: { name: ownerId } }, url: makeUrl() } as any);
-        const bodyList = await resList.json();
+        const bodyList: any = await resList.json();
         expect(bodyList.success).toBe(true);
         expect(Array.isArray(bodyList.orders)).toBe(true);
         expect(bodyList.orders.some((o: any) => o.id === orderId)).toBe(true);
@@ -46,7 +46,7 @@ describe('HughesNet archived orders API', () => {
 
         const res = await GET({ platform, locals: { user: { name: ownerId } }, url: makeUrl(`id=${orderId}`) } as any);
         expect(res.status).toBe(404);
-        const body = await res.json();
+        const body: any = await res.json();
         expect(body.success).toBe(false);
     });
 });

@@ -72,7 +72,7 @@ function createTrashStore() {
 			}
 		},
 
-		async permanentDelete(id: string, userId: string) {
+		async permanentDelete(id: string, _userId: string) {
 			const db = await getDB();
             const tx = db.transaction('trash', 'readwrite');
             await tx.objectStore('trash').delete(id);
@@ -104,7 +104,7 @@ function createTrashStore() {
 				const response = await fetch('/api/trash');
 				if (!response.ok) return;
 
-				const cloudTrash = await response.json();
+				const cloudTrash: any = await response.json();
 				const cloudIds = new Set<string>();
 
 				const db = await getDB();

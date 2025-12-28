@@ -3,7 +3,7 @@ import { writable, get } from 'svelte/store';
 import { getDB } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
 import type { ExpenseRecord } from '$lib/db/types';
-import { storage } from '$lib/utils/storage';
+
 import { auth } from '$lib/stores/auth';
 import { PLAN_LIMITS } from '$lib/constants';
 
@@ -254,7 +254,7 @@ function createExpensesStore() {
                 const response = await fetch(url);
                 if (!response.ok) throw new Error('Failed to fetch expenses');
                 
-                const cloudExpenses = await response.json();
+                const cloudExpenses: any = await response.json();
                 
                 if (cloudExpenses.length === 0) {
                      console.log('☁️ No new expense changes from cloud.');

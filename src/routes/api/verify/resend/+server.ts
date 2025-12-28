@@ -5,7 +5,9 @@ import { sendVerificationEmail } from '$lib/server/email';
 import { checkRateLimit } from '$lib/server/rateLimit';
 
 export const POST: RequestHandler = async ({ request, platform, url, getClientAddress }) => {
-    const usersKV = platform?.env?.BETA_USERS_KV;
+    const { getEnv, safeKV } = await import('$lib/server/env');
+    const env = getEnv(platform);
+    const usersKV = safeKV(env, 'BETA_USERS_KV');
     if (!usersKV) return json({ message: 'DB Error' }, { status: 500 });
 
     // 1. Rate Limit
@@ -15,7 +17,8 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
         return json({ message: 'Too many requests. Please wait.' }, { status: 429 });
     }
 
-    const { email } = await request.json();
+    const body: any = await request.json();
+    const { email } = body;
     if (!email) return json({ message: 'Email required' }, { status: 400 });
 
     const normEmail = email.toLowerCase().trim();

@@ -8,7 +8,7 @@
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { onMount, onDestroy } from 'svelte';
+  import { onDestroy } from 'svelte';
 
   // --- STATE ---
   let searchQuery = '';
@@ -69,8 +69,9 @@ $: if (typeof document !== 'undefined') {
       }
 
       // 2. Maintenance Items
-      if (trip.maintenanceItems?.length) {
-          trip.maintenanceItems.forEach((item, i) => {
+      const maint = trip['maintenanceItems'] || [];
+      if (maint.length) {
+          maint.forEach((item: any, i: number) => {
               items.push({
                   id: `trip-maint-${trip.id}-${i}`,
                   date: date,
@@ -84,9 +85,9 @@ $: if (typeof document !== 'undefined') {
       }
 
       // 3. Supply Items
-      const supplies = trip.supplyItems || trip.suppliesItems || [];
+      const supplies = trip['supplyItems'] || trip['suppliesItems'] || [];
       if (supplies.length) {
-          supplies.forEach((item, i) => {
+          supplies.forEach((item: any, i: number) => {
               items.push({
                   id: `trip-supply-${trip.id}-${i}`,
                   date: date,
@@ -117,7 +118,7 @@ $: if (typeof document !== 'undefined') {
       const matchesSearch = !query || 
         (item.description && item.description.toLowerCase().includes(query)) ||
         item.amount.toString().includes(query) ||
-        (item.source === 'trip' && 'trip log'.includes(query));
+        (((item as any).source === 'trip') && 'trip log'.includes(query));
       
       if (!matchesSearch) return false;
 
@@ -165,7 +166,7 @@ $: if (typeof document !== 'undefined') {
   }
 
   function editExpense(expense: any) {
-    if (expense.source === 'trip') {
+    if ((expense as any).source === 'trip') {
       goto(`/dashboard/trips?id=${expense.tripId}`);
     } else {
       goto(`/dashboard/expenses/edit/${expense.id}`);
@@ -182,7 +183,7 @@ $: if (typeof document !== 'undefined') {
         return;
     }
 
-    const currentUser = $page.data.user || $user;
+    const currentUser = $page.data['user'] || $user;
     const userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
     if (userId) {
       try {
@@ -223,7 +224,7 @@ $: if (typeof document !== 'undefined') {
 
       if (!confirm(`Move ${manualExpenses.length} expenses to trash? ${tripLogs > 0 ? `(${tripLogs} trip logs will be skipped)` : ''}`)) return;
 
-      const currentUser = $page.data.user || $user;
+      const currentUser = $page.data['user'] || $user;
       const userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
       
       if (!userId) return;
@@ -242,6 +243,8 @@ $: if (typeof document !== 'undefined') {
       selectedExpenses = new Set();
   }
 
+  function isTripSource(item: any): boolean { return (item as any)?.source === 'trip'; }
+
   function exportSelected() {
       const selectedData = filteredExpenses.filter(e => selectedExpenses.has(e.id));
       if (selectedData.length === 0) return;
@@ -252,7 +255,7 @@ $: if (typeof document !== 'undefined') {
           e.category,
           e.amount,
           `"${(e.description || '').replace(/"/g, '""')}"`,
-          e.source === 'trip' ? 'Trip Log' : 'Manual'
+          isTripSource(e) ? 'Trip Log' : 'Manual'
       ].join(','));
 
       const csvContent = [headers.join(','), ...rows].join('\n');
@@ -341,13 +344,17 @@ $: if (typeof document !== 'undefined') {
     let swiping = false;
 
     function handleTouchStart(e: TouchEvent) {
-        startX = e.touches[0].clientX;
+        const touch = e.touches?.[0];
+        if (!touch) return;
+        startX = touch.clientX;
         x = 0;
         node.style.transition = 'none';
     }
 
     function handleTouchMove(e: TouchEvent) {
-        const dx = e.touches[0].clientX - startX;
+        const touch = e.touches?.[0];
+        if (!touch) return;
+        const dx = touch.clientX - startX;
         swiping = true;
         if (dx < -120) x = -120;
         else if (dx > 120) x = 120;
@@ -470,7 +477,7 @@ $: if (typeof document !== 'undefined') {
         <option value="amount">By Cost</option>
       </select>
         
-      <button class="sort-btn" on:click={() => sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'}>
+      <button class="sort-btn" aria-label="Toggle sort order" on:click={() => sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'}>
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="transform: rotate({sortOrder === 'asc' ? '180deg' : '0deg'})">
             <path d="M10 3V17M10 17L4 11M10 17L16 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
@@ -509,7 +516,7 @@ $: if (typeof document !== 'undefined') {
       {#each filteredExpenses as expense (expense.id)}
         {@const isSelected = selectedExpenses.has(expense.id)}
         <div class="card-wrapper">
-            {#if expense.source !== 'trip'}
+            {#if !isTripSource(expense)}
                 <div class="swipe-bg">
                     <div class="swipe-action edit"><span>Edit</span></div>
                     <div class="swipe-action delete"><span>Trash</span></div>
@@ -518,7 +525,7 @@ $: if (typeof document !== 'undefined') {
 
             <div 
                 class="expense-card" 
-                class:read-only={expense.source === 'trip'}
+                class:read-only={isTripSource(expense)}
                 class:selected={isSelected}
                 on:click={() => editExpense(expense)}
                 role="button"
@@ -527,7 +534,7 @@ $: if (typeof document !== 'undefined') {
                 use:swipeable={{
                     onEdit: () => editExpense(expense),
                     onDelete: (e) => deleteExpense(expense.id, e),
-                    isReadOnly: expense.source === 'trip'
+                    isReadOnly: isTripSource(expense)
                 }}
             >
                 <div class="card-top">
@@ -544,9 +551,9 @@ $: if (typeof document !== 'undefined') {
 
                     <div class="expense-main-info">
                         <span class="expense-date-display">
-                            {formatDate(expense.date)}
+                            {formatDate(expense.date || '')}
                         </span>
-                        
+
                         <h3 class="expense-desc-title">
                             {expense.description || 'No description'}
                         </h3>
@@ -566,7 +573,7 @@ $: if (typeof document !== 'undefined') {
                         <span class={`category-badge ${getCategoryColor(expense.category)}`}>
                              {getCategoryLabel(expense.category)}
                         </span>
-                        {#if expense.source === 'trip'}
+                        {#if isTripSource(expense)}
                             <span class="source-badge">Trip Log</span>
                         {/if}
                       </div>

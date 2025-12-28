@@ -2,21 +2,24 @@
 import { json, error } from '@sveltejs/kit';
 import { getStripe } from '$lib/server/stripe';
 import { findUserById } from '$lib/server/userService';
+import { getEnv, safeKV } from '$lib/server/env';
 
 export async function POST({ locals, url, platform }) {
-    const currentUser = locals.user;
+    const currentUser = locals.user as any;
     
     if (!currentUser?.id) {
         throw error(401, 'Unauthorized');
     }
 
-    if (!platform?.env?.BETA_USERS_KV) {
+    const env = getEnv(platform);
+    const usersKV = safeKV(env, 'BETA_USERS_KV');
+    if (!usersKV) {
         throw error(500, 'Service unavailable');
     }
 
     try {
         // Fetch full user record to get Stripe Customer ID
-        const user = await findUserById(platform.env.BETA_USERS_KV, currentUser.id);
+        const user = await findUserById(usersKV, currentUser.id);
         
         if (!user?.stripeCustomerId) {
             throw error(400, 'No billing account found. Please upgrade first.');

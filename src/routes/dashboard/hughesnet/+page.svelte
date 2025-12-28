@@ -4,7 +4,6 @@
   import { trips } from '$lib/stores/trips';
   import { trash } from '$lib/stores/trash';
   import { user } from '$lib/stores/auth';
-  import Modal from '$lib/components/ui/Modal.svelte';
 
   let username = '';
   let password = '';
@@ -79,7 +78,7 @@
               method: 'POST',
               body: JSON.stringify({ action: 'get_settings' })
           });
-          const data = await res.json();
+          const data: any = await res.json();
           
           if (data.settings) {
               installPay = data.settings.installPay ?? 0;
@@ -133,7 +132,7 @@
                   settings 
               })
            });
-           const data = await res.json();
+           const data: any = await res.json();
            if (!data.success) {
                console.error('Save failed:', data.error);
                addLog(`Save Error: ${data.error}`);
@@ -148,7 +147,8 @@
 
   // Reactive Watcher
   $: if (isConfigLoaded) {
-      const _ = [installPay, repairPay, upgradePay, wifiExtenderPay, voipPay, driveTimeBonus, poleCost, concreteCost, poleCharge, installTime, repairTime, overrideTimes];
+      // Tickle reactivity by referencing variables; avoid creating unused bindings
+      void [installPay, repairPay, upgradePay, wifiExtenderPay, voipPay, driveTimeBonus, poleCost, concreteCost, poleCharge, installTime, repairTime, overrideTimes];
       if (saveTimeout) clearTimeout(saveTimeout);
       saveTimeout = setTimeout(() => {
           saveSettings();
@@ -159,7 +159,7 @@
     addLog('Checking cache for existing orders...');
     try {
         const res = await fetch(`/api/hughesnet`);
-        const data = await res.json();
+        const data: any = await res.json();
         if (data.orders) {
             orders = Object.values(data.orders);
             if (orders.length > 0) {
@@ -188,7 +188,7 @@
             method: 'POST',
             body: JSON.stringify({ action: 'connect', username, password })
         });
-        const data = await res.json();
+        const data: any = await res.json();
         processServerLogs(data.logs);
 
         if (data.success) {
@@ -216,7 +216,7 @@
             method: 'POST',
             body: JSON.stringify({ action: 'disconnect' })
         });
-        const data = await res.json();
+        const data: any = await res.json();
         processServerLogs(data.logs);
         
         if (data.success) {
@@ -316,8 +316,8 @@
              // Collect conflicts
              if (data.conflicts && Array.isArray(data.conflicts)) {
                  // Merge unique conflicts by date
-                 const existingDates = new Set(conflictTrips.map(c => c.date));
-                 const newConflicts = data.conflicts.filter(c => !existingDates.has(c.date));
+                 const existingDates = new Set(conflictTrips.map((c: any) => c.date));
+                 const newConflicts = data.conflicts.filter((c: any) => !existingDates.has(c.date));
                  conflictTrips = [...conflictTrips, ...newConflicts];
              }
 
@@ -384,7 +384,7 @@
               method: 'POST',
               body: JSON.stringify({ action: 'clear' })
           });
-          const data = await res.json();
+          const data: any = await res.json();
           processServerLogs(data.logs);
 
           addLog(`✅ Cleared ${data.count} trips.`);
@@ -639,8 +639,8 @@
 
           {#if $user?.name?.toLowerCase() === 'james'}
           <div class="form-group">
-            <label>Drive Time Bonus ($)</label>
-            <input type="number" bind:value={driveTimeBonus} placeholder="0.00" min="0" step="0.01" />
+            <label for="drive-time-bonus">Drive Time Bonus ($)</label>
+            <input id="drive-time-bonus" type="number" bind:value={driveTimeBonus} placeholder="0.00" min="0" step="0.01" />
             <span class="help-text">Added to EACH order if total drive > 5.5h</span>
           </div>
           {/if}

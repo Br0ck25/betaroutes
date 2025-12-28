@@ -16,31 +16,31 @@ function findEventTimestamps($: cheerio.CheerioAPI, eventLabel: string): number[
     // Regex: 1. \s* handles missing space, 2. Looks for optional seconds
     const tsRegex = /(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/;
     
-    $('.SearchUtilData').each((i, elem) => {
+    $('.SearchUtilData').each((_, elem) => {
         const text = $(elem).text().trim();
         
         if (text.includes(eventLabel)) {
             // Check current cell first (new format)
-            let match = text.match(tsRegex);
+            let match = text.match(tsRegex) as RegExpMatchArray | null;
 
             // If not found, check previous cell (legacy format)
             if (!match) {
                 const prevCell = $(elem).prev('.SearchUtilData');
                 if (prevCell.length) {
                     const tsText = prevCell.text().trim();
-                    match = tsText.match(tsRegex);
+                    match = tsText.match(tsRegex) as RegExpMatchArray | null;
                 }
             }
 
             if (match) {
-                const [_, month, day, year, hour, min, sec] = match;
+                const [, month = '1', day = '1', year = '1970', hour = '0', min = '0', sec] = match as string[];
                 const date = new Date(
-                    parseInt(year), 
-                    parseInt(month) - 1, 
-                    parseInt(day), 
-                    parseInt(hour), 
-                    parseInt(min), 
-                    sec ? parseInt(sec) : 0
+                    parseInt(year || '1970', 10), 
+                    parseInt(month || '1', 10) - 1, 
+                    parseInt(day || '1', 10), 
+                    parseInt(hour || '0', 10), 
+                    parseInt(min || '0', 10), 
+                    sec ? parseInt(sec, 10) : 0
                 );
                 
                 if (!isNaN(date.getTime())) {
@@ -58,7 +58,8 @@ function scanForward(html: string, label: string, regex: RegExp): string {
     if (idx === -1) return '';
     const chunk = html.slice(idx, idx + 500); 
     const match = chunk.match(regex);
-    return match ? match[1].trim() : '';
+    if (!match || !match[1]) return '';
+    return String(match[1]).trim();
 }
 
 export function extractIds(html: string): string[] {
@@ -66,9 +67,13 @@ export function extractIds(html: string): string[] {
     const clean = html.replace(/&amp;/g, '&');
     let m;
     const re1 = /viewservice\.jsp\?.*?\bid=(\d+)/gi;
-    while ((m = re1.exec(clean)) !== null) ids.add(m[1]);
+    while ((m = re1.exec(clean)) !== null) {
+        if (m[1]) ids.add(m[1]);
+    }
     const re2 = /[?&]id=(\d{8})\b/gi;
-    while ((m = re2.exec(clean)) !== null) ids.add(m[1]);
+    while ((m = re2.exec(clean)) !== null) {
+        if (m[1]) ids.add(m[1]);
+    }
     return Array.from(ids);
 }
 
@@ -128,7 +133,7 @@ export function parseOrderPage(html: string, id: string): OrderData {
     if (!out.address) {
         const bodyText = $('body').text();
         const addressMatch = bodyText.match(/Address:\s*(.*?)\s+(?:City|County|State)/i);
-        if (addressMatch) out.address = addressMatch[1].trim();
+        if (addressMatch && addressMatch[1]) out.address = String(addressMatch[1]).trim();
     }
     out.address = toTitleCase(out.address);
     out.city = toTitleCase(getVal('f_city') || scanForward(html, 'City:', />([^<]+)</) || '');
@@ -150,16 +155,16 @@ export function parseOrderPage(html: string, id: string): OrderData {
 
     if (arrivalLabel.length > 0) {
         const rawArrival = cleanText(arrivalLabel.next('td.displaytext').text());
-        const match = rawArrival.match(/(\d{1,2}:\d{2})/);
-        if (match) arrivalTime = match[1];
+        const match = rawArrival.match(/(\d{1,2}:\d{2})/) as RegExpMatchArray | null;
+        if (match && match[1]) arrivalTime = match[1];
     }
 
     const beginLabel = $('td.displaytextlbl').filter((_, el) => $(el).text().includes('Schd Est. Begin Time'));
     
     if (beginLabel.length > 0) {
         const rawBegin = cleanText(beginLabel.next('td.displaytext').text());
-        const match = rawBegin.match(/(\d{1,2}:\d{2})/);
-        if (match) schdBeginTime = match[1];
+        const match = rawBegin.match(/(\d{1,2}:\d{2})/) as RegExpMatchArray | null;
+        if (match && match[1]) schdBeginTime = match[1];
     }
 
     out.beginTime = getVal('f_begin_time') || 
@@ -171,8 +176,8 @@ export function parseOrderPage(html: string, id: string): OrderData {
     const bodyText = $('body').text();
     const typeLabelMatch = bodyText.match(/(?:Order|Service)\s*Type\s*[:\.]?\s*(Re-Install|Install|Repair|Upgrade)/i);
     
-    if (typeLabelMatch) {
-        const found = typeLabelMatch[1].toLowerCase();
+    if (typeLabelMatch && typeLabelMatch[1]) {
+        const found = String(typeLabelMatch[1]).toLowerCase();
         if (found.includes('re-install')) { out.type = 'Re-Install'; out.jobDuration = 90; }
         else if (found.includes('install')) { out.type = 'Install'; out.jobDuration = 90; }
         else if (found.includes('upgrade')) { out.type = 'Upgrade'; out.jobDuration = 60; }
@@ -207,7 +212,7 @@ export function parseOrderPage(html: string, id: string): OrderData {
     let referenceDateString = '';
     
     if (allActivity.length > 0) {
-        const d = new Date(allActivity[0]);
+        const d = new Date(allActivity[0] as number);
         referenceDateString = d.toDateString(); 
     }
 
@@ -215,14 +220,14 @@ export function parseOrderPage(html: string, id: string): OrderData {
 
     // 3. Select Best Timestamps based on Reference Date
     // Departure Complete: Use the LATEST one on the reference date
-    out.departureCompleteTimestamp = completeTimestamps.filter(isSameDate).sort((a, b) => b - a)[0] || null;
+    out.departureCompleteTimestamp = completeTimestamps.filter(isSameDate).sort((a, b) => b - a)[0] || undefined;
 
     // Departure Incomplete: Use the LATEST one on the reference date
-    out.departureIncompleteTimestamp = incompleteTimestamps.filter(isSameDate).sort((a, b) => b - a)[0] || null;
+    out.departureIncompleteTimestamp = incompleteTimestamps.filter(isSameDate).sort((a, b) => b - a)[0] || undefined;
 
     // Arrival: Use the EARLIEST one on the reference date
     // [!code note] This fixes the sorting issue. We ignore the late arrival (after incomplete).
-    out.arrivalTimestamp = arrivalTimestamps.filter(isSameDate).sort((a, b) => a - b)[0] || null;
+    out.arrivalTimestamp = arrivalTimestamps.filter(isSameDate).sort((a, b) => a - b)[0] || undefined;
 
     // Fallback if no specific date matched
     if (!out.arrivalTimestamp && arrivalTimestamps.length > 0) {

@@ -11,7 +11,9 @@ export const POST: RequestHandler = async ({ cookies, platform }) => {
     // 2. Delete session from SESSIONS_KV
     if (sessionId) {
         try {
-            const sessionKV = platform?.env?.BETA_SESSIONS_KV;
+            const { getEnv, safeKV } = await import('$lib/server/env');
+            const env = getEnv(platform);
+            const sessionKV = safeKV(env, 'BETA_SESSIONS_KV');
             if (sessionKV) {
                 await sessionKV.delete(sessionId); 
             }

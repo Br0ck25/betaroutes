@@ -13,14 +13,16 @@ const resetSchema = z.object({
 
 export const POST: RequestHandler = async ({ request, platform, cookies }) => {
     try {
-        const kv = platform?.env?.BETA_USERS_KV;
-        const sessionsKV = platform?.env?.BETA_SESSIONS_KV;
+        const { getEnv, safeKV } = await import('$lib/server/env');
+        const env = getEnv(platform);
+        const kv = safeKV(env, 'BETA_USERS_KV');
+        const sessionsKV = safeKV(env, 'BETA_SESSIONS_KV');
 
         if (!kv) {
             return json({ message: 'Service Unavailable' }, { status: 503 });
         }
 
-        const body = await request.json();
+        const body: any = await request.json();
         
         // 1. Validate Input
         const result = resetSchema.safeParse(body);
@@ -44,7 +46,7 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
 
         // 3. Fetch User Record
         // Must use service to ensure we get the full record (Core + Stats)
-        const user = await findUserById(kv, userId);
+        const user = await findUserById(kv as any, userId);
         if (!user) {
             return json({ message: 'User not found.' }, { status: 404 });
         }

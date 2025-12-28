@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { auth, user } from '$lib/stores/auth';
-  import { userSettings } from '$lib/stores/userSettings';
-  import { onMount, createEventDispatcher } from 'svelte';
+  import { auth } from '$lib/stores/auth';
+  import { createEventDispatcher } from 'svelte';
 
   export let profile: { name: string; email: string };
   export let monthlyUsage: number;

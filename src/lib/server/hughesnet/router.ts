@@ -44,7 +44,7 @@ export class HughesNetRouter {
             });
 
             if (res.ok) {
-                const data = await res.json();
+                const data: any = await res.json();
                 if (data.features && data.features.length > 0) {
                     const f = data.features[0];
                     // Construct a formatted address from properties
@@ -91,7 +91,7 @@ export class HughesNetRouter {
                 const res = await fetch(googleUrl, {
                     signal: this.createTimeoutSignal(EXTERNAL_API_TIMEOUT_MS)
                 });
-                const data = await res.json();
+                const data: any = await res.json();
                 
                 if (data.results?.[0]?.geometry?.location) {
                     const loc = data.results[0].geometry.location;
@@ -149,7 +149,7 @@ export class HughesNetRouter {
                 });
 
                 if (res.ok) {
-                    const data = await res.json();
+                    const data: any = await res.json();
                     if (data.routes?.[0]) {
                         const result = {
                             distance: data.routes[0].distance, // meters
@@ -183,7 +183,7 @@ export class HughesNetRouter {
                 const res = await this.fetcher.safeFetch(url, { 
                     headers: { 'Referer': 'https://gorouteyourself.com/' }
                 });
-                const data = await res.json();
+                const data: any = await res.json();
                 
                 if (data.routes?.[0]?.legs?.[0]) {
                     const result = { 

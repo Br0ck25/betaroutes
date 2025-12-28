@@ -200,7 +200,7 @@ export function sanitizeTrip(trip: unknown): Partial<Trip> {
  */
 export function validateAndSanitizeRequest(
 	body: unknown,
-	logSuspicious: boolean = true
+	_logSuspicious: boolean = true
 ): Partial<Trip> {
 	// We no longer scan for regex patterns because Svelte renders all input as text.
 	// If a user saves "<script>", it is stored as "<script>" and displayed as "<script>".

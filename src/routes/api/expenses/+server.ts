@@ -2,6 +2,8 @@
 import type { RequestHandler } from './$types';
 import { makeExpenseService } from '$lib/server/expenseService';
 import { z } from 'zod';
+import { getEnv, safeKV, safeDO } from '$lib/server/env';
+import { PLAN_LIMITS } from '$lib/constants';
 
 const expenseSchema = z.object({
     id: z.string().uuid().optional(),
@@ -14,15 +16,9 @@ const expenseSchema = z.object({
     store: z.string().optional()
 });
 
-// Helper for Strict Environment
-function getEnv(platform: App.Platform | undefined): App.Env {
-    const env = platform?.env;
-    if (!env || !env.BETA_LOGS_KV || !env.TRIP_INDEX_DO) {
-        console.error("CRITICAL: Missing BETA_LOGS_KV or TRIP_INDEX_DO bindings");
-        throw new Error('Database bindings missing');
-    }
-    return env;
-}
+// Use normalized environment accessor
+// (getEnv returns a permissive 'any' and safeKV/safeDO return bindings safely)
+
 
 export const GET: RequestHandler = async (event) => {
     try {
@@ -30,13 +26,13 @@ export const GET: RequestHandler = async (event) => {
         if (!user) return new Response('Unauthorized', { status: 401 });
 
         const env = getEnv(event.platform);
-        const storageId = user.name || user.token;
+        const storageId = (user as any).name || (user as any).token;
         const since = event.url.searchParams.get('since') || undefined;
         
         console.log(`[API] Fetching expenses for ${storageId} (Since: ${since || 'All Time'})`);
 
-        // Inject DO Binding
-        const svc = makeExpenseService(env.BETA_LOGS_KV, env.TRIP_INDEX_DO, env.BETA_LOGS_TRASH_KV);
+        // Inject DO Binding (use safe accessors)
+        const svc = makeExpenseService(safeKV(env, 'BETA_LOGS_KV')!, safeDO(env, 'TRIP_INDEX_DO')!, safeKV(env, 'BETA_LOGS_TRASH_KV'));
         const expenses = await svc.list(storageId, since);
 
         return new Response(JSON.stringify(expenses), {
@@ -57,10 +53,10 @@ export const POST: RequestHandler = async (event) => {
     try {
         const user = event.locals.user;
         if (!user) return new Response('Unauthorized', { status: 401 });
-        const storageId = user.name || user.token;
+        const storageId = (user as any).name || (user as any).token;
         const env = getEnv(event.platform);
 
-        const body = await event.request.json();
+        const body: any = await event.request.json();
         
         const parseResult = expenseSchema.safeParse(body);
 
@@ -70,7 +66,7 @@ export const POST: RequestHandler = async (event) => {
         }
 
         // Inject DO Binding
-        const svc = makeExpenseService(env.BETA_LOGS_KV, env.TRIP_INDEX_DO, env.BETA_LOGS_TRASH_KV);
+        const svc = makeExpenseService(safeKV(env, 'BETA_LOGS_KV')!, safeDO(env, 'TRIP_INDEX_DO')!, safeKV(env, 'BETA_LOGS_TRASH_KV'));
         
         const expense = {
             ...parseResult.data,
@@ -81,12 +77,13 @@ export const POST: RequestHandler = async (event) => {
         };
 
         // --- FREE TIER EXPENSE QUOTA (rolling window) ---
-        let currentPlan = user.plan;
+        let currentPlan: any = user.plan;
         try {
             // Attempt to fetch fresh user plan if available
             const { findUserById } = await import('$lib/server/userService');
-            if (event.platform?.env?.BETA_USERS_KV) {
-                const fresh = await findUserById(event.platform.env.BETA_USERS_KV, user.id);
+            const usersKV = safeKV(env, 'BETA_USERS_KV');
+            if (usersKV) {
+                const fresh = await findUserById(usersKV, (user as any).id || (user as any).token);
                 if (fresh && fresh.plan) currentPlan = fresh.plan;
             }
         } catch (e) {

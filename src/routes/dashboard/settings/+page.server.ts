@@ -6,10 +6,14 @@ export const load: PageServerLoad = async ({ locals, platform, parent }) => {
     
     let settingsData = {};
 
-    if (locals.user && platform?.env?.BETA_USER_SETTINGS_KV) {
+    if (locals.user) {
         try {
+            const { getEnv, safeKV } = await import('$lib/server/env');
+            const env = getEnv(platform);
+            const kv = safeKV(env, 'BETA_USER_SETTINGS_KV');
+            if (!kv) throw new Error('settings KV missing');
             // [!code fix] Use 'settings:' prefix to match the API write path
-            const raw = await platform.env.BETA_USER_SETTINGS_KV.get(`settings:${locals.user.id}`);
+            const raw = await kv.get(`settings:${(locals.user as any).id}`);
             if (raw) {
                 settingsData = JSON.parse(raw);
             }

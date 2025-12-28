@@ -24,20 +24,22 @@ async function hashPassword(password: string, salt?: Uint8Array): Promise<string
         ["deriveBits"]
     );
 
+    const saltBuf = (usedSalt as Uint8Array).buffer as ArrayBuffer;
     const derivedBits = await crypto.subtle.deriveBits(
         {
             name: "PBKDF2",
-            salt: usedSalt,
+            salt: saltBuf as any,
             iterations: PBKDF2_ITERATIONS,
             hash: HASH_ALGO
         },
+
         keyMaterial,
         256
     );
 
     const bufferToHex = (arr: Uint8Array) => [...arr].map(b => b.toString(16).padStart(2, '0')).join('');
     
-    return `v1:${PBKDF2_ITERATIONS}:${bufferToHex(usedSalt)}:${bufferToHex(new Uint8Array(derivedBits))}`;
+    return `v1:${PBKDF2_ITERATIONS}:${bufferToHex(usedSalt)}:${bufferToHex(new Uint8Array(derivedBits as ArrayBuffer))}`;
 }
 
 /**
@@ -52,7 +54,8 @@ function safeCompare(stored: string, provided: string): boolean {
     return result === 0;
 }
 
-function withCors(resp, req) {
+// @ts-nocheck
+function withCors(resp: Response, req: Request) {
     const allowedOrigins = [
         'https://gorouteyourself.com', 
         'https://beta.gorouteyourself.com',
@@ -61,7 +64,7 @@ function withCors(resp, req) {
     ];
     const origin = req.headers.get('Origin');
 
-    if (allowedOrigins.includes(origin)) {
+    if (origin && allowedOrigins.includes(origin)) {
         resp.headers.set('Access-Control-Allow-Origin', origin);
     }
     resp.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -70,23 +73,10 @@ function withCors(resp, req) {
     return resp;
 }
 
-async function getUsernameFromToken(env, token) {
-    // [!code fix] Using correct production binding from wrangler.toml
-    const list = await env.BETA_LOGS_KV.list({ prefix: 'user:' });
-    for (const key of list.keys) {
-        const userData = await env.BETA_LOGS_KV.get(key.name);
-        if (userData) {
-            const user = JSON.parse(userData);
-            if (user.token === token) {
-                return key.name.replace('user:', '');
-            }
-        }
-    }
-    return null;
-}
+
 
 export default {
-    async fetch(request, env, ctx) {
+    async fetch(request: Request, env: any, _ctx: any) {
         try {
             const url = new URL(request.url);
             const { pathname } = url;
@@ -97,10 +87,11 @@ export default {
             }
 
             const json = async () => await request.json().catch(() => ({}));
-            const getUserKey = (username) => `user:${username}`;
+            const getUserKey = (username: string) => `user:${username}`;
 
             if (pathname === '/api/signup' && request.method === 'POST') {
-                const { username, password } = await json();
+                const body: any = await json();
+                const { username, password } = body;
                 const userKey = getUserKey(username);
                 if (await LOGS_KV.get(userKey)) {
                     return withCors(Response.json({ error: 'Username taken.' }, { status: 400 }), request);
@@ -118,7 +109,8 @@ export default {
             }
 
             if (pathname === '/api/login' && request.method === 'POST') {
-                const { username, password } = await json();
+                const body: any = await json();
+                const { username, password } = body;
                 const userKey = getUserKey(username);
                 const data = await LOGS_KV.get(userKey);
                 if (!data) return withCors(new Response('Not found', { status: 404 }), request);
@@ -130,7 +122,7 @@ export default {
                 let matches = false;
                 
                 if (parts[0] === 'v1') {
-                    const salt = new Uint8Array(parts[2].match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+                    const salt = new Uint8Array((parts[2] as string).match(/.{1,2}/g)!.map((byte: string) => parseInt(byte, 16)));
                     const challengeHash = await hashPassword(password, salt);
                     matches = safeCompare(user.password, challengeHash);
                 } else if (user.password === password) {

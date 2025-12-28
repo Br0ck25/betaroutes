@@ -1,31 +1,33 @@
 // src/routes/api/hughesnet/+server.ts
 import { json } from '@sveltejs/kit';
 import { HughesNetService } from '$lib/server/hughesnet/service';
+import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, platform, locals }) => {
-    if (!platform?.env?.BETA_HUGHESNET_KV || !platform?.env?.TRIP_INDEX_DO) {
+    const env = getEnv(platform);
+    if (!safeKV(env, 'BETA_HUGHESNET_KV') || !safeDO(env, 'TRIP_INDEX_DO')) {
         return json({ success: false, error: 'Database configuration missing (KV or DO)' }, { status: 500 });
     }
 
     try {
-        const body = await request.json();
-        const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
-        const settingsId = locals.user?.id;
+        const body: any = await request.json();
+        const userId = (locals.user as any)?.name || (locals.user as any)?.token || (locals.user as any)?.id || 'default_user';
+        const settingsId = (locals.user as any)?.id;
 
         console.log(`[API] HughesNet Action: ${body.action} for ${userId}`);
 
         const service = new HughesNetService(
-            platform.env.BETA_HUGHESNET_KV, 
-            platform.env.HNS_ENCRYPTION_KEY,
-            platform.env.BETA_LOGS_KV,
-            platform.env.BETA_LOGS_TRASH_KV,
-            platform.env.BETA_USER_SETTINGS_KV,
-            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY,
-            platform.env.BETA_DIRECTIONS_KV,
-            platform.env.BETA_HUGHESNET_ORDERS_KV,
-            platform.env.BETA_LOGS_KV,
-            platform.env.TRIP_INDEX_DO
+            safeKV(env, 'BETA_HUGHESNET_KV')!, 
+            (env as any).HNS_ENCRYPTION_KEY,
+            safeKV(env, 'BETA_LOGS_KV')!,
+            safeKV(env, 'BETA_LOGS_TRASH_KV')!,
+            safeKV(env, 'BETA_USER_SETTINGS_KV')!,
+            (env as any).PRIVATE_GOOGLE_MAPS_API_KEY,
+            safeKV(env, 'BETA_DIRECTIONS_KV')!,
+            safeKV(env, 'BETA_HUGHESNET_ORDERS_KV')!,
+            safeKV(env, 'BETA_LOGS_KV')!,
+            safeDO(env, 'TRIP_INDEX_DO')!
         );
 
         if (body.action === 'save_settings') {
@@ -105,21 +107,22 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 };
 
 export const GET: RequestHandler = async ({ platform, locals }) => {
-    if (!platform?.env?.BETA_HUGHESNET_KV) return json({ orders: {} });
+    const env = getEnv(platform);
+    if (!safeKV(env, 'BETA_HUGHESNET_KV')) return json({ orders: {} });
     try {
-        const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
+        const userId = (locals.user as any)?.name || (locals.user as any)?.token || (locals.user as any)?.id || 'default_user';
         
         const service = new HughesNetService(
-            platform.env.BETA_HUGHESNET_KV, 
-            platform.env.HNS_ENCRYPTION_KEY,
-            platform.env.BETA_LOGS_KV,
-            platform.env.BETA_LOGS_TRASH_KV,
-            platform.env.BETA_USER_SETTINGS_KV,
-            platform.env.PRIVATE_GOOGLE_MAPS_API_KEY,
-            platform.env.BETA_DIRECTIONS_KV,
-            platform.env.BETA_HUGHESNET_ORDERS_KV,
-            platform.env.BETA_LOGS_KV,
-            platform.env.TRIP_INDEX_DO
+            safeKV(env, 'BETA_HUGHESNET_KV')!, 
+            (env as any).HNS_ENCRYPTION_KEY,
+            safeKV(env, 'BETA_LOGS_KV')!,
+            safeKV(env, 'BETA_LOGS_TRASH_KV')!,
+            safeKV(env, 'BETA_USER_SETTINGS_KV')!,
+            (env as any).PRIVATE_GOOGLE_MAPS_API_KEY,
+            safeKV(env, 'BETA_DIRECTIONS_KV')!,
+            safeKV(env, 'BETA_HUGHESNET_ORDERS_KV')!,
+            safeKV(env, 'BETA_LOGS_KV')!,
+            safeDO(env, 'TRIP_INDEX_DO')!
         );
         const orders = await service.getOrders(userId);
         

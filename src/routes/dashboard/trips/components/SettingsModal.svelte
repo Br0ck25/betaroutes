@@ -94,8 +94,8 @@
 <Modal bind:open title="Trip Settings">
     <div class="settings-modal-content">
         <div class="top-tabs">
-            <button class="top-tab-btn" class:active={settingsTab === 'defaults'} onclick={() => settingsTab = 'defaults'}>Default Values</button>
-            <button class="top-tab-btn" class:active={settingsTab === 'categories'} onclick={() => settingsTab = 'categories'}>Categories</button>
+            <button class="top-tab-btn" class:active={settingsTab === 'defaults'} on:click={() => settingsTab = 'defaults'}>Default Values</button>
+            <button class="top-tab-btn" class:active={settingsTab === 'categories'} on:click={() => settingsTab = 'categories'}>Categories</button>
         </div>
 
         {#if settingsTab === 'defaults'}
@@ -124,7 +124,7 @@
                         placeholder="Start typing address..."
                         autocomplete="off"
                         use:autocomplete={{ apiKey: API_KEY }}
-                        onplace-selected={(e) => handleAddressSelect('start', e)}
+                        on:place-selected={(e: CustomEvent) => handleAddressSelect('start', e)}
                         class="w-full p-2 border rounded-lg"
                     />
                 </div>
@@ -138,13 +138,13 @@
                         placeholder="Start typing address..."
                         autocomplete="off"
                         use:autocomplete={{ apiKey: API_KEY }}
-                        onplace-selected={(e) => handleAddressSelect('end', e)}
+                        on:place-selected={(e: CustomEvent) => handleAddressSelect('end', e)}
                         class="w-full p-2 border rounded-lg"
                     />
                 </div>
                 
                  <div class="modal-actions pt-4">
-                    <button class="btn-primary w-full" onclick={saveDefaultSettings} disabled={isSaving}>{isSaving ? 'Saving…' : 'Save Defaults'}</button>
+                    <button class="btn-primary w-full" on:click={saveDefaultSettings} disabled={isSaving}>{isSaving ? 'Saving…' : 'Save Defaults'}</button>
                 </div>
             </div>
         {/if}
@@ -152,8 +152,8 @@
         {#if settingsTab === 'categories'}
             <div class="categories-manager">
                 <div class="tabs sub-tabs">
-                    <button class="tab-btn" class:active={activeCategoryType === 'maintenance'} onclick={() => activeCategoryType = 'maintenance'}>Maintenance</button>
-                    <button class="tab-btn" class:active={activeCategoryType === 'supplies'} onclick={() => activeCategoryType = 'supplies'}>Supplies</button>
+                    <button class="tab-btn" class:active={activeCategoryType === 'maintenance'} on:click={() => activeCategoryType = 'maintenance'}>Maintenance</button>
+                    <button class="tab-btn" class:active={activeCategoryType === 'supplies'} on:click={() => activeCategoryType = 'supplies'}>Supplies</button>
                 </div>
 
                 <p class="text-sm text-gray-500 mb-4">
@@ -164,7 +164,7 @@
                     {#each activeCategories as cat}
                         <div class="cat-item">
                              <span class="cat-badge">{cat}</span>
-                            <button class="cat-delete" onclick={() => removeCategory(cat)} aria-label="Delete Category">
+                            <button class="cat-delete" on:click={() => removeCategory(cat)} aria-label="Delete Category">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                             </button>
                         </div>
@@ -174,12 +174,12 @@
                 </div>
 
                 <div class="add-cat-form">
-                    <input type="text" bind:value={newCategoryName} placeholder="New category..." class="input-field" onkeydown={(e) => e.key === 'Enter' && addCategory()} />
-                    <button class="btn-secondary" onclick={addCategory}>Add</button>
+                    <input type="text" bind:value={newCategoryName} placeholder="New category..." class="input-field" on:keydown={(e) => e.key === 'Enter' && addCategory()} />
+                    <button class="btn-secondary" on:click={addCategory}>Add</button>
                 </div>
                 
                 <div class="modal-actions mt-6">
-                    <button class="btn-cancel w-full" onclick={() => open = false}>Done</button>
+                    <button class="btn-cancel w-full" on:click={() => open = false}>Done</button>
                 </div>
             </div>
         {/if}
@@ -204,7 +204,7 @@
   .add-cat-form .input-field { flex: 1; padding: 10px; border: 1px solid #E5E7EB; border-radius: 8px; }
   .modal-actions .btn-cancel { background: white; border: 1px solid #E5E7EB; color: #374151; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; width: 100%; }
 
-  .settings-form input:focus { outline: none; border-color: #FF7F50; ring: 2px solid rgba(255, 127, 80, 0.1); }
+  .settings-form input:focus { outline: none; border-color: #FF7F50; box-shadow: 0 0 0 4px rgba(255, 127, 80, 0.08); }
   
   .btn-primary { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3); transition: transform 0.1s; cursor: pointer; }
   .btn-secondary { display: inline-flex; align-items: center; justify-content: center; padding: 10px; background: white; border: 1px solid #E5E7EB; color: #374151; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; transition: background 0.2s; text-decoration: none; }

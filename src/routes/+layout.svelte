@@ -10,7 +10,8 @@
     let { data, children } = $props();
 
 	// 1. Initialize Context
-	const userState = setUserContext(data.user);
+	const userState = setUserContext(undefined);
+	// Initialize with current value via reactive effect below (keeps capture correct)
 	// 2. Keep user state synced
 	$effect(() => {
 		userState.setUser(data.user);
@@ -29,7 +30,7 @@
             });
 
             // Access key safely via dynamic env object
-            const apiKey = env.PUBLIC_GOOGLE_MAPS_KEY;
+            const apiKey = (env as any)['PUBLIC_GOOGLE_MAPS_KEY'];
             
             if (apiKey) {
                 syncManager.initialize(apiKey);

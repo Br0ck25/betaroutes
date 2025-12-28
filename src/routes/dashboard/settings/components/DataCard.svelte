@@ -1,36 +1,36 @@
 <script lang="ts">
   import { userSettings } from '$lib/stores/userSettings';
   import { trips } from '$lib/stores/trips';
-  import { user, auth } from '$lib/stores/auth';
+  import { user } from '$lib/stores/auth';
   import { createEventDispatcher } from 'svelte';
-
-  export let isPro: boolean;
 
   const dispatch = createEventDispatcher();
 
-  function parseDuration(durationStr: string): number {
-    if (!durationStr) return 0;
+  function parseDuration(durationStr?: string): number {
+    const s = (durationStr || '').trim();
+    if (!s) return 0;
     let minutes = 0;
-    const hoursMatch = durationStr.match(/(\d+)h/);
-    const minsMatch = durationStr.match(/(\d+)m/);
-    if (hoursMatch) minutes += parseInt(hoursMatch[1]) * 60;
-    if (minsMatch) minutes += parseInt(minsMatch[1]);
-    if (!hoursMatch && !minsMatch && !isNaN(parseInt(durationStr))) {
-        minutes = parseInt(durationStr);
+    const hoursMatch = s.match(/(\d+)h/);
+    const minsMatch = s.match(/(\d+)m/);
+    if (hoursMatch && hoursMatch[1]) minutes += parseInt(hoursMatch[1], 10) * 60;
+    if (minsMatch && minsMatch[1]) minutes += parseInt(minsMatch[1], 10);
+    if (!hoursMatch && !minsMatch && !isNaN(Number(s))) {
+        minutes = parseInt(s, 10);
     }
     return minutes;
   }
 
-  function parseItemString(str: string): any[] {
-    if (!str || !str.trim()) return [];
-    return str.split('|').map(part => {
+  function parseItemString(str?: string): any[] {
+    const s = (str || '').trim();
+    if (!s) return [];
+    return s.split('|').map((part: string) => {
         const [name, costStr] = part.split(':');
         return {
             id: crypto.randomUUID(),
             type: name ? name.trim() : 'Unknown',
-            cost: parseFloat(costStr) || 0
+            cost: parseFloat(costStr || '0') || 0
         };
-    }).filter(i => i.type && i.cost >= 0);
+    }).filter((i: any) => i.type && i.cost >= 0);
   }
 
   function exportData() {
@@ -111,8 +111,7 @@
           const stopsStr = cleanRow[2];
           let stops: any[] = [];
           if (stopsStr) {
-            stops = stopsStr.split('|').map(s => ({ 
-                id: crypto.randomUUID(), 
+            stops = stopsStr.split('|').map((s: string) => ({ 
                 address: s.trim(), 
                 earnings: 0 
             }));
@@ -181,7 +180,7 @@
 
   function clearAllData() {
     if (!confirm('Are you sure? This will delete ALL your trip data locally.')) return;
-    trips.set([]);
+    trips.clear();
     dispatch('success', 'All trip data cleared.');
   }
 

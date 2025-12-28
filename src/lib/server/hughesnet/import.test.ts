@@ -29,7 +29,7 @@ describe('HughesNet archived import API', () => {
 
         const event: any = { platform, locals: { user: { name: owner } }, request: makeReq({ ids: [orderId] }) };
         const res = await POST(event as any);
-        const body = await res.json();
+        const body: any = await res.json();
         expect(body.success).toBe(true);
         expect(body.imported).toContain(orderId);
         expect(body.importedDates).toContain('2025-12-31');
@@ -52,7 +52,7 @@ describe('HughesNet archived import API', () => {
 
         const event: any = { platform, locals: { user: { name: owner } }, request: makeReq({ ids: [orderId] }) };
         const res = await POST(event as any);
-        const body = await res.json();
+        const body: any = await res.json();
         expect(body.success).toBe(true);
         expect(body.imported.length).toBe(0);
         expect(body.skipped).toContain(orderId);

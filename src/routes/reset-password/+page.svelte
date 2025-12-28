@@ -27,13 +27,18 @@
                 body: JSON.stringify({ token, password })
             });
 
-            const data = await res.json();
+            let data: any = {};
+            try {
+              data = await res.json() as any;
+            } catch (e) {
+              // ignore parse errors
+            }
 
             if (res.ok) {
                 success = true;
                 setTimeout(() => goto('/login'), 3000);
             } else {
-                error = data.message || 'Failed to reset password.';
+                error = (data && data.message) || 'Failed to reset password.';
             }
         } catch (e) {
             error = 'Network error occurred.';

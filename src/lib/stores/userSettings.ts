@@ -7,6 +7,8 @@ import { browser } from '$app/environment';
 const defaultSettings = {
   startLocation: '',
   endLocation: '',
+  defaultStartAddress: '',
+  defaultEndAddress: '',
   defaultMPG: 25,
   defaultGasPrice: 3.50,
   distanceUnit: 'mi',

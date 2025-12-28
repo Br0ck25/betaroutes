@@ -6,7 +6,8 @@ import type { User } from '$lib/server/userService';
 import bcrypt from 'bcryptjs';
 
 export const POST: RequestHandler = async ({ request, platform }) => {
-    const { username, password } = await request.json();
+    const body: any = await request.json();
+    const { username, password } = body;
     const kv = platform?.env?.BETA_USERS_KV;
 
     if (!kv) return json({ error: 'KV not found' }, { status: 500 });

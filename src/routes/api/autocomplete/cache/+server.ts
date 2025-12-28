@@ -4,7 +4,8 @@ import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, platform }) => {
   try {
-    const { query, results } = await request.json();
+    const body: any = await request.json();
+    const { query, results } = body;
     
     if (!query || !results || !Array.isArray(results)) {
       return json({ error: 'Invalid request' }, { status: 400 });
@@ -33,7 +34,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
             if (!prefixMap.has(key)) {
                 prefixMap.set(key, []);
             }
-            prefixMap.get(key).push(result);
+            (prefixMap.get(key)!).push(result);
         }
     }
 

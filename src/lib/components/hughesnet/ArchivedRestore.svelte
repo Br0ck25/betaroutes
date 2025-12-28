@@ -15,7 +15,7 @@
     error = null;
     try {
       const res = await fetch('/api/hughesnet/archived');
-      const body = await res.json();
+      const body: any = await res.json();
       if (body.success) orders = body.orders; else error = body.error || 'Failed to load archived orders';
     } catch (e: any) { error = e.message || 'Network error'; }
     loading = false;
@@ -59,7 +59,7 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: Array.from(selected) })
       });
-      const body = await res.json();
+      const body: any = await res.json();
       if (body.success) {
         successMsg = `Imported ${body.imported.length} orders. ${body.skipped.length} skipped.`;
         // Notify parent about imported ids and dates

@@ -2,6 +2,7 @@
 import { json } from '@sveltejs/kit';
 import { getStripe } from '$lib/server/stripe';
 import { updateUserPlan } from '$lib/server/userService';
+import { safeKV } from '$lib/server/env';
 
 export async function POST({ request, platform }) {
     console.log('🔔 Webhook received');
@@ -9,10 +10,11 @@ export async function POST({ request, platform }) {
     const sig = request.headers.get('stripe-signature');
     const body = await request.text();
     const stripe = getStripe();
+    const env = (platform?.env as any);
     
-    const webhookSecret = platform?.env?.STRIPE_WEBHOOK_SECRET;
+    const webhookSecret = env?.STRIPE_WEBHOOK_SECRET;
     
-    console.log('🔍 Platform env exists?', !!platform?.env);
+    console.log('🔍 Platform env exists?', !!env);
     console.log('🔍 Webhook secret exists?', !!webhookSecret);
     console.log('🔍 Signature exists?', !!sig);
     
@@ -44,9 +46,9 @@ export async function POST({ request, platform }) {
                 
                 console.log(`💰 Payment success for user ${userId}, customer ${customerId}`);
                 
-                if (userId && platform?.env?.BETA_USERS_KV) {
+                if (userId && safeKV(env, 'BETA_USERS_KV')) {
                     await updateUserPlan(
-                        platform.env.BETA_USERS_KV, 
+                        safeKV(env, 'BETA_USERS_KV')!, 
                         userId, 
                         'pro', 
                         customerId
@@ -64,8 +66,8 @@ export async function POST({ request, platform }) {
                 
                 console.log(`🔻 Subscription cancelled for customer ${customerId}`);
                 
-                if (platform?.env?.BETA_USERS_KV) {
-                    await downgradeUserByCustomerId(platform.env.BETA_USERS_KV, customerId);
+                if (env?.BETA_USERS_KV) {
+                    await downgradeUserByCustomerId(safeKV(env, 'BETA_USERS_KV')!, customerId);
                 }
                 break;
             }
@@ -79,8 +81,8 @@ export async function POST({ request, platform }) {
                 
                 // Downgrade if subscription becomes inactive
                 if (['canceled', 'unpaid', 'past_due'].includes(status)) {
-                    if (platform?.env?.BETA_USERS_KV) {
-                        await downgradeUserByCustomerId(platform.env.BETA_USERS_KV, customerId);
+                    if (safeKV(env, 'BETA_USERS_KV')) {
+                        await downgradeUserByCustomerId(safeKV(env, 'BETA_USERS_KV')!, customerId);
                     }
                 }
                 break;
@@ -108,7 +110,7 @@ async function downgradeUserByCustomerId(kv: any, stripeCustomerId: string) {
         let cursor: string | undefined = undefined;
         
         do {
-            const list = await kv.list({ prefix, cursor });
+            const list: any = await kv.list({ prefix, cursor });
             
             for (const key of list.keys) {
                 const raw = await kv.get(key.name);

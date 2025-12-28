@@ -119,14 +119,12 @@ export function calculateTripAnalytics(trips: any[]): TripAnalytics {
     // Hours
     totalHours += trip.hoursWorked || 0;
 
-    // Service type tracking
+    // Service type tracking - ensure initialization before mutation
     const serviceType = trip.serviceType || 'Other';
-    if (!revenueByServiceType[serviceType]) {
-      revenueByServiceType[serviceType] = 0;
-      tripsByServiceType[serviceType] = 0;
-    }
-    revenueByServiceType[serviceType] += tripRevenue;
-    tripsByServiceType[serviceType]++;
+    const prevRev = revenueByServiceType[serviceType] ?? 0;
+    const prevTrips = tripsByServiceType[serviceType] ?? 0;
+    revenueByServiceType[serviceType] = prevRev + tripRevenue;
+    tripsByServiceType[serviceType] = prevTrips + 1;
   });
 
   const totalExpenses = totalFuelCost + totalMaintenanceCost + totalSuppliesCost;
@@ -135,22 +133,22 @@ export function calculateTripAnalytics(trips: any[]): TripAnalytics {
 
   return {
     totalRevenue,
-    avgRevenuePerTrip: totalRevenue / totalTrips,
+    avgRevenuePerTrip: totalTrips > 0 ? totalRevenue / totalTrips : 0,
     avgRevenuePerMile: totalMiles > 0 ? totalRevenue / totalMiles : 0,
     revenueByServiceType,
     totalExpenses,
     totalFuelCost,
     totalMaintenanceCost,
     totalSuppliesCost,
-    avgExpensePerTrip: totalExpenses / totalTrips,
+    avgExpensePerTrip: totalTrips > 0 ? totalExpenses / totalTrips : 0,
     avgCostPerMile: totalMiles > 0 ? totalExpenses / totalMiles : 0,
     netProfit,
-    avgProfitPerTrip: netProfit / totalTrips,
+    avgProfitPerTrip: totalTrips > 0 ? netProfit / totalTrips : 0,
     profitMargin: totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0,
     totalMiles,
-    avgMilesPerTrip: totalMiles / totalTrips,
+    avgMilesPerTrip: totalTrips > 0 ? totalMiles / totalTrips : 0,
     totalHours,
-    avgHoursPerTrip: totalHours / totalTrips,
+    avgHoursPerTrip: totalTrips > 0 ? totalHours / totalTrips : 0,
     avgHourlyRate: totalHours > 0 ? netProfit / totalHours : 0,
     totalTrips,
     tripsByServiceType
@@ -226,17 +224,19 @@ export function calculatePeriodBreakdown(trips: any[]): PeriodBreakdown {
     // Weekly
     const weekStart = new Date(tripDate);
     weekStart.setDate(tripDate.getDate() - tripDate.getDay());
-    const weekKey = weekStart.toISOString().split('T')[0];
-    if (!weeklyData[weekKey]) {
-      weeklyData[weekKey] = { week: weekKey, revenue: 0, expenses: 0, profit: 0, trips: 0 };
+    const weekKey: string = String(weekStart.toISOString().split('T')[0]);
+    let wk = weeklyData[weekKey];
+    if (!wk) {
+      wk = { week: weekKey, revenue: 0, expenses: 0, profit: 0, trips: 0 };
+      weeklyData[weekKey] = wk;
     }
-    weeklyData[weekKey].revenue += revenue;
-    weeklyData[weekKey].expenses += expenses;
-    weeklyData[weekKey].profit += profit;
-    weeklyData[weekKey].trips++;
+    wk.revenue += revenue;
+    wk.expenses += expenses;
+    wk.profit += profit;
+    wk.trips++;
 
     // Monthly
-    const monthKey = `${tripDate.getFullYear()}-${String(tripDate.getMonth() + 1).padStart(2, '0')}`;
+    const monthKey: string = `${tripDate.getFullYear()}-${String(tripDate.getMonth() + 1).padStart(2, '0')}`;
     if (!monthlyData[monthKey]) {
       monthlyData[monthKey] = { month: monthKey, revenue: 0, expenses: 0, profit: 0, trips: 0 };
     }
@@ -252,7 +252,7 @@ export function calculatePeriodBreakdown(trips: any[]): PeriodBreakdown {
       quarterlyData[quarterKey] = { quarter: quarterKey, revenue: 0, expenses: 0, profit: 0, trips: 0 };
     }
     quarterlyData[quarterKey].revenue += revenue;
-    quarterlyData[quarterlyData].expenses += expenses;
+    quarterlyData[quarterKey].expenses += expenses;
     quarterlyData[quarterKey].profit += profit;
     quarterlyData[quarterKey].trips++;
   });

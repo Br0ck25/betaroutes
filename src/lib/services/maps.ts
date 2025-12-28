@@ -27,7 +27,7 @@ export async function optimizeRoute(
         })
     });
 
-    const data = await res.json();
+    const data: any = await res.json();
 
     // [!code highlight] Explicitly handle 403 Forbidden (Plan Limits)
     if (res.status === 403) {
@@ -81,7 +81,7 @@ export async function calculateRoute(
 
     // Logic: If no specific end address, the last stop IS the destination
     if (!destination && waypoints.length > 0) {
-        destination = waypoints[waypoints.length - 1].location as string;
+        destination = waypoints[waypoints.length - 1]?.location as string;
         waypoints.pop(); // Remove it from waypoints so it's not visited twice
     } else if (!destination && waypoints.length === 0) {
         throw new Error("Please add at least one destination or an end address.");
@@ -100,13 +100,17 @@ export async function calculateRoute(
     return new Promise((resolve, reject) => {
         directionsService.route(request, (result, status) => {
             if (status === google.maps.DirectionsStatus.OK && result) {
-                const route = result.routes[0];
+                const route = result.routes && result.routes.length > 0 ? result.routes[0] : undefined;
+                if (!route) {
+                    return reject(new Error('No route returned from Directions API'));
+                }
+
                 let distanceMeters = 0;
                 let durationSeconds = 0;
 
-                route.legs.forEach(leg => {
-                    if (leg.distance) distanceMeters += leg.distance.value;
-                    if (leg.duration) durationSeconds += leg.duration.value;
+                (route.legs || []).forEach(leg => {
+                    if (leg && leg.distance) distanceMeters += leg.distance.value || 0;
+                    if (leg && leg.duration) durationSeconds += leg.duration.value || 0;
                 });
 
                 // Conversions
@@ -117,7 +121,7 @@ export async function calculateRoute(
                     totalMiles: parseFloat(totalMiles.toFixed(1)),
                     totalMinutes: Math.round(totalMinutes),
                     route: result,
-                    optimizedOrder: route.waypoint_order 
+                    optimizedOrder: (route as any).waypoint_order || [] 
                 });
             } else {
                 reject(new Error(`Directions request failed: ${status}`));

@@ -9,7 +9,7 @@ async function geocodePhoton(address: string): Promise<[number, number] | null> 
     try {
         const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(address)}&limit=1`;
         const res = await fetch(url);
-        const data = await res.json();
+        const data: any = await res.json();
         if (data.features && data.features.length > 0) {
             return data.features[0].geometry.coordinates as [number, number];
         }
@@ -33,7 +33,7 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
         return json({ error: 'Missing start or end address' }, { status: 400 });
     }
 
-    const apiKey = platform?.env?.PRIVATE_GOOGLE_MAPS_API_KEY;
+    const apiKey = (platform?.env as any)?.PRIVATE_GOOGLE_MAPS_API_KEY;
 
     // 2. Try OSRM (Free)
     // Requires Geocoding first (Address -> Coords)
@@ -46,7 +46,7 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
             const osrmUrl = `http://router.project-osrm.org/route/v1/driving/${startCoords.join(',')};${endCoords.join(',')}?overview=false`;
             
             const res = await fetch(osrmUrl);
-            const data = await res.json();
+            const data: any = await res.json();
 
             if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
                 const route = data.routes[0];
@@ -73,7 +73,7 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
         const googleUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(start)}&destination=${encodeURIComponent(end)}&key=${apiKey}`;
         
         const response = await fetch(googleUrl);
-        const data = await response.json();
+        const data: any = await response.json();
 
         if (data.status === 'OK' && data.routes?.[0]?.legs?.[0]) {
             const leg = data.routes[0].legs[0];

@@ -16,14 +16,14 @@ export interface OrderData {
     [key: string]: any;
 }
 
-export function extractIds(html: string): string[] {
+export function extractIds(html: string | undefined): string[] {
     const ids = new Set<string>();
-    const clean = html.replace(/&amp;/g, '&');
-    let m;
+    const clean = (html || '').replace(/&amp;/g, '&');
+    let m: RegExpExecArray | null;
     const re1 = /viewservice\.jsp\?.*?\bid=(\d+)/gi;
-    while ((m = re1.exec(clean)) !== null) ids.add(m[1]);
+    while ((m = re1.exec(clean)) !== null) if (m[1]) ids.add(m[1]);
     const re2 = /[?&]id=(\d{8})\b/gi;
-    while ((m = re2.exec(clean)) !== null) ids.add(m[1]);
+    while ((m = re2.exec(clean)) !== null) if (m[1]) ids.add(m[1]);
     return Array.from(ids);
 }
 
@@ -65,7 +65,7 @@ export function parseOrderPage(html: string, id: string): OrderData {
         // Grab a chunk of text starting from the label
         const chunk = html.slice(idx, idx + 500); 
         const match = chunk.match(regex);
-        return match ? match[1].trim() : '';
+        return (match && match[1]) ? String(match[1]).trim() : ''; 
     };
 
     // --- HELPER 2: Cheerio Input Value ---
@@ -78,11 +78,11 @@ export function parseOrderPage(html: string, id: string): OrderData {
     if (!out.address) {
         // Try regex on the full HTML for robustness
         const match = html.match(/Address:<\/td>\s*<td[^>]*>(.*?)<\/td>/i);
-        if (match) out.address = match[1].replace(/<[^>]*>/g, '').trim();
+        if (match) out.address = (match[1] || '').replace(/<[^>]*>/g, '').trim();
     }
     if (!out.address) {
         const addressMatch = bodyText.match(/Address:\s*(.*?)\s+(?:City|County|State)/i);
-        if (addressMatch) out.address = addressMatch[1].trim();
+        if (addressMatch && addressMatch[1]) out.address = String(addressMatch[1]).trim();
     }
     out.address = toTitleCase(out.address || '');
 

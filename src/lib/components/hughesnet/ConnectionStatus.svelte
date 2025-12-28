@@ -93,7 +93,7 @@
 
       {#if showRestore}
         <div class="mt-4">
-          <ArchivedRestore on:restored={(e) => { dispatch('reloaded'); }} on:restoreAndSync={(e) => dispatch('restoreAndSync', e.detail)} />
+          <ArchivedRestore on:restored={() => { dispatch('reloaded'); }} on:restoreAndSync={(e) => dispatch('restoreAndSync', e.detail)} />
         </div>
       {/if}
   {/if}

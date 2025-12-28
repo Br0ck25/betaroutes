@@ -165,10 +165,9 @@ export function generateExpensesCSV(expenses: any[], trips: any[], includeSummar
     
     allExpenses.forEach(exp => {
         const dateKey = exp.date ? formatDate(exp.date) : 'Unknown';
-        if (!expensesByDate[dateKey]) expensesByDate[dateKey] = {};
+        expensesByDate[dateKey] = expensesByDate[dateKey] ?? {};
         categories.add(exp.category);
-        if (!expensesByDate[dateKey][exp.category]) expensesByDate[dateKey][exp.category] = 0;
-        expensesByDate[dateKey][exp.category] += exp.amount;
+        expensesByDate[dateKey][exp.category] = (expensesByDate[dateKey][exp.category] || 0) + exp.amount;
     });
 
     const categoryList = Array.from(categories).sort();
@@ -182,9 +181,9 @@ export function generateExpensesCSV(expenses: any[], trips: any[], includeSummar
         const row: string[] = [date];
         let dailyTotal = 0;
         categoryList.forEach(category => {
-            const amount = cats[category] || 0;
+            const amount = (cats[category] ?? 0);
             row.push(amount.toFixed(2));
-            categoryTotals[category] += amount;
+            categoryTotals[category] = (categoryTotals[category] || 0) + amount;
             dailyTotal += amount;
         });
         row.push(dailyTotal.toFixed(2));
@@ -196,7 +195,7 @@ export function generateExpensesCSV(expenses: any[], trips: any[], includeSummar
         csv += '\n';
         const totalRow = [
             'TOTALS',
-            ...categoryList.map(cat => categoryTotals[cat].toFixed(2)),
+            ...categoryList.map(cat => (categoryTotals[cat] || 0).toFixed(2)),
             grandTotal.toFixed(2)
         ];
         csv += totalRow.join(',') + '\n';
@@ -220,11 +219,11 @@ export async function generateTripsPDF(trips: any[], dateRangeStr: string) {
     
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(24);
-    doc.setFont(undefined, 'bold');
+    doc.setFont('helvetica', 'bold');
     doc.text('Trip Report', pageWidth / 2, 15, { align: 'center' });
     
     doc.setFontSize(11);
-    doc.setFont(undefined, 'normal');
+    doc.setFont('helvetica', 'normal');
     doc.text('Go Route Yourself - Professional Route Tracking', pageWidth / 2, 23, { align: 'center' });
     
     // Report metadata
@@ -246,7 +245,7 @@ export async function generateTripsPDF(trips: any[], dateRangeStr: string) {
     doc.roundedRect(14, 52, pageWidth - 28, 28, 3, 3, 'FD');
     
     doc.setFontSize(10);
-    doc.setFont(undefined, 'bold');
+    doc.setFont('helvetica', 'bold');
     const statY = 60;
     const colWidth = (pageWidth - 28) / 4;
     
@@ -366,10 +365,10 @@ export async function generateExpensesPDF(expenses: any[], trips: any[], dateRan
     
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(24);
-    doc.setFont(undefined, 'bold');
+    doc.setFont('helvetica', 'bold');
     doc.text('Expense Report', pageWidth / 2, 15, { align: 'center' });
     doc.setFontSize(11);
-    doc.setFont(undefined, 'normal');
+    doc.setFont('helvetica', 'normal');
     doc.text('Go Route Yourself - Professional Route Tracking', pageWidth / 2, 23, { align: 'center' });
 
     doc.setTextColor(0, 0, 0);
@@ -392,11 +391,11 @@ export async function generateExpensesPDF(expenses: any[], trips: any[], dateRan
     doc.roundedRect(14, 52, pageWidth - 28, boxHeight, 3, 3, 'FD');
     
     doc.setFontSize(11);
-    doc.setFont(undefined, 'bold');
+    doc.setFont('helvetica', 'bold');
     doc.text('Summary by Category', 20, 60);
     
     doc.setFontSize(9);
-    doc.setFont(undefined, 'normal');
+    doc.setFont('helvetica', 'normal');
     let yPos = 68;
     Object.entries(categoryTotals).forEach(([category, total]) => {
         doc.text(category, 20, yPos);
@@ -407,7 +406,7 @@ export async function generateExpensesPDF(expenses: any[], trips: any[], dateRan
     doc.setDrawColor(229, 231, 235);
     doc.line(20, yPos, pageWidth - 20, yPos);
     yPos += 6;
-    doc.setFont(undefined, 'bold');
+    doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
     doc.text('Total Expenses', 20, yPos);
     doc.setTextColor(239, 68, 68);

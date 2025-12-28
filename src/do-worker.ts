@@ -11,7 +11,7 @@ export class TripIndexSQL extends TripIndexDO {}
 export class PlacesIndexSQL extends PlacesIndexDO {}
 
 export default {
-  async fetch(request: Request, env: any) {
+  async fetch(_request: Request, _env: any) {
     return new Response("Data Worker (SQL) is Running", { status: 200 });
   }
 };

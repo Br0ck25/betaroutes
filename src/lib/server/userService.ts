@@ -19,7 +19,7 @@ export type UserCore = {
     username: string;
     email: string;
     password: string;
-    plan: string;
+    plan: 'free' | 'premium' | 'pro' | 'business';
     name: string;
     createdAt: string;
     stripeCustomerId?: string;
@@ -59,7 +59,7 @@ function credentialKey(credentialId: string): string {
 
 // --- Lookup Functions ---
 
-export async function findUserById(kv: KVNamespace, userId: string): Promise<User | null> {
+export async function findUserById(kv: any, userId: string): Promise<User | null> {
     const [coreRaw, statsRaw] = await Promise.all([
         kv.get(userCoreKey(userId)),
         kv.get(userStatsKey(userId))
@@ -89,20 +89,20 @@ export async function findUserById(kv: KVNamespace, userId: string): Promise<Use
     };
 }
 
-export async function findUserByEmail(kv: KVNamespace, email: string): Promise<User | null> {
+export async function findUserByEmail(kv: any, email: string): Promise<User | null> {
     const userId = await kv.get(emailKey(email));
     if (!userId) return null;
     return findUserById(kv, userId);
 }
 
-export async function findUserByUsername(kv: KVNamespace, username: string): Promise<User | null> {
+export async function findUserByUsername(kv: any, username: string): Promise<User | null> {
     const userId = await kv.get(usernameKey(username));
     if (!userId) return null;
     return findUserById(kv, userId);
 }
 
 // [!code ++] New Lookup for Biometric Login
-export async function findUserByCredentialId(kv: KVNamespace, credentialId: string): Promise<User | null> {
+export async function findUserByCredentialId(kv: any, credentialId: string): Promise<User | null> {
     const userId = await kv.get(credentialKey(credentialId));
     if (!userId) return null;
     return findUserById(kv, userId);
@@ -110,7 +110,7 @@ export async function findUserByCredentialId(kv: KVNamespace, credentialId: stri
 
 // --- Write/Update/Delete Functions ---
 
-export async function createUser(kv: KVNamespace, userData: Omit<User, 'id' | 'createdAt'>): Promise<User> {
+export async function createUser(kv: any, userData: Omit<User, 'id' | 'createdAt'>): Promise<User> {
     const userId = randomUUID();
     const now = new Date().toISOString();
     
@@ -140,7 +140,7 @@ export async function createUser(kv: KVNamespace, userData: Omit<User, 'id' | 'c
 }
 
 // [!code ++] New Function to Register a Passkey
-export async function saveAuthenticator(kv: KVNamespace, userId: string, authenticator: Authenticator) {
+export async function saveAuthenticator(kv: any, userId: string, authenticator: Authenticator) {
     const key = userCoreKey(userId);
     const raw = await kv.get(key);
     if (!raw) throw new Error('User not found');
@@ -166,7 +166,7 @@ export async function saveAuthenticator(kv: KVNamespace, userId: string, authent
 
 // FIXED: Handle index updates when email changes
 export async function updateUser(
-    kv: KVNamespace, 
+    kv: any, 
     userId: string, 
     updates: Partial<Pick<UserCore, 'name' | 'email'>>
 ): Promise<void> {
@@ -205,9 +205,9 @@ export async function updateUser(
 
 // NEW: Upgrade User Plan (For Stripe Webhooks)
 export async function updateUserPlan(
-    kv: KVNamespace, 
+    kv: any, 
     userId: string, 
-    plan: string,
+    plan: 'free' | 'premium' | 'pro' | 'business',
     stripeCustomerId?: string
 ): Promise<void> {
     const coreKey = userCoreKey(userId);
@@ -240,7 +240,7 @@ export async function updateUserPlan(
     }
 }
 
-export async function updatePasswordHash(kv: KVNamespace, user: User, newHash: string) {
+export async function updatePasswordHash(kv: any, user: User, newHash: string) {
     const key = userCoreKey(user.id);
     const statsKey = userStatsKey(user.id);
 
@@ -334,9 +334,9 @@ export async function deleteUser(
     const wipeNamespace = async (ns: KVNamespace, prefix: string) => {
         let cursor: string | undefined = undefined;
         do {
-            const list = await ns.list({ prefix, cursor, limit: 1000 });
+            const list: any = await ns.list({ prefix, cursor, limit: 1000 });
             if (list.keys.length > 0) {
-                await Promise.all(list.keys.map(k => ns.delete(k.name)));
+                await Promise.all(list.keys.map((k: any) => ns.delete(k.name)));
             }
             cursor = list.list_complete ? undefined : list.cursor;
         } while (cursor);

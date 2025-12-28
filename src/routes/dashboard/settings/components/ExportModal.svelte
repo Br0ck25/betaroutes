@@ -2,11 +2,10 @@
   import Modal from '$lib/components/ui/Modal.svelte';
   import { trips } from '$lib/stores/trips';
   import { expenses } from '$lib/stores/expenses';
-  import { formatCurrency, generateTripsCSV, generateExpensesCSV, generateTripsPDF, generateExpensesPDF } from '../lib/export-utils';
+  import { generateTripsCSV, generateExpensesCSV, generateTripsPDF, generateExpensesPDF } from '../lib/export-utils';
   import { createEventDispatcher } from 'svelte';
 
   export let showAdvancedExport = false;
-  export let userSettings: any;
 
   const dispatch = createEventDispatcher();
 
@@ -94,8 +93,8 @@
 
 <Modal bind:open={showAdvancedExport} title="Advanced Export">
   <div class="export-modal">
-    <div class="export-section">
-      <label class="export-label">Data Type</label>
+    <fieldset class="export-section">
+      <legend class="export-label">Data Type</legend>
       <div class="type-buttons">
         <button class="type-btn" class:active={exportDataType === 'trips'} on:click={() => exportDataType = 'trips'}>
           <span>Trips</span>
@@ -107,7 +106,7 @@
           <span>Tax Bundle ⭐</span>
         </button>
       </div>
-    </div>
+    </fieldset>
     
     {#if exportDataType === 'tax-bundle'}
       <div style="background: #FFF3CD; border: 2px solid #FF6B35; border-radius: 12px; padding: 16px; margin-bottom: 20px;">
@@ -116,22 +115,22 @@
       </div>
     {/if}
 
-    <div class="export-section">
-      <label class="export-label">Format</label>
+    <fieldset class="export-section">
+      <legend class="export-label">Format</legend>
       <div class="format-buttons">
         <button class="format-btn" class:active={exportFormat === 'csv'} on:click={() => exportFormat = 'csv'}>CSV</button>
         <button class="format-btn" class:active={exportFormat === 'pdf'} on:click={() => exportFormat = 'pdf'}>PDF</button>
       </div>
-    </div>
+    </fieldset>
 
-    <div class="export-section">
-      <label class="export-label">Date Range (Optional)</label>
+    <fieldset class="export-section">
+      <legend class="export-label">Date Range (Optional)</legend>
       <div class="date-range">
-        <input type="date" bind:value={exportDateFrom} />
+        <input id="adv-export-date-from" type="date" bind:value={exportDateFrom} />
         <span>to</span>
-        <input type="date" bind:value={exportDateTo} />
+        <input id="adv-export-date-to" type="date" bind:value={exportDateTo} />
       </div>
-    </div>
+    </fieldset>
     
     <div class="export-preview">
         <div class="preview-item">

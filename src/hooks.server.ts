@@ -25,10 +25,11 @@ export const handle: Handle = async ({ event, resolve }) => {
     }
 
     try {
-        // [!code fix] Get both Session KV and Users KV
-        // (Matched to your wrangler.toml binding)
-        const sessionKV = event.platform?.env?.BETA_SESSIONS_KV;
-        const usersKV = event.platform?.env?.BETA_USERS_KV;
+        // [!code fix] Get both Session KV and Users KV via helper
+        const { getEnv, safeKV } = await import('$lib/server/env');
+        const env = getEnv(event.platform);
+        const sessionKV = safeKV(env, 'BETA_SESSIONS_KV');
+        const usersKV = safeKV(env, 'BETA_USERS_KV');
 
         if (sessionKV) {
             const sessionDataStr = await sessionKV.get(sessionId);
@@ -67,7 +68,7 @@ export const handle: Handle = async ({ event, resolve }) => {
                     name: session.name,
                     email: session.email,
                     stripeCustomerId: freshStripeId // [!code ++] Required for Portal
-                };
+                } as any;
             } else {
                 // Session ID cookie exists, but data is gone from KV (expired/deleted)
                 if (event.url.pathname.startsWith('/dashboard')) {

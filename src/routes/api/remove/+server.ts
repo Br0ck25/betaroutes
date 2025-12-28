@@ -4,7 +4,7 @@ import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, fetch, cookies }) => {
 	try {
-		const body = await request.json();
+		const body: any = await request.json();
 		const token = request.headers.get('Authorization');
 
 		// 1. Forward the request to the real backend

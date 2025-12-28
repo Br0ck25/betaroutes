@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { hashPassword } from '$lib/server/auth';
-import { findUserById, updateUser } from '$lib/server/userService'; // Ensure updateUser exists, see note below
+import { findUserById } from '$lib/server/userService'; // Ensure updateUser exists, see note below
 
 export const POST: RequestHandler = async ({ request, platform }) => {
     const usersKV = platform?.env?.BETA_USERS_KV;
@@ -9,7 +9,8 @@ export const POST: RequestHandler = async ({ request, platform }) => {
         return json({ message: 'Database Unavailable' }, { status: 503 });
     }
 
-    const { token, password } = await request.json();
+    const body: any = await request.json();
+    const { token, password } = body;
 
     if (!token || !password) {
         return json({ message: 'Missing fields' }, { status: 400 });

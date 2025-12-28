@@ -22,18 +22,17 @@ export class PlacesIndexDO {
         this.state.blockConcurrencyWhile(async () => {
             const list = await this.state.storage.get<string[]>("list");
             if (list && Array.isArray(list) && list.length > 0) {
-                const stmt = this.state.storage.sql.prepare(`
-                    INSERT OR IGNORE INTO places (address, created_at) 
-                    VALUES (?, ?)
-                `);
-                
+                // Insert each item directly (avoid using .prepare which may not exist on SqlStorage)
                 // Preserve existing order by assigning incremental timestamps
-                // Backdate them so new entries appear after them
                 const baseTime = Date.now() - (list.length * 1000);
                 for (let i = 0; i < list.length; i++) {
-                     stmt.run(list[i], baseTime + (i * 1000));
+                    this.state.storage.sql.exec(
+                        "INSERT OR IGNORE INTO places (address, created_at) VALUES (?, ?)",
+                        list[i],
+                        baseTime + (i * 1000)
+                    );
                 }
-                
+
                 // Cleanup legacy storage
                 await this.state.storage.delete("list");
             }
@@ -85,7 +84,7 @@ export class PlacesIndexDO {
                     const cursor = this.state.storage.sql.exec("SELECT address FROM places ORDER BY created_at ASC");
                     const list: string[] = [];
                     for (const row of cursor) {
-                        list.push(row.address as string);
+                        list.push((row as any)['address'] as string);
                     }
 
                     const kv = this.env.BETA_PLACES_KV as KVNamespace;

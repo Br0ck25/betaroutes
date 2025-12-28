@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { trips, isLoading } from '$lib/stores/trips';
-  import Skeleton from '$lib/components/ui/Skeleton.svelte';
+  import { trips } from '$lib/stores/trips';
   import AsyncErrorBoundary from '$lib/components/AsyncErrorBoundary.svelte';
   import { goto } from '$app/navigation';
   import { user } from '$lib/stores/auth';
@@ -42,7 +41,7 @@
   let isUpgradeModalOpen = false;
 
   $: isPro = ['pro', 'business', 'premium', 'enterprise'].includes($user?.plan || '');
-  $: API_KEY = $page.data.googleMapsApiKey;
+  $: API_KEY = $page.data['googleMapsApiKey'];
 
   // Reset page when filters change
   $: if (searchQuery || sortBy || sortOrder || filterProfit || startDate || endDate) {
@@ -91,7 +90,7 @@
   // --- Filtering Logic ---
   $: allFilteredTrips = $trips.filter(trip => {
       const query = searchQuery.toLowerCase();
-      const supplies = trip.supplyItems || trip.suppliesItems || [];
+      const supplies = (trip as any)['supplyItems'] || (trip as any)['suppliesItems'] || [];
       const matchesSearch = !query || 
         trip.date?.includes(query) ||
         trip.startAddress?.toLowerCase().includes(query) ||
@@ -100,7 +99,7 @@
         trip.totalMiles?.toString().includes(query) ||
         trip.fuelCost?.toString().includes(query) ||
         trip.stops?.some((stop: any) => stop.address?.toLowerCase().includes(query) || stop.earnings?.toString().includes(query)) ||
-        trip.maintenanceItems?.some((item: any) => item.type?.toLowerCase().includes(query) || item.cost?.toString().includes(query)) ||
+        (trip as any)['maintenanceItems']?.some((item: any) => item.type?.toLowerCase().includes(query) || item.cost?.toString().includes(query)) ||
         supplies.some((item: any) => item.type?.toLowerCase().includes(query) || item.cost?.toString().includes(query));
       
       if (!matchesSearch) return false;
@@ -163,13 +162,13 @@
       if (!confirm('Move trip to trash?')) return;
       try {
         const trip = $trips.find(t => t.id === id);
-        const currentUser = $page.data.user || $user;
+        const currentUser = $page.data['user'] || $user;
         let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
         if (trip && currentUser) {
-            if (trip.userId === currentUser.name) userId = currentUser.name;
-            else if (trip.userId === currentUser.token) userId = currentUser.token;
+            if (trip.userId === (currentUser as any).name) userId = (currentUser as any).name;
+            else if (trip.userId === (currentUser as any).token) userId = (currentUser as any).token;
         }
-        if (userId) await trips.deleteTrip(id, userId);
+        if (userId) await trips.deleteTrip(id, userId as string);
       } catch (err) {
         toasts.error('Failed to delete trip. Changes reverted.');
       }
@@ -178,7 +177,7 @@
   async function deleteSelected() {
       const count = selectedTrips.size;
       if (!confirm(`Are you sure you want to delete ${count} trip(s)?`)) return;
-      const currentUser = $page.data.user || $user;
+      const currentUser = $page.data['user'] || $user;
       let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
       if (!userId) { toasts.error('User identity missing.'); return; }
 

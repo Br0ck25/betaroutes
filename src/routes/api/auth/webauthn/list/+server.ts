@@ -1,11 +1,12 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getUserAuthenticators } from '$lib/server/authenticatorService';
+import { getEnv, safeKV } from '$lib/server/env';
 
 export const GET: RequestHandler = async ({ platform, locals, cookies }) => {
   try {
     // Check if user is authenticated
-    const user = locals.user;
+    const user = locals.user as any;
     if (!user?.id) {
       // Log cookie value to help debug session mismatches in production
       try {
@@ -17,13 +18,14 @@ export const GET: RequestHandler = async ({ platform, locals, cookies }) => {
       return json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const env = platform?.env;
-    if (!env?.BETA_USERS_KV) {
+    const env = getEnv(platform);
+    const usersKV = safeKV(env, 'BETA_USERS_KV');
+    if (!usersKV) {
       return json({ error: 'Service unavailable' }, { status: 503 });
     }
 
     // Get user's authenticators
-    const authenticators = await getUserAuthenticators(env.BETA_USERS_KV, user.id);
+    const authenticators = await getUserAuthenticators(usersKV, user.id);
 
     // Return sanitized list (don't expose the public key)
     const sanitized = authenticators.map(auth => ({

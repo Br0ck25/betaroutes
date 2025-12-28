@@ -63,26 +63,26 @@ export function makeTripService(
   const toSummary = (trip: TripRecord) => ({
       id: trip.id,
       userId: trip.userId,
-      date: trip.date,
+      date: (trip as any)['date'],
       title: trip.title,
-      startAddress: trip.startAddress,
-      endAddress: trip.endAddress,
-      startTime: trip.startTime,
-      endTime: trip.endTime,
-      netProfit: trip.netProfit,
-      totalEarnings: trip.totalEarnings, 
-      fuelCost: trip.fuelCost,
-      maintenanceCost: trip.maintenanceCost,
-      suppliesCost: trip.suppliesCost,
-      maintenanceItems: trip.maintenanceItems,
-      supplyItems: trip.supplyItems,
-      suppliesItems: trip.suppliesItems, 
-      totalMiles: trip.totalMiles,
-      hoursWorked: trip.hoursWorked,      
-      estimatedTime: trip.estimatedTime,  
-      totalTime: trip.totalTime,
-      stopsCount: trip.stops?.length || 0,
-      stops: trip.stops, 
+      startAddress: (trip as any)['startAddress'],
+      endAddress: (trip as any)['endAddress'],
+      startTime: (trip as any)['startTime'],
+      endTime: (trip as any)['endTime'],
+      netProfit: (trip as any)['netProfit'],
+      totalEarnings: (trip as any)['totalEarnings'], 
+      fuelCost: (trip as any)['fuelCost'],
+      maintenanceCost: (trip as any)['maintenanceCost'],
+      suppliesCost: (trip as any)['suppliesCost'],
+      maintenanceItems: (trip as any)['maintenanceItems'],
+      supplyItems: (trip as any)['supplyItems'],
+      suppliesItems: (trip as any)['suppliesItems'], 
+      totalMiles: (trip as any)['totalMiles'],
+      hoursWorked: (trip as any)['hoursWorked'],      
+      estimatedTime: (trip as any)['estimatedTime'],  
+      totalTime: (trip as any)['totalTime'],
+      stopsCount: (trip as any)['stops']?.length || 0,
+      stops: (trip as any)['stops'], 
       createdAt: trip.createdAt,
       updatedAt: trip.updatedAt,
       deleted: trip.deleted 
@@ -106,13 +106,13 @@ export function makeTripService(
             }
         };
         
-        add(trip.startAddress, trip.startLocation);
-        add(trip.endAddress, trip.endLocation);
-        if (Array.isArray(trip.stops)) {
-          trip.stops.forEach(s => add(s.address, s.location));
+        add((trip as any)['startAddress'], (trip as any)['startLocation']);
+        add((trip as any)['endAddress'], (trip as any)['endLocation']);
+        if (Array.isArray((trip as any)['stops'])) {
+          (trip as any)['stops'].forEach((s: any) => add(s.address, s.location));
         }
-        if (Array.isArray(trip.destinations)) {
-          trip.destinations.forEach((d: any) => add(d.address, d.location));
+        if (Array.isArray((trip as any)['destinations'])) {
+          (trip as any)['destinations'].forEach((d: any) => add(d.address, d.location));
         }
 
         const writePromises: Promise<any>[] = [];

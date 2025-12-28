@@ -2,8 +2,6 @@
   import { userSettings } from '$lib/stores/userSettings';
   import { auth, user } from '$lib/stores/auth';
   import { trips } from '$lib/stores/trips';
-  import { expenses } from '$lib/stores/expenses';
-  import { toasts } from '$lib/stores/toast';
   import Modal from '$lib/components/ui/Modal.svelte';
   import Button from '$lib/components/ui/Button.svelte';
   import ProfileCard from './components/ProfileCard.svelte';
@@ -11,15 +9,12 @@
   import SecurityCard from './components/SecurityCard.svelte';
   import ExportModal from './components/ExportModal.svelte';
   
-  export let data; 
-  $: API_KEY = data.googleMapsApiKey;
-   
+  export let data: any;
+
   // --- REMOTE SYNC LOGIC ---
-  let settings = { ...$userSettings };
-  $: if (data.remoteSettings?.settings) {
+  $: if (data?.remoteSettings?.settings) {
     const merged = { ...$userSettings, ...data.remoteSettings.settings };
     userSettings.set(merged);
-    settings = merged;
   }
 
   let profile = { name: '', email: '' };
@@ -70,9 +65,9 @@
     isCheckingOut = true;
     try {
         const res = await fetch('/api/stripe/checkout', { method: 'POST' });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || 'Checkout failed');
-        if (data.url) window.location.href = data.url;
+        const json: any = await res.json();
+        if (!res.ok) throw new Error(json?.message || 'Checkout failed');
+        if (json?.url) window.location.href = json.url;
     } catch (e) {
         console.error('Checkout error:', e);
         alert('Failed to start checkout. Please try again.');
@@ -85,9 +80,9 @@
       isOpeningPortal = true;
       try {
           const res = await fetch('/api/stripe/portal', { method: 'POST' });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.message || 'Failed to open portal');
-          if (data.url) window.location.href = data.url;
+          const json: any = await res.json();
+          if (!res.ok) throw new Error(json?.message || 'Failed to open portal');
+          if (json?.url) window.location.href = json.url;
       } catch (e) {
           console.error(e);
           alert('Could not open billing portal. If you recently upgraded, try refreshing the page.');
@@ -151,7 +146,6 @@
     />
     
     <DataCard 
-        {isPro}
         on:success={(e) => showSuccessMsg(e.detail)}
         on:sync={(e) => syncToCloud(e.detail.type, e.detail.payload)}
         on:openAdvancedExport={() => { showAdvancedExport = true; }}
@@ -199,7 +193,6 @@
 
 <ExportModal 
     bind:showAdvancedExport 
-    {userSettings} 
     on:success={(e) => showSuccessMsg(e.detail)}
     on:exportTaxBundle={handleExportTaxBundle}
 />

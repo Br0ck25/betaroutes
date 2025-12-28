@@ -256,7 +256,7 @@ function createTripsStore() {
                 const response = await fetch(url);
                 if (!response.ok) throw new Error('Failed to fetch trips');
                 
-                const cloudTrips = await response.json();
+                const cloudTrips: any = await response.json();
                 
                 if (cloudTrips.length === 0) {
                      console.log('☁️ No new changes from cloud.');

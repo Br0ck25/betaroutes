@@ -321,7 +321,7 @@ function createAuthStore() {
         });
 
         if (!response.ok) {
-          const data = await response.json().catch(() => ({}));
+          const data: any = await response.json().catch(() => ({}));
           throw new Error(data.error || 'Account deletion failed');
         }
 

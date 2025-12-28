@@ -11,7 +11,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
     }
 
     try {
-        const rawPlace = await request.json();
+        const rawPlace: any = await request.json();
         const placesKV = platform?.env?.BETA_PLACES_KV as KVNamespace;
 
         if (!placesKV) {
@@ -32,7 +32,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
             geometry: rawPlace.geometry,
             source: 'autocomplete_selection', // Force source to ensure it looks 'local'
             cachedAt: new Date().toISOString(),
-            contributedBy: locals.user.id
+            contributedBy: (locals.user as any).id
         };
 
         const keyText = place.formatted_address || place.name;

@@ -10,7 +10,8 @@ export const POST: RequestHandler = async ({ request, platform, url }) => {
         return json({ message: 'Database Unavailable' }, { status: 503 });
     }
 
-    const { email } = await request.json();
+    const body: any = await request.json();
+    const { email } = body;
 
     if (!email) {
         return json({ message: 'Email is required' }, { status: 400 });

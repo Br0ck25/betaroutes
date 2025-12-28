@@ -6,13 +6,13 @@ import {
   generateAuthenticationOptions
 } from '@simplewebauthn/server';
 import { verifyAuthenticationResponseForUser } from '$lib/server/webauthn';
-import type { AuthenticatorTransport } from '@simplewebauthn/types';
 import { 
   getUserAuthenticators, 
   addAuthenticator,
   updateAuthenticatorCounter,
   getUserIdByCredentialID
 } from '$lib/server/authenticatorService';
+import { getEnv, safeKV } from '$lib/server/env';
 import { createSession } from '$lib/server/sessionService';
 import { findUserById } from '$lib/server/userService';
 import { dev } from '$app/environment';
@@ -60,8 +60,9 @@ function toBase64Url(input: any): string {
       base64 = Buffer.from(bytes).toString('base64');
     } else if (typeof btoa !== 'undefined') {
       let binary = '';
-      for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
+      const len = (bytes && typeof bytes.length === 'number') ? bytes.length : 0;
+      for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i] ?? 0);
       }
       base64 = btoa(binary);
     } else {
@@ -119,24 +120,18 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
     const type = url.searchParams.get('type');
     
     if (type === 'register') {
-      const user = locals.user;
+      const user = locals.user as any;
       if (!user || !user.email) {
         return json({ error: 'Not authenticated' }, { status: 401 });
       }
 
-      const env = platform?.env;
-      if (!env || !env.BETA_USERS_KV) {
+      const env = getEnv(platform);
+      const usersKV = safeKV(env, 'BETA_USERS_KV');
+      if (!usersKV) {
         return json({ error: 'Service Unavailable' }, { status: 503 });
       }
 
-      const authenticators = await getUserAuthenticators(env.BETA_USERS_KV, user.id);
-      
-      const userWithAuth = {
-        id: user.id,
-        email: user.email,
-        name: user.name || user.email,
-        authenticators
-      };
+      const authenticators = await getUserAuthenticators(usersKV, user.id);
 
       const rpID = getRpID({ url });
       
@@ -151,7 +146,7 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
         excludeCredentials: authenticators.map(auth => ({
           id: auth.credentialID, // Keep as string - library handles conversion
           type: 'public-key' as const,
-          transports: auth.transports as AuthenticatorTransport[] | undefined
+          transports: auth.transports as any
         })),
         authenticatorSelection: {
           authenticatorAttachment: 'platform',
@@ -279,12 +274,12 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
     const type = new URL(request.url).searchParams.get('type');
     
     if (type === 'register') {
-      const user = locals.user;
+      const user = locals.user as any;
       if (!user || !user.email) {
         return json({ error: 'Not authenticated' }, { status: 401 });
       }
 
-      const env = platform?.env;
+      const env = platform?.env as any;
       if (!env || !env.BETA_USERS_KV) {
         return json({ error: 'Service Unavailable' }, { status: 503 });
       }
@@ -295,7 +290,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       }
 
       // Accept either raw credential JSON or a wrapper { credential, deviceName }
-      let body = await request.json();
+      let body: any = await request.json();
       let credential = body?.credential ?? body;
       const deviceNameFromClient: string | undefined = body?.deviceName;
       const expectedOrigin = getOrigin(request);
@@ -390,7 +385,8 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       const deviceName = deviceNameClient || inferDeviceNameFromUA(uaHeader);
       const createdAt = new Date().toISOString();
 
-      await addAuthenticator(env.BETA_USERS_KV, user.id, {
+      const { safeKV } = await import('$lib/server/env');
+      await addAuthenticator(safeKV(env, 'BETA_USERS_KV')!, user.id, {
         credentialID: storedCredentialID,
         credentialPublicKey: storedPublicKey,
         counter: counter,
@@ -417,12 +413,13 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       });
     } else {
       // AUTHENTICATION FLOW
-      const env = platform?.env;
-      if (!env || !env.BETA_USERS_KV) {
+      const { getEnv, safeKV } = await import('$lib/server/env');
+      const env = getEnv(platform);
+      if (!safeKV(env, 'BETA_USERS_KV')) {
         return json({ error: 'Service Unavailable' }, { status: 503 });
       }
 
-      const sessionKv = env?.BETA_SESSIONS_KV;
+      const sessionKv = safeKV(env, 'BETA_SESSIONS_KV');
       if (!sessionKv) {
         return json({ error: 'Session service unavailable' }, { status: 503 });
       }
@@ -432,7 +429,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
         return json({ error: 'Challenge expired' }, { status: 400 });
       }
 
-      const credential = await request.json();
+      const credential: any = await request.json();
       
       // Browser sends credential.id as base64url string - use directly
       const credentialID = credential.id;
@@ -447,7 +444,8 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       console.log('[WebAuthn Auth] Credential.response keys:', Object.keys(credential.response || {}));
       console.log('[WebAuthn Auth] Index key:', `credential:${credentialID}`);
 
-      const userId = await getUserIdByCredentialID(env.BETA_USERS_KV, credentialID);
+      const usersKV = safeKV(env, 'BETA_USERS_KV')!;
+      const userId = await getUserIdByCredentialID(usersKV, credentialID);
       
       if (!userId) {
         console.error('[WebAuthn] Credential not found in index');
@@ -456,7 +454,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
 
       console.log('[WebAuthn] Found user:', userId);
 
-      const authenticators = await getUserAuthenticators(env.BETA_USERS_KV, userId);
+      const authenticators = await getUserAuthenticators(usersKV, userId);
       console.log('[WebAuthn] User has', authenticators.length, 'authenticators');
       
       const authenticator = authenticators.find(auth => auth.credentialID === credentialID);
@@ -559,15 +557,15 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       console.log('[WebAuthn] Verification successful!');
       console.log('[WebAuthn] authenticationInfo keys:', Object.keys(verification.authenticationInfo || {}));
 
-      const authInfo = verification.authenticationInfo;
+      const authInfo = verification.authenticationInfo as any;
       const newCounter = authInfo?.newCounter ?? authInfo?.counter ?? (authData.counter + 1);
       
       console.log('[WebAuthn] Updating counter from', authData.counter, 'to', newCounter);
       
-      await updateAuthenticatorCounter(env.BETA_USERS_KV, userId, credentialID, newCounter);
+      await updateAuthenticatorCounter(usersKV, userId, credentialID, newCounter);
 
       // ✅ CREATE SESSION - just like password login does!
-      const fullUser = await findUserById(env.BETA_USERS_KV, userId);
+      const fullUser = await findUserById(usersKV, userId);
       const now = new Date().toISOString();
       
       const sessionData = {

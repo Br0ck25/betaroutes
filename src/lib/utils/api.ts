@@ -1,6 +1,6 @@
 // src/lib/utils/api.ts
 
-import type { AuthResponse, Subscription, Trip, ApiError } from '$lib/types';
+import type { AuthResponse, Subscription, Trip } from '$lib/types';
 
 const API_BASE = 'https://logs.gorouteyourself.com';
 
@@ -26,7 +26,7 @@ class ApiClient {
       });
 
       if (!response.ok) {
-        const error: ApiError = await response.json().catch(() => ({
+        const error: any = await response.json().catch(() => ({
           error: response.statusText,
           code: response.status.toString(),
         }));

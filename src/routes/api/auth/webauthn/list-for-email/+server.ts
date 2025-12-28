@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { findUserByEmail } from '$lib/server/userService';
+import { safeKV } from '$lib/server/env';
 
 export const GET: RequestHandler = async ({ url, platform }) => {
   try {
@@ -8,9 +9,9 @@ export const GET: RequestHandler = async ({ url, platform }) => {
     if (!email) return json({ error: 'Email required' }, { status: 400 });
 
     const env = platform?.env;
-    if (!env?.BETA_USERS_KV) return json({ error: 'Service unavailable' }, { status: 503 });
+    if (!safeKV(env, 'BETA_USERS_KV')) return json({ error: 'Service unavailable' }, { status: 503 });
 
-    const user = await findUserByEmail(env.BETA_USERS_KV, email);
+    const user = await findUserByEmail(safeKV(env, 'BETA_USERS_KV')!, email);
     if (!user) return json({ success: true, authenticators: [] });
 
     const authenticators = user.authenticators || [];

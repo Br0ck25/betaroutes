@@ -38,7 +38,7 @@ export async function loadGoogleMaps(apiKey: string): Promise<void> {
     script.defer = true;
     
     script.onload = () => resolve();
-    script.onerror = (error) => {
+    script.onerror = (_error) => {
       googleMapsError = true;
       loadingPromise = null;
       reject(new Error('Failed to load Google Maps'));
@@ -311,7 +311,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
             try {
                 // Proxy 'Get Details' through our API
                 const res = await fetch(`/api/autocomplete?placeid=${item.place_id}`);
-                const details = await res.json();
+                const details: any = await res.json();
                 
                 if (details && details.geometry) {
                     const fullItem = {

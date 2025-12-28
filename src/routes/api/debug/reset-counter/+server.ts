@@ -16,10 +16,12 @@ export const GET = async ({ locals, platform }) => {
 
     if (!kv) return json({ error: 'KV not found' });
 
-    const svc = makeTripService(kv, trashKV, placesKV);
+    const tripIndexDO = (platform?.env as any)?.TRIP_INDEX_DO ?? ({} as any);
+    const placesIndexDO = (platform?.env as any)?.PLACES_INDEX_DO ?? tripIndexDO;
+    const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO as any, placesIndexDO as any);
     
-    // Use the same ID logic as your main app
-    const userId = locals.user.name || locals.user.token;
+    // Use the same ID logic as your main app (guard index signature)
+    const userId = (locals.user as any).name || (locals.user as any).token;
 
     // 1. Calculate correct count from DB
     // We list ALL trips and filter for the current month in memory
@@ -27,7 +29,7 @@ export const GET = async ({ locals, platform }) => {
     const now = new Date();
     
     const realCount = allTrips.filter(t => {
-        const d = new Date(t.date || t.createdAt);
+        const d = new Date((t as any)['date'] || (t as any)['createdAt']);
         return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     }).length;
 
@@ -38,7 +40,7 @@ export const GET = async ({ locals, platform }) => {
     await kv.put(counterKey, realCount.toString());
 
     // 3. Also update the cached stats key (for the dashboard)
-    const statsKey = `user:stats:${locals.user.id}`;
+    const statsKey = `user:stats:${(locals.user as any).id}`;
     const statsRaw = await platform?.env?.BETA_USERS_KV?.get(statsKey);
     if (statsRaw) {
         const stats = JSON.parse(statsRaw);

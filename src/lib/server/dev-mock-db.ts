@@ -89,10 +89,10 @@ function createMockDOStub(id: string) {
 			const path = url.pathname;
 			
 			// Init storage for this user/id if missing
-			if (!mockDB.INDEXES[id]) {
-				mockDB.INDEXES[id] = { trips: [], initialized: false, billing: {} };
+			if (!mockDB['INDEXES'][id]) {
+				mockDB['INDEXES'][id] = { trips: [], initialized: false, billing: {} };
 			}
-			const storage = mockDB.INDEXES[id];
+			const storage = mockDB['INDEXES'][id];
 
 			// --- MOCK API HANDLERS ---
 

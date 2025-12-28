@@ -36,12 +36,13 @@ export const GET: RequestHandler = async (event) => {
 		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
 		// [!code fix] Get DO binding
-		const tripIndexDO = event.platform?.env?.TRIP_INDEX_DO ?? fakeDO();
+		const tripIndexDO = (event.platform?.env as any)?.TRIP_INDEX_DO ?? fakeDO();
+		const placesIndexDO = (event.platform?.env as any)?.PLACES_INDEX_DO ?? tripIndexDO;
 		
-		// [!code fix] Pass DO to service
-		const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO);
+		// [!code fix] Pass DO to service (add placesIndexDO)
+		const svc = makeTripService(kv as any, trashKV as any, placesKV as any, tripIndexDO as any, placesIndexDO as any);
 
-		const storageId = user.name || user.token;
+		const storageId = (user as any).name || (user as any).token;
 
 		const trip = await svc.get(storageId, id);
 
@@ -71,18 +72,19 @@ export const PUT: RequestHandler = async (event) => {
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
 		const { id } = event.params;
-		const body = await event.request.json();
+		const body: any = await event.request.json();
 
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
 		// [!code fix] Get DO binding
-		const tripIndexDO = event.platform?.env?.TRIP_INDEX_DO ?? fakeDO();
+		const tripIndexDO = (event.platform?.env as any)?.TRIP_INDEX_DO ?? fakeDO();
+		const placesIndexDO = (event.platform?.env as any)?.PLACES_INDEX_DO ?? tripIndexDO;
 		
-		// [!code fix] Pass DO to service
-		const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO);
+		// [!code fix] Pass DO to service (add placesIndexDO)
+		const svc = makeTripService(kv as any, trashKV as any, placesKV as any, tripIndexDO as any, placesIndexDO as any);
 
-		const storageId = user.name || user.token;
+		const storageId = (user as any).name || (user as any).token;
 
 		// Verify existing ownership
 		const existing = await svc.get(storageId, id);
@@ -91,14 +93,14 @@ export const PUT: RequestHandler = async (event) => {
 		}
 
 		const updated = {
-			...existing,
-			...body,
+			...(existing as any),
+			...(body as any),
 			id,
 			userId: storageId,
 			updatedAt: new Date().toISOString()
 		};
 
-		await svc.put(updated);
+		await svc.put(updated as any);
 
 		return new Response(JSON.stringify(updated), {
 			status: 200,
@@ -127,12 +129,13 @@ export const DELETE: RequestHandler = async (event) => {
 		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
 		// [!code fix] Get DO binding
-		const tripIndexDO = event.platform?.env?.TRIP_INDEX_DO ?? fakeDO();
+		const tripIndexDO = (event.platform?.env as any)?.TRIP_INDEX_DO ?? fakeDO();
+		const placesIndexDO = (event.platform?.env as any)?.PLACES_INDEX_DO ?? tripIndexDO;
 		
 		// [!code fix] Pass DO to service
-		const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO);
+		const svc = makeTripService(kv as any, trashKV as any, placesKV as any, tripIndexDO as any, placesIndexDO as any);
 
-		const storageId = user.name || user.token;
+		const storageId = (user as any).name || (user as any).token;
 
 		// Check if trip exists
 		const existing = await svc.get(storageId, id);

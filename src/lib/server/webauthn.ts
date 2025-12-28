@@ -278,7 +278,8 @@ export async function verifyAuthenticationResponseForUser(
         if (ArrayBuffer.isView(buf) || buf instanceof ArrayBuffer) {
           const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf as any);
           let binary = '';
-          for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+          const len = (bytes && typeof bytes.length === 'number') ? bytes.length : 0;
+          for (let i = 0; i < len; i++) binary += String.fromCharCode(bytes[i] ?? 0);
           return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
         }
         return String(buf);

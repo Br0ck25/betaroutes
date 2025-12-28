@@ -65,11 +65,11 @@ export function calculateProfitPerHour(netProfit: number, hoursWorked: number): 
 export function calculateHoursWorked(startTime: string, endTime: string): number {
   if (!startTime || !endTime) return 0;
   
-  const [startHour, startMin] = startTime.split(':').map(Number);
-  const [endHour, endMin] = endTime.split(':').map(Number);
+  const [startHour = 0, startMin = 0] = startTime.split(':').map(Number);
+  const [endHour = 0, endMin = 0] = endTime.split(':').map(Number);
   
-  const startMinutes = startHour * 60 + startMin;
-  const endMinutes = endHour * 60 + endMin;
+  const startMinutes = (startHour || 0) * 60 + (startMin || 0);
+  const endMinutes = (endHour || 0) * 60 + (endMin || 0);
   
   let diffMinutes = endMinutes - startMinutes;
   if (diffMinutes < 0) {
@@ -114,7 +114,8 @@ export function calculateTripTotals(
   const profitPerHour = hoursWorked > 0 ? calculateProfitPerHour(netProfit, hoursWorked) : 0;
 
   return {
-    totalMileage: Number(distance.toFixed(2)),
+    totalMiles: Number(distance.toFixed(2)),
+    totalMileage: Number(distance.toFixed(2)), // backward-compat alias
     totalTime: formatTime(durationMinutes),
     totalEarnings,
     fuelCost,
@@ -123,7 +124,7 @@ export function calculateTripTotals(
     netProfit,
     profitPerHour,
     hoursWorked,
-  };
+  } as any;
 }
 
 export function milesToKm(miles: number): number {

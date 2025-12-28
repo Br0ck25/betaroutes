@@ -33,11 +33,17 @@ function hexToBuffer(hex: string): Uint8Array {
  * Helper: Constant-time comparison to prevent timing attacks.
  * Returns true if the two arrays are equal, false otherwise.
  */
-function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
+function constantTimeEqual(a?: Uint8Array, b?: Uint8Array): boolean {
+    if (!a || !b) return false;
     if (a.length !== b.length) return false;
     let c = 0;
-    for (let i = 0; i < a.length; i++) {
-        c |= a[i] ^ b[i];
+    const la = a! as Uint8Array;
+    const lb = b! as Uint8Array;
+    const len = la.length || 0;
+    for (let i = 0; i < len; i++) {
+        const av = la[i] ?? 0;
+        const bv = lb[i] ?? 0;
+        c |= av ^ bv;
     }
     return c === 0;
 }
@@ -58,10 +64,11 @@ export async function hashPassword(password: string): Promise<string> {
         ["deriveBits"]
     );
 
+    const saltBuf = (salt as Uint8Array).buffer as ArrayBuffer;
     const derivedBits = await crypto.subtle.deriveBits(
         {
             name: "PBKDF2",
-            salt: salt,
+            salt: saltBuf as any,
             iterations: PBKDF2_ITERATIONS,
             hash: HASH_ALGO
         },
@@ -82,9 +89,9 @@ async function verifyPBKDF2(password: string, storedHash: string): Promise<boole
     const parts = storedHash.split(':');
     if (parts.length !== 4 || parts[0] !== 'v1') return false;
 
-    const iterations = parseInt(parts[1], 10);
-    const salt = hexToBuffer(parts[2]);
-    const originalHashBuffer = hexToBuffer(parts[3]);
+    const iterations = parseInt(parts[1]!, 10);
+    const salt = hexToBuffer(parts[2]!);
+    const originalHashBuffer = hexToBuffer(parts[3]!);
 
     const enc = new TextEncoder();
     const keyMaterial = await crypto.subtle.importKey(
@@ -95,10 +102,11 @@ async function verifyPBKDF2(password: string, storedHash: string): Promise<boole
         ["deriveBits"]
     );
 
+    const saltBuf = (salt as Uint8Array).buffer as ArrayBuffer;
     const derivedBits = await crypto.subtle.deriveBits(
         {
             name: "PBKDF2",
-            salt: salt,
+            salt: saltBuf as any,
             iterations: iterations,
             hash: HASH_ALGO
         },

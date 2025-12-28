@@ -9,7 +9,7 @@
     try {
       const res = await fetch('/debug/webauthn-test');
       if (!res.ok) throw new Error('Failed to get options');
-      const data = await res.json();
+      const data: any = await res.json();
       const options = data.full;
 
       // Ensure challenge is string
@@ -65,11 +65,13 @@
         body: JSON.stringify({ credential: normalised, deviceName })
         });
 
-        const verifyJson = await verifyRes.json();
+        let verifyJson: any = {};
+        try { verifyJson = await verifyRes.json(); } catch (e) { /* ignore parse errors */ }
+
         if (verifyRes.ok && verifyJson.verified) {
           message = 'Registered and verified by server';
         } else {
-          message = 'Server verification failed: ' + (verifyJson.error || JSON.stringify(verifyJson));
+          message = 'Server verification failed: ' + (verifyJson && (verifyJson.error || JSON.stringify(verifyJson)));
         }
       } catch (err: any) {
         console.error('Verification POST error', err);

@@ -38,6 +38,9 @@ declare global {
 			HNS_ENCRYPTION_KEY: string;
 			PUBLIC_GOOGLE_MAPS_API_KEY: string;
 			PRIVATE_GOOGLE_MAPS_API_KEY: string;
+
+			// Allow other environment bindings without strict typing
+			[key: string]: any;
 		}
 
 		interface Platform {

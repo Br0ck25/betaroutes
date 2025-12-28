@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
-  
+
   let isMobileMenuOpen = false;
 
   function scrollToSection(id: string) {
@@ -473,7 +472,7 @@
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   }
 
-  .mobile-menu button, .mobile-link {
+  .mobile-menu button {
     background: none;
     border: none;
     text-align: left;

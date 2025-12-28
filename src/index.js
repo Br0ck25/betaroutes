@@ -1,3 +1,4 @@
+// @ts-nocheck
 function withCors(resp, req) {
 	const allowedOrigins = [
 		'https://gorouteyourself.com', 

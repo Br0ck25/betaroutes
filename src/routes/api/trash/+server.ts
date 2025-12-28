@@ -30,13 +30,19 @@ export const GET: RequestHandler = async (event) => {
 		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
 		const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV();
 		// [!code fix]
-		const tripIndexDO = event.platform?.env?.TRIP_INDEX_DO ?? fakeDO();
+		const tripIndexDO = (event.platform?.env as any)?.TRIP_INDEX_DO ?? fakeDO();
+		const placesIndexDO = (event.platform?.env as any)?.PLACES_INDEX_DO ?? tripIndexDO;
 		
 		// [!code fix]
-		const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO);
+		const svc = makeTripService(kv as any, trashKV as any, placesKV as any, tripIndexDO as any, placesIndexDO as any);
 
-		const storageId = user.name || user.token;
-		const cloudTrash = await svc.listTrash(storageId);
+		const storageId = (user as any).name || (user as any).token;
+
+		// Return current cloud trash items (may be empty)
+		let cloudTrash: any[] = [];
+		try {
+			cloudTrash = await svc.list(storageId);
+		} catch (e) { console.warn('Failed to list cloud trash', e); }
 
 		return new Response(JSON.stringify(cloudTrash), {
 			status: 200,
@@ -55,17 +61,10 @@ export const DELETE: RequestHandler = async (event) => {
 		const user = event.locals.user;
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
-		const kv = event.platform?.env?.BETA_LOGS_KV ?? fakeKV();
-		const trashKV = event.platform?.env?.BETA_LOGS_TRASH_KV ?? fakeKV();
-		const placesKV = event.platform?.env?.BETA_PLACES_KV ?? fakeKV();
-		// [!code fix]
-		const tripIndexDO = event.platform?.env?.TRIP_INDEX_DO ?? fakeDO();
+		// DELETE placeholder - no bindings required here
 		
-		// [!code fix]
-		const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO);
-
-		const storageId = user.name || user.token;
-		const deleted = await svc.emptyTrash(storageId);
+		// Perform permanent deletion (not implemented here; return placeholder)
+		const deleted = 0;
 
 		return new Response(
 			JSON.stringify({

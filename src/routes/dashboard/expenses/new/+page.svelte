@@ -26,9 +26,9 @@
     description: ''
   };
 
-  // Set default category
+  // Set default category (ensure a string; categories[0] may be undefined)
   $: if (!formData.category && categories.length > 0) {
-      formData.category = categories[0];
+      formData.category = categories[0] || '';
   }
 
   async function saveExpense() {
@@ -37,7 +37,7 @@
       return;
     }
 
-    const currentUser = $page.data.user || $user;
+    const currentUser = $page.data['user'] || $user;
     const userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
     
     if (!userId) {

@@ -1,7 +1,6 @@
 <script lang="ts">
-    import { goto } from '$app/navigation';
     
-    let email = '';
+    let email = ''; 
     let loading = false;
     let message = '';
     let error = '';
@@ -18,13 +17,14 @@
                 body: JSON.stringify({ email })
             });
 
-            const data = await res.json();
+            let data: any = {};
+            try { data = await res.json(); } catch (e) { /* ignore parse errors */ }
 
             if (res.ok) {
                 message = 'If an account exists with that email, we have sent a reset link.';
                 email = ''; // Clear form
             } else {
-                error = data.message || 'An error occurred.';
+                error = (data && data.message) || 'An error occurred.';
             }
         } catch (err) {
             error = 'Network error. Please try again.';

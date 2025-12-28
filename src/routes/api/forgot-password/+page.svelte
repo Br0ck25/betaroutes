@@ -1,6 +1,4 @@
 <script lang="ts">
-    import { goto } from '$app/navigation';
-    
     let email = '';
     let loading = false;
     let message = '';
@@ -18,7 +16,7 @@
                 body: JSON.stringify({ email })
             });
 
-            const data = await res.json();
+            const data: any = await res.json();
 
             if (res.ok) {
                 message = 'If an account exists with that email, we have sent a reset link.';

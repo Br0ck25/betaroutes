@@ -5,15 +5,19 @@ export function swipeable(node: HTMLElement, { onEdit, onDelete }: { onEdit: () 
     let swiping = false;
 
     function handleTouchStart(e: TouchEvent) {
-        startX = e.touches[0].clientX;
-        startY = e.touches[0].clientY;
+        const touch = e.touches?.[0];
+        if (!touch) return;
+        startX = touch.clientX;
+        startY = touch.clientY;
         x = 0;
         node.style.transition = 'none';
     }
 
     function handleTouchMove(e: TouchEvent) {
-        const dx = e.touches[0].clientX - startX;
-        const dy = e.touches[0].clientY - startY;
+        const touch = e.touches?.[0];
+        if (!touch) return;
+        const dx = touch.clientX - startX;
+        const dy = touch.clientY - startY;
         if (Math.abs(dy) > Math.abs(dx)) return;
         swiping = true;
         if (dx < -120) x = -120;

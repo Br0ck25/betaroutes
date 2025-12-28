@@ -46,7 +46,7 @@ describe('HughesNet archived orders API', () => {
 
         const res = await GET({ platform, locals: { user: { name: ownerId } }, url: makeUrl(`id=${orderId}`) } as any);
         expect(res.status).toBe(404);
-        const body = await res.json();
+        const body: any = await res.json();
         expect(body.success).toBe(false);
     });
 });

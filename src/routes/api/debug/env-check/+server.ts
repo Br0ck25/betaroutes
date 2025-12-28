@@ -1,30 +1,32 @@
 // src/routes/api/debug/env-check/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { getEnv, safeKV, safeDO } from '$lib/server/env';
 
 export const GET: RequestHandler = async ({ platform, url }) => {
+    const env = getEnv(platform);
     const checks = {
         environment: url.hostname.includes('localhost') ? 'development' : 'production',
         bindings: {
-            BETA_USERS_KV: !!platform?.env?.BETA_USERS_KV,
-            BETA_SESSIONS_KV: !!platform?.env?.BETA_SESSIONS_KV,
-            BETA_LOGS_KV: !!platform?.env?.BETA_LOGS_KV,
-            BETA_LOGS_TRASH_KV: !!platform?.env?.BETA_LOGS_TRASH_KV,
-            BETA_USER_SETTINGS_KV: !!platform?.env?.BETA_USER_SETTINGS_KV,
-            BETA_PLACES_KV: !!platform?.env?.BETA_PLACES_KV,
-            BETA_DIRECTIONS_KV: !!platform?.env?.BETA_DIRECTIONS_KV,
-            BETA_HUGHESNET_KV: !!platform?.env?.BETA_HUGHESNET_KV,
-            TRIP_INDEX_DO: !!platform?.env?.TRIP_INDEX_DO
+            BETA_USERS_KV: !!safeKV(env, 'BETA_USERS_KV'),
+            BETA_SESSIONS_KV: !!safeKV(env, 'BETA_SESSIONS_KV'),
+            BETA_LOGS_KV: !!safeKV(env, 'BETA_LOGS_KV'),
+            BETA_LOGS_TRASH_KV: !!safeKV(env, 'BETA_LOGS_TRASH_KV'),
+            BETA_USER_SETTINGS_KV: !!safeKV(env, 'BETA_USER_SETTINGS_KV'),
+            BETA_PLACES_KV: !!safeKV(env, 'BETA_PLACES_KV'),
+            BETA_DIRECTIONS_KV: !!safeKV(env, 'BETA_DIRECTIONS_KV'),
+            BETA_HUGHESNET_KV: !!safeKV(env, 'BETA_HUGHESNET_KV'),
+            TRIP_INDEX_DO: !!safeDO(env, 'TRIP_INDEX_DO')
         },
         secrets: {
-            RESEND_API_KEY: !!platform?.env?.RESEND_API_KEY,
-            RESEND_KEY_LENGTH: platform?.env?.RESEND_API_KEY?.length || 0,
-            RESEND_KEY_PREFIX: platform?.env?.RESEND_API_KEY?.substring(0, 3) || 'N/A',
-            PRIVATE_GOOGLE_MAPS_API_KEY: !!platform?.env?.PRIVATE_GOOGLE_MAPS_API_KEY,
-            HNS_ENCRYPTION_KEY: !!platform?.env?.HNS_ENCRYPTION_KEY
+            RESEND_API_KEY: !!env.RESEND_API_KEY,
+            RESEND_KEY_LENGTH: env.RESEND_API_KEY?.length || 0,
+            RESEND_KEY_PREFIX: env.RESEND_API_KEY?.substring(0, 3) || 'N/A',
+            PRIVATE_GOOGLE_MAPS_API_KEY: !!env.PRIVATE_GOOGLE_MAPS_API_KEY,
+            HNS_ENCRYPTION_KEY: !!env.HNS_ENCRYPTION_KEY
         },
         critical_missing: [] as string[]
-    };
+    }; 
 
     // Check critical requirements
     if (!checks.bindings.BETA_USERS_KV) {
@@ -60,7 +62,8 @@ export const POST: RequestHandler = async ({ request, platform }) => {
         logs.push(`Platform.env exists: ${!!platform?.env}`);
         
         // 2. Check API key
-        const resendKey = platform?.env?.RESEND_API_KEY;
+        const env = getEnv(platform);
+        const resendKey = env.RESEND_API_KEY;
         logs.push(`RESEND_API_KEY exists: ${!!resendKey}`);
         logs.push(`RESEND_API_KEY length: ${resendKey?.length || 0}`);
         logs.push(`RESEND_API_KEY prefix: ${resendKey?.substring(0, 3) || 'N/A'}`);
@@ -75,7 +78,8 @@ export const POST: RequestHandler = async ({ request, platform }) => {
         }
         
         // 3. Get test email from request
-        const { email } = await request.json();
+        const body: any = await request.json();
+        const { email } = body;
         if (!email) {
             return json({ 
                 success: false,
@@ -116,7 +120,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
             }, { status: 500 });
         }
         
-        const data = await res.json();
+        const data: any = await res.json();
         logs.push(`✅ Email sent successfully!`);
         logs.push(`Email ID: ${data.id}`);
         

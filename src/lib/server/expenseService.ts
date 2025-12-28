@@ -91,7 +91,7 @@ export function makeExpenseService(
     async put(expense: ExpenseRecord) {
       expense.updatedAt = new Date().toISOString();
       delete expense.deleted;
-      delete expense.deletedAt;
+      delete (expense as any)['deletedAt'];
 
       const stub = getIndexStub(expense.userId);
       await stub.fetch(`${DO_ORIGIN}/expenses/put`, {

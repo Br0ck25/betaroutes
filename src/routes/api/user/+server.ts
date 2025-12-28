@@ -3,11 +3,12 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 // [!code change] Import updateUser
 import { deleteUser, updateUser } from '$lib/server/userService';
+import { safeKV, safeDO } from '$lib/server/env';
 
 // [!code ++] Add PUT handler for profile updates
 export const PUT: RequestHandler = async ({ request, locals, platform }) => {
     try {
-        const user = locals.user;
+        const user = locals.user as any;
         if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
 
         const env = platform?.env;
@@ -15,15 +16,15 @@ export const PUT: RequestHandler = async ({ request, locals, platform }) => {
             return json({ error: 'Service Unavailable' }, { status: 503 });
         }
 
-        const body = await request.json();
+        const body: any = await request.json();
         
         // Validate inputs
         if (!body.name && !body.email) {
             return json({ error: 'No data to update' }, { status: 400 });
         }
 
-        // Update the core user record in KV
-        await updateUser(env.BETA_USERS_KV, user.id, {
+        // Update the core user record in KV (cast KV typing to any)
+        await updateUser(env.BETA_USERS_KV as any, (user as any).id, {
             name: body.name,
             email: body.email
         });
@@ -37,7 +38,7 @@ export const PUT: RequestHandler = async ({ request, locals, platform }) => {
 
 export const DELETE: RequestHandler = async ({ locals, platform, cookies }) => {
     try {
-        const user = locals.user;
+        const user = locals.user as any;
         if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
 
         const env = platform?.env;
@@ -45,11 +46,11 @@ export const DELETE: RequestHandler = async ({ locals, platform, cookies }) => {
             return json({ error: 'Service Unavailable' }, { status: 503 });
         }
 
-        await deleteUser(env.BETA_USERS_KV, user.id, {
-            tripsKV: env.BETA_LOGS_KV,
-            trashKV: env.BETA_LOGS_TRASH_KV,
-            settingsKV: env.BETA_USER_SETTINGS_KV,
-            tripIndexDO: env.TRIP_INDEX_DO
+        await deleteUser(safeKV(env, 'BETA_USERS_KV')!, user.id, {
+            tripsKV: safeKV(env, 'BETA_LOGS_KV')!,
+            trashKV: safeKV(env, 'BETA_LOGS_TRASH_KV'),
+            settingsKV: safeKV(env, 'BETA_USER_SETTINGS_KV'),
+            tripIndexDO: safeDO(env, 'TRIP_INDEX_DO')!
         });
 
         // Cleanup Cookies

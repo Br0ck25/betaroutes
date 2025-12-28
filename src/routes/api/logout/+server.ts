@@ -12,7 +12,7 @@ export const POST: RequestHandler = async ({ cookies, platform }) => {
     if (sessionId) {
         try {
             // [!code fix] Delete from SESSIONS_KV
-            const sessionKV = platform?.env?.BETA_SESSIONS_KV;
+            const sessionKV = (platform?.env as any)?.BETA_SESSIONS_KV;
             if (sessionKV) {
                 await sessionKV.delete(sessionId); 
                 console.log(`[LOGOUT] Session deleted: ${sessionId}`);

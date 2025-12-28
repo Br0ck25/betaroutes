@@ -18,15 +18,17 @@ const settingsSchema = z.object({
 });
 
 export const GET: RequestHandler = async ({ locals, platform }) => {
-  const user = locals.user;
+  const user = locals.user as any;
   if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
 
-  const kv = platform?.env?.BETA_USER_SETTINGS_KV;
+  const { getEnv, safeKV } = await import('$lib/server/env');
+  const env = getEnv(platform);
+  const kv = safeKV(env, 'BETA_USER_SETTINGS_KV');
   if (!kv) return json({}); 
 
   try {
       // [!code fix] Ensure consistency with write key
-      const raw = await kv.get(`settings:${user.id}`);
+      const raw = await kv.get(`settings:${(user as any).id}`);
       const settings = raw ? JSON.parse(raw) : {};
       return json(settings);
   } catch (err) {
@@ -36,14 +38,16 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
 };
 
 export const POST: RequestHandler = async ({ request, locals, platform }) => {
-  const user = locals.user;
+  const user = locals.user as any;
   if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
 
-  const kv = platform?.env?.BETA_USER_SETTINGS_KV;
+  const { getEnv, safeKV } = await import('$lib/server/env');
+  const env = getEnv(platform);
+  const kv = safeKV(env, 'BETA_USER_SETTINGS_KV');
   if (!kv) return json({ error: 'Service Unavailable' }, { status: 503 });
 
   try {
-      const body = await request.json();
+      const body: any = await request.json();
       
       // Handle both wrapped { settings: {...} } and flat payloads
       const payload = body.settings || body;
@@ -57,7 +61,7 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
       }
 
       // [!code fix] Use the namespaced key
-      const key = `settings:${user.id}`;
+      const key = `settings:${(user as any).id}`;
       const existingRaw = await kv.get(key);
       const existing = existingRaw ? JSON.parse(existingRaw) : {};
 

@@ -35,7 +35,7 @@
     }
 
     // [!code ++] Biometric Login Handler
-    function base64UrlToBuffer(base64url: any): Uint8Array {
+    export function base64UrlToBuffer(base64url: any): Uint8Array {
         // If already an ArrayBuffer or TypedArray, return a Uint8Array view
         if (!base64url) return new Uint8Array();
         if (base64url instanceof ArrayBuffer) return new Uint8Array(base64url);
@@ -63,7 +63,7 @@
                 try {
                     const listResp = await fetch(`/api/auth/webauthn/list-for-email?email=${encodeURIComponent(username)}`);
                     if (listResp.ok) {
-                        const json = await listResp.json();
+                        const json: any = await listResp.json();
                         const auths = json.authenticators || [];
                         if (auths.length > 1) {
                             // Simple selection prompt (can be replaced with nicer UI)

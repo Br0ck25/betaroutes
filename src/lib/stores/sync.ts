@@ -25,7 +25,7 @@ function createSyncStore() {
   const isBrowser = typeof navigator !== 'undefined';
   const initialOnline = isBrowser ? navigator.onLine : true;
 
-  const { subscribe, set, update } = writable<SyncState>({
+  const { subscribe, update } = writable<SyncState>({
     status: 'synced',
     online: initialOnline,
     pendingCount: 0,

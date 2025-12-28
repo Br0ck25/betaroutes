@@ -1,3 +1,5 @@
+import type { KVNamespace } from '@cloudflare/workers-types';
+
 /**
  * Service for managing WebAuthn authenticators in Cloudflare KV
  */

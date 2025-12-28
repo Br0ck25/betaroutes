@@ -3,14 +3,15 @@ import { redirect } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createUser } from '$lib/server/userService';
 import { randomUUID } from 'node:crypto';
-import { dev } from '$app/environment';
 
 export const GET: RequestHandler = async ({ url, platform, cookies }) => {
     const token = url.searchParams.get('token');
     
     // [!code fix] Ensure we have both KVs
-    const usersKV = platform?.env?.BETA_USERS_KV;
-    const sessionsKV = platform?.env?.BETA_SESSIONS_KV;
+    const { getEnv, safeKV } = await import('$lib/server/env');
+    const env = getEnv(platform);
+    const usersKV = safeKV(env, 'BETA_USERS_KV');
+    const sessionsKV = safeKV(env, 'BETA_SESSIONS_KV');
     
     if (!token || !usersKV || !sessionsKV) {
         console.error('[Verify] Missing token or database connection');

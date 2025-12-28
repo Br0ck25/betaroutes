@@ -11,7 +11,6 @@ export const GET: RequestHandler = async ({ platform }) => {
         // 1. Get all existing keys
         const list = await placesKV.list();
         let created = 0;
-        let errors = 0;
 
         for (const key of list.keys) {
             const originalKey = key.name;
@@ -26,7 +25,7 @@ export const GET: RequestHandler = async ({ platform }) => {
             // We skip short words like "rd", "st", "ky" to save space if needed, 
             // but for now let's just index words > 2 chars or numbers
             for (let i = 0; i < parts.length; i++) {
-                const word = parts[i].toLowerCase();
+                const word = (parts[i] || '').toLowerCase();
                 if (word.length < 2) continue;
 
                 // Create a "Search Key" that points to the data

@@ -15,7 +15,9 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
     
     try {
         // 1. Check Database Binding
-        const usersKV = platform?.env?.BETA_USERS_KV;
+        const { getEnv, safeKV } = await import('$lib/server/env');
+        const env = getEnv(platform);
+        const usersKV = safeKV(env, 'BETA_USERS_KV');
         if (!usersKV) {
             console.error('[Register] CRITICAL: BETA_USERS_KV binding missing');
             return json({ 
@@ -26,7 +28,7 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
         console.log('[Register] ✅ KV binding present');
 
         // 1.5. Check Email Configuration
-        const resendKey = platform?.env?.RESEND_API_KEY;
+        const resendKey = env['RESEND_API_KEY'];
         const isProduction = !url.hostname.includes('localhost') && !url.hostname.includes('127.0.0.1');
         
         if (!resendKey && isProduction) {
@@ -54,7 +56,7 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
         console.log('[Register] ✅ Rate limit passed');
 
         // 3. Parse Body
-        const body = await request.json();
+        const body: any = await request.json();
         const { username, email, password } = body;
         console.log('[Register] Request body parsed:', { 
             hasUsername: !!username, 
@@ -128,7 +130,7 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
         // 9. Store in KV
         console.log('[Register] Writing to KV...');
         await Promise.all([
-            usersKV.put(`pending_verify:${verificationToken}`, JSON.stringify(pendingUser), { expirationTtl: ttl }),
+            (usersKV as any).put(`pending_verify:${verificationToken}`, JSON.stringify(pendingUser), { expirationTtl: ttl }),
             usersKV.put(`reservation:username:${normUser}`, verificationToken, { expirationTtl: ttl }),
             usersKV.put(`reservation:email:${normEmail}`, verificationToken, { expirationTtl: ttl }),
             usersKV.put(`lookup:pending:${normEmail}`, verificationToken, { expirationTtl: ttl })
@@ -144,8 +146,8 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
                 throw new Error('sendVerificationEmail is not a function - import failed');
             }
             
-            // CRITICAL: Pass the API key from platform.env
-            const resendApiKey = platform?.env?.RESEND_API_KEY;
+            // CRITICAL: Pass the API key from env helper
+            const resendApiKey = env['RESEND_API_KEY'];
             emailSent = await sendVerificationEmail(normEmail, verificationToken, url.origin, resendApiKey);
             console.log('[Register] ✅ Email sent successfully');
         } catch (emailErr: any) {

@@ -3,16 +3,20 @@ import type { RequestHandler } from './$types';
 
 import { toIsoDate, extractDateFromTs } from '$lib/server/hughesnet/utils';
 
+import { getEnv, safeKV } from '$lib/server/env';
+
 export const POST: RequestHandler = async ({ platform, locals, request }) => {
-    if (!platform?.env?.BETA_HUGHESNET_ORDERS_KV || !platform?.env?.BETA_HUGHESNET_KV) {
+    // Use helper to normalize platform env access in type-checks
+    const env = getEnv(platform);
+    if (!env || !safeKV(env, 'BETA_HUGHESNET_ORDERS_KV') || !safeKV(env, 'BETA_HUGHESNET_KV')) {
         return json({ success: false, error: 'Orders KV or HNS KV not configured' }, { status: 500 });
     }
 
-    const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
+    const userId = (locals.user as any)?.name || (locals.user as any)?.token || (locals.user as any)?.id || 'default_user';
     try {
-        const body = await request.json();
-        const kv = platform.env.BETA_HUGHESNET_ORDERS_KV;
-        const hnsKV = platform.env.BETA_HUGHESNET_KV;
+        const body: any = await request.json();
+        const kv = safeKV(env, 'BETA_HUGHESNET_ORDERS_KV')!;
+        const hnsKV = safeKV(env, 'BETA_HUGHESNET_KV')!;
 
         let ids: string[] = [];
         if (body.all) {

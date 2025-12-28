@@ -3,7 +3,7 @@ import { getStripe } from '$lib/server/stripe';
 import { env } from '$env/dynamic/private';
 
 export async function POST({ locals, url }) {
-    const user = locals.user;
+    const user = locals.user as any;
     if (!user) {
         throw error(401, 'Unauthorized');
     }
@@ -32,11 +32,11 @@ export async function POST({ locals, url }) {
             ],
             // Pass user ID to webhook for fulfillment
             metadata: {
-                userId: user.id,
-                username: user.username
+                userId: (user as any).id,
+                username: (user as any).username
             },
             // Customer email pre-fill allows One-Click Link checkout
-            customer_email: user.email,
+            customer_email: (user as any).email,
             success_url: `${url.origin}/dashboard/settings?payment=success`,
             cancel_url: `${url.origin}/dashboard/settings?payment=cancelled`,
         });

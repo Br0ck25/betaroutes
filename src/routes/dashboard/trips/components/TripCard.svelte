@@ -76,17 +76,17 @@
         id={'trip-' + trip.id}
         class:expanded={isExpanded} 
         class:selected={isSelected}
-        onclick={handleExpand}
-        onkeydown={handleKeydown}
+        on:click={handleExpand}
+        on:keydown={handleKeydown}
         role="button"
         tabindex="0"
         aria-expanded={isExpanded}
         use:swipeable={{ onEdit: handleEdit, onDelete: handleDelete }}
     >
         <div class="card-top">
-            <div class="selection-box" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="none">
+            <div class="selection-box" role="none">
                 <label class="checkbox-container">
-                    <input type="checkbox" checked={isSelected} onchange={handleSelection} />
+                    <input type="checkbox" checked={isSelected} on:click|stopPropagation on:keydown|stopPropagation on:change={handleSelection} />
                     <span class="checkmark"></span>
                 </label>
             </div>
@@ -109,7 +109,7 @@
                     
                     <button 
                         class="map-link-btn" 
-                        onclick={(e) => openGoogleMaps(e, trip)} 
+                        on:click|stopPropagation={(e) => openGoogleMaps(e, trip)} 
                         title="View Route in Google Maps"
                         aria-label="View Route in Google Maps"
                     >
@@ -155,7 +155,7 @@
         </div>
         
         {#if isExpanded}
-            <div class="expanded-details" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="group">
+            <div class="expanded-details" role="group">
                 <div class="detail-section">
                     <h4 class="section-heading">Stops & Addresses</h4>
                     <div class="address-list">
@@ -168,7 +168,7 @@
                                     <span class="address-text"><strong>Stop {i + 1}:</strong> {stop.address}</span>
                                     <button 
                                         class="mini-map-btn" 
-                                        onclick={(e) => openMapToStop(e, trip, i)}
+                                        on:click|stopPropagation={(e) => openMapToStop(e, trip, i)}
                                         title="Map route from Start to here"
                                     >
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -184,7 +184,7 @@
                                 <span class="address-text"><strong>End:</strong> {trip.endAddress}</span>
                                 <button 
                                     class="mini-map-btn" 
-                                    onclick={(e) => openGoogleMaps(e, trip)}
+                                    on:click|stopPropagation={(e) => openGoogleMaps(e, trip)}
                                     title="Map full route"
                                 >
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -239,11 +239,11 @@
                 {/if}
                 
                 <div class="action-buttons-footer">
-                    <button class="action-btn-lg edit-btn" onclick={handleEdit}>
+                    <button class="action-btn-lg edit-btn" on:click|stopPropagation={handleEdit}>
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11 2L14 5L5 14H2V11L11 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         Edit
                     </button>
-                    <button class="action-btn-lg delete-btn" onclick={handleDelete}>
+                    <button class="action-btn-lg delete-btn" on:click|stopPropagation={handleDelete}>
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4H14M12 4V13C12 13.5304 11.7893 14.0391 11.4142 14.4142C11.0391 14.7893 10.5304 15 10 15H6C5.46957 15 4.96086 14.7893 4.58579 14.4142C4.21071 14.0391 4 13.5304 4 13V4M5 4V3C5 2.46957 5.21071 1.96086 5.58579 1.58579C5.96086 1.21071 6.46957 1 7 1H9C9.53043 1 10.0391 1.21071 10.4142 1.58579C10.7893 1.96086 11 2.46957 11 3V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         Trash
                     </button>
@@ -297,7 +297,7 @@
     .expanded-details { display: flex; flex-direction: column; gap: 16px; padding-top: 16px; border-top: 1px dashed #E5E7EB; margin-top: 16px; }
     .detail-section { background: #F9FAFB; padding: 12px; border-radius: 8px; }
     .section-heading { font-size: 13px; font-weight: 700; color: #1F2937; margin-bottom: 8px; border-bottom: 1px solid #E5E7EB; padding-bottom: 6px; }
-    .address-list p { font-size: 14px; color: #374151; margin: 4px 0; }
+    .address-text { font-size: 14px; color: #374151; margin: 4px 0; }
     .expense-list { display: flex; flex-direction: column; gap: 4px; }
     .expense-row { display: flex; justify-content: space-between; font-size: 13px; color: #4B5563; }
     .expense-row.total { border-top: 1px solid #E5E7EB; margin-top: 4px; padding-top: 4px; font-weight: 700; color: #111827; }

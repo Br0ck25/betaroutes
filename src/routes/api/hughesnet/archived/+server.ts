@@ -1,17 +1,20 @@
 // src/routes/api/hughesnet/archived/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { getEnv, safeKV } from '$lib/server/env';
 
 export const GET: RequestHandler = async ({ platform, locals, url }) => {
-    if (!platform?.env?.BETA_HUGHESNET_ORDERS_KV) {
+    const env = getEnv(platform);
+    const ordersKV = safeKV(env, 'BETA_HUGHESNET_ORDERS_KV');
+    if (!ordersKV) {
         return json({ success: false, error: 'Orders KV not configured' }, { status: 500 });
     }
 
-    const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
+    const userId = (locals.user as any)?.name || (locals.user as any)?.token || (locals.user as any)?.id || 'default_user';
     const id = url.searchParams.get('id');
 
     try {
-        const kv = platform.env.BETA_HUGHESNET_ORDERS_KV;
+        const kv = ordersKV;
 
         if (id) {
             const raw = await kv.get(`hns:order:${id}`);
@@ -46,20 +49,22 @@ export const GET: RequestHandler = async ({ platform, locals, url }) => {
 // Development helper: Insert a test archived order for the authenticated user
 export const POST: RequestHandler = async ({ platform, locals, request }) => {
     // Only allow when explicitly enabled via env var to avoid accidental writes in production
-    if (!platform?.env?.BETA_HUGHESNET_ORDERS_KV) {
+    const env = getEnv(platform);
+    const ordersKV = safeKV(env, 'BETA_HUGHESNET_ORDERS_KV');
+    if (!ordersKV) {
         return json({ success: false, error: 'Orders KV not configured' }, { status: 500 });
     }
 
-    const allowInsert = platform.env.ALLOW_HNS_ARCHIVE_INSERT === 'true' || process.env.ALLOW_HNS_ARCHIVE_INSERT === 'true';
+    const allowInsert = (env['ALLOW_HNS_ARCHIVE_INSERT'] === 'true') || (process.env['ALLOW_HNS_ARCHIVE_INSERT'] === 'true');
     if (!allowInsert) return json({ success: false, error: 'Not allowed' }, { status: 403 });
 
-    const userId = locals.user?.name || locals.user?.token || locals.user?.id || 'default_user';
+    const userId = (locals.user as any)?.name || (locals.user as any)?.token || (locals.user as any)?.id || 'default_user';
 
     try {
-        const body = await request.json();
+        const body: any = await request.json();
         const id = body.id || `dev_${Date.now()}`;
         const order = body.order || { id, address: body.address || 'Dev Inserted Address' };
-        const kv = platform.env.BETA_HUGHESNET_ORDERS_KV;
+        const kv = ordersKV;
         await kv.put(`hns:order:${id}`, JSON.stringify({ ownerId: userId, storedAt: Date.now(), order }));
         return json({ success: true, id });
     } catch (e: any) {

@@ -37,7 +37,7 @@ export class HughesNetAuth {
         // Verify the session actually works by hitting the Home page
         try {
             const verifyRes = await this.fetcher.safeFetch(HOME_URL, { 
-                headers: { 'Cookie': cookie }
+                headers: { 'Cookie': cookie ?? '' }
             });
             const verifyHtml = await verifyRes.text();
             

@@ -18,7 +18,9 @@ import { sanitizeQueryParam, sanitizeString } from '$lib/server/sanitize';
  * Mode B: ?q=...       -> Returns Autocomplete Suggestions (KV -> Photon -> Google)
  */
 export const GET: RequestHandler = async ({ url, platform, request, locals }) => {
-	const sessionsKV = platform?.env?.BETA_SESSIONS_KV;
+	const { getEnv, safeKV } = await import('$lib/server/env');
+	const env = getEnv(platform);
+	const sessionsKV = safeKV(env, 'BETA_SESSIONS_KV');
 	if (sessionsKV) {
 		const identifier = getClientIdentifier(request, locals);
 		const authenticated = isAuthenticated(locals);
@@ -48,7 +50,7 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 
 	const query = sanitizeQueryParam(url.searchParams.get('q'), 200);
 	const placeId = sanitizeQueryParam(url.searchParams.get('placeid'), 200);
-	const apiKey = platform?.env?.PRIVATE_GOOGLE_MAPS_API_KEY;
+	const apiKey = env['PRIVATE_GOOGLE_MAPS_API_KEY'];
 
 	// --- MODE A: PLACE DETAILS ---
 	if (placeId) {
@@ -56,7 +58,7 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 		try {
 			const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=geometry,name,formatted_address&key=${apiKey}`;
 			const res = await fetch(detailsUrl);
-			const data = await res.json();
+			const data: any = await res.json();
 			if (data.status === 'OK' && data.result) return json(data.result);
 			return json({ error: data.status }, { status: 400 });
 		} catch (e) {
@@ -91,19 +93,18 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 			// Limit to 5 results to keep parsing fast
 			const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5`; 
 			const pRes = await fetch(photonUrl);
-			const pData = await pRes.json();
-
+				const pData: any = await pRes.json();
 			if (pData.features && pData.features.length > 0) {
 				// [!code ++] VALIDATION LOGIC START
 				const trimmedQuery = query.trim();
 				// Regex checks if query starts with "123 Something"
 				const addressMatch = trimmedQuery.match(/^(\d+)\s+([a-zA-Z0-9]+)/);
 				const looksLikeSpecificAddress = !!addressMatch;
-				const streetToken = addressMatch ? addressMatch[2].toLowerCase() : null;
-				
+				const streetToken = addressMatch && addressMatch[2] ? addressMatch[2].toLowerCase() : null;
+
 				const validFeatures = pData.features.filter((f: any) => {
 					const p = f.properties;
-					
+
 					// STRICT ADDRESS VALIDATION
 					if (looksLikeSpecificAddress) {
 						// 1. Must have a house number
@@ -128,11 +129,10 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 							return false;
 						}
 					}
-					
+
 					return true;
 				});
 				// [!code ++] VALIDATION LOGIC END
-
 				// Only proceed if we have VALID results. 
 				// If validFeatures is empty (because OSRM returned garbage), we fall through to Google.
 				if (validFeatures.length > 0) {
@@ -181,7 +181,7 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 
 		const googleUrl = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${apiKey}&types=geocode&components=country:us`;
 		const response = await fetch(googleUrl);
-		const data = await response.json();
+		const data: any = await response.json();
 
 		if (data.status === 'OK' && data.predictions) {
 			const results = data.predictions.map((p: any) => ({
@@ -215,7 +215,9 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
 
-	const sessionsKV = platform?.env?.BETA_SESSIONS_KV;
+	const { getEnv, safeKV } = await import('$lib/server/env');
+	const env = getEnv(platform);
+	const sessionsKV = safeKV(env, 'BETA_SESSIONS_KV');
 	if (sessionsKV) {
 		const identifier = getClientIdentifier(request, locals);
 		const rateLimitResult = await checkRateLimitEnhanced(
@@ -231,8 +233,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	}
 
 	try {
-		const rawPlace = await request.json();
-		const placesKV = platform?.env?.BETA_PLACES_KV as KVNamespace;
+		const rawPlace: any = await request.json();
+		const placesKV = safeKV(env, 'BETA_PLACES_KV') as KVNamespace;
 
 		if (!placesKV || !rawPlace) return json({ success: false });
 
@@ -254,7 +256,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 				...place,
 				cachedAt: new Date().toISOString(),
 				source: 'autocomplete_selection',
-				contributedBy: locals.user.id
+				contributedBy: (locals.user as any).id
 			}),
 			{ expirationTtl: 5184000 }
 		);

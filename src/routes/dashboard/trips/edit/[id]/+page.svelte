@@ -17,7 +17,6 @@
   const tripId = $page.params.id;
   
   let step = 1;
-  let loading = true;
   let isCalculating = false;
   let dragItemIndex: number | null = null;
 
@@ -49,18 +48,27 @@
 
   onMount(async () => { await loadTripData(); });
   async function loadTripData() {
-    const currentUser = $page.data.user || $user;
+    const currentUser = $page.data['user'] || $user;
     let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
     if (!$trips || $trips.length === 0) { if (userId) await trips.load(userId); }
     const found = $trips.find(t => t.id === tripId);
     if (!found) { toasts.error('Trip not found'); goto('/dashboard/trips'); return; }
     const safeStops = (found.stops || []).map((s: any) => ({ ...s, id: s.id || crypto.randomUUID(), distanceFromPrev: s.distanceFromPrev || 0, timeFromPrev: s.timeFromPrev || 0 }));
-    const safeMaintenance = (found.maintenanceItems || []).map((m: any) => ({ ...m, id: m.id || crypto.randomUUID() }));
-    const rawSupplies = found.supplyItems || found.suppliesItems || [];
-    const safeSupplies = rawSupplies.map((s: any) => ({ ...s, id: s.id || crypto.randomUUID() }));
-    const to24h = (timeStr: string) => { if (!timeStr) return ''; if (!timeStr.match(/AM|PM/i)) return timeStr; const [time, modifier] = timeStr.split(' '); let [hours, minutes] = time.split(':'); let h = parseInt(hours, 10); if (h === 12) h = 0; if (modifier && modifier.toUpperCase() === 'PM') h += 12; return `${h.toString().padStart(2, '0')}:${minutes}`; };
-    tripData = { ...JSON.parse(JSON.stringify(found)), date: found.date || getLocalDate(), stops: safeStops, maintenanceItems: safeMaintenance, suppliesItems: safeSupplies, totalMiles: Number(found.totalMiles) || 0, mpg: Number(found.mpg) || $userSettings.defaultMPG || 25, gasPrice: Number(found.gasPrice) || $userSettings.defaultGasPrice || 3.50, fuelCost: Number(found.fuelCost) || 0, hoursWorked: Number(found.hoursWorked) || 0, estimatedTime: found.estimatedTime || 0, startTime: to24h(found.startTime), endTime: to24h(found.endTime) };
-    loading = false;
+    const safeMaintenance = ((found as any)['maintenanceItems'] || []).map((m: any) => ({ ...m, id: m.id || crypto.randomUUID() }));
+    const rawSupplies = (found as any)['supplyItems'] || (found as any)['suppliesItems'] || [];
+    const safeSupplies = (rawSupplies || []).map((s: any) => ({ ...s, id: s.id || crypto.randomUUID() }));
+    const to24h = (timeStr?: string): string => {
+      if (!timeStr) return '';
+      // If already in 24h format (no AM/PM), return as-is
+      if (!/AM|PM/i.test(timeStr)) return timeStr;
+      const [time = '', modifier = ''] = timeStr.split(' ');
+      const [hours = '0', minutes = '00'] = (time || '').split(':');
+      let h = parseInt(hours, 10) || 0;
+      if (h === 12) h = 0;
+      if (modifier && modifier.toUpperCase() === 'PM') h += 12;
+      return `${h.toString().padStart(2, '0')}:${minutes}`;
+    };
+    tripData = { ...JSON.parse(JSON.stringify(found)), date: found.date || getLocalDate(), stops: safeStops, maintenanceItems: safeMaintenance, suppliesItems: safeSupplies, totalMiles: Number((found as any).totalMiles) || 0, mpg: Number((found as any).mpg) || $userSettings.defaultMPG || 25, gasPrice: Number((found as any).gasPrice) || $userSettings.defaultGasPrice || 3.50, fuelCost: Number((found as any).fuelCost) || 0, hoursWorked: Number((found as any).hoursWorked) || 0, estimatedTime: (found as any)['estimatedTime'] || 0, startTime: to24h((found as any).startTime as string | undefined), endTime: to24h((found as any).endTime as string | undefined) };
   }
 
   let tripData = { id: crypto.randomUUID(), date: getLocalDate(), startTime: '09:00', endTime: '17:00', hoursWorked: 0, startAddress: '', endAddress: '', stops: [] as any[], totalMiles: 0, estimatedTime: 0, mpg: 25, gasPrice: 3.50, fuelCost: 0, maintenanceItems: [] as any[], suppliesItems: [] as any[], notes: '' };
@@ -68,7 +76,7 @@
   function formatDuration(minutes: number): string { if (!minutes) return '0 min'; const h = Math.floor(minutes / 60); const m = Math.round(minutes % 60); if (h > 0) return `${h} hr ${m} min`; return `${m} min`; }
   
   function generateRouteKey(start: string, end: string) { const s = start.toLowerCase().trim().replace(/[^a-z0-9]/g, ''); const e = end.toLowerCase().trim().replace(/[^a-z0-9]/g, ''); return `kv_route_${s}_to_${e}`; }
-  async function fetchRouteSegment(start: string, end: string) { if (!start || !end) return null; const localKey = generateRouteKey(start, end); const cached = localStorage.getItem(localKey); if (cached) { return JSON.parse(cached); } try { const res = await fetch(`/api/directions/cache?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`); const result = await res.json(); if (result.data) { const mappedResult = { distance: result.data.distance * 0.000621371, duration: result.data.duration / 60 }; localStorage.setItem(localKey, JSON.stringify(mappedResult)); return mappedResult; } } catch (err) { console.error("Routing failed:", err); } return null; }
+  async function fetchRouteSegment(start: string, end: string) { if (!start || !end) return null; const localKey = generateRouteKey(start, end); const cached = localStorage.getItem(localKey); if (cached) { return JSON.parse(cached); } try { const res = await fetch(`/api/directions/cache?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`); const result: any = await res.json(); if (result && result.data) { const mappedResult = { distance: result.data.distance * 0.000621371, duration: result.data.duration / 60 }; localStorage.setItem(localKey, JSON.stringify(mappedResult)); return mappedResult; } } catch (err) { console.error("Routing failed:", err); } return null; }
   async function recalculateAllLegs() { isCalculating = true; try { let prevAddress = tripData.startAddress; for (let i = 0; i < tripData.stops.length; i++) { const currentStop = tripData.stops[i]; if (prevAddress && currentStop.address) { const leg = await fetchRouteSegment(prevAddress, currentStop.address); if (leg) { currentStop.distanceFromPrev = leg.distance; currentStop.timeFromPrev = leg.duration; } } prevAddress = currentStop.address; } await recalculateTotals(); } finally { isCalculating = false; } }
   async function recalculateTotals() { let miles = tripData.stops.reduce((acc, s) => acc + (s.distanceFromPrev || 0), 0); let mins = tripData.stops.reduce((acc, s) => acc + (s.timeFromPrev || 0), 0); const lastStop = tripData.stops[tripData.stops.length - 1]; const startPoint = lastStop ? lastStop.address : tripData.startAddress; const endPoint = tripData.endAddress || tripData.startAddress; if (startPoint && endPoint) { const finalLeg = await fetchRouteSegment(startPoint, endPoint); if (finalLeg) { miles += finalLeg.distance; mins += finalLeg.duration; } } tripData.totalMiles = parseFloat(miles.toFixed(1)); tripData.estimatedTime = Math.round(mins); tripData = { ...tripData }; }
 
@@ -77,8 +85,8 @@
     if (tripData.stops.length < 2) { toasts.error("Add at least 2 stops to optimize."); return; }
     isCalculating = true;
     try {
-      const result = await optimizeRoute(tripData.startAddress, tripData.endAddress, tripData.stops);
-      if (result.optimizedOrder) {
+      const result: any = await optimizeRoute(tripData.startAddress, tripData.endAddress, tripData.stops);
+      if (result && result.optimizedOrder) {
         const currentStops = [...tripData.stops];
         let orderedStops = [];
         if (!tripData.endAddress) { const movingStops = currentStops.slice(0, -1); const fixedLast = currentStops[currentStops.length - 1]; orderedStops = result.optimizedOrder.map((i: number) => movingStops[i]); orderedStops.push(fixedLast); } 
@@ -127,12 +135,12 @@
   $: totalSuppliesCost = tripData.suppliesItems.reduce((sum, item) => sum + (item.cost || 0), 0);
   $: totalCosts = (tripData.fuelCost || 0) + totalMaintenanceCost + totalSuppliesCost;
   $: totalProfit = totalEarnings - totalCosts;
-  $: { if (tripData.startTime && tripData.endTime) { const [startHour, startMin] = tripData.startTime.split(':').map(Number); const [endHour, endMin] = tripData.endTime.split(':').map(Number); let diff = (endHour * 60 + endMin) - (startHour * 60 + startMin); if (diff < 0) diff += 24 * 60; tripData.hoursWorked = Math.round((diff / 60) * 10) / 10; } }
+  $: { if (tripData.startTime && tripData.endTime) { const [startHour, startMin] = tripData.startTime.split(':').map(Number) as [number, number]; const [endHour, endMin] = tripData.endTime.split(':').map(Number) as [number, number]; let diff = (endHour * 60 + endMin) - (startHour * 60 + startMin); if (diff < 0) diff += 24 * 60; tripData.hoursWorked = Math.round((diff / 60) * 10) / 10; } }
   function nextStep() { if (step < 4) step++; }
   function prevStep() { if (step > 1) step--; }
   
   async function saveTrip() {
-    const currentUser = $page.data.user || $user;
+    const currentUser = $page.data['user'] || $user;
     let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
     if (!userId) { toasts.error("Authentication error. Please login."); return; }
     
@@ -151,7 +159,9 @@
       updatedAt: new Date().toISOString()
     };
     try { 
-        await trips.updateTrip(tripId, tripToSave, userId); 
+        // userId is checked above; coerce to string to satisfy TS
+        const uid = String(userId);
+        await trips.updateTrip(String(tripId), tripToSave, uid);
         toasts.success('Trip updated successfully!');
         goto('/dashboard/trips');
     } catch (err: any) { 
@@ -162,7 +172,7 @@
   }
   
   function formatCurrency(amount: number) { return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(amount); }
-  function formatDateLocal(dateString: string) { if (!dateString) return ''; const [y, m, d] = dateString.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' }); }
+  function formatDateLocal(dateString?: string) { if (!dateString) return ''; const [y, m, d] = dateString.split('-').map(Number); const yy = y || 0; const mm = m || 1; const dd = d || 1; return new Date(yy, mm - 1, dd).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' }); }
 </script>
 
 <div class="trip-form">
@@ -185,13 +195,13 @@
           <h2 class="card-title">Route & Stops</h2>
           <button class="btn-small primary" on:click={handleOptimize} type="button" disabled={isCalculating} title="Reorder stops efficiently">{isCalculating ? 'Optimizing...' : 'Optimize'}</button>
         </div>
-        <div class="form-group"><label for="start-address">Starting Address</label><input id="start-address" type="text" bind:value={tripData.startAddress} use:autocomplete={{ apiKey: API_KEY }} on:place-selected={(e) => handleMainAddressChange('start', e.detail)} on:blur={(e) => handleMainAddressChange('start', { formatted_address: tripData.startAddress })} class="address-input" placeholder="Enter start address..." /></div>
+        <div class="form-group"><label for="start-address">Starting Address</label><input id="start-address" type="text" bind:value={tripData.startAddress} use:autocomplete={{ apiKey: API_KEY }} on:place-selected={(e) => handleMainAddressChange('start', e.detail)} on:blur={() => handleMainAddressChange('start', { formatted_address: tripData.startAddress })} class="address-input" placeholder="Enter start address..." /></div>
         <div class="stops-container">
           <div class="stops-header"><h3>Stops</h3><span class="count">{tripData.stops.length} added</span></div>
           {#if tripData.stops.length > 0}
             <div class="stops-list">
               {#each tripData.stops as stop, i (stop.id)}
-                <div class="stop-card" draggable="true" on:dragstart={(e) => handleDragStart(e, i)} on:drop={(e) => handleDrop(e, i)} on:dragover={handleDragOver}>
+                <div class="stop-card" role="button" tabindex="0" draggable="true" on:dragstart={(e) => handleDragStart(e, i)} on:drop={(e) => handleDrop(e, i)} on:dragover={handleDragOver}>
                   <div class="stop-header"><div class="stop-number">{i + 1}</div><div class="stop-actions"><button class="btn-icon delete" on:click={() => removeStop(stop.id)}>✕</button><div class="drag-handle">☰</div></div></div>
                   <div class="stop-inputs">
                     <input type="text" bind:value={stop.address} use:autocomplete={{ apiKey: API_KEY }} on:place-selected={(e) => handleStopChange(i, e.detail)} on:blur={() => handleStopChange(i, { formatted_address: stop.address })} class="address-input" placeholder="Address" />
@@ -209,7 +219,7 @@
 
           </div>
         </div>
-        <div class="form-group"><label for="end-address">End Address (Optional)</label><input id="end-address" type="text" bind:value={tripData.endAddress} use:autocomplete={{ apiKey: API_KEY }} on:place-selected={(e) => handleMainAddressChange('end', e.detail)} on:blur={(e) => handleMainAddressChange('end', { formatted_address: tripData.endAddress })} class="address-input" placeholder="Same as start if empty" /></div>
+        <div class="form-group"><label for="end-address">End Address (Optional)</label><input id="end-address" type="text" bind:value={tripData.endAddress} use:autocomplete={{ apiKey: API_KEY }} on:place-selected={(e) => handleMainAddressChange('end', e.detail)} on:blur={() => handleMainAddressChange('end', { formatted_address: tripData.endAddress })} class="address-input" placeholder="Same as start if empty" /></div>
         <div class="form-row"><div class="form-group"><label for="total-miles">Total Miles</label><input id="total-miles" type="number" bind:value={tripData.totalMiles} step="0.1" /></div><div class="form-group"><label for="drive-time">Drive Time <span class="hint">(Est)</span></label><div id="drive-time" class="readonly-field">{formatDuration(tripData.estimatedTime)}</div></div></div>
         <div class="form-actions"><button class="btn-primary full-width" on:click={nextStep}>Continue</button></div>
       </div>
@@ -335,16 +345,14 @@
   .stop-inputs { display: flex; flex-direction: column; gap: 14px; width: 100%; }
   .stop-inputs.new { display: flex; flex-direction: column; gap: 14px; margin-bottom: 18px; }
   .form-actions { display: flex; gap: 18px; margin-top: 36px; padding-top: 26px; border-top: 1px solid #E5E7EB; }
-  .btn-primary, .btn-secondary, .btn-add { flex: 1; padding: 18px; border-radius: 12px; font-weight: 600; font-size: 18px; cursor: pointer; border: none; text-align: center; }
+  .btn-primary, .btn-secondary { flex: 1; padding: 18px; border-radius: 12px; font-weight: 600; font-size: 18px; cursor: pointer; border: none; text-align: center; }
   .btn-primary { background: linear-gradient(135deg, #FF7F50 0%, #FF6A3D 100%); color: white; }
   .btn-secondary { background: white; border: 1px solid #E5E7EB; color: #374151; }
-  .btn-add { background: #2563EB; color: white; margin-top: 14px; font-size: 17px; padding: 16px; }
   .btn-icon { background: none; border: none; font-size: 22px; cursor: pointer; color: #9CA3AF; padding: 6px; }
   .btn-icon.delete:hover { color: #DC2626; }
   .btn-icon.gear { color: #6B7280; font-size: 18px; padding: 4px; transition: color 0.2s; }
   .btn-icon.gear:hover { color: #374151; }
   
-  .btn-text { background: none; border: none; color: #2563EB; font-weight: 600; font-size: 16px; cursor: pointer; }
   .btn-small { padding: 12px 18px; border-radius: 8px; border: none; font-weight: 600; font-size: 15px; cursor: pointer; }
   .btn-small.primary { background: #10B981; color: white; }
   .summary-box { background: #ECFDF5; border: 1px solid #A7F3D0; padding: 22px; border-radius: 14px; display: flex; justify-content: space-between; align-items: center; color: #065F46; margin-bottom: 36px; font-size: 18px; }

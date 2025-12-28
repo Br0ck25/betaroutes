@@ -3,6 +3,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { authenticateUser, hashPassword } from '$lib/server/auth';
 import { findUserById, updatePasswordHash } from '$lib/server/userService';
+import { getEnv, safeKV } from '$lib/server/env';
 
 export const POST: RequestHandler = async ({ request, platform, locals }) => {
     // 1. Ensure user is logged in
@@ -10,7 +11,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
         return json({ message: 'Unauthorized' }, { status: 401 });
     }
 
-    const { currentPassword, newPassword } = await request.json();
+    const body: any = await request.json();
+    const { currentPassword, newPassword } = body;
 
     if (!currentPassword || !newPassword) {
         return json({ message: 'Current and new password are required' }, { status: 400 });
@@ -21,14 +23,15 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
         return json({ message: 'New password must be at least 8 characters.' }, { status: 400 });
     }
 
-    const usersKV = platform?.env?.BETA_USERS_KV;
+    const env = getEnv(platform);
+    const usersKV = safeKV(env, 'BETA_USERS_KV');
     if (!usersKV) {
         return json({ message: 'Database unavailable' }, { status: 500 });
     }
 
     // 2. Verify Current Password
     // Use the session's email or name to verify the "currentPassword" provided by the user
-    const authUser = await authenticateUser(usersKV, locals.user.email || locals.user.name, currentPassword);
+const authUser = await authenticateUser(usersKV, (locals.user as any).email || (locals.user as any).name, currentPassword);
 
     if (!authUser) {
         return json({ message: 'Incorrect current password' }, { status: 401 });

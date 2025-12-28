@@ -2,6 +2,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { authenticateUser } from '$lib/server/auth';
+import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { createSession } from '$lib/server/sessionService';
 import { findUserById } from '$lib/server/userService';
 import { makeTripService } from '$lib/server/tripService';
@@ -10,9 +11,9 @@ import { dev } from '$app/environment';
 
 export const POST: RequestHandler = async ({ request, platform, cookies, getClientAddress }) => {
     try {
-        const env = platform?.env;
-        const kv = env?.BETA_USERS_KV;
-        const sessionKv = env?.BETA_SESSIONS_KV;
+        const env = getEnv(platform);
+        const kv = safeKV(env, 'BETA_USERS_KV');
+        const sessionKv = safeKV(env, 'BETA_SESSIONS_KV');
 
         // 1. Check Bindings
         if (!kv || !sessionKv) {
@@ -36,7 +37,8 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
         }
 
         // 3. Parse Body
-        const { email, password } = await request.json();
+        const body: any = await request.json();
+        const { email, password } = body;
 
         // 4. Authenticate
         // @ts-ignore
@@ -79,21 +81,24 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 
         // 9. AUTO-MIGRATION
         // Move legacy data (username key) to new storage (UUID key) in background
-        if (platform?.context && env?.BETA_LOGS_KV && env?.TRIP_INDEX_DO) {
+        if (platform?.context && safeKV(env, 'BETA_LOGS_KV') && (safeDO(env, 'TRIP_INDEX_DO') || (env as any).TRIP_INDEX_DO)) {
             const userId = authResult.id;
             const username = authResult.username;
 
             platform.context.waitUntil((async () => {
                 try {
+                    const tripIndexDO = safeDO(env, 'TRIP_INDEX_DO') || (env as any).TRIP_INDEX_DO;
+                    const placesIndexDO = safeDO(env, 'PLACES_INDEX_DO') || tripIndexDO;
                     const svc = makeTripService(
-                        env.BETA_LOGS_KV,
-                        env.BETA_LOGS_TRASH_KV,
-                        env.BETA_PLACES_KV,
-                        env.TRIP_INDEX_DO
+                        safeKV(env, 'BETA_LOGS_KV') as any,
+                        safeKV(env, 'BETA_LOGS_TRASH_KV') as any,
+                        safeKV(env, 'BETA_PLACES_KV') as any,
+                        tripIndexDO as any,
+                        placesIndexDO as any
                     );
                     
                     // Trigger the move. If keys exist under 'username', they move to 'userId'.
-                    await svc.migrateUser(username, userId);
+                    await (svc as any).migrateUser?.(username, userId);
                     
                 } catch (e) {
                     console.error(`[Auto-Migration] Failed for ${username}:`, e);

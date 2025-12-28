@@ -5,14 +5,15 @@ import { findUserByEmail } from '$lib/server/userService';
 import { sendPasswordResetEmail } from '$lib/server/email';
 import { checkRateLimit } from '$lib/server/rateLimit'; // [!code fix] Rate limiting
 import { randomUUID } from 'node:crypto';
-import { env } from '$env/dynamic/private'; // [!code fix] Secure config
+import { getEnv, safeKV } from '$lib/server/env';
 
 export const POST: RequestHandler = async ({ request, platform, getClientAddress }) => {
     const start = Date.now();
     // [!code fix] Pad response time to mask internal logic (Enumeration Protection)
     const MIN_DURATION = 500; 
 
-    const usersKV = platform?.env?.BETA_USERS_KV;
+    const env = getEnv(platform);
+    const usersKV = safeKV(env, 'BETA_USERS_KV');
     if (!usersKV) {
         return json({ message: 'Service Unavailable' }, { status: 503 });
     }
@@ -26,7 +27,8 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
         return json({ message: 'Too many attempts. Please try again later.' }, { status: 429 });
     }
 
-    const { email } = await request.json();
+    const body: any = await request.json();
+    const { email } = body;
     if (!email || typeof email !== 'string') {
         return json({ message: 'Email is required' }, { status: 400 });
     }
@@ -40,7 +42,7 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
     }
 
     // 3. Logic
-    const user = await findUserByEmail(usersKV, email);
+    const user = await findUserByEmail(usersKV as any, email);
 
     if (user) {
         const token = randomUUID();
