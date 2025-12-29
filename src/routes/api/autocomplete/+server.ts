@@ -86,7 +86,42 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 					const str = (item.formatted_address || item.name || '').toLowerCase();
 					return str.includes(query.toLowerCase());
 				});
-				if (matches.length > 0) return json(matches);
+				if (matches.length > 0) {
+					// If query looks like an explicit address, validate cached matches strictly
+					const trimmedQuery = query.trim();
+					const addressMatch = trimmedQuery.match(/^(\d+)\s+([a-zA-Z0-9]+)/);
+					const looksLikeSpecificAddress = !!addressMatch;
+					const streetToken =
+						addressMatch && addressMatch[2] ? addressMatch[2].toLowerCase() : null;
+					const explicitStreetToken = (trimmedQuery.match(
+						/\b([A-Za-z]+(?:\.|\b)\s*(?:st|street|ave|avenue|rd|road|dr|drive|blvd|lane|ln|way|court|ct|circle|cir)?)\b/i
+					) || [])[1];
+					const broadTypes = [
+						'city',
+						'state',
+						'country',
+						'county',
+						'state_district',
+						'place',
+						'administrative'
+					];
+
+					const filteredMatches = matches.filter((it: any) => {
+						const text = (it.formatted_address || it.name || '').toLowerCase();
+						if ((it.name || '').trim().match(/^\d+\s*$/)) return false;
+						if (it.osm_value && broadTypes.includes(it.osm_value)) return false;
+						if (looksLikeSpecificAddress) {
+							if (!text.includes(addressMatch![1])) return false;
+							if (streetToken && !text.includes(streetToken)) return false;
+						}
+						if (explicitStreetToken && !looksLikeSpecificAddress) {
+							if (!text.includes(explicitStreetToken.toLowerCase())) return false;
+						}
+						return true;
+					});
+
+					if (filteredMatches.length > 0) return json(filteredMatches);
+				}
 			}
 		}
 
@@ -175,7 +210,11 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 									lng: f.geometry.coordinates[0]
 								}
 							},
-							source: 'photon'
+							source: 'photon',
+							house_number: p.housenumber || null,
+							street: p.street || p.name || null,
+							osm_value: p.osm_value,
+							osm_key: p.osm_key
 						};
 					});
 
