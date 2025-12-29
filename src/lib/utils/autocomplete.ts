@@ -395,6 +395,69 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 		if (dropdown) dropdown.style.display = 'none';
 		isSelecting = true;
 
+		// Helper: basic validation to ensure address-grade match
+		function isAcceptableGeocode(result: any, input: string) {
+			if (!result) return false;
+			// Disallow obvious non-addresses
+			if (
+				result.name &&
+				String(result.name)
+					.trim()
+					.match(/^\d+\s*$/)
+			)
+				return false;
+			// If we have explicit house/street info use it
+			if (result.house_number && result.street) {
+				return input.toLowerCase().includes(String(result.street).toLowerCase());
+			}
+			// If input contains a street-like token, prefer results that contain it
+			const streetHint = (input.match(
+				/\b([A-Za-z]+)\s*(?:st|street|ave|avenue|rd|road|dr|drive|blvd|lane|ln|way|court|ct|circle|cir)\b/i
+			) || [])[1];
+			if (streetHint) {
+				const resultText = ((result.name || '') + ' ' + (result.street || '')).toLowerCase();
+				return resultText.includes(streetHint.toLowerCase());
+			}
+			// As a last resort, accept if it has geometry and a reasonable name
+			return !!(result.geometry && result.geometry.location && result.name);
+		}
+
+		// If source is Photon (OpenMap) we must validate before committing
+		if (source === 'photon') {
+			const candidate = { ...it };
+			if (!isAcceptableGeocode(candidate, node.value)) {
+				// Try a fallback search (server will promote to Google when Photon is rejected)
+				try {
+					const res = await fetch(`/api/autocomplete?q=${encodeURIComponent(node.value)}`);
+					const data = await res.json();
+					if (Array.isArray(data) && data.length > 0) {
+						// Prefer a Google-proxy hit if available
+						const googleHit = data.find((d: any) => d.source === 'google_proxy');
+						if (googleHit) {
+							// If Google needs details, commitItem will fetch them.
+							commitSelection(googleHit);
+							return;
+						}
+
+						// Otherwise pick the first acceptable candidate
+						const acceptable = data.find((d: any) => isAcceptableGeocode(d, node.value));
+						if (acceptable) {
+							commitSelection(acceptable);
+							return;
+						}
+					}
+				} catch (err: unknown) {
+					console.error('[autocomplete] fallback search failed', err);
+				}
+
+				// If we get here, photon candidate is weak: emit a 'place-invalid' event and do NOT commit
+				node.dispatchEvent(
+					new CustomEvent('place-invalid', { detail: { candidate: item, input: node.value } })
+				);
+				return;
+			}
+		}
+
 		// Check if we need to fetch details (geometry)
 		// Photon and KV usually have geometry. Google Proxy usually does not.
 		if (!it.geometry || !it.geometry.location) {

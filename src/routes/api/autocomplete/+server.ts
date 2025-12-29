@@ -140,6 +140,21 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 				if (validFeatures.length > 0) {
 					const results = validFeatures.map((f: any) => {
 						const p = f.properties;
+
+						// Global rejection: broad administrative/place types are not address-grade
+						const broadTypes = [
+							'city',
+							'state',
+							'country',
+							'county',
+							'state_district',
+							'place',
+							'administrative'
+						];
+						if (broadTypes.includes(p.osm_value) || broadTypes.includes(p.osm_key)) return false;
+
+						// Reject labels that are just numbers (e.g. "407") which commonly appear as non-address tokens
+						if ((p.name || '').trim().match(/^\d+\s*$/)) return false;
 						const parts = [p.name];
 						if (p.housenumber && p.name !== p.housenumber) parts.unshift(p.housenumber);
 
