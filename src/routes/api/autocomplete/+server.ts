@@ -11,6 +11,7 @@ import {
 	RATE_LIMITS
 } from '$lib/server/rateLimit';
 import { sanitizeQueryParam, sanitizeString } from '$lib/server/sanitize';
+import { log } from '$lib/server/log';
 
 /**
  * GET Handler
@@ -61,7 +62,8 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 			const data: any = await res.json();
 			if (data.status === 'OK' && data.result) return json(data.result);
 			return json({ error: data.status }, { status: 400 });
-		} catch (e) {
+		} catch (err: unknown) {
+			void err;
 			return json({ error: 'Failed to fetch details' }, { status: 500 });
 		}
 	}
@@ -91,9 +93,9 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 		// 2. Try Photon (OpenStreetMap) - Free
 		try {
 			// Limit to 5 results to keep parsing fast
-			const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5`; 
+			const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5`;
 			const pRes = await fetch(photonUrl);
-				const pData: any = await pRes.json();
+			const pData: any = await pRes.json();
 			if (pData.features && pData.features.length > 0) {
 				// [!code ++] VALIDATION LOGIC START
 				const trimmedQuery = query.trim();
@@ -117,7 +119,7 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 						// 3. Token Check: If input is "407 Mastin", result MUST contain "mastin"
 						// This prevents "407" matching a zip code or district ID in a different city
 						if (streetToken) {
-							const resultText = [(p.name || ''), (p.street || '')].join(' ').toLowerCase();
+							const resultText = [p.name || '', p.street || ''].join(' ').toLowerCase();
 							if (!resultText.includes(streetToken)) {
 								return false;
 							}
@@ -133,7 +135,7 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 					return true;
 				});
 				// [!code ++] VALIDATION LOGIC END
-				// Only proceed if we have VALID results. 
+				// Only proceed if we have VALID results.
 				// If validFeatures is empty (because OSRM returned garbage), we fall through to Google.
 				if (validFeatures.length > 0) {
 					const results = validFeatures.map((f: any) => {
@@ -151,7 +153,7 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 							formatted_address: formatted,
 							name: p.name,
 							secondary_text: [p.city, p.state, p.country].filter(Boolean).join(', '),
-							place_id: `photon:${f.geometry.coordinates[1]},${f.geometry.coordinates[0]}`, 
+							place_id: `photon:${f.geometry.coordinates[1]},${f.geometry.coordinates[0]}`,
 							geometry: {
 								location: {
 									lat: f.geometry.coordinates[1],
@@ -169,11 +171,13 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 
 					return json(results);
 				} else {
-					console.log(`[Autocomplete] Photon results rejected by validation for "${query}". Falling back to Google.`);
+					log.warn('Photon results rejected by validation', { query });
 				}
 			}
 		} catch (photonErr) {
-			console.warn('Photon lookup failed or rejected, falling back to Google', photonErr);
+			log.warn('Photon lookup failed or rejected, falling back to Google', {
+				message: (photonErr as any)?.message
+			});
 		}
 
 		// 3. Google Fallback (Cost: $) - Executed if KV missed AND Photon failed validation
@@ -201,9 +205,8 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 		}
 
 		return json([]);
-
 	} catch (err) {
-		console.error('Autocomplete Error:', err);
+		log.error('Autocomplete Error', { message: (err as any)?.message });
 		return json([]);
 	}
 };
@@ -224,7 +227,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 			sessionsKV,
 			identifier,
 			'autocomplete:write',
-			30, 
+			30,
 			60000
 		);
 		if (!rateLimitResult.allowed) {
@@ -243,7 +246,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 			name: sanitizeString(rawPlace.name, 200),
 			secondary_text: sanitizeString(rawPlace.secondary_text, 300),
 			place_id: sanitizeString(rawPlace.place_id, 200),
-			geometry: rawPlace.geometry, 
+			geometry: rawPlace.geometry,
 			source: sanitizeString(rawPlace.source, 50)
 		};
 

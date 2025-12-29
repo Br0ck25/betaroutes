@@ -1,11 +1,12 @@
 // src/routes/api/delete-account/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { log } from '$lib/server/log';
 
 export const POST: RequestHandler = async ({ request, fetch, cookies }) => {
 	try {
 		// Use standard Promise methods for the body
-			const body = await request.json() as any;
+		const body = (await request.json()) as any;
 		const token = request.headers.get('Authorization');
 
 		// 1. Forward the request to the real backend
@@ -29,14 +30,15 @@ export const POST: RequestHandler = async ({ request, fetch, cookies }) => {
 		let data;
 		try {
 			data = await externalResponse.json();
-		} catch (e) {
+		} catch (_e: unknown) {
+			void _e;
 			// Fallback if external API doesn't return JSON (e.g. 204 No Content)
 			data = { success: externalResponse.ok };
 		}
 
 		return json(data, { status: externalResponse.status });
 	} catch (err) {
-		console.error('Delete account proxy error:', err);
+		log.error('Delete account proxy error', { message: (err as any)?.message });
 		return json({ error: 'Internal Server Error' }, { status: 500 });
 	}
 };

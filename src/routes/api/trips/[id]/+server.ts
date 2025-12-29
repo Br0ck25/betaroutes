@@ -1,24 +1,30 @@
 // src/routes/api/trips/[id]/+server.ts
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
+import type { TripRecord } from '$lib/server/tripService';
+import { log } from '$lib/server/log';
+import { safeDO } from '$lib/server/env';
+import { createSafeErrorMessage } from '$lib/server/sanitize';
+import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
 
 // Helper to safely get KV namespace
-function safeKV(env: any, name: string) {
-	const kv = env?.[name];
+function safeKV(env: unknown, name: string) {
+	const bindings = env as Record<string, unknown> | undefined;
+	const kv = bindings?.[name];
 	if (!kv) {
-		console.warn(`[API] KV Binding '${name}' not found.`);
+		log.warn(`[API] KV Binding '${name}' not found.`);
 	}
-	return kv ?? null;
+	return kv ?? undefined;
 }
 
 // [!code ++] Helper for fake Durable Object (Fallback)
 function fakeDO() {
-    return {
-        idFromName: () => ({ name: 'fake' }),
-        get: () => ({
-            fetch: async () => new Response(JSON.stringify([]))
-        })
-    };
+	return {
+		idFromName: () => ({ name: 'fake' }),
+		get: () => ({
+			fetch: async () => new Response(JSON.stringify([]))
+		})
+	};
 }
 
 /**
@@ -36,13 +42,20 @@ export const GET: RequestHandler = async (event) => {
 		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
 		// [!code fix] Get DO binding
-		const tripIndexDO = (event.platform?.env as any)?.TRIP_INDEX_DO ?? fakeDO();
-		const placesIndexDO = (event.platform?.env as any)?.PLACES_INDEX_DO ?? tripIndexDO;
-		
-		// [!code fix] Pass DO to service (add placesIndexDO)
-		const svc = makeTripService(kv as any, trashKV as any, placesKV as any, tripIndexDO as any, placesIndexDO as any);
+		const tripIndexDO = safeDO(event.platform?.env, 'TRIP_INDEX_DO') ?? fakeDO();
+		const placesIndexDO = safeDO(event.platform?.env, 'PLACES_INDEX_DO') ?? tripIndexDO;
 
-		const storageId = (user as any).name || (user as any).token;
+		// [!code fix] Pass DO to service (add placesIndexDO)
+		const svc = makeTripService(
+			kv as unknown as KVNamespace,
+			trashKV as unknown as KVNamespace | undefined,
+			placesKV as unknown as KVNamespace | undefined,
+			tripIndexDO as unknown as DurableObjectNamespace,
+			placesIndexDO as unknown as DurableObjectNamespace
+		);
+
+		const userSafe = user as { name?: string; token?: string } | undefined;
+		const storageId = userSafe?.name || userSafe?.token || '';
 
 		const trip = await svc.get(storageId, id);
 
@@ -55,7 +68,7 @@ export const GET: RequestHandler = async (event) => {
 			headers: { 'Content-Type': 'application/json' }
 		});
 	} catch (err) {
-		console.error('GET /api/trips/[id] error', err);
+		log.error('GET /api/trips/[id] error', { message: createSafeErrorMessage(err) });
 		return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
 			status: 500,
 			headers: { 'Content-Type': 'application/json' }
@@ -72,19 +85,26 @@ export const PUT: RequestHandler = async (event) => {
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
 		const { id } = event.params;
-		const body: any = await event.request.json();
+		const body = (await event.request.json()) as Record<string, unknown>;
 
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
 		// [!code fix] Get DO binding
-		const tripIndexDO = (event.platform?.env as any)?.TRIP_INDEX_DO ?? fakeDO();
-		const placesIndexDO = (event.platform?.env as any)?.PLACES_INDEX_DO ?? tripIndexDO;
-		
-		// [!code fix] Pass DO to service (add placesIndexDO)
-		const svc = makeTripService(kv as any, trashKV as any, placesKV as any, tripIndexDO as any, placesIndexDO as any);
+		const tripIndexDO = safeDO(event.platform?.env, 'TRIP_INDEX_DO') ?? fakeDO();
+		const placesIndexDO = safeDO(event.platform?.env, 'PLACES_INDEX_DO') ?? tripIndexDO;
 
-		const storageId = (user as any).name || (user as any).token;
+		// [!code fix] Pass DO to service (add placesIndexDO)
+		const svc = makeTripService(
+			kv as unknown as KVNamespace,
+			trashKV as unknown as KVNamespace | undefined,
+			placesKV as unknown as KVNamespace | undefined,
+			tripIndexDO as unknown as DurableObjectNamespace,
+			placesIndexDO as unknown as DurableObjectNamespace
+		);
+
+		const userSafe = user as { name?: string; token?: string } | undefined;
+		const storageId = userSafe?.name || userSafe?.token || '';
 
 		// Verify existing ownership
 		const existing = await svc.get(storageId, id);
@@ -93,21 +113,21 @@ export const PUT: RequestHandler = async (event) => {
 		}
 
 		const updated = {
-			...(existing as any),
-			...(body as any),
+			...(existing as Record<string, unknown>),
+			...(body as Record<string, unknown>),
 			id,
 			userId: storageId,
 			updatedAt: new Date().toISOString()
 		};
 
-		await svc.put(updated as any);
+		await svc.put(updated as unknown as TripRecord);
 
 		return new Response(JSON.stringify(updated), {
 			status: 200,
 			headers: { 'Content-Type': 'application/json' }
 		});
 	} catch (err) {
-		console.error('PUT /api/trips/[id] error', err);
+		log.error('PUT /api/trips/[id] error', { message: createSafeErrorMessage(err) });
 		return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
 			status: 500,
 			headers: { 'Content-Type': 'application/json' }
@@ -129,13 +149,20 @@ export const DELETE: RequestHandler = async (event) => {
 		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
 		// [!code fix] Get DO binding
-		const tripIndexDO = (event.platform?.env as any)?.TRIP_INDEX_DO ?? fakeDO();
-		const placesIndexDO = (event.platform?.env as any)?.PLACES_INDEX_DO ?? tripIndexDO;
-		
-		// [!code fix] Pass DO to service
-		const svc = makeTripService(kv as any, trashKV as any, placesKV as any, tripIndexDO as any, placesIndexDO as any);
+		const tripIndexDO = safeDO(event.platform?.env, 'TRIP_INDEX_DO') ?? fakeDO();
+		const placesIndexDO = safeDO(event.platform?.env, 'PLACES_INDEX_DO') ?? tripIndexDO;
 
-		const storageId = (user as any).name || (user as any).token;
+		// [!code fix] Pass DO to service
+		const svc = makeTripService(
+			kv as unknown as KVNamespace,
+			trashKV as unknown as KVNamespace | undefined,
+			placesKV as unknown as KVNamespace | undefined,
+			tripIndexDO as unknown as DurableObjectNamespace,
+			placesIndexDO as unknown as DurableObjectNamespace
+		);
+
+		const userSafe = user as { name?: string; token?: string } | undefined;
+		const storageId = userSafe?.name || userSafe?.token || '';
 
 		// Check if trip exists
 		const existing = await svc.get(storageId, id);
@@ -149,14 +176,14 @@ export const DELETE: RequestHandler = async (event) => {
 		// Perform soft delete
 		await svc.delete(storageId, id);
 
-		await svc.incrementUserCounter(user.token, -1);
+		await svc.incrementUserCounter(userSafe?.token ?? '', -1);
 
 		return new Response(JSON.stringify({ success: true }), {
 			status: 200,
 			headers: { 'Content-Type': 'application/json' }
 		});
 	} catch (err) {
-		console.error('DELETE /api/trips/[id] error', err);
+		log.error('DELETE /api/trips/[id] error', { message: createSafeErrorMessage(err) });
 		return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
 			status: 500,
 			headers: { 'Content-Type': 'application/json' }

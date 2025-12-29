@@ -3,38 +3,42 @@ import { json, error } from '@sveltejs/kit';
 import { getStripe } from '$lib/server/stripe';
 import { findUserById } from '$lib/server/userService';
 import { getEnv, safeKV } from '$lib/server/env';
+import { log } from '$lib/server/log';
 
 export async function POST({ locals, url, platform }) {
-    const currentUser = locals.user as any;
-    
-    if (!currentUser?.id) {
-        throw error(401, 'Unauthorized');
-    }
+	const currentUser = locals.user as Record<string, unknown> | undefined;
+	const userId =
+		typeof currentUser?.['id'] === 'string' ? (currentUser['id'] as string) : undefined;
 
-    const env = getEnv(platform);
-    const usersKV = safeKV(env, 'BETA_USERS_KV');
-    if (!usersKV) {
-        throw error(500, 'Service unavailable');
-    }
+	if (!userId) {
+		throw error(401, 'Unauthorized');
+	}
 
-    try {
-        // Fetch full user record to get Stripe Customer ID
-        const user = await findUserById(usersKV, currentUser.id);
-        
-        if (!user?.stripeCustomerId) {
-            throw error(400, 'No billing account found. Please upgrade first.');
-        }
+	const env = getEnv(platform);
+	const usersKV = safeKV(env, 'BETA_USERS_KV');
+	if (!usersKV) {
+		throw error(500, 'Service unavailable');
+	}
 
-        const stripe = getStripe();
-        const session = await stripe.billingPortal.sessions.create({
-            customer: user.stripeCustomerId,
-            return_url: `${url.origin}/dashboard/settings?portal=success`,
-        });
+	try {
+		// Fetch full user record to get Stripe Customer ID
+		const user = await findUserById(usersKV, userId);
 
-        return json({ url: session.url });
-    } catch (err: any) {
-        console.error('Stripe Portal Error:', err);
-        if (err.status) throw err; // Re-throw SvelteKit errors
-        throw error(500, 'Failed to create portal session');
-    }
+		if (!user?.stripeCustomerId) {
+			throw error(400, 'No billing account found. Please upgrade first.');
+		}
+
+		const stripe = getStripe();
+		const session = await stripe.billingPortal.sessions.create({
+			customer: user.stripeCustomerId,
+			return_url: `${url.origin}/dashboard/settings?portal=success`
+		});
+
+		return json({ url: session.url });
+	} catch (err: unknown) {
+		const message = err instanceof Error ? err.message : String(err);
+		log.error('Stripe Portal Error', { message });
+		if (typeof (err as { status?: unknown })?.status === 'number') throw err; // Re-throw SvelteKit errors
+		throw error(500, 'Failed to create portal session');
+	}
 }

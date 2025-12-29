@@ -1,35 +1,36 @@
 // src/lib/server/userService.ts
 import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
 import { randomUUID } from 'node:crypto';
+import { log } from '$lib/server/log';
 
 // 1. Define Split Types
 
 // [!code ++] New Type for Passkeys/WebAuthn
 export type Authenticator = {
-    credentialID: string;
-    credentialPublicKey: string; // Base64URL encoded
-    counter: number;
-    transports?: string[]; 
-    name?: string; // Friendly display name
-    createdAt?: string;
+	credentialID: string;
+	credentialPublicKey: string; // Base64URL encoded
+	counter: number;
+	transports?: string[];
+	name?: string; // Friendly display name
+	createdAt?: string;
 };
 
 export type UserCore = {
-    id: string;
-    username: string;
-    email: string;
-    password: string;
-    plan: 'free' | 'premium' | 'pro' | 'business';
-    name: string;
-    createdAt: string;
-    stripeCustomerId?: string;
-    authenticators?: Authenticator[]; // [!code ++] Added field
+	id: string;
+	username: string;
+	email: string;
+	password: string;
+	plan: 'free' | 'premium' | 'pro' | 'business';
+	name: string;
+	createdAt: string;
+	stripeCustomerId?: string;
+	authenticators?: Authenticator[]; // [!code ++] Added field
 };
 
 export type UserStats = {
-    tripsThisMonth: number;
-    maxTrips: number;
-    resetDate: string;
+	tripsThisMonth: number;
+	maxTrips: number;
+	resetDate: string;
 };
 
 export type User = UserCore & UserStats;
@@ -37,325 +38,366 @@ export type User = UserCore & UserStats;
 // --- KV Key Utility Functions ---
 
 function userCoreKey(userId: string): string {
-    return `user:${userId}`;
+	return `user:${userId}`;
 }
 
 function userStatsKey(userId: string): string {
-    return `user:stats:${userId}`;
+	return `user:stats:${userId}`;
 }
 
 function usernameKey(username: string): string {
-    return `idx:username:${username.toLowerCase()}`;
+	return `idx:username:${username.toLowerCase()}`;
 }
 
 function emailKey(email: string): string {
-    return `idx:email:${email.toLowerCase()}`;
+	return `idx:email:${email.toLowerCase()}`;
 }
 
 // [!code ++] New Index for WebAuthn Login
 function credentialKey(credentialId: string): string {
-    return `idx:credential:${credentialId}`;
+	return `idx:credential:${credentialId}`;
+}
+
+// Helpers for safely reading KV records parsed as unknown
+function getString(rec: Record<string, unknown>, key: string): string | undefined {
+	const v = rec[key];
+	return typeof v === 'string' ? v : undefined;
+}
+
+function getNumber(rec: Record<string, unknown>, key: string): number | undefined {
+	const v = rec[key];
+	return typeof v === 'number' ? v : undefined;
 }
 
 // --- Lookup Functions ---
 
-export async function findUserById(kv: any, userId: string): Promise<User | null> {
-    const [coreRaw, statsRaw] = await Promise.all([
-        kv.get(userCoreKey(userId)),
-        kv.get(userStatsKey(userId))
-    ]);
+export async function findUserById(kv: KVNamespace, userId: string): Promise<User | null> {
+	const [coreRaw, statsRaw] = await Promise.all([
+		kv.get(userCoreKey(userId)),
+		kv.get(userStatsKey(userId))
+	]);
 
-    if (!coreRaw) return null;
+	if (!coreRaw) return null;
 
-    const core = JSON.parse(coreRaw);
-    
-    const stats: UserStats = statsRaw ? JSON.parse(statsRaw) : {
-        tripsThisMonth: core.tripsThisMonth ?? 0,
-        maxTrips: core.maxTrips ?? 10,
-        resetDate: core.resetDate ?? new Date().toISOString()
-    };
+	const core = JSON.parse(coreRaw) as UserCore;
 
-    return {
-        id: core.id,
-        username: core.username,
-        email: core.email,
-        password: core.password,
-        plan: core.plan,
-        name: core.name,
-        createdAt: core.createdAt,
-        stripeCustomerId: core.stripeCustomerId,
-        authenticators: core.authenticators || [], // [!code ++] Return empty array if undefined
-        ...stats
-    };
+	const stats: UserStats = statsRaw
+		? JSON.parse(statsRaw)
+		: {
+				tripsThisMonth: 0,
+				maxTrips: 10,
+				resetDate: new Date().toISOString()
+			};
+
+	return {
+		id: core.id,
+		username: core.username,
+		email: core.email,
+		password: core.password,
+		plan: core.plan,
+		name: core.name,
+		createdAt: core.createdAt,
+		stripeCustomerId: core.stripeCustomerId,
+		authenticators: core.authenticators || [], // [!code ++] Return empty array if undefined
+		...stats
+	};
 }
 
-export async function findUserByEmail(kv: any, email: string): Promise<User | null> {
-    const userId = await kv.get(emailKey(email));
-    if (!userId) return null;
-    return findUserById(kv, userId);
+export async function findUserByEmail(kv: KVNamespace, email: string): Promise<User | null> {
+	const userId = await kv.get(emailKey(email));
+	if (!userId) return null;
+	return findUserById(kv, userId);
 }
 
-export async function findUserByUsername(kv: any, username: string): Promise<User | null> {
-    const userId = await kv.get(usernameKey(username));
-    if (!userId) return null;
-    return findUserById(kv, userId);
+export async function findUserByUsername(kv: KVNamespace, username: string): Promise<User | null> {
+	const userId = await kv.get(usernameKey(username));
+	if (!userId) return null;
+	return findUserById(kv, userId);
 }
 
 // [!code ++] New Lookup for Biometric Login
-export async function findUserByCredentialId(kv: any, credentialId: string): Promise<User | null> {
-    const userId = await kv.get(credentialKey(credentialId));
-    if (!userId) return null;
-    return findUserById(kv, userId);
+export async function findUserByCredentialId(
+	kv: KVNamespace,
+	credentialId: string
+): Promise<User | null> {
+	const userId = await kv.get(credentialKey(credentialId));
+	if (!userId) return null;
+	return findUserById(kv, userId);
 }
 
 // --- Write/Update/Delete Functions ---
 
-export async function createUser(kv: any, userData: Omit<User, 'id' | 'createdAt'>): Promise<User> {
-    const userId = randomUUID();
-    const now = new Date().toISOString();
-    
-    const { tripsThisMonth, maxTrips, resetDate, ...coreData } = userData;
+export async function createUser(
+	kv: KVNamespace,
+	userData: Omit<User, 'id' | 'createdAt'>
+): Promise<User> {
+	const userId = randomUUID();
+	const now = new Date().toISOString();
 
-    const userCore: UserCore = {
-        ...coreData,
-        id: userId,
-        createdAt: now,
-        authenticators: [] // [!code ++] Initialize empty
-    };
+	const { tripsThisMonth, maxTrips, resetDate, ...coreData } = userData;
 
-    const userStats: UserStats = {
-        tripsThisMonth: tripsThisMonth || 0,
-        maxTrips: maxTrips || 10,
-        resetDate: resetDate || now
-    };
+	const userCore: UserCore = {
+		...coreData,
+		id: userId,
+		createdAt: now,
+		authenticators: [] // [!code ++] Initialize empty
+	};
 
-    await Promise.all([
-        kv.put(userCoreKey(userId), JSON.stringify(userCore)),
-        kv.put(userStatsKey(userId), JSON.stringify(userStats)),
-        kv.put(usernameKey(userCore.username), userId),
-        kv.put(emailKey(userCore.email), userId)
-    ]);
+	const userStats: UserStats = {
+		tripsThisMonth: tripsThisMonth || 0,
+		maxTrips: maxTrips || 10,
+		resetDate: resetDate || now
+	};
 
-    return { ...userCore, ...userStats };
+	await Promise.all([
+		kv.put(userCoreKey(userId), JSON.stringify(userCore)),
+		kv.put(userStatsKey(userId), JSON.stringify(userStats)),
+		kv.put(usernameKey(userCore.username), userId),
+		kv.put(emailKey(userCore.email), userId)
+	]);
+
+	return { ...userCore, ...userStats };
 }
 
 // [!code ++] New Function to Register a Passkey
-export async function saveAuthenticator(kv: any, userId: string, authenticator: Authenticator) {
-    const key = userCoreKey(userId);
-    const raw = await kv.get(key);
-    if (!raw) throw new Error('User not found');
+export async function saveAuthenticator(
+	kv: KVNamespace,
+	userId: string,
+	authenticator: Authenticator
+) {
+	const key = userCoreKey(userId);
+	const raw = await kv.get(key);
+	if (!raw) throw new Error('User not found');
 
-    const core = JSON.parse(raw) as UserCore;
-    const authenticators = core.authenticators || [];
-    
-    // Avoid duplicates or update existing
-    const existingIndex = authenticators.findIndex(a => a.credentialID === authenticator.credentialID);
-    if (existingIndex >= 0) {
-        authenticators[existingIndex] = authenticator; // Update counter etc.
-    } else {
-        authenticators.push(authenticator);
-    }
+	const core = JSON.parse(raw) as UserCore;
+	const authenticators = core.authenticators || [];
 
-    core.authenticators = authenticators;
+	// Avoid duplicates or update existing
+	const existingIndex = authenticators.findIndex(
+		(a) => a.credentialID === authenticator.credentialID
+	);
+	if (existingIndex >= 0) {
+		authenticators[existingIndex] = authenticator; // Update counter etc.
+	} else {
+		authenticators.push(authenticator);
+	}
 
-    await Promise.all([
-        kv.put(key, JSON.stringify(core)),
-        kv.put(credentialKey(authenticator.credentialID), userId) // Create Index
-    ]);
+	core.authenticators = authenticators;
+
+	await Promise.all([
+		kv.put(key, JSON.stringify(core)),
+		kv.put(credentialKey(authenticator.credentialID), userId) // Create Index
+	]);
 }
 
 // FIXED: Handle index updates when email changes
 export async function updateUser(
-    kv: any, 
-    userId: string, 
-    updates: Partial<Pick<UserCore, 'name' | 'email'>>
+	kv: KVNamespace,
+	userId: string,
+	updates: Partial<Pick<UserCore, 'name' | 'email'>>
 ): Promise<void> {
-    const key = userCoreKey(userId);
-    const raw = await kv.get(key);
-    if (!raw) throw new Error('User not found');
+	const key = userCoreKey(userId);
+	const raw = await kv.get(key);
+	if (!raw) throw new Error('User not found');
 
-    const record = JSON.parse(raw) as UserCore;
-    
-    // Handle Email Change: Update Indexes
-    if (updates.email && updates.email.toLowerCase() !== record.email.toLowerCase()) {
-        const newEmail = updates.email.toLowerCase();
-        const oldEmail = record.email.toLowerCase();
+	const record = JSON.parse(raw) as UserCore;
 
-        // 1. Check if new email is taken
-        const existingId = await kv.get(emailKey(newEmail));
-        if (existingId) {
-            throw new Error('Email already in use');
-        }
+	// Handle Email Change: Update Indexes
+	if (updates.email && updates.email.toLowerCase() !== record.email.toLowerCase()) {
+		const newEmail = updates.email.toLowerCase();
+		const oldEmail = record.email.toLowerCase();
 
-        // 2. Create new index BEFORE deleting old one (safety)
-        await kv.put(emailKey(newEmail), userId);
-        
-        // 3. Delete old index
-        await kv.delete(emailKey(oldEmail));
-    }
+		// 1. Check if new email is taken
+		const existingId = await kv.get(emailKey(newEmail));
+		if (existingId) {
+			throw new Error('Email already in use');
+		}
 
-    // Merge updates into the core record
-    const updatedCore = {
-        ...record,
-        ...updates
-    };
+		// 2. Create new index BEFORE deleting old one (safety)
+		await kv.put(emailKey(newEmail), userId);
 
-    await kv.put(key, JSON.stringify(updatedCore));
+		// 3. Delete old index
+		await kv.delete(emailKey(oldEmail));
+	}
+
+	// Merge updates into the core record
+	const updatedCore = {
+		...record,
+		...updates
+	};
+
+	await kv.put(key, JSON.stringify(updatedCore));
 }
 
 // NEW: Upgrade User Plan (For Stripe Webhooks)
 export async function updateUserPlan(
-    kv: any, 
-    userId: string, 
-    plan: 'free' | 'premium' | 'pro' | 'business',
-    stripeCustomerId?: string
+	kv: KVNamespace,
+	userId: string,
+	plan: 'free' | 'premium' | 'pro' | 'business',
+	stripeCustomerId?: string
 ): Promise<void> {
-    const coreKey = userCoreKey(userId);
-    const statsKey = userStatsKey(userId);
+	const coreKey = userCoreKey(userId);
+	const statsKey = userStatsKey(userId);
 
-    const [coreRaw, statsRaw] = await Promise.all([
-        kv.get(coreKey),
-        kv.get(statsKey)
-    ]);
+	const [coreRaw, statsRaw] = await Promise.all([kv.get(coreKey), kv.get(statsKey)]);
 
-    if (!coreRaw) throw new Error('User not found');
+	if (!coreRaw) throw new Error('User not found');
 
-    // 1. Update Plan in Core
-    const core = JSON.parse(coreRaw) as UserCore;
-    core.plan = plan;
-    
-    if (stripeCustomerId) {
-        core.stripeCustomerId = stripeCustomerId;
-    }
+	// 1. Update Plan in Core
+	const core = JSON.parse(coreRaw) as UserCore;
+	core.plan = plan;
 
-    await kv.put(coreKey, JSON.stringify(core));
+	if (stripeCustomerId) {
+		core.stripeCustomerId = stripeCustomerId;
+	}
 
-    // 2. Update Limits in Stats (Unlimited for Pro)
-    if (statsRaw) {
-        const stats = JSON.parse(statsRaw) as UserStats;
-        if (plan === 'pro' || plan === 'business') {
-            stats.maxTrips = 999999; // Effectively unlimited
-        }
-        await kv.put(statsKey, JSON.stringify(stats));
-    }
+	await kv.put(coreKey, JSON.stringify(core));
+
+	// 2. Update Limits in Stats (Unlimited for Pro)
+	if (statsRaw) {
+		const stats = JSON.parse(statsRaw) as UserStats;
+		if (plan === 'pro' || plan === 'business') {
+			stats.maxTrips = 999999; // Effectively unlimited
+		}
+		await kv.put(statsKey, JSON.stringify(stats));
+	}
 }
 
-export async function updatePasswordHash(kv: any, user: User, newHash: string) {
-    const key = userCoreKey(user.id);
-    const statsKey = userStatsKey(user.id);
+export async function updatePasswordHash(kv: KVNamespace, user: User, newHash: string) {
+	const key = userCoreKey(user.id);
+	const statsKey = userStatsKey(user.id);
 
-    const raw = await kv.get(key);
-    if (!raw) throw new Error('User not found during password update');
-    
-    const record = JSON.parse(raw);
+	const raw = await kv.get(key);
+	if (!raw) throw new Error('User not found during password update');
 
-    // Migration Check
-    if (record.tripsThisMonth !== undefined || record.maxTrips !== undefined) {
-        console.log('[MIGRATION] Moving stats to separate key for user', user.id);
-        const stats: UserStats = {
-            tripsThisMonth: record.tripsThisMonth ?? 0,
-            maxTrips: record.maxTrips ?? 10,
-            resetDate: record.resetDate ?? new Date().toISOString()
-        };
-        await kv.put(statsKey, JSON.stringify(stats));
-    }
+	const record = JSON.parse(raw) as Record<string, unknown>;
 
-    const core: UserCore = {
-        id: record.id,
-        username: record.username,
-        email: record.email,
-        password: newHash,
-        plan: record.plan,
-        name: record.name,
-        createdAt: record.createdAt,
-        stripeCustomerId: record.stripeCustomerId,
-        authenticators: record.authenticators || [] // Preserve authenticators
-    };
-    
-    await kv.put(key, JSON.stringify(core));
+	// Migration Check — safely read from the raw record
+	if (
+		record['tripsThisMonth'] !== undefined ||
+		record['maxTrips'] !== undefined ||
+		record['resetDate'] !== undefined
+	) {
+		log.debug('[MIGRATION] Moving stats to separate key for user', user.id);
+		const stats: UserStats = {
+			tripsThisMonth: getNumber(record, 'tripsThisMonth') ?? 0,
+			maxTrips: getNumber(record, 'maxTrips') ?? 10,
+			resetDate: getString(record, 'resetDate') ?? new Date().toISOString()
+		};
+		await kv.put(statsKey, JSON.stringify(stats));
+	}
+
+	// Build typed core record with safe reads
+	const id = getString(record, 'id') ?? user.id;
+	const username = getString(record, 'username') ?? '';
+	const email = getString(record, 'email') ?? '';
+	const name = getString(record, 'name') ?? '';
+	const createdAt = getString(record, 'createdAt') ?? new Date().toISOString();
+	const plan = (getString(record, 'plan') as UserCore['plan']) ?? 'free';
+	const stripeCustomerId = getString(record, 'stripeCustomerId');
+	const authenticators = record['authenticators'] as unknown as Authenticator[] | undefined;
+
+	const core: UserCore = {
+		id,
+		username,
+		email,
+		password: newHash,
+		plan,
+		name,
+		createdAt,
+		stripeCustomerId,
+		authenticators: authenticators || [] // Preserve authenticators
+	};
+
+	await kv.put(key, JSON.stringify(core));
 }
 
 /**
  * Completely delete a user and ALL associated data (Trips, Settings, Indexes)
  */
 export async function deleteUser(
-    kv: KVNamespace, 
-    userId: string,
-    resources?: {
-        tripsKV?: KVNamespace;
-        trashKV?: KVNamespace;
-        settingsKV?: KVNamespace;
-        tripIndexDO?: DurableObjectNamespace;
-    }
+	kv: KVNamespace,
+	userId: string,
+	resources?: {
+		tripsKV?: KVNamespace;
+		trashKV?: KVNamespace;
+		settingsKV?: KVNamespace;
+		tripIndexDO?: DurableObjectNamespace;
+	}
 ): Promise<void> {
-    const user = await findUserById(kv, userId);
-    if (!user) return;
+	const user = await findUserById(kv, userId);
+	if (!user) return;
 
-    console.log(`[UserService] 🗑️ START Account Wipe: ${userId} (${user.email})`);
+	log.debug(`[UserService] 🗑️ START Account Wipe: ${userId} (${user.email})`);
 
-    // 1. Delete Core User Data (Auth)
-    const authPromises = [
-        kv.delete(`user:${userId}`),
-        kv.delete(`user:stats:${userId}`),
-        kv.delete(`idx:username:${user.username.toLowerCase()}`),
-        kv.delete(`idx:email:${user.email.toLowerCase()}`)
-    ];
+	// 1. Delete Core User Data (Auth)
+	const authPromises = [
+		kv.delete(`user:${userId}`),
+		kv.delete(`user:stats:${userId}`),
+		kv.delete(`idx:username:${user.username.toLowerCase()}`),
+		kv.delete(`idx:email:${user.email.toLowerCase()}`)
+	];
 
-    // [!code ++] Delete Credential Indexes (WebAuthn)
-    if (user.authenticators) {
-        for (const auth of user.authenticators) {
-            authPromises.push(kv.delete(credentialKey(auth.credentialID)));
-        }
-    }
+	// [!code ++] Delete Credential Indexes (WebAuthn)
+	if (user.authenticators) {
+		for (const auth of user.authenticators) {
+			authPromises.push(kv.delete(credentialKey(auth.credentialID)));
+		}
+	}
 
-    // 2. Delete Settings
-    if (resources?.settingsKV) {
-        authPromises.push(resources.settingsKV.delete(`settings:${userId}`));
-    }
+	// 2. Delete Settings
+	if (resources?.settingsKV) {
+		authPromises.push(resources.settingsKV.delete(`settings:${userId}`));
+	}
 
-    // 3. WIPE SQLITE DATA in Durable Object
-    if (resources?.tripIndexDO) {
-        try {
-            // Identify the specific DO instance for this user
-            const id = resources.tripIndexDO.idFromName(user.username);
-            const stub = resources.tripIndexDO.get(id);
-            
-            // Call the new WIPE endpoint
-            await stub.fetch('http://internal/admin/wipe-user', {
-                method: 'POST'
-            });
-            console.log(`[UserService] Sent WIPE command to DO for ${user.username}`);
-        } catch (e) {
-            console.error('[UserService] Failed to wipe DO data:', e);
-        }
-    }
+	// 3. WIPE SQLITE DATA in Durable Object
+	if (resources?.tripIndexDO) {
+		try {
+			// Identify the specific DO instance for this user
+			const id = resources.tripIndexDO.idFromName(user.username);
+			const stub = resources.tripIndexDO.get(id);
 
-    // 4. Delete Trips (Iterate and Destroy)
-    const wipeNamespace = async (ns: KVNamespace, prefix: string) => {
-        let cursor: string | undefined = undefined;
-        do {
-            const list: any = await ns.list({ prefix, cursor, limit: 1000 });
-            if (list.keys.length > 0) {
-                await Promise.all(list.keys.map((k: any) => ns.delete(k.name)));
-            }
-            cursor = list.list_complete ? undefined : list.cursor;
-        } while (cursor);
-    };
+			// Call the new WIPE endpoint
+			await stub.fetch('http://internal/admin/wipe-user', {
+				method: 'POST'
+			});
+			log.debug(`[UserService] Sent WIPE command to DO for ${user.username}`);
+		} catch (e) {
+			log.error('[UserService] Failed to wipe DO data:', e);
+		}
+	}
 
-    const cleanupTasks: Promise<void>[] = [];
+	// 4. Delete Trips (Iterate and Destroy)
+	type KVListResult = { keys: Array<{ name: string }>; list_complete?: boolean; cursor?: string };
+	const wipeNamespace = async (ns: KVNamespace, prefix: string) => {
+		let cursor: string | undefined = undefined;
+		do {
+			const list: KVListResult = (await ns.list({
+				prefix,
+				cursor,
+				limit: 1000
+			})) as unknown as KVListResult;
+			if (list.keys.length > 0) {
+				await Promise.all(list.keys.map((k) => ns.delete(k.name)));
+			}
+			cursor = list.list_complete ? undefined : list.cursor;
+		} while (cursor);
+	};
 
-    if (resources?.tripsKV) {
-        cleanupTasks.push(wipeNamespace(resources.tripsKV, `trip:${user.username}:`)); 
-        cleanupTasks.push(wipeNamespace(resources.tripsKV, `trip:${userId}:`));
-    }
+	const cleanupTasks: Promise<void>[] = [];
 
-    if (resources?.trashKV) {
-        cleanupTasks.push(wipeNamespace(resources.trashKV, `trash:${user.username}:`));
-        cleanupTasks.push(wipeNamespace(resources.trashKV, `trash:${userId}:`));
-    }
+	if (resources?.tripsKV) {
+		cleanupTasks.push(wipeNamespace(resources.tripsKV, `trip:${user.username}:`));
+		cleanupTasks.push(wipeNamespace(resources.tripsKV, `trip:${userId}:`));
+	}
 
-    await Promise.all(authPromises);
-    await Promise.all(cleanupTasks);
+	if (resources?.trashKV) {
+		cleanupTasks.push(wipeNamespace(resources.trashKV, `trash:${user.username}:`));
+		cleanupTasks.push(wipeNamespace(resources.trashKV, `trash:${userId}:`));
+	}
 
-    console.log(`[UserService] ✅ FINISHED Account Wipe for ${userId}`);
+	await Promise.all(authPromises);
+	await Promise.all(cleanupTasks);
+
+	log.debug(`[UserService] ✅ FINISHED Account Wipe for ${userId}`);
 }

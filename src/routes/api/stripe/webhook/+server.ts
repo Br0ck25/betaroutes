@@ -1,136 +1,167 @@
 // src/routes/api/stripe/webhook/+server.ts
+import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
 import { getStripe } from '$lib/server/stripe';
 import { updateUserPlan } from '$lib/server/userService';
 import { safeKV } from '$lib/server/env';
+import { createSafeErrorMessage } from '$lib/server/sanitize';
+import { log } from '$lib/server/log';
+import type { KVNamespace } from '@cloudflare/workers-types';
+import type Stripe from 'stripe';
 
-export async function POST({ request, platform }) {
-    console.log('🔔 Webhook received');
-    
-    const sig = request.headers.get('stripe-signature');
-    const body = await request.text();
-    const stripe = getStripe();
-    const env = (platform?.env as any);
-    
-    const webhookSecret = env?.STRIPE_WEBHOOK_SECRET;
-    
-    console.log('🔍 Platform env exists?', !!env);
-    console.log('🔍 Webhook secret exists?', !!webhookSecret);
-    console.log('🔍 Signature exists?', !!sig);
-    
-    if (!sig) {
-        console.error('❌ No signature header');
-        return json({ error: 'Missing signature' }, { status: 400 });
-    }
-    
-    if (!webhookSecret) {
-        console.error('❌ No webhook secret in environment');
-        return json({ error: 'Webhook secret not configured' }, { status: 500 });
-    }
+export const POST: RequestHandler = async ({ request, platform }) => {
+	log.info('Stripe webhook received');
 
-    let event;
-    try {
-        event = await stripe.webhooks.constructEventAsync(body, sig, webhookSecret);
-        console.log('✅ Webhook verified:', event.type);
-    } catch (err: any) {
-        console.error(`❌ Signature verification failed: ${err.message}`);
-        return json({ error: 'Webhook Error' }, { status: 400 });
-    }
+	const sig = request.headers.get('stripe-signature');
+	const body = await request.text();
+	const stripe = getStripe();
+	const env = platform?.env as Record<string, unknown> | undefined;
 
-    try {
-        switch (event.type) {
-            case 'checkout.session.completed': {
-                const session = event.data.object as any;
-                const userId = session.metadata?.userId;
-                const customerId = session.customer as string;
-                
-                console.log(`💰 Payment success for user ${userId}, customer ${customerId}`);
-                
-                if (userId && safeKV(env, 'BETA_USERS_KV')) {
-                    await updateUserPlan(
-                        safeKV(env, 'BETA_USERS_KV')!, 
-                        userId, 
-                        'pro', 
-                        customerId
-                    );
-                    console.log(`✅ User ${userId} upgraded to Pro`);
-                } else {
-                    console.error('❌ Missing userId or KV binding');
-                }
-                break;
-            }
+	const webhookSecret = (env as Record<string, unknown>)['STRIPE_WEBHOOK_SECRET'] as
+		| string
+		| undefined;
 
-            case 'customer.subscription.deleted': {
-                const subscription = event.data.object as any;
-                const customerId = subscription.customer;
-                
-                console.log(`🔻 Subscription cancelled for customer ${customerId}`);
-                
-                if (env?.BETA_USERS_KV) {
-                    await downgradeUserByCustomerId(safeKV(env, 'BETA_USERS_KV')!, customerId);
-                }
-                break;
-            }
+	if (!sig) {
+		log.error('Stripe webhook missing signature header');
+		return json({ error: 'Missing signature' }, { status: 400 });
+	}
 
-            case 'customer.subscription.updated': {
-                const subscription = event.data.object as any;
-                const customerId = subscription.customer;
-                const status = subscription.status;
-                
-                console.log(`📝 Subscription updated for ${customerId}: ${status}`);
-                
-                // Downgrade if subscription becomes inactive
-                if (['canceled', 'unpaid', 'past_due'].includes(status)) {
-                    if (safeKV(env, 'BETA_USERS_KV')) {
-                        await downgradeUserByCustomerId(safeKV(env, 'BETA_USERS_KV')!, customerId);
-                    }
-                }
-                break;
-            }
+	if (!webhookSecret) {
+		log.error('Stripe webhook secret not configured');
+		return json({ error: 'Webhook secret not configured' }, { status: 500 });
+	}
 
-            default:
-                console.log(`ℹ️ Unhandled event: ${event.type}`);
-        }
+	let event: Stripe.Event;
+	try {
+		event = stripe.webhooks.constructEvent(body, sig as string, webhookSecret as string);
+		log.info('✅ Webhook verified', { eventType: event.type });
+	} catch (err: unknown) {
+		log.error('❌ Signature verification failed', { message: createSafeErrorMessage(err) });
+		return json({ error: 'Webhook Error' }, { status: 400 });
+	}
 
-        return json({ received: true });
+	try {
+		switch (event.type) {
+			case 'checkout.session.completed': {
+				const session = event.data.object as unknown as Record<string, unknown> | undefined;
+				const metadata =
+					session && typeof session['metadata'] === 'object'
+						? (session['metadata'] as Record<string, unknown>)
+						: undefined;
+				const userId = typeof metadata?.['userId'] === 'string' ? metadata['userId'] : undefined;
+				const customerId = String(session?.['customer'] ?? '');
 
-    } catch (err) {
-        console.error('❌ Webhook processing error:', err);
-        return json({ error: 'Processing failed' }, { status: 500 });
-    }
-}
+				log.info('Payment success', { userId, customerId });
+
+				const usersKV = safeKV(env, 'BETA_USERS_KV');
+				if (userId && usersKV) {
+					await updateUserPlan(usersKV, userId, 'pro', customerId);
+					// Persist mapping customerId -> userId to avoid expensive KV scans later
+					try {
+						await usersKV.put(`stripe:customer:${customerId}`, userId);
+					} catch (e: unknown) {
+						log.warn('Failed to persist stripe customer mapping', {
+							message: createSafeErrorMessage(e)
+						});
+					}
+					log.info('User upgraded to Pro', { userId });
+				} else {
+					log.error('Missing userId or KV binding', { hasUserId: !!userId, hasUsersKV: !!usersKV });
+				}
+				break;
+			}
+
+			case 'customer.subscription.deleted': {
+				const subscription = event.data.object as unknown as Record<string, unknown> | undefined;
+				const customerId = String(subscription?.['customer'] ?? '');
+
+				log.info('Subscription cancelled', { customerId });
+
+				const usersKV = safeKV(env, 'BETA_USERS_KV');
+				if (usersKV) {
+					await downgradeUserByCustomerId(usersKV, customerId);
+				}
+				break;
+			}
+
+			case 'customer.subscription.updated': {
+				const subscription = event.data.object as unknown as Record<string, unknown> | undefined;
+				const customerId = String(subscription?.['customer'] ?? '');
+				const status = String(subscription?.['status'] ?? '');
+
+				log.info('Subscription updated', { customerId, status });
+
+				// Downgrade if subscription becomes inactive
+				if (['canceled', 'unpaid', 'past_due'].includes(status)) {
+					const usersKV = safeKV(env, 'BETA_USERS_KV');
+					if (usersKV) {
+						await downgradeUserByCustomerId(usersKV, customerId);
+					}
+				}
+				break;
+			}
+
+			default:
+				log.info('Unhandled event', { type: event.type });
+		}
+
+		return json({ received: true });
+	} catch (err: unknown) {
+		log.error('❌ Webhook processing error', { message: createSafeErrorMessage(err) });
+		return json({ error: 'Processing failed' }, { status: 500 });
+	}
+};
 
 /**
  * Find user by Stripe customer ID and downgrade to free plan
  */
-async function downgradeUserByCustomerId(kv: any, stripeCustomerId: string) {
-    try {
-        // Search through all user records to find matching stripeCustomerId
-        const prefix = 'user:';
-        let cursor: string | undefined = undefined;
-        
-        do {
-            const list: any = await kv.list({ prefix, cursor });
-            
-            for (const key of list.keys) {
-                const raw = await kv.get(key.name);
-                if (raw) {
-                    const user = JSON.parse(raw);
-                    if (user.stripeCustomerId === stripeCustomerId) {
-                        // Found the user - downgrade them
-                        await updateUserPlan(kv, user.id, 'free');
-                        console.log(`✅ Downgraded user ${user.id} (${user.email}) to free plan`);
-                        return;
-                    }
-                }
-            }
-            
-            cursor = list.list_complete ? undefined : list.cursor;
-        } while (cursor);
-        
-        console.warn(`⚠️ No user found with stripeCustomerId: ${stripeCustomerId}`);
-    } catch (err) {
-        console.error('❌ Error downgrading user:', err);
-        throw err;
-    }
+async function downgradeUserByCustomerId(kv: KVNamespace, stripeCustomerId: string) {
+	try {
+		// First, try the fast lookup mapping -> avoids scanning entire KV
+		try {
+			const mappedUserId = await kv.get(`stripe:customer:${stripeCustomerId}`);
+			if (mappedUserId) {
+				await updateUserPlan(kv, String(mappedUserId), 'free');
+				log.info('Downgraded user via mapping', { userId: String(mappedUserId) });
+				return;
+			}
+		} catch (mapErr: unknown) {
+			log.warn('Failed to read stripe customer mapping, falling back to scan', {
+				message: createSafeErrorMessage(mapErr)
+			});
+		}
+
+		// Fallback: Search through user records if mapping not found
+		const prefix = 'user:';
+		let cursor: string | undefined = undefined;
+
+		do {
+			type KVListResult = {
+				keys: Array<{ name: string }>;
+				list_complete?: boolean;
+				cursor?: string;
+			};
+			const list: KVListResult = (await kv.list({ prefix, cursor })) as unknown as KVListResult;
+
+			for (const key of list.keys) {
+				const raw = await kv.get(key.name);
+				if (raw) {
+					const user = JSON.parse(raw) as Record<string, unknown>;
+					if (user['stripeCustomerId'] === stripeCustomerId) {
+						// Found the user - downgrade them
+						await updateUserPlan(kv, String(user['id']), 'free');
+						log.info('Downgraded user', { userId: user['id'], email: user['email'] });
+						return;
+					}
+				}
+			}
+
+			cursor = list.list_complete ? undefined : list.cursor;
+		} while (cursor);
+
+		log.warn('No user found with stripeCustomerId', { stripeCustomerId });
+	} catch (err: unknown) {
+		log.error('Error downgrading user', { message: createSafeErrorMessage(err) });
+		throw err;
+	}
 }

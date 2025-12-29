@@ -13,6 +13,8 @@ import type {
 	UnsanitizedTrip
 } from '$lib/types';
 
+import { log } from '$lib/server/log';
+
 /**
  * Input Sanitization Utility
  * Focused on Data Integrity and Type Safety.
@@ -202,6 +204,9 @@ export function validateAndSanitizeRequest(
 	body: unknown,
 	_logSuspicious: boolean = true
 ): Partial<Trip> {
+	// Keep `_logSuspicious` referenced so lint doesn't flag it as unused (reserved for future use)
+	void _logSuspicious;
+
 	// We no longer scan for regex patterns because Svelte renders all input as text.
 	// If a user saves "<script>", it is stored as "<script>" and displayed as "<script>".
 	// It never executes.
@@ -214,7 +219,7 @@ export function sanitizeQueryParam(param: string | null, maxLength: number = 200
 
 export function createSafeErrorMessage(error: unknown): string {
 	if (error instanceof Error) {
-		console.error('Error details:', error.message, error.stack);
+		log.error('Error details', { message: error.message, stack: error.stack });
 		return 'An error occurred while processing your request';
 	}
 	return 'An unexpected error occurred';

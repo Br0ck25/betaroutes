@@ -15,7 +15,7 @@ function createTrashStore() {
 				const db = await getDB();
 				const tx = db.transaction('trash', 'readonly');
 				const store = tx.objectStore('trash');
-				let items = userId ? await store.index('userId').getAll(userId) : await store.getAll();
+				const items = userId ? await store.index('userId').getAll(userId) : await store.getAll();
 				items.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
 				set(items);
 				return items;
@@ -27,7 +27,7 @@ function createTrashStore() {
 		},
 
 		async restore(id: string, userId: string) {
-            try {
+			try {
 				const db = await getDB();
 				const trashTx = db.transaction('trash', 'readonly');
 				const trashItem = await trashTx.objectStore('trash').get(id);
@@ -40,23 +40,23 @@ function createTrashStore() {
 				delete (restoredItem as any).deletedBy;
 				delete (restoredItem as any).expiresAt;
 				const originalKey = restoredItem.originalKey;
-                delete (restoredItem as any).originalKey;
-                delete (restoredItem as any).recordType;
+				delete (restoredItem as any).originalKey;
+				delete (restoredItem as any).recordType;
 
 				restoredItem.updatedAt = new Date().toISOString();
 				restoredItem.syncStatus = 'pending';
 
-                // Detect type and restore to correct store
-                if (originalKey && originalKey.startsWith('expense:')) {
-                    const tx = db.transaction('expenses', 'readwrite');
-				    await tx.objectStore('expenses').put(restoredItem);
-				    await tx.done;
-                } else {
-                    // Default to trips
-                    const tx = db.transaction('trips', 'readwrite');
-				    await tx.objectStore('trips').put(restoredItem);
-				    await tx.done;
-                }
+				// Detect type and restore to correct store
+				if (originalKey && originalKey.startsWith('expense:')) {
+					const tx = db.transaction('expenses', 'readwrite');
+					await tx.objectStore('expenses').put(restoredItem);
+					await tx.done;
+				} else {
+					// Default to trips
+					const tx = db.transaction('trips', 'readwrite');
+					await tx.objectStore('trips').put(restoredItem);
+					await tx.done;
+				}
 
 				const deleteTx = db.transaction('trash', 'readwrite');
 				await deleteTx.objectStore('trash').delete(id);
@@ -72,29 +72,29 @@ function createTrashStore() {
 			}
 		},
 
-		async permanentDelete(id: string, _userId: string) {
+		async permanentDelete(id: string) {
 			const db = await getDB();
-            const tx = db.transaction('trash', 'readwrite');
-            await tx.objectStore('trash').delete(id);
-            await tx.done;
-            update(l => l.filter(t => t.id !== id));
-            await syncManager.addToQueue({ action: 'permanentDelete', tripId: id });
+			const tx = db.transaction('trash', 'readwrite');
+			await tx.objectStore('trash').delete(id);
+			await tx.done;
+			update((l) => l.filter((t) => t.id !== id));
+			await syncManager.addToQueue({ action: 'permanentDelete', tripId: id });
 		},
 
 		async emptyTrash(userId: string) {
-            const db = await getDB();
-            const userItems = await db.getAllFromIndex('trash', 'userId', userId);
-            if (userItems.length === 0) return 0;
+			const db = await getDB();
+			const userItems = await db.getAllFromIndex('trash', 'userId', userId);
+			if (userItems.length === 0) return 0;
 
-            const tx = db.transaction('trash', 'readwrite');
-            for(const item of userItems) await tx.store.delete(item.id);
-            await tx.done;
-            set([]);
+			const tx = db.transaction('trash', 'readwrite');
+			for (const item of userItems) await tx.store.delete(item.id);
+			await tx.done;
+			set([]);
 
-            for(const item of userItems) {
-                await syncManager.addToQueue({ action: 'permanentDelete', tripId: item.id });
-            }
-            return userItems.length;
+			for (const item of userItems) {
+				await syncManager.addToQueue({ action: 'permanentDelete', tripId: item.id });
+			}
+			return userItems.length;
 		},
 
 		async syncFromCloud(userId: string) {
@@ -109,37 +109,37 @@ function createTrashStore() {
 
 				const db = await getDB();
 				const tx = db.transaction('trash', 'readwrite');
-				
+
 				for (const rawItem of cloudTrash) {
-                    // Normalize Item
+					// Normalize Item
 					let flatItem: any = { ...rawItem };
-                    
-                    // Handle generic 'data' wrapper if present from new API
-                    if (flatItem.data) {
-                         // Merge data up
-                         flatItem = { ...flatItem.data, ...flatItem };
-                         delete flatItem.data;
-                    }
-                    // Handle legacy 'trip' wrapper
+
+					// Handle generic 'data' wrapper if present from new API
+					if (flatItem.data) {
+						// Merge data up
+						flatItem = { ...flatItem.data, ...flatItem };
+						delete flatItem.data;
+					}
+					// Handle legacy 'trip' wrapper
 					if (flatItem.trip) flatItem = { ...flatItem.trip, ...flatItem };
-                    delete flatItem.trip;
+					delete flatItem.trip;
 
 					if (flatItem.metadata) {
 						flatItem.deletedAt = flatItem.metadata.deletedAt || flatItem.deletedAt;
 						flatItem.expiresAt = flatItem.metadata.expiresAt || flatItem.expiresAt;
-                        flatItem.originalKey = flatItem.metadata.originalKey || flatItem.originalKey;
+						flatItem.originalKey = flatItem.metadata.originalKey || flatItem.originalKey;
 						delete flatItem.metadata;
 					}
-                    
-                    if (!flatItem.id) continue;
-                    
-                    // Determine Record Type
-                    if (!flatItem.recordType) {
-                        if (flatItem.originalKey?.startsWith('expense:')) flatItem.recordType = 'expense';
-                        else flatItem.recordType = 'trip';
-                    }
 
-                    cloudIds.add(flatItem.id);
+					if (!flatItem.id) continue;
+
+					// Determine Record Type
+					if (!flatItem.recordType) {
+						if (flatItem.originalKey?.startsWith('expense:')) flatItem.recordType = 'expense';
+						else flatItem.recordType = 'trip';
+					}
+
+					cloudIds.add(flatItem.id);
 
 					const local = await tx.store.get(flatItem.id);
 					if (!local || new Date(flatItem.deletedAt) > new Date(local.deletedAt)) {
@@ -150,48 +150,50 @@ function createTrashStore() {
 						});
 					}
 				}
-                
-                // Reconciliation
+
+				// Reconciliation
 				const index = tx.store.index('userId');
 				const localItems = await index.getAll(userId);
 				for (const localItem of localItems) {
 					if (!cloudIds.has(localItem.id)) {
-						if (localItem.syncStatus === 'pending') continue; 
+						if (localItem.syncStatus === 'pending') continue;
 						await tx.store.delete(localItem.id);
 					}
 				}
 				await tx.done;
 
-                // Cleanup Active Stores (Safety Check)
-                const cleanupTx = db.transaction(['trash', 'trips', 'expenses'], 'readwrite');
-                const allTrash = await cleanupTx.objectStore('trash').getAll();
-                const tripStore = cleanupTx.objectStore('trips');
-                const expenseStore = cleanupTx.objectStore('expenses');
-                
-                for(const trashItem of allTrash) {
-                    // Remove from active trips
-                    if (await tripStore.get(trashItem.id)) {
-                        await tripStore.delete(trashItem.id);
-                    }
-                    // Remove from active expenses
-                    if (await expenseStore.get(trashItem.id)) {
-                         await expenseStore.delete(trashItem.id);
-                    }
-                }
-                await cleanupTx.done;
+				// Cleanup Active Stores (Safety Check)
+				const cleanupTx = db.transaction(['trash', 'trips', 'expenses'], 'readwrite');
+				const allTrash = await cleanupTx.objectStore('trash').getAll();
+				const tripStore = cleanupTx.objectStore('trips');
+				const expenseStore = cleanupTx.objectStore('expenses');
+
+				for (const trashItem of allTrash) {
+					// Remove from active trips
+					if (await tripStore.get(trashItem.id)) {
+						await tripStore.delete(trashItem.id);
+					}
+					// Remove from active expenses
+					if (await expenseStore.get(trashItem.id)) {
+						await expenseStore.delete(trashItem.id);
+					}
+				}
+				await cleanupTx.done;
 
 				await this.load(userId);
 			} catch (err) {
 				console.error('❌ Failed to sync trash:', err);
 			}
 		},
-        
-        async getCount(userId: string) {
-            const items = await this.load(userId);
-            return items.length;
-        },
 
-		clear() { set([]); }
+		async getCount(userId: string) {
+			const items = await this.load(userId);
+			return items.length;
+		},
+
+		clear() {
+			set([]);
+		}
 	};
 }
 

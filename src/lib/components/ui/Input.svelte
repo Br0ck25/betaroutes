@@ -1,9 +1,9 @@
 <script lang="ts">
-	export let label = "";
-	export let type = "text";
-	export let value = "";
-	export let placeholder = "";
-	export let id = "";
+	export let label = '';
+	export let type = 'text';
+	export let value = '';
+	export let placeholder = '';
+	export let id = '';
 </script>
 
 <label class="block w-full">

@@ -2,7 +2,14 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
+import { ensureDebugEnabled } from '$lib/server/debug';
+
 export const GET: RequestHandler = async ({ platform }) => {
+	try {
+		ensureDebugEnabled(platform);
+	} catch {
+		return new Response(null, { status: 404 });
+	}
 	try {
 		const kv = platform?.env?.BETA_USERS_KV;
 		if (!kv) {

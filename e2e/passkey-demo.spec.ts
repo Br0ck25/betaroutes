@@ -68,8 +68,10 @@ test('passkey demo registration flow', async ({ page }) => {
 
   // Assert the captured POST exists and contains base64url strings for attestation/clientData
   expect(capturedPost).not.toBeNull();
+  // credential may be wrapped as { credential: { ... } } or be top-level
+  const sentCred = capturedPost.credential || capturedPost;
   // rawId may be under rawId or id
-  expect(typeof capturedPost.rawId === 'string' || typeof capturedPost.id === 'string').toBe(true);
-  const resp = capturedPost.response || {};
+  expect(typeof sentCred.rawId === 'string' || typeof sentCred.id === 'string').toBe(true);
+  const resp = sentCred.response || {};
   expect(typeof resp.attestationObject === 'string' || typeof resp.clientDataJSON === 'string').toBe(true);
 });

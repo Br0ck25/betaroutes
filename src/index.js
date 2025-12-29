@@ -1,9 +1,11 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
+
 function withCors(resp, req) {
 	const allowedOrigins = [
-		'https://gorouteyourself.com', 
+		'https://gorouteyourself.com',
 		'https://beta.gorouteyourself.com',
-		'https://betaroute.brocksville.com', 
+		'https://betaroute.brocksville.com',
 		'https://logs.gorouteyourself.com'
 	];
 	const origin = req.headers.get('Origin');
@@ -42,7 +44,7 @@ async function getUsernameFromToken(env, token) {
 }
 
 export default {
-	async fetch(request, env, ctx) {
+	async fetch(request, env) {
 		try {
 			const url = new URL(request.url);
 			const { pathname } = url;
@@ -59,7 +61,13 @@ export default {
 				const { username, password } = await json();
 				const userKey = getUserKey(username);
 				if (await env.LOGS_KV.get(userKey)) {
-					return withCors(Response.json({ error: 'That username is already taken. Please choose another.' }, { status: 400 }), request);
+					return withCors(
+						Response.json(
+							{ error: 'That username is already taken. Please choose another.' },
+							{ status: 400 }
+						),
+						request
+					);
 				}
 
 				const token = crypto.randomUUID();
@@ -71,7 +79,7 @@ export default {
 						password: hashedPassword,
 						token,
 						resetKey,
-						createdAt: new Date().toISOString(),
+						createdAt: new Date().toISOString()
 					})
 				);
 
@@ -114,7 +122,10 @@ export default {
 				const token = request.headers.get('Authorization');
 				const hashedCurrent = await hashPassword(currentPassword);
 
-				if (user.token !== token || (user.password !== currentPassword && user.password !== hashedCurrent)) {
+				if (
+					user.token !== token ||
+					(user.password !== currentPassword && user.password !== hashedCurrent)
+				) {
 					return withCors(new Response('Unauthorized', { status: 403 }), request);
 				}
 
@@ -129,7 +140,8 @@ export default {
 				const data = await env.LOGS_KV.get(userKey);
 				if (!data) return withCors(new Response('User not found', { status: 404 }), request);
 				const user = JSON.parse(data);
-				if (user.resetKey !== resetKey) return withCors(new Response('Invalid reset key', { status: 403 }), request);
+				if (user.resetKey !== resetKey)
+					return withCors(new Response('Invalid reset key', { status: 403 }), request);
 				user.password = await hashPassword(newPassword);
 				await env.LOGS_KV.put(userKey, JSON.stringify(user));
 				return withCors(new Response('Password reset'), request);
@@ -160,29 +172,35 @@ export default {
 
 				// Get username from token
 				const username = await getUsernameFromToken(env, token);
-				
+
 				// Check if this is James (Pro user for testing)
 				if (username && (username.toLowerCase() === 'james' || username.toLowerCase() === 'jam')) {
-					return withCors(Response.json({
-						plan: 'pro',
-						status: 'active',
-						tripsThisMonth: 50,
-						maxTrips: -1, // unlimited
-						features: ['export', 'analytics', 'cloud-sync', 'enhanced-analytics']
-					}), request);
+					return withCors(
+						Response.json({
+							plan: 'pro',
+							status: 'active',
+							tripsThisMonth: 50,
+							maxTrips: -1, // unlimited
+							features: ['export', 'analytics', 'cloud-sync', 'enhanced-analytics']
+						}),
+						request
+					);
 				}
 
 				// Get user data to check subscription
 				const userData = await env.LOGS_KV.get(`subscription:${token}`);
 				if (!userData) {
 					// Default to free plan if no subscription data
-					return withCors(Response.json({
-						plan: 'free',
-						status: 'active',
-						tripsThisMonth: 0,
-						maxTrips: 10,
-						features: []
-					}), request);
+					return withCors(
+						Response.json({
+							plan: 'free',
+							status: 'active',
+							tripsThisMonth: 0,
+							maxTrips: 10,
+							features: []
+						}),
+						request
+					);
 				}
 
 				const subscription = JSON.parse(userData);
@@ -195,7 +213,7 @@ export default {
 				const logs = await env.LOGS_KV.get(getLogsKey(token));
 				return withCors(
 					new Response(logs || '[]', {
-						headers: { 'Content-Type': 'application/json' },
+						headers: { 'Content-Type': 'application/json' }
 					}),
 					request
 				);
@@ -215,7 +233,7 @@ export default {
 				const categories = await env.LOGS_KV.get(`categories:${token}`);
 				return withCors(
 					new Response(categories || '{"maintenance":[],"supplies":[]}', {
-						headers: { 'Content-Type': 'application/json' },
+						headers: { 'Content-Type': 'application/json' }
 					}),
 					request
 				);
@@ -234,7 +252,7 @@ export default {
 				if (!html) return new Response('index.html not found', { status: 404 });
 
 				const resp = new Response(html, {
-					headers: { 'Content-Type': 'text/html; charset=utf-8' },
+					headers: { 'Content-Type': 'text/html; charset=utf-8' }
 				});
 
 				resp.headers.delete('Cross-Origin-Opener-Policy');
@@ -389,7 +407,7 @@ export default {
 `;
 
 				return new Response(html, {
-					headers: { 'Content-Type': 'text/html; charset=utf-8' },
+					headers: { 'Content-Type': 'text/html; charset=utf-8' }
 				});
 			}
 
@@ -446,13 +464,13 @@ export default {
 					ico: 'image/x-icon',
 					svg: 'image/svg+xml',
 					webmanifest: 'application/manifest+json',
-					xml: 'application/xml',
+					xml: 'application/xml'
 				};
 
 				const resp = new Response(asset.body, {
 					headers: {
-						'Content-Type': contentTypes[ext] || 'application/octet-stream',
-					},
+						'Content-Type': contentTypes[ext] || 'application/octet-stream'
+					}
 				});
 				return withCors(resp, request);
 			}
@@ -460,7 +478,10 @@ export default {
 			return withCors(new Response('Not found', { status: 404 }), request);
 		} catch (err) {
 			console.error('Worker error:', err);
-			return withCors(Response.json({ error: 'Internal Server Error', details: err.message }, { status: 500 }), request);
+			return withCors(
+				Response.json({ error: 'Internal Server Error', details: err.message }, { status: 500 }),
+				request
+			);
 		}
-	},
+	}
 };

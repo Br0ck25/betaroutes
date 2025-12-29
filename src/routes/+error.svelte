@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
+	import { base } from '$app/paths';
+	const resolve = (href: string) => `${base}${href}`;
 
 	let errorDetails = $state({
 		status: $page.status || 500,
@@ -105,18 +107,32 @@
 		{/if}
 
 		<div class="error-actions">
-			<a href="/dashboard" class="btn-primary">
-				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-					<polyline points="9 22 9 12 15 12 15 22"/>
+			<a href={resolve('/dashboard')} class="btn-primary">
+				<svg
+					width="20"
+					height="20"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+				>
+					<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+					<polyline points="9 22 9 12 15 12 15 22" />
 				</svg>
 				Go to Dashboard
 			</a>
 
 			<button onclick={() => window.history.back()} class="btn-secondary">
-				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<line x1="19" y1="12" x2="5" y2="12"/>
-					<polyline points="12 19 5 12 12 5"/>
+				<svg
+					width="20"
+					height="20"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+				>
+					<line x1="19" y1="12" x2="5" y2="12" />
+					<polyline points="12 19 5 12 12 5" />
 				</svg>
 				Go Back
 			</button>
@@ -131,16 +147,18 @@
 		{#if errorDetails.showDetails && $page.error}
 			<div class="error-details">
 				<h3>Technical Information</h3>
-				<pre><code>{JSON.stringify(
-					{
-						status: $page.status,
-						message: $page.error.message,
-						url: $page.url.pathname,
-						timestamp: new Date().toISOString()
-					},
-					null,
-					2
-				)}</code></pre>
+				<pre><code
+						>{JSON.stringify(
+							{
+								status: $page.status,
+								message: $page.error.message,
+								url: $page.url.pathname,
+								timestamp: new Date().toISOString()
+							},
+							null,
+							2
+						)}</code
+					></pre>
 			</div>
 		{/if}
 

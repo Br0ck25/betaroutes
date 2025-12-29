@@ -40,13 +40,13 @@ declare global {
 			PRIVATE_GOOGLE_MAPS_API_KEY: string;
 
 			// Allow other environment bindings without strict typing
-			[key: string]: any;
+			[key: string]: unknown;
 		}
 
 		interface Platform {
 			env: Env;
 			context: {
-				waitUntil(promise: Promise<any>): void;
+				waitUntil(promise: Promise<unknown>): void;
 			};
 			caches: CacheStorage & { default: Cache };
 		}

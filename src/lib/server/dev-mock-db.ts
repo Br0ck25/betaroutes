@@ -2,18 +2,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { PRIVATE_GOOGLE_MAPS_API_KEY } from '$env/static/private';
+import { log } from '$lib/server/log';
 
 const DB_FILE = path.resolve('.kv-mock.json');
 
 // Helper for safe sorting to prevent runtime crashes (matches TripIndexDO logic)
-function getSortValue(t: any): string {
-    if (!t) return "";
-    const val = t.date || t.createdAt;
-    return typeof val === 'string' ? val : "";
+function getSortValue(t: unknown): string {
+	if (!t || typeof t !== 'object') return '';
+	const obj = t as Record<string, unknown>;
+	const val = (obj['date'] ?? obj['createdAt']) as unknown;
+	return typeof val === 'string' ? val : '';
 }
 
 // Initial state
-let mockDB: Record<string, any> = {
+let mockDB: Record<string, Record<string, unknown>> = {
 	USERS: {},
 	SESSIONS: {},
 	LOGS: {},
@@ -31,16 +33,16 @@ try {
 		const raw = fs.readFileSync(DB_FILE, 'utf-8');
 		const loaded = JSON.parse(raw);
 		mockDB = { ...mockDB, ...loaded };
-		
+
 		// Ensure namespaces exist
-		['HUGHESNET', 'HUGHESNET_ORDERS', 'PLACES', 'SESSIONS', 'INDEXES'].forEach(ns => {
+		['HUGHESNET', 'HUGHESNET_ORDERS', 'PLACES', 'SESSIONS', 'INDEXES'].forEach((ns) => {
 			if (!mockDB[ns]) mockDB[ns] = {};
 		});
-		
-		console.log('📂 Loaded mock KV data from .kv-mock.json');
+
+		log.debug('📂 Loaded mock KV data from .kv-mock.json');
 	}
 } catch (e) {
-	console.error('Failed to load mock DB', e);
+	log.error('Failed to load mock DB', e);
 }
 
 // Save helper
@@ -48,7 +50,7 @@ function saveDB() {
 	try {
 		fs.writeFileSync(DB_FILE, JSON.stringify(mockDB, null, 2));
 	} catch (e) {
-		console.error('Failed to save mock DB', e);
+		log.error('Failed to save mock DB', e);
 	}
 }
 
@@ -56,24 +58,28 @@ function saveDB() {
 function createMockKV(namespace: string) {
 	return {
 		async get(key: string) {
-			return mockDB[namespace][key] ?? null;
+			const ns = mockDB[namespace] as Record<string, unknown> | undefined;
+			return (ns?.[key] as string) ?? null;
 		},
 		async put(key: string, value: string) {
-			// console.log(`[MOCK KV ${namespace}] PUT ${key}`);
-			if (!mockDB[namespace]) mockDB[namespace] = {}; 
-			mockDB[namespace][key] = value;
-			saveDB(); 
+			// log.debug(`[MOCK KV ${namespace}] PUT ${key}`);
+			if (!mockDB[namespace]) mockDB[namespace] = {};
+			const ns = mockDB[namespace] as Record<string, unknown>;
+			ns[key] = value;
+			saveDB();
 		},
 		async delete(key: string) {
-			// console.log(`[MOCK KV ${namespace}] DELETE ${key}`);
+			// log.debug(`[MOCK KV ${namespace}] DELETE ${key}`);
 			if (mockDB[namespace]) {
-				delete mockDB[namespace][key];
-				saveDB(); 
+				const ns = mockDB[namespace] as Record<string, unknown>;
+				delete ns[key];
+				saveDB();
 			}
 		},
 		async list({ prefix }: { prefix: string }) {
 			if (!mockDB[namespace]) return { keys: [] };
-			const keys = Object.keys(mockDB[namespace])
+			const ns = mockDB[namespace] as Record<string, unknown>;
+			const keys = Object.keys(ns)
 				.filter((k) => k.startsWith(prefix))
 				.map((name) => ({ name }));
 			return { keys };
@@ -85,14 +91,20 @@ function createMockKV(namespace: string) {
 function createMockDOStub(id: string) {
 	return {
 		async fetch(urlOrRequest: string | Request, init?: RequestInit) {
-			const url = typeof urlOrRequest === 'string' ? new URL(urlOrRequest) : new URL(urlOrRequest.url);
+			const url =
+				typeof urlOrRequest === 'string' ? new URL(urlOrRequest) : new URL(urlOrRequest.url);
 			const path = url.pathname;
-			
+
 			// Init storage for this user/id if missing
+			if (!mockDB['INDEXES']) mockDB['INDEXES'] = {};
 			if (!mockDB['INDEXES'][id]) {
 				mockDB['INDEXES'][id] = { trips: [], initialized: false, billing: {} };
 			}
-			const storage = mockDB['INDEXES'][id];
+			const storage = mockDB['INDEXES'][id] as {
+				trips: unknown[];
+				initialized: boolean;
+				billing: Record<string, number>;
+			};
 
 			// --- MOCK API HANDLERS ---
 
@@ -105,32 +117,37 @@ function createMockDOStub(id: string) {
 			}
 
 			if (path === '/migrate') {
-				const body = JSON.parse(init?.body as string || '[]');
+				const body = JSON.parse((init?.body as string) || '[]');
 				storage.trips = body;
 				storage.initialized = true;
 				saveDB();
-				return new Response("OK");
+				return new Response('OK');
 			}
 
 			if (path === '/put') {
 				const trip = JSON.parse(init?.body as string);
-				const idx = storage.trips.findIndex((t: any) => t.id === trip.id);
+				const idx = storage.trips.findIndex(
+					(t: unknown) =>
+						(t as Record<string, unknown>)['id'] === (trip as Record<string, unknown>)['id']
+				);
 				if (idx >= 0) storage.trips[idx] = trip;
 				else storage.trips.push(trip);
-				
+
 				// Safe Sort desc
-				storage.trips.sort((a: any, b: any) => 
-                    getSortValue(b).localeCompare(getSortValue(a))
-                );
+				storage.trips.sort((a: unknown, b: unknown) =>
+					getSortValue(b).localeCompare(getSortValue(a))
+				);
 				saveDB();
-				return new Response("OK");
+				return new Response('OK');
 			}
 
 			if (path === '/delete') {
 				const { id: tripId } = JSON.parse(init?.body as string);
-				storage.trips = storage.trips.filter((t: any) => t.id !== tripId);
+				storage.trips = storage.trips.filter(
+					(t: unknown) => (t as Record<string, unknown>)['id'] !== tripId
+				);
 				saveDB();
-				return new Response("OK");
+				return new Response('OK');
 			}
 
 			// Mock Billing Check
@@ -144,7 +161,7 @@ function createMockDOStub(id: string) {
 				saveDB();
 				return new Response(JSON.stringify({ allowed: true, count: current + 1 }));
 			}
-			
+
 			if (path === '/billing/decrement') {
 				const { monthKey } = JSON.parse(init?.body as string);
 				const current = storage.billing[monthKey] || 0;
@@ -154,7 +171,7 @@ function createMockDOStub(id: string) {
 				return new Response(JSON.stringify({ count: next }));
 			}
 
-			return new Response("Not Found", { status: 404 });
+			return new Response('Not Found', { status: 404 });
 		}
 	};
 }
@@ -162,31 +179,39 @@ function createMockDOStub(id: string) {
 /**
  * Main Setup Function
  */
-export function setupMockKV(event: any) {
+export function setupMockKV(event: { platform?: { env?: Record<string, unknown> } }) {
 	if (!event.platform) event.platform = { env: {} };
 	if (!event.platform.env) event.platform.env = {};
 
-	const env = event.platform.env;
+	const env = event.platform.env as Record<string, unknown>;
 
-	if (!env.PRIVATE_GOOGLE_MAPS_API_KEY) {
-		env.PRIVATE_GOOGLE_MAPS_API_KEY = PRIVATE_GOOGLE_MAPS_API_KEY;
+	if (!env['PRIVATE_GOOGLE_MAPS_API_KEY']) {
+		env['PRIVATE_GOOGLE_MAPS_API_KEY'] = PRIVATE_GOOGLE_MAPS_API_KEY;
 	}
 
 	// Mock KVs
-	if (!env.BETA_SESSIONS_KV) env.BETA_SESSIONS_KV = createMockKV('SESSIONS');
-	if (!env.BETA_USERS_KV) env.BETA_USERS_KV = createMockKV('USERS');
-	if (!env.BETA_LOGS_KV) env.BETA_LOGS_KV = createMockKV('LOGS');
-	if (!env.BETA_LOGS_TRASH_KV) env.BETA_LOGS_TRASH_KV = createMockKV('TRASH');
-	if (!env.BETA_USER_SETTINGS_KV) env.BETA_USER_SETTINGS_KV = createMockKV('SETTINGS');
-	if (!env.BETA_PLACES_KV) env.BETA_PLACES_KV = createMockKV('PLACES');
-	if (!env.BETA_HUGHESNET_KV) env.BETA_HUGHESNET_KV = createMockKV('HUGHESNET');
-	if (!env.BETA_HUGHESNET_ORDERS_KV) env.BETA_HUGHESNET_ORDERS_KV = createMockKV('HUGHESNET_ORDERS');
+	if (!env['BETA_SESSIONS_KV']) env['BETA_SESSIONS_KV'] = createMockKV('SESSIONS');
+	if (!env['BETA_USERS_KV']) env['BETA_USERS_KV'] = createMockKV('USERS');
+	if (!env['BETA_LOGS_KV']) env['BETA_LOGS_KV'] = createMockKV('LOGS');
+	if (!env['BETA_LOGS_TRASH_KV']) env['BETA_LOGS_TRASH_KV'] = createMockKV('TRASH');
+	if (!env['BETA_USER_SETTINGS_KV']) env['BETA_USER_SETTINGS_KV'] = createMockKV('SETTINGS');
+	if (!env['BETA_PLACES_KV']) env['BETA_PLACES_KV'] = createMockKV('PLACES');
+	if (!env['BETA_HUGHESNET_KV']) env['BETA_HUGHESNET_KV'] = createMockKV('HUGHESNET');
+	if (!env['BETA_HUGHESNET_ORDERS_KV'])
+		env['BETA_HUGHESNET_ORDERS_KV'] = createMockKV('HUGHESNET_ORDERS');
 
 	// [!code ++] Mock Durable Object Binding
-	if (!env.TRIP_INDEX_DO) {
-		env.TRIP_INDEX_DO = {
+	if (!env['TRIP_INDEX_DO']) {
+		env['TRIP_INDEX_DO'] = {
 			idFromName: (name: string) => ({ toString: () => name }), // Use name as ID for mock
-			get: (id: any) => createMockDOStub(id.toString())
+			get: (id: unknown) => createMockDOStub(String(id))
 		};
 	}
+}
+
+// Helper to seed session entries directly into the in-memory mock DB used by tests
+export function seedMockSession(sessionId: string, user: Record<string, unknown>) {
+	if (!mockDB['SESSIONS']) mockDB['SESSIONS'] = {};
+	mockDB['SESSIONS'][sessionId] = JSON.stringify(user);
+	saveDB();
 }

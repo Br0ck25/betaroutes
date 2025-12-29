@@ -1,6 +1,7 @@
 // src/lib/server/rateLimit.ts
 import type { KVNamespace } from '@cloudflare/workers-types';
 import type { RateLimitData, User } from '$lib/types';
+import { log } from '$lib/server/log';
 
 export interface RateLimitResult {
 	allowed: boolean;
@@ -111,7 +112,7 @@ export async function checkRateLimitEnhanced(
 			limit
 		};
 	} catch (error) {
-		console.error('Rate limit check failed:', error);
+		log.error('Rate limit check failed:', error);
 		// On error, allow the request (fail open)
 		return {
 			allowed: true,
@@ -136,9 +137,7 @@ export function createRateLimitHeaders(result: RateLimitResult): Record<string, 
 
 	if (result.resetAt) {
 		headers['X-RateLimit-Reset'] = Math.ceil(result.resetAt.getTime() / 1000).toString();
-		headers['Retry-After'] = Math.ceil(
-			(result.resetAt.getTime() - Date.now()) / 1000
-		).toString();
+		headers['Retry-After'] = Math.ceil((result.resetAt.getTime() - Date.now()) / 1000).toString();
 	}
 
 	return headers;
@@ -171,8 +170,7 @@ export function getClientIdentifier(
 	const xForwardedFor = request.headers.get('x-forwarded-for');
 	const xRealIp = request.headers.get('x-real-ip');
 
-	const ip =
-		cfConnectingIp || xForwardedFor?.split(',')[0]?.trim() || xRealIp || 'unknown';
+	const ip = cfConnectingIp || xForwardedFor?.split(',')[0]?.trim() || xRealIp || 'unknown';
 
 	return `ip:${ip}`;
 }

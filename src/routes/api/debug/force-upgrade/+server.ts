@@ -13,7 +13,7 @@ export const POST: RequestHandler = async ({ platform }) => {
 
 		// [!code fix] Implement pagination loop to fetch more than 1,000 keys
 		let list = await kv.list({ prefix: '' });
-		let keys = [...list.keys];
+		const keys = [...list.keys];
 
 		while (!list.list_complete && list.cursor) {
 			list = await kv.list({ prefix: '', cursor: list.cursor });
@@ -35,7 +35,9 @@ export const POST: RequestHandler = async ({ platform }) => {
 					upgradedCount++;
 					logs.push(`✅ Updated [${key.name}] for ${data.email}`);
 				}
-			} catch (e) { /* ignore non-user objects */ }
+			} catch (_e: unknown) {
+				void _e;
+			}
 		}
 
 		return json({

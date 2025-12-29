@@ -1,20 +1,21 @@
 // src/routes/api/trash/[id]/+server.ts
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
+import { log } from '$lib/server/log';
 
-function safeKV(env: any, name: string) {
-	const kv = env?.[name];
+function safeKV(env: Record<string, unknown> | undefined, name: string) {
+	const kv = env?.[name] as unknown;
 	return kv ?? null;
 }
 
 // [!code ++] Fake DO helper
 function fakeDO() {
-    return {
-        idFromName: () => ({ name: 'fake' }),
-        get: () => ({
-            fetch: async () => new Response(JSON.stringify([]))
-        })
-    };
+	return {
+		idFromName: () => ({ name: 'fake' }),
+		get: () => ({
+			fetch: async () => new Response(JSON.stringify([]))
+		})
+	};
 }
 
 export const POST: RequestHandler = async (event) => {
@@ -27,29 +28,42 @@ export const POST: RequestHandler = async (event) => {
 		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
 		// [!code fix]
-		const tripIndexDO = (event.platform?.env as any)?.TRIP_INDEX_DO ?? fakeDO();
-		const placesIndexDO = (event.platform?.env as any)?.PLACES_INDEX_DO ?? tripIndexDO;
-			
-		// [!code fix]
-		const svc = makeTripService(kv as any, trashKV as any, placesKV as any, tripIndexDO as any, placesIndexDO as any);
+		const platformEnv = event.platform?.env as Record<string, unknown> | undefined;
+		const tripIndexDO = (platformEnv?.['TRIP_INDEX_DO'] as unknown) ?? fakeDO();
+		const placesIndexDO = (platformEnv?.['PLACES_INDEX_DO'] as unknown) ?? tripIndexDO;
 
-		const storageId = (user as any).name || (user as any).token;
+		// [!code fix]
+		const svc = makeTripService(
+			kv as any,
+			trashKV as any,
+			placesKV as any,
+			tripIndexDO as any,
+			placesIndexDO as any
+		);
+
+		const currentUser = user as { name?: string; token?: string };
+		const storageId = currentUser.name || currentUser.token;
 
 		// Perform restore (simplified placeholder implementation)
 		const restoredTrip = { id, owner: storageId, restored: true };
 		try {
-			await (svc as any).incrementUserCounter?.((user as any).token, 1);
-		} catch (e) { console.warn('Failed to increment user counter:', e); }
+			await (
+				svc as unknown as { incrementUserCounter?: (t: string, n: number) => Promise<void> }
+			).incrementUserCounter?.(currentUser.token || '', 1);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			log.warn('Failed to increment user counter', { message });
+		}
 
 		return new Response(JSON.stringify(restoredTrip), {
 			status: 200,
 			headers: { 'Content-Type': 'application/json' }
 		});
 	} catch (err) {
-		console.error('POST /api/trash/[id]/restore error', err);
-		const message = err instanceof Error ? err.message : 'Internal Server Error';
-		const status = message.includes('not found') ? 404 : 500;
-		return new Response(JSON.stringify({ error: message }), {
+		const errMsg = err instanceof Error ? err.message : String(err);
+		log.error('POST /api/trash/[id]/restore error', { message: errMsg });
+		const status = errMsg.includes('not found') ? 404 : 500;
+		return new Response(JSON.stringify({ error: errMsg }), {
 			status,
 			headers: { 'Content-Type': 'application/json' }
 		});
@@ -63,9 +77,10 @@ export const DELETE: RequestHandler = async (event) => {
 
 		// DELETE placeholder - no bindings required here
 		return new Response(null, { status: 204 });
-	} catch (err) {
-		console.error('DELETE /api/trash/[id] error', err);
-		return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
+	} catch (err: unknown) {
+		const message = err instanceof Error ? err.message : String(err);
+		log.error('DELETE /api/trash/[id] error', { message });
+		return new Response(JSON.stringify({ error: message }), {
 			status: 500,
 			headers: { 'Content-Type': 'application/json' }
 		});

@@ -121,6 +121,8 @@ export interface Trip {
 	userId?: string;
 	createdAt?: string;
 	updatedAt?: string;
+	// Optional service type for analytics
+	serviceType?: string;
 }
 
 // ============================================================================

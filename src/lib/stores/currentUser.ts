@@ -1,7 +1,8 @@
 import { writable } from 'svelte/store';
+import type { User } from '$lib/server/userService';
 
-export const currentUser = writable<any | null>(null);
+export const currentUser = writable<User | null>(null);
 
-export function setUser(user: any) {
-    currentUser.set(user);
+export function setUser(user: User | null) {
+	currentUser.set(user);
 }

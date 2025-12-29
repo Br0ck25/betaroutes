@@ -2,12 +2,12 @@
 	import '../app.css';
 	import Footer from '$lib/components/layout/Footer.svelte';
 	import { setUserContext } from '$lib/stores/user.svelte';
-    import { onMount } from 'svelte';
-    import { syncManager } from '$lib/sync/syncManager';
-    import { trips } from '$lib/stores/trips';
-    import { env } from '$env/dynamic/public';
-    import { page } from '$app/stores';
-    let { data, children } = $props();
+	import { onMount } from 'svelte';
+	import { syncManager } from '$lib/sync/syncManager';
+	import { trips } from '$lib/stores/trips';
+	import { env } from '$env/dynamic/public';
+	import { page } from '$app/stores';
+	let { data, children } = $props();
 
 	// 1. Initialize Context
 	const userState = setUserContext(undefined);
@@ -17,29 +17,27 @@
 		userState.setUser(data.user);
 	});
 
-    // 3. Initialize Sync & Wire to UI Store
-    onMount(async () => {
-        // Load local data immediately
-        await trips.load();
+	// 3. Initialize Sync & Wire to UI Store
+	onMount(async () => {
+		// Load local data immediately
+		await trips.load();
 
-        if (data.user) {
-            // Connect SyncManager to the UI Store
-            syncManager.setStoreUpdater((enrichedTrip) => {
-              
-              trips.updateLocal(enrichedTrip);
-            });
+		if (data.user) {
+			// Connect SyncManager to the UI Store
+			syncManager.setStoreUpdater((enrichedTrip) => {
+				trips.updateLocal(enrichedTrip);
+			});
 
-            // Access key safely via dynamic env object
-            const apiKey = (env as any)['PUBLIC_GOOGLE_MAPS_KEY'];
-            
-            if (apiKey) {
-                syncManager.initialize(apiKey);
-          
-            } else {
-                console.warn('Google Maps API Key missing in environment variables.');
-            }
-        }
-    });
+			// Access key safely via dynamic env object
+			const apiKey = (env as any)['PUBLIC_GOOGLE_MAPS_KEY'];
+
+			if (apiKey) {
+				syncManager.initialize(apiKey);
+			} else {
+				console.warn('Google Maps API Key missing in environment variables.');
+			}
+		}
+	});
 </script>
 
 <div class="flex flex-col min-h-dvh bg-neutral-bg-primary font-inter text-neutral-primary">
@@ -47,7 +45,7 @@
 		{@render children()}
 	</main>
 
-    {#if $page.url.pathname !== '/'}
-	    <Footer />
-    {/if}
+	{#if $page.url.pathname !== '/'}
+		<Footer />
+	{/if}
 </div>
