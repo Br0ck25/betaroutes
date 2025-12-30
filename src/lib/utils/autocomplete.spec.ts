@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { isRenderableCandidate } from './autocomplete';
-import { geocodePhoton as geocodePhotonOptimize } from '../../routes/api/directions/optimize/+server';
+import { geocodePhoton as geocodePhotonOptimize } from '../../lib/server/geocode';
 
 describe('autocomplete validator', () => {
 	it('rejects broad/place-level Photon results for address-like input', () => {
