@@ -12,7 +12,7 @@ function fakeKV() {
 	};
 }
 
-// [!code ++] Fake DO helper
+// Fake DO helper
 function fakeDO() {
 	return {
 		idFromName: () => ({ name: 'fake' }),
@@ -36,7 +36,7 @@ export const GET: RequestHandler = async (event) => {
 		const tripIndexDO = (platformEnv?.['TRIP_INDEX_DO'] as unknown) ?? fakeDO();
 		const placesIndexDO = (platformEnv?.['PLACES_INDEX_DO'] as unknown) ?? tripIndexDO;
 
-		// Create service - cast to expected runtime types with unknown intermediary
+		// Create service
 		const svc = makeTripService(
 			kv as any,
 			trashKV as any,
@@ -48,17 +48,17 @@ export const GET: RequestHandler = async (event) => {
 		const currentUser = user as { name?: string; token?: string };
 		const storageId = currentUser.name || currentUser.token;
 
-		// If no storage id available (shouldn't happen), return empty list early
 		if (!storageId)
 			return new Response(JSON.stringify([]), {
 				status: 200,
 				headers: { 'Content-Type': 'application/json' }
 			});
 
-		// Return current cloud trash items (may be empty)
+		// Return current cloud trash items
 		let cloudTrash: unknown[] = [];
 		try {
-			cloudTrash = await svc.list(storageId);
+			// [!code fix] Use listTrash instead of list (which returns active trips)
+			cloudTrash = await svc.listTrash(storageId);
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			log.warn('Failed to list cloud trash', { message });
@@ -82,9 +82,8 @@ export const DELETE: RequestHandler = async (event) => {
 		const user = event.locals.user;
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
-		// DELETE placeholder - no bindings required here
-
-		// Perform permanent deletion (not implemented here; return placeholder)
+		// This bulk DELETE endpoint is currently a placeholder
+		// Individual items are deleted via /api/trash/[id]
 		const deleted = 0;
 
 		return new Response(

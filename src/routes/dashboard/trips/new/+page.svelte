@@ -451,6 +451,8 @@
 			maintenanceCost: totalMaintenanceCost,
 			suppliesCost: totalSuppliesCost,
 			netProfit: totalProfit,
+			// Include both keys for compatibility but ensure `totalMiles` is present
+			totalMiles: tripData.totalMiles,
 			totalMileage: tripData.totalMiles,
 			fuelCost: tripData.fuelCost,
 			stops: tripData.stops.map((stop, index) => ({
@@ -458,6 +460,7 @@
 				earnings: Number(stop.earnings),
 				order: index
 			})),
+
 			destinations: tripData.stops.map((stop) => ({
 				address: stop.address,
 				earnings: stop.earnings,

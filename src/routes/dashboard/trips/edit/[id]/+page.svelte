@@ -500,6 +500,8 @@
 			maintenanceCost: totalMaintenanceCost,
 			suppliesCost: totalSuppliesCost,
 			netProfit: totalProfit,
+			// Ensure `totalMiles` is always present for analytics
+			totalMiles: tripData.totalMiles,
 			totalMileage: tripData.totalMiles,
 			fuelCost: tripData.fuelCost,
 			stops: tripData.stops.map((stop, index) => ({
