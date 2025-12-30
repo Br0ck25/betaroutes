@@ -1,65 +1,108 @@
 // src/lib/utils/autocomplete.ts
 import type { Action } from 'svelte/action';
 
-// ... (Keep loadGoogleMaps and imports same as before) ...
+// Singleton Promise to prevent race conditions
 let loadingPromise: Promise<void> | null = null;
 let googleMapsError = false;
 
+// Exported Singleton Loader
 export async function loadGoogleMaps(apiKey: string): Promise<void> {
-	// ... (Keep existing loader) ...
 	if (typeof google !== 'undefined' && google.maps) return Promise.resolve();
 	if (googleMapsError) return Promise.reject(new Error('Google Maps previously failed'));
 	if (loadingPromise) return loadingPromise;
-	// ...
+
+	if (!apiKey || apiKey === 'undefined') {
+		googleMapsError = true;
+		return Promise.reject(new Error('No API key'));
+	}
+
+	const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
+	if (existingScript) {
+		loadingPromise = new Promise((resolve) => {
+			const check = setInterval(() => {
+				if (typeof google !== 'undefined' && google.maps) {
+					clearInterval(check);
+					resolve();
+				}
+			}, 100);
+		});
+		return loadingPromise;
+	}
+
 	loadingPromise = new Promise((resolve, reject) => {
 		const script = document.createElement('script');
 		script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&loading=async`;
 		script.async = true;
 		script.defer = true;
+
 		script.onload = () => resolve();
 		script.onerror = () => {
 			googleMapsError = true;
 			loadingPromise = null;
 			reject(new Error('Failed to load Google Maps'));
 		};
+
 		document.head.appendChild(script);
 	});
+
 	return loadingPromise;
 }
 
-// [!code fix] Strict render validator
-function isRenderableCandidate(result: any, input: string) {
+// [!code fix] Lightweight validator for Rendering Phase
+export function isRenderableCandidate(result: any, input: string) {
 	if (!result) return false;
 	// Always show Google results
 	if (result.source === 'google' || result.source === 'google_proxy') return true;
 
-	// 1. Sanity: Never render numeric-only names
-	if (result.name && String(result.name).trim().match(/^\d+$/)) return false;
+	// 1. Sanity: Never render numeric-only names (e.g. "407")
+	if (result.name && String(result.name).trim().match(/^\d+$/)) {
+		return false;
+	}
 
-	// 2. Address Logic
-	// If input matches "123 Mastin" pattern
+	// 1b. Reject broad/non-address OSM types to avoid numeric token fallbacks
+	const broadTypes = ['city', 'state', 'country', 'county', 'state_district', 'place', 'administrative'];
+	if ((result.osm_value && broadTypes.includes(String(result.osm_value))) || (result.osm_key && broadTypes.includes(String(result.osm_key)))) {
+		return false;
+	}
+
+	// 2. Address Logic: If input looks like an address start (Number + Space + Char), strict check
 	const inputIsAddress = /^\d+\s+\w+/i.test(input);
 
 	if (inputIsAddress) {
-		const hn = result.house_number || (result.properties && result.properties.housenumber);
-		const st = result.street || (result.properties && result.properties.street);
+		// Normalize access to ensure we find fields even if nested
+			const hn = (result.house_number || (result.properties && result.properties.housenumber) || null);
+			const st = result.street || (result.properties && result.properties.street) || null;
+			const nm = result.name || '';
 
-		// If NO house number AND NO street, it is likely a city/district match (e.g. "Louisville")
-		// Reject it immediately to force fallback logic
-		if (!hn && !st) return false;
+			// Extract numeric token from input and require a match
+			const inputNumber = input.match(/^(\d+)/)?.[1] || null;
+			if (!inputNumber) return false; // defensive
 
-		// Optional: Ensure the street name in result partially matches input
-		// (Prevents "407" matching an unrelated "District 407")
-		const nm = result.name || '';
-		const inputStreetMatch = input.match(/^\d+\s+(.+)$/);
-		if (inputStreetMatch && inputStreetMatch[1]) {
-			const inputStreetToken = inputStreetMatch[1].split(' ')[0].toLowerCase(); // "mastin"
-			const resultText = (nm + ' ' + (st || '')).toLowerCase();
-			if (inputStreetToken.length > 3 && !resultText.includes(inputStreetToken)) {
+			// Must have a housenumber that matches the input number (otherwise it's likely an unrelated POI)
+			if (!hn) return false;
+			if (String(hn) !== String(inputNumber) && !String(nm || '').includes(String(inputNumber)) && !(String(result.formatted_address || '').includes(String(inputNumber)))) {
 				return false;
 			}
-		}
+
+			// Must also provide a street name (or a name containing the street)
+			if (!st) return false;
+
+			// Optional: Ensure the street name in result partially matches input
+			const m = /^\d+\s+([A-Za-z0-9-]+)/.exec(input);
+			if (m && m[1]) {
+				// @ts-ignore - m[1] is guarded above
+				const inputStreetToken = String(m[1]).split(/\s+/)[0].toLowerCase(); // e.g. "mastin"
+				const resultText = (nm + ' ' + (st || '')).toLowerCase();
+				// Only check if we have enough characters to be sure
+				if (inputStreetToken.length > 3 && !resultText.includes(inputStreetToken)) {
+					return false;
+				}
+			}
+
+			return true;
 	}
+
+	// Non-address inputs default to renderable (POIs, streets, cities are ok)
 	return true;
 }
 
@@ -75,9 +118,9 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 	}
 
 	function initUI() {
-		// ... (Keep existing UI setup) ...
 		dropdown = document.createElement('div');
 		dropdown.className = 'pac-container';
+
 		Object.assign(dropdown.style, {
 			position: 'absolute',
 			zIndex: '2147483647',
@@ -93,7 +136,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 			paddingBottom: '8px',
 			pointerEvents: 'auto'
 		});
-		// ... (Keep parent appending logic) ...
+
 		const dialogAncestor = node.closest && node.closest('dialog');
 		if (dialogAncestor) {
 			(dropdown as HTMLElement & { __autocompleteContainer?: Element }).__autocompleteContainer =
@@ -104,12 +147,15 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 			document.body.appendChild(dropdown);
 			dropdown.style.position = 'fixed';
 		}
-		// ... (Keep event listeners) ...
-		stop = (e: Event) => e.stopPropagation();
+
+		stop = (e: Event) => {
+			e.stopPropagation();
+		};
 		stopAndPrevent = (e: Event) => {
 			e.preventDefault();
 			e.stopPropagation();
 		};
+
 		dropdown.addEventListener('pointerdown', stopAndPrevent);
 		dropdown.addEventListener('pointerup', stop);
 		dropdown.addEventListener('mousedown', stopAndPrevent);
@@ -120,9 +166,9 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 	}
 
 	function updatePosition() {
-		// ... (Keep existing position logic) ...
 		if (!dropdown) return;
 		const rect = node.getBoundingClientRect();
+
 		const container = (dropdown as HTMLElement & { __autocompleteContainer?: Element })
 			.__autocompleteContainer;
 		if (container && container instanceof Element) {
@@ -146,6 +192,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 			isSelecting = false;
 			return;
 		}
+
 		const value = (e.target as HTMLInputElement).value;
 		updatePosition();
 
@@ -173,13 +220,14 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 
 				// [!code fix] Mandatory: Strict Filter BEFORE rendering
 				let filtered = validData;
-				if (source === 'photon') {
+				// Apply strict filtering to both Photon results and cached (kv) results
+				if (source === 'photon' || source === 'kv') {
 					filtered = validData.filter((item: any) => isRenderableCandidate(item, value));
 				}
 
-				// [!code fix] Escalation Logic: If Photon gave us junk, ask Server to force Google
-				if (source === 'photon' && filtered.length === 0 && validData.length > 0) {
-					console.warn('[autocomplete] OSRM results rejected. Escalating to Google...');
+				// [!code fix] Escalation Logic: If Photon or KV gave us junk (results exist but filtered is empty), force Google
+				if ((source === 'photon' || source === 'kv') && filtered.length === 0 && validData.length > 0) {
+					console.debug('[autocomplete] OSRM/KV results rejected. Escalating to Google...');
 					try {
 						const googleUrl = `/api/autocomplete?q=${encodeURIComponent(value)}&forceGoogle=true`;
 						const googleRes = await fetch(googleUrl);
@@ -192,11 +240,9 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 						}
 					} catch (err) {
 						console.error('[autocomplete] Google escalation failed', err);
-					}
-				}
-
+					}				}
 				if (filtered.length > 0) {
-					// Cache external results (remove source tag)
+					// Cache external results (remove source tag for KV storage)
 					if (source !== 'kv') {
 						const cleanResults = filtered.map(({ source, ...rest }) => {
 							void source;
@@ -215,7 +261,6 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 		}, 300);
 	}
 
-	// ... (Keep existing helpers: cacheToKV, savePlaceToKV) ...
 	async function cacheToKV(query: string, results: Array<Record<string, unknown>>) {
 		try {
 			fetch('/api/autocomplete/cache', {
@@ -223,7 +268,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ query, results })
 			});
-		} catch (_e) {
+		} catch (_e: unknown) {
 			void _e;
 		}
 	}
@@ -235,8 +280,9 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(place)
 			});
-		} catch (_e) {
+		} catch (_e: unknown) {
 			void _e;
+			console.error('Failed to save place details');
 		}
 	}
 
@@ -250,14 +296,14 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 
 		const header = document.createElement('div');
 		let sourceLabel = '⚡ Fast Cache';
-		let sourceColor = '#10B981';
+		let sourceColor = '#10B981'; // Green
 
 		if (source === 'google') {
 			sourceLabel = '📍 Google Live';
-			sourceColor = '#4285F4';
+			sourceColor = '#4285F4'; // Blue
 		} else if (source === 'photon') {
 			sourceLabel = '🗺️ OpenMap';
-			sourceColor = '#F59E0B';
+			sourceColor = '#F59E0B'; // Orange/Amber
 		}
 
 		const leftSpan = document.createElement('span');
@@ -288,9 +334,9 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 		dropdown.appendChild(header);
 
 		items.forEach((item) => {
-			// ... (Keep existing item rendering) ...
 			const row = document.createElement('div');
 			const it: any = item;
+
 			const mainText =
 				it.name ||
 				(typeof it.formatted_address === 'string' ? it.formatted_address.split(',')[0] : '');
@@ -299,6 +345,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 				(typeof it.formatted_address === 'string' && it.formatted_address.includes(',')
 					? it.formatted_address.split(',').slice(1).join(',').trim()
 					: '');
+
 			const pinIcon = `<svg focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#9AA0A6" width="20px" height="20px"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`;
 
 			Object.assign(row.style, {
@@ -345,6 +392,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 
 			content.appendChild(mainDiv);
 			content.appendChild(secondaryDiv);
+
 			row.appendChild(iconWrap);
 			row.appendChild(content);
 
@@ -404,13 +452,102 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 		if (dropdown) dropdown.style.display = 'none';
 		isSelecting = true;
 
-		// [!code fix] We trust our filtered list now, so we can be lighter here
-		// But still good to ensure we have geometry for Photon items
+		// Normalize once at top of selectItem
+		const normalized = {
+			...it,
+			house_number: it.house_number || (it.properties && it.properties.housenumber),
+			street: it.street || (it.properties && it.properties.street),
+			name: it.name,
+			nosm_value: it.osm_value || (it.properties && it.properties.osm_value) || null,
+			nosm_key: it.osm_key || (it.properties && it.properties.osm_key) || null
+		};
+
+		function isAcceptableGeocode(result: any, input: string) {
+			if (result.source === 'google_proxy' || result.source === 'google') return true;
+			if (!result) return false;
+
+			// Reject broad/non-address OSM types (e.g. city/place) as they often surface numeric token fallbacks
+			const broadTypes = ['city', 'state', 'country', 'county', 'state_district', 'place', 'administrative'];
+			if ((result.osm_value && broadTypes.includes(String(result.osm_value))) || (result.osm_key && broadTypes.includes(String(result.osm_key)))) {
+				return false;
+			}
+
+			// 1. Sanity check: Disallow purely numeric names
+			if (result.name && String(result.name).trim().match(/^\d+\s*$/)) {
+				return false;
+			}
+
+			// 2. Address-specific validation (Selection Phase - Strict)
+			const inputIsAddress = /^\d+\s+\w+/i.test(input);
+
+			if (inputIsAddress) {
+				if (!result.house_number) return false;
+
+				// Robust street matching regex (handles Suffixes/Punctuation)
+				const streetHintMatch = input.match(/\b([A-Za-z]{3,})\b/i);
+				const streetHint = streetHintMatch?.[1];
+
+				if (streetHint) {
+					const resultText = ((result.name || '') + ' ' + (result.street || '')).toLowerCase();
+					if (!resultText.includes(streetHint.toLowerCase())) {
+						return false;
+					}
+				}
+				return true;
+			}
+
+			// 3. Fallback for non-address inputs
+			if (result.house_number && result.street) {
+				return input.toLowerCase().includes(String(result.street).toLowerCase());
+			}
+
+			return !!(result.geometry && result.geometry.location && result.name);
+		}
+
+		// Use normalized object for validation
+		if (source === 'photon' || source === 'kv') {
+			const candidate = { ...normalized, geometry: it.geometry };
+			if (!isAcceptableGeocode(candidate, node.value)) {
+				// Try a fallback search if validation failed on selection (double safety)
+				try {
+					const res = await fetch(`/api/autocomplete?q=${encodeURIComponent(node.value)}&forceGoogle=true`);
+					const data = await res.json();
+					if (Array.isArray(data) && data.length > 0) {
+						const googleHit = data.find((d: any) => d.source === 'google_proxy');
+						if (googleHit) {
+							commitSelection(googleHit);
+							return;
+						}
+						const acceptable = data.find((d: any) => {
+							const normD = {
+								...d,
+								house_number: d.house_number || (d.properties && d.properties.housenumber),
+								street: d.street || (d.properties && d.properties.street)
+							};
+							return isAcceptableGeocode(normD, node.value);
+						});
+						if (acceptable) {
+							commitSelection(acceptable);
+							return;
+						}
+					}
+				} catch (err: unknown) {
+					console.error('[autocomplete] fallback search failed', err);
+				}
+
+				node.dispatchEvent(
+					new CustomEvent('place-invalid', { detail: { candidate: item, input: node.value } })
+				);
+				return;
+			}
+		}
+
 		if (!it.geometry || !it.geometry.location) {
 			if (it.place_id && source === 'google') {
 				try {
 					const res = await fetch(`/api/autocomplete?placeid=${it.place_id}`);
 					const details: any = await res.json();
+
 					if (details && details.geometry) {
 						const fullItem = {
 							...item,
@@ -422,29 +559,32 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 						commitSelection(fullItem);
 						return;
 					}
-				} catch (err) {
+				} catch (err: unknown) {
 					console.error('Details fetch failed', err);
 				}
 			}
 			commitSelection(item);
 		} else {
-			if (source === 'photon') savePlaceToKV(item);
+			if (source === 'photon') {
+				savePlaceToKV(item);
+			}
 			commitSelection(item);
 		}
 	}
 
 	function commitSelection(data: Record<string, unknown>) {
-		// ... (Keep existing commit logic) ...
 		node.value = (data['formatted_address'] as string) || (data['name'] as string);
 		node.dispatchEvent(new Event('input', { bubbles: true }));
 		node.dispatchEvent(new CustomEvent('place-selected', { detail: data }));
+
 		setTimeout(() => {
 			try {
 				node.focus();
-			} catch (_e) {
+			} catch (_e: unknown) {
 				void _e;
 			}
 		}, 0);
+
 		const dlg = node.closest && node.closest('dialog');
 		if (dlg) {
 			try {
@@ -452,24 +592,25 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 				setTimeout(() => {
 					try {
 						(dlg as any).__suppressClose = false;
-					} catch (_e) {
+					} catch (_e: unknown) {
 						void _e;
 					}
 				}, 500);
-			} catch (_e) {
+			} catch (_e: unknown) {
 				void _e;
 			}
 		}
+
 		if (dlg && !(dlg as HTMLDialogElement).open) {
 			try {
 				(dlg as HTMLDialogElement).showModal();
-			} catch (_e) {
+			} catch (_e: unknown) {
 				void _e;
 			}
 			setTimeout(() => {
 				try {
 					node.focus();
-				} catch (_e) {
+				} catch (_e: unknown) {
 					void _e;
 				}
 			}, 60);
@@ -477,7 +618,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 	}
 
 	initUI();
-	// ... (Keep event listeners and cleanup) ...
+
 	node.addEventListener('input', handleInput);
 	node.addEventListener('focus', () => {
 		if (node.value.length > 1) {

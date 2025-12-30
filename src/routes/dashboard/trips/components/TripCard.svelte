@@ -42,10 +42,9 @@
 	async function openMapToStop(e: MouseEvent, trip: any, stopIndex: number) {
 		e.stopPropagation();
 		const targetStop = trip.stops[stopIndex];
-		const destination = encodeURIComponent(targetStop.address || '');
-		const previousStops = trip.stops.slice(0, stopIndex);
+		const destination = targetStop.address || '';
 
-		// Try to get the user's current location (with a timeout). Fall back to trip start address.
+		// Try to get the user's current location (with a timeout). If unavailable, omit origin so Google uses current location.
 		let originParam = '';
 		function getCurrentPosition(timeout = 5000) {
 			return new Promise<GeolocationPosition>((resolve, reject) => {
@@ -74,22 +73,17 @@
 
 		try {
 			const pos = await getCurrentPosition(5000);
-			originParam = encodeURIComponent(`${pos.coords.latitude},${pos.coords.longitude}`);
+			originParam = `${pos.coords.latitude},${pos.coords.longitude}`;
 		} catch (_err) {
-			// If we can't get geolocation, fall back to trip start address if available
-			originParam = encodeURIComponent(trip.startAddress || '');
+			// If we can't get geolocation, omit the origin parameter so Google will use the user's current location.
+			originParam = '';
 		}
 
-		let url = `https://www.google.com/maps/dir/?api=1&origin=${originParam}&destination=${destination}`;
-		if (previousStops.length > 0) {
-			const waypoints = previousStops
-				.map((s: any) => encodeURIComponent(s.address || ''))
-				.filter((a: string) => a.length > 0)
-				.join('|');
-			if (waypoints) {
-				url += `&waypoints=${waypoints}`;
-			}
-		}
+		const params = new URLSearchParams({ api: '1', destination });
+		if (originParam) params.set('origin', originParam);
+		// Note: do not include earlier stops as waypoints — map should go from current location to the selected stop only.
+
+		const url = `https://www.google.com/maps/dir/?${params.toString()}`;
 		window.open(url, '_blank');
 	}
 
