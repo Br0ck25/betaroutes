@@ -3,6 +3,8 @@
 	import { base } from '$app/paths';
 	const resolve = (href: string) => `${base}${href}`;
 	import { expenses } from '$lib/stores/expenses'; // [!code ++]
+	import { userSettings } from '$lib/stores/userSettings';
+	import { toasts } from '$lib/stores/toast';
 	import {
 		calculateDashboardStats,
 		formatCurrency,
@@ -14,6 +16,34 @@
 
 	// [!code change] Pass $expenses to the calculator
 	$: stats = calculateDashboardStats($trips, $expenses, selectedRange);
+
+	// --- Maintenance reminder calculations (all-time) ---
+	$: allStats = calculateDashboardStats($trips, $expenses, 'all');
+	$: currentOdometer = (Number($userSettings.vehicleOdometerStart || 0) + Number(allStats.totalMiles || 0));
+	$: milesSinceService = Math.max(0, currentOdometer - Number($userSettings.lastServiceOdometer || 0));
+	$: dueIn = (Number($userSettings.serviceIntervalMiles || 5000) - milesSinceService);
+	$: reminderThreshold = Number($userSettings.reminderThresholdMiles || 500);
+	$: maintenanceMessage = dueIn >= 0
+		? `You have driven ${Math.round(milesSinceService).toLocaleString()} miles since your last service. Due in ${Math.round(dueIn).toLocaleString()} miles.`
+		: `Overdue by ${Math.abs(Math.round(dueIn)).toLocaleString()} miles — please service now.`;
+
+	async function markServicedNow() {
+		const newOdo = Math.round(currentOdometer || 0);
+		try {
+			userSettings.update((s) => ({ ...s, lastServiceOdometer: newOdo, lastServiceDate: new Date().toISOString() }));
+			// Persist
+			const res = await fetch('/api/settings', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ settings: { lastServiceOdometer: newOdo, lastServiceDate: new Date().toISOString() } })
+			});
+			if (!res.ok) throw new Error('Failed to persist service mark');
+			toasts.success('Marked vehicle as serviced');
+		} catch (e) {
+			console.error(e);
+			toasts.error('Could not mark serviced');
+		}
+	}
 
 	const rangeLabels = {
 		// ... existing labels
@@ -61,6 +91,15 @@
 			</a>
 		</div>
 	</div>
+
+	{#if $userSettings.serviceIntervalMiles}
+		<div class="alert maintenance" class:error={dueIn < 0} class:warning={dueIn >= 0 && dueIn <= reminderThreshold} style="display:flex; align-items:center; gap:12px; margin:16px 0; padding:12px; border-radius:10px; background:#FFFBEB; color:#92400E; border:1px solid #F59E0B;">
+			<div style="font-weight:600">{maintenanceMessage}</div>
+			<div style="margin-left:auto">
+				<button class="btn-secondary" on:click={markServicedNow}>Mark serviced now</button>
+			</div>
+		</div>
+	{/if}
 
 	<div class="stats-grid">
 		<div class="stat-card featured">

@@ -31,6 +31,16 @@ const defaultSettings = {
 	vehicleOdometerStart: 0,
 	businessUsePercentage: 100,
 
+	// Maintenance / Service Settings
+	// `serviceIntervalMiles`: how many miles between services (user-editable)
+	// `lastServiceOdometer`: odometer reading at last service
+	// `lastServiceDate`: ISO date when last service was performed (optional)
+	// `reminderThresholdMiles`: how close to the due mileage to notify (e.g., 500 miles)
+	serviceIntervalMiles: 5000,
+	lastServiceOdometer: 0,
+	lastServiceDate: '',
+	reminderThresholdMiles: 500,
+
 	// Service Types (for revenue tracking)
 	serviceTypes: ['HughesNet', 'Starlink', 'Dish', 'Security Camera', 'Other'],
 

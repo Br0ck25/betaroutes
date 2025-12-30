@@ -8,6 +8,7 @@
 	import DataCard from './components/DataCard.svelte';
 	import SecurityCard from './components/SecurityCard.svelte';
 	import ExportModal from './components/ExportModal.svelte';
+import MaintenanceCard from './components/MaintenanceCard.svelte';
 
 	export let data: any;
 
@@ -156,6 +157,8 @@
 				isUpgradeModalOpen = true;
 			}}
 		/>
+
+		<MaintenanceCard />
 
 		<DataCard
 			on:success={(e) => showSuccessMsg(e.detail)}

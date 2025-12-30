@@ -15,7 +15,13 @@ const settingsSchema = z.object({
 	theme: z.enum(['light', 'dark', 'system']).optional(),
 	expenseCategories: z.array(z.string()).optional(),
 	maintenanceCategories: z.array(z.string()).optional(),
-	supplyCategories: z.array(z.string()).optional()
+	supplyCategories: z.array(z.string()).optional(),
+
+	// Vehicle & maintenance settings
+	serviceIntervalMiles: z.number().nonnegative().optional(),
+	lastServiceOdometer: z.number().nonnegative().optional(),
+	lastServiceDate: z.string().optional(),
+	reminderThresholdMiles: z.number().nonnegative().optional()
 });
 
 export const GET: RequestHandler = async ({ locals, platform }) => {
