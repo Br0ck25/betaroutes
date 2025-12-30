@@ -1,5 +1,6 @@
 // src/lib/utils/autocomplete.ts
 import type { Action } from 'svelte/action';
+import { isAcceptableGeocode } from './geocode';
 
 // Singleton Promise to prevent race conditions
 let loadingPromise: Promise<void> | null = null;
@@ -50,61 +51,10 @@ export async function loadGoogleMaps(apiKey: string): Promise<void> {
 
 // [!code fix] Lightweight validator for Rendering Phase
 export function isRenderableCandidate(result: any, input: string) {
-	if (!result) return false;
-	// Always show Google results
-	if (result.source === 'google' || result.source === 'google_proxy') return true;
-
-	// 1. Sanity: Never render numeric-only names (e.g. "407")
-	if (result.name && String(result.name).trim().match(/^\d+$/)) {
-		return false;
-	}
-
-	// 1b. Reject broad/non-address OSM types to avoid numeric token fallbacks
-	const broadTypes = ['city', 'state', 'country', 'county', 'state_district', 'place', 'administrative'];
-	if ((result.osm_value && broadTypes.includes(String(result.osm_value))) || (result.osm_key && broadTypes.includes(String(result.osm_key)))) {
-		return false;
-	}
-
-	// 2. Address Logic: If input looks like an address start (Number + Space + Char), strict check
-	const inputIsAddress = /^\d+\s+\w+/i.test(input);
-
-	if (inputIsAddress) {
-		// Normalize access to ensure we find fields even if nested
-			const hn = (result.house_number || (result.properties && result.properties.housenumber) || null);
-			const st = result.street || (result.properties && result.properties.street) || null;
-			const nm = result.name || '';
-
-			// Extract numeric token from input and require a match
-			const inputNumber = input.match(/^(\d+)/)?.[1] || null;
-			if (!inputNumber) return false; // defensive
-
-			// Must have a housenumber that matches the input number (otherwise it's likely an unrelated POI)
-			if (!hn) return false;
-			if (String(hn) !== String(inputNumber) && !String(nm || '').includes(String(inputNumber)) && !(String(result.formatted_address || '').includes(String(inputNumber)))) {
-				return false;
-			}
-
-			// Must also provide a street name (or a name containing the street)
-			if (!st) return false;
-
-			// Optional: Ensure the street name in result partially matches input
-			const m = /^\d+\s+([A-Za-z0-9-]+)/.exec(input);
-			if (m && m[1]) {
-				// @ts-ignore - m[1] is guarded above
-				const inputStreetToken = String(m[1]).split(/\s+/)[0].toLowerCase(); // e.g. "mastin"
-				const resultText = (nm + ' ' + (st || '')).toLowerCase();
-				// Only check if we have enough characters to be sure
-				if (inputStreetToken.length > 3 && !resultText.includes(inputStreetToken)) {
-					return false;
-				}
-			}
-
-			return true;
-	}
-
-	// Non-address inputs default to renderable (POIs, streets, cities are ok)
-	return true;
+	return isAcceptableGeocode(result, input);
 }
+
+
 
 export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node, params) => {
 	let dropdown: HTMLDivElement | null = null;
@@ -219,28 +169,14 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 				}
 
 				// [!code fix] Mandatory: Strict Filter BEFORE rendering
-				let filtered = validData;
-				// Apply strict filtering to both Photon results and cached (kv) results
-				if (source === 'photon' || source === 'kv') {
-					filtered = validData.filter((item: any) => isRenderableCandidate(item, value));
-				}
-
-				// [!code fix] Escalation Logic: If Photon or KV gave us junk (results exist but filtered is empty), force Google
-				if ((source === 'photon' || source === 'kv') && filtered.length === 0 && validData.length > 0) {
-					console.debug('[autocomplete] OSRM/KV results rejected. Escalating to Google...');
-					try {
-						const googleUrl = `/api/autocomplete?q=${encodeURIComponent(value)}&forceGoogle=true`;
-						const googleRes = await fetch(googleUrl);
-						const googleData = await googleRes.json();
-
-						if (Array.isArray(googleData) && googleData.length > 0) {
-							validData = googleData;
-							source = 'google';
-							filtered = googleData; // Google results are trusted
-						}
-					} catch (err) {
-						console.error('[autocomplete] Google escalation failed', err);
-					}				}
+				const suggestionsToShow = validData.slice(0, 5);
+			const acceptableSet = new Set(
+				suggestionsToShow
+					.filter((item: any) => isAcceptableGeocode(item, value))
+					.map((it: any) => it.place_id || it.formatted_address || JSON.stringify(it))
+			);
+			let filtered = suggestionsToShow;				// Keep the top suggestions visible regardless of acceptability (we'll validate on blur/selection)
+				filtered = suggestionsToShow;
 				if (filtered.length > 0) {
 					// Cache external results (remove source tag for KV storage)
 					if (source !== 'kv') {
@@ -250,7 +186,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 						});
 						cacheToKV(value, cleanResults);
 					}
-					renderResults(filtered.slice(0, 5), source, time);
+					renderResults(filtered.slice(0, 5), source, time, acceptableSet);
 				} else {
 					renderEmpty();
 				}
@@ -289,7 +225,8 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 	function renderResults(
 		items: Array<Record<string, unknown>>,
 		source: 'kv' | 'google' | 'photon' = 'kv',
-		timing?: number
+		timing?: number,
+		acceptableSet?: Set<string>
 	) {
 		if (!dropdown) return;
 		while (dropdown.firstChild) dropdown.removeChild(dropdown.firstChild);
@@ -346,6 +283,10 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 					? it.formatted_address.split(',').slice(1).join(',').trim()
 					: '');
 
+			// Determine if this suggestion is address-grade (acceptable) — google is always acceptable
+			const key = it.place_id || it.formatted_address || JSON.stringify(it);
+			const isAcceptable = source === 'google' || (acceptableSet && acceptableSet.has(key));
+
 			const pinIcon = `<svg focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#9AA0A6" width="20px" height="20px"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`;
 
 			Object.assign(row.style, {
@@ -391,6 +332,15 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 			secondaryDiv.textContent = secondaryText;
 
 			content.appendChild(mainDiv);
+			// If the suggestion is not address-grade, mark it as unverified (google is considered acceptable already)
+			if (!isAcceptable) {
+				secondaryDiv.textContent = secondaryDiv.textContent
+					? secondaryDiv.textContent + ' • Unverified address'
+					: 'Unverified address';
+				row.style.opacity = '0.85';
+				row.setAttribute('data-unverified', 'true');
+			}
+
 			content.appendChild(secondaryDiv);
 
 			row.appendChild(iconWrap);
@@ -462,47 +412,8 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 			nosm_key: it.osm_key || (it.properties && it.properties.osm_key) || null
 		};
 
-		function isAcceptableGeocode(result: any, input: string) {
-			if (result.source === 'google_proxy' || result.source === 'google') return true;
-			if (!result) return false;
-
-			// Reject broad/non-address OSM types (e.g. city/place) as they often surface numeric token fallbacks
-			const broadTypes = ['city', 'state', 'country', 'county', 'state_district', 'place', 'administrative'];
-			if ((result.osm_value && broadTypes.includes(String(result.osm_value))) || (result.osm_key && broadTypes.includes(String(result.osm_key)))) {
-				return false;
-			}
-
-			// 1. Sanity check: Disallow purely numeric names
-			if (result.name && String(result.name).trim().match(/^\d+\s*$/)) {
-				return false;
-			}
-
-			// 2. Address-specific validation (Selection Phase - Strict)
-			const inputIsAddress = /^\d+\s+\w+/i.test(input);
-
-			if (inputIsAddress) {
-				if (!result.house_number) return false;
-
-				// Robust street matching regex (handles Suffixes/Punctuation)
-				const streetHintMatch = input.match(/\b([A-Za-z]{3,})\b/i);
-				const streetHint = streetHintMatch?.[1];
-
-				if (streetHint) {
-					const resultText = ((result.name || '') + ' ' + (result.street || '')).toLowerCase();
-					if (!resultText.includes(streetHint.toLowerCase())) {
-						return false;
-					}
-				}
-				return true;
-			}
-
-			// 3. Fallback for non-address inputs
-			if (result.house_number && result.street) {
-				return input.toLowerCase().includes(String(result.street).toLowerCase());
-			}
-
-			return !!(result.geometry && result.geometry.location && result.name);
-		}
+		// Use the canonical validator imported at top of the module (isAcceptableGeocode)
+		// This keeps selection-time logic consistent with client-side rendering rules.
 
 		// Use normalized object for validation
 		if (source === 'photon' || source === 'kv') {
@@ -628,8 +539,30 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 		}
 	});
 	node.addEventListener('blur', () =>
-		setTimeout(() => {
+		setTimeout(async () => {
 			if (dropdown) dropdown.style.display = 'none';
+
+			// On blur, revalidate the raw input and silently escalate to Google if needed
+			const value = node.value;
+			if (!value || value.length < 2) return;
+			try {
+				const res = await fetch(`/api/autocomplete?q=${encodeURIComponent(value)}&forceGoogle=true`);
+				const data = await res.json();
+				if (Array.isArray(data) && data.length > 0) {
+					const googleHit = data.find((d: any) => d.source === 'google_proxy');
+					if (googleHit) {
+						commitSelection(googleHit);
+						return;
+					}
+					const acceptable = data.find((d: any) => isAcceptableGeocode(d, value));
+					if (acceptable) {
+						commitSelection(acceptable);
+						return;
+					}
+				}
+			} catch (err: unknown) {
+				console.error('[autocomplete] blur validation failed', err);
+			}
 		}, 200)
 	);
 
