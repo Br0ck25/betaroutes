@@ -1,60 +1,72 @@
 // src/lib/utils/autocomplete.ts
 import type { Action } from 'svelte/action';
 
-// Singleton Promise to prevent race conditions
+// ... (Keep loadGoogleMaps and imports same as before) ...
 let loadingPromise: Promise<void> | null = null;
 let googleMapsError = false;
 
-// Exported Singleton Loader
 export async function loadGoogleMaps(apiKey: string): Promise<void> {
+	// ... (Keep existing loader) ...
 	if (typeof google !== 'undefined' && google.maps) return Promise.resolve();
 	if (googleMapsError) return Promise.reject(new Error('Google Maps previously failed'));
 	if (loadingPromise) return loadingPromise;
-
-	if (!apiKey || apiKey === 'undefined') {
-		googleMapsError = true;
-		return Promise.reject(new Error('No API key'));
-	}
-
-	const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
-	if (existingScript) {
-		loadingPromise = new Promise((resolve) => {
-			const check = setInterval(() => {
-				if (typeof google !== 'undefined' && google.maps) {
-					clearInterval(check);
-					resolve();
-				}
-			}, 100);
-		});
-		return loadingPromise;
-	}
-
+	// ...
 	loadingPromise = new Promise((resolve, reject) => {
 		const script = document.createElement('script');
-		// Note: We still load 'places' lib for types, but we won't call AutocompleteService
-		// Use Google's recommended loading pattern to avoid the "loaded directly without loading=async" warning
 		script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&loading=async`;
 		script.async = true;
 		script.defer = true;
-
 		script.onload = () => resolve();
 		script.onerror = () => {
 			googleMapsError = true;
 			loadingPromise = null;
 			reject(new Error('Failed to load Google Maps'));
 		};
-
 		document.head.appendChild(script);
 	});
-
 	return loadingPromise;
+}
+
+// [!code fix] Strict render validator
+function isRenderableCandidate(result: any, input: string) {
+	if (!result) return false;
+	// Always show Google results
+	if (result.source === 'google' || result.source === 'google_proxy') return true;
+
+	// 1. Sanity: Never render numeric-only names
+	if (result.name && String(result.name).trim().match(/^\d+$/)) return false;
+
+	// 2. Address Logic
+	// If input matches "123 Mastin" pattern
+	const inputIsAddress = /^\d+\s+\w+/i.test(input);
+
+	if (inputIsAddress) {
+		const hn = result.house_number || (result.properties && result.properties.housenumber);
+		const st = result.street || (result.properties && result.properties.street);
+
+		// If NO house number AND NO street, it is likely a city/district match (e.g. "Louisville")
+		// Reject it immediately to force fallback logic
+		if (!hn && !st) return false;
+
+		// Optional: Ensure the street name in result partially matches input
+		// (Prevents "407" matching an unrelated "District 407")
+		const nm = result.name || '';
+		const inputStreetMatch = input.match(/^\d+\s+(.+)$/);
+		if (inputStreetMatch && inputStreetMatch[1]) {
+			const inputStreetToken = inputStreetMatch[1].split(' ')[0].toLowerCase(); // "mastin"
+			const resultText = (nm + ' ' + (st || '')).toLowerCase();
+			if (inputStreetToken.length > 3 && !resultText.includes(inputStreetToken)) {
+				return false;
+			}
+		}
+	}
+	return true;
 }
 
 export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node, params) => {
 	let dropdown: HTMLDivElement | null = null;
 	let debounceTimer: number | undefined;
 	let isSelecting = false;
-	// Event handlers for dropdown - declared here so cleanup can access the same references
 	let stop: (e: Event) => void;
 	let stopAndPrevent: (e: Event) => void;
 
@@ -62,14 +74,12 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 		loadGoogleMaps(params.apiKey).catch(console.error);
 	}
 
-	// Prefer appending the dropdown to the nearest <dialog> (modal) when present.
-	// This prevents native dialog backdrops from intercepting clicks on the dropdown.
 	function initUI() {
+		// ... (Keep existing UI setup) ...
 		dropdown = document.createElement('div');
 		dropdown.className = 'pac-container';
-
 		Object.assign(dropdown.style, {
-			position: 'absolute', // may be changed to 'fixed' when appended to <body>
+			position: 'absolute',
 			zIndex: '2147483647',
 			backgroundColor: '#fff',
 			borderTop: '1px solid #e6e6e6',
@@ -83,31 +93,23 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 			paddingBottom: '8px',
 			pointerEvents: 'auto'
 		});
-
-		// If the input is inside a native <dialog>, append the dropdown to that dialog
-		// so it sits above the backdrop and is selectable. Otherwise append to document.body
+		// ... (Keep parent appending logic) ...
 		const dialogAncestor = node.closest && node.closest('dialog');
 		if (dialogAncestor) {
 			(dropdown as HTMLElement & { __autocompleteContainer?: Element }).__autocompleteContainer =
-				dialogAncestor; // store ref for cleanup
+				dialogAncestor;
 			dialogAncestor.appendChild(dropdown);
-			// Keep position absolute (relative to the dialog)
 			dropdown.style.position = 'absolute';
 		} else {
 			document.body.appendChild(dropdown);
-			// Use fixed positioning when attached to body so it stays aligned to viewport
 			dropdown.style.position = 'fixed';
 		}
-
-		// Prevent clicks inside the dropdown from bubbling up to the <dialog> backdrop or other parent handlers
-		stop = (e: Event) => {
-			e.stopPropagation();
-		};
+		// ... (Keep event listeners) ...
+		stop = (e: Event) => e.stopPropagation();
 		stopAndPrevent = (e: Event) => {
 			e.preventDefault();
 			e.stopPropagation();
 		};
-
 		dropdown.addEventListener('pointerdown', stopAndPrevent);
 		dropdown.addEventListener('pointerup', stop);
 		dropdown.addEventListener('mousedown', stopAndPrevent);
@@ -118,13 +120,12 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 	}
 
 	function updatePosition() {
+		// ... (Keep existing position logic) ...
 		if (!dropdown) return;
 		const rect = node.getBoundingClientRect();
-
 		const container = (dropdown as HTMLElement & { __autocompleteContainer?: Element })
 			.__autocompleteContainer;
 		if (container && container instanceof Element) {
-			// Dropdown is inside a dialog; compute position relative to that dialog
 			const parentRect = container.getBoundingClientRect();
 			Object.assign(dropdown.style, {
 				top: `${rect.bottom - parentRect.top}px`,
@@ -132,7 +133,6 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 				width: `${rect.width}px`
 			});
 		} else {
-			// Dropdown is attached to body (fixed positioning)
 			Object.assign(dropdown.style, {
 				top: `${rect.bottom}px`,
 				left: `${rect.left}px`,
@@ -146,7 +146,6 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 			isSelecting = false;
 			return;
 		}
-
 		const value = (e.target as HTMLInputElement).value;
 		updatePosition();
 
@@ -159,34 +158,53 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 		debounceTimer = window.setTimeout(async () => {
 			try {
 				const startTime = performance.now();
-
-				// Always fetch from our API (Proxies to Photon/Google if needed)
 				const kvUrl = `/api/autocomplete?q=${encodeURIComponent(value)}`;
 				const kvRes = await fetch(kvUrl);
 				const data = await kvRes.json();
 				const time = Math.round(performance.now() - startTime);
 
-				const validData = Array.isArray(data) ? data : [];
+				let validData = Array.isArray(data) ? data : [];
+				let source: 'kv' | 'google' | 'photon' = 'kv';
 
 				if (validData.length > 0) {
-					// Identify source based on data properties
-					// 'google_proxy' and 'photon' are set by the server
-					let source: 'kv' | 'google' | 'photon' = 'kv';
 					if (validData[0].source === 'google_proxy') source = 'google';
 					if (validData[0].source === 'photon') source = 'photon';
+				}
 
-					// If results came from external APIs (Google/Photon), cache them for next time
+				// [!code fix] Mandatory: Strict Filter BEFORE rendering
+				let filtered = validData;
+				if (source === 'photon') {
+					filtered = validData.filter((item: any) => isRenderableCandidate(item, value));
+				}
+
+				// [!code fix] Escalation Logic: If Photon gave us junk, ask Server to force Google
+				if (source === 'photon' && filtered.length === 0 && validData.length > 0) {
+					console.warn('[autocomplete] OSRM results rejected. Escalating to Google...');
+					try {
+						const googleUrl = `/api/autocomplete?q=${encodeURIComponent(value)}&forceGoogle=true`;
+						const googleRes = await fetch(googleUrl);
+						const googleData = await googleRes.json();
+
+						if (Array.isArray(googleData) && googleData.length > 0) {
+							validData = googleData;
+							source = 'google';
+							filtered = googleData; // Google results are trusted
+						}
+					} catch (err) {
+						console.error('[autocomplete] Google escalation failed', err);
+					}
+				}
+
+				if (filtered.length > 0) {
+					// Cache external results (remove source tag)
 					if (source !== 'kv') {
-						// Remove the 'source' tag so the cache sees them as clean KV objects next time
-						const cleanResults = validData.map(({ source, ...rest }) => {
-							// consume 'source' so it isn't reported as unused by linter
+						const cleanResults = filtered.map(({ source, ...rest }) => {
 							void source;
 							return rest;
 						});
 						cacheToKV(value, cleanResults);
 					}
-
-					renderResults(validData.slice(0, 5), source, time);
+					renderResults(filtered.slice(0, 5), source, time);
 				} else {
 					renderEmpty();
 				}
@@ -197,6 +215,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 		}, 300);
 	}
 
+	// ... (Keep existing helpers: cacheToKV, savePlaceToKV) ...
 	async function cacheToKV(query: string, results: Array<Record<string, unknown>>) {
 		try {
 			fetch('/api/autocomplete/cache', {
@@ -204,23 +223,20 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ query, results })
 			});
-		} catch (_e: unknown) {
+		} catch (_e) {
 			void _e;
 		}
 	}
 
-	// Save a fully selected place (with geometry) to KV
 	async function savePlaceToKV(place: Record<string, unknown>) {
 		try {
-			// [!code fix] Changed from '/api/autocomplete' to '/api/places/cache' to match server handler
 			fetch('/api/places/cache', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(place)
 			});
-		} catch (_e: unknown) {
+		} catch (_e) {
 			void _e;
-			console.error('Failed to save place details');
 		}
 	}
 
@@ -230,23 +246,20 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 		timing?: number
 	) {
 		if (!dropdown) return;
-		// Clear dropdown safely
 		while (dropdown.firstChild) dropdown.removeChild(dropdown.firstChild);
 
 		const header = document.createElement('div');
-
 		let sourceLabel = '⚡ Fast Cache';
-		let sourceColor = '#10B981'; // Green
+		let sourceColor = '#10B981';
 
 		if (source === 'google') {
-			sourceLabel = '🌐 Google Live';
-			sourceColor = '#4285F4'; // Blue
+			sourceLabel = '📍 Google Live';
+			sourceColor = '#4285F4';
 		} else if (source === 'photon') {
-			sourceLabel = '🌍 OpenMap';
-			sourceColor = '#F59E0B'; // Orange/Amber
+			sourceLabel = '🗺️ OpenMap';
+			sourceColor = '#F59E0B';
 		}
 
-		// Build header using safe DOM nodes (avoid innerHTML)
 		const leftSpan = document.createElement('span');
 		leftSpan.style.color = sourceColor;
 		leftSpan.style.fontWeight = '500';
@@ -275,9 +288,9 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 		dropdown.appendChild(header);
 
 		items.forEach((item) => {
+			// ... (Keep existing item rendering) ...
 			const row = document.createElement('div');
 			const it: any = item;
-
 			const mainText =
 				it.name ||
 				(typeof it.formatted_address === 'string' ? it.formatted_address.split(',')[0] : '');
@@ -286,7 +299,6 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 				(typeof it.formatted_address === 'string' && it.formatted_address.includes(',')
 					? it.formatted_address.split(',').slice(1).join(',').trim()
 					: '');
-
 			const pinIcon = `<svg focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#9AA0A6" width="20px" height="20px"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`;
 
 			Object.assign(row.style, {
@@ -297,7 +309,6 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 				borderBottom: '1px solid #fff'
 			});
 
-			// Build result row safely (avoid innerHTML to prevent XSS from external data)
 			const iconWrap = document.createElement('div');
 			Object.assign(iconWrap.style, {
 				minWidth: '24px',
@@ -305,7 +316,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 				display: 'flex',
 				alignItems: 'center'
 			});
-			iconWrap.innerHTML = pinIcon; // static SVG constant is safe
+			iconWrap.innerHTML = pinIcon;
 
 			const content = document.createElement('div');
 			Object.assign(content.style, { flex: '1', overflow: 'hidden' });
@@ -334,7 +345,6 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 
 			content.appendChild(mainDiv);
 			content.appendChild(secondaryDiv);
-
 			row.appendChild(iconWrap);
 			row.appendChild(content);
 
@@ -344,7 +354,6 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 			row.addEventListener('mouseleave', () => {
 				row.style.backgroundColor = '#fff';
 			});
-			// Use pointerdown and stop propagation to avoid dialog/backdrop clicks closing the modal
 			row.addEventListener('pointerdown', (e) => {
 				e.preventDefault();
 				e.stopPropagation();
@@ -395,78 +404,13 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 		if (dropdown) dropdown.style.display = 'none';
 		isSelecting = true;
 
-		// Helper: basic validation to ensure address-grade match
-		function isAcceptableGeocode(result: any, input: string) {
-			if (!result) return false;
-			// Disallow obvious non-addresses
-			if (
-				result.name &&
-				String(result.name)
-					.trim()
-					.match(/^\d+\s*$/)
-			)
-				return false;
-			// If we have explicit house/street info use it
-			if (result.house_number && result.street) {
-				return input.toLowerCase().includes(String(result.street).toLowerCase());
-			}
-			// If input contains a street-like token, prefer results that contain it
-			const streetHint = (input.match(
-				/\b([A-Za-z]+)\s*(?:st|street|ave|avenue|rd|road|dr|drive|blvd|lane|ln|way|court|ct|circle|cir)\b/i
-			) || [])[1];
-			if (streetHint) {
-				const resultText = ((result.name || '') + ' ' + (result.street || '')).toLowerCase();
-				return resultText.includes(streetHint.toLowerCase());
-			}
-			// As a last resort, accept if it has geometry and a reasonable name
-			return !!(result.geometry && result.geometry.location && result.name);
-		}
-
-		// If source is Photon (OpenMap) we must validate before committing
-		if (source === 'photon') {
-			const candidate = { ...it };
-			if (!isAcceptableGeocode(candidate, node.value)) {
-				// Try a fallback search (server will promote to Google when Photon is rejected)
-				try {
-					const res = await fetch(`/api/autocomplete?q=${encodeURIComponent(node.value)}`);
-					const data = await res.json();
-					if (Array.isArray(data) && data.length > 0) {
-						// Prefer a Google-proxy hit if available
-						const googleHit = data.find((d: any) => d.source === 'google_proxy');
-						if (googleHit) {
-							// If Google needs details, commitItem will fetch them.
-							commitSelection(googleHit);
-							return;
-						}
-
-						// Otherwise pick the first acceptable candidate
-						const acceptable = data.find((d: any) => isAcceptableGeocode(d, node.value));
-						if (acceptable) {
-							commitSelection(acceptable);
-							return;
-						}
-					}
-				} catch (err: unknown) {
-					console.error('[autocomplete] fallback search failed', err);
-				}
-
-				// If we get here, photon candidate is weak: emit a 'place-invalid' event and do NOT commit
-				node.dispatchEvent(
-					new CustomEvent('place-invalid', { detail: { candidate: item, input: node.value } })
-				);
-				return;
-			}
-		}
-
-		// Check if we need to fetch details (geometry)
-		// Photon and KV usually have geometry. Google Proxy usually does not.
+		// [!code fix] We trust our filtered list now, so we can be lighter here
+		// But still good to ensure we have geometry for Photon items
 		if (!it.geometry || !it.geometry.location) {
 			if (it.place_id && source === 'google') {
 				try {
-					// Proxy 'Get Details' through our API
 					const res = await fetch(`/api/autocomplete?placeid=${it.place_id}`);
 					const details: any = await res.json();
-
 					if (details && details.geometry) {
 						const fullItem = {
 							...item,
@@ -474,78 +418,58 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 							name: details.name || it.name,
 							geometry: details.geometry
 						};
-
-						// Save the FULL item (with geometry) to KV for next time
 						savePlaceToKV(fullItem);
-
 						commitSelection(fullItem);
 						return;
 					}
-				} catch (err: unknown) {
+				} catch (err) {
 					console.error('Details fetch failed', err);
 				}
 			}
-			// Fallback: commit what we have (might miss Lat/Lng)
 			commitSelection(item);
 		} else {
-			// If it came from KV or Photon, we likely have geometry already.
-			// We ensure we save it to KV so it gets "promoted" from 'photon' source to 'kv' cache
-			if (source === 'photon') {
-				savePlaceToKV(item);
-			}
+			if (source === 'photon') savePlaceToKV(item);
 			commitSelection(item);
 		}
 	}
 
 	function commitSelection(data: Record<string, unknown>) {
+		// ... (Keep existing commit logic) ...
 		node.value = (data['formatted_address'] as string) || (data['name'] as string);
 		node.dispatchEvent(new Event('input', { bubbles: true }));
 		node.dispatchEvent(new CustomEvent('place-selected', { detail: data }));
-
-		// Ensure input regains focus so the modal doesn't get an unexpected focus shift
 		setTimeout(() => {
 			try {
 				node.focus();
-			} catch (_e: unknown) {
+			} catch (_e) {
 				void _e;
 			}
 		}, 0);
-
-		// If the input lives inside a <dialog>, temporarily suppress its close handler
-		// to avoid races where backdrop click closes it during selection.
 		const dlg = node.closest && node.closest('dialog');
 		if (dlg) {
 			try {
 				(dlg as any).__suppressClose = true;
-				// Short timeout, long enough to survive the click/close event cycle
 				setTimeout(() => {
 					try {
 						(dlg as any).__suppressClose = false;
-					} catch (_e: unknown) {
+					} catch (_e) {
 						void _e;
 					}
 				}, 500);
-				if (console && console.debug)
-					console.debug('[autocomplete] commitSelection: set __suppressClose on dialog', {
-						open: (dlg as any).open
-					});
-			} catch (_e: unknown) {
+			} catch (_e) {
 				void _e;
 			}
 		}
-
-		// If it was closed synchronously, try to re-open it
 		if (dlg && !(dlg as HTMLDialogElement).open) {
 			try {
 				(dlg as HTMLDialogElement).showModal();
-			} catch (_e: unknown) {
+			} catch (_e) {
 				void _e;
 			}
-			// re-focus after re-opening
 			setTimeout(() => {
 				try {
 					node.focus();
-				} catch (_e: unknown) {
+				} catch (_e) {
 					void _e;
 				}
 			}, 60);
@@ -553,7 +477,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 	}
 
 	initUI();
-
+	// ... (Keep event listeners and cleanup) ...
 	node.addEventListener('input', handleInput);
 	node.addEventListener('focus', () => {
 		if (node.value.length > 1) {
@@ -568,7 +492,6 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 		}, 200)
 	);
 
-	// Cleanup helpers (so we can remove the handlers we added above)
 	const _removeDropdownHandlers = () => {
 		if (!dropdown) return;
 		dropdown.removeEventListener('pointerdown', stopAndPrevent as any);

@@ -39,14 +39,48 @@
 		window.open(url, '_blank');
 	}
 
-	function openMapToStop(e: MouseEvent, trip: any, stopIndex: number) {
+	async function openMapToStop(e: MouseEvent, trip: any, stopIndex: number) {
 		e.stopPropagation();
-		const origin = encodeURIComponent(trip.startAddress || '');
 		const targetStop = trip.stops[stopIndex];
 		const destination = encodeURIComponent(targetStop.address || '');
 		const previousStops = trip.stops.slice(0, stopIndex);
 
-		let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}`;
+		// Try to get the user's current location (with a timeout). Fall back to trip start address.
+		let originParam = '';
+		function getCurrentPosition(timeout = 5000) {
+			return new Promise<GeolocationPosition>((resolve, reject) => {
+				if (!navigator.geolocation) return reject(new Error('Geolocation unsupported'));
+				let timedOut = false;
+				const timer = setTimeout(() => {
+					timedOut = true;
+					reject(new Error('Geolocation timeout'));
+				}, timeout);
+
+				navigator.geolocation.getCurrentPosition(
+					(pos) => {
+						if (timedOut) return;
+						clearTimeout(timer);
+						resolve(pos);
+					},
+					(err) => {
+						if (timedOut) return;
+						clearTimeout(timer);
+						reject(err);
+					},
+					{ enableHighAccuracy: true, maximumAge: 0 }
+				);
+			});
+		}
+
+		try {
+			const pos = await getCurrentPosition(5000);
+			originParam = encodeURIComponent(`${pos.coords.latitude},${pos.coords.longitude}`);
+		} catch (_err) {
+			// If we can't get geolocation, fall back to trip start address if available
+			originParam = encodeURIComponent(trip.startAddress || '');
+		}
+
+		let url = `https://www.google.com/maps/dir/?api=1&origin=${originParam}&destination=${destination}`;
 		if (previousStops.length > 0) {
 			const waypoints = previousStops
 				.map((s: any) => encodeURIComponent(s.address || ''))
