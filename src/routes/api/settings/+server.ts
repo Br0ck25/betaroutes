@@ -21,7 +21,8 @@ const settingsSchema = z.object({
 	serviceIntervalMiles: z.number().nonnegative().optional(),
 	lastServiceOdometer: z.number().nonnegative().optional(),
 	lastServiceDate: z.string().optional(),
-	reminderThresholdMiles: z.number().nonnegative().optional()
+	reminderThresholdMiles: z.number().nonnegative().optional(),
+	vehicleOdometerStart: z.number().nonnegative().optional()
 });
 
 export const GET: RequestHandler = async ({ locals, platform }) => {

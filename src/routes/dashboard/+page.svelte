@@ -19,25 +19,28 @@
 
 	// --- Maintenance reminder calculations (all-time) ---
 	$: allStats = calculateDashboardStats($trips, $expenses, 'all');
-	$: currentOdometer = (Number($userSettings.vehicleOdometerStart || 0) + Number(allStats.totalMiles || 0));
-	$: milesSinceService = Math.max(0, currentOdometer - Number($userSettings.lastServiceOdometer || 0));
-	$: dueIn = (Number($userSettings.serviceIntervalMiles || 5000) - milesSinceService);
+	$: currentOdometer =
+		Number($userSettings.vehicleOdometerStart || 0) + Number(allStats.totalMiles || 0);
+	$: milesSinceService = Math.max(
+		0,
+		currentOdometer - Number($userSettings.lastServiceOdometer || 0)
+	);
+	$: dueIn = Number($userSettings.serviceIntervalMiles || 5000) - milesSinceService;
 	$: reminderThreshold = Number($userSettings.reminderThresholdMiles || 500);
-	$: maintenanceMessage = dueIn >= 0
-		? `You have driven ${Math.round(milesSinceService).toLocaleString()} miles since your last service. Due in ${Math.round(dueIn).toLocaleString()} miles.`
-		: `Overdue by ${Math.abs(Math.round(dueIn)).toLocaleString()} miles — please service now.`;
+	$: maintenanceMessage =
+		dueIn >= 0
+			? `You have driven ${Math.round(milesSinceService).toLocaleString()} miles since your last service. Due in ${Math.round(dueIn).toLocaleString()} miles.`
+			: `Overdue by ${Math.abs(Math.round(dueIn)).toLocaleString()} miles — please service now.`;
+
+	import { saveSettings } from './settings/lib/save-settings';
 
 	async function markServicedNow() {
 		const newOdo = Math.round(currentOdometer || 0);
+		const payload = { lastServiceOdometer: newOdo, lastServiceDate: new Date().toISOString() };
 		try {
-			userSettings.update((s) => ({ ...s, lastServiceOdometer: newOdo, lastServiceDate: new Date().toISOString() }));
-			// Persist
-			const res = await fetch('/api/settings', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ settings: { lastServiceOdometer: newOdo, lastServiceDate: new Date().toISOString() } })
-			});
-			if (!res.ok) throw new Error('Failed to persist service mark');
+			userSettings.update((s) => ({ ...s, ...payload }));
+			const result = await saveSettings(payload);
+			if (!result.ok) throw new Error(result.error);
 			toasts.success('Marked vehicle as serviced');
 		} catch (e) {
 			console.error(e);
@@ -69,7 +72,7 @@
 		</div>
 
 		<div class="header-actions">
-			<select bind:value={selectedRange} class="range-select">
+			<select bind:value={selectedRange} class="range-select" aria-label="Select time range">
 				<option value="30d">Last 30 Days</option>
 				<option value="60d">Last 60 Days</option>
 				<option value="90d">Last 90 Days</option>
@@ -93,13 +96,24 @@
 	</div>
 
 	{#if $userSettings.lastServiceOdometer && $userSettings.lastServiceOdometer > currentOdometer}
-		<div class="alert info" style="background:#E0F2FE; color:#0369A1; border:1px solid #60A5FA; padding:12px; border-radius:8px; margin:16px 0;">
-			Note: Your recorded last service odometer ({$userSettings.lastServiceOdometer.toLocaleString()}) is higher than the current estimated odometer ({Math.round(currentOdometer).toLocaleString()} mi). If this isn't expected, set <a href="/dashboard/settings">Vehicle odometer start</a> in Settings or update your last service reading.
+		<div
+			class="alert info"
+			style="background:#E0F2FE; color:#0369A1; border:1px solid #60A5FA; padding:12px; border-radius:8px; margin:16px 0;"
+		>
+			Note: Your recorded last service odometer ({$userSettings.lastServiceOdometer.toLocaleString()})
+			is higher than the current estimated odometer ({Math.round(currentOdometer).toLocaleString()} mi).
+			If this isn't expected, set <a href="/dashboard/settings">Vehicle odometer start</a> in Settings
+			or update your last service reading.
 		</div>
 	{/if}
 
 	{#if $userSettings.serviceIntervalMiles}
-		<div class="alert maintenance" class:error={dueIn < 0} class:warning={dueIn >= 0 && dueIn <= reminderThreshold} style="display:flex; align-items:center; gap:12px; margin:16px 0; padding:12px; border-radius:10px; background:#FFFBEB; color:#92400E; border:1px solid #F59E0B;">
+		<div
+			class="alert maintenance"
+			class:error={dueIn < 0}
+			class:warning={dueIn >= 0 && dueIn <= reminderThreshold}
+			style="display:flex; align-items:center; gap:12px; margin:16px 0; padding:12px; border-radius:10px; background:#FFFBEB; color:#92400E; border:1px solid #F59E0B;"
+		>
 			<div style="font-weight:600">{maintenanceMessage}</div>
 			<div style="margin-left:auto">
 				<button class="btn-secondary" on:click={markServicedNow}>Mark serviced now</button>

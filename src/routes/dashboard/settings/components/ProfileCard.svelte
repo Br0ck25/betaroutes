@@ -9,6 +9,7 @@
 	export let isCheckingOut: boolean = false;
 
 	const dispatch = createEventDispatcher();
+	let buttonHighlight = false;
 
 	async function saveProfile() {
 		auth.updateProfile({ name: profile.name, email: profile.email });
@@ -20,13 +21,19 @@
 			});
 			if (res.ok) {
 				dispatch('success', 'Profile updated successfully!');
+				buttonHighlight = true;
+				setTimeout(() => (buttonHighlight = false), 3000);
 			} else {
 				console.error('Failed to save profile to server');
 				dispatch('success', 'Saved locally (Server error)');
+				buttonHighlight = true;
+				setTimeout(() => (buttonHighlight = false), 3000);
 			}
 		} catch (e) {
 			console.error('Save error:', e);
 			dispatch('success', 'Saved locally (Network error)');
+			buttonHighlight = true;
+			setTimeout(() => (buttonHighlight = false), 3000);
 		}
 	}
 
@@ -74,7 +81,9 @@
 		/>
 	</div>
 
-	<button class="btn-secondary" on:click={saveProfile}>Save Profile</button>
+	<button class="btn-secondary save-btn" class:highlight={buttonHighlight} on:click={saveProfile}
+		>Save Profile</button
+	>
 
 	<div class="divider"></div>
 

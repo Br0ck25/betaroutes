@@ -6,3 +6,47 @@
 html {
 	-webkit-tap-highlight-color: transparent;
 }
+
+/* Safe area insets for devices with notches (iOS) */
+body {
+	/* older syntax + modern */
+	padding-top: constant(safe-area-inset-top);
+	padding-top: env(safe-area-inset-top);
+	padding-bottom: constant(safe-area-inset-bottom);
+	padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Logo & image sizing to reduce CLS */
+img {
+	display: block;
+	max-width: 100%;
+	height: auto;
+}
+.logo {
+	width: 48px;
+	height: 48px;
+}
+.mobile-logo {
+	width: 40px;
+	height: 40px;
+}
+.sidebar-logo {
+	width: 120px;
+	height: 40px;
+}
+
+/* Improve touch targets and reduce accidental double-tap zoom */
+button,
+a,
+.btn {
+	min-height: 44px;
+	min-width: 44px;
+	touch-action: manipulation;
+}
+
+/* Ensure fast taps on mobile for common interactive elements */
+input,
+textarea,
+select {
+	-webkit-tap-highlight-color: transparent;
+}

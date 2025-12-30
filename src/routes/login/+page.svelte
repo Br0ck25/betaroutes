@@ -419,7 +419,25 @@
 	<div class="auth-brand">
 		<div class="brand-content">
 			<a href="/" class="brand-logo">
-				<img src="/logo.png" alt="Go Route Yourself" />
+				<picture>
+					<source
+						type="image/avif"
+						srcset="/optimized/logo-48.avif 48w, /optimized/logo-120.avif 120w"
+						sizes="48px"
+					/>
+					<source
+						type="image/webp"
+						srcset="/optimized/logo-48.webp 48w, /optimized/logo-120.webp 120w"
+						sizes="48px"
+					/>
+					<img
+						src="/optimized/logo-48.png"
+						alt="Go Route Yourself"
+						width="48"
+						height="48"
+						decoding="async"
+					/>
+				</picture>
 			</a>
 
 			<div class="brand-text">

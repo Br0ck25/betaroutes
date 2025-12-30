@@ -3,6 +3,9 @@
 	import { userSettings } from '$lib/stores/userSettings';
 	import { toasts } from '$lib/stores/toast';
 	import { autocomplete } from '$lib/utils/autocomplete';
+	import { createEventDispatcher } from 'svelte';
+
+	const dispatch = createEventDispatcher();
 
 	export let open = false;
 	export let API_KEY: string;
@@ -28,19 +31,18 @@
 
 	let isSaving = false;
 
+	import { saveSettings } from '../../settings/lib/save-settings';
+
 	async function saveDefaultSettings() {
 		if (isSaving) return;
 		if (console && console.debug) console.debug('[settings] saveDefaultSettings', settings);
 		isSaving = true;
 		userSettings.set(settings);
 		try {
-			const res = await fetch('/api/settings', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ settings: settings })
-			});
-			if (!res.ok) throw new Error('Failed to sync');
+			const result = await saveSettings(settings);
+			if (!result.ok) throw new Error(result.error);
 			toasts.success('Default values saved!');
+			dispatch('success', 'Default values saved!');
 			// Close modal on success
 			open = false;
 		} catch (e) {
@@ -62,11 +64,8 @@
 		}
 
 		try {
-			await fetch('/api/settings', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(updateData)
-			});
+			const result = await saveSettings(updateData);
+			if (!result.ok) throw new Error(result.error);
 		} catch (e) {
 			console.error('Failed to sync settings', e);
 			toasts.error('Saved locally, but sync failed');
@@ -84,6 +83,7 @@
 		await updateCategories(updated);
 		newCategoryName = '';
 		toasts.success('Category added');
+		dispatch('success', 'Category added');
 	}
 
 	async function removeCategory(cat: string) {
@@ -91,6 +91,7 @@
 		const updated = activeCategories.filter((c) => c !== cat);
 		await updateCategories(updated);
 		toasts.success('Category removed');
+		dispatch('success', 'Category removed');
 	}
 </script>
 
@@ -179,8 +180,10 @@
 				</div>
 
 				<div class="modal-actions pt-4">
-					<button class="btn-primary w-full" on:click={saveDefaultSettings} disabled={isSaving}
-						>{isSaving ? 'Saving…' : 'Save Defaults'}</button
+					<button
+						class="btn-primary w-full save-btn"
+						on:click={saveDefaultSettings}
+						disabled={isSaving}>{isSaving ? 'Saving…' : 'Save Defaults'}</button
 					>
 				</div>
 			</div>

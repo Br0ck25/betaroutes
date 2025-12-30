@@ -287,11 +287,9 @@
 	async function updateCategories(newCategories: string[]) {
 		userSettings.update((s) => ({ ...s, expenseCategories: newCategories }));
 		try {
-			await fetch('/api/settings', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ expenseCategories: newCategories })
-			});
+			const { saveSettings } = await import('../settings/lib/save-settings');
+			const result = await saveSettings({ expenseCategories: newCategories });
+			if (!result.ok) throw new Error(result.error);
 		} catch (e) {
 			console.error('Failed to sync settings', e);
 			toasts.error('Saved locally, but sync failed');
@@ -545,7 +543,7 @@
 		</div>
 
 		<div class="filter-group">
-			<select bind:value={filterCategory} class="filter-select">
+			<select bind:value={filterCategory} class="filter-select" aria-label="Filter by category">
 				<option value="all">All Categories</option>
 				{#each categories as cat}
 					<option value={cat}>{getCategoryLabel(cat)}</option>
@@ -553,7 +551,7 @@
 				<option value="fuel">Fuel (Trips)</option>
 			</select>
 
-			<select bind:value={sortBy} class="filter-select">
+			<select bind:value={sortBy} class="filter-select" aria-label="Sort results">
 				<option value="date">By Date</option>
 				<option value="amount">By Cost</option>
 			</select>

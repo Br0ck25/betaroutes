@@ -422,11 +422,9 @@
 			updateData.supplyCategories = newCategories;
 		}
 		try {
-			await fetch('/api/settings', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(updateData)
-			});
+			const { saveSettings } = await import('../../../settings/lib/save-settings');
+			const result = await saveSettings(updateData);
+			if (!result.ok) throw new Error(result.error);
 		} catch (e) {
 			console.error('Failed to sync settings', e);
 			toasts.error('Saved locally, but sync failed');
@@ -818,7 +816,10 @@
 						>
 					</div>
 					<div class="add-row">
-						<select bind:value={selectedMaintenance} class="select-input"
+						<select
+							bind:value={selectedMaintenance}
+							class="select-input"
+							aria-label="Maintenance type"
 							><option value="" disabled selected>Select Item...</option
 							>{#each maintenanceOptions as option}<option value={option}>{option}</option
 								>{/each}</select
@@ -865,7 +866,7 @@
 						>
 					</div>
 					<div class="add-row">
-						<select bind:value={selectedSupply} class="select-input"
+						<select bind:value={selectedSupply} class="select-input" aria-label="Supply type"
 							><option value="" disabled selected>Select Item...</option
 							>{#each suppliesOptions as option}<option value={option}>{option}</option
 								>{/each}</select

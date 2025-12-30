@@ -8,7 +8,8 @@
 	import DataCard from './components/DataCard.svelte';
 	import SecurityCard from './components/SecurityCard.svelte';
 	import ExportModal from './components/ExportModal.svelte';
-import MaintenanceCard from './components/MaintenanceCard.svelte';
+	import MaintenanceCard from './components/MaintenanceCard.svelte';
+	import SettingsLayout from './SettingsLayout.svelte';
 
 	export let data: any;
 
@@ -25,14 +26,13 @@ import MaintenanceCard from './components/MaintenanceCard.svelte';
 		if (!profile.email) profile.email = remote.email || $user?.email || '';
 	}
 
+	import { saveSettings } from './lib/save-settings';
+
 	async function syncToCloud(type: 'settings' | 'profile', payload: any) {
 		try {
-			const res = await fetch('/api/settings', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ [type]: payload })
-			});
-			if (!res.ok) console.error('Failed to sync settings to cloud');
+			const key = type === 'profile' ? 'profile' : 'settings';
+			const result = await saveSettings({ [key]: payload });
+			if (!result.ok) console.error('Failed to sync settings to cloud', result.error);
 		} catch (e) {
 			console.error('Sync error:', e);
 		}
@@ -143,104 +143,114 @@ import MaintenanceCard from './components/MaintenanceCard.svelte';
 		</div>
 	{/if}
 
-	<div class="settings-grid">
-		<ProfileCard
-			bind:profile
-			{monthlyUsage}
-			{isPro}
-			{isCheckingOut}
-			{isOpeningPortal}
-			on:success={(e) => showSuccessMsg(e.detail)}
-			on:portal={handlePortal}
-			on:upgrade={(e) => {
-				upgradeSource = e.detail;
-				isUpgradeModalOpen = true;
-			}}
-		/>
+	<SettingsLayout>
+		<section id="profile" class="settings-section">
+			<ProfileCard
+				bind:profile
+				{monthlyUsage}
+				{isPro}
+				{isCheckingOut}
+				{isOpeningPortal}
+				on:success={(e) => showSuccessMsg(e.detail)}
+				on:portal={handlePortal}
+				on:upgrade={(e) => {
+					upgradeSource = e.detail;
+					isUpgradeModalOpen = true;
+				}}
+			/>
+		</section>
 
-		<MaintenanceCard />
+		<section id="maintenance" class="settings-section">
+			<MaintenanceCard on:success={(e) => showSuccessMsg(e.detail)} />
+		</section>
 
-		<DataCard
-			on:success={(e) => showSuccessMsg(e.detail)}
-			on:sync={(e) => syncToCloud(e.detail.type, e.detail.payload)}
-			on:openAdvancedExport={() => {
-				showAdvancedExport = true;
-			}}
-		/>
+		<section id="data" class="settings-section">
+			<DataCard
+				on:success={(e) => showSuccessMsg(e.detail)}
+				on:sync={(e) => syncToCloud(e.detail.type, e.detail.payload)}
+				on:openAdvancedExport={() => {
+					showAdvancedExport = true;
+				}}
+			/>
+		</section>
 
-		<div class="settings-card">
-			<div class="card-header">
-				<div class="card-icon green">
-					<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-						<path
-							d="M10 12C11.1046 12 12 11.1046 12 10C12 8.89543 11.1046 8 10 8C8.89543 8 8 8.89543 8 10C8 11.1046 8.89543 12 10 12Z"
-							stroke="currentColor"
-							stroke-width="2"
-						/>
-						<path
-							d="M16.2 12C16.1 12.5 16.3 13 16.7 13.3L16.8 13.4C17.1 13.7 17.3 14.1 17.3 14.5C17.3 14.9 17.1 15.3 16.8 15.6C16.5 15.9 16.1 16.1 15.7 16.1C15.3 16.1 14.9 15.9 14.6 15.6L14.5 15.5C14.2 15.1 13.7 14.9 13.2 15C12.7 15.1 12.4 15.5 12.3 16V16.2C12.3 17.1 11.6 17.8 10.7 17.8C9.8 17.8 9.1 17.1 9.1 16.2V16.1C9 15.5 8.6 15.1 8 15C7.5 15 7 15.2 6.7 15.6L6.6 15.7C6.3 16 5.9 16.2 5.5 16.2C5.1 16.2 4.7 16 4.4 15.7C4.1 15.4 3.9 15 3.9 14.6C3.9 14.2 4.1 13.8 4.4 13.5L4.5 13.4C4.9 13.1 5.1 12.6 5 12.1C4.9 11.6 4.5 11.3 4 11.2H3.8C2.9 11.2 2.2 10.5 2.2 9.6C2.2 8.7 2.9 8 3.8 8H3.9C4.5 7.9 4.9 7.5 5 6.9C5 6.4 4.8 5.9 4.4 5.6L4.3 5.5C4 5.2 3.8 4.8 3.8 4.4C3.8 4 4 3.6 4.3 3.3C4.6 3 5 2.8 5.4 2.8C5.8 2.8 6.2 3 6.5 3.3L6.6 3.4C7 3.8 7.5 4 8 3.9C8.5 3.9 8.8 3.4 8.9 2.9V2.7C8.9 1.8 9.6 1.1 10.5 1.1C11.4 1.1 12.1 1.8 12.1 2.7V2.8C12.1 3.4 12.5 3.8 13.1 3.9C13.6 4 14.1 3.8 14.4 3.4L14.5 3.3C14.8 3 15.2 2.8 15.6 2.8C16 2.8 16.4 3 16.7 3.3C17 3.6 17.2 4 17.2 4.4C17.2 4.8 17 5.2 16.7 5.5L16.6 5.6C16.2 5.9 16 6.4 16.1 6.9C16.2 7.4 16.6 7.7 17.1 7.8H17.3C18.2 7.8 18.9 8.5 18.9 9.4C18.9 10.3 18.2 11 17.3 11H17.2C16.6 11.1 16.2 11.5 16.1 12.1L16.2 12Z"
-							stroke="currentColor"
-							stroke-width="2"
-						/>
-					</svg>
-				</div>
-				<div>
-					<h2 class="card-title">Integrations</h2>
-					<p class="card-subtitle">Connect external services</p>
-				</div>
-			</div>
-
-			<div class="data-actions">
-				<a
-					href="/dashboard/hughesnet"
-					class="action-btn"
-					style="text-decoration: none; color: inherit; display:flex; align-items:center; gap:16px; padding:16px; background:#F9FAFB; border:2px solid #E5E7EB; border-radius:12px;"
-				>
-					<div style="display: flex; align-items: center; gap: 12px; width: 100%;">
-						<svg
-							width="24"
-							height="24"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							style="color: #0D9488;"
-						>
-							<circle cx="12" cy="12" r="10"></circle>
-							<path d="M2 12h20"></path>
+		<section id="integrations" class="settings-section">
+			<div class="settings-card">
+				<div class="card-header">
+					<div class="card-icon green">
+						<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
 							<path
-								d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
-							></path>
+								d="M10 12C11.1046 12 12 11.1046 12 10C12 8.89543 11.1046 8 10 8C8.89543 8 8 8.89543 8 10C8 11.1046 8.89543 12 10 12Z"
+								stroke="currentColor"
+								stroke-width="2"
+							/>
+							<path
+								d="M16.2 12C16.1 12.5 16.3 13 16.7 13.3L16.8 13.4C17.1 13.7 17.3 14.1 17.3 14.5C17.3 14.9 17.1 15.3 16.8 15.6C16.5 15.9 16.1 16.1 15.7 16.1C15.3 16.1 14.9 15.9 14.6 15.6L14.5 15.5C14.2 15.1 13.7 14.9 13.2 15C12.7 15.1 12.4 15.5 12.3 16V16.2C12.3 17.1 11.6 17.8 10.7 17.8C9.8 17.8 9.1 17.1 9.1 16.2V16.1C9 15.5 8.6 15.1 8 15C7.5 15 7 15.2 6.7 15.6L6.6 15.7C6.3 16 5.9 16.2 5.5 16.2C5.1 16.2 4.7 16 4.4 15.7C4.1 15.4 3.9 15 3.9 14.6C3.9 14.2 4.1 13.8 4.4 13.5L4.5 13.4C4.9 13.1 5.1 12.6 5 12.1C4.9 11.6 4.5 11.3 4 11.2H3.8C2.9 11.2 2.2 10.5 2.2 9.6C2.2 8.7 2.9 8 3.8 8H3.9C4.5 7.9 4.9 7.5 5 6.9C5 6.4 4.8 5.9 4.4 5.6L4.3 5.5C4 5.2 3.8 4.8 3.8 4.4C3.8 4 4 3.6 4.3 3.3C4.6 3 5 2.8 5.4 2.8C5.8 2.8 6.2 3 6.5 3.3L6.6 3.4C7 3.8 7.5 4 8 3.9C8.5 3.9 8.8 3.4 8.9 2.9V2.7C8.9 1.8 9.6 1.1 10.5 1.1C11.4 1.1 12.1 1.8 12.1 2.7V2.8C12.1 3.4 12.5 3.8 13.1 3.9C13.6 4 14.1 3.8 14.4 3.4L14.5 3.3C14.8 3 15.2 2.8 15.6 2.8C16 2.8 16.4 3 16.7 3.3C17 3.6 17.2 4 17.2 4.4C17.2 4.8 17 5.2 16.7 5.5L16.6 5.6C16.2 5.9 16 6.4 16.1 6.9C16.2 7.4 16.6 7.7 17.1 7.8H17.3C18.2 7.8 18.9 8.5 18.9 9.4C18.9 10.3 18.2 11 17.3 11H17.2C16.6 11.1 16.2 11.5 16.1 12.1L16.2 12Z"
+								stroke="currentColor"
+								stroke-width="2"
+							/>
 						</svg>
-						<div>
-							<div class="action-title" style="font-weight:600; font-size:15px;">HughesNet</div>
-							<div class="action-subtitle" style="color:#6B7280; font-size:13px;">
-								Configure satellite integration
-							</div>
-						</div>
-						<div style="margin-left: auto;">
+					</div>
+					<div>
+						<h2 class="card-title">Integrations</h2>
+						<p class="card-subtitle">Connect external services</p>
+					</div>
+				</div>
+
+				<div class="data-actions">
+					<a
+						href="/dashboard/hughesnet"
+						class="action-btn"
+						style="text-decoration: none; color: inherit; display:flex; align-items:center; gap:16px; padding:16px; background:#F9FAFB; border:2px solid #E5E7EB; border-radius:12px;"
+					>
+						<div style="display: flex; align-items: center; gap: 12px; width: 100%;">
 							<svg
-								width="20"
-								height="20"
+								width="24"
+								height="24"
 								viewBox="0 0 24 24"
 								fill="none"
-								stroke="#9CA3AF"
+								stroke="currentColor"
 								stroke-width="2"
 								stroke-linecap="round"
 								stroke-linejoin="round"
+								style="color: #0D9488;"
 							>
-								<polyline points="9 18 15 12 9 6"></polyline>
+								<circle cx="12" cy="12" r="10"></circle>
+								<path d="M2 12h20"></path>
+								<path
+									d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
+								></path>
 							</svg>
+							<div>
+								<div class="action-title" style="font-weight:600; font-size:15px;">HughesNet</div>
+								<div class="action-subtitle" style="color:#6B7280; font-size:13px;">
+									Configure satellite integration
+								</div>
+							</div>
+							<div style="margin-left: auto;">
+								<svg
+									width="20"
+									height="20"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="#9CA3AF"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<polyline points="9 18 15 12 9 6"></polyline>
+								</svg>
+							</div>
 						</div>
-					</div>
-				</a>
+					</a>
+				</div>
 			</div>
-		</div>
+		</section>
 
-		<SecurityCard on:success={(e) => showSuccessMsg(e.detail)} />
-	</div>
+		<section id="security" class="settings-section">
+			<SecurityCard on:success={(e) => showSuccessMsg(e.detail)} />
+		</section>
+	</SettingsLayout>
 </div>
 
 <ExportModal
@@ -345,10 +355,9 @@ import MaintenanceCard from './components/MaintenanceCard.svelte';
 		border: 1px solid #bbf7d0;
 	}
 
-	.settings-grid {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: 24px;
+	/* Section spacing when using the SettingsLayout */
+	.settings-section {
+		margin-bottom: 24px;
 	}
 
 	.settings-card {
@@ -390,8 +399,9 @@ import MaintenanceCard from './components/MaintenanceCard.svelte';
 	}
 
 	@media (max-width: 1024px) {
-		.settings-grid {
-			grid-template-columns: 1fr;
+		/* On narrow screens, sections stack naturally and nav becomes horizontal */
+		.settings-section {
+			margin-bottom: 18px;
 		}
 	}
 </style>

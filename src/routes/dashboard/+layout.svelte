@@ -148,8 +148,26 @@
 
 <div class="layout">
 	<header class="mobile-header">
-		<img src="/logo.png" alt="Go Route Yourself" class="mobile-logo" />
-
+		<picture>
+			<source
+				type="image/avif"
+				srcset="/optimized/logo-48.avif 48w, /optimized/logo-120.avif 120w"
+				sizes="40px"
+			/>
+			<source
+				type="image/webp"
+				srcset="/optimized/logo-48.webp 48w, /optimized/logo-120.webp 120w"
+				sizes="40px"
+			/>
+			<img
+				src="/optimized/logo-48.png"
+				alt="Go Route Yourself"
+				class="mobile-logo"
+				width="48"
+				height="48"
+				decoding="async"
+			/>
+		</picture>
 		<div class="mobile-actions">
 			<SyncIndicator />
 			{#if $user}
@@ -169,7 +187,26 @@
 
 	<aside class="sidebar" class:open={sidebarOpen}>
 		<div class="sidebar-header">
-			<img src="/logo.png" alt="Go Route Yourself" class="sidebar-logo" />
+			<picture>
+				<source
+					type="image/avif"
+					srcset="/optimized/logo-120.avif 120w, /optimized/logo-512.avif 512w"
+					sizes="120px"
+				/>
+				<source
+					type="image/webp"
+					srcset="/optimized/logo-120.webp 120w, /optimized/logo-512.webp 512w"
+					sizes="120px"
+				/>
+				<img
+					src="/optimized/logo-120.png"
+					alt="Go Route Yourself"
+					class="sidebar-logo"
+					width="120"
+					height="40"
+					decoding="async"
+				/>
+			</picture>
 			<button class="close-btn" on:click={closeSidebar} aria-label="Close menu">
 				<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
 					<path

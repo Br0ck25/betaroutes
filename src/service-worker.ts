@@ -32,8 +32,30 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-	// ignore POST requests etc
+	// ignore non-GET requests
 	if (event.request.method !== 'GET') return;
+
+	// Handle navigation requests (HTML pages) with a network-first strategy
+	if (event.request.mode === 'navigate') {
+		event.respondWith(
+			(async () => {
+				try {
+					const networkResponse = await fetch(event.request);
+					if (networkResponse && networkResponse.status === 200) {
+						const cache = await caches.open(CACHE);
+						cache.put(event.request, networkResponse.clone());
+					}
+					return networkResponse;
+				} catch (err) {
+					const cache = await caches.open(CACHE);
+					const cached = (await cache.match('/offline.html')) || (await cache.match('/'));
+					if (cached) return cached;
+					throw err;
+				}
+			})()
+		);
+		return;
+	}
 
 	async function respond() {
 		const url = new URL(event.request.url);

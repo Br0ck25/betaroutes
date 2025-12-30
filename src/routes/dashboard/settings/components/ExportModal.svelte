@@ -2,14 +2,8 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import { trips } from '$lib/stores/trips';
 	import { expenses } from '$lib/stores/expenses';
-	import {
-		generateTripsCSV,
-		generateExpensesCSV,
-		generateTripsPDF,
-		generateExpensesPDF,
-		generateTaxBundlePDF,
-		generateTaxBundleCSV
-	} from '../lib/export-utils';
+	import { generateTripsCSV, generateExpensesCSV, generateTaxBundleCSV } from '../lib/export-utils';
+
 	import { createEventDispatcher } from 'svelte';
 
 	export let showAdvancedExport = false;
@@ -39,21 +33,67 @@
 	async function handleAdvancedExport() {
 		// PDF Export
 		if (exportFormat === 'pdf') {
-			if (exportDataType === 'trips') {
-				const doc = await generateTripsPDF(filteredTrips, getDateRangeStr());
-				doc.save(`trips-report-${Date.now()}.pdf`);
-			} else if (exportDataType === 'expenses') {
-				const doc = await generateExpensesPDF(filteredExpenses, filteredTrips, getDateRangeStr());
-				doc.save(`expenses-report-${Date.now()}.pdf`);
-			} else if (exportDataType === 'tax-bundle') {
-				const doc = await generateTaxBundlePDF(
-					filteredTrips,
-					filteredExpenses,
-					getDateRangeStr()
-				);
-				doc.save(`tax-bundle-report-${Date.now()}.pdf`);
+			// Try client-side PDF first (keeps the flow fast when available)
+			try {
+				if (exportDataType === 'trips') {
+					const { generateTripsPDF } = await import('../lib/export-utils-pdf');
+					const doc = await generateTripsPDF(filteredTrips, getDateRangeStr());
+					doc.save(`trips-report-${Date.now()}.pdf`);
+				} else if (exportDataType === 'expenses') {
+					const { generateExpensesPDF } = await import('../lib/export-utils-pdf');
+					const doc = await generateExpensesPDF(filteredExpenses, filteredTrips, getDateRangeStr());
+					doc.save(`expenses-report-${Date.now()}.pdf`);
+				} else if (exportDataType === 'tax-bundle') {
+					const { generateTaxBundlePDF } = await import('../lib/export-utils-pdf');
+					const doc = await generateTaxBundlePDF(
+						filteredTrips,
+						filteredExpenses,
+						getDateRangeStr()
+					);
+					doc.save(`tax-bundle-report-${Date.now()}.pdf`);
+				}
+				dispatch('success', 'PDF exported successfully!');
+			} catch (err) {
+				// If client-side PDF generation fails (e.g. because we stubbed html2canvas/canvg)
+				// fallback to server-side PDF generation.
+				console.warn('Client-side PDF failed, falling back to server:', err);
+				try {
+					const body: any = { type: exportDataType, dateRangeStr: getDateRangeStr() };
+					if (exportDataType === 'trips') body.trips = filteredTrips;
+					if (exportDataType === 'expenses') {
+						body.expenses = filteredExpenses;
+						body.trips = filteredTrips;
+					}
+					if (exportDataType === 'tax-bundle') {
+						body.expenses = filteredExpenses;
+						body.trips = filteredTrips;
+					}
+
+					const res = await fetch('/api/generate-pdf', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify(body)
+					});
+
+					if (!res.ok) {
+						const errBody = await res.json().catch(() => ({}));
+						dispatch('error', (errBody as any)?.error || 'Server PDF generation failed');
+						return;
+					}
+
+					const blob = await res.blob();
+					const url = URL.createObjectURL(blob);
+					const a = document.createElement('a');
+					a.href = url;
+					a.download = `${exportDataType}-report-${Date.now()}.pdf`;
+					a.click();
+					URL.revokeObjectURL(url);
+					dispatch('success', 'PDF exported (server) successfully!');
+				} catch (e) {
+					console.error('Server-side PDF fallback failed:', e);
+					dispatch('error', 'PDF export failed');
+				}
 			}
-			dispatch('success', 'PDF exported successfully!');
 		} else {
 			// CSV Export
 			if (exportDataType === 'tax-bundle') {

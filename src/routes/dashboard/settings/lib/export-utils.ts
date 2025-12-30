@@ -1,5 +1,4 @@
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+// Lazy-load heavy PDF libs only when needed to avoid inflating the initial bundle
 
 // Helper functions
 export function formatCurrency(amount: number): string {
@@ -22,7 +21,7 @@ export function formatDate(dateStr: string): string {
 
 export async function getLogoDataUrl(): Promise<string | null> {
 	try {
-		const response = await fetch('/logo.png');
+		const response = await fetch('/optimized/logo-192.png');
 		if (!response.ok) return null;
 		const blob = await response.blob();
 		return new Promise((resolve) => {
@@ -331,175 +330,15 @@ export function generateTaxBundleCSV(trips: any[], expenses: any[], dateRangeStr
 	return csv;
 }
 
-export async function generateTripsPDF(trips: any[], dateRangeStr: string) {
-	const doc = new jsPDF();
-	const logoData = await getLogoDataUrl();
-	const pageWidth = doc.internal.pageSize.getWidth();
-
-	// Header
-	doc.setFillColor(255, 127, 80); // Orange
-	doc.rect(0, 0, pageWidth, 35, 'F');
-
-	if (logoData) {
-		doc.addImage(logoData, 'PNG', 10, 5, 25, 25);
-	}
-
-	doc.setTextColor(255, 255, 255);
-	doc.setFontSize(24);
-	doc.setFont('helvetica', 'bold');
-	doc.text('Trip Report', pageWidth / 2, 15, { align: 'center' });
-
-	doc.setFontSize(11);
-	doc.setFont('helvetica', 'normal');
-	doc.text('Go Route Yourself - Professional Route Tracking', pageWidth / 2, 23, {
-		align: 'center'
-	});
-
-	// Report metadata
-	doc.setTextColor(0, 0, 0);
-	doc.setFontSize(9);
-	doc.text(`Period: ${dateRangeStr}`, 14, 42);
-	doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 47);
-	doc.text(`Total Trips: ${trips.length}`, pageWidth - 14, 42, { align: 'right' });
-
-	// Summary statistics
-	const totalMiles = trips.reduce((sum, t) => sum + (t.totalMiles || 0), 0);
-	const totalRevenue = trips.reduce(
-		(sum, t) =>
-			sum + (t.stops?.reduce((s: number, stop: any) => s + (stop.earnings || 0), 0) || 0),
-		0
+export function generateTripsPDF(): never {
+	throw new Error(
+		'moved to export-utils-pdf; import dynamically: await import("./export-utils-pdf")'
 	);
-	const totalExpenses = trips.reduce(
-		(sum, t) => sum + (t.fuelCost || 0) + (t.maintenanceCost || 0) + (t.suppliesCost || 0),
-		0
-	);
-	const netProfit = totalRevenue - totalExpenses;
-
-	doc.setFillColor(248, 250, 252);
-	doc.roundedRect(14, 52, pageWidth - 28, 28, 3, 3, 'FD');
-
-	doc.setFontSize(10);
-	doc.setFont('helvetica', 'bold');
-	const statY = 60;
-	const colWidth = (pageWidth - 28) / 4;
-
-	doc.text('Total Miles', 14 + colWidth * 0.5, statY, { align: 'center' });
-	doc.text('Total Revenue', 14 + colWidth * 1.5, statY, { align: 'center' });
-	doc.text('Total Expenses', 14 + colWidth * 2.5, statY, { align: 'center' });
-	doc.text('Net Profit', 14 + colWidth * 3.5, statY, { align: 'center' });
-
-	doc.setFontSize(14);
-	doc.setTextColor(255, 127, 80);
-	doc.text(totalMiles.toFixed(1), 14 + colWidth * 0.5, statY + 10, { align: 'center' });
-	doc.setTextColor(34, 197, 94);
-	doc.text(formatCurrency(totalRevenue), 14 + colWidth * 1.5, statY + 10, { align: 'center' });
-	doc.setTextColor(239, 68, 68);
-	doc.text(formatCurrency(totalExpenses), 14 + colWidth * 2.5, statY + 10, { align: 'center' });
-	doc.setTextColor(netProfit >= 0 ? 34 : 239, netProfit >= 0 ? 197 : 68, netProfit >= 0 ? 94 : 68);
-	doc.text(formatCurrency(netProfit), 14 + colWidth * 3.5, statY + 10, { align: 'center' });
-
-	doc.setTextColor(0, 0, 0);
-
-	const tableData = trips.map((trip) => {
-		const intermediateStops =
-			trip.stops && trip.stops.length > 0
-				? trip.stops.map((s: any) => s.address).join('\n')
-				: 'None';
-
-		const endAddr =
-			trip.endAddress ||
-			(trip.stops && trip.stops.length > 0 ? trip.stops[trip.stops.length - 1].address : '') ||
-			trip.startAddress ||
-			'';
-
-		const revenue =
-			trip.stops?.reduce((sum: number, stop: any) => sum + (stop.earnings || 0), 0) || 0;
-		const expenses = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);
-		const profit = revenue - expenses;
-
-		return [
-			formatDate(trip.date || ''),
-			trip.startAddress || '',
-			intermediateStops,
-			endAddr,
-			(trip.totalMiles || 0).toFixed(1) + ' mi',
-			formatDuration(trip.estimatedTime || 0),
-			(trip.hoursWorked || 0).toFixed(1) + ' hr',
-			formatCurrency(revenue),
-			formatCurrency(expenses),
-			formatCurrency(profit)
-		];
-	});
-
-	autoTable(doc, {
-		startY: 85,
-		head: [
-			[
-				'Date',
-				'Start',
-				'Stops',
-				'End',
-				'Miles',
-				'Drive Time',
-				'Hours',
-				'Revenue',
-				'Expenses',
-				'Profit'
-			]
-		],
-		body: tableData,
-		theme: 'striped',
-		headStyles: {
-			fillColor: [255, 127, 80],
-			textColor: [255, 255, 255],
-			fontSize: 9,
-			fontStyle: 'bold',
-			halign: 'center'
-		},
-		styles: {
-			fontSize: 8,
-			cellPadding: 3,
-			overflow: 'linebreak',
-			lineColor: [229, 231, 235],
-			lineWidth: 0.1
-		},
-		columnStyles: {
-			0: { cellWidth: 20 },
-			1: { cellWidth: 30 },
-			2: { cellWidth: 30 },
-			3: { cellWidth: 30 },
-			4: { halign: 'right', cellWidth: 15 },
-			5: { halign: 'center', cellWidth: 18 },
-			6: { halign: 'right', cellWidth: 15 },
-			7: { halign: 'right', cellWidth: 20, textColor: [34, 197, 94] },
-			8: { halign: 'right', cellWidth: 20, textColor: [239, 68, 68] },
-			9: { halign: 'right', cellWidth: 20, fontStyle: 'bold' }
-		},
-		alternateRowStyles: { fillColor: [249, 250, 251] },
-		margin: { left: 14, right: 14 },
-		didDrawPage: function (data: any) {
-			const pageCount = doc.internal.pages.length - 1;
-			doc.setFontSize(8);
-			doc.setTextColor(128, 128, 128);
-			doc.text(
-				`Page ${data.pageNumber} of ${pageCount}`,
-				pageWidth / 2,
-				doc.internal.pageSize.getHeight() - 10,
-				{ align: 'center' }
-			);
-			doc.text(
-				'Go Route Yourself - Professional Route Tracking',
-				pageWidth - 14,
-				doc.internal.pageSize.getHeight() - 10,
-				{ align: 'right' }
-			);
-		}
-	});
-
-	return doc;
 }
 
 export async function generateExpensesPDF(expenses: any[], trips: any[], dateRangeStr: string) {
+	const { jsPDF } = await import('jspdf');
+	const autoTable = (await import('jspdf-autotable')).default;
 	const doc = new jsPDF();
 	const logoData = await getLogoDataUrl();
 	const pageWidth = doc.internal.pageSize.getWidth();
@@ -674,6 +513,8 @@ export async function generateExpensesPDF(expenses: any[], trips: any[], dateRan
 }
 
 export async function generateTaxBundlePDF(trips: any[], expenses: any[], dateRangeStr: string) {
+	const { jsPDF } = await import('jspdf');
+	const autoTable = (await import('jspdf-autotable')).default;
 	const doc = new jsPDF();
 	const logoData = await getLogoDataUrl();
 	const pageWidth = doc.internal.pageSize.getWidth();
@@ -707,8 +548,7 @@ export async function generateTaxBundlePDF(trips: any[], expenses: any[], dateRa
 	const allExpenses: any[] = [];
 	expenses.forEach((e) => allExpenses.push({ ...e, source: 'Expense Log' }));
 	trips.forEach((t) => {
-		if (t.fuelCost)
-			allExpenses.push({ category: 'Fuel', amount: t.fuelCost, source: 'Trip' });
+		if (t.fuelCost) allExpenses.push({ category: 'Fuel', amount: t.fuelCost, source: 'Trip' });
 		if (t.maintenanceCost)
 			allExpenses.push({ category: 'Maintenance', amount: t.maintenanceCost, source: 'Trip' });
 		if (t.maintenanceItems)

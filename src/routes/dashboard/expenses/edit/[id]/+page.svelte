@@ -109,7 +109,7 @@
 				<div class="form-group">
 					<label for="category">Category</label>
 					<div class="select-wrapper">
-						<select id="category" bind:value={formData.category}>
+						<select id="category" bind:value={formData.category} aria-label="Expense category">
 							{#each categories as cat}
 								<option value={cat}>{getCategoryLabel(cat)}</option>
 							{/each}

@@ -51,24 +51,24 @@ function createTripsStore() {
 					const dateB = new Date(b.date || b.createdAt).getTime();
 					return dateB - dateA;
 				});
-			// Migration: some older trip records used `totalMileage` instead of `totalMiles`.
-			// Normalize to ensure analytics work correctly.
-			const dbRW = db.transaction('trips', 'readwrite');
-			const storeRW = dbRW.objectStore('trips');
-			let migrated = 0;
-			for (const t of trips) {
-				if ((t as any).totalMiles == null && (t as any).totalMileage != null) {
-					(t as any).totalMiles = Number((t as any).totalMileage) || 0;
-					// Mark as pending so sync will upload the normalized field to the server
-					(t as any).syncStatus = 'pending';
-					(t as any).updatedAt = new Date().toISOString();
-					(t as any).lastModified = new Date().toISOString();
-					await storeRW.put(t);
-					migrated++;
+				// Migration: some older trip records used `totalMileage` instead of `totalMiles`.
+				// Normalize to ensure analytics work correctly.
+				const dbRW = db.transaction('trips', 'readwrite');
+				const storeRW = dbRW.objectStore('trips');
+				let migrated = 0;
+				for (const t of trips) {
+					if ((t as any).totalMiles == null && (t as any).totalMileage != null) {
+						(t as any).totalMiles = Number((t as any).totalMileage) || 0;
+						// Mark as pending so sync will upload the normalized field to the server
+						(t as any).syncStatus = 'pending';
+						(t as any).updatedAt = new Date().toISOString();
+						(t as any).lastModified = new Date().toISOString();
+						await storeRW.put(t);
+						migrated++;
+					}
 				}
-			}
-			await dbRW.done;
-			if (migrated > 0) console.log(`🔧 Migrated ${migrated} trips: totalMileage -> totalMiles`);
+				await dbRW.done;
+				if (migrated > 0) console.log(`🔧 Migrated ${migrated} trips: totalMileage -> totalMiles`);
 				set(trips);
 				return trips;
 			} catch (err) {

@@ -13,10 +13,9 @@
 	}
 
 	// Use categories from settings, default to basic if empty
-	$: categories =
-		$userSettings.expenseCategories?.length > 0
-			? $userSettings.expenseCategories
-			: ['maintenance', 'insurance', 'supplies', 'other'];
+	let categoryOptions: string[] = ['maintenance', 'insurance', 'supplies', 'other'];
+	$: categoryOptions =
+		$userSettings.expenseCategories?.length > 0 ? $userSettings.expenseCategories : categoryOptions;
 
 	let formData = {
 		date: getLocalDate(),
@@ -25,55 +24,55 @@
 		description: ''
 	};
 
-// Reference to amount input so quick-action can focus it
-let amountInput: HTMLInputElement | null = null;
-// Prefill category from the URL query parameter (e.g., ?category=fuel)
-$: {
-	const q = $page.url.searchParams.get('category');
-	if (q) {
-		// ensure the queried category appears in the select options
-		if (!categories.includes(q)) {
-			categories = [q, ...categories];
+	// Reference to amount input so quick-action can focus it
+	let amountInput: HTMLInputElement | null = null;
+	// Prefill category from the URL query parameter (e.g., ?category=fuel)
+	$: {
+		const q = $page.url.searchParams.get('category');
+		if (q) {
+			// ensure the queried category appears in the select options
+			if (!categoryOptions.includes(q)) {
+				categoryOptions = [q, ...categoryOptions];
+			}
+			formData.category = q;
+			// if arrived via quick action, focus the amount input for quick logging
+			if (typeof window !== 'undefined') {
+				setTimeout(() => amountInput?.focus(), 60);
+			}
 		}
-		formData.category = q;
-		// if arrived via quick action, focus the amount input for quick logging
-		if (typeof window !== 'undefined') {
-			setTimeout(() => amountInput?.focus(), 60);
+	}
+
+	async function saveExpense() {
+		if (!formData.amount || !formData.date || !formData.category) {
+			toasts.error('Please fill in required fields.');
+			return;
+		}
+
+		const currentUser = $page.data['user'] || $user;
+		const userId =
+			currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
+
+		if (!userId) {
+			toasts.error('User not identified. Cannot save.');
+			return;
+		}
+
+		try {
+			const payload = {
+				...formData,
+				amount: parseFloat(formData.amount)
+			};
+
+			await expenses.create(payload, userId);
+			toasts.success('Expense created');
+			goto('/dashboard/expenses');
+		} catch (err) {
+			console.error(err);
+			toasts.error('Failed to save expense');
 		}
 	}
-}
 
-async function saveExpense() {
-	if (!formData.amount || !formData.date || !formData.category) {
-		toasts.error('Please fill in required fields.');
-		return;
-	}
-
-	const currentUser = $page.data['user'] || $user;
-	const userId =
-		currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
-
-	if (!userId) {
-		toasts.error('User not identified. Cannot save.');
-		return;
-	}
-
-	try {
-		const payload = {
-			...formData,
-			amount: parseFloat(formData.amount)
-		};
-
-		await expenses.create(payload, userId);
-		toasts.success('Expense created');
-		goto('/dashboard/expenses');
-	} catch (err) {
-		console.error(err);
-		toasts.error('Failed to save expense');
-	}
-}
-
-function getCategoryLabel(cat: string) {
+	function getCategoryLabel(cat: string) {
 		return cat.charAt(0).toUpperCase() + cat.slice(1);
 	}
 </script>
@@ -112,8 +111,8 @@ function getCategoryLabel(cat: string) {
 				<div class="form-group">
 					<label for="category">Category</label>
 					<div class="select-wrapper">
-						<select id="category" bind:value={formData.category}>
-							{#each categories as cat}
+						<select id="category" bind:value={formData.category} aria-label="Expense category">
+							{#each categoryOptions as cat}
 								<option value={cat}>{getCategoryLabel(cat)}</option>
 							{/each}
 						</select>
@@ -129,7 +128,7 @@ function getCategoryLabel(cat: string) {
 							type="number"
 							step="0.01"
 							bind:value={formData.amount}
-					bind:this={amountInput}
+							bind:this={amountInput}
 							placeholder="0.00"
 						/>
 					</div>
@@ -153,7 +152,6 @@ function getCategoryLabel(cat: string) {
 		</div>
 	</div>
 </div>
-}
 
 <style>
 	/* MATCHING STYLES FROM TRIPS/NEW */

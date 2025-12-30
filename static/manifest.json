@@ -6,6 +6,7 @@
   "background_color": "#ffffff",
   "theme_color": "#ffffff",
   "description": "Offline-first mileage tracking and route management",
+  "scope": "/",
 
   "shortcuts": [
     {
@@ -36,8 +37,14 @@
     },
     {
       "src": "logo.png",
-      "sizes": "512x512",
+      "sizes": "180x180",
       "type": "image/png"
+    },
+    {
+      "src": "logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

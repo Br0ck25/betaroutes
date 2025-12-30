@@ -2,6 +2,7 @@
 	import { userSettings } from '$lib/stores/userSettings';
 	import { trips } from '$lib/stores/trips';
 	import { user } from '$lib/stores/auth';
+	import { toasts } from '$lib/stores/toast';
 	import { createEventDispatcher } from 'svelte';
 
 	const dispatch = createEventDispatcher();
@@ -85,7 +86,9 @@
 		URL.revokeObjectURL(url);
 	}
 
-	function importData() {
+	import { saveSettings } from '../../settings/lib/save-settings';
+
+	async function importData() {
 		const input = document.createElement('input');
 		input.type = 'file';
 		input.accept = 'application/json';
@@ -99,19 +102,23 @@
 					const data = JSON.parse(e.target.result);
 					if (data.settings) {
 						userSettings.set(data.settings);
-						if ($user) dispatch('sync', { type: 'settings', payload: data.settings });
+						// Try to persist to cloud and update canonical state
+						const result = await saveSettings(data.settings);
+						if (!result.ok) {
+							toasts.error('Settings imported locally, cloud sync failed');
+						} else {
+							dispatch('success', 'Settings imported successfully!');
+						}
 					}
 
 					if (data.trips && Array.isArray(data.trips)) {
 						if (confirm(`Found ${data.trips.length} trips in backup. Import them now?`)) {
 							let userId =
 								$user?.name || $user?.token || localStorage.getItem('offline_user_id') || 'offline';
-							let count = 0;
 							for (const trip of data.trips) {
 								await trips.create(trip, userId);
-								count++;
 							}
-							dispatch('success', `Successfully imported ${count} trips!`);
+							dispatch('success', `Successfully imported ${data.trips.length} trips from JSON!`);
 						}
 					} else {
 						dispatch('success', 'Settings imported. No trips found in backup.');

@@ -41,7 +41,26 @@
 	<div class="container">
 		<div class="header-content">
 			<a href={resolve('/')} class="logo-link">
-				<img src="/logo.png" alt="Go Route Yourself" class="logo" />
+				<picture>
+					<source
+						type="image/avif"
+						srcset="/optimized/logo-48.avif 48w, /optimized/logo-120.avif 120w, /optimized/logo-192.avif 192w, /optimized/logo-512.avif 512w"
+						sizes="48px"
+					/>
+					<source
+						type="image/webp"
+						srcset="/optimized/logo-48.webp 48w, /optimized/logo-120.webp 120w, /optimized/logo-192.webp 192w, /optimized/logo-512.webp 512w"
+						sizes="48px"
+					/>
+					<img
+						src="/optimized/logo-48.png"
+						alt="Go Route Yourself"
+						class="logo"
+						width="48"
+						height="48"
+						decoding="async"
+					/>
+				</picture>
 			</a>
 
 			<nav class="nav desktop-nav">

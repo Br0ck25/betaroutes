@@ -36,7 +36,10 @@
 		property="og:description"
 		content="Plan optimal routes, track fuel and expenses, and see your true profit per hour. The all-in-one tool for drivers."
 	/>
-	<meta property="og:image" content="https://gorouteyourself.com/og-image.png" />
+	<meta
+		property="og:image"
+		content="https://gorouteyourself.com/optimized/og-source-1200x630.png"
+	/>
 
 	<meta property="twitter:card" content="summary_large_image" />
 	<meta property="twitter:url" content="https://gorouteyourself.com/" />
@@ -45,7 +48,10 @@
 		property="twitter:description"
 		content="Stop guessing your profits. Track every mile, expense, and earning with Go Route Yourself."
 	/>
-	<meta property="twitter:image" content="https://gorouteyourself.com/og-image.png" />
+	<meta
+		property="twitter:image"
+		content="https://gorouteyourself.com/optimized/og-source-1200x630.png"
+	/>
 
 	<script type="application/ld+json">
 		{
@@ -53,7 +59,7 @@
 			"@type": "SoftwareApplication",
 			"name": "Go Route Yourself",
 			"headline": "Route Planning & Profit Tracking for Drivers",
-			"image": "https://gorouteyourself.com/logo.png",
+			"image": "https://gorouteyourself.com/optimized/logo-192.png",
 			"applicationCategory": "BusinessApplication",
 			"operatingSystem": "Web, Android, iOS",
 			"offers": {
@@ -76,7 +82,26 @@
 	<header class="header">
 		<div class="container">
 			<div class="header-content">
-				<img src="/logo.png" alt="Go Route Yourself" class="logo" />
+				<picture>
+					<source
+						type="image/avif"
+						srcset="/optimized/logo-48.avif 48w, /optimized/logo-120.avif 120w, /optimized/logo-192.avif 192w, /optimized/logo-512.avif 512w"
+						sizes="48px"
+					/>
+					<source
+						type="image/webp"
+						srcset="/optimized/logo-48.webp 48w, /optimized/logo-120.webp 120w, /optimized/logo-192.webp 192w, /optimized/logo-512.webp 512w"
+						sizes="48px"
+					/>
+					<img
+						src="/optimized/logo-48.png"
+						alt="Go Route Yourself"
+						class="logo"
+						width="48"
+						height="48"
+						decoding="async"
+					/>
+				</picture>
 
 				<nav class="nav desktop-nav">
 					<button on:click={() => scrollToSection('features')}>Features</button>
@@ -351,7 +376,27 @@
 		<div class="container">
 			<div class="footer-content">
 				<div class="footer-section">
-					<img src="/logo.png" alt="Go Route Yourself" class="footer-logo" />
+					<picture>
+						<source
+							type="image/avif"
+							srcset="/optimized/logo-120.avif 120w, /optimized/logo-512.avif 512w"
+							sizes="120px"
+						/>
+						<source
+							type="image/webp"
+							srcset="/optimized/logo-120.webp 120w, /optimized/logo-512.webp 512w"
+							sizes="120px"
+						/>
+						<img
+							src="/optimized/logo-120.png"
+							alt="Go Route Yourself"
+							class="footer-logo"
+							width="120"
+							height="40"
+							loading="lazy"
+							decoding="async"
+						/>
+					</picture>
 					<p>Route planning and profit tracking for drivers.</p>
 				</div>
 
@@ -628,6 +673,7 @@
 		font-size: 36px;
 		font-weight: 800;
 		margin-bottom: 8px;
+		min-height: 48px; /* reserve space to avoid layout shifts */
 	}
 
 	.stat-label {
