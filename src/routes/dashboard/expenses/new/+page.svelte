@@ -25,42 +25,55 @@
 		description: ''
 	};
 
-	// Set default category (ensure a string; categories[0] may be undefined)
-	$: if (!formData.category && categories.length > 0) {
-		formData.category = categories[0] || '';
-	}
-
-	async function saveExpense() {
-		if (!formData.amount || !formData.date || !formData.category) {
-			toasts.error('Please fill in required fields.');
-			return;
+// Reference to amount input so quick-action can focus it
+let amountInput: HTMLInputElement | null = null;
+// Prefill category from the URL query parameter (e.g., ?category=fuel)
+$: {
+	const q = $page.url.searchParams.get('category');
+	if (q) {
+		// ensure the queried category appears in the select options
+		if (!categories.includes(q)) {
+			categories = [q, ...categories];
 		}
-
-		const currentUser = $page.data['user'] || $user;
-		const userId =
-			currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
-
-		if (!userId) {
-			toasts.error('User not identified. Cannot save.');
-			return;
-		}
-
-		try {
-			const payload = {
-				...formData,
-				amount: parseFloat(formData.amount)
-			};
-
-			await expenses.create(payload, userId);
-			toasts.success('Expense created');
-			goto('/dashboard/expenses');
-		} catch (err) {
-			console.error(err);
-			toasts.error('Failed to save expense');
+		formData.category = q;
+		// if arrived via quick action, focus the amount input for quick logging
+		if (typeof window !== 'undefined') {
+			setTimeout(() => amountInput?.focus(), 60);
 		}
 	}
+}
 
-	function getCategoryLabel(cat: string) {
+async function saveExpense() {
+	if (!formData.amount || !formData.date || !formData.category) {
+		toasts.error('Please fill in required fields.');
+		return;
+	}
+
+	const currentUser = $page.data['user'] || $user;
+	const userId =
+		currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
+
+	if (!userId) {
+		toasts.error('User not identified. Cannot save.');
+		return;
+	}
+
+	try {
+		const payload = {
+			...formData,
+			amount: parseFloat(formData.amount)
+		};
+
+		await expenses.create(payload, userId);
+		toasts.success('Expense created');
+		goto('/dashboard/expenses');
+	} catch (err) {
+		console.error(err);
+		toasts.error('Failed to save expense');
+	}
+}
+
+function getCategoryLabel(cat: string) {
 		return cat.charAt(0).toUpperCase() + cat.slice(1);
 	}
 </script>
@@ -116,6 +129,7 @@
 							type="number"
 							step="0.01"
 							bind:value={formData.amount}
+					bind:this={amountInput}
 							placeholder="0.00"
 						/>
 					</div>

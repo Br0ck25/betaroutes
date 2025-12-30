@@ -54,7 +54,7 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 	const placeId = sanitizeQueryParam(url.searchParams.get('placeid'), 200);
 	// [!code ++] Allow client to force Google escalation
 	const forceGoogle = url.searchParams.get('forceGoogle') === 'true';
-	
+
 	const apiKey = env['PRIVATE_GOOGLE_MAPS_API_KEY'];
 
 	// --- MODE A: PLACE DETAILS ---
@@ -97,16 +97,23 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 					const trimmedQuery = query.trim();
 					const addressMatch = trimmedQuery.match(/^(\d+)\s+([a-zA-Z0-9]+)/);
 					const looksLikeSpecificAddress = !!addressMatch;
-					const streetToken = addressMatch && addressMatch[2] ? addressMatch[2].toLowerCase() : null;
+					const streetToken =
+						addressMatch && addressMatch[2] ? addressMatch[2].toLowerCase() : null;
 					const broadTypes = [
-						'city', 'state', 'country', 'county', 'state_district', 'place', 'administrative'
+						'city',
+						'state',
+						'country',
+						'county',
+						'state_district',
+						'place',
+						'administrative'
 					];
 
 					const filteredMatches = matches.filter((it: any) => {
 						const text = (it.formatted_address || it.name || '').toLowerCase();
 						if ((it.name || '').trim().match(/^\d+\s*$/)) return false;
 						if (it.osm_value && broadTypes.includes(it.osm_value)) return false;
-						
+
 						if (looksLikeSpecificAddress) {
 							if (!text.includes(addressMatch![1])) return false;
 							// If input is "407 Mastin", result MUST contain "mastin"
@@ -132,7 +139,8 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 					const trimmedQuery = query.trim();
 					const addressMatch = trimmedQuery.match(/^(\d+)\s+([a-zA-Z0-9]+)/);
 					const looksLikeSpecificAddress = !!addressMatch;
-					const streetToken = addressMatch && addressMatch[2] ? addressMatch[2].toLowerCase() : null;
+					const streetToken =
+						addressMatch && addressMatch[2] ? addressMatch[2].toLowerCase() : null;
 
 					const validFeatures = pData.features.filter((f: any) => {
 						const p = f.properties;
@@ -164,37 +172,48 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 					});
 
 					if (validFeatures.length > 0) {
-						const results = validFeatures.map((f: any) => {
-							const p = f.properties;
-							const broadTypes = ['city', 'state', 'country', 'county', 'state_district', 'place', 'administrative'];
-							if (broadTypes.includes(p.osm_value) || broadTypes.includes(p.osm_key)) return false;
-							if ((p.name || '').trim().match(/^\d+\s*$/)) return false;
-							
-							const parts = [p.name];
-							if (p.housenumber && p.name !== p.housenumber) parts.unshift(p.housenumber);
-							if (p.city && p.city !== p.name) parts.push(p.city);
-							if (p.state && p.state !== p.city) parts.push(p.state);
-							if (p.country && p.country !== p.state) parts.push(p.country);
+						const results = validFeatures
+							.map((f: any) => {
+								const p = f.properties;
+								const broadTypes = [
+									'city',
+									'state',
+									'country',
+									'county',
+									'state_district',
+									'place',
+									'administrative'
+								];
+								if (broadTypes.includes(p.osm_value) || broadTypes.includes(p.osm_key))
+									return false;
+								if ((p.name || '').trim().match(/^\d+\s*$/)) return false;
 
-							const formatted = Array.from(new Set(parts.filter(Boolean))).join(', ');
+								const parts = [p.name];
+								if (p.housenumber && p.name !== p.housenumber) parts.unshift(p.housenumber);
+								if (p.city && p.city !== p.name) parts.push(p.city);
+								if (p.state && p.state !== p.city) parts.push(p.state);
+								if (p.country && p.country !== p.state) parts.push(p.country);
 
-							return {
-								formatted_address: formatted,
-								name: p.name,
-								secondary_text: [p.city, p.state, p.country].filter(Boolean).join(', '),
-								place_id: `photon:${f.geometry.coordinates[1]},${f.geometry.coordinates[0]}`,
-								geometry: {
-									location: {
-										lat: f.geometry.coordinates[1],
-										lng: f.geometry.coordinates[0]
-									}
-								},
-								source: 'photon',
-								house_number: p.housenumber || null,
-								street: p.street || p.name || null,
-								osm_value: p.osm_value
-							};
-						}).filter(Boolean); // filter out false returns
+								const formatted = Array.from(new Set(parts.filter(Boolean))).join(', ');
+
+								return {
+									formatted_address: formatted,
+									name: p.name,
+									secondary_text: [p.city, p.state, p.country].filter(Boolean).join(', '),
+									place_id: `photon:${f.geometry.coordinates[1]},${f.geometry.coordinates[0]}`,
+									geometry: {
+										location: {
+											lat: f.geometry.coordinates[1],
+											lng: f.geometry.coordinates[0]
+										}
+									},
+									source: 'photon',
+									house_number: p.housenumber || null,
+									street: p.street || p.name || null,
+									osm_value: p.osm_value
+								};
+							})
+							.filter(Boolean); // filter out false returns
 
 						if (kv && results.length > 0) {
 							await kv.put(bucketKey, JSON.stringify(results), { expirationTtl: 86400 });

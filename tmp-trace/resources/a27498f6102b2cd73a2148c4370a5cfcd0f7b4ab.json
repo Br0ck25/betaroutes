@@ -1,1 +1,1 @@
-{"token":"fake-jwt","user":{"id":"u1","name":"Test User","plan":"pro"}}
+{ "token": "fake-jwt", "user": { "id": "u1", "name": "Test User", "plan": "pro" } }

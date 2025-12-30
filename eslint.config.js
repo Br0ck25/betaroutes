@@ -29,12 +29,7 @@ export default defineConfig(
 	},
 	// Server-only overrides: disallow raw console.* usage in server code (enforce using sanitized logger)
 	{
-		files: [
-			'**/+server.*',
-			'**/+page.server.*',
-			'**/+layout.server.*',
-			'src/lib/server/**'
-		],
+		files: ['**/+server.*', '**/+page.server.*', '**/+layout.server.*', 'src/lib/server/**'],
 		rules: {
 			'no-console': 'error'
 		}

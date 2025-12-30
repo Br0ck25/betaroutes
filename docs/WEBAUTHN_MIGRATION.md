@@ -9,12 +9,14 @@ Usage (production):
 3. Call POST https://<your-app>/api/admin/webauthn/migrate with the header `x-admin-secret: <secret>`.
 
 What it does:
+
 - Lists keys prefixed with `authenticators:` (user-specific authenticator store) and reads the JSON array.
 - Attempts to normalize each authenticator's `credentialID` and `credentialPublicKey` to Base64URL strings.
 - Writes back normalized authenticators and refreshes `credential:{credentialID}` index keys.
 - Returns counts of migrated / skipped records.
 
 Security:
+
 - The endpoint is gated by `ADMIN_MIGRATE_SECRET` and returns only aggregate counts.
 - Remove or rotate the secret once migration is complete.
 

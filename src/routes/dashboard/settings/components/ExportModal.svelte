@@ -6,14 +6,15 @@
 		generateTripsCSV,
 		generateExpensesCSV,
 		generateTripsPDF,
-		generateExpensesPDF
+		generateExpensesPDF,
+		generateTaxBundlePDF,
+		generateTaxBundleCSV
 	} from '../lib/export-utils';
 	import { createEventDispatcher } from 'svelte';
 
 	export let showAdvancedExport = false;
 
 	const dispatch = createEventDispatcher();
-
 	let exportDataType: 'trips' | 'expenses' | 'tax-bundle' = 'trips';
 	let exportFormat: 'csv' | 'pdf' = 'csv';
 	let exportDateFrom = '';
@@ -27,7 +28,6 @@
 		if (exportDateTo && tripDate > new Date(exportDateTo)) return false;
 		return true;
 	});
-
 	$: filteredExpenses = $expenses.filter((expense) => {
 		if (!expense.date) return false;
 		const expenseDate = new Date(expense.date);
@@ -46,28 +46,20 @@
 				const doc = await generateExpensesPDF(filteredExpenses, filteredTrips, getDateRangeStr());
 				doc.save(`expenses-report-${Date.now()}.pdf`);
 			} else if (exportDataType === 'tax-bundle') {
-				// For PDF tax bundle, we usually do the full logic which is complex.
-				// For simplicity, we trigger the tax bundle logic in parent or import it here if needed.
-				// Since the logic was massive, let's assume we call a function we imported or moved.
-				// Note: In the refactor, generateTaxBundlePDF should be imported from export-utils.
-				// I'll emit an event for simplicity if it requires too much local state,
-				// otherwise import from utils.
-				dispatch('exportTaxBundle', {
-					trips: filteredTrips,
-					expenses: filteredExpenses,
-					dateRange: getDateRangeStr()
-				});
+				const doc = await generateTaxBundlePDF(
+					filteredTrips,
+					filteredExpenses,
+					getDateRangeStr()
+				);
+				doc.save(`tax-bundle-report-${Date.now()}.pdf`);
 			}
 			dispatch('success', 'PDF exported successfully!');
 		} else {
 			// CSV Export
 			if (exportDataType === 'tax-bundle') {
-				dispatch('exportTaxBundle', {
-					trips: filteredTrips,
-					expenses: filteredExpenses,
-					dateRange: getDateRangeStr(),
-					format: 'csv'
-				});
+				const csv = generateTaxBundleCSV(filteredTrips, filteredExpenses, getDateRangeStr());
+				downloadCSV(csv, 'tax-bundle-export');
+				dispatch('success', 'Tax Bundle exported successfully!');
 			} else if (exportDataType === 'trips') {
 				const csv = generateTripsCSV(filteredTrips, exportIncludeSummary);
 				downloadCSV(csv, 'trips-export');

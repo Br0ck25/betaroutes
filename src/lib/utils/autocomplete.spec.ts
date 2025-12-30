@@ -58,7 +58,16 @@ describe('server geocodePhoton fallback', () => {
 		vi.stubGlobal('fetch', (input: any) => {
 			const url = String(input);
 			if (url.includes('photon.komoot.io')) {
-				return Promise.resolve({ json: async () => ({ features: [{ geometry: { coordinates: [ -83.0, 36.6 ] }, properties: { name: 'Louisville', osm_value: 'city' } }] }) } as any);
+				return Promise.resolve({
+					json: async () => ({
+						features: [
+							{
+								geometry: { coordinates: [-83.0, 36.6] },
+								properties: { name: 'Louisville', osm_value: 'city' }
+							}
+						]
+					})
+				} as any);
 			}
 			return Promise.reject(new Error('unexpected'));
 		});
@@ -72,10 +81,24 @@ describe('server geocodePhoton fallback', () => {
 		vi.stubGlobal('fetch', (input: any) => {
 			const url = String(input);
 			if (url.includes('photon.komoot.io')) {
-				return Promise.resolve({ json: async () => ({ features: [{ geometry: { coordinates: [ -83.0, 36.6 ] }, properties: { name: 'Louisville', osm_value: 'city' } }] }) } as any);
+				return Promise.resolve({
+					json: async () => ({
+						features: [
+							{
+								geometry: { coordinates: [-83.0, 36.6] },
+								properties: { name: 'Louisville', osm_value: 'city' }
+							}
+						]
+					})
+				} as any);
 			}
 			if (url.includes('maps.googleapis.com')) {
-				return Promise.resolve({ json: async () => ({ status: 'OK', results: [{ geometry: { location: { lat: 36.9, lng: -83.3 } } }] }) } as any);
+				return Promise.resolve({
+					json: async () => ({
+						status: 'OK',
+						results: [{ geometry: { location: { lat: 36.9, lng: -83.3 } } }]
+					})
+				} as any);
 			}
 			return Promise.reject(new Error('unexpected'));
 		});
@@ -89,10 +112,24 @@ describe('server geocodePhoton fallback', () => {
 		vi.stubGlobal('fetch', (input: any) => {
 			const url = String(input);
 			if (url.includes('photon.komoot.io')) {
-				return Promise.resolve({ json: async () => ({ features: [{ geometry: { coordinates: [ -83.0, 36.6 ] }, properties: { name: 'Sonic', street: 'Main St', housenumber: '100' } }] }) } as any);
+				return Promise.resolve({
+					json: async () => ({
+						features: [
+							{
+								geometry: { coordinates: [-83.0, 36.6] },
+								properties: { name: 'Sonic', street: 'Main St', housenumber: '100' }
+							}
+						]
+					})
+				} as any);
 			}
 			if (url.includes('maps.googleapis.com')) {
-				return Promise.resolve({ json: async () => ({ status: 'OK', results: [{ geometry: { location: { lat: 36.9, lng: -83.3 } } }] }) } as any);
+				return Promise.resolve({
+					json: async () => ({
+						status: 'OK',
+						results: [{ geometry: { location: { lat: 36.9, lng: -83.3 } } }]
+					})
+				} as any);
 			}
 			return Promise.reject(new Error('unexpected'));
 		});

@@ -14,7 +14,16 @@ it('on blur escalates to Google and replaces input if Photon suggestions are una
 	vi.stubGlobal('fetch', (inputArg: any) => {
 		const url = String(inputArg);
 		if (url.includes('/api/autocomplete')) {
-			return Promise.resolve({ json: async () => ([{ source: 'google_proxy', formatted_address: '407 Mastin Dr, Cumberland, KY', geometry: { location: { lat: 36.9, lng: -83.3 } }, place_id: 'g1' }]) } as any);
+			return Promise.resolve({
+				json: async () => [
+					{
+						source: 'google_proxy',
+						formatted_address: '407 Mastin Dr, Cumberland, KY',
+						geometry: { location: { lat: 36.9, lng: -83.3 } },
+						place_id: 'g1'
+					}
+				]
+			} as any);
 		}
 		return Promise.reject(new Error('unexpected'));
 	});

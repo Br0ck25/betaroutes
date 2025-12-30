@@ -4,48 +4,77 @@ import { log } from '$lib/server/log';
  * Geocode using Photon (OpenStreetMap). Returns [lon, lat] or null.
  * Performs a Google fallback when `apiKey` is provided and Photon is weak.
  */
-export async function geocodePhoton(address: string, apiKey?: string): Promise<[number, number] | null> {
+export async function geocodePhoton(
+	address: string,
+	apiKey?: string
+): Promise<[number, number] | null> {
 	try {
 		const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(address)}&limit=1`;
 		const res = await fetch(url);
-		const data: any = await res.json();
+		const data = (await res.json()) as {
+			features?: Array<{
+				properties?: Record<string, unknown>;
+				geometry?: { coordinates?: [number, number] };
+			}>;
+		};
 		if (data.features && data.features.length > 0) {
 			const f = data.features[0];
-			const p = f.properties || {};
+			if (!f) return null;
+			const p = f && f.properties ? f.properties : ({} as Record<string, unknown>);
 
 			// If input looks like a house-level address, require housenumber + street match
 			const inputIsAddress = /^\d+\s+\w+/.test(address);
 			if (inputIsAddress) {
-				const hasHN = !!p.housenumber;
-				const hasStreet = !!(p.street || p.name);
+				const hasHN = !!p['housenumber'];
+				const hasStreet = !!(p['street'] || p['name']);
 				const inputNumber = address.match(/^(\d+)/)?.[1] || null;
-				const streetToken = address.match(/^\d+\s+(.+)$/)?.[1]?.split(/\s+/)[0]?.toLowerCase();
-				const resultText = ((p.name || '') + ' ' + (p.street || '')).toLowerCase();
+				const streetToken = address
+					.match(/^\d+\s+(.+)$/)?.[1]
+					?.split(/\s+/)[0]
+					?.toLowerCase();
+				const resultText = (
+					String(p['name'] || '') +
+					' ' +
+					String(p['street'] || '')
+				).toLowerCase();
 
 				// Require both housenumber equality and street presence/match
-				if (!hasHN || String(p.housenumber) !== String(inputNumber) || !hasStreet || (streetToken && streetToken.length > 3 && !resultText.includes(streetToken))) {
+				if (
+					!hasHN ||
+					String(p['housenumber']) !== String(inputNumber) ||
+					!hasStreet ||
+					(streetToken && streetToken.length > 3 && !resultText.includes(streetToken))
+				) {
 					// Attempt Google fallback if API key provided
 					if (apiKey) {
 						try {
 							const gUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`;
 							const gRes = await fetch(gUrl);
-							const gData: any = await gRes.json();
+							const gData = (await gRes.json()) as {
+								status?: string;
+								results?: Array<{ geometry?: { location?: { lat?: number; lng?: number } } }>;
+							};
 							if (gData.status === 'OK' && gData.results && gData.results.length > 0) {
-								const loc = gData.results[0].geometry.location;
-								return [loc.lng, loc.lat];
+								const loc = gData.results?.[0]?.geometry?.location;
+								if (loc && typeof loc.lng === 'number' && typeof loc.lat === 'number')
+									return [loc.lng, loc.lat];
 							}
 						} catch (e) {
-							log.warn('Google geocode failed (photon fallback)', { message: (e as any)?.message });
+							log.warn('Google geocode failed (photon fallback)', {
+								message: e instanceof Error ? e.message : String(e)
+							});
 						}
 					}
 					return null;
 				}
 			}
 
-			return f.geometry.coordinates as [number, number];
+			return f.geometry && f.geometry.coordinates
+				? (f.geometry.coordinates as [number, number])
+				: null;
 		}
 	} catch (e) {
-		log.warn('Photon geocode failed', { message: (e as any)?.message });
+		log.warn('Photon geocode failed', { message: e instanceof Error ? e.message : String(e) });
 	}
 
 	// Final attempt: try Google if key available
@@ -53,13 +82,17 @@ export async function geocodePhoton(address: string, apiKey?: string): Promise<[
 		try {
 			const gUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`;
 			const gRes = await fetch(gUrl);
-			const gData: any = await gRes.json();
-			if (gData.status === 'OK' && gData.results && gData.results.length > 0) {
-				const loc = gData.results[0].geometry.location;
+			const gData = (await gRes.json()) as {
+				status?: string;
+				results?: Array<{ geometry?: { location?: { lat?: number; lng?: number } } }>;
+			};
+			const loc = gData.results?.[0]?.geometry?.location;
+			if (loc && typeof loc.lng === 'number' && typeof loc.lat === 'number')
 				return [loc.lng, loc.lat];
-			}
 		} catch (e) {
-			log.warn('Google geocode failed (final fallback)', { message: (e as any)?.message });
+			log.warn('Google geocode failed (final fallback)', {
+				message: e instanceof Error ? e.message : String(e)
+			});
 		}
 	}
 

@@ -6,8 +6,8 @@ export default defineConfig({
 	test: {
 		// [!code changed] Simplified test config
 		include: ['src/**/*.{test,spec}.{js,ts}'],
-		// Optional: explicit environment (defaults to node in Vitest, 
-        // usually 'jsdom' is preferred for Svelte component testing if you add that later)
-		environment: 'node' 
+		// Optional: explicit environment (defaults to node in Vitest,
+		// usually 'jsdom' is preferred for Svelte component testing if you add that later)
+		environment: 'node'
 	}
 });

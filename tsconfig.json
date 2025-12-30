@@ -10,7 +10,7 @@
 		"skipLibCheck": true,
 		"sourceMap": true,
 		"moduleResolution": "bundler",
-		
+
 		// ← ENHANCED: Comprehensive strict mode flags
 		"strict": true,
 		"strictNullChecks": true,
@@ -20,7 +20,7 @@
 		"noImplicitAny": true,
 		"noImplicitThis": true,
 		"alwaysStrict": true,
-		
+
 		// ← NEW: Additional safety checks
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
@@ -29,7 +29,7 @@
 		"noUncheckedIndexedAccess": true,
 		"noImplicitOverride": true,
 		"noPropertyAccessFromIndexSignature": true,
-		
+
 		// ← NEW: Better error reporting
 		"exactOptionalPropertyTypes": false,
 		"allowUnreachableCode": false,

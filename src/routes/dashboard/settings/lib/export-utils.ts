@@ -281,6 +281,56 @@ export function generateExpensesCSV(
 	return csv;
 }
 
+export function generateTaxBundleCSV(trips: any[], expenses: any[], dateRangeStr: string): string {
+	// 1. Calculate Summary Data
+	const totalMiles = trips.reduce((sum, t) => sum + (t.totalMiles || 0), 0);
+	const mileageDeduction = totalMiles * 0.67; // 2024 Standard Mileage Rate
+
+	const allExpenses: any[] = [];
+	expenses.forEach((e) => allExpenses.push({ ...e, source: 'Expense Log' }));
+	trips.forEach((t) => {
+		if (t.fuelCost) allExpenses.push({ category: 'Fuel', amount: t.fuelCost, source: 'Trip' });
+		if (t.maintenanceCost)
+			allExpenses.push({ category: 'Maintenance', amount: t.maintenanceCost, source: 'Trip' });
+		if (t.maintenanceItems)
+			t.maintenanceItems.forEach((i: any) =>
+				allExpenses.push({ category: 'Maintenance', amount: i.cost, source: 'Trip' })
+			);
+		if (t.suppliesCost)
+			allExpenses.push({ category: 'Supplies', amount: t.suppliesCost, source: 'Trip' });
+		if (t.suppliesItems || t.supplyItems)
+			(t.suppliesItems || t.supplyItems).forEach((i: any) =>
+				allExpenses.push({ category: 'Supplies', amount: i.cost, source: 'Trip' })
+			);
+	});
+	const totalExpenses = allExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+	// 2. Build CSV
+	let csv = `TAX BUNDLE EXPORT - ${dateRangeStr}\n`;
+	csv += `Generated: ${new Date().toLocaleString()}\n\n`;
+
+	csv += `SUMMARY COMPARISON\n`;
+	csv += `Method,Details,Deduction Value\n`;
+	csv += `Standard Mileage Deduction,${totalMiles.toFixed(1)} miles @ $0.67/mi,${mileageDeduction.toFixed(2)}\n`;
+	csv += `Actual Expenses Deduction,Sum of all business expenses,${totalExpenses.toFixed(2)}\n\n`;
+
+	csv += `----------------------------------------\n`;
+	csv += `PART 1: MILEAGE LOG\n`;
+	csv += `----------------------------------------\n`;
+	const tripsCsv = generateTripsCSV(trips, false); // Get trips CSV without summary row
+	if (tripsCsv) csv += tripsCsv + '\n\n';
+	else csv += 'No trips recorded.\n\n';
+
+	csv += `----------------------------------------\n`;
+	csv += `PART 2: EXPENSE LOG\n`;
+	csv += `----------------------------------------\n`;
+	const expensesCsv = generateExpensesCSV(expenses, trips, false); // Get expenses CSV without summary row
+	if (expensesCsv) csv += expensesCsv + '\n';
+	else csv += 'No expenses recorded.\n';
+
+	return csv;
+}
+
 export async function generateTripsPDF(trips: any[], dateRangeStr: string) {
 	const doc = new jsPDF();
 	const logoData = await getLogoDataUrl();
@@ -315,7 +365,8 @@ export async function generateTripsPDF(trips: any[], dateRangeStr: string) {
 	// Summary statistics
 	const totalMiles = trips.reduce((sum, t) => sum + (t.totalMiles || 0), 0);
 	const totalRevenue = trips.reduce(
-		(sum, t) => sum + (t.stops?.reduce((s: number, stop: any) => s + (stop.earnings || 0), 0) || 0),
+		(sum, t) =>
+			sum + (t.stops?.reduce((s: number, stop: any) => s + (stop.earnings || 0), 0) || 0),
 		0
 	);
 	const totalExpenses = trips.reduce(
@@ -616,6 +667,166 @@ export async function generateExpensesPDF(expenses: any[], trips: any[], dateRan
 				doc.internal.pageSize.getHeight() - 10,
 				{ align: 'center' }
 			);
+		}
+	});
+
+	return doc;
+}
+
+export async function generateTaxBundlePDF(trips: any[], expenses: any[], dateRangeStr: string) {
+	const doc = new jsPDF();
+	const logoData = await getLogoDataUrl();
+	const pageWidth = doc.internal.pageSize.getWidth();
+
+	// Header
+	doc.setFillColor(255, 127, 80);
+	doc.rect(0, 0, pageWidth, 35, 'F');
+	if (logoData) doc.addImage(logoData, 'PNG', 10, 5, 25, 25);
+
+	doc.setTextColor(255, 255, 255);
+	doc.setFontSize(24);
+	doc.setFont('helvetica', 'bold');
+	doc.text('Tax Bundle Report', pageWidth / 2, 15, { align: 'center' });
+	doc.setFontSize(11);
+	doc.setFont('helvetica', 'normal');
+	doc.text('Go Route Yourself - Professional Route Tracking', pageWidth / 2, 23, {
+		align: 'center'
+	});
+
+	// Metadata
+	doc.setTextColor(0, 0, 0);
+	doc.setFontSize(10);
+	doc.text(`Period: ${dateRangeStr}`, 14, 45);
+	doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 50);
+
+	// --- CALCULATIONS ---
+	const totalMiles = trips.reduce((sum, t) => sum + (t.totalMiles || 0), 0);
+	const mileageDeduction = totalMiles * 0.67;
+
+	// Collate all expenses
+	const allExpenses: any[] = [];
+	expenses.forEach((e) => allExpenses.push({ ...e, source: 'Expense Log' }));
+	trips.forEach((t) => {
+		if (t.fuelCost)
+			allExpenses.push({ category: 'Fuel', amount: t.fuelCost, source: 'Trip' });
+		if (t.maintenanceCost)
+			allExpenses.push({ category: 'Maintenance', amount: t.maintenanceCost, source: 'Trip' });
+		if (t.maintenanceItems)
+			t.maintenanceItems.forEach((i: any) =>
+				allExpenses.push({ category: 'Maintenance', amount: i.cost, source: 'Trip' })
+			);
+		if (t.suppliesCost)
+			allExpenses.push({ category: 'Supplies', amount: t.suppliesCost, source: 'Trip' });
+		if (t.suppliesItems || t.supplyItems)
+			(t.suppliesItems || t.supplyItems).forEach((i: any) =>
+				allExpenses.push({ category: 'Supplies', amount: i.cost, source: 'Trip' })
+			);
+	});
+
+	const totalExpenses = allExpenses.reduce((sum, e) => sum + e.amount, 0);
+	const grandTotalDeduction = mileageDeduction + totalExpenses;
+
+	// --- SUMMARY BOX ---
+	doc.setFillColor(248, 250, 252);
+	doc.roundedRect(14, 60, pageWidth - 28, 90, 3, 3, 'FD');
+
+	let y = 70;
+	doc.setFontSize(14);
+	doc.setFont('helvetica', 'bold');
+	doc.text('Tax Deduction Summary', 20, y);
+
+	y += 10;
+	doc.setFontSize(11);
+	doc.text('Mileage Deduction', 20, y);
+	doc.setFont('helvetica', 'normal');
+	doc.text(`${totalMiles.toFixed(1)} miles @ $0.67/mile`, 20, y + 6);
+	doc.setFont('helvetica', 'bold');
+	doc.text(formatCurrency(mileageDeduction), pageWidth - 20, y + 6, { align: 'right' });
+
+	y += 20;
+	doc.text('Business Expenses', 20, y);
+	doc.setFont('helvetica', 'normal');
+	doc.text(`${allExpenses.length} items recorded`, 20, y + 6);
+	doc.setFont('helvetica', 'bold');
+	doc.text(formatCurrency(totalExpenses), pageWidth - 20, y + 6, { align: 'right' });
+
+	y += 20;
+	doc.setDrawColor(200, 200, 200);
+	doc.line(20, y, pageWidth - 20, y);
+	y += 10;
+
+	doc.setFontSize(16);
+	doc.setTextColor(255, 127, 80);
+	doc.text('Estimated Total Deduction', 20, y);
+	doc.text(formatCurrency(grandTotalDeduction), pageWidth - 20, y, { align: 'right' });
+
+	y += 15;
+	doc.setFontSize(9);
+	doc.setTextColor(100, 100, 100);
+	doc.setFont('helvetica', 'italic');
+	doc.text(
+		'Note: You must choose either Standard Mileage Deduction OR Actual Expenses for your vehicle.',
+		20,
+		y
+	);
+	doc.text('This report includes both for your comparison.', 20, y + 5);
+
+	// --- MILEAGE LOG SECTION ---
+	doc.addPage();
+	doc.setTextColor(255, 127, 80);
+	doc.setFontSize(18);
+	doc.setFont('helvetica', 'bold');
+	doc.text('Mileage Log', 14, 20);
+
+	const tripTableData = trips.map((trip) => {
+		const endAddr =
+			trip.endAddress ||
+			(trip.stops && trip.stops.length > 0 ? trip.stops[trip.stops.length - 1].address : '') ||
+			trip.startAddress ||
+			'';
+		return [
+			formatDate(trip.date || ''),
+			trip.startAddress || '',
+			endAddr,
+			(trip.totalMiles || 0).toFixed(1) + ' mi',
+			(trip.notes || '').substring(0, 30)
+		];
+	});
+
+	autoTable(doc, {
+		startY: 30,
+		head: [['Date', 'Start', 'End', 'Miles', 'Notes']],
+		body: tripTableData,
+		theme: 'striped',
+		headStyles: { fillColor: [255, 127, 80] },
+		styles: { fontSize: 8, cellPadding: 3 },
+		columnStyles: {
+			3: { halign: 'right', fontStyle: 'bold' }
+		}
+	});
+
+	// --- EXPENSE LOG SECTION ---
+	doc.addPage();
+	doc.setTextColor(255, 127, 80);
+	doc.setFontSize(18);
+	doc.text('Expense Log', 14, 20);
+
+	const expenseTableData = allExpenses.map((exp) => [
+		formatDate(exp.date),
+		exp.description ? `${exp.category} - ${exp.description}` : exp.category,
+		formatCurrency(exp.amount),
+		exp.source
+	]);
+
+	autoTable(doc, {
+		startY: 30,
+		head: [['Date', 'Expense', 'Amount', 'Source']],
+		body: expenseTableData,
+		theme: 'striped',
+		headStyles: { fillColor: [255, 127, 80] },
+		styles: { fontSize: 8, cellPadding: 3 },
+		columnStyles: {
+			2: { halign: 'right', textColor: [239, 68, 68], fontStyle: 'bold' }
 		}
 	});
 

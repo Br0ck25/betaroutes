@@ -54,8 +54,6 @@ export function isRenderableCandidate(result: any, input: string) {
 	return isAcceptableGeocode(result, input);
 }
 
-
-
 export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node, params) => {
 	let dropdown: HTMLDivElement | null = null;
 	let debounceTimer: number | undefined;
@@ -154,13 +152,11 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 		if (debounceTimer) clearTimeout(debounceTimer);
 		debounceTimer = window.setTimeout(async () => {
 			try {
-				const startTime = performance.now();
 				const kvUrl = `/api/autocomplete?q=${encodeURIComponent(value)}`;
 				const kvRes = await fetch(kvUrl);
 				const data = await kvRes.json();
-				const time = Math.round(performance.now() - startTime);
 
-				let validData = Array.isArray(data) ? data : [];
+				const validData = Array.isArray(data) ? data : [];
 				let source: 'kv' | 'google' | 'photon' = 'kv';
 
 				if (validData.length > 0) {
@@ -170,12 +166,12 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 
 				// [!code fix] Mandatory: Strict Filter BEFORE rendering
 				const suggestionsToShow = validData.slice(0, 5);
-			const acceptableSet = new Set(
-				suggestionsToShow
-					.filter((item: any) => isAcceptableGeocode(item, value))
-					.map((it: any) => it.place_id || it.formatted_address || JSON.stringify(it))
-			);
-			let filtered = suggestionsToShow;				// Keep the top suggestions visible regardless of acceptability (we'll validate on blur/selection)
+				const acceptableSet = new Set(
+					suggestionsToShow
+						.filter((item: any) => isAcceptableGeocode(item, value))
+						.map((it: any) => it.place_id || it.formatted_address || JSON.stringify(it))
+				);
+				let filtered = suggestionsToShow; // Keep the top suggestions visible regardless of acceptability (we'll validate on blur/selection)
 				filtered = suggestionsToShow;
 				if (filtered.length > 0) {
 					// Cache external results (remove source tag for KV storage)
@@ -186,7 +182,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 						});
 						cacheToKV(value, cleanResults);
 					}
-					renderResults(filtered.slice(0, 5), source, time, acceptableSet);
+					renderResults(filtered.slice(0, 5), source, acceptableSet);
 				} else {
 					renderEmpty();
 				}
@@ -225,50 +221,11 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 	function renderResults(
 		items: Array<Record<string, unknown>>,
 		source: 'kv' | 'google' | 'photon' = 'kv',
-		timing?: number,
-		acceptableSet?: Set<string>
+		/* timing removed */
+		/* acceptableSet */ acceptableSet?: Set<string>
 	) {
 		if (!dropdown) return;
 		while (dropdown.firstChild) dropdown.removeChild(dropdown.firstChild);
-
-		const header = document.createElement('div');
-		let sourceLabel = '⚡ Fast Cache';
-		let sourceColor = '#10B981'; // Green
-
-		if (source === 'google') {
-			sourceLabel = '📍 Google Live';
-			sourceColor = '#4285F4'; // Blue
-		} else if (source === 'photon') {
-			sourceLabel = '🗺️ OpenMap';
-			sourceColor = '#F59E0B'; // Orange/Amber
-		}
-
-		const leftSpan = document.createElement('span');
-		leftSpan.style.color = sourceColor;
-		leftSpan.style.fontWeight = '500';
-		leftSpan.textContent = sourceLabel;
-		header.appendChild(leftSpan);
-
-		if (timing) {
-			const timingSpan = document.createElement('span');
-			timingSpan.style.color = '#9AA0A6';
-			timingSpan.style.fontSize = '11px';
-			timingSpan.textContent = `${timing}ms`;
-			header.appendChild(timingSpan);
-		}
-
-		Object.assign(header.style, {
-			display: 'flex',
-			justifyContent: 'space-between',
-			alignItems: 'center',
-			padding: '8px 16px',
-			borderBottom: '1px solid #f1f3f4',
-			fontSize: '11px',
-			textTransform: 'uppercase',
-			letterSpacing: '0.5px',
-			backgroundColor: '#f8f9fa'
-		});
-		dropdown.appendChild(header);
 
 		items.forEach((item) => {
 			const row = document.createElement('div');
@@ -361,19 +318,6 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 			dropdown!.appendChild(row);
 		});
 
-		if (source === 'google') {
-			const footer = document.createElement('div');
-			Object.assign(footer.style, { textAlign: 'right', padding: '4px 16px' });
-			const poweredImg = document.createElement('img');
-			poweredImg.src =
-				'https://maps.gstatic.com/mapfiles/api-3/images/powered-by-google-on-white3.png';
-			poweredImg.alt = 'Powered by Google';
-			poweredImg.style.height = '12px';
-			poweredImg.style.opacity = '0.7';
-			footer.appendChild(poweredImg);
-			dropdown.appendChild(footer);
-		}
-
 		dropdown.style.display = 'block';
 		updatePosition();
 	}
@@ -421,7 +365,9 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 			if (!isAcceptableGeocode(candidate, node.value)) {
 				// Try a fallback search if validation failed on selection (double safety)
 				try {
-					const res = await fetch(`/api/autocomplete?q=${encodeURIComponent(node.value)}&forceGoogle=true`);
+					const res = await fetch(
+						`/api/autocomplete?q=${encodeURIComponent(node.value)}&forceGoogle=true`
+					);
 					const data = await res.json();
 					if (Array.isArray(data) && data.length > 0) {
 						const googleHit = data.find((d: any) => d.source === 'google_proxy');
@@ -546,7 +492,9 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 			const value = node.value;
 			if (!value || value.length < 2) return;
 			try {
-				const res = await fetch(`/api/autocomplete?q=${encodeURIComponent(value)}&forceGoogle=true`);
+				const res = await fetch(
+					`/api/autocomplete?q=${encodeURIComponent(value)}&forceGoogle=true`
+				);
 				const data = await res.json();
 				if (Array.isArray(data) && data.length > 0) {
 					const googleHit = data.find((d: any) => d.source === 'google_proxy');

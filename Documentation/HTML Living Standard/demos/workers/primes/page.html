@@ -1,21 +1,23 @@
-<!DOCTYPE HTML>
+<!DOCTYPE html>
 <html lang="en">
- 
-<!-- Mirrored from html.spec.whatwg.org/demos/workers/primes/page.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 26 Dec 2025 20:12:55 GMT -->
-<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=utf-8" /><!-- /Added by HTTrack -->
-<head>
-  <meta charset="utf-8">
-  <title>Worker example: One-core computation</title>
- </head>
- <body>
-  <p>The highest prime number discovered so far is: <output id="result"></output></p>
-  <script>
-   var worker = new Worker('worker.js');
-   worker.onmessage = function (event) {
-     document.getElementById('result').textContent = event.data;
-   };
-  </script>
- </body>
+	<!-- Mirrored from html.spec.whatwg.org/demos/workers/primes/page.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 26 Dec 2025 20:12:55 GMT -->
+	<!-- Added by HTTrack --><meta
+		http-equiv="content-type"
+		content="text/html;charset=utf-8"
+	/><!-- /Added by HTTrack -->
+	<head>
+		<meta charset="utf-8" />
+		<title>Worker example: One-core computation</title>
+	</head>
+	<body>
+		<p>The highest prime number discovered so far is: <output id="result"></output></p>
+		<script>
+			var worker = new Worker('worker.js');
+			worker.onmessage = function (event) {
+				document.getElementById('result').textContent = event.data;
+			};
+		</script>
+	</body>
 
-<!-- Mirrored from html.spec.whatwg.org/demos/workers/primes/page.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 26 Dec 2025 20:12:55 GMT -->
+	<!-- Mirrored from html.spec.whatwg.org/demos/workers/primes/page.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 26 Dec 2025 20:12:55 GMT -->
 </html>

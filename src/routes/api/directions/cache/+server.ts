@@ -5,7 +5,6 @@ import { log } from '$lib/server/log';
 
 import { geocodePhoton } from '$lib/server/geocode';
 
-
 export const GET: RequestHandler = async ({ url, platform, locals }) => {
 	// 1. Security: Ensure user is logged in
 	if (!locals.user) {

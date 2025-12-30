@@ -1,1 +1,7 @@
-dialog.svelte-32v57s{margin:auto;inset:0}dialog.svelte-32v57s::backdrop{background-color:#00000080}
+dialog.svelte-32v57s {
+	margin: auto;
+	inset: 0;
+}
+dialog.svelte-32v57s::backdrop {
+	background-color: #00000080;
+}

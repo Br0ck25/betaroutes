@@ -47,5 +47,3 @@ A new endpoint is available to inspect archived (previously synced) orders persi
 - GET /api/hughesnet/archived?id=<ORDER_ID> - returns a single archived order if it belongs to the authenticated user
 
 This endpoint reads from `BETA_HUGHESNET_ORDERS_KV` and only returns records scoped to the requesting user.
-
-

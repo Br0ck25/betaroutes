@@ -1,1 +1,7 @@
-{"type":"data","nodes":[{"type":"data","data":[{"user":1},null],"uses":{}},{"type":"data","data":[{}],"uses":{}}]}
+{
+	"type": "data",
+	"nodes": [
+		{ "type": "data", "data": [{ "user": 1 }, null], "uses": {} },
+		{ "type": "data", "data": [{}], "uses": {} }
+	]
+}
