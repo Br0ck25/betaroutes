@@ -3,34 +3,48 @@
   import { trips } from '$lib/stores/trips';
   import { toasts } from '$lib/stores/toast';
   import { calculateDashboardStats } from '$lib/utils/dashboardLogic';
-  import { get } from 'svelte/store';
+  import { onMount } from 'svelte';
 
-  let intervalMiles: number;
-  let lastServiceOdometer: number;
-  let lastServiceDate: string;
-  let reminderThresholdMiles: number;
+  // Editable inputs (local) to avoid overwriting during typing
+  let intervalMilesInput: number | undefined;
+  let lastServiceOdometerInput: number | undefined;
+  let lastServiceDateInput: string | undefined;
+  let reminderThresholdMilesInput: number | undefined;
+  let vehicleOdometerStartInput: number | undefined;
 
-  // Hydrate local values from store
-  $: {
-    const s = get(userSettings) as any;
-    intervalMiles = Number(s.serviceIntervalMiles || 5000);
-    lastServiceOdometer = Number(s.lastServiceOdometer || 0);
-    lastServiceDate = s.lastServiceDate || '';
-    reminderThresholdMiles = Number(s.reminderThresholdMiles || 500);
-  }
+  // Initialize inputs from the store on mount
+  onMount(() => {
+    intervalMilesInput = Number($userSettings.serviceIntervalMiles || 5000);
+    lastServiceOdometerInput = Number($userSettings.lastServiceOdometer || 0);
+    lastServiceDateInput = $userSettings.lastServiceDate || '';
+    reminderThresholdMilesInput = Number($userSettings.reminderThresholdMiles || 500);
+    vehicleOdometerStartInput = Number($userSettings.vehicleOdometerStart || 0);
+  });
 
-  // Current odometer computed from trips + vehicleOdometerStart
-  $: allStats = calculateDashboardStats(get(trips), [], 'all');
-  $: currentOdometer = (get(userSettings).vehicleOdometerStart || 0) + (allStats?.totalMiles || 0);
+  // Current odometer computed from trips + vehicleOdometerStart (reflects unsaved input while editing)
+  let baseOdo = 0;
+  let currentOdometer = 0;
+  $: allStats = calculateDashboardStats($trips, [], 'all');
+  $: baseOdo = Number(vehicleOdometerStartInput != null ? vehicleOdometerStartInput : ($userSettings.vehicleOdometerStart || 0));
+  $: currentOdometer = baseOdo + (allStats?.totalMiles || 0);
 
   async function saveSettings() {
     try {
-      userSettings.update((s) => ({ ...s, serviceIntervalMiles: Number(intervalMiles), lastServiceOdometer: Number(lastServiceOdometer), lastServiceDate }));
+      const payload: any = {
+        serviceIntervalMiles: Number(intervalMilesInput || 5000),
+        lastServiceOdometer: Number(lastServiceOdometerInput || 0),
+        lastServiceDate: lastServiceDateInput || '',
+        reminderThresholdMiles: Number(reminderThresholdMilesInput || 500),
+        vehicleOdometerStart: Number(vehicleOdometerStartInput || 0)
+      };
+
+      userSettings.update((s) => ({ ...s, ...payload }));
+
       // Persist to server
       const res = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings: { serviceIntervalMiles: Number(intervalMiles), lastServiceOdometer: Number(lastServiceOdometer), lastServiceDate } })
+        body: JSON.stringify({ settings: payload })
       });
       if (!res.ok) throw new Error('Failed to save settings');
       toasts.success('Maintenance settings saved');
@@ -41,8 +55,8 @@
   }
 
   async function markServicedNow() {
-    lastServiceOdometer = Math.round(currentOdometer || 0);
-    lastServiceDate = new Date().toISOString();
+    lastServiceOdometerInput = Math.round(currentOdometer || 0);
+    lastServiceDateInput = new Date().toISOString();
     await saveSettings();
   }
 </script>
@@ -58,17 +72,23 @@
 
   <div class="form-group">
     <label for="interval-miles">Service interval (miles)</label>
-    <input id="interval-miles" type="number" bind:value={intervalMiles} min="0" />
+    <input id="interval-miles" type="number" bind:value={intervalMilesInput} min="0" />
+  </div>
+
+  <div class="form-group">
+    <label for="vehicle-odo">Vehicle odometer start</label>
+    <input id="vehicle-odo" type="number" bind:value={vehicleOdometerStartInput} min="0" />
+    <div class="small-note" style="margin-top:6px; color:#6b7280;">Set your vehicle's odometer at the time you started using the app (or your real odometer).</div>
   </div>
 
   <div class="form-group">
     <label for="last-odo">Last service odometer</label>
-    <input id="last-odo" type="number" bind:value={lastServiceOdometer} min="0" />
+    <input id="last-odo" type="number" bind:value={lastServiceOdometerInput} min="0" />
   </div>
 
   <div class="form-group">
     <label for="reminder-threshold">Reminder threshold (miles)</label>
-    <input id="reminder-threshold" type="number" bind:value={reminderThresholdMiles} min="0" />
+    <input id="reminder-threshold" type="number" bind:value={reminderThresholdMilesInput} min="0" />
     <div class="small-note" style="margin-top:6px; color:#6b7280;">Notify when the service is within this many miles</div>
   </div>
 

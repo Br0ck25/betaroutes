@@ -92,6 +92,12 @@
 		</div>
 	</div>
 
+	{#if $userSettings.lastServiceOdometer && $userSettings.lastServiceOdometer > currentOdometer}
+		<div class="alert info" style="background:#E0F2FE; color:#0369A1; border:1px solid #60A5FA; padding:12px; border-radius:8px; margin:16px 0;">
+			Note: Your recorded last service odometer ({$userSettings.lastServiceOdometer.toLocaleString()}) is higher than the current estimated odometer ({Math.round(currentOdometer).toLocaleString()} mi). If this isn't expected, set <a href="/dashboard/settings">Vehicle odometer start</a> in Settings or update your last service reading.
+		</div>
+	{/if}
+
 	{#if $userSettings.serviceIntervalMiles}
 		<div class="alert maintenance" class:error={dueIn < 0} class:warning={dueIn >= 0 && dueIn <= reminderThreshold} style="display:flex; align-items:center; gap:12px; margin:16px 0; padding:12px; border-radius:10px; background:#FFFBEB; color:#92400E; border:1px solid #F59E0B;">
 			<div style="font-weight:600">{maintenanceMessage}</div>
