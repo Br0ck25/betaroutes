@@ -253,8 +253,31 @@ export class TripIndexDO {
 						const destination = points[i + 1];
 						if (!origin || !destination || origin === destination) continue;
 
+						// Build sanitized cache key
+						const key = sanitizeKey(origin, destination);
+
 						try {
-							// Call Google Directions API
+							// 1) Check KV cache first
+							let cached: string | null = null;
+							if (directionsKV) {
+								cached = await directionsKV.get(key);
+							}
+
+							if (cached) {
+								try {
+									const parsed = JSON.parse(cached);
+									if (parsed && parsed.distance != null && parsed.duration != null) {
+										totalMeters += Number(parsed.distance);
+										totalSeconds += Number(parsed.duration);
+										this.log(`[ComputeRoutes] Cache HIT ${key}`);
+										continue; // next leg
+									}
+								} catch (e) {
+									this.warn(`[ComputeRoutes] Corrupt cache for ${key}, will refetch`);
+								}
+							}
+
+							// 2) Not cached - call Google (if key present)
 							if (!googleKey) {
 								this.log('[ComputeRoutes] GOOGLE API KEY missing; cannot compute route');
 								continue;
@@ -276,18 +299,17 @@ export class TripIndexDO {
 								const distance = leg.distance?.value ?? null;
 								const duration = leg.duration?.value ?? null;
 
-								// Save per-pair route to BETA_DIRECTIONS_KV if available
+								if (distance && isFinite(distance)) totalMeters += distance;
+								if (duration && isFinite(duration)) totalSeconds += duration;
+
+								// Save result to KV for future reuse
 								if (directionsKV && distance !== null && duration !== null) {
-									const key = sanitizeKey(origin, destination);
 									await directionsKV.put(
 										key,
 										JSON.stringify({ distance, duration, source: 'google' })
 									);
 									this.log(`[ComputeRoutes] Wrote ${key}`);
 								}
-
-								if (distance && isFinite(distance)) totalMeters += distance;
-								if (duration && isFinite(duration)) totalSeconds += duration;
 							}
 						} catch (err: unknown) {
 							const emsg = err instanceof Error ? err.message : String(err);
