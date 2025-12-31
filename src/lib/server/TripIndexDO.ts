@@ -269,17 +269,17 @@ export class TripIndexDO {
 									if (parsed && parsed.distance != null && parsed.duration != null) {
 										totalMeters += Number(parsed.distance);
 										totalSeconds += Number(parsed.duration);
-										this.log(`[ComputeRoutes] Cache HIT ${key}`);
+										log.info(`[ComputeRoutes] Cache HIT ${key}`);
 										continue; // next leg
 									}
 								} catch (e) {
-									this.warn(`[ComputeRoutes] Corrupt cache for ${key}, will refetch`);
+									log.warn(`[ComputeRoutes] Corrupt cache for ${key}, will refetch`);
 								}
 							}
 
 							// 2) Not cached - call Google (if key present)
 							if (!googleKey) {
-								this.log('[ComputeRoutes] GOOGLE API KEY missing; cannot compute route');
+								log.warn('[ComputeRoutes] GOOGLE API KEY missing; cannot compute route');
 								continue;
 							}
 							const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(
@@ -308,12 +308,12 @@ export class TripIndexDO {
 										key,
 										JSON.stringify({ distance, duration, source: 'google' })
 									);
-									this.log(`[ComputeRoutes] Wrote ${key}`);
+									log.info(`[ComputeRoutes] Wrote ${key}`);
 								}
 							}
 						} catch (err: unknown) {
 							const emsg = err instanceof Error ? err.message : String(err);
-							this.warn(`[ComputeRoutes] Failed for ${origin} -> ${destination}: ${emsg}`);
+							log.warn(`[ComputeRoutes] Failed for ${origin} -> ${destination}: ${emsg}`);
 						}
 					}
 
@@ -338,13 +338,13 @@ export class TripIndexDO {
 							const tripKey = `trip:${trip.userId}:${trip.id}`;
 							try {
 								await tripsKV.put(tripKey, JSON.stringify({ ...updated }));
-								this.log(`[ComputeRoutes] Updated trip KV ${tripKey}`);
+								log.info(`[ComputeRoutes] Updated trip KV ${tripKey}`);
 							} catch (e) {
-								this.warn(`[ComputeRoutes] Failed to update trip KV: ${(e as Error).message}`);
+								log.warn(`[ComputeRoutes] Failed to update trip KV: ${(e as Error).message}`);
 							}
 						}
 					} catch (e) {
-						this.warn(`[ComputeRoutes] Failed to update trip summary: ${(e as Error).message}`);
+						log.warn(`[ComputeRoutes] Failed to update trip summary: ${(e as Error).message}`);
 					}
 
 					return new Response('OK');
