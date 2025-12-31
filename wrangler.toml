@@ -3,7 +3,9 @@ compatibility_date = "2024-12-05"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = ".svelte-kit/cloudflare"
 
-
+[[env.production.kv_namespaces]]
+binding = "BETA_DIRECTIONS_KV"
+id = "5392d9ff847542a29abf58c5f0624011"
 
 # ---------------------------------------------------
 # Production environment
@@ -48,6 +50,9 @@ id = "a827fef4c1a84512b7a41a1a167ffbc9"
 binding = "BETA_PLACES_KV"
 id = "2030b20c6baa46fe8c7bb620aaf0f8c1"
 
+[[env.production.kv_namespaces]]
+binding = "BETA_DIRECTIONS_KV"
+id = "5392d9ff847542a29abf58c5f0624011"
 
 [[env.production.kv_namespaces]]
 binding = "BETA_SESSIONS_KV"
@@ -99,6 +104,9 @@ id = "a827fef4c1a84512b7a41a1a167ffbc9"
 binding = "BETA_PLACES_KV"
 id = "2030b20c6baa46fe8c7bb620aaf0f8c1"
 
+[[env.preview.kv_namespaces]]
+binding = "BETA_DIRECTIONS_KV"
+id = "5392d9ff847542a29abf58c5f0624011"
 
 [[env.preview.kv_namespaces]]
 binding = "BETA_SESSIONS_KV"
