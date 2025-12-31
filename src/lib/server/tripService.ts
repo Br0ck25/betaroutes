@@ -1,475 +1,417 @@
-// src/lib/server/tripService.ts
-import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
-import { generatePrefixKey, generatePlaceKey } from '$lib/utils/keys';
-import { DO_ORIGIN, RETENTION } from '$lib/constants';
+// src/lib/server/TripIndexDO.ts
+import type { DurableObjectState, KVNamespace } from '@cloudflare/workers-types';
 import { log } from '$lib/server/log';
 
-export type Stop = {
-	id: string;
-	address: string;
-	notes?: string;
-	earnings?: number;
-	order: number;
-	location?: { lat: number; lng: number };
-};
-
-export type TripRecord = {
+interface TripSummary {
 	id: string;
 	userId: string;
-	title?: string;
-	stops?: Stop[];
-	// Common derived/search fields
 	date?: string;
-	startAddress?: string;
-	endAddress?: string;
-	startLocation?: { lat: number; lng: number };
-	endLocation?: { lat: number; lng: number };
-	destinations?: { address: string; location?: { lat: number; lng: number } }[];
-	startTime?: string;
-	endTime?: string;
-	netProfit?: number;
-	totalEarnings?: number;
-	fuelCost?: number;
-	maintenanceCost?: number;
-	suppliesCost?: number;
-	maintenanceItems?: unknown[];
-	supplyItems?: unknown[];
-	suppliesItems?: unknown[];
-	totalMiles?: number;
-	hoursWorked?: number;
-	estimatedTime?: number;
-	totalTime?: string;
 	createdAt: string;
-	updatedAt?: string;
-	deletedAt?: string;
-	deleted?: boolean;
-	// Optional: tracks last modified timestamp from external edits or merges
-	lastModified?: string;
-};
+	updatedAt: string;
+	[key: string]: unknown;
+}
 
-export type TrashMetadata = {
-	deletedAt: string;
-	deletedBy: string;
-	originalKey: string;
-	expiresAt: string;
-};
-
-export type TrashItem = {
+interface ExpenseRecord {
 	id: string;
 	userId: string;
-	recordType: 'trip' | 'expense';
-	metadata: TrashMetadata;
-};
-
-// Helper type used when restoring items from trash (keeps TripRecord but allows extra props)
-export type Restorable = TripRecord & Record<string, unknown>;
-
-function prefixForUser(userId: string) {
-	return `trip:${userId}:`;
+	date: string;
+	category: string;
+	amount: number;
+	description?: string;
+	createdAt: string;
+	updatedAt: string;
+	[key: string]: unknown;
 }
 
-function trashPrefixForUser(userId: string) {
-	return `trash:${userId}:`;
-}
+export class TripIndexDO {
+	state: DurableObjectState;
+	env: Record<string, unknown>;
 
-export function makeTripService(
-	kv: KVNamespace,
-	trashKV: KVNamespace | undefined,
-	placesKV: KVNamespace | undefined,
-	tripIndexDO: DurableObjectNamespace,
-	placesIndexDO: DurableObjectNamespace
-) {
-	const getIndexStub = (userId: string) => {
-		const id = tripIndexDO.idFromName(userId);
-		return tripIndexDO.get(id);
-	};
+	constructor(state: DurableObjectState, env: Record<string, unknown>) {
+		this.state = state;
+		this.env = env;
 
-	const toSummary = (trip: TripRecord) => ({
-		id: trip.id,
-		userId: trip.userId,
-		date: trip.date,
-		title: trip.title,
-		startAddress: trip.startAddress,
-		endAddress: trip.endAddress,
-		startTime: trip.startTime,
-		endTime: trip.endTime,
-		netProfit: trip.netProfit,
-		totalEarnings: trip.totalEarnings,
-		fuelCost: trip.fuelCost,
-		maintenanceCost: trip.maintenanceCost,
-		suppliesCost: trip.suppliesCost,
-		maintenanceItems: trip.maintenanceItems,
-		supplyItems: trip.supplyItems,
-		suppliesItems: trip.suppliesItems,
-		totalMiles: trip.totalMiles,
-		hoursWorked: trip.hoursWorked,
-		estimatedTime: trip.estimatedTime,
-		totalTime: trip.totalTime,
-		stopsCount: trip.stops?.length || 0,
-		stops: trip.stops,
-		createdAt: trip.createdAt,
-		updatedAt: trip.updatedAt,
-		deleted: trip.deleted
-	});
+		// 1. Initialize SQLite Schema
+		this.state.storage.sql.exec(`
+            CREATE TABLE IF NOT EXISTS trips (
+                id TEXT PRIMARY KEY,
+                userId TEXT,
+                date TEXT,
+                createdAt TEXT,
+                data TEXT
+            );
+            
+            CREATE TABLE IF NOT EXISTS expenses (
+                id TEXT PRIMARY KEY,
+                userId TEXT,
+                date TEXT,
+                category TEXT,
+                createdAt TEXT,
+                data TEXT
+            );
 
-	/**
-	 * Reliability Fix: Refactored indexing logic.
-	 * Uses try-catch and allSettled to ensure that one failed API call
-	 * doesn't corrupt the entire indexing process or crash the put() operation.
-	 */
-	async function indexTripData(trip: TripRecord) {
-		if (!placesKV || trip.deleted) return;
+            CREATE INDEX IF NOT EXISTS idx_trips_user ON trips(userId);
+            CREATE INDEX IF NOT EXISTS idx_expenses_user ON expenses(userId);
+        `);
+
+		// 2. Migration Logic (Legacy KV -> SQLite)
+		this.state.blockConcurrencyWhile(async () => {
+			try {
+				const legacyTrips = await this.state.storage.get<TripSummary[]>('trips');
+				if (legacyTrips && Array.isArray(legacyTrips) && legacyTrips.length > 0) {
+					const CHUNK_SIZE = 100;
+					for (let i = 0; i < legacyTrips.length; i += CHUNK_SIZE) {
+						const chunk = legacyTrips.slice(i, i + CHUNK_SIZE);
+						this.state.storage.sql.exec('BEGIN TRANSACTION');
+						try {
+							for (const trip of chunk) {
+								this.state.storage.sql.exec(
+									'INSERT OR REPLACE INTO trips (id, userId, date, createdAt, data) VALUES (?, ?, ?, ?, ?)',
+									trip.id,
+									trip.userId || '',
+									trip.date || '',
+									trip.createdAt || '',
+									JSON.stringify(trip)
+								);
+							}
+							this.state.storage.sql.exec('COMMIT');
+						} catch (err) {
+							this.state.storage.sql.exec('ROLLBACK');
+							throw err;
+						}
+					}
+					await this.state.storage.delete('trips');
+				}
+			} catch (err) {
+				log.error('[TripIndexDO] Startup Migration Failed:', err);
+			}
+		});
+	}
+
+	async fetch(request: Request) {
+		const url = new URL(request.url);
+		const path = url.pathname;
 
 		try {
-			const uniquePlaces = new Map<string, { lat?: number; lng?: number }>();
-			const add = (addr?: string, loc?: { lat: number; lng: number }) => {
-				if (!addr || addr.length < 3) return;
-				const normalized = addr.toLowerCase().trim();
-				if (!uniquePlaces.has(normalized) || loc) {
-					uniquePlaces.set(normalized, loc || {});
+			const parseBody = async <T>() => {
+				try {
+					return (await request.json()) as T;
+				} catch {
+					throw new Error('INVALID_JSON');
 				}
 			};
 
-			add(trip.startAddress, trip.startLocation);
-			add(trip.endAddress, trip.endLocation);
-			if (Array.isArray(trip.stops)) {
-				(trip.stops as Stop[]).forEach((s: Stop) => add(s.address, s.location));
-			}
-			if (Array.isArray(trip.destinations)) {
-				(
-					trip.destinations as { address: string; location?: { lat: number; lng: number } }[]
-				).forEach((d) => add(d.address, d.location));
+			// --- ADMIN OPERATIONS ---
+			if (path === '/admin/wipe-user') {
+				if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
+				this.state.storage.sql.exec('DELETE FROM trips');
+				this.state.storage.sql.exec('DELETE FROM expenses');
+				return new Response('Account Data Wiped');
 			}
 
-			const writePromises: Promise<unknown>[] = [];
+			// --- TRIP OPERATIONS ---
+			if (path === '/list') {
+				const limitParam = url.searchParams.get('limit');
+				const offsetParam = url.searchParams.get('offset');
+				let query = `SELECT data FROM trips ORDER BY date DESC, createdAt DESC`;
+				const params: (string | number)[] = [];
 
-			for (const [addrKey, data] of uniquePlaces.entries()) {
-				// 1. Update individual place metadata if coordinates exist
-				if (data.lat !== undefined && data.lng !== undefined) {
-					const safeKey = await generatePlaceKey(addrKey);
-					const payload = {
-						lastSeen: new Date().toISOString(),
-						formatted_address: addrKey,
-						lat: data.lat,
-						lng: data.lng
-					};
-					writePromises.push(placesKV.put(safeKey, JSON.stringify(payload)));
+				if (limitParam) {
+					query += ` LIMIT ? OFFSET ?`;
+					params.push(parseInt(limitParam) || 50, parseInt(offsetParam || '0') || 0);
 				}
 
-				// 2. Update search index Durable Object
-				const prefixKey = generatePrefixKey(addrKey);
-				const stub = placesIndexDO.get(placesIndexDO.idFromName(prefixKey));
+				const cursor = this.state.storage.sql.exec(query, ...params);
+				const countRes = this.state.storage.sql.exec('SELECT COUNT(*) as total FROM trips');
+				const total = (countRes.one() as { total: number }).total;
 
-				writePromises.push(
-					stub.fetch(`${DO_ORIGIN}/add?key=${encodeURIComponent(prefixKey)}`, {
-						method: 'POST',
-						body: JSON.stringify({ address: addrKey })
+				const trips = [];
+				for (const row of cursor) {
+					trips.push(JSON.parse((row as Record<string, unknown>)['data'] as string));
+				}
+				return new Response(
+					JSON.stringify({
+						trips,
+						pagination: {
+							total,
+							limit: limitParam ? parseInt(limitParam) : trips.length,
+							offset: offsetParam ? parseInt(offsetParam) : 0
+						}
 					})
 				);
 			}
 
-			// Ensure allSettled so one failure doesn't stop the others
-			const results = await Promise.allSettled(writePromises);
-			const rejected = results.filter((r) => r.status === 'rejected');
-			if (rejected.length > 0) {
-				log.error(`[TripService] Indexing had ${rejected.length} failures for trip ${trip.id}`);
+			if (path === '/migrate') {
+				const trips = await parseBody<TripSummary[]>();
+				this.state.storage.sql.exec('BEGIN TRANSACTION');
+				try {
+					for (const trip of trips) {
+						this.state.storage.sql.exec(
+							'INSERT OR REPLACE INTO trips (id, userId, date, createdAt, data) VALUES (?, ?, ?, ?, ?)',
+							trip.id,
+							trip.userId,
+							trip.date || '',
+							trip.createdAt || '',
+							JSON.stringify(trip)
+						);
+					}
+					this.state.storage.sql.exec('COMMIT');
+				} catch (err) {
+					this.state.storage.sql.exec('ROLLBACK');
+					throw err;
+				}
+				return new Response('OK');
 			}
-		} catch (err) {
-			log.error('[TripService] Critical error in indexTripData:', err);
+
+			if (path === '/put') {
+				const trip = await parseBody<TripSummary>();
+				if (!trip || !trip.id || !trip.userId) return new Response('Invalid Data', { status: 400 });
+				this.state.storage.sql.exec(
+					`INSERT OR REPLACE INTO trips (id, userId, date, createdAt, data) VALUES (?, ?, ?, ?, ?)`,
+					trip.id,
+					trip.userId,
+					trip.date || '',
+					trip.createdAt || '',
+					JSON.stringify(trip)
+				);
+				return new Response('OK');
+			}
+
+			// --- COMPUTE ROUTES (Aligns with HughesNet Router) ---
+			if (path === '/compute-routes') {
+				if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
+				const body = await parseBody<{ id: string }>();
+				const tripId = body?.id;
+				if (!tripId) return new Response('Missing trip id', { status: 400 });
+
+				try {
+					const cursor = this.state.storage.sql.exec('SELECT data FROM trips WHERE id = ?', tripId);
+					const row = cursor.one();
+					if (!row) return new Response('Trip not found', { status: 404 });
+					const trip = JSON.parse(
+						(row as Record<string, unknown>)['data'] as string
+					) as TripSummary;
+
+					const points: string[] = [];
+					if (trip['startAddress']) points.push(String(trip['startAddress']));
+					if (Array.isArray(trip['stops'])) {
+						for (const s of trip['stops'] as any[]) {
+							if (s && s.address) points.push(String(s.address));
+						}
+					}
+					if (trip['endAddress']) points.push(String(trip['endAddress']));
+
+					const directionsKV = (this.env as any)['BETA_DIRECTIONS_KV'] as KVNamespace | undefined;
+					const tripsKV = (this.env as any)['BETA_LOGS_KV'] as KVNamespace | undefined;
+					const googleKey = String((this.env as any)['PRIVATE_GOOGLE_MAPS_API_KEY'] || '');
+
+					let totalMeters = 0;
+					let totalSeconds = 0;
+
+					for (let i = 0; i < points.length - 1; i++) {
+						const origin = points[i];
+						const destination = points[i + 1];
+						if (!origin || !destination || origin === destination) continue;
+
+						// [!code changed] ALIGNMENT: Use HughesNet-style keys
+						// This matches the regex logic in src/lib/server/hughesnet/router.ts
+						let key = `dir:${origin.toLowerCase().trim()}_to_${destination.toLowerCase().trim()}`;
+						key = key.replace(/[^a-z0-9_:-]/g, '');
+
+						// Safety check for KV limit (512 bytes)
+						if (key.length > 512) {
+							// Fallback to substring if absurdly long, though this breaks sharing for edge cases
+							key = key.substring(0, 512);
+						}
+
+						try {
+							// 1) Check KV cache
+							let cached: string | null = null;
+							if (directionsKV) {
+								cached = await directionsKV.get(key);
+							}
+
+							if (cached) {
+								try {
+									const parsed = JSON.parse(cached);
+									if (parsed && parsed.distance != null && parsed.duration != null) {
+										totalMeters += Number(parsed.distance);
+										totalSeconds += Number(parsed.duration);
+										// log.info(`[ComputeRoutes] Cache HIT ${key}`);
+										continue;
+									}
+								} catch (e) {
+									// ignore corrupt
+								}
+							}
+
+							// 2) Google Fallback
+							if (!googleKey) {
+								log.warn('[ComputeRoutes] GOOGLE API KEY missing');
+								continue;
+							}
+							const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(
+								origin
+							)}&destination=${encodeURIComponent(destination)}&key=${googleKey}`;
+							const res = await fetch(url);
+							const data: any = await res.json().catch(() => null);
+
+							if (
+								data &&
+								data.status === 'OK' &&
+								data.routes &&
+								data.routes[0] &&
+								data.routes[0].legs &&
+								data.routes[0].legs[0]
+							) {
+								const leg = data.routes[0].legs[0];
+								const distance = leg.distance?.value ?? null;
+								const duration = leg.duration?.value ?? null;
+
+								if (distance && isFinite(distance)) totalMeters += distance;
+								if (duration && isFinite(duration)) totalSeconds += duration;
+
+								// Save to KV (Readable Key)
+								if (directionsKV && distance !== null && duration !== null) {
+									await directionsKV.put(
+										key,
+										JSON.stringify({ distance, duration, source: 'google' })
+									);
+									log.info(`[ComputeRoutes] Cached: ${key}`);
+								}
+							}
+						} catch (err) {
+							log.warn(`[ComputeRoutes] Failed leg: ${err}`);
+						}
+					}
+
+					// Update Trip in SQLite & KV
+					try {
+						const miles = Number((totalMeters * 0.000621371).toFixed(1));
+						const minutes = Math.round(totalSeconds / 60);
+						const updated = {
+							...trip,
+							totalMiles: miles,
+							estimatedTime: minutes,
+							updatedAt: new Date().toISOString()
+						};
+
+						this.state.storage.sql.exec(
+							'UPDATE trips SET data = ? WHERE id = ?',
+							JSON.stringify(updated),
+							tripId
+						);
+
+						if (tripsKV) {
+							const tripKey = `trip:${trip.userId}:${trip.id}`;
+							await tripsKV.put(tripKey, JSON.stringify({ ...updated }));
+						}
+					} catch (e) {
+						log.warn(`[ComputeRoutes] Save failed: ${e}`);
+					}
+
+					return new Response('OK');
+				} catch (e: unknown) {
+					const msg = e instanceof Error ? e.message : String(e);
+					log.error('[TripIndexDO] compute-routes failed', { message: msg });
+					return new Response(JSON.stringify({ error: msg }), { status: 500 });
+				}
+			}
+
+			if (path === '/delete') {
+				const { id } = await parseBody<{ id: string }>();
+				this.state.storage.sql.exec('DELETE FROM trips WHERE id = ?', id);
+				return new Response('OK');
+			}
+
+			// --- EXPENSE OPERATIONS (Omitted for brevity, logic remains identical) ---
+			if (path === '/expenses/list') {
+				const cursor = this.state.storage.sql.exec(
+					`SELECT data FROM expenses ORDER BY date DESC, createdAt DESC`
+				);
+				const expenses = [];
+				for (const row of cursor) {
+					expenses.push(JSON.parse((row as Record<string, unknown>)['data'] as string));
+				}
+				return new Response(JSON.stringify(expenses));
+			}
+
+			if (path === '/expenses/put') {
+				const item = await parseBody<ExpenseRecord>();
+				this.state.storage.sql.exec(
+					`INSERT OR REPLACE INTO expenses (id, userId, date, category, createdAt, data) VALUES (?, ?, ?, ?, ?, ?)`,
+					item.id,
+					item.userId,
+					item.date,
+					item.category,
+					item.createdAt,
+					JSON.stringify(item)
+				);
+				return new Response('OK');
+			}
+
+			if (path === '/expenses/delete') {
+				const { id } = await parseBody<{ id: string }>();
+				this.state.storage.sql.exec('DELETE FROM expenses WHERE id = ?', id);
+				return new Response('OK');
+			}
+
+			if (path === '/expenses/migrate') {
+				const items = await parseBody<ExpenseRecord[]>();
+				this.state.storage.sql.exec('BEGIN TRANSACTION');
+				try {
+					for (const item of items) {
+						this.state.storage.sql.exec(
+							'INSERT OR REPLACE INTO expenses (id, userId, date, category, createdAt, data) VALUES (?, ?, ?, ?, ?, ?)',
+							item.id,
+							item.userId,
+							item.date,
+							item.category,
+							item.createdAt,
+							JSON.stringify(item)
+						);
+					}
+					this.state.storage.sql.exec('COMMIT');
+				} catch (err) {
+					this.state.storage.sql.exec('ROLLBACK');
+					throw err;
+				}
+				await this.state.storage.put('expenses_migrated', true);
+				return new Response('OK');
+			}
+
+			if (path === '/expenses/status') {
+				const countRes = this.state.storage.sql.exec('SELECT COUNT(*) as c FROM expenses');
+				const count = (countRes.one() as { c: number }).c;
+				const migrated = await this.state.storage.get('expenses_migrated');
+				return new Response(JSON.stringify({ needsMigration: !migrated && count === 0 }));
+			}
+
+			// --- BILLING ---
+			if (path === '/billing/check-increment') {
+				const { monthKey, limit } = await parseBody<{ monthKey: string; limit: number }>();
+				const key = `count:${monthKey}`;
+				const current = (await this.state.storage.get<number>(key)) || 0;
+				if (current >= limit)
+					return new Response(JSON.stringify({ allowed: false, count: current }));
+				await this.state.storage.put(key, current + 1);
+				return new Response(JSON.stringify({ allowed: true, count: current + 1 }));
+			}
+
+			if (path === '/billing/decrement') {
+				const { monthKey } = await parseBody<{ monthKey: string }>();
+				const key = `count:${monthKey}`;
+				const current = (await this.state.storage.get<number>(key)) || 0;
+				await this.state.storage.put(key, Math.max(0, current - 1));
+				return new Response(JSON.stringify({ count: Math.max(0, current - 1) }));
+			}
+
+			return new Response('Not Found', { status: 404 });
+		} catch (err: unknown) {
+			const msg = err instanceof Error ? err.message : String(err);
+			log.error('[TripIndexDO] Error:', { message: msg });
+			if (msg === 'INVALID_JSON') return new Response('Invalid JSON', { status: 400 });
+			return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
 		}
 	}
-
-	return {
-		async checkMonthlyQuota(
-			userId: string,
-			limit: number
-		): Promise<{ allowed: boolean; count: number }> {
-			const date = new Date();
-			const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-			const stub = getIndexStub(userId);
-
-			const res = await stub.fetch(`${DO_ORIGIN}/billing/check-increment`, {
-				method: 'POST',
-				body: JSON.stringify({ monthKey, limit })
-			});
-			if (!res.ok) return { allowed: false, count: limit };
-			return (await res.json()) as { allowed: boolean; count: number };
-		},
-
-		async list(
-			userId: string,
-			options: { since?: string; limit?: number; offset?: number } = {}
-		): Promise<TripRecord[]> {
-			const stub = getIndexStub(userId);
-
-			let url = `${DO_ORIGIN}/list`;
-			const params = new URLSearchParams();
-			if (options.limit) params.set('limit', String(options.limit));
-			if (options.offset) params.set('offset', String(options.offset));
-			if (params.size > 0) url += `?${params.toString()}`;
-
-			const res = await stub.fetch(url);
-
-			if (!res.ok) {
-				log.error(`[TripService] DO Error: ${res.status}`);
-				return [];
-			}
-
-			const data = (await res.json()) as
-				| { trips: TripRecord[]; needsMigration?: boolean }
-				| TripRecord[];
-
-			let trips: TripRecord[] = [];
-			let needsMigration = false;
-
-			if (Array.isArray(data)) {
-				trips = data;
-			} else {
-				trips = data.trips || [];
-				needsMigration = !!data.needsMigration;
-			}
-
-			if (needsMigration) {
-				log.debug(`[TripService] Migrating index for user ${userId} to Durable Object...`);
-				const prefix = prefixForUser(userId);
-
-				const out: TripRecord[] = [];
-				let list = await kv.list({ prefix });
-				let keys = list.keys;
-
-				while (!list.list_complete && list.cursor) {
-					list = await kv.list({ prefix, cursor: list.cursor });
-					keys = keys.concat(list.keys);
-				}
-
-				for (const k of keys) {
-					const raw = await kv.get(k.name);
-					if (!raw) continue;
-					const t = JSON.parse(raw);
-					out.push(t);
-				}
-
-				const summaries = out.map(toSummary);
-
-				await stub.fetch(`${DO_ORIGIN}/migrate`, {
-					method: 'POST',
-					body: JSON.stringify(summaries)
-				});
-
-				out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-				return out;
-			}
-
-			if (options.since) {
-				const sinceDate = new Date(options.since);
-				return trips.filter((t) => new Date(t.updatedAt || t.createdAt) > sinceDate);
-			} else {
-				return trips.filter((t) => !t.deleted);
-			}
-		},
-
-		async get(userId: string, tripId: string) {
-			const key = `trip:${userId}:${tripId}`;
-			const raw = await kv.get(key);
-			return raw ? (JSON.parse(raw) as TripRecord) : null;
-		},
-
-		async put(trip: TripRecord) {
-			trip.updatedAt = new Date().toISOString();
-			delete trip.deleted;
-			delete trip.deletedAt;
-			await kv.put(`trip:${trip.userId}:${trip.id}`, JSON.stringify(trip));
-			const stub = getIndexStub(trip.userId);
-
-			await stub.fetch(`${DO_ORIGIN}/put`, {
-				method: 'POST',
-				body: JSON.stringify(toSummary(trip))
-			});
-
-			try {
-				await indexTripData(trip);
-			} catch (e) {
-				log.error('[TripService] Failed to index trip data:', e);
-			}
-		},
-
-		async delete(userId: string, tripId: string) {
-			const key = `trip:${userId}:${tripId}`;
-			const raw = await kv.get(key);
-			if (!raw) return;
-
-			const trip = JSON.parse(raw);
-			const now = new Date();
-			// Reliability Fix: Use RETENTION constant
-			const expiresAt = new Date(now.getTime() + RETENTION.THIRTY_DAYS * 1000);
-
-			// 1. Copy to Trash KV
-			if (trashKV) {
-				const metadata: TrashMetadata = {
-					deletedAt: now.toISOString(),
-					deletedBy: userId,
-					originalKey: key,
-					expiresAt: expiresAt.toISOString()
-				};
-
-				const trashKey = `trash:${userId}:${tripId}`;
-				const trashPayload = {
-					type: 'trip',
-					data: trip,
-					metadata
-				};
-
-				await trashKV.put(trashKey, JSON.stringify(trashPayload), {
-					expirationTtl: RETENTION.THIRTY_DAYS
-				});
-			}
-
-			// 2. Overwrite Main KV with Tombstone
-			const tombstone = {
-				id: trip.id,
-				userId: trip.userId,
-				deleted: true,
-				deletedAt: now.toISOString(),
-				updatedAt: now.toISOString(),
-				createdAt: trip.createdAt
-			};
-
-			await kv.put(key, JSON.stringify(tombstone), { expirationTtl: RETENTION.THIRTY_DAYS });
-
-			// 3. Update Index (DO) with DELETE command
-			const stub = getIndexStub(userId);
-			await stub.fetch(`${DO_ORIGIN}/delete`, {
-				method: 'POST',
-				body: JSON.stringify({ id: trip.id })
-			});
-
-			// 4. Handle Billing
-			const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-			await stub.fetch(`${DO_ORIGIN}/billing/decrement`, {
-				method: 'POST',
-				body: JSON.stringify({ monthKey })
-			});
-		},
-
-		async listTrash(userId: string): Promise<TrashItem[]> {
-			if (!trashKV) return [];
-			const prefix = trashPrefixForUser(userId);
-			const list = await trashKV.list({ prefix });
-			const out: TrashItem[] = [];
-
-			for (const k of list.keys) {
-				const raw = await trashKV.get(k.name);
-				if (!raw) continue;
-				const parsed = JSON.parse(raw);
-
-				let item: Restorable | Record<string, unknown>;
-				let type: 'trip' | 'expense' = 'trip';
-
-				if (parsed.trip) {
-					item = parsed.trip;
-					type = 'trip';
-				} else if (parsed.type && parsed.data) {
-					item = parsed.data;
-					type = parsed.type;
-				} else {
-					item = parsed;
-				}
-
-				// Ensure we produce a well-typed TrashItem (derive id/userId from item or metadata)
-				const itemRec = item as Record<string, unknown>;
-				const id =
-					typeof itemRec['id'] === 'string'
-						? (itemRec['id'] as string)
-						: (parsed.metadata?.originalKey || '').split(':').pop() || '';
-				const uid =
-					typeof itemRec['userId'] === 'string'
-						? (itemRec['userId'] as string)
-						: (parsed.metadata?.originalKey || '').split(':')[1] || '';
-				out.push({
-					id,
-					userId: uid,
-					metadata: parsed.metadata as TrashMetadata,
-					recordType: type
-				});
-			}
-
-			out.sort((a, b) => (b.metadata?.deletedAt || '').localeCompare(a.metadata?.deletedAt || ''));
-			return out;
-		},
-
-		async emptyTrash(userId: string) {
-			if (!trashKV) return 0;
-			const prefix = trashPrefixForUser(userId);
-			const list = await trashKV.list({ prefix });
-			let count = 0;
-
-			for (const k of list.keys) {
-				await trashKV.delete(k.name);
-				count++;
-			}
-			return count;
-		},
-
-		async restore(userId: string, itemId: string) {
-			if (!trashKV) throw new Error('Trash KV not available');
-
-			const trashKey = `trash:${userId}:${itemId}`;
-			const raw = await trashKV.get(trashKey);
-
-			if (!raw) throw new Error('Item not found in trash');
-
-			const parsed = JSON.parse(raw);
-
-			let item: Restorable | Record<string, unknown>;
-			let type: 'trip' | 'expense' = 'trip';
-
-			if (parsed.trip) {
-				item = parsed.trip as Restorable;
-				type = 'trip';
-			} else if (parsed.type && parsed.data) {
-				item = parsed.data as Record<string, unknown>;
-				type = parsed.type;
-			} else {
-				item = parsed as Restorable;
-			}
-
-			if ('deletedAt' in item) delete (item as Record<string, unknown>)['deletedAt'];
-			if ('deleted' in item) delete (item as Record<string, unknown>)['deleted'];
-			(item as Record<string, unknown>)['updatedAt'] = new Date().toISOString();
-
-			const restored = item as Restorable;
-
-			if (type === 'trip') {
-				const activeKey = `trip:${userId}:${restored.id}`;
-				await kv.put(activeKey, JSON.stringify(restored));
-
-				const stub = getIndexStub(userId);
-				await stub.fetch(`${DO_ORIGIN}/put`, {
-					method: 'POST',
-					body: JSON.stringify(toSummary(restored))
-				});
-			} else if (type === 'expense') {
-				const activeKey = `expense:${userId}:${restored.id}`;
-				await kv.put(activeKey, JSON.stringify(restored));
-			}
-
-			await trashKV.delete(trashKey);
-			return item;
-		},
-
-		async permanentDelete(userId: string, itemId: string) {
-			if (!trashKV) throw new Error('Trash KV not available');
-			const trashKey = `trash:${userId}:${itemId}`;
-			await trashKV.delete(trashKey);
-		},
-
-		async incrementUserCounter(userId: string, amt = 1) {
-			const key = `meta:user:${userId}:trip_count`;
-			const raw = await kv.get(key);
-			const cur = raw ? parseInt(raw, 10) : 0;
-			const next = Math.max(0, cur + amt);
-			await kv.put(key, String(next));
-			return next;
-		}
-	};
 }
