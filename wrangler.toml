@@ -51,8 +51,8 @@ binding = "BETA_PLACES_KV"
 id = "2030b20c6baa46fe8c7bb620aaf0f8c1"
 
 [[env.production.kv_namespaces]]
-binding = "BETA_DIRECTIONS_KV"
-id = "3fb03d50a94e4b2cb4fc3f54bdfd45d7"
+binding = ""
+id = ""
 
 [[env.production.kv_namespaces]]
 binding = "BETA_SESSIONS_KV"
@@ -105,8 +105,8 @@ binding = "BETA_PLACES_KV"
 id = "2030b20c6baa46fe8c7bb620aaf0f8c1"
 
 [[env.preview.kv_namespaces]]
-binding = "BETA_DIRECTIONS_KV"
-id = "3fb03d50a94e4b2cb4fc3f54bdfd45d7"
+binding = ""
+id = ""
 
 [[env.preview.kv_namespaces]]
 binding = "BETA_SESSIONS_KV"
