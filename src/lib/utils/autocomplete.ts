@@ -49,7 +49,7 @@ export async function loadGoogleMaps(apiKey: string): Promise<void> {
 	return loadingPromise;
 }
 
-// [!code fix] Lightweight validator for Rendering Phase
+// Lightweight validator for Rendering Phase
 export function isRenderableCandidate(result: any, input: string) {
 	return isAcceptableGeocode(result, input);
 }
@@ -163,7 +163,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 					if (validData[0].source === 'google_proxy') source = 'google';
 				}
 
-				// [!code fix] Mandatory: Strict Filter BEFORE rendering
+				// Mandatory: Strict Filter BEFORE rendering
 				const suggestionsToShow = validData.slice(0, 5);
 				const acceptableSet = new Set(
 					suggestionsToShow
@@ -173,14 +173,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 				let filtered = suggestionsToShow; // Keep the top suggestions visible regardless of acceptability (we'll validate on blur/selection)
 				filtered = suggestionsToShow;
 				if (filtered.length > 0) {
-					// Cache external results (remove source tag for KV storage)
-					if (source !== 'kv') {
-						const cleanResults = filtered.map(({ source, ...rest }) => {
-							void source;
-							return rest;
-						});
-						cacheToKV(value, cleanResults);
-					}
+					// [!code --] Removed client-side caching call (moved to server)
 					renderResults(filtered.slice(0, 5), source, acceptableSet);
 				} else {
 					renderEmpty();
@@ -192,17 +185,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 		}, 300);
 	}
 
-	async function cacheToKV(query: string, results: Array<Record<string, unknown>>) {
-		try {
-			fetch('/api/autocomplete/cache', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ query, results })
-			});
-		} catch (_e: unknown) {
-			void _e;
-		}
-	}
+	// [!code --] Removed redundant cacheToKV function
 
 	async function savePlaceToKV(place: Record<string, unknown>) {
 		try {

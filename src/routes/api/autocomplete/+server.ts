@@ -52,7 +52,7 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 
 	const query = sanitizeQueryParam(url.searchParams.get('q'), 200);
 	const placeId = sanitizeQueryParam(url.searchParams.get('placeid'), 200);
-	// [!code ++] Allow client to force Google escalation
+	// Allow client to force Google escalation
 	const forceGoogle = url.searchParams.get('forceGoogle') === 'true';
 
 	const apiKey = env['PRIVATE_GOOGLE_MAPS_API_KEY'];
@@ -82,7 +82,6 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 
 	try {
 		// 1. Try KV Cache First (Skip if forceGoogle is true)
-		// [!code ++] Added !forceGoogle check
 		if (kv && !forceGoogle) {
 			const bucketRaw = await kv.get(bucketKey);
 			if (bucketRaw) {
@@ -148,10 +147,15 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 				source: 'google_proxy'
 			}));
 
-			// Save Google results to KV permanently so future requests hit the cache.
-			// These results are considered authoritative enough to keep indefinitely in KV.
+			// [!code ++] Save Google results to KV with Fan-Out (Background)
 			if (kv && results.length > 0) {
-				await kv.put(bucketKey, JSON.stringify(results));
+				const cacheTask = fanOutCache(kv, results);
+				if (platform && platform.context && platform.context.waitUntil) {
+					platform.context.waitUntil(cacheTask);
+				} else {
+					// Fire and forget in environments without waitUntil
+					cacheTask.catch((err) => console.error('Background cache failed', err));
+				}
 			}
 
 			return json(results);
@@ -163,6 +167,51 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 		return json([]);
 	}
 };
+
+/**
+ * Helper: Fan-out Cache Logic
+ * Caches results into multiple prefix buckets (2..10 chars)
+ */
+async function fanOutCache(kv: KVNamespace, results: any[]) {
+	// 1. Group new items by their potential prefixes
+	const prefixMap = new Map<string, any[]>();
+
+	for (const result of results) {
+		const address = result.formatted_address || result.name || '';
+		const normalized = address.toLowerCase().replace(/\s+/g, '');
+
+		// Generate prefixes for this result (lengths 2 to 10)
+		for (let len = 2; len <= Math.min(10, normalized.length); len++) {
+			const prefix = normalized.substring(0, len);
+			const key = `prefix:${prefix}`;
+
+			if (!prefixMap.has(key)) {
+				prefixMap.set(key, []);
+			}
+			prefixMap.get(key)!.push(result);
+		}
+	}
+
+	// 2. Process each prefix bucket
+	const updatePromises = Array.from(prefixMap.entries()).map(async ([key, newItems]) => {
+		const existingRaw = await kv.get(key);
+		let bucket = existingRaw ? JSON.parse(existingRaw) : [];
+
+		for (const item of newItems) {
+			const exists = bucket.some(
+				(b: any) =>
+					b.formatted_address === item.formatted_address ||
+					(b.place_id && b.place_id === item.place_id)
+			);
+			if (!exists) bucket.push(item);
+		}
+
+		if (bucket.length > 20) bucket = bucket.slice(0, 20);
+		await kv.put(key, JSON.stringify(bucket));
+	});
+
+	await Promise.all(updatePromises);
+}
 
 /**
  * POST Handler

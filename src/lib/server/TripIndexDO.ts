@@ -1,5 +1,5 @@
 // src/lib/server/TripIndexDO.ts
-import type { DurableObjectState } from '@cloudflare/workers-types';
+import type { DurableObjectState, KVNamespace } from '@cloudflare/workers-types';
 import { log } from '$lib/server/log';
 
 interface TripSummary {
@@ -234,15 +234,9 @@ export class TripIndexDO {
 					}
 					if (trip['endAddress']) points.push(String(trip['endAddress']));
 
-					// Helper: sanitize key
-					const sanitizeKey = (a: string, b: string) => {
-						let key = `dir:${a.toLowerCase().trim()}_to_${b.toLowerCase().trim()}`;
-						return key.replace(/[^a-z0-9_:-]/g, '');
-					};
-
 					// Access KVs and API key from env
-					const directionsKV = (this.env as any)['BETA_DIRECTIONS_KV'] as any | undefined;
-					const tripsKV = (this.env as any)['BETA_LOGS_KV'] as any | undefined;
+					const directionsKV = (this.env as any)['BETA_DIRECTIONS_KV'] as KVNamespace | undefined;
+					const tripsKV = (this.env as any)['BETA_LOGS_KV'] as KVNamespace | undefined;
 					const googleKey = String((this.env as any)['PRIVATE_GOOGLE_MAPS_API_KEY'] || '');
 
 					let totalMeters = 0;
@@ -253,8 +247,15 @@ export class TripIndexDO {
 						const destination = points[i + 1];
 						if (!origin || !destination || origin === destination) continue;
 
-						// Build sanitized cache key
-						const key = sanitizeKey(origin, destination);
+						// [!code ++] Robust Hashed Key Generation
+						// Uses SHA-256 to ensure safety with long addresses or special chars
+						const keyString = `${origin.trim().toLowerCase()}|${destination.trim().toLowerCase()}`;
+						const encoder = new TextEncoder();
+						const data = encoder.encode(keyString);
+						const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+						const hashArray = Array.from(new Uint8Array(hashBuffer));
+						const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+						const key = `dir:${hashHex}`;
 
 						try {
 							// 1) Check KV cache first
@@ -269,7 +270,7 @@ export class TripIndexDO {
 									if (parsed && parsed.distance != null && parsed.duration != null) {
 										totalMeters += Number(parsed.distance);
 										totalSeconds += Number(parsed.duration);
-										log.info(`[ComputeRoutes] Cache HIT ${key}`);
+										// log.debug(`[ComputeRoutes] Cache HIT ${key.substring(0, 8)}`);
 										continue; // next leg
 									}
 								} catch (e) {
@@ -302,18 +303,18 @@ export class TripIndexDO {
 								if (distance && isFinite(distance)) totalMeters += distance;
 								if (duration && isFinite(duration)) totalSeconds += duration;
 
-								// Save result to KV for future reuse
+								// Save result to KV for future reuse (Forever)
 								if (directionsKV && distance !== null && duration !== null) {
 									await directionsKV.put(
 										key,
 										JSON.stringify({ distance, duration, source: 'google' })
 									);
-									log.info(`[ComputeRoutes] Wrote ${key}`);
+									log.info(`[ComputeRoutes] Cached new route leg ${key.substring(0, 8)}`);
 								}
 							}
 						} catch (err: unknown) {
 							const emsg = err instanceof Error ? err.message : String(err);
-							log.warn(`[ComputeRoutes] Failed for ${origin} -> ${destination}: ${emsg}`);
+							log.warn(`[ComputeRoutes] Failed for leg ${i}: ${emsg}`);
 						}
 					}
 
