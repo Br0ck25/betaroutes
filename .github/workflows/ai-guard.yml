@@ -1,0 +1,13 @@
+name: AI Guard
+
+on: [push, pull_request]
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          if grep -R "\$:" src --include="*.svelte"; then exit 1; fi
+          if grep -R "onMount" src --include="*.svelte"; then exit 1; fi
+          if grep -R "<[^>]* />" src --include="*.svelte" --include="*.html"; then exit 1; fi

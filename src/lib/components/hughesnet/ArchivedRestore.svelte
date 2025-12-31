@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { createEventDispatcher } from 'svelte';
+	import Modal from '$lib/components/ui/Modal.svelte';
+	import Button from '$lib/components/ui/Button.svelte';
 
 	const dispatch = createEventDispatcher();
 
@@ -140,29 +142,28 @@
 			</ul>
 
 			{#if showConfirm}
-				<div class="modal-overlay">
-					<div class="modal">
-						<h4>Restore {selected.length} archived order(s)?</h4>
+				<Modal bind:open={showConfirm} title={`Restore ${selected.length} archived order(s)?`}>
+					<div class="space-y-3">
 						<p>
 							Would you like to just restore them, or restore and run a HughesNet sync now to create
 							trips for those dates?
 						</p>
 						<div class="modal-actions">
-							<button
-								class="btn-secondary"
+							<Button
+								variant="outline"
 								on:click={() => {
 									confirmAction = 'restore';
 									confirmRestore();
-								}}>Restore Only</button
+								}}>Restore Only</Button
 							>
-							<button
-								class="btn-primary"
+							<Button
+								variant="primary"
 								on:click={() => {
 									confirmAction = 'restore_sync';
 									confirmRestore();
-								}}>Restore & Sync Now</button
+								}}>Restore & Sync Now</Button
 							>
-							<button class="btn-small" on:click={closeConfirm}>Cancel</button>
+							<Button variant="secondary" on:click={closeConfirm}>Cancel</Button>
 						</div>
 						{#if confirmAction === 'restore_sync'}
 							<p class="help">
@@ -171,7 +172,7 @@
 							</p>
 						{/if}
 					</div>
-				</div>
+				</Modal>
 			{/if}
 		{/if}
 	{/if}
@@ -247,34 +248,7 @@
 		border-radius: 8px;
 		margin-bottom: 8px;
 	}
-	.modal-overlay {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.4);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 50;
-	}
-	.modal {
-		background: white;
-		padding: 20px;
-		border-radius: 10px;
-		max-width: 480px;
-		width: 100%;
-		box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-	}
-	.modal h4 {
-		margin-top: 0;
-	}
-	.modal-actions {
-		display: flex;
-		gap: 8px;
-		margin-top: 12px;
-	}
+
 	.help {
 		margin-top: 8px;
 		color: #92400e;

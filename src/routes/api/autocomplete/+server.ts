@@ -16,8 +16,8 @@ import { log } from '$lib/server/log';
 /**
  * GET Handler
  * Mode A: ?placeid=... -> Returns Google Place Details (Lat/Lng)
- * Mode B: ?q=...       -> Returns Autocomplete Suggestions (KV -> Photon -> Google)
- * * Supports 'forceGoogle=true' to bypass OSRM/Cache if client rejected previous results.
+ * Mode B: ?q=...       -> Returns Autocomplete Suggestions (KV -> Google)
+ * * Supports 'forceGoogle=true' to bypass KV and force a Google query if the client rejected previous results.
  */
 export const GET: RequestHandler = async ({ url, platform, request, locals }) => {
 	const { getEnv, safeKV } = await import('$lib/server/env');
@@ -127,112 +127,11 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 			}
 		}
 
-		// 2. Try Photon (OpenStreetMap) - Free (Skip if forceGoogle is true)
-		// [!code ++] Added !forceGoogle check
-		if (!forceGoogle) {
-			try {
-				// Limit to 5 results to keep parsing fast
-				const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5`;
-				const pRes = await fetch(photonUrl);
-				const pData: any = await pRes.json();
-				if (pData.features && pData.features.length > 0) {
-					const trimmedQuery = query.trim();
-					const addressMatch = trimmedQuery.match(/^(\d+)\s+([a-zA-Z0-9]+)/);
-					const looksLikeSpecificAddress = !!addressMatch;
-					const streetToken =
-						addressMatch && addressMatch[2] ? addressMatch[2].toLowerCase() : null;
-
-					const validFeatures = pData.features.filter((f: any) => {
-						const p = f.properties;
-
-						// STRICT ADDRESS VALIDATION
-						if (looksLikeSpecificAddress) {
-							// 1. Must have a house number
-							if (!p.housenumber) return false;
-
-							// 2. Must have a street name
-							const hasStreetName = p.street || p.name;
-							if (!hasStreetName) return false;
-
-							// 3. Token Check: If input is "407 Mastin", result MUST contain "mastin"
-							if (streetToken) {
-								const resultText = [p.name || '', p.street || ''].join(' ').toLowerCase();
-								if (!resultText.includes(streetToken)) {
-									return false;
-								}
-							}
-
-							// 4. Reject broad types
-							const broadTypes = ['city', 'state', 'country', 'county', 'state_district'];
-							if (broadTypes.includes(p.osm_value) || broadTypes.includes(p.osm_key)) {
-								return false;
-							}
-						}
-						return true;
-					});
-
-					if (validFeatures.length > 0) {
-						const results = validFeatures
-							.map((f: any) => {
-								const p = f.properties;
-								const broadTypes = [
-									'city',
-									'state',
-									'country',
-									'county',
-									'state_district',
-									'place',
-									'administrative'
-								];
-								if (broadTypes.includes(p.osm_value) || broadTypes.includes(p.osm_key))
-									return false;
-								if ((p.name || '').trim().match(/^\d+\s*$/)) return false;
-
-								const parts = [p.name];
-								if (p.housenumber && p.name !== p.housenumber) parts.unshift(p.housenumber);
-								if (p.city && p.city !== p.name) parts.push(p.city);
-								if (p.state && p.state !== p.city) parts.push(p.state);
-								if (p.country && p.country !== p.state) parts.push(p.country);
-
-								const formatted = Array.from(new Set(parts.filter(Boolean))).join(', ');
-
-								return {
-									formatted_address: formatted,
-									name: p.name,
-									secondary_text: [p.city, p.state, p.country].filter(Boolean).join(', '),
-									place_id: `photon:${f.geometry.coordinates[1]},${f.geometry.coordinates[0]}`,
-									geometry: {
-										location: {
-											lat: f.geometry.coordinates[1],
-											lng: f.geometry.coordinates[0]
-										}
-									},
-									source: 'photon',
-									house_number: p.housenumber || null,
-									street: p.street || p.name || null,
-									osm_value: p.osm_value
-								};
-							})
-							.filter(Boolean); // filter out false returns
-
-						if (kv && results.length > 0) {
-							await kv.put(bucketKey, JSON.stringify(results), { expirationTtl: 86400 });
-						}
-
-						if (results.length > 0) return json(results);
-					} else {
-						log.warn('Photon results rejected by validation', { query });
-					}
-				}
-			} catch (photonErr) {
-				log.warn('Photon lookup failed or rejected, falling back to Google', {
-					message: (photonErr as any)?.message
-				});
-			}
-		}
+		// 2. KV missed -> Direct Google fallback (Photon removed). If KV misses, query Google for autocomplete.
+		// This keeps costs predictable while still benefiting from KV caching.
 
 		// 3. Google Fallback (Cost: $) - Executed if:
-		//    a) KV missed AND Photon failed/rejected
+		//    a) KV missed
 		//    b) OR forceGoogle=true
 		if (!apiKey) return json([]);
 
@@ -249,10 +148,10 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 				source: 'google_proxy'
 			}));
 
-			// Save Google results to KV to save money next time
-			// We can cache these even if forced, as Google results are generally high quality
+			// Save Google results to KV permanently so future requests hit the cache.
+			// These results are considered authoritative enough to keep indefinitely in KV.
 			if (kv && results.length > 0) {
-				await kv.put(bucketKey, JSON.stringify(results), { expirationTtl: 86400 });
+				await kv.put(bucketKey, JSON.stringify(results));
 			}
 
 			return json(results);
@@ -314,8 +213,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 				cachedAt: new Date().toISOString(),
 				source: 'autocomplete_selection',
 				contributedBy: (locals.user as any).id
-			}),
-			{ expirationTtl: 5184000 }
+			})
 		);
 
 		return json({ success: true });

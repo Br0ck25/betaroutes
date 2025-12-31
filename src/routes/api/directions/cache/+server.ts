@@ -3,8 +3,6 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { log } from '$lib/server/log';
 
-import { geocodePhoton } from '$lib/server/geocode';
-
 export const GET: RequestHandler = async ({ url, platform, locals }) => {
 	// 1. Security: Ensure user is logged in
 	if (!locals.user) {
@@ -20,34 +18,8 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
 
 	const apiKey = (platform?.env as any)?.PRIVATE_GOOGLE_MAPS_API_KEY;
 
-	// 2. Try OSRM (Free)
-	// Requires Geocoding first (Address -> Coords)
-	try {
-		const startCoords = await geocodePhoton(start, apiKey);
-		const endCoords = await geocodePhoton(end, apiKey);
-
-		if (startCoords && endCoords) {
-			// OSRM expects: lon,lat;lon,lat
-			const osrmUrl = `http://router.project-osrm.org/route/v1/driving/${startCoords.join(',')};${endCoords.join(',')}?overview=false`;
-
-			const res = await fetch(osrmUrl);
-			const data: any = await res.json();
-
-			if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
-				const route = data.routes[0];
-				const result = {
-					distance: route.distance, // meters
-					duration: route.duration // seconds
-				};
-
-				return json({ source: 'osrm', data: result });
-			}
-		}
-	} catch (e) {
-		log.warn('OSRM/Photon routing failed, falling back to Google', {
-			message: (e as any)?.message
-		});
-	}
+	// 2. Directly use Google Directions API (Server-side) — OSRM removed in favor of Google + KV cache.
+	// Geocoding-based approaches were previously attempted, but we now prefer Google for consistent results.
 
 	// 3. Fallback: Call Google Directions API (Server-Side)
 	if (!apiKey) {

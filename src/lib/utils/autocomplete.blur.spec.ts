@@ -1,7 +1,7 @@
 /* @vitest-environment jsdom */
 import { it, expect, vi } from 'vitest';
 
-it('on blur escalates to Google and replaces input if Photon suggestions are unacceptable', async () => {
+it('on blur escalates to Google and replaces input if suggestions are unacceptable', async () => {
 	// Use fake timers to drive the blur timeout
 	vi.useFakeTimers();
 	const input = document.createElement('input');

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { auth } from '$lib/stores/auth';
 	import { createEventDispatcher } from 'svelte';
+	import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
 
 	export let profile: { name: string; email: string };
 	export let monthlyUsage: number;
@@ -46,25 +47,19 @@
 	}
 </script>
 
-<div class="settings-card">
-	<div class="card-header">
-		<div class="card-icon orange">
-			<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-				<path
-					d="M10 10C12.7614 10 15 7.76142 15 5C15 2.23858 12.7614 0 10 0C7.23858 0 5 2.23858 5 5C5 7.76142 7.23858 10 10 10Z"
-					fill="currentColor"
-				/>
-				<path
-					d="M10 12C4.47715 12 0 15.3579 0 19.5C0 19.7761 0.223858 20 0.5 20H19.5C19.7761 20 20 19.7761 20 19.5C20 15.3579 15.5228 12 10 12Z"
-					fill="currentColor"
-				/>
-			</svg>
-		</div>
-		<div>
-			<h2 class="card-title">Profile</h2>
-			<p class="card-subtitle">Your account information</p>
-		</div>
-	</div>
+<CollapsibleCard title="Profile" subtitle="Your account information" storageKey="settings:profile">
+	<span slot="icon">
+		<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+			<path
+				d="M10 10C12.7614 10 15 7.76142 15 5C15 2.23858 12.7614 0 10 0C7.23858 0 5 2.23858 5 5C5 7.76142 7.23858 10 10 10Z"
+				fill="currentColor"
+			/>
+			<path
+				d="M10 12C4.47715 12 0 15.3579 0 19.5C0 19.7761 0.223858 20 0.5 20H19.5C19.7761 20 20 19.7761 20 19.5C20 15.3579 15.5228 12 10 12Z"
+				fill="currentColor"
+			/>
+		</svg>
+	</span>
 
 	<div class="form-group">
 		<label for="profile-name">Name</label>
@@ -123,45 +118,9 @@
 			</div>
 		{/if}
 	</div>
-</div>
+</CollapsibleCard>
 
 <style>
-	.settings-card {
-		background: white;
-		border: 1px solid #e5e7eb;
-		border-radius: 16px;
-		padding: 24px;
-	}
-	.card-header {
-		display: flex;
-		gap: 16px;
-		margin-bottom: 24px;
-		padding-bottom: 20px;
-		border-bottom: 1px solid #e5e7eb;
-	}
-	.card-icon {
-		width: 48px;
-		height: 48px;
-		border-radius: 12px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		color: white;
-		flex-shrink: 0;
-	}
-	.card-icon.orange {
-		background: linear-gradient(135deg, var(--orange, #ff6a3d) 0%, #ff6a3d 100%);
-	}
-	.card-title {
-		font-size: 18px;
-		font-weight: 700;
-		color: #111827;
-		margin-bottom: 4px;
-	}
-	.card-subtitle {
-		font-size: 14px;
-		color: #6b7280;
-	}
 	.form-group {
 		margin-bottom: 20px;
 	}

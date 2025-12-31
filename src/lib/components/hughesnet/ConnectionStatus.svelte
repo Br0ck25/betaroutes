@@ -126,7 +126,7 @@
 					on:restored={() => {
 						dispatch('reloaded');
 					}}
-					on:restoreAndSync={(e) => dispatch('restoreAndSync', e.detail)}
+					on:restoreAndSync={(e: CustomEvent) => dispatch('restoreAndSync', e.detail)}
 				/>
 			</div>
 		{/if}

@@ -10,7 +10,7 @@ export interface RouteResult {
 
 /**
  * Optimizes the route order using the Server API.
- * Strategies: KV Cache -> OSRM -> Google
+ * Strategies: KV Cache -> Google
  */
 export async function optimizeRoute(
 	startAddress: string,

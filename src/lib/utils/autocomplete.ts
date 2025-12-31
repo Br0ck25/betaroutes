@@ -157,11 +157,10 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 				const data = await kvRes.json();
 
 				const validData = Array.isArray(data) ? data : [];
-				let source: 'kv' | 'google' | 'photon' = 'kv';
+				let source: 'kv' | 'google' = 'kv';
 
 				if (validData.length > 0) {
 					if (validData[0].source === 'google_proxy') source = 'google';
-					if (validData[0].source === 'photon') source = 'photon';
 				}
 
 				// [!code fix] Mandatory: Strict Filter BEFORE rendering
@@ -220,7 +219,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 
 	function renderResults(
 		items: Array<Record<string, unknown>>,
-		source: 'kv' | 'google' | 'photon' = 'kv',
+		source: 'kv' | 'google' = 'kv',
 		/* timing removed */
 		/* acceptableSet */ acceptableSet?: Set<string>
 	) {
@@ -341,7 +340,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 		/* ... */
 	}
 
-	async function selectItem(item: Record<string, unknown>, source: 'kv' | 'google' | 'photon') {
+	async function selectItem(item: Record<string, unknown>, source: 'kv' | 'google') {
 		const it: any = item;
 		if (dropdown) dropdown.style.display = 'none';
 		isSelecting = true;
@@ -360,10 +359,10 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 		// This keeps selection-time logic consistent with client-side rendering rules.
 
 		// Use normalized object for validation
-		if (source === 'photon' || source === 'kv') {
+		if (source === 'kv') {
 			const candidate = { ...normalized, geometry: it.geometry };
 			if (!isAcceptableGeocode(candidate, node.value)) {
-				// Try a fallback search if validation failed on selection (double safety)
+				// Try a fallback search to Google if validation failed on selection (double safety)
 				try {
 					const res = await fetch(
 						`/api/autocomplete?q=${encodeURIComponent(node.value)}&forceGoogle=true`
@@ -379,7 +378,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 							const normD = {
 								...d,
 								house_number: d.house_number || (d.properties && d.properties.housenumber),
-								street: d.street || (d.properties && d.properties.street)
+								street: d.street || d.name || (d.properties && d.properties.street)
 							};
 							return isAcceptableGeocode(normD, node.value);
 						});
@@ -422,9 +421,6 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 			}
 			commitSelection(item);
 		} else {
-			if (source === 'photon') {
-				savePlaceToKV(item);
-			}
 			commitSelection(item);
 		}
 	}
@@ -434,9 +430,15 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 		node.dispatchEvent(new Event('input', { bubbles: true }));
 		node.dispatchEvent(new CustomEvent('place-selected', { detail: data }));
 
+		// Only restore focus when the selection was explicit (isSelecting)
+		// or when the input is already the active element. This prevents
+		// blur-triggered validation from stealing focus when the user
+		// is trying to focus another field (causing a bounce).
 		setTimeout(() => {
 			try {
-				node.focus();
+				if (isSelecting || document.activeElement === node) {
+					node.focus();
+				}
 			} catch (_e: unknown) {
 				void _e;
 			}

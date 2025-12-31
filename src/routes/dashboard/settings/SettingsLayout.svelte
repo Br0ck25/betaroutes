@@ -32,6 +32,8 @@
 
 	function scrollTo(id: string) {
 		const el = document.getElementById(id);
+		// Set the active tab immediately for instant feedback while we smooth-scroll
+		if (id) active = id;
 		if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	}
 </script>
@@ -108,10 +110,15 @@
 
 	/* Shared save button styling for settings (global so children can use it) */
 	:global(.save-btn) {
+		display: block;
+		width: 100%;
+		box-sizing: border-box;
 		min-width: 120px;
-		padding: 10px 14px;
+		padding: 12px 16px;
 		border-radius: 10px;
 		font-weight: 700;
+		margin-top: 8px;
+		text-align: center;
 	}
 	:global(.save-btn:focus-visible) {
 		outline: 3px solid rgba(255, 127, 80, 0.18);
@@ -129,6 +136,29 @@
 			box-shadow 0.18s ease,
 			border-color 0.18s ease,
 			transform 0.12s ease;
+	}
+
+	/* Ensure consistent icon/title sizing for all settings cards */
+	:global(.settings .card-icon) {
+		width: 48px;
+		height: 48px;
+		border-radius: 12px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: white;
+		flex-shrink: 0;
+		font-size: 20px;
+	}
+	:global(.settings .card-title) {
+		font-size: 18px;
+		font-weight: 700;
+		color: #111827;
+		margin-bottom: 4px;
+	}
+	:global(.settings .card-subtitle) {
+		font-size: 14px;
+		color: #6b7280;
 	}
 
 	/* Responsive: move nav to top as scrollable horizontal row */

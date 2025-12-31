@@ -1,28 +1,27 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { isRenderableCandidate } from '../src/lib/utils/autocomplete';
-import { geocodePhoton as geocodePhotonOptimize } from '../src/routes/api/directions/optimize/+server';
+import { geocode as geocodeServer } from '../src/lib/server/geocode';
 
 describe('autocomplete validator', () => {
-	it('rejects broad/place-level Photon results for address-like input', () => {
+	it('rejects broad/place-level results for address-like input', () => {
 		const input = '407 Mastin Dr, Cumberland, KY 40823';
 		const bad = { name: '407', osm_value: 'place' };
 		expect(isRenderableCandidate(bad, input)).toBe(false);
 	});
 
-	it('accepts Photon address-level result with housenumber and street', () => {
+	it('accepts address-level result with housenumber and street', () => {
 		const input = '407 Mastin Dr, Cumberland, KY 40823';
 		const good = {
 			name: '407 Mastin Dr',
 			house_number: '407',
 			street: 'Mastin Dr',
-			formatted_address: '407 Mastin Dr, Cumberland, KY',
-			source: 'photon'
+			formatted_address: '407 Mastin Dr, Cumberland, KY'
 		};
 		expect(isRenderableCandidate(good, input)).toBe(true);
 	});
 });
 
-describe('server geocodePhoton fallback', () => {
+describe('server geocode (Google-only)', () => {
 	let originalFetch: any;
 	beforeEach(() => {
 		originalFetch = global.fetch;
@@ -32,45 +31,16 @@ describe('server geocodePhoton fallback', () => {
 		vi.restoreAllMocks();
 	});
 
-	it('returns null when Photon result lacks housenumber and no API key provided', async () => {
+	it('returns null when no API key provided', async () => {
 		const address = '407 Mastin Dr, Cumberland, KY 40823';
-		vi.stubGlobal('fetch', (input: any) => {
-			const url = String(input);
-			if (url.includes('photon.komoot.io')) {
-				return Promise.resolve({
-					json: async () => ({
-						features: [
-							{
-								geometry: { coordinates: [-83.0, 36.6] },
-								properties: { name: 'Louisville', osm_value: 'city' }
-							}
-						]
-					})
-				} as any);
-			}
-			return Promise.reject(new Error('unexpected'));
-		});
-
-		const res = await geocodePhotonOptimize(address);
+		const res = await geocodeServer(address);
 		expect(res).toBeNull();
 	});
 
-	it('falls back to Google geocode when Photon result is weak and API key provided', async () => {
+	it('calls Google and returns coords when API key provided', async () => {
 		const address = '407 Mastin Dr, Cumberland, KY 40823';
 		vi.stubGlobal('fetch', (input: any) => {
 			const url = String(input);
-			if (url.includes('photon.komoot.io')) {
-				return Promise.resolve({
-					json: async () => ({
-						features: [
-							{
-								geometry: { coordinates: [-83.0, 36.6] },
-								properties: { name: 'Louisville', osm_value: 'city' }
-							}
-						]
-					})
-				} as any);
-			}
 			if (url.includes('maps.googleapis.com')) {
 				return Promise.resolve({
 					json: async () => ({
@@ -82,7 +52,26 @@ describe('server geocodePhoton fallback', () => {
 			return Promise.reject(new Error('unexpected'));
 		});
 
-		const res = await geocodePhotonOptimize(address, 'FAKE_KEY');
-		expect(res).toEqual([-83.3, 36.9]);
+		const res = await geocodeServer(address, 'FAKE_KEY');
+		expect(res).toEqual({ lat: 36.9, lon: -83.3, formattedAddress: undefined });
+	});
+
+	it('returns google coords for a second address example', async () => {
+		const address = '1199 Main St Jackson KY';
+		vi.stubGlobal('fetch', (input: any) => {
+			const url = String(input);
+			if (url.includes('maps.googleapis.com')) {
+				return Promise.resolve({
+					json: async () => ({
+						status: 'OK',
+						results: [{ geometry: { location: { lat: 36.9, lng: -83.3 } } }]
+					})
+				} as any);
+			}
+			return Promise.reject(new Error('unexpected'));
+		});
+
+		const res = await geocodeServer(address, 'FAKE_KEY');
+		expect(res).toEqual({ lat: 36.9, lon: -83.3, formattedAddress: undefined });
 	});
 });

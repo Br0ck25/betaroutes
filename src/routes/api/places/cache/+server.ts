@@ -41,7 +41,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		// 1. Save "Detail" Record (place:<hash>)
 		// This is used if we ever need to look up a specific place ID directly
 		const key = await generatePlaceKey(keyText);
-		await placesKV.put(key, JSON.stringify(place), { expirationTtl: 5184000 }); // 60 days
+		// Save detail record permanently so user-selected places remain cached indefinitely
+		await placesKV.put(key, JSON.stringify(place));
 
 		// 2. [!code ++] Update Search Index Buckets (prefix:...)
 		// This ensures the place shows up in future autocomplete searches
@@ -72,7 +73,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 				// Cap bucket size
 				if (bucket.length > 20) bucket = bucket.slice(0, 20);
 
-				await placesKV.put(bucketKey, JSON.stringify(bucket), { expirationTtl: 5184000 });
+				// Save prefix bucket permanently so cached search results don't expire
+				await placesKV.put(bucketKey, JSON.stringify(bucket));
 			})
 		);
 

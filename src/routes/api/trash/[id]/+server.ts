@@ -8,7 +8,7 @@ function safeKV(env: Record<string, unknown> | undefined, name: string) {
 	return kv ?? null;
 }
 
-// [!code ++] Fake DO helper
+// Fake DO helper
 function fakeDO() {
 	return {
 		idFromName: () => ({ name: 'fake' }),
@@ -24,15 +24,14 @@ export const POST: RequestHandler = async (event) => {
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
 		const { id } = event.params;
-		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
-		const trashKV = safeKV(event.platform?.env, 'BETA_LOGS_TRASH_KV');
-		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
-		// [!code fix]
 		const platformEnv = event.platform?.env as Record<string, unknown> | undefined;
+
+		const kv = safeKV(platformEnv, 'BETA_LOGS_KV');
+		const trashKV = safeKV(platformEnv, 'BETA_LOGS_TRASH_KV');
+		const placesKV = safeKV(platformEnv, 'BETA_PLACES_KV');
 		const tripIndexDO = (platformEnv?.['TRIP_INDEX_DO'] as unknown) ?? fakeDO();
 		const placesIndexDO = (platformEnv?.['PLACES_INDEX_DO'] as unknown) ?? tripIndexDO;
 
-		// [!code fix]
 		const svc = makeTripService(
 			kv as any,
 			trashKV as any,
@@ -43,6 +42,11 @@ export const POST: RequestHandler = async (event) => {
 
 		const currentUser = user as { name?: string; token?: string };
 		const storageId = currentUser.name || currentUser.token;
+
+		if (storageId) {
+			// [!code fix] Actually call restore logic
+			await svc.restore(storageId, id);
+		}
 
 		// Perform restore (simplified placeholder implementation)
 		const restoredTrip = { id, owner: storageId, restored: true };
@@ -75,7 +79,31 @@ export const DELETE: RequestHandler = async (event) => {
 		const user = event.locals.user;
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
-		// DELETE placeholder - no bindings required here
+		const { id } = event.params;
+		const platformEnv = event.platform?.env as Record<string, unknown> | undefined;
+
+		const kv = safeKV(platformEnv, 'BETA_LOGS_KV');
+		const trashKV = safeKV(platformEnv, 'BETA_LOGS_TRASH_KV');
+		const placesKV = safeKV(platformEnv, 'BETA_PLACES_KV');
+		const tripIndexDO = (platformEnv?.['TRIP_INDEX_DO'] as unknown) ?? fakeDO();
+		const placesIndexDO = (platformEnv?.['PLACES_INDEX_DO'] as unknown) ?? tripIndexDO;
+
+		const svc = makeTripService(
+			kv as any,
+			trashKV as any,
+			placesKV as any,
+			tripIndexDO as any,
+			placesIndexDO as any
+		);
+
+		const currentUser = user as { name?: string; token?: string };
+		const storageId = currentUser.name || currentUser.token;
+
+		if (storageId) {
+			// [!code fix] Actually call permanentDelete
+			await svc.permanentDelete(storageId, id);
+		}
+
 		return new Response(null, { status: 204 });
 	} catch (err: unknown) {
 		const message = err instanceof Error ? err.message : String(err);

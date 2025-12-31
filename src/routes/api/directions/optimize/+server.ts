@@ -5,10 +5,8 @@ import { log } from '$lib/server/log';
 import type { KVNamespace } from '@cloudflare/workers-types';
 
 /**
- * Helper: Geocode using Photon (OpenStreetMap)
- * Returns [lon, lat]
+ * Helper: Server geocoding is handled via Google (geocode helper) — Photon removed.
  */
-import { geocodePhoton } from '$lib/server/geocode';
 
 /**
  * Helper: Generate a unique key for the set of stops to cache the optimization result
@@ -67,60 +65,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	const allAddresses = [startAddress, ...stopAddresses];
 	if (endAddress) allAddresses.push(endAddress);
 
-	// 4. Try OSRM (Free)
-	try {
-		// Geocode all points first
-		const coords = await Promise.all(allAddresses.map((addr) => geocodePhoton(addr, apiKey)));
-		const hasAllCoords = coords.every((c) => c !== null);
-
-		if (hasAllCoords) {
-			// OSRM Trip API: http://project-osrm.org/docs/v5.5.1/api/#trip-service
-			const coordsString = coords.map((c) => c!.join(',')).join(';');
-			let osrmUrl = `http://router.project-osrm.org/trip/v1/driving/${coordsString}?source=first`;
-
-			if (endAddress) {
-				osrmUrl += `&destination=last&roundtrip=false`;
-			} else {
-				// If no end address, we don't force roundtrip, allowing it to end at the best location?
-				// Or we treat it as a roundtrip to start?
-				// Google "optimizeWaypoints" usually keeps start/end fixed.
-				// If no end provided, usually implies roundtrip or just visit all.
-				// Let's assume roundtrip=false to be safe for a delivery route list.
-				osrmUrl += `&roundtrip=false`;
-			}
-
-			const res = await fetch(osrmUrl);
-			const data: any = await res.json();
-
-			if (data.code === 'Ok' && data.waypoints) {
-				// OSRM returns 'waypoints' sorted by their order in the Optimized Trip.
-				// Each waypoint object has a 'waypoint_index' property corresponding to the Input Index.
-				// Input Index 0 is Start.
-
-				// We need to extract the indices of the "Stops" (which were input indices 1 to N).
-				const waypointIndices = data.waypoints
-					.map((wp: any) => wp.waypoint_index)
-					.filter((idx: number) => {
-						// Exclude Start (0)
-						if (idx === 0) return false;
-						// Exclude End (last index) if endAddress existed
-						if (endAddress && idx === allAddresses.length - 1) return false;
-						return true;
-					});
-
-				// Convert back to 0-based indices relative to the 'stops' array
-				// The input index 1 corresponds to stops[0].
-				const optimizedOrder = waypointIndices.map((idx: number) => idx - 1);
-
-				const result = { source: 'osrm', optimizedOrder };
-
-				if (kv) await kv.put(cacheKey, JSON.stringify(result), { expirationTtl: 86400 }); // 24h cache
-				return json(result);
-			}
-		}
-	} catch (e) {
-		log.warn('OSRM Optimization failed, falling back to Google', { message: (e as any)?.message });
-	}
+	// 4. OSRM removed: Use Google Directions 'optimize:true' (Server-side) with KV caching.
+	// The Google fallback below handles optimization and caching.
 
 	// 5. Google Fallback (Server-Side)
 	if (!apiKey) {
@@ -153,7 +99,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 				legs: route.legs // Include legs for distance calculations
 			};
 
-			if (kv) await kv.put(cacheKey, JSON.stringify(result), { expirationTtl: 86400 });
+			if (kv) await kv.put(cacheKey, JSON.stringify(result));
 			return json(result);
 		}
 

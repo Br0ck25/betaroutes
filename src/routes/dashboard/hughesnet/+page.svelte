@@ -663,12 +663,12 @@
 
 				<div style="padding:12px;">
 					<ArchivedRestore
-						on:restored={(e) => {
+						on:restored={(e: CustomEvent) => {
 							if (e.detail?.imported) {
 								addLog(`Imported ${e.detail.imported.length} archived orders`);
 							}
 						}}
-						on:restoreAndSync={(e) => {
+						on:restoreAndSync={(e: CustomEvent) => {
 							if (e.detail?.dates) {
 								addLog(`Imported orders for ${e.detail.dates.join(', ')}, syncing...`);
 								handleSync(1, true, e.detail.dates);

@@ -38,6 +38,7 @@
 	$: currentOdometer = baseOdo + (allStats?.totalMiles || 0);
 
 	import { saveSettings } from '../lib/save-settings';
+	import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
 
 	async function saveSettingsHandler() {
 		try {
@@ -70,14 +71,12 @@
 	}
 </script>
 
-<div class="settings-card">
-	<div class="card-header">
-		<div class="card-icon teal">🔧</div>
-		<div>
-			<h2 class="card-title">Maintenance</h2>
-			<p class="card-subtitle">Service interval & last service</p>
-		</div>
-	</div>
+<CollapsibleCard
+	title="Maintenance"
+	subtitle="Service interval & last service"
+	storageKey="settings:maintenance"
+>
+	<span slot="icon">🔧</span>
 
 	<div class="form-group">
 		<label for="interval-miles">Service interval (miles)</label>
@@ -118,38 +117,9 @@
 		>
 		<button class="btn-primary" on:click={markServicedNow}>Mark serviced now</button>
 	</div>
-</div>
+</CollapsibleCard>
 
 <style>
-	.settings-card {
-		background: white;
-		border: 1px solid #e5e7eb;
-		border-radius: 12px;
-		padding: 16px;
-	}
-	.card-header {
-		display: flex;
-		gap: 12px;
-		align-items: center;
-		margin-bottom: 12px;
-	}
-	.card-icon.teal {
-		background: #ccfbf1;
-		color: #065f46;
-		padding: 8px;
-		border-radius: 8px;
-		font-size: 16px;
-	}
-	.card-title {
-		font-size: 16px;
-		font-weight: 700;
-		margin: 0;
-	}
-	.card-subtitle {
-		font-size: 13px;
-		color: #6b7280;
-		margin: 0;
-	}
 	.form-group {
 		margin-bottom: 12px;
 	}
@@ -160,10 +130,13 @@
 		font-weight: 600;
 	}
 	.form-group input {
-		width: 220px;
-		padding: 8px 10px;
-		border-radius: 8px;
-		border: 1px solid #e5e7eb;
+		width: 100%;
+		max-width: 450px;
+		padding: 12px 16px;
+		border-radius: 10px;
+		border: 2px solid #e5e7eb;
+		font-size: 16px;
+		box-sizing: border-box;
 	}
 	.form-group.small .small-note {
 		font-size: 14px;
@@ -173,6 +146,18 @@
 		display: flex;
 		gap: 8px;
 		margin-top: 12px;
+		align-items: center;
+	}
+	.form-actions .save-btn {
+		flex: 0 0 auto;
+		width: 100%;
+		max-width: 450px;
+	}
+	.form-actions .btn-primary {
+		flex: 1 1 auto;
+		min-width: 120px;
+		padding: 12px 16px;
+		border-radius: 10px;
 	}
 	.btn-primary {
 		background: #ff6a3d;
@@ -188,5 +173,22 @@
 		border-radius: 8px;
 		padding: 8px 12px;
 		border: 1px solid #e5e7eb;
+	}
+
+	/* Responsive: stack buttons on small screens to prevent overflow */
+	@media (max-width: 640px) {
+		.form-actions {
+			flex-direction: column;
+			align-items: stretch;
+		}
+		.form-actions .save-btn,
+		.form-actions .btn-primary {
+			width: 100%;
+			max-width: 100%;
+			flex: 0 0 auto;
+		}
+		.form-actions .save-btn {
+			margin-bottom: 8px;
+		}
 	}
 </style>

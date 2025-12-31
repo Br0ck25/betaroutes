@@ -79,18 +79,18 @@
 >
 	<div class="relative flex flex-col h-full overflow-hidden">
 		<div class="flex items-center justify-between px-6 py-4 border-b border-neutral-100 shrink-0">
-			<h3 class="text-lg font-semibold text-neutral-900 leading-none tracking-tight">
+			<h3 class="modal-title">
 				{title || 'Dialog'}
 			</h3>
 			<button
 				onclick={() => dialog.close()}
-				class="rounded-md p-1 hover:bg-neutral-100 transition-colors text-neutral-500 hover:text-neutral-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
+				class="rounded-md p-2 hover:bg-neutral-100 transition-colors text-neutral-500 hover:text-neutral-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
 				aria-label="Close"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
-					width="20"
-					height="20"
+					width="24"
+					height="24"
 					viewBox="0 0 24 24"
 					fill="none"
 					stroke="currentColor"
@@ -103,7 +103,7 @@
 			</button>
 		</div>
 
-		<div class="p-6 overflow-y-auto">
+		<div class="p-6 overflow-y-auto modal-body">
 			{#if children}
 				{@render children()}
 			{/if}
@@ -121,5 +121,45 @@
 	dialog::backdrop {
 		/* Tailwind 'backdrop:' utility covers this, but explicit inheritance ensures safety */
 		background-color: rgb(0 0 0 / 0.5);
+	}
+
+	/* Standardized modal content styles so consumers get consistent spacing, inputs and actions */
+	.modal-title {
+		font-size: 1.125rem; /* 18px */
+		font-weight: 700;
+		color: #111827;
+		margin: 0;
+	}
+
+	.modal-body {
+		padding-top: 12px;
+		padding-bottom: 12px;
+		line-height: 1.4;
+		color: #374151;
+	}
+
+	/* Buttons inside modals should be larger and consistent */
+	:global(.modal-actions) {
+		display: flex;
+		gap: 12px;
+		margin-top: 20px;
+	}
+
+	:global(.modal-actions) :global(button),
+	:global(.modal-actions) button {
+		flex: 1;
+		padding: 12px 16px;
+		border-radius: 10px;
+		font-weight: 600;
+	}
+
+	/* Make form controls consistent inside modal content */
+	.modal-body :global(input),
+	.modal-body :global(select),
+	.modal-body :global(textarea) {
+		padding: 10px 12px;
+		border: 2px solid #e5e7eb;
+		border-radius: 8px;
+		font-size: 14px;
 	}
 </style>

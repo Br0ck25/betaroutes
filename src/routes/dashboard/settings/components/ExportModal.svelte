@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Modal from '$lib/components/ui/Modal.svelte';
+	import Button from '$lib/components/ui/Button.svelte';
 	import { trips } from '$lib/stores/trips';
 	import { expenses } from '$lib/stores/expenses';
 	import { generateTripsCSV, generateExpensesCSV, generateTaxBundleCSV } from '../lib/export-utils';
@@ -15,14 +16,14 @@
 	let exportDateTo = '';
 	let exportIncludeSummary = true;
 
-	$: filteredTrips = $trips.filter((trip) => {
+	$: filteredTrips = $trips.filter((trip: any) => {
 		if (!trip.date) return false;
 		const tripDate = new Date(trip.date);
 		if (exportDateFrom && tripDate < new Date(exportDateFrom)) return false;
 		if (exportDateTo && tripDate > new Date(exportDateTo)) return false;
 		return true;
 	});
-	$: filteredExpenses = $expenses.filter((expense) => {
+	$: filteredExpenses = $expenses.filter((expense: any) => {
 		if (!expense.date) return false;
 		const expenseDate = new Date(expense.date);
 		if (exportDateFrom && expenseDate < new Date(exportDateFrom)) return false;
@@ -226,10 +227,12 @@
 		{/if}
 
 		<div class="modal-actions">
-			<button class="btn-secondary" on:click={() => (showAdvancedExport = false)}>Cancel</button>
-			<button class="btn-primary" on:click={handleAdvancedExport}>
-				Export {exportFormat.toUpperCase()}
-			</button>
+			<Button variant="outline" className="" on:click={() => (showAdvancedExport = false)}
+				>Cancel</Button
+			>
+			<Button variant="primary" className="" on:click={handleAdvancedExport}
+				>Export {exportFormat.toUpperCase()}</Button
+			>
 		</div>
 	</div>
 </Modal>
@@ -305,22 +308,7 @@
 		gap: 12px;
 		margin-top: 24px;
 	}
-	.modal-actions button {
-		flex: 1;
-		padding: 14px;
-		border-radius: 10px;
-		font-weight: 600;
-		cursor: pointer;
-	}
-	.btn-primary {
-		background: var(--orange, #ff6a3d);
-		color: white;
-		border: none;
-	}
-	.btn-secondary {
-		background: white;
-		border: 2px solid #e5e7eb;
-	}
+
 	.checkbox-label {
 		display: flex;
 		align-items: center;

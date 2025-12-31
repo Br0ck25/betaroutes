@@ -66,7 +66,8 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 			}
 
 			// D. Write back
-			await kv.put(key, JSON.stringify(bucket), { expirationTtl: 60 * 60 * 24 * 90 }); // 90 days
+			// Save bucket permanently so autocomplete caches don't expire
+			await kv.put(key, JSON.stringify(bucket));
 		});
 
 		await Promise.all(updatePromises);
