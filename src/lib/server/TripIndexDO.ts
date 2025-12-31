@@ -208,6 +208,131 @@ export class TripIndexDO {
 				return new Response('OK');
 			}
 
+			// --- NEW: Compute Routes for a Trip (invoked asynchronously by trip POST/PUT)
+			if (path === '/compute-routes') {
+				if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
+				const body = await parseBody<{ id: string }>();
+				const tripId = body?.id;
+				if (!tripId) return new Response('Missing trip id', { status: 400 });
+
+				try {
+					// Fetch trip from SQLite
+					const cursor = this.state.storage.sql.exec('SELECT data FROM trips WHERE id = ?', tripId);
+					const row = cursor.one();
+					if (!row) return new Response('Trip not found', { status: 404 });
+					const trip = JSON.parse(
+						(row as Record<string, unknown>)['data'] as string
+					) as TripSummary;
+
+					// Build points
+					const points: string[] = [];
+					if (trip['startAddress']) points.push(String(trip['startAddress']));
+					if (Array.isArray(trip['stops'])) {
+						for (const s of trip['stops'] as any[]) {
+							if (s && s.address) points.push(String(s.address));
+						}
+					}
+					if (trip['endAddress']) points.push(String(trip['endAddress']));
+
+					// Helper: sanitize key
+					const sanitizeKey = (a: string, b: string) => {
+						let key = `dir:${a.toLowerCase().trim()}_to_${b.toLowerCase().trim()}`;
+						return key.replace(/[^a-z0-9_:-]/g, '');
+					};
+
+					// Access KVs and API key from env
+					const directionsKV = (this.env as any)['BETA_DIRECTIONS_KV'] as any | undefined;
+					const tripsKV = (this.env as any)['BETA_LOGS_KV'] as any | undefined;
+					const googleKey = String((this.env as any)['PRIVATE_GOOGLE_MAPS_API_KEY'] || '');
+
+					let totalMeters = 0;
+					let totalSeconds = 0;
+
+					for (let i = 0; i < points.length - 1; i++) {
+						const origin = points[i];
+						const destination = points[i + 1];
+						if (!origin || !destination || origin === destination) continue;
+
+						try {
+							// Call Google Directions API
+							if (!googleKey) {
+								this.log('[ComputeRoutes] GOOGLE API KEY missing; cannot compute route');
+								continue;
+							}
+							const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(
+								origin
+							)}&destination=${encodeURIComponent(destination)}&key=${googleKey}`;
+							const res = await fetch(url);
+							const data: any = await res.json().catch(() => null);
+							if (
+								data &&
+								data.status === 'OK' &&
+								data.routes &&
+								data.routes[0] &&
+								data.routes[0].legs &&
+								data.routes[0].legs[0]
+							) {
+								const leg = data.routes[0].legs[0];
+								const distance = leg.distance?.value ?? null;
+								const duration = leg.duration?.value ?? null;
+
+								// Save per-pair route to BETA_DIRECTIONS_KV if available
+								if (directionsKV && distance !== null && duration !== null) {
+									const key = sanitizeKey(origin, destination);
+									await directionsKV.put(
+										key,
+										JSON.stringify({ distance, duration, source: 'google' })
+									);
+									this.log(`[ComputeRoutes] Wrote ${key}`);
+								}
+
+								if (distance && isFinite(distance)) totalMeters += distance;
+								if (duration && isFinite(duration)) totalSeconds += duration;
+							}
+						} catch (err: unknown) {
+							const emsg = err instanceof Error ? err.message : String(err);
+							this.warn(`[ComputeRoutes] Failed for ${origin} -> ${destination}: ${emsg}`);
+						}
+					}
+
+					// Update trip summary (SQLite)
+					try {
+						const miles = Number((totalMeters * 0.000621371).toFixed(1));
+						const minutes = Math.round(totalSeconds / 60);
+						const updated = {
+							...trip,
+							totalMiles: miles,
+							estimatedTime: minutes,
+							updatedAt: new Date().toISOString()
+						};
+						this.state.storage.sql.exec(
+							'UPDATE trips SET data = ? WHERE id = ?',
+							JSON.stringify(updated),
+							tripId
+						);
+
+						// Also update the BETA_LOGS_KV trip record if available
+						if (tripsKV) {
+							const tripKey = `trip:${trip.userId}:${trip.id}`;
+							try {
+								await tripsKV.put(tripKey, JSON.stringify({ ...updated }));
+								this.log(`[ComputeRoutes] Updated trip KV ${tripKey}`);
+							} catch (e) {
+								this.warn(`[ComputeRoutes] Failed to update trip KV: ${(e as Error).message}`);
+							}
+						}
+					} catch (e) {
+						this.warn(`[ComputeRoutes] Failed to update trip summary: ${(e as Error).message}`);
+					}
+
+					return new Response('OK');
+				} catch (e: unknown) {
+					const msg = e instanceof Error ? e.message : String(e);
+					log.error('[TripIndexDO] compute-routes failed', { message: msg });
+					return new Response(JSON.stringify({ error: msg }), { status: 500 });
+				}
+			}
+
 			if (path === '/delete') {
 				const { id } = await parseBody<{ id: string }>();
 				if (!id) return new Response('Missing ID', { status: 400 });

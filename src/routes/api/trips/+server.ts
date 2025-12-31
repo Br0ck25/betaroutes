@@ -349,6 +349,23 @@ export const POST: RequestHandler = async (event) => {
 		// Persist trip (coerce to TripRecord)
 		await svc.put(trip as TripRecord);
 
+		// --- Enqueue route computation in TripIndexDO (non-blocking)
+		try {
+			const tripIndexDO = safeDO(env, 'TRIP_INDEX_DO');
+			if (tripIndexDO) {
+				const id = tripIndexDO.idFromName(trip.userId);
+				const stub = tripIndexDO.get(id);
+				// Fire-and-forget; do not block trip save on route computation
+				void stub.fetch('http://internal/compute-routes', {
+					method: 'POST',
+					body: JSON.stringify({ id: trip.id })
+				});
+			}
+		} catch (e) {
+			// Log but do not fail the request
+			log.warn('Failed to enqueue route computation', { message: (e as Error).message });
+		}
+
 		if (!existingTrip) {
 			await svc.incrementUserCounter(sessionUserSafe?.token || '', 1);
 		}
@@ -486,6 +503,21 @@ export const PUT: RequestHandler = async (event) => {
 		};
 
 		await svc.put(trip as unknown as TripRecord);
+
+		// --- Enqueue route computation in TripIndexDO (non-blocking)
+		try {
+			const tripIndexDO = safeDO(env, 'TRIP_INDEX_DO');
+			if (tripIndexDO) {
+				const id = tripIndexDO.idFromName(trip.userId);
+				const stub = tripIndexDO.get(id);
+				void stub.fetch('http://internal/compute-routes', {
+					method: 'POST',
+					body: JSON.stringify({ id: trip.id })
+				});
+			}
+		} catch (e) {
+			log.warn('Failed to enqueue route computation', { message: (e as Error).message });
+		}
 
 		return new Response(JSON.stringify(trip), {
 			status: 200,
