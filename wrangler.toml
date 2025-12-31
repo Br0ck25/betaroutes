@@ -3,9 +3,7 @@ compatibility_date = "2024-12-05"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = ".svelte-kit/cloudflare"
 
-[[env.production.kv_namespaces]]
-binding = "BETA_DIRECTIONS_KV"
-id = "5392d9ff847542a29abf58c5f0624011"
+
 
 # ---------------------------------------------------
 # Production environment
