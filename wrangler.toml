@@ -4,8 +4,8 @@ compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = ".svelte-kit/cloudflare"
 
 [[kv_namespaces]]
-binding = "BETA_DIRECTIONS_KV"
-id = "3fb03d50a94e4b2cb4fc3f54bdfd45d7"
+binding = ""
+id = ""
 
 # ---------------------------------------------------
 # Production environment
