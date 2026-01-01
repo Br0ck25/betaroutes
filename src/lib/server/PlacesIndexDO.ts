@@ -38,6 +38,33 @@ export class PlacesIndexDO {
 				await this.state.storage.delete('list');
 			}
 		});
+		// Helper moved to class method (kept here during refactor)
+	}
+
+	private async recordAddressInternal(addr: string) {
+		try {
+			this.state.storage.sql.exec(
+				'INSERT OR REPLACE INTO places (address, created_at) VALUES (?, ?)',
+				addr,
+				Date.now()
+			);
+			const countRes = this.state.storage.sql.exec('SELECT COUNT(*) as total FROM places');
+			const result = countRes.one() as { total: number };
+			if (result.total > 50) {
+				const toDelete = result.total - 50;
+				this.state.storage.sql.exec(
+					`
+					DELETE FROM places 
+					WHERE address IN (
+						SELECT address FROM places ORDER BY created_at ASC LIMIT ?
+					)
+					`,
+					toDelete
+				);
+			}
+		} catch (e) {
+			log.warn('[PlacesIndexDO] recordAddressInternal failed', e);
+		}
 	}
 
 	async fetch(request: Request) {
@@ -104,6 +131,95 @@ export class PlacesIndexDO {
 				return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
 			}
 		}
+
+		// POST /record - record an address into DO (recent list)
+		if (request.method === 'POST' && url.pathname === '/record') {
+			try {
+				const { address } = (await request.json()) as { address?: string };
+				if (!address) return new Response('Missing address', { status: 400 });
+				await this.recordAddressInternal(address);
+				return new Response('OK');
+			} catch (err) {
+				log.error('[PlacesIndexDO] /record failed', err);
+				return new Response('Error', { status: 500 });
+			}
+		}
+
+		// Geocode cache: GET /geocode?address=... and POST /geocode body { address, lat, lon, formattedAddress }
+		if (url.pathname === '/geocode') {
+			const kv = this.env.BETA_PLACES_KV;
+			if (request.method === 'GET') {
+				try {
+					const addr = url.searchParams.get('address') || '';
+					if (!addr) return new Response('Missing address', { status: 400 });
+					const key = `geo:${addr
+						.toLowerCase()
+						.trim()
+						.replace(/[^a-z0-9]/g, '_')}`;
+					if (!kv) return new Response('No KV', { status: 404 });
+					const raw = await kv.get(key);
+					if (!raw) return new Response('Not Found', { status: 404 });
+					return new Response(raw, {
+						status: 200,
+						headers: { 'Content-Type': 'application/json' }
+					});
+				} catch (e) {
+					log.warn('[PlacesIndexDO] geocode GET failed', e);
+					return new Response('Error', { status: 500 });
+				}
+			}
+
+			if (request.method === 'POST') {
+				try {
+					const body = (await request.json()) as {
+						address?: string;
+						lat?: number;
+						lon?: number;
+						formattedAddress?: string;
+					};
+					if (!body || !body.address || body.lat == null || body.lon == null)
+						return new Response('Invalid body', { status: 400 });
+
+					if (!kv) return new Response('No KV', { status: 500 });
+					const key = `geo:${body.address
+						.toLowerCase()
+						.trim()
+						.replace(/[^a-z0-9]/g, '_')}`;
+					await kv.put(
+						key,
+						JSON.stringify({
+							lat: body.lat,
+							lon: body.lon,
+							formattedAddress: body.formattedAddress
+						})
+					);
+					return new Response('OK');
+				} catch (e) {
+					log.warn('[PlacesIndexDO] geocode POST failed', e);
+					return new Response('Error', { status: 500 });
+				}
+			}
+		}
+
+		// GET /list - Returns the recent list maintained by the DO (for debugging)
+		if (request.method === 'GET' && url.pathname === '/list') {
+			try {
+				const cursor = this.state.storage.sql.exec(
+					'SELECT address FROM places ORDER BY created_at ASC'
+				);
+				const list: string[] = [];
+				for (const row of cursor) {
+					list.push(((row as Record<string, unknown>)['address'] as string) ?? '');
+				}
+				return new Response(JSON.stringify(list), {
+					headers: { 'Content-Type': 'application/json' }
+				});
+			} catch (e) {
+				log.warn('[PlacesIndexDO] list failed', e);
+				return new Response('Error', { status: 500 });
+			}
+		}
+
 		return new Response('Not Found', { status: 404 });
 	}
 }

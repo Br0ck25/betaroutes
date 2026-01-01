@@ -195,15 +195,22 @@ export class TripIndexDO {
 					const points: string[] = [];
 					if (trip['startAddress']) points.push(String(trip['startAddress']));
 					if (Array.isArray(trip['stops'])) {
-						for (const s of trip['stops'] as any[]) {
+						const stops = (trip['stops'] as unknown as Array<{ address?: string }>) || [];
+						for (const s of stops) {
 							if (s && s.address) points.push(String(s.address));
 						}
 					}
 					if (trip['endAddress']) points.push(String(trip['endAddress']));
 
-					const directionsKV = (this.env as any)['BETA_DIRECTIONS_KV'] as KVNamespace | undefined;
-					const tripsKV = (this.env as any)['BETA_LOGS_KV'] as KVNamespace | undefined;
-					const googleKey = String((this.env as any)['PRIVATE_GOOGLE_MAPS_API_KEY'] || '');
+					const directionsKV = (this.env as unknown as Record<string, unknown>)[
+						'BETA_DIRECTIONS_KV'
+					] as KVNamespace | undefined;
+					const tripsKV = (this.env as unknown as Record<string, unknown>)['BETA_LOGS_KV'] as
+						| KVNamespace
+						| undefined;
+					const googleKey = String(
+						(this.env as unknown as Record<string, unknown>)['PRIVATE_GOOGLE_MAPS_API_KEY'] || ''
+					);
 
 					let totalMeters = 0;
 					let totalSeconds = 0;
@@ -240,7 +247,7 @@ export class TripIndexDO {
 										// log.info(`[ComputeRoutes] Cache HIT ${key}`);
 										continue;
 									}
-								} catch (e) {
+								} catch {
 									// ignore corrupt
 								}
 							}
@@ -254,8 +261,20 @@ export class TripIndexDO {
 								origin
 							)}&destination=${encodeURIComponent(destination)}&key=${googleKey}`;
 							const res = await fetch(url);
-							const data: any = await res.json().catch(() => null);
-
+							// Type the Google Directions response to avoid `any`
+							type DirectionsLeg = {
+								distance?: { value?: number };
+								duration?: { value?: number };
+								start_location?: { lat?: number; lng?: number };
+								end_location?: { lat?: number; lng?: number };
+								start_address?: string;
+								end_address?: string;
+							};
+							type DirectionsResponse = {
+								status?: string;
+								routes?: Array<{ legs?: DirectionsLeg[] }>;
+							} | null;
+							const data = (await res.json().catch(() => null)) as DirectionsResponse;
 							if (
 								data &&
 								data.status === 'OK' &&
@@ -278,6 +297,44 @@ export class TripIndexDO {
 										JSON.stringify({ distance, duration, source: 'google' })
 									);
 									log.info(`[ComputeRoutes] Cached: ${key}`);
+									try {
+										const placesKV = (this.env as unknown as Record<string, unknown>)[
+											'BETA_PLACES_KV'
+										] as KVNamespace | undefined;
+										if (placesKV) {
+											const writeIfMissing = async (
+												addr: string | undefined,
+												loc: { lat?: number; lng?: number } | undefined,
+												formatted?: string
+											) => {
+												if (!addr || !loc || loc.lat == null || loc.lng == null) return;
+												const geoKey = `geo:${addr
+													.toLowerCase()
+													.trim()
+													.replace(/[^a-z0-9]/g, '_')}`;
+												const existing = await placesKV.get(geoKey);
+												if (!existing) {
+													await placesKV.put(
+														geoKey,
+														JSON.stringify({
+															lat: Number(loc.lat),
+															lon: Number(loc.lng),
+															formattedAddress: formatted || addr
+														})
+													);
+													log.info(`[ComputeRoutes] Geocode cached: ${geoKey}`);
+												}
+											};
+											await writeIfMissing(
+												leg.start_address,
+												leg.start_location,
+												leg.start_address
+											);
+											await writeIfMissing(leg.end_address, leg.end_location, leg.end_address);
+										}
+									} catch (e) {
+										log.warn('[ComputeRoutes] Auto geocode write failed', e);
+									}
 								}
 							}
 						} catch (err) {
