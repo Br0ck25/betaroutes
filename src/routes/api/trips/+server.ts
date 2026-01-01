@@ -355,11 +355,26 @@ export const POST: RequestHandler = async (event) => {
 			if (tripIndexDO) {
 				const id = tripIndexDO.idFromName(trip.userId);
 				const stub = tripIndexDO.get(id);
-				// Fire-and-forget; do not block trip save on route computation
-				void stub.fetch('http://internal/compute-routes', {
+				const computeReq = stub.fetch('http://internal/compute-routes', {
 					method: 'POST',
 					body: JSON.stringify({ id: trip.id })
 				});
+				// Prefer using platform.context.waitUntil to reliably schedule work after response
+				try {
+					if (event.platform?.context?.waitUntil) {
+						event.platform.context.waitUntil(computeReq);
+					} else if ((event as any)?.context?.waitUntil) {
+						(event as any).context.waitUntil(computeReq);
+					} else {
+						// Fallback to fire-and-forget
+						void computeReq;
+					}
+					log.info('Enqueued route computation', { tripId: trip.id });
+				} catch (err) {
+					// If waitUntil itself throws, still fallback
+					log.warn('Failed to waitUntil compute job, continuing', { message: String(err) });
+					void computeReq;
+				}
 			}
 		} catch (e) {
 			// Log but do not fail the request
