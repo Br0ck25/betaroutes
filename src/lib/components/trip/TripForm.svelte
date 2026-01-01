@@ -32,10 +32,12 @@
 	let startTime = $state('');
 	let endTime = $state('');
 
-	let startAddress = $state(
-		settings.startLocation || storage.getSetting('defaultStartAddress') || ''
+	let startAddress = $state<string>(
+		String(settings.startLocation || storage.getSetting('defaultStartAddress') || '')
 	);
-	let endAddress = $state(settings.endLocation || storage.getSetting('defaultEndAddress') || '');
+	let endAddress = $state<string>(
+		String(settings.endLocation || storage.getSetting('defaultEndAddress') || '')
+	);
 
 	// Coordinates State
 	let startLocation = $state<LatLng | undefined>(undefined);

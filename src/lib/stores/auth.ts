@@ -1,6 +1,6 @@
 // src/lib/stores/auth.ts
 import { writable, derived } from 'svelte/store';
-import type { User } from '$lib/types';
+import type { User, AuthResponse, Subscription } from '$lib/types';
 import { storage } from '$lib/utils/storage';
 import { api } from '$lib/utils/api';
 import { trips } from './trips';
@@ -103,7 +103,7 @@ function createAuthStore() {
 					});
 
 					const syncId = user.name || user.token;
-					await trips.syncFromCloud(syncId);
+					if (syncId) await trips.syncFromCloud(syncId);
 				} catch (error) {
 					console.warn('Failed to load user data, checking offline cache...', error);
 
@@ -163,13 +163,13 @@ function createAuthStore() {
 		signup: async (username: string, password: string) => {
 			update((state) => ({ ...state, isLoading: true, error: null }));
 			try {
-				const response = await api.signup(username, password);
+				const response = (await api.signup(username, password)) as AuthResponse;
 				const offlineId = getOfflineId();
 
-				storage.setToken(response.token);
+				storage.setToken(response.token || '');
 				storage.setUsername(username);
 
-				const subscription = await api.getSubscription(response.token);
+				const subscription = (await api.getSubscription(response.token || '')) as Subscription;
 
 				const user: User = {
 					token: response.token,
@@ -211,14 +211,14 @@ function createAuthStore() {
 		login: async (username: string, password: string) => {
 			update((state) => ({ ...state, isLoading: true, error: null }));
 			try {
-				const response = await api.login(username, password);
+				const response = (await api.login(username, password)) as AuthResponse;
 				const offlineId = getOfflineId();
 
-				storage.setToken(response.token);
+				storage.setToken(response.token || '');
 				storage.setUsername(username);
 				const savedEmail = localStorage.getItem('user_email') || '';
 
-				const subscription = await api.getSubscription(response.token);
+				const subscription = (await api.getSubscription(response.token || '')) as Subscription;
 
 				const user: User = {
 					token: response.token,
@@ -389,5 +389,5 @@ export const authError = derived(auth, ($auth) => $auth.error);
 export const canCreateTrip = derived(user, ($user) => {
 	if (!$user) return true;
 	if ($user.plan === 'pro' || $user.plan === 'business') return true;
-	return $user.tripsThisMonth < $user.maxTrips;
+	return ($user.tripsThisMonth ?? 0) < ($user.maxTrips ?? Infinity);
 });

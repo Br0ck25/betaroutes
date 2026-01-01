@@ -182,12 +182,16 @@ export function calculateMonthlyComparison(allTrips: Trip[]): MonthlyComparison 
 	const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
 
 	const currentMonthTrips = allTrips.filter((trip) => {
+		if (!trip.date) return false;
 		const tripDate = new Date(trip.date);
+		if (isNaN(tripDate.getTime())) return false;
 		return tripDate >= currentMonthStart;
 	});
 
 	const previousMonthTrips = allTrips.filter((trip) => {
+		if (!trip.date) return false;
 		const tripDate = new Date(trip.date);
+		if (isNaN(tripDate.getTime())) return false;
 		return tripDate >= previousMonthStart && tripDate <= previousMonthEnd;
 	});
 
@@ -242,7 +246,10 @@ export function calculatePeriodBreakdown(trips: Trip[]): PeriodBreakdown {
 	const quarterlyData: Record<string, PeriodAggregate> = {};
 
 	trips.forEach((trip) => {
+		if (!trip.date) return;
 		const tripDate = new Date(trip.date);
+		if (isNaN(tripDate.getTime())) return;
+
 		const revenue =
 			trip.stops?.reduce((sum: number, stop: any) => sum + (stop.earnings || 0), 0) || 0;
 		const expenses = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);

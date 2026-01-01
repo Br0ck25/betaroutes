@@ -184,10 +184,15 @@ export class TripIndexDO {
 				const tripId = body?.id;
 				if (!tripId) return new Response('Missing trip id', { status: 400 });
 
+				log.info(`[ComputeRoutes] START ${tripId}`);
+
 				try {
 					const cursor = this.state.storage.sql.exec('SELECT data FROM trips WHERE id = ?', tripId);
 					const row = cursor.one();
-					if (!row) return new Response('Trip not found', { status: 404 });
+					if (!row) {
+						log.warn(`[ComputeRoutes] Trip not found: ${tripId}`);
+						return new Response('Trip not found', { status: 404 });
+					}
 					const trip = JSON.parse(
 						(row as Record<string, unknown>)['data'] as string
 					) as TripSummary;
@@ -367,6 +372,9 @@ export class TripIndexDO {
 						log.warn(`[ComputeRoutes] Save failed: ${e}`);
 					}
 
+					log.info(
+						`[ComputeRoutes] FINISH ${tripId} totalMeters=${totalMeters} totalSeconds=${totalSeconds}`
+					);
 					return new Response('OK');
 				} catch (e: unknown) {
 					const msg = e instanceof Error ? e.message : String(e);
