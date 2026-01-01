@@ -135,10 +135,12 @@ export class HughesNetRouter {
 						duration: data.routes[0].legs[0].duration.value
 					};
 
-					// Save to KV (Permanent Cache)
+					// Save to KV with 30-day TTL
 					if (this.kv) {
 						try {
-							await this.kv.put(key, JSON.stringify(result));
+							await this.kv.put(key, JSON.stringify(result), {
+								expirationTtl: 30 * 24 * 60 * 60 // 30 days
+							});
 						} catch (e) {
 							log.warn('Failed to cache route:', e);
 						}

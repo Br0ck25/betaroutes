@@ -295,11 +295,12 @@ export class TripIndexDO {
 								if (distance && isFinite(distance)) totalMeters += distance;
 								if (duration && isFinite(duration)) totalSeconds += duration;
 
-								// Save to KV (Readable Key)
+								// Save to KV with 30-day TTL
 								if (directionsKV && distance !== null && duration !== null) {
 									await directionsKV.put(
 										key,
-										JSON.stringify({ distance, duration, source: 'google' })
+										JSON.stringify({ distance, duration, source: 'google' }),
+										{ expirationTtl: 30 * 24 * 60 * 60 } // 30 days
 									);
 									log.info(`[ComputeRoutes] Cached: ${key}`);
 									try {

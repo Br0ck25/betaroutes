@@ -17,18 +17,35 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
 	}
 
 	const apiKey = (platform?.env as any)?.PRIVATE_GOOGLE_MAPS_API_KEY;
+	const directionsKV = (platform?.env as any)?.BETA_DIRECTIONS_KV;
 
-	// 2. Directly use Google Directions API (Server-side) — OSRM removed in favor of Google + KV cache.
-	// Geocoding-based approaches were previously attempted, but we now prefer Google for consistent results.
+	// 2. Generate cache key (consistent with router.ts pattern)
+	const cacheKey = `dir:${start.toLowerCase().trim()}_to_${end.toLowerCase().trim()}`.replace(
+		/[^a-z0-9_:-]/g,
+		''
+	);
 
-	// 3. Fallback: Call Google Directions API (Server-Side)
+	// 3. Check KV Cache first
+	if (directionsKV) {
+		try {
+			const cached = await directionsKV.get(cacheKey);
+			if (cached) {
+				log.info('Cache hit for route', { start, end });
+				return json({ source: 'cache', data: JSON.parse(cached) });
+			}
+		} catch (e) {
+			log.warn('Failed to get cached route:', e);
+		}
+	}
+
+	// 4. Cache miss - Call Google Directions API (Server-Side)
 	if (!apiKey) {
 		log.error('PRIVATE_GOOGLE_MAPS_API_KEY is missing');
 		return json({ error: 'Server configuration error' }, { status: 500 });
 	}
 
 	try {
-		log.info('Fetching route from Google', { start, end });
+		log.info('Cache miss - Fetching route from Google', { start, end });
 		const googleUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(start)}&destination=${encodeURIComponent(end)}&key=${apiKey}`;
 
 		const response = await fetch(googleUrl);
@@ -41,6 +58,18 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
 				distance: leg.distance.value,
 				duration: leg.duration.value
 			};
+
+			// 5. Save to KV Cache with 30-day TTL
+			if (directionsKV) {
+				try {
+					await directionsKV.put(cacheKey, JSON.stringify(result), {
+						expirationTtl: 30 * 24 * 60 * 60 // 30 days
+					});
+					log.info('Cached route result', { start, end });
+				} catch (e) {
+					log.warn('Failed to cache route:', e);
+				}
+			}
 
 			return json({ source: 'google', data: result });
 		}

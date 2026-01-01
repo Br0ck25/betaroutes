@@ -99,7 +99,11 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 				legs: route.legs // Include legs for distance calculations
 			};
 
-			if (kv) await kv.put(cacheKey, JSON.stringify(result));
+			if (kv) {
+				await kv.put(cacheKey, JSON.stringify(result), {
+					expirationTtl: 30 * 24 * 60 * 60 // 30 days
+				});
+			}
 			return json(result);
 		}
 
