@@ -18,6 +18,7 @@ import {
 } from '$lib/server/sanitize';
 import { log } from '$lib/server/log';
 import type { TripRecord } from '$lib/server/tripService';
+import { computeAndCacheDirections } from '$lib/server/directionsCache';
 
 import { safeKV, safeDO } from '$lib/server/env';
 
@@ -348,6 +349,32 @@ export const POST: RequestHandler = async (event) => {
 
 		// Persist trip (coerce to TripRecord)
 		await svc.put(trip as TripRecord);
+
+		// --- Direct compute & KV writes (bypass TripIndexDO)
+		try {
+			const directionsKV = safeKV(env, 'BETA_DIRECTIONS_KV');
+			if (directionsKV) {
+				const p = computeAndCacheDirections(env, trip).catch((e: unknown) => {
+					const msg = e instanceof Error ? e.message : String(e);
+					log.warn('Direct compute failed', { message: msg });
+				});
+				try {
+					if (event.platform?.context?.waitUntil) {
+						event.platform.context.waitUntil(p as any);
+					} else if ((event as any)?.context?.waitUntil) {
+						(event as any).context.waitUntil(p);
+					} else {
+						// Fallback to fire-and-forget
+						void p;
+					}
+				} catch (err) {
+					// ignore waitUntil failures
+					void p;
+				}
+			}
+		} catch (e) {
+			log.warn('Direct compute scheduling failed', { message: (e as Error).message });
+		}
 
 		// --- Enqueue route computation in TripIndexDO (non-blocking)
 		try {

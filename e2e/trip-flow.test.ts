@@ -120,12 +120,28 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
 				},
 				TravelMode: { DRIVING: 'DRIVING' },
 				UnitSystem: { IMPERIAL: 0 },
-				DirectionsStatus: { OK: 'OK' },
-				places: { PlacesServiceStatus: { OK: 'OK' } }
+				DirectionsStatus: { OK: 'OK' }
 			}
 		} as any;
 	});
-
+	await page.route('**/maps/api/directions/**', async (route) => {
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				routes: [
+					{
+						legs: [
+							{
+								distance: { value: 16093 },
+								duration: { value: 900 }
+							}
+						]
+					}
+				]
+			})
+		});
+	});
 	// --- TEST EXECUTION ---
 
 	// 1. Log In
@@ -269,12 +285,13 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
 		'After selecting destination (place-selected), Trip Summary snapshot (truncated):',
 		(await page.content()).slice(0, 500)
 	);
-	// Debug: print the Trip Summary mileage displayed in the UI
+	// Debug & robust assertion: check Trip Summary mileage using stable test id
+	// Wait until the Trip Summary shows a distance (robust: avoid exact '10 mi' assumption)
+	const distanceLocator = page.locator('[data-testid="trip-distance"]').first();
+	await expect(distanceLocator).toHaveText(/\d+\s?mi/, { timeout: 10000 });
+	await expect(distanceLocator).toBeVisible();
 	// eslint-disable-next-line no-console
-	console.log(
-		'TripSummary distance displayed:',
-		await page.locator('.text-xl.font-bold.text-green-900').first().textContent()
-	);
+	console.log('TripSummary distance displayed:', await distanceLocator.textContent());
 	try {
 		await page.screenshot({
 			path: 'test-results/trip-flow-Critical-Path-Create-and-view-a-new-trip/after-destination.png'

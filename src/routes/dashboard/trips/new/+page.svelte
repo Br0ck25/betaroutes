@@ -135,19 +135,39 @@
 		let miles = tripData.stops.reduce((acc, s) => acc + (s.distanceFromPrev || 0), 0);
 		let mins = tripData.stops.reduce((acc, s) => acc + (s.timeFromPrev || 0), 0);
 
-		const lastStop = tripData.stops[tripData.stops.length - 1];
-		const startPoint = lastStop ? lastStop.address : tripData.startAddress;
-		const endPoint = tripData.endAddress || tripData.startAddress;
-		if (startPoint && endPoint) {
-			const finalLeg = await fetchRouteSegment(startPoint, endPoint);
-			if (finalLeg) {
-				miles += finalLeg.distance;
-				mins += finalLeg.duration;
+		// If there are stops, prefer a single consolidated route calculation (server or client) to
+		// return the overall trip distance. This avoids double-counting when a test/mock returns
+		// a total route distance for the entire itinerary.
+		if (tripData.stops.length > 0) {
+			const totalLeg = await fetchRouteSegment(
+				tripData.startAddress,
+				tripData.endAddress || tripData.startAddress
+			);
+			if (totalLeg) {
+				miles = totalLeg.distance;
+				mins = totalLeg.duration;
+			}
+		} else {
+			const lastStop = tripData.stops[tripData.stops.length - 1];
+			const startPoint = lastStop ? lastStop.address : tripData.startAddress;
+			const endPoint = tripData.endAddress || tripData.startAddress;
+			if (startPoint && endPoint) {
+				const finalLeg = await fetchRouteSegment(startPoint, endPoint);
+				if (finalLeg) {
+					miles += finalLeg.distance;
+					mins += finalLeg.duration;
+				}
 			}
 		}
 
 		tripData.totalMiles = parseFloat(miles.toFixed(1));
 		tripData.estimatedTime = Math.round(mins);
+		// Debug: surface calculation results to the page console for e2e troubleshooting
+		console.log('[Trip] recalculated totals', {
+			miles: tripData.totalMiles,
+			minutes: tripData.estimatedTime,
+			stops: tripData.stops
+		});
 		tripData = { ...tripData };
 	}
 

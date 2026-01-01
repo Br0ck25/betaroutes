@@ -224,6 +224,10 @@
 			netProfit = grossEarnings - (fuelCost + suppliesCost + maintenanceCost);
 
 			calculated = true;
+			console.log('[TripForm] handleCalculate success', {
+				totalMiles: routeData?.totalMiles,
+				totalMinutes: routeData?.totalMinutes
+			});
 
 			if (!silent) toasts.success('Route calculated successfully!');
 
