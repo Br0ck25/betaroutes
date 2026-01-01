@@ -304,10 +304,8 @@ export class TripIndexDO {
 									);
 									log.info(`[ComputeRoutes] Cached: ${key}`);
 									try {
-										const placesKV = (this.env as unknown as Record<string, unknown>)[
-											'BETA_PLACES_KV'
-										] as KVNamespace | undefined;
-										if (placesKV) {
+										// Use BETA_DIRECTIONS_KV for geocode data (not BETA_PLACES_KV)
+										if (directionsKV) {
 											const writeIfMissing = async (
 												addr: string | undefined,
 												loc: { lat?: number; lng?: number } | undefined,
@@ -318,15 +316,16 @@ export class TripIndexDO {
 													.toLowerCase()
 													.trim()
 													.replace(/[^a-z0-9]/g, '_')}`;
-												const existing = await placesKV.get(geoKey);
+												const existing = await directionsKV.get(geoKey);
 												if (!existing) {
-													await placesKV.put(
+													await directionsKV.put(
 														geoKey,
 														JSON.stringify({
 															lat: Number(loc.lat),
 															lon: Number(loc.lng),
 															formattedAddress: formatted || addr
-														})
+														}),
+														{ expirationTtl: 30 * 24 * 60 * 60 } // 30 days
 													);
 													log.info(`[ComputeRoutes] Geocode cached: ${geoKey}`);
 												}

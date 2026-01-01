@@ -47,10 +47,12 @@ export class HughesNetRouter {
 					formattedAddress: pt.formattedAddress
 				};
 
-				// Save to KV (Permanent Cache)
+				// Save to KV with 30-day TTL
 				if (this.kv) {
 					try {
-						await this.kv.put(kvKey, JSON.stringify(point));
+						await this.kv.put(kvKey, JSON.stringify(point), {
+							expirationTtl: 30 * 24 * 60 * 60 // 30 days
+						});
 					} catch (err) {
 						log.warn('Failed to cache geocode:', err);
 					}
@@ -79,10 +81,12 @@ export class HughesNetRouter {
 						formattedAddress: first['formatted_address']
 					};
 
-					// Save to KV (Permanent Cache)
+					// Save to KV with 30-day TTL
 					if (this.kv) {
 						try {
-							await this.kv.put(kvKey, JSON.stringify(point));
+							await this.kv.put(kvKey, JSON.stringify(point), {
+								expirationTtl: 30 * 24 * 60 * 60 // 30 days
+							});
 						} catch (e) {
 							log.warn('Failed to cache geocode:', e);
 						}

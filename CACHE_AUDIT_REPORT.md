@@ -236,9 +236,10 @@ await directionsKV.put(cacheKey, JSON.stringify(result), {
 ```
 
 **Cache Strategy:**
-- **Geocode data:** Permanent (addresses don't change) ✅
+- **Geocode data:** 30-day TTL (refreshes periodically) ✅
 - **Route data:** 30-day TTL (handles road changes, construction) ✅
 - **Optimization:** 30-day TTL (refreshes periodically) ✅
+- **Autocomplete:** Permanent (user-selected addresses) ✅
 
 **Severity:** ~~⚠️ **MODERATE**~~ ✅ **RESOLVED**
 
