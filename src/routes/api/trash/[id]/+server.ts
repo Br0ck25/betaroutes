@@ -29,15 +29,19 @@ export const POST: RequestHandler = async (event) => {
 		const kv = safeKV(platformEnv, 'BETA_LOGS_KV');
 		const trashKV = safeKV(platformEnv, 'BETA_LOGS_TRASH_KV');
 		const placesKV = safeKV(platformEnv, 'BETA_PLACES_KV');
+		const directionsKV = safeKV(platformEnv, 'BETA_DIRECTIONS_KV');
 		const tripIndexDO = (platformEnv?.['TRIP_INDEX_DO'] as unknown) ?? fakeDO();
 		const placesIndexDO = (platformEnv?.['PLACES_INDEX_DO'] as unknown) ?? tripIndexDO;
+		const googleApiKey = platformEnv?.['PRIVATE_GOOGLE_MAPS_API_KEY'] as string | undefined;
 
 		const svc = makeTripService(
 			kv as any,
 			trashKV as any,
 			placesKV as any,
+			directionsKV as any,
 			tripIndexDO as any,
-			placesIndexDO as any
+			placesIndexDO as any,
+			googleApiKey
 		);
 
 		const currentUser = user as { name?: string; token?: string };
@@ -85,15 +89,19 @@ export const DELETE: RequestHandler = async (event) => {
 		const kv = safeKV(platformEnv, 'BETA_LOGS_KV');
 		const trashKV = safeKV(platformEnv, 'BETA_LOGS_TRASH_KV');
 		const placesKV = safeKV(platformEnv, 'BETA_PLACES_KV');
+		const directionsKV = safeKV(platformEnv, 'BETA_DIRECTIONS_KV');
 		const tripIndexDO = (platformEnv?.['TRIP_INDEX_DO'] as unknown) ?? fakeDO();
 		const placesIndexDO = (platformEnv?.['PLACES_INDEX_DO'] as unknown) ?? tripIndexDO;
+		const googleApiKey = platformEnv?.['PRIVATE_GOOGLE_MAPS_API_KEY'] as string | undefined;
 
 		const svc = makeTripService(
 			kv as any,
 			trashKV as any,
 			placesKV as any,
+			directionsKV as any,
 			tripIndexDO as any,
-			placesIndexDO as any
+			placesIndexDO as any,
+			googleApiKey
 		);
 
 		const currentUser = user as { name?: string; token?: string };

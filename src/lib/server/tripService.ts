@@ -74,8 +74,10 @@ export function makeTripService(
 	kv: KVNamespace,
 	trashKV: KVNamespace | undefined,
 	placesKV: KVNamespace | undefined,
+	directionsKV: KVNamespace | undefined,
 	tripIndexDO: DurableObjectNamespace,
-	placesIndexDO: DurableObjectNamespace
+	placesIndexDO: DurableObjectNamespace,
+	googleApiKey: string | undefined
 ) {
 	const getIndexStub = (userId: string) => {
 		const id = tripIndexDO.idFromName(userId);
@@ -109,6 +111,96 @@ export function makeTripService(
 		updatedAt: trip.updatedAt,
 		deleted: trip.deleted
 	});
+
+	async function computeAndCacheRoutes(trip: TripRecord) {
+		if (!directionsKV || !googleApiKey || trip.deleted) return;
+
+		try {
+			// Extract addresses from trip
+			const points: string[] = [];
+			if (trip.startAddress) points.push(trip.startAddress);
+			if (Array.isArray(trip.stops)) {
+				trip.stops.forEach((s) => {
+					if (s.address) points.push(s.address);
+				});
+			}
+			if (trip.endAddress) points.push(trip.endAddress);
+
+			// Compute and cache each route segment
+			for (let i = 0; i < points.length - 1; i++) {
+				const origin = points[i];
+				const destination = points[i + 1];
+				if (!origin || !destination || origin === destination) continue;
+
+				// Generate cache key (same format as router.ts)
+				let key = `dir:${origin.toLowerCase().trim()}_to_${destination.toLowerCase().trim()}`;
+				key = key.replace(/[^a-z0-9_:-]/g, '');
+
+				// Check if already cached
+				const cached = await directionsKV.get(key);
+				if (cached) continue; // Already cached, skip
+
+				// Call Google Directions API
+				try {
+					const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&key=${googleApiKey}`;
+					const res = await fetch(url);
+					const data: any = await res.json();
+
+					if (data.status === 'OK' && data.routes?.[0]?.legs?.[0]) {
+						const leg = data.routes[0].legs[0];
+						const result = {
+							distance: leg.distance.value,
+							duration: leg.duration.value
+						};
+
+						// Cache with 30-day TTL
+						await directionsKV.put(key, JSON.stringify(result), {
+							expirationTtl: 30 * 24 * 60 * 60 // 30 days
+						});
+						log.info(`[TripService] Cached route: ${key}`);
+
+						// Also cache geocode data from the response
+						if (leg.start_address && leg.start_location) {
+							const geoKey = `geo:${leg.start_address.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}`;
+							const existing = await directionsKV.get(geoKey);
+							if (!existing) {
+								await directionsKV.put(
+									geoKey,
+									JSON.stringify({
+										lat: Number(leg.start_location.lat),
+										lon: Number(leg.start_location.lng),
+										formattedAddress: leg.start_address
+									}),
+									{ expirationTtl: 30 * 24 * 60 * 60 }
+								);
+								log.info(`[TripService] Cached geocode: ${geoKey}`);
+							}
+						}
+						if (leg.end_address && leg.end_location) {
+							const geoKey = `geo:${leg.end_address.toLowerCase().trim().replace(/[^a-z0-9]/g, '_')}`;
+							const existing = await directionsKV.get(geoKey);
+							if (!existing) {
+								await directionsKV.put(
+									geoKey,
+									JSON.stringify({
+										lat: Number(leg.end_location.lat),
+										lon: Number(leg.end_location.lng),
+										formattedAddress: leg.end_address
+									}),
+									{ expirationTtl: 30 * 24 * 60 * 60 }
+								);
+								log.info(`[TripService] Cached geocode: ${geoKey}`);
+							}
+						}
+					}
+				} catch (err) {
+					log.warn(`[TripService] Failed to fetch/cache route ${origin} -> ${destination}:`, err);
+				}
+			}
+		} catch (err) {
+			log.error('[TripService] Critical error in computeAndCacheRoutes:', err);
+		}
+	}
 
 	async function indexTripData(trip: TripRecord) {
 		if (!placesKV || trip.deleted) return;
@@ -275,7 +367,14 @@ export function makeTripService(
 				body: JSON.stringify(toSummary(trip))
 			});
 
-			// 2. Trigger Route Calculation & Caching (Background)
+			// 2. Compute and cache routes SYNCHRONOUSLY (direct to BETA_DIRECTIONS_KV)
+			try {
+				await computeAndCacheRoutes(trip);
+			} catch (e) {
+				log.error('[TripService] Failed to compute and cache routes:', e);
+			}
+
+			// 3. Trigger Route Calculation & Caching (Background - fallback)
 			stub
 				.fetch(`${DO_ORIGIN}/compute-routes`, {
 					method: 'POST',
@@ -285,7 +384,7 @@ export function makeTripService(
 					log.error('[TripService] Background route computation failed trigger:', err);
 				});
 
-			// 3. Index Places
+			// 4. Index Places
 			try {
 				await indexTripData(trip);
 			} catch (e) {

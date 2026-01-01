@@ -31,18 +31,22 @@ export const GET: RequestHandler = async (event) => {
 		const kv = (platformEnv?.['BETA_LOGS_KV'] as unknown) ?? fakeKV();
 		const trashKV = (platformEnv?.['BETA_LOGS_TRASH_KV'] as unknown) ?? fakeKV();
 		const placesKV = (platformEnv?.['BETA_PLACES_KV'] as unknown) ?? fakeKV();
+		const directionsKV = (platformEnv?.['BETA_DIRECTIONS_KV'] as unknown) ?? fakeKV();
 
 		// Durable Object bindings (mock or real)
 		const tripIndexDO = (platformEnv?.['TRIP_INDEX_DO'] as unknown) ?? fakeDO();
 		const placesIndexDO = (platformEnv?.['PLACES_INDEX_DO'] as unknown) ?? tripIndexDO;
+		const googleApiKey = platformEnv?.['PRIVATE_GOOGLE_MAPS_API_KEY'] as string | undefined;
 
 		// Create service
 		const svc = makeTripService(
 			kv as any,
 			trashKV as any,
 			placesKV as any,
+			directionsKV as any,
 			tripIndexDO as any,
-			placesIndexDO as any
+			placesIndexDO as any,
+			googleApiKey
 		);
 
 		const currentUser = user as { name?: string; token?: string };

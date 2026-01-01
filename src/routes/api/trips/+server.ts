@@ -168,8 +168,10 @@ export const GET: RequestHandler = async (event) => {
 			safeKV(env, 'BETA_LOGS_KV')!,
 			safeKV(env, 'BETA_LOGS_TRASH_KV'),
 			safeKV(env, 'BETA_PLACES_KV'),
+			safeKV(env, 'BETA_DIRECTIONS_KV'),
 			safeDO(env, 'TRIP_INDEX_DO')!,
-			safeDO(env, 'PLACES_INDEX_DO')!
+			safeDO(env, 'PLACES_INDEX_DO')!,
+			env.PRIVATE_GOOGLE_MAPS_API_KEY
 		);
 
 		const allTrips = await svc.list(storageId, { since: sinceParam, limit, offset });
@@ -274,8 +276,10 @@ export const POST: RequestHandler = async (event) => {
 			safeKV(env, 'BETA_LOGS_KV')!,
 			safeKV(env, 'BETA_LOGS_TRASH_KV'),
 			safeKV(env, 'BETA_PLACES_KV'),
+			safeKV(env, 'BETA_DIRECTIONS_KV'),
 			safeDO(env, 'TRIP_INDEX_DO')!,
-			safeDO(env, 'PLACES_INDEX_DO')!
+			safeDO(env, 'PLACES_INDEX_DO')!,
+			env.PRIVATE_GOOGLE_MAPS_API_KEY
 		);
 
 		const validData = parseResult.data;
@@ -476,8 +480,10 @@ export const PUT: RequestHandler = async (event) => {
 			safeKV(env, 'BETA_LOGS_KV')!,
 			safeKV(env, 'BETA_LOGS_TRASH_KV'),
 			safeKV(env, 'BETA_PLACES_KV'),
+			safeKV(env, 'BETA_DIRECTIONS_KV'),
 			safeDO(env, 'TRIP_INDEX_DO')!,
-			safeDO(env, 'PLACES_INDEX_DO')!
+			safeDO(env, 'PLACES_INDEX_DO')!,
+			env.PRIVATE_GOOGLE_MAPS_API_KEY
 		);
 
 		const validData = parseResult.data;

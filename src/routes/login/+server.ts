@@ -109,8 +109,10 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 							safeKV(env, 'BETA_LOGS_KV') as any,
 							safeKV(env, 'BETA_LOGS_TRASH_KV') as any,
 							safeKV(env, 'BETA_PLACES_KV') as any,
+							safeKV(env, 'BETA_DIRECTIONS_KV') as any,
 							tripIndexDO as any,
-							placesIndexDO as any
+							placesIndexDO as any,
+							(env as any).PRIVATE_GOOGLE_MAPS_API_KEY
 						);
 
 						// Trigger the move. If keys exist under 'username', they move to 'userId'.

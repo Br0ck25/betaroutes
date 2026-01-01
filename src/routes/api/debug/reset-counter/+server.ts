@@ -13,12 +13,14 @@ export const GET = async ({ locals, platform }) => {
 	const kv = safeKV(platform?.env, 'BETA_LOGS_KV');
 	const trashKV = safeKV(platform?.env, 'BETA_LOGS_TRASH_KV');
 	const placesKV = safeKV(platform?.env, 'BETA_PLACES_KV');
+	const directionsKV = safeKV(platform?.env, 'BETA_DIRECTIONS_KV');
 
 	if (!kv) return json({ error: 'KV not found' });
 
 	const tripIndexDO = (platform?.env as any)?.TRIP_INDEX_DO ?? ({} as any);
 	const placesIndexDO = (platform?.env as any)?.PLACES_INDEX_DO ?? tripIndexDO;
-	const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO as any, placesIndexDO as any);
+	const googleApiKey = (platform?.env as any)?.PRIVATE_GOOGLE_MAPS_API_KEY;
+	const svc = makeTripService(kv, trashKV, placesKV, directionsKV, tripIndexDO as any, placesIndexDO as any, googleApiKey);
 
 	// Use the same ID logic as your main app (guard index signature)
 	const userId = (locals.user as any).name || (locals.user as any).token;

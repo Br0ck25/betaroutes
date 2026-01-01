@@ -51,8 +51,8 @@ export class HughesNetService {
 		private _logsKV: KVNamespace,
 		private trashKV: KVNamespace,
 		private settingsKV: KVNamespace,
-		googleApiKey: string | undefined,
-		directionsKV: KVNamespace | undefined,
+		private googleApiKey: string | undefined,
+		private directionsKV: KVNamespace | undefined,
 		private ordersKV: KVNamespace,
 		private tripKV: KVNamespace,
 		private tripIndexDO: DurableObjectNamespace
@@ -205,8 +205,10 @@ export class HughesNetService {
 			this.tripKV,
 			this.trashKV,
 			undefined,
+			this.directionsKV,
 			this.tripIndexDO,
-			this.tripIndexDO
+			this.tripIndexDO,
+			this.googleApiKey
 		);
 		const allTrips = await tripService.list(userId);
 		let count = 0;
@@ -744,8 +746,10 @@ export class HughesNetService {
 				this.tripKV,
 				this.trashKV,
 				undefined,
+				this.directionsKV,
 				this.tripIndexDO,
-				this.tripIndexDO
+				this.tripIndexDO,
+				this.googleApiKey
 			);
 
 			for (const date of sortedDates) {
