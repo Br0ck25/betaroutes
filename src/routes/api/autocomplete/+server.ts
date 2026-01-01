@@ -52,7 +52,7 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 
 	const query = sanitizeQueryParam(url.searchParams.get('q'), 200);
 	const placeId = sanitizeQueryParam(url.searchParams.get('placeid'), 200);
-	// [!code ++] Allow client to force Google escalation
+	// Allow client to force Google escalation
 	const forceGoogle = url.searchParams.get('forceGoogle') === 'true';
 
 	const apiKey = env['PRIVATE_GOOGLE_MAPS_API_KEY'];
@@ -64,7 +64,46 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 			const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=geometry,name,formatted_address&key=${apiKey}`;
 			const res = await fetch(detailsUrl);
 			const data: any = await res.json();
-			if (data.status === 'OK' && data.result) return json(data.result);
+			if (data.status === 'OK' && data.result) {
+				// Background: cache geocode directly to BETA_PLACES_KV for reuse (bypass PlacesIndexDO)
+				try {
+					const { getEnv, safeKV } = await import('$lib/server/env');
+					const env = getEnv(platform);
+					const placesKV = safeKV(env, 'BETA_PLACES_KV') as KVNamespace | undefined;
+					if (placesKV && data.result && data.result.geometry && data.result.geometry.location) {
+						const addr = data.result.formatted_address || data.result.name;
+						if (addr) {
+							const geoKey = `geo:${addr
+								.toLowerCase()
+								.trim()
+								.replace(/[^a-z0-9]/g, '_')}`;
+							// Fire-and-forget write to KV
+							void (async () => {
+								try {
+									const existing = await placesKV.get(geoKey);
+									if (!existing) {
+										await placesKV.put(
+											geoKey,
+											JSON.stringify({
+												lat: Number(data.result.geometry.location.lat),
+												lon: Number(data.result.geometry.location.lng),
+												formattedAddress: data.result.formatted_address || addr,
+												source: 'autocomplete_place_details'
+											})
+										);
+									}
+								} catch (e) {
+									// ignore KV failures
+								}
+							})();
+						}
+					}
+				} catch (e) {
+					// ignore
+				}
+
+				return json(data.result);
+			}
 			return json({ error: data.status }, { status: 400 });
 		} catch (err: unknown) {
 			void err;
@@ -82,7 +121,6 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 
 	try {
 		// 1. Try KV Cache First (Skip if forceGoogle is true)
-		// [!code ++] Added !forceGoogle check
 		if (kv && !forceGoogle) {
 			const bucketRaw = await kv.get(bucketKey);
 			if (bucketRaw) {
@@ -148,10 +186,15 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 				source: 'google_proxy'
 			}));
 
-			// Save Google results to KV permanently so future requests hit the cache.
-			// These results are considered authoritative enough to keep indefinitely in KV.
+			// [!code ++] Save Google results to KV with Fan-Out (Background)
 			if (kv && results.length > 0) {
-				await kv.put(bucketKey, JSON.stringify(results));
+				const cacheTask = fanOutCache(kv, results);
+				if (platform && platform.context && platform.context.waitUntil) {
+					platform.context.waitUntil(cacheTask);
+				} else {
+					// Fire and forget in environments without waitUntil
+					cacheTask.catch((err) => console.error('Background cache failed', err));
+				}
 			}
 
 			return json(results);
@@ -163,6 +206,51 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 		return json([]);
 	}
 };
+
+/**
+ * Helper: Fan-out Cache Logic
+ * Caches results into multiple prefix buckets (2..10 chars)
+ */
+async function fanOutCache(kv: KVNamespace, results: any[]) {
+	// 1. Group new items by their potential prefixes
+	const prefixMap = new Map<string, any[]>();
+
+	for (const result of results) {
+		const address = result.formatted_address || result.name || '';
+		const normalized = address.toLowerCase().replace(/\s+/g, '');
+
+		// Generate prefixes for this result (lengths 2 to 10)
+		for (let len = 2; len <= Math.min(10, normalized.length); len++) {
+			const prefix = normalized.substring(0, len);
+			const key = `prefix:${prefix}`;
+
+			if (!prefixMap.has(key)) {
+				prefixMap.set(key, []);
+			}
+			prefixMap.get(key)!.push(result);
+		}
+	}
+
+	// 2. Process each prefix bucket
+	const updatePromises = Array.from(prefixMap.entries()).map(async ([key, newItems]) => {
+		const existingRaw = await kv.get(key);
+		let bucket = existingRaw ? JSON.parse(existingRaw) : [];
+
+		for (const item of newItems) {
+			const exists = bucket.some(
+				(b: any) =>
+					b.formatted_address === item.formatted_address ||
+					(b.place_id && b.place_id === item.place_id)
+			);
+			if (!exists) bucket.push(item);
+		}
+
+		if (bucket.length > 20) bucket = bucket.slice(0, 20);
+		await kv.put(key, JSON.stringify(bucket));
+	});
+
+	await Promise.all(updatePromises);
+}
 
 /**
  * POST Handler
@@ -215,6 +303,30 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 				contributedBy: (locals.user as any).id
 			})
 		);
+
+		// Also record this selection in PLACES KV (bypass PlacesIndexDO) — keep a per-user recent list (non-blocking)
+		try {
+			const userId = (locals.user as any).id;
+			const recentKey = `recent:${userId}`;
+			void (async () => {
+				try {
+					const existingRaw = await placesKV.get(recentKey);
+					let list: string[] = existingRaw ? JSON.parse(existingRaw) : [];
+					// Ensure uniqueness and push most recent to the end
+					list = list.filter((a) => a !== keyText);
+					list.push(keyText);
+					if (list.length > 50) list = list.slice(-50);
+					await placesKV.put(recentKey, JSON.stringify(list));
+				} catch (err) {
+					log.warn('[Autocomplete] recent list KV write failed', err);
+				}
+			})();
+		} catch (e) {
+			// Don't block on failures
+			log.warn('[Autocomplete] Failed to update recent list (KV)', {
+				message: (e as Error).message
+			});
+		}
 
 		return json({ success: true });
 	} catch (e) {
