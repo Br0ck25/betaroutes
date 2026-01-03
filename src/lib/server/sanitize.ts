@@ -121,9 +121,12 @@ export function sanitizeStop(stop: unknown): Stop | null {
 	if (!stop || typeof stop !== 'object') return null;
 	const s = stop as UnsanitizedStop;
 
+	// Accept common address fields to be resilient to differing payload shapes
+	const rawAddress = (s as any).address || (s as any).formatted_address || (s as any).name || '';
+
 	return {
 		id: s.id ? sanitizeUUID(s.id) : undefined,
-		address: sanitizeString(s.address, 500),
+		address: sanitizeString(rawAddress, 500),
 		earnings: sanitizeNumber(s.earnings, 0),
 		notes: sanitizeString(s.notes, 1000),
 		order: sanitizeNumber(s.order, 0),

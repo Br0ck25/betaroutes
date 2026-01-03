@@ -281,6 +281,24 @@ export const POST: RequestHandler = async (event) => {
 
 		const validData = parseResult.data;
 		const id = validData.id || crypto.randomUUID();
+
+		// Sanity check: warn if stops exist but addresses are empty (helps catch client-side payload issues)
+		try {
+			if (validData.stops && Array.isArray(validData.stops)) {
+				const missing = (validData.stops as any[]).filter(
+					(s) => !s || !s.address || String(s.address).trim() === ''
+				);
+				if (missing.length > 0) {
+					log.warn('POST /api/trips: some stops missing address after sanitization', {
+						tripId: id,
+						missingCount: missing.length,
+						sample: (validData.stops as any[]).slice(0, 5)
+					});
+				}
+			}
+		} catch (e) {
+			log.warn('POST /api/trips: sanity check failed', e);
+		}
 		let existingTrip = null;
 
 		if (validData.id) {
