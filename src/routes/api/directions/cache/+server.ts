@@ -1,6 +1,7 @@
 // src/routes/api/directions/cache/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import type { KVNamespace } from '@cloudflare/workers-types';
 import { log } from '$lib/server/log';
 
 export const GET: RequestHandler = async ({ url, platform, locals }) => {
@@ -27,6 +28,33 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
 		// functional without external dependencies. This prevents flaky e2e failures when the key
 		// is intentionally absent in test environments.
 		return json({ source: 'test', data: { distance: 16093, duration: 900 } });
+	}
+
+	// 3a. Check KV cache first (prefer server KV over client/local cache)
+	try {
+		const directionsKV = (platform?.env as any)?.BETA_DIRECTIONS_KV as KVNamespace | undefined;
+		if (directionsKV) {
+			let cacheKey = `dir:${start?.toLowerCase().trim()}_to_${end?.toLowerCase().trim()}`;
+			cacheKey = cacheKey.replace(/[^a-z0-9_:-]/g, '');
+			if (cacheKey.length > 512) cacheKey = cacheKey.substring(0, 512);
+			const cached = await directionsKV.get(cacheKey);
+			if (cached) {
+				try {
+					const parsed = JSON.parse(cached);
+					if (parsed && parsed.distance != null && parsed.duration != null) {
+						log.info('DirectionsCache: KV HIT', { start, end, cacheKey });
+						return json({
+							source: 'kv',
+							data: { distance: parsed.distance, duration: parsed.duration }
+						});
+					}
+				} catch {
+					// ignore corrupt cache
+				}
+			}
+		}
+	} catch (e) {
+		log.warn('[DirectionsCache] KV check failed', e);
 	}
 
 	try {

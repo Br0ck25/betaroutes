@@ -148,26 +148,60 @@
 	async function fetchRouteSegment(start: string, end: string) {
 		if (!start || !end) return null;
 		const localKey = generateRouteKey(start, end);
-		const cached = localStorage.getItem(localKey);
-		if (cached) {
-			return JSON.parse(cached);
-		}
+
+		// Prefer server-side KV/cache first
 		try {
 			const res = await fetch(
 				`/api/directions/cache?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
 			);
-			const result: any = await res.json();
-			if (result && result.data) {
+			const result: any = await res.json().catch(() => null);
+			if (res.ok && result && result.data) {
 				const mappedResult = {
 					distance: result.data.distance * 0.000621371,
 					duration: result.data.duration / 60
 				};
-				localStorage.setItem(localKey, JSON.stringify(mappedResult));
+
+				// Only cache valid responses (non-zero)
+				if ((mappedResult.distance || 0) > 0 && (mappedResult.duration || 0) > 0) {
+					console.info('[route] server hit', localKey, { source: result.source });
+					try {
+						localStorage.setItem(
+							localKey,
+							JSON.stringify({ ...mappedResult, cachedAt: Date.now() })
+						);
+					} catch (e) {
+						console.warn('[route] localStorage write failed', e);
+					}
+				} else {
+					console.info('[route] server returned invalid metrics; not caching', localKey);
+				}
 				return mappedResult;
+			} else {
+				console.info('[route] server miss or error', localKey);
 			}
 		} catch (err) {
-			console.error('Routing failed:', err);
+			console.info('[route] server fetch failed, falling back to local cache', localKey, err);
 		}
+
+		// Fallback to local cache
+		try {
+			const cached = localStorage.getItem(localKey);
+			if (cached) {
+				const parsed = JSON.parse(cached);
+				if ((parsed.distance || 0) > 0 && (parsed.duration || 0) > 0) {
+					console.info('[route] cache hit', localKey);
+					return { distance: parsed.distance, duration: parsed.duration };
+				} else {
+					console.info('[route] cache contained invalid data; ignoring', localKey);
+					localStorage.removeItem(localKey);
+				}
+			} else {
+				console.info('[route] cache miss', localKey);
+			}
+		} catch (e) {
+			console.warn('[route] cache read failed', e);
+		}
+
 		return null;
 	}
 	async function recalculateAllLegs() {
