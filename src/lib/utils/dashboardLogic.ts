@@ -252,3 +252,33 @@ export function calculateDashboardStats(
 		periodComparison
 	};
 }
+
+/**
+ * Compute maintenance banner visibility and message.
+ * Returns { visible, message, dueIn, reminderThreshold }
+ */
+export function computeMaintenance(opts: {
+	vehicleOdometerStart?: number | string;
+	totalMilesAllTime?: number | string;
+	lastServiceOdometer?: number | string;
+	serviceIntervalMiles?: number | string;
+	reminderThresholdMiles?: number | string;
+}) {
+	const vehicleOdometerStart = Number(opts.vehicleOdometerStart || 0);
+	const totalMilesAllTime = Number(opts.totalMilesAllTime || 0);
+	const lastServiceOdometer = Number(opts.lastServiceOdometer || 0);
+	const serviceIntervalMiles = Number(opts.serviceIntervalMiles || 0);
+	const reminderThreshold = Number(opts.reminderThresholdMiles || 500);
+
+	const currentOdometer = vehicleOdometerStart + totalMilesAllTime;
+	const milesSinceService = Math.max(0, currentOdometer - lastServiceOdometer);
+	const dueIn = serviceIntervalMiles - milesSinceService;
+
+	const visible = Boolean(serviceIntervalMiles && dueIn <= reminderThreshold);
+	const message =
+		dueIn >= 0
+			? `You have driven ${Math.round(milesSinceService).toLocaleString()} miles since your last service. Due in ${Math.round(dueIn).toLocaleString()} miles.`
+			: `Overdue by ${Math.abs(Math.round(dueIn)).toLocaleString()} miles — please service now.`;
+
+	return { visible, message, dueIn, reminderThreshold };
+}

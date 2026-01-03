@@ -9,6 +9,7 @@
 		calculateDashboardStats,
 		formatCurrency,
 		formatDate,
+		computeMaintenance,
 		type TimeRange
 	} from '$lib/utils/dashboardLogic';
 
@@ -21,16 +22,13 @@
 	$: allStats = calculateDashboardStats($trips, $expenses, 'all');
 	$: currentOdometer =
 		Number($userSettings.vehicleOdometerStart || 0) + Number(allStats.totalMiles || 0);
-	$: milesSinceService = Math.max(
-		0,
-		currentOdometer - Number($userSettings.lastServiceOdometer || 0)
-	);
-	$: dueIn = Number($userSettings.serviceIntervalMiles || 5000) - milesSinceService;
-	$: reminderThreshold = Number($userSettings.reminderThresholdMiles || 500);
-	$: maintenanceMessage =
-		dueIn >= 0
-			? `You have driven ${Math.round(milesSinceService).toLocaleString()} miles since your last service. Due in ${Math.round(dueIn).toLocaleString()} miles.`
-			: `Overdue by ${Math.abs(Math.round(dueIn)).toLocaleString()} miles — please service now.`;
+	$: maintenance = computeMaintenance({
+		vehicleOdometerStart: $userSettings.vehicleOdometerStart,
+		totalMilesAllTime: allStats.totalMiles,
+		lastServiceOdometer: $userSettings.lastServiceOdometer,
+		serviceIntervalMiles: $userSettings.serviceIntervalMiles,
+		reminderThresholdMiles: $userSettings.reminderThresholdMiles
+	});
 
 	import { saveSettings } from './settings/lib/save-settings';
 
@@ -107,14 +105,14 @@
 		</div>
 	{/if}
 
-	{#if $userSettings.serviceIntervalMiles}
+	{#if maintenance.visible}
 		<div
 			class="alert maintenance"
-			class:error={dueIn < 0}
-			class:warning={dueIn >= 0 && dueIn <= reminderThreshold}
+			class:error={maintenance.dueIn < 0}
+			class:warning={maintenance.dueIn >= 0 && maintenance.dueIn <= maintenance.reminderThreshold}
 			style="display:flex; align-items:center; gap:12px; margin:16px 0; padding:12px; border-radius:10px; background:#FFFBEB; color:#92400E; border:1px solid #F59E0B;"
 		>
-			<div style="font-weight:600">{maintenanceMessage}</div>
+			<div style="font-weight:600">{maintenance.message}</div>
 			<div style="margin-left:auto">
 				<button class="btn-secondary" on:click={markServicedNow}>Mark serviced now</button>
 			</div>

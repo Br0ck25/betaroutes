@@ -15,8 +15,13 @@
 	let sortBy = 'date';
 	let sortOrder = 'desc';
 	let filterCategory = 'all';
-	let startDate = '';
-	let endDate = '';
+	// Default to current year (Jan 1 -> today)
+	const _now = new Date();
+	function _fmtInput(d: Date) {
+		return d.toISOString().slice(0, 10);
+	}
+	let startDate = _fmtInput(new Date(_now.getFullYear(), 0, 1));
+	let endDate = _fmtInput(_now);
 	let lastHadSelections = false;
 
 	// Selection State
