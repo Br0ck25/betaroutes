@@ -339,9 +339,10 @@
 
 <style>
 	.settings {
-		max-width: 1200px;
+		max-width: 1400px;
 		margin: 0 auto;
-		padding: 20px;
+		padding: 16px;
+		padding-bottom: 80px;
 	}
 	.page-header {
 		margin-bottom: 32px;
