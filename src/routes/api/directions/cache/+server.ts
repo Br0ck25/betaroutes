@@ -44,6 +44,72 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
 				duration: leg.duration.value
 			};
 
+			// Non-blocking: cache leg result and geocodes into BETA_DIRECTIONS_KV with 30-day TTL
+			const directionsKV = (platform?.env as any)?.BETA_DIRECTIONS_KV as KVNamespace | undefined;
+			const TTL = 30 * 24 * 60 * 60; // 30 days
+			if (directionsKV) {
+				const doCache = async () => {
+					try {
+						let key = `dir:${start?.toLowerCase().trim()}_to_${end?.toLowerCase().trim()}`;
+						key = key.replace(/[^a-z0-9_:-]/g, '');
+						if (key.length > 512) key = key.substring(0, 512);
+
+						await directionsKV.put(
+							key,
+							JSON.stringify({
+								distance: result.distance,
+								duration: result.duration,
+								source: 'google'
+							}),
+							{ expirationTtl: TTL }
+						);
+						log.info(`[DirectionsCache] Cached: ${key}`);
+
+						const writeIfMissing = async (
+							addr: string | undefined,
+							loc: { lat?: number; lng?: number } | undefined,
+							formatted?: string
+						) => {
+							if (!addr || !loc || loc.lat == null || loc.lng == null) return;
+							const geoKey = `geo:${addr
+								.toLowerCase()
+								.trim()
+								.replace(/[^a-z0-9]/g, '_')}`;
+							const existing = await directionsKV.get(geoKey);
+							if (!existing) {
+								await directionsKV.put(
+									geoKey,
+									JSON.stringify({
+										lat: Number(loc.lat),
+										lon: Number(loc.lng),
+										formattedAddress: formatted || addr,
+										source: 'directions_cache'
+									}),
+									{ expirationTtl: TTL }
+								);
+								log.info(`[DirectionsCache] Geocode cached (directions KV): ${geoKey}`);
+							}
+						};
+
+						await writeIfMissing(leg.start_address, leg.start_location as any, leg.start_address);
+						await writeIfMissing(leg.end_address, leg.end_location as any, leg.end_address);
+					} catch (e) {
+						log.warn('[DirectionsCache] Auto geocode write failed', e);
+					}
+				};
+
+				const cachePromise = doCache();
+				try {
+					if (platform?.context?.waitUntil) {
+						platform.context.waitUntil(cachePromise as any);
+					} else {
+						void cachePromise;
+					}
+				} catch (err) {
+					void cachePromise;
+				}
+			}
+
 			return json({ source: 'google', data: result });
 		}
 
