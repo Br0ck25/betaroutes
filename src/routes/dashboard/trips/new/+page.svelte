@@ -352,6 +352,17 @@
 			return;
 		}
 
+		// Diagnostic: log addresses being used to calculate the leg
+		console.info('[route] addStop', { segmentStart, newStopAddress: newStop.address });
+
+		// If the stop equals the segment start, surface UI hint and still add it as 0-mile stop
+		const isSame =
+			segmentStart.toLowerCase().trim() === (newStop.address || '').toLowerCase().trim();
+		if (isSame) {
+			console.info('[route] adding identical stop (0 miles)', segmentStart);
+			toasts.info('Stop address is the same as previous point — distance will be 0');
+		}
+
 		isCalculating = true;
 		try {
 			const segmentData: any = await fetchRouteSegment(segmentStart, newStop.address);

@@ -313,6 +313,7 @@
 			placeOrEvent?.formatted_address || placeOrEvent?.name || tripData.stops[index].address;
 		if (!val) return;
 		tripData.stops[index].address = val;
+		console.info('[route] handleStopChange', { index, val });
 		isCalculating = true;
 		try {
 			const prevLoc = index === 0 ? tripData.startAddress : tripData.stops[index - 1].address;
@@ -321,6 +322,16 @@
 				if (legIn) {
 					tripData.stops[index].distanceFromPrev = legIn.distance;
 					tripData.stops[index].timeFromPrev = legIn.duration;
+				} else {
+					const isSame = prevLoc.toLowerCase().trim() === (val || '').toLowerCase().trim();
+					if (isSame) {
+						console.info('[route] handleStopChange same-address', { index, val });
+						try {
+							toasts.info('Stop address matches the previous point (0 miles)');
+						} catch (_e) {
+							void _e;
+						}
+					}
 				}
 			}
 			const nextStop = tripData.stops[index + 1];
