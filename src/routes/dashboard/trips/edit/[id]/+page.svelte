@@ -118,6 +118,8 @@
 		stops: [] as any[],
 		totalMiles: 0,
 		estimatedTime: 0,
+		roundTripMiles: 0,
+		roundTripTime: 0,
 		mpg: 25,
 		gasPrice: 3.5,
 		fuelCost: 0,
@@ -240,18 +242,48 @@
 	async function recalculateTotals() {
 		let miles = tripData.stops.reduce((acc, s) => acc + (s.distanceFromPrev || 0), 0);
 		let mins = tripData.stops.reduce((acc, s) => acc + (s.timeFromPrev || 0), 0);
-		const lastStop = tripData.stops[tripData.stops.length - 1];
-		const startPoint = lastStop ? lastStop.address : tripData.startAddress;
-		const endPoint = tripData.endAddress || tripData.startAddress;
-		if (startPoint && endPoint) {
-			const finalLeg = await fetchRouteSegment(startPoint, endPoint);
-			if (finalLeg) {
-				miles += finalLeg.distance;
-				mins += finalLeg.duration;
+		let returnMiles = 0;
+		let returnMins = 0;
+
+		if (tripData.stops.length > 0) {
+			const lastStop = tripData.stops[tripData.stops.length - 1];
+			const startPoint = lastStop ? lastStop.address : tripData.startAddress;
+			const endPoint = tripData.endAddress || tripData.startAddress;
+			if (startPoint && endPoint && endPoint !== startPoint) {
+				const finalLeg = await fetchRouteSegment(startPoint, endPoint);
+				if (finalLeg) {
+					miles += finalLeg.distance;
+					mins += finalLeg.duration;
+				}
+			}
+		} else {
+			const startPoint = tripData.startAddress;
+			const endPoint = tripData.endAddress || tripData.startAddress;
+			if (startPoint && endPoint) {
+				const finalLeg = await fetchRouteSegment(startPoint, endPoint);
+				if (finalLeg) {
+					miles += finalLeg.distance;
+					mins += finalLeg.duration;
+				}
 			}
 		}
+
+		if (
+			tripData.endAddress &&
+			tripData.startAddress &&
+			tripData.endAddress.trim() !== tripData.startAddress.trim()
+		) {
+			const backLeg = await fetchRouteSegment(tripData.endAddress, tripData.startAddress);
+			if (backLeg) {
+				returnMiles = backLeg.distance;
+				returnMins = backLeg.duration;
+			}
+		}
+
 		tripData.totalMiles = parseFloat(miles.toFixed(1));
 		tripData.estimatedTime = Math.round(mins);
+		tripData.roundTripMiles = parseFloat((miles + returnMiles).toFixed(1));
+		tripData.roundTripTime = Math.round(mins + returnMins);
 		tripData = { ...tripData };
 	}
 
@@ -560,6 +592,8 @@
 			totalMiles: tripData.totalMiles,
 			totalMileage: tripData.totalMiles,
 			fuelCost: tripData.fuelCost,
+			roundTripMiles: tripData.roundTripMiles,
+			roundTripTime: tripData.roundTripTime,
 			stops: tripData.stops.map((stop, index) => ({
 				...stop,
 				earnings: Number(stop.earnings),
@@ -984,7 +1018,12 @@
 					</div>
 					<div class="review-tile">
 						<span class="review-label">Distance</span>
-						<div>{tripData.totalMiles} mi</div>
+						<div>
+							{tripData.totalMiles} mi
+							{#if tripData.roundTripMiles && tripData.roundTripMiles !== tripData.totalMiles}
+								• Round trip: {tripData.roundTripMiles} mi • {tripData.roundTripTime} min
+							{/if}
+						</div>
 					</div>
 					<div class="review-tile">
 						<span class="review-label">Stops</span>

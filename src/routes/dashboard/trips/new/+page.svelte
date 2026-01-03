@@ -57,6 +57,8 @@
 		stops: [] as any[],
 		totalMiles: 0,
 		estimatedTime: 0,
+		roundTripMiles: 0,
+		roundTripTime: 0,
 		mpg: $userSettings.defaultMPG || 25,
 		gasPrice: $userSettings.defaultGasPrice || 3.5,
 		fuelCost: 0,
@@ -183,22 +185,25 @@
 	async function recalculateTotals() {
 		let miles = tripData.stops.reduce((acc, s) => acc + (s.distanceFromPrev || 0), 0);
 		let mins = tripData.stops.reduce((acc, s) => acc + (s.timeFromPrev || 0), 0);
+		let returnMiles = 0;
+		let returnMins = 0;
 
-		// If there are stops, prefer a single consolidated route calculation (server or client) to
-		// return the overall trip distance. This avoids double-counting when a test/mock returns
-		// a total route distance for the entire itinerary.
+		// If there are stops, use the sum of per-leg distances (already populated by recalculateAllLegs/handleStopChange)
+		// and add the final leg from last stop -> endAddress when present.
 		if (tripData.stops.length > 0) {
-			const totalLeg = await fetchRouteSegment(
-				tripData.startAddress,
-				tripData.endAddress || tripData.startAddress
-			);
-			if (totalLeg) {
-				miles = totalLeg.distance;
-				mins = totalLeg.duration;
-			}
-		} else {
 			const lastStop = tripData.stops[tripData.stops.length - 1];
 			const startPoint = lastStop ? lastStop.address : tripData.startAddress;
+			const endPoint = tripData.endAddress || tripData.startAddress;
+			if (startPoint && endPoint && endPoint !== startPoint) {
+				const finalLeg = await fetchRouteSegment(startPoint, endPoint);
+				if (finalLeg) {
+					miles += finalLeg.distance;
+					mins += finalLeg.duration;
+				}
+			}
+		} else {
+			// No stops: single leg from start -> end
+			const startPoint = tripData.startAddress;
 			const endPoint = tripData.endAddress || tripData.startAddress;
 			if (startPoint && endPoint) {
 				const finalLeg = await fetchRouteSegment(startPoint, endPoint);
@@ -209,12 +214,31 @@
 			}
 		}
 
+		// Compute return leg (end -> start) to show round-trip totals if end provided and different
+		if (
+			tripData.endAddress &&
+			tripData.startAddress &&
+			tripData.endAddress.trim() !== tripData.startAddress.trim()
+		) {
+			const backLeg = await fetchRouteSegment(tripData.endAddress, tripData.startAddress);
+			if (backLeg) {
+				returnMiles = backLeg.distance;
+				returnMins = backLeg.duration;
+			}
+		}
+
 		tripData.totalMiles = parseFloat(miles.toFixed(1));
 		tripData.estimatedTime = Math.round(mins);
+		// Store round-trip values
+		tripData.roundTripMiles = parseFloat((miles + returnMiles).toFixed(1));
+		tripData.roundTripTime = Math.round(mins + returnMins);
+
 		// Debug: surface calculation results to the page console for e2e troubleshooting
 		console.log('[Trip] recalculated totals', {
 			miles: tripData.totalMiles,
 			minutes: tripData.estimatedTime,
+			roundTripMiles: tripData.roundTripMiles,
+			roundTripMinutes: tripData.roundTripTime,
 			stops: tripData.stops
 		});
 		tripData = { ...tripData };
@@ -533,6 +557,8 @@
 			totalMiles: tripData.totalMiles,
 			totalMileage: tripData.totalMiles,
 			fuelCost: tripData.fuelCost,
+			roundTripMiles: tripData.roundTripMiles,
+			roundTripTime: tripData.roundTripTime,
 			stops: tripData.stops.map((stop, index) => ({
 				...stop,
 				earnings: Number(stop.earnings),
@@ -971,7 +997,12 @@
 					</div>
 					<div class="review-tile">
 						<span class="review-label">Distance</span>
-						<div>{tripData.totalMiles} mi</div>
+						<div>
+							{tripData.totalMiles} mi
+							{#if tripData.roundTripMiles && tripData.roundTripMiles !== tripData.totalMiles}
+								• Round trip: {tripData.roundTripMiles} mi • {tripData.roundTripTime} min
+							{/if}
+						</div>
 					</div>
 					<div class="review-tile">
 						<span class="review-label">Stops</span>
