@@ -3,7 +3,10 @@
 	const resolve = (href: string) => `${base}${href}`;
 </script>
 
-<footer class="w-full border-t border-neutral-border bg-neutral-bg-secondary mt-10">
+<footer
+	class="w-full border-t border-neutral-border bg-neutral-bg-secondary mt-10"
+	style="padding-bottom: calc(env(safe-area-inset-bottom, 20px) + 12px);"
+>
 	<div
 		class="max-w-7xl mx-auto px-4 py-6 text-neutral-secondary text-sm flex flex-col tablet:flex-row justify-between items-center gap-4"
 	>
