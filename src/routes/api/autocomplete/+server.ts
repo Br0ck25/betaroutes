@@ -247,6 +247,7 @@ async function fanOutCache(kv: KVNamespace, results: any[]) {
 
 		if (bucket.length > 20) bucket = bucket.slice(0, 20);
 		await kv.put(key, JSON.stringify(bucket));
+		log.info('[Autocomplete] Updated prefix bucket', { key, size: bucket.length });
 	});
 
 	await Promise.all(updatePromises);
@@ -303,6 +304,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 				contributedBy: (locals.user as any).id
 			})
 		);
+		// Log the place key for debugging/verification
+		log.info('[Autocomplete] Cached place detail', { key, keyText });
 
 		// Also record this selection in PLACES KV (bypass PlacesIndexDO) — keep a per-user recent list (non-blocking)
 		try {
