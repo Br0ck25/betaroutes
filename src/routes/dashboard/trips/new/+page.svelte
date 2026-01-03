@@ -90,6 +90,19 @@
 		if (!start || !end) return null;
 		const localKey = generateRouteKey(start, end);
 
+		// If the addresses are identical, short-circuit and return 0 (cache locally)
+		const sameAddress = start.toLowerCase().trim() === end.toLowerCase().trim();
+		if (sameAddress) {
+			const mappedResult = { distance: 0, duration: 0 };
+			console.info('[route] same-address', localKey);
+			try {
+				localStorage.setItem(localKey, JSON.stringify({ ...mappedResult, cachedAt: Date.now() }));
+			} catch (e) {
+				console.warn('[route] localStorage write failed', e);
+			}
+			return mappedResult;
+		}
+
 		// Prefer server-side KV/cache first
 		try {
 			const res = await fetch(

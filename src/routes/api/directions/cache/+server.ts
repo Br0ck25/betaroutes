@@ -19,6 +19,28 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
 
 	const apiKey = (platform?.env as any)?.PRIVATE_GOOGLE_MAPS_API_KEY;
 
+	// 2a. Handle identical origin and destination: return zero route and cache it
+	const normalize = (s?: string) => (s || '').toLowerCase().trim();
+	if (normalize(start) === normalize(end)) {
+		try {
+			const directionsKV = (platform?.env as any)?.BETA_DIRECTIONS_KV as KVNamespace | undefined;
+			const TTL = 30 * 24 * 60 * 60;
+			if (directionsKV) {
+				let key = `dir:${normalize(start)}_to_${normalize(end)}`;
+				key = key.replace(/[^a-z0-9_:-]/g, '');
+				if (key.length > 512) key = key.substring(0, 512);
+				await directionsKV.put(key, JSON.stringify({ distance: 0, duration: 0, source: 'same' }), {
+					expirationTtl: TTL
+				});
+				log.info(`[DirectionsCache] Cached same-origin: ${key}`);
+			}
+		} catch (e) {
+			log.warn('[DirectionsCache] Failed caching same-origin', e);
+		}
+		log.info('DirectionsCache: same-origin request', { start, end });
+		return json({ source: 'same', data: { distance: 0, duration: 0 } });
+	}
+
 	// 2. Directly use Google Directions API (Server-side) — OSRM removed in favor of Google + KV cache.
 	// Geocoding-based approaches were previously attempted, but we now prefer Google for consistent results.
 
