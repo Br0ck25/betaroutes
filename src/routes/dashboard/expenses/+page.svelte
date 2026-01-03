@@ -1550,6 +1550,8 @@
 	@media (min-width: 640px) {
 		.filters-bar {
 			flex-direction: row;
+			justify-content: space-between;
+			align-items: center;
 		}
 		.search-box {
 			max-width: 300px;
@@ -1559,6 +1561,7 @@
 		}
 		.filter-group {
 			width: auto;
+			flex-wrap: nowrap;
 		}
 		.filter-select {
 			width: 140px;
