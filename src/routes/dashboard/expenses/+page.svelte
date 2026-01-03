@@ -943,10 +943,7 @@
 		flex-direction: column;
 		gap: 12px;
 		margin-bottom: 20px;
-		max-width: 100%;
-		overflow-x: hidden;
 	}
-
 	.sticky-bar {
 		position: sticky;
 		top: 0;
@@ -960,7 +957,6 @@
 	.search-box {
 		position: relative;
 		width: 100%;
-		max-width: 100%;
 	}
 	.search-icon {
 		position: absolute;
@@ -972,41 +968,46 @@
 	}
 	.search-box input {
 		width: 100%;
-		max-width: 100%;
 		padding: 12px 16px 12px 42px;
 		border: 1px solid #e5e7eb;
 		border-radius: 10px;
-		font-size: 16px;
+		font-size: 15px;
 		background: white;
+		box-sizing: border-box;
 	}
-
-	.date-group,
-	.filter-group {
+	.date-group {
 		display: flex;
 		gap: 8px;
 		align-items: center;
-		width: 100%;
-		max-width: 100%;
 	}
-	.filter-group {
-		width: 100%;
-	}
-
-	.date-input,
-	.filter-select {
+	.date-input {
 		flex: 1;
 		padding: 12px;
 		border: 1px solid #e5e7eb;
 		border-radius: 10px;
-		font-size: 16px;
+		font-size: 14px;
 		background: white;
 		min-width: 0;
-		max-width: 100%;
 	}
-
 	.date-sep {
 		color: #9ca3af;
 		font-weight: bold;
+	}
+	.filter-group {
+		display: flex;
+		flex-direction: row;
+		gap: 8px;
+		width: 100%;
+	}
+	.filter-select {
+		flex: 1;
+		min-width: 0;
+		padding: 12px;
+		border: 1px solid #e5e7eb;
+		border-radius: 10px;
+		font-size: 14px;
+		background: white;
+		color: #374151;
 	}
 	.sort-btn {
 		flex: 0 0 48px;

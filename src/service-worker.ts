@@ -14,7 +14,33 @@ self.addEventListener('install', (event) => {
 	// Create a new cache and add all files to it
 	async function addFilesToCache() {
 		const cache = await caches.open(CACHE);
-		await cache.addAll(ASSETS);
+
+		// Fast path: try adding everything at once. If any request fails, fall back to
+		// fetching assets individually so we can skip/log failures and avoid the
+		// whole installation failing.
+		try {
+			await cache.addAll(ASSETS);
+			return;
+		} catch (err) {
+			// addAll failed (often because one asset returned a non-OK response).
+			console.warn('service-worker: cache.addAll failed, retrying assets individually', err);
+		}
+
+		// Fetch and add assets individually, logging failures but continuing.
+		for (const asset of ASSETS) {
+			try {
+				const res = await fetch(asset, { cache: 'no-cache' });
+				if (!res || !res.ok) {
+					console.error(
+						`service-worker: failed to fetch ${asset}: ${res && res.status} ${res && res.statusText}`
+					);
+					continue;
+				}
+				await cache.put(asset, res.clone());
+			} catch (e) {
+				console.error(`service-worker: error fetching ${asset}`, e);
+			}
+		}
 	}
 
 	event.waitUntil(addFilesToCache());
