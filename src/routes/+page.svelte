@@ -300,9 +300,12 @@
 
 					<ul class="features-list">
 						<li>✓ 10 trips per month</li>
+						<li>✓ Up to 5 stops per trip</li>
 						<li>✓ Google Maps routing</li>
-						<li>✓ Basic profit tracking</li>
-						<li>✓ Mobile app access</li>
+						<li>✓ Profit tracking</li>
+						<li>✓ Analytics dashboard</li>
+						<li>✓ Export CSV & PDF reports</li>
+						<li>✓ Cloud sync</li>
 					</ul>
 
 					<a href={resolve('/register')} class="btn-plan">Get Started</a>
@@ -321,36 +324,15 @@
 
 					<ul class="features-list">
 						<li>✓ Unlimited trips</li>
-						<li>✓ Advanced analytics</li>
-						<li>✓ PDF reports</li>
-						<li>✓ Cloud backup</li>
-						<li>✓ Priority support</li>
-						<li>✓ Custom reports</li>
+						<li>✓ Unlimited stops per trip</li>
+						<li>✓ Google Maps routing</li>
+						<li>✓ Profit tracking</li>
+						<li>✓ Analytics dashboard</li>
+						<li>✓ Export CSV & PDF reports</li>
+						<li>✓ Cloud sync</li>
 					</ul>
 
 					<a href={resolve('/register')} class="btn-plan featured">Start Free Trial</a>
-				</div>
-
-				<div class="pricing-card">
-					<div class="plan-header">
-						<h3>Business</h3>
-						<div class="price">
-							<span class="currency">$</span>
-							<span class="amount">29.99</span>
-							<span class="period">/month</span>
-						</div>
-					</div>
-
-					<ul class="features-list">
-						<li>✓ Everything in Pro</li>
-						<li>✓ Team management</li>
-						<li>✓ Multi-user access</li>
-						<li>✓ API access</li>
-						<li>✓ White-label reports</li>
-						<li>✓ Dedicated support</li>
-					</ul>
-
-					<a href={resolve('/contact')} class="btn-plan">Contact Sales</a>
 				</div>
 			</div>
 		</div>
@@ -510,6 +492,10 @@
 		color: var(--gray-600);
 		text-decoration: none;
 		font-weight: 500;
+		display: inline-flex;
+		align-items: center;
+		height: 44px;
+		padding: 0 8px;
 	}
 
 	.btn-primary {

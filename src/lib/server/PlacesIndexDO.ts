@@ -157,24 +157,26 @@ export class PlacesIndexDO {
 						.toLowerCase()
 						.trim()
 						.replace(/[^a-z0-9]/g, '_')}`;
-						// Check Places KV first, then fallback to Directions KV
-						const placesKV = this.env.BETA_PLACES_KV as KVNamespace | undefined;
-						const directionsKV = (this.env as unknown as Record<string, unknown>)[
-							'BETA_DIRECTIONS_KV'
-						] as KVNamespace | undefined;
-						let raw: string | null = null;
-						if (placesKV) raw = await placesKV.get(key);
-						if (!raw && directionsKV) raw = await directionsKV.get(key);
-						if (!raw) return new Response('Not Found', { status: 404 });
-						return new Response(raw, {
-							status: 200,
-							headers: { 'Content-Type': 'application/json' }
-						});
-					} catch (e) {
-						log.warn('[PlacesIndexDO] geocode GET failed', e);
-						return new Response('Error', { status: 500 });
+					// Check Places KV first, then fallback to Directions KV
+					const placesKV = this.env.BETA_PLACES_KV as KVNamespace | undefined;
+					const directionsKV = (this.env as unknown as Record<string, unknown>)[
+						'BETA_DIRECTIONS_KV'
+					] as KVNamespace | undefined;
+					let raw: string | null = null;
+					if (placesKV) raw = await placesKV.get(key);
+					if (!raw && directionsKV) raw = await directionsKV.get(key);
+					if (!raw) return new Response('Not Found', { status: 404 });
+					return new Response(raw, {
+						status: 200,
+						headers: { 'Content-Type': 'application/json' }
+					});
+				} catch (e) {
+					log.warn('[PlacesIndexDO] geocode GET failed', e);
+					return new Response('Error', { status: 500 });
 				}
-				}
+			}
+			if (request.method === 'POST') {
+				try {
 					const body = (await request.json()) as {
 						address?: string;
 						lat?: number;
@@ -183,7 +185,6 @@ export class PlacesIndexDO {
 					};
 					if (!body || !body.address || body.lat == null || body.lon == null)
 						return new Response('Invalid body', { status: 400 });
-
 
 					const key = `geo:${body.address
 						.toLowerCase()

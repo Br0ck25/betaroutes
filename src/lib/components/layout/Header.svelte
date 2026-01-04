@@ -211,6 +211,10 @@
 		font-weight: 500;
 		font-size: 16px;
 		cursor: pointer;
+		display: inline-flex;
+		align-items: center;
+		height: 44px;
+		padding: 0 8px;
 	}
 
 	.btn-login:hover {

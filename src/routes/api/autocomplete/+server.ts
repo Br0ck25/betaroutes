@@ -211,7 +211,7 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
  * Helper: Fan-out Cache Logic
  * Caches results into multiple prefix buckets (2..10 chars)
  */
-async function fanOutCache(kv: KVNamespace, results: any[]) {
+async function fanOutCache(kv: any, results: any[]) {
 	// 1. Group new items by their potential prefixes
 	const prefixMap = new Map<string, any[]>();
 
