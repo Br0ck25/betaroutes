@@ -131,6 +131,7 @@
 				<label class="checkbox-container">
 					<input
 						type="checkbox"
+						aria-labelledby={'trip-' + trip.id + '-title'}
 						checked={isSelected}
 						on:click|stopPropagation
 						on:keydown|stopPropagation
@@ -151,7 +152,7 @@
 				</span>
 
 				<div class="trip-title-row">
-					<h3 class="trip-route-title">
+					<h3 class="trip-route-title" id={'trip-' + trip.id + '-title'}>
 						{trip.startAddress?.split(',')[0] || 'Unknown'}
 						{#if trip.stops && trip.stops.length > 0}
 							→ {trip.stops[trip.stops.length - 1].address?.split(',')[0] || 'Stop'}

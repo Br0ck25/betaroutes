@@ -3,6 +3,7 @@
 This file documents **approved Svelte 5 patterns** for this repository.
 
 All examples:
+
 - Use **runes-based reactivity**
 - Avoid legacy Svelte 4 APIs
 - Follow the **HTML Living Standard**
@@ -16,11 +17,11 @@ Use `$state` for local, mutable state.
 
 ```svelte
 <script>
-  let count = $state(0);
+	let count = $state(0);
 </script>
 
-<button onclick={() => count += 1}>
-  {count}
+<button onclick={() => (count += 1)}>
+	{count}
 </button>
 ```
 
@@ -32,14 +33,15 @@ Use `$derived` for values computed from other state.
 
 ```svelte
 <script>
-  let count = $state(2);
-  let doubled = $derived(count * 2);
+	let count = $state(2);
+	let doubled = $derived(count * 2);
 </script>
 
 <p>Doubled: {doubled}</p>
 ```
 
 Derived values must be:
+
 - Pure
 - Side-effect free
 - Synchronous
@@ -52,11 +54,11 @@ Use `$effect` for side effects and lifecycle-like behavior.
 
 ```svelte
 <script>
-  let count = $state(0);
+	let count = $state(0);
 
-  $effect(() => {
-    console.log('Count changed:', count);
-  });
+	$effect(() => {
+		console.log('Count changed:', count);
+	});
 </script>
 ```
 
@@ -64,17 +66,17 @@ Cleanup example:
 
 ```svelte
 <script>
-  let active = $state(true);
+	let active = $state(true);
 
-  $effect(() => {
-    const id = setInterval(() => {
-      if (active) {
-        console.log('tick');
-      }
-    }, 1000);
+	$effect(() => {
+		const id = setInterval(() => {
+			if (active) {
+				console.log('tick');
+			}
+		}, 1000);
 
-    return () => clearInterval(id);
-  });
+		return () => clearInterval(id);
+	});
 </script>
 ```
 
@@ -84,11 +86,11 @@ Cleanup example:
 
 ```svelte
 <script>
-  let { value, disabled = false } = $props();
+	let { value, disabled = false } = $props();
 </script>
 
 <button {disabled}>
-  {value}
+	{value}
 </button>
 ```
 
@@ -97,9 +99,7 @@ Cleanup example:
 ## Event Handling
 
 ```svelte
-<button onclick={() => alert('clicked')}>
-  Click me
-</button>
+<button onclick={() => alert('clicked')}> Click me </button>
 ```
 
 ---
@@ -108,11 +108,11 @@ Cleanup example:
 
 ```svelte
 <script>
-  let { children } = $props();
+	let { children } = $props();
 </script>
 
 <section>
-  {@render children()}
+	{@render children()}
 </section>
 ```
 
@@ -123,7 +123,7 @@ Cleanup example:
 Correct:
 
 ```html
-<input disabled>
+<input disabled />
 ```
 
 Incorrect:
@@ -138,15 +138,15 @@ Incorrect:
 
 ```svelte
 <script>
-  export let value;
-  $: doubled = value * 2;
-  onMount(() => {});
+	export let value;
+	$: doubled = value * 2;
+	onMount(() => {});
 </script>
 ```
 
 ```svelte
 <script>
-  import { writable } from 'svelte/store';
+	import { writable } from 'svelte/store';
 </script>
 ```
 

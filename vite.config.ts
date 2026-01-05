@@ -12,11 +12,11 @@ export default defineConfig({
 		return isSSR
 			? ({ alias: {} } as { alias: Record<string, string> })
 			: ({
-				alias: {
-					canvg: resolve(__dirname, 'src/lib/vendor-stubs/canvg-stub.ts'),
-					html2canvas: resolve(__dirname, 'src/lib/vendor-stubs/html2canvas-stub.ts')
-				}
-			} as { alias: Record<string, string> });
+					alias: {
+						canvg: resolve(__dirname, 'src/lib/vendor-stubs/canvg-stub.ts'),
+						html2canvas: resolve(__dirname, 'src/lib/vendor-stubs/html2canvas-stub.ts')
+					}
+				} as { alias: Record<string, string> });
 	})(),
 
 	test: {
@@ -28,7 +28,7 @@ export default defineConfig({
 	},
 
 	// Preview server: set Cache-Control headers for assets so local previews emulate CDN
-	preview: ({
+	preview: {
 		// `configurePreviewServer` isn't exported in some Vite types; keep `any` to avoid type conflicts
 		configurePreviewServer(server: any) {
 			// Ensure preview returns long cache headers for static assets used in audits.
@@ -60,5 +60,5 @@ export default defineConfig({
 				// ignore
 			}
 		}
-	} as any),
+	} as any
 });

@@ -659,9 +659,9 @@
 									{formatDate(expense.date || '')}
 								</span>
 
-								<h3 class="expense-desc-title">
+								<h2 class="expense-desc-title">
 									{expense.description || 'No description'}
-								</h3>
+								</h2>
 							</div>
 
 							<div class="expense-amount-display">
