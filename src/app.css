@@ -27,15 +27,16 @@ img {
 	height: 48px;
 }
 .mobile-logo {
-		width: auto;
-		height: auto;
-	}
-	.sidebar-logo {
-		width: auto;
-		height: 40px;
-	}
-	.footer-logo {
-		width: auto;
+	width: auto;
+	height: auto;
+}
+.sidebar-logo {
+	width: auto;
+	height: 40px;
+}
+.footer-logo {
+	width: auto;
+}
 a,
 .btn {
 	min-height: 44px;
