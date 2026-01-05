@@ -204,12 +204,12 @@
 			<picture>
 				<source
 					type="image/avif"
-					srcset="/optimized/logo-120.avif 120w, /optimized/logo-512.avif 512w"
+					srcset="/optimized/logo-512.avif 120w, /optimized/logo-512.avif 512w"
 					sizes="40px"
 				/>
 				<source
 					type="image/webp"
-					srcset="/optimized/logo-120.webp 120w, /optimized/logo-512.webp 512w"
+					srcset="/optimized/logo-512.webp 120w, /optimized/logo-512.webp 512w"
 					sizes="40px"
 				/>
 				<img

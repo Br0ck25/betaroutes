@@ -124,12 +124,12 @@ export function sanitizeStop(stop: unknown): Stop | null {
 	// Accept common address fields to be resilient to differing payload shapes
 	const sRecord = s as Record<string, unknown>;
 	const rawAddress =
-		typeof sRecord.address === 'string'
-			? sRecord.address
-			: typeof sRecord.formatted_address === 'string'
-				? sRecord.formatted_address
-				: typeof sRecord.name === 'string'
-					? sRecord.name
+		typeof sRecord['address'] === 'string'
+			? (sRecord['address'] as string)
+			: typeof sRecord['formatted_address'] === 'string'
+				? (sRecord['formatted_address'] as string)
+				: typeof sRecord['name'] === 'string'
+					? (sRecord['name'] as string)
 					: '';
 
 	return {
