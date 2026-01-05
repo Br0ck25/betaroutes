@@ -27,6 +27,20 @@
 	// Selection State
 	let selectedExpenses = new Set<string>();
 
+	// Render a small slice of the list initially to reduce initial DOM work and main-thread blocking.
+	// We'll expand to the full list when the browser is idle or after loading finishes.
+	let visibleLimit = 20;
+	$: visibleExpenses = filteredExpenses.slice(0, visibleLimit);
+
+	// After initial render & when not loading, expand the visible window on idle
+	$: if (typeof window !== 'undefined' && !loading && visibleLimit < filteredExpenses.length) {
+		if ('requestIdleCallback' in window) {
+			requestIdleCallback(() => (visibleLimit = filteredExpenses.length));
+		} else {
+			setTimeout(() => (visibleLimit = filteredExpenses.length), 200);
+		}
+	}
+
 	$: if (typeof document !== 'undefined') {
 		const hasSelections = selectedExpenses.size > 0;
 		if (hasSelections !== lastHadSelections) {
@@ -613,7 +627,7 @@
 		</div>
 	{:else if filteredExpenses.length > 0}
 		<div class="expense-list-cards">
-			{#each filteredExpenses as expense (expense.id)}
+			{#each visibleExpenses as expense (expense.id)}
 				{@const isSelected = selectedExpenses.has(expense.id)}
 				<div class="card-wrapper">
 					{#if !isTripSource(expense)}
@@ -647,6 +661,7 @@
 								<label class="checkbox-container">
 									<input
 										type="checkbox"
+										aria-labelledby={'expense-' + expense.id + '-title'}
 										checked={isSelected}
 										on:change={() => toggleSelection(expense.id)}
 									/>
@@ -659,13 +674,9 @@
 									{formatDate(expense.date || '')}
 								</span>
 
-								<h2 class="expense-desc-title">
+								<h2 class="expense-desc-title" id={'expense-' + expense.id + '-title'}>
 									{expense.description || 'No description'}
 								</h2>
-							</div>
-
-							<div class="expense-amount-display">
-								{formatCurrency(expense.amount)}
 							</div>
 
 							<svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">

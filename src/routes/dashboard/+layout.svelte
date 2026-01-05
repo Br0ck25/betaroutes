@@ -115,21 +115,35 @@
 		}
 
 		if (userId) {
-			try {
-				console.log('[DASHBOARD LAYOUT] Loading data for:', userId);
+			// Defer heavy initialization until after first paint so the LCP can render quickly
+			await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
 
-				await syncManager.initialize(apiKey);
+			const doInit = async () => {
+				try {
+					console.log('[DASHBOARD LAYOUT] Loading data for:', userId);
 
-				// Load all data
-				await Promise.all([trips.load(userId), expenses.load(userId), trash.load(userId)]);
+					await syncManager.initialize(apiKey);
 
-				// Sync background
-				trips.syncFromCloud(userId);
-				expenses.syncFromCloud(userId);
+					// Kick off loads without awaiting them so we don't block initial paint
+					trips.load(userId);
+					expenses.load(userId);
+					trash.load(userId);
 
-				console.log('[DASHBOARD LAYOUT] ✅ Data loaded successfully!');
-			} catch (err) {
-				console.error('[DASHBOARD LAYOUT] ❌ Failed to load data:', err);
+					// Background syncs
+					trips.syncFromCloud(userId);
+					expenses.syncFromCloud(userId);
+
+					console.log('[DASHBOARD LAYOUT] ✅ Data loading started');
+				} catch (err) {
+					console.error('[DASHBOARD LAYOUT] ❌ Failed to start data load:', err);
+				}
+			};
+
+			// Prefer requestIdleCallback when available to do non-critical work
+			if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+				(requestIdleCallback as any)(() => doInit().catch(console.error));
+			} else {
+				setTimeout(() => doInit().catch(console.error), 0);
 			}
 		} else {
 			await auth.init();
