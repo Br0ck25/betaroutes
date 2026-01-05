@@ -95,5 +95,38 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.locals.user = null;
 	}
 
-	return resolve(event);
+	// Ensure static assets have efficient cache lifetimes to improve repeat-visit performance.
+	// - Hashed app assets (/ _app/ or files containing long hex hashes) => 1 year, immutable
+	// - Other static assets (images, fonts, scripts, styles, media) => 30 days
+	// Do NOT override existing Cache-Control headers, and skip HTML/API responses.
+	const response = await resolve(event);
+	try {
+		if (event.request.method === 'GET' && response.status === 200) {
+			const existing = response.headers.get('cache-control');
+			if (!existing) {
+				const urlPath = event.url.pathname.toLowerCase();
+				const oneYear = 'public, max-age=31536000, immutable';
+				const thirtyDays = 'public, max-age=2592000, immutable';
+
+				const isHtml = urlPath.endsWith('/') || urlPath.endsWith('.html') || urlPath === '/';
+				if (!isHtml) {
+					const isHashedAsset = urlPath.startsWith('/_app/') || /\.[a-f0-9]{8,}\./.test(urlPath);
+					if (isHashedAsset) {
+						response.headers.set('Cache-Control', oneYear);
+					} else if (
+						/(?:\.(png|jpe?g|webp|avif|gif|svg|mp4|webm|ogg|mp3|wav|css|js|mjs|woff2?|ttf|otf|eot))$/.test(
+							urlPath
+						)
+					) {
+						response.headers.set('Cache-Control', thirtyDays);
+					}
+				}
+			}
+		}
+	} catch (e) {
+		// Do not interrupt request flow for header-setting errors
+		log.warn('[HOOK] cache header set failed', e);
+	}
+
+	return response;
 };
