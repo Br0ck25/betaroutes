@@ -35,7 +35,9 @@ img {
 	height: 64px;
 }
 .footer-logo {
-	width: auto;
+	width: 96px;
+	height: 40px;
+	object-fit: contain;
 }
 a,
 .btn {

@@ -52,13 +52,13 @@
 		property="twitter:image"
 		content="https://gorouteyourself.com/optimized/og-source-1200x630.png"
 	/>
-	<link rel="icon" href="/logo-180x75.png" sizes="180x75" type="image/png" />
-	<link rel="apple-touch-icon" href="/logo-180x75.png" sizes="180x75" />
+	<link rel="icon" href="/180x75.avif" sizes="180x75" type="image/avif" />
+	<link rel="apple-touch-icon" href="/180x75.avif" sizes="180x75" />
 	<link
 		rel="preload"
-		href="/logo-180x75.png"
+		href="/180x75.avif"
 		as="image"
-		imagesrcset="/logo-180x75.png 1x, /logo-180x75.png 2x"
+		imagesrcset="/180x75.avif 1x, /180x75.avif 2x"
 		imagesizes="180px"
 	/>
 
@@ -68,7 +68,7 @@
 			"@type": "SoftwareApplication",
 			"name": "Go Route Yourself",
 			"headline": "Route Planning & Profit Tracking for Drivers",
-			"image": "https://gorouteyourself.com/logo-180x75.png",
+			"image": "https://gorouteyourself.com/180x75.avif",
 			"applicationCategory": "BusinessApplication",
 			"operatingSystem": "Web, Android, iOS",
 			"offers": {
@@ -92,15 +92,15 @@
 		<div class="container">
 			<div class="header-content">
 				<picture>
-					<source type="image/avif" srcset="/logo-180x75.png 180w" sizes="64px" />
-					<source type="image/webp" srcset="/logo-180x75.png 180w" sizes="64px" />
+					<source type="image/avif" srcset="/180x75.avif 180w" sizes="64px" />
+					<source type="image/webp" srcset="/180x75.avif 180w" sizes="64px" />
 					<img
-						src="/logo-180x75.png"
+						src="/180x75.avif"
 						alt="Go Route Yourself"
 						class="logo logo-full"
-						width="180"
-						height="75"
-						srcset="/logo-180x75.png 1x, /logo-180x75.png 2x"
+						width="64"
+						height="27"
+						srcset="/180x75.avif 1x, /180x75.avif 2x"
 						decoding="async"
 					/>
 				</picture>
@@ -360,16 +360,14 @@
 			<div class="footer-content">
 				<div class="footer-section">
 					<picture>
-						<source type="image/avif" srcset="/logo-180x75.png 120w" sizes="120px" />
-						<source type="image/webp" srcset="/logo-180x75.png 120w" sizes="120px" />
+						<source type="image/avif" srcset="/96x40.avif 96w" sizes="40px" />
+						<source type="image/webp" srcset="/96x40.avif 96w" sizes="40px" />
 						<img
-							src="/logo-180x75.png"
+							src="/96x40.avif"
 							alt="Go Route Yourself"
 							class="footer-logo"
-							width="512"
-							height="512"
-							loading="lazy"
-							decoding="async"
+							width="96"
+							height="40"
 						/>
 					</picture>
 					<p>Route planning and profit tracking for drivers.</p>

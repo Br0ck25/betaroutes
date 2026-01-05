@@ -439,12 +439,11 @@ export default {
 			}
 
 			if (pathname === '/favicon.ico') {
-				const favicon = await env.ASSETS.get('logo-180x75.png', { type: 'stream' });
+				const favicon = await env.ASSETS.get('180x75.avif', { type: 'stream' });
 				if (!favicon) return new Response('favicon not found', { status: 404 });
 
 				const resp = new Response(favicon.body, favicon);
-				resp.headers.set('Content-Type', 'image/png');
-				return withCors(resp, request);
+				resp.headers.set('Content-Type', 'image/avif');
 			}
 
 			// Generic static asset handler

@@ -163,10 +163,10 @@
 <div class="layout">
 	<header class="mobile-header">
 		<picture>
-			<source type="image/avif" srcset="/logo-180x75.png 48w, /logo-180x75.png 120w" sizes="40px" />
-			<source type="image/webp" srcset="/logo-180x75.png 48w, /logo-180x75.png 120w" sizes="40px" />
+			<source type="image/avif" srcset="/180x75.avif 48w, /180x75.avif 120w" sizes="40px" />
+			<source type="image/webp" srcset="/180x75.avif 48w, /180x75.avif 120w" sizes="40px" />
 			<img
-				src="/logo-180x75.png"
+				src="/180x75.avif"
 				alt="Go Route Yourself"
 				class="mobile-logo"
 				width="48"
@@ -194,7 +194,7 @@
 	<aside class="sidebar" class:open={sidebarOpen}>
 		<div class="sidebar-header">
 			<img
-				src="/logo-180x75.png"
+				src="/180x75.avif"
 				alt="Go Route Yourself"
 				class="sidebar-logo"
 				width="64"

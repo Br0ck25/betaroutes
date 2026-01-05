@@ -420,9 +420,9 @@
 		<div class="brand-content">
 			<a href="/" class="brand-logo">
 				<picture>
-					<source type="image/avif" srcset="/logo-180x75.png 48w" sizes="48px" />
+					<source type="image/avif" srcset="/180x75.avif 48w" sizes="48px" />
 					<img
-						src="/logo-180x75.png"
+						src="/180x75.avif"
 						alt="Go Route Yourself"
 						width="180"
 						height="75"

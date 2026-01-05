@@ -42,23 +42,15 @@
 		<div class="header-content">
 			<a href={resolve('/')} class="logo-link">
 				<picture>
-					<source
-						type="image/avif"
-						srcset="/logo-180x75.png 180w"
-						sizes="64px"
-					/>
-					<source
-						type="image/webp"
-						srcset="/logo-180x75.png 180w"
-						sizes="64px"
-					/>
+					<source type="image/avif" srcset="/180x75.avif 180w" sizes="64px" />
+					<source type="image/webp" srcset="/180x75.avif 180w" sizes="64px" />
 					<img
-						src="/logo-180x75.png"
+						src="/180x75.avif"
 						alt="Go Route Yourself"
 						class="logo"
 						width="180"
 						height="75"
-						srcset="/logo-180x75.png 1x, /logo-180x75.png 2x"
+						srcset="/180x75.avif 1x, /180x75.avif 2x"
 						decoding="async"
 					/>
 				</picture>

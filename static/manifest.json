@@ -15,7 +15,7 @@
       "description": "Create a new trip",
       "url": "/dashboard/trips/new",
       "icons": [
-        { "src": "logo-180x75.png", "sizes": "180x75", "type": "image/png" }
+        { "src": "180x75.avif", "sizes": "180x75", "type": "image/avif" }
       ]
     },
     {
@@ -24,15 +24,15 @@
       "description": "Quickly log a fuel expense",
       "url": "/dashboard/expenses/new?category=fuel",
       "icons": [
-        { "src": "logo-180x75.png", "sizes": "180x75", "type": "image/png" }
+        { "src": "180x75.avif", "sizes": "180x75", "type": "image/avif" }
       ]
     }
   ],
 
   "icons": [
-    { "src": "logo-180x75.png", "sizes": "180x75", "type": "image/png" },
-    { "src": "logo-180x75.png", "sizes": "180x75", "type": "image/png" },
-    { "src": "logo-180x75.png", "sizes": "180x75", "type": "image/png" },
-    { "src": "logo-180x75.png", "sizes": "180x75", "type": "image/png", "purpose": "any maskable" }
+    { "src": "180x75.avif", "sizes": "180x75", "type": "image/avif" },
+    { "src": "180x75.avif", "sizes": "180x75", "type": "image/avif" },
+    { "src": "180x75.avif", "sizes": "180x75", "type": "image/avif" },
+    { "src": "180x75.avif", "sizes": "180x75", "type": "image/avif", "purpose": "any maskable" }
   ]
 }

@@ -42,23 +42,9 @@
 			<div class="header-content">
 				<a href="/" class="logo-link">
 					<picture>
-						<source
-							type="image/avif"
-							srcset="/logo-180x75.png 48w, /logo-180x75.png 120w"
-							sizes="48px"
-						/>
-						<source
-							type="image/webp"
-							srcset="/logo-180x75.png 48w, /logo-180x75.png 120w"
-							sizes="48px"
-						/>
-						<img
-							src="/logo-180x75.png"
-							alt="Go Route Yourself"
-							class="logo"
-							width="512"
-							height="512"
-						/>
+						<source type="image/avif" srcset="/180x75.avif 48w, /180x75.avif 120w" sizes="48px" />
+						<source type="image/webp" srcset="/180x75.avif 48w, /180x75.avif 120w" sizes="48px" />
+						<img src="/180x75.avif" alt="Go Route Yourself" class="logo" width="512" height="512" />
 					</picture>
 				</a>
 
