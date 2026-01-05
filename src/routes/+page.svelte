@@ -522,6 +522,10 @@
 		color: var(--navy);
 		font-weight: 600;
 		font-size: 15px;
+		display: inline-flex;
+		align-items: center;
+		height: 44px;
+		padding: 0 8px;
 	}
 
 	.hamburger-btn {
