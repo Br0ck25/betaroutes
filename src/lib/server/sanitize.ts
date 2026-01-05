@@ -122,7 +122,15 @@ export function sanitizeStop(stop: unknown): Stop | null {
 	const s = stop as UnsanitizedStop;
 
 	// Accept common address fields to be resilient to differing payload shapes
-	const rawAddress = (s as any).address || (s as any).formatted_address || (s as any).name || '';
+	const sRecord = s as Record<string, unknown>;
+	const rawAddress =
+		typeof sRecord.address === 'string'
+			? sRecord.address
+			: typeof sRecord.formatted_address === 'string'
+				? sRecord.formatted_address
+				: typeof sRecord.name === 'string'
+					? sRecord.name
+					: '';
 
 	return {
 		id: s.id ? sanitizeUUID(s.id) : undefined,

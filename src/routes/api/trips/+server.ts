@@ -385,7 +385,7 @@ export const POST: RequestHandler = async (event) => {
 						// Fallback to fire-and-forget
 						void p;
 					}
-				} catch (err) {
+				} catch {
 					// ignore waitUntil failures
 					void p;
 				}

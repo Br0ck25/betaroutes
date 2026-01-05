@@ -155,7 +155,7 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
 					} else {
 						void cachePromise;
 					}
-				} catch (err) {
+				} catch {
 					void cachePromise;
 				}
 			}

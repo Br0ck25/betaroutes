@@ -92,13 +92,13 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 											})
 										);
 									}
-								} catch (e) {
+								} catch {
 									// ignore KV failures
 								}
 							})();
 						}
 					}
-				} catch (e) {
+				} catch {
 					// ignore
 				}
 
@@ -193,7 +193,11 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 					platform.context.waitUntil(cacheTask);
 				} else {
 					// Fire and forget in environments without waitUntil
-					cacheTask.catch((err) => console.error('Background cache failed', err));
+					cacheTask.catch((err) =>
+						log.error('Background cache failed', {
+							message: (err as Error)?.message || String(err)
+						})
+					);
 				}
 			}
 
