@@ -238,9 +238,23 @@ export function parseOrderPage(html: string, id: string): OrderData {
 	if (bodyText.includes('CON NON-STD CHARGE NEW POLE')) {
 		out.hasPoleMount = true;
 	}
+	// Detect explicit Wi-Fi task label (legacy)
 	if (bodyText.includes('WI-FI INSTALLATION [Task]')) {
 		out.hasWifiExtender = true;
 	}
+	// Heuristic: scan table cells with class SearchUtilData for common shorthand labels
+	// Example: <td class="SearchUtilData">MESH WIFI INST L</td>
+	$('.SearchUtilData').each((_, el) => {
+		const cell = $(el).text().trim();
+		const up = cell.toUpperCase();
+		// If the cell mentions WIFI (or MESH) and an install/extend indicator, mark wifi extender
+		if (
+			/\b(WIFI|WI-FI|MESH)\b/.test(up) &&
+			/\b(INST|INSTALL|INSTALLATION|EXTEND|EXTENDER|EXT)\b/.test(up)
+		) {
+			out.hasWifiExtender = true;
+		}
+	});
 	if (bodyText.includes('Install, VOIP Phone [Task]')) {
 		out.hasVoip = true;
 	}
