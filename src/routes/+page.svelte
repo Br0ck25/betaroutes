@@ -374,7 +374,7 @@
 							alt="Go Route Yourself"
 							class="footer-logo"
 							width="120"
-							height="40"
+							height="120"
 							loading="lazy"
 							decoding="async"
 						/>

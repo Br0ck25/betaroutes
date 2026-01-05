@@ -203,7 +203,7 @@
 					alt="Go Route Yourself"
 					class="sidebar-logo"
 					width="120"
-					height="40"
+					height="120"
 					decoding="async"
 				/>
 			</picture>
@@ -352,6 +352,7 @@
 	}
 
 	.mobile-logo {
+		width: auto;
 		height: 32px;
 	}
 
@@ -392,6 +393,7 @@
 	}
 
 	.sidebar-logo {
+		width: auto;
 		height: 40px;
 	}
 

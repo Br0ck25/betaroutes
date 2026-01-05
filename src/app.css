@@ -27,16 +27,15 @@ img {
 	height: 48px;
 }
 .mobile-logo {
-	width: 40px;
-	height: 40px;
-}
-.sidebar-logo {
-	width: 120px;
-	height: 40px;
-}
-
-/* Improve touch targets and reduce accidental double-tap zoom */
-button,
+		width: auto;
+		height: auto;
+	}
+	.sidebar-logo {
+		width: auto;
+		height: auto;
+	}
+	.footer-logo {
+		width: auto;
 a,
 .btn {
 	min-height: 44px;
