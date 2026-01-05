@@ -548,7 +548,7 @@
 		margin: 0;
 	}
 	.highlight-text {
-		color: var(--orange);
+		color: #b0422a; /* darker orange for WCAG contrast */
 		font-weight: 600;
 	}
 	.btn-primary {
@@ -676,7 +676,7 @@
 	}
 	.stat-info {
 		font-size: 13px;
-		color: #9ca3af;
+		color: #4b5563; /* darker gray for sufficient contrast */
 	}
 	.charts-grid {
 		display: grid;
@@ -888,7 +888,7 @@
 		align-items: center;
 		gap: 8px;
 		font-size: 13px;
-		color: #6b7280;
+		color: #4b5563; /* darker gray for sufficient contrast */
 	}
 	.trip-profit {
 		font-size: 18px;
@@ -897,7 +897,7 @@
 		align-self: flex-end;
 	}
 	.trip-profit.positive {
-		color: var(--green);
+		color: #2e7d32; /* darker green for contrast */
 	}
 	.trip-profit.negative {
 		color: #dc2626;

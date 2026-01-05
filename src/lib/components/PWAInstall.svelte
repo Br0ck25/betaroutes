@@ -67,7 +67,7 @@
 		z-index: 60;
 	}
 	.btn-install {
-		background: var(--color-primary, #06b6d4);
+		background: var(--color-primary, #0369a1); /* darker blue for accessible white text */
 		color: white;
 		padding: 0.5rem 1rem;
 		min-height: 48px;
