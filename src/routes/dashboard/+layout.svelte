@@ -158,6 +158,16 @@
 		href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
 		rel="stylesheet"
 	/>
+	<!-- Preload the dashboard mobile logo to improve LCP discoverability and priority -->
+	<link
+		rel="preload"
+		href="/180x75.avif"
+		as="image"
+		type="image/avif"
+		imagesrcset="/180x75.avif 48w, /180x75.avif 120w"
+		imagesizes="40px"
+		fetchpriority="high"
+	/>
 </svelte:head>
 
 <div class="layout">
@@ -172,6 +182,8 @@
 				width="48"
 				height="48"
 				decoding="async"
+				loading="eager"
+				fetchpriority="high"
 			/>
 		</picture>
 		<div class="mobile-actions">
@@ -200,6 +212,8 @@
 				width="64"
 				height="64"
 				decoding="async"
+				loading="eager"
+				fetchpriority="high"
 				style="width:64px; height:64px; object-fit:contain;"
 			/>
 
