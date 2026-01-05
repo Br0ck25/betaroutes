@@ -657,6 +657,32 @@
 		font-weight: 800;
 		color: #111827;
 		margin-bottom: 4px;
+		/* Reserve vertical space so numbers changing on load don't cause CLS */
+		min-height: 36px;
+		/* Use tabular numbers to avoid width changes when digits update */
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+		min-width: 6ch;
+	}
+
+	.stat-change {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 13px;
+		font-weight: 600;
+		/* Reserve space even when the element is visually empty */
+		min-height: 20px;
+		min-width: 6ch;
+	}
+
+	/* Reserve horizontal space when .stat-change is empty (prevents CLS) */
+	.stat-change:empty::after {
+		content: '\00a0';
+		display: inline-block;
+		width: 6ch;
+		height: 16px;
+		opacity: 0;
 	}
 	.stat-card.featured .stat-value {
 		color: white;
