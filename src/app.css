@@ -23,12 +23,12 @@ img {
 	height: auto;
 }
 .logo {
-	width: 48px;
-	height: 48px;
+	width: 64px;
+	height: 64px;
 }
 .mobile-logo {
 	width: auto;
-	height: auto;
+	height: 48px;
 }
 .sidebar-logo {
 	width: auto;

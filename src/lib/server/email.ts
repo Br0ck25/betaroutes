@@ -180,7 +180,7 @@ export async function sendVerificationEmail(
 	apiKey?: string
 ) {
 	const verifyUrl = `${baseUrl}/api/verify?token=${token}`;
-	const logoUrl = `${baseUrl}/optimized/logo-192.png`;
+	const logoUrl = `${baseUrl}/logo-180x75.png`;
 
 	// 1. Dev Mode: Skip actual sending to save API credits and ease debugging
 	if (dev) {
@@ -241,7 +241,7 @@ export async function sendPasswordResetEmail(
 	apiKey?: string
 ) {
 	const resetUrl = `${baseUrl}/reset-password?token=${token}`;
-	const logoUrl = `${baseUrl}/optimized/logo-192.png`;
+	const logoUrl = `${baseUrl}/logo-180x75.png`;
 
 	// 1. Dev Mode: Skip actual sending
 	if (dev) {

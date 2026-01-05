@@ -21,7 +21,7 @@ export function formatDate(dateStr: string): string {
 
 export async function getLogoDataUrl(): Promise<string | null> {
 	try {
-		const response = await fetch('/optimized/logo-192.png');
+		const response = await fetch('/logo-180x75.png');
 		if (!response.ok) return null;
 		const blob = await response.blob();
 		return new Promise((resolve) => {

@@ -420,22 +420,14 @@
 		<div class="brand-content">
 			<a href="/" class="brand-logo">
 				<picture>
-					<source
-						type="image/avif"
-						srcset="/optimized/logo-48.avif 48w, /optimized/logo-120.avif 120w"
-						sizes="48px"
-					/>
-					<source
-						type="image/webp"
-						srcset="/optimized/logo-48.webp 48w, /optimized/logo-120.webp 120w"
-						sizes="48px"
-					/>
+					<source type="image/avif" srcset="/logo-180x75.png 48w" sizes="48px" />
 					<img
-						src="/optimized/logo-48.png"
+						src="/logo-180x75.png"
 						alt="Go Route Yourself"
-						width="48"
-						height="48"
+						width="180"
+						height="75"
 						decoding="async"
+						style="width:180px; height:75px; object-fit:contain;"
 					/>
 				</picture>
 			</a>
@@ -883,8 +875,9 @@
 	}
 
 	.brand-logo img {
-		height: 48px;
-		width: auto;
+		width: 180px;
+		height: 75px;
+		object-fit: contain;
 	}
 
 	.brand-text {

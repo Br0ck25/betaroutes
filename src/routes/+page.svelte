@@ -52,6 +52,15 @@
 		property="twitter:image"
 		content="https://gorouteyourself.com/optimized/og-source-1200x630.png"
 	/>
+	<link rel="icon" href="/logo-180x75.png" sizes="180x75" type="image/png" />
+	<link rel="apple-touch-icon" href="/logo-180x75.png" sizes="180x75" />
+	<link
+		rel="preload"
+		href="/logo-180x75.png"
+		as="image"
+		imagesrcset="/logo-180x75.png 1x, /logo-180x75.png 2x"
+		imagesizes="180px"
+	/>
 
 	<script type="application/ld+json">
 		{
@@ -59,7 +68,7 @@
 			"@type": "SoftwareApplication",
 			"name": "Go Route Yourself",
 			"headline": "Route Planning & Profit Tracking for Drivers",
-			"image": "https://gorouteyourself.com/optimized/logo-192.png",
+			"image": "https://gorouteyourself.com/logo-180x75.png",
 			"applicationCategory": "BusinessApplication",
 			"operatingSystem": "Web, Android, iOS",
 			"offers": {
@@ -83,26 +92,18 @@
 		<div class="container">
 			<div class="header-content">
 				<picture>
-					<source
-						type="image/avif"
-						srcset="/optimized/logo-48.avif 48w, /optimized/logo-120.avif 120w, /optimized/logo-192.avif 192w, /optimized/logo-512.avif 512w"
-						sizes="48px"
-					/>
-					<source
-						type="image/webp"
-						srcset="/optimized/logo-48.webp 48w, /optimized/logo-120.webp 120w, /optimized/logo-192.webp 192w, /optimized/logo-512.webp 512w"
-						sizes="48px"
-					/>
+					<source type="image/avif" srcset="/logo-180x75.png 180w" sizes="64px" />
+					<source type="image/webp" srcset="/logo-180x75.png 180w" sizes="64px" />
 					<img
-						src="/optimized/logo-48.png"
+						src="/logo-180x75.png"
 						alt="Go Route Yourself"
-						class="logo"
-						width="48"
-						height="48"
+						class="logo logo-full"
+						width="180"
+						height="75"
+						srcset="/logo-180x75.png 1x, /logo-180x75.png 2x"
 						decoding="async"
 					/>
 				</picture>
-
 				<nav class="nav desktop-nav">
 					<button on:click={() => scrollToSection('features')}>Features</button>
 					<button on:click={() => scrollToSection('how-it-works')}>How It Works</button>
@@ -359,22 +360,14 @@
 			<div class="footer-content">
 				<div class="footer-section">
 					<picture>
-						<source
-							type="image/avif"
-							srcset="/optimized/logo-120.avif 120w, /optimized/logo-512.avif 512w"
-							sizes="120px"
-						/>
-						<source
-							type="image/webp"
-							srcset="/optimized/logo-120.webp 120w, /optimized/logo-512.webp 512w"
-							sizes="120px"
-						/>
+						<source type="image/avif" srcset="/logo-180x75.png 120w" sizes="120px" />
+						<source type="image/webp" srcset="/logo-180x75.png 120w" sizes="120px" />
 						<img
-							src="/optimized/logo-120.png"
+							src="/logo-180x75.png"
 							alt="Go Route Yourself"
 							class="footer-logo"
-							width="120"
-							height="120"
+							width="512"
+							height="512"
 							loading="lazy"
 							decoding="async"
 						/>
@@ -383,21 +376,21 @@
 				</div>
 
 				<div class="footer-section">
-					<h4>Product</h4>
+					<h3>Product</h3>
 					<a href="#features">Features</a>
 					<a href="#pricing">Pricing</a>
 					<a href="#how-it-works">How It Works</a>
 				</div>
 
 				<div class="footer-section">
-					<h4>Company</h4>
+					<h3>Company</h3>
 					<a href={resolve('/about')}>About</a>
 					<a href={resolve('/contact')}>Contact</a>
 					<a href={resolve('/blog')}>Blog</a>
 				</div>
 
 				<div class="footer-section">
-					<h4>Legal</h4>
+					<h3>Legal</h3>
 					<a href={resolve('/privacy')}>Privacy Policy</a>
 					<a href={resolve('/terms')}>Terms of Service</a>
 				</div>
@@ -464,8 +457,15 @@
 	}
 
 	.logo {
-		height: 50px;
-		width: auto;
+		height: 100%;
+		width: 100%;
+		object-fit: contain;
+	}
+
+	.logo-full {
+		height: 100%;
+		width: 100%;
+		object-fit: contain;
 	}
 
 	/* Desktop Navigation */
@@ -986,7 +986,7 @@
 		margin-bottom: 16px;
 	}
 
-	.footer-section h4 {
+	.footer-section h3 {
 		margin-bottom: 16px;
 		font-size: 16px;
 		color: var(--navy);

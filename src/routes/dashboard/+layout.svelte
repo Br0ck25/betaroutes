@@ -163,18 +163,10 @@
 <div class="layout">
 	<header class="mobile-header">
 		<picture>
-			<source
-				type="image/avif"
-				srcset="/optimized/logo-48.avif 48w, /optimized/logo-120.avif 120w"
-				sizes="40px"
-			/>
-			<source
-				type="image/webp"
-				srcset="/optimized/logo-48.webp 48w, /optimized/logo-120.webp 120w"
-				sizes="40px"
-			/>
+			<source type="image/avif" srcset="/logo-180x75.png 48w, /logo-180x75.png 120w" sizes="40px" />
+			<source type="image/webp" srcset="/logo-180x75.png 48w, /logo-180x75.png 120w" sizes="40px" />
 			<img
-				src="/optimized/logo-48.png"
+				src="/logo-180x75.png"
 				alt="Go Route Yourself"
 				class="mobile-logo"
 				width="48"
@@ -201,26 +193,16 @@
 
 	<aside class="sidebar" class:open={sidebarOpen}>
 		<div class="sidebar-header">
-			<picture>
-				<source
-					type="image/avif"
-					srcset="/optimized/logo-512.avif 120w, /optimized/logo-512.avif 512w"
-					sizes="40px"
-				/>
-				<source
-					type="image/webp"
-					srcset="/optimized/logo-512.webp 120w, /optimized/logo-512.webp 512w"
-					sizes="40px"
-				/>
-				<img
-					src="/optimized/logo-512.png"
-					alt="Go Route Yourself"
-					class="sidebar-logo"
-					width="512"
-					height="512"
-					decoding="async"
-				/>
-			</picture>
+			<img
+				src="/logo-180x75.png"
+				alt="Go Route Yourself"
+				class="sidebar-logo"
+				width="64"
+				height="64"
+				decoding="async"
+				style="width:64px; height:64px; object-fit:contain;"
+			/>
+
 			<button class="close-btn" on:click={closeSidebar} aria-label="Close menu">
 				<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
 					<path
@@ -367,7 +349,7 @@
 
 	.mobile-logo {
 		width: auto;
-		height: 32px;
+		height: 48px;
 	}
 
 	.mobile-user {

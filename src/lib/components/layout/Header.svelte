@@ -44,20 +44,21 @@
 				<picture>
 					<source
 						type="image/avif"
-						srcset="/optimized/logo-48.avif 48w, /optimized/logo-120.avif 120w, /optimized/logo-192.avif 192w, /optimized/logo-512.avif 512w"
-						sizes="48px"
+						srcset="/logo-180x75.png 180w"
+						sizes="64px"
 					/>
 					<source
 						type="image/webp"
-						srcset="/optimized/logo-48.webp 48w, /optimized/logo-120.webp 120w, /optimized/logo-192.webp 192w, /optimized/logo-512.webp 512w"
-						sizes="48px"
+						srcset="/logo-180x75.png 180w"
+						sizes="64px"
 					/>
 					<img
-						src="/optimized/logo-48.png"
+						src="/logo-180x75.png"
 						alt="Go Route Yourself"
 						class="logo"
-						width="48"
-						height="48"
+						width="180"
+						height="75"
+						srcset="/logo-180x75.png 1x, /logo-180x75.png 2x"
 						decoding="async"
 					/>
 				</picture>
@@ -172,8 +173,9 @@
 	}
 
 	.logo {
-		height: 40px; /* Slightly smaller for internal pages */
-		width: auto;
+		height: 100%;
+		width: 100%;
+		object-fit: contain;
 	}
 
 	.logo-link {

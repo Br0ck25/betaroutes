@@ -439,7 +439,7 @@ export default {
 			}
 
 			if (pathname === '/favicon.ico') {
-				const favicon = await env.ASSETS.get('logo512.png', { type: 'stream' });
+				const favicon = await env.ASSETS.get('logo-180x75.png', { type: 'stream' });
 				if (!favicon) return new Response('favicon not found', { status: 404 });
 
 				const resp = new Response(favicon.body, favicon);
