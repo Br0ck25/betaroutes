@@ -467,17 +467,6 @@
 	</span>
 
 	<div class="card-header">
-		<div class="card-icon red">
-			<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-				<path
-					d="M7 17H3C2.46957 17 1.96086 16.7893 1.58579 16.4142C1.21071 16.0391 1 15.5304 1 15V3C1 2.46957 1.21071 1.96086 1.58579 1.58579C1.96086 1.21071 2.46957 1 3 1H7M13 13L17 9M17 9L13 5M17 9H7"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				/>
-			</svg>
-		</div>
 		<div>
 			<h2 class="card-title">Account Actions</h2>
 			<p class="card-subtitle">Sign out or delete account</p>
@@ -519,9 +508,6 @@
 </CollapsibleCard>
 
 <style>
-	.card-icon.red {
-		background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
-	}
 	.card-title {
 		font-size: 18px;
 		font-weight: 700;

@@ -6,8 +6,8 @@
 	onMount(() => {
 		const handler = (e: Event) => {
 			const ev: any = e;
-			ev.preventDefault();
-			deferredPrompt = ev;
+			// If dispatched from +layout, the original event is in ev.detail; otherwise fall back to window storage
+			deferredPrompt = ev?.detail ?? (window as any).__deferredPWAInstall ?? ev;
 			visible = true;
 		};
 
@@ -69,7 +69,10 @@
 	.btn-install {
 		background: var(--color-primary, #06b6d4);
 		color: white;
-		padding: 0.6rem 1rem;
+		padding: 0.5rem 1rem;
+		min-height: 48px;
+		min-width: 48px;
+		line-height: 1;
 		border-radius: 8px;
 		font-weight: 600;
 		box-shadow: 0 6px 20px rgba(2, 6, 23, 0.12);

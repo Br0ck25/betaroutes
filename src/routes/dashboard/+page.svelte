@@ -259,7 +259,7 @@
 		<div class="chart-card">
 			<div class="chart-header">
 				<div>
-					<h3 class="chart-title">Profit Trend</h3>
+					<h2 class="chart-title">Profit Trend</h2>
 					<p class="chart-subtitle">{rangeLabels[selectedRange]}</p>
 				</div>
 				<div class="chart-legend">
@@ -306,7 +306,7 @@
 		<div class="chart-card">
 			<div class="chart-header">
 				<div>
-					<h3 class="chart-title">Cost Breakdown</h3>
+					<h2 class="chart-title">Cost Breakdown</h2>
 					<p class="chart-subtitle">Expenses in period</p>
 				</div>
 			</div>
@@ -377,7 +377,7 @@
 	<div class="section-card">
 		<div class="section-header">
 			<div>
-				<h3 class="section-title">Recent Trips</h3>
+				<h2 class="section-title">Recent Trips</h2>
 				<p class="section-subtitle">Latest from selected period</p>
 			</div>
 			<a href="/dashboard/trips" class="btn-secondary">
@@ -471,7 +471,7 @@
 						stroke-linejoin="round"
 					/>
 				</svg>
-				<h4>No trips found</h4>
+				<h3>No trips found</h3>
 				<p>No trips found in this date range.</p>
 				<a href="/dashboard/trips/new" class="btn-primary">
 					<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -927,7 +927,7 @@
 		color: #d1d5db;
 		margin: 0 auto 24px;
 	}
-	.empty-state-large h4 {
+	.empty-state-large h3 {
 		font-size: 18px;
 		font-weight: 700;
 		color: #111827;

@@ -580,11 +580,15 @@
 		justify-content: center;
 		text-decoration: none;
 		color: #9ca3af;
-		font-size: 10px;
+		font-size: 12px;
 		font-weight: 500;
 		width: 100%;
-		gap: 4px;
+		gap: 6px;
 		cursor: pointer;
+		padding: 6px 8px;
+		min-height: 48px;
+		min-width: 48px;
+		box-sizing: border-box;
 	}
 
 	.bottom-nav-item.active {

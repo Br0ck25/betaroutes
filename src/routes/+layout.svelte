@@ -69,7 +69,8 @@
 				ev.preventDefault(); // prevent automatic browser prompt
 				// store the event so other parts of the app can trigger the prompt
 				(window as any).__deferredPWAInstall = ev;
-				window.dispatchEvent(new CustomEvent('pwa:beforeinstallprompt'));
+				// dispatch the original event as detail so consumers can call prompt()
+				window.dispatchEvent(new CustomEvent('pwa:beforeinstallprompt', { detail: ev }));
 			});
 
 			// Optional: log successful installs
