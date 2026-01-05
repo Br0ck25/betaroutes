@@ -408,7 +408,7 @@
 
 	.sidebar-logo {
 		width: auto;
-		height: 40px;
+		height: 64px;
 	}
 
 	/* Sync Indicator in Sidebar */
