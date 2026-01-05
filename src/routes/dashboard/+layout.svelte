@@ -205,19 +205,19 @@
 				<source
 					type="image/avif"
 					srcset="/optimized/logo-120.avif 120w, /optimized/logo-512.avif 512w"
-					sizes="120px"
+					sizes="40px"
 				/>
 				<source
 					type="image/webp"
 					srcset="/optimized/logo-120.webp 120w, /optimized/logo-512.webp 512w"
-					sizes="120px"
+					sizes="40px"
 				/>
 				<img
-					src="/optimized/logo-120.png"
+					src="/optimized/logo-512.png"
 					alt="Go Route Yourself"
 					class="sidebar-logo"
-					width="120"
-					height="120"
+					width="512"
+					height="512"
 					decoding="async"
 				/>
 			</picture>
