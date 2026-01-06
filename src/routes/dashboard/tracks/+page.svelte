@@ -1,5 +1,4 @@
 <script>
-	let { children } = $props();
 </script>
 
 <h1 class="text-2xl font-bold text-gray-900 dark:text-white">My Tracks</h1>
@@ -8,7 +7,5 @@
 </p>
 
 <div class="mt-6 border border-gray-300 dark:border-gray-700 rounded-lg p-4">
-	<p class="text-gray-600 dark:text-gray-300">
-		List of tracks will appear here.
-	</p>
+	<p class="text-gray-600 dark:text-gray-300">List of tracks will appear here.</p>
 </div>
