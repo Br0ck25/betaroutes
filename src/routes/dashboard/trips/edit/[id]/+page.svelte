@@ -72,12 +72,14 @@
 		}));
 		const safeMaintenance = ((found as any)['maintenanceItems'] || []).map((m: any) => ({
 			...m,
-			id: m.id || crypto.randomUUID()
+			id: m.id || crypto.randomUUID(),
+			taxDeductible: (m as any).taxDeductible || false
 		}));
 		const rawSupplies = (found as any)['supplyItems'] || (found as any)['suppliesItems'] || [];
 		const safeSupplies = (rawSupplies || []).map((s: any) => ({
 			...s,
-			id: s.id || crypto.randomUUID()
+			id: s.id || crypto.randomUUID(),
+			taxDeductible: (s as any).taxDeductible || false
 		}));
 		const to24h = (timeStr?: string): string => {
 			if (!timeStr) return '';
@@ -100,6 +102,7 @@
 			mpg: Number((found as any).mpg) || $userSettings.defaultMPG || 25,
 			gasPrice: Number((found as any).gasPrice) || $userSettings.defaultGasPrice || 3.5,
 			fuelCost: Number((found as any).fuelCost) || 0,
+			fuelCostManual: Boolean((found as any).fuelCostManual) || false,
 			hoursWorked: Number((found as any).hoursWorked) || 0,
 			estimatedTime: (found as any)['estimatedTime'] || 0,
 			startTime: to24h((found as any).startTime as string | undefined),
@@ -123,6 +126,7 @@
 		mpg: 25,
 		gasPrice: 3.5,
 		fuelCost: 0,
+		fuelCostManual: false,
 		maintenanceItems: [] as any[],
 		suppliesItems: [] as any[],
 		notes: ''
@@ -480,7 +484,7 @@
 		if (!selectedMaintenance) return;
 		tripData.maintenanceItems = [
 			...tripData.maintenanceItems,
-			{ id: crypto.randomUUID(), type: selectedMaintenance, cost: 0 }
+			{ id: crypto.randomUUID(), type: selectedMaintenance, cost: 0, taxDeductible: false }
 		];
 		selectedMaintenance = '';
 	}
@@ -491,7 +495,7 @@
 		if (!selectedSupply) return;
 		tripData.suppliesItems = [
 			...tripData.suppliesItems,
-			{ id: crypto.randomUUID(), type: selectedSupply, cost: 0 }
+			{ id: crypto.randomUUID(), type: selectedSupply, cost: 0, taxDeductible: false }
 		];
 		selectedSupply = '';
 	}
@@ -558,6 +562,18 @@
 	$: totalSuppliesCost = tripData.suppliesItems.reduce((sum, item) => sum + (item.cost || 0), 0);
 	$: totalCosts = (tripData.fuelCost || 0) + totalMaintenanceCost + totalSuppliesCost;
 	$: totalProfit = totalEarnings - totalCosts;
+
+	// Auto-calc fuel cost unless user overrides it
+	$: {
+		if (!tripData.fuelCostManual) {
+			if (tripData.totalMiles && tripData.mpg && tripData.gasPrice) {
+				const gallons = tripData.totalMiles / tripData.mpg;
+				tripData.fuelCost = Math.round(gallons * tripData.gasPrice * 100) / 100;
+			} else {
+				tripData.fuelCost = 0;
+			}
+		}
+	}
 	$: {
 		if (tripData.startTime && tripData.endTime) {
 			const [startHour, startMin] = tripData.startTime.split(':').map(Number) as [number, number];
@@ -883,11 +899,26 @@
 					</div>
 				</div>
 				<div class="summary-box" style="margin: 40px 0;">
-					<span>Estimated Fuel Cost</span><strong>{formatCurrency(tripData.fuelCost)}</strong>
+					<span>Estimated Fuel Cost</span>
+					<div class="input-money-wrapper">
+						<span class="symbol">$</span>
+						<input
+							type="number"
+							bind:value={tripData.fuelCost}
+							step="0.01"
+							on:input={() => (tripData.fuelCostManual = true)}
+						/>
+					</div>
+					{#if tripData.fuelCostManual}
+						<button class="btn-small" on:click={() => (tripData.fuelCostManual = false)}
+							>Reset</button
+						>
+					{/if}
 				</div>
 				<div class="section-group">
 					<div class="section-top">
 						<h3>Maintenance</h3>
+						<p class="helper-quiet">Yes / No indicates whether the item is tax deductible.</p>
 						<button
 							class="btn-icon gear"
 							on:click={() => openSettings('maintenance')}
@@ -921,7 +952,14 @@
 							disabled={!selectedMaintenance}>Add</button
 						>
 					</div>
-					{#each tripData.maintenanceItems as item}<div class="expense-row">
+					<div class="expense-headers">
+						<span class="name">Item</span>
+						<span class="cost">Cost</span>
+						<span class="tax">Tax deductible</span>
+						<span class="actions" aria-hidden="true"></span>
+					</div>
+					{#each tripData.maintenanceItems as item}
+						<div class="expense-row">
 							<span class="name">{item.type}</span>
 							<div class="input-money-wrapper small">
 								<span class="symbol">$</span><input
@@ -929,6 +967,18 @@
 									bind:value={item.cost}
 									placeholder="0.00"
 								/>
+							</div>
+							<div class="tax-toggle-wrapper">
+								<span class="tax-label">Tax deductible</span>
+								<button
+									type="button"
+									class="yesno-toggle"
+									role="switch"
+									aria-checked={item.taxDeductible}
+									aria-label={item.taxDeductible ? 'Tax deductible: Yes' : 'Tax deductible: No'}
+									on:click={() => (item.taxDeductible = !item.taxDeductible)}
+									>{item.taxDeductible ? 'Yes' : 'No'}</button
+								>
 							</div>
 							<button class="btn-icon delete" on:click={() => removeMaintenanceItem(item.id)}
 								>✕</button
@@ -938,6 +988,7 @@
 				<div class="section-group">
 					<div class="section-top">
 						<h3>Supplies</h3>
+						<p class="helper-quiet">Yes / No indicates whether the item is tax deductible.</p>
 						<button
 							class="btn-icon gear"
 							on:click={() => openSettings('supplies')}
@@ -974,6 +1025,18 @@
 									bind:value={item.cost}
 									placeholder="0.00"
 								/>
+							</div>
+							<div class="tax-toggle-wrapper">
+								<span class="tax-label">Tax deductible</span>
+								<button
+									type="button"
+									class="yesno-toggle"
+									role="switch"
+									aria-checked={item.taxDeductible}
+									aria-label={item.taxDeductible ? 'Tax deductible: Yes' : 'Tax deductible: No'}
+									on:click={() => (item.taxDeductible = !item.taxDeductible)}
+									>{item.taxDeductible ? 'Yes' : 'No'}</button
+								>
 							</div>
 							<button class="btn-icon delete" on:click={() => removeSupplyItem(item.id)}>✕</button>
 						</div>{/each}
@@ -1037,11 +1100,24 @@
 					<div class="row subheader"><span>Expenses Breakdown</span></div>
 					{#if tripData.fuelCost > 0}<div class="row detail">
 							<span>Fuel</span> <span class="val">{formatCurrency(tripData.fuelCost)}</span>
-						</div>{/if}{#each tripData.maintenanceItems as item}<div class="row detail">
-							<span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span>
-						</div>{/each}{#each tripData.suppliesItems as item}<div class="row detail">
-							<span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span>
-						</div>{/each}
+						</div>{/if}{#each tripData.maintenanceItems as item}
+						<div class="row detail">
+							<span>{item.type}{item.taxDeductible ? ' • Tax' : ''}</span>
+							<span class="val">{formatCurrency(item.cost)}</span>
+						</div>
+					{/each}
+					<div class="expense-headers">
+						<span class="name">Item</span>
+						<span class="cost">Cost</span>
+						<span class="tax">Tax deductible</span>
+						<span class="actions" aria-hidden="true"></span>
+					</div>
+					{#each tripData.suppliesItems as item}
+						<div class="row detail">
+							<span>{item.type}{item.taxDeductible ? ' • Tax' : ''}</span>
+							<span class="val">{formatCurrency(item.cost)}</span>
+						</div>
+					{/each}
 					<div class="row total-expenses">
 						<span>Total Expenses</span>
 						<span class="val negative">-{formatCurrency(totalCosts)}</span>
@@ -1542,6 +1618,31 @@
 	.expense-row .input-money-wrapper {
 		width: 120px;
 	}
+
+	.expense-headers {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 14px;
+		padding: 8px 0;
+		color: #6b7280;
+		font-size: 13px;
+		border-bottom: 1px solid #f3f4f6;
+	}
+	.expense-headers .name {
+		flex: 1;
+	}
+	.expense-headers .cost {
+		width: 120px;
+	}
+	.expense-headers .tax {
+		width: 96px;
+		text-align: center;
+	}
+	.expense-headers .actions {
+		width: 48px;
+		text-align: right;
+	}
 	.review-grid {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
@@ -1728,5 +1829,44 @@
 			width: auto;
 			min-width: 160px;
 		}
+	}
+
+	.yesno-toggle {
+		display: inline-block;
+		min-width: 64px;
+		padding: 6px 10px;
+		border-radius: 10px;
+		border: 1px solid #e5e7eb;
+		background: white;
+		color: #374151;
+		font-weight: 700;
+		cursor: pointer;
+		text-align: center;
+	}
+	.yesno-toggle[aria-checked='true'] {
+		background: #ecfdf5;
+		border-color: #bbf7d0;
+		color: #065f46;
+	}
+	.yesno-toggle:focus {
+		outline: 3px solid rgba(99, 102, 241, 0.12);
+		outline-offset: 2px;
+	}
+
+	.tax-toggle-wrapper {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 4px;
+	}
+	.tax-label {
+		font-size: 12px;
+		color: #6b7280;
+		font-weight: 600;
+	}
+	.helper-quiet {
+		font-size: 12px;
+		color: #6b7280;
+		margin-top: 6px;
 	}
 </style>

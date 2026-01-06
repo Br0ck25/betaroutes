@@ -21,12 +21,12 @@
 		date: getLocalDate(),
 		category: '',
 		amount: '',
-		description: ''
+		description: '',
+		taxDeductible: false
 	};
 
-	// Reference to amount input so quick-action can focus it
 	let amountInput: HTMLInputElement | null = null;
-	// Prefill category from the URL query parameter (e.g., ?category=fuel)
+
 	$: {
 		const q = $page.url.searchParams.get('category');
 		if (q) {
@@ -144,6 +144,27 @@
 					placeholder="e.g., Oil Change at Jiffy Lube"
 				></textarea>
 			</div>
+
+			<div class="form-group">
+				<label for="taxDeductible">Tax deductible</label>
+				<div>
+					<button
+						type="button"
+						id="taxDeductible"
+						class="yesno-toggle"
+						role="switch"
+						aria-checked={formData.taxDeductible}
+						on:click={() => (formData.taxDeductible = !formData.taxDeductible)}
+						on:keydown={(e) =>
+							e.key === 'Enter' || e.key === ' '
+								? ((formData.taxDeductible = !formData.taxDeductible), e.preventDefault())
+								: null}
+					>
+						{formData.taxDeductible ? 'Yes' : 'No'}
+					</button>
+					<div class="checkbox-help">Shown in exports and tax reports</div>
+				</div>
+			</div>
 		</div>
 
 		<div class="form-actions">
@@ -155,6 +176,35 @@
 
 <style>
 	/* MATCHING STYLES FROM TRIPS/NEW */
+	/* Use global .checkbox-label styles for consistent look */
+	.checkbox-help {
+		font-size: 12px;
+		color: #6b7280;
+		margin-left: 32px;
+		margin-top: 6px;
+	}
+
+	.yesno-toggle {
+		display: inline-block;
+		min-width: 72px;
+		padding: 8px 12px;
+		border-radius: 10px;
+		border: 1px solid #e5e7eb;
+		background: white;
+		color: #374151;
+		font-weight: 700;
+		cursor: pointer;
+		text-align: center;
+	}
+	.yesno-toggle[aria-checked='true'] {
+		background: #ecfdf5;
+		border-color: #bbf7d0;
+		color: #065f46;
+	}
+	.yesno-toggle:focus {
+		outline: 3px solid rgba(99, 102, 241, 0.12);
+		outline-offset: 2px;
+	}
 	.expense-form-page {
 		max-width: 800px;
 		margin: 0 auto;

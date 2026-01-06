@@ -82,7 +82,7 @@
 				date: date,
 				category: 'fuel',
 				amount: trip.fuelCost,
-				description: 'Fuel (Trip Log)',
+				description: 'Fuel',
 				source: 'trip',
 				tripId: trip.id
 			});
@@ -97,9 +97,10 @@
 					date: date,
 					category: 'maintenance',
 					amount: item.cost,
-					description: `${item.type} (Trip Log)`,
+					description: `${item.type}`,
 					source: 'trip',
-					tripId: trip.id
+					tripId: trip.id,
+					taxDeductible: Boolean(item.taxDeductible)
 				});
 			});
 		}
@@ -113,9 +114,10 @@
 					date: date,
 					category: 'supplies',
 					amount: item.cost,
-					description: `${item.type} (Trip Log)`,
+					description: `${item.type}`,
 					source: 'trip',
-					tripId: trip.id
+					tripId: trip.id,
+					taxDeductible: Boolean(item.taxDeductible)
 				});
 			});
 		}
@@ -279,13 +281,14 @@
 		const selectedData = filteredExpenses.filter((e) => selectedExpenses.has(e.id));
 		if (selectedData.length === 0) return;
 
-		const headers = ['Date', 'Category', 'Amount', 'Description', 'Source'];
+		const headers = ['Date', 'Category', 'Amount', 'Description', 'Tax Deductible', 'Source'];
 		const rows = selectedData.map((e) =>
 			[
 				e.date,
 				e.category,
 				e.amount,
 				`"${(e.description || '').replace(/"/g, '""')}"`,
+				(e as any).taxDeductible ? 'Yes' : 'No',
 				isTripSource(e) ? 'Trip Log' : 'Manual'
 			].join(',')
 		);
@@ -679,21 +682,28 @@
 								</h2>
 							</div>
 
-							<svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
-								<path
-									d="M9 18L15 12L9 6"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								/>
-							</svg>
+							<div class="card-right">
+								<span class="expense-amount-display" aria-hidden="true"
+									>{formatCurrency(expense.amount || 0)}</span
+								>
+								<svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+									<path
+										d="M9 18L15 12L9 6"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/>
+								</svg>
+							</div>
 						</div>
-
 						<div class="card-stats">
 							<div class="stat-badge-container">
 								<span class={`category-badge ${getCategoryColor(expense.category)}`}>
 									{getCategoryLabel(expense.category)}
+									{#if (expense as any).taxDeductible}
+										<span class="tax-badge">Tax</span>
+									{/if}
 								</span>
 								{#if isTripSource(expense)}
 									<span class="source-badge">Trip Log</span>
@@ -1174,13 +1184,19 @@
 
 	.card-top {
 		display: grid;
-		grid-template-columns: auto 1fr auto auto;
+		grid-template-columns: auto 1fr auto;
 		align-items: center;
 		gap: 12px;
 		padding-bottom: 12px;
 		margin-bottom: 12px;
 		border-bottom: 1px solid #f3f4f6;
 		max-width: 100%;
+	}
+
+	.card-right {
+		display: flex;
+		align-items: center;
+		gap: 8px;
 	}
 
 	.selection-box {
@@ -1216,6 +1232,9 @@
 		font-weight: 800;
 		color: #111827;
 		white-space: nowrap;
+		margin-right: 4px;
+		min-width: 72px;
+		text-align: right;
 	}
 
 	.nav-icon {
@@ -1244,6 +1263,17 @@
 		border: 1px solid;
 		display: inline-flex;
 		align-items: center;
+		white-space: nowrap;
+	}
+
+	.tax-badge {
+		font-size: 11px;
+		font-weight: 700;
+		background: #ecfdf5;
+		color: #065f46;
+		padding: 4px 8px;
+		border-radius: 6px;
+		margin-left: 8px;
 		white-space: nowrap;
 	}
 

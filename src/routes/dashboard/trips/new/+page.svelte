@@ -855,6 +855,8 @@
 				<div class="section-group">
 					<div class="section-top">
 						<h3>Maintenance</h3>
+						<p class="helper-quiet">Yes / No indicates whether the item is tax deductible.</p>
+						<p class="helper-quiet">Yes / No indicates whether the item is tax deductible.</p>
 						<button
 							class="btn-icon gear"
 							on:click={() => openSettings('maintenance')}
@@ -901,6 +903,18 @@
 								<span class="symbol">$</span>
 								<input type="number" bind:value={item.cost} placeholder="0.00" />
 							</div>
+							<div class="tax-toggle-wrapper">
+								<span class="tax-label">Tax deductible</span>
+								<button
+									type="button"
+									class="yesno-toggle"
+									role="switch"
+									aria-checked={item.taxDeductible}
+									aria-label={item.taxDeductible ? 'Tax deductible: Yes' : 'Tax deductible: No'}
+									on:click={() => (item.taxDeductible = !item.taxDeductible)}
+									>{item.taxDeductible ? 'Yes' : 'No'}</button
+								>
+							</div>
 							<button class="btn-icon delete" on:click={() => removeMaintenanceItem(item.id)}
 								>✕</button
 							>
@@ -911,6 +925,7 @@
 				<div class="section-group">
 					<div class="section-top">
 						<h3>Supplies</h3>
+						<p class="helper-quiet">Yes / No indicates whether the item is tax deductible.</p>
 						<button
 							class="btn-icon gear"
 							on:click={() => openSettings('supplies')}
@@ -950,6 +965,18 @@
 							<div class="input-money-wrapper small">
 								<span class="symbol">$</span>
 								<input type="number" bind:value={item.cost} placeholder="0.00" />
+							</div>
+							<div class="tax-toggle-wrapper">
+								<span class="tax-label">Tax deductible</span>
+								<button
+									type="button"
+									class="yesno-toggle"
+									role="switch"
+									aria-checked={item.taxDeductible}
+									aria-label={item.taxDeductible ? 'Tax deductible: Yes' : 'Tax deductible: No'}
+									on:click={() => (item.taxDeductible = !item.taxDeductible)}
+									>{item.taxDeductible ? 'Yes' : 'No'}</button
+								>
 							</div>
 							<button class="btn-icon delete" on:click={() => removeSupplyItem(item.id)}>✕</button>
 						</div>
@@ -1520,6 +1547,44 @@
 	}
 	.expense-row .input-money-wrapper {
 		width: 120px;
+	}
+
+	.tax-toggle-wrapper {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 4px;
+	}
+	.tax-label {
+		font-size: 12px;
+		color: #6b7280;
+		font-weight: 600;
+	}
+	.helper-quiet {
+		font-size: 12px;
+		color: #6b7280;
+		margin-top: 6px;
+	}
+	.yesno-toggle {
+		display: inline-block;
+		min-width: 64px;
+		padding: 6px 10px;
+		border-radius: 10px;
+		border: 1px solid #e5e7eb;
+		background: white;
+		color: #374151;
+		font-weight: 700;
+		cursor: pointer;
+		text-align: center;
+	}
+	.yesno-toggle[aria-checked='true'] {
+		background: #ecfdf5;
+		border-color: #bbf7d0;
+		color: #065f46;
+	}
+	.yesno-toggle:focus {
+		outline: 3px solid rgba(99, 102, 241, 0.12);
+		outline-offset: 2px;
 	}
 	.review-grid {
 		display: grid;
