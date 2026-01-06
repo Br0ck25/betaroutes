@@ -20,6 +20,9 @@
 	"engines": {
 		"node": ">=20"
 	},
+	"overrides": {
+		"@peculiar/x509": "1.13.0"
+	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "^4.20251205.0",
 		"@eslint/compat": "^1.4.0",
