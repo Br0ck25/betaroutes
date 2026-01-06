@@ -3,19 +3,20 @@
 	"private": true,
 	"version": "0.0.1",
 	"type": "module",
-	"scripts": {
-		"dev": "vite dev",
-		"build": "vite build",
-		"preview": "vite preview",
-		"prepare": "svelte-kit sync || echo ''",
-		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && npm run check:robots",
-		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"check:robots": "node scripts/validate-robots.js",
-		"format": "prettier --write .",
-		"lint": "prettier --check \"src/**/*.{ts,js,svelte,css,md}\" && eslint \"src/**/*.{ts,js,svelte}\"",
-		"test:unit": "vitest",
-		"test": "npm run test:unit -- --run && npm run test:e2e",
-		"test:e2e": "playwright test"
+"scripts": {
+  "dev": "vite dev",
+  "build": "svelte-kit build",
+  "preview": "svelte-kit preview",
+  "prepare": "svelte-kit sync || echo ''",
+  "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && npm run check:robots",
+  "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+  "check:robots": "node scripts/validate-robots.js",
+  "format": "prettier --write .",
+  "lint": "prettier --check \"src/**/*.{ts,js,svelte,css,md}\" && eslint \"src/**/*.{ts,js,svelte}\"",
+  "test:unit": "vitest",
+  "test": "npm run test:unit -- --run && npm run test:e2e",
+  "test:e2e": "playwright test"
+}
 	},
 	"engines": {
 		"node": ">=20"
