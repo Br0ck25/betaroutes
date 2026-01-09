@@ -5,13 +5,9 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 const config = {
 	preprocess: vitePreprocess(),
 	kit: {
-		// Define your Cloudflare Pages routes here
-		adapter: adapter({
-			routes: {
-				include: ['/dashboard', '/dashboard/*'],
-				exclude: []
-			}
-		})
+		// Remove the 'routes' block.
+		// SvelteKit will automatically generate the correct rules to include everything.
+		adapter: adapter()
 	}
 };
 
