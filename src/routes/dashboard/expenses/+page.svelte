@@ -679,7 +679,10 @@
 								</h2>
 							</div>
 
-							<svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+							<span class="expense-amount-display" aria-label={`Amount: ${formatCurrency(expense.amount || 0)}`}>
+						{formatCurrency(expense.amount || 0)}
+					</span>
+					<svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
 								<path
 									d="M9 18L15 12L9 6"
 									stroke="currentColor"
@@ -1216,6 +1219,8 @@
 		font-weight: 800;
 		color: #111827;
 		white-space: nowrap;
+		text-align: right;
+		min-width: 72px;
 	}
 
 	.nav-icon {

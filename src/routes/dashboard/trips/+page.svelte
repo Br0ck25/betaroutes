@@ -265,6 +265,25 @@
 		else expandedTrips.add(id);
 		expandedTrips = expandedTrips;
 	}
+
+	// Auto-expand a trip when `?id=<tripId>` is present in URL — used when navigating from expenses
+	let lastQueryExpandId = '';
+	$: {
+		const qId = $page?.url?.searchParams.get('id');
+		if (qId && qId !== lastQueryExpandId && allFilteredTrips?.length > 0) {
+			const idx = allFilteredTrips.findIndex((t) => t.id === qId);
+			if (idx !== -1) {
+				const newPage = Math.floor(idx / itemsPerPage) + 1;
+				if (currentPage !== newPage) currentPage = newPage;
+				expandedTrips = new Set([qId]);
+				setTimeout(() => {
+					const el = document.getElementById('trip-' + qId);
+					if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+				}, 60);
+			}
+			lastQueryExpandId = qId;
+		}
+	}
 </script>
 
 <svelte:head>
