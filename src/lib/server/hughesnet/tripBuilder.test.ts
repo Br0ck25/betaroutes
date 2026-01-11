@@ -16,7 +16,11 @@ describe('createTripForDate wifi pay', () => {
 		await settingsKV.put('settings:testuser', JSON.stringify({ settings: {} }));
 
 		const captured: any[] = [];
-		const tripService = { put: async (t: any) => captured.push(t) };
+		const tripService = {
+			put: async (t: any) => {
+				captured.push(t);
+			}
+		};
 
 		const now = Date.now();
 		const orders = [
@@ -53,6 +57,7 @@ describe('createTripForDate wifi pay', () => {
 			settingsKV,
 			{ getRouteInfo: async () => ({ duration: 0, distance: 0 }) },
 			(msg) => {
+				void msg;
 				/* logger */
 			}
 		);

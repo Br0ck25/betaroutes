@@ -8,76 +8,79 @@ let currentSubscription = null;
 
 // Check subscription status on page load
 async function checkSubscriptionStatus() {
-  const token = localStorage.getItem("token");
-  if (!token) return;
+	const token = localStorage.getItem('token');
+	if (!token) return;
 
-  const username = localStorage.getItem("username");
-  console.log("Subscription Check: found username =", username);
-  if (username === "James") {
-    currentSubscription = {
-      plan: 'pro',
-      status: 'active',
-      tripsThisMonth: 0,
-      maxTrips: Infinity,
-      resetDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString(),
-      features: ['cloud-sync', 'export', 'analytics', 'optimization']
-    };
-    console.log("!!! DEBUG MODE: User James forced to Pro Plan for testing. Current Username:", username);
-    updateSubscriptionUI();
-    updateSubscriptionInfoInMenu();
-    return;
-  }
+	const username = localStorage.getItem('username');
+	console.log('Subscription Check: found username =', username);
+	if (username === 'James') {
+		currentSubscription = {
+			plan: 'pro',
+			status: 'active',
+			tripsThisMonth: 0,
+			maxTrips: Infinity,
+			resetDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString(),
+			features: ['cloud-sync', 'export', 'analytics', 'optimization']
+		};
+		console.log(
+			'!!! DEBUG MODE: User James forced to Pro Plan for testing. Current Username:',
+			username
+		);
+		updateSubscriptionUI();
+		updateSubscriptionInfoInMenu();
+		return;
+	}
 
-  try {
-    const response = await fetch("https://logs.gorouteyourself.com/api/subscription", {
-      headers: { Authorization: token }
-    });
+	try {
+		const response = await fetch('https://logs.gorouteyourself.com/api/subscription', {
+			headers: { Authorization: token }
+		});
 
-    if (response.ok) {
-      currentSubscription = await response.json();
-      updateSubscriptionUI();
-      updateSubscriptionInfoInMenu();
-    }
-  } catch (err) {
-    console.error("❌ Failed to check subscription:", err);
-  }
+		if (response.ok) {
+			currentSubscription = await response.json();
+			updateSubscriptionUI();
+			updateSubscriptionInfoInMenu();
+		}
+	} catch (err) {
+		console.error('❌ Failed to check subscription:', err);
+	}
 }
 
 // Update UI based on subscription status
 function updateSubscriptionUI() {
-  if (!currentSubscription) return;
+	if (!currentSubscription) return;
 
-  const plan = currentSubscription.plan;
-  const usernameDisplay = document.getElementById("username-display");
-  
-  // Add plan badge to username
-  if (usernameDisplay && plan !== 'free') {
-    const username = localStorage.getItem("username");
-    const badge = plan === 'pro' ? '⭐' : '💼';
-    usernameDisplay.textContent = `${username} ${badge}`;
-  }
+	const plan = currentSubscription.plan;
+	const usernameDisplay = document.getElementById('username-display');
 
-  // Show trip limit warning for free users
-  if (plan === 'free') {
-    const tripsRemaining = currentSubscription.maxTrips - currentSubscription.tripsThisMonth;
-    
-    if (tripsRemaining <= 3 && tripsRemaining > 0) {
-      showTripLimitWarning(tripsRemaining);
-    } else if (tripsRemaining <= 0) {
-      // Don't auto-show modal, will show when they try to log
-      console.log("⚠️ Trip limit reached");
-    }
-  }
+	// Add plan badge to username
+	if (usernameDisplay && plan !== 'free') {
+		const username = localStorage.getItem('username');
+		const badge = plan === 'pro' ? '⭐' : '💼';
+		usernameDisplay.textContent = `${username} ${badge}`;
+	}
+
+	// Show trip limit warning for free users
+	if (plan === 'free') {
+		const tripsRemaining = currentSubscription.maxTrips - currentSubscription.tripsThisMonth;
+
+		if (tripsRemaining <= 3 && tripsRemaining > 0) {
+			showTripLimitWarning(tripsRemaining);
+		} else if (tripsRemaining <= 0) {
+			// Don't auto-show modal, will show when they try to log
+			console.log('⚠️ Trip limit reached');
+		}
+	}
 }
 
 // Show warning banner when approaching trip limit
 function showTripLimitWarning(remaining) {
-  const existingBanner = document.getElementById("trip-limit-warning");
-  if (existingBanner) existingBanner.remove();
+	const existingBanner = document.getElementById('trip-limit-warning');
+	if (existingBanner) existingBanner.remove();
 
-  const banner = document.createElement("div");
-  banner.id = "trip-limit-warning";
-  banner.style.cssText = `
+	const banner = document.createElement('div');
+	banner.id = 'trip-limit-warning';
+	banner.style.cssText = `
     background-color: #fff3cd;
     color: #856404;
     border: 1px solid #ffc107;
@@ -90,23 +93,23 @@ function showTripLimitWarning(remaining) {
     position: relative;
     z-index: 500;
   `;
-  
-  banner.innerHTML = `
+
+	banner.innerHTML = `
     ⚠️ You have ${remaining} trip${remaining !== 1 ? 's' : ''} remaining this month. 
     <a href="#" onclick="showUpgradeModal(); return false;" style="color: #0d6efd; font-weight: bold; text-decoration: underline;">Upgrade to Pro</a> 
     for unlimited trips!
   `;
 
-  const container = document.querySelector(".container");
-  if (container) {
-    container.parentNode.insertBefore(banner, container);
-  }
+	const container = document.querySelector('.container');
+	if (container) {
+		container.parentNode.insertBefore(banner, container);
+	}
 }
 
 // Show error when trip limit reached
 function showTripLimitReached() {
-  showAlertModal(
-    `<div style="text-align: center;">
+	showAlertModal(
+		`<div style="text-align: center;">
       <div style="font-size: 48px; margin-bottom: 20px;">🚫</div>
       <h3 style="color: #dc3545; margin-bottom: 20px;">Trip Limit Reached</h3>
       <p style="margin-bottom: 20px;">You've used all 10 free trips this month. Your limit resets on ${new Date(currentSubscription.resetDate).toLocaleDateString()}.</p>
@@ -130,17 +133,17 @@ function showTripLimitReached() {
       </ul>
       <div style="font-size: 32px; font-weight: bold; margin: 30px 0; color: #4caf50;">$9.99<span style="font-size: 16px; font-weight: normal; color: #666;">/month</span></div>
     </div>`,
-    () => {
-      showUpgradeModal();
-    }
-  );
+		() => {
+			showUpgradeModal();
+		}
+	);
 }
 
 // Show upgrade modal with full pricing comparison
 function showUpgradeModal() {
-  const modal = document.createElement("div");
-  modal.id = "upgrade-modal";
-  modal.style.cssText = `
+	const modal = document.createElement('div');
+	modal.id = 'upgrade-modal';
+	modal.style.cssText = `
     display: flex;
     position: fixed;
     top: 0;
@@ -155,7 +158,7 @@ function showUpgradeModal() {
     box-sizing: border-box;
   `;
 
-  modal.innerHTML = `
+	modal.innerHTML = `
     <div style="
       background: white;
       padding: 40px 30px;
@@ -333,186 +336,192 @@ function showUpgradeModal() {
     </div>
   `;
 
-  document.body.appendChild(modal);
+	document.body.appendChild(modal);
 }
 
 // Close upgrade modal
 function closeUpgradeModal() {
-  const modal = document.getElementById("upgrade-modal");
-  if (modal) modal.remove();
+	const modal = document.getElementById('upgrade-modal');
+	if (modal) modal.remove();
 }
 
 // Handle upgrade to selected plan
 async function upgradeToPlan(plan) {
-  const token = localStorage.getItem("token");
-  if (!token) {
-    closeUpgradeModal();
-    showLogin();
-    return;
-  }
+	const token = localStorage.getItem('token');
+	if (!token) {
+		closeUpgradeModal();
+		showLogin();
+		return;
+	}
 
-  // Show loading state
-  const button = event.target;
-  const originalText = button.textContent;
-  button.textContent = "Processing...";
-  button.disabled = true;
+	// Show loading state
+	const button = event.target;
+	const originalText = button.textContent;
+	button.textContent = 'Processing...';
+	button.disabled = true;
 
-  try {
-    const response = await fetch("https://logs.gorouteyourself.com/api/create-checkout-session", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: token,
-      },
-      body: JSON.stringify({ plan }),
-    });
+	try {
+		const response = await fetch('https://logs.gorouteyourself.com/api/create-checkout-session', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: token
+			},
+			body: JSON.stringify({ plan })
+		});
 
-    if (!response.ok) {
-      throw new Error("Failed to create checkout session");
-    }
+		if (!response.ok) {
+			throw new Error('Failed to create checkout session');
+		}
 
-    const data = await response.json();
-    
-    // Redirect to Stripe Checkout
-    window.location.href = data.url;
-    
-  } catch (err) {
-    console.error("❌ Upgrade error:", err);
-    button.textContent = originalText;
-    button.disabled = false;
-    showAlertModal("❌ Failed to start checkout. Please try again or contact support.");
-  }
+		const data = await response.json();
+
+		// Redirect to Stripe Checkout
+		window.location.href = data.url;
+	} catch (err) {
+		console.error('❌ Upgrade error:', err);
+		button.textContent = originalText;
+		button.disabled = false;
+		showAlertModal('❌ Failed to start checkout. Please try again or contact support.');
+	}
 }
 
 // Open customer portal for managing subscription
 async function openCustomerPortal() {
-  const token = localStorage.getItem("token");
-  if (!token) return;
+	const token = localStorage.getItem('token');
+	if (!token) return;
 
-  try {
-    const response = await fetch("https://logs.gorouteyourself.com/api/create-portal-session", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: token,
-      },
-    });
+	try {
+		const response = await fetch('https://logs.gorouteyourself.com/api/create-portal-session', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: token
+			}
+		});
 
-    if (!response.ok) {
-      throw new Error("Failed to create portal session");
-    }
+		if (!response.ok) {
+			throw new Error('Failed to create portal session');
+		}
 
-    const data = await response.json();
-    window.location.href = data.url;
-    
-  } catch (err) {
-    console.error("❌ Portal error:", err);
-    showAlertModal("❌ Failed to open billing portal. Please try again or contact support.");
-  }
+		const data = await response.json();
+		window.location.href = data.url;
+	} catch (err) {
+		console.error('❌ Portal error:', err);
+		showAlertModal('❌ Failed to open billing portal. Please try again or contact support.');
+	}
 }
 
 // Update subscription info in hamburger menu
 async function updateSubscriptionInfoInMenu() {
-  if (!currentSubscription) return;
+	if (!currentSubscription) return;
 
-  const planNameEl = document.getElementById("plan-name");
-  const planDetailsEl = document.getElementById("plan-details");
-  
-  if (planNameEl) {
-    const planDisplay = currentSubscription.plan.charAt(0).toUpperCase() + currentSubscription.plan.slice(1);
-    planNameEl.textContent = `${planDisplay} Plan`;
-    
-    // Style based on plan
-    if (currentSubscription.plan === 'pro') {
-      planNameEl.style.color = '#7b1fa2';
-    } else if (currentSubscription.plan === 'business') {
-      planNameEl.style.color = '#2196f3';
-    }
-  }
-  
-  if (planDetailsEl) {
-    if (currentSubscription.plan === 'free') {
-      planDetailsEl.innerHTML = `
+	const planNameEl = document.getElementById('plan-name');
+	const planDetailsEl = document.getElementById('plan-details');
+
+	if (planNameEl) {
+		const planDisplay =
+			currentSubscription.plan.charAt(0).toUpperCase() + currentSubscription.plan.slice(1);
+		planNameEl.textContent = `${planDisplay} Plan`;
+
+		// Style based on plan
+		if (currentSubscription.plan === 'pro') {
+			planNameEl.style.color = '#7b1fa2';
+		} else if (currentSubscription.plan === 'business') {
+			planNameEl.style.color = '#2196f3';
+		}
+	}
+
+	if (planDetailsEl) {
+		if (currentSubscription.plan === 'free') {
+			planDetailsEl.innerHTML = `
         ${currentSubscription.tripsThisMonth}/${currentSubscription.maxTrips} trips used<br>
         <span style="font-size: 11px;">Resets ${new Date(currentSubscription.resetDate).toLocaleDateString()}</span>
       `;
-    } else {
-      planDetailsEl.innerHTML = `<span style="color: #4caf50;">✓ Unlimited trips</span>`;
-    }
-  }
-  
-  // Update button text/action based on plan
-  const upgradeButton = document.querySelector('#subscription-info button');
-  if (upgradeButton) {
-    if (currentSubscription.plan === 'free') {
-      upgradeButton.textContent = '⭐ Upgrade to Pro';
-      upgradeButton.onclick = () => { closeMenu(); showUpgradeModal(); };
-    } else {
-      upgradeButton.textContent = '⚙️ Manage Subscription';
-      upgradeButton.onclick = () => { closeMenu(); openCustomerPortal(); };
-      upgradeButton.style.background = 'linear-gradient(135deg, #2196f3, #1976d2)';
-    }
-  }
+		} else {
+			planDetailsEl.innerHTML = `<span style="color: #4caf50;">✓ Unlimited trips</span>`;
+		}
+	}
+
+	// Update button text/action based on plan
+	const upgradeButton = document.querySelector('#subscription-info button');
+	if (upgradeButton) {
+		if (currentSubscription.plan === 'free') {
+			upgradeButton.textContent = '⭐ Upgrade to Pro';
+			upgradeButton.onclick = () => {
+				closeMenu();
+				showUpgradeModal();
+			};
+		} else {
+			upgradeButton.textContent = '⚙️ Manage Subscription';
+			upgradeButton.onclick = () => {
+				closeMenu();
+				openCustomerPortal();
+			};
+			upgradeButton.style.background = 'linear-gradient(135deg, #2196f3, #1976d2)';
+		}
+	}
 }
 
 // Check subscription before logging trip
 async function canLogTrip() {
-  const token = localStorage.getItem("token");
-  if (!token) return true; // Local-only users can always log
-  
-  if (!currentSubscription) {
-    await checkSubscriptionStatus();
-  }
-  
-  if (!currentSubscription) return true; // Fallback if check fails
-  
-  if (currentSubscription.plan === 'free') {
-    return currentSubscription.tripsThisMonth < currentSubscription.maxTrips;
-  }
-  
-  return true; // Pro/Business have unlimited
+	const token = localStorage.getItem('token');
+	if (!token) return true; // Local-only users can always log
+
+	if (!currentSubscription) {
+		await checkSubscriptionStatus();
+	}
+
+	if (!currentSubscription) return true; // Fallback if check fails
+
+	if (currentSubscription.plan === 'free') {
+		return currentSubscription.tripsThisMonth < currentSubscription.maxTrips;
+	}
+
+	return true; // Pro/Business have unlimited
 }
 
 // Override the original logResults function
 const originalLogResults = window.logResults;
 if (typeof originalLogResults === 'function') {
-  window.logResults = async function() {
-    const destinationInputs = document.querySelectorAll('input[id^="destination-"]');
-    const filledDestinations = Array.from(destinationInputs).filter(input => input.value.trim() !== "");
-    if (filledDestinations.length === 0) {
-      showAlertModal("⚠️ Please enter at least one destination before logging your route.");
-      return;
-    }
+	window.logResults = async function () {
+		const destinationInputs = document.querySelectorAll('input[id^="destination-"]');
+		const filledDestinations = Array.from(destinationInputs).filter(
+			(input) => input.value.trim() !== ''
+		);
+		if (filledDestinations.length === 0) {
+			showAlertModal('⚠️ Please enter at least one destination before logging your route.');
+			return;
+		}
 
-    // Check if user can log trip
-    const canLog = await canLogTrip();
-    if (!canLog) {
-      showTripLimitReached();
-      return;
-    }
+		// Check if user can log trip
+		const canLog = await canLogTrip();
+		if (!canLog) {
+			showTripLimitReached();
+			return;
+		}
 
-    // Call original function
-    await originalLogResults.call(this);
-    
-    // Refresh subscription status after logging
-    const token = localStorage.getItem("token");
-    if (token) {
-      await checkSubscriptionStatus();
-    }
-  };
+		// Call original function
+		await originalLogResults.call(this);
+
+		// Refresh subscription status after logging
+		const token = localStorage.getItem('token');
+		if (token) {
+			await checkSubscriptionStatus();
+		}
+	};
 }
-
 
 // Also check after successful auth
 const originalUpdateAuthUI = window.updateAuthUI;
 if (typeof originalUpdateAuthUI === 'function') {
-  window.updateAuthUI = async function() {
-    await originalUpdateAuthUI.call(this);
-    const token = localStorage.getItem("token");
-    if (token) {
-      await checkSubscriptionStatus();
-    }
-  };
+	window.updateAuthUI = async function () {
+		await originalUpdateAuthUI.call(this);
+		const token = localStorage.getItem('token');
+		if (token) {
+			await checkSubscriptionStatus();
+		}
+	};
 }
 
-console.log("✅ Subscription integration loaded");
+console.log('✅ Subscription integration loaded');

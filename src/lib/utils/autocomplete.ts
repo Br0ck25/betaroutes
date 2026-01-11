@@ -17,6 +17,11 @@ export async function loadGoogleMaps(apiKey: string): Promise<void> {
 		return Promise.reject(new Error('No API key'));
 	}
 
+	if (typeof document === 'undefined') {
+		googleMapsError = true;
+		return Promise.reject(new Error('Document not available')); // Server-side: cannot load maps
+	}
+
 	const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
 	if (existingScript) {
 		loadingPromise = new Promise((resolve) => {

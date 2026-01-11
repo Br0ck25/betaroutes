@@ -31,6 +31,7 @@
 	});
 
 	function scrollTo(id: string) {
+		if (typeof document === 'undefined') return;
 		const el = document.getElementById(id);
 		// Set the active tab immediately for instant feedback while we smooth-scroll
 		if (id) active = id;

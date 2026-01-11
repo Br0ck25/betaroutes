@@ -8,10 +8,10 @@
 	const dispatch = createEventDispatcher();
 
 	export let open = false;
-	export let API_KEY: string;
+	export let API_KEY: string = '';
 
+	export let activeCategoryType: 'maintenance' | 'supplies' | 'expenses' = 'maintenance';
 	let settingsTab: 'defaults' | 'categories' = 'defaults';
-	let activeCategoryType: 'maintenance' | 'supplies' = 'maintenance';
 	let newCategoryName = '';
 	let settings = { ...$userSettings };
 
@@ -21,7 +21,9 @@
 	$: activeCategories =
 		activeCategoryType === 'maintenance'
 			? $userSettings.maintenanceCategories || ['oil change', 'repair']
-			: $userSettings.supplyCategories || ['water', 'snacks'];
+			: activeCategoryType === 'supplies'
+				? $userSettings.supplyCategories || ['water', 'snacks']
+				: $userSettings.expenseCategories || ['maintenance', 'insurance', 'supplies', 'other'];
 
 	function handleAddressSelect(field: 'start' | 'end', e: CustomEvent) {
 		const val = e.detail.formatted_address || e.detail.name;
@@ -30,6 +32,24 @@
 	}
 
 	let isSaving = false;
+	let didSave = false; // tracks whether user clicked Save Defaults
+	// When modal opens/closes, keep a copy of persisted settings and reset staged values when closed without saving
+	$: if (open) {
+		didSave = false;
+		settings = { ...$userSettings };
+		gasDisplay =
+			settings?.defaultGasPrice != null ? Number(settings.defaultGasPrice).toFixed(2) : '';
+	}
+	$: if (!open) {
+		// If the modal is being closed without saving, reset staged changes
+		if (!didSave) {
+			settings = { ...$userSettings };
+			gasDisplay =
+				settings?.defaultGasPrice != null ? Number(settings.defaultGasPrice).toFixed(2) : '';
+		}
+		// reset flag for next open
+		didSave = false;
+	}
 
 	import { saveSettings } from '../../settings/lib/save-settings';
 
@@ -37,6 +57,17 @@
 		if (isSaving) return;
 		if (console && console.debug) console.debug('[settings] saveDefaultSettings', settings);
 		isSaving = true;
+
+		// Commit staged gas display into settings before saving
+		try {
+			const parsed = parseFloat(String(gasDisplay).replace(/,/g, '.'));
+			const n = isNaN(parsed) ? 0 : parsed;
+			settings.defaultGasPrice = n;
+		} catch (_e) {
+			// ignore parsing errors — defaults will be enforced server-side
+		}
+
+		// Persist to the userSettings store and backend
 		userSettings.set(settings);
 		try {
 			const result = await saveSettings(settings);
@@ -44,6 +75,7 @@
 			toasts.success('Default values saved!');
 			dispatch('success', 'Default values saved!');
 			// Close modal on success
+			didSave = true;
 			open = false;
 		} catch (e) {
 			console.error('Sync error:', e);
@@ -58,9 +90,12 @@
 		if (activeCategoryType === 'maintenance') {
 			userSettings.update((s) => ({ ...s, maintenanceCategories: newCategories }));
 			updateData.maintenanceCategories = newCategories;
-		} else {
+		} else if (activeCategoryType === 'supplies') {
 			userSettings.update((s) => ({ ...s, supplyCategories: newCategories }));
 			updateData.supplyCategories = newCategories;
+		} else {
+			userSettings.update((s) => ({ ...s, expenseCategories: newCategories }));
+			updateData.expenseCategories = newCategories;
 		}
 
 		try {
@@ -92,6 +127,38 @@
 		await updateCategories(updated);
 		toasts.success('Category removed');
 		dispatch('success', 'Category removed');
+	}
+
+	/* Gas price display handling: keep a formatted string for UI and sync to settings */
+	let gasDisplay: string =
+		settings?.defaultGasPrice != null ? Number(settings.defaultGasPrice).toFixed(2) : '';
+
+	$: if (settings) {
+		// only update display from settings when not actively editing
+		if (
+			typeof document !== 'undefined' &&
+			document.activeElement &&
+			(document.activeElement as HTMLElement).id !== 'default-gas'
+		) {
+			gasDisplay =
+				settings.defaultGasPrice != null ? Number(settings.defaultGasPrice).toFixed(2) : '';
+		}
+	}
+
+	function formatGas() {
+		// normalize comma to dot and only update the staged display value.
+		const parsed = parseFloat(String(gasDisplay).replace(/,/g, '.'));
+		const n = isNaN(parsed) ? 0 : parsed;
+		const formatted = n.toFixed(2);
+		gasDisplay = formatted;
+		// NOTE: do NOT write to `settings.defaultGasPrice` here — only commit on Save.
+	}
+
+	function onGasInput(e: Event) {
+		// allow only digits, dot, comma
+		const el = e.target as HTMLInputElement;
+		el.value = el.value.replace(/[^0-9.,]/g, '');
+		gasDisplay = el.value;
 	}
 </script>
 
@@ -133,16 +200,18 @@
 					<label for="default-gas" class="block text-sm font-medium text-gray-700 mb-1"
 						>Default Gas Price</label
 					>
-					<div class="relative">
-						<span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+					<div class="money-input">
+						<span class="money-symbol">$</span>
 						<input
 							id="default-gas"
-							type="number"
-							bind:value={settings.defaultGasPrice}
-							placeholder="3.50"
-							min="0"
-							step="0.01"
-							class="w-full p-2 pl-7 border rounded-lg"
+							type="text"
+							inputmode="decimal"
+							bind:value={gasDisplay}
+							on:input={onGasInput}
+							on:blur={formatGas}
+							placeholder="0.00"
+							aria-label="Default gas price"
+							class="money-input-field"
 						/>
 					</div>
 				</div>
@@ -201,6 +270,11 @@
 						class="tab-btn"
 						class:active={activeCategoryType === 'supplies'}
 						on:click={() => (activeCategoryType = 'supplies')}>Supplies</button
+					>
+					<button
+						class="tab-btn"
+						class:active={activeCategoryType === 'expenses'}
+						on:click={() => (activeCategoryType = 'expenses')}>Expenses</button
 					>
 				</div>
 
@@ -359,6 +433,73 @@
 	}
 
 	.settings-form input:focus {
+		outline: none;
+		border-color: #ff7f50;
+		box-shadow: 0 0 0 4px rgba(255, 127, 80, 0.08);
+	}
+
+	/* Visual-only $ inside the input field */
+	.money-input {
+		position: relative;
+	}
+	/* Adaptive money input: tighter defaults to avoid excessive spacing */
+	.money-input {
+		position: relative;
+		/* anchor the symbol in pixels and compute pad from that + estimated width */
+		--money-symbol-offset: 12px; /* pixel anchor */
+		--money-symbol-gap: 0.5ch; /* small buffer for symbol width */
+		--money-pad: calc(var(--money-symbol-offset) + 1ch + var(--money-symbol-gap));
+	}
+	@media (min-width: 768px) {
+		.money-input {
+			--money-symbol-offset: 12px;
+			--money-symbol-gap: 0.6ch;
+			--money-pad: calc(var(--money-symbol-offset) + 1ch + var(--money-symbol-gap));
+		}
+	}
+	.money-symbol {
+		position: absolute;
+		left: var(--money-symbol-offset);
+		top: 50%;
+		transform: translateY(-50%);
+		color: #6b7280;
+		font-weight: 600;
+		pointer-events: none;
+		z-index: 2;
+		min-width: 1.2ch;
+		text-align: left;
+	}
+	.money-input-field {
+		width: 100%;
+		/* smaller, balanced minimum padding that keeps the field compact */
+		padding: 10px 12px 10px 12px; /* fallback */
+		padding-left: max(var(--money-pad), 1.73rem); /* ~10% reduction from previous */
+		border: 1px solid #e5e7eb;
+		border-radius: 8px;
+		background: white;
+		box-sizing: border-box;
+		font-size: 16px;
+	}
+	/* ensure higher-specificity override inside modal */
+	.settings-form .money-input .money-input-field {
+		padding-left: max(var(--money-pad), 1.73rem);
+	}
+
+	/* Slightly reduce the enforced minimum on very small screens */
+	@media (max-width: 420px) {
+		.money-input-field {
+			padding-left: max(var(--money-pad), 1.44rem);
+		}
+		.money-symbol {
+			left: 10px;
+		}
+	}
+	.money-input-field:focus {
+		outline: none;
+		border-color: #ff7f50;
+		box-shadow: 0 0 0 4px rgba(255, 127, 80, 0.08);
+	}
+	.money-input-field:focus {
 		outline: none;
 		border-color: #ff7f50;
 		box-shadow: 0 0 0 4px rgba(255, 127, 80, 0.08);

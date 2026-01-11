@@ -12,16 +12,83 @@
 		return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
 	}
 
-	// Use categories from settings, default to basic if empty
-	let categoryOptions: string[] = ['maintenance', 'insurance', 'supplies', 'other'];
-	$: categoryOptions =
-		$userSettings.expenseCategories?.length > 0 ? $userSettings.expenseCategories : categoryOptions;
+	import SettingsModal from '../../trips/components/SettingsModal.svelte';
+
+	// Category options derived from user settings (grouped)
+	$: maintenanceOptions =
+		$userSettings.maintenanceCategories?.length > 0
+			? $userSettings.maintenanceCategories
+			: ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement'];
+	$: suppliesOptions =
+		$userSettings.supplyCategories?.length > 0
+			? $userSettings.supplyCategories
+			: ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental'];
+	$: expenseOptions =
+		$userSettings.expenseCategories?.length > 0
+			? $userSettings.expenseCategories
+			: ['maintenance', 'insurance', 'supplies', 'other'];
+
+	let selectedMaintenance = '';
+	let selectedSupply = '';
+	let selectedExpense = '';
+
+	let isManageCategoriesOpen = false;
+	let activeCategoryType: 'maintenance' | 'supplies' | 'expenses' = 'maintenance';
+
+	// Keep the selectedX in sync with formData.category
+	$: if (formData.category) {
+		if (maintenanceOptions.includes(formData.category)) {
+			selectedMaintenance = formData.category;
+			selectedSupply = '';
+			selectedExpense = '';
+		} else if (suppliesOptions.includes(formData.category)) {
+			selectedSupply = formData.category;
+			selectedMaintenance = '';
+			selectedExpense = '';
+		} else if (expenseOptions.includes(formData.category)) {
+			selectedExpense = formData.category;
+			selectedMaintenance = '';
+			selectedSupply = '';
+		} else {
+			selectedMaintenance = '';
+			selectedSupply = '';
+			selectedExpense = '';
+		}
+	}
+
+	function openSettings(type: 'maintenance' | 'supplies' | 'expenses') {
+		activeCategoryType = type;
+		isManageCategoriesOpen = true;
+	}
+
+	function selectMaintenance() {
+		if (!selectedMaintenance) return;
+		formData.category = selectedMaintenance;
+		// clear other selections
+		selectedSupply = '';
+		selectedExpense = '';
+	}
+
+	function selectSupply() {
+		if (!selectedSupply) return;
+		formData.category = selectedSupply;
+		selectedMaintenance = '';
+		selectedExpense = '';
+	}
+
+	function selectExpense() {
+		if (!selectedExpense) return;
+		formData.category = selectedExpense;
+		selectedMaintenance = '';
+		selectedSupply = '';
+	}
 
 	let formData = {
 		date: getLocalDate(),
 		category: '',
 		amount: '',
-		description: ''
+		description: '',
+		taxDeductible: false
 	};
 
 	// Reference to amount input so quick-action can focus it
@@ -30,9 +97,14 @@
 	$: {
 		const q = $page.url.searchParams.get('category');
 		if (q) {
-			// ensure the queried category appears in the select options
-			if (!categoryOptions.includes(q)) {
-				categoryOptions = [q, ...categoryOptions];
+			// ensure the queried category appears in the available options (preferring expenseOptions)
+			if (
+				!maintenanceOptions.includes(q) &&
+				!suppliesOptions.includes(q) &&
+				!expenseOptions.includes(q)
+			) {
+				// eslint-disable-next-line svelte/no-reactive-reassign
+				expenseOptions = [q, ...expenseOptions];
 			}
 			formData.category = q;
 			// if arrived via quick action, focus the amount input for quick logging
@@ -71,10 +143,6 @@
 			toasts.error('Failed to save expense');
 		}
 	}
-
-	function getCategoryLabel(cat: string) {
-		return cat.charAt(0).toUpperCase() + cat.slice(1);
-	}
 </script>
 
 <div class="expense-form-page">
@@ -108,14 +176,174 @@
 			</div>
 
 			<div class="form-row">
-				<div class="form-group">
-					<label for="category">Category</label>
-					<div class="select-wrapper">
-						<select id="category" bind:value={formData.category} aria-label="Expense category">
-							{#each categoryOptions as cat}
-								<option value={cat}>{getCategoryLabel(cat)}</option>
+				<div class="section-group">
+					<div class="section-top">
+						<h3>Maintenance</h3>
+						<button
+							class="btn-icon gear"
+							on:click={() => openSettings('maintenance')}
+							title="Manage Options"
+						>
+							<svg
+								width="20"
+								height="20"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								><circle cx="12" cy="12" r="3"></circle><path
+									d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+								></path></svg
+							>
+						</button>
+					</div>
+
+					<div class="add-row">
+						<select
+							id="maintenance-select"
+							name="maintenance"
+							bind:value={selectedMaintenance}
+							on:change={selectMaintenance}
+							class="select-input"
+							aria-label="Maintenance type"
+							disabled={!!formData.category && !maintenanceOptions.includes(formData.category)}
+						>
+							<option value="" disabled selected>Select Item...</option>
+							{#each maintenanceOptions as option}
+								<option value={option}>{option}</option>
 							{/each}
 						</select>
+						{#if maintenanceOptions.includes(formData.category)}
+							<button
+								class="btn-small neutral"
+								on:click={() => {
+									formData.category = '';
+									selectedMaintenance = '';
+								}}>Clear</button
+							>
+						{:else}
+							<button
+								class="btn-small primary"
+								on:click={() => (formData.category = selectedMaintenance)}
+								disabled={!selectedMaintenance}>Choose</button
+							>
+						{/if}
+					</div>
+				</div>
+
+				<div class="section-group">
+					<div class="section-top">
+						<h3>Supplies</h3>
+						<button
+							class="btn-icon gear"
+							on:click={() => openSettings('supplies')}
+							title="Manage Options"
+						>
+							<svg
+								width="20"
+								height="20"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								><circle cx="12" cy="12" r="3"></circle><path
+									d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+								></path></svg
+							>
+						</button>
+					</div>
+
+					<div class="add-row">
+						<select
+							id="supplies-select"
+							name="supplies"
+							bind:value={selectedSupply}
+							on:change={selectSupply}
+							class="select-input"
+							aria-label="Supply type"
+							disabled={!!formData.category && !suppliesOptions.includes(formData.category)}
+						>
+							<option value="" disabled selected>Select Item...</option>
+							{#each suppliesOptions as option}
+								<option value={option}>{option}</option>
+							{/each}
+						</select>
+						{#if suppliesOptions.includes(formData.category)}
+							<button
+								class="btn-small neutral"
+								on:click={() => {
+									formData.category = '';
+									selectedSupply = '';
+								}}>Clear</button
+							>
+						{:else}
+							<button
+								class="btn-small primary"
+								on:click={() => (formData.category = selectedSupply)}
+								disabled={!selectedSupply}>Choose</button
+							>
+						{/if}
+					</div>
+				</div>
+
+				<div class="section-group">
+					<div class="section-top">
+						<h3>Expenses</h3>
+						<button
+							class="btn-icon gear"
+							on:click={() => openSettings('expenses')}
+							title="Manage Options"
+						>
+							<svg
+								width="20"
+								height="20"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								><circle cx="12" cy="12" r="3"></circle><path
+									d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+								></path></svg
+							>
+						</button>
+					</div>
+
+					<div class="add-row">
+						<select
+							id="expense-select"
+							name="expenseCategory"
+							bind:value={selectedExpense}
+							on:change={selectExpense}
+							class="select-input"
+							aria-label="Expense category"
+							disabled={!!formData.category && !expenseOptions.includes(formData.category)}
+						>
+							<option value="" disabled selected>Select Item...</option>
+							{#each expenseOptions as option}
+								<option value={option}>{option}</option>
+							{/each}
+						</select>
+						{#if expenseOptions.includes(formData.category)}
+							<button
+								class="btn-small neutral"
+								on:click={() => {
+									formData.category = '';
+									selectedExpense = '';
+								}}>Clear</button
+							>
+						{:else}
+							<button
+								class="btn-small primary"
+								on:click={() => (formData.category = selectedExpense)}
+								disabled={!selectedExpense}>Choose</button
+							>
+						{/if}
 					</div>
 				</div>
 
@@ -125,6 +353,7 @@
 						<span class="symbol">$</span>
 						<input
 							id="amount"
+							name="amount"
 							type="number"
 							step="0.01"
 							bind:value={formData.amount}
@@ -139,12 +368,28 @@
 				<label for="description">Description</label>
 				<textarea
 					id="description"
+					name="description"
 					bind:value={formData.description}
 					rows="3"
 					placeholder="e.g., Oil Change at Jiffy Lube"
 				></textarea>
 			</div>
+
+			<div class="form-group checkbox-group">
+				<label for="tax-deductible" class="inline-label">
+					<input
+						id="tax-deductible"
+						name="taxDeductible"
+						type="checkbox"
+						bind:checked={formData.taxDeductible}
+					/>
+					<span>Tax deductible</span>
+				</label>
+			</div>
 		</div>
+
+		<!-- Settings modal (manage maintenance/supplies/expenses categories) -->
+		<SettingsModal bind:open={isManageCategoriesOpen} bind:activeCategoryType />
 
 		<div class="form-actions">
 			<a href="/dashboard/expenses" class="btn-secondary">Cancel</a>
@@ -264,6 +509,71 @@
 	}
 	.input-money-wrapper input {
 		padding-left: 36px;
+	}
+
+	.section-group {
+		margin-bottom: 24px;
+	}
+	.section-top {
+		display: flex;
+		justify-content: space-between;
+		margin-bottom: 12px;
+		align-items: center;
+	}
+	.section-top h3 {
+		font-size: 16px;
+		font-weight: 700;
+		margin: 0;
+	}
+	.add-row {
+		display: flex;
+		gap: 12px;
+		margin-bottom: 12px;
+	}
+	.select-input {
+		flex: 1;
+		padding: 12px;
+		border: 1px solid #e5e7eb;
+		border-radius: 10px;
+		font-size: 16px;
+		background: white;
+		color: #374151;
+	}
+	.btn-icon.gear {
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 6px;
+		color: #6b7280;
+	}
+	.btn-small.primary {
+		padding: 8px 12px;
+		background: linear-gradient(135deg, #ff7f50 0%, #ff6a3d 100%);
+		color: white;
+		border-radius: 8px;
+		border: none;
+		font-weight: 600;
+	}
+	.btn-small.neutral {
+		padding: 8px 12px;
+		background: white;
+		border-radius: 8px;
+		border: 1px solid #e5e7eb;
+		color: #374151;
+		font-weight: 600;
+	}
+
+	.form-group.checkbox-group .inline-label {
+		display: inline-flex;
+		align-items: center;
+		gap: 12px;
+		font-weight: 600;
+		color: #374151;
+	}
+	.form-group.checkbox-group input[type='checkbox'] {
+		width: 18px;
+		height: 18px;
+		accent-color: #ff7f50;
 	}
 
 	.form-actions {

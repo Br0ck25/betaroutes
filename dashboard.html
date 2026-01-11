@@ -1,325 +1,577 @@
-<!DOCTYPE html>
-<html lang="en" style="padding-bottom: env(safe-area-inset-bottom); background: white;">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta http-equiv="Cross-Origin-Opener-Policy" content="unsafe-none">
-    <title>Dashboard - Go Route Yourself</title>
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="dashboard.css">
-    <link rel="stylesheet" href="dashboard-enhanced.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-</head>
-<body style="
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #f4f4f9;
-    margin: 0;
-    padding: 40px 0;
-    padding-bottom: calc(100px + env(safe-area-inset-bottom));
-    display: flex;
-    justify-content: center;
-    flex-direction: column;
-    align-items: center;
-    overflow-x: hidden;
-">
+<!doctype html>
+<html lang="en" style="padding-bottom: env(safe-area-inset-bottom); background: white">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta http-equiv="Cross-Origin-Opener-Policy" content="unsafe-none" />
+		<title>Dashboard - Go Route Yourself</title>
+		<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+		<link rel="stylesheet" href="styles.css" />
+		<link rel="stylesheet" href="dashboard.css" />
+		<link rel="stylesheet" href="dashboard-enhanced.css" />
+		<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+	</head>
+	<body
+		style="
+			font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+			background-color: #f4f4f9;
+			margin: 0;
+			padding: 40px 0;
+			padding-bottom: calc(100px + env(safe-area-inset-bottom));
+			display: flex;
+			justify-content: center;
+			flex-direction: column;
+			align-items: center;
+			overflow-x: hidden;
+		"
+	>
+		<!-- Auth Message Banner -->
+		<div id="auth-message" style="display: none"></div>
 
-<!-- Auth Message Banner -->
-<div id="auth-message" style="display: none;"></div>
+		<!-- Offline Banner -->
+		<div id="offline-banner" style="display: none"></div>
 
-<!-- Offline Banner -->
-<div id="offline-banner" style="display: none;"></div>
+		<!-- TOP BAR - EXACT MATCH -->
+		<div
+			id="top-bar"
+			style="
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				position: fixed;
+				top: 0;
+				left: 0;
+				right: 0;
+				z-index: 1000;
+				background: white;
+				padding: 25px 0;
+				width: 100%;
+				max-width: 900px;
+				margin: 0 auto;
+				border-radius: 0;
+				box-shadow: none;
+				transition: none;
+			"
+		>
+			<div style="position: absolute; left: 12px; display: flex; align-items: center; height: 100%">
+				<button
+					id="hamburger-button"
+					onclick="toggleMenu()"
+					style="
+						background: none;
+						border: none;
+						font-size: 28px;
+						cursor: pointer;
+						color: black;
+						padding: 6px 10px;
+						border-radius: 8px;
+						transition: background-color 0.3s;
+						width: 50px;
+						height: 50px;
+						display: flex;
+						align-items: center;
+						justify-content: center;
+					"
+				>
+					<span class="material-icons">menu</span>
+				</button>
+			</div>
 
-<!-- TOP BAR - EXACT MATCH -->
-<div id="top-bar" style="
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  background: white;
-  padding: 25px 0;
-  width: 100%;
-  max-width: 900px;
-  margin: 0 auto;
-  border-radius: 0;
-  box-shadow: none;
-  transition: none;
-">
+			<img
+				id="logo-image"
+				src="/logo.png"
+				alt="Logo"
+				style="height: 50px; max-height: 70px; cursor: pointer"
+				onclick="window.scrollTo({ top: 0, behavior: 'smooth' })"
+			/>
 
-<div style="position: absolute; left: 12px; display: flex; align-items: center; height: 100%;">
-  <button id="hamburger-button" onclick="toggleMenu()" style="
-    background: none;
-    border: none;
-    font-size: 28px;
-    cursor: pointer;
-    color: black;
-    padding: 6px 10px;
-    border-radius: 8px;
-    transition: background-color 0.3s;
-    width: 50px;
-    height: 50px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  "><span class="material-icons">menu</span></button>
-</div>
+			<div
+				style="position: absolute; right: 22px; display: flex; align-items: center; height: 100%"
+			>
+				<span
+					id="username-display"
+					style="
+						font-size: 16px;
+						font-weight: bold;
+						background: none;
+						padding: 6px 10px;
+						border-radius: 8px;
+						color: black;
+						transition: background-color 0.3s;
+					"
+				></span>
+			</div>
+		</div>
 
-<img id="logo-image" src="/logo.png" alt="Logo" style="height: 50px; max-height: 70px; cursor: pointer;" onclick="window.scrollTo({top: 0, behavior: 'smooth'});">
+		<!-- HAMBURGER MENU -->
+		<div id="logout-message" style="display: none; margin: 20px auto; max-width: 100%">
+			<div id="account-menu">
+				<div style="position: relative; width: 100%; height: 50px">
+					<button
+						onclick="closeMenu()"
+						style="
+							position: absolute;
+							top: 10px;
+							right: 10px;
+							background: none;
+							border: none;
+							font-size: 24px;
+							font-weight: bold;
+							color: black;
+							cursor: pointer;
+							line-height: 1;
+							transition: transform 0.2s;
+						"
+						onmouseover="this.style.transform = 'scale(1.2)'"
+						onmouseout="this.style.transform = 'scale(1)'"
+					>
+						✕
+					</button>
+				</div>
 
-<div style="position: absolute; right: 22px; display: flex; align-items: center; height: 100%;">
-  <span id="username-display" style="
-    font-size: 16px;
-    font-weight: bold;
-    background: none;
-    padding: 6px 10px;
-    border-radius: 8px;
-    color: black;
-    transition: background-color 0.3s;
-  "></span>
-</div>
+				<div style="text-align: center; margin: 20px 0">
+					<img src="/logo.png" alt="Logo" style="height: 40px" />
+				</div>
 
-</div>
+				<div
+					id="subscription-info"
+					style="
+						background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+						padding: 15px;
+						margin: 10px;
+						border-radius: 8px;
+						text-align: center;
+					"
+				>
+					<div id="plan-name" style="font-weight: 600; color: #333; font-size: 16px">
+						Loading...
+					</div>
+					<div id="plan-details" style="font-size: 13px; color: #666; margin: 8px 0">
+						Please wait...
+					</div>
+				</div>
 
-<!-- HAMBURGER MENU -->
-<div id="logout-message" style="display: none; margin: 20px auto; max-width: 100%;">
-  <div id="account-menu">
-    <div style="position: relative; width: 100%; height: 50px;">
-      <button onclick="closeMenu()" style="
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        background: none;
-        border: none;
-        font-size: 24px;
-        font-weight: bold;
-        color: black;
-        cursor: pointer;
-        line-height: 1;
-        transition: transform 0.2s;
-      " onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">✕</button>
-    </div>
+				<div style="margin-top: 10px">
+					<button id="hamburger-manage-account-toggle" onclick="toggleHamburgerManageAccountMenu()">
+						Manage Account
+						<span
+							id="hamburger-manage-account-arrow"
+							style="display: inline-block; transition: transform 0.3s"
+							>▼</span
+						>
+					</button>
+					<div
+						id="hamburger-manage-account-menu"
+						style="
+							max-height: 0;
+							overflow: hidden;
+							transition: max-height 0.3s ease;
+							background: white;
+							border: 1px solid #ccc;
+							border-radius: 6px;
+							box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+							margin-top: 5px;
+							text-align: center;
+							padding: 0 10px;
+						"
+					>
+						<button
+							onclick="
+								closeMenu();
+								showPasswordModal();
+							"
+						>
+							Change Password
+						</button>
+						<button
+							onclick="
+								closeMenu();
+								showDeleteModal();
+							"
+							class="danger"
+						>
+							Delete Account
+						</button>
+					</div>
+				</div>
 
-    <div style="text-align: center; margin: 20px 0;">
-      <img src="/logo.png" alt="Logo" style="height: 40px;">
-    </div>
+				<button id="hamburger-manage-toggle" onclick="toggleHamburgerManageLogMenu()">
+					Manage Log
+					<span
+						id="hamburger-manage-arrow"
+						style="display: inline-block; transition: transform 0.3s"
+						>▼</span
+					>
+				</button>
+				<div
+					id="hamburger-manage-log-menu"
+					style="
+						max-height: 0;
+						overflow: hidden;
+						transition: max-height 0.3s ease;
+						background: white;
+						border: 1px solid #ccc;
+						border-radius: 6px;
+						box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+						margin-top: 5px;
+						text-align: center;
+						padding: 0 10px;
+					"
+				>
+					<button onclick="triggerImportFile()">Import CSV</button>
+					<button onclick="exportToCSVWithTotals()">Export CSV</button>
+					<button onclick="exportToPDFWithTotals()">Export PDF</button>
+				</div>
 
-    <div id="subscription-info" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 15px; margin: 10px; border-radius: 8px; text-align: center;">
-        <div id="plan-name" style="font-weight: 600; color: #333; font-size: 16px;">Loading...</div>
-        <div id="plan-details" style="font-size: 13px; color: #666; margin: 8px 0;">Please wait...</div>
-    </div>
+				<button id="hamburger-settings-toggle" onclick="toggleHamburgerSettingsMenu()">
+					Settings
+					<span
+						id="hamburger-settings-arrow"
+						style="display: inline-block; transition: transform 0.3s"
+						>▼</span
+					>
+				</button>
+				<div
+					id="hamburger-settings-menu"
+					style="
+						max-height: 0;
+						overflow: hidden;
+						transition: max-height 0.3s ease;
+						background: white;
+						border: 1px solid #ccc;
+						border-radius: 6px;
+						box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+						margin-top: 5px;
+						text-align: center;
+						padding: 0 10px;
+					"
+				>
+					<button onclick="installApp()">Install App</button>
+					<button onclick="window.open('/privacy-policy.html', '_blank')">Privacy Policy</button>
+					<button onclick="window.open('/faq.html', '_blank')">FAQ</button>
+				</div>
 
-    <div style="margin-top: 10px;">
-      <button id="hamburger-manage-account-toggle" onclick="toggleHamburgerManageAccountMenu()">
-        Manage Account <span id="hamburger-manage-account-arrow" style="display: inline-block; transition: transform 0.3s;">▼</span>
-      </button>
-      <div id="hamburger-manage-account-menu" style="max-height: 0; overflow: hidden; transition: max-height 0.3s ease; background: white; border: 1px solid #ccc; border-radius: 6px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15); margin-top: 5px; text-align: center; padding: 0 10px;">
-        <button onclick="closeMenu(); showPasswordModal()">Change Password</button>
-        <button onclick="closeMenu(); showDeleteModal()" class="danger">Delete Account</button>
-      </div>
-    </div>
+				<div style="padding: 0 10px">
+					<button
+						onclick="
+							closeMenu();
+							logout();
+						"
+					>
+						Log Out
+					</button>
+				</div>
+			</div>
+		</div>
 
-    <button id="hamburger-manage-toggle" onclick="toggleHamburgerManageLogMenu()">
-      Manage Log <span id="hamburger-manage-arrow" style="display: inline-block; transition: transform 0.3s;">▼</span>
-    </button>
-    <div id="hamburger-manage-log-menu" style="max-height: 0; overflow: hidden; transition: max-height 0.3s ease; background: white; border: 1px solid #ccc; border-radius: 6px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15); margin-top: 5px; text-align: center; padding: 0 10px;">
-      <button onclick="triggerImportFile()">Import CSV</button>
-      <button onclick="exportToCSVWithTotals()">Export CSV</button>
-      <button onclick="exportToPDFWithTotals()">Export PDF</button>
-    </div>
+		<!-- Main Dashboard - Use .container class from styles.css -->
+		<div class="dashboard-container" style="display: block; margin-top: 80px; width: 100%">
+			<div class="container">
+				<!-- Period Selector -->
+				<div class="period-selector">
+					<button class="period-btn active" onclick="changePeriod(7)">7 Days</button>
+					<button class="period-btn" onclick="changePeriod(30)">30 Days</button>
+					<button class="period-btn" onclick="changePeriod(90)">90 Days</button>
+				</div>
 
-    <button id="hamburger-settings-toggle" onclick="toggleHamburgerSettingsMenu()">
-      Settings <span id="hamburger-settings-arrow" style="display: inline-block; transition: transform 0.3s;">▼</span>
-    </button>
-    <div id="hamburger-settings-menu" style="max-height: 0; overflow: hidden; transition: max-height 0.3s ease; background: white; border: 1px solid #ccc; border-radius: 6px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15); margin-top: 5px; text-align: center; padding: 0 10px;">
-      <button onclick="installApp()">Install App</button>
-      <button onclick="window.open('/privacy-policy.html', '_blank')">Privacy Policy</button>
-      <button onclick="window.open('/faq.html', '_blank')">FAQ</button>
-    </div>
+				<!-- Enhanced Analytics (Pro/Business) -->
+				<div id="enhanced-analytics" style="display: none">
+					<div class="comparison-section">
+						<h2>Period Comparison</h2>
+						<div class="comparison-grid" id="comparison-metrics"></div>
+					</div>
 
-    <div style="padding: 0 10px;">
-      <button onclick="closeMenu(); logout()">Log Out</button>
-    </div>
-  </div>
-</div>
+					<div class="efficiency-section">
+						<h2>Efficiency Metrics</h2>
+						<div class="efficiency-grid" id="efficiency-metrics"></div>
+					</div>
 
-<!-- Main Dashboard - Use .container class from styles.css -->
-<div class="dashboard-container" style="display: block; margin-top: 80px; width: 100%;">
+					<div class="top-routes-section">
+						<h2>Top 10 Routes by Profitability</h2>
+						<div class="table-responsive">
+							<table class="routes-table">
+								<thead>
+									<tr>
+										<th>#</th>
+										<th>Route</th>
+										<th>Trips</th>
+										<th>Total Profit</th>
+										<th>$/Mile</th>
+										<th>$/Hour</th>
+									</tr>
+								</thead>
+								<tbody id="top-routes-table-body"></tbody>
+							</table>
+						</div>
+					</div>
+				</div>
 
-  <div class="container">
-    
-    <!-- Period Selector -->
-    <div class="period-selector">
-        <button class="period-btn active" onclick="changePeriod(7)">7 Days</button>
-        <button class="period-btn" onclick="changePeriod(30)">30 Days</button>
-        <button class="period-btn" onclick="changePeriod(90)">90 Days</button>
-    </div>
+				<!-- Stats Cards -->
+				<div class="stats-grid">
+					<div class="stat-card">
+						<div
+							class="stat-icon"
+							style="background: linear-gradient(135deg, #4caf50 0%, #45a049 100%)"
+						>
+							<span class="material-icons">attach_money</span>
+						</div>
+						<div class="stat-content">
+							<div class="stat-label">Total Profit</div>
+							<div class="stat-value" id="total-profit">$0.00</div>
+							<div class="stat-change" id="profit-change"></div>
+						</div>
+					</div>
 
-    <!-- Enhanced Analytics (Pro/Business) -->
-    <div id="enhanced-analytics" style="display: none;">
-        <div class="comparison-section">
-            <h2>Period Comparison</h2>
-            <div class="comparison-grid" id="comparison-metrics"></div>
-        </div>
+					<div class="stat-card">
+						<div
+							class="stat-icon"
+							style="background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%)"
+						>
+							<span class="material-icons">route</span>
+						</div>
+						<div class="stat-content">
+							<div class="stat-label">Total Trips</div>
+							<div class="stat-value" id="total-trips">0</div>
+							<div class="stat-change" id="trips-change"></div>
+						</div>
+					</div>
 
-        <div class="efficiency-section">
-            <h2>Efficiency Metrics</h2>
-            <div class="efficiency-grid" id="efficiency-metrics"></div>
-        </div>
+					<div class="stat-card">
+						<div
+							class="stat-icon"
+							style="background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%)"
+						>
+							<span class="material-icons">speed</span>
+						</div>
+						<div class="stat-content">
+							<div class="stat-label">Avg Profit/Hour</div>
+							<div class="stat-value" id="avg-profit-hour">$0.00</div>
+							<div class="stat-change" id="profit-hour-change"></div>
+						</div>
+					</div>
 
-        <div class="top-routes-section">
-            <h2>Top 10 Routes by Profitability</h2>
-            <div class="table-responsive">
-                <table class="routes-table">
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Route</th>
-                            <th>Trips</th>
-                            <th>Total Profit</th>
-                            <th>$/Mile</th>
-                            <th>$/Hour</th>
-                        </tr>
-                    </thead>
-                    <tbody id="top-routes-table-body"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+					<div class="stat-card">
+						<div
+							class="stat-icon"
+							style="background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%)"
+						>
+							<span class="material-icons">local_gas_station</span>
+						</div>
+						<div class="stat-content">
+							<div class="stat-label">Fuel Costs</div>
+							<div class="stat-value" id="fuel-costs">$0.00</div>
+							<div class="stat-change" id="fuel-change"></div>
+						</div>
+					</div>
+				</div>
 
-    <!-- Stats Cards -->
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-icon" style="background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);">
-                <span class="material-icons">attach_money</span>
-            </div>
-            <div class="stat-content">
-                <div class="stat-label">Total Profit</div>
-                <div class="stat-value" id="total-profit">$0.00</div>
-                <div class="stat-change" id="profit-change"></div>
-            </div>
-        </div>
+				<!-- Charts -->
+				<div class="charts-grid">
+					<div class="chart-card">
+						<h3>Profit Trend</h3>
+						<canvas id="profit-chart"></canvas>
+					</div>
 
-        <div class="stat-card">
-            <div class="stat-icon" style="background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);">
-                <span class="material-icons">route</span>
-            </div>
-            <div class="stat-content">
-                <div class="stat-label">Total Trips</div>
-                <div class="stat-value" id="total-trips">0</div>
-                <div class="stat-change" id="trips-change"></div>
-            </div>
-        </div>
+					<div class="chart-card">
+						<h3>Cost Breakdown</h3>
+						<canvas id="cost-chart"></canvas>
+					</div>
+				</div>
 
-        <div class="stat-card">
-            <div class="stat-icon" style="background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);">
-                <span class="material-icons">speed</span>
-            </div>
-            <div class="stat-content">
-                <div class="stat-label">Avg Profit/Hour</div>
-                <div class="stat-value" id="avg-profit-hour">$0.00</div>
-                <div class="stat-change" id="profit-hour-change"></div>
-            </div>
-        </div>
+				<!-- Recent Trips Table -->
+				<div class="recent-trips-card" style="margin-bottom: 100px">
+					<h3>Recent Trips</h3>
+					<div class="table-responsive">
+						<table class="trips-table">
+							<thead>
+								<tr>
+									<th>Date</th>
+									<th>Route</th>
+									<th>Stops</th>
+									<th>Miles</th>
+									<th>Profit</th>
+									<th>Actions</th>
+								</tr>
+							</thead>
+							<tbody id="recent-trips-table"></tbody>
+						</table>
+					</div>
+					<button
+						onclick="toggleViewAll()"
+						id="view-all-trips-button"
+						style="margin-top: 20px; width: 100%"
+					>
+						View All Trips
+					</button>
+				</div>
+			</div>
+		</div>
 
-        <div class="stat-card">
-            <div class="stat-icon" style="background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);">
-                <span class="material-icons">local_gas_station</span>
-            </div>
-            <div class="stat-content">
-                <div class="stat-label">Fuel Costs</div>
-                <div class="stat-value" id="fuel-costs">$0.00</div>
-                <div class="stat-change" id="fuel-change"></div>
-            </div>
-        </div>
-    </div>
+		<!-- Empty State -->
+		<div
+			id="empty-state"
+			class="container"
+			style="display: none; text-align: center; padding: 60px 20px"
+		>
+			<span class="material-icons" style="font-size: 80px; color: #ccc">route</span>
+			<h2>No Trips Yet</h2>
+			<p>Start logging your routes to see analytics here.</p>
+			<button onclick="window.location.href = 'index.html'">Log Your First Trip</button>
+		</div>
 
-    <!-- Charts -->
-    <div class="charts-grid">
-        <div class="chart-card">
-            <h3>Profit Trend</h3>
-            <canvas id="profit-chart"></canvas>
-        </div>
+		<!-- UNIVERSAL MODAL -->
+		<div
+			id="universal-modal"
+			style="
+				display: none;
+				position: fixed;
+				top: 0;
+				left: 0;
+				width: 100%;
+				height: 100%;
+				background: rgba(0, 0, 0, 0.6);
+				z-index: 3000;
+				justify-content: center;
+				align-items: center;
+			"
+		>
+			<div
+				class="modal-box"
+				style="
+					background: white;
+					padding: 30px;
+					border-radius: 10px;
+					width: 90%;
+					max-width: 400px;
+					text-align: center;
+				"
+			>
+				<h3 id="universal-modal-message"></h3>
+				<div id="universal-modal-buttons" style="margin-top: 20px"></div>
+			</div>
+		</div>
 
-        <div class="chart-card">
-            <h3>Cost Breakdown</h3>
-            <canvas id="cost-chart"></canvas>
-        </div>
-    </div>
+		<!-- PASSWORD MODAL -->
+		<div
+			id="change-password-modal"
+			style="
+				display: none;
+				position: fixed;
+				top: 0;
+				left: 0;
+				width: 100%;
+				height: 100%;
+				background: rgba(0, 0, 0, 0.6);
+				justify-content: center;
+				align-items: center;
+				z-index: 2000;
+			"
+		>
+			<div onclick="event.stopPropagation()" class="modal-box">
+				<h3>Change Password</h3>
+				<input
+					type="password"
+					id="current-password"
+					placeholder="Current password"
+					style="
+						width: 100%;
+						margin-bottom: 10px;
+						box-sizing: border-box;
+						padding: 10px;
+						font-size: 16px;
+						line-height: 1.4;
+					"
+				/>
+				<input
+					type="password"
+					id="new-password"
+					placeholder="New password"
+					style="
+						width: 100%;
+						margin-bottom: 10px;
+						box-sizing: border-box;
+						padding: 10px;
+						font-size: 16px;
+						line-height: 1.4;
+					"
+				/>
+				<input
+					type="password"
+					id="confirm-password"
+					placeholder="Confirm new password"
+					style="
+						width: 100%;
+						margin-bottom: 10px;
+						box-sizing: border-box;
+						padding: 10px;
+						font-size: 16px;
+						line-height: 1.4;
+					"
+				/>
+				<button
+					onclick="submitPasswordChange()"
+					style="width: 100%; padding: 10px; font-size: 16px"
+				>
+					Submit
+				</button>
+				<button
+					onclick="closePasswordModal()"
+					style="width: 100%; margin-top: 10px; background: #ccc; padding: 10px; font-size: 16px"
+				>
+					Cancel
+				</button>
+			</div>
+		</div>
 
-    <!-- Recent Trips Table -->
-    <div class="recent-trips-card" style="margin-bottom: 100px;">
-        <h3>Recent Trips</h3>
-        <div class="table-responsive">
-            <table class="trips-table">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Route</th>
-                        <th>Stops</th>
-                        <th>Miles</th>
-                        <th>Profit</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="recent-trips-table"></tbody>
-            </table>
-        </div>
-        <button onclick="toggleViewAll()" id="view-all-trips-button" style="margin-top: 20px; width: 100%;">View All Trips</button>
-    </div>
+		<!-- DELETE MODAL -->
+		<div
+			id="delete-account-modal"
+			style="
+				display: none;
+				position: fixed;
+				top: 0;
+				left: 0;
+				width: 100%;
+				height: 100%;
+				background: rgba(0, 0, 0, 0.6);
+				justify-content: center;
+				align-items: center;
+				z-index: 2000;
+			"
+		>
+			<div onclick="event.stopPropagation()" class="modal-box">
+				<h3>Delete Account</h3>
+				<p style="font-size: 14px; color: red">⚠ This action is permanent.</p>
+				<input
+					type="password"
+					id="delete-password"
+					placeholder="Confirm password"
+					style="
+						width: 100%;
+						max-width: 400px;
+						margin: 0 auto 10px auto;
+						display: block;
+						padding: 10px;
+						box-sizing: border-box;
+					"
+				/>
+				<button onclick="submitDeleteAccount()" style="width: 100%; background: red; color: white">
+					Delete My Account
+				</button>
+				<button
+					onclick="closeDeleteModal()"
+					style="width: 100%; margin-top: 10px; background: #ccc"
+				>
+					Cancel
+				</button>
+			</div>
+		</div>
 
-  </div>
-
-</div>
-
-<!-- Empty State -->
-<div id="empty-state" class="container" style="display: none; text-align: center; padding: 60px 20px;">
-    <span class="material-icons" style="font-size: 80px; color: #ccc;">route</span>
-    <h2>No Trips Yet</h2>
-    <p>Start logging your routes to see analytics here.</p>
-    <button onclick="window.location.href='index.html'">Log Your First Trip</button>
-</div>
-
-<!-- UNIVERSAL MODAL -->
-<div id="universal-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); z-index: 3000; justify-content: center; align-items: center;">
-    <div class="modal-box" style="background: white; padding: 30px; border-radius: 10px; width: 90%; max-width: 400px; text-align: center;">
-      <h3 id="universal-modal-message"></h3>
-      <div id="universal-modal-buttons" style="margin-top: 20px;"></div>
-    </div>
-</div>
-
-<!-- PASSWORD MODAL -->
-<div id="change-password-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); justify-content: center; align-items: center; z-index: 2000;">
-  <div onclick="event.stopPropagation()" class="modal-box">
-    <h3>Change Password</h3>
-    <input type="password" id="current-password" placeholder="Current password" style="width: 100%; margin-bottom: 10px; box-sizing: border-box; padding: 10px; font-size: 16px; line-height: 1.4;">
-    <input type="password" id="new-password" placeholder="New password" style="width: 100%; margin-bottom: 10px; box-sizing: border-box; padding: 10px; font-size: 16px; line-height: 1.4;">
-    <input type="password" id="confirm-password" placeholder="Confirm new password" style="width: 100%; margin-bottom: 10px; box-sizing: border-box; padding: 10px; font-size: 16px; line-height: 1.4;">
-    <button onclick="submitPasswordChange()" style="width: 100%; padding: 10px; font-size: 16px">Submit</button>
-    <button onclick="closePasswordModal()" style="width: 100%; margin-top: 10px; background: #ccc; padding: 10px; font-size: 16px">Cancel</button>
-  </div>
-</div>
-
-<!-- DELETE MODAL -->
-<div id="delete-account-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); justify-content: center; align-items: center; z-index: 2000;">
-  <div onclick="event.stopPropagation()" class="modal-box">
-    <h3>Delete Account</h3>
-    <p style="font-size: 14px; color: red">⚠ This action is permanent.</p>
-    <input type="password" id="delete-password" placeholder="Confirm password" style="width: 100%; max-width: 400px; margin: 0 auto 10px auto; display: block; padding: 10px; box-sizing: border-box;">
-    <button onclick="submitDeleteAccount()" style="width: 100%; background: red; color: white">Delete My Account</button>
-    <button onclick="closeDeleteModal()" style="width: 100%; margin-top: 10px; background: #ccc">Cancel</button>
-  </div>
-</div>
-
-<script src="app.js"></script>
-<script src="subscription-integration.js"></script>
-<script src="dashboard.js"></script>
-<script src="dashboard-enhanced.js"></script>
-
-</body>
+		<script src="app.js"></script>
+		<script src="subscription-integration.js"></script>
+		<script src="dashboard.js"></script>
+		<script src="dashboard-enhanced.js"></script>
+	</body>
 </html>

@@ -159,8 +159,6 @@
 						{/if}
 					</h3>
 
-
-
 					<button
 						class="map-link-btn"
 						on:click|stopPropagation={(e) => openGoogleMaps(e, trip)}
@@ -244,13 +242,18 @@
 						{#if trip.stops}
 							{#each trip.stops as stop, i}
 								<div class="address-row">
-							<span class="address-text"><strong>Stop {i + 1}:</strong> {stop.address}</span>
-								{#if Number(stop.earnings) > 0}
-									<span class="stop-amount" title={formatCurrency(Number(stop.earnings))} aria-label={`Stop amount ${formatCurrency(Number(stop.earnings))}`} data-testid={`stop-amount-${i}`}>
-										{formatCurrency(Number(stop.earnings))}
-									</span>
-								{/if}
-								<button
+									<span class="address-text"><strong>Stop {i + 1}:</strong> {stop.address}</span>
+									{#if Number(stop.earnings) > 0}
+										<span
+											class="stop-amount"
+											title={formatCurrency(Number(stop.earnings))}
+											aria-label={`Stop amount ${formatCurrency(Number(stop.earnings))}`}
+											data-testid={`stop-amount-${i}`}
+										>
+											{formatCurrency(Number(stop.earnings))}
+										</span>
+									{/if}
+									<button
 										class="mini-map-btn"
 										on:click|stopPropagation={(e) => openMapToStop(e, trip, i)}
 										title="Map route from Start to here"

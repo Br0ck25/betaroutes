@@ -60,10 +60,11 @@ export interface CostItem {
 	id?: string;
 	type: string;
 	cost: number;
+	taxDeductible?: boolean;
 }
 
-export interface MaintenanceCost extends CostItem {}
-export interface SupplyCost extends CostItem {}
+export type MaintenanceCost = CostItem;
+export type SupplyCost = CostItem;
 
 /** Trip shape (backwards-compatible fields included) */
 export interface Trip {
@@ -193,6 +194,7 @@ export interface UnsanitizedDestination {
 export interface UnsanitizedCostItem {
 	type?: unknown;
 	cost?: unknown;
+	taxDeductible?: unknown;
 }
 
 export interface UnsanitizedTrip {

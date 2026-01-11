@@ -72,12 +72,14 @@
 		}));
 		const safeMaintenance = ((found as any)['maintenanceItems'] || []).map((m: any) => ({
 			...m,
-			id: m.id || crypto.randomUUID()
+			id: m.id || crypto.randomUUID(),
+			taxDeductible: !!m.taxDeductible
 		}));
 		const rawSupplies = (found as any)['supplyItems'] || (found as any)['suppliesItems'] || [];
 		const safeSupplies = (rawSupplies || []).map((s: any) => ({
 			...s,
-			id: s.id || crypto.randomUUID()
+			id: s.id || crypto.randomUUID(),
+			taxDeductible: !!s.taxDeductible
 		}));
 		const to24h = (timeStr?: string): string => {
 			if (!timeStr) return '';
@@ -100,6 +102,8 @@
 			mpg: Number((found as any).mpg) || $userSettings.defaultMPG || 25,
 			gasPrice: Number((found as any).gasPrice) || $userSettings.defaultGasPrice || 3.5,
 			fuelCost: Number((found as any).fuelCost) || 0,
+			/** Normalize taxDeductible for older records */
+			taxDeductible: !!(found as any).taxDeductible,
 			hoursWorked: Number((found as any).hoursWorked) || 0,
 			estimatedTime: (found as any)['estimatedTime'] || 0,
 			startTime: to24h((found as any).startTime as string | undefined),
@@ -125,6 +129,7 @@
 		fuelCost: 0,
 		maintenanceItems: [] as any[],
 		suppliesItems: [] as any[],
+
 		notes: ''
 	};
 	let newStop = { address: '', earnings: 0, notes: '' };
@@ -480,7 +485,7 @@
 		if (!selectedMaintenance) return;
 		tripData.maintenanceItems = [
 			...tripData.maintenanceItems,
-			{ id: crypto.randomUUID(), type: selectedMaintenance, cost: 0 }
+			{ id: crypto.randomUUID(), type: selectedMaintenance, cost: 0, taxDeductible: false }
 		];
 		selectedMaintenance = '';
 	}
@@ -491,7 +496,7 @@
 		if (!selectedSupply) return;
 		tripData.suppliesItems = [
 			...tripData.suppliesItems,
-			{ id: crypto.randomUUID(), type: selectedSupply, cost: 0 }
+			{ id: crypto.randomUUID(), type: selectedSupply, cost: 0, taxDeductible: false }
 		];
 		selectedSupply = '';
 	}
@@ -930,6 +935,19 @@
 									placeholder="0.00"
 								/>
 							</div>
+							<div class="item-controls">
+								<button
+									type="button"
+									class="tax-pill"
+									on:click={() => (item.taxDeductible = !item.taxDeductible)}
+									aria-pressed={item.taxDeductible}
+									title="Mark this item as tax deductible"
+									>{item.taxDeductible ? 'Tax' : 'No Tax'}</button
+								>
+								<label class="inline-label sr-only"
+									><input type="checkbox" bind:checked={item.taxDeductible} /></label
+								>
+							</div>
 							<button class="btn-icon delete" on:click={() => removeMaintenanceItem(item.id)}
 								>✕</button
 							>
@@ -974,6 +992,19 @@
 									bind:value={item.cost}
 									placeholder="0.00"
 								/>
+							</div>
+							<div class="item-controls">
+								<button
+									type="button"
+									class="tax-pill"
+									on:click={() => (item.taxDeductible = !item.taxDeductible)}
+									aria-pressed={item.taxDeductible}
+									title="Mark this item as tax deductible"
+									>{item.taxDeductible ? 'Tax' : 'No Tax'}</button
+								>
+								<label class="inline-label sr-only"
+									><input type="checkbox" bind:checked={item.taxDeductible} /></label
+								>
 							</div>
 							<button class="btn-icon delete" on:click={() => removeSupplyItem(item.id)}>✕</button>
 						</div>{/each}
@@ -1166,6 +1197,39 @@
 
 <style>
 	/* Use styles from New Trip page for consistency */
+	/* Component-level override: hide old pill button and show visible checkbox + label */
+	.item-controls .tax-pill {
+		display: none !important;
+		visibility: hidden !important;
+	}
+	.item-controls .inline-label.sr-only {
+		position: static !important;
+		width: auto !important;
+		height: auto !important;
+		display: inline-flex !important;
+		align-items: center;
+		gap: 6px;
+	}
+	.item-controls .inline-label.sr-only input[type='checkbox'] {
+		appearance: checkbox !important;
+		display: inline-block !important;
+		opacity: 1 !important;
+		width: 18px !important;
+		height: 18px !important;
+		margin-right: 6px !important;
+	}
+	.item-controls .inline-label.sr-only::after {
+		content: 'Tax deductible';
+		margin-left: 6px;
+		font-weight: 600;
+		color: #374151;
+		font-size: 13px;
+	}
+	.item-controls .inline-label {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
 	.trip-form {
 		max-width: 1300px;
 		margin: 0 auto;

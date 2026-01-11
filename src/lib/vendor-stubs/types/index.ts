@@ -82,6 +82,7 @@ export interface SupplyCost {
 export interface CostItem {
 	type: string;
 	cost: number;
+	taxDeductible?: boolean;
 }
 
 // ============================================================================

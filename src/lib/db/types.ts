@@ -24,6 +24,7 @@ export interface TripRecord {
 	mpg?: number;
 	gasPrice?: number;
 	fuelCost?: number;
+
 	notes?: string;
 
 	// Custom fields
@@ -57,6 +58,8 @@ export interface ExpenseRecord {
 	date: string;
 	category: string;
 	amount: number;
+	/** Whether this expense is tax-deductible */
+	taxDeductible?: boolean;
 	description?: string;
 
 	// Metadata

@@ -22,6 +22,7 @@ export type CostItem = {
 	type?: string;
 	item?: string;
 	cost?: number;
+	taxDeductible?: boolean;
 };
 
 export type Trip = {

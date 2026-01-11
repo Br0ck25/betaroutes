@@ -70,7 +70,13 @@
 		</div>
 
 		<div class="header-actions">
-			<select bind:value={selectedRange} class="range-select" aria-label="Select time range">
+			<select
+				id="range-select"
+				name="selectedRange"
+				bind:value={selectedRange}
+				class="range-select"
+				aria-label="Select time range"
+			>
 				<option value="30d">Last 30 Days</option>
 				<option value="60d">Last 60 Days</option>
 				<option value="90d">Last 90 Days</option>

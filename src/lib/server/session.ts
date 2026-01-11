@@ -2,7 +2,7 @@ import type { Cookies } from '@sveltejs/kit';
 
 const COOKIE_NAME = 'session';
 
-export function setSessionCookie(cookies: Cookies, user: any) {
+export function setSessionCookie(cookies: Cookies, user: unknown) {
 	cookies.set(COOKIE_NAME, JSON.stringify(user), {
 		path: '/',
 		httpOnly: true,

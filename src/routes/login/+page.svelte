@@ -814,7 +814,7 @@
 </div>
 
 <style>
-	@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+	/* font import moved to `src/app.css` */
 	:root {
 		--orange: #ff7f50;
 		--blue: #29abe2;

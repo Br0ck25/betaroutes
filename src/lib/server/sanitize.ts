@@ -165,7 +165,9 @@ export function sanitizeCostItem(item: unknown): CostItem | null {
 
 	return {
 		type,
-		cost: sanitizeNumber(c.cost, 0)
+		cost: sanitizeNumber(c.cost, 0),
+		// Preserve boolean flag when provided
+		taxDeductible: !!(c as { taxDeductible?: unknown }).taxDeductible
 	};
 }
 

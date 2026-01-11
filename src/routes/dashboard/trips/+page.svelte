@@ -234,6 +234,7 @@
 	}
 
 	function exportSelected() {
+		if (typeof document === 'undefined' || typeof window === 'undefined') return;
 		const selectedData = allFilteredTrips.filter((t) => selectedTrips.has(t.id));
 		if (selectedData.length === 0) return;
 		const headers = ['Date', 'Start', 'End', 'Miles', 'Profit', 'Notes'];
@@ -276,10 +277,12 @@
 				const newPage = Math.floor(idx / itemsPerPage) + 1;
 				if (currentPage !== newPage) currentPage = newPage;
 				expandedTrips = new Set([qId]);
-				setTimeout(() => {
-					const el = document.getElementById('trip-' + qId);
-					if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-				}, 60);
+				if (typeof document !== 'undefined') {
+					setTimeout(() => {
+						const el = document.getElementById('trip-' + qId);
+						if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+					}, 60);
+				}
 			}
 			lastQueryExpandId = qId;
 		}

@@ -30,16 +30,27 @@
 	// Render a small slice of the list initially to reduce initial DOM work and main-thread blocking.
 	// We'll expand to the full list when the browser is idle or after loading finishes.
 	let visibleLimit = 20;
+	let visibleExpenses: any[] = [];
 	$: visibleExpenses = filteredExpenses.slice(0, visibleLimit);
 
-	// After initial render & when not loading, expand the visible window on idle
-	$: if (typeof window !== 'undefined' && !loading && visibleLimit < filteredExpenses.length) {
+	// Expand visible window when more items become available (guarded to avoid reactive loops)
+	let _lastExpandedSize = 0; // non-reactive guard variable
+	/* eslint-disable svelte/infinite-reactive-loop */
+	$: if (
+		!loading &&
+		typeof window !== 'undefined' &&
+		filteredExpenses.length > visibleLimit &&
+		filteredExpenses.length !== _lastExpandedSize
+	) {
+		const size = filteredExpenses.length;
+		_lastExpandedSize = size;
 		if ('requestIdleCallback' in window) {
-			requestIdleCallback(() => (visibleLimit = filteredExpenses.length));
+			requestIdleCallback(() => (visibleLimit = size));
 		} else {
-			setTimeout(() => (visibleLimit = filteredExpenses.length), 200);
+			setTimeout(() => (visibleLimit = size), 200);
 		}
 	}
+	/* eslint-enable svelte/infinite-reactive-loop */
 
 	$: if (typeof document !== 'undefined') {
 		const hasSelections = selectedExpenses.size > 0;
@@ -82,7 +93,8 @@
 				date: date,
 				category: 'fuel',
 				amount: trip.fuelCost,
-				description: 'Fuel (Trip Log)',
+				description: 'Fuel',
+				taxDeductible: !!(trip as any).fuelTaxDeductible,
 				source: 'trip',
 				tripId: trip.id
 			});
@@ -97,7 +109,8 @@
 					date: date,
 					category: 'maintenance',
 					amount: item.cost,
-					description: `${item.type} (Trip Log)`,
+					description: `${item.type}`,
+					taxDeductible: !!item.taxDeductible,
 					source: 'trip',
 					tripId: trip.id
 				});
@@ -113,7 +126,8 @@
 					date: date,
 					category: 'supplies',
 					amount: item.cost,
-					description: `${item.type} (Trip Log)`,
+					description: `${item.type}`,
+					taxDeductible: !!item.taxDeductible,
 					source: 'trip',
 					tripId: trip.id
 				});
@@ -371,6 +385,37 @@
 		return colors[sum % colors.length];
 	}
 
+	// When an expense description is empty, show a parent category label (Maintenance/Supplies/etc.)
+	function getFallbackLabel(expense: any) {
+		const cat = (expense.category || '').toString().toLowerCase();
+		// maintenance categories from settings or defaults
+		const maintenance = (
+			$userSettings.maintenanceCategories || [
+				'oil change',
+				'tire rotation',
+				'brake service',
+				'filter replacement'
+			]
+		).map((s) => s.toLowerCase());
+		if (maintenance.includes(cat)) return 'Maintenance';
+
+		const supplies = (
+			$userSettings.supplyCategories || ['concrete', 'poles', 'wire', 'tools', 'equipment rental']
+		).map((s) => s.toLowerCase());
+		if (supplies.includes(cat)) return 'Supplies';
+
+		if (cat === 'fuel') return 'Fuel';
+
+		// If the category is one of the top-level expense categories, show it capitalized
+		const expCats = (
+			$userSettings.expenseCategories || ['maintenance', 'insurance', 'supplies', 'other']
+		).map((s) => s.toLowerCase());
+		if (expCats.includes(cat)) return getCategoryLabel(cat);
+
+		// default fallback: capitalized category (or 'Expenses')
+		return getCategoryLabel(expense.category || 'expenses');
+	}
+
 	// Swipe Action
 	function swipeable(
 		node: HTMLElement,
@@ -552,17 +597,43 @@
 					stroke-linejoin="round"
 				/>
 			</svg>
-			<input type="text" placeholder="Search expenses..." bind:value={searchQuery} />
+			<input
+				id="search-expenses"
+				name="searchQuery"
+				type="text"
+				placeholder="Search expenses..."
+				bind:value={searchQuery}
+			/>
 		</div>
 
 		<div class="filter-group date-group">
-			<input type="date" bind:value={startDate} class="date-input" aria-label="Start Date" />
+			<input
+				id="start-date"
+				name="startDate"
+				type="date"
+				bind:value={startDate}
+				class="date-input"
+				aria-label="Start Date"
+			/>
 			<span class="date-sep">-</span>
-			<input type="date" bind:value={endDate} class="date-input" aria-label="End Date" />
+			<input
+				id="end-date"
+				name="endDate"
+				type="date"
+				bind:value={endDate}
+				class="date-input"
+				aria-label="End Date"
+			/>
 		</div>
 
 		<div class="filter-group">
-			<select bind:value={filterCategory} class="filter-select" aria-label="Filter by category">
+			<select
+				id="filter-category"
+				name="filterCategory"
+				bind:value={filterCategory}
+				class="filter-select"
+				aria-label="Filter by category"
+			>
 				<option value="all">All Categories</option>
 				{#each categories as cat}
 					<option value={cat}>{getCategoryLabel(cat)}</option>
@@ -570,7 +641,13 @@
 				<option value="fuel">Fuel (Trips)</option>
 			</select>
 
-			<select bind:value={sortBy} class="filter-select" aria-label="Sort results">
+			<select
+				id="sort-by"
+				name="sortBy"
+				bind:value={sortBy}
+				class="filter-select"
+				aria-label="Sort results"
+			>
 				<option value="date">By Date</option>
 				<option value="amount">By Cost</option>
 			</select>
@@ -602,7 +679,13 @@
 	{#if filteredExpenses.length > 0}
 		<div class="batch-header" class:visible={filteredExpenses.length > 0}>
 			<label class="checkbox-container">
-				<input type="checkbox" checked={allSelected} on:change={toggleSelectAll} />
+				<input
+					id="select-all"
+					name="selectAll"
+					type="checkbox"
+					checked={allSelected}
+					on:change={toggleSelectAll}
+				/>
 				<span class="checkmark"></span>
 				Select All ({filteredExpenses.length})
 			</label>
@@ -661,6 +744,9 @@
 								<label class="checkbox-container">
 									<input
 										type="checkbox"
+										id={'expense-' + expense.id + '-checkbox'}
+										name="selectedExpense"
+										value={expense.id}
 										aria-labelledby={'expense-' + expense.id + '-title'}
 										checked={isSelected}
 										on:change={() => toggleSelection(expense.id)}
@@ -675,14 +761,17 @@
 								</span>
 
 								<h2 class="expense-desc-title" id={'expense-' + expense.id + '-title'}>
-									{expense.description || 'No description'}
+									{expense.description || getFallbackLabel(expense)}
 								</h2>
 							</div>
 
-							<span class="expense-amount-display" aria-label={`Amount: ${formatCurrency(expense.amount || 0)}`}>
-						{formatCurrency(expense.amount || 0)}
-					</span>
-					<svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+							<span
+								class="expense-amount-display"
+								aria-label={`Amount: ${formatCurrency(expense.amount || 0)}`}
+							>
+								{formatCurrency(expense.amount || 0)}
+							</span>
+							<svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
 								<path
 									d="M9 18L15 12L9 6"
 									stroke="currentColor"
@@ -700,6 +789,9 @@
 								</span>
 								{#if isTripSource(expense)}
 									<span class="source-badge">Trip Log</span>
+								{/if}
+								{#if expense.taxDeductible}
+									<span class="category-badge tax-pill" title="Tax deductible">Tax Deductible</span>
 								{/if}
 							</div>
 						</div>
@@ -827,9 +919,8 @@
 		<div class="add-cat-form">
 			<input
 				type="text"
-				bind:value={newCategoryName}
-				placeholder="New Category Name..."
-				class="input-field"
+				id="new-category-name"
+				name="newCategoryName"
 				on:keydown={(e) => e.key === 'Enter' && addCategory()}
 			/>
 			<button class="btn-secondary" on:click={addCategory}>Add</button>
@@ -1261,6 +1352,19 @@
 		border-radius: 6px;
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
+		white-space: nowrap;
+	}
+
+	/* Tax pill that visually matches category badges */
+	.tax-pill {
+		font-size: 12px;
+		font-weight: 600;
+		color: #166534;
+		background: #ecfdf5;
+		padding: 4px 10px;
+		border-radius: 100px;
+		border: 1px solid #bbf7d0;
+		text-transform: capitalize;
 		white-space: nowrap;
 	}
 

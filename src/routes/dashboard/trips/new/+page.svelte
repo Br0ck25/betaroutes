@@ -64,6 +64,7 @@
 		fuelCost: 0,
 		maintenanceItems: [] as any[],
 		suppliesItems: [] as any[],
+
 		notes: ''
 	};
 	let newStop = { address: '', earnings: 0, notes: '' };
@@ -444,7 +445,7 @@
 		if (!selectedMaintenance) return;
 		tripData.maintenanceItems = [
 			...tripData.maintenanceItems,
-			{ id: crypto.randomUUID(), type: selectedMaintenance, cost: 0 }
+			{ id: crypto.randomUUID(), type: selectedMaintenance, cost: 0, taxDeductible: false }
 		];
 		selectedMaintenance = '';
 	}
@@ -455,7 +456,7 @@
 		if (!selectedSupply) return;
 		tripData.suppliesItems = [
 			...tripData.suppliesItems,
-			{ id: crypto.randomUUID(), type: selectedSupply, cost: 0 }
+			{ id: crypto.randomUUID(), type: selectedSupply, cost: 0, taxDeductible: false }
 		];
 		selectedSupply = '';
 	}
@@ -852,6 +853,12 @@
 					<span>Estimated Fuel Cost</span><strong>{formatCurrency(tripData.fuelCost)}</strong>
 				</div>
 
+				<div class="info-note">
+					<span
+						><strong>Note:</strong> Use the checkboxes next to each Maintenance or Supplies item to mark
+						that individual item as tax-deductible.</span
+					>
+				</div>
 				<div class="section-group">
 					<div class="section-top">
 						<h3>Maintenance</h3>
@@ -900,6 +907,19 @@
 							<div class="input-money-wrapper small">
 								<span class="symbol">$</span>
 								<input type="number" bind:value={item.cost} placeholder="0.00" />
+							</div>
+							<div class="item-controls">
+								<button
+									type="button"
+									class="tax-pill"
+									on:click={() => (item.taxDeductible = !item.taxDeductible)}
+									aria-pressed={item.taxDeductible}
+									title="Mark this item as tax deductible"
+									>{item.taxDeductible ? 'Tax' : 'No Tax'}</button
+								>
+								<label class="inline-label sr-only"
+									><input type="checkbox" bind:checked={item.taxDeductible} /></label
+								>
 							</div>
 							<button class="btn-icon delete" on:click={() => removeMaintenanceItem(item.id)}
 								>✕</button
@@ -950,6 +970,19 @@
 							<div class="input-money-wrapper small">
 								<span class="symbol">$</span>
 								<input type="number" bind:value={item.cost} placeholder="0.00" />
+							</div>
+							<div class="item-controls">
+								<button
+									type="button"
+									class="tax-pill"
+									on:click={() => (item.taxDeductible = !item.taxDeductible)}
+									aria-pressed={item.taxDeductible}
+									title="Mark this item as tax deductible"
+									>{item.taxDeductible ? 'Tax' : 'No Tax'}</button
+								>
+								<label class="inline-label sr-only"
+									><input type="checkbox" bind:checked={item.taxDeductible} /></label
+								>
 							</div>
 							<button class="btn-icon delete" on:click={() => removeSupplyItem(item.id)}>✕</button>
 						</div>
@@ -1031,10 +1064,14 @@
 					</div>
 				</div>
 				<div class="form-actions">
-					<button class="btn-secondary" on:click={prevStep}>Back</button><button
-						class="btn-primary"
-						on:click={saveTrip}>Save Trip</button
-					>
+					<div class="form-group checkbox-group review-checkbox">
+						<span
+							><strong>Note:</strong> Use the checkboxes next to each Maintenance or Supplies item to
+							mark that individual item as tax-deductible.</span
+						>
+					</div>
+					<button class="btn-secondary" on:click={prevStep}>Back</button>
+					<button class="btn-primary" on:click={saveTrip}>Save Trip</button>
 				</div>
 			</div>
 		{/if}
@@ -1145,6 +1182,39 @@
 
 <style>
 	/* Use styles from New Trip page for consistency */
+	/* Component-level override: hide old pill button and show visible checkbox + label */
+	.item-controls .tax-pill {
+		display: none !important;
+		visibility: hidden !important;
+	}
+	.item-controls .inline-label.sr-only {
+		position: static !important;
+		width: auto !important;
+		height: auto !important;
+		display: inline-flex !important;
+		align-items: center;
+		gap: 6px;
+	}
+	.item-controls .inline-label.sr-only input[type='checkbox'] {
+		appearance: checkbox !important;
+		display: inline-block !important;
+		opacity: 1 !important;
+		width: 18px !important;
+		height: 18px !important;
+		margin-right: 6px !important;
+	}
+	.item-controls .inline-label.sr-only::after {
+		content: 'Tax deductible';
+		margin-left: 6px;
+		font-weight: 600;
+		color: #374151;
+		font-size: 13px;
+	}
+	.item-controls .inline-label {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
 	.trip-form {
 		max-width: 1300px;
 		margin: 0 auto;
@@ -1513,6 +1583,7 @@
 		padding: 14px 0;
 		border-bottom: 1px solid #f3f4f6;
 	}
+
 	.expense-row .name {
 		font-size: 17px;
 		font-weight: 500;
