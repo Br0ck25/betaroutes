@@ -98,6 +98,17 @@ export function makeExpenseService(
 				method: 'POST',
 				body: JSON.stringify(expense)
 			});
+
+			// Backfill into KV for compatibility with older tooling that reads `BETA_LOGS_KV`.
+			// This is best-effort: don't block the DO write if KV fails.
+			try {
+				const payload = { ...expense } as Record<string, unknown>;
+				// Remove any UI-only fields before persisting to KV
+				if (payload['store']) delete payload['store'];
+				await kv.put(`expense:${expense.userId}:${expense.id}`, JSON.stringify(payload));
+			} catch (err) {
+				log.warn(`[ExpenseService] KV write failed for expense ${expense.id}`);
+			}
 		},
 
 		async delete(userId: string, id: string) {

@@ -6,7 +6,11 @@ import { resolve } from 'path';
 type PreviewServer = {
 	middlewares: {
 		use: (
-			fn: (req: { url?: string }, res: { setHeader: (name: string, value: string) => void }, next: () => void) => void
+			fn: (
+				req: { url?: string },
+				res: { setHeader: (name: string, value: string) => void },
+				next: () => void
+			) => void
 		) => void;
 		stack?: unknown[];
 	};
@@ -42,7 +46,11 @@ export default defineConfig({
 		// Configure preview server middleware. Use structural types to avoid `any` and satisfy ESLint.
 		configurePreviewServer(server: PreviewServer) {
 			// Ensure preview returns long cache headers for static assets used in audits.
-			const mw: (req: { url?: string }, res: { setHeader: (name: string, value: string) => void }, next: () => void) => void = (req, res, next) => {
+			const mw: (
+				req: { url?: string },
+				res: { setHeader: (name: string, value: string) => void },
+				next: () => void
+			) => void = (req, res, next) => {
 				try {
 					const url = req.url || '';
 					// Match fonts, optimized images, and known static extensions

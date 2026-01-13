@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 // ============================================
 // SUBSCRIPTION MANAGEMENT FUNCTIONS
 // This file should be appended to app.js OR included as separate script
@@ -337,9 +336,7 @@ function showUpgradeModal() {
     </div>
   `;
 
-/* eslint-disable @typescript-eslint/no-unused-vars */
-
-
+	/* eslint-disable @typescript-eslint/no-unused-vars */
 
 	document.body.appendChild(modal);
 }
