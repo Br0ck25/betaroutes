@@ -29,10 +29,10 @@ export default defineConfig({
 
 	// Preview server: set Cache-Control headers for assets so local previews emulate CDN
 	preview: {
-		// `configurePreviewServer` isn't exported in some Vite types; keep `any` to avoid type conflicts
-		configurePreviewServer(server: any) {
+		// Configure preview server middleware. Use structural types to avoid `any` and satisfy ESLint.
+		configurePreviewServer(server: { middlewares: { use: (fn: (req: { url?: string }, res: { setHeader: (name: string, value: string) => void }, next: () => void) => void ); stack?: unknown[] } }) {
 			// Ensure preview returns long cache headers for static assets used in audits.
-			const mw = (req: any, res: any, next: any) => {
+			const mw: (req: { url?: string }, res: { setHeader: (name: string, value: string) => void }, next: () => void) => void = (req, res, next) => {
 				try {
 					const url = req.url || '';
 					// Match fonts, optimized images, and known static extensions
@@ -43,22 +43,22 @@ export default defineConfig({
 					) {
 						res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
 					}
-				} catch (e) {
+				} catch {
 					// ignore
 				}
 				next();
 			};
 
-			server.middlewares.use(mw as any);
+			server.middlewares.use(mw);
 			// Move our middleware to the front of the stack so it runs before static file handlers
 			try {
-				const stack = (server.middlewares as any).stack;
+				const stack = server.middlewares.stack;
 				if (Array.isArray(stack) && stack.length > 0) {
 					stack.unshift(stack.pop());
 				}
-			} catch (e) {
+			} catch {
 				// ignore
 			}
 		}
-	} as any
+	}
 });

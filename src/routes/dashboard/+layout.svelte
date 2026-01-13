@@ -189,21 +189,29 @@
 		<div class="mobile-actions">
 			<SyncIndicator />
 			{#if $user}
-				<a
-					href={resolve('/dashboard/settings/')}
-					class="mobile-user"
-					aria-label="Profile Settings"
-					on:click={(e) => handleNav(e, '/dashboard/settings/')}
+				<button
+					class="mobile-user-btn"
+					aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
+					aria-expanded={sidebarOpen}
+					aria-controls="dashboard-sidebar"
+					on:click={() => (sidebarOpen = !sidebarOpen)}
 				>
 					<div class="user-avatar small">
 						{getInitial($user.name || $user.email || '')}
 					</div>
-				</a>
+				</button>
 			{/if}
 		</div>
 	</header>
 
-	<aside class="sidebar" class:open={sidebarOpen}>
+	<aside
+		id="dashboard-sidebar"
+		class="sidebar"
+		class:open={sidebarOpen}
+		role="region"
+		aria-label="Dashboard sidebar"
+		aria-hidden={!sidebarOpen}
+	>
 		<div class="sidebar-header">
 			<img
 				src="/180x75.avif"
@@ -295,15 +303,41 @@
 
 	<nav class="bottom-nav">
 		{#each navItems as item}
-			<a
-				href={resolve(item.href)}
-				class="bottom-nav-item"
-				class:active={isActive(item.href, $page.url.pathname, item.exact, item.exclude)}
-				on:click={(e) => handleNav(e, item.href)}
-			>
-				<span class="bottom-nav-icon">{@html item.icon}</span>
-				<span class="bottom-nav-label">{item.label}</span>
-			</a>
+			{#if item.label === 'Settings'}
+				<button
+					class="bottom-nav-item"
+					aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
+					aria-expanded={sidebarOpen}
+					aria-controls="dashboard-sidebar"
+					on:click={() => (sidebarOpen = !sidebarOpen)}
+				>
+					<span class="bottom-nav-icon">
+						<svg
+							width="24"
+							height="24"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<path d="M3 12h18M3 6h18M3 18h18"></path>
+						</svg>
+					</span>
+					<span class="sr-only">Open menu</span>
+				</button>
+			{:else}
+				<a
+					href={resolve(item.href)}
+					class="bottom-nav-item"
+					class:active={isActive(item.href, $page.url.pathname, item.exact, item.exclude)}
+					on:click={(e) => handleNav(e, item.href)}
+				>
+					<span class="bottom-nav-icon">{@html item.icon}</span>
+					<span class="bottom-nav-label">{item.label}</span>
+				</a>
+			{/if}
 		{/each}
 	</nav>
 </div>
@@ -366,12 +400,30 @@
 		height: 48px;
 	}
 
-	.mobile-user {
+	.mobile-user-btn {
+		background: none;
+		border: none;
+		padding: 0;
+		cursor: pointer;
 		display: flex;
 		align-items: center;
-		text-decoration: none;
-		color: inherit;
+	}
+	button.bottom-nav-item {
+		background: none;
+		border: none;
+		padding: 6px 8px;
 		cursor: pointer;
+	}
+	.sr-only {
+		position: absolute !important;
+		width: 1px !important;
+		height: 1px !important;
+		padding: 0 !important;
+		margin: -1px !important;
+		overflow: hidden !important;
+		clip: rect(0 0 0 0) !important;
+		white-space: nowrap !important;
+		border: 0 !important;
 	}
 
 	/* --- Sidebar (Hidden by default on mobile) --- */
