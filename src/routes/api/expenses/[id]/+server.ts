@@ -13,9 +13,12 @@ export const DELETE: RequestHandler = async (event) => {
 		const env = getEnv(event.platform);
 		const storageId = user.name || user.token || user.id || '';
 
-		// Pass both the Main KV and Trash KV to the service
+		// Pass both the Main KV(s) and Trash KV to the service
+		const primaryKV = safeKV(env, 'BETA_EXPENSES_KV')!;
+		const secondaryKV = safeKV(env, 'BETA_EXPENSES_SECONDARY_KV');
+		const kvs = secondaryKV ? [primaryKV, secondaryKV] : primaryKV;
 		const svc = makeExpenseService(
-			safeKV(env, 'BETA_EXPENSES_KV')!,
+			kvs,
 			safeDO(env, 'TRIP_INDEX_DO')!,
 			safeKV(env, 'BETA_EXPENSES_TRASH_KV')
 		);
@@ -37,7 +40,10 @@ export const PUT: RequestHandler = async (event) => {
 		const storageId = user.name || user.token || user.id || '';
 
 		const body = (await event.request.json()) as unknown;
-		const svc = makeExpenseService(safeKV(env, 'BETA_EXPENSES_KV')!, safeDO(env, 'TRIP_INDEX_DO')!); // Trash KV not needed for update
+		const primaryKV = safeKV(env, 'BETA_EXPENSES_KV')!;
+		const secondaryKV = safeKV(env, 'BETA_EXPENSES_SECONDARY_KV');
+		const kvs = secondaryKV ? [primaryKV, secondaryKV] : primaryKV;
+		const svc = makeExpenseService(kvs, safeDO(env, 'TRIP_INDEX_DO')!); // Trash KV not needed for update
 
 		// Ensure ID matches URL
 		const expense = {
