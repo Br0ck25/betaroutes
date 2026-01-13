@@ -17,11 +17,10 @@ export interface ExpenseRecord {
 }
 
 export function makeExpenseService(
-	kvs: KVNamespace | KVNamespace[],
+	kv: KVNamespace,
 	tripIndexDO: DurableObjectNamespace,
 	trashKV?: KVNamespace
 ) {
-	const kvList = Array.isArray(kvs) ? kvs : [kvs];
 	const getIndexStub = (userId: string) => {
 		const id = tripIndexDO.idFromName(userId);
 		return tripIndexDO.get(id);
@@ -40,26 +39,20 @@ export function makeExpenseService(
 					log.debug(`[ExpenseService] Migrating expenses for ${userId} to SQL...`);
 					const prefix = `expense:${userId}:`;
 
-					// [!code fix] PAGINATION SUPPORT + MULTI-KV
-					// Ensure we fetch ALL keys across all configured KVs
+					// [!code fix] PAGINATION SUPPORT
+					// Ensure we fetch ALL keys, not just the first 1000
 					const expenses: ExpenseRecord[] = [];
-					const seenKeys = new Set<string>();
+					let list = await kv.list({ prefix });
+					let keys = list.keys;
 
-					for (const storeKV of kvList) {
-						let list = await storeKV.list({ prefix });
-						let keys = list.keys;
+					while (!list.list_complete && list.cursor) {
+						list = await kv.list({ prefix, cursor: list.cursor });
+						keys = keys.concat(list.keys);
+					}
 
-						while (!list.list_complete && list.cursor) {
-							list = await storeKV.list({ prefix, cursor: list.cursor });
-							keys = keys.concat(list.keys);
-						}
-
-						for (const key of keys) {
-							if (seenKeys.has(key.name)) continue;
-							seenKeys.add(key.name);
-							const raw = await storeKV.get(key.name);
-							if (raw) expenses.push(JSON.parse(raw));
-						}
+					for (const key of keys) {
+						const raw = await kv.get(key.name);
+						if (raw) expenses.push(JSON.parse(raw));
 					}
 
 					// Bulk Insert to DO
@@ -85,31 +78,25 @@ export function makeExpenseService(
 			// write directly to KV instead of going through the DO/API). DO remains authoritative.
 			try {
 				const prefix = `expense:${userId}:`;
-				const seen = new Set<string>();
+				let list = await kv.list({ prefix });
+				let keys = list.keys;
 
-				for (const storeKV of kvList) {
-					let list = await storeKV.list({ prefix });
-					let keys = list.keys;
+				while (!list.list_complete && list.cursor) {
+					list = await kv.list({ prefix, cursor: list.cursor });
+					keys = keys.concat(list.keys);
+				}
 
-					while (!list.list_complete && list.cursor) {
-						list = await storeKV.list({ prefix, cursor: list.cursor });
-						keys = keys.concat(list.keys);
-					}
-
-					for (const k of keys) {
-						if (seen.has(k.name)) continue;
-						seen.add(k.name);
-						try {
-							const raw = await storeKV.get(k.name);
-							if (!raw) continue;
-							const parsed = JSON.parse(raw) as ExpenseRecord;
-							if (!expenses.find((e) => e.id === parsed.id)) {
-								expenses.push(parsed);
-								if (!doIds.has(parsed.id)) kvOnlyIds.add(parsed.id);
-							}
-						} catch (err) {
-							log.warn(`[ExpenseService] Failed to read KV key ${k.name}`);
+				for (const k of keys) {
+					try {
+						const raw = await kv.get(k.name);
+						if (!raw) continue;
+						const parsed = JSON.parse(raw) as ExpenseRecord;
+						if (!expenses.find((e) => e.id === parsed.id)) {
+							expenses.push(parsed);
+							if (!doIds.has(parsed.id)) kvOnlyIds.add(parsed.id);
 						}
+					} catch (err) {
+						log.warn(`[ExpenseService] Failed to read KV key ${k.name}`);
 					}
 				}
 			} catch (err) {
@@ -164,17 +151,14 @@ export function makeExpenseService(
 
 			// Backfill into KV for compatibility with older tooling that reads `BETA_LOGS_KV`.
 			// This is best-effort: don't block the DO write if KV fails.
-			const payload = { ...expense } as Record<string, unknown>;
-			if (payload['store']) delete payload['store'];
-			await Promise.allSettled(
-				kvList.map(async (storeKV) => {
-					try {
-						await storeKV.put(`expense:${expense.userId}:${expense.id}`, JSON.stringify(payload));
-					} catch (err) {
-						log.warn(`[ExpenseService] KV write failed for expense ${expense.id} in one KV`, err);
-					}
-				})
-			);
+			try {
+				const payload = { ...expense } as Record<string, unknown>;
+				// Remove any UI-only fields before persisting to KV
+				if (payload['store']) delete payload['store'];
+				await kv.put(`expense:${expense.userId}:${expense.id}`, JSON.stringify(payload));
+			} catch (err) {
+				log.warn(`[ExpenseService] KV write failed for expense ${expense.id}`);
+			}
 		},
 
 		async delete(userId: string, id: string) {
@@ -209,25 +193,21 @@ export function makeExpenseService(
 
 			// 4. Write tombstone to KV instead of deleting it outright so other clients
 			// can detect the deletion during delta sync (mirror trip behavior)
-			const tombstone = {
-				id: item.id,
-				userId: item.userId,
-				deleted: true,
-				deletedAt: now.toISOString(),
-				updatedAt: now.toISOString(),
-				createdAt: (item as any).createdAt
-			};
-			await Promise.allSettled(
-				kvList.map(async (storeKV) => {
-					try {
-						await storeKV.put(`expense:${userId}:${id}`, JSON.stringify(tombstone), {
-							expirationTtl: RETENTION.THIRTY_DAYS
-						});
-					} catch (err) {
-						log.warn(`[ExpenseService] Failed to write tombstone for expense ${id} in one KV`);
-					}
-				})
-			);
+			try {
+				const tombstone = {
+					id: item.id,
+					userId: item.userId,
+					deleted: true,
+					deletedAt: now.toISOString(),
+					updatedAt: now.toISOString(),
+					createdAt: (item as any).createdAt
+				};
+				await kv.put(`expense:${userId}:${id}`, JSON.stringify(tombstone), {
+					expirationTtl: RETENTION.THIRTY_DAYS
+				});
+			} catch (err) {
+				log.warn(`[ExpenseService] Failed to write tombstone for expense ${id}`);
+			}
 		}
 	};
 }
