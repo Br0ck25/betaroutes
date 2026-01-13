@@ -134,16 +134,27 @@
 						}
 					}, 30000);
 
-					console.log('[DASHBOARD LAYOUT] ✅ Data loading started');
-				} catch (err) {
-					console.error('[DASHBOARD LAYOUT] ❌ Failed to start data load:', err);
-				}
-			};
-			if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-				(requestIdleCallback as any)(() => doInit().catch(console.error));
-			} else {
-				setTimeout(() => doInit().catch(console.error), 0);
+				// Listen for sync manager cycle completion and pull incoming changes immediately
+				syncManager.subscribe((evt) => {
+					if (evt && evt.type === 'syncCycleComplete') {
+						if (userId && navigator.onLine) {
+							console.log('🔄 Sync cycle complete — fetching incoming changes...');
+							trips.syncFromCloud(userId);
+							expenses.syncFromCloud(userId);
+						}
+					}
+				});
+
+			console.log('[DASHBOARD LAYOUT] ✅ Data loading started');
+			} catch (err) {
+				console.error('[DASHBOARD LAYOUT] ❌ Failed to start data load:', err);
 			}
+		};
+		if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+			(requestIdleCallback as any)(() => doInit().catch(console.error));
+		} else {
+			setTimeout(() => doInit().catch(console.error), 0);
+		}
 		} else {
 			await auth.init();
 		}

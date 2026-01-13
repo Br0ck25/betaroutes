@@ -9,7 +9,7 @@ class SyncManager {
 	private syncInterval: ReturnType<typeof setInterval> | null = null;
 	private isSyncing = false;
 	private apiKey: string = '';
-	
+
 	// List of listeners (supports multiple stores now)
 	private listeners: ((item: any) => void)[] = [];
 
@@ -148,6 +148,14 @@ class SyncManager {
 			}
 
 			await this.updatePendingCount();
+
+			// Notify listeners that a sync cycle completed so consumers can pull incoming changes
+			try {
+				this.notifyListeners({ type: 'syncCycleComplete' });
+			} catch (e) {
+				console.warn('⚠️ notifyListeners(syncCycleComplete) failed:', e);
+			}
+
 			if (failCount === 0) syncStatus.setSynced();
 			else syncStatus.setError(`${failCount} item(s) failed`);
 		} catch (err) {
@@ -270,7 +278,22 @@ class SyncManager {
 			}
 			throw new Error(`${method} failed with status ${res.status}`);
 		}
+		// Attempt to parse response body (some routes return JSON)
+		let parsedBody: any = null;
+		try {
+			parsedBody = await res.clone().json();
+		} catch (e) {
+			// ignore non-JSON/empty bodies
+		}
 
+		// Notify listeners with the authoritative server response so stores can update
+		if (parsedBody && updateStore) {
+			try {
+				this.notifyListeners(parsedBody);
+			} catch (e) {
+				console.warn('⚠️ notifyListeners failed:', e);
+			}
+		}
 		if (updateStore) await this.markAsSynced(updateStore, id);
 	}
 

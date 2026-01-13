@@ -237,7 +237,7 @@ function createExpensesStore() {
 				if (!navigator.onLine) return;
 
 				const lastSync = localStorage.getItem('last_sync_expenses');
-				
+
 				// [!code fix] SAFETY BUFFER: Subtract 5 minutes from lastSync to overlap and catch missed items due to clock skew
 				let url = '/api/expenses';
 				if (lastSync) {
@@ -246,20 +246,16 @@ function createExpensesStore() {
 					url += `?since=${encodeURIComponent(date.toISOString())}`;
 				}
 
-				console.log(
-					`☁️ Syncing expenses... ${lastSync ? `(Delta since ${lastSync})` : '(Full)'}`
-				);
+				console.log(`☁️ Syncing expenses... ${lastSync ? `(Delta since ${lastSync})` : '(Full)'}`);
 
 				const response = await fetch(url);
 				if (!response.ok) throw new Error('Failed to fetch expenses');
 
 				const cloudExpenses: any = await response.json();
 
-				// [!code fix] Update Last Sync Time *NOW*, based on current time
-				localStorage.setItem('last_sync_expenses', new Date().toISOString());
-
 				if (cloudExpenses.length === 0) {
 					console.log('☁️ No new expense changes.');
+					localStorage.setItem('last_sync_expenses', new Date().toISOString());
 					return;
 				}
 
@@ -300,7 +296,8 @@ function createExpensesStore() {
 					}
 				}
 				await tx.done;
-
+				// Update last-sync timestamp after successful merge
+				localStorage.setItem('last_sync_expenses', new Date().toISOString());
 				console.log(
 					`✅ Synced ${cloudExpenses.length} items. Updated: ${updateCount}, Deleted: ${deleteCount}.`
 				);
