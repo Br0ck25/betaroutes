@@ -71,6 +71,8 @@ export function makeExpenseService(
 			}
 
 			let expenses = (await res.json()) as ExpenseRecord[];
+			const doIds = new Set(expenses.map((e) => e.id));
+			const kvOnlyIds = new Set<string>();
 
 			// --- Compatibility fallback: merge any KV-only entries (helps when clients
 			// write directly to KV instead of going through the DO/API). DO remains authoritative.
@@ -91,6 +93,7 @@ export function makeExpenseService(
 						const parsed = JSON.parse(raw) as ExpenseRecord;
 						if (!expenses.find((e) => e.id === parsed.id)) {
 							expenses.push(parsed);
+							if (!doIds.has(parsed.id)) kvOnlyIds.add(parsed.id);
 						}
 					} catch (err) {
 						log.warn(`[ExpenseService] Failed to read KV key ${k.name}`);
@@ -120,7 +123,9 @@ export function makeExpenseService(
 			// Delta Sync Logic
 			if (since) {
 				const sinceDate = new Date(since);
-				return expenses.filter((e) => new Date(e.updatedAt || e.createdAt) > sinceDate);
+				return expenses.filter(
+					(e) => new Date(e.updatedAt || e.createdAt) > sinceDate || kvOnlyIds.has(e.id)
+				);
 			}
 
 			return expenses;
