@@ -27,7 +27,6 @@
 		if (e.key === 'Escape') closeSidebar();
 	}
 
-	// Helper to force client-side navigation using goto
 	function handleNav(e: MouseEvent, href: string) {
 		e.preventDefault();
 		closeSidebar();
@@ -54,8 +53,7 @@
 		},
 		{
 			href: '/dashboard/expenses/',
-			icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 1V23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M17 5H9.5C8.57174 5 7.6815 5.36875 7.02513 6.02513C6.36875 6.6815 6 7.57174 6 8.5C6 9.42826 6.36875 10.3185 7.02513 10.9749C7.6815 11.6313 8.57174 12 9.5 12H14.5C15.4283 12 16.3185 12.3688 16.9749 13.0251C17.6313 13.6815 18 14.5717 18 15.5C18 16.4283 17.6313 17.3185 16.9749 17.9749C16.3185 18.6313 15.4283 
-19 14.5 19H6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+			icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 1V23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M17 5H9.5C8.57174 5 7.6815 5.36875 7.02513 6.02513C6.36875 6.6815 6 7.57174 6 8.5C6 9.42826 6.36875 10.3185 7.02513 10.9749C7.6815 11.6313 8.57174 12 9.5 12H14.5C15.4283 12 16.3185 12.3688 16.9749 13.0251C17.6313 13.6815 18 14.5717 18 15.5C18 16.4283 17.6313 17.3185 16.9749 17.9749C16.3185 18.6313 15.4283 19 14.5 19H6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
 			label: 'Expenses'
 		},
 		{
@@ -66,32 +64,22 @@
 		},
 		{
 			href: '/dashboard/settings/',
-			icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19.4 15C20.4 14.3 21 13.2 21 12C21 10.8 20.4 9.7 19.4 9L20 8C20.5 7.2 20.2 6.1 19.4 5.6L18.4 5C17.6 4.5 
-16.6 4.8 16.1 5.6L15.5 6.6C14.5 5.9 13.3 5.5 12 5.5C10.7 5.5 9.5 5.9 8.5 6.6L7.9 5.6C7.4 4.8 6.4 4.5 5.6 5L4.6 5.6C3.8 6.1 3.5 7.2 4 8L4.6 9C3.6 9.7 3 10.8 3 12C3 13.2 3.6 14.3 4.6 15L4 16C3.5 16.8 3.8 17.9 4.6 18.4L5.6 19C6.4 19.5 7.4 19.2 7.9 18.4L8.5 17.4C9.5 18.1 10.7 18.5 12 18.5C13.3 18.5 14.5 18.1 15.5 17.4L16.1 18.4C16.6 19.2 17.6 19.5 18.4 19L19.4 18.4C20.2 17.9 20.5 16.8 20 16L19.4 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+			icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19.4 15C20.4 14.3 21 13.2 21 12C21 10.8 20.4 9.7 19.4 9L20 8C20.5 7.2 20.2 6.1 19.4 5.6L18.4 5C17.6 4.5 16.6 4.8 16.1 5.6L15.5 6.6C14.5 5.9 13.3 5.5 12 5.5C10.7 5.5 9.5 5.9 8.5 6.6L7.9 5.6C7.4 4.8 6.4 4.5 5.6 5L4.6 5.6C3.8 6.1 3.5 7.2 4 8L4.6 9C3.6 9.7 3 10.8 3 12C3 13.2 3.6 14.3 4.6 15L4 16C3.5 16.8 3.8 17.9 4.6 18.4L5.6 19C6.4 19.5 7.4 19.2 7.9 18.4L8.5 17.4C9.5 18.1 10.7 18.5 12 18.5C13.3 18.5 14.5 18.1 15.5 17.4L16.1 18.4C16.6 19.2 17.6 19.5 18.4 19L19.4 18.4C20.2 17.9 20.5 16.8 20 16L19.4 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
 			label: 'Settings'
 		}
 	];
-	// UPDATED: Now accepts currentPath argument for guaranteed reactivity
-	function isActive(
-		href: string,
-		currentPath: string,
-		exact = false,
-		exclude: string[] = []
-	): boolean {
-		// Normalize both to ensure trailing slash consistency
-		const path = currentPath.endsWith('/') ?
-			currentPath : currentPath + '/';
+
+	function isActive(href: string, currentPath: string, exact = false, exclude: string[] = []): boolean {
+		const path = currentPath.endsWith('/') ? currentPath : currentPath + '/';
 		const link = href.endsWith('/') ? href : href + '/';
 		if (exclude.length > 0) {
 			if (exclude.some((e) => path.startsWith(e))) {
 				return false;
 			}
 		}
-
 		if (exact) {
 			return path === link;
 		}
-
 		return path.startsWith(link);
 	}
 
@@ -99,7 +87,6 @@
 		return name ? name.charAt(0).toUpperCase() : 'U';
 	}
 
-	// [!code change] Track polling interval for cleanup
 	let syncInterval: any;
 
 	onDestroy(() => {
@@ -110,7 +97,6 @@
 		console.log('[DASHBOARD LAYOUT] Initializing...');
 
 		const apiKey = data.googleMapsApiKey;
-
 		let userId =
 			(data?.user as any)?.name || $user?.name || (data?.user as any)?.token || $user?.token;
 
@@ -122,7 +108,6 @@
 		}
 
 		if (userId) {
-			// Defer heavy initialization until after first paint so the LCP can render quickly
 			await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
 
 			const doInit = async () => {
@@ -131,16 +116,16 @@
 
 					await syncManager.initialize(apiKey);
 
-					// Kick off loads without awaiting them so we don't block initial paint
 					trips.load(userId);
 					expenses.load(userId);
 					trash.load(userId);
 
-					// Background syncs (Initial)
+					// Initial Sync
 					trips.syncFromCloud(userId);
 					expenses.syncFromCloud(userId);
 					
-					// [!code change] Setup Polling for incoming changes (every 30s)
+					// [!code fix] Auto-Sync Polling (every 30s)
+					// This ensures Device B sees Device A's changes
 					syncInterval = setInterval(() => {
 						if (userId && navigator.onLine) {
 							console.log('🔄 Auto-syncing incoming changes...');
@@ -154,7 +139,6 @@
 					console.error('[DASHBOARD LAYOUT] ❌ Failed to start data load:', err);
 				}
 			};
-			// Prefer requestIdleCallback when available to do non-critical work
 			if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
 				(requestIdleCallback as any)(() => doInit().catch(console.error));
 			} else {

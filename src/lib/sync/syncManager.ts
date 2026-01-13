@@ -9,20 +9,27 @@ class SyncManager {
 	private syncInterval: ReturnType<typeof setInterval> | null = null;
 	private isSyncing = false;
 	private apiKey: string = '';
-
-	// [!code change] Changed from single Updater to array of Listeners
+	
+	// List of listeners (supports multiple stores now)
 	private listeners: ((item: any) => void)[] = [];
 
-	// [!code change] New method to subscribe multiple stores
+	constructor() {
+		// No-op
+	}
+
+	// New Method: Allows multiple stores to listen
 	subscribe(fn: (item: any) => void) {
 		this.listeners.push(fn);
 	}
 
-	// [!code change] Helper to notify all listeners
+	// Deprecated Method: Kept to prevent "is not a function" crashes
+	setStoreUpdater(fn: (item: any) => void) {
+		console.warn('⚠️ syncManager.setStoreUpdater is deprecated. Use .subscribe() instead.');
+		this.subscribe(fn);
+	}
+
 	private notifyListeners(item: any) {
-		if (this.listeners.length > 0) {
-			this.listeners.forEach((fn) => fn(item));
-		}
+		this.listeners.forEach((fn) => fn(item));
 	}
 
 	async initialize(apiKey?: string) {
@@ -33,14 +40,16 @@ class SyncManager {
 
 		syncStatus.setOnline(navigator.onLine);
 
-		window.addEventListener('online', () => this.handleOnline());
-		window.addEventListener('offline', () => this.handleOffline());
+		if (typeof window !== 'undefined') {
+			window.addEventListener('online', () => this.handleOnline());
+			window.addEventListener('offline', () => this.handleOffline());
 
-		document.addEventListener('visibilitychange', () => {
-			if (!document.hidden && navigator.onLine) {
-				this.syncNow();
-			}
-		});
+			document.addEventListener('visibilitychange', () => {
+				if (!document.hidden && navigator.onLine) {
+					this.syncNow();
+				}
+			});
+		}
 
 		if (navigator.onLine) {
 			await this.syncNow();
@@ -120,7 +129,7 @@ class SyncManager {
 
 			for (const item of queue) {
 				try {
-					// Enrich data only if it's a trip (checking for trip-specific fields or store name)
+					// Enrich data only if it's a trip
 					if (
 						(item.action === 'create' || item.action === 'update') &&
 						item.data &&
@@ -200,7 +209,7 @@ class SyncManager {
 					await tx.objectStore('trips').put(trip);
 					await tx.done;
 
-					// [!code change] Notify all listeners instead of just one
+					// Notify listeners so UI updates immediately
 					console.log('⚡ Updating UI with enriched data:', trip.id);
 					this.notifyListeners(trip);
 				}
@@ -214,13 +223,8 @@ class SyncManager {
 		const { action, tripId, data } = item;
 
 		// Determine which store/API to use
-		// Default to 'trips' for backward compatibility
 		const storeName = ((data as any)?.store as string) || 'trips';
-
-		// Construct base URL based on store
 		const baseUrl = storeName === 'expenses' ? '/api/expenses' : '/api/trips';
-
-		// Construct Full URL
 		const url =
 			action === 'create'
 				? baseUrl
@@ -228,8 +232,6 @@ class SyncManager {
 					? `${baseUrl}/${tripId}`
 					: `${baseUrl}/${tripId}`;
 
-		// Map store name to IndexedDB store name for local marking
-		// 'trips' -> 'trips', 'expenses' -> 'expenses'
 		let targetStore: 'trips' | 'expenses' | 'trash' | null =
 			storeName === 'expenses' ? 'expenses' : 'trips';
 
@@ -260,7 +262,6 @@ class SyncManager {
 		});
 
 		if (!res.ok) {
-			// Detect Client Errors (400-499) which are non-retriable
 			if (res.status >= 400 && res.status < 500) {
 				const errText = await res.text().catch(() => '');
 				throw new Error(
@@ -291,20 +292,15 @@ class SyncManager {
 		const tx = db.transaction('syncQueue', 'readwrite');
 		const store = tx.objectStore('syncQueue');
 
-		// Check for fatal error flag
 		const isFatal = error.message?.includes('ABORT_RETRY');
 
 		if (isFatal) {
 			console.error(
 				`🛑 Sync failed permanently for item ${item.id} (Trip ${item.tripId}). Removing from queue.`
 			);
-			// Delete immediately to prevent battery drain from infinite retries on bad data
 			await store.delete(item.id!);
-
-			// Update status to show specific error
 			syncStatus.setError(`Sync rejected: ${error.message.replace('ABORT_RETRY: ', '')}`);
 		} else {
-			// Standard retry logic for 5xx or Network errors
 			item.retries = (item.retries || 0) + 1;
 			item.lastError = error.message || String(error);
 
