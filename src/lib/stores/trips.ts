@@ -424,8 +424,8 @@ function createTripsStore() {
 
 export const trips = createTripsStore();
 
-// Register Store Listener for Background Sync Updates
-syncManager.setStoreUpdater((trip) => trips.updateLocal(trip));
+// [!code change] Register using subscribe to avoid overwriting other listeners
+syncManager.subscribe((trip) => trips.updateLocal(trip));
 
 function createDraftStore() {
 	const { subscribe, set } = writable(storage.getDraftTrip());

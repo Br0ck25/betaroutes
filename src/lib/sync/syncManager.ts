@@ -10,10 +10,19 @@ class SyncManager {
 	private isSyncing = false;
 	private apiKey: string = '';
 
-	private storeUpdater: ((trip: any) => void) | null = null;
+	// [!code change] Changed from single Updater to array of Listeners
+	private listeners: ((item: any) => void)[] = [];
 
-	setStoreUpdater(fn: (trip: any) => void) {
-		this.storeUpdater = fn;
+	// [!code change] New method to subscribe multiple stores
+	subscribe(fn: (item: any) => void) {
+		this.listeners.push(fn);
+	}
+
+	// [!code change] Helper to notify all listeners
+	private notifyListeners(item: any) {
+		if (this.listeners.length > 0) {
+			this.listeners.forEach((fn) => fn(item));
+		}
 	}
 
 	async initialize(apiKey?: string) {
@@ -191,10 +200,9 @@ class SyncManager {
 					await tx.objectStore('trips').put(trip);
 					await tx.done;
 
-					if (this.storeUpdater) {
-						console.log('⚡ Updating UI with enriched data:', trip.id);
-						this.storeUpdater(trip);
-					}
+					// [!code change] Notify all listeners instead of just one
+					console.log('⚡ Updating UI with enriched data:', trip.id);
+					this.notifyListeners(trip);
 				}
 			} catch (e) {
 				console.warn('⚠️ Could not calculate route for offline trip:', e);
@@ -205,7 +213,7 @@ class SyncManager {
 	private async processSyncItem(item: SyncQueueItem) {
 		const { action, tripId, data } = item;
 
-		// [!code ++] Determine which store/API to use
+		// Determine which store/API to use
 		// Default to 'trips' for backward compatibility
 		const storeName = ((data as any)?.store as string) || 'trips';
 
@@ -237,7 +245,6 @@ class SyncManager {
 			await this.apiCall(`/api/trash/${tripId}`, 'DELETE', null, null, tripId);
 	}
 
-	// [!code change] Updated signature to allow 'expenses'
 	private async apiCall(
 		url: string,
 		method: string,
@@ -253,7 +260,7 @@ class SyncManager {
 		});
 
 		if (!res.ok) {
-			// [!code ++] Detect Client Errors (400-499) which are non-retriable
+			// Detect Client Errors (400-499) which are non-retriable
 			if (res.status >= 400 && res.status < 500) {
 				const errText = await res.text().catch(() => '');
 				throw new Error(
@@ -266,7 +273,6 @@ class SyncManager {
 		if (updateStore) await this.markAsSynced(updateStore, id);
 	}
 
-	// [!code change] Updated signature to allow 'expenses'
 	private async markAsSynced(store: 'trips' | 'expenses' | 'trash', tripId: string) {
 		const db = await getDB();
 		const tx = db.transaction(store, 'readwrite');
@@ -285,7 +291,7 @@ class SyncManager {
 		const tx = db.transaction('syncQueue', 'readwrite');
 		const store = tx.objectStore('syncQueue');
 
-		// [!code ++] Check for fatal error flag
+		// Check for fatal error flag
 		const isFatal = error.message?.includes('ABORT_RETRY');
 
 		if (isFatal) {

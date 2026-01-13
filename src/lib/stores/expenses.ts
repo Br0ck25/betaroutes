@@ -26,7 +26,7 @@ function createExpensesStore() {
 					newItems[index] = { ...newItems[index], ...expense };
 					return newItems;
 				} else {
-					// [!code ++] Insert new (Upsert) - useful for restores/sync
+					// Insert new (Upsert) - useful for restores/sync
 					return [expense, ...items].sort(
 						(a, b) =>
 							new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime()
@@ -202,7 +202,6 @@ function createExpensesStore() {
 				};
 
 				// 2. Move to Trash Store
-				// Note: Ensure your TrashRecord type is compatible with ExpenseRecord or generic
 				const trashTx = db.transaction('trash', 'readwrite');
 				await trashTx.objectStore('trash').put(trashItem);
 				await trashTx.done;
@@ -358,12 +357,9 @@ function createExpensesStore() {
 
 export const expenses = createExpensesStore();
 
-// Register Store Listener for Background Sync Updates
-// Note: This listens for ANY updateLocal call from syncManager.
-// If syncManager doesn't distinguish types, this might try to update expenses with trip data.
-// Ensure syncManager.ts passes the correct type or check it here if possible.
-syncManager.setStoreUpdater((item) => {
-	// Basic check to see if it looks like an expense (optional)
+// [!code change] Register using subscribe to avoid overwriting other listeners
+syncManager.subscribe((item) => {
+	// Basic check to see if it looks like an expense
 	if (item && item.amount !== undefined && item.category !== undefined) {
 		expenses.updateLocal(item);
 	}
