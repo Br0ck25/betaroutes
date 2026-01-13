@@ -36,9 +36,9 @@ export const GET: RequestHandler = async (event) => {
 
 		// Inject DO Binding (use safe accessors)
 		const svc = makeExpenseService(
-			safeKV(env, 'BETA_LOGS_KV')!,
+			safeKV(env, 'BETA_EXPENSES_KV')!,
 			safeDO(env, 'TRIP_INDEX_DO')!,
-			safeKV(env, 'BETA_LOGS_TRASH_KV')
+			safeKV(env, 'BETA_EXPENSES_TRASH_KV')
 		);
 		const expenses = await svc.list(storageId, since);
 
@@ -74,9 +74,9 @@ export const POST: RequestHandler = async (event) => {
 
 		// Inject DO Binding
 		const svc = makeExpenseService(
-			safeKV(env, 'BETA_LOGS_KV')!,
+			safeKV(env, 'BETA_EXPENSES_KV')!,
 			safeDO(env, 'TRIP_INDEX_DO')!,
-			safeKV(env, 'BETA_LOGS_TRASH_KV')
+			safeKV(env, 'BETA_EXPENSES_TRASH_KV')
 		);
 
 		const expense = {
