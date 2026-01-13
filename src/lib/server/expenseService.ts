@@ -70,7 +70,52 @@ export function makeExpenseService(
 				return [];
 			}
 
-			const expenses = (await res.json()) as ExpenseRecord[];
+			let expenses = (await res.json()) as ExpenseRecord[];
+
+			// --- Compatibility fallback: merge any KV-only entries (helps when clients
+			// write directly to KV instead of going through the DO/API). DO remains authoritative.
+			try {
+				const prefix = `expense:${userId}:`;
+				let list = await kv.list({ prefix });
+				let keys = list.keys;
+
+				while (!list.list_complete && list.cursor) {
+					list = await kv.list({ prefix, cursor: list.cursor });
+					keys = keys.concat(list.keys);
+				}
+
+				for (const k of keys) {
+					try {
+						const raw = await kv.get(k.name);
+						if (!raw) continue;
+						const parsed = JSON.parse(raw) as ExpenseRecord;
+						if (!expenses.find((e) => e.id === parsed.id)) {
+							expenses.push(parsed);
+						}
+					} catch (err) {
+						log.warn(`[ExpenseService] Failed to read KV key ${k.name}`);
+					}
+				}
+			} catch (err) {
+				log.warn('[ExpenseService] KV merge failed:', err);
+			}
+
+			// Deduplicate and sort by updated/created time (newest first)
+			expenses = Object.values(
+				expenses.reduce<Record<string, ExpenseRecord>>((acc, e) => {
+					acc[e.id] = acc[e.id]
+						? new Date(e.updatedAt || e.createdAt) >
+							new Date(acc[e.id].updatedAt || acc[e.id].createdAt)
+							? e
+							: acc[e.id]
+						: e;
+					return acc;
+				}, {})
+			).sort(
+				(a, b) =>
+					new Date(b.updatedAt || b.createdAt).getTime() -
+					new Date(a.updatedAt || a.createdAt).getTime()
+			);
 
 			// Delta Sync Logic
 			if (since) {
