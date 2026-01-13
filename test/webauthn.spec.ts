@@ -8,7 +8,7 @@ describe('webauthn option generation', () => {
 			email: 't@example.com',
 			name: 'Test',
 			authenticators: []
-		} as any;
+		} as unknown as { id: string; email: string; name: string; authenticators: unknown[] };
 		const rpID = 'localhost';
 
 		const opts = await generateRegistrationOptions(user, rpID);

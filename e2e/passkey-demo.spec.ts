@@ -23,14 +23,14 @@ test('passkey demo registration flow', async ({ page }) => {
 	);
 
 	// Intercept registration POST and return a successful verification response, capture body for assertions
-	let capturedPost: any = null;
+	let capturedPost: Record<string, unknown> | null = null;
 	await page.route('**/api/auth/webauthn**', async (route) => {
 		const req = route.request();
 		if (req.method().toUpperCase() === 'POST' && req.url().includes('?type=register')) {
 			const postData = await req.postData();
 			try {
 				capturedPost = JSON.parse(postData || '{}');
-			} catch (e) {
+			} catch {
 				capturedPost = postData;
 			}
 			await route.fulfill({
@@ -45,9 +45,9 @@ test('passkey demo registration flow', async ({ page }) => {
 
 	// Stub navigator.credentials.create to simulate a successful passkey creation
 	await page.addInitScript(() => {
-		// @ts-ignore
+		// @ts-expect-error -- stub navigator.credentials for E2E
 		navigator.credentials = Object.assign(navigator.credentials || {}, {
-			create: async (opts: any) => {
+			create: async () => {
 				// Return a minimal fake credential with ArrayBuffer fields
 				const buf = (s: string) => {
 					const b = new Uint8Array(s.split('').map((c) => c.charCodeAt(0)));
@@ -65,7 +65,7 @@ test('passkey demo registration flow', async ({ page }) => {
 					getClientExtensionResults: () => ({}),
 					// some libs access transports or other fields
 					transports: []
-				} as any;
+				} as unknown;
 			}
 		});
 	});

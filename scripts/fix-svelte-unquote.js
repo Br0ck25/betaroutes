@@ -16,19 +16,19 @@ function fixContent(s) {
 	let out = s;
 	// Unquote simple directive bindings like bind:value="{x}"
 	out = out.replace(
-		/bind:([\w-]+)=\"\{([^}]*)\}\"/g,
+		/bind:([\w-]+)="\{([^}]*)\}"/g,
 		(m, a, inner) => `bind:${a}={${inner.trim()}}`
 	);
 	out = out.replace(
-		/class:([\w-]+)=\"\{([^}]*)\}\"/g,
+		/class:([\w-]+)="\{([^}]*)\}"/g,
 		(m, a, inner) => `class:${a}={${inner.trim()}}`
 	);
-	out = out.replace(/on:([\w:-]+)=\"([^}]*)\"/g, (m, a, inner) => `on:${a}={${inner.trim()}}`);
-	out = out.replace(/aria-([\w-]+)=\"([^}]*)\"/g, (m, a, inner) => `aria-${a}={${inner.trim()}}`);
+	out = out.replace(/on:([\w:-]+)="([^}]*)"/g, (m, a, inner) => `on:${a}={${inner.trim()}}`);
+	out = out.replace(/aria-([\w-]+)="([^}]*)"/g, (m, a, inner) => `aria-${a}={${inner.trim()}}`);
 
 	// Also unquote simple bind:checked
 	out = out.replace(
-		/bind:checked=\"\{([^}]*)\}\"/g,
+		/bind:checked="\{([^}]*)\}"/g,
 		(m, inner) => `bind:checked={${inner.trim()}}`
 	);
 

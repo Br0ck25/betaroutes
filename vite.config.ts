@@ -2,6 +2,16 @@ import { defineConfig } from 'vitest/config';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { resolve } from 'path';
 
+// Structural type for Vite preview server middleware to avoid `any` or overly complex inline types
+type PreviewServer = {
+	middlewares: {
+		use: (
+			fn: (req: { url?: string }, res: { setHeader: (name: string, value: string) => void }, next: () => void) => void
+		) => void;
+		stack?: unknown[];
+	};
+};
+
 export default defineConfig({
 	plugins: [sveltekit()],
 	resolve: (() => {
@@ -30,7 +40,7 @@ export default defineConfig({
 	// Preview server: set Cache-Control headers for assets so local previews emulate CDN
 	preview: {
 		// Configure preview server middleware. Use structural types to avoid `any` and satisfy ESLint.
-		configurePreviewServer(server: { middlewares: { use: (fn: (req: { url?: string }, res: { setHeader: (name: string, value: string) => void }, next: () => void) => void ); stack?: unknown[] } }) {
+		configurePreviewServer(server: PreviewServer) {
 			// Ensure preview returns long cache headers for static assets used in audits.
 			const mw: (req: { url?: string }, res: { setHeader: (name: string, value: string) => void }, next: () => void) => void = (req, res, next) => {
 				try {
