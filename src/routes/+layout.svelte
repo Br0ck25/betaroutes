@@ -8,12 +8,10 @@
 	import { trips } from '$lib/stores/trips';
 	import { env } from '$env/dynamic/public';
 	import { page } from '$app/stores';
-
 	let { data, children } = $props();
 
 	// 1. Initialize Context
 	const userState = setUserContext(undefined);
-
 	// Initialize with current value via reactive effect below (keeps capture correct)
 	// 2. Keep user state synced
 	$effect(() => {
@@ -26,8 +24,10 @@
 		await trips.load();
 
 		if (data.user) {
-			// [!code fix] REMOVED: syncManager.setStoreUpdater call
-			// The trips store now subscribes automatically in src/lib/stores/trips.ts
+			// Connect SyncManager to the UI Store
+			syncManager.setStoreUpdater((enrichedTrip) => {
+				trips.updateLocal(enrichedTrip);
+			});
 
 			// Access key safely via dynamic env object
 			const apiKey = (env as any)['PUBLIC_GOOGLE_MAPS_KEY'];

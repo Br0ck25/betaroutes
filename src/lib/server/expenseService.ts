@@ -1,6 +1,6 @@
 // src/lib/server/expenseService.ts
 import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
-import { DO_ORIGIN, RETENTION } from '$lib/constants';
+import { DO_ORIGIN } from '$lib/constants';
 import { log } from '$lib/server/log';
 
 export interface ExpenseRecord {
@@ -70,62 +70,12 @@ export function makeExpenseService(
 				return [];
 			}
 
-			let expenses = (await res.json()) as ExpenseRecord[];
-			const doIds = new Set(expenses.map((e) => e.id));
-			const kvOnlyIds = new Set<string>();
-
-			// --- Compatibility fallback: merge any KV-only entries (helps when clients
-			// write directly to KV instead of going through the DO/API). DO remains authoritative.
-			try {
-				const prefix = `expense:${userId}:`;
-				let list = await kv.list({ prefix });
-				let keys = list.keys;
-
-				while (!list.list_complete && list.cursor) {
-					list = await kv.list({ prefix, cursor: list.cursor });
-					keys = keys.concat(list.keys);
-				}
-
-				for (const k of keys) {
-					try {
-						const raw = await kv.get(k.name);
-						if (!raw) continue;
-						const parsed = JSON.parse(raw) as ExpenseRecord;
-						if (!expenses.find((e) => e.id === parsed.id)) {
-							expenses.push(parsed);
-							if (!doIds.has(parsed.id)) kvOnlyIds.add(parsed.id);
-						}
-					} catch (err) {
-						log.warn(`[ExpenseService] Failed to read KV key ${k.name}`);
-					}
-				}
-			} catch (err) {
-				log.warn('[ExpenseService] KV merge failed:', err);
-			}
-
-			// Deduplicate and sort by updated/created time (newest first)
-			expenses = Object.values(
-				expenses.reduce<Record<string, ExpenseRecord>>((acc, e) => {
-					acc[e.id] = acc[e.id]
-						? new Date(e.updatedAt || e.createdAt) >
-							new Date(acc[e.id].updatedAt || acc[e.id].createdAt)
-							? e
-							: acc[e.id]
-						: e;
-					return acc;
-				}, {})
-			).sort(
-				(a, b) =>
-					new Date(b.updatedAt || b.createdAt).getTime() -
-					new Date(a.updatedAt || a.createdAt).getTime()
-			);
+			const expenses = (await res.json()) as ExpenseRecord[];
 
 			// Delta Sync Logic
 			if (since) {
 				const sinceDate = new Date(since);
-				return expenses.filter(
-					(e) => new Date(e.updatedAt || e.createdAt) > sinceDate || kvOnlyIds.has(e.id)
-				);
+				return expenses.filter((e) => new Date(e.updatedAt || e.createdAt) > sinceDate);
 			}
 
 			return expenses;
@@ -170,9 +120,9 @@ export function makeExpenseService(
 
 			const now = new Date();
 
-			// 2. Move to Trash KV (store a structured payload like trips)
+			// 2. Move to Trash KV
 			if (trashKV) {
-				const expiresAt = new Date(now.getTime() + RETENTION.THIRTY_DAYS * 1000);
+				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 				const metadata = {
 					deletedAt: now.toISOString(),
 					deletedBy: userId,
@@ -181,33 +131,19 @@ export function makeExpenseService(
 				};
 				const trashItem = { type: 'expense', data: item, metadata };
 				await trashKV.put(`trash:${userId}:${id}`, JSON.stringify(trashItem), {
-					expirationTtl: RETENTION.THIRTY_DAYS
+					expirationTtl: 30 * 24 * 60 * 60
 				});
 			}
 
-			// 3. Delete from SQL (mark as deleted in DO/SQL)
+			// 3. Delete from SQL
 			await stub.fetch(`${DO_ORIGIN}/expenses/delete`, {
 				method: 'POST',
 				body: JSON.stringify({ id })
 			});
 
-			// 4. Write tombstone to KV instead of deleting it outright so other clients
-			// can detect the deletion during delta sync (mirror trip behavior)
-			try {
-				const tombstone = {
-					id: item.id,
-					userId: item.userId,
-					deleted: true,
-					deletedAt: now.toISOString(),
-					updatedAt: now.toISOString(),
-					createdAt: (item as any).createdAt
-				};
-				await kv.put(`expense:${userId}:${id}`, JSON.stringify(tombstone), {
-					expirationTtl: RETENTION.THIRTY_DAYS
-				});
-			} catch (err) {
-				log.warn(`[ExpenseService] Failed to write tombstone for expense ${id}`);
-			}
+			// 4. Clean up old KV (Eventual consistency cleanup)
+			// This ensures we don't leave stale data in the old system
+			await kv.delete(`expense:${userId}:${id}`);
 		}
 	};
 }
