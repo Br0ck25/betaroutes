@@ -15,8 +15,6 @@ function createExpensesStore() {
 	return {
 		subscribe,
 
-		// Updates local store without DB write
-		// Used by SyncManager to reflect background changes in the UI instantly
 		updateLocal(expense: ExpenseRecord) {
 			update((items) => {
 				const index = items.findIndex((e) => e.id === expense.id);
@@ -237,25 +235,29 @@ function createExpensesStore() {
 				if (!navigator.onLine) return;
 
 				const lastSync = localStorage.getItem('last_sync_expenses');
-
-				// [!code fix] SAFETY BUFFER: Subtract 5 minutes from lastSync to overlap and catch missed items due to clock skew
 				let url = '/api/expenses';
+				
+				// [!code change] Safety Buffer: Subtract 5 mins from lastSync to cover clock skew
 				if (lastSync) {
 					const date = new Date(lastSync);
-					date.setMinutes(date.getMinutes() - 5);
+					date.setMinutes(date.getMinutes() - 5); 
 					url += `?since=${encodeURIComponent(date.toISOString())}`;
 				}
 
-				console.log(`☁️ Syncing expenses... ${lastSync ? `(Delta since ${lastSync})` : '(Full)'}`);
+				console.log(
+					`☁️ Syncing expenses... ${lastSync ? `(Delta since ${lastSync})` : '(Full)'}`
+				);
 
 				const response = await fetch(url);
 				if (!response.ok) throw new Error('Failed to fetch expenses');
 
 				const cloudExpenses: any = await response.json();
 
+				// Update sync time immediately
+				localStorage.setItem('last_sync_expenses', new Date().toISOString());
+
 				if (cloudExpenses.length === 0) {
 					console.log('☁️ No new expense changes.');
-					localStorage.setItem('last_sync_expenses', new Date().toISOString());
 					return;
 				}
 
@@ -285,7 +287,6 @@ function createExpensesStore() {
 					if (trashIds.has(cloudExpense.id)) continue;
 
 					const local = await store.get(cloudExpense.id);
-					// Idempotent merge: safe to re-process items due to safety buffer
 					if (!local || new Date(cloudExpense.updatedAt) > new Date(local.updatedAt)) {
 						await store.put({
 							...cloudExpense,
@@ -296,8 +297,7 @@ function createExpensesStore() {
 					}
 				}
 				await tx.done;
-				// Update last-sync timestamp after successful merge
-				localStorage.setItem('last_sync_expenses', new Date().toISOString());
+
 				console.log(
 					`✅ Synced ${cloudExpenses.length} items. Updated: ${updateCount}, Deleted: ${deleteCount}.`
 				);
@@ -337,7 +337,7 @@ function createExpensesStore() {
 
 export const expenses = createExpensesStore();
 
-// [!code fix] Use subscribe() instead of setStoreUpdater()
+// [!code change] Use subscribe() to listen without conflicts
 syncManager.subscribe((item) => {
 	if (item && item.amount !== undefined && item.category !== undefined) {
 		expenses.updateLocal(item);

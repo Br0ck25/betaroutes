@@ -10,26 +10,24 @@ class SyncManager {
 	private isSyncing = false;
 	private apiKey: string = '';
 
-	// List of listeners (supports multiple stores now)
+	// [!code change] Changed from single Updater to array of Listeners
 	private listeners: ((item: any) => void)[] = [];
 
-	constructor() {
-		// No-op
-	}
-
-	// New Method: Allows multiple stores to listen
+	// [!code change] New method to subscribe multiple stores
 	subscribe(fn: (item: any) => void) {
 		this.listeners.push(fn);
 	}
 
-	// Deprecated Method: Kept to prevent "is not a function" crashes
+	// [!code change] Deprecated method kept for backward compatibility
 	setStoreUpdater(fn: (item: any) => void) {
-		console.warn('⚠️ syncManager.setStoreUpdater is deprecated. Use .subscribe() instead.');
 		this.subscribe(fn);
 	}
 
+	// [!code change] Helper to notify all listeners
 	private notifyListeners(item: any) {
-		this.listeners.forEach((fn) => fn(item));
+		if (this.listeners.length > 0) {
+			this.listeners.forEach((fn) => fn(item));
+		}
 	}
 
 	async initialize(apiKey?: string) {
@@ -148,14 +146,6 @@ class SyncManager {
 			}
 
 			await this.updatePendingCount();
-
-			// Notify listeners that a sync cycle completed so consumers can pull incoming changes
-			try {
-				this.notifyListeners({ type: 'syncCycleComplete' });
-			} catch (e) {
-				console.warn('⚠️ notifyListeners(syncCycleComplete) failed:', e);
-			}
-
 			if (failCount === 0) syncStatus.setSynced();
 			else syncStatus.setError(`${failCount} item(s) failed`);
 		} catch (err) {
@@ -217,7 +207,7 @@ class SyncManager {
 					await tx.objectStore('trips').put(trip);
 					await tx.done;
 
-					// Notify listeners so UI updates immediately
+					// [!code change] Notify all listeners
 					console.log('⚡ Updating UI with enriched data:', trip.id);
 					this.notifyListeners(trip);
 				}
@@ -230,7 +220,6 @@ class SyncManager {
 	private async processSyncItem(item: SyncQueueItem) {
 		const { action, tripId, data } = item;
 
-		// Determine which store/API to use
 		const storeName = ((data as any)?.store as string) || 'trips';
 		const baseUrl = storeName === 'expenses' ? '/api/expenses' : '/api/trips';
 		const url =
@@ -278,22 +267,7 @@ class SyncManager {
 			}
 			throw new Error(`${method} failed with status ${res.status}`);
 		}
-		// Attempt to parse response body (some routes return JSON)
-		let parsedBody: any = null;
-		try {
-			parsedBody = await res.clone().json();
-		} catch (e) {
-			// ignore non-JSON/empty bodies
-		}
 
-		// Notify listeners with the authoritative server response so stores can update
-		if (parsedBody && updateStore) {
-			try {
-				this.notifyListeners(parsedBody);
-			} catch (e) {
-				console.warn('⚠️ notifyListeners failed:', e);
-			}
-		}
 		if (updateStore) await this.markAsSynced(updateStore, id);
 	}
 
