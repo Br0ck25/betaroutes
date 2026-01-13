@@ -1,6 +1,6 @@
 // src/lib/server/expenseService.ts
 import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
-import { DO_ORIGIN } from '$lib/constants';
+import { DO_ORIGIN, RETENTION } from '$lib/constants';
 import { log } from '$lib/server/log';
 
 export interface ExpenseRecord {
@@ -120,9 +120,9 @@ export function makeExpenseService(
 
 			const now = new Date();
 
-			// 2. Move to Trash KV
+			// 2. Move to Trash KV (store a structured payload like trips)
 			if (trashKV) {
-				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+				const expiresAt = new Date(now.getTime() + RETENTION.THIRTY_DAYS * 1000);
 				const metadata = {
 					deletedAt: now.toISOString(),
 					deletedBy: userId,
@@ -131,19 +131,33 @@ export function makeExpenseService(
 				};
 				const trashItem = { type: 'expense', data: item, metadata };
 				await trashKV.put(`trash:${userId}:${id}`, JSON.stringify(trashItem), {
-					expirationTtl: 30 * 24 * 60 * 60
+					expirationTtl: RETENTION.THIRTY_DAYS
 				});
 			}
 
-			// 3. Delete from SQL
+			// 3. Delete from SQL (mark as deleted in DO/SQL)
 			await stub.fetch(`${DO_ORIGIN}/expenses/delete`, {
 				method: 'POST',
 				body: JSON.stringify({ id })
 			});
 
-			// 4. Clean up old KV (Eventual consistency cleanup)
-			// This ensures we don't leave stale data in the old system
-			await kv.delete(`expense:${userId}:${id}`);
+			// 4. Write tombstone to KV instead of deleting it outright so other clients
+			// can detect the deletion during delta sync (mirror trip behavior)
+			try {
+				const tombstone = {
+					id: item.id,
+					userId: item.userId,
+					deleted: true,
+					deletedAt: now.toISOString(),
+					updatedAt: now.toISOString(),
+					createdAt: (item as any).createdAt
+				};
+				await kv.put(`expense:${userId}:${id}`, JSON.stringify(tombstone), {
+					expirationTtl: RETENTION.THIRTY_DAYS
+				});
+			} catch (err) {
+				log.warn(`[ExpenseService] Failed to write tombstone for expense ${id}`);
+			}
 		}
 	};
 }

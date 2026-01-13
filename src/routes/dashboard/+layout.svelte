@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { auth, user } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
@@ -12,7 +12,6 @@
 	import { syncManager } from '$lib/sync/syncManager';
 	import SyncIndicator from '$lib/components/SyncIndicator.svelte';
 	import type { LayoutData } from './$types';
-
 	export let data: LayoutData;
 	$: if (data?.user) {
 		auth.hydrate(data.user);
@@ -28,7 +27,6 @@
 		if (e.key === 'Escape') closeSidebar();
 	}
 
-	// Helper to force client-side navigation using goto
 	function handleNav(e: MouseEvent, href: string) {
 		e.preventDefault();
 		closeSidebar();
@@ -71,27 +69,17 @@
 		}
 	];
 
-	// [!code fix] UPDATED: Now accepts currentPath argument for guaranteed reactivity
-	function isActive(
-		href: string,
-		currentPath: string,
-		exact = false,
-		exclude: string[] = []
-	): boolean {
-		// Normalize both to ensure trailing slash consistency
+	function isActive(href: string, currentPath: string, exact = false, exclude: string[] = []): boolean {
 		const path = currentPath.endsWith('/') ? currentPath : currentPath + '/';
 		const link = href.endsWith('/') ? href : href + '/';
-
 		if (exclude.length > 0) {
 			if (exclude.some((e) => path.startsWith(e))) {
 				return false;
 			}
 		}
-
 		if (exact) {
 			return path === link;
 		}
-
 		return path.startsWith(link);
 	}
 
@@ -99,11 +87,16 @@
 		return name ? name.charAt(0).toUpperCase() : 'U';
 	}
 
+	let syncInterval: any;
+
+	onDestroy(() => {
+		if (syncInterval) clearInterval(syncInterval);
+	});
+
 	onMount(async () => {
 		console.log('[DASHBOARD LAYOUT] Initializing...');
 
 		const apiKey = data.googleMapsApiKey;
-
 		let userId =
 			(data?.user as any)?.name || $user?.name || (data?.user as any)?.token || $user?.token;
 
@@ -115,7 +108,6 @@
 		}
 
 		if (userId) {
-			// Defer heavy initialization until after first paint so the LCP can render quickly
 			await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
 
 			const doInit = async () => {
@@ -124,22 +116,29 @@
 
 					await syncManager.initialize(apiKey);
 
-					// Kick off loads without awaiting them so we don't block initial paint
 					trips.load(userId);
 					expenses.load(userId);
 					trash.load(userId);
 
-					// Background syncs
+					// Initial Sync
 					trips.syncFromCloud(userId);
 					expenses.syncFromCloud(userId);
+					
+					// [!code fix] Auto-Sync Polling (every 30s)
+					// This ensures Device B sees Device A's changes
+					syncInterval = setInterval(() => {
+						if (userId && navigator.onLine) {
+							console.log('🔄 Auto-syncing incoming changes...');
+							trips.syncFromCloud(userId);
+							expenses.syncFromCloud(userId);
+						}
+					}, 30000);
 
 					console.log('[DASHBOARD LAYOUT] ✅ Data loading started');
 				} catch (err) {
 					console.error('[DASHBOARD LAYOUT] ❌ Failed to start data load:', err);
 				}
 			};
-
-			// Prefer requestIdleCallback when available to do non-critical work
 			if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
 				(requestIdleCallback as any)(() => doInit().catch(console.error));
 			} else {
@@ -158,7 +157,6 @@
 		href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
 		rel="stylesheet"
 	/>
-	<!-- Preload the dashboard mobile logo to improve LCP discoverability and priority -->
 	<link
 		rel="preload"
 		href="/180x75.avif"
@@ -191,7 +189,8 @@
 			{#if $user}
 				<button
 					class="mobile-user-btn"
-					aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
+					aria-label={sidebarOpen ?
+						'Close menu' : 'Open menu'}
 					aria-expanded={sidebarOpen}
 					aria-controls="dashboard-sidebar"
 					on:click={() => (sidebarOpen = !sidebarOpen)}
@@ -263,7 +262,8 @@
 					on:click={(e) => handleNav(e, '/dashboard/settings/')}
 				>
 					<div class="user-avatar">
-						{getInitial($user.name || $user.email || '')}
+						{getInitial($user.name || $user.email ||
+							'')}
 					</div>
 					<div class="user-info">
 						<div class="user-name">{$user.name || 'User'}</div>
@@ -306,7 +306,8 @@
 			{#if item.label === 'Settings'}
 				<button
 					class="bottom-nav-item"
-					aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
+					aria-label={sidebarOpen ?
+						'Close menu' : 'Open menu'}
 					aria-expanded={sidebarOpen}
 					aria-controls="dashboard-sidebar"
 					on:click={() => (sidebarOpen = !sidebarOpen)}
