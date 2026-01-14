@@ -15,16 +15,12 @@ class SyncManager {
 	private isSyncing = false;
 	private apiKey: string = '';
 
-	// [!code change] Support multiple stores instead of a single listener
+	// Support multiple stores
 	private registeredStores = new Map<string, StoreHandler>();
 
-	// [!code change] New method to register stores (Trips, Expenses, etc.)
 	registerStore(name: string, handler: StoreHandler) {
 		this.registeredStores.set(name, handler);
 	}
-
-	// [!code delete] private storeUpdater: ((trip: any) => void) | null = null;
-	// [!code delete] setStoreUpdater(fn: (trip: any) => void) { ... }
 
 	async initialize(apiKey?: string) {
 		if (this.initialized) return;
@@ -139,8 +135,7 @@ class SyncManager {
 				if (failCount > 0) syncStatus.setError(`${failCount} item(s) failed`);
 			}
 
-			// [!code ++] 2. Trigger Cloud Download (Pull) for all registered stores
-			// This ensures expenses are fetched even if manual calls are missing
+			// 2. Trigger Cloud Download (Pull) for all registered stores
 			console.log('⬇️ Triggering downward sync...');
 			await Promise.all(
 				Array.from(this.registeredStores.values()).map((store) =>
@@ -208,10 +203,8 @@ class SyncManager {
 					await tx.objectStore('trips').put(trip);
 					await tx.done;
 
-					// [!code change] Notify specifically the trips store
 					const tripsStore = this.registeredStores.get('trips');
 					if (tripsStore) {
-						console.log('⚡ Updating UI with enriched data:', trip.id);
 						tripsStore.updateLocal(trip);
 					}
 				}

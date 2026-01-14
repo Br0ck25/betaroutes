@@ -15,18 +15,14 @@ function createExpensesStore() {
 	return {
 		subscribe,
 
-		// Updates local store without DB write
-		// Used by SyncManager to reflect background changes in the UI instantly
 		updateLocal(expense: ExpenseRecord) {
 			update((items) => {
 				const index = items.findIndex((e) => e.id === expense.id);
 				if (index !== -1) {
-					// Update existing
 					const newItems = [...items];
 					newItems[index] = { ...newItems[index], ...expense };
 					return newItems;
 				} else {
-					// Insert new (Upsert) - useful for restores/sync
 					return [expense, ...items].sort(
 						(a, b) =>
 							new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime()
@@ -51,7 +47,6 @@ function createExpensesStore() {
 					expenses = await store.getAll();
 				}
 
-				// Sort by date descending (newest first)
 				expenses.sort((a, b) => {
 					const dateA = new Date(a.date || a.createdAt).getTime();
 					const dateB = new Date(b.date || b.createdAt).getTime();
@@ -71,7 +66,6 @@ function createExpensesStore() {
 
 		async create(expenseData: Partial<ExpenseRecord>, userId: string) {
 			try {
-				// Free Tier Check (rolling window)
 				const currentUser = get(auth).user;
 				const isFreeTier = !currentUser?.plan || currentUser.plan === 'free';
 				if (isFreeTier) {
@@ -107,24 +101,21 @@ function createExpensesStore() {
 					syncStatus: 'pending'
 				} as ExpenseRecord;
 
-				// 1. Save to Local DB
 				const db = await getDB();
 				const tx = db.transaction('expenses', 'readwrite');
 				await tx.objectStore('expenses').put(expense);
 				await tx.done;
 
-				// 2. Update Svelte Store immediately
 				update((expenses) => {
 					const exists = expenses.find((e) => e.id === expense.id);
 					if (exists) return expenses.map((e) => (e.id === expense.id ? expense : e));
 					return [expense, ...expenses];
 				});
 
-				// 3. Queue for Sync
 				await syncManager.addToQueue({
 					action: 'create',
-					tripId: expense.id, // Using tripId to satisfy SyncQueueItem interface
-					data: { ...expense, store: 'expenses' } // Tag data with store name for worker
+					tripId: expense.id,
+					data: { ...expense, store: 'expenses' }
 				});
 
 				return expense;
@@ -160,7 +151,7 @@ function createExpensesStore() {
 
 				await syncManager.addToQueue({
 					action: 'update',
-					tripId: id, // Using tripId to satisfy SyncQueueItem interface
+					tripId: id,
 					data: { ...updated, store: 'expenses' }
 				});
 
@@ -172,7 +163,6 @@ function createExpensesStore() {
 		},
 
 		async deleteExpense(id: string, userId: string) {
-			// Optimistic Update: Remove from UI immediately
 			let previousExpenses: ExpenseRecord[] = [];
 			update((current) => {
 				previousExpenses = current;
@@ -183,7 +173,6 @@ function createExpensesStore() {
 				console.log('🗑️ Moving expense to trash:', id);
 				const db = await getDB();
 
-				// 1. Verify Ownership
 				const expensesTx = db.transaction('expenses', 'readonly');
 				const expense = await expensesTx.objectStore('expenses').get(id);
 				if (!expense) throw new Error('Expense not found');
@@ -201,27 +190,23 @@ function createExpensesStore() {
 					syncStatus: 'pending' as const
 				};
 
-				// 2. Move to Trash Store
 				const trashTx = db.transaction('trash', 'readwrite');
 				await trashTx.objectStore('trash').put(trashItem);
 				await trashTx.done;
 
-				// 3. Remove from Expenses Store
 				const deleteTx = db.transaction('expenses', 'readwrite');
 				await deleteTx.objectStore('expenses').delete(id);
 				await deleteTx.done;
 
-				// 4. Queue Sync Action
 				await syncManager.addToQueue({
 					action: 'delete',
 					tripId: id,
-					data: { store: 'expenses' } // Tag data so worker knows which API endpoint to hit
+					data: { store: 'expenses' }
 				});
 
 				console.log('✅ Expense moved to trash:', id);
 			} catch (err) {
 				console.error('❌ Failed to delete expense:', err);
-				// Revert UI if failed
 				set(previousExpenses);
 				throw err;
 			}
@@ -250,12 +235,17 @@ function createExpensesStore() {
 				if (!navigator.onLine) return;
 
 				const lastSync = localStorage.getItem('last_sync_expenses');
-				const url = lastSync
-					? `/api/expenses?since=${encodeURIComponent(lastSync)}`
+
+				// [!code fix] SAFETY BUFFER: Backdate 'since' by 5 minutes
+				// This fixes issues where clock skew causes the client to miss recent items
+				const sinceDate = lastSync ? new Date(new Date(lastSync).getTime() - 5 * 60 * 1000) : null;
+
+				const url = sinceDate
+					? `/api/expenses?since=${encodeURIComponent(sinceDate.toISOString())}`
 					: '/api/expenses';
 
 				console.log(
-					`☁️ Syncing expenses from cloud... ${lastSync ? `(Delta since ${lastSync})` : '(Full)'}`
+					`☁️ Syncing expenses... ${lastSync ? `(Delta since ${sinceDate?.toISOString()})` : '(Full)'}`
 				);
 
 				const response = await fetch(url);
@@ -264,21 +254,19 @@ function createExpensesStore() {
 				const cloudExpenses: any = await response.json();
 
 				if (cloudExpenses.length === 0) {
-					console.log('☁️ No new expense changes from cloud.');
+					console.log('☁️ No new expense changes.');
 					localStorage.setItem('last_sync_expenses', new Date().toISOString());
 					return;
 				}
 
 				const db = await getDB();
 
-				// Get Trash IDs to prevent reviving deleted items
 				const trashTx = db.transaction('trash', 'readonly');
 				const trashStore = trashTx.objectStore('trash');
 				const trashItems = await trashStore.getAll();
 				const trashIds = new Set(trashItems.map((t: any) => t.id));
 				await trashTx.done;
 
-				// Merge Logic
 				const tx = db.transaction('expenses', 'readwrite');
 				const store = tx.objectStore('expenses');
 
@@ -286,24 +274,19 @@ function createExpensesStore() {
 				let deleteCount = 0;
 
 				for (const cloudExpense of cloudExpenses) {
-					// Handle Soft Deletes (Tombstones)
 					if (cloudExpense.deleted) {
 						const local = await store.get(cloudExpense.id);
 						if (local) {
 							await store.delete(cloudExpense.id);
 							deleteCount++;
-							console.log('🗑️ Applying server deletion for expense:', cloudExpense.id);
 						}
 						continue;
 					}
 
-					if (trashIds.has(cloudExpense.id)) {
-						console.log('Skipping synced expense because it is in local trash:', cloudExpense.id);
-						continue;
-					}
+					if (trashIds.has(cloudExpense.id)) continue;
 
 					const local = await store.get(cloudExpense.id);
-					// Last Write Wins (based on updatedAt)
+					// Last Write Wins (based on updatedAt) handles the duplicates from overlap
 					if (!local || new Date(cloudExpense.updatedAt) > new Date(local.updatedAt)) {
 						await store.put({
 							...cloudExpense,
@@ -317,7 +300,7 @@ function createExpensesStore() {
 
 				localStorage.setItem('last_sync_expenses', new Date().toISOString());
 				console.log(
-					`✅ Processed ${cloudExpenses.length} expense changes. Updated: ${updateCount}, Deleted: ${deleteCount}.`
+					`✅ Synced expenses. Updated: ${updateCount}, Deleted: ${deleteCount}.`
 				);
 
 				await this.load(userId);
@@ -355,10 +338,8 @@ function createExpensesStore() {
 
 export const expenses = createExpensesStore();
 
-// Register with SyncManager
 syncManager.registerStore('expenses', {
 	updateLocal: (item) => {
-		// Basic check to see if it looks like an expense
 		if (item && item.amount !== undefined && item.category !== undefined) {
 			expenses.updateLocal(item);
 		}
