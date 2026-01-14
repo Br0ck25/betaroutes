@@ -11,19 +11,18 @@
 
 	const resolve = (href: string) => `${base}${href}`;
 
-	let trashedTrips: any[] = [];
+	let trashedTrips: any[] = []; // Using any[] to handle the merged/flattened structure
 	let loading = true;
 	let restoring = new Set<string>();
 	let deleting = new Set<string>();
 
 	onMount(async () => {
+		await loadTrash();
 		const userId = $user?.name || $user?.token;
 		if (userId) {
-			// Trigger cloud sync first to populate DB
 			await trash.syncFromCloud(userId);
+			await loadTrash();
 		}
-		// Load from local DB
-		await loadTrash();
 	});
 
 	async function loadTrash() {
@@ -41,13 +40,21 @@
 
 			let allItems: any[] = [];
 			for (const id of potentialIds) {
-				// This query works now because store.syncFromCloud flattened the userId to the root
 				const items = await index.getAll(id);
 				allItems = [...allItems, ...items];
 			}
 
-			// Deduplicate by ID
-			const uniqueItems = Array.from(new Map(allItems.map(item => [item.id, item])).values());
+			// [!code fix] Normalize/Flatten items here to handle { data: ... } structure
+			const uniqueItems = Array.from(new Map(allItems.map((item) => {
+				let flat = { ...item };
+				// If local deletion stored it nested in 'data', flatten it up
+				if (flat.data && typeof flat.data === 'object') {
+					flat = { ...flat.data, ...flat };
+					delete flat.data;
+				}
+				return [flat.id, flat];
+			})).values());
+
 			uniqueItems.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
 			trashedTrips = uniqueItems;
 		} catch (err) {
@@ -69,8 +76,10 @@
 		restoring = restoring;
 
 		try {
+			// Pass userId to ensure security/correctness
 			await trash.restore(id, item.userId);
 
+			// Reload the correct store based on type
 			const isExpense = item.type === 'expense' || item.recordType === 'expense' || item.originalKey?.startsWith('expense:');
 			
 			if (isExpense) {
@@ -95,6 +104,7 @@
 
 		loading = true;
 		try {
+			// Process sequentially to avoid DB contention
 			for (const trip of trashedTrips) {
 				await trash.restore(trip.id, trip.userId);
 			}
@@ -115,8 +125,10 @@
 
 	async function permanentDelete(id: string) {
 		if (!confirm('Permanently delete this item? Cannot be undone.')) return;
-		if (deleting.has(id)) return;
+		const item = trashedTrips.find((t) => t.id === id);
+		if (!item) return;
 		
+		if (deleting.has(id)) return;
 		deleting.add(id);
 		deleting = deleting;
 		

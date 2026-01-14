@@ -181,12 +181,10 @@ function createExpensesStore() {
 				const now = new Date();
 				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-				// [!code fix] STRUCTURAL FIX: Wrap expense in 'data' and add 'type'
-				// This ensures the Trash UI (which expects item.data.category) finds the fields
 				const trashItem = {
-					id: expense.id, // Top-level ID for IndexedDB indexing
+					id: expense.id,
 					type: 'expense',
-					data: expense, // Nested data containing 'category', 'amount', etc.
+					data: expense,
 					deletedAt: now.toISOString(),
 					deletedBy: userId,
 					expiresAt: expiresAt.toISOString(),
@@ -239,7 +237,6 @@ function createExpensesStore() {
 				if (!navigator.onLine) return;
 
 				const lastSync = localStorage.getItem('last_sync_expenses');
-				// Safety Buffer: Backdate sync by 5 minutes to handle clock skew
 				const sinceDate = lastSync ? new Date(new Date(lastSync).getTime() - 5 * 60 * 1000) : null;
 
 				const url = sinceDate

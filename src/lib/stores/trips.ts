@@ -395,8 +395,7 @@ function createTripsStore() {
 
 export const trips = createTripsStore();
 
-// [!code change] Register properly with SyncManager
-// Replaces the old `setStoreUpdater` call causing your crash
+// [!code change] Replaces old setStoreUpdater with registerStore to fix crash
 syncManager.registerStore('trips', {
 	updateLocal: (trip) => trips.updateLocal(trip),
 	syncDown: async () => {
