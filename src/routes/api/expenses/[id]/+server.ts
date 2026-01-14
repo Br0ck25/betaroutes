@@ -1,6 +1,6 @@
 // src/routes/api/expenses/[id]/+server.ts
 import type { RequestHandler } from './$types';
-import { makeExpenseServiceKV, type ExpenseRecord } from '$lib/server/expenseService';
+import { makeExpenseService, type ExpenseRecord } from '$lib/server/expenseService';
 import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 import { log } from '$lib/server/log';
@@ -13,9 +13,10 @@ export const DELETE: RequestHandler = async (event) => {
 		const env = getEnv(event.platform);
 		const storageId = user.name || user.token || user.id || '';
 
-		// Pass both the Main KV and Trash KV to the KV-backed service (no DO)
-		const svc = makeExpenseServiceKV(
+		// Pass both the Main KV and Trash KV to the service
+		const svc = makeExpenseService(
 			safeKV(env, 'BETA_LOGS_KV')!,
+			safeDO(env, 'TRIP_INDEX_DO')!,
 			safeKV(env, 'BETA_LOGS_TRASH_KV')
 		);
 		await svc.delete(storageId, event.params.id);
@@ -36,10 +37,7 @@ export const PUT: RequestHandler = async (event) => {
 		const storageId = user.name || user.token || user.id || '';
 
 		const body = (await event.request.json()) as unknown;
-		const svc = makeExpenseServiceKV(
-			safeKV(env, 'BETA_LOGS_KV')!,
-			safeKV(env, 'BETA_LOGS_TRASH_KV')
-		); // Trash KV not needed for update
+		const svc = makeExpenseService(safeKV(env, 'BETA_LOGS_KV')!, safeDO(env, 'TRIP_INDEX_DO')!); // Trash KV not needed for update
 
 		// Ensure ID matches URL
 		const expense = {

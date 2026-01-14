@@ -1,6 +1,6 @@
 // src/routes/api/expenses/+server.ts
 import type { RequestHandler } from './$types';
-import { makeExpenseServiceKV, type ExpenseRecord } from '$lib/server/expenseService';
+import { makeExpenseService, type ExpenseRecord } from '$lib/server/expenseService';
 import { z } from 'zod';
 import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
@@ -34,9 +34,10 @@ export const GET: RequestHandler = async (event) => {
 
 		log.info('Fetching expenses', { storageId, since: since || 'All Time' });
 
-		// Use KV-backed service (no DO)
-		const svc = makeExpenseServiceKV(
+		// Inject DO Binding (use safe accessors)
+		const svc = makeExpenseService(
 			safeKV(env, 'BETA_LOGS_KV')!,
+			safeDO(env, 'TRIP_INDEX_DO')!,
 			safeKV(env, 'BETA_LOGS_TRASH_KV')
 		);
 		const expenses = await svc.list(storageId, since);
@@ -71,9 +72,10 @@ export const POST: RequestHandler = async (event) => {
 			return new Response(JSON.stringify({ error: 'Invalid Data' }), { status: 400 });
 		}
 
-		// Use KV-backed service (no DO)
-		const svc = makeExpenseServiceKV(
+		// Inject DO Binding
+		const svc = makeExpenseService(
 			safeKV(env, 'BETA_LOGS_KV')!,
+			safeDO(env, 'TRIP_INDEX_DO')!,
 			safeKV(env, 'BETA_LOGS_TRASH_KV')
 		);
 
