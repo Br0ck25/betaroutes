@@ -5,12 +5,13 @@
 	import { expenses } from '$lib/stores/expenses';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	const resolve = (href: string) => `${base}${href}`;
 	import { user } from '$lib/stores/auth';
 	import { getDB } from '$lib/db/indexedDB';
 	import type { TrashRecord } from '$lib/db/types';
 
-	let trashedTrips: TrashRecord[] = [];
+	const resolve = (href: string) => `${base}${href}`;
+
+	let trashedTrips: any[] = []; // Using any[] to handle the merged/flattened structure
 	let loading = true;
 	let restoring = new Set<string>();
 	let deleting = new Set<string>();
@@ -37,13 +38,23 @@
 			const tx = db.transaction('trash', 'readonly');
 			const index = tx.objectStore('trash').index('userId');
 
-			let allItems: TrashRecord[] = [];
+			let allItems: any[] = [];
 			for (const id of potentialIds) {
 				const items = await index.getAll(id);
 				allItems = [...allItems, ...items];
 			}
 
-			const uniqueItems = Array.from(new Map(allItems.map((item) => [item.id, item])).values());
+			// [!code fix] Normalize/Flatten items here to handle { data: ... } structure
+			const uniqueItems = Array.from(new Map(allItems.map((item) => {
+				let flat = { ...item };
+				// If local deletion stored it nested in 'data', flatten it up
+				if (flat.data && typeof flat.data === 'object') {
+					flat = { ...flat.data, ...flat };
+					delete flat.data;
+				}
+				return [flat.id, flat];
+			})).values());
+
 			uniqueItems.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
 			trashedTrips = uniqueItems;
 		} catch (err) {
@@ -65,10 +76,13 @@
 		restoring = restoring;
 
 		try {
+			// Pass userId to ensure security/correctness
 			await trash.restore(id, item.userId);
 
 			// Reload the correct store based on type
-			if (item.recordType === 'expense' || item.originalKey?.startsWith('expense:')) {
+			const isExpense = item.type === 'expense' || item.recordType === 'expense' || item.originalKey?.startsWith('expense:');
+			
+			if (isExpense) {
 				await expenses.load(item.userId);
 			} else {
 				await trips.load(item.userId);
@@ -90,7 +104,11 @@
 
 		loading = true;
 		try {
-			await Promise.all(trashedTrips.map((trip) => trash.restore(trip.id, trip.userId)));
+			// Process sequentially to avoid DB contention
+			for (const trip of trashedTrips) {
+				await trash.restore(trip.id, trip.userId);
+			}
+			
 			const userId = $user?.name || $user?.token;
 			if (userId) {
 				await trips.load(userId);
@@ -100,6 +118,7 @@
 		} catch (err) {
 			console.error('Failed to restore all:', err);
 			alert('Failed to restore some items.');
+		} finally {
 			loading = false;
 		}
 	}
@@ -108,9 +127,11 @@
 		if (!confirm('Permanently delete this item? Cannot be undone.')) return;
 		const item = trashedTrips.find((t) => t.id === id);
 		if (!item) return;
+		
 		if (deleting.has(id)) return;
 		deleting.add(id);
 		deleting = deleting;
+		
 		try {
 			await trash.permanentDelete(id);
 			await loadTrash();
@@ -126,10 +147,8 @@
 		if (!confirm('Permanently delete ALL items? Cannot be undone.')) return;
 		try {
 			const uniqueUserIds = new Set(trashedTrips.map((t) => t.userId));
-			let totalDeleted = 0;
 			for (const uid of uniqueUserIds) {
-				const count = await trash.emptyTrash(uid);
-				totalDeleted += count;
+				await trash.emptyTrash(uid);
 			}
 			await loadTrash();
 		} catch (err) {
@@ -228,12 +247,12 @@
 		</div>
 	{:else}
 		<div class="trash-list">
-			{#each trashedTrips as trip}
-				{@const expiresAt = trip.expiresAt || (trip as any).metadata?.expiresAt}
-				{@const deletedAt = trip.deletedAt || (trip as any).metadata?.deletedAt}
+			{#each trashedTrips as trip (trip.id)}
+				{@const expiresAt = trip.expiresAt || trip.metadata?.expiresAt}
+				{@const deletedAt = trip.deletedAt || trip.metadata?.deletedAt}
 				{@const daysLeft = getDaysUntilExpiration(expiresAt)}
-				{@const isExpense =
-					trip.recordType === 'expense' || trip.originalKey?.startsWith('expense:')}
+				
+				{@const isExpense = trip.type === 'expense' || trip.recordType === 'expense' || trip.originalKey?.startsWith('expense:')}
 
 				<div class="trash-item">
 					<div class="trip-info">
@@ -260,14 +279,13 @@
 
 						<div class="trip-details">
 							{#if isExpense}
-								<span class="detail amount">${trip.amount?.toFixed(2)}</span>
+								<span class="detail amount">${Number(trip.amount || 0).toFixed(2)}</span>
 								{#if trip.description}<span class="detail">{trip.description}</span>{/if}
-								<span class="detail">{new Date(trip.date || '').toLocaleDateString()}</span>
+								<span class="detail">{new Date(trip.date || trip.createdAt || '').toLocaleDateString()}</span>
 							{:else}
-								<span class="detail">{new Date(trip.date || '').toLocaleDateString()}</span>
+								<span class="detail">{new Date(trip.date || trip.createdAt || '').toLocaleDateString()}</span>
 								<span class="detail">{trip.stops?.length || 0} stops</span>
-								{#if trip.totalMiles}<span class="detail">{trip.totalMiles.toFixed(1)} mi</span
-									>{/if}
+								{#if trip.totalMiles}<span class="detail">{Number(trip.totalMiles).toFixed(1)} mi</span>{/if}
 							{/if}
 						</div>
 					</div>

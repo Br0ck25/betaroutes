@@ -16,9 +16,20 @@ function createTrashStore() {
 				const tx = db.transaction('trash', 'readonly');
 				const store = tx.objectStore('trash');
 				const items = userId ? await store.index('userId').getAll(userId) : await store.getAll();
-				items.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
-				set(items);
-				return items;
+				
+				// Normalize/Flatten similar to +page.svelte logic for consistency in store
+				const normalizedItems = items.map(item => {
+					let flat = { ...item };
+					if (flat.data && typeof flat.data === 'object') {
+						flat = { ...flat.data, ...flat };
+						delete flat.data;
+					}
+					return flat;
+				});
+
+				normalizedItems.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
+				set(normalizedItems);
+				return normalizedItems;
 			} catch (err) {
 				console.error('❌ Failed to load trash:', err);
 				set([]);
@@ -35,24 +46,39 @@ function createTrashStore() {
 				if (!trashItem) throw new Error('Item not found in trash');
 				if (trashItem.userId !== userId) throw new Error('Unauthorized');
 
-				const restoredItem = { ...trashItem };
+				// Deep clone and handle potential nested structure
+				let restoredItem = { ...trashItem };
+				
+				// If stored as nested { data: ... }, flatten it first to get the actual fields
+				if (restoredItem.data && typeof restoredItem.data === 'object') {
+					restoredItem = { ...restoredItem.data, ...restoredItem };
+					delete restoredItem.data;
+				}
+
+				// Remove trash-specific metadata
 				delete (restoredItem as any).deletedAt;
 				delete (restoredItem as any).deletedBy;
 				delete (restoredItem as any).expiresAt;
+				
 				const originalKey = restoredItem.originalKey;
+				const type = restoredItem.type || restoredItem.recordType;
+
 				delete (restoredItem as any).originalKey;
 				delete (restoredItem as any).recordType;
+				delete (restoredItem as any).type; // Clean up convenience type if present
 
 				restoredItem.updatedAt = new Date().toISOString();
 				restoredItem.syncStatus = 'pending';
 
 				// Detect type and restore to correct store
-				if (originalKey && originalKey.startsWith('expense:')) {
+				// Check 'type', 'recordType', or 'originalKey' prefix
+				if (type === 'expense' || (originalKey && originalKey.startsWith('expense:'))) {
+					console.log('Restoring expense:', id);
 					const tx = db.transaction('expenses', 'readwrite');
 					await tx.objectStore('expenses').put(restoredItem);
 					await tx.done;
 				} else {
-					// Default to trips
+					console.log('Restoring trip:', id);
 					const tx = db.transaction('trips', 'readwrite');
 					await tx.objectStore('trips').put(restoredItem);
 					await tx.done;
@@ -63,7 +89,15 @@ function createTrashStore() {
 				await deleteTx.done;
 
 				update((items) => items.filter((item) => item.id !== id));
-				await syncManager.addToQueue({ action: 'restore', tripId: id });
+				
+				// Determine target store for sync action
+				const syncTarget = (type === 'expense' || (originalKey && originalKey.startsWith('expense:'))) ? 'expenses' : 'trips';
+				
+				await syncManager.addToQueue({ 
+					action: 'restore', 
+					tripId: id,
+					data: { store: syncTarget } // Hint to worker where to restore
+				});
 
 				return restoredItem;
 			} catch (err) {
@@ -83,13 +117,21 @@ function createTrashStore() {
 
 		async emptyTrash(userId: string) {
 			const db = await getDB();
-			const userItems = await db.getAllFromIndex('trash', 'userId', userId);
+			const txRead = db.transaction('trash', 'readonly');
+			const index = txRead.objectStore('trash').index('userId');
+			const userItems = await index.getAll(userId);
+			await txRead.done;
+
 			if (userItems.length === 0) return 0;
 
 			const tx = db.transaction('trash', 'readwrite');
-			for (const item of userItems) await tx.store.delete(item.id);
+			for (const item of userItems) {
+				await tx.objectStore('trash').delete(item.id);
+			}
 			await tx.done;
-			set([]);
+			
+			// Update store to remove deleted items
+			update(current => current.filter(item => item.userId !== userId));
 
 			for (const item of userItems) {
 				await syncManager.addToQueue({ action: 'permanentDelete', tripId: item.id });
@@ -109,6 +151,7 @@ function createTrashStore() {
 
 				const db = await getDB();
 				const tx = db.transaction('trash', 'readwrite');
+				const store = tx.objectStore('trash');
 
 				for (const rawItem of cloudTrash) {
 					// Normalize Item
@@ -116,7 +159,6 @@ function createTrashStore() {
 
 					// Handle generic 'data' wrapper if present from new API
 					if (flatItem.data) {
-						// Merge data up
 						flatItem = { ...flatItem.data, ...flatItem };
 						delete flatItem.data;
 					}
@@ -134,16 +176,18 @@ function createTrashStore() {
 					if (!flatItem.id) continue;
 
 					// Determine Record Type
-					if (!flatItem.recordType) {
+					if (!flatItem.recordType && !flatItem.type) {
 						if (flatItem.originalKey?.startsWith('expense:')) flatItem.recordType = 'expense';
 						else flatItem.recordType = 'trip';
+					} else if (flatItem.type && !flatItem.recordType) {
+						flatItem.recordType = flatItem.type;
 					}
 
 					cloudIds.add(flatItem.id);
 
-					const local = await tx.store.get(flatItem.id);
+					const local = await store.get(flatItem.id);
 					if (!local || new Date(flatItem.deletedAt) > new Date(local.deletedAt)) {
-						await tx.store.put({
+						await store.put({
 							...flatItem,
 							syncStatus: 'synced',
 							lastSyncedAt: new Date().toISOString()
@@ -151,29 +195,27 @@ function createTrashStore() {
 					}
 				}
 
-				// Reconciliation
-				const index = tx.store.index('userId');
+				// Reconciliation: Remove local items not in cloud (unless pending)
+				const index = store.index('userId');
 				const localItems = await index.getAll(userId);
 				for (const localItem of localItems) {
 					if (!cloudIds.has(localItem.id)) {
 						if (localItem.syncStatus === 'pending') continue;
-						await tx.store.delete(localItem.id);
+						await store.delete(localItem.id);
 					}
 				}
 				await tx.done;
 
-				// Cleanup Active Stores (Safety Check)
+				// Cleanup Active Stores (Safety Check to prevent duplicates in active lists)
 				const cleanupTx = db.transaction(['trash', 'trips', 'expenses'], 'readwrite');
 				const allTrash = await cleanupTx.objectStore('trash').getAll();
 				const tripStore = cleanupTx.objectStore('trips');
 				const expenseStore = cleanupTx.objectStore('expenses');
 
 				for (const trashItem of allTrash) {
-					// Remove from active trips
 					if (await tripStore.get(trashItem.id)) {
 						await tripStore.delete(trashItem.id);
 					}
-					// Remove from active expenses
 					if (await expenseStore.get(trashItem.id)) {
 						await expenseStore.delete(trashItem.id);
 					}
