@@ -15,7 +15,6 @@ class SyncManager {
 	private isSyncing = false;
 	private apiKey: string = '';
 
-	// Support multiple stores
 	private registeredStores = new Map<string, StoreHandler>();
 
 	registerStore(name: string, handler: StoreHandler) {
@@ -40,7 +39,12 @@ class SyncManager {
 		});
 
 		if (navigator.onLine) {
+			// 1. Push any pending local changes immediately
 			await this.syncNow();
+			
+			// 2. [!code ++] Pull/Download data ONLY on initialization (Page Refresh)
+			await this.syncDownAll();
+			
 			this.startAutoSync();
 		}
 
@@ -49,10 +53,20 @@ class SyncManager {
 		console.log('✅ Sync manager initialized');
 	}
 
+	// [!code ++] New helper to handle the "Refresh" logic
+	private async syncDownAll() {
+		console.log('⬇️ Downloading latest data (Refresh)...');
+		await Promise.all(
+			Array.from(this.registeredStores.values()).map((store) =>
+				store.syncDown().catch((e) => console.error('Store sync down failed:', e))
+			)
+		);
+	}
+
 	private async handleOnline() {
 		console.log('🌐 Back online!');
 		syncStatus.setOnline(true);
-		await this.syncNow();
+		await this.syncNow(); // Only uploads
 		this.startAutoSync();
 	}
 
@@ -103,7 +117,7 @@ class SyncManager {
 		syncStatus.setSyncing();
 
 		try {
-			// 1. Process Upload Queue (Push)
+			// Process Upload Queue (Push Only)
 			const db = await getDB();
 			const queue = await db.getAll('syncQueue');
 
@@ -113,7 +127,6 @@ class SyncManager {
 
 				for (const item of queue) {
 					try {
-						// Enrich data only if it's a trip
 						if (
 							(item.action === 'create' || item.action === 'update') &&
 							item.data &&
@@ -135,14 +148,8 @@ class SyncManager {
 				if (failCount > 0) syncStatus.setError(`${failCount} item(s) failed`);
 			}
 
-			// 2. Trigger Cloud Download (Pull) for all registered stores
-			console.log('⬇️ Triggering downward sync...');
-			await Promise.all(
-				Array.from(this.registeredStores.values()).map((store) =>
-					store.syncDown().catch((e) => console.error('Store sync down failed:', e))
-				)
-			);
-
+			// [!code delete] Removed the "Triggering downward sync..." block
+			
 			syncStatus.setSynced();
 		} catch (err) {
 			console.error('❌ Sync error:', err);
