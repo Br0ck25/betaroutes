@@ -4,6 +4,7 @@ import type { User, AuthResponse, Subscription } from '$lib/types';
 import { storage } from '$lib/utils/storage';
 import { api } from '$lib/utils/api';
 import { trips } from './trips';
+import { expenses } from './expenses';
 
 interface AuthState {
 	user: User | null;
@@ -103,7 +104,8 @@ function createAuthStore() {
 					});
 
 					const syncId = user.name || user.token;
-					if (syncId) await trips.syncFromCloud(syncId);
+					if (syncId)
+						await Promise.all([trips.syncFromCloud(syncId), expenses.syncFromCloud(syncId)]);
 				} catch (error) {
 					console.warn('Failed to load user data, checking offline cache...', error);
 
@@ -195,7 +197,7 @@ function createAuthStore() {
 					localStorage.removeItem('offline_user_id');
 				}
 
-				await trips.syncFromCloud(username);
+				await Promise.all([trips.syncFromCloud(username), expenses.syncFromCloud(username)]);
 
 				return { success: true, resetKey: response.resetKey };
 			} catch (error: any) {
@@ -244,7 +246,7 @@ function createAuthStore() {
 					localStorage.removeItem('offline_user_id');
 				}
 
-				await trips.syncFromCloud(username);
+				await Promise.all([trips.syncFromCloud(username), expenses.syncFromCloud(username)]);
 
 				return { success: true };
 			} catch (error: any) {

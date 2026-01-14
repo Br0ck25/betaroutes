@@ -72,6 +72,35 @@ export function makeExpenseService(
 
 			const expenses = (await res.json()) as ExpenseRecord[];
 
+			// --- KV Reconciliation ---
+			// Include any KV-only writes (keys like `expense:<userId>:<id>`) so they show up
+			// for users even if the DO/SQL index doesn't yet contain them.
+			try {
+				const prefix = `expense:${userId}:`;
+				let list = await kv.list({ prefix });
+				let keys = list.keys;
+				while (!list.list_complete && list.cursor) {
+					list = await kv.list({ prefix, cursor: list.cursor });
+					keys = keys.concat(list.keys);
+				}
+
+				let added = 0;
+				for (const key of keys) {
+					const raw = await kv.get(key.name);
+					if (!raw) continue;
+					const parsed = JSON.parse(raw) as ExpenseRecord;
+					if (parsed.deleted) continue; // Skip tombstones
+					if (!expenses.find((e) => e.id === parsed.id)) {
+						expenses.push(parsed);
+						added++;
+					}
+				}
+				if (added > 0)
+					log.info(`[ExpenseService] Reconciled ${added} KV-only expense(s) for ${userId}`);
+			} catch (err) {
+				log.warn(`[ExpenseService] KV reconciliation failed for ${userId}`);
+			}
+
 			// Delta Sync Logic
 			if (since) {
 				const sinceDate = new Date(since);
