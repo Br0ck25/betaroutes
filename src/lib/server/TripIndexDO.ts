@@ -26,35 +26,47 @@ interface ExpenseRecord {
 export class TripIndexDO {
 	state: DurableObjectState;
 	env: Record<string, unknown>;
+	// [!code ++] Track if we've ensured schema to avoid running SQL on every request
+	private schemaEnsured = false;
 
 	constructor(state: DurableObjectState, env: Record<string, unknown>) {
 		this.state = state;
 		this.env = env;
+		// Constructor only runs on cold start. We'll move critical schema logic to ensureSchema()
+		this.ensureSchema();
+	}
 
-		// 1. Initialize SQLite Schema
-		this.state.storage.sql.exec(`
-            CREATE TABLE IF NOT EXISTS trips (
-                id TEXT PRIMARY KEY,
-                userId TEXT,
-                date TEXT,
-                createdAt TEXT,
-                data TEXT
-            );
-            
-            CREATE TABLE IF NOT EXISTS expenses (
-                id TEXT PRIMARY KEY,
-                userId TEXT,
-                date TEXT,
-                category TEXT,
-                createdAt TEXT,
-                data TEXT
-            );
+	// [!code ++] Robust schema initialization that runs even for existing "hot" instances
+	private ensureSchema() {
+		try {
+			this.state.storage.sql.exec(`
+				CREATE TABLE IF NOT EXISTS trips (
+					id TEXT PRIMARY KEY,
+					userId TEXT,
+					date TEXT,
+					createdAt TEXT,
+					data TEXT
+				);
+				
+				CREATE TABLE IF NOT EXISTS expenses (
+					id TEXT PRIMARY KEY,
+					userId TEXT,
+					date TEXT,
+					category TEXT,
+					createdAt TEXT,
+					data TEXT
+				);
 
-            CREATE INDEX IF NOT EXISTS idx_trips_user ON trips(userId);
-            CREATE INDEX IF NOT EXISTS idx_expenses_user ON expenses(userId);
-        `);
+				CREATE INDEX IF NOT EXISTS idx_trips_user ON trips(userId);
+				CREATE INDEX IF NOT EXISTS idx_expenses_user ON expenses(userId);
+			`);
+			this.schemaEnsured = true;
+		} catch (err) {
+			log.error('[TripIndexDO] Schema Init Failed:', err);
+		}
 
-		// 2. Migration Logic (Legacy KV -> SQLite)
+		// Legacy Migration Logic (KV -> SQLite)
+		// We can keep this here or move it. Kept for safety.
 		this.state.blockConcurrencyWhile(async () => {
 			try {
 				const legacyTrips = await this.state.storage.get<TripSummary[]>('trips');
@@ -89,6 +101,12 @@ export class TripIndexDO {
 	}
 
 	async fetch(request: Request) {
+		// [!code ++] Ensure schema exists before processing any request
+		// This handles the case where code was updated but DO instance was already alive
+		if (!this.schemaEnsured) {
+			this.ensureSchema();
+		}
+
 		const url = new URL(request.url);
 		const path = url.pathname;
 
@@ -225,14 +243,10 @@ export class TripIndexDO {
 						const destination = points[i + 1];
 						if (!origin || !destination || origin === destination) continue;
 
-						// [!code changed] ALIGNMENT: Use HughesNet-style keys
-						// This matches the regex logic in src/lib/server/hughesnet/router.ts
 						let key = `dir:${origin.toLowerCase().trim()}_to_${destination.toLowerCase().trim()}`;
 						key = key.replace(/[^a-z0-9_:-]/g, '');
 
-						// Safety check for KV limit (512 bytes)
 						if (key.length > 512) {
-							// Fallback to substring if absurdly long, though this breaks sharing for edge cases
 							key = key.substring(0, 512);
 						}
 
@@ -249,7 +263,6 @@ export class TripIndexDO {
 									if (parsed && parsed.distance != null && parsed.duration != null) {
 										totalMeters += Number(parsed.distance);
 										totalSeconds += Number(parsed.duration);
-										// log.info(`[ComputeRoutes] Cache HIT ${key}`);
 										continue;
 									}
 								} catch {
@@ -266,18 +279,18 @@ export class TripIndexDO {
 								origin
 							)}&destination=${encodeURIComponent(destination)}&key=${googleKey}`;
 							const res = await fetch(url);
-							// Type the Google Directions response to avoid `any`
-							type DirectionsLeg = {
-								distance?: { value?: number };
-								duration?: { value?: number };
-								start_location?: { lat?: number; lng?: number };
-								end_location?: { lat?: number; lng?: number };
-								start_address?: string;
-								end_address?: string;
-							};
 							type DirectionsResponse = {
 								status?: string;
-								routes?: Array<{ legs?: DirectionsLeg[] }>;
+								routes?: Array<{
+									legs?: Array<{
+										distance?: { value?: number };
+										duration?: { value?: number };
+										start_location?: { lat?: number; lng?: number };
+										end_location?: { lat?: number; lng?: number };
+										start_address?: string;
+										end_address?: string;
+									}>;
+								}>;
 							} | null;
 							const data = (await res.json().catch(() => null)) as DirectionsResponse;
 							if (
@@ -295,13 +308,12 @@ export class TripIndexDO {
 								if (distance && isFinite(distance)) totalMeters += distance;
 								if (duration && isFinite(duration)) totalSeconds += duration;
 
-								// Save to KV (Readable Key)
+								// Save to KV
 								if (directionsKV && distance !== null && duration !== null) {
 									await directionsKV.put(
 										key,
 										JSON.stringify({ distance, duration, source: 'google' })
 									);
-									log.info(`[ComputeRoutes] Cached: ${key}`);
 									try {
 										const directionsKVLocal = (this.env as unknown as Record<string, unknown>)[
 											'BETA_DIRECTIONS_KV'
@@ -328,7 +340,6 @@ export class TripIndexDO {
 															source: 'compute_routes'
 														})
 													);
-													log.info(`[ComputeRoutes] Geocode cached (directions KV): ${geoKey}`);
 												}
 											};
 											await writeIfMissing(
@@ -348,7 +359,6 @@ export class TripIndexDO {
 						}
 					}
 
-					// Update Trip in SQLite & KV
 					try {
 						const miles = Number((totalMeters * 0.000621371).toFixed(1));
 						const minutes = Math.round(totalSeconds / 60);
@@ -373,9 +383,6 @@ export class TripIndexDO {
 						log.warn(`[ComputeRoutes] Save failed: ${e}`);
 					}
 
-					log.info(
-						`[ComputeRoutes] FINISH ${tripId} totalMeters=${totalMeters} totalSeconds=${totalSeconds}`
-					);
 					return new Response('OK');
 				} catch (e: unknown) {
 					const msg = e instanceof Error ? e.message : String(e);
@@ -390,7 +397,7 @@ export class TripIndexDO {
 				return new Response('OK');
 			}
 
-			// --- EXPENSE OPERATIONS (Omitted for brevity, logic remains identical) ---
+			// --- EXPENSE OPERATIONS ---
 			if (path === '/expenses/list') {
 				const cursor = this.state.storage.sql.exec(
 					`SELECT data FROM expenses ORDER BY date DESC, createdAt DESC`
@@ -447,10 +454,16 @@ export class TripIndexDO {
 			}
 
 			if (path === '/expenses/status') {
-				const countRes = this.state.storage.sql.exec('SELECT COUNT(*) as c FROM expenses');
-				const count = (countRes.one() as { c: number }).c;
-				const migrated = await this.state.storage.get('expenses_migrated');
-				return new Response(JSON.stringify({ needsMigration: !migrated && count === 0 }));
+				// [!code check] Safety wrap in case table doesn't exist (if schemaEnsured failed)
+				try {
+					const countRes = this.state.storage.sql.exec('SELECT COUNT(*) as c FROM expenses');
+					const count = (countRes.one() as { c: number }).c;
+					const migrated = await this.state.storage.get('expenses_migrated');
+					return new Response(JSON.stringify({ needsMigration: !migrated && count === 0 }));
+				} catch {
+					// If SQL fails, we likely need migration/init
+					return new Response(JSON.stringify({ needsMigration: true }));
+				}
 			}
 
 			// --- BILLING ---
