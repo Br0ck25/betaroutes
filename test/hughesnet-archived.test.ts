@@ -7,11 +7,9 @@ function makeUrl(q = '') {
 }
 
 describe('HughesNet archived orders API', () => {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	let platform: any;
 
 	beforeEach(() => {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const event: any = { platform: { env: {} } };
 		setupMockKV(event);
 		platform = event.platform;
@@ -33,7 +31,7 @@ describe('HughesNet archived orders API', () => {
 			platform,
 			locals: { user: { name: ownerId } },
 			url: makeUrl(`id=${orderId}`)
-		} as unknown);
+		} as any);
 		const bodyById = await resById.json();
 		expect(bodyById.success).toBe(true);
 		expect(bodyById.order.id).toBe(orderId);
@@ -43,11 +41,11 @@ describe('HughesNet archived orders API', () => {
 			platform,
 			locals: { user: { name: ownerId } },
 			url: makeUrl()
-		} as unknown);
+		} as any);
 		const bodyList = await resList.json();
 		expect(bodyList.success).toBe(true);
 		expect(Array.isArray(bodyList.orders)).toBe(true);
-		expect(bodyList.orders.some((o: { id?: string }) => o.id === orderId)).toBe(true);
+		expect(bodyList.orders.some((o: any) => o.id === orderId)).toBe(true);
 	});
 
 	it('does not return orders owned by other users', async () => {
@@ -66,9 +64,9 @@ describe('HughesNet archived orders API', () => {
 			platform,
 			locals: { user: { name: ownerId } },
 			url: makeUrl(`id=${orderId}`)
-		} as unknown);
+		} as any);
 		expect(res.status).toBe(404);
-		const body = (await res.json()) as { success?: boolean };
+		const body: any = await res.json();
 		expect(body.success).toBe(false);
 	});
 });

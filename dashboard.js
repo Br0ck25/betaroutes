@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 // dashboard.js - FIXED VERSION
 // Handles rendering and interactions for the dashboard page
 

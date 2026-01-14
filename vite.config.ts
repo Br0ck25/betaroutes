@@ -2,20 +2,6 @@ import { defineConfig } from 'vitest/config';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { resolve } from 'path';
 
-// Structural type for Vite preview server middleware to avoid `any` or overly complex inline types
-type PreviewServer = {
-	middlewares: {
-		use: (
-			fn: (
-				req: { url?: string },
-				res: { setHeader: (name: string, value: string) => void },
-				next: () => void
-			) => void
-		) => void;
-		stack?: unknown[];
-	};
-};
-
 export default defineConfig({
 	plugins: [sveltekit()],
 	resolve: (() => {
@@ -43,14 +29,10 @@ export default defineConfig({
 
 	// Preview server: set Cache-Control headers for assets so local previews emulate CDN
 	preview: {
-		// Configure preview server middleware. Use structural types to avoid `any` and satisfy ESLint.
-		configurePreviewServer(server: PreviewServer) {
+		// `configurePreviewServer` isn't exported in some Vite types; keep `any` to avoid type conflicts
+		configurePreviewServer(server: any) {
 			// Ensure preview returns long cache headers for static assets used in audits.
-			const mw: (
-				req: { url?: string },
-				res: { setHeader: (name: string, value: string) => void },
-				next: () => void
-			) => void = (req, res, next) => {
+			const mw = (req: any, res: any, next: any) => {
 				try {
 					const url = req.url || '';
 					// Match fonts, optimized images, and known static extensions
@@ -61,22 +43,22 @@ export default defineConfig({
 					) {
 						res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
 					}
-				} catch {
+				} catch (e) {
 					// ignore
 				}
 				next();
 			};
 
-			server.middlewares.use(mw);
+			server.middlewares.use(mw as any);
 			// Move our middleware to the front of the stack so it runs before static file handlers
 			try {
-				const stack = server.middlewares.stack;
+				const stack = (server.middlewares as any).stack;
 				if (Array.isArray(stack) && stack.length > 0) {
 					stack.unshift(stack.pop());
 				}
-			} catch {
+			} catch (e) {
 				// ignore
 			}
 		}
-	}
+	} as any
 });

@@ -918,7 +918,6 @@
 
 		<div class="add-cat-form">
 			<input
-				class="input-field"
 				type="text"
 				id="new-category-name"
 				name="newCategoryName"

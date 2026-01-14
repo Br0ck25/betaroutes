@@ -72,35 +72,6 @@ export function makeExpenseService(
 
 			const expenses = (await res.json()) as ExpenseRecord[];
 
-			// --- KV Reconciliation ---
-			// Include any KV-only writes (keys like `expense:<userId>:<id>`) so they show up
-			// for users even if the DO/SQL index doesn't yet contain them.
-			try {
-				const prefix = `expense:${userId}:`;
-				let list = await kv.list({ prefix });
-				let keys = list.keys;
-				while (!list.list_complete && list.cursor) {
-					list = await kv.list({ prefix, cursor: list.cursor });
-					keys = keys.concat(list.keys);
-				}
-
-				let added = 0;
-				for (const key of keys) {
-					const raw = await kv.get(key.name);
-					if (!raw) continue;
-					const parsed = JSON.parse(raw) as ExpenseRecord;
-					if (parsed.deleted) continue; // Skip tombstones
-					if (!expenses.find((e) => e.id === parsed.id)) {
-						expenses.push(parsed);
-						added++;
-					}
-				}
-				if (added > 0)
-					log.info(`[ExpenseService] Reconciled ${added} KV-only expense(s) for ${userId}`);
-			} catch (err) {
-				log.warn(`[ExpenseService] KV reconciliation failed for ${userId}`);
-			}
-
 			// Delta Sync Logic
 			if (since) {
 				const sinceDate = new Date(since);
@@ -127,17 +98,6 @@ export function makeExpenseService(
 				method: 'POST',
 				body: JSON.stringify(expense)
 			});
-
-			// Backfill into KV for compatibility with older tooling that reads `BETA_LOGS_KV`.
-			// This is best-effort: don't block the DO write if KV fails.
-			try {
-				const payload = { ...expense } as Record<string, unknown>;
-				// Remove any UI-only fields before persisting to KV
-				if (payload['store']) delete payload['store'];
-				await kv.put(`expense:${expense.userId}:${expense.id}`, JSON.stringify(payload));
-			} catch (err) {
-				log.warn(`[ExpenseService] KV write failed for expense ${expense.id}`);
-			}
 		},
 
 		async delete(userId: string, id: string) {

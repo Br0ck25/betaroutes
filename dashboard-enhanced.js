@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 // ============================================
 // DASHBOARD-ENHANCED.JS - Advanced Analytics
 // ============================================

@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars, no-redeclare */
-
 document.addEventListener('DOMContentLoaded', () => {
 	if (typeof updateAuthUI === 'function') {
 		updateAuthUI();
@@ -1393,6 +1391,83 @@ document.addEventListener('DOMContentLoaded', async () => {
 			window.__pendingDraftTrip = data;
 			document.getElementById('resume-modal').style.display = 'flex';
 			return;
+
+			//  Restore draft data
+			document.getElementById('log-date').value = data.date || '';
+			document.getElementById('start-address').value = data.start || '';
+			document.getElementById('end-address').value = data.end || '';
+			document.getElementById('mpg').value = data.mpg || '';
+			document.getElementById('gas-price').value = data.gas || '';
+			document.getElementById('start-time').value = data.startTime || '';
+			document.getElementById('end-time').value = data.endTime || '';
+			document.getElementById('hours-worked').value = data.hoursWorked || '';
+
+			// Restore maintenance items in DOMContentLoaded
+			const maintenanceContainer = document.getElementById('maintenance-container');
+			maintenanceContainer.innerHTML = '';
+			if (data.maintenance && Array.isArray(data.maintenance)) {
+				data.maintenance.forEach((item) => {
+					addMaintenanceItem();
+					const lastItem = maintenanceContainer.lastElementChild;
+					const typeSelect = lastItem.querySelector('.maintenance-type');
+					const customInput = lastItem.querySelector('.maintenance-custom-name');
+					const costInput = lastItem.querySelector('.maintenance-cost');
+
+					const presetTypes = ['Oil Change', 'Tire Rotation', 'Brake Service', 'Battery'];
+					if (presetTypes.includes(item.type)) {
+						typeSelect.value = item.type;
+					} else {
+						typeSelect.value = 'Custom';
+						customInput.style.display = 'block';
+						customInput.value = item.type;
+					}
+					costInput.value = item.cost;
+				});
+			}
+
+			// Restore supplies items in DOMContentLoaded
+			const suppliesContainer = document.getElementById('supplies-container');
+			suppliesContainer.innerHTML = '';
+			if (data.supplies && Array.isArray(data.supplies)) {
+				data.supplies.forEach((item) => {
+					addSupplyItem();
+					const lastItem = suppliesContainer.lastElementChild;
+					const typeSelect = lastItem.querySelector('.supply-type');
+					const customInput = lastItem.querySelector('.supply-custom-name');
+					const costInput = lastItem.querySelector('.supply-cost');
+
+					const presetTypes = ['Poles', 'Concrete', 'Cable'];
+					if (presetTypes.includes(item.type)) {
+						typeSelect.value = item.type;
+					} else {
+						typeSelect.value = 'Custom';
+						customInput.style.display = 'block';
+						customInput.value = item.type;
+					}
+					costInput.value = item.cost;
+				});
+			}
+
+			const container = document.getElementById('destinations-container');
+			container.innerHTML = '';
+
+			destinations.forEach((d, i) => {
+				const div = document.createElement('div');
+				div.classList.add('destination');
+				div.innerHTML = `
+          <label for="destination-${i + 1}">Destination ${i + 1}</label>
+          <input type="text" id="destination-${i + 1}" list="recent-destinations" value="${d.address || ''}">
+          <label for="earnings-${i + 1}">Earnings for Destination ${i + 1}</label>
+          <input type="number" id="earnings-${i + 1}" value="${d.earnings || ''}">
+          <div class="destination-actions">
+            <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
+            <button class="move-btn" onclick="moveDestinationUp(this)">Move Up</button>
+            <button class="move-btn" onclick="moveDestinationDown(this)">Move Down</button>
+          </div>
+        `;
+				container.appendChild(div);
+				initAutocompleteDestination(div.querySelector('input[type="text"]'));
+			});
 		} catch (err) {
 			console.error(' Failed to parse draftTrip:', err);
 			localStorage.removeItem('draftTrip');

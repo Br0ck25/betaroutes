@@ -22,7 +22,7 @@ describe('autocomplete validator', () => {
 });
 
 describe('server geocode (Google-only)', () => {
-	let originalFetch: unknown;
+	let originalFetch: any;
 	beforeEach(() => {
 		originalFetch = global.fetch;
 	});
@@ -39,7 +39,7 @@ describe('server geocode (Google-only)', () => {
 
 	it('calls Google and returns coords when API key provided', async () => {
 		const address = '407 Mastin Dr, Cumberland, KY 40823';
-		vi.stubGlobal('fetch', (input: unknown) => {
+		vi.stubGlobal('fetch', (input: any) => {
 			const url = String(input);
 			if (url.includes('maps.googleapis.com')) {
 				return Promise.resolve({
@@ -47,7 +47,7 @@ describe('server geocode (Google-only)', () => {
 						status: 'OK',
 						results: [{ geometry: { location: { lat: 36.9, lng: -83.3 } } }]
 					})
-				} as unknown);
+				} as any);
 			}
 			return Promise.reject(new Error('unexpected'));
 		});
@@ -58,7 +58,7 @@ describe('server geocode (Google-only)', () => {
 
 	it('returns google coords for a second address example', async () => {
 		const address = '1199 Main St Jackson KY';
-		vi.stubGlobal('fetch', (input: unknown) => {
+		vi.stubGlobal('fetch', (input: any) => {
 			const url = String(input);
 			if (url.includes('maps.googleapis.com')) {
 				return Promise.resolve({
@@ -66,7 +66,7 @@ describe('server geocode (Google-only)', () => {
 						status: 'OK',
 						results: [{ geometry: { location: { lat: 36.9, lng: -83.3 } } }]
 					})
-				} as unknown);
+				} as any);
 			}
 			return Promise.reject(new Error('unexpected'));
 		});
