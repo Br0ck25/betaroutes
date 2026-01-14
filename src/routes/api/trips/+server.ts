@@ -82,8 +82,8 @@ const tripSchema = z.object({
 function getEnv(platform: App.Platform | undefined): App.Env {
 	const env = platform?.env;
 
-	if (!env || !safeKV(env, 'BETA_LOGS_KV') || !safeDO(env, 'TRIP_INDEX_DO')) {
-		log.error('CRITICAL: Missing BETA_LOGS_KV or TRIP_INDEX_DO bindings');
+	if (!env || !safeKV(env, 'BETA_LOGS_KV')) {
+		log.error('CRITICAL: Missing BETA_LOGS_KV binding');
 		throw new Error('Database bindings missing');
 	}
 

@@ -16,15 +16,9 @@ export interface ExpenseRecord {
 	[key: string]: unknown;
 }
 
-export function makeExpenseService(
-	kv: KVNamespace,
-	tripIndexDO: DurableObjectNamespace,
-	trashKV?: KVNamespace
-) {
-	const getIndexStub = (userId: string) => {
-		const id = tripIndexDO.idFromName(userId);
-		return tripIndexDO.get(id);
-	};
+export function makeExpenseService(kv: KVNamespace, trashKV?: KVNamespace) {
+	// Delegating to KV-backed implementation to avoid DO usage
+	return makeExpenseServiceKV(kv, trashKV);
 
 	return {
 		async list(userId: string, since?: string): Promise<ExpenseRecord[]> {
@@ -132,6 +126,76 @@ export function makeExpenseService(
 
 			// 4. Clean up old KV (Eventual consistency cleanup)
 			// This ensures we don't leave stale data in the old system
+			await kv.delete(`expense:${userId}:${id}`);
+		}
+	};
+}
+
+// New: KV-backed expense service (bypasses Durable Object)
+export function makeExpenseServiceKV(kv: KVNamespace, trashKV?: KVNamespace) {
+	const prefixForUser = (userId: string) => `expense:${userId}:`;
+
+	return {
+		async list(userId: string, since?: string): Promise<ExpenseRecord[]> {
+			const prefix = prefixForUser(userId);
+			const expenses: ExpenseRecord[] = [];
+			let list = await kv.list({ prefix });
+			let keys = list.keys;
+
+			while (!list.list_complete && list.cursor) {
+				list = await kv.list({ prefix, cursor: list.cursor });
+				keys = keys.concat(list.keys);
+			}
+
+			for (const key of keys) {
+				const raw = await kv.get(key.name);
+				if (!raw) continue;
+				expenses.push(JSON.parse(raw));
+			}
+
+			expenses.sort(
+				(a, b) =>
+					new Date(b.updatedAt || b.createdAt).getTime() -
+					new Date(a.updatedAt || a.createdAt).getTime()
+			);
+
+			if (since) {
+				const sinceDate = new Date(since);
+				return expenses.filter((e) => new Date(e.updatedAt || e.createdAt) > sinceDate);
+			}
+
+			return expenses;
+		},
+
+		async get(userId: string, id: string) {
+			const raw = await kv.get(`expense:${userId}:${id}`);
+			return raw ? (JSON.parse(raw) as ExpenseRecord) : null;
+		},
+
+		async put(expense: ExpenseRecord) {
+			expense.updatedAt = new Date().toISOString();
+			delete expense.deleted;
+			delete (expense as Record<string, unknown>)['deletedAt'];
+			await kv.put(`expense:${expense.userId}:${expense.id}`, JSON.stringify(expense));
+		},
+
+		async delete(userId: string, id: string) {
+			const item = await this.get(userId, id);
+			if (!item) return;
+			const now = new Date();
+			if (trashKV) {
+				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+				const metadata = {
+					deletedAt: now.toISOString(),
+					deletedBy: userId,
+					originalKey: `expense:${userId}:${id}`,
+					expiresAt: expiresAt.toISOString()
+				};
+				const trashItem = { type: 'expense', data: item, metadata };
+				await trashKV.put(`trash:${userId}:${id}`, JSON.stringify(trashItem), {
+					expirationTtl: 30 * 24 * 60 * 60
+				});
+			}
 			await kv.delete(`expense:${userId}:${id}`);
 		}
 	};
