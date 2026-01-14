@@ -7,11 +7,9 @@ import type { ExpenseRecord } from '$lib/db/types';
 import { auth } from '$lib/stores/auth';
 import { PLAN_LIMITS } from '$lib/constants';
 
-// ... [Keep existing implementation of isLoading and createExpensesStore unchanged] ...
 export const isLoading = writable(false);
 
 function createExpensesStore() {
-    // ... [Original createExpensesStore implementation] ...
 	const { subscribe, set, update } = writable<ExpenseRecord[]>([]);
 
 	return {
@@ -28,7 +26,7 @@ function createExpensesStore() {
 					newItems[index] = { ...newItems[index], ...expense };
 					return newItems;
 				} else {
-					// [!code ++] Insert new (Upsert) - useful for restores/sync
+					// Insert new (Upsert) - useful for restores/sync
 					return [expense, ...items].sort(
 						(a, b) =>
 							new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime()
@@ -204,7 +202,6 @@ function createExpensesStore() {
 				};
 
 				// 2. Move to Trash Store
-				// Note: Ensure your TrashRecord type is compatible with ExpenseRecord or generic
 				const trashTx = db.transaction('trash', 'readwrite');
 				await trashTx.objectStore('trash').put(trashItem);
 				await trashTx.done;
@@ -252,8 +249,6 @@ function createExpensesStore() {
 			try {
 				if (!navigator.onLine) return;
 
-				// Note: You may need to add get/setLastExpenseSync to your storage utils
-				// For now, using a distinct key for expenses sync time
 				const lastSync = localStorage.getItem('last_sync_expenses');
 				const url = lastSync
 					? `/api/expenses?since=${encodeURIComponent(lastSync)}`
@@ -360,26 +355,25 @@ function createExpensesStore() {
 
 export const expenses = createExpensesStore();
 
-// [!code change] Register properly with SyncManager
+// Register with SyncManager
+// Uses registerStore instead of setStoreUpdater to coexist with trips store
 syncManager.registerStore('expenses', {
 	updateLocal: (item) => {
+		// Basic check to see if it looks like an expense
 		if (item && item.amount !== undefined && item.category !== undefined) {
 			expenses.updateLocal(item);
 		}
 	},
 	syncDown: async () => {
+		// Trigger the download logic when SyncManager decides it's time (e.g. back online)
 		const user = get(auth).user;
 		if (user?.id) await expenses.syncFromCloud(user.id);
 	}
 });
 
 function createDraftStore() {
-    // ... [Original code] ...
-	// Assuming storage utils might not have dedicated expense methods yet,
-	// we use a safe fallback or assume you will add them.
 	const STORAGE_KEY = 'draft_expense';
 
-	// Helper to get from storage directly if method doesn't exist
 	const getDraft = () => {
 		try {
 			const stored = localStorage.getItem(STORAGE_KEY);
