@@ -921,6 +921,7 @@
 				type="text"
 				id="new-category-name"
 				name="newCategoryName"
+				class="input-field"
 				on:keydown={(e) => e.key === 'Enter' && addCategory()}
 			/>
 			<button class="btn-secondary" on:click={addCategory}>Add</button>

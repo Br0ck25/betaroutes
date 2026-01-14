@@ -1,7 +1,7 @@
 // src/lib/sync/syncManager.ts
 import { getDB } from '$lib/db/indexedDB';
 import { syncStatus } from '$lib/stores/sync';
-import type { SyncQueueItem } from '$lib/db/types';
+import type { SyncQueueItem, TripRecord } from '$lib/db/types';
 import { loadGoogleMaps } from '$lib/utils/autocomplete';
 
 interface StoreHandler {
@@ -16,9 +16,14 @@ class SyncManager {
 	private apiKey: string = '';
 
 	private registeredStores = new Map<string, StoreHandler>();
+	private storeUpdater?: (trip: TripRecord) => void;
 
 	registerStore(name: string, handler: StoreHandler) {
 		this.registeredStores.set(name, handler);
+	}
+
+	setStoreUpdater(updater: (trip: TripRecord) => void) {
+		this.storeUpdater = updater;
 	}
 
 	async initialize(apiKey?: string) {
@@ -41,10 +46,10 @@ class SyncManager {
 		if (navigator.onLine) {
 			// 1. Push any pending local changes immediately
 			await this.syncNow();
-			
+
 			// 2. [!code ++] Pull/Download data ONLY on initialization (Page Refresh)
 			await this.syncDownAll();
-			
+
 			this.startAutoSync();
 		}
 
@@ -149,7 +154,7 @@ class SyncManager {
 			}
 
 			// [!code delete] Removed the "Triggering downward sync..." block
-			
+
 			syncStatus.setSynced();
 		} catch (err) {
 			console.error('❌ Sync error:', err);
@@ -211,7 +216,9 @@ class SyncManager {
 					await tx.done;
 
 					const tripsStore = this.registeredStores.get('trips');
-					if (tripsStore) {
+					if (this.storeUpdater) {
+						this.storeUpdater(trip as TripRecord);
+					} else if (tripsStore) {
 						tripsStore.updateLocal(trip);
 					}
 				}

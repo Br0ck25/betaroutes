@@ -11,7 +11,7 @@
 
 	const resolve = (href: string) => `${base}${href}`;
 
-	let trashedTrips: any[] = []; // Using any[] to handle the merged/flattened structure
+	let trashedTrips: TrashRecord[] = []; // Using typed TrashRecord[] to handle the merged/flattened structure
 	let loading = true;
 	let restoring = new Set<string>();
 	let deleting = new Set<string>();
@@ -45,15 +45,19 @@
 			}
 
 			// [!code fix] Normalize/Flatten items here to handle { data: ... } structure
-			const uniqueItems = Array.from(new Map(allItems.map((item) => {
-				let flat = { ...item };
-				// If local deletion stored it nested in 'data', flatten it up
-				if (flat.data && typeof flat.data === 'object') {
-					flat = { ...flat.data, ...flat };
-					delete flat.data;
-				}
-				return [flat.id, flat];
-			})).values());
+			const uniqueItems = Array.from(
+				new Map(
+					allItems.map((item) => {
+						let flat = { ...item };
+						// If local deletion stored it nested in 'data', flatten it up
+						if (flat.data && typeof flat.data === 'object') {
+							flat = { ...flat.data, ...flat };
+							delete flat.data;
+						}
+						return [flat.id, flat];
+					})
+				).values()
+			);
 
 			uniqueItems.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
 			trashedTrips = uniqueItems;
@@ -80,8 +84,11 @@
 			await trash.restore(id, item.userId);
 
 			// Reload the correct store based on type
-			const isExpense = item.type === 'expense' || item.recordType === 'expense' || item.originalKey?.startsWith('expense:');
-			
+			const isExpense =
+				(item['type'] as string | undefined) === 'expense' ||
+				(item['recordType'] as string | undefined) === 'expense' ||
+				(item['originalKey'] as string | undefined)?.startsWith('expense:');
+
 			if (isExpense) {
 				await expenses.load(item.userId);
 			} else {
@@ -108,7 +115,7 @@
 			for (const trip of trashedTrips) {
 				await trash.restore(trip.id, trip.userId);
 			}
-			
+
 			const userId = $user?.name || $user?.token;
 			if (userId) {
 				await trips.load(userId);
@@ -127,11 +134,11 @@
 		if (!confirm('Permanently delete this item? Cannot be undone.')) return;
 		const item = trashedTrips.find((t) => t.id === id);
 		if (!item) return;
-		
+
 		if (deleting.has(id)) return;
 		deleting.add(id);
 		deleting = deleting;
-		
+
 		try {
 			await trash.permanentDelete(id);
 			await loadTrash();
@@ -248,12 +255,19 @@
 	{:else}
 		<div class="trash-list">
 			{#each trashedTrips as trip (trip.id)}
-				{@const expiresAt = trip.expiresAt || trip.metadata?.expiresAt}
-				{@const deletedAt = trip.deletedAt || trip.metadata?.deletedAt}
+				{@const t = trip as TrashRecord}
+				{@const expiresAt =
+					(t['expiresAt'] as string | undefined) ||
+					((t['metadata'] as any)?.expiresAt as string | undefined)}
+				{@const deletedAt =
+					(t['deletedAt'] as string | undefined) ||
+					((t['metadata'] as any)?.deletedAt as string | undefined)}
 				{@const daysLeft = getDaysUntilExpiration(expiresAt)}
-				
-				{@const isExpense = trip.type === 'expense' || trip.recordType === 'expense' || trip.originalKey?.startsWith('expense:')}
 
+				{@const isExpense =
+					(t['type'] as string | undefined) === 'expense' ||
+					(t['recordType'] as string | undefined) === 'expense' ||
+					(t['originalKey'] as string | undefined)?.startsWith('expense:')}
 				<div class="trash-item">
 					<div class="trip-info">
 						<div class="trip-header">
@@ -281,11 +295,17 @@
 							{#if isExpense}
 								<span class="detail amount">${Number(trip.amount || 0).toFixed(2)}</span>
 								{#if trip.description}<span class="detail">{trip.description}</span>{/if}
-								<span class="detail">{new Date(trip.date || trip.createdAt || '').toLocaleDateString()}</span>
+								<span class="detail"
+									>{new Date(trip.date || trip.createdAt || '').toLocaleDateString()}</span
+								>
 							{:else}
-								<span class="detail">{new Date(trip.date || trip.createdAt || '').toLocaleDateString()}</span>
+								<span class="detail"
+									>{new Date(trip.date || trip.createdAt || '').toLocaleDateString()}</span
+								>
 								<span class="detail">{trip.stops?.length || 0} stops</span>
-								{#if trip.totalMiles}<span class="detail">{Number(trip.totalMiles).toFixed(1)} mi</span>{/if}
+								{#if trip.totalMiles}<span class="detail"
+										>{Number(trip.totalMiles).toFixed(1)} mi</span
+									>{/if}
 							{/if}
 						</div>
 					</div>

@@ -56,6 +56,14 @@ id = "5392d9ff847542a29abf58c5f0624011"
 binding = "BETA_SESSIONS_KV"
 id = "d395b64dcd0641f5a44d94c5ef5628eb"
 
+[[env.production.kv_namespaces]]
+binding = "BETA_MILLAGE_KV"
+id = "05f8026102b54e82ba5ecd5c427d05b8"
+
+[[env.production.kv_namespaces]]
+binding = "BETA_MILLAGE_TRASH_KV"
+id = "f467f7a82eb64cc98c1694e437b67b9f"
+
 # ---------------------------------------------------
 # Preview environment
 # ---------------------------------------------------

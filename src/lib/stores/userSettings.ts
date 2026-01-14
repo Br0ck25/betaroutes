@@ -50,6 +50,9 @@ const defaultSettings = {
 	includeCharts: true,
 	includeAnalytics: true,
 
+	// Millage rate (per mile). Editable in Millage tracker.
+	millageRate: 0.655,
+
 	// Automation Settings
 	autoExportEnabled: false,
 	autoExportFrequency: 'monthly', // 'weekly', 'monthly', 'quarterly'
