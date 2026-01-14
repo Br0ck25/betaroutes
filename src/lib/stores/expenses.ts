@@ -1,379 +1,157 @@
-// src/lib/stores/expenses.ts
-import { writable, get } from 'svelte/store';
-import { getDB } from '$lib/db/indexedDB';
-import { syncManager } from '$lib/sync/syncManager';
-import type { ExpenseRecord } from '$lib/db/types';
+// src/lib/server/expenseService.ts
+import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
+import { DO_ORIGIN } from '$lib/constants';
+import { log } from '$lib/server/log';
 
-import { auth } from '$lib/stores/auth';
-import { PLAN_LIMITS } from '$lib/constants';
+export interface ExpenseRecord {
+	id: string;
+	userId: string;
+	date: string;
+	category: string;
+	amount: number;
+	description?: string;
+	createdAt: string;
+	updatedAt: string;
+	deleted?: boolean;
+	[key: string]: unknown;
+}
 
-export const isLoading = writable(false);
-
-function createExpensesStore() {
-	const { subscribe, set, update } = writable<ExpenseRecord[]>([]);
+export function makeExpenseService(
+	kv: KVNamespace,
+	tripIndexDO: DurableObjectNamespace,
+	trashKV?: KVNamespace
+) {
+	const getIndexStub = (userId: string) => {
+		const id = tripIndexDO.idFromName(userId);
+		return tripIndexDO.get(id);
+	};
 
 	return {
-		subscribe,
+		async list(userId: string, since?: string): Promise<ExpenseRecord[]> {
+			const stub = getIndexStub(userId);
+			const prefix = `expense:${userId}:`;
 
-		updateLocal(expense: ExpenseRecord) {
-			update((items) => {
-				const index = items.findIndex((e) => e.id === expense.id);
-				if (index !== -1) {
-					const newItems = [...items];
-					newItems[index] = { ...newItems[index], ...expense };
-					return newItems;
-				} else {
-					return [expense, ...items].sort(
-						(a, b) =>
-							new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime()
-					);
-				}
-			});
-		},
-
-		async load(userId?: string) {
-			isLoading.set(true);
-			try {
-				const db = await getDB();
-				const tx = db.transaction('expenses', 'readonly');
-				const store = tx.objectStore('expenses');
-
-				let expenses: ExpenseRecord[];
-
-				if (userId) {
-					const index = store.index('userId');
-					expenses = await index.getAll(userId);
-				} else {
-					expenses = await store.getAll();
-				}
-
-				expenses.sort((a, b) => {
-					const dateA = new Date(a.date || a.createdAt).getTime();
-					const dateB = new Date(b.date || b.createdAt).getTime();
-					return dateB - dateA;
-				});
-
-				set(expenses);
-				return expenses;
-			} catch (err) {
-				console.error('❌ Failed to load expenses:', err);
-				set([]);
-				return [];
-			} finally {
-				isLoading.set(false);
+			// 1. Try to fetch from SQL Index (Durable Object) first
+			const res = await stub.fetch(`${DO_ORIGIN}/expenses/list`);
+			
+			let expenses: ExpenseRecord[] = [];
+			if (res.ok) {
+				expenses = (await res.json()) as ExpenseRecord[];
+			} else {
+				log.error(`[ExpenseService] DO Error: ${res.status}`);
 			}
-		},
 
-		async create(expenseData: Partial<ExpenseRecord>, userId: string) {
-			try {
-				const currentUser = get(auth).user;
-				const isFreeTier = !currentUser?.plan || currentUser.plan === 'free';
-				if (isFreeTier) {
-					const db = await getDB();
-					const tx = db.transaction('expenses', 'readonly');
-					const index = tx.objectStore('expenses').index('userId');
-					const allExpenses = await index.getAll(userId);
+			// [!code fix] SELF-HEALING: If Index is empty but KV has data, force sync.
+			// This repairs the "I see it in KV but app is empty" state
+			if (expenses.length === 0) {
+				const kvCheck = await kv.list({ prefix, limit: 1 });
+				
+				if (kvCheck.keys.length > 0) {
+					log.info(`[ExpenseService] Detected desync for ${userId} (KV has data, Index empty). repairing...`);
+					
+					const allExpenses: ExpenseRecord[] = [];
+					let list = await kv.list({ prefix });
+					let keys = list.keys;
 
-					const windowDays = PLAN_LIMITS.FREE.WINDOW_DAYS || 30;
-					const windowMs = windowDays * 24 * 60 * 60 * 1000;
-					const cutoff = new Date(Date.now() - windowMs);
-
-					const recentCount = allExpenses.filter(
-						(e) => new Date(e.date || e.createdAt) >= cutoff
-					).length;
-					const allowed =
-						PLAN_LIMITS.FREE.MAX_EXPENSES_PER_MONTH ||
-						PLAN_LIMITS.FREE.MAX_EXPENSES_IN_WINDOW ||
-						20;
-					if (recentCount >= allowed) {
-						throw new Error(
-							`Free tier limit reached (${allowed} expenses per ${windowDays} days).`
-						);
-					}
-				}
-
-				const expense: ExpenseRecord = {
-					...expenseData,
-					id: expenseData.id || crypto.randomUUID(),
-					userId,
-					createdAt: expenseData.createdAt || new Date().toISOString(),
-					updatedAt: expenseData.updatedAt || new Date().toISOString(),
-					syncStatus: 'pending'
-				} as ExpenseRecord;
-
-				const db = await getDB();
-				const tx = db.transaction('expenses', 'readwrite');
-				await tx.objectStore('expenses').put(expense);
-				await tx.done;
-
-				update((expenses) => {
-					const exists = expenses.find((e) => e.id === expense.id);
-					if (exists) return expenses.map((e) => (e.id === expense.id ? expense : e));
-					return [expense, ...expenses];
-				});
-
-				await syncManager.addToQueue({
-					action: 'create',
-					tripId: expense.id,
-					data: { ...expense, store: 'expenses' }
-				});
-
-				return expense;
-			} catch (err) {
-				console.error('❌ Failed to create expense:', err);
-				throw err;
-			}
-		},
-
-		async updateExpense(id: string, changes: Partial<ExpenseRecord>, userId: string) {
-			try {
-				const db = await getDB();
-				const tx = db.transaction('expenses', 'readwrite');
-				const store = tx.objectStore('expenses');
-
-				const existing = await store.get(id);
-				if (!existing) throw new Error('Expense not found');
-				if (existing.userId !== userId) throw new Error('Unauthorized');
-
-				const updated: ExpenseRecord = {
-					...existing,
-					...changes,
-					id,
-					userId,
-					updatedAt: new Date().toISOString(),
-					syncStatus: 'pending'
-				};
-
-				await store.put(updated);
-				await tx.done;
-
-				update((expenses) => expenses.map((e) => (e.id === id ? updated : e)));
-
-				await syncManager.addToQueue({
-					action: 'update',
-					tripId: id,
-					data: { ...updated, store: 'expenses' }
-				});
-
-				return updated;
-			} catch (err) {
-				console.error('❌ Failed to update expense:', err);
-				throw err;
-			}
-		},
-
-		async deleteExpense(id: string, userId: string) {
-			let previousExpenses: ExpenseRecord[] = [];
-			update((current) => {
-				previousExpenses = current;
-				return current.filter((e) => e.id !== id);
-			});
-
-			try {
-				console.log('🗑️ Moving expense to trash:', id);
-				const db = await getDB();
-
-				const expensesTx = db.transaction('expenses', 'readonly');
-				const expense = await expensesTx.objectStore('expenses').get(id);
-				if (!expense) throw new Error('Expense not found');
-				if (expense.userId !== userId) throw new Error('Unauthorized');
-
-				const now = new Date();
-				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-				const trashItem = {
-					id: expense.id,
-					type: 'expense',
-					data: expense,
-					deletedAt: now.toISOString(),
-					deletedBy: userId,
-					expiresAt: expiresAt.toISOString(),
-					originalKey: `expense:${userId}:${id}`,
-					syncStatus: 'pending' as const
-				};
-
-				const trashTx = db.transaction('trash', 'readwrite');
-				await trashTx.objectStore('trash').put(trashItem);
-				await trashTx.done;
-
-				const deleteTx = db.transaction('expenses', 'readwrite');
-				await deleteTx.objectStore('expenses').delete(id);
-				await deleteTx.done;
-
-				await syncManager.addToQueue({
-					action: 'delete',
-					tripId: id,
-					data: { store: 'expenses' }
-				});
-
-				console.log('✅ Expense moved to trash:', id);
-			} catch (err) {
-				console.error('❌ Failed to delete expense:', err);
-				set(previousExpenses);
-				throw err;
-			}
-		},
-
-		async get(id: string, userId: string) {
-			try {
-				const db = await getDB();
-				const tx = db.transaction('expenses', 'readonly');
-				const expense = await tx.objectStore('expenses').get(id);
-				if (!expense || expense.userId !== userId) return null;
-				return expense;
-			} catch (err) {
-				console.error('❌ Failed to get expense:', err);
-				return null;
-			}
-		},
-
-		clear() {
-			set([]);
-		},
-
-		async syncFromCloud(userId: string) {
-			isLoading.set(true);
-			try {
-				if (!navigator.onLine) return;
-
-				const lastSync = localStorage.getItem('last_sync_expenses');
-				const sinceDate = lastSync ? new Date(new Date(lastSync).getTime() - 5 * 60 * 1000) : null;
-
-				const url = sinceDate
-					? `/api/expenses?since=${encodeURIComponent(sinceDate.toISOString())}`
-					: '/api/expenses';
-
-				console.log(
-					`☁️ Syncing expenses... ${lastSync ? `(Delta since ${sinceDate?.toISOString()})` : '(Full)'}`
-				);
-
-				const response = await fetch(url);
-				if (!response.ok) throw new Error('Failed to fetch expenses');
-
-				const cloudExpenses: any = await response.json();
-
-				if (cloudExpenses.length === 0) {
-					console.log('☁️ No new expense changes.');
-					localStorage.setItem('last_sync_expenses', new Date().toISOString());
-					return;
-				}
-
-				const db = await getDB();
-
-				const trashTx = db.transaction('trash', 'readonly');
-				const trashStore = trashTx.objectStore('trash');
-				const trashItems = await trashStore.getAll();
-				const trashIds = new Set(trashItems.map((t: any) => t.id));
-				await trashTx.done;
-
-				const tx = db.transaction('expenses', 'readwrite');
-				const store = tx.objectStore('expenses');
-
-				let updateCount = 0;
-				let deleteCount = 0;
-
-				for (const cloudExpense of cloudExpenses) {
-					if (cloudExpense.deleted) {
-						const local = await store.get(cloudExpense.id);
-						if (local) {
-							await store.delete(cloudExpense.id);
-							deleteCount++;
-						}
-						continue;
+					while (!list.list_complete && list.cursor) {
+						list = await kv.list({ prefix, cursor: list.cursor });
+						keys = keys.concat(list.keys);
 					}
 
-					if (trashIds.has(cloudExpense.id)) continue;
+					for (const key of keys) {
+						const raw = await kv.get(key.name);
+						if (raw) allExpenses.push(JSON.parse(raw));
+					}
 
-					const local = await store.get(cloudExpense.id);
-					if (!local || new Date(cloudExpense.updatedAt) > new Date(local.updatedAt)) {
-						await store.put({
-							...cloudExpense,
-							syncStatus: 'synced',
-							lastSyncedAt: new Date().toISOString()
+					if (allExpenses.length > 0) {
+						await stub.fetch(`${DO_ORIGIN}/expenses/migrate`, {
+							method: 'POST',
+							body: JSON.stringify(allExpenses)
 						});
-						updateCount++;
+						// Return fresh data immediately
+						expenses = allExpenses;
 					}
 				}
-				await tx.done;
-
-				localStorage.setItem('last_sync_expenses', new Date().toISOString());
-				console.log(
-					`✅ Synced expenses. Updated: ${updateCount}, Deleted: ${deleteCount}.`
-				);
-
-				await this.load(userId);
-			} catch (err) {
-				console.error('❌ Failed to sync expenses from cloud:', err);
-			} finally {
-				isLoading.set(false);
 			}
+
+			if (since) {
+				const sinceDate = new Date(since);
+				return expenses.filter((e) => new Date(e.updatedAt || e.createdAt) > sinceDate);
+			}
+
+			return expenses;
 		},
 
-		async migrateOfflineExpenses(tempUserId: string, realUserId: string) {
-			if (!tempUserId || !realUserId || tempUserId === realUserId) return;
-			const db = await getDB();
-			const tx = db.transaction('expenses', 'readwrite');
-			const store = tx.objectStore('expenses');
-			const index = store.index('userId');
-			const offlineExpenses = await index.getAll(tempUserId);
+		async get(userId: string, id: string) {
+			const all = await this.list(userId);
+			return all.find((e) => e.id === id) || null;
+		},
 
-			for (const expense of offlineExpenses) {
-				expense.userId = realUserId;
-				expense.syncStatus = 'pending';
-				expense.updatedAt = new Date().toISOString();
-				await store.put(expense);
-				await syncManager.addToQueue({
-					action: 'create',
-					tripId: expense.id,
-					data: { ...expense, store: 'expenses' }
-				});
+		async put(expense: ExpenseRecord) {
+			expense.updatedAt = new Date().toISOString();
+			delete expense.deleted;
+			delete (expense as Record<string, unknown>)['deletedAt'];
+
+			// [!code fix] Write to KV (The Log) - Ensure data persists in main DB
+			await kv.put(`expense:${expense.userId}:${expense.id}`, JSON.stringify(expense));
+
+			// Write to DO (The Index)
+			const stub = getIndexStub(expense.userId);
+			await stub.fetch(`${DO_ORIGIN}/expenses/put`, {
+				method: 'POST',
+				body: JSON.stringify(expense)
+			});
+		},
+
+		async delete(userId: string, id: string) {
+			const stub = getIndexStub(userId);
+
+			// 1. Fetch item for Trash logic
+			// [!code fix] Fallback to KV if not found in DO (ensures deletion works even if desynced)
+			let item = await this.get(userId, id);
+			
+			if (!item) {
+				const raw = await kv.get(`expense:${userId}:${id}`);
+				if (raw) {
+					item = JSON.parse(raw);
+					log.info('[ExpenseService] Found item in KV for deletion (missing in DO)', { id });
+				}
 			}
-			await tx.done;
-			await this.load(realUserId);
+
+			if (!item) {
+				log.warn('[ExpenseService] Item not found for deletion, skipping trash', { id });
+				// Even if not found, we continue to delete commands to ensure cleanup
+			} else {
+				// 2. Move to Trash KV
+				if (trashKV) {
+					const now = new Date();
+					const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+					const metadata = {
+						deletedAt: now.toISOString(),
+						deletedBy: userId,
+						originalKey: `expense:${userId}:${id}`,
+						expiresAt: expiresAt.toISOString()
+					};
+					// Store with 'data' wrapper for consistency with normalization logic
+					const trashItem = { type: 'expense', data: item, metadata };
+					
+					await trashKV.put(`trash:${userId}:${id}`, JSON.stringify(trashItem), {
+						expirationTtl: 30 * 24 * 60 * 60
+					});
+					log.info('[ExpenseService] Moved to trash', { id });
+				} else {
+					log.error('[ExpenseService] Trash KV binding missing!');
+				}
+			}
+
+			// 3. Delete from SQL
+			await stub.fetch(`${DO_ORIGIN}/expenses/delete`, {
+				method: 'POST',
+				body: JSON.stringify({ id })
+			});
+
+			// 4. Clean up old KV
+			await kv.delete(`expense:${userId}:${id}`);
 		}
 	};
 }
-
-export const expenses = createExpensesStore();
-
-syncManager.registerStore('expenses', {
-	updateLocal: (item) => {
-		if (item && item.amount !== undefined && item.category !== undefined) {
-			expenses.updateLocal(item);
-		}
-	},
-	syncDown: async () => {
-		const user = get(auth).user;
-		if (user?.id) await expenses.syncFromCloud(user.id);
-	}
-});
-
-function createDraftStore() {
-	const STORAGE_KEY = 'draft_expense';
-
-	const getDraft = () => {
-		try {
-			const stored = localStorage.getItem(STORAGE_KEY);
-			return stored ? JSON.parse(stored) : null;
-		} catch {
-			return null;
-		}
-	};
-
-	const { subscribe, set } = writable(getDraft());
-
-	return {
-		subscribe,
-		save: (data: any) => {
-			localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-			set(data);
-		},
-		load: () => getDraft(),
-		clear: () => {
-			localStorage.removeItem(STORAGE_KEY);
-			set(null);
-		}
-	};
-}
-
-export const draftExpense = createDraftStore();
