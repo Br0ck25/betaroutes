@@ -7,17 +7,18 @@ import { storage } from '$lib/utils/storage';
 import { auth } from '$lib/stores/auth';
 import { PLAN_LIMITS } from '$lib/constants';
 
+// ... [Keep existing implementation of isLoading and createTripsStore unchanged] ...
 export const isLoading = writable(false);
 
 function createTripsStore() {
-	const { subscribe, set, update } = writable<TripRecord[]>([]);
+    // ... [Keep existing implementation inside createTripsStore] ...
+    const { subscribe, set, update } = writable<TripRecord[]>([]);
 
-	return {
-		subscribe,
-
-		// New Method: Updates local store without DB write
-		// Used by SyncManager to reflect background changes (like offline calc) in the UI instantly
-		updateLocal(trip: TripRecord) {
+    return {
+        subscribe,
+        // ... [Rest of methods: updateLocal, load, create, updateTrip, deleteTrip, get, clear, syncFromCloud, etc.] ...
+        // (Assuming you kept the original code above, I will just show the listener change at the bottom)
+        updateLocal(trip: TripRecord) {
 			update((items) => {
 				const index = items.findIndex((t) => t.id === trip.id);
 				if (index !== -1) {
@@ -28,8 +29,8 @@ function createTripsStore() {
 				return items;
 			});
 		},
-
-		async load(userId?: string) {
+        async load(userId?: string) {
+            // ... [Original code] ...
 			isLoading.set(true);
 			try {
 				const db = await getDB();
@@ -78,9 +79,9 @@ function createTripsStore() {
 			} finally {
 				isLoading.set(false);
 			}
-		},
-
-		async create(tripData: Partial<TripRecord>, userId: string) {
+        },
+        async create(tripData: Partial<TripRecord>, userId: string) {
+            // ... [Original code] ...
 			try {
 				// Free Tier Check
 				const currentUser = get(auth).user;
@@ -145,9 +146,9 @@ function createTripsStore() {
 				console.error('❌ Failed to create trip:', err);
 				throw err;
 			}
-		},
-
-		async updateTrip(id: string, changes: Partial<TripRecord>, userId: string) {
+        },
+        async updateTrip(id: string, changes: Partial<TripRecord>, userId: string) {
+            // ... [Original code] ...
 			try {
 				const db = await getDB();
 				const tx = db.transaction('trips', 'readwrite');
@@ -185,9 +186,9 @@ function createTripsStore() {
 				console.error('❌ Failed to update trip:', err);
 				throw err;
 			}
-		},
-
-		async deleteTrip(id: string, userId: string) {
+        },
+        async deleteTrip(id: string, userId: string) {
+            // ... [Original code] ...
 			// Optimistic Update: Remove from UI immediately
 			let previousTrips: TripRecord[] = [];
 			update((current) => {
@@ -240,9 +241,9 @@ function createTripsStore() {
 				set(previousTrips);
 				throw err;
 			}
-		},
-
-		async get(id: string, userId: string) {
+        },
+        async get(id: string, userId: string) {
+            // ... [Original code] ...
 			try {
 				const db = await getDB();
 				const tx = db.transaction('trips', 'readonly');
@@ -253,13 +254,12 @@ function createTripsStore() {
 				console.error('❌ Failed to get trip:', err);
 				return null;
 			}
-		},
-
-		clear() {
+        },
+        clear() {
 			set([]);
 		},
-
-		async syncFromCloud(userId: string) {
+        async syncFromCloud(userId: string) {
+            // ... [Original code] ...
 			isLoading.set(true);
 			try {
 				if (!navigator.onLine) return;
@@ -339,9 +339,9 @@ function createTripsStore() {
 			} finally {
 				isLoading.set(false);
 			}
-		},
-
-		async syncPendingToCloud(userId: string) {
+        },
+        async syncPendingToCloud(userId: string) {
+            // ... [Original code] ...
 			try {
 				if (!navigator.onLine) return { synced: 0, failed: 0 };
 
@@ -399,9 +399,9 @@ function createTripsStore() {
 				console.error('❌ Failed to sync pending changes:', err);
 				return { synced: 0, failed: 0 };
 			}
-		},
-
-		async migrateOfflineTrips(tempUserId: string, realUserId: string) {
+        },
+        async migrateOfflineTrips(tempUserId: string, realUserId: string) {
+            // ... [Original code] ...
 			if (!tempUserId || !realUserId || tempUserId === realUserId) return;
 			const db = await getDB();
 			const tx = db.transaction('trips', 'readwrite');
@@ -418,16 +418,23 @@ function createTripsStore() {
 			}
 			await tx.done;
 			await this.load(realUserId);
-		}
-	};
+        }
+    };
 }
 
 export const trips = createTripsStore();
 
-// Register Store Listener for Background Sync Updates
-syncManager.setStoreUpdater((trip) => trips.updateLocal(trip));
+// [!code change] Use the new registerStore method
+syncManager.registerStore('trips', {
+	updateLocal: (trip) => trips.updateLocal(trip),
+	syncDown: async () => {
+		const user = get(auth).user;
+		if (user?.id) await trips.syncFromCloud(user.id);
+	}
+});
 
 function createDraftStore() {
+    // ... [Original code] ...
 	const { subscribe, set } = writable(storage.getDraftTrip());
 	return {
 		subscribe,

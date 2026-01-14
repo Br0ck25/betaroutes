@@ -7,9 +7,11 @@ import type { ExpenseRecord } from '$lib/db/types';
 import { auth } from '$lib/stores/auth';
 import { PLAN_LIMITS } from '$lib/constants';
 
+// ... [Keep existing implementation of isLoading and createExpensesStore unchanged] ...
 export const isLoading = writable(false);
 
 function createExpensesStore() {
+    // ... [Original createExpensesStore implementation] ...
 	const { subscribe, set, update } = writable<ExpenseRecord[]>([]);
 
 	return {
@@ -358,18 +360,21 @@ function createExpensesStore() {
 
 export const expenses = createExpensesStore();
 
-// Register Store Listener for Background Sync Updates
-// Note: This listens for ANY updateLocal call from syncManager.
-// If syncManager doesn't distinguish types, this might try to update expenses with trip data.
-// Ensure syncManager.ts passes the correct type or check it here if possible.
-syncManager.setStoreUpdater((item) => {
-	// Basic check to see if it looks like an expense (optional)
-	if (item && item.amount !== undefined && item.category !== undefined) {
-		expenses.updateLocal(item);
+// [!code change] Register properly with SyncManager
+syncManager.registerStore('expenses', {
+	updateLocal: (item) => {
+		if (item && item.amount !== undefined && item.category !== undefined) {
+			expenses.updateLocal(item);
+		}
+	},
+	syncDown: async () => {
+		const user = get(auth).user;
+		if (user?.id) await expenses.syncFromCloud(user.id);
 	}
 });
 
 function createDraftStore() {
+    // ... [Original code] ...
 	// Assuming storage utils might not have dedicated expense methods yet,
 	// we use a safe fallback or assume you will add them.
 	const STORAGE_KEY = 'draft_expense';

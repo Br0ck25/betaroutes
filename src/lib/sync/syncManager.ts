@@ -4,17 +4,27 @@ import { syncStatus } from '$lib/stores/sync';
 import type { SyncQueueItem } from '$lib/db/types';
 import { loadGoogleMaps } from '$lib/utils/autocomplete';
 
+interface StoreHandler {
+	updateLocal: (data: any) => void;
+	syncDown: () => Promise<void>;
+}
+
 class SyncManager {
 	private initialized = false;
 	private syncInterval: ReturnType<typeof setInterval> | null = null;
 	private isSyncing = false;
 	private apiKey: string = '';
 
-	private storeUpdater: ((trip: any) => void) | null = null;
+	// [!code change] Support multiple stores instead of a single listener
+	private registeredStores = new Map<string, StoreHandler>();
 
-	setStoreUpdater(fn: (trip: any) => void) {
-		this.storeUpdater = fn;
+	// [!code change] New method to register stores (Trips, Expenses, etc.)
+	registerStore(name: string, handler: StoreHandler) {
+		this.registeredStores.set(name, handler);
 	}
+
+	// [!code delete] private storeUpdater: ((trip: any) => void) | null = null;
+	// [!code delete] setStoreUpdater(fn: (trip: any) => void) { ... }
 
 	async initialize(apiKey?: string) {
 		if (this.initialized) return;
@@ -97,41 +107,48 @@ class SyncManager {
 		syncStatus.setSyncing();
 
 		try {
+			// 1. Process Upload Queue (Push)
 			const db = await getDB();
 			const queue = await db.getAll('syncQueue');
 
-			if (queue.length === 0) {
-				syncStatus.setSynced();
-				this.isSyncing = false;
-				return;
-			}
+			if (queue.length > 0) {
+				console.log(`🔄 Syncing ${queue.length} item(s)...`);
+				let failCount = 0;
 
-			console.log(`🔄 Syncing ${queue.length} item(s)...`);
-			let failCount = 0;
+				for (const item of queue) {
+					try {
+						// Enrich data only if it's a trip
+						if (
+							(item.action === 'create' || item.action === 'update') &&
+							item.data &&
+							(!item.data.store || item.data.store === 'trips')
+						) {
+							await this.enrichTripData(item.data);
+						}
 
-			for (const item of queue) {
-				try {
-					// Enrich data only if it's a trip (checking for trip-specific fields or store name)
-					if (
-						(item.action === 'create' || item.action === 'update') &&
-						item.data &&
-						(!item.data.store || item.data.store === 'trips')
-					) {
-						await this.enrichTripData(item.data);
+						await this.processSyncItem(item);
+						await this.removeFromQueue(item.id!);
+					} catch (err) {
+						failCount++;
+						console.error(`❌ Failed to sync: ${item.action} ${item.tripId}`, err);
+						await this.handleSyncError(item, err);
 					}
-
-					await this.processSyncItem(item);
-					await this.removeFromQueue(item.id!);
-				} catch (err) {
-					failCount++;
-					console.error(`❌ Failed to sync: ${item.action} ${item.tripId}`, err);
-					await this.handleSyncError(item, err);
 				}
+
+				await this.updatePendingCount();
+				if (failCount > 0) syncStatus.setError(`${failCount} item(s) failed`);
 			}
 
-			await this.updatePendingCount();
-			if (failCount === 0) syncStatus.setSynced();
-			else syncStatus.setError(`${failCount} item(s) failed`);
+			// [!code ++] 2. Trigger Cloud Download (Pull) for all registered stores
+			// This ensures expenses are fetched even if manual calls are missing
+			console.log('⬇️ Triggering downward sync...');
+			await Promise.all(
+				Array.from(this.registeredStores.values()).map((store) =>
+					store.syncDown().catch((e) => console.error('Store sync down failed:', e))
+				)
+			);
+
+			syncStatus.setSynced();
 		} catch (err) {
 			console.error('❌ Sync error:', err);
 			syncStatus.setError('Sync failed');
@@ -191,9 +208,11 @@ class SyncManager {
 					await tx.objectStore('trips').put(trip);
 					await tx.done;
 
-					if (this.storeUpdater) {
+					// [!code change] Notify specifically the trips store
+					const tripsStore = this.registeredStores.get('trips');
+					if (tripsStore) {
 						console.log('⚡ Updating UI with enriched data:', trip.id);
-						this.storeUpdater(trip);
+						tripsStore.updateLocal(trip);
 					}
 				}
 			} catch (e) {
@@ -205,14 +224,9 @@ class SyncManager {
 	private async processSyncItem(item: SyncQueueItem) {
 		const { action, tripId, data } = item;
 
-		// [!code ++] Determine which store/API to use
-		// Default to 'trips' for backward compatibility
 		const storeName = ((data as any)?.store as string) || 'trips';
-
-		// Construct base URL based on store
 		const baseUrl = storeName === 'expenses' ? '/api/expenses' : '/api/trips';
 
-		// Construct Full URL
 		const url =
 			action === 'create'
 				? baseUrl
@@ -220,8 +234,6 @@ class SyncManager {
 					? `${baseUrl}/${tripId}`
 					: `${baseUrl}/${tripId}`;
 
-		// Map store name to IndexedDB store name for local marking
-		// 'trips' -> 'trips', 'expenses' -> 'expenses'
 		let targetStore: 'trips' | 'expenses' | 'trash' | null =
 			storeName === 'expenses' ? 'expenses' : 'trips';
 
@@ -237,7 +249,6 @@ class SyncManager {
 			await this.apiCall(`/api/trash/${tripId}`, 'DELETE', null, null, tripId);
 	}
 
-	// [!code change] Updated signature to allow 'expenses'
 	private async apiCall(
 		url: string,
 		method: string,
@@ -253,7 +264,6 @@ class SyncManager {
 		});
 
 		if (!res.ok) {
-			// [!code ++] Detect Client Errors (400-499) which are non-retriable
 			if (res.status >= 400 && res.status < 500) {
 				const errText = await res.text().catch(() => '');
 				throw new Error(
@@ -266,7 +276,6 @@ class SyncManager {
 		if (updateStore) await this.markAsSynced(updateStore, id);
 	}
 
-	// [!code change] Updated signature to allow 'expenses'
 	private async markAsSynced(store: 'trips' | 'expenses' | 'trash', tripId: string) {
 		const db = await getDB();
 		const tx = db.transaction(store, 'readwrite');
@@ -285,20 +294,15 @@ class SyncManager {
 		const tx = db.transaction('syncQueue', 'readwrite');
 		const store = tx.objectStore('syncQueue');
 
-		// [!code ++] Check for fatal error flag
 		const isFatal = error.message?.includes('ABORT_RETRY');
 
 		if (isFatal) {
 			console.error(
 				`🛑 Sync failed permanently for item ${item.id} (Trip ${item.tripId}). Removing from queue.`
 			);
-			// Delete immediately to prevent battery drain from infinite retries on bad data
 			await store.delete(item.id!);
-
-			// Update status to show specific error
 			syncStatus.setError(`Sync rejected: ${error.message.replace('ABORT_RETRY: ', '')}`);
 		} else {
-			// Standard retry logic for 5xx or Network errors
 			item.retries = (item.retries || 0) + 1;
 			item.lastError = error.message || String(error);
 
