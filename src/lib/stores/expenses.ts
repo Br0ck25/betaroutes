@@ -181,8 +181,12 @@ function createExpensesStore() {
 				const now = new Date();
 				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
+				// [!code fix] STRUCTURAL FIX: Wrap expense in 'data' and add 'type'
+				// This ensures the Trash UI (which expects item.data.category) finds the fields
 				const trashItem = {
-					...expense,
+					id: expense.id, // Top-level ID for IndexedDB indexing
+					type: 'expense',
+					data: expense, // Nested data containing 'category', 'amount', etc.
 					deletedAt: now.toISOString(),
 					deletedBy: userId,
 					expiresAt: expiresAt.toISOString(),
@@ -235,9 +239,7 @@ function createExpensesStore() {
 				if (!navigator.onLine) return;
 
 				const lastSync = localStorage.getItem('last_sync_expenses');
-
-				// [!code fix] SAFETY BUFFER: Backdate 'since' by 5 minutes
-				// This fixes issues where clock skew causes the client to miss recent items
+				// Safety Buffer: Backdate sync by 5 minutes to handle clock skew
 				const sinceDate = lastSync ? new Date(new Date(lastSync).getTime() - 5 * 60 * 1000) : null;
 
 				const url = sinceDate
@@ -286,7 +288,6 @@ function createExpensesStore() {
 					if (trashIds.has(cloudExpense.id)) continue;
 
 					const local = await store.get(cloudExpense.id);
-					// Last Write Wins (based on updatedAt) handles the duplicates from overlap
 					if (!local || new Date(cloudExpense.updatedAt) > new Date(local.updatedAt)) {
 						await store.put({
 							...cloudExpense,
