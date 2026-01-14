@@ -29,18 +29,29 @@ export function makeExpenseService(
 	return {
 		async list(userId: string, since?: string): Promise<ExpenseRecord[]> {
 			const stub = getIndexStub(userId);
+			const prefix = `expense:${userId}:`;
 
-			// 1. Check migration status (Lazy Migration)
-			const statusRes = await stub.fetch(`${DO_ORIGIN}/expenses/status`);
-			if (statusRes.ok) {
-				const status = (await statusRes.json()) as { needsMigration: boolean };
+			// 1. Try to fetch from SQL Index (Durable Object) first
+			const res = await stub.fetch(`${DO_ORIGIN}/expenses/list`);
+			
+			let expenses: ExpenseRecord[] = [];
+			if (res.ok) {
+				expenses = (await res.json()) as ExpenseRecord[];
+			} else {
+				log.error(`[ExpenseService] DO Error: ${res.status}`);
+			}
 
-				if (status.needsMigration) {
-					log.debug(`[ExpenseService] Migrating expenses for ${userId} to SQL...`);
-					const prefix = `expense:${userId}:`;
-
-					// Ensure we fetch ALL keys, not just the first 1000
-					const expenses: ExpenseRecord[] = [];
+			// SELF-HEALING: If Index is empty but KV has data, force sync.
+			// This fixes the "I see it in KV but not on other device" issue.
+			if (expenses.length === 0) {
+				// Check if we actually have data in KV
+				const kvCheck = await kv.list({ prefix, limit: 1 });
+				
+				if (kvCheck.keys.length > 0) {
+					log.info(`[ExpenseService] Detected desync for ${userId} (KV has data, Index empty). repairing...`);
+					
+					// Fetch ALL data from KV
+					const allExpenses: ExpenseRecord[] = [];
 					let list = await kv.list({ prefix });
 					let keys = list.keys;
 
@@ -51,25 +62,21 @@ export function makeExpenseService(
 
 					for (const key of keys) {
 						const raw = await kv.get(key.name);
-						if (raw) expenses.push(JSON.parse(raw));
+						if (raw) allExpenses.push(JSON.parse(raw));
 					}
 
-					// Bulk Insert to DO
-					await stub.fetch(`${DO_ORIGIN}/expenses/migrate`, {
-						method: 'POST',
-						body: JSON.stringify(expenses)
-					});
+					// Force Push to DO
+					if (allExpenses.length > 0) {
+						await stub.fetch(`${DO_ORIGIN}/expenses/migrate`, {
+							method: 'POST',
+							body: JSON.stringify(allExpenses)
+						});
+						
+						// Update local variable to return the fresh data immediately
+						expenses = allExpenses;
+					}
 				}
 			}
-
-			// 2. Fetch from SQL (Fast)
-			const res = await stub.fetch(`${DO_ORIGIN}/expenses/list`);
-			if (!res.ok) {
-				log.error(`[ExpenseService] DO Error: ${res.status}`);
-				return [];
-			}
-
-			const expenses = (await res.json()) as ExpenseRecord[];
 
 			// Delta Sync Logic
 			if (since) {
@@ -81,7 +88,6 @@ export function makeExpenseService(
 		},
 
 		async get(userId: string, id: string) {
-			// Optimistic fetch from list (since SQL is fast)
 			const all = await this.list(userId);
 			return all.find((e) => e.id === id) || null;
 		},
@@ -91,10 +97,10 @@ export function makeExpenseService(
 			delete expense.deleted;
 			delete (expense as Record<string, unknown>)['deletedAt'];
 
-			// [!code ++] PERSIST TO KV (Fixes missing logs)
-			// This matches the behavior in tripService.ts and ensures data appears in KV
+			// 1. Write to KV (The Log)
 			await kv.put(`expense:${expense.userId}:${expense.id}`, JSON.stringify(expense));
 
+			// 2. Write to DO (The Index)
 			const stub = getIndexStub(expense.userId);
 			await stub.fetch(`${DO_ORIGIN}/expenses/put`, {
 				method: 'POST',
@@ -104,14 +110,11 @@ export function makeExpenseService(
 
 		async delete(userId: string, id: string) {
 			const stub = getIndexStub(userId);
-
-			// 1. Fetch item for Trash logic
 			const item = await this.get(userId, id);
 			if (!item) return;
 
 			const now = new Date();
 
-			// 2. Move to Trash KV
 			if (trashKV) {
 				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 				const metadata = {
@@ -126,13 +129,11 @@ export function makeExpenseService(
 				});
 			}
 
-			// 3. Delete from SQL
 			await stub.fetch(`${DO_ORIGIN}/expenses/delete`, {
 				method: 'POST',
 				body: JSON.stringify({ id })
 			});
 
-			// 4. Clean up old KV (Eventual consistency cleanup)
 			await kv.delete(`expense:${userId}:${id}`);
 		}
 	};

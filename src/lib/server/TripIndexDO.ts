@@ -26,17 +26,16 @@ interface ExpenseRecord {
 export class TripIndexDO {
 	state: DurableObjectState;
 	env: Record<string, unknown>;
-	// [!code ++] Track if we've ensured schema to avoid running SQL on every request
 	private schemaEnsured = false;
 
 	constructor(state: DurableObjectState, env: Record<string, unknown>) {
 		this.state = state;
 		this.env = env;
-		// Constructor only runs on cold start. We'll move critical schema logic to ensureSchema()
+		// Run on cold start, but also lazily on fetch
 		this.ensureSchema();
 	}
 
-	// [!code ++] Robust schema initialization that runs even for existing "hot" instances
+	// Create tables if they don't exist (Critical for existing users)
 	private ensureSchema() {
 		try {
 			this.state.storage.sql.exec(`
@@ -65,8 +64,7 @@ export class TripIndexDO {
 			log.error('[TripIndexDO] Schema Init Failed:', err);
 		}
 
-		// Legacy Migration Logic (KV -> SQLite)
-		// We can keep this here or move it. Kept for safety.
+		// Legacy Migration Logic (KV -> SQLite for Trips)
 		this.state.blockConcurrencyWhile(async () => {
 			try {
 				const legacyTrips = await this.state.storage.get<TripSummary[]>('trips');
@@ -101,8 +99,7 @@ export class TripIndexDO {
 	}
 
 	async fetch(request: Request) {
-		// [!code ++] Ensure schema exists before processing any request
-		// This handles the case where code was updated but DO instance was already alive
+		// Ensure schema exists before processing any request
 		if (!this.schemaEnsured) {
 			this.ensureSchema();
 		}
@@ -195,7 +192,7 @@ export class TripIndexDO {
 				return new Response('OK');
 			}
 
-			// --- COMPUTE ROUTES (Aligns with HughesNet Router) ---
+			// --- COMPUTE ROUTES ---
 			if (path === '/compute-routes') {
 				if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
 				const body = await parseBody<{ id: string }>();
@@ -454,14 +451,12 @@ export class TripIndexDO {
 			}
 
 			if (path === '/expenses/status') {
-				// [!code check] Safety wrap in case table doesn't exist (if schemaEnsured failed)
 				try {
 					const countRes = this.state.storage.sql.exec('SELECT COUNT(*) as c FROM expenses');
 					const count = (countRes.one() as { c: number }).c;
 					const migrated = await this.state.storage.get('expenses_migrated');
 					return new Response(JSON.stringify({ needsMigration: !migrated && count === 0 }));
 				} catch {
-					// If SQL fails, we likely need migration/init
 					return new Response(JSON.stringify({ needsMigration: true }));
 				}
 			}
