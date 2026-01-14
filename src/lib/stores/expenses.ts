@@ -356,7 +356,6 @@ function createExpensesStore() {
 export const expenses = createExpensesStore();
 
 // Register with SyncManager
-// Uses registerStore instead of setStoreUpdater to coexist with trips store
 syncManager.registerStore('expenses', {
 	updateLocal: (item) => {
 		// Basic check to see if it looks like an expense
@@ -365,7 +364,6 @@ syncManager.registerStore('expenses', {
 		}
 	},
 	syncDown: async () => {
-		// Trigger the download logic when SyncManager decides it's time (e.g. back online)
 		const user = get(auth).user;
 		if (user?.id) await expenses.syncFromCloud(user.id);
 	}

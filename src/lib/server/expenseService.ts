@@ -39,7 +39,6 @@ export function makeExpenseService(
 					log.debug(`[ExpenseService] Migrating expenses for ${userId} to SQL...`);
 					const prefix = `expense:${userId}:`;
 
-					// [!code fix] PAGINATION SUPPORT
 					// Ensure we fetch ALL keys, not just the first 1000
 					const expenses: ExpenseRecord[] = [];
 					let list = await kv.list({ prefix });
@@ -83,7 +82,6 @@ export function makeExpenseService(
 
 		async get(userId: string, id: string) {
 			// Optimistic fetch from list (since SQL is fast)
-			// Ideally we'd add a GET /expenses/item endpoint later
 			const all = await this.list(userId);
 			return all.find((e) => e.id === id) || null;
 		},
@@ -92,6 +90,10 @@ export function makeExpenseService(
 			expense.updatedAt = new Date().toISOString();
 			delete expense.deleted;
 			delete (expense as Record<string, unknown>)['deletedAt'];
+
+			// [!code ++] PERSIST TO KV (Fixes missing logs)
+			// This matches the behavior in tripService.ts and ensures data appears in KV
+			await kv.put(`expense:${expense.userId}:${expense.id}`, JSON.stringify(expense));
 
 			const stub = getIndexStub(expense.userId);
 			await stub.fetch(`${DO_ORIGIN}/expenses/put`, {
@@ -131,7 +133,6 @@ export function makeExpenseService(
 			});
 
 			// 4. Clean up old KV (Eventual consistency cleanup)
-			// This ensures we don't leave stale data in the old system
 			await kv.delete(`expense:${userId}:${id}`);
 		}
 	};
