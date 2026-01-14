@@ -1,9 +1,19 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { userSettings } from '$lib/stores/userSettings';
 	import { saveSettings } from '../settings/lib/save-settings';
 	import { toasts } from '$lib/stores/toast';
 	import { formatCurrency } from '$lib/utils/dashboardLogic';
+
+	// Focus helper for the native "New" button
+	function goToAdd() {
+		const el = document.getElementById('millage-start');
+		if (el) {
+			el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			(el as HTMLInputElement).focus();
+		}
+	}
 
 	let items = $state([] as any[]);
 	let loading = $state(false);
@@ -101,94 +111,147 @@
 	<title>Millage - Dashboard</title>
 </svelte:head>
 
-<div class="page-header">
-	<div class="header-left">
-		<h1 class="page-title">Millage Tracker</h1>
-		<p class="page-subtitle">Log start/end odometer readings and track reimbursement</p>
-	</div>
-	<div class="header-actions">
-		<label class="inline"
-			>Rate: <input
-				type="number"
-				step="0.01"
-				value={$userSettings.millageRate ?? 0}
-				onchange={(e) => changeRate((e.target as HTMLInputElement).value)}
-			/></label
-		>
-	</div>
-</div>
+<div class="page-container">
+	<div class="page-header">
+		<div class="header-text">
+			<h1 class="page-title">Millage Tracker</h1>
+			<p class="page-subtitle">Log start/end odometer readings and track reimbursement</p>
+		</div>
+		<div class="header-actions">
+			<button
+				class="btn-secondary"
+				aria-label="View Trash"
+				onclick={() => goto('/dashboard/trash')}
+			>
+				<svg
+					width="20"
+					height="20"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<polyline points="3 6 5 6 21 6"></polyline>
+					<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+					></path>
+				</svg>
+			</button>
 
-<div class="stats-summary">
-	<div class="summary-card">
-		<div class="summary-label">Total Miles</div>
-		<div class="summary-value">{Math.round(totalMiles || 0)}</div>
+			<button class="btn-secondary" onclick={() => load()} aria-label="Refresh">
+				<svg
+					width="20"
+					height="20"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<polyline points="23 4 23 10 17 10"></polyline>
+					<path d="M20.49 15A9 9 0 1 1 15 3.51L23 11"></path>
+				</svg>
+			</button>
+
+			<button class="btn-primary" onclick={goToAdd} aria-label="New Log">
+				<svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"
+					><path
+						d="M10 4V16M4 10H16"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/></svg
+				>
+				New Log
+			</button>
+			<label class="inline"
+				>Rate: <input
+					type="number"
+					step="0.01"
+					value={$userSettings.millageRate ?? 0}
+					onchange={(e) => changeRate((e.target as HTMLInputElement).value)}
+				/></label
+			>
+		</div>
 	</div>
 
-	<div class="summary-card">
-		<div class="summary-label">Total Reimbursement</div>
-		<div class="summary-value">{formatCurrency(totalReimbursement || 0)}</div>
-	</div>
-</div>
-
-<div class="form-card">
-	<div class="card-header">
-		<h2 class="card-title">Add Millage Log</h2>
-	</div>
-
-	<div class="form-grid">
-		<div class="form-row">
-			<div class="form-group">
-				<label>Start Odometer<input type="number" bind:value={startOdo} /></label>
-			</div>
-			<div class="form-group">
-				<label>End Odometer<input type="number" bind:value={endOdo} /></label>
-			</div>
+	<div class="stats-summary">
+		<div class="summary-card">
+			<div class="summary-label">Total Miles</div>
+			<div class="summary-value">{Number(totalMiles || 0).toFixed(2)}</div>
 		</div>
 
-		<div class="form-row">
-			<div class="form-group">
-				<label>Date<input type="date" bind:value={date} /></label>
-			</div>
-			<div class="form-group">
-				<label>Notes<input type="text" bind:value={notes} /></label>
-			</div>
+		<div class="summary-card">
+			<div class="summary-label">Total Reimbursement</div>
+			<div class="summary-value">{formatCurrency(totalReimbursement || 0)}</div>
+		</div>
+	</div>
+
+	<div class="form-card">
+		<div class="card-header">
+			<h2 class="card-title">Add Millage Log</h2>
 		</div>
 
-		<div class="form-row">
-			<div></div>
-			<div style="display:flex; justify-content:flex-end; gap:12px">
-				<button class="btn-secondary" onclick={() => load()}>Refresh</button>
-				<button class="btn-primary" onclick={add}>Add</button>
+		<div class="form-grid">
+			<div class="form-row">
+				<div class="form-group">
+					<label>Start Odometer<input type="number" bind:value={startOdo} /></label>
+				</div>
+				<div class="form-group">
+					<label>End Odometer<input type="number" bind:value={endOdo} /></label>
+				</div>
+			</div>
+
+			<div class="form-row">
+				<div class="form-group">
+					<label>Date<input type="date" bind:value={date} /></label>
+				</div>
+				<div class="form-group">
+					<label>Notes<input type="text" bind:value={notes} /></label>
+				</div>
+			</div>
+
+			<div class="form-row">
+				<div></div>
+				<div style="display:flex; justify-content:flex-end; gap:12px">
+					<button class="btn-secondary" onclick={() => load()}>Refresh</button>
+					<button class="btn-primary" onclick={add}>Add</button>
+				</div>
 			</div>
 		</div>
 	</div>
-</div>
 
-<div class="list-card">
-	{#if loading}
-		<div class="empty-state">Loading…</div>
-	{:else if items.length === 0}
-		<div class="empty-state">No logs yet</div>
-	{:else}
-		<ul class="list">
-			{#each items as it}
-				<li class="list-item">
-					<div class="list-item-main">
-						<div class="list-title">{it.date?.split('T')[0]} — {it.miles} mi</div>
-						<div class="list-sub">
-							{formatCurrency((it.miles || 0) * Number($userSettings.millageRate || 0))}
+	<div class="list-card">
+		{#if loading}
+			<div class="empty-state">Loading…</div>
+		{:else if items.length === 0}
+			<div class="empty-state">No logs yet</div>
+		{:else}
+			<ul class="list">
+				{#each items as it}
+					<li class="list-item">
+						<div class="list-item-main">
+							<div class="list-title">
+								{it.date?.split('T')[0]} — {Number(it.miles || 0).toFixed(2)} mi
+							</div>
+							<div class="list-sub">
+								{formatCurrency((it.miles || 0) * Number($userSettings.millageRate || 0))}
+							</div>
 						</div>
-					</div>
-					<div class="list-actions">
-						<button class="btn-danger" onclick={() => remove(it.id)}>Delete</button>
-					</div>
-					{#if it.notes}
-						<div class="list-notes">{it.notes}</div>
-					{/if}
-				</li>
-			{/each}
-		</ul>
-	{/if}
+						<div class="list-actions">
+							<button class="btn-danger" onclick={() => remove(it.id)}>Delete</button>
+						</div>
+						{#if it.notes}
+							<div class="list-notes">{it.notes}</div>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	</div>
 </div>
 
 <style>

@@ -64,10 +64,16 @@ export const POST: RequestHandler = async (event) => {
 		const payload = parse.data;
 		const id = payload.id || crypto.randomUUID();
 		const userId = sessionUser.name || sessionUser.token || sessionUser.id || '';
-		const miles =
+		let miles =
 			typeof payload.miles === 'number'
 				? payload.miles
 				: Math.max(0, Number(payload.endOdometer) - Number(payload.startOdometer));
+		// Round miles to 2 decimals for storage/display
+		miles = Number(miles.toFixed(2));
+
+		let reimbursement = payload.reimbursement ?? undefined;
+		if (typeof reimbursement === 'number') reimbursement = Number(reimbursement.toFixed(2));
+
 		const record = {
 			id,
 			userId,
@@ -75,7 +81,7 @@ export const POST: RequestHandler = async (event) => {
 			startOdometer: payload.startOdometer,
 			endOdometer: payload.endOdometer,
 			miles,
-			reimbursement: payload.reimbursement ?? undefined,
+			reimbursement,
 			notes: payload.notes || '',
 			createdAt: new Date().toISOString(),
 			updatedAt: new Date().toISOString()

@@ -90,6 +90,11 @@ export const PUT: RequestHandler = async (event) => {
 		const updated = { ...existing, ...body, updatedAt: new Date().toISOString() };
 		if (typeof updated.startOdometer === 'number' && typeof updated.endOdometer === 'number') {
 			updated.miles = Math.max(0, updated.endOdometer - updated.startOdometer);
+			updated.miles = Number((updated.miles || 0).toFixed(2));
+		}
+
+		if (typeof updated.reimbursement === 'number') {
+			updated.reimbursement = Number(updated.reimbursement.toFixed(2));
 		}
 
 		await svc.put(updated);
