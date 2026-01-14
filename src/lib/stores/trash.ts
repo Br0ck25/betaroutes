@@ -15,21 +15,21 @@ function createTrashStore() {
 				const db = await getDB();
 				const tx = db.transaction('trash', 'readonly');
 				const store = tx.objectStore('trash');
-				const items = userId ? await store.index('userId').getAll(userId) : await store.getAll();
 				
-				// Normalize/Flatten similar to +page.svelte logic for consistency in store
-				const normalizedItems = items.map(item => {
-					let flat = { ...item };
-					if (flat.data && typeof flat.data === 'object') {
-						flat = { ...flat.data, ...flat };
-						delete flat.data;
-					}
-					return flat;
-				});
+				let items = [];
+				if (userId) {
+					// This query ONLY works if userId is at the top level of the object
+					items = await store.index('userId').getAll(userId);
+				} else {
+					items = await store.getAll();
+				}
 
-				normalizedItems.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
-				set(normalizedItems);
-				return normalizedItems;
+				// Safety flatten on load, just in case old data exists
+				const flatItems = items.map(normalizeTrashItem);
+				
+				flatItems.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
+				set(flatItems);
+				return flatItems;
 			} catch (err) {
 				console.error('❌ Failed to load trash:', err);
 				set([]);
@@ -46,14 +46,8 @@ function createTrashStore() {
 				if (!trashItem) throw new Error('Item not found in trash');
 				if (trashItem.userId !== userId) throw new Error('Unauthorized');
 
-				// Deep clone and handle potential nested structure
-				let restoredItem = { ...trashItem };
-				
-				// If stored as nested { data: ... }, flatten it first to get the actual fields
-				if (restoredItem.data && typeof restoredItem.data === 'object') {
-					restoredItem = { ...restoredItem.data, ...restoredItem };
-					delete restoredItem.data;
-				}
+				// Deep clone and normalize
+				let restoredItem = normalizeTrashItem(trashItem);
 
 				// Remove trash-specific metadata
 				delete (restoredItem as any).deletedAt;
@@ -65,20 +59,17 @@ function createTrashStore() {
 
 				delete (restoredItem as any).originalKey;
 				delete (restoredItem as any).recordType;
-				delete (restoredItem as any).type; // Clean up convenience type if present
+				delete (restoredItem as any).type; 
 
 				restoredItem.updatedAt = new Date().toISOString();
 				restoredItem.syncStatus = 'pending';
 
 				// Detect type and restore to correct store
-				// Check 'type', 'recordType', or 'originalKey' prefix
 				if (type === 'expense' || (originalKey && originalKey.startsWith('expense:'))) {
-					console.log('Restoring expense:', id);
 					const tx = db.transaction('expenses', 'readwrite');
 					await tx.objectStore('expenses').put(restoredItem);
 					await tx.done;
 				} else {
-					console.log('Restoring trip:', id);
 					const tx = db.transaction('trips', 'readwrite');
 					await tx.objectStore('trips').put(restoredItem);
 					await tx.done;
@@ -90,13 +81,12 @@ function createTrashStore() {
 
 				update((items) => items.filter((item) => item.id !== id));
 				
-				// Determine target store for sync action
 				const syncTarget = (type === 'expense' || (originalKey && originalKey.startsWith('expense:'))) ? 'expenses' : 'trips';
 				
 				await syncManager.addToQueue({ 
 					action: 'restore', 
 					tripId: id,
-					data: { store: syncTarget } // Hint to worker where to restore
+					data: { store: syncTarget } 
 				});
 
 				return restoredItem;
@@ -130,7 +120,6 @@ function createTrashStore() {
 			}
 			await tx.done;
 			
-			// Update store to remove deleted items
 			update(current => current.filter(item => item.userId !== userId));
 
 			for (const item of userItems) {
@@ -154,34 +143,14 @@ function createTrashStore() {
 				const store = tx.objectStore('trash');
 
 				for (const rawItem of cloudTrash) {
-					// Normalize Item
-					let flatItem: any = { ...rawItem };
-
-					// Handle generic 'data' wrapper if present from new API
-					if (flatItem.data) {
-						flatItem = { ...flatItem.data, ...flatItem };
-						delete flatItem.data;
-					}
-					// Handle legacy 'trip' wrapper
-					if (flatItem.trip) flatItem = { ...flatItem.trip, ...flatItem };
-					delete flatItem.trip;
-
-					if (flatItem.metadata) {
-						flatItem.deletedAt = flatItem.metadata.deletedAt || flatItem.deletedAt;
-						flatItem.expiresAt = flatItem.metadata.expiresAt || flatItem.expiresAt;
-						flatItem.originalKey = flatItem.metadata.originalKey || flatItem.originalKey;
-						delete flatItem.metadata;
-					}
+					// [!code fix] CRITICAL: Normalize BEFORE saving to IndexedDB
+					// This ensures 'userId' is at the root so the index.getAll(userId) query works
+					const flatItem = normalizeTrashItem(rawItem);
 
 					if (!flatItem.id) continue;
 
-					// Determine Record Type
-					if (!flatItem.recordType && !flatItem.type) {
-						if (flatItem.originalKey?.startsWith('expense:')) flatItem.recordType = 'expense';
-						else flatItem.recordType = 'trip';
-					} else if (flatItem.type && !flatItem.recordType) {
-						flatItem.recordType = flatItem.type;
-					}
+					// Ensure userId is present for indexing
+					if (!flatItem.userId && userId) flatItem.userId = userId;
 
 					cloudIds.add(flatItem.id);
 
@@ -195,7 +164,7 @@ function createTrashStore() {
 					}
 				}
 
-				// Reconciliation: Remove local items not in cloud (unless pending)
+				// Reconciliation
 				const index = store.index('userId');
 				const localItems = await index.getAll(userId);
 				for (const localItem of localItems) {
@@ -206,19 +175,15 @@ function createTrashStore() {
 				}
 				await tx.done;
 
-				// Cleanup Active Stores (Safety Check to prevent duplicates in active lists)
+				// Cleanup Active Stores
 				const cleanupTx = db.transaction(['trash', 'trips', 'expenses'], 'readwrite');
 				const allTrash = await cleanupTx.objectStore('trash').getAll();
 				const tripStore = cleanupTx.objectStore('trips');
 				const expenseStore = cleanupTx.objectStore('expenses');
 
 				for (const trashItem of allTrash) {
-					if (await tripStore.get(trashItem.id)) {
-						await tripStore.delete(trashItem.id);
-					}
-					if (await expenseStore.get(trashItem.id)) {
-						await expenseStore.delete(trashItem.id);
-					}
+					if (await tripStore.get(trashItem.id)) await tripStore.delete(trashItem.id);
+					if (await expenseStore.get(trashItem.id)) await expenseStore.delete(trashItem.id);
 				}
 				await cleanupTx.done;
 
@@ -237,6 +202,47 @@ function createTrashStore() {
 			set([]);
 		}
 	};
+}
+
+// Helper to flatten nested data structures from server
+function normalizeTrashItem(item: any): any {
+	let flat = { ...item };
+
+	// 1. Flatten 'data' wrapper (used by Expense deletion)
+	if (flat.data && typeof flat.data === 'object') {
+		// We prioritize keys in 'data' (like userId, amount) over the wrapper
+		flat = { ...flat.data, ...flat };
+		// Explicitly copy ID/UserID from data if wrapper is missing them
+		if (item.data.id) flat.id = item.data.id;
+		if (item.data.userId) flat.userId = item.data.userId;
+		delete flat.data;
+	}
+
+	// 2. Flatten legacy 'trip' wrapper
+	if (flat.trip) {
+		flat = { ...flat.trip, ...flat };
+		if (item.trip.id) flat.id = item.trip.id;
+		if (item.trip.userId) flat.userId = item.trip.userId;
+		delete flat.trip;
+	}
+
+	// 3. Flatten metadata
+	if (flat.metadata) {
+		flat.deletedAt = flat.metadata.deletedAt || flat.deletedAt;
+		flat.expiresAt = flat.metadata.expiresAt || flat.expiresAt;
+		flat.originalKey = flat.metadata.originalKey || flat.originalKey;
+		delete flat.metadata;
+	}
+
+	// 4. Ensure record type
+	if (!flat.recordType && !flat.type) {
+		if (flat.originalKey?.startsWith('expense:')) flat.recordType = 'expense';
+		else flat.recordType = 'trip';
+	} else if (flat.type && !flat.recordType) {
+		flat.recordType = flat.type;
+	}
+
+	return flat;
 }
 
 export const trash = createTrashStore();
