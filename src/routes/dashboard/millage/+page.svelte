@@ -105,6 +105,24 @@
 	}
 
 	onMount(load);
+
+	let editRate = $state(false);
+	let rateInput = $state(String($userSettings.millageRate ?? 0));
+
+	function startEditRate() {
+		rateInput = String($userSettings.millageRate ?? 0);
+		editRate = true;
+	}
+
+	function saveRate() {
+		const v = String(rateInput);
+		changeRate(v);
+		editRate = false;
+	}
+
+	function cancelEditRate() {
+		editRate = false;
+	}
 </script>
 
 <svelte:head>
@@ -116,6 +134,11 @@
 		<div class="header-text">
 			<h1 class="page-title">Millage Tracker</h1>
 			<p class="page-subtitle">Log start/end odometer readings and track reimbursement</p>
+			<div class="header-meta">
+				<span class="meta-label">Rate:</span>
+				<span class="meta-value">{formatCurrency($userSettings.millageRate ?? 0)}/mi</span>
+				<button class="btn-link" onclick={startEditRate} aria-label="Edit rate">Edit</button>
+			</div>
 		</div>
 		<div class="header-actions">
 			<button
@@ -139,7 +162,11 @@
 				</svg>
 			</button>
 
-			<button class="btn-secondary" onclick={() => load()} aria-label="Refresh">
+			<button
+				class="btn-secondary"
+				onclick={() => goto('/dashboard/settings')}
+				aria-label="Settings"
+			>
 				<svg
 					width="20"
 					height="20"
@@ -150,11 +177,19 @@
 					stroke-linecap="round"
 					stroke-linejoin="round"
 				>
-					<polyline points="23 4 23 10 17 10"></polyline>
-					<path d="M20.49 15A9 9 0 1 1 15 3.51L23 11"></path>
+					<path
+						d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.39a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
+					/>
+					<circle cx="12" cy="12" r="3" />
 				</svg>
 			</button>
-
+			{#if editRate}
+				<div style="display:flex; gap:8px; align-items:center;">
+					<input class="rate-input" type="number" step="0.01" bind:value={rateInput} />
+					<button class="btn-primary" onclick={saveRate}>Save</button>
+					<button class="btn-secondary" onclick={cancelEditRate}>Cancel</button>
+				</div>
+			{/if}
 			<button class="btn-primary" onclick={goToAdd} aria-label="New Log">
 				<svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"
 					><path
@@ -167,14 +202,6 @@
 				>
 				New Log
 			</button>
-			<label class="inline"
-				>Rate: <input
-					type="number"
-					step="0.01"
-					value={$userSettings.millageRate ?? 0}
-					onchange={(e) => changeRate((e.target as HTMLInputElement).value)}
-				/></label
-			>
 		</div>
 	</div>
 
@@ -304,25 +331,30 @@
 		margin: 0;
 	}
 
+	/* Stats Summary (match Expenses) */
 	.stats-summary {
-		display: flex;
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
 		gap: 12px;
-		margin: 16px 0;
+		margin-bottom: 24px;
 	}
 	.summary-card {
 		background: white;
 		border: 1px solid #e5e7eb;
-		border-radius: 10px;
-		padding: 12px;
-		flex: 1;
+		border-radius: 12px;
+		padding: 16px;
+		text-align: center;
 	}
 	.summary-label {
-		font-size: 13px;
+		font-size: 12px;
 		color: #6b7280;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		margin-bottom: 4px;
 	}
 	.summary-value {
-		font-size: 18px;
-		font-weight: 700;
+		font-size: 20px;
+		font-weight: 800;
 		color: #111827;
 	}
 
@@ -337,8 +369,8 @@
 	.list-item {
 		background: white;
 		border: 1px solid #e5e7eb;
-		padding: 12px;
-		border-radius: 10px;
+		padding: 16px;
+		border-radius: 12px;
 	}
 	.list-item-main {
 		display: flex;
@@ -360,5 +392,100 @@
 		display: flex;
 		gap: 8px;
 		align-items: center;
+	}
+
+	.page-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 24px;
+	}
+	.page-title {
+		font-size: 24px;
+		font-weight: 800;
+		color: #111827;
+		margin: 0;
+	}
+	.page-subtitle {
+		font-size: 14px;
+		color: #6b7280;
+		margin: 0;
+	}
+	.header-actions {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+	}
+
+	.btn-primary {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 10px 16px;
+		background: linear-gradient(135deg, #ff7f50 0%, #ff6a3d 100%);
+		color: white;
+		border: none;
+		border-radius: 8px;
+		font-weight: 600;
+		font-size: 14px;
+		cursor: pointer;
+		box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3);
+		transition: transform 0.1s;
+		text-decoration: none;
+	}
+	.btn-primary:active {
+		transform: translateY(1px);
+	}
+
+	.btn-secondary {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 10px;
+		background: white;
+		border: 1px solid #e5e7eb;
+		color: #374151;
+		border-radius: 8px;
+		font-weight: 600;
+		font-size: 14px;
+		cursor: pointer;
+		transition: background 0.2s;
+	}
+
+	@media (hover: hover) {
+		.btn-secondary:hover {
+			background: #f9fafb;
+		}
+	}
+
+	.header-meta {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		color: #6b7280;
+		margin-top: 8px;
+	}
+	.header-meta .meta-label {
+		font-weight: 600;
+		color: #374151;
+		margin-right: 6px;
+	}
+	.header-meta .meta-value {
+		font-weight: 700;
+		color: #111827;
+	}
+	.btn-link {
+		background: transparent;
+		border: 0;
+		color: #2c507b;
+		cursor: pointer;
+		padding: 6px;
+		border-radius: 8px;
+	}
+	.rate-input {
+		width: 120px;
+		padding: 8px;
+		border-radius: 8px;
+		border: 1px solid #e5e7eb;
 	}
 </style>
