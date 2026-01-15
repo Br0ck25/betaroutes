@@ -4,11 +4,6 @@ import { makeTripService } from '$lib/server/tripService';
 import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 
-function safeKV(env: Record<string, unknown> | undefined, name: string) {
-	const kv = env?.[name] as unknown;
-	return kv ?? null;
-}
-
 // Fake DO helper
 function fakeDO() {
 	return {

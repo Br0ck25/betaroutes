@@ -530,7 +530,7 @@
 			<button
 				class="btn-secondary"
 				on:click={() => (isManageCategoriesOpen = true)}
-				aria-label="Expenses Settings"
+				aria-label="Expense Settings"
 			>
 				<svg
 					width="20"
@@ -902,7 +902,7 @@
 	</div>
 {/if}
 
-<Modal bind:open={isManageCategoriesOpen} title="Expenses Settings">
+<Modal bind:open={isManageCategoriesOpen} title="Expense Settings">
 	<div class="categories-manager">
 		<div class="tabs sub-tabs">
 			<button
