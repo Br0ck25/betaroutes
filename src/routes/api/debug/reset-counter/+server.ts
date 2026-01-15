@@ -11,7 +11,7 @@ export const GET = async ({ locals, platform }) => {
 	if (!locals.user) return json({ error: 'Login first' });
 
 	const kv = safeKV(platform?.env, 'BETA_LOGS_KV');
-	const trashKV = safeKV(platform?.env, 'BETA_LOGS_TRASH_KV');
+	const trashKV = undefined;
 	const placesKV = safeKV(platform?.env, 'BETA_PLACES_KV');
 
 	if (!kv) return json({ error: 'KV not found' });

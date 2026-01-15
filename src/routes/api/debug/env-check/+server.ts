@@ -19,7 +19,6 @@ export const GET: RequestHandler = async ({ platform, url }) => {
 			BETA_USERS_KV: !!safeKV(env, 'BETA_USERS_KV'),
 			BETA_SESSIONS_KV: !!safeKV(env, 'BETA_SESSIONS_KV'),
 			BETA_LOGS_KV: !!safeKV(env, 'BETA_LOGS_KV'),
-			BETA_LOGS_TRASH_KV: !!safeKV(env, 'BETA_LOGS_TRASH_KV'),
 			BETA_USER_SETTINGS_KV: !!safeKV(env, 'BETA_USER_SETTINGS_KV'),
 			BETA_PLACES_KV: !!safeKV(env, 'BETA_PLACES_KV'),
 			BETA_DIRECTIONS_KV: !!safeKV(env, 'BETA_DIRECTIONS_KV'),

@@ -193,7 +193,6 @@ export function setupMockKV(event: { platform?: { env?: Record<string, unknown> 
 	if (!env['BETA_SESSIONS_KV']) env['BETA_SESSIONS_KV'] = createMockKV('SESSIONS');
 	if (!env['BETA_USERS_KV']) env['BETA_USERS_KV'] = createMockKV('USERS');
 	if (!env['BETA_LOGS_KV']) env['BETA_LOGS_KV'] = createMockKV('LOGS');
-	if (!env['BETA_LOGS_TRASH_KV']) env['BETA_LOGS_TRASH_KV'] = createMockKV('TRASH');
 	if (!env['BETA_USER_SETTINGS_KV']) env['BETA_USER_SETTINGS_KV'] = createMockKV('SETTINGS');
 	if (!env['BETA_PLACES_KV']) env['BETA_PLACES_KV'] = createMockKV('PLACES');
 	if (!env['BETA_HUGHESNET_KV']) env['BETA_HUGHESNET_KV'] = createMockKV('HUGHESNET');

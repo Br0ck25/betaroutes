@@ -30,16 +30,14 @@ describe('Trip trash behavior', () => {
 
 		await svc.delete(userId, id);
 
-		const rawTrash = await kv.get(`trash:${userId}:${id}`);
+		// Tombstone should exist in-place in the main KV
+		const rawTrash = await kv.get(`trip:${userId}:${id}`);
 		expect(rawTrash).toBeTruthy();
 		const parsedTrash = JSON.parse(rawTrash);
-		expect(parsedTrash.type === 'trip' || parsedTrash.data.id === id).toBeTruthy();
-
-		const rawTrip = await kv.get(`trip:${userId}:${id}`);
-		expect(rawTrip).toBeTruthy();
-		const parsedTrip = JSON.parse(rawTrip);
-		expect(parsedTrip.deleted).toBe(true);
-		expect(parsedTrip.deletedAt).toBeTruthy();
+		expect(parsedTrash.deleted).toBe(true);
+		expect(parsedTrash.backup?.id === id).toBeTruthy();
+		expect(parsedTrash.deletedBy === userId).toBeTruthy();
+		expect(parsedTrash.metadata?.expiresAt).toBeTruthy();
 
 		const list = await svc.listTrash(userId);
 		expect(list.length).toBeGreaterThan(0);
@@ -50,8 +48,6 @@ describe('Trip trash behavior', () => {
 
 		const afterTrip = JSON.parse(await kv.get(`trip:${userId}:${id}`));
 		expect(afterTrip.deleted).toBe(undefined);
-
-		const afterTrash = await kv.get(`trash:${userId}:${id}`);
-		expect(afterTrash).toBeNull();
+		expect(afterTrip.title).toBe('to trash');
 	});
 });

@@ -16,7 +16,7 @@ describe('HughesNet service archived write smoke test', () => {
 			platform.env['BETA_HUGHESNET_KV'] as any,
 			'enc-key',
 			platform.env['BETA_LOGS_KV'] as any,
-			platform.env['BETA_LOGS_TRASH_KV'] as any,
+			undefined,
 			platform.env['BETA_USER_SETTINGS_KV'] as any,
 			undefined,
 			platform.env['BETA_DIRECTIONS_KV'] as any,

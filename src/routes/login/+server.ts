@@ -107,7 +107,7 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 						const placesIndexDO = safeDO(env, 'PLACES_INDEX_DO') || tripIndexDO;
 						const svc = makeTripService(
 							safeKV(env, 'BETA_LOGS_KV') as any,
-							safeKV(env, 'BETA_LOGS_TRASH_KV') as any,
+							undefined,
 							safeKV(env, 'BETA_PLACES_KV') as any,
 							tripIndexDO as any,
 							placesIndexDO as any

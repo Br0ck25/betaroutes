@@ -28,9 +28,6 @@ id = "9551bf35d9cc4f75a5210c52d906da24"
 binding = "BETA_USERS_KV"
 id = "569eff477945483283fa854d7bdf6b14"
 
-[[env.production.kv_namespaces]]
-binding = "BETA_LOGS_TRASH_KV"
-id = "9203d2e85d9d47dabb167faf4e5121a9"
 
 [[env.production.kv_namespaces]]
 binding = "BETA_USER_SETTINGS_KV"
@@ -90,9 +87,6 @@ id = "babfd9307ecd4a1993a382ebe30c5a16"
 binding = "BETA_USERS_KV"
 id = "a245706e522b444fa9b67fa9a1b88d6a"
 
-[[env.preview.kv_namespaces]]
-binding = "BETA_LOGS_TRASH_KV"
-id = "4dbad92a0fc44f9b91c8a46165c8e40b"
 
 [[env.preview.kv_namespaces]]
 binding = "BETA_USER_SETTINGS_KV"

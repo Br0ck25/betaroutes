@@ -49,7 +49,6 @@ export const DELETE: RequestHandler = async ({ locals, platform, cookies }) => {
 
 		await deleteUser(safeKV(env, 'BETA_USERS_KV')!, user.id, {
 			tripsKV: safeKV(env, 'BETA_LOGS_KV')!,
-			trashKV: safeKV(env, 'BETA_LOGS_TRASH_KV'),
 			settingsKV: safeKV(env, 'BETA_USER_SETTINGS_KV'),
 			tripIndexDO: safeDO(env, 'TRIP_INDEX_DO')!
 		});

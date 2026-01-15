@@ -169,7 +169,7 @@ export const GET: RequestHandler = async (event) => {
 
 		const svc = makeTripService(
 			safeKV(env, 'BETA_LOGS_KV')!,
-			safeKV(env, 'BETA_LOGS_TRASH_KV'),
+			undefined,
 			safeKV(env, 'BETA_PLACES_KV'),
 			safeDO(env, 'TRIP_INDEX_DO')!,
 			safeDO(env, 'PLACES_INDEX_DO')!
@@ -275,7 +275,7 @@ export const POST: RequestHandler = async (event) => {
 
 		const svc = makeTripService(
 			safeKV(env, 'BETA_LOGS_KV')!,
-			safeKV(env, 'BETA_LOGS_TRASH_KV'),
+			undefined,
 			safeKV(env, 'BETA_PLACES_KV'),
 			safeDO(env, 'TRIP_INDEX_DO')!,
 			safeDO(env, 'PLACES_INDEX_DO')!
@@ -521,7 +521,7 @@ export const PUT: RequestHandler = async (event) => {
 
 		const svc = makeTripService(
 			safeKV(env, 'BETA_LOGS_KV')!,
-			safeKV(env, 'BETA_LOGS_TRASH_KV'),
+			undefined,
 			safeKV(env, 'BETA_PLACES_KV'),
 			safeDO(env, 'TRIP_INDEX_DO')!,
 			safeDO(env, 'PLACES_INDEX_DO')!

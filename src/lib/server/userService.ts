@@ -320,7 +320,6 @@ export async function deleteUser(
 	userId: string,
 	resources?: {
 		tripsKV?: KVNamespace;
-		trashKV?: KVNamespace;
 		settingsKV?: KVNamespace;
 		tripIndexDO?: DurableObjectNamespace;
 	}
@@ -389,11 +388,6 @@ export async function deleteUser(
 	if (resources?.tripsKV) {
 		cleanupTasks.push(wipeNamespace(resources.tripsKV, `trip:${user.username}:`));
 		cleanupTasks.push(wipeNamespace(resources.tripsKV, `trip:${userId}:`));
-	}
-
-	if (resources?.trashKV) {
-		cleanupTasks.push(wipeNamespace(resources.trashKV, `trash:${user.username}:`));
-		cleanupTasks.push(wipeNamespace(resources.trashKV, `trash:${userId}:`));
 	}
 
 	await Promise.all(authPromises);

@@ -38,7 +38,7 @@ export const GET: RequestHandler = async (event) => {
 		const svc = makeExpenseService(
 			safeKV(env, 'BETA_LOGS_KV')!,
 			safeDO(env, 'TRIP_INDEX_DO')!,
-			safeKV(env, 'BETA_LOGS_TRASH_KV')
+			undefined
 		);
 		const expenses = await svc.list(storageId, since);
 
@@ -76,7 +76,7 @@ export const POST: RequestHandler = async (event) => {
 		const svc = makeExpenseService(
 			safeKV(env, 'BETA_LOGS_KV')!,
 			safeDO(env, 'TRIP_INDEX_DO')!,
-			safeKV(env, 'BETA_LOGS_TRASH_KV')
+			undefined
 		);
 
 		const expense = {

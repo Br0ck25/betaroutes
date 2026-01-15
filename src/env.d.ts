@@ -18,7 +18,6 @@ declare namespace App {
 		env: {
 			BETA_LOGS_KV: KVNamespace;
 			BETA_USERS_KV: KVNamespace;
-			BETA_LOGS_TRASH_KV: KVNamespace;
 			BETA_PLACES_KV?: KVNamespace;
 		};
 		context: {

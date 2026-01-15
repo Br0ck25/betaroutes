@@ -29,7 +29,7 @@ export const GET: RequestHandler = async (event) => {
 
 		const platformEnv = event.platform?.env as Record<string, unknown> | undefined;
 		const kv = (platformEnv?.['BETA_LOGS_KV'] as unknown) ?? fakeKV();
-		const trashKV = (platformEnv?.['BETA_LOGS_TRASH_KV'] as unknown) ?? fakeKV();
+		const trashKV = undefined;
 		const placesKV = (platformEnv?.['BETA_PLACES_KV'] as unknown) ?? fakeKV();
 
 		// Durable Object bindings (mock or real)

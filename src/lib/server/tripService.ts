@@ -306,25 +306,22 @@ export function makeTripService(
 			const now = new Date();
 			const expiresAt = new Date(now.getTime() + RETENTION.THIRTY_DAYS * 1000);
 
-			if (trashKV) {
-				const metadata: TrashMetadata = {
-					deletedAt: now.toISOString(),
-					deletedBy: userId,
-					originalKey: key,
-					expiresAt: expiresAt.toISOString()
-				};
-				const trashKey = `trash:${userId}:${tripId}`;
-				const trashPayload = { type: 'trip', data: trip, metadata };
-				await trashKV.put(trashKey, JSON.stringify(trashPayload), {
-					expirationTtl: RETENTION.THIRTY_DAYS
-				});
-			}
+			// Persist a tombstone in the main logs KV that includes metadata and a backup of the original
+			const metadata: TrashMetadata = {
+				deletedAt: now.toISOString(),
+				deletedBy: userId,
+				originalKey: key,
+				expiresAt: expiresAt.toISOString()
+			};
 
 			const tombstone = {
 				id: trip.id,
 				userId: trip.userId,
 				deleted: true,
 				deletedAt: now.toISOString(),
+				deletedBy: userId,
+				metadata,
+				backup: trip,
 				updatedAt: now.toISOString(),
 				createdAt: trip.createdAt
 			};
@@ -345,107 +342,91 @@ export function makeTripService(
 		},
 
 		async listTrash(userId: string): Promise<TrashItem[]> {
-			if (!trashKV) return [];
-			const prefix = trashPrefixForUser(userId);
-			const list = await trashKV.list({ prefix });
-			const out: TrashItem[] = [];
+			const prefix = prefixForUser(userId);
+			let list = await kv.list({ prefix });
+			let keys = list.keys;
+			while (!list.list_complete && list.cursor) {
+				list = await kv.list({ prefix, cursor: list.cursor });
+				keys = keys.concat(list.keys);
+			}
 
-			for (const k of list.keys) {
-				const raw = await trashKV.get(k.name);
+			const out: TrashItem[] = [];
+			for (const k of keys) {
+				const raw = await kv.get(k.name);
 				if (!raw) continue;
 				const parsed = JSON.parse(raw);
-				let item: Restorable | Record<string, unknown>;
-				let type: 'trip' | 'expense' = 'trip';
+				if (!parsed || !parsed.deleted) continue;
 
-				if (parsed.trip) {
-					item = parsed.trip;
-					type = 'trip';
-				} else if (parsed.type && parsed.data) {
-					item = parsed.data;
-					type = parsed.type;
-				} else {
-					item = parsed;
-				}
+				const id = parsed.id || String(k.name.split(':').pop() || '');
+				const uid = parsed.userId || String(k.name.split(':')[1] || '');
+				const metadata: TrashMetadata = parsed.metadata || {
+					deletedAt: parsed.deletedAt || '',
+					deletedBy: parsed.deletedBy || uid,
+					originalKey: k.name,
+					expiresAt: parsed.metadata?.expiresAt || ''
+				};
 
-				const itemRec = item as Record<string, unknown>;
-				const id =
-					typeof itemRec['id'] === 'string'
-						? (itemRec['id'] as string)
-						: (parsed.metadata?.originalKey || '').split(':').pop() || '';
-				const uid =
-					typeof itemRec['userId'] === 'string'
-						? (itemRec['userId'] as string)
-						: (parsed.metadata?.originalKey || '').split(':')[1] || '';
-				out.push({
-					id,
-					userId: uid,
-					metadata: parsed.metadata as TrashMetadata,
-					recordType: type
-				});
+				out.push({ id, userId: uid, metadata, recordType: 'trip' });
 			}
+
 			out.sort((a, b) => (b.metadata?.deletedAt || '').localeCompare(a.metadata?.deletedAt || ''));
 			return out;
 		},
 
 		async emptyTrash(userId: string) {
-			if (!trashKV) return 0;
-			const prefix = trashPrefixForUser(userId);
-			const list = await trashKV.list({ prefix });
+			const prefix = prefixForUser(userId);
+			let list = await kv.list({ prefix });
+			let keys = list.keys;
+			while (!list.list_complete && list.cursor) {
+				list = await kv.list({ prefix, cursor: list.cursor });
+				keys = keys.concat(list.keys);
+			}
 			let count = 0;
-			for (const k of list.keys) {
-				await trashKV.delete(k.name);
-				count++;
+			for (const k of keys) {
+				const raw = await kv.get(k.name);
+				if (!raw) continue;
+				const parsed = JSON.parse(raw);
+				if (parsed && parsed.deleted) {
+					await kv.delete(k.name);
+					count++;
+				}
 			}
 			return count;
 		},
 
 		async restore(userId: string, itemId: string) {
-			if (!trashKV) throw new Error('Trash KV not available');
-			const trashKey = `trash:${userId}:${itemId}`;
-			const raw = await trashKV.get(trashKey);
+			const key = `trip:${userId}:${itemId}`;
+			const raw = await kv.get(key);
 			if (!raw) throw new Error('Item not found in trash');
 			const parsed = JSON.parse(raw);
+			if (!parsed || !parsed.deleted) throw new Error('Item is not deleted');
+			const backup = parsed.backup || parsed.data || parsed.trip;
+			if (!backup) throw new Error('Backup data not found in item');
 
-			let item: Restorable | Record<string, unknown>;
-			let type: 'trip' | 'expense' = 'trip';
+			// Clean tombstone fields and set updatedAt
+			if ('deletedAt' in backup) delete (backup as Record<string, unknown>)['deletedAt'];
+			if ('deleted' in backup) delete (backup as Record<string, unknown>)['deleted'];
+			(backup as Record<string, unknown>)['updatedAt'] = new Date().toISOString();
 
-			if (parsed.trip) {
-				item = parsed.trip as Restorable;
-				type = 'trip';
-			} else if (parsed.type && parsed.data) {
-				item = parsed.data as Record<string, unknown>;
-				type = parsed.type;
-			} else {
-				item = parsed as Restorable;
+			const restored = backup as Restorable;
+
+			if (restored) {
+				if (restored && restored.userId) {
+					await kv.put(key, JSON.stringify(restored));
+					const stub = getIndexStub(userId);
+					await stub.fetch(`${DO_ORIGIN}/put`, {
+						method: 'POST',
+						body: JSON.stringify(toSummary(restored))
+					});
+					return restored;
+				}
 			}
-
-			if ('deletedAt' in item) delete (item as Record<string, unknown>)['deletedAt'];
-			if ('deleted' in item) delete (item as Record<string, unknown>)['deleted'];
-			(item as Record<string, unknown>)['updatedAt'] = new Date().toISOString();
-
-			const restored = item as Restorable;
-
-			if (type === 'trip') {
-				const activeKey = `trip:${userId}:${restored.id}`;
-				await kv.put(activeKey, JSON.stringify(restored));
-				const stub = getIndexStub(userId);
-				await stub.fetch(`${DO_ORIGIN}/put`, {
-					method: 'POST',
-					body: JSON.stringify(toSummary(restored))
-				});
-			} else if (type === 'expense') {
-				const activeKey = `expense:${userId}:${restored.id}`;
-				await kv.put(activeKey, JSON.stringify(restored));
-			}
-
-			await trashKV.delete(trashKey);
-			return item;
+			throw new Error('Restore failed');
 		},
 
 		async permanentDelete(userId: string, itemId: string) {
-			if (!trashKV) throw new Error('Trash KV not available');
-			const trashKey = `trash:${userId}:${itemId}`;
-			await trashKV.delete(trashKey);
+			const key = `trip:${userId}:${itemId}`;
+			await kv.delete(key);
 		},
 
 		async incrementUserCounter(userId: string, amt = 1) {
