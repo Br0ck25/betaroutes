@@ -192,16 +192,40 @@ function createTrashStore() {
 					cloudIds.add(flatItem.id);
 
 					const local = await store.get(flatItem.id);
-					if (!local || new Date(flatItem.deletedAt) > new Date(local.deletedAt)) {
+					const hasDetails = (obj: any) =>
+						!!(
+							obj &&
+							(obj.startAddress ||
+								obj.stops ||
+								obj.totalMiles ||
+								obj.amount ||
+								obj.category ||
+								obj.date)
+						);
+					if (!local) {
 						await store.put({
 							...flatItem,
 							syncStatus: 'synced',
 							lastSyncedAt: new Date().toISOString()
 						});
+					} else if (new Date(flatItem.deletedAt) > new Date(local.deletedAt)) {
+						// Preserve richer local details when cloud only supplies metadata-only record
+						if (hasDetails(local) && !hasDetails(flatItem)) {
+							await store.put({
+								...local,
+								...flatItem,
+								syncStatus: 'synced',
+								lastSyncedAt: new Date().toISOString()
+							});
+						} else {
+							await store.put({
+								...flatItem,
+								syncStatus: 'synced',
+								lastSyncedAt: new Date().toISOString()
+							});
+						}
 					}
 				}
-
-				// Reconciliation: Remove local items not in cloud (unless pending)
 				const index = store.index('userId');
 				const localItems = await index.getAll(userId);
 				for (const localItem of localItems) {
