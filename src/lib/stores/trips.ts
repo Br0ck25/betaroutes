@@ -65,7 +65,7 @@ function createTripsStore() {
 				}
 				await dbRW.done;
 				if (migrated > 0) console.log(`🔧 Migrated ${migrated} trips: totalMileage -> totalMiles`);
-				
+
 				set(trips);
 				return trips;
 			} catch (err) {
@@ -254,9 +254,7 @@ function createTripsStore() {
 				const lastSync = storage.getLastSync();
 				const url = lastSync ? `/api/trips?since=${encodeURIComponent(lastSync)}` : '/api/trips';
 
-				console.log(
-					`☁️ Syncing trips... ${lastSync ? `(Delta since ${lastSync})` : '(Full)'}`
-				);
+				console.log(`☁️ Syncing trips... ${lastSync ? `(Delta since ${lastSync})` : '(Full)'}`);
 
 				const response = await fetch(url);
 				if (!response.ok) throw new Error('Failed to fetch trips');
@@ -308,9 +306,7 @@ function createTripsStore() {
 				await tx.done;
 
 				storage.setLastSync(new Date().toISOString());
-				console.log(
-					`✅ Synced trips. Updated: ${updateCount}, Deleted: ${deleteCount}.`
-				);
+				console.log(`✅ Synced trips. Updated: ${updateCount}, Deleted: ${deleteCount}.`);
 
 				await this.load(userId);
 			} catch (err) {

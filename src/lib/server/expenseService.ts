@@ -33,7 +33,7 @@ export function makeExpenseService(
 
 			// 1. Try to fetch from SQL Index (Durable Object) first
 			const res = await stub.fetch(`${DO_ORIGIN}/expenses/list`);
-			
+
 			let expenses: ExpenseRecord[] = [];
 			if (res.ok) {
 				expenses = (await res.json()) as ExpenseRecord[];
@@ -46,10 +46,12 @@ export function makeExpenseService(
 			if (expenses.length === 0) {
 				// Check if we actually have data in KV
 				const kvCheck = await kv.list({ prefix, limit: 1 });
-				
+
 				if (kvCheck.keys.length > 0) {
-					log.info(`[ExpenseService] Detected desync for ${userId} (KV has data, Index empty). repairing...`);
-					
+					log.info(
+						`[ExpenseService] Detected desync for ${userId} (KV has data, Index empty). repairing...`
+					);
+
 					// Fetch ALL data from KV
 					const allExpenses: ExpenseRecord[] = [];
 					let list = await kv.list({ prefix });
@@ -71,7 +73,7 @@ export function makeExpenseService(
 							method: 'POST',
 							body: JSON.stringify(allExpenses)
 						});
-						
+
 						// Update local variable to return the fresh data immediately
 						expenses = allExpenses;
 					}

@@ -1,7 +1,7 @@
 // src/lib/db/indexedDB.ts
 import { openDB, type IDBPDatabase } from 'idb';
 import { DB_NAME, DB_VERSION } from './types';
-import type { TripRecord, TrashRecord, SyncQueueItem, ExpenseRecord } from './types';
+import type { TripRecord, TrashRecord, SyncQueueItem, ExpenseRecord, MillageRecord } from './types';
 
 /**
  * Database interface with typed stores
@@ -62,77 +62,102 @@ export async function getDB(): Promise<IDBPDatabase<AppDB>> {
 		return dbPromise;
 	}
 
-	dbPromise = openDB<AppDB>(DB_NAME, DB_VERSION, {
-		upgrade(db, oldVersion, newVersion) {
-			console.log(`📦 Upgrading database from v${oldVersion} to v${newVersion}`);
+	// Try opening the DB with the desired version. If the browser already has a newer
+	// version (e.g. user has a DB from a different build), openDB will throw a
+	// VersionError. In that case, fall back to opening the existing database
+	// without requesting an upgrade to avoid the exception and continue using
+	// the current schema.
+	try {
+		dbPromise = openDB<AppDB>(DB_NAME, DB_VERSION, {
+			upgrade(db, oldVersion, newVersion) {
+				console.log(`📦 Upgrading database from v${oldVersion} to v${newVersion}`);
 
-			// Create trips store
-			if (!db.objectStoreNames.contains('trips')) {
-				console.log('Creating "trips" object store...');
-				const tripStore = db.createObjectStore('trips', { keyPath: 'id' });
+				// Create trips store
+				if (!db.objectStoreNames.contains('trips')) {
+					console.log('Creating "trips" object store...');
+					const tripStore = db.createObjectStore('trips', { keyPath: 'id' });
 
-				// Indexes for efficient queries
-				tripStore.createIndex('userId', 'userId', { unique: false });
-				tripStore.createIndex('syncStatus', 'syncStatus', { unique: false });
-				tripStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+					// Indexes for efficient queries
+					tripStore.createIndex('userId', 'userId', { unique: false });
+					tripStore.createIndex('syncStatus', 'syncStatus', { unique: false });
+					tripStore.createIndex('updatedAt', 'updatedAt', { unique: false });
 
-				console.log('✅ Created "trips" store with indexes');
+					console.log('✅ Created "trips" store with indexes');
+				}
+
+				// [!code ++] Create expenses store
+				if (!db.objectStoreNames.contains('expenses')) {
+					console.log('Creating "expenses" object store...');
+					const expenseStore = db.createObjectStore('expenses', { keyPath: 'id' });
+
+					// Indexes for efficient queries
+					expenseStore.createIndex('userId', 'userId', { unique: false });
+					expenseStore.createIndex('syncStatus', 'syncStatus', { unique: false });
+					expenseStore.createIndex('date', 'date', { unique: false });
+
+					console.log('✅ Created "expenses" store with indexes');
+				}
+
+				// Create trash store
+				if (!db.objectStoreNames.contains('trash')) {
+					console.log('Creating "trash" object store...');
+					const trashStore = db.createObjectStore('trash', { keyPath: 'id' });
+
+					// Indexes for efficient queries
+					trashStore.createIndex('userId', 'userId', { unique: false });
+					trashStore.createIndex('syncStatus', 'syncStatus', { unique: false });
+					trashStore.createIndex('deletedAt', 'deletedAt', { unique: false });
+					trashStore.createIndex('expiresAt', 'expiresAt', { unique: false });
+
+					console.log('✅ Created "trash" store with indexes');
+				}
+
+				// Create sync queue store
+				if (!db.objectStoreNames.contains('syncQueue')) {
+					console.log('Creating "syncQueue" object store...');
+					const syncQueue = db.createObjectStore('syncQueue', {
+						keyPath: 'id',
+						autoIncrement: true
+					});
+
+					// Indexes for efficient queries
+					syncQueue.createIndex('timestamp', 'timestamp', { unique: false });
+					syncQueue.createIndex('action', 'action', { unique: false });
+					syncQueue.createIndex('tripId', 'tripId', { unique: false });
+
+					console.log('✅ Created "syncQueue" store with indexes');
+				}
+
+				console.log('✅ Database upgrade complete');
+			},
+
+			blocked() {
+				console.warn('⚠️ Database upgrade blocked - close other tabs');
+			},
+
+			blocking() {
+				console.warn('⚠️ This tab is blocking database upgrade in another tab');
 			}
+		});
 
-			// [!code ++] Create expenses store
-			if (!db.objectStoreNames.contains('expenses')) {
-				console.log('Creating "expenses" object store...');
-				const expenseStore = db.createObjectStore('expenses', { keyPath: 'id' });
-
-				// Indexes for efficient queries
-				expenseStore.createIndex('userId', 'userId', { unique: false });
-				expenseStore.createIndex('syncStatus', 'syncStatus', { unique: false });
-				expenseStore.createIndex('date', 'date', { unique: false });
-
-				console.log('✅ Created "expenses" store with indexes');
-			}
-
-			// Create trash store
-			if (!db.objectStoreNames.contains('trash')) {
-				console.log('Creating "trash" object store...');
-				const trashStore = db.createObjectStore('trash', { keyPath: 'id' });
-
-				// Indexes for efficient queries
-				trashStore.createIndex('userId', 'userId', { unique: false });
-				trashStore.createIndex('syncStatus', 'syncStatus', { unique: false });
-				trashStore.createIndex('deletedAt', 'deletedAt', { unique: false });
-				trashStore.createIndex('expiresAt', 'expiresAt', { unique: false });
-
-				console.log('✅ Created "trash" store with indexes');
-			}
-
-			// Create sync queue store
-			if (!db.objectStoreNames.contains('syncQueue')) {
-				console.log('Creating "syncQueue" object store...');
-				const syncQueue = db.createObjectStore('syncQueue', {
-					keyPath: 'id',
-					autoIncrement: true
-				});
-
-				// Indexes for efficient queries
-				syncQueue.createIndex('timestamp', 'timestamp', { unique: false });
-				syncQueue.createIndex('action', 'action', { unique: false });
-				syncQueue.createIndex('tripId', 'tripId', { unique: false });
-
-				console.log('✅ Created "syncQueue" store with indexes');
-			}
-
-			console.log('✅ Database upgrade complete');
-		},
-
-		blocked() {
-			console.warn('⚠️ Database upgrade blocked - close other tabs');
-		},
-
-		blocking() {
-			console.warn('⚠️ This tab is blocking database upgrade in another tab');
+		// Force resolution now so VersionError is thrown inside the try block
+		await dbPromise;
+	} catch (err: any) {
+		if (
+			err?.name === 'VersionError' ||
+			(typeof DOMException !== 'undefined' &&
+				err instanceof DOMException &&
+				err.name === 'VersionError')
+		) {
+			console.warn(
+				'⚠️ Database has a newer version than this code expects. Opening existing DB without upgrade.'
+			);
+			// Fallback: open at the existing database version without attempting to upgrade
+			dbPromise = openDB<AppDB>(DB_NAME);
+		} else {
+			throw err;
 		}
-	});
+	}
 
 	return dbPromise;
 }
@@ -213,6 +238,7 @@ export async function exportData() {
 export async function importData(data: {
 	trips?: TripRecord[];
 	expenses?: ExpenseRecord[]; // [!code ++]
+	millage?: MillageRecord[];
 	trash?: TrashRecord[];
 	syncQueue?: SyncQueueItem[];
 }) {
@@ -228,11 +254,18 @@ export async function importData(data: {
 		}
 	}
 
-	// [!code ++] Import expenses
+	// [!code ++] Import expenses and millage
 	if (data.expenses) {
 		const expenseStore = tx.objectStore('expenses');
 		for (const expense of data.expenses) {
 			await expenseStore.put(expense);
+		}
+	}
+
+	if (data.millage) {
+		const millageStore = tx.objectStore('millage');
+		for (const m of data.millage) {
+			await millageStore.put(m as any);
 		}
 	}
 

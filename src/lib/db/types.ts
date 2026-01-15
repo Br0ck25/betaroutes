@@ -79,7 +79,27 @@ export interface TrashRecord extends Partial<TripRecord>, Partial<ExpenseRecord>
 	deletedBy: string;
 	expiresAt: string;
 	originalKey: string;
-	recordType?: 'trip' | 'expense'; // Added discriminator
+	recordType?: 'trip' | 'expense' | 'millage'; // Added discriminator
+	[key: string]: unknown;
+}
+
+/**
+ * Millage record stored in IndexedDB (client-side)
+ */
+export interface MillageRecord {
+	id: string;
+	userId: string;
+	date?: string;
+	startOdometer: number;
+	endOdometer: number;
+	miles: number;
+	reimbursement?: number;
+	notes?: string;
+	// Metadata
+	createdAt: string;
+	updatedAt: string;
+	syncStatus: SyncStatus;
+	lastSyncedAt?: string;
 	[key: string]: unknown;
 }
 
@@ -99,5 +119,5 @@ export interface SyncQueueItem {
 /**
  * Database schema version
  */
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 export const DB_NAME = 'go-route-yourself';

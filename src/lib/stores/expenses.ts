@@ -297,9 +297,7 @@ function createExpensesStore() {
 				await tx.done;
 
 				localStorage.setItem('last_sync_expenses', new Date().toISOString());
-				console.log(
-					`✅ Synced expenses. Updated: ${updateCount}, Deleted: ${deleteCount}.`
-				);
+				console.log(`✅ Synced expenses. Updated: ${updateCount}, Deleted: ${deleteCount}.`);
 
 				await this.load(userId);
 			} catch (err) {

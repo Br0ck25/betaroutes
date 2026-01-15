@@ -16,9 +16,9 @@ function createTrashStore() {
 				const tx = db.transaction('trash', 'readonly');
 				const store = tx.objectStore('trash');
 				const items = userId ? await store.index('userId').getAll(userId) : await store.getAll();
-				
+
 				// Normalize/Flatten similar to +page.svelte logic for consistency in store
-				const normalizedItems = items.map(item => {
+				const normalizedItems = items.map((item) => {
 					let flat = { ...item };
 					if (flat.data && typeof flat.data === 'object') {
 						flat = { ...flat.data, ...flat };
@@ -27,7 +27,9 @@ function createTrashStore() {
 					return flat;
 				});
 
-				normalizedItems.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
+				normalizedItems.sort(
+					(a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime()
+				);
 				set(normalizedItems);
 				return normalizedItems;
 			} catch (err) {
@@ -48,7 +50,7 @@ function createTrashStore() {
 
 				// Deep clone and handle potential nested structure
 				let restoredItem = { ...trashItem };
-				
+
 				// If stored as nested { data: ... }, flatten it first to get the actual fields
 				if (restoredItem.data && typeof restoredItem.data === 'object') {
 					restoredItem = { ...restoredItem.data, ...restoredItem };
@@ -59,7 +61,7 @@ function createTrashStore() {
 				delete (restoredItem as any).deletedAt;
 				delete (restoredItem as any).deletedBy;
 				delete (restoredItem as any).expiresAt;
-				
+
 				const originalKey = restoredItem.originalKey;
 				const type = restoredItem.type || restoredItem.recordType;
 
@@ -89,12 +91,15 @@ function createTrashStore() {
 				await deleteTx.done;
 
 				update((items) => items.filter((item) => item.id !== id));
-				
+
 				// Determine target store for sync action
-				const syncTarget = (type === 'expense' || (originalKey && originalKey.startsWith('expense:'))) ? 'expenses' : 'trips';
-				
-				await syncManager.addToQueue({ 
-					action: 'restore', 
+				const syncTarget =
+					type === 'expense' || (originalKey && originalKey.startsWith('expense:'))
+						? 'expenses'
+						: 'trips';
+
+				await syncManager.addToQueue({
+					action: 'restore',
 					tripId: id,
 					data: { store: syncTarget } // Hint to worker where to restore
 				});
@@ -129,9 +134,9 @@ function createTrashStore() {
 				await tx.objectStore('trash').delete(item.id);
 			}
 			await tx.done;
-			
+
 			// Update store to remove deleted items
-			update(current => current.filter(item => item.userId !== userId));
+			update((current) => current.filter((item) => item.userId !== userId));
 
 			for (const item of userItems) {
 				await syncManager.addToQueue({ action: 'permanentDelete', tripId: item.id });

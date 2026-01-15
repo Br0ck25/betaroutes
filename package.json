@@ -7,7 +7,7 @@
 		"dev": "vite dev",
 		"build": "vite build",
 		"preview": "vite preview",
-		"prepare": "svelte-kit sync || echo ''",
+		"prepare": "svelte-kit sync || echo '' && husky install",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && npm run check:robots",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"check:robots": "node scripts/validate-robots.js",
@@ -16,6 +16,15 @@
 		"test:unit": "vitest",
 		"test": "npm run test:unit -- --run && npm run test:e2e",
 		"test:e2e": "playwright test"
+	},
+	"lint-staged": {
+		"*.{ts,js,svelte}": [
+			"eslint --fix",
+			"prettier --write"
+		],
+		"*.{css,md}": [
+			"prettier --write"
+		]
 	},
 	"engines": {
 		"node": ">=22"
@@ -47,7 +56,9 @@
 		"typescript": "^5.9.3",
 		"typescript-eslint": "^8.47.0",
 		"vite": "^7.2.2",
-		"vitest": "^4.0.16"
+		"vitest": "^4.0.16",
+		"husky": "^8.0.3",
+		"lint-staged": "^14.0.0"
 	},
 	"dependencies": {
 		"@googlemaps/js-api-loader": "^2.0.2",
