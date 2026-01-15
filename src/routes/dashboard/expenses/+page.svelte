@@ -486,7 +486,7 @@
 		<div class="header-actions">
 			<button
 				class="btn-secondary"
-				on:click={() => goto('/dashboard/trash')}
+				on:click={() => goto('/dashboard/trash?type=expenses')}
 				aria-label="View Trash"
 			>
 				<svg

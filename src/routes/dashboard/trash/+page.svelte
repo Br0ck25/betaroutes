@@ -17,15 +17,19 @@
 	let deleting = new Set<string>();
 
 	onMount(async () => {
-		await loadTrash();
+		const params = new URLSearchParams(window.location.search);
+		const typeParam = params.get('type');
+
+		// Initial local load (filtered if requested)
+		await loadTrash(typeParam === 'expenses' ? 'expense' : undefined);
 		const userId = $user?.name || $user?.token;
 		if (userId) {
-			await trash.syncFromCloud(userId);
-			await loadTrash();
+			await trash.syncFromCloud(userId, typeParam || undefined);
+			await loadTrash(typeParam === 'expenses' ? 'expense' : undefined);
 		}
 	});
 
-	async function loadTrash() {
+	async function loadTrash(type?: string) {
 		loading = true;
 		try {
 			const potentialIds = new Set<string>();
@@ -59,8 +63,18 @@
 				).values()
 			);
 
-			uniqueItems.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
-			trashedTrips = uniqueItems;
+			// Filter by type if requested (expense/trip)
+			const filtered = type
+				? uniqueItems.filter(
+						(it) =>
+							(it.recordType || it.type || (it.originalKey && it.originalKey.startsWith('expense:'))
+								? it.recordType || it.type || 'expense'
+								: 'trip') === type
+					)
+				: uniqueItems;
+
+			filtered.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
+			trashedTrips = filtered;
 		} catch (err) {
 			console.error('Error loading trash:', err);
 		} finally {

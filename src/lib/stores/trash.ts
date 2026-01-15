@@ -10,7 +10,7 @@ function createTrashStore() {
 	return {
 		subscribe,
 
-		async load(userId?: string) {
+		async load(userId?: string, type?: string) {
 			try {
 				const db = await getDB();
 				const tx = db.transaction('trash', 'readonly');
@@ -27,11 +27,21 @@ function createTrashStore() {
 					return flat;
 				});
 
-				normalizedItems.sort(
-					(a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime()
-				);
-				set(normalizedItems);
-				return normalizedItems;
+				// Filter by type if provided (expense or trip)
+				const filtered = type
+					? normalizedItems.filter(
+							(it) =>
+								(it.recordType ||
+								it.type ||
+								(it.originalKey && it.originalKey.startsWith('expense:'))
+									? it.recordType || it.type || 'expense'
+									: 'trip') === type
+						)
+					: normalizedItems;
+
+				filtered.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
+				set(filtered);
+				return filtered;
 			} catch (err) {
 				console.error('❌ Failed to load trash:', err);
 				set([]);
@@ -144,11 +154,12 @@ function createTrashStore() {
 			return userItems.length;
 		},
 
-		async syncFromCloud(userId: string) {
+		async syncFromCloud(userId: string, type?: string) {
 			try {
 				if (!navigator.onLine) return;
 
-				const response = await fetch('/api/trash');
+				const url = type ? `/api/trash?type=${encodeURIComponent(type)}` : '/api/trash';
+				const response = await fetch(url);
 				if (!response.ok) return;
 
 				const cloudTrash: any = await response.json();
@@ -227,7 +238,7 @@ function createTrashStore() {
 				}
 				await cleanupTx.done;
 
-				await this.load(userId);
+				await this.load(userId, type === 'expenses' ? 'expense' : type);
 			} catch (err) {
 				console.error('❌ Failed to sync trash:', err);
 			}

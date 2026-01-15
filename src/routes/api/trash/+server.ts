@@ -55,18 +55,29 @@ export const GET: RequestHandler = async (event) => {
 				headers: { 'Content-Type': 'application/json' }
 			});
 
-		// Return current cloud trash items (merge trips + expenses)
+		// Return current cloud trash items (merge or filter by type)
 		let cloudTrash: unknown[] = [];
 		try {
+			const type = (event.url.searchParams.get('type') || '').toLowerCase();
 			const tripTrash = await svc.listTrash(storageId);
-			const expenseSvc = makeExpenseService(
-				safeKV(platformEnv, 'BETA_EXPENSES_KV') as any,
-				safeDO(platformEnv, 'TRIP_INDEX_DO') as any
-			);
-			const expenseTrash = await expenseSvc.listTrash(storageId);
-			cloudTrash = [...tripTrash, ...expenseTrash].sort((a: any, b: any) =>
-				(b.metadata?.deletedAt || '').localeCompare(a.metadata?.deletedAt || '')
-			);
+			if (type === 'expenses') {
+				const expenseSvc = makeExpenseService(
+					safeKV(platformEnv, 'BETA_EXPENSES_KV') as any,
+					safeDO(platformEnv, 'TRIP_INDEX_DO') as any
+				);
+				cloudTrash = await expenseSvc.listTrash(storageId);
+			} else if (type === 'trips') {
+				cloudTrash = tripTrash;
+			} else {
+				const expenseSvc = makeExpenseService(
+					safeKV(platformEnv, 'BETA_EXPENSES_KV') as any,
+					safeDO(platformEnv, 'TRIP_INDEX_DO') as any
+				);
+				const expenseTrash = await expenseSvc.listTrash(storageId);
+				cloudTrash = [...tripTrash, ...expenseTrash].sort((a: any, b: any) =>
+					(b.metadata?.deletedAt || '').localeCompare(a.metadata?.deletedAt || '')
+				);
+			}
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			log.warn('Failed to list cloud trash', { message });
