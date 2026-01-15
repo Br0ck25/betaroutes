@@ -94,6 +94,49 @@
 				});
 			}
 
+			// Enrich items with local 'trips' or 'expenses' data when available so UI can render full details
+			for (const item of uniqueItems) {
+				// Consider an item metadata-only until we find data
+				(item as any)._isMetadataOnly = true;
+
+				// Detect if the flat item already has meaningful fields
+				const hasDetailFields = !!(
+					item.startAddress ||
+					item.stops ||
+					item.totalMiles ||
+					item.amount ||
+					item.category ||
+					item.date
+				);
+				if (hasDetailFields) {
+					(item as any)._isMetadataOnly = false;
+					continue;
+				}
+
+				// Try to fetch local trip/expense record from the DB to enrich metadata-only items
+				try {
+					const qdb = await getDB();
+					const txTrips = qdb.transaction('trips', 'readonly');
+					const localTrip = await txTrips.objectStore('trips').get(item.id);
+					if (localTrip) {
+						Object.assign(item, localTrip);
+						(item as any)._isMetadataOnly = false;
+						continue;
+					}
+
+					// If not a trip, try expenses store
+					const txExpenses = qdb.transaction('expenses', 'readonly');
+					const localExpense = await txExpenses.objectStore('expenses').get(item.id);
+					if (localExpense) {
+						Object.assign(item, localExpense);
+						(item as any)._isMetadataOnly = false;
+						continue;
+					}
+				} catch (err) {
+					console.warn('Failed to enrich trash item:', err);
+				}
+			}
+
 			uniqueItems.sort(
 				(a, b) => new Date(b.deletedAt || 0).getTime() - new Date(a.deletedAt || 0).getTime()
 			);
@@ -400,27 +443,28 @@
 							</div>
 						</div>
 
-						<div class="trip-details">
-							{#if isExpense}
-								<span class="detail amount">${Number(trip.amount || 0).toFixed(2)}</span>
-								{#if trip.description}<span class="detail">{trip.description}</span>{/if}
-								{#if trip.date || trip.createdAt}
-									<span class="detail">{formatDate(trip.date || trip.createdAt)}</span>
+						{#if !trip['_isMetadataOnly']}
+							<div class="trip-details">
+								{#if isExpense}
+									<span class="detail amount">${Number(trip.amount || 0).toFixed(2)}</span>
+									{#if trip.description}<span class="detail">{trip.description}</span>{/if}
+									{#if trip.date || trip.createdAt}
+										<span class="detail">{formatDate(trip.date || trip.createdAt)}</span>
+									{/if}
+								{:else}
+									{#if trip.date || trip.createdAt}
+										<span class="detail">{formatDate(trip.date || trip.createdAt)}</span>
+									{/if}
+									{#if typeof stops === 'number'}
+										<span class="detail">{stops} {stops === 1 ? 'stop' : 'stops'}</span>
+									{/if}
+									{#if trip.totalMiles}
+										<span class="detail">{Number(trip.totalMiles).toFixed(1)} mi</span>
+									{/if}
 								{/if}
-							{:else}
-								{#if trip.date || trip.createdAt}
-									<span class="detail">{formatDate(trip.date || trip.createdAt)}</span>
-								{/if}
-								{#if typeof stops === 'number'}
-									<span class="detail">{stops} {stops === 1 ? 'stop' : 'stops'}</span>
-								{/if}
-								{#if trip.totalMiles}
-									<span class="detail">{Number(trip.totalMiles).toFixed(1)} mi</span>
-								{/if}
-							{/if}
-						</div>
+							</div>
+						{/if}
 					</div>
-
 					<div class="trip-actions">
 						<button
 							class="btn-restore-item"
