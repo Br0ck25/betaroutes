@@ -9,11 +9,6 @@ function safeKV(env: Record<string, unknown> | undefined, name: string) {
 	return kv ?? null;
 }
 
-function safeKV(env: Record<string, unknown> | undefined, name: string) {
-	const kv = env?.[name] as unknown;
-	return kv ?? null;
-}
-
 // Fake DO helper
 function fakeDO() {
 	return {

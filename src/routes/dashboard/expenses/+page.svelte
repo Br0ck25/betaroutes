@@ -77,6 +77,17 @@
 			? $userSettings.expenseCategories
 			: ['maintenance', 'insurance', 'supplies', 'other'];
 
+	// Which sub-category tab is active in the modal
+	let activeCategoryType: 'maintenance' | 'supplies' | 'expenses' = 'expenses';
+
+	// Derive the active list depending on the selected tab
+	$: activeCategories =
+		activeCategoryType === 'maintenance'
+			? $userSettings.maintenanceCategories || ['oil change', 'repair']
+			: activeCategoryType === 'supplies'
+				? $userSettings.supplyCategories || ['water', 'snacks']
+				: $userSettings.expenseCategories || ['maintenance', 'insurance', 'supplies', 'other'];
+
 	// --- MODAL STATE (Only for Categories now) ---
 	let isManageCategoriesOpen = false;
 	let newCategoryName = '';
@@ -318,10 +329,21 @@
 
 	// --- CATEGORY MANAGEMENT ---
 	async function updateCategories(newCategories: string[]) {
-		userSettings.update((s) => ({ ...s, expenseCategories: newCategories }));
+		const updateData: any = {};
+		if (activeCategoryType === 'maintenance') {
+			userSettings.update((s) => ({ ...s, maintenanceCategories: newCategories }));
+			updateData.maintenanceCategories = newCategories;
+		} else if (activeCategoryType === 'supplies') {
+			userSettings.update((s) => ({ ...s, supplyCategories: newCategories }));
+			updateData.supplyCategories = newCategories;
+		} else {
+			userSettings.update((s) => ({ ...s, expenseCategories: newCategories }));
+			updateData.expenseCategories = newCategories;
+		}
+
 		try {
 			const { saveSettings } = await import('../settings/lib/save-settings');
-			const result = await saveSettings({ expenseCategories: newCategories });
+			const result = await saveSettings(updateData);
 			if (!result.ok) throw new Error(result.error);
 		} catch (e) {
 			console.error('Failed to sync settings', e);
@@ -332,11 +354,11 @@
 	async function addCategory() {
 		if (!newCategoryName.trim()) return;
 		const val = newCategoryName.trim().toLowerCase();
-		if (categories.includes(val)) {
+		if (activeCategories.includes(val)) {
 			toasts.error('Category already exists');
 			return;
 		}
-		const updated = [...categories, val];
+		const updated = [...activeCategories, val];
 		await updateCategories(updated);
 		newCategoryName = '';
 		toasts.success('Category added');
@@ -344,7 +366,7 @@
 
 	async function removeCategory(cat: string) {
 		if (!confirm(`Delete "${cat}" category? Existing expenses will keep this category.`)) return;
-		const updated = categories.filter((c) => c !== cat);
+		const updated = activeCategories.filter((c) => c !== cat);
 		await updateCategories(updated);
 		toasts.success('Category removed');
 	}
@@ -508,7 +530,7 @@
 			<button
 				class="btn-secondary"
 				on:click={() => (isManageCategoriesOpen = true)}
-				aria-label="Manage Categories"
+				aria-label="Expenses Settings"
 			>
 				<svg
 					width="20"
@@ -880,14 +902,32 @@
 	</div>
 {/if}
 
-<Modal bind:open={isManageCategoriesOpen} title="Manage Categories">
+<Modal bind:open={isManageCategoriesOpen} title="Expenses Settings">
 	<div class="categories-manager">
+		<div class="tabs sub-tabs">
+			<button
+				class="tab-btn"
+				class:active={activeCategoryType === 'maintenance'}
+				on:click={() => (activeCategoryType = 'maintenance')}>Maintenance</button
+			>
+			<button
+				class="tab-btn"
+				class:active={activeCategoryType === 'supplies'}
+				on:click={() => (activeCategoryType = 'supplies')}>Supplies</button
+			>
+			<button
+				class="tab-btn"
+				class:active={activeCategoryType === 'expenses'}
+				on:click={() => (activeCategoryType = 'expenses')}>Expenses</button
+			>
+		</div>
+
 		<p class="text-sm text-gray-500 mb-4">
-			Add or remove expense categories. These are saved to your settings.
+			Manage {activeCategoryType} options.
 		</p>
 
 		<div class="cat-list">
-			{#each categories as cat}
+			{#each activeCategories as cat}
 				<div class="cat-item">
 					<span class={`cat-badge ${getCategoryColor(cat)}`}>{getCategoryLabel(cat)}</span>
 					<button
@@ -910,17 +950,15 @@
 					</button>
 				</div>
 			{:else}
-				<div class="text-sm text-gray-400 italic text-center py-4">
-					No categories. Add one below.
-				</div>
+				<div class="text-sm text-gray-400 italic text-center py-4">No categories defined.</div>
 			{/each}
 		</div>
 
 		<div class="add-cat-form">
 			<input
 				type="text"
-				id="new-category-name"
-				name="newCategoryName"
+				bind:value={newCategoryName}
+				placeholder="New category..."
 				class="input-field"
 				on:keydown={(e) => e.key === 'Enter' && addCategory()}
 			/>
@@ -1610,6 +1648,26 @@
 	/* Categories Manager Modal Styles */
 	.categories-manager {
 		padding: 4px;
+	}
+	.sub-tabs {
+		display: flex;
+		gap: 8px;
+		margin-bottom: 16px;
+		border-bottom: 1px solid #e5e7eb;
+	}
+	.tab-btn {
+		padding: 8px 16px;
+		background: none;
+		border: none;
+		border-bottom: 2px solid transparent;
+		font-weight: 600;
+		color: #6b7280;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.tab-btn.active {
+		color: #ff7f50;
+		border-bottom-color: #ff7f50;
 	}
 	.cat-list {
 		display: flex;
