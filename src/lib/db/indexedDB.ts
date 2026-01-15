@@ -26,6 +26,15 @@ export interface AppDB {
 			date: string;
 		};
 	};
+	millage: {
+		key: string;
+		value: MillageRecord;
+		indexes: {
+			userId: string;
+			syncStatus: string;
+			date: string;
+		};
+	};
 	trash: {
 		key: string;
 		value: TrashRecord;
@@ -168,14 +177,15 @@ export async function getDB(): Promise<IDBPDatabase<AppDB>> {
 export async function clearDatabase(): Promise<void> {
 	const db = await getDB();
 
-	// [!code ++] Added expenses to transaction
-	const tx = db.transaction(['trips', 'expenses', 'trash', 'syncQueue'], 'readwrite');
+	// [!code ++] Added expenses & millage to transaction
+	const tx = db.transaction(['trips', 'expenses', 'trash', 'syncQueue', 'millage'], 'readwrite');
 
 	await Promise.all([
 		tx.objectStore('trips').clear(),
 		tx.objectStore('expenses').clear(),
 		tx.objectStore('trash').clear(),
-		tx.objectStore('syncQueue').clear()
+		tx.objectStore('syncQueue').clear(),
+		tx.objectStore('millage').clear()
 	]);
 
 	await tx.done;
@@ -189,21 +199,23 @@ export async function clearDatabase(): Promise<void> {
 export async function getDBStats() {
 	const db = await getDB();
 
-	// [!code ++] Added expenses
-	const tx = db.transaction(['trips', 'expenses', 'trash', 'syncQueue'], 'readonly');
+	// [!code ++] Added expenses & millage
+	const tx = db.transaction(['trips', 'expenses', 'trash', 'syncQueue', 'millage'], 'readonly');
 
-	const [tripCount, expenseCount, trashCount, queueCount] = await Promise.all([
+	const [tripCount, expenseCount, trashCount, queueCount, millageCount] = await Promise.all([
 		tx.objectStore('trips').count(),
 		tx.objectStore('expenses').count(),
 		tx.objectStore('trash').count(),
-		tx.objectStore('syncQueue').count()
+		tx.objectStore('syncQueue').count(),
+		tx.objectStore('millage').count()
 	]);
 
 	return {
 		trips: tripCount,
 		expenses: expenseCount,
 		trash: trashCount,
-		pendingSync: queueCount
+		pendingSync: queueCount,
+		millage: millageCount
 	};
 }
 
@@ -213,14 +225,15 @@ export async function getDBStats() {
 export async function exportData() {
 	const db = await getDB();
 
-	// [!code ++] Added expenses
-	const tx = db.transaction(['trips', 'expenses', 'trash', 'syncQueue'], 'readonly');
+	// [!code ++] Added expenses & millage
+	const tx = db.transaction(['trips', 'expenses', 'trash', 'syncQueue', 'millage'], 'readonly');
 
-	const [trips, expenses, trash, syncQueue] = await Promise.all([
+	const [trips, expenses, trash, syncQueue, millage] = await Promise.all([
 		tx.objectStore('trips').getAll(),
 		tx.objectStore('expenses').getAll(),
 		tx.objectStore('trash').getAll(),
-		tx.objectStore('syncQueue').getAll()
+		tx.objectStore('syncQueue').getAll(),
+		tx.objectStore('millage').getAll()
 	]);
 
 	return {
@@ -228,6 +241,7 @@ export async function exportData() {
 		expenses,
 		trash,
 		syncQueue,
+		millage,
 		exportedAt: new Date().toISOString()
 	};
 }

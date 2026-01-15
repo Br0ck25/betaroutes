@@ -17,18 +17,10 @@
 	let restoring = new Set<string>();
 	let deleting = new Set<string>();
 
-	onMount(async () => {
-		const type = $page.url.searchParams.get('type') || undefined;
-		await loadTrash(type);
-		const userId = $user?.name || $user?.token;
-		if (userId) {
-			await trash.syncFromCloud(userId, type);
-			await loadTrash(type);
-		}
-	});
-
+	// Reactive current view type (expense|trip|undefined)
+	let currentType: string | undefined;
+	$: currentType = $page.url.searchParams.get('type') || undefined;
 	async function loadTrash(type?: string) {
-		loading = true;
 		try {
 			const potentialIds = new Set<string>();
 			if ($user?.name) potentialIds.add($user.name);
@@ -201,6 +193,17 @@
 		const diff = expires.getTime() - now.getTime();
 		return Math.ceil(diff / (1000 * 60 * 60 * 24));
 	}
+
+	// Run initial load on mount (after functions are defined)
+	onMount(async () => {
+		const type = $page.url.searchParams.get('type') || undefined;
+		await loadTrash(type);
+		const userId = $user?.name || $user?.token;
+		if (userId) {
+			await trash.syncFromCloud(userId, type);
+			await loadTrash(type);
+		}
+	});
 </script>
 
 <svelte:head>
@@ -243,7 +246,11 @@
 				</button>
 			{/if}
 
-			<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/trips'))}>
+			<button
+				class="btn-secondary"
+				on:click={() =>
+					goto(resolve(currentType === 'expense' ? '/dashboard/expenses' : '/dashboard/trips'))}
+			>
 				<svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
 					<path
 						d="M10 19L3 12M3 12L10 5M3 12H21"
@@ -253,7 +260,11 @@
 						stroke-linejoin="round"
 					/>
 				</svg>
-				Back to Trips
+				{#if currentType === 'expense'}
+					Back to Expenses
+				{:else}
+					Back to Trips
+				{/if}
 			</button>
 		</div>
 	</div>

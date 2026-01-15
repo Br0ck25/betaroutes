@@ -15,9 +15,9 @@ export const DELETE: RequestHandler = async (event) => {
 
 		// Pass both the Main KV and Trash KV to the service
 		const svc = makeExpenseService(
-			safeKV(env, 'BETA_LOGS_KV')!,
+			safeKV(env, 'BETA_EXPENSES_KV')!,
 			safeDO(env, 'TRIP_INDEX_DO')!,
-			safeKV(env, 'BETA_LOGS_TRASH_KV')
+			safeKV(env, 'BETA_EXPENSES_TRASH_KV')
 		);
 		await svc.delete(storageId, event.params.id);
 

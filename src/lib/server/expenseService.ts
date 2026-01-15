@@ -1,6 +1,6 @@
 // src/lib/server/expenseService.ts
 import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
-import { DO_ORIGIN } from '$lib/constants';
+import { DO_ORIGIN, RETENTION } from '$lib/constants';
 import { log } from '$lib/server/log';
 
 export interface ExpenseRecord {
@@ -116,9 +116,9 @@ export function makeExpenseService(
 			if (!item) return;
 
 			const now = new Date();
+			const expiresAt = new Date(now.getTime() + RETENTION.THIRTY_DAYS * 1000);
 
 			if (trashKV) {
-				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 				const metadata = {
 					deletedAt: now.toISOString(),
 					deletedBy: userId,
@@ -127,16 +127,27 @@ export function makeExpenseService(
 				};
 				const trashItem = { type: 'expense', data: item, metadata };
 				await trashKV.put(`trash:${userId}:${id}`, JSON.stringify(trashItem), {
-					expirationTtl: 30 * 24 * 60 * 60
+					expirationTtl: RETENTION.THIRTY_DAYS
 				});
 			}
+
+			// Write a tombstone into the expenses KV so other devices see the deletion
+			const tombstone = {
+				id: item.id,
+				userId: item.userId,
+				deleted: true,
+				deletedAt: now.toISOString(),
+				updatedAt: now.toISOString(),
+				createdAt: item.createdAt
+			};
+			await kv.put(`expense:${userId}:${id}`, JSON.stringify(tombstone), {
+				expirationTtl: RETENTION.THIRTY_DAYS
+			});
 
 			await stub.fetch(`${DO_ORIGIN}/expenses/delete`, {
 				method: 'POST',
 				body: JSON.stringify({ id })
 			});
-
-			await kv.delete(`expense:${userId}:${id}`);
 		}
 	};
 }
