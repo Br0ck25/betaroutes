@@ -23,6 +23,7 @@ declare global {
 			// KV Namespaces
 			BETA_LOGS_KV: KVNamespace;
 			BETA_USERS_KV: KVNamespace;
+			BETA_EXPENSES_KV: KVNamespace;
 			BETA_USER_SETTINGS_KV: KVNamespace;
 			BETA_HUGHESNET_KV: KVNamespace;
 			BETA_PLACES_KV: KVNamespace;

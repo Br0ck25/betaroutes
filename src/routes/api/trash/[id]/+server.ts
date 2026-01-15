@@ -44,22 +44,37 @@ export const POST: RequestHandler = async (event) => {
 		const storageId = currentUser.name || currentUser.token;
 
 		if (storageId) {
-			// [!code fix] Actually call restore logic
-			await svc.restore(storageId, id);
+			// Try trip restore first, then expense restore
+			let restored: unknown | null = null;
+			try {
+				restored = await svc.restore(storageId, id);
+			} catch (e) {
+				// Try expense
+				try {
+					const expenseSvc = (await import('$lib/server/expenseService')).makeExpenseService(
+						safeKV(platformEnv, 'BETA_EXPENSES_KV') as any,
+						safeDO(platformEnv, 'TRIP_INDEX_DO') as any
+					);
+					restored = await expenseSvc.restore(storageId, id);
+				} catch (err) {
+					throw err;
+				}
+			}
+
+			// If it was a trip, increment counter
+			if (restored) {
+				try {
+					await (
+						svc as unknown as { incrementUserCounter?: (t: string, n: number) => Promise<void> }
+					).incrementUserCounter?.(currentUser.token || '', 1);
+				} catch (err) {
+					const message = err instanceof Error ? err.message : String(err);
+					log.warn('Failed to increment user counter', { message });
+				}
+			}
 		}
 
-		// Perform restore (simplified placeholder implementation)
-		const restoredTrip = { id, owner: storageId, restored: true };
-		try {
-			await (
-				svc as unknown as { incrementUserCounter?: (t: string, n: number) => Promise<void> }
-			).incrementUserCounter?.(currentUser.token || '', 1);
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			log.warn('Failed to increment user counter', { message });
-		}
-
-		return new Response(JSON.stringify(restoredTrip), {
+		return new Response(JSON.stringify({ success: true }), {
 			status: 200,
 			headers: { 'Content-Type': 'application/json' }
 		});
@@ -100,8 +115,17 @@ export const DELETE: RequestHandler = async (event) => {
 		const storageId = currentUser.name || currentUser.token;
 
 		if (storageId) {
-			// [!code fix] Actually call permanentDelete
-			await svc.permanentDelete(storageId, id);
+			// Attempt to remove from both trip and expense namespaces
+			try {
+				await svc.permanentDelete(storageId, id);
+			} catch {}
+			try {
+				const expenseSvc = (await import('$lib/server/expenseService')).makeExpenseService(
+					safeKV(platformEnv, 'BETA_EXPENSES_KV') as any,
+					safeDO(platformEnv, 'TRIP_INDEX_DO') as any
+				);
+				await expenseSvc.permanentDelete(storageId, id);
+			} catch {}
 		}
 
 		return new Response(null, { status: 204 });

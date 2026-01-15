@@ -1073,12 +1073,6 @@
 					</div>
 				</div>
 				<div class="form-actions">
-					<div class="form-group checkbox-group review-checkbox">
-						<span
-							><strong>Note:</strong> Use the checkboxes next to each Maintenance or Supplies item to
-							mark that individual item as tax-deductible.</span
-						>
-					</div>
 					<button class="btn-secondary" on:click={prevStep}>Back</button>
 					<button class="btn-primary" on:click={saveTrip}>Save Trip</button>
 				</div>

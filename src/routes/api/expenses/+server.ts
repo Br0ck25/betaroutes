@@ -35,11 +35,7 @@ export const GET: RequestHandler = async (event) => {
 		log.info('Fetching expenses', { storageId, since: since || 'All Time' });
 
 		// Inject DO Binding (use safe accessors)
-		const svc = makeExpenseService(
-			safeKV(env, 'BETA_LOGS_KV')!,
-			safeDO(env, 'TRIP_INDEX_DO')!,
-			undefined
-		);
+		const svc = makeExpenseService(safeKV(env, 'BETA_EXPENSES_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		const expenses = await svc.list(storageId, since);
 
 		return new Response(JSON.stringify(expenses), {
@@ -73,11 +69,7 @@ export const POST: RequestHandler = async (event) => {
 		}
 
 		// Inject DO Binding
-		const svc = makeExpenseService(
-			safeKV(env, 'BETA_LOGS_KV')!,
-			safeDO(env, 'TRIP_INDEX_DO')!,
-			undefined
-		);
+		const svc = makeExpenseService(safeKV(env, 'BETA_EXPENSES_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 
 		const expense = {
 			...parseResult.data,

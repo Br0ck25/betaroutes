@@ -1,6 +1,7 @@
 // src/routes/api/trash/+server.ts
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
+import { makeExpenseService } from '$lib/server/expenseService';
 import { log } from '$lib/server/log';
 
 function fakeKV() {
@@ -54,11 +55,18 @@ export const GET: RequestHandler = async (event) => {
 				headers: { 'Content-Type': 'application/json' }
 			});
 
-		// Return current cloud trash items
+		// Return current cloud trash items (merge trips + expenses)
 		let cloudTrash: unknown[] = [];
 		try {
-			// [!code fix] Use listTrash instead of list (which returns active trips)
-			cloudTrash = await svc.listTrash(storageId);
+			const tripTrash = await svc.listTrash(storageId);
+			const expenseSvc = makeExpenseService(
+				safeKV(platformEnv, 'BETA_EXPENSES_KV') as any,
+				safeDO(platformEnv, 'TRIP_INDEX_DO') as any
+			);
+			const expenseTrash = await expenseSvc.listTrash(storageId);
+			cloudTrash = [...tripTrash, ...expenseTrash].sort((a: any, b: any) =>
+				(b.metadata?.deletedAt || '').localeCompare(a.metadata?.deletedAt || '')
+			);
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			log.warn('Failed to list cloud trash', { message });
