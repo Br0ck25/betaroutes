@@ -2,6 +2,7 @@
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
 import { makeExpenseService } from '$lib/server/expenseService';
+import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 
 function fakeKV() {
