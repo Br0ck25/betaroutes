@@ -117,20 +117,46 @@
 				try {
 					const qdb = await getDB();
 					const txTrips = qdb.transaction('trips', 'readonly');
-					const localTrip = await txTrips.objectStore('trips').get(item.id);
+					let localTrip = await txTrips.objectStore('trips').get(item.id);
 					if (localTrip) {
 						Object.assign(item, localTrip);
 						(item as any)._isMetadataOnly = false;
 						continue;
 					}
 
+					// Fallback: parse originalKey (e.g. 'trip:user:ID' or 'expense:user:ID') and try lookup by that id
+					if (!localTrip && typeof item.originalKey === 'string') {
+						const parsedId = String(item.originalKey).split(':').pop();
+						if (parsedId) {
+							localTrip = await txTrips.objectStore('trips').get(parsedId);
+							if (localTrip) {
+								Object.assign(item, localTrip);
+								(item as any)._isMetadataOnly = false;
+								continue;
+							}
+						}
+					}
+
 					// If not a trip, try expenses store
 					const txExpenses = qdb.transaction('expenses', 'readonly');
-					const localExpense = await txExpenses.objectStore('expenses').get(item.id);
+					let localExpense = await txExpenses.objectStore('expenses').get(item.id);
 					if (localExpense) {
 						Object.assign(item, localExpense);
 						(item as any)._isMetadataOnly = false;
 						continue;
+					}
+
+					// Fallback for expenses using originalKey parsed id
+					if (!localExpense && typeof item.originalKey === 'string') {
+						const parsedId = String(item.originalKey).split(':').pop();
+						if (parsedId) {
+							localExpense = await txExpenses.objectStore('expenses').get(parsedId);
+							if (localExpense) {
+								Object.assign(item, localExpense);
+								(item as any)._isMetadataOnly = false;
+								continue;
+							}
+						}
 					}
 				} catch (err) {
 					console.warn('Failed to enrich trash item:', err);
