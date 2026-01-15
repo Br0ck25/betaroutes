@@ -125,8 +125,9 @@
 					}
 
 					// Fallback: parse originalKey (e.g. 'trip:user:ID' or 'expense:user:ID') and try lookup by that id
-					if (!localTrip && typeof item.originalKey === 'string') {
-						const parsedId = String(item.originalKey).split(':').pop();
+					let parsedId: string | undefined;
+					if (typeof item.originalKey === 'string') {
+						parsedId = String(item.originalKey).split(':').pop() || undefined;
 						if (parsedId) {
 							localTrip = await txTrips.objectStore('trips').get(parsedId);
 							if (localTrip) {
@@ -147,15 +148,41 @@
 					}
 
 					// Fallback for expenses using originalKey parsed id
-					if (!localExpense && typeof item.originalKey === 'string') {
-						const parsedId = String(item.originalKey).split(':').pop();
-						if (parsedId) {
-							localExpense = await txExpenses.objectStore('expenses').get(parsedId);
-							if (localExpense) {
-								Object.assign(item, localExpense);
+					if (!localExpense && parsedId) {
+						localExpense = await txExpenses.objectStore('expenses').get(parsedId);
+						if (localExpense) {
+							Object.assign(item, localExpense);
+							(item as any)._isMetadataOnly = false;
+							continue;
+						}
+					}
+
+					// Final fallback: fetch from server API if local DB misses the full record
+					if (parsedId) {
+						try {
+							// Prefer trip endpoint first (if recordType hints trip), else try expense
+							if (
+								(item.recordType as string | undefined) === 'expense' ||
+								(item.type as string | undefined) === 'expense'
+							) {
+								const res = await fetch(`/api/expenses/${encodeURIComponent(parsedId)}`);
+								if (res.ok) {
+									const data = await res.json();
+									Object.assign(item, data);
+									(item as any)._isMetadataOnly = false;
+									continue;
+								}
+							}
+
+							const res = await fetch(`/api/trips/${encodeURIComponent(parsedId)}`);
+							if (res.ok) {
+								const data = await res.json();
+								Object.assign(item, data);
 								(item as any)._isMetadataOnly = false;
 								continue;
 							}
+						} catch (err) {
+							// ignore server fetch errors, we already warned below
 						}
 					}
 				} catch (err) {
