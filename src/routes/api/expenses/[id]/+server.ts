@@ -13,12 +13,8 @@ export const DELETE: RequestHandler = async (event) => {
 		const env = getEnv(event.platform);
 		const storageId = user.name || user.token || user.id || '';
 
-		// Pass both the Main KV and Trash KV to the service
-		const svc = makeExpenseService(
-			safeKV(env, 'BETA_LOGS_KV')!,
-			safeDO(env, 'TRIP_INDEX_DO')!,
-			undefined
-		);
+		// Use the expenses KV so tombstones are written to the expenses namespace
+		const svc = makeExpenseService(safeKV(env, 'BETA_EXPENSES_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		await svc.delete(storageId, event.params.id);
 
 		return new Response(JSON.stringify({ success: true }));
