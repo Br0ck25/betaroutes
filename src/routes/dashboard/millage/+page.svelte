@@ -442,7 +442,7 @@
 		<div class="header-actions">
 			<button
 				class="btn-secondary"
-				on:click={() => goto('/dashboard/trash?type=expenses')}
+				on:click={() => goto('/dashboard/trash?type=millage')}
 				aria-label="View Trash"
 			>
 				<svg

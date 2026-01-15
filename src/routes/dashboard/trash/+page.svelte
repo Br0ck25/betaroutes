@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { browser } from '$app/environment';
 	import { trash } from '$lib/stores/trash';
 	import { trips } from '$lib/stores/trips';
 	import { expenses } from '$lib/stores/expenses';
+	import { millage } from '$lib/stores/millage';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { user } from '$lib/stores/auth';
@@ -16,36 +18,38 @@
 	let loading = true;
 	let restoring = new Set<string>();
 	let deleting = new Set<string>();
+	let currentTypeParam: string | null = null;
 
 	onMount(() => {
 		// Quick initial local load (detailed sync handled reactively below)
 		const params = new URLSearchParams(window.location.search);
 		const typeParam = params.get('type');
-		loadTrash(typeParam === 'expenses' ? 'expense' : undefined).catch(console.error);
+		loadTrash(
+			typeParam === 'expenses' ? 'expense' : typeParam === 'millage' ? 'millage' : undefined
+		).catch(console.error);
 	});
 
-	// Reactive: watch the URL 'type' query param and refresh when it changes
-	let currentTypeParam: string | null = null;
-	$: (async () => {
-		const param = $page.url.searchParams.get('type');
-		if (param !== currentTypeParam) {
-			currentTypeParam = param;
-			const type = param === 'expenses' ? 'expense' : undefined;
-			loading = true;
-			try {
-				await loadTrash(type);
-				const userId = $user?.name || $user?.token;
-				if (userId) {
-					await trash.syncFromCloud(userId, param || undefined);
+	$: if (browser)
+		(async () => {
+			const param = $page.url.searchParams.get('type');
+			if (param !== currentTypeParam) {
+				currentTypeParam = param;
+				const type = param === 'expenses' ? 'expense' : param === 'millage' ? 'millage' : undefined;
+				loading = true;
+				try {
 					await loadTrash(type);
+					const userId = $user?.name || $user?.token;
+					if (userId) {
+						await trash.syncFromCloud(userId, param || undefined);
+						await loadTrash(type);
+					}
+				} catch (err) {
+					console.error('Failed to refresh trash for type change', err);
+				} finally {
+					loading = false;
 				}
-			} catch (err) {
-				console.error('Failed to refresh trash for type change', err);
-			} finally {
-				loading = false;
 			}
-		}
-	})();
+		})();
 
 	async function loadTrash(type?: string) {
 		loading = true;
@@ -53,7 +57,8 @@
 			const potentialIds = new Set<string>();
 			if ($user?.name) potentialIds.add($user.name);
 			if ($user?.token) potentialIds.add($user.token);
-			const offlineId = localStorage.getItem('offline_user_id');
+			const offlineId =
+				typeof localStorage !== 'undefined' ? localStorage.getItem('offline_user_id') : null;
 			if (offlineId) potentialIds.add(offlineId);
 
 			const db = await getDB();
@@ -81,14 +86,21 @@
 				).values()
 			);
 
-			// Filter by type if requested (expense/trip)
+			// Filter by type if requested (expense/trip/millage)
 			const filtered = type
-				? uniqueItems.filter(
-						(it) =>
-							(it.recordType || it.type || (it.originalKey && it.originalKey.startsWith('expense:'))
-								? it.recordType || it.type || 'expense'
-								: 'trip') === type
-					)
+				? uniqueItems.filter((it) => {
+						const inferred =
+							it.recordType ||
+							it.type ||
+							(it.originalKey &&
+								(it.originalKey.startsWith('expense:')
+									? 'expense'
+									: it.originalKey.startsWith('millage:')
+										? 'millage'
+										: 'trip')) ||
+							'trip';
+						return inferred === type;
+					})
 				: uniqueItems;
 
 			filtered.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
@@ -120,9 +132,15 @@
 				(item['type'] as string | undefined) === 'expense' ||
 				(item['recordType'] as string | undefined) === 'expense' ||
 				(item['originalKey'] as string | undefined)?.startsWith('expense:');
+			const isMillage =
+				(item['type'] as string | undefined) === 'millage' ||
+				(item['recordType'] as string | undefined) === 'millage' ||
+				(item['originalKey'] as string | undefined)?.startsWith('millage:');
 
 			if (isExpense) {
 				await expenses.load(item.userId);
+			} else if (isMillage) {
+				await millage.load(item.userId);
 			} else {
 				await trips.load(item.userId);
 			}
@@ -152,6 +170,7 @@
 			if (userId) {
 				await trips.load(userId);
 				await expenses.load(userId);
+				await millage.load(userId);
 			}
 			await loadTrash();
 		} catch (err) {
@@ -254,18 +273,46 @@
 				</button>
 			{/if}
 
-			<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/trips'))}>
-				<svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-					<path
-						d="M10 19L3 12M3 12L10 5M3 12H21"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					/>
-				</svg>
-				Back to Trips
-			</button>
+			{#if currentTypeParam === 'expenses'}
+				<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/expenses'))}>
+					<svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+						<path
+							d="M10 19L3 12M3 12L10 5M3 12H21"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+					</svg>
+					Back to Expenses
+				</button>
+			{:else if currentTypeParam === 'millage'}
+				<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/millage'))}>
+					<svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+						<path
+							d="M10 19L3 12M3 12L10 5M3 12H21"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+					</svg>
+					Back to Millage
+				</button>
+			{:else}
+				<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/trips'))}>
+					<svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+						<path
+							d="M10 19L3 12M3 12L10 5M3 12H21"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+					</svg>
+					Back to Trips
+				</button>
+			{/if}
 		</div>
 	</div>
 
