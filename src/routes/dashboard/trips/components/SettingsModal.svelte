@@ -15,9 +15,9 @@
 	let newCategoryName = '';
 	let settings = { ...$userSettings };
 
-	$: if ($userSettings) {
-		settings = { ...$userSettings };
-	}
+	/* Initialize from store only when modal is opened. We intentionally avoid a global reactive
+	   copy from `$userSettings` here because it would overwrite staged overrides while the user
+	   is typing in the modal and make inputs appear un-editable. */
 	$: activeCategories =
 		activeCategoryType === 'maintenance'
 			? $userSettings.maintenanceCategories || ['oil change', 'repair']
@@ -58,7 +58,14 @@
 		if (console && console.debug) console.debug('[settings] saveDefaultSettings', settings);
 		isSaving = true;
 
-		// Commit staged gas display into settings before saving
+		// Commit staged MPG + gas display into settings before saving
+		try {
+			const mpgParsed = parseFloat(String(settings.defaultMPG).replace(/,/g, '.'));
+			settings.defaultMPG = isNaN(mpgParsed) ? 0 : mpgParsed;
+		} catch (_e) {
+			// ignore parsing errors — defaults will be enforced server-side
+		}
+
 		try {
 			const parsed = parseFloat(String(gasDisplay).replace(/,/g, '.'));
 			const n = isNaN(parsed) ? 0 : parsed;

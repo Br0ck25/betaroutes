@@ -1,7 +1,13 @@
 // src/routes/api/trash/[id]/+server.ts
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
+import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
+
+function safeKV(env: Record<string, unknown> | undefined, name: string) {
+	const kv = env?.[name] as unknown;
+	return kv ?? null;
+}
 
 function safeKV(env: Record<string, unknown> | undefined, name: string) {
 	const kv = env?.[name] as unknown;
@@ -117,15 +123,107 @@ export const DELETE: RequestHandler = async (event) => {
 		if (storageId) {
 			// Attempt to remove from both trip and expense namespaces
 			try {
+				// Log pre-delete presence for diagnostics
+				try {
+					const expKv = safeKV(platformEnv, 'BETA_EXPENSES_KV') as any;
+					const logsKv = safeKV(platformEnv, 'BETA_LOGS_KV') as any;
+					const expenseKey = `expense:${storageId}:${id}`;
+					const tripKey = `trip:${storageId}:${id}`;
+					const expPresent = expKv ? !!(await expKv.get(expenseKey)) : false;
+					const logsPresent = logsKv ? !!(await logsKv.get(expenseKey)) : false;
+					log.info('Pre-delete presence', {
+						expenseKey,
+						expPresent,
+						logsPresent,
+						tripKey,
+						tripPresent: !!(await logsKv.get(tripKey))
+					});
+				} catch (diagErr) {
+					log.warn('Failed to read pre-delete KV presence', { message: String(diagErr) });
+				}
+
 				await svc.permanentDelete(storageId, id);
-			} catch {}
+			} catch (err) {
+				log.warn('Trip permanentDelete failed or not applicable', { message: String(err) });
+			}
 			try {
 				const expenseSvc = (await import('$lib/server/expenseService')).makeExpenseService(
 					safeKV(platformEnv, 'BETA_EXPENSES_KV') as any,
 					safeDO(platformEnv, 'TRIP_INDEX_DO') as any
 				);
 				await expenseSvc.permanentDelete(storageId, id);
-			} catch {}
+			} catch (err) {
+				log.warn('Expense permanentDelete failed', { message: String(err) });
+			}
+
+			// Also attempt to delete expense key from legacy logs KV in case old entries exist
+			try {
+				const logsKv = safeKV(platformEnv, 'BETA_LOGS_KV') as any;
+				if (logsKv) {
+					const legacyExpenseKey = `expense:${storageId}:${id}`;
+					await logsKv.delete(legacyExpenseKey);
+					const legPresent = !!(await logsKv.get(legacyExpenseKey));
+					if (!legPresent)
+						log.info('Removed legacy expense key from logs KV', { legacyExpenseKey });
+				}
+			} catch (legacyErr) {
+				log.warn('Failed to remove legacy expense key from BETA_LOGS_KV', {
+					message: String(legacyErr)
+				});
+			}
+
+			// Log post-delete presence for diagnostics
+			try {
+				const expKv = safeKV(platformEnv, 'BETA_EXPENSES_KV') as any;
+				const logsKv = safeKV(platformEnv, 'BETA_LOGS_KV') as any;
+				const expenseKey = `expense:${storageId}:${id}`;
+				const tripKey = `trip:${storageId}:${id}`;
+				let expPresent = expKv ? !!(await expKv.get(expenseKey)) : false;
+				let logsPresent = logsKv ? !!(await logsKv.get(expenseKey)) : false;
+				log.info('Post-delete presence', {
+					expenseKey,
+					expPresent,
+					logsPresent,
+					tripKey,
+					tripPresent: !!(await logsKv.get(tripKey))
+				});
+
+				// If the key still exists, attempt one more delete to be safe
+				if (expPresent && expKv) {
+					try {
+						await expKv.delete(expenseKey);
+						expPresent = !!(await expKv.get(expenseKey));
+						log.warn('Second attempt to delete from BETA_EXPENSES_KV', {
+							expenseKey,
+							stillPresent: expPresent
+						});
+					} catch (e) {
+						log.warn('Failed second delete attempt on BETA_EXPENSES_KV', { message: String(e) });
+					}
+				}
+
+				if (logsPresent && logsKv) {
+					try {
+						await logsKv.delete(expenseKey);
+						logsPresent = !!(await logsKv.get(expenseKey));
+						log.warn('Second attempt to delete from BETA_LOGS_KV', {
+							expenseKey,
+							stillPresent: logsPresent
+						});
+					} catch (e) {
+						log.warn('Failed second delete attempt on BETA_LOGS_KV', { message: String(e) });
+					}
+				}
+				if (expPresent || logsPresent) {
+					log.error('Expense key still present after deletion attempts', {
+						expenseKey,
+						expPresent,
+						logsPresent
+					});
+				}
+			} catch (diagErr) {
+				log.warn('Failed to read post-delete KV presence', { message: String(diagErr) });
+			}
 		}
 
 		return new Response(null, { status: 204 });
