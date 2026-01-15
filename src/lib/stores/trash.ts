@@ -144,11 +144,12 @@ function createTrashStore() {
 			return userItems.length;
 		},
 
-		async syncFromCloud(userId: string) {
+		async syncFromCloud(userId: string, type?: string) {
 			try {
 				if (!navigator.onLine) return;
 
-				const response = await fetch('/api/trash');
+				const url = type ? `/api/trash?type=${encodeURIComponent(type)}` : '/api/trash';
+				const response = await fetch(url);
 				if (!response.ok) return;
 
 				const cloudTrash: any = await response.json();

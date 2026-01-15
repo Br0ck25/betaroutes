@@ -25,8 +25,16 @@ binding = "BETA_LOGS_KV"
 id = "9551bf35d9cc4f75a5210c52d906da24"
 
 [[env.production.kv_namespaces]]
+binding = "BETA_EXPENSES_KV"
+id = "7145abd7f89f4eb2bfbfdb84f69d6a5f"
+
+[[env.production.kv_namespaces]]
 binding = "BETA_USERS_KV"
 id = "569eff477945483283fa854d7bdf6b14"
+
+[[env.production.kv_namespaces]]
+binding = "BETA_EXPENSES_TRASH_KV"
+id = "75b7763419da46d69a687e6a66bd95df"
 
 [[env.production.kv_namespaces]]
 binding = "BETA_LOGS_TRASH_KV"
@@ -87,8 +95,16 @@ binding = "BETA_LOGS_KV"
 id = "babfd9307ecd4a1993a382ebe30c5a16"
 
 [[env.preview.kv_namespaces]]
+binding = "BETA_EXPENSES_KV"
+id = "7145abd7f89f4eb2bfbfdb84f69d6a5f"
+
+[[env.preview.kv_namespaces]]
 binding = "BETA_USERS_KV"
 id = "a245706e522b444fa9b67fa9a1b88d6a"
+
+[[env.preview.kv_namespaces]]
+binding = "BETA_EXPENSES_TRASH_KV"
+id = "75b7763419da46d69a687e6a66bd95df"
 
 [[env.preview.kv_namespaces]]
 binding = "BETA_LOGS_TRASH_KV"

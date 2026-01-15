@@ -4,6 +4,7 @@
 	import { trips } from '$lib/stores/trips';
 	import { expenses } from '$lib/stores/expenses';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import { base } from '$app/paths';
 	import { user } from '$lib/stores/auth';
 	import { getDB } from '$lib/db/indexedDB';
@@ -17,15 +18,16 @@
 	let deleting = new Set<string>();
 
 	onMount(async () => {
-		await loadTrash();
+		const type = $page.url.searchParams.get('type') || undefined;
+		await loadTrash(type);
 		const userId = $user?.name || $user?.token;
 		if (userId) {
-			await trash.syncFromCloud(userId);
-			await loadTrash();
+			await trash.syncFromCloud(userId, type);
+			await loadTrash(type);
 		}
 	});
 
-	async function loadTrash() {
+	async function loadTrash(type?: string) {
 		loading = true;
 		try {
 			const potentialIds = new Set<string>();
@@ -45,7 +47,7 @@
 			}
 
 			// [!code fix] Normalize/Flatten items here to handle { data: ... } structure
-			const uniqueItems = Array.from(
+			let uniqueItems = Array.from(
 				new Map(
 					allItems.map((item) => {
 						let flat = { ...item };
@@ -58,6 +60,25 @@
 					})
 				).values()
 			);
+
+			// Optionally filter by type (expense or trip)
+			if (type === 'expense') {
+				uniqueItems = uniqueItems.filter((item) => {
+					const isExpense =
+						(item['type'] as string | undefined) === 'expense' ||
+						(item['recordType'] as string | undefined) === 'expense' ||
+						(item['originalKey'] as string | undefined)?.startsWith('expense:');
+					return !!isExpense;
+				});
+			} else if (type === 'trip') {
+				uniqueItems = uniqueItems.filter((item) => {
+					const isExpense =
+						(item['type'] as string | undefined) === 'expense' ||
+						(item['recordType'] as string | undefined) === 'expense' ||
+						(item['originalKey'] as string | undefined)?.startsWith('expense:');
+					return !isExpense;
+				});
+			}
 
 			uniqueItems.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
 			trashedTrips = uniqueItems;
