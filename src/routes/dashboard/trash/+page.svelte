@@ -38,16 +38,38 @@
 				allItems = [...allItems, ...items];
 			}
 
-			// [!code fix] Normalize/Flatten items here to handle { data: ... } structure
+			// [!code fix] Robust Normalize/Flatten items: handle { data }, { trip }, and metadata wrappers
 			let uniqueItems = Array.from(
 				new Map(
 					allItems.map((item) => {
-						let flat = { ...item };
-						// If local deletion stored it nested in 'data', flatten it up
+						let flat: any = { ...item };
+
+						// Handle wrappers from server/new API
 						if (flat.data && typeof flat.data === 'object') {
 							flat = { ...flat.data, ...flat };
 							delete flat.data;
 						}
+						if (flat.trip && typeof flat.trip === 'object') {
+							flat = { ...flat.trip, ...flat };
+							delete flat.trip;
+						}
+
+						// Pull metadata fields up for convenience
+						if (flat.metadata && typeof flat.metadata === 'object') {
+							flat.deletedAt = flat.metadata.deletedAt || flat.deletedAt;
+							flat.expiresAt = flat.metadata.expiresAt || flat.expiresAt;
+							flat.originalKey = flat.metadata.originalKey || flat.originalKey;
+							delete flat.metadata;
+						}
+
+						// Ensure a recordType exists for filtering
+						if (!flat.recordType && !flat.type) {
+							if (flat.originalKey?.startsWith('expense:')) flat.recordType = 'expense';
+							else flat.recordType = 'trip';
+						} else if (flat.type && !flat.recordType) {
+							flat.recordType = flat.type;
+						}
+
 						return [flat.id, flat];
 					})
 				).values()
@@ -72,7 +94,9 @@
 				});
 			}
 
-			uniqueItems.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
+			uniqueItems.sort(
+				(a, b) => new Date(b.deletedAt || 0).getTime() - new Date(a.deletedAt || 0).getTime()
+			);
 			trashedTrips = uniqueItems;
 		} catch (err) {
 			console.error('Error loading trash:', err);
@@ -194,6 +218,47 @@
 		return Math.ceil(diff / (1000 * 60 * 60 * 24));
 	}
 
+	function getStopCount(t: any): number {
+		if (!t) return 0;
+		if (Array.isArray(t.stops)) return t.stops.length;
+		if (t.stops && typeof t.stops === 'object') return Object.keys(t.stops).length;
+		return 0;
+	}
+
+	function getTripTitle(t: any): string {
+		// Safely extract an address/title from several possible shapes of 'stops' or fields
+		const firstStopAddress = Array.isArray(t.stops)
+			? (t.stops[0]?.address as string | undefined)
+			: t.stops && typeof t.stops === 'object'
+				? (Object.values(t.stops as Record<string, any>)[0] as any)?.address
+				: undefined;
+
+		const c =
+			typeof t.startAddress === 'string'
+				? t.startAddress
+				: typeof firstStopAddress === 'string'
+					? firstStopAddress
+					: typeof t.endAddress === 'string'
+						? t.endAddress
+						: typeof t.notes === 'string'
+							? t.notes
+							: typeof t.originalKey === 'string'
+								? t.originalKey
+								: 'Unknown Trip';
+
+		return c.split(',')[0];
+	}
+
+	function getLastStopShort(t: any): string | null {
+		if (Array.isArray(t.stops) && t.stops.length)
+			return (t.stops[t.stops.length - 1]?.address || '').split(',')[0];
+		if (t.stops && typeof t.stops === 'object') {
+			const vals = Object.values(t.stops) as any[];
+			if (vals.length) return (vals[vals.length - 1]?.address || '').split(',')[0];
+		}
+		return null;
+	}
+
 	// Run initial load on mount (after functions are defined)
 	onMount(async () => {
 		const type = $page.url.searchParams.get('type') || undefined;
@@ -308,10 +373,9 @@
 									<span class="badge-expense">Expense</span>
 									<span class="expense-category">{trip.category || 'Uncategorized'}</span>
 								{:else}
-									{trip.startAddress?.split(',')[0] || 'Unknown Trip'}
-									{#if trip.stops && trip.stops.length > 0}
-										{@const lastStop = trip.stops[trip.stops.length - 1]}
-										→ {lastStop?.address?.split(',')[0] || 'Stop'}
+									{getTripTitle(trip)}
+									{#if getLastStopShort(trip)}
+										→ {getLastStopShort(trip)}
 									{/if}
 								{/if}
 							</h3>
@@ -327,14 +391,12 @@
 							{#if isExpense}
 								<span class="detail amount">${Number(trip.amount || 0).toFixed(2)}</span>
 								{#if trip.description}<span class="detail">{trip.description}</span>{/if}
-								<span class="detail"
-									>{new Date(trip.date || trip.createdAt || '').toLocaleDateString()}</span
-								>
+								<span class="detail">{formatDate(trip.date || trip.createdAt)}</span>
 							{:else}
+								<span class="detail">{formatDate(trip.date || trip.createdAt)}</span>
 								<span class="detail"
-									>{new Date(trip.date || trip.createdAt || '').toLocaleDateString()}</span
+									>{getStopCount(trip)} {getStopCount(trip) === 1 ? 'stop' : 'stops'}</span
 								>
-								<span class="detail">{trip.stops?.length || 0} stops</span>
 								{#if trip.totalMiles}<span class="detail"
 										>{Number(trip.totalMiles).toFixed(1)} mi</span
 									>{/if}
