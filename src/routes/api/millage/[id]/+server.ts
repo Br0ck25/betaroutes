@@ -97,6 +97,12 @@ export const PUT: RequestHandler = async (event) => {
 			updated.reimbursement = Number(updated.reimbursement.toFixed(2));
 		}
 
+		if (typeof updated.millageRate === 'number') {
+			updated.millageRate = Number(updated.millageRate);
+		}
+
+		if (updated.vehicle === '') updated.vehicle = undefined;
+
 		await svc.put(updated);
 		return new Response(JSON.stringify(updated), {
 			headers: { 'Content-Type': 'application/json' }

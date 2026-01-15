@@ -54,6 +54,8 @@ const costItemSchema = z.object({
 const tripSchema = z.object({
 	id: z.string().uuid().optional(),
 	date: z.string().optional(),
+	// Optional pay date only used for taxes
+	payDate: z.string().optional(),
 	startTime: z.string().optional(),
 	endTime: z.string().optional(),
 	hoursWorked: z.number().optional(),

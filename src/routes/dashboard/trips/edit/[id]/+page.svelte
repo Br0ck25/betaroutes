@@ -95,6 +95,7 @@
 		tripData = {
 			...JSON.parse(JSON.stringify(found)),
 			date: found.date || getLocalDate(),
+			payDate: (found as any).payDate || '',
 			stops: safeStops,
 			maintenanceItems: safeMaintenance,
 			suppliesItems: safeSupplies,
@@ -114,6 +115,7 @@
 	let tripData = {
 		id: crypto.randomUUID(),
 		date: getLocalDate(),
+		payDate: '',
 		startTime: '09:00',
 		endTime: '17:00',
 		hoursWorked: 0,
@@ -831,6 +833,14 @@
 							bind:value={tripData.date}
 							required
 						/>
+					</div>
+					<div class="form-group">
+						<label for="trip-pay-date">Pay Date <span class="hint">(Optional)</span></label><input
+							id="trip-pay-date"
+							type="date"
+							bind:value={tripData.payDate}
+						/>
+						<div class="hint">Tax purposes</div>
 					</div>
 					<div class="form-row">
 						<div class="form-group">

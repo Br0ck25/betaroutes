@@ -232,7 +232,12 @@ class SyncManager {
 		const { action, tripId, data } = item;
 
 		const storeName = ((data as any)?.store as string) || 'trips';
-		const baseUrl = storeName === 'expenses' ? '/api/expenses' : '/api/trips';
+		const baseUrl =
+			storeName === 'expenses'
+				? '/api/expenses'
+				: storeName === 'millage'
+					? '/api/millage'
+					: '/api/trips';
 
 		const url =
 			action === 'create'
@@ -241,8 +246,8 @@ class SyncManager {
 					? `${baseUrl}/${tripId}`
 					: `${baseUrl}/${tripId}`;
 
-		let targetStore: 'trips' | 'expenses' | 'trash' | null =
-			storeName === 'expenses' ? 'expenses' : 'trips';
+		let targetStore: 'trips' | 'expenses' | 'millage' | 'trash' | null =
+			storeName === 'expenses' ? 'expenses' : storeName === 'millage' ? 'millage' : 'trips';
 
 		if (action === 'delete') targetStore = 'trash';
 		if (action === 'permanentDelete') targetStore = null;
@@ -260,7 +265,7 @@ class SyncManager {
 		url: string,
 		method: string,
 		body: any,
-		updateStore: 'trips' | 'expenses' | 'trash' | null,
+		updateStore: 'trips' | 'expenses' | 'millage' | 'trash' | null,
 		id: string
 	) {
 		const res = await fetch(url, {
@@ -283,7 +288,7 @@ class SyncManager {
 		if (updateStore) await this.markAsSynced(updateStore, id);
 	}
 
-	private async markAsSynced(store: 'trips' | 'expenses' | 'trash', tripId: string) {
+	private async markAsSynced(store: 'trips' | 'expenses' | 'millage' | 'trash', tripId: string) {
 		const db = await getDB();
 		const tx = db.transaction(store, 'readwrite');
 		const objectStore = tx.objectStore(store);

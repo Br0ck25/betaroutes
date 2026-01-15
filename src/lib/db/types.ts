@@ -14,6 +14,8 @@ export interface TripRecord {
 
 	// Trip data
 	date?: string;
+	/** Optional pay date for tax purposes */
+	payDate?: string;
 	startTime?: string;
 	endTime?: string;
 	hoursWorked?: number;
@@ -93,6 +95,10 @@ export interface MillageRecord {
 	startOdometer: number;
 	endOdometer: number;
 	miles: number;
+	// Optional vehicle name or id
+	vehicle?: string;
+	// Millage rate applied for this log (per mile)
+	millageRate?: number;
 	reimbursement?: number;
 	notes?: string;
 	// Metadata

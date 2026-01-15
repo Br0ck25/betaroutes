@@ -73,6 +73,8 @@ function createMillageStore() {
 						typeof data.miles === 'number'
 							? data.miles
 							: Math.max(0, Number(data.endOdometer) - Number(data.startOdometer)),
+					millageRate: typeof data.millageRate === 'number' ? data.millageRate : undefined,
+					vehicle: data.vehicle || undefined,
 					reimbursement: data.reimbursement,
 					notes: data.notes || '',
 					createdAt: data.createdAt || new Date().toISOString(),
@@ -121,6 +123,12 @@ function createMillageStore() {
 
 				if (typeof updated.startOdometer === 'number' && typeof updated.endOdometer === 'number') {
 					updated.miles = Math.max(0, updated.endOdometer - updated.startOdometer);
+				}
+
+				// Ensure numeric millageRate if present
+				if (typeof updated.millageRate === 'string') {
+					const n = Number(updated.millageRate);
+					updated.millageRate = isNaN(n) ? undefined : n;
 				}
 
 				await store.put(updated);

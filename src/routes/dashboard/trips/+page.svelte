@@ -305,7 +305,7 @@
 	<div class="trip-history">
 		<div class="page-header">
 			<div class="header-text">
-				<h1 class="page-title">Trip History</h1>
+				<h1 class="page-title">Trips</h1>
 				<p class="page-subtitle">View and manage all your trips</p>
 			</div>
 

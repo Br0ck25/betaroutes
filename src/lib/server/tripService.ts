@@ -19,6 +19,8 @@ export type TripRecord = {
 	title?: string;
 	stops?: Stop[];
 	date?: string;
+	/** Optional pay date for tax purposes */
+	payDate?: string;
 	startAddress?: string;
 	endAddress?: string;
 	startLocation?: { lat: number; lng: number };
@@ -86,6 +88,8 @@ export function makeTripService(
 		id: trip.id,
 		userId: trip.userId,
 		date: trip.date,
+		// Optional pay date (tax purposes)
+		payDate: trip.payDate,
 		title: trip.title,
 		startAddress: trip.startAddress,
 		endAddress: trip.endAddress,

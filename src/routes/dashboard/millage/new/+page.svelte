@@ -1,186 +1,271 @@
 <script lang="ts">
 	import { millage } from '$lib/stores/millage';
+
 	import { user } from '$lib/stores/auth';
 	import { userSettings } from '$lib/stores/userSettings';
 	import { toasts } from '$lib/stores/toast';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 
-	// derived helper for vehicles
-	$: vehicles = ($userSettings as any).vehicles || [];
-
+	// --- HELPER: Get Local Date (YYYY-MM-DD) ---
 	function getLocalDate() {
 		const now = new Date();
 		return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
 	}
 
-	let form = {
+	// Settings modal removed for Millage logs
+
+	let formData = {
 		date: getLocalDate(),
 		startOdometer: '',
 		endOdometer: '',
 		miles: '',
+		vehicle: '',
+		millageRate: '',
 		notes: '',
-		vehicleId: ''
+		category: ''
 	};
 
-	function computeMiles() {
-		if (form.startOdometer !== '' && form.endOdometer !== '') {
-			const s = Number(form.startOdometer);
-			const e = Number(form.endOdometer);
-			form.miles = String(Math.max(0, e - s));
+	// Reference to miles input so quick-action can focus it
+	let amountInput: HTMLInputElement | null = null;
+	// Whether the user manually edited the miles input; when true we stop auto-updating miles from odometers
+	let milesManual = false;
+
+	// default millageRate from user settings for new logs (only set if field empty)
+	$: if ($userSettings && formData.millageRate === '') {
+		formData.millageRate =
+			$userSettings.millageRate != null ? String($userSettings.millageRate) : '';
+	}
+
+	// Default vehicle selection if available and none selected
+	$: if ($userSettings?.vehicles?.length > 0 && !formData.vehicle) {
+		const v0 = $userSettings.vehicles[0];
+		formData.vehicle = v0?.id ?? v0?.name ?? '';
+	}
+	// Prefill category from the URL query parameter (e.g., ?category=fuel)
+	$: {
+		const q = $page.url.searchParams.get('category');
+		if (q) {
+			formData.category = q;
+			// if arrived via quick action, focus the miles input for quick logging
+			if (typeof window !== 'undefined') {
+				setTimeout(() => (amountInput as any)?.focus(), 60);
+			}
 		}
 	}
 
-	async function save() {
-		if (!form.date) {
-			toasts.error('Please choose a date');
-			return;
+	// Auto-calc miles from odometer readings unless the user has manually edited miles
+	$: if (!milesManual) {
+		if (formData.startOdometer !== '' && formData.endOdometer !== '') {
+			const s = Number(formData.startOdometer) || 0;
+			const e = Number(formData.endOdometer) || 0;
+			formData.miles = Number(Math.max(0, e - s).toFixed(2)).toString();
 		}
+	}
 
-		// Require either both odometer readings, or an explicit miles value
+	async function saveExpense() {
 		if (
-			(form.startOdometer === '' || form.endOdometer === '') &&
-			(form.miles === '' || Number(form.miles) <= 0)
+			!formData.date ||
+			((formData.startOdometer === '' || formData.endOdometer === '') && formData.miles === '')
 		) {
-			toasts.error('Please provide start and end odometer readings or enter miles directly');
+			toasts.error('Please fill in required fields (either start & end odometer or miles).');
 			return;
 		}
 
 		const currentUser = $page.data['user'] || $user;
 		const userId =
 			currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
+
 		if (!userId) {
-			toasts.error('User missing');
+			toasts.error('User not identified. Cannot save.');
 			return;
 		}
 
 		try {
-			let vehicleSnapshot: any = {};
-			if (form.vehicleId) {
-				const v = vehicles.find((x: any) => x.id === form.vehicleId);
-				if (v) {
-					vehicleSnapshot = {
-						vehicleId: v.id,
-						vehicleMake: v.make,
-						vehicleModel: v.model,
-						vehicleYear: v.year
-					};
-				}
-			}
+			const start = Number(formData.startOdometer) || 0;
+			const end = Number(formData.endOdometer) || 0;
+			let miles =
+				formData.miles !== '' && !isNaN(Number(formData.miles))
+					? Number(formData.miles)
+					: Math.max(0, end - start);
+			miles = Number(miles.toFixed(2));
 
 			const payload = {
-				date: form.date,
-				startOdometer: Number(form.startOdometer),
-				endOdometer: Number(form.endOdometer),
-				miles: Number(form.miles) || undefined,
-				notes: form.notes,
-				...vehicleSnapshot
+				...formData,
+				startOdometer: start,
+				endOdometer: end,
+				miles,
+				millageRate: formData.millageRate !== '' ? Number(formData.millageRate) : undefined,
+				vehicle: formData.vehicle || undefined
 			};
-			await millage.create(payload, userId);
+
+			await millage.create(payload as any, userId);
 			toasts.success('Millage log created');
 			goto('/dashboard/millage');
 		} catch (err) {
 			console.error(err);
-			toasts.error('Failed to save');
+			toasts.error('Failed to save millage log');
 		}
 	}
 </script>
 
 <div class="expense-form-page">
-	<div class="page-container">
-		<div class="page-header">
-			<div>
-				<h1 class="page-title">New Millage Log</h1>
-				<p class="page-subtitle">Record your odometer readings</p>
-			</div>
-			<a href="/dashboard/millage" class="btn-back">
-				<svg width="24" height="24" viewBox="0 0 20 20" fill="none">
-					<path
-						d="M12 4L6 10L12 16"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					/>
-				</svg>
-				Back
-			</a>
+	<div class="page-header">
+		<div>
+			<h1 class="page-title">New Millage Log</h1>
+			<p class="page-subtitle">Record start/end odometer and miles</p>
+		</div>
+		<a href="/dashboard/millage" class="btn-back">
+			<svg width="24" height="24" viewBox="0 0 20 20" fill="none"
+				><path
+					d="M12 4L6 10L12 16"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				/></svg
+			> Back
+		</a>
+	</div>
+
+	<div class="form-card">
+		<div class="card-header">
+			<h2 class="card-title">Millage Details</h2>
 		</div>
 
-		<div class="form-card">
-			<div class="card-header">
-				<h2 class="card-title">Details</h2>
+		<div class="form-grid">
+			<div class="form-group">
+				<label for="millage-date">Date</label>
+				<input id="millage-date" type="date" bind:value={formData.date} required />
 			</div>
 
-			<div class="form-grid">
-				<div class="form-group">
-					<label for="millage-date">Date</label>
-					<input id="millage-date" type="date" bind:value={form.date} />
-				</div>
+			<div class="form-row">
+				<!-- Maintenance, Supplies, and Expenses options removed for Millage logs -->
 
-				<div class="form-group">
-					<label for="vehicle-select">Vehicle</label>
-					<div class="vehicle-select-row">
-						<select id="vehicle-select" class="select-input" bind:value={form.vehicleId}>
-							<option value="">(None)</option>
-							{#each vehicles as v}
-								<option value={v.id}>{v.make} {v.model} {v.year}</option>
-							{/each}
-						</select>
-						<a href="/dashboard/millage" class="btn-small neutral" title="Manage vehicles">Manage</a
-						>
-					</div>
-				</div>
-
-				<div class="form-row">
-					<div class="form-group">
+				<div class="form-group grid-3">
+					<div>
 						<label for="start-odo">Start Odometer</label>
 						<input
 							id="start-odo"
 							type="number"
-							bind:value={form.startOdometer}
-							oninput={computeMiles}
+							inputmode="decimal"
+							bind:value={formData.startOdometer}
+							placeholder="0"
 						/>
 					</div>
-
-					<div class="form-group">
+					<div>
 						<label for="end-odo">End Odometer</label>
 						<input
 							id="end-odo"
 							type="number"
-							bind:value={form.endOdometer}
-							oninput={computeMiles}
+							inputmode="decimal"
+							bind:value={formData.endOdometer}
+							placeholder="0"
+						/>
+					</div>
+					<div>
+						<label for="miles">Miles</label>
+						<input
+							id="miles"
+							type="number"
+							step="0.01"
+							inputmode="decimal"
+							bind:this={amountInput}
+							bind:value={formData.miles}
+							placeholder="0.0"
+							on:input={(e) => (milesManual = (e.target as HTMLInputElement).value !== '')}
 						/>
 					</div>
 				</div>
+			</div>
 
-				<div class="form-group">
-					<label for="miles">Miles</label>
-					<input id="miles" type="number" bind:value={form.miles} />
-					<small class="text-sm text-gray-400"
-						>Calculated from start/end odometers when provided — you can edit this value directly.</small
-					>
-				</div>
+			<div class="form-group">
+				<label for="notes">Notes</label>
+				<textarea
+					id="notes"
+					name="notes"
+					bind:value={formData.notes}
+					rows="3"
+					placeholder="e.g., Trip to client site"
+				></textarea>
 
+				<!-- tax deductible removed -->
+			</div>
+
+			<!-- Settings modal removed for Millage logs -->
+
+			<div class="form-row">
 				<div class="form-group">
-					<label for="notes">Notes</label>
-					<textarea
-						id="notes"
-						bind:value={form.notes}
-						rows="3"
-						placeholder="Optional notes (e.g., trip purpose)"
-					></textarea>
+					<label for="vehicle">Vehicle</label>
+					<select id="vehicle" bind:value={formData.vehicle} class="p-2 border rounded-lg">
+						{#if $userSettings.vehicles && $userSettings.vehicles.length > 0}
+							{#each $userSettings.vehicles as v}
+								<option value={v.id || v.name}>{v.name}</option>
+							{/each}
+						{:else}
+							<option value="">No vehicles (open Millage Settings)</option>
+						{/if}
+					</select>
 				</div>
-				<div class="form-actions">
-					<a href="/dashboard/millage" class="btn-secondary">Cancel</a>
-					<button class="btn-primary" onclick={save}>Save Log</button>
+				<div class="form-group">
+					<label for="millage-rate">Millage Rate (per mile)</label>
+					<input
+						id="millage-rate"
+						type="number"
+						step="0.001"
+						bind:value={formData.millageRate}
+						placeholder="0.655"
+					/>
 				</div>
+			</div>
+
+			<div class="form-actions">
+				<a href="/dashboard/millage" class="btn-secondary">Cancel</a>
+				<button class="btn-primary" on:click={saveExpense}>Save Log</button>
 			</div>
 		</div>
 	</div>
 </div>
 
 <style>
+	/* MATCHING STYLES FROM TRIPS/NEW */
+	.expense-form-page {
+		max-width: 800px;
+		margin: 0 auto;
+		padding: 4px;
+		padding-bottom: 90px;
+	}
+
+	.page-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 26px;
+		padding: 0 8px;
+	}
+	.page-title {
+		font-size: 28px;
+		font-weight: 800;
+		color: #111827;
+		margin: 0;
+	}
+	.page-subtitle {
+		font-size: 14px;
+		color: #6b7280;
+		display: none;
+		margin: 0;
+	}
+
+	.btn-back {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-weight: 600;
+		color: #6b7280;
+		text-decoration: none;
+		font-size: 14px;
+	}
+
 	.form-card {
 		background: white;
 		border: 1px solid #e5e7eb;
@@ -198,43 +283,6 @@
 		margin: 0;
 	}
 
-	/* Page container (match Expenses) */
-	.page-container {
-		max-width: 1400px;
-		margin: 0 auto;
-		padding: 16px;
-		padding-bottom: 80px;
-		overflow-x: hidden;
-	}
-
-	/* Header: match Expenses new page */
-	.page-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 24px;
-	}
-	.page-title {
-		font-size: 28px;
-		font-weight: 800;
-		color: #111827;
-		margin: 0;
-	}
-	.page-subtitle {
-		font-size: 14px;
-		color: #6b7280;
-		margin: 0;
-	}
-	.btn-back {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		font-weight: 600;
-		color: #6b7280;
-		text-decoration: none;
-		font-size: 14px;
-	}
-
 	.form-grid {
 		display: flex;
 		flex-direction: column;
@@ -244,6 +292,18 @@
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 20px;
+	}
+	/* Make the start/end/miles group span the full width (match Date input) */
+	.form-row .grid-3 {
+		grid-column: 1 / -1;
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 16px;
+	}
+	@media (max-width: 767px) {
+		.form-row .grid-3 {
+			grid-template-columns: 1fr;
+		}
 	}
 	.form-group {
 		display: flex;
@@ -258,8 +318,7 @@
 	}
 
 	input,
-	textarea,
-	select {
+	textarea {
 		width: 100%;
 		padding: 16px;
 		border: 1px solid #e5e7eb;
@@ -269,35 +328,9 @@
 		box-sizing: border-box;
 	}
 	input:focus,
-	textarea:focus,
-	select:focus {
+	textarea:focus {
 		outline: none;
 		border-color: #ff7f50;
-	}
-
-	.vehicle-select-row {
-		display: flex;
-		gap: 12px;
-		align-items: center;
-	}
-
-	.select-input {
-		flex: 1;
-		padding: 12px;
-		border: 1px solid #e5e7eb;
-		border-radius: 10px;
-		font-size: 16px;
-		background: white;
-		color: #374151;
-	}
-
-	.btn-small.neutral {
-		padding: 8px 12px;
-		background: white;
-		border-radius: 8px;
-		border: 1px solid #e5e7eb;
-		color: #374151;
-		font-weight: 600;
 	}
 
 	.form-actions {

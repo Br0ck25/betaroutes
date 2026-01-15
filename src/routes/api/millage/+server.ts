@@ -13,6 +13,9 @@ const millageSchema = z.object({
 	endOdometer: z.number().nonnegative(),
 	notes: z.string().max(1000).optional(),
 	miles: z.number().nonnegative().optional(),
+	// Optional per-log millage rate and vehicle
+	millageRate: z.number().nonnegative().optional(),
+	vehicle: z.string().optional(),
 	reimbursement: z.number().nonnegative().optional()
 });
 
@@ -81,6 +84,9 @@ export const POST: RequestHandler = async (event) => {
 			startOdometer: payload.startOdometer,
 			endOdometer: payload.endOdometer,
 			miles,
+			millageRate:
+				typeof payload.millageRate === 'number' ? Number(payload.millageRate) : undefined,
+			vehicle: payload.vehicle || undefined,
 			reimbursement,
 			notes: payload.notes || '',
 			createdAt: new Date().toISOString(),

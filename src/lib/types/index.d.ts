@@ -28,6 +28,7 @@ export type CostItem = {
 export type Trip = {
 	id?: string;
 	date?: string;
+	payDate?: string;
 	startTime?: string;
 	endTime?: string;
 	hoursWorked?: number;
@@ -77,6 +78,7 @@ export type UnsanitizedCostItem = {
 export type UnsanitizedTrip = {
 	id?: unknown;
 	date?: unknown;
+	payDate?: unknown;
 	startTime?: unknown;
 	endTime?: unknown;
 	hoursWorked?: unknown;
