@@ -41,7 +41,9 @@ describe('Trip trash behavior', () => {
 
 		const list = await svc.listTrash(userId);
 		expect(list.length).toBeGreaterThan(0);
-		expect(list.find((t) => t.id === id)).toBeTruthy();
+		const found = list.find((t) => t.id === id);
+		expect(found).toBeTruthy();
+		expect(found?.title || found?.startAddress || '').toBeTruthy();
 
 		// Restore
 		await svc.restore(userId, id);

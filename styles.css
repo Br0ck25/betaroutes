@@ -492,18 +492,7 @@ button.tax-pill *,
 .form-actions .review-checkbox {
 	display: none !important;
 }
-.form-actions::before {
-	content: 'Note: Use the checkboxes next to each Maintenance or Supplies item to mark that individual item as tax-deductible.';
-	display: inline-block;
-	background: #f8fafc;
-	border: 1px solid #e5e7eb;
-	padding: 8px 12px;
-	border-radius: 8px;
-	color: #374151;
-	font-size: 13px;
-	margin-right: auto;
-	margin-bottom: 6px;
-}
+
 
 /* Prevent scroll globally */
 html,

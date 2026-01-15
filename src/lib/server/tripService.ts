@@ -59,6 +59,16 @@ export type TrashItem = {
 	userId: string;
 	recordType: 'trip' | 'expense';
 	metadata: TrashMetadata;
+	// Optional summary fields for UI
+	title?: string;
+	date?: string;
+	createdAt?: string;
+	stops?: unknown[];
+	totalMiles?: number;
+	startAddress?: string;
+	category?: string;
+	amount?: number;
+	description?: string;
 };
 
 export type Restorable = TripRecord & Record<string, unknown>;
@@ -366,32 +376,31 @@ export function makeTripService(
 					expiresAt: parsed.metadata?.expiresAt || ''
 				};
 
-				out.push({ id, userId: uid, metadata, recordType: 'trip' });
+				// Build a lightweight summary for UI display (merge backup fields if present)
+				const backup = parsed.backup || parsed.data || parsed.trip || parsed || {};
+				let type: 'trip' | 'expense' = 'trip';
+				if (parsed.type === 'expense' || (backup && (backup.category || backup.amount))) {
+					type = 'expense';
+				}
+
+				if (type === 'trip') {
+					out.push({
+						id,
+						userId: uid,
+						metadata,
+						recordType: 'trip',
+						title: (backup.title as string) || (backup.startAddress as string) || undefined,
+						date: (backup.date as string) || undefined,
+						createdAt: (backup.createdAt as string) || undefined,
+						stops: (backup.stops as unknown[]) || undefined,
+						totalMiles: typeof backup.totalMiles === 'number' ? backup.totalMiles : undefined,
+						startAddress: (backup.startAddress as string) || undefined
+					});
+				}
 			}
 
 			out.sort((a, b) => (b.metadata?.deletedAt || '').localeCompare(a.metadata?.deletedAt || ''));
 			return out;
-		},
-
-		async emptyTrash(userId: string) {
-			const prefix = prefixForUser(userId);
-			let list = await kv.list({ prefix });
-			let keys = list.keys;
-			while (!list.list_complete && list.cursor) {
-				list = await kv.list({ prefix, cursor: list.cursor });
-				keys = keys.concat(list.keys);
-			}
-			let count = 0;
-			for (const k of keys) {
-				const raw = await kv.get(k.name);
-				if (!raw) continue;
-				const parsed = JSON.parse(raw);
-				if (parsed && parsed.deleted) {
-					await kv.delete(k.name);
-					count++;
-				}
-			}
-			return count;
 		},
 
 		async restore(userId: string, itemId: string) {
