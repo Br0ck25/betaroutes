@@ -86,22 +86,28 @@
 				).values()
 			);
 
-			// Filter by type if requested (expense/trip/millage)
-			const filtered = type
-				? uniqueItems.filter((it) => {
-						const inferred =
-							it.recordType ||
-							it.type ||
-							(it.originalKey &&
-								(it.originalKey.startsWith('expense:')
-									? 'expense'
-									: it.originalKey.startsWith('millage:')
-										? 'millage'
-										: 'trip')) ||
-							'trip';
-						return inferred === type;
-					})
-				: uniqueItems;
+			// Filter by type: use explicit `type` if provided; otherwise infer from the current URL param and default to `trip`
+			const effectiveType =
+				type ??
+				(currentTypeParam === 'expenses'
+					? 'expense'
+					: currentTypeParam === 'millage'
+						? 'millage'
+						: 'trip');
+
+			const filtered = uniqueItems.filter((it) => {
+				const inferred =
+					it.recordType ||
+					it.type ||
+					(it.originalKey &&
+						(it.originalKey.startsWith('expense:')
+							? 'expense'
+							: it.originalKey.startsWith('millage:')
+								? 'millage'
+								: 'trip')) ||
+					'trip';
+				return inferred === effectiveType;
+			});
 
 			filtered.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
 			trashedTrips = filtered;

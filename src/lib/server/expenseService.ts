@@ -58,9 +58,26 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 						keys = keys.concat(list.keys);
 					}
 
+					let migratedCount = 0;
+					let skippedTombstones = 0;
 					for (const key of keys) {
 						const raw = await kv.get(key.name);
-						if (raw) allExpenses.push(JSON.parse(raw));
+						if (!raw) continue;
+						const parsed = JSON.parse(raw);
+
+						// If this is a tombstone, prefer migrating its backup payload (if available)
+						if (parsed && parsed.deleted) {
+							if (parsed.backup) {
+								allExpenses.push(parsed.backup);
+								migratedCount++;
+							} else {
+								skippedTombstones++;
+							}
+							continue;
+						}
+
+						allExpenses.push(parsed);
+						migratedCount++;
 					}
 
 					// Force Push to DO
@@ -72,6 +89,9 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 
 						// Update local variable to return the fresh data immediately
 						expenses = allExpenses;
+						log.info(
+							`[ExpenseService] Migrated ${migratedCount} items (${skippedTombstones} tombstones skipped)`
+						);
 					}
 				}
 			}

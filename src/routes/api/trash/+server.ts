@@ -2,6 +2,7 @@
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
 import { makeExpenseService } from '$lib/server/expenseService';
+import { makeMillageService } from '$lib/server/millageService';
 import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 
@@ -67,6 +68,12 @@ export const GET: RequestHandler = async (event) => {
 					safeDO(platformEnv, 'TRIP_INDEX_DO') as any
 				);
 				cloudTrash = await expenseSvc.listTrash(storageId);
+			} else if (type === 'millage') {
+				const millageSvc = makeMillageService(
+					safeKV(platformEnv, 'BETA_MILLAGE_KV') as any,
+					safeDO(platformEnv, 'TRIP_INDEX_DO') as any
+				);
+				cloudTrash = await millageSvc.listTrash(storageId);
 			} else if (type === 'trips') {
 				cloudTrash = tripTrash;
 			} else {
@@ -75,7 +82,12 @@ export const GET: RequestHandler = async (event) => {
 					safeDO(platformEnv, 'TRIP_INDEX_DO') as any
 				);
 				const expenseTrash = await expenseSvc.listTrash(storageId);
-				cloudTrash = [...tripTrash, ...expenseTrash].sort((a: any, b: any) =>
+				const millageSvc = makeMillageService(
+					safeKV(platformEnv, 'BETA_MILLAGE_KV') as any,
+					safeDO(platformEnv, 'TRIP_INDEX_DO') as any
+				);
+				const millageTrash = await millageSvc.listTrash(storageId);
+				cloudTrash = [...tripTrash, ...expenseTrash, ...millageTrash].sort((a: any, b: any) =>
 					(b.metadata?.deletedAt || '').localeCompare(a.metadata?.deletedAt || '')
 				);
 			}
