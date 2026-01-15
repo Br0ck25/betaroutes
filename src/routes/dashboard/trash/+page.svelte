@@ -225,6 +225,12 @@
 		return 0;
 	}
 
+	function firstPart(value: unknown): string | null {
+		if (typeof value !== 'string') return null;
+		const parts = (value as string).split(',');
+		return parts[0] ?? null;
+	}
+
 	function getTripTitle(t: any): string {
 		// Safely extract an address/title from several possible shapes of 'stops' or fields
 		const firstStopAddress = Array.isArray(t.stops)
@@ -233,20 +239,21 @@
 				? (Object.values(t.stops as Record<string, any>)[0] as any)?.address
 				: undefined;
 
-		const c =
-			typeof t.startAddress === 'string'
-				? t.startAddress
-				: typeof firstStopAddress === 'string'
-					? firstStopAddress
-					: typeof t.endAddress === 'string'
-						? t.endAddress
-						: typeof t.notes === 'string'
-							? t.notes
-							: typeof t.originalKey === 'string'
-								? t.originalKey
-								: 'Unknown Trip';
+		const v =
+			firstPart(t.startAddress) ||
+			firstPart(firstStopAddress) ||
+			firstPart(t.endAddress) ||
+			firstPart(t.notes);
+		if (v) return v;
 
-		return c.split(',')[0];
+		// Fallback: if we only have an originalKey like 'trip:USER:ID', show a concise label
+		if (typeof t.originalKey === 'string') {
+			const parts = t.originalKey.split(':');
+			const id = parts.pop() || t.originalKey;
+			return `Trip (${String(id).slice(0, 8)})`;
+		}
+
+		return 'Unknown Trip';
 	}
 
 	function getLastStopShort(t: any): string | null {
@@ -257,6 +264,13 @@
 			if (vals.length) return (vals[vals.length - 1]?.address || '').split(',')[0];
 		}
 		return null;
+	}
+
+	function getFullTripTitle(t: any, lastShort?: string | null): string {
+		const start = getTripTitle(t);
+		const last = lastShort ?? getLastStopShort(t);
+		if (last && start !== last) return `${start} → ${last}`;
+		return start;
 	}
 
 	// Run initial load on mount (after functions are defined)
@@ -365,6 +379,8 @@
 					(t['type'] as string | undefined) === 'expense' ||
 					(t['recordType'] as string | undefined) === 'expense' ||
 					(t['originalKey'] as string | undefined)?.startsWith('expense:')}
+				{@const stops = getStopCount(trip)}
+				{@const lastStopShort = getLastStopShort(trip)}
 				<div class="trash-item">
 					<div class="trip-info">
 						<div class="trip-header">
@@ -373,10 +389,7 @@
 									<span class="badge-expense">Expense</span>
 									<span class="expense-category">{trip.category || 'Uncategorized'}</span>
 								{:else}
-									{getTripTitle(trip)}
-									{#if getLastStopShort(trip)}
-										→ {getLastStopShort(trip)}
-									{/if}
+									{getFullTripTitle(trip, lastStopShort)}
 								{/if}
 							</h3>
 							<div class="trip-meta">
@@ -391,15 +404,19 @@
 							{#if isExpense}
 								<span class="detail amount">${Number(trip.amount || 0).toFixed(2)}</span>
 								{#if trip.description}<span class="detail">{trip.description}</span>{/if}
-								<span class="detail">{formatDate(trip.date || trip.createdAt)}</span>
+								{#if trip.date || trip.createdAt}
+									<span class="detail">{formatDate(trip.date || trip.createdAt)}</span>
+								{/if}
 							{:else}
-								<span class="detail">{formatDate(trip.date || trip.createdAt)}</span>
-								<span class="detail"
-									>{getStopCount(trip)} {getStopCount(trip) === 1 ? 'stop' : 'stops'}</span
-								>
-								{#if trip.totalMiles}<span class="detail"
-										>{Number(trip.totalMiles).toFixed(1)} mi</span
-									>{/if}
+								{#if trip.date || trip.createdAt}
+									<span class="detail">{formatDate(trip.date || trip.createdAt)}</span>
+								{/if}
+								{#if typeof stops === 'number'}
+									<span class="detail">{stops} {stops === 1 ? 'stop' : 'stops'}</span>
+								{/if}
+								{#if trip.totalMiles}
+									<span class="detail">{Number(trip.totalMiles).toFixed(1)} mi</span>
+								{/if}
 							{/if}
 						</div>
 					</div>
