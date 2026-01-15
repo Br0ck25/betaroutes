@@ -326,3 +326,19 @@ export async function deleteDatabase(): Promise<void> {
 		};
 	});
 }
+
+/**
+ * Returns a list of missing object stores compared to the expected schema.
+ * Useful for detecting clients with stale/invalid DB schemas.
+ */
+export async function getMissingStores(): Promise<string[]> {
+	try {
+		const db = await getDB();
+		const required = ['trips', 'expenses', 'trash', 'syncQueue', 'millage'];
+		const present = Array.from(db.objectStoreNames as any as string[]);
+		return required.filter((s) => !present.includes(s));
+	} catch (err) {
+		console.warn('Failed to inspect DB schema', err);
+		return ['unknown'];
+	}
+}
