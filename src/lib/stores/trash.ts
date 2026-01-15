@@ -169,6 +169,7 @@ function createTrashStore() {
 				const tx = db.transaction('trash', 'readwrite');
 				const store = tx.objectStore('trash');
 
+				let savedCount = 0;
 				for (const rawItem of cloudTrash) {
 					// Normalize Item
 					let flatItem: any = { ...rawItem };
@@ -186,7 +187,16 @@ function createTrashStore() {
 						flatItem.deletedAt = flatItem.metadata.deletedAt || flatItem.deletedAt;
 						flatItem.expiresAt = flatItem.metadata.expiresAt || flatItem.expiresAt;
 						flatItem.originalKey = flatItem.metadata.originalKey || flatItem.originalKey;
+						// If metadata includes originalKey but no userId, derive it
+						if (!flatItem.userId && flatItem.metadata.originalKey) {
+							flatItem.userId = String(flatItem.metadata.originalKey.split(':')[1] || '');
+						}
 						delete flatItem.metadata;
+					}
+
+					// Fallback: derive userId from originalKey if absent
+					if (!flatItem.userId && flatItem.originalKey) {
+						flatItem.userId = String(flatItem.originalKey.split(':')[1] || '');
 					}
 
 					if (!flatItem.id) continue;
@@ -199,6 +209,9 @@ function createTrashStore() {
 						flatItem.recordType = flatItem.type;
 					}
 
+					// Keep a convenience 'type' aligned with recordType
+					flatItem.type = flatItem.recordType;
+
 					cloudIds.add(flatItem.id);
 
 					const local = await store.get(flatItem.id);
@@ -208,8 +221,11 @@ function createTrashStore() {
 							syncStatus: 'synced',
 							lastSyncedAt: new Date().toISOString()
 						});
+						savedCount++;
 					}
 				}
+				if (savedCount > 0)
+					console.debug(`[trash] Synced ${savedCount} items from cloud (type=${type})`);
 
 				// Reconciliation: Remove local items not in cloud (unless pending)
 				const index = store.index('userId');

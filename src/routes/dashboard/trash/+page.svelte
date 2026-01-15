@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import { trash } from '$lib/stores/trash';
 	import { trips } from '$lib/stores/trips';
 	import { expenses } from '$lib/stores/expenses';
@@ -16,18 +17,35 @@
 	let restoring = new Set<string>();
 	let deleting = new Set<string>();
 
-	onMount(async () => {
+	onMount(() => {
+		// Quick initial local load (detailed sync handled reactively below)
 		const params = new URLSearchParams(window.location.search);
 		const typeParam = params.get('type');
-
-		// Initial local load (filtered if requested)
-		await loadTrash(typeParam === 'expenses' ? 'expense' : undefined);
-		const userId = $user?.name || $user?.token;
-		if (userId) {
-			await trash.syncFromCloud(userId, typeParam || undefined);
-			await loadTrash(typeParam === 'expenses' ? 'expense' : undefined);
-		}
+		loadTrash(typeParam === 'expenses' ? 'expense' : undefined).catch(console.error);
 	});
+
+	// Reactive: watch the URL 'type' query param and refresh when it changes
+	let currentTypeParam: string | null = null;
+	$: (async () => {
+		const param = $page.url.searchParams.get('type');
+		if (param !== currentTypeParam) {
+			currentTypeParam = param;
+			const type = param === 'expenses' ? 'expense' : undefined;
+			loading = true;
+			try {
+				await loadTrash(type);
+				const userId = $user?.name || $user?.token;
+				if (userId) {
+					await trash.syncFromCloud(userId, param || undefined);
+					await loadTrash(type);
+				}
+			} catch (err) {
+				console.error('Failed to refresh trash for type change', err);
+			} finally {
+				loading = false;
+			}
+		}
+	})();
 
 	async function loadTrash(type?: string) {
 		loading = true;
