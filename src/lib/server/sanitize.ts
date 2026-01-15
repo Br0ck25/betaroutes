@@ -181,7 +181,7 @@ export function sanitizeTrip(trip: unknown): Partial<Trip> {
 
 	const t = trip as UnsanitizedTrip;
 
-	const sanitized: Partial<Trip> = {
+	return {
 		id: t.id ? sanitizeUUID(t.id) : undefined,
 		date: sanitizeString(t.date, 50),
 		startTime: sanitizeString(t.startTime, 50),
@@ -208,9 +208,6 @@ export function sanitizeTrip(trip: unknown): Partial<Trip> {
 		suppliesItems: sanitizeArray(t.suppliesItems, sanitizeCostItem, 20),
 		lastModified: t.lastModified ? sanitizeDateTime(t.lastModified) : undefined
 	};
-	// Optional pay date for tax purposes (preserve exactly what user provided)
-	(sanitized as any).payDate = sanitizeString((t as any).payDate, 50);
-	return sanitized;
 }
 
 /**

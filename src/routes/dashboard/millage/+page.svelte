@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { millage, isLoading as millageLoading } from '$lib/stores/millage';
+	import { trips, isLoading as tripsLoading } from '$lib/stores/trips';
 	import { userSettings } from '$lib/stores/userSettings';
 	import SettingsModal from './components/SettingsModal.svelte';
 	import { user } from '$lib/stores/auth';
@@ -89,17 +90,44 @@
 	let isManageCategoriesOpen = false;
 	let newCategoryName = '';
 
-	// Trip-derived expenses (fuel/maintenance/supplies) are intentionally excluded from the Millage listing.
-	// If needed we can add a separate view to inspect trip fuel, but they should not appear in Millage logs.
+	// --- DERIVE TRIP EXPENSES ---
+	$: tripExpenses = $trips.flatMap((trip) => {
+		const items = [];
+		const date = trip.date || trip.createdAt.split('T')[0];
+
+		// 1. Fuel
+		if (trip.fuelCost && trip.fuelCost > 0) {
+			items.push({
+				id: `trip-fuel-${trip.id}`,
+				date: date,
+				category: 'fuel',
+				amount: trip.fuelCost,
+				description: 'Fuel',
+				taxDeductible: !!(trip as any).fuelTaxDeductible,
+				source: 'trip',
+				tripId: trip.id
+			});
+		}
+
+		// 2. Maintenance Items removed for Millage page (excluded)
+		// (maintenance entries are intentionally omitted from millage listing)
+
+		// 3. Supply Items removed for Millage page (excluded)
+		// (supply entries are intentionally omitted from millage listing)
+
+		return items;
+	});
 
 	// --- COMBINE & FILTER ---
-	// Only include manual Millage records here (do not mix Trip fuel entries)
-	$: allExpenses = $millage.filter(
-		(r) =>
-			typeof (r as any).miles === 'number' ||
-			typeof (r as any).startOdometer === 'number' ||
-			typeof (r as any).endOdometer === 'number'
-	);
+	$: allExpenses = [
+		...$millage.filter(
+			(r) =>
+				typeof (r as any).miles === 'number' ||
+				typeof (r as any).startOdometer === 'number' ||
+				typeof (r as any).endOdometer === 'number'
+		),
+		...tripExpenses
+	];
 
 	// Reset selection when filters change
 	$: if (searchQuery || sortBy || sortOrder || filterCategory || startDate || endDate) {
@@ -153,7 +181,7 @@
 			return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
 		});
 
-	$: loading = $millageLoading; // switched to millage store
+	$: loading = $millageLoading || $tripsLoading; // switched to millage store
 	$: allSelected = filteredExpenses.length > 0 && selectedExpenses.size === filteredExpenses.length;
 
 	// --- ACTIONS ---

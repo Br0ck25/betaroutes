@@ -306,18 +306,19 @@ export function makeTripService(
 			const now = new Date();
 			const expiresAt = new Date(now.getTime() + RETENTION.THIRTY_DAYS * 1000);
 
-			// Store original trip snapshot in the main logs KV under a trash prefix so we can restore later.
-			const metadata: TrashMetadata = {
-				deletedAt: now.toISOString(),
-				deletedBy: userId,
-				originalKey: key,
-				expiresAt: expiresAt.toISOString()
-			};
-			const trashKey = `trash:${userId}:${tripId}`;
-			const trashPayload = { type: 'trip', data: trip, metadata };
-			await kv.put(trashKey, JSON.stringify(trashPayload), {
-				expirationTtl: RETENTION.THIRTY_DAYS
-			});
+			if (trashKV) {
+				const metadata: TrashMetadata = {
+					deletedAt: now.toISOString(),
+					deletedBy: userId,
+					originalKey: key,
+					expiresAt: expiresAt.toISOString()
+				};
+				const trashKey = `trash:${userId}:${tripId}`;
+				const trashPayload = { type: 'trip', data: trip, metadata };
+				await trashKV.put(trashKey, JSON.stringify(trashPayload), {
+					expirationTtl: RETENTION.THIRTY_DAYS
+				});
+			}
 
 			const tombstone = {
 				id: trip.id,
@@ -344,17 +345,13 @@ export function makeTripService(
 		},
 
 		async listTrash(userId: string): Promise<TrashItem[]> {
+			if (!trashKV) return [];
 			const prefix = trashPrefixForUser(userId);
-			let list = await kv.list({ prefix });
-			let keys = list.keys;
-			while (!list.list_complete && list.cursor) {
-				list = await kv.list({ prefix, cursor: list.cursor });
-				keys = keys.concat(list.keys);
-			}
+			const list = await trashKV.list({ prefix });
 			const out: TrashItem[] = [];
 
-			for (const k of keys) {
-				const raw = await kv.get(k.name);
+			for (const k of list.keys) {
+				const raw = await trashKV.get(k.name);
 				if (!raw) continue;
 				const parsed = JSON.parse(raw);
 				let item: Restorable | Record<string, unknown>;
@@ -391,24 +388,21 @@ export function makeTripService(
 		},
 
 		async emptyTrash(userId: string) {
+			if (!trashKV) return 0;
 			const prefix = trashPrefixForUser(userId);
-			let list = await kv.list({ prefix });
-			let keys = list.keys;
-			while (!list.list_complete && list.cursor) {
-				list = await kv.list({ prefix, cursor: list.cursor });
-				keys = keys.concat(list.keys);
-			}
+			const list = await trashKV.list({ prefix });
 			let count = 0;
-			for (const k of keys) {
-				await kv.delete(k.name);
+			for (const k of list.keys) {
+				await trashKV.delete(k.name);
 				count++;
 			}
 			return count;
 		},
 
 		async restore(userId: string, itemId: string) {
+			if (!trashKV) throw new Error('Trash KV not available');
 			const trashKey = `trash:${userId}:${itemId}`;
-			const raw = await kv.get(trashKey);
+			const raw = await trashKV.get(trashKey);
 			if (!raw) throw new Error('Item not found in trash');
 			const parsed = JSON.parse(raw);
 
@@ -444,13 +438,14 @@ export function makeTripService(
 				await kv.put(activeKey, JSON.stringify(restored));
 			}
 
-			await kv.delete(trashKey);
+			await trashKV.delete(trashKey);
 			return item;
 		},
 
 		async permanentDelete(userId: string, itemId: string) {
+			if (!trashKV) throw new Error('Trash KV not available');
 			const trashKey = `trash:${userId}:${itemId}`;
-			await kv.delete(trashKey);
+			await trashKV.delete(trashKey);
 		},
 
 		async incrementUserCounter(userId: string, amt = 1) {

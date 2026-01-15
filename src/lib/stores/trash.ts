@@ -144,12 +144,11 @@ function createTrashStore() {
 			return userItems.length;
 		},
 
-		async syncFromCloud(userId: string, type?: string) {
+		async syncFromCloud(userId: string) {
 			try {
 				if (!navigator.onLine) return;
 
-				const url = type ? `/api/trash?type=${encodeURIComponent(type)}` : '/api/trash';
-				const response = await fetch(url);
+				const response = await fetch('/api/trash');
 				if (!response.ok) return;
 
 				const cloudTrash: any = await response.json();
@@ -192,40 +191,16 @@ function createTrashStore() {
 					cloudIds.add(flatItem.id);
 
 					const local = await store.get(flatItem.id);
-					const hasDetails = (obj: any) =>
-						!!(
-							obj &&
-							(obj.startAddress ||
-								obj.stops ||
-								obj.totalMiles ||
-								obj.amount ||
-								obj.category ||
-								obj.date)
-						);
-					if (!local) {
+					if (!local || new Date(flatItem.deletedAt) > new Date(local.deletedAt)) {
 						await store.put({
 							...flatItem,
 							syncStatus: 'synced',
 							lastSyncedAt: new Date().toISOString()
 						});
-					} else if (new Date(flatItem.deletedAt) > new Date(local.deletedAt)) {
-						// Preserve richer local details when cloud only supplies metadata-only record
-						if (hasDetails(local) && !hasDetails(flatItem)) {
-							await store.put({
-								...local,
-								...flatItem,
-								syncStatus: 'synced',
-								lastSyncedAt: new Date().toISOString()
-							});
-						} else {
-							await store.put({
-								...flatItem,
-								syncStatus: 'synced',
-								lastSyncedAt: new Date().toISOString()
-							});
-						}
 					}
 				}
+
+				// Reconciliation: Remove local items not in cloud (unless pending)
 				const index = store.index('userId');
 				const localItems = await index.getAll(userId);
 				for (const localItem of localItems) {
@@ -237,11 +212,10 @@ function createTrashStore() {
 				await tx.done;
 
 				// Cleanup Active Stores (Safety Check to prevent duplicates in active lists)
-				const cleanupTx = db.transaction(['trash', 'trips', 'expenses', 'millage'], 'readwrite');
+				const cleanupTx = db.transaction(['trash', 'trips', 'expenses'], 'readwrite');
 				const allTrash = await cleanupTx.objectStore('trash').getAll();
 				const tripStore = cleanupTx.objectStore('trips');
 				const expenseStore = cleanupTx.objectStore('expenses');
-				const millageStore = cleanupTx.objectStore('millage');
 
 				for (const trashItem of allTrash) {
 					if (await tripStore.get(trashItem.id)) {
@@ -249,9 +223,6 @@ function createTrashStore() {
 					}
 					if (await expenseStore.get(trashItem.id)) {
 						await expenseStore.delete(trashItem.id);
-					}
-					if (await millageStore.get(trashItem.id)) {
-						await millageStore.delete(trashItem.id);
 					}
 				}
 				await cleanupTx.done;

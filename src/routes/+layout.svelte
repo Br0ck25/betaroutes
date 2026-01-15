@@ -23,32 +23,6 @@
 		// Load local data immediately
 		await trips.load();
 
-		// Check DB schema for critical missing stores (helps catch clients with stale DB)
-		try {
-			const { getMissingStores, deleteDatabase } = await import('$lib/db/indexedDB');
-			const missing = await getMissingStores();
-			if (missing.length > 0 && (missing.includes('millage') || missing.includes('unknown'))) {
-				// Prompt user to reset local DB (dangerous - warn clearly)
-				const ok = confirm(
-					'Your local database schema is out of date or corrupted (missing stores).\n' +
-						'Would you like to reset the local database now? This will clear local data but should fix errors.'
-				);
-				if (ok) {
-					try {
-						await deleteDatabase();
-						location.reload();
-					} catch (e) {
-						console.error('Failed to delete DB:', e);
-						alert('Failed to reset local DB. Please clear site data or try again.');
-					}
-				} else {
-					console.warn('Missing stores detected:', missing);
-				}
-			}
-		} catch (e) {
-			console.warn('DB schema check failed', e);
-		}
-
 		if (data.user) {
 			// Connect SyncManager to the UI Store
 			syncManager.setStoreUpdater((enrichedTrip) => {

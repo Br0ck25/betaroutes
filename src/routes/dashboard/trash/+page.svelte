@@ -4,7 +4,6 @@
 	import { trips } from '$lib/stores/trips';
 	import { expenses } from '$lib/stores/expenses';
 	import { goto } from '$app/navigation';
-	import { page } from '$app/stores';
 	import { base } from '$app/paths';
 	import { user } from '$lib/stores/auth';
 	import { getDB } from '$lib/db/indexedDB';
@@ -17,10 +16,17 @@
 	let restoring = new Set<string>();
 	let deleting = new Set<string>();
 
-	// Reactive current view type (expense|trip|undefined)
-	let currentType: string | undefined;
-	$: currentType = $page.url.searchParams.get('type') || undefined;
-	async function loadTrash(type?: string) {
+	onMount(async () => {
+		await loadTrash();
+		const userId = $user?.name || $user?.token;
+		if (userId) {
+			await trash.syncFromCloud(userId);
+			await loadTrash();
+		}
+	});
+
+	async function loadTrash() {
+		loading = true;
 		try {
 			const potentialIds = new Set<string>();
 			if ($user?.name) potentialIds.add($user.name);
@@ -38,161 +44,22 @@
 				allItems = [...allItems, ...items];
 			}
 
-			// [!code fix] Robust Normalize/Flatten items: handle { data }, { trip }, and metadata wrappers
-			let uniqueItems = Array.from(
+			// [!code fix] Normalize/Flatten items here to handle { data: ... } structure
+			const uniqueItems = Array.from(
 				new Map(
 					allItems.map((item) => {
-						let flat: any = { ...item };
-
-						// Handle wrappers from server/new API
+						let flat = { ...item };
+						// If local deletion stored it nested in 'data', flatten it up
 						if (flat.data && typeof flat.data === 'object') {
 							flat = { ...flat.data, ...flat };
 							delete flat.data;
 						}
-						if (flat.trip && typeof flat.trip === 'object') {
-							flat = { ...flat.trip, ...flat };
-							delete flat.trip;
-						}
-
-						// Pull metadata fields up for convenience
-						if (flat.metadata && typeof flat.metadata === 'object') {
-							flat.deletedAt = flat.metadata.deletedAt || flat.deletedAt;
-							flat.expiresAt = flat.metadata.expiresAt || flat.expiresAt;
-							flat.originalKey = flat.metadata.originalKey || flat.originalKey;
-							delete flat.metadata;
-						}
-
-						// Ensure a recordType exists for filtering
-						if (!flat.recordType && !flat.type) {
-							if (flat.originalKey?.startsWith('expense:')) flat.recordType = 'expense';
-							else flat.recordType = 'trip';
-						} else if (flat.type && !flat.recordType) {
-							flat.recordType = flat.type;
-						}
-
 						return [flat.id, flat];
 					})
 				).values()
 			);
 
-			// Optionally filter by type (expense or trip)
-			if (type === 'expense') {
-				uniqueItems = uniqueItems.filter((item) => {
-					const isExpense =
-						(item['type'] as string | undefined) === 'expense' ||
-						(item['recordType'] as string | undefined) === 'expense' ||
-						(item['originalKey'] as string | undefined)?.startsWith('expense:');
-					return !!isExpense;
-				});
-			} else if (type === 'trip') {
-				uniqueItems = uniqueItems.filter((item) => {
-					const isExpense =
-						(item['type'] as string | undefined) === 'expense' ||
-						(item['recordType'] as string | undefined) === 'expense' ||
-						(item['originalKey'] as string | undefined)?.startsWith('expense:');
-					return !isExpense;
-				});
-			}
-
-			// Enrich items with local 'trips' or 'expenses' data when available so UI can render full details
-			for (const item of uniqueItems) {
-				// Consider an item metadata-only until we find data
-				(item as any)._isMetadataOnly = true;
-
-				// Detect if the flat item already has meaningful fields
-				const hasDetailFields = !!(
-					item.startAddress ||
-					item.stops ||
-					item.totalMiles ||
-					item.amount ||
-					item.category ||
-					item.date
-				);
-				if (hasDetailFields) {
-					(item as any)._isMetadataOnly = false;
-					continue;
-				}
-
-				// Try to fetch local trip/expense record from the DB to enrich metadata-only items
-				try {
-					const qdb = await getDB();
-					const txTrips = qdb.transaction('trips', 'readonly');
-					let localTrip = await txTrips.objectStore('trips').get(item.id);
-					if (localTrip) {
-						Object.assign(item, localTrip);
-						(item as any)._isMetadataOnly = false;
-						continue;
-					}
-
-					// Fallback: parse originalKey (e.g. 'trip:user:ID' or 'expense:user:ID') and try lookup by that id
-					let parsedId: string | undefined;
-					if (typeof item.originalKey === 'string') {
-						parsedId = String(item.originalKey).split(':').pop() || undefined;
-						if (parsedId) {
-							localTrip = await txTrips.objectStore('trips').get(parsedId);
-							if (localTrip) {
-								Object.assign(item, localTrip);
-								(item as any)._isMetadataOnly = false;
-								continue;
-							}
-						}
-					}
-
-					// If not a trip, try expenses store
-					const txExpenses = qdb.transaction('expenses', 'readonly');
-					let localExpense = await txExpenses.objectStore('expenses').get(item.id);
-					if (localExpense) {
-						Object.assign(item, localExpense);
-						(item as any)._isMetadataOnly = false;
-						continue;
-					}
-
-					// Fallback for expenses using originalKey parsed id
-					if (!localExpense && parsedId) {
-						localExpense = await txExpenses.objectStore('expenses').get(parsedId);
-						if (localExpense) {
-							Object.assign(item, localExpense);
-							(item as any)._isMetadataOnly = false;
-							continue;
-						}
-					}
-
-					// Final fallback: fetch from server API if local DB misses the full record
-					if (parsedId) {
-						try {
-							// Prefer trip endpoint first (if recordType hints trip), else try expense
-							if (
-								(item.recordType as string | undefined) === 'expense' ||
-								(item.type as string | undefined) === 'expense'
-							) {
-								const res = await fetch(`/api/expenses/${encodeURIComponent(parsedId)}`);
-								if (res.ok) {
-									const data = await res.json();
-									Object.assign(item, data);
-									(item as any)._isMetadataOnly = false;
-									continue;
-								}
-							}
-
-							const res = await fetch(`/api/trips/${encodeURIComponent(parsedId)}`);
-							if (res.ok) {
-								const data = await res.json();
-								Object.assign(item, data);
-								(item as any)._isMetadataOnly = false;
-								continue;
-							}
-						} catch (err) {
-							// ignore server fetch errors, we already warned below
-						}
-					}
-				} catch (err) {
-					console.warn('Failed to enrich trash item:', err);
-				}
-			}
-
-			uniqueItems.sort(
-				(a, b) => new Date(b.deletedAt || 0).getTime() - new Date(a.deletedAt || 0).getTime()
-			);
+			uniqueItems.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
 			trashedTrips = uniqueItems;
 		} catch (err) {
 			console.error('Error loading trash:', err);
@@ -313,72 +180,6 @@
 		const diff = expires.getTime() - now.getTime();
 		return Math.ceil(diff / (1000 * 60 * 60 * 24));
 	}
-
-	function getStopCount(t: any): number {
-		if (!t) return 0;
-		if (Array.isArray(t.stops)) return t.stops.length;
-		if (t.stops && typeof t.stops === 'object') return Object.keys(t.stops).length;
-		return 0;
-	}
-
-	function firstPart(value: unknown): string | null {
-		if (typeof value !== 'string') return null;
-		const parts = (value as string).split(',');
-		return parts[0] ?? null;
-	}
-
-	function getTripTitle(t: any): string {
-		// Safely extract an address/title from several possible shapes of 'stops' or fields
-		const firstStopAddress = Array.isArray(t.stops)
-			? (t.stops[0]?.address as string | undefined)
-			: t.stops && typeof t.stops === 'object'
-				? (Object.values(t.stops as Record<string, any>)[0] as any)?.address
-				: undefined;
-
-		const v =
-			firstPart(t.startAddress) ||
-			firstPart(firstStopAddress) ||
-			firstPart(t.endAddress) ||
-			firstPart(t.notes);
-		if (v) return v;
-
-		// Fallback: if we only have an originalKey like 'trip:USER:ID', show a concise label
-		if (typeof t.originalKey === 'string') {
-			const parts = t.originalKey.split(':');
-			const id = parts.pop() || t.originalKey;
-			return `Trip (${String(id).slice(0, 8)})`;
-		}
-
-		return 'Unknown Trip';
-	}
-
-	function getLastStopShort(t: any): string | null {
-		if (Array.isArray(t.stops) && t.stops.length)
-			return (t.stops[t.stops.length - 1]?.address || '').split(',')[0];
-		if (t.stops && typeof t.stops === 'object') {
-			const vals = Object.values(t.stops) as any[];
-			if (vals.length) return (vals[vals.length - 1]?.address || '').split(',')[0];
-		}
-		return null;
-	}
-
-	function getFullTripTitle(t: any, lastShort?: string | null): string {
-		const start = getTripTitle(t);
-		const last = lastShort ?? getLastStopShort(t);
-		if (last && start !== last) return `${start} → ${last}`;
-		return start;
-	}
-
-	// Run initial load on mount (after functions are defined)
-	onMount(async () => {
-		const type = $page.url.searchParams.get('type') || undefined;
-		await loadTrash(type);
-		const userId = $user?.name || $user?.token;
-		if (userId) {
-			await trash.syncFromCloud(userId, type);
-			await loadTrash(type);
-		}
-	});
 </script>
 
 <svelte:head>
@@ -421,11 +222,7 @@
 				</button>
 			{/if}
 
-			<button
-				class="btn-secondary"
-				on:click={() =>
-					goto(resolve(currentType === 'expense' ? '/dashboard/expenses' : '/dashboard/trips'))}
-			>
+			<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/trips'))}>
 				<svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
 					<path
 						d="M10 19L3 12M3 12L10 5M3 12H21"
@@ -435,11 +232,7 @@
 						stroke-linejoin="round"
 					/>
 				</svg>
-				{#if currentType === 'expense'}
-					Back to Expenses
-				{:else}
-					Back to Trips
-				{/if}
+				Back to Trips
 			</button>
 		</div>
 	</div>
@@ -475,8 +268,6 @@
 					(t['type'] as string | undefined) === 'expense' ||
 					(t['recordType'] as string | undefined) === 'expense' ||
 					(t['originalKey'] as string | undefined)?.startsWith('expense:')}
-				{@const stops = getStopCount(trip)}
-				{@const lastStopShort = getLastStopShort(trip)}
 				<div class="trash-item">
 					<div class="trip-info">
 						<div class="trip-header">
@@ -485,7 +276,11 @@
 									<span class="badge-expense">Expense</span>
 									<span class="expense-category">{trip.category || 'Uncategorized'}</span>
 								{:else}
-									{getFullTripTitle(trip, lastStopShort)}
+									{trip.startAddress?.split(',')[0] || 'Unknown Trip'}
+									{#if trip.stops && trip.stops.length > 0}
+										{@const lastStop = trip.stops[trip.stops.length - 1]}
+										→ {lastStop?.address?.split(',')[0] || 'Stop'}
+									{/if}
 								{/if}
 							</h3>
 							<div class="trip-meta">
@@ -496,28 +291,25 @@
 							</div>
 						</div>
 
-						{#if !trip['_isMetadataOnly']}
-							<div class="trip-details">
-								{#if isExpense}
-									<span class="detail amount">${Number(trip.amount || 0).toFixed(2)}</span>
-									{#if trip.description}<span class="detail">{trip.description}</span>{/if}
-									{#if trip.date || trip.createdAt}
-										<span class="detail">{formatDate(trip.date || trip.createdAt)}</span>
-									{/if}
-								{:else}
-									{#if trip.date || trip.createdAt}
-										<span class="detail">{formatDate(trip.date || trip.createdAt)}</span>
-									{/if}
-									{#if typeof stops === 'number'}
-										<span class="detail">{stops} {stops === 1 ? 'stop' : 'stops'}</span>
-									{/if}
-									{#if trip.totalMiles}
-										<span class="detail">{Number(trip.totalMiles).toFixed(1)} mi</span>
-									{/if}
-								{/if}
-							</div>
-						{/if}
+						<div class="trip-details">
+							{#if isExpense}
+								<span class="detail amount">${Number(trip.amount || 0).toFixed(2)}</span>
+								{#if trip.description}<span class="detail">{trip.description}</span>{/if}
+								<span class="detail"
+									>{new Date(trip.date || trip.createdAt || '').toLocaleDateString()}</span
+								>
+							{:else}
+								<span class="detail"
+									>{new Date(trip.date || trip.createdAt || '').toLocaleDateString()}</span
+								>
+								<span class="detail">{trip.stops?.length || 0} stops</span>
+								{#if trip.totalMiles}<span class="detail"
+										>{Number(trip.totalMiles).toFixed(1)} mi</span
+									>{/if}
+							{/if}
+						</div>
 					</div>
+
 					<div class="trip-actions">
 						<button
 							class="btn-restore-item"

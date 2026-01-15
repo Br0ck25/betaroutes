@@ -505,12 +505,6 @@ button.tax-pill *,
 	margin-bottom: 6px;
 }
 
-/* Suppress global review note for forms that opt out */
-.form-actions.no-note::before {
-	content: none !important;
-	display: none !important;
-}
-
 /* Prevent scroll globally */
 html,
 body {

@@ -14,6 +14,8 @@ export interface TripRecord {
 
 	// Trip data
 	date?: string;
+	/** Optional pay date for tax purposes */
+	payDate?: string;
 	startTime?: string;
 	endTime?: string;
 	hoursWorked?: number;
@@ -123,5 +125,5 @@ export interface SyncQueueItem {
 /**
  * Database schema version
  */
-export const DB_VERSION = 4;
+export const DB_VERSION = 3;
 export const DB_NAME = 'go-route-yourself';
