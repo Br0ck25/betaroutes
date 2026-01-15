@@ -237,10 +237,11 @@ function createTrashStore() {
 				await tx.done;
 
 				// Cleanup Active Stores (Safety Check to prevent duplicates in active lists)
-				const cleanupTx = db.transaction(['trash', 'trips', 'expenses'], 'readwrite');
+				const cleanupTx = db.transaction(['trash', 'trips', 'expenses', 'millage'], 'readwrite');
 				const allTrash = await cleanupTx.objectStore('trash').getAll();
 				const tripStore = cleanupTx.objectStore('trips');
 				const expenseStore = cleanupTx.objectStore('expenses');
+				const millageStore = cleanupTx.objectStore('millage');
 
 				for (const trashItem of allTrash) {
 					if (await tripStore.get(trashItem.id)) {
@@ -248,6 +249,9 @@ function createTrashStore() {
 					}
 					if (await expenseStore.get(trashItem.id)) {
 						await expenseStore.delete(trashItem.id);
+					}
+					if (await millageStore.get(trashItem.id)) {
+						await millageStore.delete(trashItem.id);
 					}
 				}
 				await cleanupTx.done;
