@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
 import { makeExpenseService } from '$lib/server/expenseService';
 import { makeMillageService } from '$lib/server/millageService';
-import { safeKV, safeDO } from '$lib/server/env';
+import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 
 function fakeKV() {
@@ -32,6 +32,7 @@ export const GET: RequestHandler = async (event) => {
 
 		const platformEnv = event.platform?.env as Record<string, unknown> | undefined;
 		const kv = (platformEnv?.['BETA_LOGS_KV'] as unknown) ?? fakeKV();
+		const trashKV = undefined;
 		const placesKV = (platformEnv?.['BETA_PLACES_KV'] as unknown) ?? fakeKV();
 
 		// Durable Object bindings (mock or real)
@@ -41,15 +42,14 @@ export const GET: RequestHandler = async (event) => {
 		// Create service
 		const svc = makeTripService(
 			kv as any,
-			undefined,
+			trashKV as any,
 			placesKV as any,
 			tripIndexDO as any,
 			placesIndexDO as any
 		);
 
-		const currentUser = user as { id?: string; name?: string; token?: string };
-		// Prefer canonical stable user id first for storage keys
-		const storageId = currentUser.id || currentUser.name || currentUser.token;
+		const currentUser = user as { name?: string; token?: string };
+		const storageId = currentUser.name || currentUser.token;
 
 		if (!storageId)
 			return new Response(JSON.stringify([]), {

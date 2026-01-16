@@ -57,7 +57,7 @@ export type TrashMetadata = {
 export type TrashItem = {
 	id: string;
 	userId: string;
-	recordType: 'trip' | 'expense' | 'millage';
+	recordType: 'trip' | 'expense';
 	metadata: TrashMetadata;
 	// Optional summary fields for UI
 	title?: string;
@@ -77,10 +77,14 @@ function prefixForUser(userId: string) {
 	return `trip:${userId}:`;
 }
 
+function trashPrefixForUser(userId: string) {
+	return `trash:${userId}:`;
+}
+
 // [!code check] Ensure 'export' is here
 export function makeTripService(
 	kv: KVNamespace,
-	_trashKV: KVNamespace | undefined,
+	trashKV: KVNamespace | undefined,
 	placesKV: KVNamespace | undefined,
 	tripIndexDO: DurableObjectNamespace,
 	placesIndexDO: DurableObjectNamespace

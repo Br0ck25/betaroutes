@@ -575,25 +575,30 @@
 			</div>
 		</div>
 
-		<div class="summary-card">
-			<div class="summary-label">Tax Deductions</div>
-			<div class="summary-value">
-				{formatCurrency(
-					filteredExpenses.filter((e) => e.taxDeductible === true).reduce((s, e) => s + e.amount, 0)
-				)}
+		{#if categories[0]}
+			<div class="summary-card hidden-mobile">
+				<div class="summary-label">{getCategoryLabel(categories[0])}</div>
+				<div class="summary-value">
+					{formatCurrency(
+						filteredExpenses
+							.filter((e) => e.category === categories[0])
+							.reduce((s, e) => s + e.amount, 0)
+					)}
+				</div>
 			</div>
-		</div>
-
-		<div class="summary-card">
-			<div class="summary-label">Non Tax Deductions</div>
-			<div class="summary-value">
-				{formatCurrency(
-					filteredExpenses
-						.filter((e) => !(e.taxDeductible === true))
-						.reduce((s, e) => s + e.amount, 0)
-				)}
+		{/if}
+		{#if categories[1]}
+			<div class="summary-card hidden-mobile">
+				<div class="summary-label">{getCategoryLabel(categories[1])}</div>
+				<div class="summary-value">
+					{formatCurrency(
+						filteredExpenses
+							.filter((e) => e.category === categories[1])
+							.reduce((s, e) => s + e.amount, 0)
+					)}
+				</div>
 			</div>
-		</div>
+		{/if}
 	</div>
 
 	<div class="filters-bar sticky-bar">

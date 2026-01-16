@@ -1,6 +1,5 @@
 // src/lib/server/expenseService.ts
 import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
-import type { TrashItem } from '$lib/server/tripService';
 import { DO_ORIGIN, RETENTION } from '$lib/constants';
 import { log } from '$lib/server/log';
 
@@ -173,7 +172,7 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				keys = keys.concat(list.keys);
 			}
 
-			const out: TrashItem[] = [];
+			const out: any[] = [];
 			for (const k of keys) {
 				const raw = await kv.get(k.name);
 				if (!raw) continue;

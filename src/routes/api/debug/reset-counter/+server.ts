@@ -11,13 +11,14 @@ export const GET = async ({ locals, platform }) => {
 	if (!locals.user) return json({ error: 'Login first' });
 
 	const kv = safeKV(platform?.env, 'BETA_LOGS_KV');
+	const trashKV = undefined;
 	const placesKV = safeKV(platform?.env, 'BETA_PLACES_KV');
 
 	if (!kv) return json({ error: 'KV not found' });
 
 	const tripIndexDO = (platform?.env as any)?.TRIP_INDEX_DO ?? ({} as any);
 	const placesIndexDO = (platform?.env as any)?.PLACES_INDEX_DO ?? tripIndexDO;
-	const svc = makeTripService(kv, undefined, placesKV, tripIndexDO as any, placesIndexDO as any);
+	const svc = makeTripService(kv, trashKV, placesKV, tripIndexDO as any, placesIndexDO as any);
 
 	// Use the same ID logic as your main app (guard index signature)
 	const userId = (locals.user as any).name || (locals.user as any).token;

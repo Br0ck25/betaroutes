@@ -21,7 +21,10 @@ export const DELETE: RequestHandler = async (event) => {
 
 		const id = event.params.id;
 		const userId = sessionUser.name || sessionUser.token || sessionUser.id || '';
-		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!);
+		const svc = makeMillageService(
+			safeKV(env, 'BETA_MILLAGE_KV')!,
+			safeKV(env, 'BETA_MILLAGE_TRASH_KV')
+		);
 		await svc.delete(userId, id);
 		return new Response(null, { status: 204 });
 	} catch (err) {
@@ -46,7 +49,10 @@ export const GET: RequestHandler = async (event) => {
 
 		const id = event.params.id;
 		const userId = sessionUser.name || sessionUser.token || sessionUser.id || '';
-		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!);
+		const svc = makeMillageService(
+			safeKV(env, 'BETA_MILLAGE_KV')!,
+			safeKV(env, 'BETA_MILLAGE_TRASH_KV')
+		);
 		const item = await svc.get(userId, id);
 		if (!item) return new Response('Not found', { status: 404 });
 		return new Response(JSON.stringify(item), { headers: { 'Content-Type': 'application/json' } });

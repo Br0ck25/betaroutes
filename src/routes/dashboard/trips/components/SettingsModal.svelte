@@ -3,7 +3,6 @@
 	import { userSettings } from '$lib/stores/userSettings';
 	import { toasts } from '$lib/stores/toast';
 	import { autocomplete } from '$lib/utils/autocomplete';
-	import { saveSettings } from '../../settings/lib/save-settings';
 	import { createEventDispatcher } from 'svelte';
 
 	const dispatch = createEventDispatcher();
@@ -15,13 +14,6 @@
 	let settingsTab: 'defaults' | 'categories' = 'defaults';
 	let newCategoryName = '';
 	let settings = { ...$userSettings };
-
-	// Local primitives for form fields — binding directly to nested object props caused
-	// inputs to appear uneditable in some browsers. Keep separate staged vars and commit
-	// them to `settings` on Save.
-	let defaultMPGLocal: number | string = settings.defaultMPG;
-	let defaultStartLocal: string = settings.defaultStartAddress || '';
-	let defaultEndLocal: string = settings.defaultEndAddress || '';
 
 	/* Initialize from store only when modal is opened. We intentionally avoid a global reactive
 	   copy from `$userSettings` here because it would overwrite staged overrides while the user
@@ -35,9 +27,8 @@
 
 	function handleAddressSelect(field: 'start' | 'end', e: CustomEvent) {
 		const val = e.detail.formatted_address || e.detail.name;
-		// Update the staged local value so the input stays editable; commit on Save
-		if (field === 'start') defaultStartLocal = val;
-		if (field === 'end') defaultEndLocal = val;
+		if (field === 'start') settings.defaultStartAddress = val;
+		if (field === 'end') settings.defaultEndAddress = val;
 	}
 
 	let isSaving = false;
@@ -46,10 +37,6 @@
 	$: if (open) {
 		didSave = false;
 		settings = { ...$userSettings };
-		// Initialize staged locals from persisted settings
-		defaultMPGLocal = settings?.defaultMPG ?? '';
-		defaultStartLocal = settings?.defaultStartAddress || '';
-		defaultEndLocal = settings?.defaultEndAddress || '';
 		gasDisplay =
 			settings?.defaultGasPrice != null ? Number(settings.defaultGasPrice).toFixed(2) : '';
 	}
@@ -57,10 +44,6 @@
 		// If the modal is being closed without saving, reset staged changes
 		if (!didSave) {
 			settings = { ...$userSettings };
-			// Reset staged locals as well
-			defaultMPGLocal = settings?.defaultMPG ?? '';
-			defaultStartLocal = settings?.defaultStartAddress || '';
-			defaultEndLocal = settings?.defaultEndAddress || '';
 			gasDisplay =
 				settings?.defaultGasPrice != null ? Number(settings.defaultGasPrice).toFixed(2) : '';
 		}
@@ -68,17 +51,16 @@
 		didSave = false;
 	}
 
+	import { saveSettings } from '../../settings/lib/save-settings';
+
 	async function saveDefaultSettings() {
 		if (isSaving) return;
 		if (console && console.debug) console.debug('[settings] saveDefaultSettings', settings);
 		isSaving = true;
 
-		// Commit staged addresses into settings and parse MPG from the staged local
-		settings.defaultStartAddress = defaultStartLocal;
-		settings.defaultEndAddress = defaultEndLocal;
-
+		// Commit staged MPG + gas display into settings before saving
 		try {
-			const mpgParsed = parseFloat(String(defaultMPGLocal).replace(/,/g, '.'));
+			const mpgParsed = parseFloat(String(settings.defaultMPG).replace(/,/g, '.'));
 			settings.defaultMPG = isNaN(mpgParsed) ? 0 : mpgParsed;
 		} catch (_e) {
 			// ignore parsing errors — defaults will be enforced server-side
@@ -213,7 +195,7 @@
 					<input
 						id="default-mpg"
 						type="number"
-						bind:value={defaultMPGLocal}
+						bind:value={settings.defaultMPG}
 						placeholder="25"
 						min="1"
 						step="0.1"
@@ -248,7 +230,7 @@
 					<input
 						id="default-start"
 						type="text"
-						bind:value={defaultStartLocal}
+						bind:value={settings.defaultStartAddress}
 						placeholder="Start typing address..."
 						autocomplete="off"
 						use:autocomplete={{ apiKey: API_KEY }}
@@ -264,7 +246,7 @@
 					<input
 						id="default-end"
 						type="text"
-						bind:value={defaultEndLocal}
+						bind:value={settings.defaultEndAddress}
 						placeholder="Start typing address..."
 						autocomplete="off"
 						use:autocomplete={{ apiKey: API_KEY }}

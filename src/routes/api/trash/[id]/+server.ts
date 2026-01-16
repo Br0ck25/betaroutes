@@ -1,7 +1,7 @@
 // src/routes/api/trash/[id]/+server.ts
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
-import { safeKV, safeDO } from '$lib/server/env';
+import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 
 // Fake DO helper
@@ -24,7 +24,6 @@ export const POST: RequestHandler = async (event) => {
 
 		const kv = safeKV(platformEnv, 'BETA_LOGS_KV');
 		const trashKV = undefined;
-		void trashKV;
 		const placesKV = safeKV(platformEnv, 'BETA_PLACES_KV');
 		const tripIndexDO = (platformEnv?.['TRIP_INDEX_DO'] as unknown) ?? fakeDO();
 		const placesIndexDO = (platformEnv?.['PLACES_INDEX_DO'] as unknown) ?? tripIndexDO;
@@ -37,9 +36,8 @@ export const POST: RequestHandler = async (event) => {
 			placesIndexDO as any
 		);
 
-		const currentUser = user as { id?: string; name?: string; token?: string };
-		// Prefer canonical stable user id first for storage keys
-		const storageId = currentUser.id || currentUser.name || currentUser.token;
+		const currentUser = user as { name?: string; token?: string };
+		const storageId = currentUser.name || currentUser.token;
 
 		if (storageId) {
 			// Try trip restore first, then expense restore
@@ -97,7 +95,6 @@ export const DELETE: RequestHandler = async (event) => {
 
 		const kv = safeKV(platformEnv, 'BETA_LOGS_KV');
 		const trashKV = undefined;
-		void trashKV;
 		const placesKV = safeKV(platformEnv, 'BETA_PLACES_KV');
 		const tripIndexDO = (platformEnv?.['TRIP_INDEX_DO'] as unknown) ?? fakeDO();
 		const placesIndexDO = (platformEnv?.['PLACES_INDEX_DO'] as unknown) ?? tripIndexDO;
@@ -111,7 +108,7 @@ export const DELETE: RequestHandler = async (event) => {
 		);
 
 		const currentUser = user as { name?: string; token?: string };
-		const storageId = currentUser.id || currentUser.name || currentUser.token;
+		const storageId = currentUser.name || currentUser.token;
 
 		if (storageId) {
 			// Attempt to remove from both trip and expense namespaces
