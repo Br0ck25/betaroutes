@@ -45,6 +45,25 @@ describe('API: /api/settings', () => {
 		expect(json.defaultGasPrice).toBe(2.99);
 	});
 
+	it('reads settings from legacy username key and migrates to id key', async () => {
+		const user = { id: 'newid', username: 'legacyuser' } as any;
+		const kv = platform.env['BETA_USER_SETTINGS_KV'] as any;
+		await kv.put(`settings:${user.username}`, JSON.stringify({ defaultGasPrice: 1.23 }));
+
+		const request = new Request('https://example.test/api/settings');
+		const res = await GET({ request, locals: { user }, platform } as any);
+		const json = (await res.json()) as any;
+		expect(json.defaultGasPrice).toBe(1.23);
+
+		// Confirm migration: new key exists and old key removed
+		const migrated = await kv.get(`settings:${user.id}`);
+		expect(migrated).toBeTruthy();
+		const parsed = JSON.parse(migrated);
+		expect(parsed.defaultGasPrice).toBe(1.23);
+		const old = await kv.get(`settings:${user.username}`);
+		expect(old).toBeFalsy();
+	});
+
 	it('saves millage defaults (millageRate + vehicles) to BETA_USER_SETTINGS_KV', async () => {
 		const user = { id: 'miller' } as any;
 		const body = {

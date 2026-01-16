@@ -13,8 +13,31 @@ export const load: PageServerLoad = async ({ locals, platform, parent }) => {
 			const env = getEnv(platform);
 			const kv = safeKV(env, 'BETA_USER_SETTINGS_KV');
 			if (!kv) throw new Error('settings KV missing');
-			// [!code fix] Use 'settings:' prefix to match the API write path
-			const raw = await kv.get(`settings:${(locals.user as any).id}`);
+			// Read primary key by user id
+			const key = `settings:${(locals.user as any).id}`;
+			let raw = await kv.get(key);
+
+			// Fallback: older saves may have used username or email as the key. Try those and migrate.
+			if (!raw) {
+				const fallbacks = [
+					`settings:${(locals.user as any).username}`,
+					`settings:${(locals.user as any).email}`
+				].filter(Boolean) as string[];
+
+				for (const fk of fallbacks) {
+					const fRaw = await kv.get(fk);
+					if (fRaw) {
+						raw = fRaw;
+						// migrate to new key
+						await kv.put(key, raw);
+						try {
+							await kv.delete(fk);
+						} catch {}
+						break;
+					}
+				}
+			}
+
 			if (raw) {
 				settingsData = JSON.parse(raw);
 			}

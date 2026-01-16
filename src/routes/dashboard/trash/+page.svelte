@@ -533,9 +533,6 @@
 		text-align: center;
 		padding: 40px 20px;
 	}
-	.empty-state svg {
-		margin-bottom: 16px;
-	}
 
 	.badge-expense {
 		background-color: #dbeafe;

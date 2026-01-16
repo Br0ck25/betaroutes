@@ -222,7 +222,7 @@ export class TripIndexDO {
 			if (path === '/put') {
 				const trip = await parseBody<TripSummary>();
 				if (!trip || !trip.id || !trip.userId) return new Response('Invalid Data', { status: 400 });
-				
+
 				// Added specific try/catch for the INSERT to log schema errors clearly
 				try {
 					this.state.storage.sql.exec(
