@@ -47,8 +47,9 @@ export const GET: RequestHandler = async (event) => {
 			placesIndexDO as any
 		);
 
-		const currentUser = user as { name?: string; token?: string };
-		const storageId = currentUser.name || currentUser.token;
+		const currentUser = user as { id?: string; name?: string; token?: string };
+		// Prefer canonical stable user id first for storage keys
+		const storageId = currentUser.id || currentUser.name || currentUser.token;
 
 		if (!storageId)
 			return new Response(JSON.stringify([]), {
