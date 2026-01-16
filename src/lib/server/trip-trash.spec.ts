@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
 import { setupMockKV } from '$lib/server/dev-mock-db';
 import { makeTripService } from '$lib/server/tripService';
 
@@ -7,18 +8,18 @@ describe('Trip trash behavior', () => {
 
 	beforeEach(() => {
 		const event: { platform: { env: Record<string, unknown> } } = { platform: { env: {} } };
-		setupMockKV(event as any);
+		setupMockKV(event);
 		platform = event.platform;
 	});
 
 	it('delete stores original in main logs KV and marks trip deleted', async () => {
-		const kv = platform.env['BETA_LOGS_KV'] as any;
+		const kv = platform.env['BETA_LOGS_KV'] as unknown as KVNamespace;
 		const svc = makeTripService(
 			kv,
 			undefined,
-			platform.env['BETA_PLACES_KV'] as any,
-			platform.env['TRIP_INDEX_DO'] as any,
-			platform.env['TRIP_INDEX_DO'] as any
+			platform.env['BETA_PLACES_KV'] as unknown as KVNamespace,
+			platform.env['TRIP_INDEX_DO'] as unknown as DurableObjectNamespace,
+			platform.env['TRIP_INDEX_DO'] as unknown as DurableObjectNamespace
 		);
 
 		const userId = 'trash_user';

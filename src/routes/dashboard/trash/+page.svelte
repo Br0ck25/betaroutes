@@ -21,35 +21,38 @@
 	let currentTypeParam: string | null = null;
 
 	onMount(() => {
-		// Quick initial local load (detailed sync handled reactively below)
+		// Quick initial local load (detailed sync handled reactively via page subscription)
 		const params = new URLSearchParams(window.location.search);
 		const typeParam = params.get('type');
 		loadTrash(
 			typeParam === 'expenses' ? 'expense' : typeParam === 'millage' ? 'millage' : undefined
 		).catch(console.error);
-	});
 
-	$: if (browser)
-		(async () => {
-			const param = $page.url.searchParams.get('type');
+		const unsubscribe = page.subscribe(($p) => {
+			const param = $p.url.searchParams.get('type');
 			if (param !== currentTypeParam) {
 				currentTypeParam = param;
 				const type = param === 'expenses' ? 'expense' : param === 'millage' ? 'millage' : undefined;
 				loading = true;
-				try {
-					await loadTrash(type);
-					const userId = $user?.name || $user?.token;
-					if (userId) {
-						await trash.syncFromCloud(userId, param || undefined);
+				(async () => {
+					try {
 						await loadTrash(type);
+						const userId = $user?.name || $user?.token;
+						if (userId) {
+							await trash.syncFromCloud(userId, param || undefined);
+							await loadTrash(type);
+						}
+					} catch (err) {
+						console.error('Failed to refresh trash for type change', err);
+					} finally {
+						loading = false;
 					}
-				} catch (err) {
-					console.error('Failed to refresh trash for type change', err);
-				} finally {
-					loading = false;
-				}
+				})();
 			}
-		})();
+		});
+
+		return () => unsubscribe();
+	});
 
 	async function loadTrash(type?: string) {
 		loading = true;

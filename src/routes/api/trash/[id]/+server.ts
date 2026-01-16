@@ -46,17 +46,13 @@ export const POST: RequestHandler = async (event) => {
 			let restored: unknown | null = null;
 			try {
 				restored = await svc.restore(storageId, id);
-			} catch (e) {
+			} catch {
 				// Try expense
-				try {
-					const expenseSvc = (await import('$lib/server/expenseService')).makeExpenseService(
-						safeKV(platformEnv, 'BETA_EXPENSES_KV') as any,
-						safeDO(platformEnv, 'TRIP_INDEX_DO') as any
-					);
-					restored = await expenseSvc.restore(storageId, id);
-				} catch (err) {
-					throw err;
-				}
+				const expenseSvc = (await import('$lib/server/expenseService')).makeExpenseService(
+					safeKV(platformEnv, 'BETA_EXPENSES_KV') as any,
+					safeDO(platformEnv, 'TRIP_INDEX_DO') as any
+				);
+				restored = await expenseSvc.restore(storageId, id);
 			}
 
 			// If it was a trip, increment counter

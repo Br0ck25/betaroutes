@@ -57,7 +57,7 @@ export type TrashMetadata = {
 export type TrashItem = {
 	id: string;
 	userId: string;
-	recordType: 'trip' | 'expense';
+	recordType: 'trip' | 'expense' | 'millage';
 	metadata: TrashMetadata;
 	// Optional summary fields for UI
 	title?: string;
