@@ -5,6 +5,7 @@
 	import { user } from '$lib/stores/auth';
 	import { toasts } from '$lib/stores/toast';
 	import { createEventDispatcher } from 'svelte';
+	import { localDateISO } from '$lib/utils/dates';
 
 	const dispatch = createEventDispatcher();
 
@@ -221,9 +222,7 @@
 					}
 
 					parsed.push({
-						date: cleanRow[0]
-							? new Date(cleanRow[0]).toISOString().split('T')[0]
-							: new Date().toISOString().split('T')[0],
+						date: cleanRow[0] ? localDateISO(cleanRow[0]) : localDateISO(),
 						startAddress: cleanRow[1] || 'Unknown Start',
 						endAddress: cleanRow[3] || cleanRow[1] || 'Unknown End',
 						stops: stops,

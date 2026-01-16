@@ -4,6 +4,7 @@
 	import { toasts } from '$lib/stores/toast';
 	import { calculateDashboardStats } from '$lib/utils/dashboardLogic';
 	import { onMount, createEventDispatcher } from 'svelte';
+	import { localDateISO } from '$lib/utils/dates';
 
 	const dispatch = createEventDispatcher();
 
@@ -66,7 +67,7 @@
 
 	async function markServicedNow() {
 		lastServiceOdometerInput = Math.round(currentOdometer || 0);
-		lastServiceDateInput = new Date().toISOString();
+		lastServiceDateInput = localDateISO();
 		await saveSettingsHandler();
 	}
 </script>

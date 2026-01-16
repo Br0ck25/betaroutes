@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { trips } from '$lib/stores/trips';
 	import { user } from '$lib/stores/auth';
-
+	import { localDateISO } from '$lib/utils/dates';
 	let importFormat = 'csv';
 	let isProcessing = false;
 	let previewTrips: any[] = [];
@@ -49,9 +49,7 @@
 			const dateStr = row[0] ?? '';
 			const milesStr = row[1] ?? '0';
 			const trip: any = {
-				date: dateStr
-					? new Date(String(dateStr)).toISOString().split('T')[0]
-					: new Date().toISOString().split('T')[0],
+				date: dateStr ? localDateISO(String(dateStr)) : localDateISO(),
 				totalMiles: parseFloat(String(milesStr)) || 0,
 				startAddress: row[2] ?? 'Unknown Start',
 				endAddress: row[3] ?? 'Unknown End',

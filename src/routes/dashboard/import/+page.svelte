@@ -48,9 +48,7 @@
 		}
 
 		previewTrip = {
-			date: startTimeElement
-				? startTimeElement.split('T')[0]
-				: new Date().toISOString().split('T')[0],
+			date: startTimeElement ? startTimeElement.split('T')[0] : localDateISO(),
 			startTime: startTimeElement
 				? (startTimeElement.split('T')[1]?.slice(0, 5) ?? '09:00')
 				: '09:00',
