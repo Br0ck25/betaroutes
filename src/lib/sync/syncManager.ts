@@ -271,6 +271,7 @@ class SyncManager {
 		const res = await fetch(url, {
 			method,
 			keepalive: true,
+			credentials: 'include',
 			headers: body ? { 'Content-Type': 'application/json' } : undefined,
 			body: body ? JSON.stringify(body) : undefined
 		});

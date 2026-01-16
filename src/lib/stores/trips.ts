@@ -343,8 +343,7 @@ function createTripsStore() {
 						const method = trip.createdAt !== trip.updatedAt ? 'PUT' : 'POST';
 						const response = await fetch('/api/trips', {
 							method,
-							headers: { 'Content-Type': 'application/json' },
-							body: JSON.stringify(trip)
+							credentials: 'include'
 						});
 
 						if (response.ok) {

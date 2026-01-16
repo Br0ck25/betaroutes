@@ -173,10 +173,7 @@ function createAuthStore() {
 				try {
 					await fetch('/login', {
 						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ email: username, password })
-					});
-				} catch (e) {
+					credentials: 'include',
 					console.warn('Failed to create server session after signup:', e);
 				}
 
@@ -228,10 +225,7 @@ function createAuthStore() {
 				try {
 					await fetch('/login', {
 						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ email: username, password })
-					});
-				} catch (e) {
+					credentials: 'include',
 					console.warn('Failed to create server session on login:', e);
 				}
 
