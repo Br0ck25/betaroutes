@@ -49,7 +49,7 @@ export class HughesNetService {
 		private kv: KVNamespace,
 		encryptionKey: string,
 		private _logsKV: KVNamespace,
-		private trashKV: KVNamespace,
+		private trashKV: KVNamespace | undefined,
 		private settingsKV: KVNamespace,
 		googleApiKey: string | undefined,
 		directionsKV: KVNamespace | undefined,

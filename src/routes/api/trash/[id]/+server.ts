@@ -1,7 +1,7 @@
 // src/routes/api/trash/[id]/+server.ts
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
-import { getEnv, safeKV, safeDO } from '$lib/server/env';
+import { safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 
 // Fake DO helper
@@ -23,7 +23,7 @@ export const POST: RequestHandler = async (event) => {
 		const platformEnv = event.platform?.env as Record<string, unknown> | undefined;
 
 		const kv = safeKV(platformEnv, 'BETA_LOGS_KV');
-		const trashKV = undefined;
+		const trashKV = undefined; void trashKV;
 		const placesKV = safeKV(platformEnv, 'BETA_PLACES_KV');
 		const tripIndexDO = (platformEnv?.['TRIP_INDEX_DO'] as unknown) ?? fakeDO();
 		const placesIndexDO = (platformEnv?.['PLACES_INDEX_DO'] as unknown) ?? tripIndexDO;
@@ -94,7 +94,7 @@ export const DELETE: RequestHandler = async (event) => {
 		const platformEnv = event.platform?.env as Record<string, unknown> | undefined;
 
 		const kv = safeKV(platformEnv, 'BETA_LOGS_KV');
-		const trashKV = undefined;
+		const trashKV = undefined; void trashKV;
 		const placesKV = safeKV(platformEnv, 'BETA_PLACES_KV');
 		const tripIndexDO = (platformEnv?.['TRIP_INDEX_DO'] as unknown) ?? fakeDO();
 		const placesIndexDO = (platformEnv?.['PLACES_INDEX_DO'] as unknown) ?? tripIndexDO;

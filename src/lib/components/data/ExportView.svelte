@@ -142,10 +142,8 @@
 			const date = trip.date ? new Date(trip.date).toLocaleDateString() : '';
 			const miles = trip.totalMiles || 0;
 			const start = `"${(trip.startAddress || '').replace(/"/g, '""')}"`;
-			const end =
-				trip.stops && trip.stops.length > 0
-					? `"${(trip.stops[trip.stops.length - 1].address || '').replace(/"/g, '""')}"`
-					: `"${(trip.endAddress || 'End').replace(/"/g, '""')}"`;
+			const last = trip.stops?.[trip.stops.length - 1];
+				const end = `"${((last?.address) || trip.endAddress || 'End').replace(/"/g, '""') }"`;
 
 			const purpose = `"${(trip.purpose || 'Business').replace(/"/g, '""')}"`;
 			const vehicle = `"${(trip.vehicleId || '').replace(/"/g, '""')}"`;
@@ -351,9 +349,9 @@
 									{typeof trip.startAddress === 'string'
 										? trip.startAddress.split(',')[0]
 										: 'Unknown'} →
-									{trip.stops && trip.stops.length > 0
-										? typeof trip.stops[trip.stops.length - 1]?.address === 'string'
-											? trip.stops[trip.stops.length - 1].address.split(',')[0]
+									{String(trip.stops?.at(-1)?.address ?? trip.endAddress ?? 'End').split(',')[0]
+				
+				
 											: 'End'
 										: 'End'}
 								</div>

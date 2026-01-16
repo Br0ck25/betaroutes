@@ -12,7 +12,6 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onDestroy } from 'svelte';
-
 	// Derived totals for millage (use safe casting where needed)
 	$: totalMiles = filteredExpenses.reduce((s, e) => s + (Number((e as any).miles) || 0), 0);
 	$: totalReimbursement = filteredExpenses.reduce(
@@ -38,15 +37,14 @@
 
 	// Selection State
 	let selectedExpenses = new Set<string>();
-
 	// Render a small slice of the list initially to reduce initial DOM work and main-thread blocking.
 	// We'll expand to the full list when the browser is idle or after loading finishes.
 	let visibleLimit = 20;
 	let visibleExpenses: any[] = [];
 	$: visibleExpenses = filteredExpenses.slice(0, visibleLimit);
-
 	// Expand visible window when more items become available (guarded to avoid reactive loops)
-	let _lastExpandedSize = 0; // non-reactive guard variable
+	let _lastExpandedSize = 0;
+	// non-reactive guard variable
 	/* eslint-disable svelte/infinite-reactive-loop */
 	$: if (
 		!loading &&
@@ -82,18 +80,17 @@
 			document.body.classList.remove('has-selections');
 		}
 	});
-
 	// Categories intentionally empty for Millage page
 	let categories: string[] = [];
-
 	// --- MODAL STATE (Only for Categories now) ---
 	let isManageCategoriesOpen = false;
 	let newCategoryName = '';
-
 	// --- DERIVE TRIP EXPENSES ---
 	$: tripExpenses = $trips.flatMap((trip) => {
 		const items = [];
-		const date = trip.date || trip.createdAt.split('T')[0];
+		// FIX: Safely access createdAt to prevent split() on undefined
+		const date =
+			trip.date || (trip.createdAt ? trip.createdAt.split('T')[0] : _fmtInput(new Date()));
 
 		// 1. Fuel
 		if (trip.fuelCost && trip.fuelCost > 0) {
@@ -117,7 +114,6 @@
 
 		return items;
 	});
-
 	// --- COMBINE & FILTER ---
 	$: allExpenses = [
 		...$millage.filter(
@@ -128,7 +124,6 @@
 		),
 		...tripExpenses
 	];
-
 	// Reset selection when filters change
 	$: if (searchQuery || sortBy || sortOrder || filterCategory || startDate || endDate) {
 		selectedExpenses = new Set();
@@ -181,7 +176,8 @@
 			return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
 		});
 
-	$: loading = $millageLoading || $tripsLoading; // switched to millage store
+	$: loading = $millageLoading || $tripsLoading;
+	// switched to millage store
 	$: allSelected = filteredExpenses.length > 0 && selectedExpenses.size === filteredExpenses.length;
 
 	// --- ACTIONS ---
@@ -200,7 +196,6 @@
 	async function deleteExpense(id: string, e?: MouseEvent) {
 		if (e) e.stopPropagation();
 		if (!confirm('Move this expense to trash? You can restore it later.')) return;
-
 		// Check if it's a trip log
 		if (id.startsWith('trip-')) {
 			toasts.error('Cannot delete Trip Logs here. Delete the Trip instead.');
@@ -241,7 +236,6 @@
 		const ids = Array.from(selectedExpenses);
 		const manualExpenses = ids.filter((id) => !id.startsWith('trip-'));
 		const tripLogs = ids.length - manualExpenses.length;
-
 		if (manualExpenses.length === 0 && tripLogs > 0) {
 			toasts.error(`Cannot delete ${tripLogs} Trip Logs. Edit them in Trips.`);
 			return;
@@ -253,7 +247,6 @@
 			)
 		)
 			return;
-
 		const currentUser = $page.data['user'] || $user;
 		const userId =
 			currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
@@ -281,7 +274,6 @@
 	function exportSelected() {
 		const selectedData = filteredExpenses.filter((e) => selectedExpenses.has(e.id));
 		if (selectedData.length === 0) return;
-
 		const headers = ['Date', 'Miles', 'Reimbursement', 'Notes', 'Source'];
 		const rows = selectedData.map((e) =>
 			[
@@ -354,10 +346,14 @@
 	}
 
 	function getCategoryLabel(cat: string) {
+		if (!cat) return '';
 		return cat.charAt(0).toUpperCase() + cat.slice(1);
 	}
 
-	function getCategoryColor(cat: string) {
+	function getCategoryColor(cat?: string) {
+		// FIX: Handle undefined/missing category (e.g. for Millage records)
+		if (!cat) return 'text-gray-600 bg-gray-50 border-gray-200';
+
 		if (cat === 'fuel') return 'text-red-600 bg-red-50 border-red-200';
 		const colors = [
 			'text-blue-600 bg-blue-50 border-blue-200',
@@ -476,7 +472,9 @@
 					stroke-linecap="round"
 					stroke-linejoin="round"
 					><circle cx="12" cy="12" r="3"></circle><path
-						d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+						d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 
+2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 
+0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
 					></path></svg
 				>
 			</button>

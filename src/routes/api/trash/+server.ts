@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
 import { makeExpenseService } from '$lib/server/expenseService';
 import { makeMillageService } from '$lib/server/millageService';
-import { getEnv, safeKV, safeDO } from '$lib/server/env';
+import { safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 
 function fakeKV() {
@@ -32,7 +32,6 @@ export const GET: RequestHandler = async (event) => {
 
 		const platformEnv = event.platform?.env as Record<string, unknown> | undefined;
 		const kv = (platformEnv?.['BETA_LOGS_KV'] as unknown) ?? fakeKV();
-		const trashKV = undefined;
 		const placesKV = (platformEnv?.['BETA_PLACES_KV'] as unknown) ?? fakeKV();
 
 		// Durable Object bindings (mock or real)
@@ -42,7 +41,7 @@ export const GET: RequestHandler = async (event) => {
 		// Create service
 		const svc = makeTripService(
 			kv as any,
-			trashKV as any,
+			undefined,
 			placesKV as any,
 			tripIndexDO as any,
 			placesIndexDO as any

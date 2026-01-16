@@ -77,14 +77,10 @@ function prefixForUser(userId: string) {
 	return `trip:${userId}:`;
 }
 
-function trashPrefixForUser(userId: string) {
-	return `trash:${userId}:`;
-}
-
 // [!code check] Ensure 'export' is here
 export function makeTripService(
 	kv: KVNamespace,
-	trashKV: KVNamespace | undefined,
+	_trashKV: KVNamespace | undefined,
 	placesKV: KVNamespace | undefined,
 	tripIndexDO: DurableObjectNamespace,
 	placesIndexDO: DurableObjectNamespace
