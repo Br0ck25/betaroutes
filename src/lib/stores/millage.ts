@@ -12,9 +12,7 @@ function createMillageStore() {
 
 	return {
 		subscribe,
-
-		// Allow direct setting of the full millage array (used for server hydration)
-		set: (items: MillageRecord[]) => set(items),
+		set, // [!code highlight] <--- This was missing! It is required for +page.svelte hydration.
 
 		updateLocal(record: MillageRecord) {
 			update((items) => {
@@ -165,7 +163,17 @@ function createMillageStore() {
 
 				const millageTx = db.transaction('millage', 'readonly');
 				const rec = await millageTx.objectStore('millage').get(id);
-				if (!rec) throw new Error('Not found');
+
+				// If it's already gone locally, just sync the delete
+				if (!rec) {
+					await syncManager.addToQueue({
+						action: 'delete',
+						tripId: id,
+						data: { store: 'millage' }
+					});
+					return;
+				}
+
 				if (rec.userId !== userId) throw new Error('Unauthorized');
 
 				const now = new Date();
