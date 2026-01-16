@@ -77,8 +77,9 @@
 		</div>
 
 		{#if settingsTab === 'defaults'}
-			<div class="settings-form">
-				<p class="text-sm text-gray-500 mb-2">Default millage rate used for new logs.</p>
+			<div class="settings-form space-y-4">
+				<p class="text-sm text-gray-500 mb-2">Pre-fill new millage logs with these values.</p>
+
 				<div class="form-group">
 					<label for="default-millage" class="block text-sm font-medium text-gray-700 mb-1"
 						>Millage Rate (per mile)</label
@@ -88,13 +89,15 @@
 						type="number"
 						step="0.001"
 						bind:value={settings.millageRate}
+						placeholder="0.00"
 						class="w-full p-2 border rounded-lg"
 					/>
 				</div>
 
-				<div class="form-actions" style="margin-top:12px;">
-					<button class="btn-secondary" on:click={() => (open = false)}>Cancel</button>
-					<button class="btn-primary" on:click={saveDefaultSettings}>Save Defaults</button>
+				<div class="modal-actions pt-4">
+					<button class="btn-primary w-full save-btn" on:click={saveDefaultSettings}
+						>{'Save Defaults'}</button
+					>
 				</div>
 			</div>
 		{:else}
@@ -127,47 +130,87 @@
 						<li class="text-sm text-gray-500">No vehicles added yet.</li>
 					{/if}
 				</ul>
+
+				<div class="modal-actions mt-6">
+					<button class="btn-cancel w-full" on:click={() => (open = false)}>Done</button>
+				</div>
 			</div>
 		{/if}
 	</div>
 </Modal>
 
 <style>
+	.categories-manager {
+		padding: 4px;
+	}
 	.top-tabs {
 		display: flex;
-		gap: 8px;
-		margin-bottom: 12px;
+		border-bottom: 2px solid #e5e7eb;
+		margin-bottom: 20px;
 	}
 	.top-tab-btn {
-		padding: 8px 12px;
-		border-radius: 8px;
-		background: #f3f4f6;
+		flex: 1;
+		padding: 12px;
+		font-weight: 600;
+		color: #6b7280;
 		border: none;
+		background: none;
 		cursor: pointer;
+		border-bottom: 2px solid transparent;
+		margin-bottom: -2px;
 	}
 	.top-tab-btn.active {
-		background: #ffedd5;
+		color: #ff7f50;
+		border-bottom-color: #ff7f50;
 	}
 	.settings-form .form-group {
 		margin-bottom: 12px;
 	}
+	.settings-form input:focus {
+		outline: none;
+		border-color: #ff7f50;
+		box-shadow: 0 0 0 4px rgba(255, 127, 80, 0.08);
+	}
+
 	.btn-primary {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 10px 16px;
 		background: linear-gradient(135deg, #ff7f50 0%, #ff6a3d 100%);
 		color: white;
-		padding: 8px 12px;
-		border-radius: 8px;
 		border: none;
+		border-radius: 8px;
+		font-weight: 600;
+		font-size: 14px;
+		text-decoration: none;
+		box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3);
+		transition: transform 0.1s;
+		cursor: pointer;
 	}
 	.btn-secondary {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 10px;
 		background: white;
 		border: 1px solid #e5e7eb;
-		padding: 8px 12px;
+		color: #374151;
 		border-radius: 8px;
+		font-weight: 600;
+		font-size: 14px;
+		cursor: pointer;
+		transition: background 0.2s;
+		text-decoration: none;
 	}
-	.btn-small.neutral {
+	.modal-actions .btn-cancel {
 		background: white;
 		border: 1px solid #e5e7eb;
-		padding: 6px 8px;
-		border-radius: 6px;
+		color: #374151;
+		padding: 12px;
+		border-radius: 8px;
+		font-weight: 600;
+		cursor: pointer;
+		width: 100%;
 	}
 </style>
