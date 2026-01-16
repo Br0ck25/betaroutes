@@ -21,10 +21,12 @@ export const DELETE: RequestHandler = async (event) => {
 		}
 
 		const id = event.params.id;
-		// Key millage by username-first
 		const userId = getStorageId(sessionUser);
 		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
+
+		// Soft delete via service
 		await svc.delete(userId, id);
+
 		return new Response(null, { status: 204 });
 	} catch (err) {
 		log.error('DELETE /api/millage/[id] error', { message: createSafeErrorMessage(err) });
@@ -47,7 +49,6 @@ export const GET: RequestHandler = async (event) => {
 		}
 
 		const id = event.params.id;
-		// Key millage by username-first
 		const userId = getStorageId(sessionUser);
 		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		const item = await svc.get(userId, id);
@@ -74,7 +75,6 @@ export const PUT: RequestHandler = async (event) => {
 		}
 
 		const id = event.params.id;
-		// Key millage by username-first
 		const userId = getStorageId(sessionUser);
 
 		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
@@ -82,7 +82,17 @@ export const PUT: RequestHandler = async (event) => {
 		if (!existing) return new Response('Not found', { status: 404 });
 
 		const body: any = await event.request.json();
-		const updated = { ...existing, ...body, updatedAt: new Date().toISOString() };
+
+		// Merge existing with update
+		const updated = {
+			...existing,
+			...body,
+			userId, // Ensure userId cannot be changed
+			id, // Ensure ID cannot be changed
+			updatedAt: new Date().toISOString()
+		};
+
+		// Re-calculate fields if inputs changed
 		if (typeof updated.startOdometer === 'number' && typeof updated.endOdometer === 'number') {
 			updated.miles = Math.max(0, updated.endOdometer - updated.startOdometer);
 			updated.miles = Number((updated.miles || 0).toFixed(2));

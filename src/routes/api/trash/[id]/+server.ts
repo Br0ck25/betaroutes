@@ -45,16 +45,16 @@ export const POST: RequestHandler = async (event) => {
 			let restored: unknown | null = null;
 			try {
 				restored = await svc.restore(storageId, id);
-			} catch (e) {
-				// Try expense
+			} catch {
+				// Try expense restore; ignore failures
 				try {
 					const expenseSvc = (await import('$lib/server/expenseService')).makeExpenseService(
 						safeKV(platformEnv, 'BETA_EXPENSES_KV') as any,
 						safeDO(platformEnv, 'TRIP_INDEX_DO') as any
 					);
 					restored = await expenseSvc.restore(storageId, id);
-				} catch (err) {
-					throw err;
+				} catch {
+					/* ignore */
 				}
 			}
 

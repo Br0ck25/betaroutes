@@ -49,7 +49,7 @@ export const GET: RequestHandler = async (event) => {
 					s.setTime(now - bufMs);
 				}
 				since = s.toISOString();
-			} catch (e) {
+			} catch {
 				// leave since as-is on parse error
 			}
 		}

@@ -41,9 +41,7 @@ export class TripIndexDO {
 		// If the existing table doesn't have the columns we expect, the INSERT will fail later.
 		// We test this by trying to SELECT the specific columns we use.
 		try {
-			this.state.storage.sql.exec(
-				'SELECT id, userId, date, createdAt, data FROM trips LIMIT 1'
-			);
+			this.state.storage.sql.exec('SELECT id, userId, date, createdAt, data FROM trips LIMIT 1');
 			this.state.storage.sql.exec(
 				'SELECT id, userId, date, category, createdAt, data FROM expenses LIMIT 1'
 			);
@@ -201,7 +199,7 @@ export class TripIndexDO {
 			if (path === '/put') {
 				const trip = await parseBody<TripSummary>();
 				if (!trip || !trip.id || !trip.userId) return new Response('Invalid Data', { status: 400 });
-				
+
 				// Added specific try/catch for the INSERT to log schema errors clearly
 				try {
 					this.state.storage.sql.exec(

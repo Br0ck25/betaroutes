@@ -34,21 +34,21 @@ export const GET: RequestHandler = async ({ params, url, platform }) => {
 		const items = await Promise.all(
 			keys.map(async (k) => {
 				const raw = await kv.get(k.name);
-				let parsed: any = null;
+				let parsed: Record<string, unknown> | null = null;
 				try {
-					parsed = raw ? JSON.parse(raw) : null;
-				} catch (e) {
-					parsed = { _raw: raw };
+					parsed = raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
+				} catch {
+					parsed = { _raw: raw } as Record<string, unknown>;
 				}
 
 				// Provide a minimal summary to avoid huge payloads
 				const summary = parsed
 					? {
 							key: k.name,
-							id: parsed.id,
-							date: parsed.date,
-							createdAt: parsed.createdAt,
-							updatedAt: parsed.updatedAt
+							id: (parsed.id as string | undefined) || undefined,
+							date: (parsed.date as string | undefined) || undefined,
+							createdAt: (parsed.createdAt as string | undefined) || undefined,
+							updatedAt: (parsed.updatedAt as string | undefined) || undefined
 						}
 					: { key: k.name, value: null };
 

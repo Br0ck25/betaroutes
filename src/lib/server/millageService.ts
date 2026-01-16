@@ -199,32 +199,40 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				keys = keys.concat(list.keys);
 			}
 
-			const out: any[] = [];
+			const out: MillageTrash[] = [];
 			for (const k of keys) {
 				const raw = await kv.get(k.name);
 				if (!raw) continue;
-				const parsed = JSON.parse(raw);
+				const parsed = JSON.parse(raw) as Record<string, unknown>;
 				if (!parsed || !parsed.deleted) continue;
 
-				const id = parsed.id || String(k.name.split(':').pop() || '');
-				const uid = parsed.userId || String(k.name.split(':')[1] || '');
-				const metadata = parsed.metadata || {
-					deletedAt: parsed.deletedAt || '',
-					deletedBy: parsed.deletedBy || uid,
+				const id = (parsed.id as string) || String(k.name.split(':').pop() || '');
+				const uid = (parsed.userId as string) || String(k.name.split(':')[1] || '');
+				const metadata = (parsed.metadata as Record<string, unknown>) || {
+					deletedAt: (parsed.deletedAt as string) || '',
+					deletedBy: (parsed.deletedBy as string) || uid,
 					originalKey: k.name,
-					expiresAt: parsed.metadata?.expiresAt || ''
+					expiresAt: (parsed.metadata as Record<string, unknown>)?.expiresAt || ''
 				};
 
-				const backup = parsed.backup || parsed.data || parsed.millage || parsed || {};
+				const backup =
+					(parsed.backup as Record<string, unknown>) ||
+					(parsed.data as Record<string, unknown>) ||
+					(parsed.millage as Record<string, unknown>) ||
+					(parsed as Record<string, unknown>) ||
+					{};
 				out.push({
 					id,
 					userId: uid,
 					metadata,
 					recordType: 'millage',
 					date: (backup.date as string) || undefined,
-					miles: typeof backup.miles === 'number' ? backup.miles : undefined,
+					miles:
+						typeof (backup.miles as unknown) === 'number' ? (backup.miles as number) : undefined,
 					reimbursement:
-						typeof backup.reimbursement === 'number' ? backup.reimbursement : undefined,
+						typeof (backup.reimbursement as unknown) === 'number'
+							? (backup.reimbursement as number)
+							: undefined,
 					vehicle: (backup.vehicle as string) || undefined
 				});
 			}

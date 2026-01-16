@@ -29,16 +29,23 @@
 		).catch(console.error);
 	});
 
-	$: if (browser)
-		(async () => {
-			const param = $page.url.searchParams.get('type');
+	// Monitor page `type` param via subscription to avoid infinite reactive loop warnings
+	let _pageUnsub: () => void | null = null;
+	import { get } from 'svelte/store';
+	import { onDestroy } from 'svelte';
+
+	onMount(() => {
+		// Subscribe to page changes
+		_pageUnsub = page.subscribe(async ($p) => {
+			const param = $p.url.searchParams.get('type');
 			if (param !== currentTypeParam) {
 				currentTypeParam = param;
 				const type = param === 'expenses' ? 'expense' : param === 'millage' ? 'millage' : undefined;
 				loading = true;
 				try {
 					await loadTrash(type);
-					const userId = $user?.name || $user?.token;
+					const userState = get(user);
+					const userId = userState?.name || userState?.token;
 					if (userId) {
 						await trash.syncFromCloud(userId, param || undefined);
 						await loadTrash(type);
@@ -49,7 +56,12 @@
 					loading = false;
 				}
 			}
-		})();
+		});
+	});
+
+	onDestroy(() => {
+		if (typeof _pageUnsub === 'function') _pageUnsub();
+	});
 
 	async function loadTrash(type?: string) {
 		loading = true;

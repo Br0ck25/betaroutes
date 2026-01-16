@@ -272,7 +272,7 @@ function createTripsStore() {
 							adjusted.setTime(now.getTime() - 5 * 60 * 1000);
 						}
 						url = `/api/trips?since=${encodeURIComponent(adjusted.toISOString())}`;
-					} catch (e) {
+					} catch {
 						// If parsing fails, fall back to raw lastSync
 						url = `/api/trips?since=${encodeURIComponent(lastSync)}`;
 					}
@@ -282,7 +282,7 @@ function createTripsStore() {
 				const response = await fetch(url, { credentials: 'include' });
 				if (!response.ok) throw new Error('Failed to fetch trips');
 
-				const cloudTrips: any = await response.json();
+				const cloudTrips: unknown[] = (await response.json()) as unknown[];
 
 				if (cloudTrips.length === 0) {
 					console.log('☁️ No new trip changes.');
@@ -295,37 +295,38 @@ function createTripsStore() {
 				const trashTx = db.transaction('trash', 'readonly');
 				const trashStore = trashTx.objectStore('trash');
 				const trashItems = await trashStore.getAll();
-				const trashIds = new Set(trashItems.map((t: any) => t.id));
-				await trashTx.done;
+				const trashIds = new Set(trashItems.map((t: { id: string }) => t.id));
 
 				const tx = db.transaction('trips', 'readwrite');
 				const store = tx.objectStore('trips');
-
 				let updateCount = 0;
 				let deleteCount = 0;
 
-				for (const cloudTrip of cloudTrips) {
-					if (cloudTrip.deleted) {
-						const local = await store.get(cloudTrip.id);
-						if (local) {
-							await store.delete(cloudTrip.id);
-							deleteCount++;
-						}
-						continue;
-					}
-
+				for (const cloudTripRaw of cloudTrips) {
+					const cloudTrip = cloudTripRaw as unknown as {
+						id?: string;
+						updatedAt?: string;
+						deleted?: boolean;
+					};
+					if (!cloudTrip.id) continue;
 					if (trashIds.has(cloudTrip.id)) continue;
 
 					const local = await store.get(cloudTrip.id);
-					if (!local || new Date(cloudTrip.updatedAt) > new Date(local.updatedAt)) {
-						await store.put({
-							...cloudTrip,
-							syncStatus: 'synced',
-							lastSyncedAt: new Date().toISOString()
-						});
-						updateCount++;
+					if (!local || new Date(cloudTrip.updatedAt || '') > new Date(local.updatedAt || '')) {
+						if (cloudTrip.deleted) {
+							await store.delete(cloudTrip.id);
+							deleteCount++;
+						} else {
+							await store.put({
+								...(cloudTrip as object),
+								syncStatus: 'synced',
+								lastSyncedAt: new Date().toISOString()
+							});
+							updateCount++;
+						}
 					}
 				}
+
 				await tx.done;
 
 				storage.setLastSync(new Date().toISOString());

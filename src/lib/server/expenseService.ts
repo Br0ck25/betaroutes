@@ -203,30 +203,36 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				keys = keys.concat(list.keys);
 			}
 
-			const out: any[] = [];
+			const out: TrashRecord[] = [];
 			for (const k of keys) {
 				const raw = await kv.get(k.name);
 				if (!raw) continue;
-				const parsed = JSON.parse(raw);
+				const parsed = JSON.parse(raw) as Record<string, unknown>;
 				if (!parsed || !parsed.deleted) continue;
 
-				const id = parsed.id || String(k.name.split(':').pop() || '');
-				const uid = parsed.userId || String(k.name.split(':')[1] || '');
-				const metadata = parsed.metadata || {
-					deletedAt: parsed.deletedAt || '',
-					deletedBy: parsed.deletedBy || uid,
+				const id = (parsed.id as string) || String(k.name.split(':').pop() || '');
+				const uid = (parsed.userId as string) || String(k.name.split(':')[1] || '');
+				const metadata = (parsed.metadata as Record<string, unknown>) || {
+					deletedAt: (parsed.deletedAt as string) || '',
+					deletedBy: (parsed.deletedBy as string) || uid,
 					originalKey: k.name,
-					expiresAt: parsed.metadata?.expiresAt || ''
+					expiresAt: (parsed.metadata as Record<string, unknown>)?.expiresAt || ''
 				};
 
-				const backup = parsed.backup || parsed.data || parsed.expense || parsed || {};
+				const backup =
+					(parsed.backup as Record<string, unknown>) ||
+					(parsed.data as Record<string, unknown>) ||
+					(parsed.expense as Record<string, unknown>) ||
+					(parsed as Record<string, unknown>) ||
+					{};
 				out.push({
 					id,
 					userId: uid,
 					metadata,
 					recordType: 'expense',
 					category: (backup.category as string) || undefined,
-					amount: typeof backup.amount === 'number' ? backup.amount : undefined,
+					amount:
+						typeof (backup.amount as unknown) === 'number' ? (backup.amount as number) : undefined,
 					description: (backup.description as string) || undefined,
 					date: (backup.date as string) || undefined
 				});

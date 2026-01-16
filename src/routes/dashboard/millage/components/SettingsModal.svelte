@@ -96,7 +96,7 @@
 
 				<div class="modal-actions pt-4">
 					<button class="btn-primary w-full save-btn" on:click={saveDefaultSettings}
-						>{'Save Defaults'}</button
+						>Save Defaults</button
 					>
 				</div>
 			</div>

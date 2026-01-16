@@ -10,7 +10,7 @@ function parseToDate(input?: string | Date): Date {
 	const s = input.trim();
 
 	// If string contains a time or timezone, let Date parse it
-	if (s.includes('T') || /[Z+\-]\d{2}:?\d{2}$/.test(s)) {
+	if (s.includes('T') || /(Z|[+-]\d{2}:?\d{2})$/.test(s)) {
 		return new Date(s);
 	}
 

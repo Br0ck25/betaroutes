@@ -167,7 +167,7 @@ export const GET: RequestHandler = async (event) => {
 					s.setTime(now - bufMs);
 				}
 				sinceParam = s.toISOString();
-			} catch (e) {
+			} catch {
 				// if parsing fails, leave sinceParam as-is
 			}
 		}
