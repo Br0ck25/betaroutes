@@ -13,6 +13,9 @@ function createMillageStore() {
 	return {
 		subscribe,
 
+		// Allow direct setting of the full millage array (used for server hydration)
+		set: (items: MillageRecord[]) => set(items),
+
 		updateLocal(record: MillageRecord) {
 			update((items) => {
 				const index = items.findIndex((r) => r.id === record.id);
