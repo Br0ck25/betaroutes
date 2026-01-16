@@ -257,7 +257,7 @@ function createTripsStore() {
 
 				console.log(`☁️ Syncing trips... ${lastSync ? `(Delta since ${lastSync})` : '(Full)'}`);
 
-const response = await fetch(url, { credentials: 'include' });
+				const response = await fetch(url, { credentials: 'include' });
 				if (!response.ok) throw new Error('Failed to fetch trips');
 
 				const cloudTrips: any = await response.json();
