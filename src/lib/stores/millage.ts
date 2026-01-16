@@ -14,23 +14,32 @@ function createMillageStore() {
 		subscribe,
 		set,
 
+		// [!code fix] improved hydrate: Checks trash to prevent "zombie" items
 		async hydrate(data: MillageRecord[], userId: string) {
 			try {
 				const db = await getDB();
+				
+				// 1. Get all local trash IDs
 				const trashTx = db.transaction('trash', 'readonly');
 				const trashItems = await trashTx.objectStore('trash').getAll();
 				const trashIds = new Set(trashItems.map((t: any) => t.id));
 				await trashTx.done;
 
+				// 2. Filter server data: Don't show items we already deleted locally
 				const validData = data.filter((item) => !trashIds.has(item.id));
+				
+				// 3. Update Screen Immediately
 				set(validData);
 
+				// 4. Update Local Database
 				const tx = db.transaction('millage', 'readwrite');
 				const store = tx.objectStore('millage');
+				
 				for (const item of validData) {
 					await store.put({ ...item, syncStatus: 'synced' });
 				}
 
+				// 5. Cleanup: If server sent something we know is trash, ensure it's deleted locally
 				for (const serverItem of data) {
 					if (trashIds.has(serverItem.id)) {
 						const existing = await store.get(serverItem.id);
@@ -42,7 +51,7 @@ function createMillageStore() {
 				await tx.done;
 			} catch (err) {
 				console.error('Failed to hydrate millage cache:', err);
-				set(data);
+				set(data); // Fallback
 			}
 		},
 
@@ -189,14 +198,13 @@ function createMillageStore() {
 		},
 
 		async deleteMillage(id: string, userId: string) {
-			// 1. Optimistic UI update (Instant removal)
+			// 1. Optimistic Update: Remove immediately from UI
 			update((current) => current.filter((r) => r.id !== id));
 
 			try {
 				const db = await getDB();
 
-				// [!code fix] Use a SINGLE ReadWrite transaction for both stores
-				// This prevents read-locks from blocking the delete action
+				// [!code fix] USE SINGLE TRANSACTION for both stores to prevent locking
 				const tx = db.transaction(['millage', 'trash'], 'readwrite');
 				const millageStore = tx.objectStore('millage');
 				const trashStore = tx.objectStore('trash');
@@ -216,7 +224,6 @@ function createMillageStore() {
 
 				if (rec.userId !== userId) {
 					await tx.done;
-					// Force reload to fix UI if permission denied
 					this.load(userId);
 					throw new Error('Unauthorized');
 				}
@@ -227,28 +234,24 @@ function createMillageStore() {
 				const trashItem = {
 					id: rec.id,
 					type: 'millage',
-					recordType: 'millage', // Explicit type help for Trash UI
+					recordType: 'millage',
 					data: rec,
 					deletedAt: now.toISOString(),
 					deletedBy: userId,
 					expiresAt: expiresAt.toISOString(),
 					originalKey: `millage:${userId}:${id}`,
 					syncStatus: 'pending',
-					// Copy key fields to top level for easier Trash UI rendering
 					miles: rec.miles,
 					vehicle: rec.vehicle,
 					date: rec.date
 				};
 
-				// Move to trash
+				// Move to trash AND delete from millage in ONE step
 				await trashStore.put(trashItem);
-				
-				// Remove from active
 				await millageStore.delete(id);
 
 				await tx.done;
 
-				// Queue sync
 				await syncManager.addToQueue({
 					action: 'delete',
 					tripId: id,
@@ -256,7 +259,7 @@ function createMillageStore() {
 				});
 			} catch (err) {
 				console.error('❌ Failed to delete millage record:', err);
-				// On actual failure, reload data to restore the item in UI
+				// Only reload if the database write FAILED
 				this.load(userId);
 				throw err;
 			}
@@ -302,22 +305,19 @@ function createMillageStore() {
 					const store = tx.objectStore('millage');
 					const trashStore = tx.objectStore('trash');
 					
-					// Get all trash IDs once
 					const trashKeys = await trashStore.getAllKeys();
 					const trashIds = new Set(trashKeys.map(String));
 
 					for (const rec of cloud) {
-						// 1. Handle Remote Deletes
 						if (rec.deleted) {
 							const local = await store.get(rec.id);
 							if (local) await store.delete(rec.id);
 							continue;
 						}
 
-						// 2. Prevent Resurrection of locally trashed items
+						// Prevent Resurrection
 						if (trashIds.has(rec.id)) continue;
 
-						// 3. Update/Create active items
 						const local = await store.get(rec.id);
 						if (!local || new Date(rec.updatedAt) > new Date(local.updatedAt)) {
 							await store.put({

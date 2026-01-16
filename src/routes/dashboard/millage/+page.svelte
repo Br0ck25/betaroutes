@@ -767,9 +767,10 @@
 					>
 						<polyline points="20 6 9 17 4 12"></polyline>
 					</svg>
-					<span class="selected-count">
-						{selectedExpenses.size}
-						{selectedExpenses.size === 1 ? 'expense' : 'expenses'} selected</span>
+					<span class="selected-count"
+						>{selectedExpenses.size}
+						{selectedExpenses.size === 1 ? 'expense' : 'expenses'} selected</span
+					>
 				</div>
 			</div>
 
@@ -824,6 +825,7 @@
 		</div>
 	</div>
 {/if}
+
 <Modal bind:open={isManageCategoriesOpen} title="Manage Categories">
 	<div class="categories-manager">
 		<p class="text-sm text-gray-500 mb-4">
