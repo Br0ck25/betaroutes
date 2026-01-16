@@ -169,12 +169,17 @@ function createAuthStore() {
 				storage.setToken(response.token || '');
 				storage.setUsername(username);
 
-				const subscription = (await api.getSubscription(response.token || '')) as Subscription;
+			// Create server-side session so cloud endpoints (/api/trips) are authorized
+			try {
+				await fetch('/login', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ email: username, password })
+				});
+			} catch (e) {
+				console.warn('Failed to create server session after signup:', e);
+			}
 
-				const user: User = {
-					token: response.token,
-					plan: subscription.plan,
-					tripsThisMonth: subscription.tripsThisMonth,
 					maxTrips: subscription.maxTrips,
 					resetDate: subscription.resetDate,
 					name: username,
@@ -216,11 +221,16 @@ function createAuthStore() {
 
 				storage.setToken(response.token || '');
 				storage.setUsername(username);
-				const savedEmail = localStorage.getItem('user_email') || '';
-
-				const subscription = (await api.getSubscription(response.token || '')) as Subscription;
-
-				const user: User = {
+			// Create server-side session cookie so /api/trips and other server endpoints recognize the user
+			try {
+				await fetch('/login', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ email: username, password })
+				});
+			} catch (e) {
+				console.warn('Failed to create server session on login:', e);
+			}
 					token: response.token,
 					plan: subscription.plan,
 					tripsThisMonth: subscription.tripsThisMonth,
