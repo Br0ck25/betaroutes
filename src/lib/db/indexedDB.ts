@@ -36,6 +36,15 @@ export interface AppDB {
 			expiresAt: string;
 		};
 	};
+	millage: {
+		key: string;
+		value: MillageRecord;
+		indexes: {
+			userId: string;
+			syncStatus: string;
+			date: string;
+		};
+	};
 	syncQueue: {
 		key: number;
 		value: SyncQueueItem;
@@ -112,23 +121,34 @@ export async function getDB(): Promise<IDBPDatabase<AppDB>> {
 					console.log('✅ Created "trash" store with indexes');
 				}
 
-				// Create sync queue store
+				// [!code ++] Create millage store
+				if (!db.objectStoreNames.contains('millage')) {
+					console.log('Creating "millage" object store...');
+					const millageStore = db.createObjectStore('millage', { keyPath: 'id' });
+
+					// Indexes for efficient queries
+					millageStore.createIndex('userId', 'userId', { unique: false });
+					millageStore.createIndex('syncStatus', 'syncStatus', { unique: false });
+					millageStore.createIndex('date', 'date', { unique: false });
+
+					console.log('✅ Created "millage" store with indexes');
+				}
+
+				// Create syncQueue store
 				if (!db.objectStoreNames.contains('syncQueue')) {
 					console.log('Creating "syncQueue" object store...');
-					const syncQueue = db.createObjectStore('syncQueue', {
+					const queueStore = db.createObjectStore('syncQueue', {
 						keyPath: 'id',
 						autoIncrement: true
 					});
 
-					// Indexes for efficient queries
-					syncQueue.createIndex('timestamp', 'timestamp', { unique: false });
-					syncQueue.createIndex('action', 'action', { unique: false });
-					syncQueue.createIndex('tripId', 'tripId', { unique: false });
+					// Indexes
+					queueStore.createIndex('timestamp', 'timestamp', { unique: false });
+					queueStore.createIndex('action', 'action', { unique: false });
+					queueStore.createIndex('tripId', 'tripId', { unique: false });
 
 					console.log('✅ Created "syncQueue" store with indexes');
 				}
-
-				console.log('✅ Database upgrade complete');
 			},
 
 			blocked() {
@@ -169,11 +189,12 @@ export async function clearDatabase(): Promise<void> {
 	const db = await getDB();
 
 	// [!code ++] Added expenses to transaction
-	const tx = db.transaction(['trips', 'expenses', 'trash', 'syncQueue'], 'readwrite');
+	const tx = db.transaction(['trips', 'expenses', 'millage', 'trash', 'syncQueue'], 'readwrite');
 
 	await Promise.all([
 		tx.objectStore('trips').clear(),
 		tx.objectStore('expenses').clear(),
+		tx.objectStore('millage').clear(),
 		tx.objectStore('trash').clear(),
 		tx.objectStore('syncQueue').clear()
 	]);
@@ -190,11 +211,12 @@ export async function getDBStats() {
 	const db = await getDB();
 
 	// [!code ++] Added expenses
-	const tx = db.transaction(['trips', 'expenses', 'trash', 'syncQueue'], 'readonly');
+	const tx = db.transaction(['trips', 'expenses', 'millage', 'trash', 'syncQueue'], 'readonly');
 
-	const [tripCount, expenseCount, trashCount, queueCount] = await Promise.all([
+	const [tripCount, expenseCount, millageCount, trashCount, queueCount] = await Promise.all([
 		tx.objectStore('trips').count(),
 		tx.objectStore('expenses').count(),
+		tx.objectStore('millage').count(),
 		tx.objectStore('trash').count(),
 		tx.objectStore('syncQueue').count()
 	]);
@@ -202,6 +224,7 @@ export async function getDBStats() {
 	return {
 		trips: tripCount,
 		expenses: expenseCount,
+		millage: millageCount,
 		trash: trashCount,
 		pendingSync: queueCount
 	};
@@ -214,11 +237,12 @@ export async function exportData() {
 	const db = await getDB();
 
 	// [!code ++] Added expenses
-	const tx = db.transaction(['trips', 'expenses', 'trash', 'syncQueue'], 'readonly');
+	const tx = db.transaction(['trips', 'expenses', 'millage', 'trash', 'syncQueue'], 'readonly');
 
-	const [trips, expenses, trash, syncQueue] = await Promise.all([
+	const [trips, expenses, millage, trash, syncQueue] = await Promise.all([
 		tx.objectStore('trips').getAll(),
 		tx.objectStore('expenses').getAll(),
+		tx.objectStore('millage').getAll(),
 		tx.objectStore('trash').getAll(),
 		tx.objectStore('syncQueue').getAll()
 	]);
@@ -226,6 +250,7 @@ export async function exportData() {
 	return {
 		trips,
 		expenses,
+		millage,
 		trash,
 		syncQueue,
 		exportedAt: new Date().toISOString()
@@ -244,7 +269,7 @@ export async function importData(data: {
 }) {
 	const db = await getDB();
 
-	const tx = db.transaction(['trips', 'expenses', 'trash', 'syncQueue'], 'readwrite');
+	const tx = db.transaction(['trips', 'expenses', 'millage', 'trash', 'syncQueue'], 'readwrite');
 
 	// Import trips
 	if (data.trips) {
