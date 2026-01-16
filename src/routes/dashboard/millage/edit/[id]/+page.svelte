@@ -102,22 +102,28 @@
 		}
 
 		try {
-			const start = Number(formData.startOdometer) || 0;
-			const end = Number(formData.endOdometer) || 0;
-			let miles =
-				formData.miles !== '' && !isNaN(Number(formData.miles))
-					? Number(formData.miles)
-					: Math.max(0, end - start);
-			miles = Number(miles.toFixed(2));
+			const start = formData.startOdometer !== '' ? Number(formData.startOdometer) : undefined;
+			const end = formData.endOdometer !== '' ? Number(formData.endOdometer) : undefined;
 
-			const payload = {
+			let miles: number | undefined;
+			if (formData.miles !== '' && !isNaN(Number(formData.miles))) {
+				miles = Number(Number(formData.miles).toFixed(2));
+			} else if (typeof start === 'number' && typeof end === 'number') {
+				miles = Number(Math.max(0, end - start).toFixed(2));
+			} else {
+				miles = undefined;
+			}
+
+			const payload: any = {
 				...formData,
-				startOdometer: start,
-				endOdometer: end,
-				miles,
 				millageRate: formData.millageRate !== '' ? Number(formData.millageRate) : undefined,
 				vehicle: formData.vehicle || undefined
 			};
+
+			// Only include odometer fields when the user entered them
+			if (typeof start === 'number') payload.startOdometer = start;
+			if (typeof end === 'number') payload.endOdometer = end;
+			if (typeof miles === 'number') payload.miles = miles;
 
 			await millage.updateMillage(String(expenseId), payload as any, String(userId));
 			toasts.success('Millage log updated');

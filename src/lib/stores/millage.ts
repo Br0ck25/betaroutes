@@ -213,9 +213,10 @@ function createMillageStore() {
 					syncStatus: 'pending'
 				};
 
-				// Only recompute miles from odometer if the odometer fields were part of the update
+				// Recompute miles from odometer only when BOTH odometer values are provided as numbers
+				// and only if the caller did NOT explicitly provide a numeric `miles` value (user intent).
 				if (
-					('startOdometer' in changes || 'endOdometer' in changes) &&
+					typeof changes.miles !== 'number' &&
 					typeof updated.startOdometer === 'number' &&
 					typeof updated.endOdometer === 'number'
 				) {
@@ -238,8 +239,9 @@ function createMillageStore() {
 						const tripId = (updated as any).tripId || id;
 						if (tripId) {
 							const { trips } = await import('$lib/stores/trips');
-							// Propagate miles -> totalMiles on trip
-							await trips.updateTrip(tripId, { totalMiles: updated.miles }, userId);
+							// Propagate miles -> totalMiles on trip, only if trip exists locally
+							const localTrip = await trips.get(tripId, userId);
+							if (localTrip) await trips.updateTrip(tripId, { totalMiles: updated.miles }, userId);
 						}
 					}
 				} catch (err) {
