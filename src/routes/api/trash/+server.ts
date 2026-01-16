@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
 import { makeExpenseService } from '$lib/server/expenseService';
 import { makeMillageService } from '$lib/server/millageService';
-import { safeKV, safeDO } from '$lib/server/env';
+import { safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { getStorageId } from '$lib/server/user';
 
@@ -60,7 +60,7 @@ export const GET: RequestHandler = async (event) => {
 
 		const currentUser = user as { id?: string; name?: string; token?: string };
 		const storageId = getStorageId(currentUser);
-		
+
 		if (!storageId) {
 			return new Response(JSON.stringify([]), {
 				status: 200,
@@ -71,7 +71,7 @@ export const GET: RequestHandler = async (event) => {
 		let cloudTrash: unknown[] = [];
 		try {
 			const type = (event.url.searchParams.get('type') || '').toLowerCase();
-			
+
 			// Fetch based on filter or fetch all
 			if (type === 'expenses') {
 				cloudTrash = await expenseSvc.listTrash(storageId);
@@ -86,7 +86,7 @@ export const GET: RequestHandler = async (event) => {
 					expenseSvc.listTrash(storageId),
 					millageSvc.listTrash(storageId)
 				]);
-				
+
 				cloudTrash = [...trips, ...expenses, ...millage].sort((a: any, b: any) =>
 					(b.metadata?.deletedAt || '').localeCompare(a.metadata?.deletedAt || '')
 				);
@@ -109,8 +109,8 @@ export const GET: RequestHandler = async (event) => {
 	}
 };
 
-export const DELETE: RequestHandler = async (event) => {
-	// Bulk delete implementation usually done one-by-one by client, 
+export const DELETE: RequestHandler = async () => {
+	// Bulk delete implementation usually done one-by-one by client,
 	// or implemented here if needed. Keeping placeholder for now.
 	return new Response(JSON.stringify({ deleted: 0 }), { status: 200 });
 };

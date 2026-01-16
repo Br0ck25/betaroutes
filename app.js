@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars, no-redeclare, no-unreachable */
+
 document.addEventListener('DOMContentLoaded', () => {
 	if (typeof updateAuthUI === 'function') {
 		updateAuthUI();

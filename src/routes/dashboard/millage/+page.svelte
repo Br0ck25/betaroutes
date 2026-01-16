@@ -24,7 +24,6 @@
 
 		// eslint-disable-next-line svelte/require-store-reactive-access
 		if ($user?.id && 'hydrate' in millage) {
-			// @ts-expect-error - Custom method
 			millage.hydrate(normalized, $user.id);
 		} else {
 			millage.set(normalized);
@@ -401,7 +400,7 @@
 </svelte:head>
 
 <div class="page-container">
-    <div class="page-header">
+	<div class="page-header">
 		<div class="header-text">
 			<h1 class="page-title">Millage</h1>
 			<p class="page-subtitle">Log odometer readings and miles</p>

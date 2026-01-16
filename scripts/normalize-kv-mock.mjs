@@ -17,7 +17,7 @@ let countPhotonPlaceId = 0;
 let countPhotonSource = 0;
 
 // Replace raw photon tokens with osm- (covers both bare and embedded cases)
-newText = newText.replace(/photon:/g, (m) => {
+newText = newText.replace(/photon:/g, () => {
 	countPhotonPlaceId += 1;
 	return 'osm-';
 });

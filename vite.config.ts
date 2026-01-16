@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { defineConfig } from 'vitest/config';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { resolve } from 'path';
@@ -43,7 +44,7 @@ export default defineConfig({
 					) {
 						res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
 					}
-				} catch (e) {
+				} catch {
 					// ignore
 				}
 				next();
@@ -56,7 +57,7 @@ export default defineConfig({
 				if (Array.isArray(stack) && stack.length > 0) {
 					stack.unshift(stack.pop());
 				}
-			} catch (e) {
+			} catch {
 				// ignore
 			}
 		}

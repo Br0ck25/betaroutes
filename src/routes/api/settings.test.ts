@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { setupMockKV } from '$lib/server/dev-mock-db';
-import { POST, GET } from './+server';
+import { POST, GET } from './settings/+server';
 
 describe('API: /api/settings', () => {
 	let platform: { env: Record<string, unknown> };
@@ -21,7 +21,7 @@ describe('API: /api/settings', () => {
 		});
 
 		const res = await POST({ request, locals: { user }, platform } as any);
-		const json = await res.json();
+		const json = (await res.json()) as any;
 		expect(res.status).toBe(200);
 		expect(json.defaultMPG).toBe(33.5);
 		expect(json.expenseCategories).toEqual(['fuel', 'parts']);
@@ -41,7 +41,7 @@ describe('API: /api/settings', () => {
 
 		const request = new Request('https://example.test/api/settings');
 		const res = await GET({ request, locals: { user }, platform } as any);
-		const json = await res.json();
+		const json = (await res.json()) as any;
 		expect(json.defaultGasPrice).toBe(2.99);
 	});
 });

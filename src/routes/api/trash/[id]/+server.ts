@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
 import { makeExpenseService } from '$lib/server/expenseService';
 import { makeMillageService } from '$lib/server/millageService';
-import { safeKV, safeDO } from '$lib/server/env';
+import { safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { getStorageId } from '$lib/server/user';
 
@@ -46,10 +46,10 @@ export const POST: RequestHandler = async (event) => {
 
 		const currentUser = user as { id?: string; name?: string; token?: string };
 		const storageId = getStorageId(currentUser);
-		
+
 		if (storageId) {
 			let restored: unknown | null = null;
-			
+
 			// Strategy: Try sequentially until one succeeds
 			try {
 				restored = await tripSvc.restore(storageId, id);
@@ -60,7 +60,8 @@ export const POST: RequestHandler = async (event) => {
 					try {
 						restored = await millageSvc.restore(storageId, id);
 					} catch {
-						/* All failed */
+						// all attempts failed; no-op
+						void 0;
 					}
 				}
 			}
@@ -71,14 +72,15 @@ export const POST: RequestHandler = async (event) => {
 					if ((restored as any).stops || (restored as any).startAddress) {
 						await (tripSvc as any).incrementUserCounter?.(currentUser.token || '', 1);
 					}
-				} catch {}
-				
+				} catch {
+					void 0;
+				}
+
 				return new Response(JSON.stringify({ success: true }), { status: 200 });
 			}
 		}
 
 		return new Response(JSON.stringify({ error: 'Item not found in trash' }), { status: 404 });
-
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		log.error('POST /api/trash/[id]/restore error', { message });

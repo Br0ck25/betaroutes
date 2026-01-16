@@ -34,7 +34,7 @@ describe('Trip trash behavior', () => {
 		// Tombstone should exist in-place in the main KV
 		const rawTrash = await kv.get(`trip:${userId}:${id}`);
 		expect(rawTrash).toBeTruthy();
-		const parsedTrash = JSON.parse(rawTrash);
+		const parsedTrash = JSON.parse(rawTrash as string);
 		expect(parsedTrash.deleted).toBe(true);
 		expect(parsedTrash.backup?.id === id).toBeTruthy();
 		expect(parsedTrash.deletedBy === userId).toBeTruthy();
@@ -49,7 +49,7 @@ describe('Trip trash behavior', () => {
 		// Restore
 		await svc.restore(userId, id);
 
-		const afterTrip = JSON.parse(await kv.get(`trip:${userId}:${id}`));
+		const afterTrip = JSON.parse((await kv.get(`trip:${userId}:${id}`)) as string);
 		expect(afterTrip.deleted).toBe(undefined);
 		expect(afterTrip.title).toBe('to trash');
 	});

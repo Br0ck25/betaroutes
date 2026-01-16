@@ -134,7 +134,7 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 
 		async delete(userId: string, id: string) {
 			const stub = getIndexStub(userId);
-			
+
 			const key = `millage:${userId}:${id}`;
 			const raw = await kv.get(key);
 			if (!raw) return;
@@ -182,12 +182,12 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				keys = keys.concat(list.keys);
 			}
 
-			const out: any[] = [];
+			const out: Record<string, unknown>[] = [];
 			for (const k of keys) {
 				const raw = await kv.get(k.name);
 				if (!raw) continue;
-				const parsed = JSON.parse(raw);
-				if (!parsed || !parsed.deleted) continue;
+				const parsed = JSON.parse(raw) as Record<string, unknown>;
+				if (!parsed || !parsed['deleted']) continue;
 
 				const id = parsed.id || String(k.name.split(':').pop() || '');
 				const uid = parsed.userId || String(k.name.split(':')[1] || '');
@@ -217,7 +217,7 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 		async permanentDelete(userId: string, itemId: string) {
 			const key = `millage:${userId}:${itemId}`;
 			await kv.delete(key);
-			
+
 			const stub = getIndexStub(userId);
 			await stub.fetch(`${DO_ORIGIN}/millage/delete`, {
 				method: 'POST',
@@ -229,7 +229,7 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			const key = `millage:${userId}:${itemId}`;
 			const raw = await kv.get(key);
 			if (!raw) throw new Error('Item not found');
-			
+
 			const tombstone = JSON.parse(raw);
 			if (!tombstone.deleted) throw new Error('Item not deleted');
 

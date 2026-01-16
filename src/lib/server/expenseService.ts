@@ -77,11 +77,11 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 					for (const key of keys) {
 						const raw = await kv.get(key.name);
 						if (!raw) continue;
-						const parsed = JSON.parse(raw);
+						const parsed = JSON.parse(raw) as Record<string, unknown>;
 
-						if (parsed && parsed.deleted) {
-							if (parsed.backup) {
-								allExpenses.push(parsed.backup);
+						if (parsed && parsed['deleted']) {
+							if (parsed['backup']) {
+								allExpenses.push(parsed['backup'] as ExpenseRecord);
 								migratedCount++;
 							} else {
 								skippedTombstones++;
@@ -89,10 +89,9 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 							continue;
 						}
 
-						allExpenses.push(parsed);
+						allExpenses.push(parsed as ExpenseRecord);
 						migratedCount++;
 					}
-
 					if (allExpenses.length > 0) {
 						await stub.fetch(`${DO_ORIGIN}/expenses/migrate`, {
 							method: 'POST',
@@ -115,12 +114,12 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 
 			// [!code fix] Full List Logic: MUST filter out deleted items
 			// This ensures 'hydrate' sees items missing and removes them locally
-			return expenses.filter(e => !e.deleted);
+			return expenses.filter((e) => !e.deleted);
 		},
 
 		async get(userId: string, id: string) {
 			// Reuse list to ensure consistent behavior
-			const all = await this.list(userId); 
+			const all = await this.list(userId);
 			return all.find((e) => e.id === id) || null;
 		},
 
@@ -170,14 +169,14 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 
 		async delete(userId: string, id: string) {
 			const stub = getIndexStub(userId);
-			
+
 			// We need to fetch from KV directly to ensure we get the latest data for backup
 			// (even if DO is slightly behind)
 			const key = `expense:${userId}:${id}`;
 			const raw = await kv.get(key);
 			if (!raw) return;
-			
-			const item = JSON.parse(raw);
+
+			const item = JSON.parse(raw) as Record<string, unknown>;
 
 			const now = new Date();
 			const expiresAt = new Date(now.getTime() + RETENTION.THIRTY_DAYS * 1000);
@@ -190,15 +189,15 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			};
 
 			const tombstone = {
-				id: item.id,
-				userId: item.userId,
+				id: (item['id'] as string) || id,
+				userId: (item['userId'] as string) || userId,
 				deleted: true,
 				deletedAt: now.toISOString(),
 				deletedBy: userId,
 				metadata,
 				backup: item,
 				updatedAt: now.toISOString(),
-				createdAt: item.createdAt
+				createdAt: (item['createdAt'] as string) || ''
 			};
 
 			// 1. Update KV with tombstone
@@ -229,21 +228,21 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				const raw = await kv.get(k.name);
 				if (!raw) continue;
 				const parsed = JSON.parse(raw) as Record<string, unknown>;
-				if (!parsed || !parsed.deleted) continue;
+				if (!parsed || !parsed['deleted']) continue;
 
-				const id = (parsed.id as string) || String(k.name.split(':').pop() || '');
-				const uid = (parsed.userId as string) || String(k.name.split(':')[1] || '');
-				const metadata = (parsed.metadata as Record<string, unknown>) || {
-					deletedAt: (parsed.deletedAt as string) || '',
-					deletedBy: (parsed.deletedBy as string) || uid,
+				const id = (parsed['id'] as string) || String(k.name.split(':').pop() || '');
+				const uid = (parsed['userId'] as string) || String(k.name.split(':')[1] || '');
+				const metadata = (parsed['metadata'] as Record<string, unknown>) || {
+					deletedAt: (parsed['deletedAt'] as string) || '',
+					deletedBy: (parsed['deletedBy'] as string) || uid,
 					originalKey: k.name,
-					expiresAt: (parsed.metadata as Record<string, unknown>)?.expiresAt || ''
+					expiresAt: (parsed['metadata'] as Record<string, unknown>)?.['expiresAt'] || ''
 				};
 
 				const backup =
-					(parsed.backup as Record<string, unknown>) ||
-					(parsed.data as Record<string, unknown>) ||
-					(parsed.expense as Record<string, unknown>) ||
+					(parsed['backup'] as Record<string, unknown>) ||
+					(parsed['data'] as Record<string, unknown>) ||
+					(parsed['expense'] as Record<string, unknown>) ||
 					(parsed as Record<string, unknown>) ||
 					{};
 				out.push({
@@ -251,11 +250,13 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 					userId: uid,
 					metadata: metadata as TrashRecord['metadata'],
 					recordType: 'expense',
-					category: (backup.category as string) || undefined,
+					category: (backup['category'] as string) || undefined,
 					amount:
-						typeof (backup.amount as unknown) === 'number' ? (backup.amount as number) : undefined,
-					description: (backup.description as string) || undefined,
-					date: (backup.date as string) || undefined
+						typeof (backup['amount'] as unknown) === 'number'
+							? (backup['amount'] as number)
+							: undefined,
+					description: (backup['description'] as string) || undefined,
+					date: (backup['date'] as string) || undefined
 				});
 			}
 
@@ -281,7 +282,7 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 					// Also ensure it's gone from DO
 					const stub = getIndexStub(userId);
 					const id = k.name.split(':').pop();
-					if(id) {
+					if (id) {
 						await stub.fetch(`${DO_ORIGIN}/expenses/delete`, {
 							method: 'POST',
 							body: JSON.stringify({ id })
@@ -297,11 +298,12 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			const key = `expense:${userId}:${itemId}`;
 			const raw = await kv.get(key);
 			if (!raw) throw new Error('Item not found in trash');
-			const parsed = JSON.parse(raw);
-			if (!parsed || !parsed.deleted) throw new Error('Item is not deleted');
-			const backup = parsed.backup || parsed.data || parsed.expense;
+			const parsed = JSON.parse(raw) as Record<string, unknown>;
+			if (!parsed || !parsed['deleted']) throw new Error('Item is not deleted');
+			const backup = (parsed['backup'] || parsed['data'] || parsed['expense']) as
+				| Record<string, unknown>
+				| undefined;
 			if (!backup) throw new Error('Backup data not found in item');
-
 			if ('deletedAt' in backup) delete (backup as Record<string, unknown>)['deletedAt'];
 			if ('deleted' in backup) delete (backup as Record<string, unknown>)['deleted'];
 			(backup as Record<string, unknown>)['updatedAt'] = new Date().toISOString();
@@ -319,7 +321,7 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 		async permanentDelete(userId: string, itemId: string) {
 			const key = `expense:${userId}:${itemId}`;
 			await kv.delete(key);
-			
+
 			const stub = getIndexStub(userId);
 			await stub.fetch(`${DO_ORIGIN}/expenses/delete`, {
 				method: 'POST',

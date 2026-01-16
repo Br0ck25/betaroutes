@@ -45,10 +45,10 @@ export const GET: RequestHandler = async ({ params, url, platform }) => {
 				const summary = parsed
 					? {
 							key: k.name,
-							id: (parsed.id as string | undefined) || undefined,
-							date: (parsed.date as string | undefined) || undefined,
-							createdAt: (parsed.createdAt as string | undefined) || undefined,
-							updatedAt: (parsed.updatedAt as string | undefined) || undefined
+							id: (parsed['id'] as string | undefined) || undefined,
+							date: (parsed['date'] as string | undefined) || undefined,
+							createdAt: (parsed['createdAt'] as string | undefined) || undefined,
+							updatedAt: (parsed['updatedAt'] as string | undefined) || undefined
 						}
 					: { key: k.name, value: null };
 
