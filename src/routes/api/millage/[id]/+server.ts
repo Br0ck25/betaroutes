@@ -20,8 +20,8 @@ export const DELETE: RequestHandler = async (event) => {
 		}
 
 		const id = event.params.id;
-	// Prefer username first to match expense behavior
-	const userId = sessionUser.name || sessionUser.token || sessionUser.id || '';
+		// Prefer username first to match expense behavior
+		const userId = sessionUser.name || sessionUser.token || sessionUser.id || '';
 		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		await svc.delete(userId, id);
 		return new Response(null, { status: 204 });

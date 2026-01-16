@@ -23,6 +23,18 @@ interface ExpenseRecord {
 	[key: string]: unknown;
 }
 
+interface MillageRecord {
+	id: string;
+	userId: string;
+	date?: string;
+	startOdometer: number;
+	endOdometer: number;
+	miles: number;
+	createdAt: string;
+	updatedAt: string;
+	[key: string]: unknown;
+}
+
 export class TripIndexDO {
 	state: DurableObjectState;
 	env: Record<string, unknown>;
@@ -56,8 +68,17 @@ export class TripIndexDO {
 					data TEXT
 				);
 
+				CREATE TABLE IF NOT EXISTS millage (
+					id TEXT PRIMARY KEY,
+					userId TEXT,
+					date TEXT,
+					createdAt TEXT,
+					data TEXT
+				);
+
 				CREATE INDEX IF NOT EXISTS idx_trips_user ON trips(userId);
 				CREATE INDEX IF NOT EXISTS idx_expenses_user ON expenses(userId);
+				CREATE INDEX IF NOT EXISTS idx_millage_user ON millage(userId);
 			`);
 			this.schemaEnsured = true;
 		} catch (err) {
@@ -121,6 +142,7 @@ export class TripIndexDO {
 				if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
 				this.state.storage.sql.exec('DELETE FROM trips');
 				this.state.storage.sql.exec('DELETE FROM expenses');
+				this.state.storage.sql.exec('DELETE FROM millage');
 				return new Response('Account Data Wiped');
 			}
 
@@ -459,6 +481,59 @@ export class TripIndexDO {
 				} catch {
 					return new Response(JSON.stringify({ needsMigration: true }));
 				}
+			}
+
+			// --- MILLAGE OPERATIONS ---
+			if (path === '/millage/list') {
+				const cursor = this.state.storage.sql.exec(
+					`SELECT data FROM millage ORDER BY date DESC, createdAt DESC`
+				);
+				const items = [];
+				for (const row of cursor) {
+					items.push(JSON.parse((row as Record<string, unknown>)['data'] as string));
+				}
+				return new Response(JSON.stringify(items));
+			}
+
+			if (path === '/millage/put') {
+				const item = await parseBody<MillageRecord>();
+				this.state.storage.sql.exec(
+					`INSERT OR REPLACE INTO millage (id, userId, date, createdAt, data) VALUES (?, ?, ?, ?, ?)`,
+					item.id,
+					item.userId,
+					item.date || '',
+					item.createdAt,
+					JSON.stringify(item)
+				);
+				return new Response('OK');
+			}
+
+			if (path === '/millage/delete') {
+				const { id } = await parseBody<{ id: string }>();
+				this.state.storage.sql.exec('DELETE FROM millage WHERE id = ?', id);
+				return new Response('OK');
+			}
+
+			if (path === '/millage/migrate') {
+				const items = await parseBody<MillageRecord[]>();
+				this.state.storage.sql.exec('BEGIN TRANSACTION');
+				try {
+					for (const item of items) {
+						this.state.storage.sql.exec(
+							'INSERT OR REPLACE INTO millage (id, userId, date, createdAt, data) VALUES (?, ?, ?, ?, ?)',
+							item.id,
+							item.userId,
+							item.date || '',
+							item.createdAt,
+							JSON.stringify(item)
+						);
+					}
+					this.state.storage.sql.exec('COMMIT');
+				} catch (err) {
+					this.state.storage.sql.exec('ROLLBACK');
+					throw err;
+				}
+				return new Response('OK');
 			}
 
 			// --- BILLING ---
