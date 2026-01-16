@@ -183,7 +183,7 @@
 				!query ||
 				(item.description && item.description.toLowerCase().includes(query)) ||
 				item.amount.toString().includes(query) ||
-				((item as any).source === 'trip' && 'trip log'.includes(query));
+				((item as any).source === 'trip' && 'trip'.includes(query));
 
 			if (!matchesSearch) return false;
 
@@ -244,7 +244,7 @@
 
 		// Check if it's a trip log
 		if (id.startsWith('trip-')) {
-			toasts.error('Cannot delete Trip Logs here. Delete the Trip instead.');
+			toasts.error('Cannot delete Trips here. Delete the Trip instead.');
 			return;
 		}
 
@@ -292,7 +292,7 @@
 
 		if (
 			!confirm(
-				`Move ${manualExpenses.length} expenses to trash? ${tripLogs > 0 ? `(${tripLogs} trip logs will be skipped)` : ''}`
+				`Move ${manualExpenses.length} expenses to trash? ${tripLogs > 0 ? `(${tripLogs} trips will be skipped)` : ''}`
 			)
 		)
 			return;
@@ -334,7 +334,7 @@
 				e.category,
 				e.amount,
 				`"${(e.description || '').replace(/"/g, '""')}"`,
-				isTripSource(e) ? 'Trip Log' : 'Manual'
+				isTripSource(e) ? 'Trip' : 'Manual'
 			].join(',')
 		);
 
@@ -828,7 +828,7 @@
 									{getCategoryLabel(expense.category)}
 								</span>
 								{#if isTripSource(expense)}
-									<span class="source-badge">Trip Log</span>
+									<span class="source-badge">Trip</span>
 								{/if}
 								{#if expense.taxDeductible}
 									<span class="category-badge tax-pill" title="Tax deductible">Tax Deductible</span>
