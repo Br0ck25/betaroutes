@@ -229,6 +229,49 @@ export function makeTripService(
 				needsMigration = !!data.needsMigration;
 			}
 
+			// SELF-HEAL: If the DO index returned empty but KV has trips, force a migrate and return KV data
+			if (!needsMigration && trips.length === 0) {
+				try {
+					const prefix = prefixForUser(userId);
+					let list = await kv.list({ prefix });
+					let keys = list.keys;
+
+					while (!list.list_complete && list.cursor) {
+						list = await kv.list({ prefix, cursor: list.cursor });
+						keys = keys.concat(list.keys);
+					}
+
+					if (keys.length > 0) {
+						const out: TripRecord[] = [];
+						for (const k of keys) {
+							const raw = await kv.get(k.name);
+							if (!raw) continue;
+							const t = JSON.parse(raw);
+							out.push(t);
+						}
+
+						if (out.length > 0) {
+							log.info('[TripService] Detected trips in KV but empty DO index; triggering migrate');
+							const summaries = out.map(toSummary);
+							// Best-effort: try to ask DO to migrate these summaries
+							try {
+								await stub.fetch(`${DO_ORIGIN}/migrate`, {
+									method: 'POST',
+									body: JSON.stringify(summaries)
+								});
+							} catch (e) {
+								log.warn('[TripService] DO migrate failed', { message: (e as Error).message });
+							}
+
+							out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+							return out;
+						}
+					}
+				} catch (e) {
+					log.warn('[TripService] Self-heal migrate check failed', { message: (e as Error).message });
+				}
+			}
+
 			if (needsMigration) {
 				const prefix = prefixForUser(userId);
 				const out: TripRecord[] = [];
@@ -279,14 +322,18 @@ export function makeTripService(
 			await kv.put(`trip:${trip.userId}:${trip.id}`, JSON.stringify(trip));
 			const stub = getIndexStub(trip.userId);
 
-			// 1. Update the Summary Index
-			await stub.fetch(`${DO_ORIGIN}/put`, {
+		// 1. Update the Summary Index (log failures)
+		try {
+			const r = await stub.fetch(`${DO_ORIGIN}/put`, {
 				method: 'POST',
 				body: JSON.stringify(toSummary(trip))
 			});
-
-			// 2. Trigger Route Calculation & Caching (Background)
-			stub
+			if (!r.ok) {
+				log.warn('[TripService] DO put returned non-ok status', { status: r.status });
+			}
+		} catch (e) {
+			log.error('[TripService] DO put failed', { message: (e as Error).message });
+		}
 				.fetch(`${DO_ORIGIN}/compute-routes`, {
 					method: 'POST',
 					body: JSON.stringify({ id: trip.id })
