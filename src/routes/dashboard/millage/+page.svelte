@@ -21,10 +21,8 @@
 			records.map((r) => ({ ...r, syncStatus: (r as any).syncStatus ?? 'synced' }));
 		const normalized = normalize(data.millage);
 
-		// eslint-disable-next-line svelte/require-store-reactive-access
-		if ($user?.id && 'hydrate' in millage) {
-			// @ts-expect-error - Custom method
-			millage.hydrate(normalized, $user.id);
+		if ($user?.id && 'hydrate' in $millage) {
+			(millage as any).hydrate(normalized, $user.id);
 		} else {
 			millage.set(normalized);
 		}
@@ -185,7 +183,7 @@
 			try {
 				await millage.deleteMillage(id, String(userId));
 				toasts.success('Log moved to trash');
-				
+
 				// Force reactivity in case store update was missed (though it shouldn't be)
 				if (selectedExpenses.has(id)) {
 					selectedExpenses.delete(id);
@@ -244,7 +242,7 @@
 		selectedExpenses = new Set();
 	}
 
-    // ... rest of imports (exportSelected, categories, helpers, etc) same as before ...
+	// ... rest of imports (exportSelected, categories, helpers, etc) same as before ...
 	function isTripSource(item: any): boolean {
 		return (item as any)?.source === 'trip';
 	}
