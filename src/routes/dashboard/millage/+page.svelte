@@ -7,7 +7,7 @@
 	import { toasts } from '$lib/stores/toast';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation'; // [!code fix] import invalidateAll
 	import { page } from '$app/stores';
 	import { onDestroy } from 'svelte';
 
@@ -15,14 +15,15 @@
 
 	export let data: PageData;
 
-	// Hydrate store on load
 	$: if (data.millage) {
 		const normalize = (records: any[]) =>
 			records.map((r) => ({ ...r, syncStatus: (r as any).syncStatus ?? 'synced' }));
 		const normalized = normalize(data.millage);
 
-		if ($user?.id && 'hydrate' in $millage) {
-			(millage as any).hydrate(normalized, $user.id);
+		// eslint-disable-next-line svelte/require-store-reactive-access
+		if ($user?.id && 'hydrate' in millage) {
+			// @ts-expect-error - Custom method
+			millage.hydrate(normalized, $user.id);
 		} else {
 			millage.set(normalized);
 		}
@@ -100,7 +101,6 @@
 
 	$: tripExpenses = $trips.flatMap((_trip) => []);
 
-	// REACTIVITY: Ensure this updates when $millage changes
 	$: allExpenses = [
 		...$millage.filter(
 			(r) =>
@@ -111,7 +111,6 @@
 		...tripExpenses
 	];
 
-	// Filter Logic
 	$: filteredExpenses = allExpenses
 		.filter((item) => {
 			const query = searchQuery.toLowerCase();
@@ -183,12 +182,12 @@
 			try {
 				await millage.deleteMillage(id, String(userId));
 				toasts.success('Log moved to trash');
-
-				// Force reactivity in case store update was missed (though it shouldn't be)
 				if (selectedExpenses.has(id)) {
 					selectedExpenses.delete(id);
 					selectedExpenses = selectedExpenses;
 				}
+				// [!code fix] Refresh page data to ensure server sync
+				await invalidateAll();
 			} catch (err) {
 				console.error(err);
 				toasts.error('Failed to move to trash');
@@ -240,9 +239,11 @@
 
 		toasts.success(`Moved ${successCount} logs to trash.`);
 		selectedExpenses = new Set();
+		// [!code fix] Refresh page data
+		await invalidateAll();
 	}
 
-	// ... rest of imports (exportSelected, categories, helpers, etc) same as before ...
+    // ... imports ...
 	function isTripSource(item: any): boolean {
 		return (item as any)?.source === 'trip';
 	}
@@ -339,12 +340,6 @@
 		if (cat === 'supplies') return colors[2];
 		const sum = cat.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
 		return colors[sum % colors.length];
-	}
-
-	function getVehicleLabel(id?: string) {
-		if (!id) return '';
-		const v = ($userSettings?.vehicles || []).find((x) => x?.id === id || x?.name === id);
-		return v?.name ?? id;
 	}
 
 	function swipeable(
@@ -480,7 +475,7 @@
 
 		<div class="summary-card">
 			<div class="summary-label">Total Miles</div>
-			<div class="summary-value">{totalMiles.toFixed(2)}</div>
+			<div class="summary-value">{totalMiles.toFixed(2)} mi</div>
 		</div>
 
 		<div class="summary-card">
@@ -698,7 +693,7 @@
 								<h2 class="expense-desc-title" id={'expense-' + expense.id + '-title'}>
 									{expense.notes ||
 										expense.description ||
-										`${expense.startOdometer} → ${expense.endOdometer}`}
+										`Log ${expense.startOdometer} → ${expense.endOdometer}`}
 								</h2>
 							</div>
 
@@ -724,54 +719,12 @@
 								<span class={`category-badge ${getCategoryColor(expense.category)}`}>
 									{(expense.miles ?? 0).toFixed(2)} mi
 								</span>
-								{#if expense.vehicle}
-									<span class="category-badge" title="Vehicle"
-										>{getVehicleLabel(expense.vehicle)}</span
-									>
-								{/if}
-								{#if typeof expense.millageRate === 'number' || expense.millageRate}
-									<span class="category-badge" title="Millage Rate"
-										>${(Number(expense.millageRate) || 0).toFixed(3)}/mi</span
-									>
-								{/if}
-								{#if expense.startOdometer !== undefined || expense.endOdometer !== undefined}
-									<span class="category-badge" title="Odometer"
-										>{expense.startOdometer ?? ''} → {expense.endOdometer ?? ''}</span
-									>
-								{/if}
 								{#if isTripSource(expense)}
 									<span class="source-badge">Trip Log</span>
 								{/if}
 								{#if expense.taxDeductible}
 									<span class="category-badge tax-pill" title="Tax deductible">Tax Deductible</span>
 								{/if}
-							</div>
-						</div>
-						<div class="card-stats">
-							<div class="stat-item">
-								<span class="stat-label">Miles</span><span class="stat-value"
-									>{(expense.miles ?? 0).toFixed(2)}</span
-								>
-							</div>
-							<div class="stat-item">
-								<span class="stat-label">Vehicle</span><span class="stat-value"
-									>{expense.vehicle ? getVehicleLabel(expense.vehicle) : '-'}</span
-								>
-							</div>
-							<div class="stat-item">
-								<span class="stat-label">Rate</span><span class="stat-value"
-									>{expense.millageRate
-										? `$${(Number(expense.millageRate) || 0).toFixed(3)}/mi`
-										: '-'}</span
-								>
-							</div>
-							<div class="stat-item">
-								<span class="stat-label">Odometer</span><span class="stat-value"
-									>{expense.startOdometer ?? ''}{expense.startOdometer != null &&
-									expense.endOdometer != null
-										? ` → ${expense.endOdometer}`
-										: ''}</span
-								>
 							</div>
 						</div>
 					</div>
@@ -1300,27 +1253,15 @@
 	}
 
 	.card-stats {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: 12px;
+		display: flex;
+		align-items: center;
+		max-width: 100%;
+		overflow-x: auto;
 	}
 	.stat-badge-container {
-		display: none;
-	}
-	.stat-item {
 		display: flex;
-		flex-direction: column;
-		align-items: center;
-	}
-	.stat-label {
-		font-size: 11px;
-		color: #9ca3af;
-		text-transform: uppercase;
-	}
-	.stat-value {
-		font-size: 14px;
-		font-weight: 600;
-		color: #4b5563;
+		gap: 8px;
+		flex-wrap: wrap;
 	}
 
 	.category-badge {

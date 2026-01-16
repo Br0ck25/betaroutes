@@ -14,38 +14,27 @@ function createMillageStore() {
 		subscribe,
 		set,
 
-		// Method to hydrate from server data (SSR) + persist to local DB
 		async hydrate(data: MillageRecord[], userId: string) {
 			try {
 				const db = await getDB();
-				
-				// 1. Get all local trash IDs to prevent resurrection
 				const trashTx = db.transaction('trash', 'readonly');
 				const trashItems = await trashTx.objectStore('trash').getAll();
 				const trashIds = new Set(trashItems.map((t: any) => t.id));
 				await trashTx.done;
 
-				// 2. Filter server data
 				const validData = data.filter((item) => !trashIds.has(item.id));
-				
-				// 3. Update Screen Immediately
 				set(validData);
 
-				// 4. Update Local Database
 				const tx = db.transaction(['millage', 'trash'], 'readwrite');
 				const store = tx.objectStore('millage');
-				
 				for (const item of validData) {
 					await store.put({ ...item, syncStatus: 'synced' });
 				}
 
-				// 5. Cleanup zombies (active items that should be in trash)
 				for (const serverItem of data) {
 					if (trashIds.has(serverItem.id)) {
 						const existing = await store.get(serverItem.id);
-						if (existing) {
-							await store.delete(serverItem.id);
-						}
+						if (existing) await store.delete(serverItem.id);
 					}
 				}
 				await tx.done;
@@ -90,7 +79,6 @@ function createMillageStore() {
 				const trashItems = await trashStore.getAll();
 				const trashIds = new Set(trashItems.map((t: any) => t.id));
 
-				// Filter out trashed items
 				const activeItems = items.filter(item => !trashIds.has(item.id));
 
 				activeItems.sort((a, b) => {
@@ -182,11 +170,6 @@ function createMillageStore() {
 					updated.miles = Math.max(0, updated.endOdometer - updated.startOdometer);
 				}
 
-				if (typeof updated.millageRate === 'string') {
-					const n = Number(updated.millageRate);
-					updated.millageRate = isNaN(n) ? undefined : n;
-				}
-
 				await store.put(updated);
 				await tx.done;
 
@@ -205,8 +188,13 @@ function createMillageStore() {
 		},
 
 		async deleteMillage(id: string, userId: string) {
-			// 1. Optimistic Update
-			update((current) => current.filter((r) => r.id !== id));
+			let previous: MillageRecord[] = [];
+			
+			// 1. Optimistic Update: Remove instantly from UI store
+			update((current) => {
+				previous = current;
+				return current.filter((r) => r.id !== id);
+			});
 
 			try {
 				const db = await getDB();
@@ -255,10 +243,9 @@ function createMillageStore() {
 				await millageStore.delete(id);
 				await tx.done;
 
-				// [!code fix] FORCE RELOAD from DB to ensure UI is perfectly synced with disk
-				// This mimics the Trash page behavior which re-fetches data after operation.
-				await this.load(userId);
-
+				// [!code fix] Do NOT call load() here. It causes race conditions that revert the UI.
+				// The optimistic update above is sufficient for the UI.
+				
 				await syncManager.addToQueue({
 					action: 'delete',
 					tripId: id,
@@ -266,7 +253,8 @@ function createMillageStore() {
 				});
 			} catch (err) {
 				console.error('❌ Failed to delete millage record:', err);
-				this.load(userId); // Revert on failure
+				// ONLY revert if the DB write failed
+				set(previous); 
 				throw err;
 			}
 		},
@@ -319,7 +307,6 @@ function createMillageStore() {
 							if (local) await store.delete(rec.id);
 							continue;
 						}
-
 						if (trashIds.has(rec.id)) continue;
 
 						const local = await store.get(rec.id);
