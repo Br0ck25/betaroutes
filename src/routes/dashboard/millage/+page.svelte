@@ -698,7 +698,7 @@
 								<h2 class="expense-desc-title" id={'expense-' + expense.id + '-title'}>
 									{expense.notes ||
 										expense.description ||
-										`Log ${expense.startOdometer} → ${expense.endOdometer}`}
+										`${expense.startOdometer} → ${expense.endOdometer}`}
 								</h2>
 							</div>
 
@@ -746,6 +746,12 @@
 									<span class="category-badge tax-pill" title="Tax deductible">Tax Deductible</span>
 								{/if}
 							</div>
+						</div>
+						<div class="stat-grid">
+							<div class="stat-item"><span class="stat-label">Miles</span><span class="stat-value">{(expense.miles ?? 0).toFixed(2)}</span></div>
+							<div class="stat-item"><span class="stat-label">Vehicle</span><span class="stat-value">{expense.vehicle ? getVehicleLabel(expense.vehicle) : '-'}</span></div>
+							<div class="stat-item"><span class="stat-label">Rate</span><span class="stat-value">{expense.millageRate ? `$${(Number(expense.millageRate) || 0).toFixed(3)}/mi` : '-'}</span></div>
+							<div class="stat-item"><span class="stat-label">Odometer</span><span class="stat-value">{expense.startOdometer ?? ''}{expense.startOdometer != null && expense.endOdometer != null ? ` → ${expense.endOdometer}` : ''}</span></div>
 						</div>
 					</div>
 				</div>
