@@ -1279,15 +1279,27 @@
 	}
 
 	.card-stats {
-		display: flex;
-		align-items: center;
-		max-width: 100%;
-		overflow-x: auto;
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: 12px;
 	}
 	.stat-badge-container {
+		display: none;
+	}
+	.stat-item {
 		display: flex;
-		gap: 8px;
-		flex-wrap: wrap;
+		flex-direction: column;
+		align-items: center;
+	}
+	.stat-label {
+		font-size: 11px;
+		color: #9ca3af;
+		text-transform: uppercase;
+	}
+	.stat-value {
+		font-size: 14px;
+		font-weight: 600;
+		color: #4b5563;
 	}
 
 	.category-badge {
