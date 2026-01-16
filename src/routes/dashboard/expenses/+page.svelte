@@ -6,23 +6,40 @@
 	import { toasts } from '$lib/stores/toast';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onDestroy } from 'svelte';
+	import type { PageData } from './$types';
 
-	// --- STATE ---
-	let searchQuery = '';
+	export let data: PageData;
+
+	// [!code fix] HYDRATION
+	$: if (data.expenses) {
+		const normalize = (records: any[]) =>
+			records.map((r) => ({ ...r, syncStatus: (r as any).syncStatus ?? 'synced' }));
+		const normalized = normalize(data.expenses);
+
+		// eslint-disable-next-line svelte/require-store-reactive-access
+		if ($user?.id && 'hydrate' in expenses) {
+			// @ts-expect-error - Custom method
+			expenses.hydrate(normalized, $user.id);
+		} else {
+			expenses.set(normalized);
+		}
+	}
+    
+    // --- STATE ---
+    let searchQuery = '';
 	let sortBy = 'date';
 	let sortOrder = 'desc';
 	let filterCategory = 'all';
-	// Default to current year (Jan 1 -> today)
-	const _now = new Date();
-	function _fmtInput(d: Date) {
-		return d.toISOString().slice(0, 10);
-	}
+    
+    const _now = new Date();
+	function _fmtInput(d: Date) { return d.toISOString().slice(0, 10); }
 	let startDate = _fmtInput(new Date(_now.getFullYear(), 0, 1));
 	let endDate = _fmtInput(_now);
-	let lastHadSelections = false;
+    
+    let lastHadSelections = false;
 
 	// Selection State
 	let selectedExpenses = new Set<string>();
@@ -241,6 +258,8 @@
 					selectedExpenses.delete(id);
 					selectedExpenses = selectedExpenses;
 				}
+                // [!code fix] Refresh page data to ensure server sync
+                await invalidateAll();
 			} catch (err) {
 				console.error(err);
 				toasts.error('Failed to move to trash');
@@ -295,6 +314,8 @@
 
 		toasts.success(`Moved ${successCount} expenses to trash.`);
 		selectedExpenses = new Set();
+        // [!code fix] Refresh page data to ensure server sync
+        await invalidateAll();
 	}
 
 	function isTripSource(item: any): boolean {

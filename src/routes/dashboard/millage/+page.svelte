@@ -475,7 +475,7 @@
 
 		<div class="summary-card">
 			<div class="summary-label">Total Miles</div>
-			<div class="summary-value">{totalMiles.toFixed(2)}</div>
+			<div class="summary-value">{totalMiles.toFixed(2)} mi</div>
 		</div>
 
 		<div class="summary-card">
