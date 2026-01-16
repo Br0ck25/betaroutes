@@ -20,7 +20,7 @@ function createExpensesStore() {
 		set,
 
 		// [!code fix] Smart Hydrate: Removes stale items (deleted on other devices)
-		async hydrate(data: ExpenseRecord[], _userId?: string) {
+		async hydrate(data: ExpenseRecord[]) {
 			try {
 				const db = await getDB();
 

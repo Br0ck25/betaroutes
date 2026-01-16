@@ -20,7 +20,7 @@ function createMillageStore() {
 		set,
 
 		// [!code fix] Hydrate: Sets data INSTANTLY, then cleans up in background
-		async hydrate(data: MillageRecord[], _userId?: string) {
+		async hydrate(data: MillageRecord[]) {
 			// Start hydration latch so syncFromCloud can wait if needed
 			_hydrationPromise = new Promise((res) => (_resolveHydration = res));
 

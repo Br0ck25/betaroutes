@@ -186,45 +186,34 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			for (const k of keys) {
 				const raw = await kv.get(k.name);
 				if (!raw) continue;
-				const parsed = JSON.parse(raw) as Record<string, unknown> | undefined;
-				if (!parsed || !(parsed['deleted'] as boolean)) continue;
+				const parsed = JSON.parse(raw) as Record<string, unknown>;
+				if (!parsed || !parsed['deleted']) continue;
 
-				const id = (parsed['id'] as string) || String(k.name.split(':').pop() || '');
-				const uid = (parsed['userId'] as string) || String(k.name.split(':')[1] || '');
-				const parsedMetadata = parsed['metadata'] as Record<string, unknown> | undefined;
-				const metadata = parsedMetadata || {
-					deletedAt: (parsed['deletedAt'] as string) || '',
+				const id = parsed.id || String(k.name.split(':').pop() || '');
+				const uid = parsed.userId || String(k.name.split(':')[1] || '');
+				const metadata = parsed.metadata || {
+					deletedAt: parsed.deletedAt || '',
 					deletedBy: uid,
 					originalKey: k.name,
-					expiresAt: (parsedMetadata && (parsedMetadata['expiresAt'] as string)) || ''
+					expiresAt: parsed.metadata?.expiresAt || ''
 				};
 
-				const backup =
-					(parsed['backup'] as Record<string, unknown> | undefined) ||
-					(parsed['data'] as Record<string, unknown> | undefined) ||
-					(parsed as Record<string, unknown>);
-
+				const backup = parsed.backup || parsed.data || parsed;
 				out.push({
 					id,
 					userId: uid,
-					metadata: metadata as Record<string, unknown>,
+					metadata,
 					recordType: 'millage',
-					miles:
-						typeof (backup['miles'] as number) === 'number'
-							? (backup['miles'] as number)
-							: undefined,
-					vehicle: backup['vehicle'],
-					date: backup['date']
+					miles: typeof backup.miles === 'number' ? backup.miles : undefined,
+					vehicle: backup.vehicle,
+					date: backup.date
 				});
 			}
 
-			out.sort((a, b) =>
-				((b['metadata'] as any)?.deletedAt || '').localeCompare(
-					(a['metadata'] as any)?.deletedAt || ''
-				)
-			);
+			out.sort((a, b) => (b.metadata?.deletedAt || '').localeCompare(a.metadata?.deletedAt || ''));
 			return out;
 		},
+
 		async permanentDelete(userId: string, itemId: string) {
 			const key = `millage:${userId}:${itemId}`;
 			await kv.delete(key);

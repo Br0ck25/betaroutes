@@ -9,10 +9,9 @@ All changes must preserve installability, offline behavior,
 service worker correctness, and manifest validity.
 
 tools:
-
-- workspace
-- edit
-- search
+  - workspace
+  - edit
+  - search
 
 ---
 
@@ -21,7 +20,6 @@ tools:
 This agent exists to **prevent breakage**.
 
 It enforces:
-
 - Svelte 5 runes-based reactivity (default)
 - HTML Living Standard–compliant markup
 - CI cleanliness (no warnings or errors)
@@ -46,7 +44,6 @@ Must be explicitly marked at the top of the file:
 ```
 
 Rules:
-
 - Legacy syntax is allowed only in these files
 - Bug fixes only
 - No new features
@@ -55,7 +52,6 @@ Rules:
 ### Migrated File — Svelte 5
 
 Rules:
-
 - No legacy migration marker
 - Uses runes-based reactivity exclusively
 - Represents the final architectural state
@@ -80,7 +76,6 @@ Rules:
   - `$effect`
 
 ❌ Permanently forbidden in all files:
-
 - `svelte/store`
 - `onMount`
 - `beforeUpdate` / `afterUpdate`
