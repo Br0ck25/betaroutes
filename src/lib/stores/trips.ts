@@ -133,7 +133,26 @@ function createTripsStore() {
 					tripId: trip.id,
 					data: trip
 				});
-
+				// Link a millage entry to this trip (same id) so mileage is editable in Millage log
+				try {
+					const { millage } = await import('$lib/stores/millage');
+					await millage.create(
+						{
+							id: trip.id,
+							date: trip.date,
+							startOdometer: 0,
+							endOdometer: 0,
+							miles:
+								typeof trip.totalMiles === 'number'
+									? trip.totalMiles
+									: Number((trip as any).totalMiles) || 0,
+							tripId: trip.id
+						},
+						userId
+					);
+				} catch (err) {
+					console.warn('Failed to create linked millage record:', err);
+				}
 				return trip;
 			} catch (err) {
 				console.error('❌ Failed to create trip:', err);
@@ -173,7 +192,33 @@ function createTripsStore() {
 					tripId: id,
 					data: updated
 				});
-
+				// Ensure corresponding millage record is created/updated so changes are reflected in Millage log
+				try {
+					const { millage } = await import('$lib/stores/millage');
+					const linked = await millage.get(id as any, userId);
+					if (linked) {
+						await millage.updateMillage(
+							linked.id,
+							{ miles: (updated as any).totalMiles, date: updated.date },
+							userId,
+							{ propagateToTrip: false }
+						);
+					} else if (typeof (updated as any).totalMiles === 'number') {
+						await millage.create(
+							{
+								id: id,
+								date: updated.date,
+								startOdometer: 0,
+								endOdometer: 0,
+								miles: (updated as any).totalMiles,
+								tripId: id
+							},
+							userId
+						);
+					}
+				} catch (err) {
+					console.warn('Failed to sync trip -> millage:', err);
+				}
 				return updated;
 			} catch (err) {
 				console.error('❌ Failed to update trip:', err);

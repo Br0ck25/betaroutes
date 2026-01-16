@@ -1,33 +1,34 @@
 # Canonical Svelte 5 Examples
 
-This file documents **approved Svelte 5 patterns** for this repository.
+This document defines **approved, CI-safe Svelte 5 patterns** for this repository.
 
 All examples:
 
-- Use **runes-based reactivity**
-- Avoid legacy Svelte 4 APIs
+- Use **Svelte 5 runes-based reactivity**
+- Avoid all legacy Svelte 4 APIs
 - Follow the **HTML Living Standard**
-- Are safe for CI enforcement
+- Are compatible with **PWA constraints**
+- Are safe for AI and CI enforcement
 
 ---
 
-## State
+## State (`$state`)
 
-Use `$state` for local, mutable state.
+Use `$state` for local, mutable component state.
 
 ```svelte
 <script>
 	let count = $state(0);
 </script>
 
-<button onclick={() => (count += 1)}>
+<button onclick={() => count++}>
 	{count}
 </button>
 ```
 
 ---
 
-## Derived State
+## Derived State (`$derived`)
 
 Use `$derived` for values computed from other state.
 
@@ -40,15 +41,15 @@ Use `$derived` for values computed from other state.
 <p>Doubled: {doubled}</p>
 ```
 
-Derived values must be:
+Rules for `$derived`:
 
-- Pure
-- Side-effect free
-- Synchronous
+- Must be pure
+- Must be synchronous
+- No side effects
 
 ---
 
-## Effects
+## Effects (`$effect`)
 
 Use `$effect` for side effects and lifecycle-like behavior.
 
@@ -62,7 +63,7 @@ Use `$effect` for side effects and lifecycle-like behavior.
 </script>
 ```
 
-Cleanup example:
+### Cleanup
 
 ```svelte
 <script>
@@ -82,29 +83,39 @@ Cleanup example:
 
 ---
 
-## Component Props
+## Component Props (`$props`)
+
+Props must be read using `$props()`.
 
 ```svelte
 <script>
-	let { value, disabled = false } = $props();
+	let { label, disabled = false } = $props();
 </script>
 
 <button {disabled}>
-	{value}
+	{label}
 </button>
 ```
+
+❌ Do not use `export let` in migrated files.
 
 ---
 
 ## Event Handling
 
+Use **standard DOM attributes**, not Svelte directives.
+
 ```svelte
 <button onclick={() => alert('clicked')}> Click me </button>
 ```
 
+❌ `on:click` is forbidden in Svelte 5 files.
+
 ---
 
-## Snippets
+## Snippets (Slots Replacement)
+
+Slots are replaced with **snippets** and `{@render}`.
 
 ```svelte
 <script>
@@ -118,7 +129,7 @@ Cleanup example:
 
 ---
 
-## HTML Rules
+## HTML Living Standard
 
 Correct:
 
@@ -134,7 +145,7 @@ Incorrect:
 
 ---
 
-## Forbidden Patterns
+## Forbidden Patterns (Examples)
 
 ```svelte
 <script>
@@ -152,6 +163,14 @@ Incorrect:
 
 ---
 
-## Migration Notes
+## Migration Note
 
 This file documents the **final Svelte 5 state**.
+
+Legacy syntax may exist **only** in files explicitly marked:
+
+```html
+<!-- MIGRATION: SVELTE4-LEGACY -->
+```
+
+Once migrated, legacy allowances are permanently revoked.

@@ -218,11 +218,11 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				});
 			}
 
-			out.sort((a, b) =>
-				((b['metadata'] as any)?.deletedAt || '').localeCompare(
-					(a['metadata'] as any)?.deletedAt || ''
-				)
-			);
+			const getDeletedAt = (obj: Record<string, unknown>) => {
+				const meta = obj['metadata'] as Record<string, unknown> | undefined;
+				return (meta && (meta['deletedAt'] as string)) || '';
+			};
+			out.sort((a, b) => getDeletedAt(b).localeCompare(getDeletedAt(a)));
 			return out;
 		},
 		async permanentDelete(userId: string, itemId: string) {

@@ -4,6 +4,7 @@ import { syncManager } from '$lib/sync/syncManager';
 import type { MillageRecord } from '$lib/db/types';
 import type { User } from '$lib/types';
 import { auth } from '$lib/stores/auth';
+import { userSettings } from '$lib/stores/userSettings';
 
 export const isLoading = writable(false);
 
@@ -21,6 +22,8 @@ function createMillageStore() {
 
 		// [!code fix] Hydrate: Sets data INSTANTLY, then cleans up in background
 		async hydrate(data: MillageRecord[], _userId?: string) {
+			// Intentionally unused parameter retained for call-site compatibility
+			void _userId;
 			// Start hydration latch so syncFromCloud can wait if needed
 			_hydrationPromise = new Promise((res) => (_resolveHydration = res));
 
@@ -146,7 +149,10 @@ function createMillageStore() {
 					typeof data.miles === 'number'
 						? data.miles
 						: Math.max(0, Number(data.endOdometer) - Number(data.startOdometer)),
-				millageRate: typeof data.millageRate === 'number' ? data.millageRate : undefined,
+				millageRate:
+					typeof data.millageRate === 'number'
+						? data.millageRate
+						: (get(userSettings) as any).millageRate,
 				vehicle: data.vehicle || undefined,
 				reimbursement: data.reimbursement,
 				notes: data.notes || '',
@@ -177,7 +183,12 @@ function createMillageStore() {
 			}
 		},
 
-		async updateMillage(id: string, changes: Partial<MillageRecord>, userId: string) {
+		async updateMillage(
+			id: string,
+			changes: Partial<MillageRecord>,
+			userId: string,
+			opts?: { propagateToTrip?: boolean }
+		) {
 			update((items) =>
 				items.map((r) =>
 					r.id === id ? { ...r, ...changes, updatedAt: new Date().toISOString() } : r
@@ -202,7 +213,12 @@ function createMillageStore() {
 					syncStatus: 'pending'
 				};
 
-				if (typeof updated.startOdometer === 'number' && typeof updated.endOdometer === 'number') {
+				// Only recompute miles from odometer if the odometer fields were part of the update
+				if (
+					('startOdometer' in changes || 'endOdometer' in changes) &&
+					typeof updated.startOdometer === 'number' &&
+					typeof updated.endOdometer === 'number'
+				) {
 					updated.miles = Math.max(0, updated.endOdometer - updated.startOdometer);
 				}
 
@@ -215,6 +231,20 @@ function createMillageStore() {
 					data: { ...updated, store: 'millage' }
 				});
 
+				// If this millage entry is linked to a trip, reflect changes on the trip record
+				try {
+					const shouldPropagate = opts?.propagateToTrip !== false;
+					if (shouldPropagate) {
+						const tripId = (updated as any).tripId || id;
+						if (tripId) {
+							const { trips } = await import('$lib/stores/trips');
+							// Propagate miles -> totalMiles on trip
+							await trips.updateTrip(tripId, { totalMiles: updated.miles }, userId);
+						}
+					}
+				} catch (err) {
+					console.warn('Failed to propagate millage update to trip:', err);
+				}
 				return updated;
 			} catch (err) {
 				console.error('❌ Failed to update millage:', err);
