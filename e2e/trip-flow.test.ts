@@ -40,7 +40,8 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
 		} else if (method === 'POST') {
 			// Simulate saving a trip
 			const data = route.request().postDataJSON();
-			const newTrip = { ...data, id: 'test-trip-id', netProfit: 150.5 }; // Add dummy calculated fields
+			// Include a fuelCost to simulate a trip that would previously have created a trip-derived fuel log
+			const newTrip = { ...data, id: 'test-trip-id', netProfit: 150.5, fuelCost: 12.34 }; // Add fuelCost to simulate real trip fuel
 			mockTrips.push(newTrip);
 			await route.fulfill({ status: 201, json: newTrip });
 		} else {
@@ -372,4 +373,9 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
 	// Check if the card appears in the list
 	// Matches the start address we entered
 	await expect(page.locator('.trip-card')).toContainText('123 Start St');
+
+	// Verify Millage page does NOT include trip-derived fuel logs (regression test)
+	await page.goto('/dashboard/millage');
+	// The old behavior created an item with id `trip-fuel-test-trip-id`; ensure it is not present
+	await expect(page.locator('#expense-trip-fuel-test-trip-id-title')).toHaveCount(0);
 });

@@ -92,19 +92,9 @@
 		const date =
 			trip.date || (trip.createdAt ? trip.createdAt.split('T')[0] : _fmtInput(new Date()));
 
-		// 1. Fuel
-		if (trip.fuelCost && trip.fuelCost > 0) {
-			items.push({
-				id: `trip-fuel-${trip.id}`,
-				date: date,
-				category: 'fuel',
-				amount: trip.fuelCost,
-				description: 'Fuel',
-				taxDeductible: !!(trip as any).fuelTaxDeductible,
-				source: 'trip',
-				tripId: trip.id
-			});
-		}
+		// Trip-derived expenses intentionally excluded from Millage listing
+		// (Fuel/maintenance/supplies from trips are shown under Expenses, not Millage)
+		// This avoids duplicating expense entries across both lists.
 
 		// 2. Maintenance Items removed for Millage page (excluded)
 		// (maintenance entries are intentionally omitted from millage listing)
