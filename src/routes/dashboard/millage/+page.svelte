@@ -13,12 +13,20 @@
 
 	// [!code focus:4] Import PageData and receive props from server
 	import type { PageData } from './$types';
+	import type { MillageRecord as DBMillageRecord } from '$lib/db/types';
 
 	export let data: PageData;
 
 	// [!code focus:3] Hydrate the store immediately when data arrives from the server
 	$: if (data.millage) {
-		millage.set(data.millage);
+		// Ensure server-provided records include the required `syncStatus` property
+		// and cast to the DB MillageRecord[] expected by the store.
+		millage.set(
+			data.millage.map((r) => ({
+				...r,
+				syncStatus: (r as any).syncStatus ?? 'synced'
+			})) as DBMillageRecord[]
+		);
 	}
 
 	let isMillageSettingsOpen = false;

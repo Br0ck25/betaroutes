@@ -1,3 +1,4 @@
+// src/lib/stores/millage.ts
 import { writable, get } from 'svelte/store';
 import { getDB } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
@@ -12,7 +13,28 @@ function createMillageStore() {
 
 	return {
 		subscribe,
-		set, // [!code highlight] <--- This was missing! It is required for +page.svelte hydration.
+		set,
+
+		// New method to initialize from Server Data (SSR) + persist to local DB
+		async hydrate(data: MillageRecord[], userId: string) {
+			// 1. Show immediately
+			set(data);
+
+			// 2. Cache to IndexedDB in background so future loads work
+			try {
+				const db = await getDB();
+				const tx = db.transaction('millage', 'readwrite');
+				const store = tx.objectStore('millage');
+				for (const item of data) {
+					// Only overwrite if newer or missing (basic check)
+					// For hydration, we generally trust the server
+					await store.put({ ...item, syncStatus: 'synced' });
+				}
+				await tx.done;
+			} catch (err) {
+				console.error('Failed to hydrate millage cache:', err);
+			}
+		},
 
 		updateLocal(record: MillageRecord) {
 			update((items) => {
@@ -127,7 +149,6 @@ function createMillageStore() {
 					updated.miles = Math.max(0, updated.endOdometer - updated.startOdometer);
 				}
 
-				// Ensure numeric millageRate if present
 				if (typeof updated.millageRate === 'string') {
 					const n = Number(updated.millageRate);
 					updated.millageRate = isNaN(n) ? undefined : n;
@@ -160,11 +181,9 @@ function createMillageStore() {
 
 			try {
 				const db = await getDB();
-
 				const millageTx = db.transaction('millage', 'readonly');
 				const rec = await millageTx.objectStore('millage').get(id);
 
-				// If it's already gone locally, just sync the delete
 				if (!rec) {
 					await syncManager.addToQueue({
 						action: 'delete',
@@ -173,7 +192,6 @@ function createMillageStore() {
 					});
 					return;
 				}
-
 				if (rec.userId !== userId) throw new Error('Unauthorized');
 
 				const now = new Date();
@@ -226,7 +244,7 @@ function createMillageStore() {
 		async syncFromCloud(userId: string) {
 			isLoading.set(true);
 			try {
-				if (!navigator.onLine) return;
+				if (!navigator.onLine) return; // Note: removing return logic here to ensure load always happens is one way, but putting load in finally is safer.
 
 				const lastSync = localStorage.getItem('last_sync_millage');
 				const sinceDate = lastSync ? new Date(new Date(lastSync).getTime() - 5 * 60 * 1000) : null;
@@ -240,47 +258,47 @@ function createMillageStore() {
 
 				const cloud: any = await response.json();
 
-				if (cloud.length === 0) {
-					localStorage.setItem('last_sync_millage', new Date().toISOString());
-					return;
-				}
+				// [!code change] Removed early return. Even if cloud is empty, we must proceed to load local data.
+				if (cloud.length > 0) {
+					const db = await getDB();
 
-				const db = await getDB();
+					const trashTx = db.transaction('trash', 'readonly');
+					const trashItems = await trashTx.objectStore('trash').getAll();
+					const trashIds = new Set(trashItems.map((t: any) => t.id));
+					await trashTx.done;
 
-				const trashTx = db.transaction('trash', 'readonly');
-				const trashItems = await trashTx.objectStore('trash').getAll();
-				const trashIds = new Set(trashItems.map((t: any) => t.id));
-				await trashTx.done;
+					const tx = db.transaction('millage', 'readwrite');
+					const store = tx.objectStore('millage');
 
-				const tx = db.transaction('millage', 'readwrite');
-				const store = tx.objectStore('millage');
+					for (const rec of cloud) {
+						if (rec.deleted) {
+							const local = await store.get(rec.id);
+							if (local) await store.delete(rec.id);
+							continue;
+						}
 
-				for (const rec of cloud) {
-					if (rec.deleted) {
+						if (trashIds.has(rec.id)) continue;
+
 						const local = await store.get(rec.id);
-						if (local) await store.delete(rec.id);
-						continue;
+						if (!local || new Date(rec.updatedAt) > new Date(local.updatedAt)) {
+							await store.put({
+								...rec,
+								syncStatus: 'synced',
+								lastSyncedAt: new Date().toISOString()
+							});
+						}
 					}
-
-					if (trashIds.has(rec.id)) continue;
-
-					const local = await store.get(rec.id);
-					if (!local || new Date(rec.updatedAt) > new Date(local.updatedAt)) {
-						await store.put({
-							...rec,
-							syncStatus: 'synced',
-							lastSyncedAt: new Date().toISOString()
-						});
-					}
+					await tx.done;
 				}
 
-				await tx.done;
 				localStorage.setItem('last_sync_millage', new Date().toISOString());
 
-				await this.load(userId);
+				// [!code change] load() is now called in finally block to guarantee display
 			} catch (err) {
 				console.error('❌ Failed to sync millage from cloud:', err);
 			} finally {
+				// [!code change] CRITICAL: Always load data from IDB to Store, even if sync skipped or failed
+				await this.load(userId);
 				isLoading.set(false);
 			}
 		},
