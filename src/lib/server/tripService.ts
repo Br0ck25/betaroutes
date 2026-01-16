@@ -179,6 +179,34 @@ export function makeTripService(
 		}
 	}
 
+	// Helper to fetch directly from KV (Source of Truth)
+	async function listFromKV(userId: string): Promise<TripRecord[]> {
+		const prefix = prefixForUser(userId);
+		const out: TripRecord[] = [];
+		let list = await kv.list({ prefix });
+		let keys = list.keys;
+
+		while (!list.list_complete && list.cursor) {
+			list = await kv.list({ prefix, cursor: list.cursor });
+			keys = keys.concat(list.keys);
+		}
+
+		for (const k of keys) {
+			const raw = await kv.get(k.name);
+			if (!raw) continue;
+			try {
+				const t = JSON.parse(raw);
+				// Filter out deleted items here, similar to the DO
+				if (!t.deleted) out.push(t);
+			} catch (e) {
+				// ignore corrupt JSON in KV
+			}
+		}
+
+		out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+		return out;
+	}
+
 	return {
 		async checkMonthlyQuota(
 			userId: string,
@@ -210,97 +238,67 @@ export function makeTripService(
 
 			const res = await stub.fetch(url);
 
+			// --- FAILSAFE 1: If DO is completely down (e.g. 500), fallback to KV immediately ---
 			if (!res.ok) {
-				log.error(`[TripService] DO Error: ${res.status}`);
-				return [];
+				log.error(`[TripService] DO Error: ${res.status} - Falling back to KV`);
+				const kvTrips = await listFromKV(userId);
+				if (options.since) {
+					const sinceDate = new Date(options.since);
+					return kvTrips.filter((t) => new Date(t.updatedAt || t.createdAt) > sinceDate);
+				}
+				return kvTrips;
 			}
 
 			const data = (await res.json()) as
-				| { trips: TripRecord[]; needsMigration?: boolean }
+				| { trips: TripRecord[]; needsMigration?: boolean; pagination?: { total: number } }
 				| TripRecord[];
 
 			let trips: TripRecord[] = [];
 			let needsMigration = false;
+			let doCount = 0;
 
 			if (Array.isArray(data)) {
 				trips = data;
+				doCount = trips.length;
 			} else {
 				trips = data.trips || [];
 				needsMigration = !!data.needsMigration;
+				// Use the total from pagination if available, otherwise array length
+				doCount = data.pagination?.total ?? trips.length;
 			}
 
-			// SELF-HEAL: If the DO index returned empty but KV has trips, force a migrate and return KV data
-			if (!needsMigration && trips.length === 0) {
-				try {
-					const prefix = prefixForUser(userId);
-					let list = await kv.list({ prefix });
-					let keys = list.keys;
+			// --- FAILSAFE 2: Count-Based Consistency Check ---
+			// Retrieve the expected count of active trips from KV metadata
+			const expectedCountStr = await kv.get(`meta:user:${userId}:trip_count`);
+			const expectedCount = expectedCountStr ? parseInt(expectedCountStr, 10) : 0;
 
-					while (!list.list_complete && list.cursor) {
-						list = await kv.list({ prefix, cursor: list.cursor });
-						keys = keys.concat(list.keys);
-					}
+			// If the DO index has fewer items than KV expects, or explicitly requests migration,
+			// or returns 0 items when we know some should exist, trigger a full repair.
+			if (needsMigration || doCount < expectedCount || (trips.length === 0 && expectedCount > 0)) {
+				log.info(
+					`[TripService] Sync mismatch detected (DO: ${doCount}, KV: ${expectedCount}). Triggering repair.`
+				);
 
-					if (keys.length > 0) {
-						const out: TripRecord[] = [];
-						for (const k of keys) {
-							const raw = await kv.get(k.name);
-							if (!raw) continue;
-							const t = JSON.parse(raw);
-							out.push(t);
-						}
+				// 1. Fetch full list from KV (Source of Truth)
+				const repairedTrips = await listFromKV(userId);
 
-						if (out.length > 0) {
-							log.info('[TripService] Detected trips in KV but empty DO index; triggering migrate');
-							const summaries = out.map(toSummary);
-							// Best-effort: try to ask DO to migrate these summaries
-							try {
-								await stub.fetch(`${DO_ORIGIN}/migrate`, {
-									method: 'POST',
-									body: JSON.stringify(summaries)
-								});
-							} catch (e) {
-								log.warn('[TripService] DO migrate failed', { message: (e as Error).message });
-							}
-
-							out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-							return out;
-						}
-					}
-				} catch (e) {
-					log.warn('[TripService] Self-heal migrate check failed', {
-						message: (e as Error).message
-					});
-				}
-			}
-
-			if (needsMigration) {
-				const prefix = prefixForUser(userId);
-				const out: TripRecord[] = [];
-				let list = await kv.list({ prefix });
-				let keys = list.keys;
-
-				while (!list.list_complete && list.cursor) {
-					list = await kv.list({ prefix, cursor: list.cursor });
-					keys = keys.concat(list.keys);
+				// 2. Asynchronously repair the DO index
+				if (repairedTrips.length > 0) {
+					const summaries = repairedTrips.map(toSummary);
+					stub
+						.fetch(`${DO_ORIGIN}/migrate`, {
+							method: 'POST',
+							body: JSON.stringify(summaries)
+						})
+						.catch((e) => log.warn('[TripService] Background repair failed', e));
 				}
 
-				for (const k of keys) {
-					const raw = await kv.get(k.name);
-					if (!raw) continue;
-					const t = JSON.parse(raw);
-					out.push(t);
+				// 3. Return the fresh data from KV immediately to the user
+				if (options.since) {
+					const sinceDate = new Date(options.since);
+					return repairedTrips.filter((t) => new Date(t.updatedAt || t.createdAt) > sinceDate);
 				}
-
-				const summaries = out.map(toSummary);
-
-				await stub.fetch(`${DO_ORIGIN}/migrate`, {
-					method: 'POST',
-					body: JSON.stringify(summaries)
-				});
-
-				out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-				return out;
+				return repairedTrips;
 			}
 
 			if (options.since) {
