@@ -60,12 +60,21 @@
 		},
 		{
 			href: '/dashboard/millage/',
-			icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+			icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+				<path d="M3 11h18v3a2 2 0 0 1-2 2h-1.5a2 2 0 0 1-4 0H11.5a2 2 0 0 1-4 0H6a2 2 0 0 1-2-2v-3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+				<path d="M5 11L7 6h10l2 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+				<circle cx="7.5" cy="17.5" r="1.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+				<circle cx="16.5" cy="17.5" r="1.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			</svg>`,
 			label: 'Millage'
 		},
 		{
 			href: '/dashboard/trips/',
-			icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M9 2C13.97 2 18 6.03 18 11C18 15.97 13.97 20 9 20H2V13C2 8.03 6.03 4 11 4H18V11C18 6.03 13.97 2 9 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+			icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+				<path d="M12 2C8.13 2 5 5.13 5 9c0 5 7 11 7 11s7-6 7-11c0-3.87-3.13-7-7-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+				<circle cx="12" cy="9" r="2.5" stroke="currentColor" stroke-width="2"/>
+				<path d="M3 12c4-2 6 1 9-1s6 0 9 1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 3"/>
+			</svg>`,
 			label: 'Trips',
 			exclude: ['/dashboard/trips/new']
 		},
