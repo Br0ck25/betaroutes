@@ -231,7 +231,41 @@ class SyncManager {
 	private async processSyncItem(item: SyncQueueItem) {
 		const { action, tripId, data } = item;
 
-		const storeName = ((data as any)?.store as string) || 'trips';
+		// Determine store robustly. Don't trust a `store` hint if the payload
+		// clearly looks like a trip (has stops/startAddress/totalMiles) or an expense
+		// (has category/amount). This prevents accidental routing when payloads
+		// include a `store` property by mistake (e.g., trips with `store: 'millage'`).
+		const hintedStore = ((data as any)?.store as string) || '';
+		const looksLikeTrip = Boolean(
+			data &&
+			((data as any).stops || (data as any).startAddress || (data as any).totalMiles != null)
+		);
+		const looksLikeExpense = Boolean(
+			data &&
+			(((data as any).category && (data as any).amount != null) || (data as any).amount != null)
+		);
+
+		let storeName: string;
+		if (looksLikeTrip) {
+			storeName = 'trips';
+			if (hintedStore && hintedStore !== 'trips') {
+				console.warn(
+					`SyncManager: Ignoring hinted store '${hintedStore}' for trip-like payload ${tripId}`
+				);
+			}
+		} else if (looksLikeExpense) {
+			storeName = 'expenses';
+			if (hintedStore && hintedStore !== 'expenses') {
+				console.warn(
+					`SyncManager: Ignoring hinted store '${hintedStore}' for expense-like payload ${tripId}`
+				);
+			}
+		} else if (hintedStore === 'expenses' || hintedStore === 'millage') {
+			storeName = hintedStore;
+		} else {
+			storeName = hintedStore || 'trips';
+		}
+
 		const baseUrl =
 			storeName === 'expenses'
 				? '/api/expenses'
