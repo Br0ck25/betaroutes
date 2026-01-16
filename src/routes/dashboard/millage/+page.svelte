@@ -243,7 +243,7 @@
 		await invalidateAll();
 	}
 
-    // ... imports ...
+	// ... imports ...
 	function isTripSource(item: any): boolean {
 		return (item as any)?.source === 'trip';
 	}
@@ -475,7 +475,7 @@
 
 		<div class="summary-card">
 			<div class="summary-label">Total Miles</div>
-			<div class="summary-value">{totalMiles.toFixed(2)} mi</div>
+			<div class="summary-value">{totalMiles.toFixed(2)}</div>
 		</div>
 
 		<div class="summary-card">
