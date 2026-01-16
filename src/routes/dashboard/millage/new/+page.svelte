@@ -194,7 +194,7 @@
 
 			<!-- Settings modal removed for Millage logs -->
 
-			<div class="form-row">
+			<div class="form-row vehicle-rate-row">
 				<div class="form-group">
 					<label for="vehicle">Vehicle</label>
 					<select id="vehicle" bind:value={formData.vehicle} class="p-2 border rounded-lg">
@@ -302,6 +302,13 @@
 	}
 	@media (max-width: 767px) {
 		.form-row .grid-3 {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	/* Force millage rate below vehicle on small screens <= 711px */
+	@media (max-width: 711px) {
+		.vehicle-rate-row {
 			grid-template-columns: 1fr;
 		}
 	}
