@@ -15,10 +15,10 @@ function walk(dir) {
 function fixContent(src) {
 	let s = src;
 	// 1) Handle double-brace use: e.g., use:autocomplete={{ apiKey: API_KEY }} -> use:autocomplete="{{ apiKey: API_KEY }}"
-	s = s.replace(/([\w:-]+)=\{\{([\s\S]*?)\}\}/g, (m, a, inner) => `${a}="{{ ${inner.trim()} }}"`);
+	s = s.replace(/([\w:-]+)={{([\s\S]*?)}}/g, (m, a, inner) => `${a}="{{ ${inner.trim()} }}"`);
 
 	// 2) Handle single-brace attributes: bind:, on:, class:, aria:, value=, etc.
-	s = s.replace(/([\w:-]+)=\{([^\{][^}]*)\}/g, (m, a, inner) => `${a}="{${inner.trim()}}"`);
+	s = s.replace(/([\w:-]+)=\{([^}]*)\}/g, (m, a, inner) => `${a}="{${inner.trim()}}"`);
 
 	// 3) Convert leading tabs to 4 spaces for indentation
 	s = s.replace(/^\t+/gm, (m) => ' '.repeat(4 * m.length));

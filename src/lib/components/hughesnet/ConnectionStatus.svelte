@@ -56,77 +56,41 @@
 		</div>
 
 		<button class="btn-primary" on:click={handleConnect} disabled={loading}>
-			{statusMessage === 'Sync Now' ? 'Connect' : statusMessage}
+			{#if statusMessage === 'Sync Now'}Connect{:else}{statusMessage}{/if}
 		</button>
 	{:else}
 		<div class="success-state">
-			<div class="status-indicator">
-				<span class="dot"></span> Connected
-			</div>
+			<div class="status-indicator"><span class="dot"></span> Connected</div>
 			<p class="last-sync">Found {ordersCount} active orders in cache.</p>
 		</div>
 
 		<div class="warning-box">
 			<p>
-					⚠️ <strong>Important:</strong> Before syncing, ensure your Start/End addresses, MPG, and Gas Price defaults are updated in <button class="btn-link" on:click={() => dispatch('openTripSettings')} aria-label="Open Trip Settings">Trip Settings</button>.
-
-		{#if loading && currentBatch > 0}
-			<div class="sync-progress-container">
-				<div class="progress-info">
-					<span class="progress-label">Syncing Batch {currentBatch}</span>
-					<span class="progress-sub">Fetching orders...</span>
-				</div>
-				<div class="progress-bar">
-					<div class="progress-fill indeterminate"></div>
-				</div>
-			</div>
-		{:else}
+				<strong>Important:</strong> Check your Trip Settings before syncing (Start/End addresses, MPG,
+				Gas Price).
+			</p>
 			<div class="button-group mt-4">
-				<button class="btn-primary" on:click={() => dispatch('sync')} disabled={loading}>
-					<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-						><path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-						></path></svg
-					>
-					{statusMessage}
-				</button>
-
-				<button class="btn-secondary" on:click={() => dispatch('disconnect')} disabled={loading}>
-					Disconnect
-				</button>
-
-				<button
-					class="btn-secondary danger-hover"
-					on:click={() => dispatch('clear')}
-					disabled={loading}
+				<button class="btn-primary" on:click={() => dispatch('sync')} disabled={loading}
+					>{statusMessage}</button
 				>
-					Delete HNS Trips
-				</button>
-
-				<!-- Restore Archived Orders -->
+				<button class="btn-secondary" on:click={() => dispatch('disconnect')} disabled={loading}
+					>Disconnect</button
+				>
 				<button
 					class="btn-secondary"
-					on:click={() => (showRestore = !showRestore)}
-					disabled={loading}
+					on:click={() => dispatch('openTripSettings')}
+					disabled={loading}>Trip Settings</button
 				>
-					{showRestore ? 'Hide Archived' : 'Restore Archived Orders'}
-				</button>
 			</div>
-		{/if}
-
-		{#if showRestore}
-			<div class="mt-4">
-				<ArchivedRestore
-					on:restored={() => {
-						dispatch('reloaded');
-					}}
-					on:restoreAndSync={(e: CustomEvent) => dispatch('restoreAndSync', e.detail)}
-				/>
-			</div>
-		{/if}
+			{#if showRestore}
+				<div class="mt-4">
+					<ArchivedRestore
+						on:restored={() => dispatch('reloaded')}
+						on:restoreAndSync={(e: CustomEvent) => dispatch('restoreAndSync', e.detail)}
+					/>
+				</div>
+			{/if}
+		</div>
 	{/if}
 </div>
 
@@ -217,7 +181,7 @@
 	.btn-link {
 		background: none;
 		border: none;
-		color: var(--accent-blue, #1FA8DB);
+		color: var(--accent-blue, #1fa8db);
 		cursor: pointer;
 		padding: 0;
 		font-weight: 700;

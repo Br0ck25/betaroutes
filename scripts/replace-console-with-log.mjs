@@ -28,7 +28,7 @@ function replaceConsole(content) {
 }
 
 async function addImportIfMissing(filePath, content) {
-	if (!/import\s+\{\s*log\s*\}\s+from\s+['\"]\$lib\/server\/log['\"];?/.test(content)) {
+	if (!/import\s+\{\s*log\s*\}\s+from\s+['"]\$lib\/server\/log['"];?/.test(content)) {
 		// Add near top after other imports
 		const lines = content.split('\n');
 		const idx = lines.findIndex((l) => l.startsWith('import'));

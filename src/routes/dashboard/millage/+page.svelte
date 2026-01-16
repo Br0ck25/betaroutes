@@ -24,7 +24,6 @@
 
 		// eslint-disable-next-line svelte/require-store-reactive-access
 		if ($user?.id && 'hydrate' in millage) {
-			// @ts-expect-error - Custom method
 			millage.hydrate(normalized, $user.id);
 		} else {
 			millage.set(normalized);
@@ -120,7 +119,7 @@
 				!query ||
 				((item as any).description && (item as any).description.toLowerCase().includes(query)) ||
 				String((item as any).amount || '').includes(query) ||
-				((item as any).source === 'trip' && 'trip log'.includes(query));
+				((item as any).source === 'trip' && 'trip'.includes(query));
 
 			if (!matchesSearch) return false;
 			if (filterCategory !== 'all' && item.category !== filterCategory) return false;
@@ -173,7 +172,7 @@
 		if (e) e.stopPropagation();
 		if (!confirm('Move this expense to trash? You can restore it later.')) return;
 		if (id.startsWith('trip-')) {
-			toasts.error('Cannot delete Trip Logs here. Delete the Trip instead.');
+			toasts.error('Cannot delete Trips here. Delete the Trip instead.');
 			return;
 		}
 
@@ -218,7 +217,7 @@
 
 		if (
 			!confirm(
-				`Move ${manualExpenses.length} expenses to trash? ${tripLogs > 0 ? `(${tripLogs} trip logs will be skipped)` : ''}`
+				`Move ${manualExpenses.length} expenses to trash? ${tripLogs > 0 ? `(${tripLogs} trips will be skipped)` : ''}`
 			)
 		)
 			return;
@@ -257,7 +256,7 @@
 				((e as any).miles ?? 0).toFixed(2),
 				((e as any).reimbursement || '').toString(),
 				`"${(((e as any).notes || '') as string).replace(/"/g, '""')}"`,
-				'Manual'
+				isTripSource(e) ? 'Trip' : 'Manual'
 			].join(',')
 		);
 
@@ -401,7 +400,7 @@
 </svelte:head>
 
 <div class="page-container">
-    <div class="page-header">
+	<div class="page-header">
 		<div class="header-text">
 			<h1 class="page-title">Millage</h1>
 			<p class="page-subtitle">Log odometer readings and miles</p>
@@ -468,13 +467,13 @@
 
 	<div class="stats-summary">
 		<div class="summary-card">
-			<div class="summary-label">Total Logs</div>
+			<div class="summary-label">Total</div>
 			<div class="summary-value">{filteredExpenses.length}</div>
 		</div>
 
 		<div class="summary-card">
 			<div class="summary-label">Total Miles</div>
-			<div class="summary-value">{totalMiles.toFixed(2)} mi</div>
+			<div class="summary-value">{totalMiles.toFixed(2)}</div>
 		</div>
 
 		<div class="summary-card">
@@ -692,12 +691,12 @@
 								<h2 class="expense-desc-title" id={'expense-' + expense.id + '-title'}>
 									{expense.notes ||
 										expense.description ||
-										`Log ${expense.startOdometer} → ${expense.endOdometer}`}
+										`${expense.startOdometer} → ${expense.endOdometer}`}
 								</h2>
 							</div>
 
 							<span class="expense-amount-display" aria-label={`Miles: ${expense.miles ?? 0}`}>
-								{(expense.miles ?? 0).toFixed(2)} mi
+								{(expense.miles ?? 0).toFixed(2)}
 								{#if typeof expense.reimbursement === 'number' && expense.reimbursement > 0}
 									<div class="reimbursement">({formatCurrency(expense.reimbursement)})</div>
 								{/if}
@@ -714,16 +713,27 @@
 						</div>
 
 						<div class="card-stats">
-							<div class="stat-badge-container">
-								<span class={`category-badge ${getCategoryColor(expense.category)}`}>
-									{(expense.miles ?? 0).toFixed(2)} mi
-								</span>
-								{#if isTripSource(expense)}
-									<span class="source-badge">Trip Log</span>
-								{/if}
-								{#if expense.taxDeductible}
-									<span class="category-badge tax-pill" title="Tax deductible">Tax Deductible</span>
-								{/if}
+							<div class="stat-item">
+								<span class="stat-label">Miles</span>
+								<span class="stat-value">{(expense.miles ?? 0).toFixed(2)}</span>
+							</div>
+							<div class="stat-item">
+								<span class="stat-label">Vehicle</span>
+								<span class="stat-value">{expense.vehicle || '-'}</span>
+							</div>
+							<div class="stat-item">
+								<span class="stat-label">Rate</span>
+								<span class="stat-value"
+									>{expense.millageRate != null
+										? `$${Number(expense.millageRate).toFixed(3)}/mi`
+										: '-'}</span
+								>
+							</div>
+							<div class="stat-item">
+								<span class="stat-label">Odometer</span>
+								<span class="stat-value"
+									>{expense.startOdometer ?? '-'} → {expense.endOdometer ?? '-'}</span
+								>
 							</div>
 						</div>
 					</div>
@@ -1252,11 +1262,26 @@
 	}
 
 	.card-stats {
-		display: flex;
-		align-items: center;
-		max-width: 100%;
-		overflow-x: auto;
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: 12px;
 	}
+	.stat-item {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+	}
+	.stat-label {
+		font-size: 11px;
+		color: #9ca3af;
+		text-transform: uppercase;
+	}
+	.stat-value {
+		font-size: 14px;
+		font-weight: 600;
+		color: #4b5563;
+	}
+
 	.stat-badge-container {
 		display: flex;
 		gap: 8px;

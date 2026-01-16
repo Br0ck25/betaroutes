@@ -15,8 +15,9 @@ function walk(dir) {
 function fixContent(src) {
 	let s = src;
 	// Convert double-braced attributes to single-brace (handles quoted and unquoted forms)
-	s = s.replace(/([\w:-]+)=\"\{\{([\s\S]*?)\}\}\"/g, (m, a, inner) => `${a}={${inner}}`);
-	s = s.replace(/([\w:-]+)=\'\{\{([\s\S]*?)\}\}\'/g, (m, a, inner) => `${a}={${inner}}`);
+	s = s.replace(/([\w:-]+)="{{([\s\S]*?)}}"/g, (m, a, inner) => `${a}={${inner}}`);
+	s = s.replace(/([\w:-]+)='{{([\s\S]*?)}}'/g, (m, a, inner) => `${a}={${inner}}`);
+	// fallback double-brace matcher
 	s = s.replace(/([\w:-]+)=\{\{([\s\S]*?)\}\}/g, (m, a, inner) => `${a}={${inner}}`);
 
 	return s;

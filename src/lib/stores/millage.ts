@@ -9,18 +9,30 @@ export const isLoading = writable(false);
 
 function createMillageStore() {
 	const { subscribe, set, update } = writable<MillageRecord[]>([]);
+	let _hydrationPromise: Promise<void> | null = null;
+	let _resolveHydration: any = null;
+	// Referenced intentionally to avoid unused variable lint
+	void _hydrationPromise;
+	void _resolveHydration;
 
 	return {
 		subscribe,
 		set,
 
 		// [!code fix] Hydrate: Sets data INSTANTLY, then cleans up in background
-		async hydrate(data: MillageRecord[], userId: string) {
+		async hydrate(data: MillageRecord[]) {
+			// Start hydration latch so syncFromCloud can wait if needed
+			_hydrationPromise = new Promise((res) => (_resolveHydration = res));
+
 			// 1. Show Server Data Immediately (Fixes "Disappearing Log")
 			set(data);
 
 			// 2. Stop here if running on Server (Fixes ReferenceError)
-			if (typeof window === 'undefined') return;
+			if (typeof window === 'undefined') {
+				_resolveHydration?.();
+				_hydrationPromise = null;
+				return;
+			}
 
 			try {
 				const db = await getDB();
@@ -57,8 +69,14 @@ function createMillageStore() {
 				}
 
 				await tx.done;
+
+				// Resolve hydration so any concurrent syncs can proceed
+				if (_resolveHydration) _resolveHydration();
+				_hydrationPromise = null;
 			} catch (err) {
 				console.error('Failed to hydrate millage cache:', err);
+				_resolveHydration?.();
+				_hydrationPromise = null;
 			}
 		},
 
@@ -281,7 +299,7 @@ function createMillageStore() {
 				const item = await tx.objectStore('millage').get(id);
 				if (!item || item.userId !== userId) return null;
 				return item;
-			} catch (err) {
+			} catch {
 				return null;
 			}
 		},
@@ -340,6 +358,8 @@ function createMillageStore() {
 			} catch (err) {
 				console.error('❌ Failed to sync millage from cloud:', err);
 			} finally {
+				// Ensure hydration (if running) completes before loading DB to avoid races
+				if (_hydrationPromise) await _hydrationPromise;
 				await this.load(userId);
 				isLoading.set(false);
 			}

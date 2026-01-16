@@ -24,7 +24,12 @@ export async function createTripForDate(
 	driveTimeBonus: number,
 	tripService: { put: (t: Trip) => Promise<void> },
 	settingsKV: KVNamespace,
-	router: { getRouteInfo: (origin: string, destination: string) => Promise<RouteLeg | null> },
+	router: {
+		getRouteInfo: (origin: string, destination: string) => Promise<RouteLeg | null>;
+		resolveAddress?: (
+			raw: string
+		) => Promise<{ lat?: number; lon?: number; formattedAddress?: string } | null>;
+	},
 	logger: (msg: string) => void
 ): Promise<boolean> {
 	let defaultStart = '',

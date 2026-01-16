@@ -21,25 +21,26 @@
 
 		// eslint-disable-next-line svelte/require-store-reactive-access
 		if ($user?.id && 'hydrate' in expenses) {
-			// @ts-expect-error - Custom method
 			expenses.hydrate(normalized, $user.id);
 		} else {
 			expenses.set(normalized);
 		}
 	}
-    
-    // --- STATE ---
-    let searchQuery = '';
+
+	// --- STATE ---
+	let searchQuery = '';
 	let sortBy = 'date';
 	let sortOrder = 'desc';
 	let filterCategory = 'all';
-    
-    const _now = new Date();
-	function _fmtInput(d: Date) { return d.toISOString().slice(0, 10); }
+
+	const _now = new Date();
+	function _fmtInput(d: Date) {
+		return d.toISOString().slice(0, 10);
+	}
 	let startDate = _fmtInput(new Date(_now.getFullYear(), 0, 1));
 	let endDate = _fmtInput(_now);
-    
-    let lastHadSelections = false;
+
+	let lastHadSelections = false;
 
 	// Selection State
 	let selectedExpenses = new Set<string>();
@@ -182,7 +183,7 @@
 				!query ||
 				(item.description && item.description.toLowerCase().includes(query)) ||
 				item.amount.toString().includes(query) ||
-				((item as any).source === 'trip' && 'trip log'.includes(query));
+				((item as any).source === 'trip' && 'trip'.includes(query));
 
 			if (!matchesSearch) return false;
 
@@ -243,7 +244,7 @@
 
 		// Check if it's a trip log
 		if (id.startsWith('trip-')) {
-			toasts.error('Cannot delete Trip Logs here. Delete the Trip instead.');
+			toasts.error('Cannot delete Trips here. Delete the Trip instead.');
 			return;
 		}
 
@@ -258,8 +259,8 @@
 					selectedExpenses.delete(id);
 					selectedExpenses = selectedExpenses;
 				}
-                // [!code fix] Refresh page data to ensure server sync
-                await invalidateAll();
+				// [!code fix] Refresh page data to ensure server sync
+				await invalidateAll();
 			} catch (err) {
 				console.error(err);
 				toasts.error('Failed to move to trash');
@@ -291,7 +292,7 @@
 
 		if (
 			!confirm(
-				`Move ${manualExpenses.length} expenses to trash? ${tripLogs > 0 ? `(${tripLogs} trip logs will be skipped)` : ''}`
+				`Move ${manualExpenses.length} expenses to trash? ${tripLogs > 0 ? `(${tripLogs} trips will be skipped)` : ''}`
 			)
 		)
 			return;
@@ -314,8 +315,8 @@
 
 		toasts.success(`Moved ${successCount} expenses to trash.`);
 		selectedExpenses = new Set();
-        // [!code fix] Refresh page data to ensure server sync
-        await invalidateAll();
+		// [!code fix] Refresh page data to ensure server sync
+		await invalidateAll();
 	}
 
 	function isTripSource(item: any): boolean {
@@ -333,7 +334,7 @@
 				e.category,
 				e.amount,
 				`"${(e.description || '').replace(/"/g, '""')}"`,
-				isTripSource(e) ? 'Trip Log' : 'Manual'
+				isTripSource(e) ? 'Trip' : 'Manual'
 			].join(',')
 		);
 
@@ -827,7 +828,7 @@
 									{getCategoryLabel(expense.category)}
 								</span>
 								{#if isTripSource(expense)}
-									<span class="source-badge">Trip Log</span>
+									<span class="source-badge">Trip</span>
 								{/if}
 								{#if expense.taxDeductible}
 									<span class="category-badge tax-pill" title="Tax deductible">Tax Deductible</span>

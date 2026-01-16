@@ -10,7 +10,7 @@
 	import { user } from '$lib/stores/auth';
 	import { getDB } from '$lib/db/indexedDB';
 	import type { TrashRecord } from '$lib/db/types';
-    import { get } from 'svelte/store';
+	import { get } from 'svelte/store';
 
 	const resolve = (href: string) => `${base}${href}`;
 
@@ -19,7 +19,7 @@
 	let restoring = new Set<string>();
 	let deleting = new Set<string>();
 	let currentTypeParam: string | null = null;
-	let _pageUnsub: () => void | null = null;
+	let _pageUnsub: (() => void) | null = null;
 
 	onMount(() => {
 		const params = new URLSearchParams(window.location.search);
@@ -109,7 +109,7 @@
 								? 'millage'
 								: 'trip')) ||
 					'trip';
-				
+
 				// If viewing 'all', show everything, otherwise filter
 				if (!type && !currentTypeParam) return true;
 				return inferred === effectiveType;
@@ -176,7 +176,7 @@
 
 	async function permanentDelete(id: string) {
 		if (!confirm('Permanently delete this item? Cannot be undone.')) return;
-		
+
 		if (deleting.has(id)) return;
 		deleting.add(id);
 		deleting = deleting;
@@ -237,12 +237,8 @@
 
 		<div class="header-actions">
 			{#if trashedTrips.length > 0}
-				<button class="btn-success" on:click={restoreAll}>
-					Restore All
-				</button>
-				<button class="btn-danger" on:click={emptyTrash}>
-					Empty Trash
-				</button>
+				<button class="btn-success" on:click={restoreAll}> Restore All </button>
+				<button class="btn-danger" on:click={emptyTrash}> Empty Trash </button>
 			{/if}
 
 			{#if currentTypeParam === 'expenses'}
@@ -283,8 +279,8 @@
 					(t['type'] as string | undefined) === 'expense' ||
 					(t['recordType'] as string | undefined) === 'expense' ||
 					(t['originalKey'] as string | undefined)?.startsWith('expense:')}
-				
-				{@const isMillage = 
+
+				{@const isMillage =
 					(t['type'] as string | undefined) === 'millage' ||
 					(t['recordType'] as string | undefined) === 'millage' ||
 					(t['originalKey'] as string | undefined)?.startsWith('millage:')}
@@ -298,7 +294,7 @@
 									<span class="expense-category">{trip.category || 'Uncategorized'}</span>
 								{:else if isMillage}
 									<span class="badge-millage">Millage</span>
-									{trip.vehicle || 'Millage Log'}
+									{trip['vehicle'] || 'Millage Log'}
 								{:else}
 									{typeof trip.startAddress === 'string'
 										? trip.startAddress.split(',')[0]
@@ -324,7 +320,7 @@
 								<span class="detail"
 									>{new Date(trip.date || trip.createdAt || '').toLocaleDateString()}</span
 								>
-								<span class="detail amount">{Number(trip.miles || 0).toFixed(2)} mi</span>
+								<span class="detail amount">{Number(trip['miles'] || 0).toFixed(2)} mi</span>
 								{#if trip.notes}<span class="detail">{trip.notes}</span>{/if}
 							{:else}
 								<span class="detail"
@@ -361,8 +357,8 @@
 </div>
 
 <style>
-    /* Add this new style for millage badges */
-    .badge-millage {
+	/* Add this new style for millage badges */
+	.badge-millage {
 		background-color: #d1fae5;
 		color: #065f46;
 		font-size: 0.8em;
@@ -372,7 +368,7 @@
 		vertical-align: middle;
 		font-weight: 600;
 	}
-    /* Keep existing styles */
+	/* Keep existing styles */
 	.trash-page {
 		padding: 16px;
 		max-width: 1200px;
