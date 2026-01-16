@@ -41,8 +41,31 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
 	if (!kv) return json({});
 
 	try {
-		// [!code fix] Ensure consistency with write key
-		const raw = await kv.get(`settings:${(user as any).id}`);
+		// Read primary key by user id
+		const key = `settings:${(user as any).id}`;
+		let raw = await kv.get(key);
+
+		// Fallback: older saves may have used username or email as the key. Try those and migrate.
+		if (!raw) {
+			const fallbacks = [
+				`settings:${(user as any).username}`,
+				`settings:${(user as any).email}`
+			].filter(Boolean) as string[];
+
+			for (const fk of fallbacks) {
+				const fRaw = await kv.get(fk);
+				if (fRaw) {
+					raw = fRaw;
+					// migrate to new key so other devices can see it
+					await kv.put(key, raw);
+					try {
+						await kv.delete(fk);
+					} catch {}
+					break;
+				}
+			}
+		}
+
 		const settings = raw ? JSON.parse(raw) : {};
 		return json(settings);
 	} catch (err: any) {
