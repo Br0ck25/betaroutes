@@ -21,38 +21,35 @@
 	let currentTypeParam: string | null = null;
 
 	onMount(() => {
-		// Quick initial local load (detailed sync handled reactively via page subscription)
+		// Quick initial local load (detailed sync handled reactively below)
 		const params = new URLSearchParams(window.location.search);
 		const typeParam = params.get('type');
 		loadTrash(
 			typeParam === 'expenses' ? 'expense' : typeParam === 'millage' ? 'millage' : undefined
 		).catch(console.error);
+	});
 
-		const unsubscribe = page.subscribe(($p) => {
-			const param = $p.url.searchParams.get('type');
+	$: if (browser)
+		(async () => {
+			const param = $page.url.searchParams.get('type');
 			if (param !== currentTypeParam) {
 				currentTypeParam = param;
 				const type = param === 'expenses' ? 'expense' : param === 'millage' ? 'millage' : undefined;
 				loading = true;
-				(async () => {
-					try {
+				try {
+					await loadTrash(type);
+					const userId = $user?.name || $user?.token;
+					if (userId) {
+						await trash.syncFromCloud(userId, param || undefined);
 						await loadTrash(type);
-						const userId = $user?.name || $user?.token;
-						if (userId) {
-							await trash.syncFromCloud(userId, param || undefined);
-							await loadTrash(type);
-						}
-					} catch (err) {
-						console.error('Failed to refresh trash for type change', err);
-					} finally {
-						loading = false;
 					}
-				})();
+				} catch (err) {
+					console.error('Failed to refresh trash for type change', err);
+				} finally {
+					loading = false;
+				}
 			}
-		});
-
-		return () => unsubscribe();
-	});
+		})();
 
 	async function loadTrash(type?: string) {
 		loading = true;
@@ -89,28 +86,22 @@
 				).values()
 			);
 
-			// Filter by type: use explicit `type` if provided; otherwise infer from the current URL param and default to `trip`
-			const effectiveType =
-				type ??
-				(currentTypeParam === 'expenses'
-					? 'expense'
-					: currentTypeParam === 'millage'
-						? 'millage'
-						: 'trip');
-
-			const filtered = uniqueItems.filter((it) => {
-				const inferred =
-					it.recordType ||
-					it.type ||
-					(it.originalKey &&
-						(it.originalKey.startsWith('expense:')
-							? 'expense'
-							: it.originalKey.startsWith('millage:')
-								? 'millage'
-								: 'trip')) ||
-					'trip';
-				return inferred === effectiveType;
-			});
+			// Filter by type if requested (expense/trip/millage)
+			const filtered = type
+				? uniqueItems.filter((it) => {
+						const inferred =
+							it.recordType ||
+							it.type ||
+							(it.originalKey &&
+								(it.originalKey.startsWith('expense:')
+									? 'expense'
+									: it.originalKey.startsWith('millage:')
+										? 'millage'
+										: 'trip')) ||
+							'trip';
+						return inferred === type;
+					})
+				: uniqueItems;
 
 			filtered.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
 			trashedTrips = filtered;
@@ -364,14 +355,10 @@
 									<span class="badge-expense">Expense</span>
 									<span class="expense-category">{trip.category || 'Uncategorized'}</span>
 								{:else}
-									{typeof trip.startAddress === 'string'
-										? trip.startAddress.split(',')[0]
-										: 'Unknown Trip'}
+									{trip.startAddress?.split(',')[0] || 'Unknown Trip'}
 									{#if trip.stops && trip.stops.length > 0}
 										{@const lastStop = trip.stops[trip.stops.length - 1]}
-										→ {typeof lastStop?.address === 'string'
-											? lastStop.address.split(',')[0]
-											: 'Stop'}
+										→ {lastStop?.address?.split(',')[0] || 'Stop'}
 									{/if}
 								{/if}
 							</h3>

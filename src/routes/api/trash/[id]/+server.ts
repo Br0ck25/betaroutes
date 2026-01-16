@@ -38,21 +38,25 @@ export const POST: RequestHandler = async (event) => {
 		);
 
 		const currentUser = user as { id?: string; name?: string; token?: string };
-		// Prefer username first to match expense behavior
-		const storageId = currentUser.name || currentUser.token || currentUser.id;
+		// Prefer canonical stable user id first for storage keys
+		const storageId = currentUser.id || currentUser.name || currentUser.token;
 
 		if (storageId) {
 			// Try trip restore first, then expense restore
 			let restored: unknown | null = null;
 			try {
 				restored = await svc.restore(storageId, id);
-			} catch {
+			} catch (e) {
 				// Try expense
-				const expenseSvc = (await import('$lib/server/expenseService')).makeExpenseService(
-					safeKV(platformEnv, 'BETA_EXPENSES_KV') as any,
-					safeDO(platformEnv, 'TRIP_INDEX_DO') as any
-				);
-				restored = await expenseSvc.restore(storageId, id);
+				try {
+					const expenseSvc = (await import('$lib/server/expenseService')).makeExpenseService(
+						safeKV(platformEnv, 'BETA_EXPENSES_KV') as any,
+						safeDO(platformEnv, 'TRIP_INDEX_DO') as any
+					);
+					restored = await expenseSvc.restore(storageId, id);
+				} catch (err) {
+					throw err;
+				}
 			}
 
 			// If it was a trip, increment counter
@@ -106,9 +110,8 @@ export const DELETE: RequestHandler = async (event) => {
 			placesIndexDO as any
 		);
 
-		const currentUser = user as { id?: string; name?: string; token?: string };
-		// Prefer username first to match expense behavior
-		const storageId = currentUser.name || currentUser.token || currentUser.id;
+		const currentUser = user as { name?: string; token?: string };
+		const storageId = currentUser.id || currentUser.name || currentUser.token;
 
 		if (storageId) {
 			// Attempt to remove from both trip and expense namespaces

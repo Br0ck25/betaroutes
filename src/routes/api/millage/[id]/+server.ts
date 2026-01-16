@@ -1,7 +1,7 @@
 // src/routes/api/millage/[id]/+server.ts
 import type { RequestHandler } from './$types';
 import { makeMillageService } from '$lib/server/millageService';
-import { getEnv, safeKV, safeDO } from '$lib/server/env';
+import { getEnv, safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 
@@ -20,9 +20,8 @@ export const DELETE: RequestHandler = async (event) => {
 		}
 
 		const id = event.params.id;
-		// Prefer username first to match expense behavior
 		const userId = sessionUser.name || sessionUser.token || sessionUser.id || '';
-		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
+		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!);
 		await svc.delete(userId, id);
 		return new Response(null, { status: 204 });
 	} catch (err) {
@@ -46,9 +45,8 @@ export const GET: RequestHandler = async (event) => {
 		}
 
 		const id = event.params.id;
-		// Prefer username first to match expense behavior
 		const userId = sessionUser.name || sessionUser.token || sessionUser.id || '';
-		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
+		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!);
 		const item = await svc.get(userId, id);
 		if (!item) return new Response('Not found', { status: 404 });
 		return new Response(JSON.stringify(item), { headers: { 'Content-Type': 'application/json' } });
@@ -73,11 +71,13 @@ export const PUT: RequestHandler = async (event) => {
 		}
 
 		const id = event.params.id;
-		// Prefer username first to match expense behavior
 		const userId = sessionUser.name || sessionUser.token || sessionUser.id || '';
 		const body = (await event.request.json()) as any;
 
-		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
+		const svc = makeMillageService(
+			safeKV(env, 'BETA_MILLAGE_KV')!,
+			safeKV(env, 'BETA_MILLAGE_TRASH_KV')
+		);
 		const existing = await svc.get(userId, id);
 		if (!existing) return new Response('Not found', { status: 404 });
 

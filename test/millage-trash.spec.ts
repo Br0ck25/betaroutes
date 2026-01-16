@@ -13,7 +13,7 @@ describe('Millage trash behavior', () => {
 
 	it('delete stores tombstone in main millage KV and sets TTL', async () => {
 		const kv = platform.env['BETA_MILLAGE_KV'] as any;
-		const svc = makeMillageService(kv, platform.env['TRIP_INDEX_DO'] as any);
+		const svc = makeMillageService(kv);
 
 		const userId = 'trash_m_user';
 		const id = 'm-1';

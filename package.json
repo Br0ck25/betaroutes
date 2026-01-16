@@ -31,7 +31,6 @@
 	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "^4.20251205.0",
-		"fake-indexeddb": "^3.1.7",
 		"@eslint/compat": "^1.4.0",
 		"@eslint/js": "^9.39.1",
 		"@playwright/test": "^1.56.1",
