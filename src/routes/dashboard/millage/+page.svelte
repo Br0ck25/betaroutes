@@ -480,7 +480,7 @@
 
 		<div class="summary-card">
 			<div class="summary-label">Total Miles</div>
-			<div class="summary-value">{totalMiles.toFixed(2)} mi</div>
+			<div class="summary-value">{totalMiles.toFixed(2)}</div>
 		</div>
 
 		<div class="summary-card">
@@ -720,31 +720,37 @@
 						</div>
 
 						<div class="card-stats">
-						<div class="stat-badge-container">
-							<span class={`category-badge ${getCategoryColor(expense.category)}`}>
-								{(expense.miles ?? 0).toFixed(2)} mi
-							</span>
-							{#if expense.vehicle}
-								<span class="category-badge" title="Vehicle">{getVehicleLabel(expense.vehicle)}</span>
-							{/if}
-							{#if typeof expense.millageRate === 'number' || expense.millageRate}
-								<span class="category-badge" title="Millage Rate">${(Number(expense.millageRate) || 0).toFixed(3)}/mi</span>
-							{/if}
-							{#if expense.startOdometer !== undefined || expense.endOdometer !== undefined}
-								<span class="category-badge" title="Odometer">{expense.startOdometer ?? ''} → {expense.endOdometer ?? ''}</span>
-							{/if}
-							{#if isTripSource(expense)}
-								<span class="source-badge">Trip Log</span>
-							{/if}
-							{#if expense.taxDeductible}
-								<span class="category-badge tax-pill" title="Tax deductible">Tax Deductible</span>
-							{/if}
+							<div class="stat-badge-container">
+								<span class={`category-badge ${getCategoryColor(expense.category)}`}>
+									{(expense.miles ?? 0).toFixed(2)} mi
+								</span>
+								{#if expense.vehicle}
+									<span class="category-badge" title="Vehicle"
+										>{getVehicleLabel(expense.vehicle)}</span
+									>
+								{/if}
+								{#if typeof expense.millageRate === 'number' || expense.millageRate}
+									<span class="category-badge" title="Millage Rate"
+										>${(Number(expense.millageRate) || 0).toFixed(3)}/mi</span
+									>
+								{/if}
+								{#if expense.startOdometer !== undefined || expense.endOdometer !== undefined}
+									<span class="category-badge" title="Odometer"
+										>{expense.startOdometer ?? ''} → {expense.endOdometer ?? ''}</span
+									>
+								{/if}
+								{#if isTripSource(expense)}
+									<span class="source-badge">Trip Log</span>
+								{/if}
+								{#if expense.taxDeductible}
+									<span class="category-badge tax-pill" title="Tax deductible">Tax Deductible</span>
+								{/if}
+							</div>
 						</div>
 					</div>
 				</div>
-			</div>
-				{/each}
-			</div>
+			{/each}
+		</div>
 	{:else}
 		<div class="empty-state">
 			<p>No millage logs found matching your filters.</p>
