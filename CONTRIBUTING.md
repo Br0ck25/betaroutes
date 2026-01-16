@@ -69,7 +69,6 @@ If something is unclear:
 This is a **Progressive Web App**.
 
 Do not break or remove:
-
 - `manifest.json`
 - Service worker registration
 - Offline or caching behavior

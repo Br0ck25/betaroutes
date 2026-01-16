@@ -6,7 +6,7 @@
 	export let ordersCount = 0;
 	export let loading = false;
 	export let statusMessage = 'Sync Now';
-	export const currentBatch = 0;
+	export let currentBatch = 0;
 
 	let username = '';
 	let password = '';
@@ -177,6 +177,20 @@
 		border: none;
 	}
 
+	/* Small link-style button used for inline hints */
+	.btn-link {
+		background: none;
+		border: none;
+		color: var(--accent-blue, #1fa8db);
+		cursor: pointer;
+		padding: 0;
+		font-weight: 700;
+		text-decoration: underline;
+	}
+	.btn-link:focus {
+		outline: 2px solid rgba(31, 168, 219, 0.25);
+		outline-offset: 2px;
+	}
 	.btn-primary:hover {
 		transform: translateY(-2px);
 		box-shadow: 0 8px 16px rgba(255, 127, 80, 0.3);
@@ -196,6 +210,10 @@
 		border-color: #f97316;
 		color: #f97316;
 	}
+	.btn-secondary.danger-hover:hover {
+		border-color: #dc2626;
+		color: #dc2626;
+	}
 
 	.button-group {
 		display: flex;
@@ -203,6 +221,56 @@
 	}
 	.mt-4 {
 		margin-top: 16px;
+	}
+
+	.sync-progress-container {
+		background: #fff7ed;
+		border: 1px solid #fed7aa;
+		border-radius: 12px;
+		padding: 16px;
+		text-align: center;
+		margin-top: 16px;
+	}
+	.progress-info {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		margin-bottom: 8px;
+	}
+	.progress-label {
+		font-weight: 700;
+		color: #9a3412;
+		font-size: 14px;
+	}
+	.progress-sub {
+		color: #c2410c;
+		font-size: 12px;
+	}
+	.progress-bar {
+		height: 8px;
+		background: #ffedd5;
+		border-radius: 4px;
+		overflow: hidden;
+		position: relative;
+	}
+	.progress-fill {
+		height: 100%;
+		background: linear-gradient(90deg, #f97316, #ea580c);
+		border-radius: 4px;
+		width: 30%;
+	}
+	.progress-fill.indeterminate {
+		width: 50%;
+		animation: pulse-progress 1.5s infinite ease-in-out;
+	}
+
+	@keyframes pulse-progress {
+		0% {
+			transform: translateX(-100%);
+		}
+		100% {
+			transform: translateX(200%);
+		}
 	}
 
 	.success-state {
@@ -240,5 +308,10 @@
 		border-radius: 8px;
 		font-size: 13px;
 		color: #9a3412;
+	}
+	.warning-box a {
+		color: #c2410c;
+		text-decoration: underline;
+		font-weight: 600;
 	}
 </style>

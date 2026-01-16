@@ -42,7 +42,6 @@ This repository is a **mixed Svelte 4 / Svelte 5 codebase** during migration.
 Each `.svelte` file must be in **exactly one state**:
 
 #### Legacy (Svelte 4)
-
 - Explicitly marked with:
   ```html
   <!-- MIGRATION: SVELTE4-LEGACY -->
@@ -52,14 +51,13 @@ Each `.svelte` file must be in **exactly one state**:
 - No refactors or new features
 
 #### Migrated (Svelte 5)
-
 - No migration marker
 - Uses runes-based reactivity exclusively
 - Represents the final architectural state
 
 ❌ Never mix legacy and runes syntax in the same file  
 ❌ Never partially migrate a file  
-❌ Never remove a migration marker without completing migration
+❌ Never remove a migration marker without completing migration  
 
 If legacy syntax exists without a marker: **STOP**
 
@@ -87,7 +85,7 @@ The following are permanently forbidden:
 - Markup changes must not alter semantics unless explicitly required
 
 ❌ No XHTML or XML-style syntax  
-❌ No deprecated elements or attributes
+❌ No deprecated elements or attributes  
 
 ---
 

@@ -14,7 +14,6 @@ and tooling.
 This repository enforces **non-negotiable rules**.
 
 Violations will:
-
 - Fail local checks
 - Fail pre-commit hooks
 - Fail CI
@@ -72,7 +71,6 @@ See **HTML_LIVING_STANDARD.md** for details.
 This is a **PWA-first application**.
 
 All changes must preserve:
-
 - Installability
 - Service worker registration
 - Offline / caching behavior
@@ -86,7 +84,7 @@ See **PWA.md** for full rules.
 
 ## Required Reading
 
-Before making _any_ changes, you must read:
+Before making *any* changes, you must read:
 
 - README.md
 - CONTRIBUTING.md
@@ -133,7 +131,6 @@ npx sv create my-app
 ## Final Note
 
 This repository prioritizes:
-
 - Long-term maintainability
 - Predictable behavior
 - CI safety

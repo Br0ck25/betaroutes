@@ -27,15 +27,13 @@ These rules are enforced by linting, CI, and AI guards.
 - Use **lowercase** attribute names
 
 Correct:
-
 ```html
-<section class="content"></section>
+<section class="content">
 ```
 
 Incorrect:
-
 ```html
-<section CLASS="content"></section>
+<Section CLASS="content">
 ```
 
 ---
@@ -45,15 +43,15 @@ Incorrect:
 Void elements **must not** be self-closed with XML syntax.
 
 Correct:
-
 ```html
-<input disabled /> <img src="/icon.png" alt="icon" />
+<input disabled>
+<img src="/icon.png" alt="icon">
 ```
 
 Incorrect:
-
 ```html
-<input disabled /> <img src="/icon.png" />
+<input disabled />
+<img src="/icon.png" />
 ```
 
 ---
@@ -63,15 +61,13 @@ Incorrect:
 Boolean attributes must **not** include values.
 
 Correct:
-
 ```html
-<button disabled></button>
+<button disabled>
 ```
 
 Incorrect:
-
 ```html
-<button disabled="true"></button>
+<button disabled="true">
 ```
 
 ---
@@ -81,7 +77,6 @@ Incorrect:
 Prefer semantic elements over generic containers.
 
 Preferred:
-
 - `<main>` instead of `<div id="main">`
 - `<nav>` instead of `<div class="nav">`
 - `<section>` for grouped content
@@ -123,7 +118,6 @@ Even inside `.svelte` files:
 ## Enforcement
 
 Violations of this document will:
-
 - Fail lint checks
 - Fail CI
 - Be rejected by AI_GUARD rules

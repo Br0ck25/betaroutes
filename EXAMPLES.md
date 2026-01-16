@@ -3,7 +3,6 @@
 This document defines **approved, CI-safe Svelte 5 patterns** for this repository.
 
 All examples:
-
 - Use **Svelte 5 runes-based reactivity**
 - Avoid all legacy Svelte 4 APIs
 - Follow the **HTML Living Standard**
@@ -42,7 +41,6 @@ Use `$derived` for values computed from other state.
 ```
 
 Rules for `$derived`:
-
 - Must be pure
 - Must be synchronous
 - No side effects
@@ -106,7 +104,9 @@ Props must be read using `$props()`.
 Use **standard DOM attributes**, not Svelte directives.
 
 ```svelte
-<button onclick={() => alert('clicked')}> Click me </button>
+<button onclick={() => alert('clicked')}>
+	Click me
+</button>
 ```
 
 ❌ `on:click` is forbidden in Svelte 5 files.
@@ -134,7 +134,7 @@ Slots are replaced with **snippets** and `{@render}`.
 Correct:
 
 ```html
-<input disabled />
+<input disabled>
 ```
 
 Incorrect:

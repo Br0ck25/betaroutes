@@ -340,15 +340,6 @@
 		return colors[sum % colors.length];
 	}
 
-	// Return a display label for the vehicle field. The stored value may be an id
-	// or the raw name. Prefer the matching vehicle name from userSettings, else
-	// fall back to the raw value.
-	function getVehicleLabel(val?: string) {
-		if (!val) return '-';
-		const v = $userSettings?.vehicles?.find((x) => x.id === val || x.name === val);
-		return v ? v.name : val;
-	}
-
 	function swipeable(
 		node: HTMLElement,
 		{
@@ -728,7 +719,7 @@
 							</div>
 							<div class="stat-item">
 								<span class="stat-label">Vehicle</span>
-								<span class="stat-value">{getVehicleLabel(expense.vehicle)}</span>
+								<span class="stat-value">{expense.vehicle || '-'}</span>
 							</div>
 							<div class="stat-item">
 								<span class="stat-label">Rate</span>

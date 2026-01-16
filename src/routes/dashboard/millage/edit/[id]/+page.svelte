@@ -6,7 +6,6 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import SelectMobile from '$lib/components/ui/SelectMobile.svelte';
-	import { syncManager } from '$lib/sync/syncManager';
 	const expenseId = $page.params.id;
 
 	// Settings modal removed for Millage edit page
@@ -103,46 +102,25 @@
 		}
 
 		try {
-			const start = formData.startOdometer !== '' ? Number(formData.startOdometer) : undefined;
-			const end = formData.endOdometer !== '' ? Number(formData.endOdometer) : undefined;
+			const start = Number(formData.startOdometer) || 0;
+			const end = Number(formData.endOdometer) || 0;
+			let miles =
+				formData.miles !== '' && !isNaN(Number(formData.miles))
+					? Number(formData.miles)
+					: Math.max(0, end - start);
+			miles = Number(miles.toFixed(2));
 
-			let miles: number | undefined;
-			if (formData.miles !== '' && !isNaN(Number(formData.miles))) {
-				miles = Number(Number(formData.miles).toFixed(2));
-			} else if (typeof start === 'number' && typeof end === 'number') {
-				miles = Number(Math.max(0, end - start).toFixed(2));
-			} else {
-				miles = undefined;
-			}
-
-			const payload: any = {
+			const payload = {
 				...formData,
+				startOdometer: start,
+				endOdometer: end,
+				miles,
 				millageRate: formData.millageRate !== '' ? Number(formData.millageRate) : undefined,
 				vehicle: formData.vehicle || undefined
 			};
 
-			// Only include odometer fields when the user entered them
-			if (typeof start === 'number') payload.startOdometer = start;
-			if (typeof end === 'number') payload.endOdometer = end;
-			if (typeof miles === 'number') payload.miles = miles;
-
 			await millage.updateMillage(String(expenseId), payload as any, String(userId));
-
-			// Try to push pending changes to the server immediately so a hard refresh doesn't
-			// load stale server-side data. If offline or sync fails, keep the local save and
-			// notify the user that it will sync later.
-			try {
-				if (navigator.onLine) {
-					await syncManager.forceSyncNow();
-					toasts.success('Millage log updated and synced');
-				} else {
-					toasts.success('Millage log saved locally; will sync when online');
-				}
-			} catch (err) {
-				console.warn('Sync failed after updating millage:', err);
-				toasts.success('Millage log saved locally; sync will resume automatically');
-			}
-
+			toasts.success('Millage log updated');
 			goto('/dashboard/millage');
 		} catch (err) {
 			console.error(err);
@@ -361,7 +339,8 @@
 	}
 
 	input,
-	textarea {
+	textarea,
+	select {
 		width: 100%;
 		padding: 16px;
 		border: 1px solid #e5e7eb;
@@ -371,7 +350,8 @@
 		box-sizing: border-box;
 	}
 	input:focus,
-	textarea:focus {
+	textarea:focus,
+	select:focus {
 		outline: none;
 		border-color: #ff7f50;
 	}
