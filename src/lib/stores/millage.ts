@@ -24,7 +24,7 @@ function createMillageStore() {
 
 			try {
 				const db = await getDB();
-				
+
 				// 3. Background Cleanup: Check Trash
 				const trashTx = db.transaction('trash', 'readonly');
 				const trashItems = await trashTx.objectStore('trash').getAll();
@@ -33,15 +33,15 @@ function createMillageStore() {
 
 				// 4. Filter Active Data (Remove locally deleted items)
 				const validServerData = data.filter((item) => !trashIds.has(item.id));
-				const serverIdSet = new Set(validServerData.map(i => i.id));
-				
+				const serverIdSet = new Set(validServerData.map((i) => i.id));
+
 				// 5. Update Store Again with Filtered Data (Refined)
 				set(validServerData);
 
 				// 6. Sync Local DB
 				const tx = db.transaction(['millage', 'trash'], 'readwrite');
 				const store = tx.objectStore('millage');
-				
+
 				const localItems = await store.getAll();
 				for (const local of localItems) {
 					// Remove Zombies (Locally synced but missing from server OR in trash)
@@ -51,7 +51,7 @@ function createMillageStore() {
 						await store.delete(local.id);
 					}
 				}
-				
+
 				for (const item of validServerData) {
 					await store.put({ ...item, syncStatus: 'synced' });
 				}
@@ -97,7 +97,7 @@ function createMillageStore() {
 				const trashItems = await trashStore.getAll();
 				const trashIds = new Set(trashItems.map((t: any) => t.id));
 
-				const activeItems = items.filter(item => !trashIds.has(item.id));
+				const activeItems = items.filter((item) => !trashIds.has(item.id));
 
 				activeItems.sort((a, b) => {
 					const dateA = new Date(a.date || a.createdAt).getTime();
@@ -302,7 +302,7 @@ function createMillageStore() {
 					? `/api/millage?since=${encodeURIComponent(sinceDate.toISOString())}`
 					: '/api/millage';
 
-				const response = await fetch(url);
+				const response = await fetch(url, { credentials: 'include' });
 				if (!response.ok) throw new Error('Failed to fetch millage');
 
 				const cloud: any = await response.json();
@@ -312,7 +312,7 @@ function createMillageStore() {
 					const tx = db.transaction(['millage', 'trash'], 'readwrite');
 					const store = tx.objectStore('millage');
 					const trashStore = tx.objectStore('trash');
-					
+
 					const trashKeys = await trashStore.getAllKeys();
 					const trashIds = new Set(trashKeys.map(String));
 

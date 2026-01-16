@@ -163,7 +163,7 @@ function createTrashStore() {
 				if (!navigator.onLine) return;
 
 				const url = type ? `/api/trash?type=${encodeURIComponent(type)}` : '/api/trash';
-				const response = await fetch(url);
+				const response = await fetch(url, { credentials: 'include' });
 				if (!response.ok) return;
 
 				const cloudTrash: any = await response.json();
