@@ -4,6 +4,7 @@ import { getDB } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
 import type { ExpenseRecord } from '$lib/db/types';
 import type { User } from '$lib/types';
+
 import { auth } from '$lib/stores/auth';
 import { PLAN_LIMITS } from '$lib/constants';
 
@@ -16,39 +17,53 @@ function createExpensesStore() {
 		subscribe,
 		set,
 
-		// [!code fix] Smart Hydrate: Filters trash to stop resurrection
+		// [!code fix] Smart Hydrate: Removes stale items (deleted on other devices)
 		async hydrate(data: ExpenseRecord[], userId: string) {
 			try {
 				const db = await getDB();
 				
-				// 1. Check Trash
+				// 1. Check Trash to prevent resurrection of locally deleted items
 				const trashTx = db.transaction('trash', 'readonly');
 				const trashItems = await trashTx.objectStore('trash').getAll();
 				const trashIds = new Set(trashItems.map((t: any) => t.id));
 				await trashTx.done;
 
-				// 2. Filter Active Data
-				const validData = data.filter((item) => !trashIds.has(item.id));
-				set(validData);
+				// 2. Prepare Valid Data (Server data minus local trash)
+				const validServerData = data.filter((item) => !trashIds.has(item.id));
+				const serverIdSet = new Set(validServerData.map(i => i.id));
+				
+				// 3. Update Screen Immediately
+				set(validServerData);
 
-				// 3. Update DB
+				// 4. Update DB (ReadWrite)
 				const tx = db.transaction(['expenses', 'trash'], 'readwrite');
 				const store = tx.objectStore('expenses');
 				
-				for (const item of validData) {
+				// Get all local items to check for zombies (stale items)
+				const localItems = await store.getAll();
+
+				for (const local of localItems) {
+					// DELETE if:
+					// a) It is in the local Trash
+					// b) OR It is marked as 'synced' locally, but missing from server list (Deleted remotely)
+					// (We skip 'pending' items because those are new local creations waiting to upload)
+					const isTrash = trashIds.has(local.id);
+					const isStale = local.syncStatus === 'synced' && !serverIdSet.has(local.id);
+
+					if (isTrash || isStale) {
+						await store.delete(local.id);
+					}
+				}
+				
+				// UPDATE/INSERT fresh server data
+				for (const item of validServerData) {
 					await store.put({ ...item, syncStatus: 'synced' });
 				}
 
-				// 4. Cleanup Zombies
-				for (const serverItem of data) {
-					if (trashIds.has(serverItem.id)) {
-						const existing = await store.get(serverItem.id);
-						if (existing) await store.delete(serverItem.id);
-					}
-				}
 				await tx.done;
 			} catch (err) {
 				console.error('Failed to hydrate expenses:', err);
+				// Fallback: just trust the server data
 				set(data);
 			}
 		},
@@ -73,12 +88,12 @@ function createExpensesStore() {
 			isLoading.set(true);
 			try {
 				const db = await getDB();
-				// Use transaction across both stores to ensure consistency
 				const tx = db.transaction(['expenses', 'trash'], 'readonly');
 				const store = tx.objectStore('expenses');
 				const trashStore = tx.objectStore('trash');
 
 				let expenses: ExpenseRecord[];
+
 				if (userId) {
 					const index = store.index('userId');
 					expenses = await index.getAll(userId);
@@ -89,7 +104,6 @@ function createExpensesStore() {
 				const trashItems = await trashStore.getAll();
 				const trashIds = new Set(trashItems.map((t: any) => t.id));
 
-				// Filter out trashed items
 				const activeItems = expenses.filter(e => !trashIds.has(e.id));
 
 				activeItems.sort((a, b) => {
@@ -210,7 +224,6 @@ function createExpensesStore() {
 			}
 		},
 
-		// [!code fix] Safe Delete Logic with Reload
 		async deleteExpense(id: string, userId: string) {
 			let previousExpenses: ExpenseRecord[] = [];
 			update((current) => {
@@ -229,7 +242,7 @@ function createExpensesStore() {
 
 				const rec = await store.get(id);
 				if (!rec) {
-					// Already gone? Just sync delete
+					// Already gone locally? Just ensure sync sends delete
 					await tx.done;
 					await syncManager.addToQueue({
 						action: 'delete',
@@ -279,7 +292,7 @@ function createExpensesStore() {
 				console.log('✅ Expense moved to trash:', id);
 			} catch (err) {
 				console.error('❌ Failed to delete expense:', err);
-				set(previousExpenses); // Revert UI on failure
+				set(previousExpenses); // Revert on failure
 				throw err;
 			}
 		},
@@ -313,6 +326,10 @@ function createExpensesStore() {
 					? `/api/expenses?since=${encodeURIComponent(sinceDate.toISOString())}`
 					: '/api/expenses';
 
+				console.log(
+					`☁️ Syncing expenses... ${lastSync ? `(Delta since ${sinceDate?.toISOString()})` : '(Full)'}`
+				);
+
 				const response = await fetch(url, { credentials: 'include' });
 				if (!response.ok) throw new Error('Failed to fetch expenses');
 
@@ -328,14 +345,17 @@ function createExpensesStore() {
 					const trashIds = new Set(trashKeys.map(String));
 
 					for (const cloudExpense of cloudExpenses) {
+						// 1. Handle Server Deletes
 						if (cloudExpense.deleted) {
 							const local = await store.get(cloudExpense.id);
 							if (local) await store.delete(cloudExpense.id);
 							continue;
 						}
 
+						// 2. Prevent Resurrection of local trash
 						if (trashIds.has(cloudExpense.id)) continue;
 
+						// 3. Update/Create
 						const local = await store.get(cloudExpense.id);
 						if (!local || new Date(cloudExpense.updatedAt) > new Date(local.updatedAt)) {
 							await store.put({
