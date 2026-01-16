@@ -5,8 +5,7 @@
 	import { toasts } from '$lib/stores/toast';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { onMount } from 'svelte';
-
+	import SelectMobile from '$lib/components/ui/SelectMobile.svelte';
 	const expenseId = $page.params.id;
 
 	// Settings modal removed for Millage edit page
@@ -30,6 +29,7 @@
 		category: ''
 	};
 
+	// Whether the user manually edited the miles input; when true we stop auto-updating miles from odometers
 	let milesManual = false;
 
 	// default millageRate from settings if editing and none present
@@ -37,10 +37,17 @@
 		formData.millageRate = String($userSettings.millageRate);
 	}
 
-	onMount(() => {
-		// Find millage record in store
-		const rec = $millage.find((e) => e.id === expenseId);
-		if (rec) {
+	// Default vehicle selection if available and none selected
+	$: if ($userSettings?.vehicles?.length > 0 && !formData.vehicle) {
+		const v0 = $userSettings.vehicles[0];
+		formData.vehicle = v0?.id ?? v0?.name ?? '';
+	}
+
+	// Find and prefill millage record when store or page params load
+	$: {
+		const id = $page.params.id;
+		const rec = $millage.find((e) => e.id === id);
+		if (rec && !formData.date) {
 			const r: any = rec as any;
 			formData = {
 				date: r.date || '',
@@ -52,11 +59,11 @@
 				notes: r.notes || '',
 				category: r.category || ''
 			};
-		} else {
+		} else if ($millage && $millage.length > 0 && !rec) {
 			toasts.error('Millage log not found.');
 			goto('/dashboard/millage');
 		}
-	});
+	}
 
 	// Auto-calc miles from odometer readings unless the user has manually edited miles
 	$: if (!milesManual) {
@@ -143,127 +150,17 @@
 
 	<div class="form-card">
 		<div class="card-header">
-			<h2 class="card-title">Expense Details</h2>
+			<h2 class="card-title">Millage Details</h2>
 		</div>
 
 		<div class="form-grid">
 			<div class="form-group">
-				<label for="expense-date">Date</label>
-				<input id="expense-date" type="date" bind:value={formData.date} required />
+				<label for="millage-date">Date</label>
+				<input id="millage-date" type="date" bind:value={formData.date} required />
 			</div>
 
 			<div class="form-row">
-				<div class="section-group">
-					<div class="section-top">
-						<h3>Maintenance</h3>
-						<button class="btn-icon gear" title="Manage Options">
-							<svg
-								width="20"
-								height="20"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								><circle cx="12" cy="12" r="3"></circle><path
-									d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
-								></path></svg
-							>
-						</button>
-					</div>
-
-					<div class="add-row">
-						<select
-							id="maintenance-select-removed"
-							name="removed"
-							class="select-input"
-							aria-label="Maintenance type"
-							disabled
-						>
-							<option value="" disabled selected>Select Item...</option>
-							{#each [] as option}
-								<option value={option}>{option}</option>
-							{/each}
-						</select>
-						<!-- maintenance actions removed -->
-					</div>
-				</div>
-
-				<div class="section-group">
-					<div class="section-top">
-						<h3>Supplies</h3>
-						<button class="btn-icon gear" title="Manage Options">
-							<svg
-								width="20"
-								height="20"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								><circle cx="12" cy="12" r="3"></circle><path
-									d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
-								></path></svg
-							>
-						</button>
-					</div>
-
-					<div class="add-row">
-						<select
-							id="supplies-select"
-							name="supplies"
-							class="select-input"
-							aria-label="Supply type"
-							disabled
-						>
-							<option value="" disabled selected>Select Item...</option>
-							{#each [] as option}
-								<option value={option}>{option}</option>
-							{/each}
-						</select>
-						<button class="btn-small neutral" disabled>Choose</button>
-					</div>
-				</div>
-
-				<div class="section-group">
-					<div class="section-top">
-						<h3>Expenses</h3>
-						<button class="btn-icon gear" title="Manage Options">
-							<svg
-								width="20"
-								height="20"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								><circle cx="12" cy="12" r="3"></circle><path
-									d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
-								></path></svg
-							>
-						</button>
-					</div>
-
-					<div class="add-row">
-						<select
-							id="expense-select"
-							name="expenseCategory"
-							class="select-input"
-							aria-label="Expense category"
-							disabled
-						>
-							<option value="" disabled selected>Select Item...</option>
-							{#each [] as option}
-								<option value={option}>{option}</option>
-							{/each}
-						</select>
-						<button class="btn-small neutral" disabled>Choose</button>
-					</div>
-				</div>
-
+				<!-- Maintenance, Supplies, and Expenses options removed for Millage logs -->
 				<div class="form-group grid-3">
 					<div>
 						<label for="start-odo">Start Odometer</label>
@@ -293,8 +190,8 @@
 							step="0.01"
 							inputmode="decimal"
 							bind:value={formData.miles}
-							on:input={(e) => (milesManual = (e.target as HTMLInputElement).value !== '')}
 							placeholder="0.0"
+							on:input={(e) => (milesManual = (e.target as HTMLInputElement).value !== '')}
 						/>
 					</div>
 				</div>
@@ -315,18 +212,21 @@
 
 			<!-- Settings modal removed for Millage edit -->
 
-			<div class="form-row">
+			<div class="form-row vehicle-rate-row">
 				<div class="form-group">
-					<label for="vehicle">Vehicle</label>
-					<select id="vehicle" bind:value={formData.vehicle} class="p-2 border rounded-lg">
-						{#if $userSettings.vehicles && $userSettings.vehicles.length > 0}
-							{#each $userSettings.vehicles as v}
-								<option value={v.id || v.name}>{v.name}</option>
-							{/each}
-						{:else}
-							<option value="">No vehicles (open Millage Settings)</option>
-						{/if}
-					</select>
+					<label for="vehicle-mobile">Vehicle</label>
+					<SelectMobile
+						className="mobile-select"
+						id="vehicle-mobile"
+						placeholder={$userSettings.vehicles && $userSettings.vehicles.length > 0
+							? 'Select vehicle'
+							: 'No vehicles (open Millage Settings)'}
+						options={$userSettings.vehicles
+							? $userSettings.vehicles.map((v) => ({ value: v.id || v.name, label: v.name }))
+							: [{ value: '', label: 'No vehicles (open Millage Settings)' }]}
+						bind:value={formData.vehicle}
+						on:change={(e) => (formData.vehicle = e.detail.value)}
+					/>
 				</div>
 				<div class="form-group">
 					<label for="millage-rate">Millage Rate (per mile)</label>
@@ -342,7 +242,7 @@
 
 			<div class="form-actions">
 				<a href="/dashboard/millage" class="btn-secondary">Cancel</a>
-				<button class="btn-primary" on:click={saveExpense}>Save Changes</button>
+				<button class="btn-primary" on:click={saveExpense}>Save Log</button>
 			</div>
 		</div>
 	</div>
@@ -454,50 +354,6 @@
 	select:focus {
 		outline: none;
 		border-color: #ff7f50;
-	}
-
-	.section-group {
-		margin-bottom: 24px;
-	}
-	.section-top {
-		display: flex;
-		justify-content: space-between;
-		margin-bottom: 12px;
-		align-items: center;
-	}
-	.section-top h3 {
-		font-size: 16px;
-		font-weight: 700;
-		margin: 0;
-	}
-	.add-row {
-		display: flex;
-		gap: 12px;
-		margin-bottom: 12px;
-	}
-	.select-input {
-		flex: 1;
-		padding: 12px;
-		border: 1px solid #e5e7eb;
-		border-radius: 10px;
-		font-size: 16px;
-		background: white;
-		color: #374151;
-	}
-	.btn-icon.gear {
-		background: none;
-		border: none;
-		cursor: pointer;
-		padding: 6px;
-		color: #6b7280;
-	}
-	.btn-small.neutral {
-		padding: 8px 12px;
-		background: white;
-		border-radius: 8px;
-		border: 1px solid #e5e7eb;
-		color: #374151;
-		font-weight: 600;
 	}
 
 	.form-actions {
