@@ -6,6 +6,7 @@
 	import { base } from '$app/paths';
 	import { trips } from '$lib/stores/trips';
 	import { expenses } from '$lib/stores/expenses';
+	import { millage } from '$lib/stores/millage';
 
 	const resolve = (href: string) => `${base}${href}`;
 	import { trash } from '$lib/stores/trash';
@@ -141,13 +142,13 @@
 					// Kick off loads without awaiting them so we don't block initial paint
 					trips.load(userId);
 					expenses.load(userId);
+					millage.load(userId);
 					trash.load(userId);
 
 					// Background syncs
 					trips.syncFromCloud(userId);
 					expenses.syncFromCloud(userId);
-
-					console.log('[DASHBOARD LAYOUT] ✅ Data loading started');
+					millage.syncFromCloud(userId);
 				} catch (err) {
 					console.error('[DASHBOARD LAYOUT] ❌ Failed to start data load:', err);
 				}
