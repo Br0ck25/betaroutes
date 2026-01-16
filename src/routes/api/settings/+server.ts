@@ -17,6 +17,12 @@ const settingsSchema = z.object({
 	maintenanceCategories: z.array(z.string()).optional(),
 	supplyCategories: z.array(z.string()).optional(),
 
+	// Millage defaults
+	millageRate: z.number().nonnegative().optional(),
+	vehicles: z
+		.array(z.object({ id: z.string().max(100), name: z.string().max(200) }).strict())
+		.optional(),
+
 	// Vehicle & maintenance settings
 	serviceIntervalMiles: z.number().nonnegative().optional(),
 	lastServiceOdometer: z.number().nonnegative().optional(),
