@@ -1,5 +1,6 @@
 // src/lib/server/millageService.ts
 import type { KVNamespace } from '@cloudflare/workers-types';
+import { DO_ORIGIN, RETENTION } from '$lib/constants';
 import { log } from '$lib/server/log';
 
 export interface MillageRecord {
@@ -65,22 +66,118 @@ export function makeMillageService(kv: KVNamespace, trashKV?: KVNamespace) {
 			if (!raw) return;
 			const item = JSON.parse(raw);
 
-			if (trashKV) {
-				const now = new Date();
-				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-				const metadata = {
-					deletedAt: now.toISOString(),
-					deletedBy: userId,
-					originalKey: `millage:${userId}:${id}`,
-					expiresAt: expiresAt.toISOString()
+			const now = new Date();
+			const expiresAt = new Date(now.getTime() + RETENTION.THIRTY_DAYS * 1000);
+
+			const metadata = {
+				deletedAt: now.toISOString(),
+				deletedBy: userId,
+				originalKey: `millage:${userId}:${id}`,
+				expiresAt: expiresAt.toISOString()
+			};
+
+			const tombstone = {
+				id: item.id,
+				userId: item.userId,
+				deleted: true,
+				deletedAt: now.toISOString(),
+				deletedBy: userId,
+				metadata,
+				backup: item,
+				updatedAt: now.toISOString(),
+				createdAt: item.createdAt
+			};
+
+			await kv.put(`millage:${userId}:${id}`, JSON.stringify(tombstone), {
+				expirationTtl: RETENTION.THIRTY_DAYS
+			});
+		},
+
+		async listTrash(userId: string) {
+			const prefix = `millage:${userId}:`;
+			let list = await kv.list({ prefix });
+			let keys = list.keys;
+			while (!list.list_complete && list.cursor) {
+				list = await kv.list({ prefix, cursor: list.cursor });
+				keys = keys.concat(list.keys);
+			}
+
+			const out: any[] = [];
+			for (const k of keys) {
+				const raw = await kv.get(k.name);
+				if (!raw) continue;
+				const parsed = JSON.parse(raw);
+				if (!parsed || !parsed.deleted) continue;
+
+				const id = parsed.id || String(k.name.split(':').pop() || '');
+				const uid = parsed.userId || String(k.name.split(':')[1] || '');
+				const metadata = parsed.metadata || {
+					deletedAt: parsed.deletedAt || '',
+					deletedBy: parsed.deletedBy || uid,
+					originalKey: k.name,
+					expiresAt: parsed.metadata?.expiresAt || ''
 				};
-				const trashItem = { type: 'millage', data: item, metadata };
-				await trashKV.put(`trash:${userId}:${id}`, JSON.stringify(trashItem), {
-					expirationTtl: 30 * 24 * 60 * 60
+
+				const backup = parsed.backup || parsed.data || parsed.millage || parsed || {};
+				out.push({
+					id,
+					userId: uid,
+					metadata,
+					recordType: 'millage',
+					date: (backup.date as string) || undefined,
+					miles: typeof backup.miles === 'number' ? backup.miles : undefined,
+					reimbursement:
+						typeof backup.reimbursement === 'number' ? backup.reimbursement : undefined,
+					vehicle: (backup.vehicle as string) || undefined
 				});
 			}
 
-			await kv.delete(`millage:${userId}:${id}`);
+			out.sort((a, b) => (b.metadata?.deletedAt || '').localeCompare(a.metadata?.deletedAt || ''));
+			return out;
+		},
+
+		async emptyTrash(userId: string) {
+			const prefix = `millage:${userId}:`;
+			let list = await kv.list({ prefix });
+			let keys = list.keys;
+			while (!list.list_complete && list.cursor) {
+				list = await kv.list({ prefix, cursor: list.cursor });
+				keys = keys.concat(list.keys);
+			}
+			let count = 0;
+			for (const k of keys) {
+				const raw = await kv.get(k.name);
+				if (!raw) continue;
+				const parsed = JSON.parse(raw);
+				if (parsed && parsed.deleted) {
+					await kv.delete(k.name);
+					count++;
+				}
+			}
+			return count;
+		},
+
+		async restore(userId: string, itemId: string) {
+			const key = `millage:${userId}:${itemId}`;
+			const raw = await kv.get(key);
+			if (!raw) throw new Error('Item not found in trash');
+			const parsed = JSON.parse(raw);
+			if (!parsed || !parsed.deleted) throw new Error('Item is not deleted');
+			const backup = parsed.backup || parsed.data || parsed.millage;
+			if (!backup) throw new Error('Backup data not found in item');
+
+			if ('deletedAt' in backup) delete (backup as Record<string, unknown>)['deletedAt'];
+			if ('deleted' in backup) delete (backup as Record<string, unknown>)['deleted'];
+			(backup as Record<string, unknown>)['updatedAt'] = new Date().toISOString();
+
+			const restored = backup as MillageRecord;
+			await kv.put(key, JSON.stringify(restored));
+			return restored;
+		},
+
+		async permanentDelete(userId: string, itemId: string) {
+			const key = `millage:${userId}:${itemId}`;
+			await kv.delete(key);
 		}
 	};
 }

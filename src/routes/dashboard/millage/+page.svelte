@@ -465,7 +465,6 @@
 				title="Millage Settings"
 				on:click={() => (isMillageSettingsOpen = true)}
 				aria-label="Millage Settings"
-				style="margin-left:8px"
 			>
 				<svg
 					width="20"

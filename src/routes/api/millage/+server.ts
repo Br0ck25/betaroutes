@@ -32,10 +32,7 @@ export const GET: RequestHandler = async (event) => {
 		}
 
 		const storageId = user.name || user.token || user.id || '';
-		const svc = makeMillageService(
-			safeKV(env, 'BETA_MILLAGE_KV')!,
-			safeKV(env, 'BETA_MILLAGE_TRASH_KV')
-		);
+		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!);
 		const items = await svc.list(storageId);
 		return new Response(JSON.stringify(items), { headers: { 'Content-Type': 'application/json' } });
 	} catch (err) {
@@ -93,10 +90,7 @@ export const POST: RequestHandler = async (event) => {
 			updatedAt: new Date().toISOString()
 		};
 
-		const svc = makeMillageService(
-			safeKV(env, 'BETA_MILLAGE_KV')!,
-			safeKV(env, 'BETA_MILLAGE_TRASH_KV')
-		);
+		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!);
 		await svc.put(record as any);
 
 		return new Response(JSON.stringify(record), {
