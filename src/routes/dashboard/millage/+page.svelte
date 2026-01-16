@@ -341,6 +341,12 @@
 		return colors[sum % colors.length];
 	}
 
+	function getVehicleLabel(id?: string) {
+		if (!id) return '';
+		const v = ($userSettings?.vehicles || []).find((x) => x?.id === id || x?.name === id);
+		return v?.name ?? id;
+	}
+
 	function swipeable(
 		node: HTMLElement,
 		{
@@ -714,22 +720,31 @@
 						</div>
 
 						<div class="card-stats">
-							<div class="stat-badge-container">
-								<span class={`category-badge ${getCategoryColor(expense.category)}`}>
-									{(expense.miles ?? 0).toFixed(2)} mi
-								</span>
-								{#if isTripSource(expense)}
-									<span class="source-badge">Trip Log</span>
-								{/if}
-								{#if expense.taxDeductible}
-									<span class="category-badge tax-pill" title="Tax deductible">Tax Deductible</span>
-								{/if}
-							</div>
+						<div class="stat-badge-container">
+							<span class={`category-badge ${getCategoryColor(expense.category)}`}>
+								{(expense.miles ?? 0).toFixed(2)} mi
+							</span>
+							{#if expense.vehicle}
+								<span class="category-badge" title="Vehicle">{getVehicleLabel(expense.vehicle)}</span>
+							{/if}
+							{#if typeof expense.millageRate === 'number' || expense.millageRate}
+								<span class="category-badge" title="Millage Rate">${(Number(expense.millageRate) || 0).toFixed(3)}/mi</span>
+							{/if}
+							{#if expense.startOdometer !== undefined || expense.endOdometer !== undefined}
+								<span class="category-badge" title="Odometer">{expense.startOdometer ?? ''} → {expense.endOdometer ?? ''}</span>
+							{/if}
+							{#if isTripSource(expense)}
+								<span class="source-badge">Trip Log</span>
+							{/if}
+							{#if expense.taxDeductible}
+								<span class="category-badge tax-pill" title="Tax deductible">Tax Deductible</span>
+							{/if}
 						</div>
 					</div>
 				</div>
-			{/each}
-		</div>
+			</div>
+				{/each}
+			</div>
 	{:else}
 		<div class="empty-state">
 			<p>No millage logs found matching your filters.</p>
@@ -752,10 +767,9 @@
 					>
 						<polyline points="20 6 9 17 4 12"></polyline>
 					</svg>
-					<span class="selected-count"
-						>{selectedExpenses.size}
-						{selectedExpenses.size === 1 ? 'expense' : 'expenses'} selected</span
-					>
+					<span class="selected-count">
+						{selectedExpenses.size}
+						{selectedExpenses.size === 1 ? 'expense' : 'expenses'} selected</span>
 				</div>
 			</div>
 
@@ -810,7 +824,6 @@
 		</div>
 	</div>
 {/if}
-
 <Modal bind:open={isManageCategoriesOpen} title="Manage Categories">
 	<div class="categories-manager">
 		<p class="text-sm text-gray-500 mb-4">
