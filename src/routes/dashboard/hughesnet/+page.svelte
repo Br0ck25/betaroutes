@@ -593,13 +593,7 @@
 					<p>
 						⚠️ <strong>Important:</strong> Before syncing, ensure your Start/End addresses, MPG, and
 						Gas Price defaults are updated in
-						<a href="#" on:click|preventDefault={() => (showTripSettings = true)}>Trip Settings</a>
-						or open them directly:
-						<button
-							class="btn-link"
-							on:click={() => (showTripSettings = true)}
-							aria-label="Open Trip Settings">Open Trip Settings</button
-						>.
+						<a href="#" on:click|preventDefault={() => (showTripSettings = true)}>Trip Settings</a>.
 					</p>
 				</div>
 

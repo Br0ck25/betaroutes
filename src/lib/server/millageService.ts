@@ -18,6 +18,21 @@ export interface MillageRecord {
 	[key: string]: unknown;
 }
 
+export interface TrashRecord {
+	id: string;
+	userId: string;
+	metadata: {
+		deletedAt: string;
+		deletedBy: string;
+		originalKey: string;
+		expiresAt: string;
+	};
+	recordType: 'millage';
+	miles?: number;
+	vehicle?: string;
+	date?: string;
+}
+
 export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNamespace) {
 	const getIndexStub = (userId: string) => {
 		const id = tripIndexDO.idFromName(userId);
@@ -98,17 +113,14 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				}
 			}
 
-			// Delta Sync
+			// Delta Sync: Return everything (including deletions) if checking for updates
 			if (since) {
 				const sinceDate = new Date(since);
-				return millage.filter((m) => new Date(m.updatedAt || m.createdAt) > sinceDate);
+				return millage.filter((e) => new Date(e.updatedAt || e.createdAt) > sinceDate);
 			}
 
-			// Sort by updatedAt/createdAt desc
-			millage.sort((a, b) =>
-				(b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || '')
-			);
-			return millage;
+			// [!code fix] Full List: Filter out deleted items so hydration is clean
+			return millage.filter((m) => !m.deleted);
 		},
 
 		async get(userId: string, id: string) {
@@ -119,39 +131,28 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 		async put(item: MillageRecord) {
 			item.updatedAt = new Date().toISOString();
 			delete item.deleted;
+			delete (item as Record<string, unknown>)['deletedAt'];
 
 			// Write to KV
 			await kv.put(`millage:${item.userId}:${item.id}`, JSON.stringify(item));
 
-			// Update DO index
+			// Write to DO
 			const stub = getIndexStub(item.userId);
-			try {
-				await stub.fetch(`${DO_ORIGIN}/millage/put`, {
-					method: 'POST',
-					body: JSON.stringify(item)
-				});
-			} catch (err) {
-				log.warn('[MillageService] Failed to update DO index', err);
-			}
+			await stub.fetch(`${DO_ORIGIN}/millage/put`, {
+				method: 'POST',
+				body: JSON.stringify(item)
+			});
 		},
 
 		async delete(userId: string, id: string) {
-			// Attempt direct key first
-			let key = `millage:${userId}:${id}`;
-			let raw = await kv.get(key);
-
-			// If not found, try to locate the record using list/get fallbacks
-			if (!raw) {
-				const found = await this.get(userId, id);
-				if (!found) return; // nothing to delete
-				// Use the actual stored userId to construct the key
-				key = `millage:${found.userId}:${id}`;
-				raw = await kv.get(key);
-				if (!raw) return;
-			}
+			const stub = getIndexStub(userId);
+			
+			// Fetch current state for backup
+			const key = `millage:${userId}:${id}`;
+			const raw = await kv.get(key);
+			if (!raw) return;
 
 			const item = JSON.parse(raw);
-
 			const now = new Date();
 			const expiresAt = new Date(now.getTime() + RETENTION.THIRTY_DAYS * 1000);
 
@@ -162,32 +163,28 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				expiresAt: expiresAt.toISOString()
 			};
 
+			// Create Tombstone (Soft Delete)
 			const tombstone = {
 				id: item.id,
 				userId: item.userId,
 				deleted: true,
 				deletedAt: now.toISOString(),
-				deletedBy: userId,
 				metadata,
-				backup: item,
+				backup: item, // Save data for restore
 				updatedAt: now.toISOString(),
 				createdAt: item.createdAt
 			};
 
+			// 1. Update KV with tombstone
 			await kv.put(key, JSON.stringify(tombstone), {
 				expirationTtl: RETENTION.THIRTY_DAYS
 			});
 
-			// Remove from DO index (use the user's DO stub from the stored userId to be safe)
-			const stub = getIndexStub(item.userId);
-			try {
-				await stub.fetch(`${DO_ORIGIN}/millage/delete`, {
-					method: 'POST',
-					body: JSON.stringify({ id })
-				});
-			} catch (err) {
-				log.warn('[MillageService] Failed to remove from DO index', err);
-			}
+			// 2. [!code fix] Update DO with tombstone (PUT, not DELETE)
+			await stub.fetch(`${DO_ORIGIN}/millage/put`, {
+				method: 'POST',
+				body: JSON.stringify(tombstone)
+			});
 		},
 
 		async listTrash(userId: string) {
@@ -199,41 +196,31 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				keys = keys.concat(list.keys);
 			}
 
-			const out: MillageTrash[] = [];
+			const out: TrashRecord[] = [];
 			for (const k of keys) {
 				const raw = await kv.get(k.name);
 				if (!raw) continue;
-				const parsed = JSON.parse(raw) as Record<string, unknown>;
+				const parsed = JSON.parse(raw);
 				if (!parsed || !parsed.deleted) continue;
 
-				const id = (parsed.id as string) || String(k.name.split(':').pop() || '');
-				const uid = (parsed.userId as string) || String(k.name.split(':')[1] || '');
-				const metadata = (parsed.metadata as Record<string, unknown>) || {
-					deletedAt: (parsed.deletedAt as string) || '',
-					deletedBy: (parsed.deletedBy as string) || uid,
+				const id = parsed.id || String(k.name.split(':').pop() || '');
+				const uid = parsed.userId || String(k.name.split(':')[1] || '');
+				const metadata = parsed.metadata || {
+					deletedAt: parsed.deletedAt || '',
+					deletedBy: uid,
 					originalKey: k.name,
-					expiresAt: (parsed.metadata as Record<string, unknown>)?.expiresAt || ''
+					expiresAt: parsed.metadata?.expiresAt || ''
 				};
 
-				const backup =
-					(parsed.backup as Record<string, unknown>) ||
-					(parsed.data as Record<string, unknown>) ||
-					(parsed.millage as Record<string, unknown>) ||
-					(parsed as Record<string, unknown>) ||
-					{};
+				const backup = parsed.backup || parsed.data || parsed;
 				out.push({
 					id,
 					userId: uid,
 					metadata,
 					recordType: 'millage',
-					date: (backup.date as string) || undefined,
-					miles:
-						typeof (backup.miles as unknown) === 'number' ? (backup.miles as number) : undefined,
-					reimbursement:
-						typeof (backup.reimbursement as unknown) === 'number'
-							? (backup.reimbursement as number)
-							: undefined,
-					vehicle: (backup.vehicle as string) || undefined
+					miles: typeof backup.miles === 'number' ? backup.miles : undefined,
+					vehicle: backup.vehicle,
+					date: backup.date
 				});
 			}
 
@@ -241,71 +228,34 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			return out;
 		},
 
-		async emptyTrash(userId: string) {
-			const prefix = `millage:${userId}:`;
-			let list = await kv.list({ prefix });
-			let keys = list.keys;
-			while (!list.list_complete && list.cursor) {
-				list = await kv.list({ prefix, cursor: list.cursor });
-				keys = keys.concat(list.keys);
-			}
-			let count = 0;
-			for (const k of keys) {
-				const raw = await kv.get(k.name);
-				if (!raw) continue;
-				const parsed = JSON.parse(raw);
-				if (parsed && parsed.deleted) {
-					await kv.delete(k.name);
-					count++;
-				}
-			}
-			return count;
+		async permanentDelete(userId: string, itemId: string) {
+			const key = `millage:${userId}:${itemId}`;
+			await kv.delete(key);
+			
+			const stub = getIndexStub(userId);
+			await stub.fetch(`${DO_ORIGIN}/millage/delete`, {
+				method: 'POST',
+				body: JSON.stringify({ id: itemId })
+			});
 		},
 
 		async restore(userId: string, itemId: string) {
 			const key = `millage:${userId}:${itemId}`;
 			const raw = await kv.get(key);
-			if (!raw) throw new Error('Item not found in trash');
-			const parsed = JSON.parse(raw);
-			if (!parsed || !parsed.deleted) throw new Error('Item is not deleted');
-			const backup = parsed.backup || parsed.data || parsed.millage;
-			if (!backup) throw new Error('Backup data not found in item');
+			if (!raw) throw new Error('Item not found');
+			
+			const tombstone = JSON.parse(raw);
+			if (!tombstone.deleted) throw new Error('Item not deleted');
 
-			if ('deletedAt' in backup) delete (backup as Record<string, unknown>)['deletedAt'];
-			if ('deleted' in backup) delete (backup as Record<string, unknown>)['deleted'];
-			(backup as Record<string, unknown>)['updatedAt'] = new Date().toISOString();
+			const restored = tombstone.backup || tombstone.data || tombstone;
+			delete restored.deleted;
+			delete restored.deletedAt;
+			delete restored.metadata;
+			delete restored.backup;
+			restored.updatedAt = new Date().toISOString();
 
-			const restored = backup as MillageRecord;
-			await kv.put(key, JSON.stringify(restored));
-
-			// Restore in DO index
-			const stub = getIndexStub(userId);
-			try {
-				await stub.fetch(`${DO_ORIGIN}/millage/put`, {
-					method: 'POST',
-					body: JSON.stringify(restored)
-				});
-			} catch (err) {
-				log.warn('[MillageService] Failed to restore to DO index', err);
-			}
-
+			await this.put(restored);
 			return restored;
-		},
-
-		async permanentDelete(userId: string, itemId: string) {
-			const key = `millage:${userId}:${itemId}`;
-			await kv.delete(key);
-
-			// Remove from DO index as well
-			const stub = getIndexStub(userId);
-			try {
-				await stub.fetch(`${DO_ORIGIN}/millage/delete`, {
-					method: 'POST',
-					body: JSON.stringify({ id: itemId })
-				});
-			} catch (err) {
-				log.warn('[MillageService] Failed to remove from DO index during permanentDelete', err);
-			}
 		}
 	};
 }
