@@ -48,6 +48,7 @@
 
 	const rangeLabels = {
 		// ... existing labels
+		'7d': 'Last 7 days',
 		'30d': 'Last 30 days',
 		'60d': 'Last 60 days',
 		'90d': 'Last 90 days',
@@ -77,6 +78,7 @@
 				class="range-select"
 				aria-label="Select time range"
 			>
+				<option value="7d">Last 7 Days</option>
 				<option value="30d">Last 30 Days</option>
 				<option value="60d">Last 60 Days</option>
 				<option value="90d">Last 90 Days</option>

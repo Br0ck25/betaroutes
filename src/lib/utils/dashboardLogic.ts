@@ -1,6 +1,6 @@
 // src/lib/utils/dashboardLogic.ts
 
-export type TimeRange = '30d' | '60d' | '90d' | '1y' | 'all';
+export type TimeRange = '7d' | '30d' | '60d' | '90d' | '1y' | 'all';
 
 export function formatCurrency(amount: number): string {
 	return new Intl.NumberFormat('en-US', {
@@ -60,6 +60,12 @@ export function calculateDashboardStats(
 	let groupBy: 'day' | 'month' = 'day';
 
 	switch (range) {
+		case '7d':
+			startDate = new Date(now);
+			startDate.setDate(now.getDate() - 7);
+			prevStartDate = new Date(startDate);
+			prevStartDate.setDate(startDate.getDate() - 7);
+			break;
 		case '30d':
 			startDate = new Date(now);
 			startDate.setDate(now.getDate() - 30);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeMaintenance } from './dashboardLogic';
+import { computeMaintenance, calculateDashboardStats } from './dashboardLogic';
 
 describe('computeMaintenance', () => {
 	it('is visible when within reminder threshold and shows "Due in" message', () => {
@@ -44,5 +44,56 @@ describe('computeMaintenance', () => {
 		expect(res.visible).toBe(true);
 		expect(res.message).toContain('Overdue');
 		expect(Math.round(res.dueIn)).toBe(-600);
+	});
+});
+
+describe('calculateDashboardStats - 7d range', () => {
+	it('includes trips from the last 7 days and excludes older ones', () => {
+		const now = new Date();
+		const format = (d: Date) => d.toISOString().split('T')[0];
+
+		const trips = [
+			{
+				id: 't1',
+				date: format(new Date(now)),
+				stops: [{ earnings: 100 }],
+				fuelCost: 10,
+				maintenanceCost: 0,
+				suppliesCost: 0,
+				totalMiles: 10
+			}, // today
+			{
+				id: 't2',
+				date: format(new Date(now.getTime() - 86400 * 1000)),
+				stops: [{ earnings: 200 }],
+				fuelCost: 50,
+				maintenanceCost: 0,
+				suppliesCost: 0,
+				totalMiles: 15
+			}, // yesterday
+			{
+				id: 't3',
+				date: format(new Date(now.getTime() - 6 * 86400 * 1000)),
+				stops: [{ earnings: 50 }],
+				fuelCost: 0,
+				maintenanceCost: 0,
+				suppliesCost: 0,
+				totalMiles: 5
+			}, // 6 days ago
+			{
+				id: 't4',
+				date: format(new Date(now.getTime() - 8 * 86400 * 1000)),
+				stops: [{ earnings: 500 }],
+				fuelCost: 0,
+				maintenanceCost: 0,
+				suppliesCost: 0,
+				totalMiles: 50
+			} // 8 days ago (should be excluded)
+		];
+
+		const stats = calculateDashboardStats(trips, [], '7d');
+
+		expect(stats.totalTrips).toBe(3);
+		expect(stats.recentTrips.find((t: any) => t.id === 't4')).toBeUndefined();
 	});
 });
