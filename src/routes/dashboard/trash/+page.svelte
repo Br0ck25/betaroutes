@@ -5,6 +5,7 @@
 	import { trips } from '$lib/stores/trips';
 	import { expenses } from '$lib/stores/expenses';
 	import { millage } from '$lib/stores/millage';
+	import { userSettings } from '$lib/stores/userSettings';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { user } from '$lib/stores/auth';
@@ -294,7 +295,14 @@
 									<span class="expense-category">{trip.category || 'Uncategorized'}</span>
 								{:else if isMillage}
 									<span class="badge-millage">Millage</span>
-									{trip['vehicle'] || 'Millage Log'}
+									{#if trip['vehicle']}
+										{@const v = $userSettings?.vehicles?.find(
+											(x) => x.id === trip['vehicle'] || x.name === trip['vehicle']
+										)}
+										{v ? v.name : trip['vehicle']}
+									{:else}
+										Millage Log
+									{/if}
 								{:else}
 									{typeof trip.startAddress === 'string'
 										? trip.startAddress.split(',')[0]
