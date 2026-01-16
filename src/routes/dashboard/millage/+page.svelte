@@ -11,22 +11,26 @@
 	import { page } from '$app/stores';
 	import { onDestroy } from 'svelte';
 
-	// [!code focus:4] Import PageData and receive props from server
 	import type { PageData } from './$types';
-	import type { MillageRecord as DBMillageRecord } from '$lib/db/types';
 
 	export let data: PageData;
 
-	// [!code focus:3] Hydrate the store immediately when data arrives from the server
+	// [!code focus:10] CRITICAL FIX: Hydrate store AND Local DB on load
 	$: if (data.millage) {
-		// Ensure server-provided records include the required `syncStatus` property
-		// and cast to the DB MillageRecord[] expected by the store.
-		millage.set(
-			data.millage.map((r) => ({
-				...r,
-				syncStatus: (r as any).syncStatus ?? 'synced'
-			})) as DBMillageRecord[]
-		);
+		// Normalize incoming records so they satisfy the DB store type (ensure syncStatus exists)
+		const normalize = (records: any[]) =>
+			records.map((r) => ({ ...r, syncStatus: (r as any).syncStatus ?? 'synced' }));
+		const normalized = normalize(data.millage);
+
+		// If the user is loaded and the store has the hydrate method (added in previous step)
+		// we use it to ensure data persists to IndexedDB.
+		if ($user?.id && 'hydrate' in $millage) {
+			// Call hydrate with a safe cast so TypeScript doesn't require a @ts-expect-error
+			(millage as any).hydrate(normalized, $user.id);
+		} else {
+			// Fallback if store hasn't been fully updated yet
+			millage.set(normalized);
+		}
 	}
 
 	let isMillageSettingsOpen = false;
@@ -215,6 +219,7 @@
 			currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
 		if (userId) {
 			try {
+				// Use the store action which handles local + server delete
 				await millage.deleteMillage(id, String(userId));
 				toasts.success('Log moved to trash');
 				if (selectedExpenses.has(id)) {
