@@ -1,4 +1,3 @@
-// src/lib/stores/millage.ts
 import { writable, get } from 'svelte/store';
 import { getDB } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
@@ -15,7 +14,7 @@ function createMillageStore() {
 		subscribe,
 		set,
 
-		// [!code fix] Smart Hydrate: Filters out trash and stale zombies
+		// [!code fix] Smart Hydrate: Removes stale local items missing from server
 		async hydrate(data: MillageRecord[], userId: string) {
 			try {
 				const db = await getDB();
@@ -26,7 +25,7 @@ function createMillageStore() {
 				const trashIds = new Set(trashItems.map((t: any) => t.id));
 				await trashTx.done;
 
-				// 2. Filter Active Data (Remove things we know are trash)
+				// 2. Prepare Valid Data (Server data minus local trash)
 				const validServerData = data.filter((item) => !trashIds.has(item.id));
 				const serverIdSet = new Set(validServerData.map(i => i.id));
 				
@@ -40,12 +39,12 @@ function createMillageStore() {
 				// Cleanup Zombies (Items locally 'synced' but missing from server)
 				const localItems = await store.getAll();
 				for (const local of localItems) {
-					// Is it in trash?
+					// DELETE if:
+					// a) It is in the local Trash
+					// b) OR It is marked as 'synced' locally, but missing from server list (Deleted remotely)
 					if (trashIds.has(local.id)) {
 						await store.delete(local.id);
-					} 
-					// Is it stale? (Synced locally, but gone from server)
-					else if (local.syncStatus === 'synced' && !serverIdSet.has(local.id)) {
+					} else if (local.syncStatus === 'synced' && !serverIdSet.has(local.id)) {
 						await store.delete(local.id);
 					}
 				}
@@ -58,7 +57,7 @@ function createMillageStore() {
 				await tx.done;
 			} catch (err) {
 				console.error('Failed to hydrate millage cache:', err);
-				set(data); // Fallback
+				set(data);
 			}
 		},
 
@@ -207,7 +206,6 @@ function createMillageStore() {
 		},
 
 		async deleteMillage(id: string, userId: string) {
-			// 1. Optimistic Update: Remove immediately from store
 			let previous: MillageRecord[] = [];
 			update((current) => {
 				previous = current;
@@ -225,7 +223,6 @@ function createMillageStore() {
 				const rec = await millageStore.get(id);
 
 				if (!rec) {
-					// Already gone? Just ensure sync sends delete
 					await tx.done;
 					await syncManager.addToQueue({
 						action: 'delete',
@@ -262,7 +259,7 @@ function createMillageStore() {
 				await millageStore.delete(id);
 				await tx.done;
 
-				// [!code fix] Force reload to prevent race conditions or "sticky" UI state
+				// Force reload to ensure disk sync matches UI
 				await this.load(userId);
 
 				await syncManager.addToQueue({
@@ -272,7 +269,7 @@ function createMillageStore() {
 				});
 			} catch (err) {
 				console.error('❌ Failed to delete millage record:', err);
-				set(previous); // Revert on failure
+				set(previous);
 				throw err;
 			}
 		},
@@ -316,22 +313,18 @@ function createMillageStore() {
 					const store = tx.objectStore('millage');
 					const trashStore = tx.objectStore('trash');
 					
-					// Get all trash IDs once
 					const trashKeys = await trashStore.getAllKeys();
 					const trashIds = new Set(trashKeys.map(String));
 
 					for (const rec of cloud) {
-						// 1. Handle Remote Deletes
 						if (rec.deleted) {
 							const local = await store.get(rec.id);
 							if (local) await store.delete(rec.id);
 							continue;
 						}
 
-						// 2. Prevent Resurrection of locally trashed items
 						if (trashIds.has(rec.id)) continue;
 
-						// 3. Update/Create active items
 						const local = await store.get(rec.id);
 						if (!local || new Date(rec.updatedAt) > new Date(local.updatedAt)) {
 							await store.put({

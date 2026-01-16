@@ -7,15 +7,17 @@
 	import { toasts } from '$lib/stores/toast';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
-	import { goto, invalidateAll } from '$app/navigation'; // [!code fix] import invalidateAll
+	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onDestroy } from 'svelte';
+	import { browser } from '$app/environment'; // [!code fix] Import browser check
 
 	import type { PageData } from './$types';
 
 	export let data: PageData;
 
-	$: if (data.millage) {
+	// [!code fix] Only run hydration in the browser
+	$: if (browser && data.millage) {
 		const normalize = (records: any[]) =>
 			records.map((r) => ({ ...r, syncStatus: (r as any).syncStatus ?? 'synced' }));
 		const normalized = normalize(data.millage);
@@ -186,7 +188,6 @@
 					selectedExpenses.delete(id);
 					selectedExpenses = selectedExpenses;
 				}
-				// [!code fix] Refresh page data to ensure server sync
 				await invalidateAll();
 			} catch (err) {
 				console.error(err);
@@ -239,11 +240,9 @@
 
 		toasts.success(`Moved ${successCount} logs to trash.`);
 		selectedExpenses = new Set();
-		// [!code fix] Refresh page data
 		await invalidateAll();
 	}
 
-	// ... imports ...
 	function isTripSource(item: any): boolean {
 		return (item as any)?.source === 'trip';
 	}
@@ -402,7 +401,7 @@
 </svelte:head>
 
 <div class="page-container">
-	<div class="page-header">
+    <div class="page-header">
 		<div class="header-text">
 			<h1 class="page-title">Millage</h1>
 			<p class="page-subtitle">Log odometer readings and miles</p>

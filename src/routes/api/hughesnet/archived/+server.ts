@@ -22,18 +22,41 @@ export const GET: RequestHandler = async ({ platform, locals, url }) => {
 		const kv = ordersKV;
 
 		if (id) {
+			// First, check the Orders KV for an archived record
 			const raw = await kv.get(`hns:order:${id}`);
-			if (!raw) return json({ success: false, error: 'Not found' }, { status: 404 });
-			let parsed;
-			try {
-				parsed = JSON.parse(raw);
-			} catch (err: unknown) {
-				log.warn('Corrupt archived record', { id, message: createSafeErrorMessage(err) });
-				return json({ success: false, error: 'Corrupt record' }, { status: 500 });
+			if (raw) {
+				let parsed;
+				try {
+					parsed = JSON.parse(raw);
+				} catch (err: unknown) {
+					log.warn('Corrupt archived record', { id, message: createSafeErrorMessage(err) });
+					return json({ success: false, error: 'Corrupt record' }, { status: 500 });
+				}
+				if (parsed.ownerId !== userId)
+					return json({ success: false, error: 'Not found' }, { status: 404 });
+				return json({ success: true, order: parsed.order });
 			}
-			if (parsed.ownerId !== userId)
-				return json({ success: false, error: 'Not found' }, { status: 404 });
-			return json({ success: true, order: parsed.order });
+
+			// If not found in Orders KV, check the per-user HNS DB as a fallback
+			const hnsKV = safeKV(env, 'BETA_HUGHESNET_KV');
+			if (hnsKV) {
+				try {
+					const dbRaw = await hnsKV.get(`hns:db:${userId}`);
+					if (dbRaw) {
+						const db = JSON.parse(dbRaw) as Record<string, unknown>;
+						if (db && Object.prototype.hasOwnProperty.call(db, id)) {
+							return json({ success: true, order: db[id] });
+						}
+					}
+				} catch (err: unknown) {
+					log.warn('Failed to read user HNS DB as archived fallback', {
+						id,
+						message: createSafeErrorMessage(err)
+					});
+				}
+			}
+
+			return json({ success: false, error: 'Not found' }, { status: 404 });
 		}
 
 		// list all keys and return those owned by the current user
@@ -58,6 +81,26 @@ export const GET: RequestHandler = async ({ platform, locals, url }) => {
 					message: createSafeErrorMessage(err)
 				});
 			}
+		}
+
+		// Also include orders present in the user's HNS DB (hns:db) that may not have been persisted to Orders KV yet
+		try {
+			const hnsKV = safeKV(env, 'BETA_HUGHESNET_KV');
+			if (hnsKV) {
+				const dbRaw = await hnsKV.get(`hns:db:${userId}`);
+				if (dbRaw) {
+					const db = JSON.parse(dbRaw) as Record<string, any>;
+					for (const [oid, order] of Object.entries(db)) {
+						if (!results.some((r) => r.id === oid)) {
+							results.push({ id: oid, storedAt: undefined, order });
+						}
+					}
+				}
+			}
+		} catch (err: unknown) {
+			log.warn('Failed to include HNS DB orders in archived list', {
+				message: createSafeErrorMessage(err)
+			});
 		}
 
 		return json({ success: true, orders: results });
