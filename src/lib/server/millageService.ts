@@ -18,21 +18,6 @@ export interface MillageRecord {
 	[key: string]: unknown;
 }
 
-export interface TrashRecord {
-	id: string;
-	userId: string;
-	metadata: {
-		deletedAt: string;
-		deletedBy: string;
-		originalKey: string;
-		expiresAt: string;
-	};
-	recordType: 'millage';
-	miles?: number;
-	vehicle?: string;
-	date?: string;
-}
-
 export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNamespace) {
 	const getIndexStub = (userId: string) => {
 		const id = tripIndexDO.idFromName(userId);
@@ -83,7 +68,6 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 						if (!raw) continue;
 						const parsed = JSON.parse(raw);
 
-						// If this is a tombstone, prefer migrating its backup payload (if available)
 						if (parsed && parsed.deleted) {
 							if (parsed.backup) {
 								all.push(parsed.backup);
@@ -113,14 +97,19 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				}
 			}
 
-			// Delta Sync: Return everything (including deletions) if checking for updates
+			// Delta Sync: Return everything (including deletions)
 			if (since) {
 				const sinceDate = new Date(since);
-				return millage.filter((e) => new Date(e.updatedAt || e.createdAt) > sinceDate);
+				return millage.filter((m) => new Date(m.updatedAt || m.createdAt) > sinceDate);
 			}
 
-			// [!code fix] Full List: Filter out deleted items so hydration is clean
-			return millage.filter((m) => !m.deleted);
+			// [!code fix] Full List: Filter out deleted items (Tombstones)
+			// This prevents deleted items from appearing on page load/refresh
+			return millage
+				.filter((m) => !m.deleted)
+				.sort((a, b) =>
+					(b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || '')
+				);
 		},
 
 		async get(userId: string, id: string) {
@@ -131,7 +120,6 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 		async put(item: MillageRecord) {
 			item.updatedAt = new Date().toISOString();
 			delete item.deleted;
-			delete (item as Record<string, unknown>)['deletedAt'];
 
 			// Write to KV
 			await kv.put(`millage:${item.userId}:${item.id}`, JSON.stringify(item));
@@ -147,7 +135,6 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 		async delete(userId: string, id: string) {
 			const stub = getIndexStub(userId);
 			
-			// Fetch current state for backup
 			const key = `millage:${userId}:${id}`;
 			const raw = await kv.get(key);
 			if (!raw) return;
@@ -163,24 +150,23 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				expiresAt: expiresAt.toISOString()
 			};
 
-			// Create Tombstone (Soft Delete)
 			const tombstone = {
 				id: item.id,
 				userId: item.userId,
 				deleted: true,
 				deletedAt: now.toISOString(),
 				metadata,
-				backup: item, // Save data for restore
+				backup: item,
 				updatedAt: now.toISOString(),
 				createdAt: item.createdAt
 			};
 
-			// 1. Update KV with tombstone
+			// Update KV with tombstone
 			await kv.put(key, JSON.stringify(tombstone), {
 				expirationTtl: RETENTION.THIRTY_DAYS
 			});
 
-			// 2. [!code fix] Update DO with tombstone (PUT, not DELETE)
+			// Update DO with tombstone (PUT)
 			await stub.fetch(`${DO_ORIGIN}/millage/put`, {
 				method: 'POST',
 				body: JSON.stringify(tombstone)
@@ -196,7 +182,7 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				keys = keys.concat(list.keys);
 			}
 
-			const out: TrashRecord[] = [];
+			const out: any[] = [];
 			for (const k of keys) {
 				const raw = await kv.get(k.name);
 				if (!raw) continue;

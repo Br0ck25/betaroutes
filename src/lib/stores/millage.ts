@@ -35,7 +35,7 @@ function createMillageStore() {
 				const validServerData = data.filter((item) => !trashIds.has(item.id));
 				const serverIdSet = new Set(validServerData.map(i => i.id));
 				
-				// 5. Update Store Again (Refined)
+				// 5. Update Store Again with Filtered Data (Refined)
 				set(validServerData);
 
 				// 6. Sync Local DB
