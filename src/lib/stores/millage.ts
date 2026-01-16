@@ -14,34 +14,37 @@ function createMillageStore() {
 		subscribe,
 		set,
 
-		// [!code fix] Smart Hydrate: Removes stale local items missing from server
+		// [!code fix] Hydrate: Sets data INSTANTLY, then cleans up in background
 		async hydrate(data: MillageRecord[], userId: string) {
+			// 1. Show Server Data Immediately (Fixes "Disappearing Log")
+			set(data);
+
+			// 2. Stop here if running on Server (Fixes ReferenceError)
+			if (typeof window === 'undefined') return;
+
 			try {
 				const db = await getDB();
 				
-				// 1. Check Trash
+				// 3. Background Cleanup: Check Trash
 				const trashTx = db.transaction('trash', 'readonly');
 				const trashItems = await trashTx.objectStore('trash').getAll();
 				const trashIds = new Set(trashItems.map((t: any) => t.id));
 				await trashTx.done;
 
-				// 2. Prepare Valid Data (Server data minus local trash)
+				// 4. Filter Active Data (Remove locally deleted items)
 				const validServerData = data.filter((item) => !trashIds.has(item.id));
 				const serverIdSet = new Set(validServerData.map(i => i.id));
 				
-				// 3. Update Screen Immediately
+				// 5. Update Store Again (Refined)
 				set(validServerData);
 
-				// 4. Update DB (ReadWrite)
+				// 6. Sync Local DB
 				const tx = db.transaction(['millage', 'trash'], 'readwrite');
 				const store = tx.objectStore('millage');
 				
-				// Cleanup Zombies (Items locally 'synced' but missing from server)
 				const localItems = await store.getAll();
 				for (const local of localItems) {
-					// DELETE if:
-					// a) It is in the local Trash
-					// b) OR It is marked as 'synced' locally, but missing from server list (Deleted remotely)
+					// Remove Zombies (Locally synced but missing from server OR in trash)
 					if (trashIds.has(local.id)) {
 						await store.delete(local.id);
 					} else if (local.syncStatus === 'synced' && !serverIdSet.has(local.id)) {
@@ -49,7 +52,6 @@ function createMillageStore() {
 					}
 				}
 				
-				// Insert/Update fresh server data
 				for (const item of validServerData) {
 					await store.put({ ...item, syncStatus: 'synced' });
 				}
@@ -57,7 +59,6 @@ function createMillageStore() {
 				await tx.done;
 			} catch (err) {
 				console.error('Failed to hydrate millage cache:', err);
-				set(data);
 			}
 		},
 
@@ -96,7 +97,6 @@ function createMillageStore() {
 				const trashItems = await trashStore.getAll();
 				const trashIds = new Set(trashItems.map((t: any) => t.id));
 
-				// Filter out trashed items
 				const activeItems = items.filter(item => !trashIds.has(item.id));
 
 				activeItems.sort((a, b) => {
@@ -259,7 +259,7 @@ function createMillageStore() {
 				await millageStore.delete(id);
 				await tx.done;
 
-				// Force reload to ensure disk sync matches UI
+				// Force reload to sync UI state
 				await this.load(userId);
 
 				await syncManager.addToQueue({
