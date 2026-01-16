@@ -150,6 +150,18 @@ export const GET: RequestHandler = async (event) => {
 		const storageId = userSafe?.name || userSafe?.token || '';
 		let sinceParam = sanitizeQueryParam(event.url.searchParams.get('since'), 50);
 
+		// Add a small buffer to the sinceParam to account for client clock skew (5 minutes)
+		if (sinceParam) {
+			try {
+				const bufMs = 5 * 60 * 1000; // 5 minutes
+				const s = new Date(sinceParam);
+				s.setTime(s.getTime() - bufMs);
+				sinceParam = s.toISOString();
+			} catch (e) {
+				// if parsing fails, leave sinceParam as-is
+			}
+		}
+
 		// --- ENFORCE DATA RETENTION FOR FREE USERS ---
 		if (user.plan === 'free') {
 			const retentionDate = new Date();

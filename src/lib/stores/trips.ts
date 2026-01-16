@@ -253,8 +253,18 @@ function createTripsStore() {
 				if (!navigator.onLine) return;
 
 				const lastSync = storage.getLastSync();
-				const url = lastSync ? `/api/trips?since=${encodeURIComponent(lastSync)}` : '/api/trips';
-
+				// Add a small buffer to compensate for device clock skew (5 minutes)
+				let url = '/api/trips';
+				if (lastSync) {
+					try {
+						const adjusted = new Date(lastSync);
+						adjusted.setMinutes(adjusted.getMinutes() - 5); // 5-minute buffer
+						url = `/api/trips?since=${encodeURIComponent(adjusted.toISOString())}`;
+					} catch (e) {
+						// If parsing fails, fall back to raw lastSync
+						url = `/api/trips?since=${encodeURIComponent(lastSync)}`;
+					}
+				}
 				console.log(`☁️ Syncing trips... ${lastSync ? `(Delta since ${lastSync})` : '(Full)'}`);
 
 				const response = await fetch(url, { credentials: 'include' });
