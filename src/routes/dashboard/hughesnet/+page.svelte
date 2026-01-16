@@ -7,7 +7,8 @@
 	import { page } from '$app/stores';
 	import SettingsModal from '../trips/components/SettingsModal.svelte';
 	let showTripSettings = false;
-	$: API_KEY = $page.data?.googleMapsApiKey;
+	// Access via bracket notation because `page.data` exposes properties through an index signature
+	$: API_KEY = $page.data?.['googleMapsApiKey'];
 
 	let username = '';
 	let password = '';
@@ -593,7 +594,10 @@
 					<p>
 						⚠️ <strong>Important:</strong> Before syncing, ensure your Start/End addresses, MPG, and
 						Gas Price defaults are updated in
-						<a href="#" on:click|preventDefault={() => (showTripSettings = true)}>Trip Settings</a>.
+						<button type="button" class="btn-link" on:click={() => (showTripSettings = true)}>
+							Trip Settings
+						</button>
+						.
 					</p>
 				</div>
 
@@ -1479,7 +1483,7 @@
 		font-size: 13px;
 		color: #9a3412;
 	}
-	.warning-box a {
+	.warning-box .btn-link {
 		color: #c2410c;
 		text-decoration: underline;
 		font-weight: 600;
