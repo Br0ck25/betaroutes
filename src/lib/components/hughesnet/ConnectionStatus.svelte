@@ -68,10 +68,7 @@
 
 		<div class="warning-box">
 			<p>
-				⚠️ <strong>Important:</strong> Before syncing, please ensure your Start Address and MPG
-				defaults are updated in <a href="/dashboard/settings">Global Settings</a>.
-			</p>
-		</div>
+					⚠️ <strong>Important:</strong> Before syncing, ensure your Start/End addresses, MPG, and Gas Price defaults are updated in <button class="btn-link" on:click={() => dispatch('openTripSettings')} aria-label="Open Trip Settings">Trip Settings</button>.
 
 		{#if loading && currentBatch > 0}
 			<div class="sync-progress-container">
@@ -214,6 +211,21 @@
 		background: linear-gradient(135deg, #f97316 0%, #ff6a3d 100%);
 		color: white;
 		border: none;
+	}
+
+	/* Small link-style button used for inline hints */
+	.btn-link {
+		background: none;
+		border: none;
+		color: var(--accent-blue, #1FA8DB);
+		cursor: pointer;
+		padding: 0;
+		font-weight: 700;
+		text-decoration: underline;
+	}
+	.btn-link:focus {
+		outline: 2px solid rgba(31, 168, 219, 0.25);
+		outline-offset: 2px;
 	}
 	.btn-primary:hover {
 		transform: translateY(-2px);

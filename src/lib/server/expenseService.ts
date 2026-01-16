@@ -3,8 +3,7 @@ import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-ty
 import { DO_ORIGIN, RETENTION } from '$lib/constants';
 import { log } from '$lib/server/log';
 
-// [!code fix] Add this import (assuming TrashRecord is defined in types or just define a local interface)
-// If you have a shared type file, import it. Otherwise, define it locally to satisfy the linter.
+// Define locally to avoid missing import errors
 export interface TrashRecord {
 	id: string;
 	userId: string;
@@ -108,16 +107,20 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				}
 			}
 
+			// Delta Sync Logic: Return everything (including tombstones) that changed
 			if (since) {
 				const sinceDate = new Date(since);
 				return expenses.filter((e) => new Date(e.updatedAt || e.createdAt) > sinceDate);
 			}
 
-			return expenses;
+			// [!code fix] Full List Logic: MUST filter out deleted items
+			// This ensures 'hydrate' sees items missing and removes them locally
+			return expenses.filter(e => !e.deleted);
 		},
 
 		async get(userId: string, id: string) {
-			const all = await this.list(userId);
+			// Reuse list to ensure consistent behavior
+			const all = await this.list(userId); 
 			return all.find((e) => e.id === id) || null;
 		},
 
@@ -167,8 +170,14 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 
 		async delete(userId: string, id: string) {
 			const stub = getIndexStub(userId);
-			const item = await this.get(userId, id);
-			if (!item) return;
+			
+			// We need to fetch from KV directly to ensure we get the latest data for backup
+			// (even if DO is slightly behind)
+			const key = `expense:${userId}:${id}`;
+			const raw = await kv.get(key);
+			if (!raw) return;
+			
+			const item = JSON.parse(raw);
 
 			const now = new Date();
 			const expiresAt = new Date(now.getTime() + RETENTION.THIRTY_DAYS * 1000);
@@ -176,7 +185,7 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			const metadata = {
 				deletedAt: now.toISOString(),
 				deletedBy: userId,
-				originalKey: `expense:${userId}:${id}`,
+				originalKey: key,
 				expiresAt: expiresAt.toISOString()
 			};
 
@@ -192,13 +201,17 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				createdAt: item.createdAt
 			};
 
-			await kv.put(`expense:${userId}:${id}`, JSON.stringify(tombstone), {
+			// 1. Update KV with tombstone
+			await kv.put(key, JSON.stringify(tombstone), {
 				expirationTtl: RETENTION.THIRTY_DAYS
 			});
 
-			await stub.fetch(`${DO_ORIGIN}/expenses/delete`, {
+			// 2. [!code fix] Update DO with tombstone (PUT) instead of deleting
+			// This is CRITICAL for sync to work. Devices need to download this record
+			// to know it has been deleted.
+			await stub.fetch(`${DO_ORIGIN}/expenses/put`, {
 				method: 'POST',
-				body: JSON.stringify({ id })
+				body: JSON.stringify(tombstone)
 			});
 		},
 
@@ -265,6 +278,15 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				const parsed = JSON.parse(raw);
 				if (parsed && parsed.deleted) {
 					await kv.delete(k.name);
+					// Also ensure it's gone from DO
+					const stub = getIndexStub(userId);
+					const id = k.name.split(':').pop();
+					if(id) {
+						await stub.fetch(`${DO_ORIGIN}/expenses/delete`, {
+							method: 'POST',
+							body: JSON.stringify({ id })
+						});
+					}
 					count++;
 				}
 			}
@@ -297,7 +319,7 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 		async permanentDelete(userId: string, itemId: string) {
 			const key = `expense:${userId}:${itemId}`;
 			await kv.delete(key);
-			// Also notify DO to remove it from index so it doesn't reappear in list()
+			
 			const stub = getIndexStub(userId);
 			await stub.fetch(`${DO_ORIGIN}/expenses/delete`, {
 				method: 'POST',

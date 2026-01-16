@@ -4,6 +4,10 @@
 	import { trips } from '$lib/stores/trips';
 	import { trash } from '$lib/stores/trash';
 	import { user } from '$lib/stores/auth';
+	import { page } from '$app/stores';
+	import SettingsModal from '../trips/components/SettingsModal.svelte';
+	let showTripSettings = false;
+	$: API_KEY = $page.data?.googleMapsApiKey;
 
 	let username = '';
 	let password = '';
@@ -528,6 +532,9 @@
 		</div>
 	{/if}
 
+	<!-- Trip Settings Modal (open from warning link/button) -->
+	<SettingsModal bind:open={showTripSettings} {API_KEY} />
+
 	<div class="settings-grid">
 		<div class="settings-card">
 			<div class="card-header">
@@ -584,8 +591,15 @@
 
 				<div class="warning-box">
 					<p>
-						⚠️ <strong>Important:</strong> Before syncing, please ensure your Start Address and MPG
-						defaults are updated in <a href="/dashboard/settings">Global Settings</a>.
+						⚠️ <strong>Important:</strong> Before syncing, ensure your Start/End addresses, MPG, and
+						Gas Price defaults are updated in
+						<a href="#" on:click|preventDefault={() => (showTripSettings = true)}>Trip Settings</a>
+						or open them directly:
+						<button
+							class="btn-link"
+							on:click={() => (showTripSettings = true)}
+							aria-label="Open Trip Settings">Open Trip Settings</button
+						>.
 					</p>
 				</div>
 
@@ -2009,6 +2023,21 @@
 	}
 	.btn-primary.safe:hover {
 		box-shadow: 0 8px 16px rgba(5, 150, 105, 0.3);
+	}
+
+	/* Small link-style button used for inline hints */
+	.btn-link {
+		background: none;
+		border: none;
+		color: var(--accent-blue, #1fa8db);
+		cursor: pointer;
+		padding: 0;
+		font-weight: 700;
+		text-decoration: underline;
+	}
+	.btn-link:focus {
+		outline: 2px solid rgba(31, 168, 219, 0.25);
+		outline-offset: 2px;
 	}
 
 	.btn-secondary.danger {

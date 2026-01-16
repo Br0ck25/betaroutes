@@ -111,6 +111,42 @@ export async function createTripForDate(
 		if (!endAddr) endAddr = startAddr;
 	}
 
+	// Prefer autocompleted / geocoded formatted addresses when available
+	const resolvedCache = new Map<string, string>();
+	async function resolveIfPossible(raw: string) {
+		if (!raw || !(router as any)?.resolveAddress) return raw;
+		const key = raw.trim();
+		if (resolvedCache.has(key)) return resolvedCache.get(key)!;
+		try {
+			const pt = await (router as any).resolveAddress(key);
+			if (pt && (pt as any).formattedAddress) {
+				resolvedCache.set(key, (pt as any).formattedAddress);
+				return (pt as any).formattedAddress;
+			}
+			resolvedCache.set(key, key);
+			return key;
+		} catch (err: unknown) {
+			const emsg = err instanceof Error ? err.message : String(err);
+			if (emsg === 'REQ_LIMIT') throw err;
+			logger(`[Trip ${date}] Failed to resolve address "${key}": ${emsg}`);
+			resolvedCache.set(key, key);
+			return key;
+		}
+	}
+
+	try {
+		if (startAddr) startAddr = await resolveIfPossible(startAddr);
+		if (endAddr) endAddr = await resolveIfPossible(endAddr);
+	} catch (err: unknown) {
+		const emsg = err instanceof Error ? err.message : String(err);
+		if (emsg === 'REQ_LIMIT') {
+			// Propagate batching signal to caller
+			log.warn(`[Trip ${date}] Hard limit reached during address resolution`);
+			return false;
+		}
+		logger(`[Trip ${date}] Address resolution failed: ${emsg}`);
+	}
+
 	let startMins = 9 * 60;
 	let commuteMins = 0;
 
@@ -171,9 +207,27 @@ export async function createTripForDate(
 		startMins = 9 * 60;
 
 	const points: string[] = [startAddr];
+	const orderResolvedAddrs: Record<string, string> = {};
+
+	// Resolve order addresses (prefer geocoded / autocomplete formatted address)
 	for (const o of ordersWithMeta) {
-		const addr = buildAddress(o);
-		if (addr) points.push(addr);
+		const rawAddr = buildAddress(o);
+		let resolvedAddr = rawAddr;
+		if (rawAddr && (router as any)?.resolveAddress) {
+			try {
+				resolvedAddr = await resolveIfPossible(rawAddr);
+			} catch (err: unknown) {
+				const emsg = err instanceof Error ? err.message : String(err);
+				if (emsg === 'REQ_LIMIT') {
+					log.warn(`[Trip ${date}] Hard limit reached during address resolution`);
+					return false;
+				}
+				// fallback to raw address on other errors
+				resolvedAddr = rawAddr;
+			}
+		}
+		if (resolvedAddr) points.push(resolvedAddr);
+		orderResolvedAddrs[o.id] = resolvedAddr || rawAddr;
 	}
 	if (endAddr && endAddr.trim()) points.push(endAddr);
 
@@ -272,7 +326,7 @@ export async function createTripForDate(
 		}
 		return {
 			id: crypto.randomUUID(),
-			address: buildAddress(o),
+			address: orderResolvedAddrs[o.id] || buildAddress(o),
 			order: i,
 			notes,
 			earnings: basePay,

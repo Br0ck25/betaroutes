@@ -55,7 +55,14 @@ describe('createTripForDate wifi pay', () => {
 			0, // driveTimeBonus
 			tripService,
 			settingsKV,
-			{ getRouteInfo: async () => ({ duration: 0, distance: 0 }) },
+			{
+				getRouteInfo: async () => ({ duration: 0, distance: 0 }),
+				resolveAddress: async (raw: string) => ({
+					lat: 0,
+					lon: 0,
+					formattedAddress: raw + ' (resolved)'
+				})
+			},
 			(msg) => {
 				void msg;
 				/* logger */
@@ -67,5 +74,7 @@ describe('createTripForDate wifi pay', () => {
 		const trip = captured[0];
 		expect(trip.totalEarnings).toBeGreaterThanOrEqual(15);
 		expect(trip.stops[0].notes).toContain('[WIFI: $15]');
+		expect(trip.stops[0].address).toContain('1 Test');
+		expect(trip.stops[0].address).toContain('(resolved)');
 	});
 });
