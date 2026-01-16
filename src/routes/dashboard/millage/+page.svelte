@@ -15,27 +15,24 @@
 
 	export let data: PageData;
 
-	// [!code focus:10] CRITICAL FIX: Hydrate store AND Local DB on load
+	// Hydrate store on load
 	$: if (data.millage) {
-		// Normalize incoming records so they satisfy the DB store type (ensure syncStatus exists)
 		const normalize = (records: any[]) =>
 			records.map((r) => ({ ...r, syncStatus: (r as any).syncStatus ?? 'synced' }));
 		const normalized = normalize(data.millage);
 
-		// If the user is loaded and the store has the hydrate method (added in previous step)
-		// we use it to ensure data persists to IndexedDB.
-		if ($user?.id && 'hydrate' in $millage) {
-			// Call hydrate with a safe cast so TypeScript doesn't require a @ts-expect-error
-			(millage as any).hydrate(normalized, $user.id);
+		// eslint-disable-next-line svelte/require-store-reactive-access
+		if ($user?.id && 'hydrate' in millage) {
+			// @ts-expect-error - Custom method
+			millage.hydrate(normalized, $user.id);
 		} else {
-			// Fallback if store hasn't been fully updated yet
 			millage.set(normalized);
 		}
 	}
 
 	let isMillageSettingsOpen = false;
 
-	// Derived totals for millage (use safe casting where needed)
+	// Derived totals
 	$: totalMiles = filteredExpenses.reduce((s, e) => s + (Number((e as any).miles) || 0), 0);
 	$: totalReimbursement = filteredExpenses.reduce(
 		(s, e) => s + (Number((e as any).reimbursement) || 0),
@@ -49,7 +46,6 @@
 	let filterCategory = 'all';
 	let allExpenses: any[] = [];
 	let filteredExpenses: any[] = [];
-	// Default to current year (Jan 1 -> today)
 	const _now = new Date();
 	function _fmtInput(d: Date) {
 		return d.toISOString().slice(0, 10);
@@ -57,17 +53,14 @@
 	let startDate = _fmtInput(new Date(_now.getFullYear(), 0, 1));
 	let endDate = _fmtInput(_now);
 	let lastHadSelections = false;
-
-	// Selection State
 	let selectedExpenses = new Set<string>();
-	// Render a small slice of the list initially to reduce initial DOM work and main-thread blocking.
-	// We'll expand to the full list when the browser is idle or after loading finishes.
 	let visibleLimit = 20;
 	let visibleExpenses: any[] = [];
 	$: visibleExpenses = filteredExpenses.slice(0, visibleLimit);
-	// Expand visible window when more items become available (guarded to avoid reactive loops)
 	let _lastExpandedSize = 0;
-	// non-reactive guard variable
+
+	$: loading = $millageLoading || $tripsLoading;
+
 	/* eslint-disable svelte/infinite-reactive-loop */
 	$: if (
 		!loading &&
@@ -97,36 +90,19 @@
 		}
 	}
 
-	// Clean up body class when component is destroyed
 	onDestroy(() => {
 		if (typeof document !== 'undefined') {
 			document.body.classList.remove('has-selections');
 		}
 	});
-	// Categories intentionally empty for Millage page
+
 	let categories: string[] = [];
-	// --- MODAL STATE (Only for Categories now) ---
 	let isManageCategoriesOpen = false;
 	let newCategoryName = '';
-	// --- DERIVE TRIP EXPENSES ---
-	$: tripExpenses = $trips.flatMap((_trip) => {
-		const items: any[] = [];
-		// FIX: Safely access createdAt to prevent split() on undefined
-		// Placeholder: trip-derived millage items can be appended here in future
 
-		// Trip-derived expenses intentionally excluded from Millage listing
-		// (Fuel/maintenance/supplies from trips are shown under Expenses, not Millage)
-		// This avoids duplicating expense entries across both lists.
+	$: tripExpenses = $trips.flatMap((_trip) => []);
 
-		// 2. Maintenance Items removed for Millage page (excluded)
-		// (maintenance entries are intentionally omitted from millage listing)
-
-		// 3. Supply Items removed for Millage page (excluded)
-		// (supply entries are intentionally omitted from millage listing)
-
-		return items;
-	});
-	// --- COMBINE & FILTER ---
+	// REACTIVITY: Ensure this updates when $millage changes
 	$: allExpenses = [
 		...$millage.filter(
 			(r) =>
@@ -136,14 +112,10 @@
 		),
 		...tripExpenses
 	];
-	// Reset selection when filters change
-	$: if (searchQuery || sortBy || sortOrder || filterCategory || startDate || endDate) {
-		selectedExpenses = new Set();
-	}
 
+	// Filter Logic
 	$: filteredExpenses = allExpenses
 		.filter((item) => {
-			// Search (safe casts)
 			const query = searchQuery.toLowerCase();
 			const matchesSearch =
 				!query ||
@@ -152,11 +124,8 @@
 				((item as any).source === 'trip' && 'trip log'.includes(query));
 
 			if (!matchesSearch) return false;
-
-			// Category
 			if (filterCategory !== 'all' && item.category !== filterCategory) return false;
 
-			// Date Range
 			if (item.date) {
 				const itemDate = new Date(item.date);
 				itemDate.setHours(0, 0, 0, 0);
@@ -172,7 +141,6 @@
 					if (itemDate > end) return false;
 				}
 			}
-
 			return true;
 		})
 		.sort((a, b) => {
@@ -188,14 +156,11 @@
 			return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
 		});
 
-	$: loading = $millageLoading || $tripsLoading;
-	// switched to millage store
 	$: allSelected = filteredExpenses.length > 0 && selectedExpenses.size === filteredExpenses.length;
 
-	// --- ACTIONS ---
 	function goToAdd() {
 		goto('/dashboard/millage/new');
-	} // open millage new form
+	}
 
 	function editExpense(expense: any) {
 		if ((expense as any).source === 'trip') {
@@ -208,7 +173,6 @@
 	async function deleteExpense(id: string, e?: MouseEvent) {
 		if (e) e.stopPropagation();
 		if (!confirm('Move this expense to trash? You can restore it later.')) return;
-		// Check if it's a trip log
 		if (id.startsWith('trip-')) {
 			toasts.error('Cannot delete Trip Logs here. Delete the Trip instead.');
 			return;
@@ -219,9 +183,10 @@
 			currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
 		if (userId) {
 			try {
-				// Use the store action which handles local + server delete
 				await millage.deleteMillage(id, String(userId));
 				toasts.success('Log moved to trash');
+				
+				// Force reactivity in case store update was missed (though it shouldn't be)
 				if (selectedExpenses.has(id)) {
 					selectedExpenses.delete(id);
 					selectedExpenses = selectedExpenses;
@@ -233,7 +198,6 @@
 		}
 	}
 
-	// --- SELECTION LOGIC ---
 	function toggleSelection(id: string) {
 		if (selectedExpenses.has(id)) selectedExpenses.delete(id);
 		else selectedExpenses.add(id);
@@ -280,6 +244,7 @@
 		selectedExpenses = new Set();
 	}
 
+    // ... rest of imports (exportSelected, categories, helpers, etc) same as before ...
 	function isTripSource(item: any): boolean {
 		return (item as any)?.source === 'trip';
 	}
@@ -310,7 +275,6 @@
 		selectedExpenses = new Set();
 	}
 
-	// --- CATEGORY MANAGEMENT ---
 	async function updateCategories(newCategories: string[]) {
 		userSettings.update((s) => ({ ...s, expenseCategories: newCategories }));
 		try {
@@ -343,7 +307,6 @@
 		toasts.success('Category removed');
 	}
 
-	// --- HELPERS ---
 	function formatCurrency(amount: number) {
 		return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 	}
@@ -364,7 +327,6 @@
 	}
 
 	function getCategoryColor(cat?: string) {
-		// FIX: Handle undefined/missing category (e.g. for Millage records)
 		if (!cat) return 'text-gray-600 bg-gray-50 border-gray-200';
 
 		if (cat === 'fuel') return 'text-red-600 bg-red-50 border-red-200';
@@ -381,7 +343,6 @@
 		return colors[sum % colors.length];
 	}
 
-	// Swipe Action
 	function swipeable(
 		node: HTMLElement,
 		{
