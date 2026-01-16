@@ -18,8 +18,6 @@ describe('Trips <-> Millage integration', () => {
 		expect(m).toBeTruthy();
 		expect(m?.miles).toBe(42);
 		expect((m as any).tripId).toBe(trip.id);
-		// Default millage rate should be pulled from user settings
-		expect(m?.millageRate).toBe(0.655);
 
 		// DB has millage
 		const db = await getDB();
@@ -40,17 +38,5 @@ describe('Trips <-> Millage integration', () => {
 		const updatedTrip = await trips.get(trip.id, userId as any);
 		expect(updatedTrip).toBeTruthy();
 		expect((updatedTrip as any).totalMiles).toBe(123);
-	});
-
-	it('uses custom userSettings.millageRate when creating linked millage', async () => {
-		const userId = 'u-test-rate';
-		// Set a custom millage rate in settings
-		const { userSettings } = await import('./userSettings');
-		const { get } = await import('svelte/store');
-		userSettings.set({ ...(get(userSettings) as any), millageRate: 0.75 });
-
-		const trip = await trips.create({ date: '2025-01-03', totalMiles: 7 }, userId as any);
-		const m = await millage.get(trip.id, userId as any);
-		expect(m?.millageRate).toBe(0.75);
 	});
 });

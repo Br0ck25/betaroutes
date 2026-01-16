@@ -1,8 +1,9 @@
 name: Svelte 5 & HTML Living Standard Guard
 description: >
-Ensures all changes comply with project-enforced frontend standards.
-Supports safe, file-by-file migration from Svelte 4 to Svelte 5.
-Use for multi-file edits, migrations, audits, and CI-safe changes.
+Enforces Svelte 5 runes-based reactivity and the HTML Living Standard.
+During migration from Svelte 4, limited legacy syntax is tolerated behind
+explicit migration boundaries. Use this agent for multi-file edits,
+migrations, audits, and CI-safe changes.
 
 This project is a **Progressive Web App (PWA)**.
 All changes must preserve installability, offline behavior,
@@ -18,68 +19,41 @@ tools:
 
 ## Purpose
 
-This agent exists to **prevent breakage**.
+This agent ensures all changes comply with **project-enforced frontend standards**
+while supporting a **controlled migration from Svelte 4 to Svelte 5**.
 
-It enforces:
+This repository is a **PWA-first application**. Any change that risks breaking
+PWA functionality is disallowed.
 
-- Svelte 5 runes-based reactivity (default)
-- HTML Living Standard–compliant markup
-- CI cleanliness (no warnings or errors)
-- Safe, incremental Svelte 4 → Svelte 5 migration
-- Preservation of all PWA functionality
+Use this agent when:
 
-The **canonical source of truth** is the repository documentation.
-If there is any conflict, **CI enforcement and repo docs win**.
-
----
-
-## Migration Model (Critical)
-
-Every `.svelte` file must belong to **exactly one category**.
-
-### Legacy File — Svelte 4
-
-Must be explicitly marked at the top of the file:
-
-```svelte
-<!-- MIGRATION: SVELTE4-LEGACY -->
-```
-
-Rules:
-
-- Legacy syntax is allowed only in these files
-- Bug fixes only
-- No new features
-- No opportunistic refactors
-
-### Migrated File — Svelte 5
-
-Rules:
-
-- No legacy migration marker
-- Uses runes-based reactivity exclusively
-- Represents the final architectural state
-
-### Migration Hard Stops
-
-❌ Never mix legacy and runes syntax in the same file  
-❌ Never partially migrate a file  
-❌ Never remove a migration marker without completing migration  
-❌ If a file contains legacy syntax without a marker: **STOP**
+- Migrating Svelte 4 → Svelte 5
+- Performing multi-file refactors
+- Modifying markup or layouts
+- Fixing CI or lint failures
+- Auditing the repo for legacy patterns
 
 ---
 
-## Hard Rules (Non-Negotiable)
+## Mandatory Rules (Non-Negotiable)
 
 ### Svelte
 
-- Target version: **Svelte 5**
-- Default for all new code: **runes-based reactivity**
+- **Target: Svelte 5**
+- **Default expectation: runes-based reactivity**
   - `$state`
   - `$derived`
   - `$effect`
 
-❌ Permanently forbidden in all files:
+#### Temporary Migration Allowances (Must Be Removed)
+
+Allowed **only in files not yet migrated**:
+
+- `export let` (props)
+- `$:` reactive labels
+- `on:click` DOM events
+
+❌ Permanently forbidden (even during migration):
 
 - `svelte/store`
 - `onMount`
@@ -87,59 +61,91 @@ Rules:
 - `createEventDispatcher`
 - Class-style component instantiation (`new Component()`)
 
+Migration allowance ends immediately once a file is converted.
+Do not mix legacy and runes syntax in the same component.
+
 ---
 
 ### HTML
 
 - Follow the **HTML Living Standard (WHATWG)**
-- ❌ No XML or XHTML-style syntax
+- ❌ No XHTML / XML-style syntax
 - ❌ No deprecated elements or attributes
-- Prefer semantic, accessible HTML
+- Prefer semantic HTML
+- Valid, accessible markup is required
 
 ---
 
-### PWA
+### PWA Requirements (Non-Negotiable)
 
+- The app must remain a valid **Progressive Web App**
 - Do not break or remove:
   - `manifest.json`
   - service worker registration
   - offline or caching behavior
 - Preserve installability and Lighthouse PWA compliance
+- Do not remove or weaken:
+  - required meta tags
+  - icons
+  - theme colors
 - Use modern, standards-based PWA patterns only
+
+---
+
+## Required Reading (Before Making Changes)
+
+You MUST read and follow:
+
+1. `README.md`
+2. `CONTRIBUTING.md`
+3. `AI_GUARD.md`
+4. `HTML_LIVING_STANDARD.md`
+
+If there is a conflict, **CI enforcement wins**.
 
 ---
 
 ## Workflow Expectations
 
 - Preserve existing structure unless explicitly asked to refactor
-- Migrate components **one file at a time**
+- Migrate components incrementally, file-by-file
+- Never mix legacy and runes syntax in the same file
+- Remove migration allowances immediately after conversion
 - Never weaken lint rules, pre-commit hooks, or CI guards
-- Prefer the **smallest safe change**
-- If unsure at any point: **STOP and ask**
+- This is a **PWA** — verify changes do not break installability or offline behavior
 
----
-
-## Mandatory Post-Change Verification
+### Mandatory Post-Change Verification
 
 After **any** code change or new code:
 
-1. `npm run check`
-2. `npm run lint`
-3. `npx eslint`
+1. Run `npm run check`
+2. Fix **all** errors and warnings
+3. Run `npm run lint`
+4. Fix **all** errors and warnings
+5. Run `npx eslint`
+6. Fix **all** eslint errors and warnings
 
-All must pass with **zero errors or warnings**.  
-Never suppress, downgrade, or bypass failures.
+❌ Never ignore, suppress, downgrade, or bypass errors or warnings  
+✅ All changes must be CI-clean by default
+
+If checks or lint fail and the fix is unclear:
+**STOP and ask instead of committing a partial or unsafe change.**
 
 ---
 
-## Required Reading
+## Verification Checklist (Self-Check)
 
-Before making changes, follow exactly:
+Before finishing:
 
-- README.md
-- CONTRIBUTING.md
-- AI_GUARD.md
-- ARCHITECTURE.md
-- MIGRATION.md
-- HTML_LIVING_STANDARD.md
-- PWA.md
+- [ ] Migrated files use `$state`, `$derived`, `$effect`
+- [ ] No `onMount` or lifecycle APIs
+- [ ] No Svelte stores
+- [ ] No XHTML-style or deprecated HTML
+- [ ] Legacy syntax exists only in explicitly unmigrated files
+- [ ] PWA functionality preserved (manifest, service worker, installability)
+- [ ] `npm run check` passes with zero errors or warnings
+- [ ] `npm run lint` passes with zero errors or warnings
+- [ ] `npx eslint` passes with zero errors or warnings
+- [ ] Changes pass CI guards conceptually
+
+If unsure at any point, stop and ask instead of guessing.
