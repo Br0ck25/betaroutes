@@ -95,7 +95,8 @@
 	// --- DERIVE TRIP EXPENSES ---
 	$: tripExpenses = $trips.flatMap((trip) => {
 		const items = [];
-		const date = trip.date || trip.createdAt.split('T')[0];
+		const date =
+			trip.date || (typeof trip.createdAt === 'string' ? trip.createdAt.split('T')[0] : '');
 
 		// 1. Fuel
 		if (trip.fuelCost && trip.fuelCost > 0) {

@@ -53,6 +53,7 @@
 		'60d': 'Last 60 days',
 		'90d': 'Last 90 days',
 		'1y': 'Current Year',
+		'prev-1y': 'Previous Year',
 		all: 'All Time'
 	};
 </script>
@@ -83,7 +84,7 @@
 				<option value="60d">Last 60 Days</option>
 				<option value="90d">Last 90 Days</option>
 				<option value="1y">Current Year</option>
-				<option value="all">All Time</option>
+				<option value="prev-1y">Previous Year</option>
 			</select>
 
 			<a href={resolve('/dashboard/trips/new')} class="btn-primary">

@@ -97,3 +97,59 @@ describe('calculateDashboardStats - 7d range', () => {
 		expect(stats.recentTrips.find((t: any) => t.id === 't4')).toBeUndefined();
 	});
 });
+
+describe('calculateDashboardStats - prev-1y range', () => {
+	it('includes only trips within the previous calendar year', () => {
+		const now = new Date();
+		const y = now.getFullYear();
+		const prevYearStart = new Date(y - 1, 0, 1);
+		const prevYearMid = new Date(y - 1, 6, 1);
+		const prevYearEnd = new Date(y - 1, 11, 31);
+
+		const format = (d: Date) => d.toISOString().split('T')[0];
+
+		const trips = [
+			{
+				id: 'a',
+				date: format(prevYearStart),
+				stops: [{ earnings: 100 }],
+				fuelCost: 0,
+				maintenanceCost: 0,
+				suppliesCost: 0,
+				totalMiles: 10
+			},
+			{
+				id: 'b',
+				date: format(prevYearMid),
+				stops: [{ earnings: 200 }],
+				fuelCost: 0,
+				maintenanceCost: 0,
+				suppliesCost: 0,
+				totalMiles: 20
+			},
+			{
+				id: 'c',
+				date: format(prevYearEnd),
+				stops: [{ earnings: 300 }],
+				fuelCost: 0,
+				maintenanceCost: 0,
+				suppliesCost: 0,
+				totalMiles: 30
+			},
+			{
+				id: 'd',
+				date: format(new Date(y, 0, 1)),
+				stops: [{ earnings: 400 }],
+				fuelCost: 0,
+				maintenanceCost: 0,
+				suppliesCost: 0,
+				totalMiles: 40
+			} // current year
+		];
+
+		const stats = calculateDashboardStats(trips, [], 'prev-1y');
+
+		expect(stats.totalTrips).toBe(3);
+		expect(stats.recentTrips.find((t: any) => t.id === 'd')).toBeUndefined();
+	});
+});

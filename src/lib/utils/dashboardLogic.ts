@@ -1,6 +1,6 @@
 // src/lib/utils/dashboardLogic.ts
 
-export type TimeRange = '7d' | '30d' | '60d' | '90d' | '1y' | 'all';
+export type TimeRange = '7d' | '30d' | '60d' | '90d' | '1y' | 'prev-1y' | 'all';
 
 export function formatCurrency(amount: number): string {
 	return new Intl.NumberFormat('en-US', {
@@ -58,6 +58,7 @@ export function calculateDashboardStats(
 	let startDate: Date;
 	let prevStartDate: Date;
 	let groupBy: 'day' | 'month' = 'day';
+	let endDate: Date = now;
 
 	switch (range) {
 		case '7d':
@@ -85,9 +86,17 @@ export function calculateDashboardStats(
 			prevStartDate.setDate(startDate.getDate() - 90);
 			break;
 		case '1y':
+			// Current year to date
 			startDate = new Date(currentYear, 0, 1);
 			prevStartDate = new Date(currentYear - 1, 0, 1);
 			groupBy = 'month';
+			break;
+		case 'prev-1y':
+			// Entire previous calendar year
+			startDate = new Date(currentYear - 1, 0, 1);
+			prevStartDate = new Date(currentYear - 2, 0, 1);
+			groupBy = 'month';
+			endDate = new Date(currentYear - 1, 11, 31, 23, 59, 59, 999);
 			break;
 		case 'all':
 			startDate = new Date(0);
@@ -106,7 +115,7 @@ export function calculateDashboardStats(
 	// Fill buckets
 	if (range !== 'all') {
 		const d = new Date(startDate);
-		while (d <= now) {
+		while (d <= endDate) {
 			let key: string;
 			if (groupBy === 'month') {
 				key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -147,7 +156,7 @@ export function calculateDashboardStats(
 		const tripProfit = earnings - tripCosts;
 
 		// Current Range
-		if (tTime >= startDate.getTime() && tTime <= now.getTime()) {
+		if (tTime >= startDate.getTime() && tTime <= endDate.getTime()) {
 			currentTrips.push(trip);
 			totalProfit += tripProfit;
 			totalMiles += Number(trip.totalMiles) || 0;
@@ -181,7 +190,7 @@ export function calculateDashboardStats(
 		const amount = Number(exp.amount) || 0;
 		const category = (exp.category || 'other').toLowerCase();
 
-		if (tTime >= startDate.getTime() && tTime <= now.getTime()) {
+		if (tTime >= startDate.getTime() && tTime <= endDate.getTime()) {
 			totalProfit -= amount; // Deduct expense from profit
 
 			// Add to Cost Breakdown
