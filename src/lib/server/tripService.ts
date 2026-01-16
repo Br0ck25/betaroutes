@@ -175,6 +175,7 @@ export function makeTripService(
 		}
 	}
 
+	// [!code change] Helper to fetch directly from KV (Source of Truth)
 	async function listFromKV(userId: string): Promise<TripRecord[]> {
 		const prefix = prefixForUser(userId);
 		const out: TripRecord[] = [];
@@ -191,7 +192,9 @@ export function makeTripService(
 			if (!raw) continue;
 			try {
 				const t = JSON.parse(raw);
-				if (!t.deleted) out.push(t);
+				// [!code change] CRITICAL FIX: Do NOT filter out deleted items here.
+				// We must return them so the sync logic knows to tell the client to delete them.
+				out.push(t); 
 			} catch (e) {
 				// ignore corrupt JSON in KV
 			}
@@ -233,10 +236,13 @@ export function makeTripService(
             const dirtyKey = `meta:user:${userId}:index_dirty`;
             const isDirty = await kv.get(dirtyKey);
 
+            // --- STRATEGY: DIRTY READ ---
+            // If the index is marked dirty, SKIP the DO and fetch from KV immediately.
             if (isDirty) {
                 log.info(`[TripService] Dirty index detected for ${userId}. Fetching from KV & repairing.`);
                 const kvTrips = await listFromKV(userId);
                 
+                // Trigger background repair
                 const stub = getIndexStub(userId);
                 const summaries = kvTrips.map(toSummary);
                 stub.fetch(`${DO_ORIGIN}/migrate`, {
@@ -250,7 +256,8 @@ export function makeTripService(
 					const sinceDate = new Date(options.since);
 					return kvTrips.filter((t) => new Date(t.updatedAt || t.createdAt) > sinceDate);
 				}
-                return kvTrips;
+				// If full sync, we DON'T want to return deleted items
+                return kvTrips.filter(t => !t.deleted);
             }
 
 			const stub = getIndexStub(userId);
@@ -263,6 +270,7 @@ export function makeTripService(
 
 			const res = await stub.fetch(url);
 
+			// --- FAILSAFE 1: If DO is completely down (500), fallback to KV ---
 			if (!res.ok) {
 				log.error(`[TripService] DO Error: ${res.status} - Falling back to KV`);
 				const kvTrips = await listFromKV(userId);
@@ -270,7 +278,7 @@ export function makeTripService(
 					const sinceDate = new Date(options.since);
 					return kvTrips.filter((t) => new Date(t.updatedAt || t.createdAt) > sinceDate);
 				}
-				return kvTrips;
+				return kvTrips.filter(t => !t.deleted);
 			}
 
 			const data = (await res.json()) as
@@ -290,6 +298,7 @@ export function makeTripService(
                 doCount = data.pagination?.total ?? trips.length;
 			}
 
+			// --- FAILSAFE 2: Counter Check (Secondary) ---
 			const expectedCountStr = await kv.get(`meta:user:${userId}:trip_count`);
 			const expectedCount = expectedCountStr ? parseInt(expectedCountStr, 10) : 0;
 
@@ -310,7 +319,7 @@ export function makeTripService(
 					const sinceDate = new Date(options.since);
 					return repairedTrips.filter((t) => new Date(t.updatedAt || t.createdAt) > sinceDate);
 				}
-				return repairedTrips;
+				return repairedTrips.filter(t => !t.deleted);
 			}
 
 			if (options.since) {
@@ -334,6 +343,7 @@ export function makeTripService(
 			await kv.put(`trip:${trip.userId}:${trip.id}`, JSON.stringify(trip));
 			const stub = getIndexStub(trip.userId);
 
+			// 1. Update the Summary Index
 			try {
 				const r = await stub.fetch(`${DO_ORIGIN}/put`, {
 					method: 'POST',
@@ -341,6 +351,7 @@ export function makeTripService(
 				});
 				if (!r.ok) {
 					log.warn('[TripService] DO put returned non-ok status - marking dirty', { status: r.status });
+                    // CRITICAL: Mark index as dirty so next list() fetches from KV
                     await markDirty(trip.userId);
 				}
 			} catch (e) {
@@ -348,6 +359,7 @@ export function makeTripService(
                 await markDirty(trip.userId);
 			}
 
+			// 2. Trigger Route Calculation (Background)
 			stub
 				.fetch(`${DO_ORIGIN}/compute-routes`, {
 					method: 'POST',
@@ -357,6 +369,7 @@ export function makeTripService(
 					log.error('[TripService] Background route computation failed trigger:', err);
 				});
 
+			// 3. Index Places
 			try {
 				await indexTripData(trip);
 			} catch (e) {
@@ -397,8 +410,6 @@ export function makeTripService(
 			const stub = getIndexStub(userId);
             
             try {
-				// CHANGE: Use PUT instead of DELETE to ensure the "deleted: true" status
-				// is propagated to the index and other devices via sync.
                 const r = await stub.fetch(`${DO_ORIGIN}/put`, {
                     method: 'POST',
                     body: JSON.stringify(toSummary(tombstone as unknown as TripRecord))
