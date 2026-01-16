@@ -229,7 +229,11 @@ function createAuthStore() {
 				try {
 					await fetch('/login', {
 						method: 'POST',
-					credentials: 'include',
+						credentials: 'include',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ email: username, password })
+					});
+				} catch (e) {
 					console.warn('Failed to create server session on login:', e);
 				}
 

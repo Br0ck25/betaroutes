@@ -4,7 +4,7 @@ import { getDB } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
 import type { TripRecord } from '$lib/db/types';
 import { storage } from '$lib/utils/storage';
-import { auth } from '$lib/stores/auth';
+import { user as authUser } from '$lib/stores/auth';
 import type { User } from '$lib/types';
 import { PLAN_LIMITS } from '$lib/constants';
 
@@ -80,7 +80,7 @@ function createTripsStore() {
 
 		async create(tripData: Partial<TripRecord>, userId: string) {
 			try {
-				const currentUser = (get(auth) as { user?: User | null }).user;
+				const currentUser = get(authUser) as User | null;
 				const isFreeTier = !currentUser?.plan || currentUser.plan === 'free';
 
 				if (isFreeTier) {
@@ -395,7 +395,7 @@ export const trips = createTripsStore();
 syncManager.registerStore('trips', {
 	updateLocal: (trip) => trips.updateLocal(trip),
 	syncDown: async () => {
-		const user = (get(auth) as { user?: User | null }).user;
+		const user = get(authUser) as User | null;
 		if (user?.id) await trips.syncFromCloud(user.id);
 	}
 });
