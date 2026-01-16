@@ -39,7 +39,11 @@ function createTrashStore() {
 						)
 					: normalizedItems;
 
-				filtered.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
+				filtered.sort((a, b) => {
+					const aTime = a && a.deletedAt ? new Date(a.deletedAt).getTime() : 0;
+					const bTime = b && b.deletedAt ? new Date(b.deletedAt).getTime() : 0;
+					return bTime - aTime;
+				});
 				set(filtered);
 				return filtered;
 			} catch (err) {
@@ -187,17 +191,17 @@ function createTrashStore() {
 						flatItem.deletedAt = flatItem.metadata.deletedAt || flatItem.deletedAt;
 						flatItem.expiresAt = flatItem.metadata.expiresAt || flatItem.expiresAt;
 						flatItem.originalKey = flatItem.metadata.originalKey || flatItem.originalKey;
-						// If metadata includes originalKey but no userId, derive it
-						if (!flatItem.userId && flatItem.metadata.originalKey) {
-							flatItem.userId = String(flatItem.metadata.originalKey.split(':')[1] || '');
+
+						// If metadata includes originalKey but no userId, derive it (guarded)
+						if (!flatItem.userId && typeof flatItem.metadata.originalKey === 'string') {
+							const parts = flatItem.metadata.originalKey.split(':');
+							flatItem.userId = String(parts[1] || '');
 						}
+
 						delete flatItem.metadata;
 					}
 
-					// Fallback: derive userId from originalKey if absent
-					if (!flatItem.userId && flatItem.originalKey) {
-						flatItem.userId = String(flatItem.originalKey.split(':')[1] || '');
-					}
+					// Fallback: derive userId from originalKey if absent (guarded)
 
 					if (!flatItem.id) continue;
 

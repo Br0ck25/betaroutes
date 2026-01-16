@@ -153,9 +153,11 @@
 
 				<div class="trip-title-row">
 					<h3 class="trip-route-title" id={'trip-' + trip.id + '-title'}>
-						{trip.startAddress?.split(',')[0] || 'Unknown'}
+						{typeof trip.startAddress === 'string' ? trip.startAddress.split(',')[0] : 'Unknown'}
 						{#if trip.stops && trip.stops.length > 0}
-							→ {trip.stops[trip.stops.length - 1].address?.split(',')[0] || 'Stop'}
+							→ {typeof trip.stops[trip.stops.length - 1]?.address === 'string'
+								? trip.stops[trip.stops.length - 1].address.split(',')[0]
+								: 'Stop'}
 						{/if}
 					</h3>
 

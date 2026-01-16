@@ -361,10 +361,14 @@
 									<span class="badge-expense">Expense</span>
 									<span class="expense-category">{trip.category || 'Uncategorized'}</span>
 								{:else}
-									{trip.startAddress?.split(',')[0] || 'Unknown Trip'}
+									{typeof trip.startAddress === 'string'
+										? trip.startAddress.split(',')[0]
+										: 'Unknown Trip'}
 									{#if trip.stops && trip.stops.length > 0}
 										{@const lastStop = trip.stops[trip.stops.length - 1]}
-										→ {lastStop?.address?.split(',')[0] || 'Stop'}
+										→ {typeof lastStop?.address === 'string'
+											? lastStop.address.split(',')[0]
+											: 'Stop'}
 									{/if}
 								{/if}
 							</h3>

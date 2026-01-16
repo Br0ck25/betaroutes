@@ -20,7 +20,8 @@ export const DELETE: RequestHandler = async (event) => {
 		}
 
 		const id = event.params.id;
-		const userId = sessionUser.name || sessionUser.token || sessionUser.id || '';
+		// Prefer canonical stable user id first (match POST behavior)
+		const userId = sessionUser.id || sessionUser.name || sessionUser.token || '';
 		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		await svc.delete(userId, id);
 		return new Response(null, { status: 204 });
@@ -45,7 +46,8 @@ export const GET: RequestHandler = async (event) => {
 		}
 
 		const id = event.params.id;
-		const userId = sessionUser.name || sessionUser.token || sessionUser.id || '';
+		// Prefer canonical stable user id first (match POST behavior)
+		const userId = sessionUser.id || sessionUser.name || sessionUser.token || '';
 		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		const item = await svc.get(userId, id);
 		if (!item) return new Response('Not found', { status: 404 });
@@ -71,8 +73,8 @@ export const PUT: RequestHandler = async (event) => {
 		}
 
 		const id = event.params.id;
-		const userId = sessionUser.name || sessionUser.token || sessionUser.id || '';
-		const body = (await event.request.json()) as any;
+		// Prefer canonical stable user id first (match POST behavior)
+		const userId = sessionUser.id || sessionUser.name || sessionUser.token || '';
 
 		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		const existing = await svc.get(userId, id);

@@ -39,7 +39,6 @@ export const GET: RequestHandler = async (event) => {
 
 		// Connect to KVs
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
-		const trashKV = undefined;
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
 		// [!code fix] Get DO binding
 		const tripIndexDO = safeDO(event.platform?.env, 'TRIP_INDEX_DO') ?? fakeDO();
@@ -48,7 +47,7 @@ export const GET: RequestHandler = async (event) => {
 		// [!code fix] Pass DO to service (add placesIndexDO)
 		const svc = makeTripService(
 			kv as unknown as KVNamespace,
-			trashKV as unknown as KVNamespace | undefined,
+			undefined,
 			placesKV as unknown as KVNamespace | undefined,
 			tripIndexDO as unknown as DurableObjectNamespace,
 			placesIndexDO as unknown as DurableObjectNamespace
@@ -88,7 +87,6 @@ export const PUT: RequestHandler = async (event) => {
 		const body = (await event.request.json()) as Record<string, unknown>;
 
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
-		const trashKV = undefined;
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
 		// [!code fix] Get DO binding
 		const tripIndexDO = safeDO(event.platform?.env, 'TRIP_INDEX_DO') ?? fakeDO();
@@ -97,7 +95,7 @@ export const PUT: RequestHandler = async (event) => {
 		// [!code fix] Pass DO to service (add placesIndexDO)
 		const svc = makeTripService(
 			kv as unknown as KVNamespace,
-			trashKV as unknown as KVNamespace | undefined,
+			undefined,
 			placesKV as unknown as KVNamespace | undefined,
 			tripIndexDO as unknown as DurableObjectNamespace,
 			placesIndexDO as unknown as DurableObjectNamespace
@@ -146,7 +144,6 @@ export const DELETE: RequestHandler = async (event) => {
 		const { id } = event.params;
 
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
-		const trashKV = undefined;
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
 		// [!code fix] Get DO binding
 		const tripIndexDO = safeDO(event.platform?.env, 'TRIP_INDEX_DO') ?? fakeDO();
@@ -155,7 +152,7 @@ export const DELETE: RequestHandler = async (event) => {
 		// [!code fix] Pass DO to service
 		const svc = makeTripService(
 			kv as unknown as KVNamespace,
-			trashKV as unknown as KVNamespace | undefined,
+			undefined,
 			placesKV as unknown as KVNamespace | undefined,
 			tripIndexDO as unknown as DurableObjectNamespace,
 			placesIndexDO as unknown as DurableObjectNamespace

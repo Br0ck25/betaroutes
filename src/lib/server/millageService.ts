@@ -136,8 +136,20 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 		},
 
 		async delete(userId: string, id: string) {
-			const raw = await kv.get(`millage:${userId}:${id}`);
-			if (!raw) return;
+			// Attempt direct key first
+			let key = `millage:${userId}:${id}`;
+			let raw = await kv.get(key);
+
+			// If not found, try to locate the record using list/get fallbacks
+			if (!raw) {
+				const found = await this.get(userId, id);
+				if (!found) return; // nothing to delete
+				// Use the actual stored userId to construct the key
+				key = `millage:${found.userId}:${id}`;
+				raw = await kv.get(key);
+				if (!raw) return;
+			}
+
 			const item = JSON.parse(raw);
 
 			const now = new Date();
@@ -146,7 +158,7 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			const metadata = {
 				deletedAt: now.toISOString(),
 				deletedBy: userId,
-				originalKey: `millage:${userId}:${id}`,
+				originalKey: key,
 				expiresAt: expiresAt.toISOString()
 			};
 
@@ -162,12 +174,12 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				createdAt: item.createdAt
 			};
 
-			await kv.put(`millage:${userId}:${id}`, JSON.stringify(tombstone), {
+			await kv.put(key, JSON.stringify(tombstone), {
 				expirationTtl: RETENTION.THIRTY_DAYS
 			});
 
-			// Remove from DO index
-			const stub = getIndexStub(userId);
+			// Remove from DO index (use the user's DO stub from the stored userId to be safe)
+			const stub = getIndexStub(item.userId);
 			try {
 				await stub.fetch(`${DO_ORIGIN}/millage/delete`, {
 					method: 'POST',

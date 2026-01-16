@@ -430,7 +430,11 @@
 
 						<div class="trip-info">
 							<div class="trip-route">
-								<span class="trip-start">{trip.startAddress?.split(',')[0] || 'Unknown'}</span>
+								<span class="trip-start"
+									>{typeof trip.startAddress === 'string'
+										? trip.startAddress.split(',')[0]
+										: 'Unknown'}</span
+								>
 								<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
 									<path
 										d="M6 12L10 8L6 4"
@@ -442,7 +446,9 @@
 								</svg>
 								<span class="trip-destination">
 									{trip.stops && trip.stops.length > 0
-										? trip.stops[trip.stops.length - 1].address?.split(',')[0] || 'Multiple stops'
+										? typeof trip.stops[trip.stops.length - 1]?.address === 'string'
+											? trip.stops[trip.stops.length - 1].address.split(',')[0]
+											: 'Multiple stops'
 										: 'No stops'}
 								</span>
 							</div>
