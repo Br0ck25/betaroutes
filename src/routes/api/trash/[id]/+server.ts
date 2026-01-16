@@ -23,7 +23,8 @@ export const POST: RequestHandler = async (event) => {
 		const platformEnv = event.platform?.env as Record<string, unknown> | undefined;
 
 		const kv = safeKV(platformEnv, 'BETA_LOGS_KV');
-		const trashKV = undefined; void trashKV;
+		const trashKV = undefined;
+		void trashKV;
 		const placesKV = safeKV(platformEnv, 'BETA_PLACES_KV');
 		const tripIndexDO = (platformEnv?.['TRIP_INDEX_DO'] as unknown) ?? fakeDO();
 		const placesIndexDO = (platformEnv?.['PLACES_INDEX_DO'] as unknown) ?? tripIndexDO;
@@ -94,7 +95,8 @@ export const DELETE: RequestHandler = async (event) => {
 		const platformEnv = event.platform?.env as Record<string, unknown> | undefined;
 
 		const kv = safeKV(platformEnv, 'BETA_LOGS_KV');
-		const trashKV = undefined; void trashKV;
+		const trashKV = undefined;
+		void trashKV;
 		const placesKV = safeKV(platformEnv, 'BETA_PLACES_KV');
 		const tripIndexDO = (platformEnv?.['TRIP_INDEX_DO'] as unknown) ?? fakeDO();
 		const placesIndexDO = (platformEnv?.['PLACES_INDEX_DO'] as unknown) ?? tripIndexDO;

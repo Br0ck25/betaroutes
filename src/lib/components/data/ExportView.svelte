@@ -143,7 +143,7 @@
 			const miles = trip.totalMiles || 0;
 			const start = `"${(trip.startAddress || '').replace(/"/g, '""')}"`;
 			const last = trip.stops?.[trip.stops.length - 1];
-				const end = `"${((last?.address) || trip.endAddress || 'End').replace(/"/g, '""') }"`;
+			const end = `"${(last?.address || trip.endAddress || 'End').replace(/"/g, '""')}"`;
 
 			const purpose = `"${(trip.purpose || 'Business').replace(/"/g, '""')}"`;
 			const vehicle = `"${(trip.vehicleId || '').replace(/"/g, '""')}"`;
@@ -349,11 +349,7 @@
 									{typeof trip.startAddress === 'string'
 										? trip.startAddress.split(',')[0]
 										: 'Unknown'} →
-									{String(trip.stops?.at(-1)?.address ?? trip.endAddress ?? 'End').split(',')[0]
-				
-				
-											: 'End'
-										: 'End'}
+									{String(trip.stops?.at(-1)?.address ?? trip.endAddress ?? 'End').split(',')[0]}
 								</div>
 							</div>
 						</label>
