@@ -5,6 +5,7 @@ import { makeMillageService } from '$lib/server/millageService';
 import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
+import { getStorageId } from '$lib/server/user';
 
 const millageSchema = z.object({
 	id: z.string().uuid().optional(),
@@ -120,8 +121,8 @@ export const POST: RequestHandler = async (event) => {
 
 		const payload = parse.data;
 		const id = payload.id || crypto.randomUUID();
-		// Prefer the canonical stable user id first to avoid keying records by short-lived session tokens
-		const userId = sessionUser.id || sessionUser.name || sessionUser.token || '';
+		// Key millage records by the username (preferred), then fall back to id or token
+		const userId = getStorageId(sessionUser);
 		let miles =
 			typeof payload.miles === 'number'
 				? payload.miles

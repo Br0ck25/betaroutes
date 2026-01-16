@@ -4,6 +4,7 @@ import { makeMillageService } from '$lib/server/millageService';
 import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
+import { getStorageId } from '$lib/server/user';
 
 export const DELETE: RequestHandler = async (event) => {
 	try {
@@ -20,8 +21,8 @@ export const DELETE: RequestHandler = async (event) => {
 		}
 
 		const id = event.params.id;
-		// Prefer canonical stable user id first (match POST behavior)
-		const userId = sessionUser.id || sessionUser.name || sessionUser.token || '';
+		// Key millage by username-first
+		const userId = getStorageId(sessionUser);
 		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		await svc.delete(userId, id);
 		return new Response(null, { status: 204 });
@@ -46,8 +47,8 @@ export const GET: RequestHandler = async (event) => {
 		}
 
 		const id = event.params.id;
-		// Prefer canonical stable user id first (match POST behavior)
-		const userId = sessionUser.id || sessionUser.name || sessionUser.token || '';
+		// Key millage by username-first
+		const userId = getStorageId(sessionUser);
 		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		const item = await svc.get(userId, id);
 		if (!item) return new Response('Not found', { status: 404 });
@@ -73,8 +74,8 @@ export const PUT: RequestHandler = async (event) => {
 		}
 
 		const id = event.params.id;
-		// Prefer canonical stable user id first (match POST behavior)
-		const userId = sessionUser.id || sessionUser.name || sessionUser.token || '';
+		// Key millage by username-first
+		const userId = getStorageId(sessionUser);
 
 		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		const existing = await svc.get(userId, id);
