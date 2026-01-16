@@ -118,12 +118,43 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			// 1. Write to KV (The Log)
 			await kv.put(`expense:${expense.userId}:${expense.id}`, JSON.stringify(expense));
 
-			// 2. Write to DO (The Index)
+			// 2. Write to DO (The Index) with logging + single retry
 			const stub = getIndexStub(expense.userId);
-			await stub.fetch(`${DO_ORIGIN}/expenses/put`, {
-				method: 'POST',
-				body: JSON.stringify(expense)
-			});
+			try {
+				const res = await stub.fetch(`${DO_ORIGIN}/expenses/put`, {
+					method: 'POST',
+					body: JSON.stringify(expense)
+				});
+				if (!res.ok) {
+					log.warn('[ExpenseService] DO put returned non-ok status', {
+						status: res.status,
+						id: expense.id
+					});
+					// One immediate retry (best-effort)
+					try {
+						const retry = await stub.fetch(`${DO_ORIGIN}/expenses/put`, {
+							method: 'POST',
+							body: JSON.stringify(expense)
+						});
+						if (!retry.ok) {
+							log.error('[ExpenseService] DO put retry failed', {
+								status: retry.status,
+								id: expense.id
+							});
+						}
+					} catch (e) {
+						log.error('[ExpenseService] DO put retry threw', {
+							message: (e as Error).message,
+							id: expense.id
+						});
+					}
+				}
+			} catch (e) {
+				log.error('[ExpenseService] DO put failed', {
+					message: (e as Error).message,
+					id: expense.id
+				});
+			}
 		},
 
 		async delete(userId: string, id: string) {

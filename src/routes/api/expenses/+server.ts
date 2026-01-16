@@ -31,7 +31,28 @@ export const GET: RequestHandler = async (event) => {
 
 		const env = getEnv(event.platform);
 		const storageId = getStorageId(user);
-		const since = event.url.searchParams.get('since') || undefined;
+		let since = event.url.searchParams.get('since') || undefined;
+
+		// Add buffer and clamp future times (5 minutes) to compensate for client clock skew
+		if (since) {
+			try {
+				const bufMs = 5 * 60 * 1000;
+				const s = new Date(since);
+				s.setTime(s.getTime() - bufMs);
+				const now = Date.now();
+				if (s.getTime() > now) {
+					log.info('[GET /api/expenses] since param in future; clamping to now - buffer', {
+						storageId,
+						original: since,
+						clamped: new Date(now - bufMs).toISOString()
+					});
+					s.setTime(now - bufMs);
+				}
+				since = s.toISOString();
+			} catch (e) {
+				// leave since as-is on parse error
+			}
+		}
 
 		log.info('Fetching expenses', { storageId, since: since || 'All Time' });
 

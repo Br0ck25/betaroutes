@@ -248,7 +248,7 @@ function createExpensesStore() {
 					`☁️ Syncing expenses... ${lastSync ? `(Delta since ${sinceDate?.toISOString()})` : '(Full)'}`
 				);
 
-				const response = await fetch(url);
+				const response = await fetch(url, { credentials: 'include' });
 				if (!response.ok) throw new Error('Failed to fetch expenses');
 
 				const cloudExpenses: any = await response.json();
