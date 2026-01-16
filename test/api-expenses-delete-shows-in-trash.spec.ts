@@ -6,7 +6,7 @@ describe('Expense delete should appear in cloud trash', () => {
 	it('DELETE /api/expenses/:id writes tombstone visible via /api/trash', async () => {
 		const event: any = {
 			platform: {},
-			locals: { user: { id: 'test_user' } },
+			locals: { user: { name: 'test_user' } },
 			params: { id: 'exp-1' }
 		};
 		setupMockKV(event);
@@ -30,7 +30,7 @@ describe('Expense delete should appear in cloud trash', () => {
 		// Now list trash
 		const listEvent: any = {
 			platform: event.platform,
-			locals: { user: { id: 'test_user' } },
+			locals: { user: { name: 'test_user' } },
 			url: new URL('https://example.test/api/trash?type=expenses')
 		};
 		const listRes = await listTrash(listEvent as any);

@@ -5,6 +5,7 @@ import { makeExpenseService } from '$lib/server/expenseService';
 import { makeMillageService } from '$lib/server/millageService';
 import { safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
+import { getStorageId } from '$lib/server/user';
 
 function fakeKV() {
 	return {
@@ -48,9 +49,7 @@ export const GET: RequestHandler = async (event) => {
 		);
 
 		const currentUser = user as { id?: string; name?: string; token?: string };
-		// Prefer canonical stable user id first for storage keys
-		const storageId = currentUser.id || currentUser.name || currentUser.token;
-
+		const storageId = getStorageId(currentUser);
 		if (!storageId)
 			return new Response(JSON.stringify([]), {
 				status: 200,
