@@ -1,6 +1,6 @@
 // src/lib/stores/auth.ts
 import { writable, derived } from 'svelte/store';
-import type { User, AuthResponse, Subscription } from '$lib/types';
+import type { User, AuthResponse } from '$lib/types';
 import { storage } from '$lib/utils/storage';
 import { api } from '$lib/utils/api';
 import { trips } from './trips';
@@ -169,25 +169,27 @@ function createAuthStore() {
 				storage.setToken(response.token || '');
 				storage.setUsername(username);
 
-			// Create server-side session so cloud endpoints (/api/trips) are authorized
-			try {
-				await fetch('/login', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ email: username, password })
-				});
-			} catch (e) {
-				console.warn('Failed to create server session after signup:', e);
-			}
+				// Create server-side session so cloud endpoints (/api/trips) are authorized
+				try {
+					await fetch('/login', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ email: username, password })
+					});
+				} catch (e) {
+					console.warn('Failed to create server session after signup:', e);
+				}
 
+				const subscription = await api.getSubscription(response.token || '');
+				const user: User = {
+					token: response.token || '',
+					plan: subscription.plan,
+					tripsThisMonth: subscription.tripsThisMonth,
 					maxTrips: subscription.maxTrips,
 					resetDate: subscription.resetDate,
 					name: username,
 					email: ''
 				};
-
-				saveUserCache(user);
-
 				set({
 					user,
 					isAuthenticated: true,
@@ -221,17 +223,23 @@ function createAuthStore() {
 
 				storage.setToken(response.token || '');
 				storage.setUsername(username);
-			// Create server-side session cookie so /api/trips and other server endpoints recognize the user
-			try {
-				await fetch('/login', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ email: username, password })
-				});
-			} catch (e) {
-				console.warn('Failed to create server session on login:', e);
-			}
-					token: response.token,
+
+				// Create server-side session cookie so /api/trips and other server endpoints recognize the user
+				try {
+					await fetch('/login', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ email: username, password })
+					});
+				} catch (e) {
+					console.warn('Failed to create server session on login:', e);
+				}
+
+				const savedEmail =
+					typeof window !== 'undefined' ? localStorage.getItem('user_email') || '' : '';
+				const subscription = await api.getSubscription(response.token || '');
+				const user: User = {
+					token: response.token || '',
 					plan: subscription.plan,
 					tripsThisMonth: subscription.tripsThisMonth,
 					maxTrips: subscription.maxTrips,
@@ -239,7 +247,6 @@ function createAuthStore() {
 					name: username,
 					email: savedEmail
 				};
-
 				saveUserCache(user);
 
 				set({

@@ -86,11 +86,10 @@
 	let isManageCategoriesOpen = false;
 	let newCategoryName = '';
 	// --- DERIVE TRIP EXPENSES ---
-	$: tripExpenses = $trips.flatMap((trip) => {
-		const items = [];
+	$: tripExpenses = $trips.flatMap((_trip) => {
+		const items: any[] = [];
 		// FIX: Safely access createdAt to prevent split() on undefined
-		const date =
-			trip.date || (trip.createdAt ? trip.createdAt.split('T')[0] : _fmtInput(new Date()));
+		// Placeholder: trip-derived millage items can be appended here in future
 
 		// Trip-derived expenses intentionally excluded from Millage listing
 		// (Fuel/maintenance/supplies from trips are shown under Expenses, not Millage)

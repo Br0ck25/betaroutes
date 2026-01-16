@@ -81,6 +81,7 @@ export const PUT: RequestHandler = async (event) => {
 		const existing = await svc.get(userId, id);
 		if (!existing) return new Response('Not found', { status: 404 });
 
+		const body: any = await event.request.json();
 		const updated = { ...existing, ...body, updatedAt: new Date().toISOString() };
 		if (typeof updated.startOdometer === 'number' && typeof updated.endOdometer === 'number') {
 			updated.miles = Math.max(0, updated.endOdometer - updated.startOdometer);

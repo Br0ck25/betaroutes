@@ -3,6 +3,7 @@ import { writable, get } from 'svelte/store';
 import { getDB } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
 import type { ExpenseRecord } from '$lib/db/types';
+import type { User } from '$lib/types';
 
 import { auth } from '$lib/stores/auth';
 import { PLAN_LIMITS } from '$lib/constants';
@@ -66,7 +67,7 @@ function createExpensesStore() {
 
 		async create(expenseData: Partial<ExpenseRecord>, userId: string) {
 			try {
-				const currentUser = get(auth).user;
+				const currentUser = (get(auth) as { user?: User | null }).user;
 				const isFreeTier = !currentUser?.plan || currentUser.plan === 'free';
 				if (isFreeTier) {
 					const db = await getDB();
@@ -341,7 +342,7 @@ syncManager.registerStore('expenses', {
 		}
 	},
 	syncDown: async () => {
-		const user = get(auth).user;
+		const user = (get(auth) as { user?: User | null }).user;
 		if (user?.id) await expenses.syncFromCloud(user.id);
 	}
 });

@@ -2,6 +2,7 @@ import { writable, get } from 'svelte/store';
 import { getDB } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
 import type { MillageRecord } from '$lib/db/types';
+import type { User } from '$lib/types';
 import { auth } from '$lib/stores/auth';
 
 export const isLoading = writable(false);
@@ -307,7 +308,7 @@ syncManager.registerStore('millage', {
 		}
 	},
 	syncDown: async () => {
-		const user = get(auth).user;
+		const user = (get(auth) as { user?: User | null }).user;
 		if (user?.id) await millage.syncFromCloud(user.id);
 	}
 });
