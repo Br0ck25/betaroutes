@@ -19,7 +19,6 @@ export type TripRecord = {
 	title?: string;
 	stops?: Stop[];
 	date?: string;
-	/** Optional pay date for tax purposes */
 	payDate?: string;
 	startAddress?: string;
 	endAddress?: string;
@@ -59,7 +58,6 @@ export type TrashItem = {
 	userId: string;
 	recordType: 'trip' | 'expense';
 	metadata: TrashMetadata;
-	// Optional summary fields for UI
 	title?: string;
 	date?: string;
 	createdAt?: string;
@@ -77,7 +75,6 @@ function prefixForUser(userId: string) {
 	return `trip:${userId}:`;
 }
 
-// [!code check] Ensure 'export' is here
 export function makeTripService(
 	kv: KVNamespace,
 	_trashKV: KVNamespace | undefined,
@@ -94,7 +91,6 @@ export function makeTripService(
 		id: trip.id,
 		userId: trip.userId,
 		date: trip.date,
-		// Optional pay date (tax purposes)
 		payDate: trip.payDate,
 		title: trip.title,
 		startAddress: trip.startAddress,
@@ -196,7 +192,7 @@ export function makeTripService(
 			if (!raw) continue;
 			try {
 				const t = JSON.parse(raw);
-				// Filter out deleted items here, similar to the DO
+				// Filter out deleted items here
 				if (!t.deleted) out.push(t);
 			} catch (e) {
 				// ignore corrupt JSON in KV
@@ -206,6 +202,16 @@ export function makeTripService(
 		out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 		return out;
 	}
+
+    // Helper: Mark index as dirty (out of sync)
+    async function markDirty(userId: string) {
+        await kv.put(`meta:user:${userId}:index_dirty`, '1');
+    }
+
+    // Helper: Clear dirty flag
+    async function clearDirty(userId: string) {
+        await kv.delete(`meta:user:${userId}:index_dirty`);
+    }
 
 	return {
 		async checkMonthlyQuota(
@@ -228,6 +234,32 @@ export function makeTripService(
 			userId: string,
 			options: { since?: string; limit?: number; offset?: number } = {}
 		): Promise<TripRecord[]> {
+            const dirtyKey = `meta:user:${userId}:index_dirty`;
+            const isDirty = await kv.get(dirtyKey);
+
+            // --- STRATEGY: DIRTY READ ---
+            // If the index is marked dirty, SKIP the DO and fetch from KV immediately.
+            if (isDirty) {
+                log.info(`[TripService] Dirty index detected for ${userId}. Fetching from KV & repairing.`);
+                const kvTrips = await listFromKV(userId);
+                
+                // Trigger background repair
+                const stub = getIndexStub(userId);
+                const summaries = kvTrips.map(toSummary);
+                stub.fetch(`${DO_ORIGIN}/migrate`, {
+                    method: 'POST',
+                    body: JSON.stringify(summaries)
+                }).then(async (res) => {
+                    if (res.ok) await clearDirty(userId);
+                }).catch(e => log.warn('[TripService] Repair failed', e));
+
+                if (options.since) {
+					const sinceDate = new Date(options.since);
+					return kvTrips.filter((t) => new Date(t.updatedAt || t.createdAt) > sinceDate);
+				}
+                return kvTrips;
+            }
+
 			const stub = getIndexStub(userId);
 
 			let url = `${DO_ORIGIN}/list`;
@@ -238,7 +270,7 @@ export function makeTripService(
 
 			const res = await stub.fetch(url);
 
-			// --- FAILSAFE 1: If DO is completely down (e.g. 500), fallback to KV immediately ---
+			// --- FAILSAFE 1: If DO is completely down (500), fallback to KV ---
 			if (!res.ok) {
 				log.error(`[TripService] DO Error: ${res.status} - Falling back to KV`);
 				const kvTrips = await listFromKV(userId);
@@ -255,45 +287,35 @@ export function makeTripService(
 
 			let trips: TripRecord[] = [];
 			let needsMigration = false;
-			let doCount = 0;
+            let doCount = 0;
 
 			if (Array.isArray(data)) {
 				trips = data;
-				doCount = trips.length;
+                doCount = trips.length;
 			} else {
 				trips = data.trips || [];
 				needsMigration = !!data.needsMigration;
-				// Use the total from pagination if available, otherwise array length
-				doCount = data.pagination?.total ?? trips.length;
+                doCount = data.pagination?.total ?? trips.length;
 			}
 
-			// --- FAILSAFE 2: Count-Based Consistency Check ---
-			// Retrieve the expected count of active trips from KV metadata
+			// --- FAILSAFE 2: Counter Check (Secondary) ---
+            // Only effective if trip_count is initialized > 0.
 			const expectedCountStr = await kv.get(`meta:user:${userId}:trip_count`);
 			const expectedCount = expectedCountStr ? parseInt(expectedCountStr, 10) : 0;
 
-			// If the DO index has fewer items than KV expects, or explicitly requests migration,
-			// or returns 0 items when we know some should exist, trigger a full repair.
-			if (needsMigration || doCount < expectedCount || (trips.length === 0 && expectedCount > 0)) {
-				log.info(
-					`[TripService] Sync mismatch detected (DO: ${doCount}, KV: ${expectedCount}). Triggering repair.`
-				);
-
-				// 1. Fetch full list from KV (Source of Truth)
+			if (needsMigration || (expectedCount > 0 && doCount < expectedCount)) {
+				log.info(`[TripService] Sync mismatch (DO: ${doCount} < KV: ${expectedCount}). Repairing.`);
+				
 				const repairedTrips = await listFromKV(userId);
-
-				// 2. Asynchronously repair the DO index
+				
 				if (repairedTrips.length > 0) {
 					const summaries = repairedTrips.map(toSummary);
-					stub
-						.fetch(`${DO_ORIGIN}/migrate`, {
-							method: 'POST',
-							body: JSON.stringify(summaries)
-						})
-						.catch((e) => log.warn('[TripService] Background repair failed', e));
+					stub.fetch(`${DO_ORIGIN}/migrate`, {
+						method: 'POST',
+						body: JSON.stringify(summaries)
+					}).catch((e) => log.warn('[TripService] Repair failed', e));
 				}
 
-				// 3. Return the fresh data from KV immediately to the user
 				if (options.since) {
 					const sinceDate = new Date(options.since);
 					return repairedTrips.filter((t) => new Date(t.updatedAt || t.createdAt) > sinceDate);
@@ -322,20 +344,23 @@ export function makeTripService(
 			await kv.put(`trip:${trip.userId}:${trip.id}`, JSON.stringify(trip));
 			const stub = getIndexStub(trip.userId);
 
-			// 1. Update the Summary Index (log failures)
+			// 1. Update the Summary Index
 			try {
 				const r = await stub.fetch(`${DO_ORIGIN}/put`, {
 					method: 'POST',
 					body: JSON.stringify(toSummary(trip))
 				});
 				if (!r.ok) {
-					log.warn('[TripService] DO put returned non-ok status', { status: r.status });
+					log.warn('[TripService] DO put returned non-ok status - marking dirty', { status: r.status });
+                    // CRITICAL: Mark index as dirty so next list() fetches from KV
+                    await markDirty(trip.userId);
 				}
 			} catch (e) {
-				log.error('[TripService] DO put failed', { message: (e as Error).message });
+				log.error('[TripService] DO put failed - marking dirty', { message: (e as Error).message });
+                await markDirty(trip.userId);
 			}
 
-			// 2. Trigger Route Calculation & Caching (Background)
+			// 2. Trigger Route Calculation (Background)
 			stub
 				.fetch(`${DO_ORIGIN}/compute-routes`, {
 					method: 'POST',
@@ -362,7 +387,6 @@ export function makeTripService(
 			const now = new Date();
 			const expiresAt = new Date(now.getTime() + RETENTION.THIRTY_DAYS * 1000);
 
-			// Persist a tombstone in the main logs KV that includes metadata and a backup of the original
 			const metadata: TrashMetadata = {
 				deletedAt: now.toISOString(),
 				deletedBy: userId,
@@ -385,10 +409,18 @@ export function makeTripService(
 			await kv.put(key, JSON.stringify(tombstone), { expirationTtl: RETENTION.THIRTY_DAYS });
 
 			const stub = getIndexStub(userId);
-			await stub.fetch(`${DO_ORIGIN}/delete`, {
-				method: 'POST',
-				body: JSON.stringify({ id: trip.id })
-			});
+            
+            try {
+                const r = await stub.fetch(`${DO_ORIGIN}/delete`, {
+                    method: 'POST',
+                    body: JSON.stringify({ id: trip.id })
+                });
+                if (!r.ok) {
+                    await markDirty(userId);
+                }
+            } catch (e) {
+                await markDirty(userId);
+            }
 
 			const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 			await stub.fetch(`${DO_ORIGIN}/billing/decrement`, {
@@ -398,6 +430,7 @@ export function makeTripService(
 		},
 
 		async listTrash(userId: string): Promise<TrashItem[]> {
+            // Trash is always read from KV directly, so it is safe
 			const prefix = prefixForUser(userId);
 			let list = await kv.list({ prefix });
 			let keys = list.keys;
@@ -422,7 +455,6 @@ export function makeTripService(
 					expiresAt: parsed.metadata?.expiresAt || ''
 				};
 
-				// Build a lightweight summary for UI display (merge backup fields if present)
 				const backup = parsed.backup || parsed.data || parsed.trip || parsed || {};
 				let type: 'trip' | 'expense' = 'trip';
 				if (parsed.type === 'expense' || (backup && (backup.category || backup.amount))) {
@@ -458,23 +490,25 @@ export function makeTripService(
 			const backup = parsed.backup || parsed.data || parsed.trip;
 			if (!backup) throw new Error('Backup data not found in item');
 
-			// Clean tombstone fields and set updatedAt
 			if ('deletedAt' in backup) delete (backup as Record<string, unknown>)['deletedAt'];
 			if ('deleted' in backup) delete (backup as Record<string, unknown>)['deleted'];
 			(backup as Record<string, unknown>)['updatedAt'] = new Date().toISOString();
 
 			const restored = backup as Restorable;
 
-			if (restored) {
-				if (restored && restored.userId) {
-					await kv.put(key, JSON.stringify(restored));
-					const stub = getIndexStub(userId);
-					await stub.fetch(`${DO_ORIGIN}/put`, {
-						method: 'POST',
-						body: JSON.stringify(toSummary(restored))
-					});
-					return restored;
-				}
+			if (restored && restored.userId) {
+				await kv.put(key, JSON.stringify(restored));
+				const stub = getIndexStub(userId);
+                try {
+                    const r = await stub.fetch(`${DO_ORIGIN}/put`, {
+                        method: 'POST',
+                        body: JSON.stringify(toSummary(restored))
+                    });
+                    if (!r.ok) await markDirty(userId);
+                } catch(e) {
+                    await markDirty(userId);
+                }
+				return restored;
 			}
 			throw new Error('Restore failed');
 		},

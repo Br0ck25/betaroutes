@@ -6,6 +6,8 @@
 	import { toasts } from '$lib/stores/toast';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
+	import SelectMobile from '$lib/components/ui/SelectMobile.svelte';
+	import { onMount } from 'svelte';
 
 	// --- HELPER: Get Local Date (YYYY-MM-DD) ---
 	function getLocalDate() {
@@ -42,6 +44,21 @@
 		const v0 = $userSettings.vehicles[0];
 		formData.vehicle = v0?.id ?? v0?.name ?? '';
 	}
+
+	// Mobile detection to swap native select for custom control
+	let isMobile = false;
+	onMount(() => {
+		if (typeof window === 'undefined') return;
+		const mq = window.matchMedia('(max-width: 711px)');
+		const set = () => (isMobile = mq.matches);
+		set();
+		if (mq.addEventListener) mq.addEventListener('change', set);
+		else mq.addListener && mq.addListener(set);
+		return () => {
+			if (mq.removeEventListener) mq.removeEventListener('change', set);
+			else mq.removeListener && mq.removeListener(set);
+		};
+	});
 	// Prefill category from the URL query parameter (e.g., ?category=fuel)
 	$: {
 		const q = $page.url.searchParams.get('category');
@@ -196,7 +213,8 @@
 
 			<div class="form-row vehicle-rate-row">
 				<div class="form-group">
-					<label for="vehicle">Vehicle</label>
+					<label for={isMobile ? 'vehicle-mobile' : 'vehicle'}>Vehicle</label>
+				{#if !isMobile}
 					<select
 						id="vehicle"
 						bind:value={formData.vehicle}
@@ -210,7 +228,25 @@
 							<option value="" title="">No vehicles (open Millage Settings)</option>
 						{/if}
 					</select>
-				</div>
+				{:else}
+					<SelectMobile
+						className="mobile-select"
+						id="vehicle-mobile"
+						placeholder={$userSettings.vehicles && $userSettings.vehicles.length > 0 ? 'Select vehicle' : 'No vehicles (open Millage Settings)'}
+						options={$userSettings.vehicles ? $userSettings.vehicles.map((v) => ({ value: v.id || v.name, label: v.name })) : [{ value: '', label: 'No vehicles (open Millage Settings)' }]}
+						bind:value={formData.vehicle}
+						on:change={(e) => (formData.vehicle = e.detail.value)}
+					/>
+				{/if}
+					<!-- Mobile-only custom select (visible <= 711px) -->
+					<SelectMobile
+						className="mobile-select"
+						id="vehicle-mobile"
+						placeholder="Select vehicle"
+						options={$userSettings.vehicles ? $userSettings.vehicles.map((v) => ({ value: v.id || v.name, label: v.name })) : [{ value: '', label: 'No vehicles (open Millage Settings)' }]}
+						bind:value={formData.vehicle}
+						on:change={(e) => (formData.vehicle = e.detail.value)}
+					/>				</div>
 				<div class="form-group">
 					<label for="millage-rate">Millage Rate (per mile)</label>
 					<input
@@ -315,6 +351,17 @@
 		.vehicle-rate-row {
 			grid-template-columns: 1fr;
 		}
+		/* Show custom mobile select when JS determines mobile; we do not forcibly hide the native select via CSS so
+		   users without JS still have a control. The visibility of native vs custom is handled by Svelte.
+		*/
+		.select-mobile {
+			display: block;
+		}
+	}
+
+	/* default: hide the custom mobile control */
+	.select-mobile {
+		display: none;
 	}
 	.form-group {
 		display: flex;
