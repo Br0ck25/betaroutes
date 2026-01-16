@@ -6,6 +6,7 @@ import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 import { PLAN_LIMITS } from '$lib/constants';
+import { getStorageId } from '$lib/server/user';
 
 const expenseSchema = z.object({
 	id: z.string().uuid().optional(),
@@ -29,7 +30,7 @@ export const GET: RequestHandler = async (event) => {
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
 		const env = getEnv(event.platform);
-		const storageId = user.name || user.token || user.id || '';
+		const storageId = getStorageId(user);
 		const since = event.url.searchParams.get('since') || undefined;
 
 		log.info('Fetching expenses', { storageId, since: since || 'All Time' });
@@ -56,7 +57,7 @@ export const POST: RequestHandler = async (event) => {
 	try {
 		const user = event.locals.user as SessionUser | undefined;
 		if (!user) return new Response('Unauthorized', { status: 401 });
-		const storageId = user.name || user.token || user.id || '';
+		const storageId = getStorageId(user);
 		const env = getEnv(event.platform);
 
 		const body = (await event.request.json()) as unknown;

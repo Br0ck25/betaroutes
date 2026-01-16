@@ -4,6 +4,7 @@ import { makeExpenseService, type ExpenseRecord } from '$lib/server/expenseServi
 import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 import { log } from '$lib/server/log';
+import { getStorageId } from '$lib/server/user';
 
 export const DELETE: RequestHandler = async (event) => {
 	try {
@@ -11,7 +12,7 @@ export const DELETE: RequestHandler = async (event) => {
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
 		const env = getEnv(event.platform);
-		const storageId = user.name || user.token || user.id || '';
+		const storageId = getStorageId(user);
 
 		// Use the expenses KV so tombstones are written to the expenses namespace
 		const svc = makeExpenseService(safeKV(env, 'BETA_EXPENSES_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
@@ -30,7 +31,7 @@ export const PUT: RequestHandler = async (event) => {
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
 		const env = getEnv(event.platform);
-		const storageId = user.name || user.token || user.id || '';
+		const storageId = getStorageId(user);
 
 		const body = (await event.request.json()) as unknown;
 		const svc = makeExpenseService(safeKV(env, 'BETA_EXPENSES_KV')!, safeDO(env, 'TRIP_INDEX_DO')!); // Trash KV not needed for update
