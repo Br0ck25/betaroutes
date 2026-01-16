@@ -1,7 +1,6 @@
 <script lang="ts">
-	import { onMount, createEventDispatcher } from 'svelte';
+	import { onDestroy } from 'svelte';
 
-	const dispatch = createEventDispatcher();
 	export let id: string | undefined;
 	export let options: { value: string; label: string }[] = [];
 	export let value: string | null = null;
@@ -23,9 +22,12 @@
 		focusedIndex = -1;
 	}
 
-	function selectOption(opt: { value: string; label: string }) {
+	function selectOption(opt?: { value: string; label: string }) {
+		if (!opt) return;
 		value = opt.value;
-		dispatch('change', { value });
+		// Dispatch a bubbling CustomEvent so parent components can listen with on:change
+		const rootEl = (buttonEl && buttonEl.parentElement) as HTMLElement | undefined;
+		rootEl?.dispatchEvent(new CustomEvent('change', { detail: { value }, bubbles: true }));
 		close();
 		setTimeout(() => (buttonEl as any)?.focus(), 0);
 	}
@@ -47,7 +49,8 @@
 			a11yScroll();
 		} else if (e.key === 'Enter') {
 			e.preventDefault();
-			if (focusedIndex >= 0) selectOption(options[focusedIndex]);
+			const opt = options[focusedIndex];
+			if (opt) selectOption(opt);
 		} else if (e.key === 'Escape') {
 			close();
 		}
@@ -62,20 +65,24 @@
 	}
 
 	// Click outside to close
-	onMount(() => {
-		function docClick(e: MouseEvent) {
-			if (!open) return;
-			if (!buttonEl) return;
-			const path = (e.composedPath && e.composedPath()) || (e as any).path || [];
-			if (path.includes(buttonEl) || (listEl && path.includes(listEl))) return;
-			close();
-		}
+	function docClick(e: MouseEvent) {
+		if (!open) return;
+		if (!buttonEl) return;
+		const path = (e.composedPath && e.composedPath()) || (e as any).path || [];
+		if (path.includes(buttonEl) || (listEl && path.includes(listEl))) return;
+		close();
+	}
+
+	if (typeof document !== 'undefined') {
 		document.addEventListener('click', docClick);
-		return () => document.removeEventListener('click', docClick);
+	}
+
+	onDestroy(() => {
+		if (typeof document !== 'undefined') document.removeEventListener('click', docClick);
 	});
 </script>
 
-<div class={`select-mobile ${className}`} on:keydown={onKeydown}>
+<div class={`select-mobile ${className}`}>
 	<button
 		{id}
 		bind:this={buttonEl}
@@ -86,6 +93,7 @@
 		aria-controls={id ? `list-${id}` : undefined}
 		class="select-btn"
 		on:click={toggle}
+		on:keydown={onKeydown}
 	>
 		<span class="label">{options.find((o) => o.value === value)?.label ?? placeholder}</span>
 		<svg class="caret" width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -101,17 +109,27 @@
 
 	{#if open}
 		<ul
+			id={id ? `list-${id}` : undefined}
 			class="options"
 			role="listbox"
 			bind:this={listEl}
+			tabindex="0"
 			aria-activedescendant={focusedIndex >= 0 ? `option-${focusedIndex}` : undefined}
 		>
 			{#each options as opt, i}
 				<li
 					id={`option-${i}`}
 					role="option"
-					class:selected={options[i].value === value}
+					class:selected={opt.value === value}
+					aria-selected={opt.value === value}
+					tabindex="0"
 					on:click={() => selectOption(opt)}
+					on:keydown={(e) => {
+						if (e.key === 'Enter' || e.key === ' ') {
+							e.preventDefault();
+							selectOption(opt);
+						}
+					}}
 					on:mouseenter={() => (focusedIndex = i)}
 					title={opt.label}
 				>

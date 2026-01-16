@@ -53,3 +53,18 @@ textarea,
 select {
 	-webkit-tap-highlight-color: transparent;
 }
+/* Ensure selects never expand past their container and truncate long labels */
+select {
+	min-width: 0;
+	max-width: 100%;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+	outline: none;
+	border-color: #ff7f50;
+}

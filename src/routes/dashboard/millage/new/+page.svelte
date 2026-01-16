@@ -316,18 +316,8 @@
 		.vehicle-rate-row {
 			grid-template-columns: 1fr;
 		}
-		/* Show custom mobile select when JS determines mobile; we do not forcibly hide the native select via CSS so
-		   users without JS still have a control. The visibility of native vs custom is handled by Svelte.
-		*/
-		.select-mobile {
-			display: block;
-		}
 	}
 
-	/* default: hide the custom mobile control */
-	.select-mobile {
-		display: none;
-	}
 	.form-group {
 		display: flex;
 		flex-direction: column;
@@ -341,8 +331,7 @@
 	}
 
 	input,
-	textarea,
-	select {
+	textarea {
 		width: 100%;
 		padding: 16px;
 		border: 1px solid #e5e7eb;
@@ -352,32 +341,8 @@
 		box-sizing: border-box;
 	}
 
-	/* Ensure selects never expand past their container and truncate long labels */
-	select {
-		min-width: 0;
-		max-width: 100%;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	/* Utility class for consistency and to allow extra rules when needed */
-	.select-field {
-		display: block;
-		width: 100%;
-		box-sizing: border-box;
-	}
-
-	/* Attempt to keep option text readable but constrained (browser support varies) */
-	option {
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
 	input:focus,
-	textarea:focus,
-	select:focus {
+	textarea:focus {
 		outline: none;
 		border-color: #ff7f50;
 	}

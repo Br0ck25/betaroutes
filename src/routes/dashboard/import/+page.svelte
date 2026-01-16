@@ -2,6 +2,7 @@
 	import { trips } from '$lib/stores/trips';
 	import { user } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
+	import { localDateISO } from '$lib/utils/dates';
 	let isProcessing = false;
 	let previewTrip: any = null;
 

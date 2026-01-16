@@ -16,8 +16,9 @@ function parseToDate(input?: string | Date): Date {
 
 	// If date-only YYYY-MM-DD (common from CSV/CSV exports), construct local date
 	const parts = s.split('-').map((p) => Number(p));
-	if (parts.length === 3 && parts.every((n) => !Number.isNaN(n))) {
-		return new Date(parts[0], parts[1] - 1, parts[2]);
+	if (parts.length === 3 && parts.every((n) => typeof n === 'number' && !Number.isNaN(n))) {
+		const [y, m, d] = parts as [number, number, number];
+		return new Date(y, m - 1, d);
 	}
 
 	// Fallback - let Date try
@@ -34,7 +35,9 @@ export function localDateISO(value?: string | Date): string {
 	// Convert to a UTC-ish ISO representation for the local date by
 	// compensating the timezone offset, then taking the date portion.
 	const tzAdjusted = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-	return tzAdjusted.toISOString().split('T')[0];
+	const iso = tzAdjusted.toISOString();
+	const datePart = iso.split('T')[0] ?? iso;
+	return datePart;
 }
 
 export const getLocalDate = () => localDateISO();

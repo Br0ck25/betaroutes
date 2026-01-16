@@ -140,9 +140,6 @@
 </Modal>
 
 <style>
-	.categories-manager {
-		padding: 4px;
-	}
 	.top-tabs {
 		display: flex;
 		border-bottom: 2px solid #e5e7eb;
@@ -187,21 +184,6 @@
 		box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3);
 		transition: transform 0.1s;
 		cursor: pointer;
-	}
-	.btn-secondary {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		padding: 10px;
-		background: white;
-		border: 1px solid #e5e7eb;
-		color: #374151;
-		border-radius: 8px;
-		font-weight: 600;
-		font-size: 14px;
-		cursor: pointer;
-		transition: background 0.2s;
-		text-decoration: none;
 	}
 	.modal-actions .btn-cancel {
 		background: white;
