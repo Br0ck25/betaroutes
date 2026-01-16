@@ -7,7 +7,7 @@ import { log } from '$lib/server/log';
 const settingsSchema = z.object({
 	defaultStartAddress: z.string().max(500).optional(),
 	defaultEndAddress: z.string().max(500).optional(),
-	defaultMPG: z.number().positive().nullish(),
+	defaultMPG: z.number().nonnegative().nullish(),
 	defaultGasPrice: z.number().nonnegative().nullish(),
 	vehicleName: z.string().max(100).optional(),
 	distanceUnit: z.enum(['mi', 'km']).optional(),

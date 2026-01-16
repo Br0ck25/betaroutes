@@ -40,8 +40,9 @@ export async function createTripForDate(
 			const s = d.settings || d;
 			defaultStart = s.defaultStartAddress || '';
 			defaultEnd = s.defaultEndAddress || '';
-			if (s.defaultMPG) mpg = parseFloat(s.defaultMPG);
-			if (s.defaultGasPrice) gas = parseFloat(s.defaultGasPrice);
+			if (s.defaultMPG != null && s.defaultMPG !== '') mpg = parseFloat(String(s.defaultMPG));
+			if (s.defaultGasPrice != null && s.defaultGasPrice !== '')
+				gas = parseFloat(String(s.defaultGasPrice));
 		}
 	} catch (err: unknown) {
 		const msg = err instanceof Error ? err.message : String(err);

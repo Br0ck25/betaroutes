@@ -100,8 +100,12 @@
 			maintenanceItems: safeMaintenance,
 			suppliesItems: safeSupplies,
 			totalMiles: Number((found as any).totalMiles) || 0,
-			mpg: Number((found as any).mpg) || $userSettings.defaultMPG || 25,
-			gasPrice: Number((found as any).gasPrice) || $userSettings.defaultGasPrice || 3.5,
+			mpg: Number.isFinite(Number((found as any).mpg))
+				? Number((found as any).mpg)
+				: ($userSettings.defaultMPG ?? 25),
+			gasPrice: Number.isFinite(Number((found as any).gasPrice))
+				? Number((found as any).gasPrice)
+				: ($userSettings.defaultGasPrice ?? 3.5),
 			fuelCost: Number((found as any).fuelCost) || 0,
 			/** Normalize taxDeductible for older records */
 			taxDeductible: !!(found as any).taxDeductible,

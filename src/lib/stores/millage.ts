@@ -1,4 +1,3 @@
-// src/lib/stores/millage.ts
 import { writable, get } from 'svelte/store';
 import { getDB } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
@@ -15,19 +14,14 @@ function createMillageStore() {
 		subscribe,
 		set,
 
-		// New method to initialize from Server Data (SSR) + persist to local DB
+		// Method to hydrate from server data (SSR) + persist to local DB
 		async hydrate(data: MillageRecord[], userId: string) {
-			// 1. Show immediately
 			set(data);
-
-			// 2. Cache to IndexedDB in background so future loads work
 			try {
 				const db = await getDB();
 				const tx = db.transaction('millage', 'readwrite');
 				const store = tx.objectStore('millage');
 				for (const item of data) {
-					// Only overwrite if newer or missing (basic check)
-					// For hydration, we generally trust the server
 					await store.put({ ...item, syncStatus: 'synced' });
 				}
 				await tx.done;
@@ -85,33 +79,34 @@ function createMillageStore() {
 		},
 
 		async create(data: Partial<MillageRecord>, userId: string) {
-			try {
-				const record: MillageRecord = {
-					...data,
-					id: data.id || crypto.randomUUID(),
-					userId,
-					date: data.date || new Date().toISOString(),
-					startOdometer: (data.startOdometer as number) || 0,
-					endOdometer: (data.endOdometer as number) || 0,
-					miles:
-						typeof data.miles === 'number'
-							? data.miles
-							: Math.max(0, Number(data.endOdometer) - Number(data.startOdometer)),
-					millageRate: typeof data.millageRate === 'number' ? data.millageRate : undefined,
-					vehicle: data.vehicle || undefined,
-					reimbursement: data.reimbursement,
-					notes: data.notes || '',
-					createdAt: data.createdAt || new Date().toISOString(),
-					updatedAt: data.updatedAt || new Date().toISOString(),
-					syncStatus: 'pending'
-				};
+			const record: MillageRecord = {
+				...data,
+				id: data.id || crypto.randomUUID(),
+				userId,
+				date: data.date || new Date().toISOString(),
+				startOdometer: (data.startOdometer as number) || 0,
+				endOdometer: (data.endOdometer as number) || 0,
+				miles:
+					typeof data.miles === 'number'
+						? data.miles
+						: Math.max(0, Number(data.endOdometer) - Number(data.startOdometer)),
+				millageRate: typeof data.millageRate === 'number' ? data.millageRate : undefined,
+				vehicle: data.vehicle || undefined,
+				reimbursement: data.reimbursement,
+				notes: data.notes || '',
+				createdAt: data.createdAt || new Date().toISOString(),
+				updatedAt: data.updatedAt || new Date().toISOString(),
+				syncStatus: 'pending'
+			};
 
+			// Optimistic Update
+			update((items) => [record, ...items]);
+
+			try {
 				const db = await getDB();
 				const tx = db.transaction('millage', 'readwrite');
 				await tx.objectStore('millage').put(record);
 				await tx.done;
-
-				update((items) => [record, ...items]);
 
 				await syncManager.addToQueue({
 					action: 'create',
@@ -122,11 +117,20 @@ function createMillageStore() {
 				return record;
 			} catch (err) {
 				console.error('❌ Failed to create millage record:', err);
+				// Revert on failure
+				this.load(userId);
 				throw err;
 			}
 		},
 
 		async updateMillage(id: string, changes: Partial<MillageRecord>, userId: string) {
+			// Optimistic Update (Complex, doing it before DB for speed)
+			update((items) =>
+				items.map((r) =>
+					r.id === id ? { ...r, ...changes, updatedAt: new Date().toISOString() } : r
+				)
+			);
+
 			try {
 				const db = await getDB();
 				const tx = db.transaction('millage', 'readwrite');
@@ -149,15 +153,8 @@ function createMillageStore() {
 					updated.miles = Math.max(0, updated.endOdometer - updated.startOdometer);
 				}
 
-				if (typeof updated.millageRate === 'string') {
-					const n = Number(updated.millageRate);
-					updated.millageRate = isNaN(n) ? undefined : n;
-				}
-
 				await store.put(updated);
 				await tx.done;
-
-				update((items) => items.map((r) => (r.id === id ? updated : r)));
 
 				await syncManager.addToQueue({
 					action: 'update',
@@ -168,22 +165,23 @@ function createMillageStore() {
 				return updated;
 			} catch (err) {
 				console.error('❌ Failed to update millage:', err);
+				this.load(userId);
 				throw err;
 			}
 		},
 
 		async deleteMillage(id: string, userId: string) {
-			let previous: MillageRecord[] = [];
-			update((current) => {
-				previous = current;
-				return current.filter((r) => r.id !== id);
-			});
+			// 1. Optimistic Update: Remove immediately from store
+			update((current) => current.filter((r) => r.id !== id));
 
 			try {
 				const db = await getDB();
+
+				// Get record for trash backup
 				const millageTx = db.transaction('millage', 'readonly');
 				const rec = await millageTx.objectStore('millage').get(id);
 
+				// If not in local DB, assume it's already deleted locally, just sync
 				if (!rec) {
 					await syncManager.addToQueue({
 						action: 'delete',
@@ -192,7 +190,12 @@ function createMillageStore() {
 					});
 					return;
 				}
-				if (rec.userId !== userId) throw new Error('Unauthorized');
+
+				if (rec.userId !== userId) {
+					// Silent fail or throw, but reload store to correct UI
+					this.load(userId);
+					throw new Error('Unauthorized');
+				}
 
 				const now = new Date();
 				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -208,18 +211,26 @@ function createMillageStore() {
 					syncStatus: 'pending'
 				};
 
+				// Move to Trash Store
 				const trashTx = db.transaction('trash', 'readwrite');
 				await trashTx.objectStore('trash').put(trashItem);
 				await trashTx.done;
 
+				// Delete from Millage Store
 				const deleteTx = db.transaction('millage', 'readwrite');
 				await deleteTx.objectStore('millage').delete(id);
 				await deleteTx.done;
 
-				await syncManager.addToQueue({ action: 'delete', tripId: id, data: { store: 'millage' } });
+				// Queue Sync
+				await syncManager.addToQueue({
+					action: 'delete',
+					tripId: id,
+					data: { store: 'millage' }
+				});
 			} catch (err) {
 				console.error('❌ Failed to delete millage record:', err);
-				set(previous);
+				// Revert by reloading from DB
+				this.load(userId);
 				throw err;
 			}
 		},
@@ -232,7 +243,6 @@ function createMillageStore() {
 				if (!item || item.userId !== userId) return null;
 				return item;
 			} catch (err) {
-				console.error('❌ Failed to get millage record:', err);
 				return null;
 			}
 		},
@@ -244,7 +254,7 @@ function createMillageStore() {
 		async syncFromCloud(userId: string) {
 			isLoading.set(true);
 			try {
-				if (!navigator.onLine) return; // Note: removing return logic here to ensure load always happens is one way, but putting load in finally is safer.
+				if (!navigator.onLine) return;
 
 				const lastSync = localStorage.getItem('last_sync_millage');
 				const sinceDate = lastSync ? new Date(new Date(lastSync).getTime() - 5 * 60 * 1000) : null;
@@ -258,10 +268,8 @@ function createMillageStore() {
 
 				const cloud: any = await response.json();
 
-				// [!code change] Removed early return. Even if cloud is empty, we must proceed to load local data.
 				if (cloud.length > 0) {
 					const db = await getDB();
-
 					const trashTx = db.transaction('trash', 'readonly');
 					const trashItems = await trashTx.objectStore('trash').getAll();
 					const trashIds = new Set(trashItems.map((t: any) => t.id));
@@ -276,7 +284,6 @@ function createMillageStore() {
 							if (local) await store.delete(rec.id);
 							continue;
 						}
-
 						if (trashIds.has(rec.id)) continue;
 
 						const local = await store.get(rec.id);
@@ -290,14 +297,11 @@ function createMillageStore() {
 					}
 					await tx.done;
 				}
-
 				localStorage.setItem('last_sync_millage', new Date().toISOString());
-
-				// [!code change] load() is now called in finally block to guarantee display
 			} catch (err) {
 				console.error('❌ Failed to sync millage from cloud:', err);
 			} finally {
-				// [!code change] CRITICAL: Always load data from IDB to Store, even if sync skipped or failed
+				// Always reload from local DB to ensure UI is in sync
 				await this.load(userId);
 				isLoading.set(false);
 			}
