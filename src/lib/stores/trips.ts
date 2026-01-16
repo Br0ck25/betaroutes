@@ -259,6 +259,18 @@ function createTripsStore() {
 					try {
 						const adjusted = new Date(lastSync);
 						adjusted.setMinutes(adjusted.getMinutes() - 5); // 5-minute buffer
+						// If the adjusted time is in the future (device clock skew ahead), clamp it to now - 5 minutes
+						const now = new Date();
+						if (adjusted.getTime() > now.getTime()) {
+							console.warn(
+								'[trips.syncFromCloud] lastSync is in the future; clamping to now - 5min',
+								{
+									lastSync,
+									clamped: new Date(now.getTime() - 5 * 60 * 1000).toISOString()
+								}
+							);
+							adjusted.setTime(now.getTime() - 5 * 60 * 1000);
+						}
 						url = `/api/trips?since=${encodeURIComponent(adjusted.toISOString())}`;
 					} catch (e) {
 						// If parsing fails, fall back to raw lastSync

@@ -156,6 +156,16 @@ export const GET: RequestHandler = async (event) => {
 				const bufMs = 5 * 60 * 1000; // 5 minutes
 				const s = new Date(sinceParam);
 				s.setTime(s.getTime() - bufMs);
+				// If client sent a future time (clock ahead), clamp to now - buffer
+				const now = Date.now();
+				if (s.getTime() > now) {
+					log.info('[GET /api/trips] since param in future; clamping to now - buffer', {
+						storageId,
+						original: sinceParam,
+						clamped: new Date(now - bufMs).toISOString()
+					});
+					s.setTime(now - bufMs);
+				}
 				sinceParam = s.toISOString();
 			} catch (e) {
 				// if parsing fails, leave sinceParam as-is
