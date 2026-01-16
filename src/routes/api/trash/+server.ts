@@ -35,12 +35,12 @@ export const GET: RequestHandler = async (event) => {
 		const kv = (platformEnv?.['BETA_LOGS_KV'] as unknown) ?? fakeKV();
 		const placesKV = (platformEnv?.['BETA_PLACES_KV'] as unknown) ?? fakeKV();
 
-		// Durable Object bindings (mock or real)
+		// Durable Object bindings
 		const tripIndexDO = (platformEnv?.['TRIP_INDEX_DO'] as unknown) ?? fakeDO();
 		const placesIndexDO = (platformEnv?.['PLACES_INDEX_DO'] as unknown) ?? tripIndexDO;
 
-		// Create service
-		const svc = makeTripService(
+		// Initialize Services
+		const tripSvc = makeTripService(
 			kv as any,
 			undefined,
 			placesKV as any,
@@ -48,45 +48,46 @@ export const GET: RequestHandler = async (event) => {
 			placesIndexDO as any
 		);
 
+		const expenseSvc = makeExpenseService(
+			safeKV(platformEnv, 'BETA_EXPENSES_KV') as any,
+			tripIndexDO as any
+		);
+
+		const millageSvc = makeMillageService(
+			safeKV(platformEnv, 'BETA_MILLAGE_KV') as any,
+			tripIndexDO as any
+		);
+
 		const currentUser = user as { id?: string; name?: string; token?: string };
 		const storageId = getStorageId(currentUser);
-		if (!storageId)
+		
+		if (!storageId) {
 			return new Response(JSON.stringify([]), {
 				status: 200,
 				headers: { 'Content-Type': 'application/json' }
 			});
+		}
 
-		// Return current cloud trash items (merge or filter by type)
 		let cloudTrash: unknown[] = [];
 		try {
 			const type = (event.url.searchParams.get('type') || '').toLowerCase();
-			const tripTrash = await svc.listTrash(storageId);
+			
+			// Fetch based on filter or fetch all
 			if (type === 'expenses') {
-				const expenseSvc = makeExpenseService(
-					safeKV(platformEnv, 'BETA_EXPENSES_KV') as any,
-					safeDO(platformEnv, 'TRIP_INDEX_DO') as any
-				);
 				cloudTrash = await expenseSvc.listTrash(storageId);
 			} else if (type === 'millage') {
-				const millageSvc = makeMillageService(
-					safeKV(platformEnv, 'BETA_MILLAGE_KV') as any,
-					safeDO(platformEnv, 'TRIP_INDEX_DO') as any
-				);
 				cloudTrash = await millageSvc.listTrash(storageId);
 			} else if (type === 'trips') {
-				cloudTrash = tripTrash;
+				cloudTrash = await tripSvc.listTrash(storageId);
 			} else {
-				const expenseSvc = makeExpenseService(
-					safeKV(platformEnv, 'BETA_EXPENSES_KV') as any,
-					safeDO(platformEnv, 'TRIP_INDEX_DO') as any
-				);
-				const expenseTrash = await expenseSvc.listTrash(storageId);
-				const millageSvc = makeMillageService(
-					safeKV(platformEnv, 'BETA_MILLAGE_KV') as any,
-					safeDO(platformEnv, 'TRIP_INDEX_DO') as any
-				);
-				const millageTrash = await millageSvc.listTrash(storageId);
-				cloudTrash = [...tripTrash, ...expenseTrash, ...millageTrash].sort((a: any, b: any) =>
+				// Fetch ALL and merge
+				const [trips, expenses, millage] = await Promise.all([
+					tripSvc.listTrash(storageId),
+					expenseSvc.listTrash(storageId),
+					millageSvc.listTrash(storageId)
+				]);
+				
+				cloudTrash = [...trips, ...expenses, ...millage].sort((a: any, b: any) =>
 					(b.metadata?.deletedAt || '').localeCompare(a.metadata?.deletedAt || '')
 				);
 			}
@@ -109,29 +110,7 @@ export const GET: RequestHandler = async (event) => {
 };
 
 export const DELETE: RequestHandler = async (event) => {
-	try {
-		const user = event.locals.user;
-		if (!user) return new Response('Unauthorized', { status: 401 });
-
-		// This bulk DELETE endpoint is currently a placeholder
-		// Individual items are deleted via /api/trash/[id]
-		const deleted = 0;
-
-		return new Response(
-			JSON.stringify({
-				deleted,
-				message: `${deleted} cloud trash items permanently removed`
-			}),
-			{
-				status: 200,
-				headers: { 'Content-Type': 'application/json' }
-			}
-		);
-	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
-		log.error('DELETE /api/trash error', { message });
-		return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
-			status: 500
-		});
-	}
+	// Bulk delete implementation usually done one-by-one by client, 
+	// or implemented here if needed. Keeping placeholder for now.
+	return new Response(JSON.stringify({ deleted: 0 }), { status: 200 });
 };

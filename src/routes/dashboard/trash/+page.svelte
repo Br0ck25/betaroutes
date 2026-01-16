@@ -1,7 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
-	import { browser } from '$app/environment';
 	import { trash } from '$lib/stores/trash';
 	import { trips } from '$lib/stores/trips';
 	import { expenses } from '$lib/stores/expenses';
@@ -11,30 +10,24 @@
 	import { user } from '$lib/stores/auth';
 	import { getDB } from '$lib/db/indexedDB';
 	import type { TrashRecord } from '$lib/db/types';
+    import { get } from 'svelte/store';
 
 	const resolve = (href: string) => `${base}${href}`;
 
-	let trashedTrips: TrashRecord[] = []; // Using typed TrashRecord[] to handle the merged/flattened structure
+	let trashedTrips: TrashRecord[] = [];
 	let loading = true;
 	let restoring = new Set<string>();
 	let deleting = new Set<string>();
 	let currentTypeParam: string | null = null;
+	let _pageUnsub: () => void | null = null;
 
 	onMount(() => {
-		// Quick initial local load (detailed sync handled reactively below)
 		const params = new URLSearchParams(window.location.search);
 		const typeParam = params.get('type');
 		loadTrash(
 			typeParam === 'expenses' ? 'expense' : typeParam === 'millage' ? 'millage' : undefined
 		).catch(console.error);
-	});
 
-	// Monitor page `type` param via subscription to avoid infinite reactive loop warnings
-	let _pageUnsub: () => void | null = null;
-	import { get } from 'svelte/store';
-	import { onDestroy } from 'svelte';
-
-	onMount(() => {
 		// Subscribe to page changes
 		_pageUnsub = page.subscribe(async ($p) => {
 			const param = $p.url.searchParams.get('type');
@@ -83,12 +76,11 @@
 				allItems = [...allItems, ...items];
 			}
 
-			// [!code fix] Normalize/Flatten items here to handle { data: ... } structure
+			// Normalize/Flatten
 			const uniqueItems = Array.from(
 				new Map(
 					allItems.map((item) => {
 						let flat = { ...item };
-						// If local deletion stored it nested in 'data', flatten it up
 						if (flat.data && typeof flat.data === 'object') {
 							flat = { ...flat.data, ...flat };
 							delete flat.data;
@@ -98,7 +90,6 @@
 				).values()
 			);
 
-			// Filter by type: use explicit `type` if provided; otherwise infer from the current URL param and default to `trip`
 			const effectiveType =
 				type ??
 				(currentTypeParam === 'expenses'
@@ -118,6 +109,9 @@
 								? 'millage'
 								: 'trip')) ||
 					'trip';
+				
+				// If viewing 'all', show everything, otherwise filter
+				if (!type && !currentTypeParam) return true;
 				return inferred === effectiveType;
 			});
 
@@ -133,40 +127,24 @@
 	async function restoreTrip(id: string) {
 		if (restoring.has(id)) return;
 		const item = trashedTrips.find((t) => t.id === id);
-		if (!item) {
-			alert('Item not found locally');
-			return;
-		}
+		if (!item) return;
 
 		restoring.add(id);
 		restoring = restoring;
 
 		try {
-			// Pass userId to ensure security/correctness
 			await trash.restore(id, item.userId);
 
-			// Reload the correct store based on type
-			const isExpense =
-				(item['type'] as string | undefined) === 'expense' ||
-				(item['recordType'] as string | undefined) === 'expense' ||
-				(item['originalKey'] as string | undefined)?.startsWith('expense:');
-			const isMillage =
-				(item['type'] as string | undefined) === 'millage' ||
-				(item['recordType'] as string | undefined) === 'millage' ||
-				(item['originalKey'] as string | undefined)?.startsWith('millage:');
+			const isExpense = (item as any).recordType === 'expense' || (item as any).type === 'expense';
+			const isMillage = (item as any).recordType === 'millage' || (item as any).type === 'millage';
 
-			if (isExpense) {
-				await expenses.load(item.userId);
-			} else if (isMillage) {
-				await millage.load(item.userId);
-			} else {
-				await trips.load(item.userId);
-			}
+			if (isExpense) await expenses.load(item.userId);
+			else if (isMillage) await millage.load(item.userId);
+			else await trips.load(item.userId);
 
 			await loadTrash();
 		} catch (err) {
 			alert('Failed to restore item.');
-			console.error(err);
 		} finally {
 			restoring.delete(id);
 			restoring = restoring;
@@ -179,11 +157,9 @@
 
 		loading = true;
 		try {
-			// Process sequentially to avoid DB contention
 			for (const trip of trashedTrips) {
 				await trash.restore(trip.id, trip.userId);
 			}
-
 			const userId = $user?.name || $user?.token;
 			if (userId) {
 				await trips.load(userId);
@@ -192,7 +168,6 @@
 			}
 			await loadTrash();
 		} catch (err) {
-			console.error('Failed to restore all:', err);
 			alert('Failed to restore some items.');
 		} finally {
 			loading = false;
@@ -201,9 +176,7 @@
 
 	async function permanentDelete(id: string) {
 		if (!confirm('Permanently delete this item? Cannot be undone.')) return;
-		const item = trashedTrips.find((t) => t.id === id);
-		if (!item) return;
-
+		
 		if (deleting.has(id)) return;
 		deleting.add(id);
 		deleting = deleting;
@@ -265,69 +238,23 @@
 		<div class="header-actions">
 			{#if trashedTrips.length > 0}
 				<button class="btn-success" on:click={restoreAll}>
-					<svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-						<path
-							d="M4 4V9H4.58579M4.58579 9H9M4.58579 9L9 4.41421M16 16V11H15.4142M15.4142 11H11M15.4142 11L11 15.5858"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						/>
-					</svg>
 					Restore All
 				</button>
-
 				<button class="btn-danger" on:click={emptyTrash}>
-					<svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-						<path
-							d="M2 4H14M12 4V13C12 13.5304 11.7893 14.0391 11.4142 14.4142C11.0391 14.7893 10.5304 15 10 15H6C5.46957 15 4.96086 14.7893 4.58579 14.4142C4.21071 14.0391 4 13.5304 4 13V4M5 4V3C5 2.46957 5.21071 1.96086 5.58579 1.58579C5.96086 1.21071 6.46957 1 7 1H9C9.53043 1 10.0391 1.21071 10.4142 1.58579C10.7893 1.96086 11 2.46957 11 3V4"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						/>
-					</svg>
 					Empty Trash
 				</button>
 			{/if}
 
 			{#if currentTypeParam === 'expenses'}
 				<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/expenses'))}>
-					<svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-						<path
-							d="M10 19L3 12M3 12L10 5M3 12H21"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						/>
-					</svg>
 					Back to Expenses
 				</button>
 			{:else if currentTypeParam === 'millage'}
 				<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/millage'))}>
-					<svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-						<path
-							d="M10 19L3 12M3 12L10 5M3 12H21"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						/>
-					</svg>
 					Back to Millage
 				</button>
 			{:else}
 				<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/trips'))}>
-					<svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-						<path
-							d="M10 19L3 12M3 12L10 5M3 12H21"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						/>
-					</svg>
 					Back to Trips
 				</button>
 			{/if}
@@ -338,16 +265,7 @@
 		<div class="loading">Loading trash...</div>
 	{:else if trashedTrips.length === 0}
 		<div class="empty-state">
-			<svg width="64" height="64" viewBox="0 0 64 64" fill="none">
-				<path
-					d="M16 16H48M44 16V52C44 54.2091 42.2091 56 40 56H24C21.7909 56 20 54.2091 20 52V16M26 16V12C26 9.79086 27.7909 8 30 8H34C36.2091 8 38 9.79086 38 12V16"
-					stroke="#9CA3AF"
-					stroke-width="4"
-					stroke-linecap="round"
-				/>
-			</svg>
 			<h2>Trash is empty</h2>
-			<p>Deleted items will appear here</p>
 		</div>
 	{:else}
 		<div class="trash-list">
@@ -365,6 +283,12 @@
 					(t['type'] as string | undefined) === 'expense' ||
 					(t['recordType'] as string | undefined) === 'expense' ||
 					(t['originalKey'] as string | undefined)?.startsWith('expense:')}
+				
+				{@const isMillage = 
+					(t['type'] as string | undefined) === 'millage' ||
+					(t['recordType'] as string | undefined) === 'millage' ||
+					(t['originalKey'] as string | undefined)?.startsWith('millage:')}
+
 				<div class="trash-item">
 					<div class="trip-info">
 						<div class="trip-header">
@@ -372,16 +296,13 @@
 								{#if isExpense}
 									<span class="badge-expense">Expense</span>
 									<span class="expense-category">{trip.category || 'Uncategorized'}</span>
+								{:else if isMillage}
+									<span class="badge-millage">Millage</span>
+									{trip.vehicle || 'Millage Log'}
 								{:else}
 									{typeof trip.startAddress === 'string'
 										? trip.startAddress.split(',')[0]
 										: 'Unknown Trip'}
-									{#if trip.stops && trip.stops.length > 0}
-										{@const lastStop = trip.stops[trip.stops.length - 1]}
-										→ {typeof lastStop?.address === 'string'
-											? lastStop.address.split(',')[0]
-											: 'Stop'}
-									{/if}
 								{/if}
 							</h3>
 							<div class="trip-meta">
@@ -399,6 +320,12 @@
 								<span class="detail"
 									>{new Date(trip.date || trip.createdAt || '').toLocaleDateString()}</span
 								>
+							{:else if isMillage}
+								<span class="detail"
+									>{new Date(trip.date || trip.createdAt || '').toLocaleDateString()}</span
+								>
+								<span class="detail amount">{Number(trip.miles || 0).toFixed(2)} mi</span>
+								{#if trip.notes}<span class="detail">{trip.notes}</span>{/if}
 							{:else}
 								<span class="detail"
 									>{new Date(trip.date || trip.createdAt || '').toLocaleDateString()}</span
@@ -434,6 +361,18 @@
 </div>
 
 <style>
+    /* Add this new style for millage badges */
+    .badge-millage {
+		background-color: #d1fae5;
+		color: #065f46;
+		font-size: 0.8em;
+		padding: 2px 6px;
+		border-radius: 4px;
+		margin-right: 6px;
+		vertical-align: middle;
+		font-weight: 600;
+	}
+    /* Keep existing styles */
 	.trash-page {
 		padding: 16px;
 		max-width: 1200px;
