@@ -38,8 +38,8 @@ export const POST: RequestHandler = async (event) => {
 		);
 
 		const currentUser = user as { id?: string; name?: string; token?: string };
-		// Prefer canonical stable user id first for storage keys
-		const storageId = currentUser.id || currentUser.name || currentUser.token;
+		// Prefer username first to match expense behavior
+		const storageId = currentUser.name || currentUser.token || currentUser.id;
 
 		if (storageId) {
 			// Try trip restore first, then expense restore
@@ -110,8 +110,9 @@ export const DELETE: RequestHandler = async (event) => {
 			placesIndexDO as any
 		);
 
-		const currentUser = user as { name?: string; token?: string };
-		const storageId = currentUser.id || currentUser.name || currentUser.token;
+		const currentUser = user as { id?: string; name?: string; token?: string };
+		// Prefer username first to match expense behavior
+		const storageId = currentUser.name || currentUser.token || currentUser.id;
 
 		if (storageId) {
 			// Attempt to remove from both trip and expense namespaces

@@ -31,10 +31,10 @@ export const GET: RequestHandler = async (event) => {
 			return new Response('Service Unavailable', { status: 503 });
 		}
 
-		// Try canonical identifiers (id first) but also fall back to token or name if data was stored under those
+		// Try canonical identifiers (name first to mimic expenses) but also fall back to token or id if data was stored under those
 		const since = event.url.searchParams.get('since') || undefined;
 		const possibleIds = Array.from(
-			new Set([user.id, user.token, user.name].filter(Boolean))
+			new Set([user.name, user.token, user.id].filter(Boolean))
 		) as string[];
 		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 
@@ -120,8 +120,8 @@ export const POST: RequestHandler = async (event) => {
 
 		const payload = parse.data;
 		const id = payload.id || crypto.randomUUID();
-		// Prefer the canonical stable user id first to avoid keying records by short-lived session tokens
-		const userId = sessionUser.id || sessionUser.name || sessionUser.token || '';
+		// Prefer the username first to match expense behavior
+		const userId = sessionUser.name || sessionUser.token || sessionUser.id || '';
 		let miles =
 			typeof payload.miles === 'number'
 				? payload.miles

@@ -11,22 +11,22 @@ describe('API /api/millage storage id behavior', () => {
 		platform = event.platform;
 	});
 
-	it('POST prefers stable user id when present', async () => {
+	it('POST prefers username when present', async () => {
 		const kv = platform.env['BETA_MILLAGE_KV'] as any;
 		const body = { startOdometer: 100, endOdometer: 150 };
 
 		const event: any = {
 			request: { json: async () => body },
 			platform: { env: platform.env },
-			locals: { user: { id: 'stable-user-1' } }
+			locals: { user: { id: 'stable-user-1', name: 'James' } }
 		};
 
 		const res = await POST(event as any);
 		expect(res.status).toBe(201);
 		const created = JSON.parse(await res.text());
-		expect(created.userId).toBe('stable-user-1');
+		expect(created.userId).toBe('James');
 
-		const raw = await kv.get(`millage:stable-user-1:${created.id}`);
+		const raw = await kv.get(`millage:James:${created.id}`);
 		expect(raw).toBeTruthy();
 	});
 
