@@ -4,7 +4,6 @@ import { getDB } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
 import type { ExpenseRecord } from '$lib/db/types';
 import type { User } from '$lib/types';
-
 import { auth } from '$lib/stores/auth';
 import { PLAN_LIMITS } from '$lib/constants';
 
@@ -15,6 +14,44 @@ function createExpensesStore() {
 
 	return {
 		subscribe,
+		set,
+
+		// [!code fix] Smart Hydrate: Filters trash to stop resurrection
+		async hydrate(data: ExpenseRecord[], userId: string) {
+			try {
+				const db = await getDB();
+				
+				// 1. Check Trash
+				const trashTx = db.transaction('trash', 'readonly');
+				const trashItems = await trashTx.objectStore('trash').getAll();
+				const trashIds = new Set(trashItems.map((t: any) => t.id));
+				await trashTx.done;
+
+				// 2. Filter Active Data
+				const validData = data.filter((item) => !trashIds.has(item.id));
+				set(validData);
+
+				// 3. Update DB
+				const tx = db.transaction(['expenses', 'trash'], 'readwrite');
+				const store = tx.objectStore('expenses');
+				
+				for (const item of validData) {
+					await store.put({ ...item, syncStatus: 'synced' });
+				}
+
+				// 4. Cleanup Zombies
+				for (const serverItem of data) {
+					if (trashIds.has(serverItem.id)) {
+						const existing = await store.get(serverItem.id);
+						if (existing) await store.delete(serverItem.id);
+					}
+				}
+				await tx.done;
+			} catch (err) {
+				console.error('Failed to hydrate expenses:', err);
+				set(data);
+			}
+		},
 
 		updateLocal(expense: ExpenseRecord) {
 			update((items) => {
@@ -36,11 +73,12 @@ function createExpensesStore() {
 			isLoading.set(true);
 			try {
 				const db = await getDB();
-				const tx = db.transaction('expenses', 'readonly');
+				// Use transaction across both stores to ensure consistency
+				const tx = db.transaction(['expenses', 'trash'], 'readonly');
 				const store = tx.objectStore('expenses');
+				const trashStore = tx.objectStore('trash');
 
 				let expenses: ExpenseRecord[];
-
 				if (userId) {
 					const index = store.index('userId');
 					expenses = await index.getAll(userId);
@@ -48,14 +86,20 @@ function createExpensesStore() {
 					expenses = await store.getAll();
 				}
 
-				expenses.sort((a, b) => {
+				const trashItems = await trashStore.getAll();
+				const trashIds = new Set(trashItems.map((t: any) => t.id));
+
+				// Filter out trashed items
+				const activeItems = expenses.filter(e => !trashIds.has(e.id));
+
+				activeItems.sort((a, b) => {
 					const dateA = new Date(a.date || a.createdAt).getTime();
 					const dateB = new Date(b.date || b.createdAt).getTime();
 					return dateB - dateA;
 				});
 
-				set(expenses);
-				return expenses;
+				set(activeItems);
+				return activeItems;
 			} catch (err) {
 				console.error('❌ Failed to load expenses:', err);
 				set([]);
@@ -102,16 +146,12 @@ function createExpensesStore() {
 					syncStatus: 'pending'
 				} as ExpenseRecord;
 
+				update((items) => [expense, ...items]);
+
 				const db = await getDB();
 				const tx = db.transaction('expenses', 'readwrite');
 				await tx.objectStore('expenses').put(expense);
 				await tx.done;
-
-				update((expenses) => {
-					const exists = expenses.find((e) => e.id === expense.id);
-					if (exists) return expenses.map((e) => (e.id === expense.id ? expense : e));
-					return [expense, ...expenses];
-				});
 
 				await syncManager.addToQueue({
 					action: 'create',
@@ -122,11 +162,19 @@ function createExpensesStore() {
 				return expense;
 			} catch (err) {
 				console.error('❌ Failed to create expense:', err);
+				// Revert on error
+				this.load(userId);
 				throw err;
 			}
 		},
 
 		async updateExpense(id: string, changes: Partial<ExpenseRecord>, userId: string) {
+			update((items) =>
+				items.map((e) =>
+					e.id === id ? { ...e, ...changes, updatedAt: new Date().toISOString() } : e
+				)
+			);
+
 			try {
 				const db = await getDB();
 				const tx = db.transaction('expenses', 'readwrite');
@@ -136,7 +184,7 @@ function createExpensesStore() {
 				if (!existing) throw new Error('Expense not found');
 				if (existing.userId !== userId) throw new Error('Unauthorized');
 
-				const updated: ExpenseRecord = {
+				const updated = {
 					...existing,
 					...changes,
 					id,
@@ -148,8 +196,6 @@ function createExpensesStore() {
 				await store.put(updated);
 				await tx.done;
 
-				update((expenses) => expenses.map((e) => (e.id === id ? updated : e)));
-
 				await syncManager.addToQueue({
 					action: 'update',
 					tripId: id,
@@ -159,10 +205,12 @@ function createExpensesStore() {
 				return updated;
 			} catch (err) {
 				console.error('❌ Failed to update expense:', err);
+				this.load(userId);
 				throw err;
 			}
 		},
 
+		// [!code fix] Safe Delete Logic with Reload
 		async deleteExpense(id: string, userId: string) {
 			let previousExpenses: ExpenseRecord[] = [];
 			update((current) => {
@@ -174,32 +222,53 @@ function createExpensesStore() {
 				console.log('🗑️ Moving expense to trash:', id);
 				const db = await getDB();
 
-				const expensesTx = db.transaction('expenses', 'readonly');
-				const expense = await expensesTx.objectStore('expenses').get(id);
-				if (!expense) throw new Error('Expense not found');
-				if (expense.userId !== userId) throw new Error('Unauthorized');
+				// Single transaction for both stores to prevent locks
+				const tx = db.transaction(['expenses', 'trash'], 'readwrite');
+				const store = tx.objectStore('expenses');
+				const trashStore = tx.objectStore('trash');
+
+				const rec = await store.get(id);
+				if (!rec) {
+					// Already gone? Just sync delete
+					await tx.done;
+					await syncManager.addToQueue({
+						action: 'delete',
+						tripId: id,
+						data: { store: 'expenses' }
+					});
+					return;
+				}
+
+				if (rec.userId !== userId) {
+					await tx.done;
+					this.load(userId);
+					throw new Error('Unauthorized');
+				}
 
 				const now = new Date();
 				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
 				const trashItem = {
-					id: expense.id,
+					id: rec.id,
 					type: 'expense',
-					data: expense,
+					recordType: 'expense',
+					data: rec,
 					deletedAt: now.toISOString(),
 					deletedBy: userId,
 					expiresAt: expiresAt.toISOString(),
 					originalKey: `expense:${userId}:${id}`,
-					syncStatus: 'pending' as const
+					syncStatus: 'pending' as const,
+					amount: rec.amount,
+					category: rec.category,
+					description: rec.description
 				};
 
-				const trashTx = db.transaction('trash', 'readwrite');
-				await trashTx.objectStore('trash').put(trashItem);
-				await trashTx.done;
+				await trashStore.put(trashItem);
+				await store.delete(id);
+				await tx.done;
 
-				const deleteTx = db.transaction('expenses', 'readwrite');
-				await deleteTx.objectStore('expenses').delete(id);
-				await deleteTx.done;
+				// [!code fix] Force reload to ensure disk sync matches UI
+				await this.load(userId);
 
 				await syncManager.addToQueue({
 					action: 'delete',
@@ -210,7 +279,7 @@ function createExpensesStore() {
 				console.log('✅ Expense moved to trash:', id);
 			} catch (err) {
 				console.error('❌ Failed to delete expense:', err);
-				set(previousExpenses);
+				set(previousExpenses); // Revert UI on failure
 				throw err;
 			}
 		},
@@ -244,66 +313,45 @@ function createExpensesStore() {
 					? `/api/expenses?since=${encodeURIComponent(sinceDate.toISOString())}`
 					: '/api/expenses';
 
-				console.log(
-					`☁️ Syncing expenses... ${lastSync ? `(Delta since ${sinceDate?.toISOString()})` : '(Full)'}`
-				);
-
 				const response = await fetch(url, { credentials: 'include' });
 				if (!response.ok) throw new Error('Failed to fetch expenses');
 
 				const cloudExpenses: any = await response.json();
 
-				if (cloudExpenses.length === 0) {
-					console.log('☁️ No new expense changes.');
-					localStorage.setItem('last_sync_expenses', new Date().toISOString());
-					return;
-				}
+				if (cloudExpenses.length > 0) {
+					const db = await getDB();
+					const tx = db.transaction(['expenses', 'trash'], 'readwrite');
+					const store = tx.objectStore('expenses');
+					const trashStore = tx.objectStore('trash');
+					
+					const trashKeys = await trashStore.getAllKeys();
+					const trashIds = new Set(trashKeys.map(String));
 
-				const db = await getDB();
-
-				const trashTx = db.transaction('trash', 'readonly');
-				const trashStore = trashTx.objectStore('trash');
-				const trashItems = await trashStore.getAll();
-				const trashIds = new Set(trashItems.map((t: any) => t.id));
-				await trashTx.done;
-
-				const tx = db.transaction('expenses', 'readwrite');
-				const store = tx.objectStore('expenses');
-
-				let updateCount = 0;
-				let deleteCount = 0;
-
-				for (const cloudExpense of cloudExpenses) {
-					if (cloudExpense.deleted) {
-						const local = await store.get(cloudExpense.id);
-						if (local) {
-							await store.delete(cloudExpense.id);
-							deleteCount++;
+					for (const cloudExpense of cloudExpenses) {
+						if (cloudExpense.deleted) {
+							const local = await store.get(cloudExpense.id);
+							if (local) await store.delete(cloudExpense.id);
+							continue;
 						}
-						continue;
-					}
 
-					if (trashIds.has(cloudExpense.id)) continue;
+						if (trashIds.has(cloudExpense.id)) continue;
 
-					const local = await store.get(cloudExpense.id);
-					if (!local || new Date(cloudExpense.updatedAt) > new Date(local.updatedAt)) {
-						await store.put({
-							...cloudExpense,
-							syncStatus: 'synced',
-							lastSyncedAt: new Date().toISOString()
-						});
-						updateCount++;
+						const local = await store.get(cloudExpense.id);
+						if (!local || new Date(cloudExpense.updatedAt) > new Date(local.updatedAt)) {
+							await store.put({
+								...cloudExpense,
+								syncStatus: 'synced',
+								lastSyncedAt: new Date().toISOString()
+							});
+						}
 					}
+					await tx.done;
 				}
-				await tx.done;
-
 				localStorage.setItem('last_sync_expenses', new Date().toISOString());
-				console.log(`✅ Synced expenses. Updated: ${updateCount}, Deleted: ${deleteCount}.`);
-
-				await this.load(userId);
 			} catch (err) {
 				console.error('❌ Failed to sync expenses from cloud:', err);
 			} finally {
+				await this.load(userId);
 				isLoading.set(false);
 			}
 		},

@@ -3,6 +3,24 @@ import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-ty
 import { DO_ORIGIN, RETENTION } from '$lib/constants';
 import { log } from '$lib/server/log';
 
+// [!code fix] Add this import (assuming TrashRecord is defined in types or just define a local interface)
+// If you have a shared type file, import it. Otherwise, define it locally to satisfy the linter.
+export interface TrashRecord {
+	id: string;
+	userId: string;
+	metadata: {
+		deletedAt: string;
+		deletedBy: string;
+		originalKey: string;
+		expiresAt: string;
+	};
+	recordType: 'expense';
+	category?: string;
+	amount?: number;
+	description?: string;
+	date?: string;
+}
+
 export interface ExpenseRecord {
 	id: string;
 	userId: string;
@@ -38,9 +56,7 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			}
 
 			// SELF-HEALING: If Index is empty but KV has data, force sync.
-			// This fixes the "I see it in KV but not on other device" issue.
 			if (expenses.length === 0) {
-				// Check if we actually have data in KV
 				const kvCheck = await kv.list({ prefix, limit: 1 });
 
 				if (kvCheck.keys.length > 0) {
@@ -48,7 +64,6 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 						`[ExpenseService] Detected desync for ${userId} (KV has data, Index empty). repairing...`
 					);
 
-					// Fetch ALL data from KV
 					const allExpenses: ExpenseRecord[] = [];
 					let list = await kv.list({ prefix });
 					let keys = list.keys;
@@ -65,7 +80,6 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 						if (!raw) continue;
 						const parsed = JSON.parse(raw);
 
-						// If this is a tombstone, prefer migrating its backup payload (if available)
 						if (parsed && parsed.deleted) {
 							if (parsed.backup) {
 								allExpenses.push(parsed.backup);
@@ -80,14 +94,12 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 						migratedCount++;
 					}
 
-					// Force Push to DO
 					if (allExpenses.length > 0) {
 						await stub.fetch(`${DO_ORIGIN}/expenses/migrate`, {
 							method: 'POST',
 							body: JSON.stringify(allExpenses)
 						});
 
-						// Update local variable to return the fresh data immediately
 						expenses = allExpenses;
 						log.info(
 							`[ExpenseService] Migrated ${migratedCount} items (${skippedTombstones} tombstones skipped)`
@@ -96,7 +108,6 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				}
 			}
 
-			// Delta Sync Logic
 			if (since) {
 				const sinceDate = new Date(since);
 				return expenses.filter((e) => new Date(e.updatedAt || e.createdAt) > sinceDate);
@@ -115,10 +126,8 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			delete expense.deleted;
 			delete (expense as Record<string, unknown>)['deletedAt'];
 
-			// 1. Write to KV (The Log)
 			await kv.put(`expense:${expense.userId}:${expense.id}`, JSON.stringify(expense));
 
-			// 2. Write to DO (The Index) with logging + single retry
 			const stub = getIndexStub(expense.userId);
 			try {
 				const res = await stub.fetch(`${DO_ORIGIN}/expenses/put`, {
@@ -130,7 +139,6 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 						status: res.status,
 						id: expense.id
 					});
-					// One immediate retry (best-effort)
 					try {
 						const retry = await stub.fetch(`${DO_ORIGIN}/expenses/put`, {
 							method: 'POST',
@@ -228,7 +236,7 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				out.push({
 					id,
 					userId: uid,
-					metadata,
+					metadata: metadata as TrashRecord['metadata'],
 					recordType: 'expense',
 					category: (backup.category as string) || undefined,
 					amount:
@@ -289,6 +297,12 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 		async permanentDelete(userId: string, itemId: string) {
 			const key = `expense:${userId}:${itemId}`;
 			await kv.delete(key);
+			// Also notify DO to remove it from index so it doesn't reappear in list()
+			const stub = getIndexStub(userId);
+			await stub.fetch(`${DO_ORIGIN}/expenses/delete`, {
+				method: 'POST',
+				body: JSON.stringify({ id: itemId })
+			});
 		}
 	};
 }
