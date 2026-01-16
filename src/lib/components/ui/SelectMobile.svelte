@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, createEventDispatcher } from 'svelte';
 
-const dispatch = createEventDispatcher();
+	const dispatch = createEventDispatcher();
 	export let id: string | undefined;
 	export let options: { value: string; label: string }[] = [];
 	export let value: string | null = null;
@@ -55,7 +55,9 @@ const dispatch = createEventDispatcher();
 
 	function a11yScroll() {
 		if (!listEl) return;
-		const child = listEl.querySelectorAll('[role="option"]')[focusedIndex] as HTMLElement | undefined;
+		const child = listEl.querySelectorAll('[role="option"]')[focusedIndex] as
+			| HTMLElement
+			| undefined;
 		child?.scrollIntoView({ block: 'nearest' });
 	}
 
@@ -75,7 +77,7 @@ const dispatch = createEventDispatcher();
 
 <div class={`select-mobile ${className}`} on:keydown={onKeydown}>
 	<button
-		id={id}
+		{id}
 		bind:this={buttonEl}
 		type="button"
 		role="combobox"
@@ -87,12 +89,23 @@ const dispatch = createEventDispatcher();
 	>
 		<span class="label">{options.find((o) => o.value === value)?.label ?? placeholder}</span>
 		<svg class="caret" width="16" height="16" viewBox="0 0 24 24" fill="none">
-			<path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+			<path
+				d="M6 9l6 6 6-6"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			/>
 		</svg>
 	</button>
 
 	{#if open}
-		<ul class="options" role="listbox" bind:this={listEl} aria-activedescendant={focusedIndex >= 0 ? `option-${focusedIndex}` : undefined}>
+		<ul
+			class="options"
+			role="listbox"
+			bind:this={listEl}
+			aria-activedescendant={focusedIndex >= 0 ? `option-${focusedIndex}` : undefined}
+		>
 			{#each options as opt, i}
 				<li
 					id={`option-${i}`}

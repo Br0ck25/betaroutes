@@ -7,7 +7,6 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import SelectMobile from '$lib/components/ui/SelectMobile.svelte';
-	import { onMount } from 'svelte';
 
 	// --- HELPER: Get Local Date (YYYY-MM-DD) ---
 	function getLocalDate() {
@@ -45,20 +44,6 @@
 		formData.vehicle = v0?.id ?? v0?.name ?? '';
 	}
 
-	// Mobile detection to swap native select for custom control
-	let isMobile = false;
-	onMount(() => {
-		if (typeof window === 'undefined') return;
-		const mq = window.matchMedia('(max-width: 711px)');
-		const set = () => (isMobile = mq.matches);
-		set();
-		if (mq.addEventListener) mq.addEventListener('change', set);
-		else mq.addListener && mq.addListener(set);
-		return () => {
-			if (mq.removeEventListener) mq.removeEventListener('change', set);
-			else mq.removeListener && mq.removeListener(set);
-		};
-	});
 	// Prefill category from the URL query parameter (e.g., ?category=fuel)
 	$: {
 		const q = $page.url.searchParams.get('category');
@@ -213,35 +198,19 @@
 
 			<div class="form-row vehicle-rate-row">
 				<div class="form-group">
-					<label for={isMobile ? 'vehicle-mobile' : 'vehicle'}>Vehicle</label>
-					{#if !isMobile}
-						<select
-							id="vehicle"
-							bind:value={formData.vehicle}
-							class="p-2 border rounded-lg select-field"
-						>
-							{#if $userSettings.vehicles && $userSettings.vehicles.length > 0}
-								{#each $userSettings.vehicles as v}
-									<option value={v.id || v.name} title={v.name}>{v.name}</option>
-								{/each}
-							{:else}
-								<option value="" title="">No vehicles (open Millage Settings)</option>
-							{/if}
-						</select>
-					{:else}
-						<SelectMobile
-							className="mobile-select"
-							id="vehicle-mobile"
-							placeholder={$userSettings.vehicles && $userSettings.vehicles.length > 0
-								? 'Select vehicle'
-								: 'No vehicles (open Millage Settings)'}
-							options={$userSettings.vehicles
-								? $userSettings.vehicles.map((v) => ({ value: v.id || v.name, label: v.name }))
-								: [{ value: '', label: 'No vehicles (open Millage Settings)' }]}
-							bind:value={formData.vehicle}
-							on:change={(e) => (formData.vehicle = e.detail.value)}
-						/>
-					{/if}
+					<label for="vehicle-mobile">Vehicle</label>
+					<SelectMobile
+						className="mobile-select"
+						id="vehicle-mobile"
+						placeholder={$userSettings.vehicles && $userSettings.vehicles.length > 0
+							? 'Select vehicle'
+							: 'No vehicles (open Millage Settings)'}
+						options={$userSettings.vehicles
+							? $userSettings.vehicles.map((v) => ({ value: v.id || v.name, label: v.name }))
+							: [{ value: '', label: 'No vehicles (open Millage Settings)' }]}
+						bind:value={formData.vehicle}
+						on:change={(e) => (formData.vehicle = e.detail.value)}
+					/>
 				</div>
 				<div class="form-group">
 					<label for="millage-rate">Millage Rate (per mile)</label>

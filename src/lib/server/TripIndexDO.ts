@@ -37,6 +37,26 @@ export class TripIndexDO {
 
 	// Create tables if they don't exist (Critical for existing users)
 	private ensureSchema() {
+		// --- SELF-HEAL: Check for Schema Mismatch ---
+		// If the existing table doesn't have the columns we expect, the INSERT will fail later.
+		// We test this by trying to SELECT the specific columns we use.
+		try {
+			this.state.storage.sql.exec(
+				'SELECT id, userId, date, createdAt, data FROM trips LIMIT 1'
+			);
+			this.state.storage.sql.exec(
+				'SELECT id, userId, date, category, createdAt, data FROM expenses LIMIT 1'
+			);
+		} catch (e) {
+			log.warn('[TripIndexDO] Schema mismatch or corruption detected. Rebuilding tables...', e);
+			try {
+				this.state.storage.sql.exec('DROP TABLE IF EXISTS trips');
+				this.state.storage.sql.exec('DROP TABLE IF EXISTS expenses');
+			} catch (dropErr) {
+				log.error('[TripIndexDO] Failed to drop tables during rebuild', dropErr);
+			}
+		}
+
 		try {
 			this.state.storage.sql.exec(`
 				CREATE TABLE IF NOT EXISTS trips (
@@ -181,14 +201,21 @@ export class TripIndexDO {
 			if (path === '/put') {
 				const trip = await parseBody<TripSummary>();
 				if (!trip || !trip.id || !trip.userId) return new Response('Invalid Data', { status: 400 });
-				this.state.storage.sql.exec(
-					`INSERT OR REPLACE INTO trips (id, userId, date, createdAt, data) VALUES (?, ?, ?, ?, ?)`,
-					trip.id,
-					trip.userId,
-					trip.date || '',
-					trip.createdAt || '',
-					JSON.stringify(trip)
-				);
+				
+				// Added specific try/catch for the INSERT to log schema errors clearly
+				try {
+					this.state.storage.sql.exec(
+						`INSERT OR REPLACE INTO trips (id, userId, date, createdAt, data) VALUES (?, ?, ?, ?, ?)`,
+						trip.id,
+						trip.userId,
+						trip.date || '',
+						trip.createdAt || '',
+						JSON.stringify(trip)
+					);
+				} catch (e) {
+					log.error('[TripIndexDO] INSERT failed - likely schema mismatch', e);
+					throw e; // Re-throw so the 500 triggers the Dirty Index repair in tripService
+				}
 				return new Response('OK');
 			}
 
