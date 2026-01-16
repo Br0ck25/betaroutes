@@ -268,7 +268,9 @@ export function makeTripService(
 						}
 					}
 				} catch (e) {
-					log.warn('[TripService] Self-heal migrate check failed', { message: (e as Error).message });
+					log.warn('[TripService] Self-heal migrate check failed', {
+						message: (e as Error).message
+					});
 				}
 			}
 
@@ -322,18 +324,21 @@ export function makeTripService(
 			await kv.put(`trip:${trip.userId}:${trip.id}`, JSON.stringify(trip));
 			const stub = getIndexStub(trip.userId);
 
-		// 1. Update the Summary Index (log failures)
-		try {
-			const r = await stub.fetch(`${DO_ORIGIN}/put`, {
-				method: 'POST',
-				body: JSON.stringify(toSummary(trip))
-			});
-			if (!r.ok) {
-				log.warn('[TripService] DO put returned non-ok status', { status: r.status });
+			// 1. Update the Summary Index (log failures)
+			try {
+				const r = await stub.fetch(`${DO_ORIGIN}/put`, {
+					method: 'POST',
+					body: JSON.stringify(toSummary(trip))
+				});
+				if (!r.ok) {
+					log.warn('[TripService] DO put returned non-ok status', { status: r.status });
+				}
+			} catch (e) {
+				log.error('[TripService] DO put failed', { message: (e as Error).message });
 			}
-		} catch (e) {
-			log.error('[TripService] DO put failed', { message: (e as Error).message });
-		}
+
+			// 2. Trigger Route Calculation & Caching (Background)
+			stub
 				.fetch(`${DO_ORIGIN}/compute-routes`, {
 					method: 'POST',
 					body: JSON.stringify({ id: trip.id })

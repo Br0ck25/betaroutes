@@ -318,194 +318,197 @@
 	});
 </script>
 
-<CollapsibleCard
-	title="Security"
-	subtitle="Password and authentication"
-	storageKey="settings:security"
->
-	<span slot="icon">
-		<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-			<path
-				d="M15 7H14V5C14 3.67392 13.4732 2.40215 12.5355 1.46447C11.5979 0.526784 10.3261 0 9 0C7.67392 0 6.40215 0.526784 5.46447 1.46447C4.52678 2.40215 4 3.67392 4 5V7H3C2.46957 7 1.96086 7.21071 1.58579 7.58579C1.21071 7.96086 1 8.46957 1 9V17C1 17.5304 1.21071 18.0391 1.58579 18.4142C1.96086 18.7893 2.46957 19 3 19H15C15.5304 19 16.0391 18.7893 16.4142 18.4142C16.7893 18.0391 17 17.5304 17 17V9C17 8.46957 16.7893 7.96086 16.4142 7.58579C16.0391 7.21071 15.5304 7 15 7ZM6 5C6 4.20435 6.31607 3.44129 6.87868 2.87868C7.44129 2.31607 8.20435 2 9 2C9.79565 2 10.5587 2.31607 11.1213 2.87868C11.6839 3.44129 12 4.20435 12 5V7H6V5Z"
-				fill="currentColor"
-			/>
-		</svg>
-	</span>
-
-	{#if !showPasswordChange}
-		<button class="btn-secondary" on:click={() => (showPasswordChange = true)}
-			>Change Password</button
-		>
-	{:else}
-		<div class="password-change">
-			{#if passwordError}<div class="alert error">{passwordError}</div>{/if}
-			<div class="form-group">
-				<label for="curr-pass">Current Password</label><input
-					id="curr-pass"
-					type="password"
-					bind:value={passwordData.current}
+<div class="card-stack">
+	<CollapsibleCard
+		title="Security"
+		subtitle="Password and authentication"
+		storageKey="settings:security"
+	>
+		<span slot="icon">
+			<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+				<path
+					d="M15 7H14V5C14 3.67392 13.4732 2.40215 12.5355 1.46447C11.5979 0.526784 10.3261 0 9 0C7.67392 0 6.40215 0.526784 5.46447 1.46447C4.52678 2.40215 4 3.67392 4 5V7H3C2.46957 7 1.96086 7.21071 1.58579 7.58579C1.21071 7.96086 1 8.46957 1 9V17C1 17.5304 1.21071 18.0391 1.58579 18.4142C1.96086 18.7893 2.46957 19 3 19H15C15.5304 19 16.0391 18.7893 16.4142 18.4142C16.7893 18.0391 17 17.5304 17 17V9C17 8.46957 16.7893 7.96086 16.4142 7.58579C16.0391 7.21071 15.5304 7 15 7ZM6 5C6 4.20435 6.31607 3.44129 6.87868 2.87868C7.44129 2.31607 8.20435 2 9 2C9.79565 2 10.5587 2.31607 11.1213 2.87868C11.6839 3.44129 12 4.20435 12 5V7H6V5Z"
+					fill="currentColor"
 				/>
-			</div>
-			<div class="form-group">
-				<label for="new-pass">New Password</label><input
-					id="new-pass"
-					type="password"
-					bind:value={passwordData.new}
-				/>
-			</div>
-			<div class="form-group">
-				<label for="confirm-pass">Confirm New Password</label><input
-					id="confirm-pass"
-					type="password"
-					bind:value={passwordData.confirm}
-				/>
-			</div>
-			<div class="button-group">
-				<button class="btn-primary" on:click={changePassword}>Update</button>
-				<button class="btn-secondary" on:click={() => (showPasswordChange = false)}>Cancel</button>
-			</div>
-		</div>
-	{/if}
+			</svg>
+		</span>
 
-	<div class="divider"></div>
-
-	<div class="passkey-section">
-		<div>
-			<h3 style="font-size: 15px; font-weight: 600; color: #111827; margin-bottom: 4px;">
-				Biometric Login
-			</h3>
-			<p style="font-size: 13px; color: #6B7280; margin-bottom: 12px;">
-				Enable Face ID or Touch ID for faster login.
-			</p>
-			<p style="font-size: 12px; color: #6B7280; margin-top: 6px;">
-				This device: <strong>{deviceName}</strong>{#if deviceRegistered}
-					— <em>Registered</em>{/if}
-			</p>
-			{#if sessionExpired}
-				<div class="alert warning" style="margin-top:8px;">
-					Your session may have expired. <button class="linkish" on:click={() => location.reload()}
-						>Reload</button
-					>
-					or <a href="/logout">sign in</a> again to manage passkeys.
+		{#if !showPasswordChange}
+			<button class="btn-secondary" on:click={() => (showPasswordChange = true)}
+				>Change Password</button
+			>
+		{:else}
+			<div class="password-change">
+				{#if passwordError}<div class="alert error">{passwordError}</div>{/if}
+				<div class="form-group">
+					<label for="curr-pass">Current Password</label><input
+						id="curr-pass"
+						type="password"
+						bind:value={passwordData.current}
+					/>
 				</div>
+				<div class="form-group">
+					<label for="new-pass">New Password</label><input
+						id="new-pass"
+						type="password"
+						bind:value={passwordData.new}
+					/>
+				</div>
+				<div class="form-group">
+					<label for="confirm-pass">Confirm New Password</label><input
+						id="confirm-pass"
+						type="password"
+						bind:value={passwordData.confirm}
+					/>
+				</div>
+				<div class="button-group">
+					<button class="btn-primary" on:click={changePassword}>Update</button>
+					<button class="btn-secondary" on:click={() => (showPasswordChange = false)}>Cancel</button
+					>
+				</div>
+			</div>
+		{/if}
+
+		<div class="divider"></div>
+
+		<div class="passkey-section">
+			<div>
+				<h3 style="font-size: 15px; font-weight: 600; color: #111827; margin-bottom: 4px;">
+					Biometric Login
+				</h3>
+				<p style="font-size: 13px; color: #6B7280; margin-bottom: 12px;">
+					Enable Face ID or Touch ID for faster login.
+				</p>
+				<p style="font-size: 12px; color: #6B7280; margin-top: 6px;">
+					This device: <strong>{deviceName}</strong>{#if deviceRegistered}
+						— <em>Registered</em>{/if}
+				</p>
+				{#if sessionExpired}
+					<div class="alert warning" style="margin-top:8px;">
+						Your session may have expired. <button
+							class="linkish"
+							on:click={() => location.reload()}>Reload</button
+						>
+						or <a href="/logout">sign in</a> again to manage passkeys.
+					</div>
+				{/if}
+			</div>
+
+			{#if deviceRegistered}
+				<button class="btn-secondary" on:click={unregisterThisDevice} disabled={unregistering}>
+					<svg
+						width="16"
+						height="16"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						style="margin-right: 8px;"
+					>
+						<path d="M3 6h18M8 6v12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V6M10 11v6M14 11v6M9 6V4h6v2" />
+					</svg>
+					{unregistering ? 'Unregistering...' : 'Unregister This Device'}
+				</button>
+
+				<div style="margin-top: 8px; display:flex; align-items:center; gap:10px;">
+					<label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#374151;">
+						<input
+							type="checkbox"
+							bind:checked={rememberThisDevice}
+							on:change={() => {
+								if (rememberThisDevice && deviceCredentialID) {
+									localStorage.setItem(
+										'passkey:preferred',
+										JSON.stringify({ credentialID: deviceCredentialID, name: deviceName })
+									);
+									toasts.success('Quick sign-in enabled on this device');
+								} else {
+									localStorage.removeItem('passkey:preferred');
+									toasts.success('Quick sign-in disabled on this device');
+								}
+							}}
+						/>
+						Remember this device for quick sign-in
+					</label>
+				</div>
+			{:else}
+				<button class="btn-secondary" on:click={registerPasskey} disabled={registering}>
+					<svg
+						width="16"
+						height="16"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						style="margin-right: 8px;"
+					>
+						<path
+							d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"
+						/>
+					</svg>
+					{registering ? 'Registering...' : 'Register Device'}
+				</button>
 			{/if}
 		</div>
+	</CollapsibleCard>
 
-		{#if deviceRegistered}
-			<button class="btn-secondary" on:click={unregisterThisDevice} disabled={unregistering}>
-				<svg
-					width="16"
-					height="16"
-					viewBox="0 0 24 24"
-					fill="none"
+	<CollapsibleCard
+		title="Account Actions"
+		subtitle="Sign out or delete account"
+		storageKey="settings:account-actions"
+	>
+		<span slot="icon">
+			<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+				<path
+					d="M7 17H3C2.46957 17 1.96086 16.7893 1.58579 16.4142C1.21071 16.0391 1 15.5304 1 15V3C1 2.46957 1.21071 1.96086 1.58579 1.58579C1.96086 1.21071 2.46957 1 3 1H7M13 13L17 9M17 9L13 5M17 9H7"
 					stroke="currentColor"
 					stroke-width="2"
-					style="margin-right: 8px;"
-				>
-					<path d="M3 6h18M8 6v12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V6M10 11v6M14 11v6M9 6V4h6v2" />
-				</svg>
-				{unregistering ? 'Unregistering...' : 'Unregister This Device'}
-			</button>
-
-			<div style="margin-top: 8px; display:flex; align-items:center; gap:10px;">
-				<label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#374151;">
-					<input
-						type="checkbox"
-						bind:checked={rememberThisDevice}
-						on:change={() => {
-							if (rememberThisDevice && deviceCredentialID) {
-								localStorage.setItem(
-									'passkey:preferred',
-									JSON.stringify({ credentialID: deviceCredentialID, name: deviceName })
-								);
-								toasts.success('Quick sign-in enabled on this device');
-							} else {
-								localStorage.removeItem('passkey:preferred');
-								toasts.success('Quick sign-in disabled on this device');
-							}
-						}}
-					/>
-					Remember this device for quick sign-in
-				</label>
-			</div>
-		{:else}
-			<button class="btn-secondary" on:click={registerPasskey} disabled={registering}>
-				<svg
-					width="16"
-					height="16"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					style="margin-right: 8px;"
-				>
-					<path
-						d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"
-					/>
-				</svg>
-				{registering ? 'Registering...' : 'Register Device'}
-			</button>
-		{/if}
-	</div>
-</CollapsibleCard>
-
-<CollapsibleCard
-	title="Account Actions"
-	subtitle="Sign out or delete account"
-	storageKey="settings:account-actions"
->
-	<span slot="icon">
-		<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-			<path
-				d="M7 17H3C2.46957 17 1.96086 16.7893 1.58579 16.4142C1.21071 16.0391 1 15.5304 1 15V3C1 2.46957 1.21071 1.96086 1.58579 1.58579C1.96086 1.21071 2.46957 1 3 1H7M13 13L17 9M17 9L13 5M17 9H7"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			/>
-		</svg>
-	</span>
-
-	<div class="card-header">
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				/>
+			</svg>
+		</span>
 		<div>
 			<h2 class="card-title">Account Actions</h2>
 			<p class="card-subtitle">Sign out or delete account</p>
 		</div>
-	</div>
 
-	<div class="danger-actions">
-		<button class="btn-logout" on:click={handleLogout}>Logout</button>
+		<div class="danger-actions">
+			<button class="btn-logout" on:click={handleLogout}>Logout</button>
 
-		{#if !showDeleteConfirm}
-			<button class="btn-delete" on:click={() => (showDeleteConfirm = true)}>Delete Account</button>
-		{:else}
-			<div class="delete-confirmation">
-				<p class="delete-warning">To verify, please enter your password:</p>
-				<input
-					type="password"
-					bind:value={deletePassword}
-					placeholder="Enter your password"
-					class="delete-input"
-				/>
-				{#if deleteError}<p class="error-text">{deleteError}</p>{/if}
+			{#if !showDeleteConfirm}
+				<button class="btn-delete" on:click={() => (showDeleteConfirm = true)}
+					>Delete Account</button
+				>
+			{:else}
+				<div class="delete-confirmation">
+					<p class="delete-warning">To verify, please enter your password:</p>
+					<input
+						type="password"
+						bind:value={deletePassword}
+						placeholder="Enter your password"
+						class="delete-input"
+					/>
+					{#if deleteError}<p class="error-text">{deleteError}</p>{/if}
 
-				<div class="button-group">
-					<button class="btn-delete-confirm" on:click={handleDeleteAccount} disabled={isDeleting}>
-						{isDeleting ? 'Deleting...' : 'Permanently Delete Account'}
-					</button>
-					<button
-						class="btn-secondary"
-						on:click={() => {
-							showDeleteConfirm = false;
-							deletePassword = '';
-							deleteError = '';
-						}}>Cancel</button
-					>
+					<div class="button-group">
+						<button class="btn-delete-confirm" on:click={handleDeleteAccount} disabled={isDeleting}>
+							{isDeleting ? 'Deleting...' : 'Permanently Delete Account'}
+						</button>
+						<button
+							class="btn-secondary"
+							on:click={() => {
+								showDeleteConfirm = false;
+								deletePassword = '';
+								deleteError = '';
+							}}>Cancel</button
+						>
+					</div>
 				</div>
-			</div>
-		{/if}
-	</div>
-</CollapsibleCard>
+			{/if}
+		</div>
+	</CollapsibleCard>
+</div>
 
 <style>
 	.card-title {
@@ -618,6 +621,12 @@
 		color: #c2410c;
 		border: 1px solid #fed7aa;
 	}
+	.card-stack {
+		display: flex;
+		flex-direction: column;
+		gap: 24px;
+	}
+
 	.divider {
 		height: 1px;
 		background: #e5e7eb;
