@@ -261,10 +261,6 @@
 		</div>
 	</div>
 
-	<div style="margin:12px 0;">
-		<a href={resolve('/dashboard/millage')} class="btn-secondary">Millage</a>
-	</div>
-
 	<div class="charts-grid">
 		<div class="chart-card">
 			<div class="chart-header">
