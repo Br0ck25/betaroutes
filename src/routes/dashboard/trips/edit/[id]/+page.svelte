@@ -12,6 +12,7 @@
 	import { optimizeRoute } from '$lib/services/maps';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import { toasts } from '$lib/stores/toast';
+	import { syncManager } from '$lib/sync/syncManager';
 	import Button from '$lib/components/ui/Button.svelte';
 	import { PLAN_LIMITS } from '$lib/constants';
 
@@ -623,7 +624,19 @@
 			// userId is checked above; coerce to string to satisfy TS
 			const uid = String(userId);
 			await trips.updateTrip(String(tripId), tripToSave, uid);
-			toasts.success('Trip updated successfully!');
+
+			try {
+				if (navigator.onLine) {
+					await syncManager.forceSyncNow();
+					toasts.success('Trip updated and synced');
+				} else {
+					toasts.success('Trip updated locally; will sync when online');
+				}
+			} catch (err) {
+				console.warn('Sync failed after updating trip:', err);
+				toasts.success('Trip updated locally; sync will resume automatically');
+			}
+
 			goto(resolve('/dashboard/trips'));
 		} catch (err: any) {
 			console.error('Update failed:', err);

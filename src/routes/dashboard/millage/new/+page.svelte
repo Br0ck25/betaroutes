@@ -7,6 +7,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import SelectMobile from '$lib/components/ui/SelectMobile.svelte';
+	import { syncManager } from '$lib/sync/syncManager';
 
 	// --- HELPER: Get Local Date (YYYY-MM-DD) ---
 	function getLocalDate() {
@@ -102,7 +103,20 @@
 			};
 
 			await millage.create(payload as any, userId);
-			toasts.success('Millage log created');
+
+			// Try to flush pending changes to server to avoid created item being overwritten on hard refresh
+			try {
+				if (navigator.onLine) {
+					await syncManager.forceSyncNow();
+					toasts.success('Millage log created and synced');
+				} else {
+					toasts.success('Millage log created locally; will sync when online');
+				}
+			} catch (err) {
+				console.warn('Sync failed after creating millage:', err);
+				toasts.success('Millage log created locally; sync will resume automatically');
+			}
+
 			goto('/dashboard/millage');
 		} catch (err) {
 			console.error(err);

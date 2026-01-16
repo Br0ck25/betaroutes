@@ -6,6 +6,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import SelectMobile from '$lib/components/ui/SelectMobile.svelte';
+	import { syncManager } from '$lib/sync/syncManager';
 	const expenseId = $page.params.id;
 
 	// Settings modal removed for Millage edit page
@@ -126,7 +127,22 @@
 			if (typeof miles === 'number') payload.miles = miles;
 
 			await millage.updateMillage(String(expenseId), payload as any, String(userId));
-			toasts.success('Millage log updated');
+
+			// Try to push pending changes to the server immediately so a hard refresh doesn't
+			// load stale server-side data. If offline or sync fails, keep the local save and
+			// notify the user that it will sync later.
+			try {
+				if (navigator.onLine) {
+					await syncManager.forceSyncNow();
+					toasts.success('Millage log updated and synced');
+				} else {
+					toasts.success('Millage log saved locally; will sync when online');
+				}
+			} catch (err) {
+				console.warn('Sync failed after updating millage:', err);
+				toasts.success('Millage log saved locally; sync will resume automatically');
+			}
+
 			goto('/dashboard/millage');
 		} catch (err) {
 			console.error(err);
