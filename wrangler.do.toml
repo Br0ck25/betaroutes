@@ -3,17 +3,17 @@ main = "src/do-worker.ts"
 compatibility_date = "2024-12-05"
 compatibility_flags = ["nodejs_compat"]
 
-# 1. Trip Index DO Binding
+# 1. Trip Index DO Binding (Points to the NEW Fresh class)
 [[durable_objects.bindings]]
 name = "TRIP_INDEX_DO"
-class_name = "TripIndexSQL"
+class_name = "TripIndexFresh"
 
 # 2. Places Index DO Binding
 [[durable_objects.bindings]]
 name = "PLACES_INDEX_DO"
 class_name = "PlacesIndexSQL"
 
-# --- KV BINDINGS (Added to allow DO to access Cache/Data) ---
+# --- KV BINDINGS ---
 
 [[kv_namespaces]]
 binding = "BETA_DIRECTIONS_KV"
@@ -37,7 +37,11 @@ new_classes = ["TripIndexDO"]
 tag = "v2"
 new_classes = ["PlacesIndexDO"]
 
-# Force provisioning of SQLite storage for the new class names
 [[migrations]]
 tag = "v3"
 new_sqlite_classes = ["TripIndexSQL", "PlacesIndexSQL"]
+
+# v4: ONLY provision the new class. Do NOT delete the old one yet.
+[[migrations]]
+tag = "v4"
+new_sqlite_classes = ["TripIndexFresh"]

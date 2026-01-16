@@ -3,8 +3,6 @@ compatibility_date = "2024-12-05"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = ".svelte-kit/cloudflare"
 
-
-
 # ---------------------------------------------------
 # Production environment
 # ---------------------------------------------------
@@ -12,7 +10,7 @@ pages_build_output_dir = ".svelte-kit/cloudflare"
 
 [[env.production.durable_objects.bindings]]
 name = "TRIP_INDEX_DO"
-class_name = "TripIndexSQL"
+class_name = "TripIndexFresh" # UPDATED
 script_name = "trip-index-worker"
 
 [[env.production.durable_objects.bindings]]
@@ -27,7 +25,6 @@ id = "9551bf35d9cc4f75a5210c52d906da24"
 [[env.production.kv_namespaces]]
 binding = "BETA_USERS_KV"
 id = "569eff477945483283fa854d7bdf6b14"
-
 
 [[env.production.kv_namespaces]]
 binding = "BETA_USER_SETTINGS_KV"
@@ -61,8 +58,6 @@ id = "d395b64dcd0641f5a44d94c5ef5628eb"
 binding = "BETA_MILLAGE_KV"
 id = "05f8026102b54e82ba5ecd5c427d05b8"
 
-
-
 # ---------------------------------------------------
 # Preview environment
 # ---------------------------------------------------
@@ -73,7 +68,7 @@ PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyC_M5PjI9-Dix0dOr_Sg2bKkXhNAIbr2Xs"
 
 [[env.preview.durable_objects.bindings]]
 name = "TRIP_INDEX_DO"
-class_name = "TripIndexSQL"
+class_name = "TripIndexFresh" # UPDATED
 script_name = "trip-index-worker"
 
 [[env.preview.durable_objects.bindings]]
@@ -92,7 +87,6 @@ id = "7145abd7f89f4eb2bfbfdb84f69d6a5f"
 [[env.preview.kv_namespaces]]
 binding = "BETA_USERS_KV"
 id = "a245706e522b444fa9b67fa9a1b88d6a"
-
 
 [[env.preview.kv_namespaces]]
 binding = "BETA_USER_SETTINGS_KV"

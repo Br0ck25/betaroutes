@@ -2,12 +2,16 @@
 import { TripIndexDO } from './lib/server/TripIndexDO';
 import { PlacesIndexDO } from './lib/server/PlacesIndexDO';
 
-// 1. Export the OLD names for compatibility with existing deployments
+// 1. Export the OLD names
 export { TripIndexDO, PlacesIndexDO };
 
-// 2. Export the NEW SQL-suffixed names.
-// These specific exports are granted storage.sql access via wrangler.toml
+// 2. KEEP the old SQL class (Crucial to fix the deployment error)
 export class TripIndexSQL extends TripIndexDO {}
+
+// 3. ADD the new Fresh class (For the clean slate)
+export class TripIndexFresh extends TripIndexDO {}
+
+// 4. Export Places
 export class PlacesIndexSQL extends PlacesIndexDO {}
 
 export default {
