@@ -197,13 +197,17 @@
 			<div class="form-row vehicle-rate-row">
 				<div class="form-group">
 					<label for="vehicle">Vehicle</label>
-					<select id="vehicle" bind:value={formData.vehicle} class="p-2 border rounded-lg">
+					<select
+						id="vehicle"
+						bind:value={formData.vehicle}
+						class="p-2 border rounded-lg select-field"
+					>
 						{#if $userSettings.vehicles && $userSettings.vehicles.length > 0}
 							{#each $userSettings.vehicles as v}
-								<option value={v.id || v.name}>{v.name}</option>
+								<option value={v.id || v.name} title={v.name}>{v.name}</option>
 							{/each}
 						{:else}
-							<option value="">No vehicles (open Millage Settings)</option>
+							<option value="" title="">No vehicles (open Millage Settings)</option>
 						{/if}
 					</select>
 				</div>
@@ -325,7 +329,8 @@
 	}
 
 	input,
-	textarea {
+	textarea,
+	select {
 		width: 100%;
 		padding: 16px;
 		border: 1px solid #e5e7eb;
@@ -334,8 +339,33 @@
 		background: white;
 		box-sizing: border-box;
 	}
+
+	/* Ensure selects never expand past their container and truncate long labels */
+	select {
+		min-width: 0;
+		max-width: 100%;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	/* Utility class for consistency and to allow extra rules when needed */
+	.select-field {
+		display: block;
+		width: 100%;
+		box-sizing: border-box;
+	}
+
+	/* Attempt to keep option text readable but constrained (browser support varies) */
+	option {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
 	input:focus,
-	textarea:focus {
+	textarea:focus,
+	select:focus {
 		outline: none;
 		border-color: #ff7f50;
 	}
