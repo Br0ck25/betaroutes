@@ -214,39 +214,35 @@
 			<div class="form-row vehicle-rate-row">
 				<div class="form-group">
 					<label for={isMobile ? 'vehicle-mobile' : 'vehicle'}>Vehicle</label>
-				{#if !isMobile}
-					<select
-						id="vehicle"
-						bind:value={formData.vehicle}
-						class="p-2 border rounded-lg select-field"
-					>
-						{#if $userSettings.vehicles && $userSettings.vehicles.length > 0}
-							{#each $userSettings.vehicles as v}
-								<option value={v.id || v.name} title={v.name}>{v.name}</option>
-							{/each}
-						{:else}
-							<option value="" title="">No vehicles (open Millage Settings)</option>
-						{/if}
-					</select>
-				{:else}
-					<SelectMobile
-						className="mobile-select"
-						id="vehicle-mobile"
-						placeholder={$userSettings.vehicles && $userSettings.vehicles.length > 0 ? 'Select vehicle' : 'No vehicles (open Millage Settings)'}
-						options={$userSettings.vehicles ? $userSettings.vehicles.map((v) => ({ value: v.id || v.name, label: v.name })) : [{ value: '', label: 'No vehicles (open Millage Settings)' }]}
-						bind:value={formData.vehicle}
-						on:change={(e) => (formData.vehicle = e.detail.value)}
-					/>
-				{/if}
-					<!-- Mobile-only custom select (visible <= 711px) -->
-					<SelectMobile
-						className="mobile-select"
-						id="vehicle-mobile"
-						placeholder="Select vehicle"
-						options={$userSettings.vehicles ? $userSettings.vehicles.map((v) => ({ value: v.id || v.name, label: v.name })) : [{ value: '', label: 'No vehicles (open Millage Settings)' }]}
-						bind:value={formData.vehicle}
-						on:change={(e) => (formData.vehicle = e.detail.value)}
-					/>				</div>
+					{#if !isMobile}
+						<select
+							id="vehicle"
+							bind:value={formData.vehicle}
+							class="p-2 border rounded-lg select-field"
+						>
+							{#if $userSettings.vehicles && $userSettings.vehicles.length > 0}
+								{#each $userSettings.vehicles as v}
+									<option value={v.id || v.name} title={v.name}>{v.name}</option>
+								{/each}
+							{:else}
+								<option value="" title="">No vehicles (open Millage Settings)</option>
+							{/if}
+						</select>
+					{:else}
+						<SelectMobile
+							className="mobile-select"
+							id="vehicle-mobile"
+							placeholder={$userSettings.vehicles && $userSettings.vehicles.length > 0
+								? 'Select vehicle'
+								: 'No vehicles (open Millage Settings)'}
+							options={$userSettings.vehicles
+								? $userSettings.vehicles.map((v) => ({ value: v.id || v.name, label: v.name }))
+								: [{ value: '', label: 'No vehicles (open Millage Settings)' }]}
+							bind:value={formData.vehicle}
+							on:change={(e) => (formData.vehicle = e.detail.value)}
+						/>
+					{/if}
+				</div>
 				<div class="form-group">
 					<label for="millage-rate">Millage Rate (per mile)</label>
 					<input
