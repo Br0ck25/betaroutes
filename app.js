@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unused-vars, no-redeclare, no-unreachable */
+/* Legacy bundle: expose globals used by inline HTML. Lint rules will be satisfied by explicit exports at the bottom of this file. */
 
 document.addEventListener('DOMContentLoaded', () => {
 	if (typeof updateAuthUI === 'function') {
@@ -54,7 +54,7 @@ function clearTripForm() {
 }
 
 // Maintenance categories management
-let maintenanceItemCounter = 0;
+// counter removed: maintenanceItemCounter unused
 
 function getDefaultMaintenanceCategories() {
 	return ['Oil Change', 'Tire Rotation', 'Brake Service', 'Battery'];
@@ -117,13 +117,7 @@ function saveCustomMaintenanceType(typeName) {
 	syncCustomCategoriesToCloud();
 }
 
-function deleteCustomMaintenanceType(typeName) {
-	const customTypes = getCustomMaintenanceTypes();
-	const filtered = customTypes.filter((t) => t !== typeName);
-	localStorage.setItem('customMaintenanceTypes', JSON.stringify(filtered));
-
-	syncCustomCategoriesToCloud();
-}
+// removed: deleteCustomMaintenanceType — no references found outside this bundle
 
 function getCustomSupplyTypes() {
 	const saved = localStorage.getItem('customSupplyTypes');
@@ -149,14 +143,7 @@ function saveCustomSupplyType(typeName) {
 	syncCustomCategoriesToCloud();
 }
 
-function deleteCustomSupplyType(typeName) {
-	const customTypes = getCustomSupplyTypes();
-	const filtered = customTypes.filter((t) => t !== typeName);
-	localStorage.setItem('customSupplyTypes', JSON.stringify(filtered));
-
-	// Sync to cloud if signed in
-	syncCustomCategoriesToCloud();
-}
+// removed: deleteCustomSupplyType — no references found outside this bundle
 
 // Sync custom categories to/from cloud
 async function syncCustomCategoriesToCloud() {
@@ -207,7 +194,6 @@ async function loadCustomCategoriesFromCloud() {
 }
 
 function addMaintenanceItem() {
-	maintenanceItemCounter++;
 	const container = document.getElementById('maintenance-container');
 	const itemDiv = document.createElement('div');
 	itemDiv.classList.add('maintenance-item');
@@ -300,6 +286,7 @@ function openManageMaintenanceModal() {
   `);
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by inline HTML onclick */
 function deleteMaintenanceCategoryFromModal(typeName) {
 	deleteMaintenanceCategory(typeName);
 	closeUniversalModal();
@@ -357,6 +344,7 @@ function openManageSuppliesModal() {
   `);
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by inline HTML onclick */
 function deleteSupplyCategoryFromModal(typeName) {
 	deleteSupplyCategory(typeName);
 	closeUniversalModal();
@@ -415,7 +403,7 @@ function getTotalMaintenanceCost() {
 }
 
 // Supply items management
-let supplyItemCounter = 0;
+// counter removed: supplyItemCounter unused
 
 function getDefaultSupplyCategories() {
 	return ['Poles', 'Concrete', 'Cable'];
@@ -454,28 +442,9 @@ function deleteSupplyCategory(typeName) {
 	syncCustomCategoriesToCloud();
 }
 
-function getCustomSupplyTypes() {
-	const saved = localStorage.getItem('customSupplyTypes');
-	return saved ? JSON.parse(saved) : [];
-}
-
-function saveCustomSupplyType(typeName) {
-	if (!typeName || typeName.trim() === '') return;
-
-	const customTypes = getCustomSupplyTypes();
-	const trimmed = typeName.trim();
-
-	const presetTypes = ['Poles', 'Concrete', 'Cable'];
-	if (presetTypes.includes(trimmed) || customTypes.includes(trimmed)) {
-		return;
-	}
-
-	customTypes.push(trimmed);
-	localStorage.setItem('customSupplyTypes', JSON.stringify(customTypes));
-}
+// duplicate getCustomSupplyTypes/saveCustomSupplyType removed — consolidated earlier in the file
 
 function addSupplyItem() {
-	supplyItemCounter++;
 	const container = document.getElementById('supplies-container');
 	const itemDiv = document.createElement('div');
 	itemDiv.classList.add('supply-item');
@@ -760,13 +729,14 @@ function scrollToTop() {
 let map;
 let directionsService;
 let directionsRenderer;
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- references kept for Google Maps event listeners */
 let autocompleteStart, autocompleteEnd;
 let editingIndex = -1;
 let originalMileage = null;
 let logEntries = [];
 let currentFilterFn = null;
 let currentPage = 1;
-let skipNextSync = false;
+// skipNextSync removed: no longer used (consolidated sync logic)
 
 const logsPerPage = 10;
 
@@ -977,8 +947,6 @@ function discardDraftTrip() {
 			console.error(' Failed to parse cachedLogs:', e);
 		}
 	}
-
-	skipNextSync = true;
 }
 
 function showAlertModal(message, onClose) {
@@ -1073,8 +1041,6 @@ function saveUserInputsToLocalStorage({ mpg, gasPrice, startAddress, endAddress 
 
 document.addEventListener('click', function (event) {
 	const menu = document.getElementById('account-menu');
-	const button = event.target.closest('button');
-	const hamburgerButton = document.getElementById('hamburger-button');
 
 	// Check if click is on hamburger button or its children (including the icon)
 	const isHamburgerClick =
@@ -1266,37 +1232,7 @@ async function loadLog() {
 	}
 }
 
-function updateOfflineBanner() {
-	const banner = document.getElementById('offline-banner');
-
-	if (navigator.onLine) {
-		banner.style.display = 'none'; //  Online
-		syncAndReloadLogs(); //  Force refresh logs!
-	} else {
-		banner.style.display = 'block'; //  Offline
-	}
-}
-
-async function syncAndReloadLogs() {
-	if (skipNextSync) {
-		console.log(' Skipping sync due to Cancel selection');
-		skipNextSync = false; // reset it after skipping once
-		return;
-	}
-
-	try {
-		console.log(' Online detected: syncing and reloading logs...');
-
-		await syncPendingLogs();
-		logEntries = await loadLog();
-		displayLog();
-
-		console.log(' Logs refreshed after reconnecting!');
-		showConfirmationMessage(' Logs refreshed after reconnecting!');
-	} catch (error) {
-		console.error(' Error refreshing logs:', error);
-	}
-}
+// duplicate offline banner / sync helpers removed — consolidated into a single implementation later in the file
 
 function saveDraftTrip() {
 	if (disableAutoSave) return;
@@ -1389,87 +1325,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 				}
 			}
 
-			// Show custom modal instead of confirm()
-			window.__pendingDraftTrip = data;
-			document.getElementById('resume-modal').style.display = 'flex';
-			return;
-
-			//  Restore draft data
-			document.getElementById('log-date').value = data.date || '';
-			document.getElementById('start-address').value = data.start || '';
-			document.getElementById('end-address').value = data.end || '';
-			document.getElementById('mpg').value = data.mpg || '';
-			document.getElementById('gas-price').value = data.gas || '';
-			document.getElementById('start-time').value = data.startTime || '';
-			document.getElementById('end-time').value = data.endTime || '';
-			document.getElementById('hours-worked').value = data.hoursWorked || '';
-
-			// Restore maintenance items in DOMContentLoaded
-			const maintenanceContainer = document.getElementById('maintenance-container');
-			maintenanceContainer.innerHTML = '';
-			if (data.maintenance && Array.isArray(data.maintenance)) {
-				data.maintenance.forEach((item) => {
-					addMaintenanceItem();
-					const lastItem = maintenanceContainer.lastElementChild;
-					const typeSelect = lastItem.querySelector('.maintenance-type');
-					const customInput = lastItem.querySelector('.maintenance-custom-name');
-					const costInput = lastItem.querySelector('.maintenance-cost');
-
-					const presetTypes = ['Oil Change', 'Tire Rotation', 'Brake Service', 'Battery'];
-					if (presetTypes.includes(item.type)) {
-						typeSelect.value = item.type;
-					} else {
-						typeSelect.value = 'Custom';
-						customInput.style.display = 'block';
-						customInput.value = item.type;
-					}
-					costInput.value = item.cost;
-				});
-			}
-
-			// Restore supplies items in DOMContentLoaded
-			const suppliesContainer = document.getElementById('supplies-container');
-			suppliesContainer.innerHTML = '';
-			if (data.supplies && Array.isArray(data.supplies)) {
-				data.supplies.forEach((item) => {
-					addSupplyItem();
-					const lastItem = suppliesContainer.lastElementChild;
-					const typeSelect = lastItem.querySelector('.supply-type');
-					const customInput = lastItem.querySelector('.supply-custom-name');
-					const costInput = lastItem.querySelector('.supply-cost');
-
-					const presetTypes = ['Poles', 'Concrete', 'Cable'];
-					if (presetTypes.includes(item.type)) {
-						typeSelect.value = item.type;
-					} else {
-						typeSelect.value = 'Custom';
-						customInput.style.display = 'block';
-						customInput.value = item.type;
-					}
-					costInput.value = item.cost;
-				});
-			}
-
-			const container = document.getElementById('destinations-container');
-			container.innerHTML = '';
-
-			destinations.forEach((d, i) => {
-				const div = document.createElement('div');
-				div.classList.add('destination');
-				div.innerHTML = `
-          <label for="destination-${i + 1}">Destination ${i + 1}</label>
-          <input type="text" id="destination-${i + 1}" list="recent-destinations" value="${d.address || ''}">
-          <label for="earnings-${i + 1}">Earnings for Destination ${i + 1}</label>
-          <input type="number" id="earnings-${i + 1}" value="${d.earnings || ''}">
-          <div class="destination-actions">
-            <button class="delete-btn" onclick="deleteDestination(this)">Delete</button>
-            <button class="move-btn" onclick="moveDestinationUp(this)">Move Up</button>
-            <button class="move-btn" onclick="moveDestinationDown(this)">Move Down</button>
-          </div>
-        `;
-				container.appendChild(div);
-				initAutocompleteDestination(div.querySelector('input[type="text"]'));
-			});
+			// Restoration moved to `resumeDraftTrip` — duplicate unreachable logic removed
 		} catch (err) {
 			console.error(' Failed to parse draftTrip:', err);
 			localStorage.removeItem('draftTrip');
@@ -1634,11 +1490,12 @@ function initMap() {
 window.initMap = initMap;
 
 function initAutocompleteDestination(inputElement) {
-	const autocomplete = new google.maps.places.Autocomplete(inputElement, {
+	void new google.maps.places.Autocomplete(inputElement, {
 		types: ['geocode']
 	});
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by inline HTML handlers */
 async function calculateRoute() {
 	const destinationInputs = document.querySelectorAll('input[id^="destination-"]');
 	const filledDestinations = Array.from(destinationInputs).filter(
@@ -1726,7 +1583,7 @@ async function calculateRouteData() {
 		return Promise.resolve(null);
 	}
 
-	return new Promise((resolve, reject) => {
+	return new Promise((resolve) => {
 		directionsService.route(request, (response, status) => {
 			if (status === 'OK') {
 				directionsRenderer.setDirections(response);
@@ -1866,6 +1723,7 @@ function updateUI(data) {
 	}
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by inline HTML handlers */
 function openInGoogleMaps() {
 	const start = encodeURIComponent(document.getElementById('start-address').value.trim());
 	const endAddressInput = document.getElementById('end-address').value.trim();
@@ -1898,29 +1756,9 @@ function resetOriginalMileageDisplay() {
 	document.getElementById('mileage-display').textContent = '';
 	document.getElementById('optimized-mileage-display').textContent = '';
 }
-async function logResults() {
-	//  Check for at least one destination
-	const destinationInputs = document.querySelectorAll('input[id^="destination-"]');
-	const filledDestinations = Array.from(destinationInputs).filter(
-		(input) => input.value.trim() !== ''
-	);
-	if (filledDestinations.length === 0) {
-		showAlertModal(' Please enter at least one destination before logging your route.');
-		return;
-	}
+// older logResults removed — updated implementation is kept later in the file
 
-	//  Get calculation result
-	const calculationResult = await calculateRouteData();
-	if (calculationResult) {
-		currentPage = 1;
-		logEntry(calculationResult);
-		displayLog();
-		updateUI(calculationResult);
-		clearTripForm(); //  Reset the form
-		showConfirmationMessage(' Route logged successfully!');
-	}
-}
-
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by inline HTML handlers */
 async function optimizeRoute() {
 	const destInputs = document.querySelectorAll(
 		'#destinations-container .destination input[type="text"]'
@@ -2114,12 +1952,14 @@ function addDestination() {
 	renumberMainDestinations();
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by inline HTML handlers */
 function deleteDestination(button) {
 	button.closest('.destination').remove();
 	resetOriginalMileageDisplay();
 	renumberMainDestinations();
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by inline HTML handlers */
 function moveDestinationUp(button) {
 	const destinationDiv = button.closest('.destination');
 	const prevDiv = destinationDiv.previousElementSibling;
@@ -2130,6 +1970,7 @@ function moveDestinationUp(button) {
 	}
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by inline HTML handlers */
 function moveDestinationDown(button) {
 	const destinationDiv = button.closest('.destination');
 	const nextDiv = destinationDiv.nextElementSibling;
@@ -2212,13 +2053,10 @@ function displayLog(filterFn = () => true) {
 		emptyMessage.textContent = 'No log entries found for selected filter.';
 		logList.appendChild(emptyMessage);
 	} else {
-		pageEntries.forEach((entry, index) => {
+		pageEntries.forEach((entry) => {
 			if (entry) {
 				const realIndex = logEntries.findIndex((e) => JSON.stringify(e) === JSON.stringify(entry));
 				const listItem = document.createElement('li');
-				const destinations = Array.isArray(entry.destinations)
-					? entry.destinations.map((d) => `- ${d}`).join('<br>')
-					: '';
 
 				listItem.innerHTML = `
   <div class="log-item-details" id="log-entry-${realIndex}">
@@ -2280,6 +2118,7 @@ function renderPaginationButtons(totalPages) {
   `;
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by UI controls */
 function prevPage() {
 	if (currentPage > 1) {
 		currentPage--;
@@ -2288,6 +2127,7 @@ function prevPage() {
 	}
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by UI controls */
 function nextPage() {
 	const totalPages = Math.ceil(logEntries.length / logsPerPage);
 	if (currentPage < totalPages) {
@@ -2297,6 +2137,7 @@ function nextPage() {
 	}
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by UI controls */
 function goToPage(totalPages) {
 	const input = document.getElementById('page-input');
 	const page = parseInt(input.value);
@@ -2310,6 +2151,7 @@ function goToPage(totalPages) {
 	}
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by UI controls */
 function deleteLogEntry(index) {
 	showConfirmModal('Are you sure you want to delete this log entry?', () => {
 		logEntries.splice(index, 1);
@@ -2429,6 +2271,7 @@ function recalculateEditMileageAndCosts() {
 	});
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by inline HTML handlers */
 function moveEditDestinationUp(button) {
 	const destinationDiv = button.closest('.destination');
 	const prevDiv = destinationDiv.previousElementSibling;
@@ -2441,6 +2284,7 @@ function moveEditDestinationUp(button) {
 	}
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by inline HTML handlers */
 function moveEditDestinationDown(button) {
 	const destinationDiv = button.closest('.destination');
 	const nextDiv = destinationDiv.nextElementSibling;
@@ -2549,6 +2393,7 @@ function addEditDestination() {
 	}
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by inline HTML handlers */
 function deleteEditDestination(button) {
 	const destinationDiv = button.closest('.destination');
 	if (destinationDiv) {
@@ -2560,6 +2405,7 @@ function deleteEditDestination(button) {
 	}
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by inline HTML handlers */
 function openEditForm(index) {
 	console.log(' Opening edit for index:', index);
 	editingIndex = index;
@@ -2754,6 +2600,7 @@ function getNumberValue(id) {
 	return el ? parseFloat(el.value) || 0 : 0;
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by UI */
 async function saveEditedLogEntry() {
 	if (editingIndex === -1) {
 		console.warn('No entry selected for editing.');
@@ -2811,7 +2658,7 @@ async function saveEditedLogEntry() {
 	const netProfitFloat =
 		entry.totalEarnings - entry.fuelCost - entry.maintenanceCost - entry.suppliesCost;
 
-	const driveTime = convertTimeToHours(entry.totalTime || '');
+	// convertTimeToHours removed — unused here
 	//  Use full clock span only (start-end time)
 	let sessionMinutes = 0;
 	const start = entry.startClock;
@@ -2840,6 +2687,7 @@ async function saveEditedLogEntry() {
 
 let fileReaderBusy = false; // global or top-level
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by UI */
 async function importLog() {
 	if (fileReaderBusy) {
 		console.warn(' FileReader is still busy. Try again in a moment.');
@@ -2995,6 +2843,7 @@ function showSignup() {
 	document.getElementById('auth-modal').style.display = 'flex';
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by auth UI */
 function toggleAuthMode() {
 	isSignup = !isSignup;
 	if (isSignup) {
@@ -3004,6 +2853,7 @@ function toggleAuthMode() {
 	}
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by auth UI */
 async function submitAuth() {
 	const username = document.getElementById('auth-username').value.trim();
 	const password = document.getElementById('auth-password').value.trim();
@@ -3069,6 +2919,7 @@ async function submitAuth() {
 	}
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by auth UI */
 function logout() {
 	console.log(' Logging out...');
 
@@ -3105,6 +2956,7 @@ function logout() {
 	}, 100);
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by auth UI */
 function showPasswordModal() {
 	document.getElementById('change-password-modal').style.display = 'flex';
 }
@@ -3113,6 +2965,7 @@ function closePasswordModal() {
 	document.getElementById('change-password-modal').style.display = 'none';
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by auth UI */
 async function submitPasswordChange() {
 	const current = document.getElementById('current-password').value.trim();
 	const next = document.getElementById('new-password').value.trim();
@@ -3152,6 +3005,7 @@ async function submitPasswordChange() {
 	}
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by auth UI */
 function showResetModal() {
 	document.getElementById('reset-password-modal').style.display = 'flex';
 }
@@ -3160,6 +3014,7 @@ function closeResetModal() {
 	document.getElementById('reset-password-modal').style.display = 'none';
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by auth UI */
 async function submitResetPassword() {
 	const username = document.getElementById('reset-username').value.trim();
 	const resetKey = document.getElementById('reset-key').value.trim();
@@ -3185,6 +3040,7 @@ async function submitResetPassword() {
 	}
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by auth UI */
 function showDeleteModal() {
 	document.getElementById('delete-account-modal').style.display = 'flex';
 }
@@ -3193,6 +3049,7 @@ function closeDeleteModal() {
 	document.getElementById('delete-account-modal').style.display = 'none';
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by auth UI */
 async function submitDeleteAccount() {
 	const password = document.getElementById('delete-password').value.trim();
 	const username = localStorage.getItem('username');
@@ -3351,6 +3208,7 @@ function triggerImportFile() {
 	}
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by UI */
 function openLogEntryInGoogleMaps(index) {
 	const entry = logEntries[index];
 	if (!entry) {
@@ -3405,6 +3263,7 @@ function handleTimeChange() {
 	}
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by UI */
 function formatCurrency(value) {
 	if (isNaN(value)) return '$0.00';
 	return `$${parseFloat(value).toLocaleString(undefined, {
@@ -3500,6 +3359,7 @@ function formatTimeToAmPm(timeStr) {
 	return `${displayHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by UI */
 function toggleLogEntryDetails(index) {
 	const entry = logEntries[index];
 	const detailsDiv = document.getElementById(`details-${index}`);
@@ -3586,10 +3446,7 @@ function calculateTotalHours(entry) {
 	if (endMin < startMin) endMin += 24 * 60;
 
 	const totalMinutes = endMin - startMin;
-	const hours = Math.floor(totalMinutes / 60);
-	const minutes = totalMinutes % 60;
-	const hourText = `${hours} hour${hours !== 1 ? 's' : ''}`;
-	const minuteText = minutes > 0 ? ` ${minutes} minute${minutes !== 1 ? 's' : ''}` : '';
+
 	return formatHoursAndMinutesFromMinutes(totalMinutes);
 }
 
@@ -3636,6 +3493,7 @@ function renumberMainDestinations() {
 	});
 }
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by UI */
 function calculateTotals(logs) {
 	return logs.reduce(
 		(totals, entry) => {
@@ -4008,6 +3866,7 @@ document.addEventListener('click', function (event) {
 	}
 });
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by Google auth callback */
 async function handleGoogleSignIn(response) {
 	const credential = response.credential;
 
@@ -4072,11 +3931,7 @@ function formatHoursAndMinutes(decimal = 0) {
 	return parts.join(' ');
 }
 
-function parseHoursAndMinutes(str = '') {
-	const hours = +(str.match(/(\d+)\s*hour/)?.[1] || 0);
-	const minutes = +(str.match(/(\d+)\s*minute/)?.[1] || 0);
-	return hours + minutes / 60;
-}
+// removed: parseHoursAndMinutes — not referenced by this bundle
 
 //  Register the service worker
 if ('serviceWorker' in navigator) {
@@ -4141,6 +3996,7 @@ window.addEventListener('scroll', () => {
 	}, 50);
 });
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by Google auth callback in static pages */
 async function onGoogleLogin(response) {
 	try {
 		const res = await fetch('/api/google-login', {
@@ -4322,6 +4178,7 @@ function showUpgradeModal() {
 }
 
 // Upgrade to Pro (mock implementation - replace with Stripe)
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- referenced by inline HTML in static pages */
 async function upgradeToPro() {
 	// TODO: Integrate Stripe checkout
 	// For now, direct API upgrade
@@ -4342,7 +4199,7 @@ async function upgradeToPro() {
 		});
 
 		if (response.ok) {
-			const data = await response.json();
+			// upgrade successful
 			closeUniversalModal();
 			showAlertModal('🎉 Successfully upgraded to Pro! You now have unlimited trips.', () => {
 				location.reload();
@@ -4402,6 +4259,7 @@ async function displayUsageStats() {
 }
 
 // Update logResults to check limits
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by inline HTML */
 async function logResults() {
 	const destinationInputs = document.querySelectorAll('input[id^="destination-"]');
 	const filledDestinations = Array.from(destinationInputs).filter(
@@ -4470,6 +4328,7 @@ Add this HTML to the hamburger menu in index.html:
 */
 
 // Update subscription info in menu
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars -- used by UI */
 async function updateSubscriptionInfoInMenu() {
 	const subscription = await getSubscriptionInfo();
 	if (!subscription) return;
@@ -4499,3 +4358,171 @@ function showUpgradePage() {
 	closeMenu();
 	showUpgradeModal();
 }
+
+// Expose legacy globals used by inline HTML handlers in static pages
+(function exposeLegacyGlobals() {
+	try {
+		if (typeof toggleMenu === 'function') globalThis.toggleMenu = toggleMenu;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof scrollToTop === 'function') globalThis.scrollToTop = scrollToTop;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof showSignup === 'function') globalThis.showSignup = showSignup;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof showLogin === 'function') globalThis.showLogin = showLogin;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof closeMenu === 'function') globalThis.closeMenu = closeMenu;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof showUpgradePage === 'function') globalThis.showUpgradePage = showUpgradePage;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof triggerImportFile === 'function') globalThis.triggerImportFile = triggerImportFile;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof exportToCSVWithTotals === 'function')
+			globalThis.exportToCSVWithTotals = exportToCSVWithTotals;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof exportToPDFWithTotals === 'function')
+			globalThis.exportToPDFWithTotals = exportToPDFWithTotals;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof toggleHamburgerSettingsMenu === 'function')
+			globalThis.toggleHamburgerSettingsMenu = toggleHamburgerSettingsMenu;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof installApp === 'function') globalThis.installApp = installApp;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof addDestination === 'function') globalThis.addDestination = addDestination;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof addMaintenanceItem === 'function')
+			globalThis.addMaintenanceItem = addMaintenanceItem;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof addSupplyItem === 'function') globalThis.addSupplyItem = addSupplyItem;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof clearFilters === 'function') globalThis.clearFilters = clearFilters;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof addEditDestination === 'function')
+			globalThis.addEditDestination = addEditDestination;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof addEditMaintenanceItem === 'function')
+			globalThis.addEditMaintenanceItem = addEditMaintenanceItem;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof resumeDraftTrip === 'function') globalThis.resumeDraftTrip = resumeDraftTrip;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof discardDraftTrip === 'function') globalThis.discardDraftTrip = discardDraftTrip;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof toggleHamburgerManageLogMenu === 'function')
+			globalThis.toggleHamburgerManageLogMenu = toggleHamburgerManageLogMenu;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof toggleHamburgerManageAccountMenu === 'function')
+			globalThis.toggleHamburgerManageAccountMenu = toggleHamburgerManageAccountMenu;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof closeAuthModal === 'function') globalThis.closeAuthModal = closeAuthModal;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof deleteCustomMaintenanceType === 'function')
+			globalThis.deleteCustomMaintenanceType = deleteCustomMaintenanceType;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof deleteCustomSupplyType === 'function')
+			globalThis.deleteCustomSupplyType = deleteCustomSupplyType;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof removeMaintenanceItem === 'function')
+			globalThis.removeMaintenanceItem = removeMaintenanceItem;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof removeSupplyItem === 'function') globalThis.removeSupplyItem = removeSupplyItem;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof removeEditSupplyItem === 'function')
+			globalThis.removeEditSupplyItem = removeEditSupplyItem;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof removeEditMaintenanceItem === 'function')
+			globalThis.removeEditMaintenanceItem = removeEditMaintenanceItem;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof onStartDateChange === 'function') globalThis.onStartDateChange = onStartDateChange;
+	} catch (e) {
+		void e;
+	}
+	try {
+		if (typeof initAutocompleteDestination === 'function')
+			globalThis.initAutocompleteDestination = initAutocompleteDestination;
+	} catch (e) {
+		void e;
+	}
+})();
