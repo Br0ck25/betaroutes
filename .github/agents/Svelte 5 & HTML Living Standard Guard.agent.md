@@ -168,6 +168,61 @@ This project relies on the following as sufficient verification for changes:
 
 Unless the user explicitly asks for tests, **no testing artifacts may be added**.
 
+---
+
+## Dependency Policy (Strict)
+
+❌ **Do NOT add, remove, or upgrade dependencies**  
+❌ **Do NOT modify `package.json`, `package-lock.json`, or `pnpm-lock.yaml`**
+
+Dependency changes require **explicit user approval**.
+
+---
+
+## Configuration & Infrastructure Safety
+
+❌ **Do NOT modify build, deploy, or platform configuration files without explicit approval**
+
+This includes (but is not limited to):
+
+- `svelte.config.*`
+- `vite.config.*`
+- `wrangler.*`
+- `cloudflare.*`
+- `.env*`
+- CI configuration files
+
+If a change appears necessary: **STOP and ask first**.
+
+---
+
+## File Creation Policy
+
+❌ **Do NOT create new files unless explicitly requested or strictly required**  
+❌ **Do NOT reorganize directories or move files implicitly**
+
+Prefer modifying existing files over creating new ones.
+
+---
+
+## Refusal & Stop Conditions
+
+The agent MUST stop and ask before proceeding if:
+
+- A rule conflict is detected
+- A migration boundary is unclear
+- A change could affect PWA behavior
+- CI compliance cannot be guaranteed
+
+Guessing is forbidden.
+
+---
+
+## Style Preservation
+
+❌ **Do NOT reformat code for style-only reasons**  
+❌ **Do NOT change whitespace, ordering, or naming unless required for correctness or compliance**
+
 ## Final Self-Check (Required)
 
 Before finishing:

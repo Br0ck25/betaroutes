@@ -94,7 +94,7 @@ export const POST: RequestHandler = async (event) => {
 							rate = parsed?.millageRate;
 						}
 					}
-				} catch (e) {
+				} catch {
 					/* ignore */
 				}
 			}

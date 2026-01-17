@@ -18,7 +18,8 @@
 	const dispatch = createEventDispatcher();
 
 	// Prefer authoritative millage when available; fall back to trip.totalMiles
-	$: displayMiles = $millage.find((m) => m.id === trip.id)?.miles ?? trip.totalMiles ?? 0;
+	let displayMiles = 0;
+	$: displayMiles = $millage.find((m: any) => m.id === trip.id)?.miles ?? trip.totalMiles ?? 0;
 
 	$: profit = calculateNetProfit(trip);
 	$: hourlyPay = calculateHourlyPay(trip);
@@ -214,7 +215,7 @@
 		<div class="card-stats">
 			<div class="stat-item">
 				<span class="stat-label">Miles</span>
-				<span class="stat-value">{trip.totalMiles?.toFixed(1) || '0.0'}</span>
+				<span class="stat-value">{displayMiles?.toFixed(1) || '0.0'}</span>
 			</div>
 			<div class="stat-item">
 				<span class="stat-label">Stops</span>

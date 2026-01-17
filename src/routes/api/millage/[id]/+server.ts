@@ -155,7 +155,7 @@ export const PUT: RequestHandler = async (event) => {
 					safeDO(env, 'TRIP_INDEX_DO')! as any,
 					safeDO(env, 'PLACES_INDEX_DO')! as any
 				);
-				const existingTrip = await tripSvc.get(getStorageId(event.locals.user), id);
+				const existingTrip = await tripSvc.get(getStorageId(sessionUser), id);
 				if (existingTrip && typeof updated.miles === 'number') {
 					const patched = {
 						...existingTrip,
@@ -170,8 +170,7 @@ export const PUT: RequestHandler = async (event) => {
 				}
 			}
 		} catch (err) {
-			console.warn('Failed to mirror millage to trips KV (non-fatal):', err);
-		}
+                    log.warn('Failed to mirror millage to trips KV (non-fatal):', String(err));
 
 		return new Response(JSON.stringify(updated), {
 			headers: { 'Content-Type': 'application/json' }

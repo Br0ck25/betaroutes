@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { formatCurrency, calculateNetProfit, calculateHourlyPay } from '$lib/utils/trip-helpers';
+	import { millage } from '$lib/stores/millage';
 
 	export let trips: any[] = [];
 </script>
