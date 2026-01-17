@@ -46,22 +46,32 @@ describe('Trips <-> Millage integration', () => {
 			date: '2025-03-01',
 			stops: [
 				{ address: undefined, earnings: '12.5' as any },
-				{ /* missing id/address */ }
+				{
+					/* missing id/address */
+				}
 			]
 		};
 		const created = await trips.create(raw as any, userId as any);
-	expect(created.stops).toBeDefined();
-	const stops = (created.stops ?? []) as NonNullable<typeof created.stops>;
-	expect(stops.length).toBe(2);
-	expect(stops[0].id).toBeTruthy();
-	expect(stops[0].address).toBe('');
-	expect(stops[0].earnings).toBe(12.5);
-	expect(stops[1].id).toBeTruthy();
-	expect(stops[1].address).toBe('');
-
-	// Update with partial stop and ensure normalization persists
-	await trips.updateTrip(created.id, { stops: [{ id: String(stops[0].id), address: String(stops[0].address || ''), earnings: '7' as any, order: 0 }] }, userId as any);
-	const updated = await trips.get(created.id, userId as any);
-	expect(updated?.stops?.[0].earnings).toBe(7);
+		expect(created.stops).toBeDefined();
+		const stops = (created.stops ?? []) as NonNullable<typeof created.stops>;
+		if (stops.length < 2) throw new Error('expected 2 stops');
+		expect(stops.length).toBe(2);
+		const s0 = stops[0]!;
+		const s1 = stops[1]!;
+		expect(s0).toBeDefined();
+		expect(s0.id).toBeTruthy();
+		expect(s0.address).toBe('');
+		expect(s0.earnings).toBe(12.5);
+		expect(s1).toBeDefined();
+		expect(s1.id).toBeTruthy();
+		expect(s1.address).toBe('');
+		// Update with partial stop and ensure normalization persists
+		await trips.updateTrip(
+			created.id,
+			{ stops: [{ id: s0.id, address: s0.address, earnings: '7' as any, order: 0 }] },
+			userId as any
+		);
+		const updated = await trips.get(created.id, userId as any);
+		expect(updated?.stops?.[0].earnings).toBe(7);
 	});
 });
