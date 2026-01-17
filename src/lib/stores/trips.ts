@@ -164,6 +164,16 @@ function createTripsStore() {
 				}
 
 				// Persist succeeded — return created trip
+				// Enqueue trip for background sync so the record is pushed to BETA_LOGS_KV
+				try {
+					await syncManager.addToQueue({
+						action: 'create',
+						tripId: trip.id,
+						data: { ...trip, store: 'trips' }
+					});
+				} catch (err) {
+					console.warn('Failed to enqueue trip for sync:', err);
+				}
 				return trip;
 			} catch (err) {
 				console.error('❌ Failed to create trip:', err);
