@@ -1,8 +1,9 @@
-// src/lib/stores/trash.ts
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import { getDB } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
 import type { TrashRecord } from '$lib/db/types';
+import { user as authUser } from '$lib/stores/auth';
+import type { User } from '$lib/types';
 
 function createTrashStore() {
 	const { subscribe, set, update } = writable<TrashRecord[]>([]);
@@ -93,6 +94,11 @@ function createTrashStore() {
 					const tx = db.transaction('expenses', 'readwrite');
 					await tx.objectStore('expenses').put(restoredItem);
 					await tx.done;
+				} else if (type === 'millage' || (originalKey && originalKey.startsWith('millage:'))) {
+					console.log('Restoring millage:', id);
+					const tx = db.transaction('millage', 'readwrite');
+					await tx.objectStore('millage').put(restoredItem);
+					await tx.done;
 				} else {
 					console.log('Restoring trip:', id);
 					const tx = db.transaction('trips', 'readwrite');
@@ -107,10 +113,12 @@ function createTrashStore() {
 				update((items) => items.filter((item) => item.id !== id));
 
 				// Determine target store for sync action
-				const syncTarget =
-					type === 'expense' || (originalKey && originalKey.startsWith('expense:'))
-						? 'expenses'
-						: 'trips';
+				let syncTarget = 'trips';
+				if (type === 'expense' || (originalKey && originalKey.startsWith('expense:'))) {
+					syncTarget = 'expenses';
+				} else if (type === 'millage' || (originalKey && originalKey.startsWith('millage:'))) {
+					syncTarget = 'millage';
+				}
 
 				await syncManager.addToQueue({
 					action: 'restore',
@@ -163,7 +171,7 @@ function createTrashStore() {
 				if (!navigator.onLine) return;
 
 				const url = type ? `/api/trash?type=${encodeURIComponent(type)}` : '/api/trash';
-				const response = await fetch(url, { credentials: 'include' });
+				const response = await fetch(url);
 				if (!response.ok) return;
 
 				const cloudTrash: any = await response.json();
@@ -201,13 +209,12 @@ function createTrashStore() {
 						delete flatItem.metadata;
 					}
 
-					// Fallback: derive userId from originalKey if absent (guarded)
-
 					if (!flatItem.id) continue;
 
 					// Determine Record Type
 					if (!flatItem.recordType && !flatItem.type) {
 						if (flatItem.originalKey?.startsWith('expense:')) flatItem.recordType = 'expense';
+						else if (flatItem.originalKey?.startsWith('millage:')) flatItem.recordType = 'millage';
 						else flatItem.recordType = 'trip';
 					} else if (flatItem.type && !flatItem.recordType) {
 						flatItem.recordType = flatItem.type;
@@ -243,22 +250,20 @@ function createTrashStore() {
 				await tx.done;
 
 				// Cleanup Active Stores (Safety Check to prevent duplicates in active lists)
-				const cleanupTx = db.transaction(['trash', 'trips', 'expenses'], 'readwrite');
+				const cleanupTx = db.transaction(['trash', 'trips', 'expenses', 'millage'], 'readwrite');
 				const allTrash = await cleanupTx.objectStore('trash').getAll();
 				const tripStore = cleanupTx.objectStore('trips');
 				const expenseStore = cleanupTx.objectStore('expenses');
+				const millageStore = cleanupTx.objectStore('millage');
 
 				for (const trashItem of allTrash) {
-					if (await tripStore.get(trashItem.id)) {
-						await tripStore.delete(trashItem.id);
-					}
-					if (await expenseStore.get(trashItem.id)) {
-						await expenseStore.delete(trashItem.id);
-					}
+					if (await tripStore.get(trashItem.id)) await tripStore.delete(trashItem.id);
+					if (await expenseStore.get(trashItem.id)) await expenseStore.delete(trashItem.id);
+					if (await millageStore.get(trashItem.id)) await millageStore.delete(trashItem.id);
 				}
 				await cleanupTx.done;
 
-				await this.load(userId, type === 'expenses' ? 'expense' : type);
+				await this.load(userId, type);
 			} catch (err) {
 				console.error('❌ Failed to sync trash:', err);
 			}
@@ -276,3 +281,12 @@ function createTrashStore() {
 }
 
 export const trash = createTrashStore();
+
+// [!code fix] Register with SyncManager so it syncs in background!
+syncManager.registerStore('trash', {
+	updateLocal: () => {}, // Trash handles its own updates via syncFromCloud logic usually
+	syncDown: async () => {
+		const user = get(authUser) as User | null;
+		if (user?.id) await trash.syncFromCloud(user.id);
+	}
+});

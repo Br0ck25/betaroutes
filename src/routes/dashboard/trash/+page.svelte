@@ -24,9 +24,18 @@
 	onMount(() => {
 		const params = new URLSearchParams(window.location.search);
 		const typeParam = params.get('type');
-		loadTrash(
-			typeParam === 'expenses' ? 'expense' : typeParam === 'millage' ? 'millage' : undefined
-		).catch(console.error);
+		const type =
+			typeParam === 'expenses' ? 'expense' : typeParam === 'millage' ? 'millage' : undefined;
+
+		// 1. Load Local
+		loadTrash(type).catch(console.error);
+
+		// 2. [!code fix] Force Cloud Sync on Mount
+		const userState = get(user);
+		const userId = userState?.name || userState?.token;
+		if (userId) {
+			trash.syncFromCloud(userId, typeParam || undefined).then(() => loadTrash(type));
+		}
 
 		// Subscribe to page changes
 		_pageUnsub = page.subscribe(async ($p) => {
