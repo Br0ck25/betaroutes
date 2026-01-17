@@ -14,6 +14,7 @@ local hooks and CI.
 This is a **Progressive Web App (PWA)**.
 
 All changes must preserve:
+
 - installability
 - service worker registration
 - offline / caching behavior

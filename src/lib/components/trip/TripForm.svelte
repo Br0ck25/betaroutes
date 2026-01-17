@@ -195,10 +195,9 @@
 				distanceUnit as 'mi' | 'km'
 			);
 
-			// [!code fix] Robustly handle different property names (totalMiles vs miles vs totalMileage)
-			// This fixes the empty "Total Miles" issue in the UI
-			totalMileage =
-				routeData.totalMiles ?? (routeData as any).miles ?? (routeData as any).totalMileage ?? 0;
+			// [!code fix] Capture 'miles' first, then 'totalMiles'
+			const rawDist = (routeData as any).miles ?? routeData.totalMiles ?? 0;
+			totalMileage = Number(rawDist);
 
 			const duration = routeData.totalMinutes ?? (routeData as any).minutes ?? 0;
 

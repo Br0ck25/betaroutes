@@ -9,6 +9,7 @@ All changes must preserve installability, offline behavior,
 service worker correctness, and manifest validity.
 
 tools:
+
 - workspace
 - edit
 - search
@@ -23,6 +24,7 @@ It ensures all changes comply with **project-enforced frontend standards**
 while supporting a **controlled, explicit migration from Svelte 4 to Svelte 5**.
 
 This repository is:
+
 - A **mixed Svelte 4 / Svelte 5 codebase**
 - **PWA-first**
 - **CI-enforced with zero tolerance for warnings or partial migrations**
@@ -50,6 +52,7 @@ Must include this marker as the **first line**:
 ```
 
 Rules:
+
 - Legacy syntax is temporarily allowed
 - Bug fixes only
 - ❌ No new features
@@ -58,6 +61,7 @@ Rules:
 ### 2. Migrated File — Svelte 5
 
 Rules:
+
 - No legacy migration marker
 - Uses runes-based reactivity exclusively
 - Represents the final architectural state
@@ -98,6 +102,7 @@ Allowed **only** in explicitly marked legacy files:
 - `on:click` DOM events
 
 Legacy files:
+
 - May receive bug fixes only
 - Must not gain new features
 - Must not be refactored beyond what is required
