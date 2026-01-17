@@ -339,8 +339,7 @@
 	}
 
 	input,
-	textarea,
-	select {
+	textarea {
 		width: 100%;
 		padding: 16px;
 		border: 1px solid #e5e7eb;
@@ -350,8 +349,7 @@
 		box-sizing: border-box;
 	}
 	input:focus,
-	textarea:focus,
-	select:focus {
+	textarea:focus {
 		outline: none;
 		border-color: #ff7f50;
 	}
