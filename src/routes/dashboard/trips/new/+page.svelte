@@ -476,22 +476,26 @@
 
 			tripData.stops = [
 				...tripData.stops,
-				{
+				({
 					...newStop,
 					id: crypto.randomUUID(),
+					order: tripData.stops.length,
 					distanceFromPrev: segmentData.distance,
 					timeFromPrev: segmentData.duration
-				}
+				} as LocalStop)
 			];
+
 			await recalculateTotals();
 			newStop = { address: '', earnings: 0, notes: '' };
-			// Ensure `order` is present for every stop after adding
-			tripData.stops = tripData.stops.map((s, i) => ({ ...s, order: i }));
-			toasts.error('Error calculating route.');
+			// Ensure `order` is present and typed
+			tripData.stops = tripData.stops.map((s: LocalStop | any, i: number) => ({ ...s, order: i })) as LocalStop[];
+		} catch (err: any) {
+			console.error('addStop failed', err);
+			toasts.error(err?.message ? String(err.message) : 'Error calculating route.');
 		} finally {
 			isCalculating = false;
 		}
-	}
+	} 
 
 	function removeStop(id: string) {
 		tripData.stops = tripData.stops.filter((s) => s.id !== id);

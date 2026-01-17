@@ -509,32 +509,37 @@
 			);
 			return;
 		}
-		let segmentStart =
-			tripData.stops.length > 0
-				? tripData.stops[tripData.stops.length - 1].address
-				: tripData.startAddress;
+
+		const lastStop = tripData.stops[tripData.stops.length - 1];
+		const segmentStart = lastStop && lastStop.address ? lastStop.address : tripData.startAddress;
 		if (!segmentStart) {
 			toasts.error('Please enter a Starting Address first.');
 			return;
 		}
+
 		isCalculating = true;
 		try {
 			const segmentData: any = await fetchRouteSegment(segmentStart, newStop.address);
 			if (!segmentData) throw new Error('Could not calculate route.');
+
 			tripData.stops = [
 				...tripData.stops,
-				{
+				({
 					...newStop,
 					id: crypto.randomUUID(),
+					order: tripData.stops.length,
 					distanceFromPrev: segmentData.distance,
 					timeFromPrev: segmentData.duration
-				}
+				} as LocalStop)
 			];
+
 			await recalculateTotals();
 			newStop = { address: '', earnings: 0, notes: '' };
-				// Ensure `order` is present for every stop after adding
-				tripData.stops = tripData.stops.map((s, i) => ({ ...s, order: i }));
-			toasts.error('Error calculating route segment.');
+			// Ensure `order` is present and typed
+			tripData.stops = tripData.stops.map((s: LocalStop | any, i: number) => ({ ...s, order: i })) as LocalStop[];
+		} catch (err: any) {
+			console.error('addStop failed', err);
+			toasts.error(err?.message ? String(err.message) : 'Error calculating route segment.');
 		} finally {
 			isCalculating = false;
 		}
