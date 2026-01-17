@@ -35,6 +35,7 @@ The following must never be removed or invalidated:
   - `background_color`
 
 Rules:
+
 - Icons must exist at declared paths
 - No invalid MIME types
 - No breaking changes to `start_url`
@@ -49,6 +50,7 @@ Rules:
 - Cache versioning must be intentional and explicit
 
 Forbidden:
+
 - Uncontrolled cache clearing
 - Breaking offline navigation
 - Blocking critical routes when offline
@@ -75,6 +77,7 @@ Offline regressions are considered **breaking changes**.
 - Prefer additive changes over destructive updates
 
 If an update requires cache invalidation:
+
 - Document the reason
 - Verify offline behavior manually
 
@@ -96,13 +99,14 @@ After any change that could affect PWA behavior:
 ❌ Removing PWA metadata  
 ❌ Disabling service workers  
 ❌ Regressing offline support  
-❌ Reducing Lighthouse PWA compliance  
+❌ Reducing Lighthouse PWA compliance
 
 ---
 
 ## Enforcement
 
 Violations of these rules will:
+
 - Fail CI
 - Be rejected by AI_GUARD rules
 - Block merges

@@ -33,17 +33,20 @@ Must include this marker at the **very top** of the file:
 ```
 
 Allowed:
+
 - `export let`
 - `$:` reactive labels
 - `on:click` event directives
 
 Restrictions:
+
 - Bug fixes only
 - No new features
 - No refactors unless strictly required
 - No stylistic changes
 
 Forbidden (even in legacy):
+
 - `svelte/store`
 - `onMount`
 - `beforeUpdate` / `afterUpdate`
@@ -55,17 +58,20 @@ Forbidden (even in legacy):
 ### 2. Migrated File — Svelte 5
 
 Characteristics:
+
 - **No migration marker**
 - Uses runes-based reactivity exclusively
 - Represents the final architectural state
 
 Requirements:
+
 - Use `$state`, `$derived`, `$effect`
 - Props via `$props()`
 - DOM events via standard attributes (`onclick`)
 - Snippets instead of slots
 
 Forbidden:
+
 - Any legacy Svelte 4 syntax
 - Any lifecycle APIs
 - Any stores
@@ -95,6 +101,7 @@ When migrating a file:
 ## Hard Stops
 
 ❌ Never:
+
 - Mix Svelte 4 and Svelte 5 syntax in the same file
 - Leave a file half-migrated
 - Remove a migration marker without completing migration
@@ -119,6 +126,7 @@ A migration is considered complete when:
 ## Enforcement
 
 These rules are enforced by:
+
 - CI
 - Pre-commit hooks
 - AI_GUARD.md
