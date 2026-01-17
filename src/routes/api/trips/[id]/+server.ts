@@ -1,6 +1,7 @@
 // src/routes/api/trips/[id]/+server.ts
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
+import { makeMillageService } from '$lib/server/millageService';
 import type { TripRecord } from '$lib/server/tripService';
 import { log } from '$lib/server/log';
 import { safeDO } from '$lib/server/env';
@@ -62,6 +63,21 @@ export const GET: RequestHandler = async (event) => {
 			return new Response('Not Found', { status: 404 });
 		}
 
+		// Prefer authoritative millage from BETA_MILLAGE_KV (merge if present)
+		try {
+			const millageKV = safeKV(event.platform?.env, 'BETA_MILLAGE_KV');
+			if (millageKV) {
+				const millageSvc = makeMillageService(
+					millageKV as any,
+					safeDO(event.platform?.env, 'TRIP_INDEX_DO')!
+				);
+				const m = await millageSvc.get(storageId, id);
+				if (m && typeof m.miles === 'number') trip.totalMiles = m.miles;
+			}
+		} catch (err) {
+			log.warn('Failed to merge millage into trip response', { tripId: id, err });
+		}
+
 		return new Response(JSON.stringify(trip), {
 			status: 200,
 			headers: { 'Content-Type': 'application/json' }
@@ -120,6 +136,43 @@ export const PUT: RequestHandler = async (event) => {
 
 		await svc.put(updated as unknown as TripRecord);
 
+		// If client edited totalMiles, persist authoritative millage to its own KV so updates propagate to other clients
+		try {
+			if (Object.prototype.hasOwnProperty.call(body, 'totalMiles')) {
+				const millageKV = safeKV(event.platform?.env, 'BETA_MILLAGE_KV');
+				if (millageKV) {
+					const millageSvc = makeMillageService(
+						millageKV as any,
+						safeDO(event.platform?.env, 'TRIP_INDEX_DO')!
+					);
+					const millageRec = {
+						id,
+						userId: storageId,
+						date: (body['date'] as string) || (existing as any).date || new Date().toISOString(),
+						startOdometer: 0,
+						endOdometer: 0,
+						miles: Number((body as any).totalMiles) || 0,
+						createdAt: (existing as any).createdAt || new Date().toISOString(),
+						updatedAt: new Date().toISOString()
+					};
+					const p = millageSvc
+						.put(millageRec as any)
+						.catch((err) => log.warn('millage.put failed for trip update', { tripId: id, err }));
+					try {
+						if (event.platform?.context?.waitUntil) event.platform.context.waitUntil(p as any);
+						else if ((event as any)?.context?.waitUntil) (event as any).context.waitUntil(p);
+					} catch {
+						void p;
+					}
+				}
+			}
+		} catch (err) {
+			log.warn('Failed to persist millage for trip update', {
+				tripId: id,
+				message: createSafeErrorMessage(err)
+			});
+		}
+
 		return new Response(JSON.stringify(updated), {
 			status: 200,
 			headers: { 'Content-Type': 'application/json' }
@@ -172,6 +225,26 @@ export const DELETE: RequestHandler = async (event) => {
 
 		// Perform soft delete
 		await svc.delete(storageId, id);
+
+		// Best-effort: soft-delete linked millage record so it doesn't re-appear independently
+		try {
+			const millageKV = safeKV(event.platform?.env, 'BETA_MILLAGE_KV');
+			if (millageKV) {
+				const millageSvc = makeMillageService(
+					millageKV as any,
+					safeDO(event.platform?.env, 'TRIP_INDEX_DO')!
+				);
+				const p = millageSvc.delete(storageId, id).catch(() => {});
+				try {
+					if (event.platform?.context?.waitUntil) event.platform.context.waitUntil(p as any);
+					else if ((event as any)?.context?.waitUntil) (event as any).context.waitUntil(p);
+				} catch {
+					void p;
+				}
+			}
+		} catch (err) {
+			log.warn('Failed to delete linked millage for trip', { tripId: id, err });
+		}
 
 		await svc.incrementUserCounter(userSafe?.token ?? '', -1);
 

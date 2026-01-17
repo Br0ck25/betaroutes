@@ -140,12 +140,30 @@ function createTripsStore() {
 					return [trip, ...trips];
 				});
 
-				await syncManager.addToQueue({
-					action: 'create',
-					tripId: trip.id,
-					data: trip
-				});
+				// If the trip contains mileage, create a local millage record so the UI and sync
+				// treat millage as a first-class, editable object linked to the trip.
+				try {
+					// Lazy-import to avoid circular dependency during module initialization
+					const { millage } = await import('$lib/stores/millage');
+					if (typeof trip.totalMiles === 'number') {
+						await millage.create(
+							{
+								id: trip.id,
+								tripId: trip.id,
+								miles: Number(trip.totalMiles),
+								date: trip.date,
+								createdAt: trip.createdAt,
+								updatedAt: trip.updatedAt
+							},
+							userId
+						);
+					}
+				} catch (err) {
+					// Non-fatal: continue; millage will be created during normal sync if this fails
+					console.warn('Failed to create local millage record for trip:', err);
+				}
 
+				// Persist succeeded — return created trip
 				return trip;
 			} catch (err) {
 				console.error('❌ Failed to create trip:', err);
@@ -197,6 +215,37 @@ function createTripsStore() {
 					tripId: id,
 					data: updated
 				});
+
+				// Mirror mileage into the local millage store so the trip UI can edit it directly
+				try {
+					if (Object.prototype.hasOwnProperty.call(changes, 'totalMiles')) {
+						const { millage } = await import('$lib/stores/millage');
+						try {
+							await millage.updateMillage(
+								id,
+								{ miles: Number((changes as any).totalMiles) },
+								userId
+							);
+						} catch (err: any) {
+							if ((err?.message || '').includes('not found')) {
+								await millage.create(
+									{
+										id,
+										miles: Number((changes as any).totalMiles),
+										date: updated.date,
+										createdAt: updated.createdAt,
+										updatedAt: updated.updatedAt
+									},
+									userId
+								);
+							} else {
+								throw err;
+							}
+						}
+					}
+				} catch (err) {
+					console.warn('Failed to mirror trip mileage to local millage store:', err);
+				}
 
 				return updated;
 			} catch (err) {

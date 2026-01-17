@@ -211,6 +211,36 @@ function createMillageStore() {
 				await store.put(updated);
 				await tx.done;
 
+				// Mirror mileage into the trips DB + in-memory trips store so UI updates immediately
+				try {
+					const db = await getDB();
+					const tripsTx = db.transaction('trips', 'readwrite');
+					const tripStore = tripsTx.objectStore('trips');
+					const trip = await tripStore.get(id as any);
+					if (trip && trip.userId === userId) {
+						const newTrip = {
+							...trip,
+							totalMiles: updated.miles,
+							updatedAt: updated.updatedAt
+						} as any;
+						await tripStore.put(newTrip);
+					}
+					await tripsTx.done;
+					// Update in-memory trips store (best-effort, lazy import to avoid cycles)
+					try {
+						const { trips } = await import('$lib/stores/trips');
+						trips.updateLocal({
+							id,
+							totalMiles: updated.miles,
+							updatedAt: updated.updatedAt
+						} as any);
+					} catch {
+						// ignore in-memory update failures
+					}
+				} catch (e: any) {
+					console.warn('Failed to mirror millage update into trips DB:', e);
+				}
+
 				await syncManager.addToQueue({
 					action: 'update',
 					tripId: id,
