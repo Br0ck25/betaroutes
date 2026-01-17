@@ -150,12 +150,30 @@ function createMillageStore() {
 						: Math.max(0, Number(data.endOdometer) - Number(data.startOdometer)),
 				millageRate: typeof data.millageRate === 'number' ? data.millageRate : undefined,
 				vehicle: data.vehicle || undefined,
-				reimbursement: data.reimbursement,
+				// reimbursement will be computed below if not explicitly provided
+				reimbursement: typeof data.reimbursement === 'number' ? data.reimbursement : undefined,
 				notes: data.notes || '',
 				createdAt: data.createdAt || new Date().toISOString(),
 				updatedAt: data.updatedAt || new Date().toISOString(),
 				syncStatus: 'pending'
 			};
+
+			// Compute reimbursement if not provided: miles * millageRate.
+			if (typeof record.reimbursement !== 'number') {
+				// Prefer an explicit millageRate on the record; fall back to userSettings if available
+				let rate: number | undefined = record.millageRate;
+				if (rate == null) {
+					try {
+						const { userSettings } = await import('$lib/stores/userSettings');
+						rate = (userSettings && (userSettings as any).millageRate) || undefined;
+					} catch {
+						/* ignore */
+					}
+				}
+				if (typeof rate === 'number' && typeof record.miles === 'number') {
+					record.reimbursement = Number((record.miles * rate).toFixed(2));
+				}
+			}
 
 			update((items) => [record, ...items]);
 
@@ -221,23 +239,25 @@ function createMillageStore() {
 					updated.miles = Math.max(0, Number(updated.endOdometer) - Number(updated.startOdometer));
 				}
 
-				// Persist the updated millage record while this transaction is still active
-				await store.put(updated);
-				await tx.done;
-
-				try {
-					const tripsTx = db.transaction('trips', 'readwrite');
-					const tripStore = tripsTx.objectStore('trips');
-					const trip = await tripStore.get(id as any);
-					if (trip && trip.userId === userId) {
-						const newTrip = {
-							...trip,
-							totalMiles: updated.miles,
-							updatedAt: updated.updatedAt
-						} as any;
-						await tripStore.put(newTrip);
+			// Recompute reimbursement when miles or millageRate change unless reimbursement was explicitly provided
+			const milesChanged = Object.prototype.hasOwnProperty.call(changes, 'miles');
+			const rateChanged = Object.prototype.hasOwnProperty.call(changes, 'millageRate');
+			const reimbursementExplicit = Object.prototype.hasOwnProperty.call(changes, 'reimbursement');
+			if (!reimbursementExplicit && (milesChanged || rateChanged) && typeof updated.miles === 'number') {
+				let rate = typeof updated.millageRate === 'number' ? updated.millageRate : undefined;
+				if (rate == null) {
+					try {
+						const { userSettings } = await import('$lib/stores/userSettings');
+						rate = (userSettings && (userSettings as any).millageRate) || undefined;
+					} catch {
+						/* ignore */
 					}
-					await tripsTx.done;
+				}
+				if (typeof rate === 'number') {
+					updated.reimbursement = Number((updated.miles * rate).toFixed(2));
+				}
+			}
+
 
 					// Update in-memory trips store (best-effort, lazy import to avoid cycles)
 					try {

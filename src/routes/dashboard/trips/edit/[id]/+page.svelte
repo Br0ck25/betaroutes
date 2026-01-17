@@ -105,7 +105,7 @@
 		tripData.gasPrice = Number(src.gasPrice ?? $userSettings.defaultGasPrice ?? 3.5);
 		tripData.maintenanceItems = safeMaintenance as any;
 		tripData.suppliesItems = safeSupplies as any;
-		tripData.totalMiles = Number(src.totalMiles) || 0;
+		tripData.totalMiles = Number(($millage.find((m) => m.id === tripId)?.miles) ?? Number(src.totalMiles) || 0);
 		tripData.mpg = Number.isFinite(Number(src.mpg))
 			? Number(src.mpg)
 			: ($userSettings.defaultMPG ?? 25);

@@ -80,9 +80,26 @@ export const POST: RequestHandler = async (event) => {
 		let reimbursement = payload.reimbursement ?? undefined;
 		if (typeof reimbursement === 'number') reimbursement = Number(reimbursement.toFixed(2));
 
-		const record = {
-			id,
-			userId,
+	// If reimbursement not provided, compute using provided rate or user's default rate from settings
+	if (typeof reimbursement !== 'number') {
+		let rate: number | undefined = typeof payload.millageRate === 'number' ? Number(payload.millageRate) : undefined;
+		if (rate == null) {
+			try {
+				const userSettingsKV = safeKV(env, 'BETA_USER_SETTINGS_KV');
+				if (userSettingsKV) {
+					const raw = await userSettingsKV.get(`settings:${userId}`);
+					if (raw) {
+						const parsed = JSON.parse(raw as string);
+						rate = parsed?.millageRate;
+					}
+				}
+			} catch (e) {
+				/* ignore */
+			}
+		}
+		if (typeof rate === 'number') reimbursement = Number((miles * rate).toFixed(2));
+	}
+
 			date: payload.date || new Date().toISOString(),
 			startOdometer: payload.startOdometer,
 			endOdometer: payload.endOdometer,

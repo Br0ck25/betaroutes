@@ -9,12 +9,16 @@
 	} from '$lib/utils/trip-helpers';
 	import { swipeable } from '$lib/actions/swipe';
 	import { createEventDispatcher } from 'svelte';
+	import { millage } from '$lib/stores/millage';
 
 	export let trip: any;
 	export let isExpanded = false;
 	export let isSelected = false;
 
 	const dispatch = createEventDispatcher();
+
+	// Prefer authoritative millage when available; fall back to trip.totalMiles
+	$: displayMiles = $millage.find((m) => m.id === trip.id)?.miles ?? trip.totalMiles ?? 0;
 
 	$: profit = calculateNetProfit(trip);
 	$: hourlyPay = calculateHourlyPay(trip);

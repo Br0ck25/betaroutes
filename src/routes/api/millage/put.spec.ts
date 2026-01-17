@@ -98,4 +98,26 @@ describe('PUT /api/millage/[id] handler', () => {
 		expect(mockTripSvc.put).toHaveBeenCalled();
 		expect(mockTripSvc.put.mock.calls[0][0].totalMiles).toBeCloseTo(77, 6);
 	});
+
+	it('computes reimbursement when miles + rate are provided on PUT', async () => {
+		const existing = { id: 'r3', userId: 'u1', miles: 0 };
+		mockSvc.get.mockResolvedValue(existing);
+
+		const body = { miles: 10, millageRate: 0.725 };
+		const event: any = {
+			params: { id: 'r3' },
+			locals: { user: { id: 'u1' } },
+			request: { json: async () => body },
+			platform: {}
+		};
+
+		const { PUT } = await import('./[id]/+server');
+		const res = await PUT(event as any);
+		expect(res.status).toBe(200);
+		const json = JSON.parse(await res.text());
+		expect(json.miles).toBeCloseTo(10, 6);
+		expect(json.reimbursement).toBeCloseTo(7.25, 2);
+		expect(mockSvc.put).toHaveBeenCalled();
+		expect(mockSvc.put.mock.calls[0][0].reimbursement).toBeCloseTo(7.25, 2);
+	});
 });
