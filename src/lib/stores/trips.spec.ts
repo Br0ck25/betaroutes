@@ -74,4 +74,20 @@ describe('Trips <-> Millage integration', () => {
 		const updated = await trips.get(created.id, userId as any);
 		expect(updated?.stops?.[0].earnings).toBe(7);
 	});
+
+	it('enqueues a syncQueue item when creating a trip (so server KV is written)', async () => {
+		const userId = 'u-sync';
+		const trip = await trips.create({ date: '2026-01-01', totalMiles: 12 }, userId as any);
+
+		const db = await getDB();
+		const tx = db.transaction('syncQueue', 'readonly');
+		const all = await tx.objectStore('syncQueue').getAll();
+		await tx.done;
+
+		expect(
+			all.some(
+				(i: any) => i.tripId === trip.id && i.action === 'create' && i.data?.store === 'trips'
+			)
+		).toBe(true);
+	});
 });
