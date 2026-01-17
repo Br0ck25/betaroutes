@@ -121,7 +121,7 @@ export const PUT: RequestHandler = async (event) => {
 							rate = parsed?.millageRate;
 						}
 					}
-				} catch (e) {
+				} catch {
 					/* ignore */
 				}
 			}
@@ -164,13 +164,14 @@ export const PUT: RequestHandler = async (event) => {
 					} as any;
 					// best-effort write; do not fail the millage update if this fails
 					await tripSvc.put(patched).catch((err: unknown) => {
-						console.warn('Failed to mirror millage into trip KV:', err);
+						log.warn('Failed to mirror millage into trip KV (non-fatal):', String(err));
 						return null;
 					});
 				}
 			}
 		} catch (err) {
-                    log.warn('Failed to mirror millage to trips KV (non-fatal):', String(err));
+			log.warn('Failed to mirror millage to trips KV (non-fatal):', String(err));
+		}
 
 		return new Response(JSON.stringify(updated), {
 			headers: { 'Content-Type': 'application/json' }

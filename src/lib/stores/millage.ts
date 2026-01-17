@@ -288,7 +288,7 @@ function createMillageStore() {
 							const { trips } = await import('$lib/stores/trips');
 							trips.updateLocal({ id, totalMiles: updated.miles, updatedAt: nowIso } as any);
 						} catch {
-							console.warn('Failed to update in-memory trips store after millage change:', e);
+							console.warn('Failed to update in-memory trips store after millage change');
 						}
 					}
 					await tripsTx.done;
@@ -389,7 +389,7 @@ function createMillageStore() {
 						});
 					}
 					await tripsTx.done;
-				} catch (e) {
+				} catch {
 					/* non-fatal */
 				}
 
