@@ -1,24 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Module-level mocks are declared here so vitest's hoisting behaves predictably.
+let mockSvc: any;
+let mockTripSvc: any;
+vi.mock('$lib/server/millageService', () => ({
+	makeMillageService: () => mockSvc
+}));
+vi.mock('$lib/server/tripService', () => ({
+	makeTripService: () => mockTripSvc
+}));
+vi.mock('$lib/server/env', () => ({
+	getEnv: () => ({}),
+	safeKV: () => ({}),
+	safeDO: () => ({})
+}));
+
 describe('PUT /api/millage/[id] handler', () => {
-	let mockSvc: any;
 	beforeEach(() => {
 		mockSvc = {
 			get: vi.fn(),
 			put: vi.fn()
 		};
-
-		// mock makeMillageService to return the mock service
-		vi.mock('$lib/server/millageService', () => ({
-			makeMillageService: () => mockSvc
-		}));
-
-		// mock env helpers (no-op)
-		vi.mock('$lib/server/env', () => ({
-			getEnv: () => ({}),
-			safeKV: () => ({}),
-			safeDO: () => ({})
-		}));
+		mockTripSvc = undefined;
 	});
 
 	it('respects an explicit miles value in the request body', async () => {
@@ -35,7 +38,7 @@ describe('PUT /api/millage/[id] handler', () => {
 		};
 
 		// import handler after mocks are in place
-		const { PUT } = await import('./+server');
+		const { PUT } = await import('./[id]/+server');
 		const res = await PUT(event as any);
 		expect(res.status).toBe(200);
 		const json = JSON.parse(await res.text());
@@ -58,12 +61,41 @@ describe('PUT /api/millage/[id] handler', () => {
 		};
 
 		// import handler after mocks are in place
-		const { PUT } = await import('./+server');
+		const { PUT } = await import('./[id]/+server');
 		const res = await PUT(event as any);
 		expect(res.status).toBe(200);
 		const json = JSON.parse(await res.text());
 		expect(json.miles).toBeCloseTo(60, 6);
 		expect(mockSvc.put).toHaveBeenCalled();
 		expect(mockSvc.put.mock.calls[0][0].miles).toBeCloseTo(60, 6);
+	});
+
+	it('also mirrors miles into the BETA_LOGS_KV trip record when present (best-effort)', async () => {
+		const existing = { id: 'rt1', userId: 'u1', totalMiles: 5 };
+		mockSvc.get.mockResolvedValue({ id: 'rt1', userId: 'u1', miles: 5 });
+
+		// Prepare mocked trip service (module-level holder populated below)
+		mockTripSvc = {
+			get: vi.fn().mockResolvedValue(existing),
+			put: vi.fn().mockResolvedValue(null)
+		};
+
+		const body = { miles: 77 };
+		const event: any = {
+			params: { id: 'rt1' },
+			locals: { user: { id: 'u1' } },
+			request: { json: async () => body },
+			platform: {}
+		};
+
+		const { PUT } = await import('./[id]/+server');
+		const res = await PUT(event as any);
+		expect(res.status).toBe(200);
+		const json = JSON.parse(await res.text());
+		expect(json.miles).toBeCloseTo(77, 6);
+		expect(mockSvc.put).toHaveBeenCalled();
+		expect(mockTripSvc.get).toHaveBeenCalled();
+		expect(mockTripSvc.put).toHaveBeenCalled();
+		expect(mockTripSvc.put.mock.calls[0][0].totalMiles).toBeCloseTo(77, 6);
 	});
 });
