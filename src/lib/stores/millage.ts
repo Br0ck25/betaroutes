@@ -211,51 +211,47 @@ function createMillageStore() {
 				const odometerUpdated =
 					Object.prototype.hasOwnProperty.call(changes, 'startOdometer') ||
 					Object.prototype.hasOwnProperty.call(changes, 'endOdometer');
+				const milesExplicit = Object.prototype.hasOwnProperty.call(changes, 'miles');
+				if (
+					odometerUpdated &&
+					!milesExplicit &&
+					typeof updated.startOdometer === 'number' &&
+					typeof updated.endOdometer === 'number'
+				) {
+					updated.miles = Math.max(0, Number(updated.endOdometer) - Number(updated.startOdometer));
+				}
 
-				if (odometerUpdated) {
-					// Recalculate miles when both odometer values are present
-					if (
-						typeof updated.startOdometer === 'number' &&
-						typeof updated.endOdometer === 'number'
-					) {
-						updated.miles = Math.max(
-							0,
-							Number(updated.endOdometer) - Number(updated.startOdometer)
-						);
+				// Persist the updated millage record while this transaction is still active
+				await store.put(updated);
+				await tx.done;
+
+				try {
+					const tripsTx = db.transaction('trips', 'readwrite');
+					const tripStore = tripsTx.objectStore('trips');
+					const trip = await tripStore.get(id as any);
+					if (trip && trip.userId === userId) {
+						const newTrip = {
+							...trip,
+							totalMiles: updated.miles,
+							updatedAt: updated.updatedAt
+						} as any;
+						await tripStore.put(newTrip);
 					}
+					await tripsTx.done;
 
-					// Persist the updated millage record while this transaction is still active
-					await store.put(updated);
-					await tx.done;
-
+					// Update in-memory trips store (best-effort, lazy import to avoid cycles)
 					try {
-						const tripsTx = db.transaction('trips', 'readwrite');
-						const tripStore = tripsTx.objectStore('trips');
-						const trip = await tripStore.get(id as any);
-						if (trip && trip.userId === userId) {
-							const newTrip = {
-								...trip,
-								totalMiles: updated.miles,
-								updatedAt: updated.updatedAt
-							} as any;
-							await tripStore.put(newTrip);
-						}
-						await tripsTx.done;
-
-						// Update in-memory trips store (best-effort, lazy import to avoid cycles)
-						try {
-							const { trips } = await import('$lib/stores/trips');
-							trips.updateLocal({
-								id,
-								totalMiles: updated.miles,
-								updatedAt: updated.updatedAt
-							} as any);
-						} catch (e: any) {
-							console.warn('Failed to update in-memory trips store after millage change:', e);
-						}
+						const { trips } = await import('$lib/stores/trips');
+						trips.updateLocal({
+							id,
+							totalMiles: updated.miles,
+							updatedAt: updated.updatedAt
+						} as any);
 					} catch (e: any) {
-						console.warn('Failed to mirror millage update into trips DB:', e);
+						console.warn('Failed to update in-memory trips store after millage change:', e);
 					}
+				} catch (e: any) {
+					console.warn('Failed to mirror millage update into trips DB:', e);
 				}
 
 				await syncManager.addToQueue({
