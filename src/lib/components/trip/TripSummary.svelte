@@ -1,9 +1,12 @@
 <script lang="ts">
-	export let totalMileage: number;
-	export let distanceUnit: string;
-	export let totalTime: string;
-	export let fuelCost: number;
-	export let netProfit: number;
+	// [!code fix] Use Svelte 5 Runes for props
+	let {
+		totalMileage = 0,
+		distanceUnit = 'mi',
+		totalTime = '',
+		fuelCost = 0,
+		netProfit = 0
+	} = $props();
 </script>
 
 <div
