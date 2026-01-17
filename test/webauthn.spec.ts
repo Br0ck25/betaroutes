@@ -3,12 +3,12 @@ import { generateRegistrationOptions } from '../src/lib/server/webauthn';
 
 describe('webauthn option generation', () => {
 	it('returns a challenge and proper types', async () => {
-		const user = {
+		const user: { id: string; email: string; name: string; authenticators: unknown[] } = {
 			id: 'test-user',
 			email: 't@example.com',
 			name: 'Test',
 			authenticators: []
-		} as any;
+		};
 		const rpID = 'localhost';
 
 		const opts = await generateRegistrationOptions(user, rpID);

@@ -219,8 +219,8 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			}
 
 			out.sort((a, b) =>
-				((b['metadata'] as any)?.deletedAt || '').localeCompare(
-					(a['metadata'] as any)?.deletedAt || ''
+				String((b['metadata'] as Record<string, unknown>)['deletedAt'] ?? '').localeCompare(
+					String((a['metadata'] as Record<string, unknown>)['deletedAt'] ?? '')
 				)
 			);
 			return out;
