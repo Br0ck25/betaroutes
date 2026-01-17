@@ -1,34 +1,29 @@
-import { test, expect } from '@playwright/test';
+﻿import { test, expect } from '@playwright/test';
 
 test('Critical Path: Create and view a new trip', async ({ page }) => {
 	test.setTimeout(60_000); // Increase timeout for slow CI environments
 
 	// --- 1. Mock Data Store ---
-	const mockTrips: any[] = [];
+	const mockTrips: Array<Record<string, unknown>> = [];
 
 	// --- 2. Mock Network APIs ---
 
 	// Debug: surface page console / pageerror and close events to the test output
 	page.on('console', (msg) => {
-		// eslint-disable-next-line no-console
 		console.log('PAGE LOG:', msg.type(), msg.text());
 	});
 	page.on('pageerror', (err) => {
-		// eslint-disable-next-line no-console
 		console.log('PAGE ERROR:', err);
 	});
 	page.on('response', (res) => {
 		if (!res.ok()) {
-			// eslint-disable-next-line no-console
 			console.log('PAGE RESP ERROR:', res.status(), res.url());
 		}
 	});
 	page.on('requestfailed', (req) => {
-		// eslint-disable-next-line no-console
 		console.log('PAGE REQ FAILED:', req.url(), req.failure ? req.failure().errorText : '<unknown>');
 	});
 	page.on('close', () => {
-		// eslint-disable-next-line no-console
 		console.log('PAGE EVENT: closed', page.url());
 	});
 	await page.route('/api/trips', async (route) => {
@@ -48,8 +43,8 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
 		}
 	});
 
-	// Mock Login API (some code posts to /api/login and some to /login — handle both)
-	const loginHandler = async (route: any) => {
+	// Mock Login API (some code posts to /api/login and some to /login â€” handle both)
+	const loginHandler = async (route: Route) => {
 		if (route.request().method() === 'POST') {
 			await route.fulfill({
 				status: 200,
@@ -122,7 +117,7 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
 				UnitSystem: { IMPERIAL: 0 },
 				DirectionsStatus: { OK: 'OK' }
 			}
-		} as any;
+		} as unknown;
 	});
 	await page.route('**/maps/api/directions/**', async (route) => {
 		await route.fulfill({
@@ -171,7 +166,7 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
 		headers: { 'Content-Type': 'application/json' }
 	});
 	const seedBody = await seedRes.json();
-	// eslint-disable-next-line no-console
+
 	console.log('SEED RESP', seedRes.status(), seedBody);
 	expect(seedRes.ok()).toBe(true);
 	expect(seedBody.success).toBe(true);
@@ -201,17 +196,17 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
 
 	// Navigate to dashboard so server sees the cookie and returns the authenticated dashboard
 	await page.goto('/dashboard');
-	// eslint-disable-next-line no-console
+
 	console.log('NAV: after /dashboard goto ->', { url: page.url(), closed: page.isClosed() });
 
 	// If the client didn't render the dashboard with a 'New Trip' link, fallback to direct page
 	try {
 		await page.getByRole('link', { name: 'New Trip' }).click();
-		// eslint-disable-next-line no-console
+
 		console.log('NAV: clicked New Trip link ->', { url: page.url(), closed: page.isClosed() });
 	} catch {
 		await page.goto('/dashboard/trips/new');
-		// eslint-disable-next-line no-console
+
 		console.log('NAV: fallback goto /dashboard/trips/new ->', {
 			url: page.url(),
 			closed: page.isClosed()
@@ -222,11 +217,10 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
 	// Retry once if initial load shows the public home page (flaky client routing)
 	try {
 		await expect(page.locator('h1')).toContainText('New Trip', { timeout: 10000 });
-		// eslint-disable-next-line no-console
+
 		console.log('NAV: New Trip h1 present ->', { url: page.url(), closed: page.isClosed() });
-	} catch (e) {
+	} catch {
 		// Debug: capture current h1 and try a reload + direct navigation
-		// eslint-disable-next-line no-console
 		console.log('Initial New Trip check failed, attempting reload and direct goto', {
 			url: page.url(),
 			closed: page.isClosed()
@@ -234,7 +228,6 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
 		await page.reload();
 		await page.goto('/dashboard/trips/new');
 		await expect(page.locator('h1')).toContainText('New Trip', { timeout: 20000 });
-		// eslint-disable-next-line no-console
 		console.log('NAV: after reload goto /dashboard/trips/new ->', {
 			url: page.url(),
 			closed: page.isClosed()
@@ -252,16 +245,16 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
 		(r) => r.url().includes('/api/directions/cache') && r.request().method() === 'GET'
 	);
 	await dirRespPromise;
-	// eslint-disable-next-line no-console
+
 	console.log('DIRECTIONS: cache response received');
 	// Capture input values to ensure bindings are correct
-	// eslint-disable-next-line no-console
+
 	console.log(
 		'INPUTS after fill:',
 		await page.locator('#start-address').inputValue(),
 		await page.locator('#end-address').inputValue()
 	);
-	// eslint-disable-next-line no-console
+
 	console.log('DIRECTIONS mock calls so far:', directionsCalls);
 
 	// Dispatch a 'place-selected' event on the first destination input (simulates selecting a suggestion)
@@ -275,12 +268,12 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
 					geometry: { location: { lat: () => 40.0, lng: () => -74.0 } }
 				}
 			});
-			destInput.dispatchEvent(event as any);
+			destInput.dispatchEvent(event);
 		}
 	});
 	// Wait for the calculation effect to run (it uses a 1.5s debounce)
 	await page.waitForTimeout(2000);
-	// eslint-disable-next-line no-console
+
 	console.log(
 		'After selecting destination (place-selected), Trip Summary snapshot (truncated):',
 		(await page.content()).slice(0, 500)
@@ -290,29 +283,27 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
 	const distanceLocator = page.locator('[data-testid="trip-distance"]').first();
 	await expect(distanceLocator).toHaveText(/\d+\s?mi/, { timeout: 10000 });
 	await expect(distanceLocator).toBeVisible();
-	// eslint-disable-next-line no-console
+
 	console.log('TripSummary distance displayed:', await distanceLocator.textContent());
 	try {
 		await page.screenshot({
 			path: 'test-results/trip-flow-Critical-Path-Create-and-view-a-new-trip/after-destination.png'
 		});
-		// eslint-disable-next-line no-console
+
 		console.log('Saved screenshot: after-destination.png');
-	} catch (_) {}
-	// Capture a snapshot for debugging if something goes wrong
-	// eslint-disable-next-line no-console
+	} catch (err) {
+		void err;
+	}
+
 	console.log('PAGE HTML SNAPSHOT (truncated):', (await page.content()).slice(0, 2000));
 	try {
 		await page.screenshot({
 			path: 'test-results/trip-flow-Critical-Path-Create-and-view-a-new-trip/address-filled.png'
 		});
-		// eslint-disable-next-line no-console
 		console.log('Saved screenshot: address-filled.png');
-	} catch (_) {}
-
-	// Click Continue to go to Basics (Date)
-	await page.click('button:has-text("Continue")');
-	// eslint-disable-next-line no-console
+	} catch (err) {
+		void err;
+	}
 	console.log('STEP: clicked Continue -> awaiting Basic Information', {
 		url: page.url(),
 		closed: page.isClosed()
@@ -327,7 +318,7 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
 	await page.locator('#trip-date').waitFor({ state: 'visible', timeout: 5000 });
 	await page.locator('#trip-date').fill('2025-01-01');
 	await page.click('button:has-text("Continue")');
-	// eslint-disable-next-line no-console
+
 	console.log('STEP: clicked Continue from Basics -> awaiting Costs', {
 		url: page.url(),
 		closed: page.isClosed()
@@ -336,7 +327,7 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
 	// Step 3: Route calculations / Costs
 	// Wait for MPG input to ensure we've advanced and the element is interactable
 	await page.locator('#mpg').waitFor({ state: 'visible', timeout: 30000 });
-	// eslint-disable-next-line no-console
+
 	console.log('STEP: mpg visible ->', { url: page.url(), closed: page.isClosed() });
 
 	// Fill costs robustly (scroll, click, then fill with extended timeout)
@@ -348,19 +339,16 @@ test('Critical Path: Create and view a new trip', async ({ page }) => {
 
 	// Debug: capture review tiles contents immediately after clicking Review (helps debug race conditions)
 	await page.waitForTimeout(500);
-	// eslint-disable-next-line no-console
+
 	console.log('REVIEW TILES RAW:', await page.locator('.review-tile').allTextContents());
 	try {
 		await page.screenshot({
 			path: 'test-results/trip-flow-Critical-Path-Create-and-view-a-new-trip/after-click-review.png'
 		});
-		// eslint-disable-next-line no-console
 		console.log('Saved screenshot: after-click-review.png');
-	} catch (_) {}
-
-	// Step 4: Review
-	// Wait for the review tiles to show the expected mileage (make this explicit to avoid racing with async calcs)
-	await page.waitForSelector('.review-tile:has-text("10 mi")', { timeout: 10000 });
+	} catch (err) {
+		void err;
+	}
 	await expect(page.locator('.review-tile')).toContainText('10 mi'); // 16093 meters / 1609.34 = 10 miles
 
 	// Save

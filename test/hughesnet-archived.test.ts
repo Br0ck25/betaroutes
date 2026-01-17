@@ -7,11 +7,11 @@ function makeUrl(q = '') {
 }
 
 describe('HughesNet archived orders API', () => {
-	let platform: any;
+	let platform: { env: Record<string, unknown> } | undefined;
 
 	beforeEach(() => {
-		const event: any = { platform: { env: {} } };
-		setupMockKV(event);
+		const event: { platform: { env: Record<string, unknown> } } = { platform: { env: {} } };
+		setupMockKV(event as unknown);
 		platform = event.platform;
 	});
 
@@ -31,21 +31,24 @@ describe('HughesNet archived orders API', () => {
 			platform,
 			locals: { user: { name: ownerId } },
 			url: makeUrl(`id=${orderId}`)
-		} as any);
-		const bodyById = await resById.json();
+		} as unknown);
+		const bodyById = (await resById.json()) as { success?: boolean; order?: { id?: string } };
 		expect(bodyById.success).toBe(true);
-		expect(bodyById.order.id).toBe(orderId);
+		expect(bodyById.order?.id).toBe(orderId);
 
 		// list
 		const resList = await GET({
 			platform,
 			locals: { user: { name: ownerId } },
 			url: makeUrl()
-		} as any);
-		const bodyList = await resList.json();
+		} as unknown);
+		const bodyList = (await resList.json()) as {
+			success?: boolean;
+			orders?: Array<{ id?: string }>;
+		};
 		expect(bodyList.success).toBe(true);
 		expect(Array.isArray(bodyList.orders)).toBe(true);
-		expect(bodyList.orders.some((o: any) => o.id === orderId)).toBe(true);
+		expect((bodyList.orders || []).some((o) => (o.id ?? '') === orderId)).toBe(true);
 	});
 
 	it('does not return orders owned by other users', async () => {
@@ -64,9 +67,9 @@ describe('HughesNet archived orders API', () => {
 			platform,
 			locals: { user: { name: ownerId } },
 			url: makeUrl(`id=${orderId}`)
-		} as any);
+		} as unknown);
 		expect(res.status).toBe(404);
-		const body: any = await res.json();
+		const body = (await res.json()) as { success?: boolean };
 		expect(body.success).toBe(false);
 	});
 });
