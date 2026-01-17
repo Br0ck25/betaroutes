@@ -195,8 +195,11 @@
 				distanceUnit as 'mi' | 'km'
 			);
 
-			// [!code fix] robust property access (handles 'totalMiles' OR 'miles')
-			totalMileage = routeData.totalMiles ?? (routeData as any).miles ?? 0;
+			// [!code fix] Robustly handle different property names (totalMiles vs miles vs totalMileage)
+			// This fixes the empty "Total Miles" issue in the UI
+			totalMileage =
+				routeData.totalMiles ?? (routeData as any).miles ?? (routeData as any).totalMileage ?? 0;
+
 			const duration = routeData.totalMinutes ?? (routeData as any).minutes ?? 0;
 
 			const totals = calculateTripTotals(
@@ -227,8 +230,8 @@
 
 			calculated = true;
 			console.log('[TripForm] handleCalculate success', {
-				totalMiles: totalMileage,
-				totalMinutes: duration
+				miles: totalMileage,
+				minutes: duration
 			});
 
 			if (!silent) toasts.success('Route calculated successfully!');
