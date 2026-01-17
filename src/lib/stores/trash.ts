@@ -257,9 +257,25 @@ function createTrashStore() {
 				const millageStore = cleanupTx.objectStore('millage');
 
 				for (const trashItem of allTrash) {
-					if (await tripStore.get(trashItem.id)) await tripStore.delete(trashItem.id);
-					if (await expenseStore.get(trashItem.id)) await expenseStore.delete(trashItem.id);
-					if (await millageStore.get(trashItem.id)) await millageStore.delete(trashItem.id);
+					// Only remove from the active store that matches the tombstone's recordType
+					const rt =
+						(trashItem.recordType as string) ||
+						(trashItem.originalKey && String(trashItem.originalKey).startsWith('expense:')
+							? 'expense'
+							: 'trip');
+
+					if (rt === 'trip') {
+						if (await tripStore.get(trashItem.id)) await tripStore.delete(trashItem.id);
+					} else if (rt === 'expense') {
+						if (await expenseStore.get(trashItem.id)) await expenseStore.delete(trashItem.id);
+					} else if (rt === 'millage') {
+						if (await millageStore.get(trashItem.id)) await millageStore.delete(trashItem.id);
+					} else {
+						// Fallback (legacy): remove any matching active records if type ambiguous
+						if (await tripStore.get(trashItem.id)) await tripStore.delete(trashItem.id);
+						if (await expenseStore.get(trashItem.id)) await expenseStore.delete(trashItem.id);
+						if (await millageStore.get(trashItem.id)) await millageStore.delete(trashItem.id);
+					}
 				}
 				await cleanupTx.done;
 

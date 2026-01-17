@@ -83,4 +83,45 @@ describe('Millage store (IndexedDB)', () => {
 		const got = await millage.get(rec.id, userId as any);
 		expect(got?.miles).toBeCloseTo(150, 6);
 	});
+
+	it('deleting a millage linked to a trip preserves the trip and zeroes totalMiles', async () => {
+		const userId = 'u-delete-trip';
+		const db = await getDB();
+
+		// Seed trip and linked millage
+		const tripId = 'trip-linked-1';
+		await db
+			.transaction('trips', 'readwrite')
+			.objectStore('trips')
+			.put({
+				id: tripId,
+				userId,
+				totalMiles: 42,
+				createdAt: new Date().toISOString(),
+				updatedAt: new Date().toISOString(),
+				syncStatus: 'synced'
+			} as any);
+
+		await millage.create({ id: tripId, miles: 42, tripId }, userId as any);
+
+		// Delete the millage record
+		await millage.deleteMillage(tripId, userId as any);
+
+		// Trip should still exist and totalMiles should be zeroed
+		const tx = db.transaction('trips', 'readonly');
+		const trip = await tx.objectStore('trips').get(tripId);
+		await tx.done;
+		expect(trip).toBeTruthy();
+		expect(trip?.totalMiles).toBe(0);
+
+		// Sync queue should have an update for the trip so server will mirror the zeroed miles
+		const qtx = db.transaction('syncQueue', 'readonly');
+		const all = await qtx.objectStore('syncQueue').getAll();
+		await qtx.done;
+		expect(
+			all.some(
+				(i: any) => i.tripId === tripId && i.action === 'update' && i.data?.store === 'trips'
+			)
+		).toBe(true);
+	});
 });
