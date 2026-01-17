@@ -92,10 +92,19 @@ export const PUT: RequestHandler = async (event) => {
 			updatedAt: new Date().toISOString()
 		};
 
-		// Re-calculate fields if inputs changed
-		if (typeof updated.startOdometer === 'number' && typeof updated.endOdometer === 'number') {
+		// Re-calculate fields if inputs changed — but respect an explicitly provided `miles`.
+		const bodyHasMiles = Object.prototype.hasOwnProperty.call(body, 'miles');
+
+		if (
+			!bodyHasMiles &&
+			typeof updated.startOdometer === 'number' &&
+			typeof updated.endOdometer === 'number'
+		) {
 			updated.miles = Math.max(0, updated.endOdometer - updated.startOdometer);
 			updated.miles = Number((updated.miles || 0).toFixed(2));
+		} else if (bodyHasMiles && typeof updated.miles === 'number') {
+			// Respect and normalize an explicitly provided miles value
+			updated.miles = Number(updated.miles.toFixed(2));
 		}
 
 		if (typeof updated.reimbursement === 'number') {

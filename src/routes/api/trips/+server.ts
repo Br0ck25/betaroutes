@@ -1,6 +1,7 @@
 // src/routes/api/trips/+server.ts
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
+import { makeMillageService } from '$lib/server/millageService';
 import { findUserById } from '$lib/server/userService';
 import { z } from 'zod';
 import { PLAN_LIMITS } from '$lib/constants';
@@ -199,6 +200,22 @@ export const GET: RequestHandler = async (event) => {
 
 		const allTrips = await svc.list(storageId, { since: sinceParam, limit, offset });
 
+		// If millage KV is available, treat millage as the source-of-truth and merge
+		try {
+			const millageKV = safeKV(env, 'BETA_MILLAGE_KV');
+			if (millageKV) {
+				const millageSvc = makeMillageService(millageKV as any, safeDO(env, 'TRIP_INDEX_DO')!);
+				const ms = await millageSvc.list(storageId);
+				const mById = new Map(ms.map((m: any) => [m.id, m]));
+				for (const t of allTrips) {
+					const m = mById.get(t.id);
+					if (m && typeof m.miles === 'number') t.totalMiles = m.miles;
+				}
+			}
+		} catch (err) {
+			log.warn('Failed to merge millage into trips response', err);
+		}
+
 		return new Response(JSON.stringify(allTrips), {
 			status: 200,
 			headers: { 'Content-Type': 'application/json' }
@@ -391,6 +408,38 @@ export const POST: RequestHandler = async (event) => {
 
 		// Persist trip (coerce to TripRecord)
 		await svc.put(trip as TripRecord);
+
+		// Persist millage to dedicated KV (source-of-truth). Do not fail trip create if millage write fails.
+		try {
+			const millageKV = safeKV(env, 'BETA_MILLAGE_KV');
+			if (millageKV && typeof trip.totalMiles === 'number') {
+				const millageSvc = makeMillageService(millageKV as any, safeDO(env, 'TRIP_INDEX_DO')!);
+				const millageRec = {
+					id: trip.id,
+					userId: storageId,
+					date: trip.date,
+					startOdometer: 0,
+					endOdometer: 0,
+					miles: Number(trip.totalMiles),
+					createdAt: existingTrip ? existingTrip.createdAt : now,
+					updatedAt: now
+				};
+				const p = millageSvc
+					.put(millageRec as any)
+					.catch((err) => log.warn('millage.put failed for trip create', { tripId: trip.id, err }));
+				try {
+					if (event.platform?.context?.waitUntil) event.platform.context.waitUntil(p as any);
+					else if ((event as any)?.context?.waitUntil) (event as any).context.waitUntil(p);
+				} catch {
+					void p;
+				}
+			}
+		} catch (err) {
+			log.warn('Failed to persist millage for trip create', {
+				tripId: trip.id,
+				message: createSafeErrorMessage(err)
+			});
+		}
 
 		// --- Direct compute & KV writes (bypass TripIndexDO)
 		try {
