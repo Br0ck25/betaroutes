@@ -1,33 +1,33 @@
 # Canonical Svelte 5 Examples
 
-This document defines **approved, CI-safe Svelte 5 patterns** for this repository.
+This file documents **approved Svelte 5 patterns** for this repository.
 
 All examples:
-- Use **Svelte 5 runes-based reactivity**
-- Avoid all legacy Svelte 4 APIs
+
+- Use **runes-based reactivity**
+- Avoid legacy Svelte 4 APIs
 - Follow the **HTML Living Standard**
-- Are compatible with **PWA constraints**
-- Are safe for AI and CI enforcement
+- Are safe for CI enforcement
 
 ---
 
-## State (`$state`)
+## State
 
-Use `$state` for local, mutable component state.
+Use `$state` for local, mutable state.
 
 ```svelte
 <script>
 	let count = $state(0);
 </script>
 
-<button onclick={() => count++}>
+<button onclick={() => (count += 1)}>
 	{count}
 </button>
 ```
 
 ---
 
-## Derived State (`$derived`)
+## Derived State
 
 Use `$derived` for values computed from other state.
 
@@ -40,14 +40,15 @@ Use `$derived` for values computed from other state.
 <p>Doubled: {doubled}</p>
 ```
 
-Rules for `$derived`:
-- Must be pure
-- Must be synchronous
-- No side effects
+Derived values must be:
+
+- Pure
+- Side-effect free
+- Synchronous
 
 ---
 
-## Effects (`$effect`)
+## Effects
 
 Use `$effect` for side effects and lifecycle-like behavior.
 
@@ -61,7 +62,7 @@ Use `$effect` for side effects and lifecycle-like behavior.
 </script>
 ```
 
-### Cleanup
+Cleanup example:
 
 ```svelte
 <script>
@@ -81,41 +82,29 @@ Use `$effect` for side effects and lifecycle-like behavior.
 
 ---
 
-## Component Props (`$props`)
-
-Props must be read using `$props()`.
+## Component Props
 
 ```svelte
 <script>
-	let { label, disabled = false } = $props();
+	let { value, disabled = false } = $props();
 </script>
 
 <button {disabled}>
-	{label}
+	{value}
 </button>
 ```
-
-❌ Do not use `export let` in migrated files.
 
 ---
 
 ## Event Handling
 
-Use **standard DOM attributes**, not Svelte directives.
-
 ```svelte
-<button onclick={() => alert('clicked')}>
-	Click me
-</button>
+<button onclick={() => alert('clicked')}> Click me </button>
 ```
-
-❌ `on:click` is forbidden in Svelte 5 files.
 
 ---
 
-## Snippets (Slots Replacement)
-
-Slots are replaced with **snippets** and `{@render}`.
+## Snippets
 
 ```svelte
 <script>
@@ -129,12 +118,12 @@ Slots are replaced with **snippets** and `{@render}`.
 
 ---
 
-## HTML Living Standard
+## HTML Rules
 
 Correct:
 
 ```html
-<input disabled>
+<input disabled />
 ```
 
 Incorrect:
@@ -145,7 +134,7 @@ Incorrect:
 
 ---
 
-## Forbidden Patterns (Examples)
+## Forbidden Patterns
 
 ```svelte
 <script>
@@ -163,14 +152,6 @@ Incorrect:
 
 ---
 
-## Migration Note
+## Migration Notes
 
 This file documents the **final Svelte 5 state**.
-
-Legacy syntax may exist **only** in files explicitly marked:
-
-```html
-<!-- MIGRATION: SVELTE4-LEGACY -->
-```
-
-Once migrated, legacy allowances are permanently revoked.
