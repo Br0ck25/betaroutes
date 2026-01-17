@@ -15,7 +15,7 @@
 	const resolve = (href: string) => `${base}${href}`;
 
 	export let data;
-	$: API_KEY = data.googleMapsApiKey;
+	$: API_KEY = String(data.googleMapsApiKey ?? '');
 	let step = 1;
 	let dragItemIndex: number | null = null;
 
@@ -476,26 +476,29 @@
 
 			tripData.stops = [
 				...tripData.stops,
-				({
+				{
 					...newStop,
 					id: crypto.randomUUID(),
 					order: tripData.stops.length,
 					distanceFromPrev: segmentData.distance,
 					timeFromPrev: segmentData.duration
-				} as LocalStop)
+				} as LocalStop
 			];
 
 			await recalculateTotals();
 			newStop = { address: '', earnings: 0, notes: '' };
 			// Ensure `order` is present and typed
-			tripData.stops = tripData.stops.map((s: LocalStop | any, i: number) => ({ ...s, order: i })) as LocalStop[];
+			tripData.stops = tripData.stops.map((s: LocalStop | any, i: number) => ({
+				...s,
+				order: i
+			})) as LocalStop[];
 		} catch (err: any) {
 			console.error('addStop failed', err);
 			toasts.error(err?.message ? String(err.message) : 'Error calculating route.');
 		} finally {
 			isCalculating = false;
 		}
-	} 
+	}
 
 	function removeStop(id: string) {
 		tripData.stops = tripData.stops.filter((s) => s.id !== id);
@@ -603,6 +606,11 @@
 			tripData.fuelCost = 0;
 		}
 	}
+	let totalEarnings = 0;
+	let totalMaintenanceCost = 0;
+	let totalSuppliesCost = 0;
+	let totalCosts = 0;
+	let totalProfit = 0;
 	$: totalEarnings = tripData.stops.reduce(
 		(sum, stop) => sum + (parseFloat(String(stop.earnings || 0)) || 0),
 		0
@@ -757,7 +765,8 @@
 					<input
 						id="start-address"
 						type="text"
-						bind:value={startAddressLocal}
+						value={startAddressLocal}
+						on:input={(e) => (startAddressLocal = (e.target as HTMLInputElement).value || '')}
 						use:autocomplete={{ apiKey: API_KEY }}
 						on:place-selected={(e) => handleMainAddressChange('start', e.detail)}
 						on:blur={() =>
@@ -796,7 +805,7 @@
 									<div class="stop-inputs">
 										<input
 											type="text"
-											value={stop.address ?? ''}
+											value={String(stop.address ?? '')}
 											use:autocomplete={{ apiKey: API_KEY }}
 											on:place-selected={(e) => handleStopChange(i, e.detail)}
 											on:blur={() => handleStopChange(i, { formatted_address: stop.address })}
@@ -823,7 +832,8 @@
 						<div class="stop-inputs new">
 							<input
 								type="text"
-								bind:value={newStop.address}
+								value={String(newStop.address ?? '')}
+								on:input={(e) => (newStop.address = (e.target as HTMLInputElement).value || '')}
 								placeholder="New stop address..."
 								use:autocomplete={{ apiKey: API_KEY }}
 								on:place-selected={handleNewStopSelect}
@@ -834,7 +844,9 @@
 									type="number"
 									class="input-money"
 									placeholder="0.00"
-									bind:value={newStop.earnings}
+									value={String(newStop.earnings ?? 0)}
+									on:input={(e) =>
+										(newStop.earnings = Number((e.target as HTMLInputElement).value) || 0)}
 									step="0.01"
 									min="0"
 								/>
@@ -1089,7 +1101,10 @@
 									><input type="checkbox" bind:checked={item.taxDeductible} /></label
 								>
 							</div>
-							<button class="btn-icon delete" on:click={() => removeSupplyItem(item.id)}>✕</button>
+							<button
+								class="btn-icon delete"
+								on:click={() => removeSupplyItem(String(item.id ?? ''))}>✕</button
+							>
 						</div>
 					{/each}
 				</div>

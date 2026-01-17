@@ -16,7 +16,7 @@
 	import { PLAN_LIMITS } from '$lib/constants';
 
 	export let data;
-	$: API_KEY = data.googleMapsApiKey;
+	$: API_KEY = String(data.googleMapsApiKey ?? '');
 	const tripId = $page.params.id;
 
 	let step = 1;
@@ -100,14 +100,18 @@
 		tripData.payDate = String(src.payDate || '');
 		tripData.startAddress = String(src.startAddress || '');
 		tripData.endAddress = String(src.endAddress || '');
-		tripData.stops = (safeStops as any) as LocalStop[];
+		tripData.stops = safeStops as any as LocalStop[];
 		tripData.mpg = Number(src.mpg ?? $userSettings.defaultMPG ?? 25);
 		tripData.gasPrice = Number(src.gasPrice ?? $userSettings.defaultGasPrice ?? 3.5);
 		tripData.maintenanceItems = safeMaintenance as any;
 		tripData.suppliesItems = safeSupplies as any;
 		tripData.totalMiles = Number(src.totalMiles) || 0;
-		tripData.mpg = Number.isFinite(Number(src.mpg)) ? Number(src.mpg) : $userSettings.defaultMPG ?? 25;
-		tripData.gasPrice = Number.isFinite(Number(src.gasPrice)) ? Number(src.gasPrice) : $userSettings.defaultGasPrice ?? 3.5;
+		tripData.mpg = Number.isFinite(Number(src.mpg))
+			? Number(src.mpg)
+			: ($userSettings.defaultMPG ?? 25);
+		tripData.gasPrice = Number.isFinite(Number(src.gasPrice))
+			? Number(src.gasPrice)
+			: ($userSettings.defaultGasPrice ?? 3.5);
 		tripData.fuelCost = Number(src.fuelCost) || 0;
 		tripData.taxDeductible = !!src.taxDeductible;
 		tripData.hoursWorked = Number(src.hoursWorked) || 0;
@@ -181,7 +185,7 @@
 		}
 	}
 
-	// Remove duplicate reactive `totalSuppliesCost` if present later in file (kept only one occurrence) 
+	// Remove duplicate reactive `totalSuppliesCost` if present later in file (kept only one occurrence)
 	let tripData: LocalTrip = {
 		id: String(crypto.randomUUID()),
 		date: String(getLocalDate()),
@@ -395,7 +399,10 @@
 				} else {
 					orderedStops = result.optimizedOrder.map((i: number) => currentStops[i]);
 				}
-				tripData.stops = orderedStops.map((s: any, i: number) => ({ ...s, order: i })) as LocalStop[];
+				tripData.stops = orderedStops.map((s: any, i: number) => ({
+					...s,
+					order: i
+				})) as LocalStop[];
 				if (result.legs) {
 					tripData.stops.forEach((stop, i) => {
 						if (result.legs[i]) {
@@ -444,7 +451,11 @@
 					const isSame = prevLoc.toLowerCase().trim() === (val || '').toLowerCase().trim();
 					if (isSame) {
 						console.info('[route] handleStopChange same-address', { index: idx, val });
-						try { toasts.info('Stop address matches the previous point (0 miles)'); } catch (_e) { void _e; }
+						try {
+							toasts.info('Stop address matches the previous point (0 miles)');
+						} catch (_e) {
+							void _e;
+						}
 					}
 				}
 			}
@@ -481,8 +492,9 @@
 				} else {
 					const leg = await fetchRouteSegment(val, firstCandidate.address);
 					if (leg) {
-					firstCandidate.distanceFromPrev = leg.distance;
-					firstCandidate.timeFromPrev = leg.duration;
+						firstCandidate.distanceFromPrev = leg.distance;
+						firstCandidate.timeFromPrev = leg.duration;
+					}
 				}
 			}
 			await recalculateTotals();
@@ -524,19 +536,22 @@
 
 			tripData.stops = [
 				...tripData.stops,
-				({
+				{
 					...newStop,
 					id: crypto.randomUUID(),
 					order: tripData.stops.length,
 					distanceFromPrev: segmentData.distance,
 					timeFromPrev: segmentData.duration
-				} as LocalStop)
+				} as LocalStop
 			];
 
 			await recalculateTotals();
 			newStop = { address: '', earnings: 0, notes: '' };
 			// Ensure `order` is present and typed
-			tripData.stops = tripData.stops.map((s: LocalStop | any, i: number) => ({ ...s, order: i })) as LocalStop[];
+			tripData.stops = tripData.stops.map((s: LocalStop | any, i: number) => ({
+				...s,
+				order: i
+			})) as LocalStop[];
 		} catch (err: any) {
 			console.error('addStop failed', err);
 			toasts.error(err?.message ? String(err.message) : 'Error calculating route segment.');
@@ -643,6 +658,11 @@
 			tripData.fuelCost = 0;
 		}
 	}
+	let totalEarnings = 0;
+	let totalMaintenanceCost = 0;
+	let totalSuppliesCost = 0;
+	let totalCosts = 0;
+	let totalProfit = 0;
 	$: totalEarnings = tripData.stops.reduce(
 		(sum, stop) => sum + (parseFloat(String(stop.earnings || 0)) || 0),
 		0
@@ -651,7 +671,10 @@
 		(sum, item) => sum + (item.cost || 0),
 		0
 	);
-	$: totalSuppliesCost = (tripData.suppliesItems || []).reduce((sum, item) => sum + (item.cost || 0), 0);
+	$: totalSuppliesCost = (tripData.suppliesItems || []).reduce(
+		(sum, item) => sum + (item.cost || 0),
+		0
+	);
 	$: totalCosts = (tripData.fuelCost || 0) + totalMaintenanceCost + totalSuppliesCost;
 	$: totalProfit = totalEarnings - totalCosts;
 	$: {
@@ -797,7 +820,9 @@
 					<label for="start-address">Starting Address</label><input
 						id="start-address"
 						type="text"
-						bind:value={startAddressLocal}
+						value={startAddressLocal}
+						on:input={(e) =>
+							(startAddressLocal = String((e.target as HTMLInputElement).value || ''))}
 						use:autocomplete={{ apiKey: API_KEY }}
 						on:place-selected={(e) => handleMainAddressChange('start', e.detail)}
 						on:blur={() =>
@@ -836,7 +861,7 @@
 									<div class="stop-inputs">
 										<input
 											type="text"
-											value={stop.address ?? ''}
+											value={String(stop.address ?? '')}
 											on:input={(e) => (stop.address = (e.target as HTMLInputElement).value || '')}
 											use:autocomplete={{ apiKey: API_KEY }}
 											on:place-selected={(e) => handleStopChange(i, e.detail)}
@@ -887,7 +912,8 @@
 					<label for="end-address">End Address (Optional)</label><input
 						id="end-address"
 						type="text"
-						bind:value={endAddressLocal}
+						value={endAddressLocal}
+						on:input={(e) => (endAddressLocal = (e.target as HTMLInputElement).value || '')}
 						use:autocomplete={{ apiKey: API_KEY }}
 						on:place-selected={(e) => handleMainAddressChange('end', e.detail)}
 						on:blur={() => handleMainAddressChange('end', { formatted_address: endAddressLocal })}
