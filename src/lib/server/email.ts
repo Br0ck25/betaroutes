@@ -191,7 +191,7 @@ export async function sendVerificationEmail(
 	}
 
 	// 2. Check for API key (from parameter in production, or env in traditional deployments)
-	const resolvedApiKey = apiKey || env.RESEND_API_KEY;
+	const resolvedApiKey = apiKey || env['RESEND_API_KEY'];
 
 	if (!resolvedApiKey) {
 		log.error('Missing RESEND_API_KEY - email service not configured');
@@ -252,7 +252,7 @@ export async function sendPasswordResetEmail(
 	}
 
 	// 2. Check for API key
-	const resolvedApiKey = apiKey || env.RESEND_API_KEY;
+	const resolvedApiKey = apiKey || env['RESEND_API_KEY'];
 
 	if (!resolvedApiKey) {
 		log.error('❌ Missing RESEND_API_KEY - must be passed as parameter or in env');
@@ -311,7 +311,7 @@ export async function sendContactInquiryEmail(
 	}
 
 	// 2. Check for API key
-	const resolvedApiKey = apiKey || env.RESEND_API_KEY;
+	const resolvedApiKey = apiKey || env['RESEND_API_KEY'];
 
 	if (!resolvedApiKey) {
 		log.error('Missing RESEND_API_KEY - email service not configured');

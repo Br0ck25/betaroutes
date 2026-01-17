@@ -67,6 +67,7 @@
 		const safeStops = (found.stops || []).map((s: any) => ({
 			...s,
 			id: s.id || crypto.randomUUID(),
+			address: s.address || '',
 			distanceFromPrev: s.distanceFromPrev || 0,
 			timeFromPrev: s.timeFromPrev || 0
 		}));
@@ -92,31 +93,94 @@
 			if (modifier && modifier.toUpperCase() === 'PM') h += 12;
 			return `${h.toString().padStart(2, '0')}:${minutes}`;
 		};
-		tripData = {
-			...JSON.parse(JSON.stringify(found)),
-			date: found.date || getLocalDate(),
-			payDate: (found as any).payDate || '',
-			stops: safeStops,
-			maintenanceItems: safeMaintenance,
-			suppliesItems: safeSupplies,
-			totalMiles: Number((found as any).totalMiles) || 0,
-			mpg: Number.isFinite(Number((found as any).mpg))
-				? Number((found as any).mpg)
-				: ($userSettings.defaultMPG ?? 25),
-			gasPrice: Number.isFinite(Number((found as any).gasPrice))
-				? Number((found as any).gasPrice)
-				: ($userSettings.defaultGasPrice ?? 3.5),
-			fuelCost: Number((found as any).fuelCost) || 0,
-			/** Normalize taxDeductible for older records */
-			taxDeductible: !!(found as any).taxDeductible,
-			hoursWorked: Number((found as any).hoursWorked) || 0,
-			estimatedTime: (found as any)['estimatedTime'] || 0,
-			startTime: to24h((found as any).startTime as string | undefined),
-			endTime: to24h((found as any).endTime as string | undefined)
-		};
+		// Mutating the existing `tripData` preserves the narrow LocalTrip type for the template
+		const src = JSON.parse(JSON.stringify(found)) as any;
+		tripData.id = String(src.id || tripData.id);
+		tripData.date = src.date || getLocalDate();
+		tripData.payDate = String(src.payDate || '');
+		tripData.startAddress = String(src.startAddress || '');
+		tripData.endAddress = String(src.endAddress || '');
+		tripData.stops = safeStops as any;
+		tripData.maintenanceItems = safeMaintenance as any;
+		tripData.suppliesItems = safeSupplies as any;
+		tripData.totalMiles = Number(src.totalMiles) || 0;
+		tripData.mpg = Number.isFinite(Number(src.mpg)) ? Number(src.mpg) : $userSettings.defaultMPG ?? 25;
+		tripData.gasPrice = Number.isFinite(Number(src.gasPrice)) ? Number(src.gasPrice) : $userSettings.defaultGasPrice ?? 3.5;
+		tripData.fuelCost = Number(src.fuelCost) || 0;
+		tripData.taxDeductible = !!src.taxDeductible;
+		tripData.hoursWorked = Number(src.hoursWorked) || 0;
+		tripData.estimatedTime = Number(src.estimatedTime) || 0;
+		tripData.startTime = to24h(src.startTime as string | undefined);
+		tripData.endTime = to24h(src.endTime as string | undefined);
 	}
 
-	let tripData = {
+	// Local narrowed types for component-internal safety (NO index-signature inheritance)
+	type LocalStop = {
+		id: string;
+		address: string;
+		earnings: number;
+		notes: string;
+		distanceFromPrev: number;
+		timeFromPrev: number;
+		order: number;
+	};
+	type LocalTrip = {
+		id: string;
+		date: string;
+		payDate: string;
+		startTime: string;
+		endTime: string;
+		hoursWorked: number;
+		startAddress: string;
+		endAddress: string;
+		stops: LocalStop[];
+		totalMiles: number;
+		mpg: number;
+		gasPrice: number;
+		fuelCost: number;
+		estimatedTime: number;
+		roundTripMiles: number;
+		roundTripTime: number;
+		maintenanceItems: import('$lib/types').CostItem[];
+		suppliesItems: import('$lib/types').CostItem[];
+		notes: string;
+		taxDeductible: boolean;
+	};
+
+	// Fix async narrowing: capture index and re-check after await in loops
+	async function recalculateAllLegs() {
+		isCalculating = true;
+		try {
+			let prevAddress = tripData.startAddress;
+			for (let i = 0; i < tripData.stops.length; i++) {
+				const idx = i;
+				const currentStop = tripData.stops[idx];
+				if (!currentStop) continue;
+				const addr = currentStop.address;
+				if (!addr) {
+					prevAddress = addr;
+					continue;
+				}
+				if (prevAddress) {
+					const leg = await fetchRouteSegment(prevAddress, addr);
+					if (leg) {
+						const s = tripData.stops[idx];
+						if (s) {
+							s.distanceFromPrev = leg.distance;
+							s.timeFromPrev = leg.duration;
+						}
+					}
+				}
+				prevAddress = addr;
+			}
+			await recalculateTotals();
+		} finally {
+			isCalculating = false;
+		}
+	}
+
+	// Remove duplicate reactive `totalSuppliesCost` if present later in file (kept only one occurrence) 
+	let tripData: LocalTrip = {
 		id: crypto.randomUUID(),
 		date: getLocalDate(),
 		payDate: '',
@@ -230,26 +294,7 @@
 
 		return null;
 	}
-	async function recalculateAllLegs() {
-		isCalculating = true;
-		try {
-			let prevAddress = tripData.startAddress;
-			for (let i = 0; i < tripData.stops.length; i++) {
-				const currentStop = tripData.stops[i];
-				if (prevAddress && currentStop.address) {
-					const leg = await fetchRouteSegment(prevAddress, currentStop.address);
-					if (leg) {
-						currentStop.distanceFromPrev = leg.distance;
-						currentStop.timeFromPrev = leg.duration;
-					}
-				}
-				prevAddress = currentStop.address;
-			}
-			await recalculateTotals();
-		} finally {
-			isCalculating = false;
-		}
-	}
+	/* duplicate (older) implementation removed — use the stable-index implementation declared earlier */
 	async function recalculateTotals() {
 		let miles = tripData.stops.reduce((acc, s) => acc + (s.distanceFromPrev || 0), 0);
 		let mins = tripData.stops.reduce((acc, s) => acc + (s.timeFromPrev || 0), 0);
@@ -352,37 +397,42 @@
 	}
 
 	async function handleStopChange(index: number, placeOrEvent: any) {
-		const val =
-			placeOrEvent?.formatted_address || placeOrEvent?.name || tripData.stops[index].address;
+		const idx = index;
+		const current = tripData.stops[idx];
+		if (!current) return;
+		const val = placeOrEvent?.formatted_address || placeOrEvent?.name || current.address;
 		if (!val) return;
-		tripData.stops[index].address = val;
-		console.info('[route] handleStopChange', { index, val });
+		current.address = val;
+		console.info('[route] handleStopChange', { index: idx, val });
 		isCalculating = true;
 		try {
-			const prevLoc = index === 0 ? tripData.startAddress : tripData.stops[index - 1].address;
+			const prevLoc = idx === 0 ? tripData.startAddress : tripData.stops[idx - 1]?.address;
 			if (prevLoc) {
 				const legIn = await fetchRouteSegment(prevLoc, val);
 				if (legIn) {
-					tripData.stops[index].distanceFromPrev = legIn.distance;
-					tripData.stops[index].timeFromPrev = legIn.duration;
+					const s = tripData.stops[idx];
+					if (s) {
+						s.distanceFromPrev = legIn.distance;
+						s.timeFromPrev = legIn.duration;
+					}
 				} else {
 					const isSame = prevLoc.toLowerCase().trim() === (val || '').toLowerCase().trim();
 					if (isSame) {
-						console.info('[route] handleStopChange same-address', { index, val });
-						try {
-							toasts.info('Stop address matches the previous point (0 miles)');
-						} catch (_e) {
-							void _e;
-						}
+						console.info('[route] handleStopChange same-address', { index: idx, val });
+						try { toasts.info('Stop address matches the previous point (0 miles)'); } catch (_e) { void _e; }
 					}
 				}
 			}
-			const nextStop = tripData.stops[index + 1];
+			const nextIdx = idx + 1;
+			const nextStop = tripData.stops[nextIdx];
 			if (nextStop) {
 				const legOut = await fetchRouteSegment(val, nextStop.address);
 				if (legOut) {
-					tripData.stops[index + 1].distanceFromPrev = legOut.distance;
-					tripData.stops[index + 1].timeFromPrev = legOut.duration;
+					const s2 = tripData.stops[nextIdx];
+					if (s2) {
+						s2.distanceFromPrev = legOut.distance;
+						s2.timeFromPrev = legOut.duration;
+					}
 				}
 			}
 			await recalculateTotals();
@@ -454,7 +504,8 @@
 			];
 			await recalculateTotals();
 			newStop = { address: '', earnings: 0, notes: '' };
-		} catch (e) {
+				// Ensure `order` is present for every stop after adding
+				tripData.stops = tripData.stops.map((s, i) => ({ ...s, order: i }));
 			toasts.error('Error calculating route segment.');
 		} finally {
 			isCalculating = false;
@@ -559,14 +610,14 @@
 		}
 	}
 	$: totalEarnings = tripData.stops.reduce(
-		(sum, stop) => sum + (parseFloat(stop.earnings) || 0),
+		(sum, stop) => sum + (parseFloat(String(stop.earnings || 0)) || 0),
 		0
 	);
-	$: totalMaintenanceCost = tripData.maintenanceItems.reduce(
+	$: totalMaintenanceCost = (tripData.maintenanceItems || []).reduce(
 		(sum, item) => sum + (item.cost || 0),
 		0
 	);
-	$: totalSuppliesCost = tripData.suppliesItems.reduce((sum, item) => sum + (item.cost || 0), 0);
+	$: totalSuppliesCost = (tripData.suppliesItems || []).reduce((sum, item) => sum + (item.cost || 0), 0);
 	$: totalCosts = (tripData.fuelCost || 0) + totalMaintenanceCost + totalSuppliesCost;
 	$: totalProfit = totalEarnings - totalCosts;
 	$: {
@@ -607,7 +658,8 @@
 			roundTripTime: tripData.roundTripTime,
 			stops: tripData.stops.map((stop, index) => ({
 				...stop,
-				earnings: Number(stop.earnings),
+				id: String(stop.id || crypto.randomUUID()),
+				earnings: Number(stop.earnings) || 0,
 				order: index
 			})),
 			destinations: tripData.stops.map((stop) => ({
@@ -711,7 +763,7 @@
 					<label for="start-address">Starting Address</label><input
 						id="start-address"
 						type="text"
-						bind:value={tripData.startAddress}
+						bind:value={tripData.startAddress!}
 						use:autocomplete={{ apiKey: API_KEY }}
 						on:place-selected={(e) => handleMainAddressChange('start', e.detail)}
 						on:blur={() =>
@@ -740,7 +792,7 @@
 									<div class="stop-header">
 										<div class="stop-number">{i + 1}</div>
 										<div class="stop-actions">
-											<button class="btn-icon delete" on:click={() => removeStop(stop.id)}>✕</button
+											<button class="btn-icon delete" on:click={() => removeStop(String(stop.id ?? ''))}>✕</button
 											>
 											<div class="drag-handle">☰</div>
 										</div>
@@ -748,7 +800,7 @@
 									<div class="stop-inputs">
 										<input
 											type="text"
-											bind:value={stop.address}
+											bind:value={stop.address!}
 											use:autocomplete={{ apiKey: API_KEY }}
 											on:place-selected={(e) => handleStopChange(i, e.detail)}
 											on:blur={() => handleStopChange(i, { formatted_address: stop.address })}
@@ -962,7 +1014,7 @@
 									><input type="checkbox" bind:checked={item.taxDeductible} /></label
 								>
 							</div>
-							<button class="btn-icon delete" on:click={() => removeMaintenanceItem(item.id)}
+							<button class="btn-icon delete" on:click={() => removeMaintenanceItem(String(item.id ?? ''))}
 								>✕</button
 							>
 						</div>{/each}
@@ -1020,7 +1072,7 @@
 									><input type="checkbox" bind:checked={item.taxDeductible} /></label
 								>
 							</div>
-							<button class="btn-icon delete" on:click={() => removeSupplyItem(item.id)}>✕</button>
+							<button class="btn-icon delete" on:click={() => removeSupplyItem(String(item.id ?? ''))}>✕</button>
 						</div>{/each}
 				</div>
 				<div class="form-group">
@@ -1045,7 +1097,7 @@
 				<div class="review-grid">
 					<div class="review-tile">
 						<span class="review-label">Date</span>
-						<div>{formatDateLocal(tripData.date)}</div>
+						<div>{formatDateLocal(String(tripData.date || ''))}</div>
 					</div>
 					<div class="review-tile">
 						<span class="review-label">Total Time</span>

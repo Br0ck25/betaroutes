@@ -1,7 +1,7 @@
 // src/lib/server/dev-mock-db.ts
 import fs from 'node:fs';
 import path from 'node:path';
-import { PRIVATE_GOOGLE_MAPS_API_KEY } from '$env/static/private';
+import { env as privateEnv } from '$env/dynamic/private';
 import { log } from '$lib/server/log';
 
 const DB_FILE = path.resolve('.kv-mock.json');
@@ -186,7 +186,7 @@ export function setupMockKV(event: { platform?: { env?: Record<string, unknown> 
 	const env = event.platform.env as Record<string, unknown>;
 
 	if (!env['PRIVATE_GOOGLE_MAPS_API_KEY']) {
-		env['PRIVATE_GOOGLE_MAPS_API_KEY'] = PRIVATE_GOOGLE_MAPS_API_KEY;
+		env['PRIVATE_GOOGLE_MAPS_API_KEY'] = privateEnv['PRIVATE_GOOGLE_MAPS_API_KEY'];
 	}
 
 	// Mock KVs
