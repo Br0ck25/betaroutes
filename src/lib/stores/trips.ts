@@ -107,20 +107,20 @@ function createTripsStore() {
 
 				const now = new Date().toISOString();
 
-// Normalize stops and numeric fields to match DB schema
-		const normalizedStops = (tripData.stops || []).map((s: any, i) => ({
-			id: String(s.id || crypto.randomUUID()),
-			address: String(s.address || ''),
-			earnings: Number(s.earnings) || 0,
-			notes: s.notes || '',
-			order: typeof s.order === 'number' ? s.order : i,
-			distanceFromPrev: Number(s.distanceFromPrev) || 0,
-			timeFromPrev: Number(s.timeFromPrev) || 0
-		}));
+				// Normalize stops and numeric fields to match DB schema
+				const normalizedStops = (tripData.stops || []).map((s: any, i) => ({
+					id: String(s.id || crypto.randomUUID()),
+					address: String(s.address || ''),
+					earnings: Number(s.earnings) || 0,
+					notes: s.notes || '',
+					order: typeof s.order === 'number' ? s.order : i,
+					distanceFromPrev: Number(s.distanceFromPrev) || 0,
+					timeFromPrev: Number(s.timeFromPrev) || 0
+				}));
 
-		const trip: TripRecord = {
-			...tripData,
-			stops: normalizedStops,
+				const trip: TripRecord = {
+					...tripData,
+					stops: normalizedStops,
 					id: tripData.id || crypto.randomUUID(),
 					userId,
 					createdAt: tripData.createdAt || now,
@@ -165,19 +165,21 @@ function createTripsStore() {
 
 				const now = new Date().toISOString();
 
-const normalizedStops = (changes.stops || existing.stops || []).map((s: any, i: number) => ({
-			id: String(s.id || crypto.randomUUID()),
-			address: String(s.address || ''),
-			earnings: Number(s.earnings) || 0,
-			notes: s.notes || '',
-			order: typeof s.order === 'number' ? s.order : i,
-			distanceFromPrev: Number(s.distanceFromPrev) || 0,
-			timeFromPrev: Number(s.timeFromPrev) || 0
-		}));
-		const updated: TripRecord = {
-			...existing,
-			...changes,
-			stops: normalizedStops,
+				const normalizedStops = (changes.stops || existing.stops || []).map(
+					(s: any, i: number) => ({
+						id: String(s.id || crypto.randomUUID()),
+						address: String(s.address || ''),
+						earnings: Number(s.earnings) || 0,
+						notes: s.notes || '',
+						order: typeof s.order === 'number' ? s.order : i,
+						distanceFromPrev: Number(s.distanceFromPrev) || 0,
+						timeFromPrev: Number(s.timeFromPrev) || 0
+					})
+				);
+				const updated: TripRecord = {
+					...existing,
+					...changes,
+					stops: normalizedStops,
 					id,
 					userId,
 					updatedAt: now,

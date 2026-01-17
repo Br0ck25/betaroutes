@@ -96,11 +96,13 @@
 		// Mutating the existing `tripData` preserves the narrow LocalTrip type for the template
 		const src = JSON.parse(JSON.stringify(found)) as any;
 		tripData.id = String(src.id || tripData.id);
-		tripData.date = src.date || getLocalDate();
+		tripData.date = String(src.date || getLocalDate());
 		tripData.payDate = String(src.payDate || '');
 		tripData.startAddress = String(src.startAddress || '');
 		tripData.endAddress = String(src.endAddress || '');
-		tripData.stops = safeStops as any;
+		tripData.stops = (safeStops as any) as LocalStop[];
+		tripData.mpg = Number(src.mpg ?? $userSettings.defaultMPG ?? 25);
+		tripData.gasPrice = Number(src.gasPrice ?? $userSettings.defaultGasPrice ?? 3.5);
 		tripData.maintenanceItems = safeMaintenance as any;
 		tripData.suppliesItems = safeSupplies as any;
 		tripData.totalMiles = Number(src.totalMiles) || 0;
@@ -181,15 +183,15 @@
 
 	// Remove duplicate reactive `totalSuppliesCost` if present later in file (kept only one occurrence) 
 	let tripData: LocalTrip = {
-		id: crypto.randomUUID(),
-		date: getLocalDate(),
-		payDate: '',
-		startTime: '09:00',
-		endTime: '17:00',
+		id: String(crypto.randomUUID()),
+		date: String(getLocalDate()),
+		payDate: String(''),
+		startTime: String('09:00'),
+		endTime: String('17:00'),
 		hoursWorked: 0,
 		startAddress: '',
 		endAddress: '',
-		stops: [] as any[],
+		stops: [] as LocalStop[],
 		totalMiles: 0,
 		estimatedTime: 0,
 		roundTripMiles: 0,
@@ -197,11 +199,34 @@
 		mpg: 25,
 		gasPrice: 3.5,
 		fuelCost: 0,
-		maintenanceItems: [] as any[],
-		suppliesItems: [] as any[],
+		maintenanceItems: [] as import('$lib/types').CostItem[],
+		suppliesItems: [] as import('$lib/types').CostItem[],
+		taxDeductible: false,
 
 		notes: ''
 	};
+	// Local form-bound copies — ensure template bindings are primitive-typed for the compiler
+	let startAddressLocal: string = tripData.startAddress ?? '';
+	let endAddressLocal: string = tripData.endAddress ?? '';
+	let dateLocal: string = tripData.date ?? getLocalDate();
+	let payDateLocal: string = tripData.payDate ?? '';
+	let startTimeLocal: string = tripData.startTime ?? '09:00';
+	let endTimeLocal: string = tripData.endTime ?? '17:00';
+	let mpgLocal: number = Number(tripData.mpg ?? 25);
+	let gasPriceLocal: number = Number(tripData.gasPrice ?? 3.5);
+	let totalMilesLocal: number = Number(tripData.totalMiles ?? 0);
+	let notesLocal: string = tripData.notes ?? '';
+	$: tripData.startAddress = startAddressLocal;
+	$: tripData.endAddress = endAddressLocal;
+	$: tripData.date = dateLocal;
+	$: tripData.payDate = payDateLocal;
+	$: tripData.startTime = startTimeLocal;
+	$: tripData.endTime = endTimeLocal;
+	$: tripData.mpg = mpgLocal;
+	$: tripData.gasPrice = gasPriceLocal;
+	$: tripData.totalMiles = totalMilesLocal;
+	$: tripData.notes = notesLocal;
+
 	let newStop = { address: '', earnings: 0, notes: '' };
 	function formatDuration(minutes: number): string {
 		if (!minutes) return '0 min';
@@ -340,7 +365,7 @@
 		tripData.estimatedTime = Math.round(mins);
 		tripData.roundTripMiles = parseFloat((miles + returnMiles).toFixed(1));
 		tripData.roundTripTime = Math.round(mins + returnMins);
-		tripData = { ...tripData };
+		tripData = { ...tripData } as LocalTrip;
 	}
 
 	async function handleOptimize() {
@@ -370,7 +395,7 @@
 				} else {
 					orderedStops = result.optimizedOrder.map((i: number) => currentStops[i]);
 				}
-				tripData.stops = orderedStops;
+				tripData.stops = orderedStops.map((s: any, i: number) => ({ ...s, order: i })) as LocalStop[];
 				if (result.legs) {
 					tripData.stops.forEach((stop, i) => {
 						if (result.legs[i]) {
@@ -450,11 +475,14 @@
 		isCalculating = true;
 		try {
 			if (type === 'start' && tripData.stops.length > 0) {
-				const firstStop = tripData.stops[0];
-				const leg = await fetchRouteSegment(val, firstStop.address);
-				if (leg) {
-					firstStop.distanceFromPrev = leg.distance;
-					firstStop.timeFromPrev = leg.duration;
+				const firstCandidate = tripData.stops[0];
+				if (!firstCandidate || !val) {
+					/* no-op: nothing to calculate */
+				} else {
+					const leg = await fetchRouteSegment(val, firstCandidate.address);
+					if (leg) {
+					firstCandidate.distanceFromPrev = leg.distance;
+					firstCandidate.timeFromPrev = leg.duration;
 				}
 			}
 			await recalculateTotals();
@@ -532,6 +560,7 @@
 		event.preventDefault();
 		if (dragItemIndex === null) return;
 		const item = tripData.stops[dragItemIndex];
+		if (!item) return;
 		const newStops = tripData.stops.filter((_, i) => i !== dragItemIndex);
 		newStops.splice(dropIndex, 0, item);
 		tripData.stops = newStops;
@@ -763,7 +792,7 @@
 					<label for="start-address">Starting Address</label><input
 						id="start-address"
 						type="text"
-						bind:value={tripData.startAddress!}
+						bind:value={startAddressLocal}
 						use:autocomplete={{ apiKey: API_KEY }}
 						on:place-selected={(e) => handleMainAddressChange('start', e.detail)}
 						on:blur={() =>
@@ -792,7 +821,9 @@
 									<div class="stop-header">
 										<div class="stop-number">{i + 1}</div>
 										<div class="stop-actions">
-											<button class="btn-icon delete" on:click={() => removeStop(String(stop.id ?? ''))}>✕</button
+											<button
+												class="btn-icon delete"
+												on:click={() => removeStop(String(stop.id ?? ''))}>✕</button
 											>
 											<div class="drag-handle">☰</div>
 										</div>
@@ -800,7 +831,8 @@
 									<div class="stop-inputs">
 										<input
 											type="text"
-											bind:value={stop.address!}
+											value={stop.address ?? ''}
+											on:input={(e) => (stop.address = (e.target as HTMLInputElement).value || '')}
 											use:autocomplete={{ apiKey: API_KEY }}
 											on:place-selected={(e) => handleStopChange(i, e.detail)}
 											on:blur={() => handleStopChange(i, { formatted_address: stop.address })}
@@ -811,7 +843,9 @@
 											<span class="symbol">$</span><input
 												type="number"
 												class="input-money"
-												bind:value={stop.earnings}
+												value={String(stop.earnings ?? 0)}
+												on:input={(e) =>
+													(stop.earnings = Number((e.target as HTMLInputElement).value) || 0)}
 												step="0.01"
 												placeholder="Earnings"
 											/>
@@ -848,11 +882,10 @@
 					<label for="end-address">End Address (Optional)</label><input
 						id="end-address"
 						type="text"
-						bind:value={tripData.endAddress}
+						bind:value={endAddressLocal}
 						use:autocomplete={{ apiKey: API_KEY }}
 						on:place-selected={(e) => handleMainAddressChange('end', e.detail)}
-						on:blur={() =>
-							handleMainAddressChange('end', { formatted_address: tripData.endAddress })}
+						on:blur={() => handleMainAddressChange('end', { formatted_address: endAddressLocal })}
 						class="address-input"
 						placeholder="Same as start if empty"
 					/>
@@ -862,7 +895,7 @@
 						<label for="total-miles">Total Miles</label><input
 							id="total-miles"
 							type="number"
-							bind:value={tripData.totalMiles}
+							bind:value={totalMilesLocal}
 							step="0.1"
 						/>
 					</div>
@@ -886,7 +919,7 @@
 						<label for="trip-date">Date</label><input
 							id="trip-date"
 							type="date"
-							bind:value={tripData.date}
+							bind:value={dateLocal}
 							required
 						/>
 					</div>
@@ -894,7 +927,7 @@
 						<label for="trip-pay-date">Pay Date <span class="hint">(Optional)</span></label><input
 							id="trip-pay-date"
 							type="date"
-							bind:value={tripData.payDate}
+							bind:value={payDateLocal}
 						/>
 						<div class="hint">Tax purposes</div>
 					</div>
@@ -903,14 +936,14 @@
 							<label for="start-time">Start Time</label><input
 								id="start-time"
 								type="time"
-								bind:value={tripData.startTime}
+								bind:value={startTimeLocal}
 							/>
 						</div>
 						<div class="form-group">
 							<label for="end-time">End Time</label><input
 								id="end-time"
 								type="time"
-								bind:value={tripData.endTime}
+								bind:value={endTimeLocal}
 							/>
 						</div>
 					</div>
@@ -937,7 +970,7 @@
 						<label for="mpg">MPG</label><input
 							id="mpg"
 							type="number"
-							bind:value={tripData.mpg}
+							bind:value={mpgLocal}
 							step="0.1"
 						/>
 					</div>
@@ -947,7 +980,7 @@
 							<span class="symbol">$</span><input
 								id="gas-price"
 								type="number"
-								bind:value={tripData.gasPrice}
+								bind:value={gasPriceLocal}
 								step="0.01"
 							/>
 						</div>
@@ -1014,8 +1047,9 @@
 									><input type="checkbox" bind:checked={item.taxDeductible} /></label
 								>
 							</div>
-							<button class="btn-icon delete" on:click={() => removeMaintenanceItem(String(item.id ?? ''))}
-								>✕</button
+							<button
+								class="btn-icon delete"
+								on:click={() => removeMaintenanceItem(String(item.id ?? ''))}>✕</button
 							>
 						</div>{/each}
 				</div>
@@ -1072,13 +1106,16 @@
 									><input type="checkbox" bind:checked={item.taxDeductible} /></label
 								>
 							</div>
-							<button class="btn-icon delete" on:click={() => removeSupplyItem(String(item.id ?? ''))}>✕</button>
+							<button
+								class="btn-icon delete"
+								on:click={() => removeSupplyItem(String(item.id ?? ''))}>✕</button
+							>
 						</div>{/each}
 				</div>
 				<div class="form-group">
 					<label for="notes">Notes</label><textarea
 						id="notes"
-						bind:value={tripData.notes}
+						bind:value={notesLocal}
 						rows="3"
 						placeholder="Trip details..."
 					></textarea>
