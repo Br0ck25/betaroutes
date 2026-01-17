@@ -295,8 +295,8 @@ function createTripsStore() {
 				const now = new Date();
 				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-				const trashItem = {
-					...trip,
+				// Build base trip-trash payload
+				const trashItem: any = {
 					deletedAt: now.toISOString(),
 					deletedBy: userId,
 					expiresAt: expiresAt.toISOString(),
@@ -304,9 +304,24 @@ function createTripsStore() {
 					syncStatus: 'pending' as const
 				};
 
+				// If a millage tombstone already exists for the same id, merge millage fields
+				// into the trip trash item so the millage remains visible in millage trash UI.
 				const trashTx = db.transaction('trash', 'readwrite');
-				await trashTx.objectStore('trash').put(trashItem);
-				await trashTx.done;
+				const existing = await trashTx.objectStore('trash').get(id as any);
+				if (existing && (existing.recordType === 'millage' || existing.type === 'millage')) {
+					// Preserve millage-specific fields and mark this trash item as containing both types
+					trashItem.miles = (existing as any).miles ?? trashItem.miles;
+					trashItem.vehicle = (existing as any).vehicle ?? trashItem.vehicle;
+					trashItem.date = (existing as any).date ?? trashItem.date;
+					trashItem.containsRecordTypes = Array.from(
+						new Set([
+							...(existing.recordTypes || [existing.recordType || existing.type || 'millage']),
+							'trip'
+						])
+					);
+				} else {
+					trashItem.recordType = 'trip';
+				}
 
 				const deleteTx = db.transaction('trips', 'readwrite');
 				await deleteTx.objectStore('trips').delete(id);

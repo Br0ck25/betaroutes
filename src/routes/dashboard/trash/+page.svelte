@@ -108,7 +108,8 @@
 						: 'trip');
 
 			const filtered = uniqueItems.filter((it) => {
-				const inferred =
+				// Infer types from explicit discriminator, originalKey, or heuristics
+				const inferredFromKey =
 					it.recordType ||
 					it.type ||
 					(it.originalKey &&
@@ -118,7 +119,14 @@
 								? 'millage'
 								: 'trip')) ||
 					'trip';
-
+				const hasMillageShape =
+					typeof it.miles === 'number' ||
+					Boolean(it.vehicle) ||
+					(Array.isArray(it.recordTypes) && it.recordTypes.includes('millage')) ||
+					(it.containsRecordTypes &&
+						it.containsRecordTypes.includes &&
+						it.containsRecordTypes.includes('millage'));
+				const inferred = hasMillageShape ? 'millage' : inferredFromKey;
 				// If viewing 'all', show everything, otherwise filter
 				if (!type && !currentTypeParam) return true;
 				return inferred === effectiveType;
