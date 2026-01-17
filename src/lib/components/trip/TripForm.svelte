@@ -195,11 +195,13 @@
 				distanceUnit as 'mi' | 'km'
 			);
 
-			totalMileage = routeData.totalMiles;
+			// [!code fix] robust property access (handles 'totalMiles' OR 'miles')
+			totalMileage = routeData.totalMiles ?? (routeData as any).miles ?? 0;
+			const duration = routeData.totalMinutes ?? (routeData as any).minutes ?? 0;
 
 			const totals = calculateTripTotals(
 				totalMileage,
-				routeData.totalMinutes,
+				duration,
 				destsCopy,
 				mpg,
 				gasPrice,
@@ -225,8 +227,8 @@
 
 			calculated = true;
 			console.log('[TripForm] handleCalculate success', {
-				totalMiles: routeData?.totalMiles,
-				totalMinutes: routeData?.totalMinutes
+				totalMiles: totalMileage,
+				totalMinutes: duration
 			});
 
 			if (!silent) toasts.success('Route calculated successfully!');
