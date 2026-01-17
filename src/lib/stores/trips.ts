@@ -5,6 +5,7 @@ import { syncManager } from '$lib/sync/syncManager';
 import type { TripRecord } from '$lib/db/types';
 import { storage } from '$lib/utils/storage';
 import { user as authUser } from '$lib/stores/auth';
+import { userSettings } from '$lib/stores/userSettings';
 import type { User } from '$lib/types';
 import { PLAN_LIMITS } from '$lib/constants';
 
@@ -150,8 +151,11 @@ function createTripsStore() {
 							{
 								id: trip.id,
 								tripId: trip.id,
-								miles: Number(trip.totalMiles),
-								date: trip.date,
+									// miles + defaults from userSettings
+									miles: Number(trip.totalMiles),
+									millageRate: (get(userSettings) as any)?.millageRate ?? undefined,
+							vehicle: (get(userSettings) as any)?.vehicles?.[0]?.id ?? (get(userSettings) as any)?.vehicles?.[0]?.name ?? undefined,
+							date: trip.date,
 								createdAt: trip.createdAt,
 								updatedAt: trip.updatedAt
 							},
@@ -243,6 +247,8 @@ function createTripsStore() {
 										id,
 										miles: Number((changes as any).totalMiles),
 										date: updated.date,
+								millageRate: (get(userSettings) as any)?.millageRate ?? undefined,
+								vehicle: (get(userSettings) as any)?.vehicles?.[0]?.id ?? (get(userSettings) as any)?.vehicles?.[0]?.name ?? undefined,
 										createdAt: updated.createdAt,
 										updatedAt: updated.updatedAt
 									},
