@@ -10,7 +10,7 @@ export async function POST({ locals, url }) {
 	}
 
 	const stripe = getStripe();
-	const priceId = env.STRIPE_PRICE_ID_PRO;
+	const priceId = env['STRIPE_PRICE_ID_PRO'];
 
 	if (!priceId) {
 		log.error('Missing STRIPE_PRICE_ID_PRO env var');

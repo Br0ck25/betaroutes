@@ -14,7 +14,7 @@ export const load = async ({ locals, platform }) => {
 
 	// [!code fix] Prioritize PUBLIC key for the Frontend (Browser)
 	// 1. Try to get a Public key (safe for browser)
-	let clientApiKey = publicEnv.PUBLIC_GOOGLE_MAPS_API_KEY;
+	let clientApiKey = publicEnv['PUBLIC_GOOGLE_MAPS_API_KEY'];
 
 	// 2. If missing, check if we accidentally have the private key exposed (Dev fallback)
 	if (!clientApiKey) {
@@ -22,7 +22,7 @@ export const load = async ({ locals, platform }) => {
 		const { getEnv } = await import('$lib/server/env');
 		const env = getEnv(platform);
 		const privateKey =
-			(env as any)['PRIVATE_GOOGLE_MAPS_API_KEY'] || privateEnv.PRIVATE_GOOGLE_MAPS_API_KEY;
+			(env as any)['PRIVATE_GOOGLE_MAPS_API_KEY'] || privateEnv['PRIVATE_GOOGLE_MAPS_API_KEY'];
 		if (privateKey) {
 			log.warn('Using PRIVATE key for frontend; this is discouraged', {
 				note: 'This may fail if IP-restricted'

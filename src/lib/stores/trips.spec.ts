@@ -39,4 +39,29 @@ describe('Trips <-> Millage integration', () => {
 		expect(updatedTrip).toBeTruthy();
 		expect((updatedTrip as any).totalMiles).toBe(123);
 	});
+
+	it('normalizes stops on create & update (ids, address, earnings)', async () => {
+		const userId = 'u-normalize';
+		const raw = {
+			date: '2025-03-01',
+			stops: [
+				{ address: undefined, earnings: '12.5' as any },
+				{ /* missing id/address */ }
+			]
+		};
+		const created = await trips.create(raw as any, userId as any);
+	expect(created.stops).toBeDefined();
+	const stops = (created.stops ?? []) as NonNullable<typeof created.stops>;
+	expect(stops.length).toBe(2);
+	expect(stops[0].id).toBeTruthy();
+	expect(stops[0].address).toBe('');
+	expect(stops[0].earnings).toBe(12.5);
+	expect(stops[1].id).toBeTruthy();
+	expect(stops[1].address).toBe('');
+
+	// Update with partial stop and ensure normalization persists
+	await trips.updateTrip(created.id, { stops: [{ id: String(stops[0].id), address: String(stops[0].address || ''), earnings: '7' as any, order: 0 }] }, userId as any);
+	const updated = await trips.get(created.id, userId as any);
+	expect(updated?.stops?.[0].earnings).toBe(7);
+	});
 });

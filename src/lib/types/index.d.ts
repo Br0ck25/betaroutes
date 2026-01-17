@@ -121,7 +121,11 @@ export type User = {
 };
 
 export type LatLng = Location;
-export type TripRecord = Trip;
+
+// Canonical DB-backed types (preferred for storage/server boundaries)
+export type StopRecord = import('./db/types').StopRecord;
+export type TripRecord = import('./db/types').TripRecord;
+
 export type Settings = Record<string, unknown>;
 export type AuthResponse = { token?: string; resetKey?: string };
 export type Subscription = {
