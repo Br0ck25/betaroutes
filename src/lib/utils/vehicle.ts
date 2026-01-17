@@ -15,7 +15,7 @@ export function getVehicleDisplayName(
 		const byId = vehicles.find((v) => v.id && v.id === val);
 		if (byId && byId.name) return byId.name;
 		const byName = vehicles.find((v) => v.name && v.name === val);
-		if (byName) return byName.name;
+		if (byName && typeof byName.name === 'string') return byName.name;
 	}
 	// If the value looks like a UUID but we couldn't resolve it, avoid showing raw ID
 	if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val)) {

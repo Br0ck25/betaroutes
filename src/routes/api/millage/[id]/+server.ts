@@ -107,6 +107,28 @@ export const PUT: RequestHandler = async (event) => {
 			updated.miles = Number(updated.miles.toFixed(2));
 		}
 
+		// Recompute reimbursement when appropriate (respect explicit `reimbursement`)
+		const bodyHasReimbursement = Object.prototype.hasOwnProperty.call(body, 'reimbursement');
+		if (!bodyHasReimbursement && typeof updated.miles === 'number') {
+			let rate = typeof updated.millageRate === 'number' ? updated.millageRate : undefined;
+			if (rate == null) {
+				try {
+					const userSettingsKV = safeKV(env, 'BETA_USER_SETTINGS_KV');
+					if (userSettingsKV) {
+						const raw = await userSettingsKV.get(`settings:${userId}`);
+						if (raw) {
+							const parsed = JSON.parse(raw as string);
+							rate = parsed?.millageRate;
+						}
+					}
+				} catch {
+					/* ignore */
+				}
+			}
+			if (typeof rate === 'number')
+				updated.reimbursement = Number((updated.miles * rate).toFixed(2));
+		}
+
 		if (typeof updated.reimbursement === 'number') {
 			updated.reimbursement = Number(updated.reimbursement.toFixed(2));
 		}
@@ -133,7 +155,7 @@ export const PUT: RequestHandler = async (event) => {
 					safeDO(env, 'TRIP_INDEX_DO')! as any,
 					safeDO(env, 'PLACES_INDEX_DO')! as any
 				);
-				const existingTrip = await tripSvc.get(getStorageId(event.locals.user), id);
+				const existingTrip = await tripSvc.get(getStorageId(sessionUser), id);
 				if (existingTrip && typeof updated.miles === 'number') {
 					const patched = {
 						...existingTrip,
@@ -142,13 +164,13 @@ export const PUT: RequestHandler = async (event) => {
 					} as any;
 					// best-effort write; do not fail the millage update if this fails
 					await tripSvc.put(patched).catch((err: unknown) => {
-						console.warn('Failed to mirror millage into trip KV:', err);
+						log.warn('Failed to mirror millage into trip KV (non-fatal):', String(err));
 						return null;
 					});
 				}
 			}
 		} catch (err) {
-			console.warn('Failed to mirror millage to trips KV (non-fatal):', err);
+			log.warn('Failed to mirror millage to trips KV (non-fatal):', String(err));
 		}
 
 		return new Response(JSON.stringify(updated), {

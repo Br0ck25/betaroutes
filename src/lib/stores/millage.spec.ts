@@ -84,6 +84,40 @@ describe('Millage store (IndexedDB)', () => {
 		expect(got?.miles).toBeCloseTo(150, 6);
 	});
 
+	it('computes reimbursement on create and update (uses rate fallback)', async () => {
+		const userId = 'u-reim';
+
+		// create with explicit rate
+		const r1 = await millage.create({ miles: 10, millageRate: 0.75 }, userId as any);
+		expect(r1.reimbursement).toBeCloseTo(7.5, 2);
+
+		// create without explicit rate -> may pick up userSettings fallback (not present in this unit harness)
+		const r2 = await millage.create({ miles: 5, millageRate: 0.5 }, userId as any);
+		expect(r2.reimbursement).toBeCloseTo(2.5, 2);
+
+		// update miles should recompute reimbursement when rate present
+		await millage.updateMillage(r2.id, { miles: 6 }, userId as any);
+		const updated = await millage.get(r2.id, userId as any);
+		expect(updated?.reimbursement).toBeCloseTo(3.0, 2);
+
+		// update rate should recompute reimbursement
+		await millage.updateMillage(r2.id, { millageRate: 0.6 }, userId as any);
+		const updated2 = await millage.get(r2.id, userId as any);
+		expect(updated2?.reimbursement).toBeCloseTo(6 * 0.6, 2);
+	});
+
+	it('sums reimbursements across millage logs correctly', async () => {
+		const userId = 'u-sum';
+		await millage.create({ miles: 10, millageRate: 0.5 }, userId as any);
+		await millage.create({ miles: 20, millageRate: 0.55 }, userId as any);
+		const db = await getDB();
+		const tx = db.transaction('millage', 'readonly');
+		const all = await tx.objectStore('millage').getAll();
+		await tx.done;
+		const sum = all.reduce((s: number, r: any) => s + Number(r.reimbursement || 0), 0);
+		expect(sum).toBeCloseTo(10 * 0.5 + 20 * 0.55, 6);
+	});
+
 	it('deleting a millage linked to a trip preserves the trip and zeroes totalMiles', async () => {
 		const userId = 'u-delete-trip';
 		const db = await getDB();

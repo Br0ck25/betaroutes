@@ -445,7 +445,7 @@ export const POST: RequestHandler = async (event) => {
 									millageRec.millageRate = Number(s.millageRate);
 							}
 						}
-					} catch (e) {
+					} catch {
 						// ignore
 					}
 				}
