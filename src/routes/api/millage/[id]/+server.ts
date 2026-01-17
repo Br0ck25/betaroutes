@@ -117,7 +117,40 @@ export const PUT: RequestHandler = async (event) => {
 
 		if (updated.vehicle === '') updated.vehicle = undefined;
 
+		// Persist authoritative millage
 		await svc.put(updated);
+
+		// Best-effort: mirror `miles` into the trip record stored in BETA_LOGS_KV so
+		// trips remain discoverable/consistent in the original trip logs KV.
+		try {
+			const tripKV = safeKV(env, 'BETA_LOGS_KV');
+			if (tripKV) {
+				const { makeTripService } = await import('$lib/server/tripService');
+				const tripSvc = makeTripService(
+					tripKV as any,
+					undefined,
+					undefined,
+					safeDO(env, 'TRIP_INDEX_DO')! as any,
+					safeDO(env, 'PLACES_INDEX_DO')! as any
+				);
+				const existingTrip = await tripSvc.get(getStorageId(event.locals.user), id);
+				if (existingTrip && typeof updated.miles === 'number') {
+					const patched = {
+						...existingTrip,
+						totalMiles: updated.miles,
+						updatedAt: new Date().toISOString()
+					} as any;
+					// best-effort write; do not fail the millage update if this fails
+					await tripSvc.put(patched).catch((err: unknown) => {
+						console.warn('Failed to mirror millage into trip KV:', err);
+						return null;
+					});
+				}
+			}
+		} catch (err) {
+			console.warn('Failed to mirror millage to trips KV (non-fatal):', err);
+		}
+
 		return new Response(JSON.stringify(updated), {
 			headers: { 'Content-Type': 'application/json' }
 		});
