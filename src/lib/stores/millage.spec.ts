@@ -26,4 +26,26 @@ describe('Millage store (IndexedDB)', () => {
 		expect(stored).toBeTruthy();
 		expect(stored.userId).toBe(userId);
 	});
+
+	it("editing a non-odometer field doesn't zero the miles", async () => {
+		const userId = 'u-test';
+		const rec = await millage.create({ miles: 42, date: '2025-01-01' }, userId as any);
+
+		// Edit only notes — miles must remain unchanged
+		await millage.updateMillage(rec.id, { notes: 'updated note' }, userId as any);
+
+		const got = await millage.get(rec.id, userId as any);
+		expect(got).toBeTruthy();
+		expect(got?.miles).toBeCloseTo(42, 6);
+	});
+
+	it('updating odometers recalculates miles', async () => {
+		const userId = 'u-test';
+		const rec = await millage.create({ startOdometer: 100, endOdometer: 110 }, userId as any);
+		expect(rec.miles).toBeCloseTo(10, 6);
+
+		await millage.updateMillage(rec.id, { startOdometer: 200, endOdometer: 350 }, userId as any);
+		const got = await millage.get(rec.id, userId as any);
+		expect(got?.miles).toBeCloseTo(150, 6);
+	});
 });
