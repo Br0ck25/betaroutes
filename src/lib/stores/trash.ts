@@ -211,17 +211,32 @@ function createTrashStore() {
 
 					if (!flatItem.id) continue;
 
-					// Determine Record Type
+					// Determine Record Type (enhanced): respect explicit fields, originalKey, or
+					// infer from millage-specific properties when tombstones were merged.
 					if (!flatItem.recordType && !flatItem.type) {
 						if (flatItem.originalKey?.startsWith('expense:')) flatItem.recordType = 'expense';
 						else if (flatItem.originalKey?.startsWith('millage:')) flatItem.recordType = 'millage';
+						// Heuristic: merged trip-trash can carry millage fields (miles/vehicle)
+						else if (typeof flatItem.miles === 'number' || flatItem.vehicle)
+							flatItem.recordType = 'millage';
 						else flatItem.recordType = 'trip';
 					} else if (flatItem.type && !flatItem.recordType) {
 						flatItem.recordType = flatItem.type;
 					}
 
-					// Keep a convenience 'type' aligned with recordType
+					// Keep a convenience 'type' aligned with recordType and expose any merged types
 					flatItem.type = flatItem.recordType;
+					if (Array.isArray(flatItem.containsRecordTypes)) {
+						flatItem.recordTypes = Array.from(
+							new Set([flatItem.recordType, ...flatItem.containsRecordTypes])
+						);
+					} else if (flatItem.recordTypes && Array.isArray(flatItem.recordTypes)) {
+						flatItem.recordTypes = Array.from(
+							new Set(flatItem.recordTypes.concat(flatItem.recordType))
+						);
+					} else {
+						flatItem.recordTypes = [flatItem.recordType];
+					}
 
 					cloudIds.add(flatItem.id);
 

@@ -546,7 +546,28 @@ if (typeof (millage as any).deleteMillage !== 'function') {
 				date: rec.date
 			};
 
-			await trashStore.put(trashItem);
+			// If a trip tombstone already exists for the same id, merge millage fields
+			// into that trip-trash record instead of clobbering it (avoids collisions).
+			const existing = await trashStore.get(id);
+			if (existing && (existing.recordType === 'trip' || existing.type === 'trip')) {
+				const merged = {
+					...existing,
+					miles: rec.miles ?? existing.miles,
+					vehicle: rec.vehicle ?? existing.vehicle,
+					date: rec.date ?? existing.date,
+					containsRecordTypes: Array.from(
+						new Set([
+							...(existing.recordTypes || [existing.recordType || existing.type || 'trip']),
+							'millage'
+						])
+					),
+					syncStatus: 'pending'
+				};
+				await trashStore.put(merged);
+			} else {
+				await trashStore.put(trashItem);
+			}
+
 			await millageStore.delete(id);
 			await tx.done;
 
