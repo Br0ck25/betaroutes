@@ -414,7 +414,7 @@ export const POST: RequestHandler = async (event) => {
 			const millageKV = safeKV(env, 'BETA_MILLAGE_KV');
 			if (millageKV && typeof trip.totalMiles === 'number') {
 				const millageSvc = makeMillageService(millageKV as any, safeDO(env, 'TRIP_INDEX_DO')!);
-				const millageRec = {
+				const millageRec: any = {
 					id: trip.id,
 					userId: storageId,
 					date: trip.date,
@@ -424,6 +424,31 @@ export const POST: RequestHandler = async (event) => {
 					createdAt: existingTrip ? existingTrip.createdAt : now,
 					updatedAt: now
 				};
+
+				// If the client provided millageRate/vehicle include them; otherwise try to
+				// read the user's settings KV for defaults (best-effort).
+				if (typeof (trip as any).millageRate === 'number') {
+					millageRec.millageRate = Number((trip as any).millageRate);
+				}
+				if ((trip as any).vehicle) {
+					millageRec.vehicle = (trip as any).vehicle;
+				} else {
+					try {
+						const settingsKV = safeKV(env, 'BETA_USER_SETTINGS_KV');
+						if (settingsKV) {
+							const raw = await settingsKV.get(`settings:${(sessionUserSafe as any).id}`);
+							if (raw) {
+								const s = JSON.parse(raw);
+								if (s?.vehicles && s.vehicles[0])
+									millageRec.vehicle = s.vehicles[0].id || s.vehicles[0].name;
+								if (typeof s?.millageRate === 'number' && millageRec.millageRate == null)
+									millageRec.millageRate = Number(s.millageRate);
+							}
+						}
+					} catch (e) {
+						// ignore
+					}
+				}
 				const p = millageSvc
 					.put(millageRec as any)
 					.catch((err) => log.warn('millage.put failed for trip create', { tripId: trip.id, err }));

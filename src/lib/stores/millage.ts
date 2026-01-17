@@ -322,8 +322,40 @@ function createMillageStore() {
 				await millageStore.delete(id);
 				await tx.done;
 
-				// Force reload to sync UI state
-				await this.load(userId);
+				// If this millage was linked to a trip, preserve the trip but zero its millage
+				try {
+					const tripsTx = db.transaction('trips', 'readwrite');
+					const tripStore = tripsTx.objectStore('trips');
+					const trip = await tripStore.get(id as any);
+					if (trip && trip.userId === userId) {
+						const nowIso = new Date().toISOString();
+						const patched = {
+							...trip,
+							totalMiles: 0,
+							updatedAt: nowIso,
+							syncStatus: 'pending'
+						} as any;
+						await tripStore.put(patched);
+
+						// Update in-memory trips store (best-effort)
+						try {
+							const { trips } = await import('$lib/stores/trips');
+							trips.updateLocal({ id, totalMiles: 0, updatedAt: nowIso } as any);
+						} catch (e) {
+							console.warn('Failed to update in-memory trips store after millage delete:', e);
+						}
+
+						// Enqueue a trip update so server mirrors totalMiles = 0 into BETA_LOGS_KV
+						await syncManager.addToQueue({
+							action: 'update',
+							tripId: id,
+							data: { ...patched, store: 'trips' }
+						});
+					}
+					await tripsTx.done;
+				} catch (e) {
+					console.warn('Failed to preserve trip after millage delete (non-fatal):', e);
+				}
 
 				await syncManager.addToQueue({
 					action: 'delete',
