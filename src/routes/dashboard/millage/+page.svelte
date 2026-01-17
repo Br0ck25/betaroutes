@@ -2,6 +2,7 @@
 	import { millage, isLoading as millageLoading } from '$lib/stores/millage';
 	import { trips, isLoading as tripsLoading } from '$lib/stores/trips';
 	import { userSettings } from '$lib/stores/userSettings';
+	import { getVehicleDisplayName } from '$lib/utils/vehicle';
 	import SettingsModal from './components/SettingsModal.svelte';
 	import { user } from '$lib/stores/auth';
 	import { toasts } from '$lib/stores/toast';
@@ -719,7 +720,9 @@
 							</div>
 							<div class="stat-item">
 								<span class="stat-label">Vehicle</span>
-								<span class="stat-value">{expense.vehicle || '-'}</span>
+								<span class="stat-value"
+									>{getVehicleDisplayName(expense.vehicle, $userSettings?.vehicles)}</span
+								>
 							</div>
 							<div class="stat-item">
 								<span class="stat-label">Rate</span>

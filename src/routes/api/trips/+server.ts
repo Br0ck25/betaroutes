@@ -439,7 +439,8 @@ export const POST: RequestHandler = async (event) => {
 							const raw = await settingsKV.get(`settings:${(sessionUserSafe as any).id}`);
 							if (raw) {
 								const s = JSON.parse(raw);
-								if (s?.vehicles && s.vehicles[0]) millageRec.vehicle = s.vehicles[0].id || s.vehicles[0].name;
+								if (s?.vehicles && s.vehicles[0])
+									millageRec.vehicle = s.vehicles[0].id || s.vehicles[0].name;
 								if (typeof s?.millageRate === 'number' && millageRec.millageRate == null)
 									millageRec.millageRate = Number(s.millageRate);
 							}

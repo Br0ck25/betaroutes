@@ -151,11 +151,14 @@ function createTripsStore() {
 							{
 								id: trip.id,
 								tripId: trip.id,
-									// miles + defaults from userSettings
-									miles: Number(trip.totalMiles),
-									millageRate: (get(userSettings) as any)?.millageRate ?? undefined,
-							vehicle: (get(userSettings) as any)?.vehicles?.[0]?.id ?? (get(userSettings) as any)?.vehicles?.[0]?.name ?? undefined,
-							date: trip.date,
+								// miles + defaults from userSettings
+								miles: Number(trip.totalMiles),
+								millageRate: (get(userSettings) as any)?.millageRate ?? undefined,
+								vehicle:
+									(get(userSettings) as any)?.vehicles?.[0]?.id ??
+									(get(userSettings) as any)?.vehicles?.[0]?.name ??
+									undefined,
+								date: trip.date,
 								createdAt: trip.createdAt,
 								updatedAt: trip.updatedAt
 							},
@@ -247,8 +250,11 @@ function createTripsStore() {
 										id,
 										miles: Number((changes as any).totalMiles),
 										date: updated.date,
-								millageRate: (get(userSettings) as any)?.millageRate ?? undefined,
-								vehicle: (get(userSettings) as any)?.vehicles?.[0]?.id ?? (get(userSettings) as any)?.vehicles?.[0]?.name ?? undefined,
+										millageRate: (get(userSettings) as any)?.millageRate ?? undefined,
+										vehicle:
+											(get(userSettings) as any)?.vehicles?.[0]?.id ??
+											(get(userSettings) as any)?.vehicles?.[0]?.name ??
+											undefined,
 										createdAt: updated.createdAt,
 										updatedAt: updated.updatedAt
 									},
