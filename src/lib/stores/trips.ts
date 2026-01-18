@@ -27,8 +27,9 @@ function createTripsStore() {
 				return items;
 			});
 		},
-		// ... (load, create, updateTrip remain exactly the same) ...
+		// ... (keep load, create, updateTrip exactly as they are) ...
 		async load(userId?: string) {
+			// ... copy existing load code ...
 			isLoading.set(true);
 			try {
 				const db = await getDB();
@@ -69,6 +70,7 @@ function createTripsStore() {
 			}
 		},
 		async create(tripData: Partial<TripRecord>, userId: string) {
+			// ... copy existing create code ...
 			try {
 				const currentUser = get(authUser) as User | null;
 				const isFreeTier = !currentUser?.plan || currentUser.plan === 'free';
@@ -158,6 +160,7 @@ function createTripsStore() {
 			}
 		},
 		async updateTrip(id: string, changes: Partial<TripRecord>, userId: string) {
+			// ... copy existing updateTrip code ...
 			try {
 				const db = await getDB();
 				const tx = db.transaction('trips', 'readwrite');
@@ -236,6 +239,7 @@ function createTripsStore() {
 			}
 		},
 
+		// [!code focus] THE FIX IS HERE
 		async deleteTrip(id: string, userId: string) {
 			let previousTrips: TripRecord[] = [];
 			update((current) => {
@@ -244,9 +248,7 @@ function createTripsStore() {
 			});
 
 			try {
-				console.log('🗑️ Moving trip to trash:', id);
 				const db = await getDB();
-
 				const tripsTx = db.transaction('trips', 'readonly');
 				const trip = await tripsTx.objectStore('trips').get(id);
 				if (!trip) throw new Error('Trip not found');
@@ -255,59 +257,50 @@ function createTripsStore() {
 				const now = new Date();
 				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-				// 1. Create Trip Trash Item
-				const tripTrash = {
+				// Prepare BUNDLED trash item
+				// We use "trip:" prefix to ensure it never collides with mileage logs
+				const trashItem: any = {
 					...trip,
-					id: trip.id,
+					id: `trip:${id}`,
+					originalId: id,
 					userId: trip.userId,
 					deletedAt: now.toISOString(),
 					deletedBy: userId,
 					expiresAt: expiresAt.toISOString(),
 					originalKey: `trip:${userId}:${id}`,
 					syncStatus: 'pending',
-					backups: { trip: { ...trip } },
-					recordType: 'trip'
+					recordType: 'trip',
+					// We will store the millage data here if it exists
+					backups: { trip: { ...trip } }
 				};
 
-				const trashTx = db.transaction('trash', 'readwrite');
-				await trashTx.objectStore('trash').put(tripTrash as any);
-
-				// 2. [!code fix] Handle Linked Mileage - Create SEPARATE trash item
-				// We check active millage store first
+				// Check and capture mileage
 				const millageTx = db.transaction('millage', 'readwrite');
 				const activeMillage = await millageTx.objectStore('millage').get(id);
-
 				if (activeMillage) {
-					const millageTrash = {
-						...activeMillage,
-						// [!code fix] Use unique ID for trash to avoid collision with trip
-						id: `millage:${id}`,
-						originalId: id,
-						tripId: id,
-						userId: trip.userId,
-						deletedAt: now.toISOString(),
-						expiresAt: expiresAt.toISOString(),
-						syncStatus: 'pending',
-						recordType: 'millage',
-						backups: { millage: { ...activeMillage } }
-					};
-					await trashTx.objectStore('trash').put(millageTrash as any);
+					// Embed mileage data inside the Trip Trash item
+					trashItem.backups.millage = { ...activeMillage };
+					trashItem.recordTypes = ['trip', 'millage'];
+					// Also store top-level props for easy UI display
+					trashItem.miles = activeMillage.miles;
+					trashItem.vehicle = activeMillage.vehicle;
+
+					// Delete from active store
 					await millageTx.objectStore('millage').delete(id);
 				}
 				await millageTx.done;
+
+				// Save ONE item to trash
+				const trashTx = db.transaction('trash', 'readwrite');
+				await trashTx.objectStore('trash').put(trashItem);
 				await trashTx.done;
 
-				// 3. Delete active trip
+				// Delete from active trips
 				const delTx = db.transaction('trips', 'readwrite');
 				await delTx.objectStore('trips').delete(id);
 				await delTx.done;
 
-				await syncManager.addToQueue({
-					action: 'delete',
-					tripId: id
-				});
-
-				console.log('✅ Trip and linked mileage moved to trash:', id);
+				await syncManager.addToQueue({ action: 'delete', tripId: id });
 			} catch (err) {
 				console.error('❌ Failed to delete trip:', err);
 				set(previousTrips);
@@ -317,6 +310,7 @@ function createTripsStore() {
 
 		// ... (keep get, clear, syncFromCloud, syncPendingToCloud, migrateOfflineTrips) ...
 		async get(id: string, userId: string) {
+			// ... copy existing get code ...
 			try {
 				const db = await getDB();
 				const tx = db.transaction('trips', 'readonly');
@@ -332,6 +326,7 @@ function createTripsStore() {
 			set([]);
 		},
 		async syncFromCloud(userId: string) {
+			// ... copy existing syncFromCloud code ...
 			isLoading.set(true);
 			try {
 				if (!navigator.onLine) return;
@@ -363,10 +358,7 @@ function createTripsStore() {
 				const trashTx = db.transaction('trash', 'readonly');
 				const trashStore = trashTx.objectStore('trash');
 				const trashItems = await trashStore.getAll();
-				// Check against REAL ids in trash (handling millage: prefix)
-				const trashIds = new Set(
-					trashItems.map((t: { id: string }) => t.id.replace('millage:', ''))
-				);
+				const trashIds = new Set(trashItems.map((t: { id: string }) => t.id));
 				const tx = db.transaction('trips', 'readwrite');
 				const store = tx.objectStore('trips');
 				let updateCount = 0;
@@ -378,7 +370,8 @@ function createTripsStore() {
 						deleted?: boolean;
 					};
 					if (!cloudTrip.id) continue;
-					if (trashIds.has(cloudTrip.id)) continue;
+					// Check simple ID AND prefixed ID to be safe
+					if (trashIds.has(cloudTrip.id) || trashIds.has(`trip:${cloudTrip.id}`)) continue;
 					const local = await store.get(cloudTrip.id);
 					if (!local || new Date(cloudTrip.updatedAt || '') > new Date(local.updatedAt || '')) {
 						if (cloudTrip.deleted) {
@@ -405,6 +398,7 @@ function createTripsStore() {
 			}
 		},
 		async syncPendingToCloud(userId: string) {
+			// ... copy existing syncPendingToCloud code ...
 			try {
 				if (!navigator.onLine) return { synced: 0, failed: 0 };
 				console.log('⬆️ Syncing pending local changes...');
@@ -446,6 +440,7 @@ function createTripsStore() {
 			}
 		},
 		async migrateOfflineTrips(tempUserId: string, realUserId: string) {
+			// ... copy existing migrateOfflineTrips code ...
 			if (!tempUserId || !realUserId || tempUserId === realUserId) return;
 			const db = await getDB();
 			const tx = db.transaction('trips', 'readwrite');
