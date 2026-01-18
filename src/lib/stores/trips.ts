@@ -238,7 +238,7 @@ function createTripsStore() {
 				const now = new Date();
 				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-				// Prepare BUNDLED trash item
+				// Prepare trip trash item
 				// We use "trip:" prefix to ensure it never collides with mileage logs
 				const trashItem: any = {
 					...trip,
@@ -251,29 +251,47 @@ function createTripsStore() {
 					originalKey: `trip:${userId}:${id}`,
 					syncStatus: 'pending',
 					recordType: 'trip',
-					// We will store the millage data here if it exists
 					backups: { trip: { ...trip } }
 				};
 
-				// Check and capture mileage
+				// Check and capture mileage - create SEPARATE trash item for mileage
 				const millageTx = db.transaction('millage', 'readwrite');
 				const activeMillage = await millageTx.objectStore('millage').get(id);
+				let millageTrashItem: any = null;
 				if (activeMillage) {
-					// Embed mileage data inside the Trip Trash item
+					// Store mileage backup in trip item for reference
 					trashItem.backups.millage = { ...activeMillage };
-					trashItem.recordTypes = ['trip', 'millage'];
 					// Also store top-level props for easy UI display
 					trashItem.miles = activeMillage.miles;
 					trashItem.vehicle = activeMillage.vehicle;
+
+					// Create SEPARATE trash item for mileage so user can restore it independently
+					millageTrashItem = {
+						...activeMillage,
+						id: `millage:${id}`,
+						originalId: id,
+						userId: activeMillage.userId,
+						deletedAt: now.toISOString(),
+						deletedBy: userId,
+						expiresAt: expiresAt.toISOString(),
+						originalKey: `millage:${userId}:${id}`,
+						syncStatus: 'pending',
+						recordType: 'millage',
+						tripId: id,
+						backups: { millage: { ...activeMillage } }
+					};
 
 					// Delete from active store
 					await millageTx.objectStore('millage').delete(id);
 				}
 				await millageTx.done;
 
-				// Save ONE item to trash
+				// Save trash items (trip and optionally mileage)
 				const trashTx = db.transaction('trash', 'readwrite');
 				await trashTx.objectStore('trash').put(trashItem);
+				if (millageTrashItem) {
+					await trashTx.objectStore('trash').put(millageTrashItem);
+				}
 				await trashTx.done;
 
 				// Delete from active trips
