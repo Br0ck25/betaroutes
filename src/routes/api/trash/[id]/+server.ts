@@ -2,7 +2,7 @@
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
 import { makeExpenseService } from '$lib/server/expenseService';
-import { makeMillageService } from '$lib/server/millageService';
+import { makeMillageService, type MillageRecord } from '$lib/server/millageService';
 import { safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { getStorageId } from '$lib/server/user';
@@ -77,7 +77,7 @@ export const POST: RequestHandler = async (event) => {
 									// Check if another active mileage log exists for this trip
 									const activeMillage = await millageSvc.list(storageId);
 									const conflictingMillage = activeMillage.find(
-										(m: any) => m.tripId === millageData.tripId && m.id !== id
+										(m: MillageRecord) => m.tripId === millageData.tripId && m.id !== id
 									);
 									if (conflictingMillage) {
 										throw new Error('Cannot restore mileage: another active mileage log exists for this trip');
@@ -89,14 +89,15 @@ export const POST: RequestHandler = async (event) => {
 						restored = await millageSvc.restore(storageId, id);
 						
 						// If restored mileage has a tripId, sync the miles back to the trip
-						if (restored && (restored as any).tripId && typeof (restored as any).miles === 'number') {
+						const restoredMillage = restored as MillageRecord | undefined;
+						if (restoredMillage && restoredMillage.tripId && typeof restoredMillage.miles === 'number') {
 							try {
-								const trip = await tripSvc.get(storageId, (restored as any).tripId);
+								const trip = await tripSvc.get(storageId, restoredMillage.tripId);
 								if (trip && !trip.deleted) {
-									trip.totalMiles = (restored as any).miles;
+									trip.totalMiles = restoredMillage.miles;
 									trip.updatedAt = new Date().toISOString();
 									await tripSvc.put(trip);
-									log.info('Synced restored mileage to trip', { tripId: (restored as any).tripId, miles: (restored as any).miles });
+									log.info('Synced restored mileage to trip', { tripId: restoredMillage.tripId, miles: restoredMillage.miles });
 								}
 							} catch (e) {
 								log.warn('Failed to sync restored mileage to trip', { message: String(e) });

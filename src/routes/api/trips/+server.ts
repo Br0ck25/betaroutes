@@ -1,7 +1,7 @@
 // src/routes/api/trips/+server.ts
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
-import { makeMillageService } from '$lib/server/millageService';
+import { makeMillageService, type MillageRecord } from '$lib/server/millageService';
 import { findUserById } from '$lib/server/userService';
 import { z } from 'zod';
 import { PLAN_LIMITS } from '$lib/constants';
@@ -622,7 +622,7 @@ export const PUT: RequestHandler = async (event) => {
 				if (millageKV) {
 					const millageSvc = makeMillageService(millageKV, safeDO(env, 'TRIP_INDEX_DO')!);
 					const allMillage = await millageSvc.list(storageId);
-					const linkedMillage = allMillage.find((m: any) => m.tripId === trip.id);
+					const linkedMillage = allMillage.find((m: MillageRecord) => m.tripId === trip.id);
 					
 					if (linkedMillage) {
 						// Update existing mileage log

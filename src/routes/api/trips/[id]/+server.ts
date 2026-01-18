@@ -1,7 +1,7 @@
 // src/routes/api/trips/[id]/+server.ts
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
-import { makeMillageService } from '$lib/server/millageService';
+import { makeMillageService, type MillageRecord } from '$lib/server/millageService';
 import type { TripRecord } from '$lib/server/tripService';
 import { log } from '$lib/server/log';
 import { safeDO } from '$lib/server/env';
@@ -184,7 +184,7 @@ export const DELETE: RequestHandler = async (event) => {
 				);
 				// Find mileage logs linked to this trip
 				const allMillage = await millageSvc.list(storageId);
-				const linkedMillage = allMillage.filter((m: any) => m.tripId === id);
+				const linkedMillage = allMillage.filter((m: MillageRecord) => m.tripId === id);
 				for (const m of linkedMillage) {
 					await millageSvc.delete(storageId, m.id);
 					log.info('Cascade deleted mileage log for trip', { tripId: id, millageId: m.id });
