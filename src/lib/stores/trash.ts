@@ -9,6 +9,23 @@ import type { User } from '$lib/types';
 function createTrashStore() {
 	const { subscribe, set, update } = writable<TrashRecord[]>([]);
 
+	// Helper to ensure mileage items in trash have unique IDs to prevent collision with trips
+	const getUniqueTrashId = (item: any) => {
+		if (
+			(item.recordType === 'millage' || item.type === 'millage') &&
+			!String(item.id).startsWith('millage:')
+		) {
+			return `millage:${item.id}`;
+		}
+		return item.id;
+	};
+
+	// Helper to get the REAL id (for database) from the unique trash ID
+	const getRealId = (trashId: string) => {
+		if (trashId.startsWith('millage:')) return trashId.replace('millage:', '');
+		return trashId;
+	};
+
 	return {
 		subscribe,
 
@@ -25,25 +42,19 @@ function createTrashStore() {
 						flat = { ...flat.data, ...flat };
 						delete flat.data;
 					}
+					// Ensure the UI sees the real ID for display, or keep the unique one for keys
 					return flat;
 				});
 
-				// [!code fix] improved type detection to prevent millage appearing as trips
-				const getType = (it: any) => {
-					if (it.recordType) return it.recordType;
-					if (it.type) return it.type;
-					if (it.originalKey) {
-						if (it.originalKey.startsWith('expense:')) return 'expense';
-						if (it.originalKey.startsWith('millage:')) return 'millage';
-						if (it.originalKey.startsWith('trip:')) return 'trip';
-					}
-					// Fallback heuristics
-					if (typeof it.miles === 'number' && !it.stops) return 'millage';
-					return 'trip'; // Default
-				};
-
 				const filtered = type
-					? normalizedItems.filter((it) => getType(it) === type)
+					? normalizedItems.filter((it) => {
+							if (it.recordType === type || it.type === type) return true;
+							// Fallback checks
+							if (type === 'expense' && it.originalKey?.startsWith('expense:')) return true;
+							if (type === 'millage' && it.originalKey?.startsWith('millage:')) return true;
+							if (type === 'trip' && it.originalKey?.startsWith('trip:')) return true;
+							return false;
+						})
 					: normalizedItems;
 
 				filtered.sort((a, b) => {
@@ -51,6 +62,7 @@ function createTrashStore() {
 					const bTime = b && b.deletedAt ? new Date(b.deletedAt).getTime() : 0;
 					return bTime - aTime;
 				});
+
 				set(filtered);
 				return filtered;
 			} catch (err) {
@@ -60,94 +72,79 @@ function createTrashStore() {
 			}
 		},
 
-		async restore(id: string, userId: string, targetType?: string) {
+		async restore(uniqueId: string, userId: string, targetType?: string) {
 			try {
 				const db = await getDB();
 
-				// [!code fix] Step 1: Read/Check Phase (Separate Transaction)
-				// We must do this separate from the write transaction to avoid "Transaction finished" errors
-				// during the async/await gap.
+				// 1. Fetch from trash using the UNIQUE ID (e.g. "millage:123")
 				const txRead = db.transaction('trash', 'readonly');
-				const stored = await txRead.objectStore('trash').get(id);
+				const stored = await txRead.objectStore('trash').get(uniqueId);
 				await txRead.done;
 
 				if (!stored) throw new Error('Item not found in trash');
 				if (stored.userId !== userId) throw new Error('Unauthorized');
 
-				// Normalize available backups and recordTypes
-				const backups: Record<string, any> =
-					stored.backups || (stored.data && (stored.data.__backups as any)) || {};
 				const recordTypes: string[] = Array.from(
 					new Set(
 						[
 							...(Array.isArray(stored.recordTypes) ? stored.recordTypes : []),
-							stored.recordType ||
-								stored.type ||
-								(stored.originalKey ? String(stored.originalKey).split(':')[0] : undefined)
+							stored.recordType || stored.type
 						].filter(Boolean) as string[]
 					)
 				);
 
-				const desired =
-					targetType ||
-					stored.type ||
-					stored.recordType ||
-					(recordTypes.length ? recordTypes[0] : undefined);
-				if (!desired && recordTypes.length > 1)
-					throw new Error('Ambiguous tombstone: specify which record type to restore');
-				const restoreType = desired || recordTypes[0] || 'trip';
+				const restoreType =
+					targetType || stored.recordType || stored.type || recordTypes[0] || 'trip';
 
-				// [!code fix] Invariant Check: Parent Trip Existence
+				// 2. Parent Trip Check (Guard)
 				if (restoreType === 'millage') {
-					// Need to find the trip ID. It might be on the root or inside 'data' or 'backups'
-					const backupData =
-						backups['millage'] || stored.data || (stored.recordType === 'millage' ? stored : {});
-					const parentTripId = stored.tripId || backupData.tripId;
+					// The parent ID is the stored.tripId OR the restored ID (if they share IDs)
+					const realId = getRealId(uniqueId);
+					const parentId = stored.tripId || realId;
 
-					if (parentTripId) {
-						// Check if parent trip is active
-						const txCheck = db.transaction(['trips', 'trash'], 'readonly');
-						const tripExists = await txCheck.objectStore('trips').get(parentTripId);
-						const tripTrash = await txCheck.objectStore('trash').get(parentTripId);
-						await txCheck.done;
+					const txCheck = db.transaction(['trips', 'trash'], 'readonly');
+					const tripExists = await txCheck.objectStore('trips').get(parentId);
+					const tripTrash = await txCheck.objectStore('trash').get(parentId); // Trip trash uses plain ID
+					await txCheck.done;
 
-						// If trip is NOT active (missing from 'trips' store), block restore.
-						// Even if it's not in trash (permanently deleted), we can't restore a child to a ghost parent.
-						if (!tripExists) {
-							if (tripTrash) {
-								throw new Error(
-									'This mileage log belongs to a trip that is currently in the trash. Restore the trip first.'
-								);
-							} else {
-								throw new Error(
-									'This mileage log belongs to a trip that has been permanently deleted. It cannot be restored.'
-								);
-							}
+					if (!tripExists) {
+						if (tripTrash) {
+							throw new Error(
+								'This mileage log belongs to a trip that is currently in the trash. Restore the trip first.'
+							);
+						} else {
+							throw new Error(
+								'This mileage log belongs to a trip that has been permanently deleted. It cannot be restored.'
+							);
 						}
 					}
 				}
 
-				// [!code fix] Step 2: Write Phase (Single Atomic Transaction)
+				// 3. Restore Logic
 				const tx = db.transaction(['trash', 'expenses', 'millage', 'trips'], 'readwrite');
 
-				// Prepare object
+				const backups: Record<string, any> =
+					stored.backups || (stored.data && (stored.data.__backups as any)) || {};
 				const backupFor = (t: string) =>
 					backups[t] ||
 					(stored.data && stored.data[t]) ||
 					(stored.recordType === t ? stored.data || stored : undefined) ||
 					stored;
+
 				const restored = { ...(backupFor(restoreType) || {}) };
+
+				// [!code fix] Ensure we restore with the REAL ID (stripping prefix)
+				restored.id = getRealId(uniqueId);
 
 				delete restored.deleted;
 				delete restored.deletedAt;
 				delete restored.metadata;
 				delete restored.backup;
-				delete restored.backups; // Ensure we don't restore the trash container fields
+				delete restored.backups;
 				delete restored.recordTypes;
 				restored.updatedAt = new Date().toISOString();
 				restored.syncStatus = 'pending';
 
-				// Write to Active Store
 				if (restoreType === 'expense') {
 					await tx.objectStore('expenses').put(restored);
 				} else if (restoreType === 'millage') {
@@ -156,36 +153,22 @@ function createTrashStore() {
 					await tx.objectStore('trips').put(restored);
 				}
 
-				// Update Trash Store (Remove or Degrade)
-				const remaining = recordTypes.filter((r) => r !== restoreType);
-				if (remaining.length === 0) {
-					await tx.objectStore('trash').delete(id);
-					update((items) => items.filter((it) => it.id !== id));
-				} else {
-					if (stored.backups && stored.backups[restoreType]) delete stored.backups[restoreType];
-					stored.recordTypes = remaining;
-					// Refresh primary view fields
-					const primary = remaining[0] as string | undefined;
-					const pb = primary ? backupFor(primary) : {};
-					stored.miles = (pb as any).miles ?? stored.miles;
-					stored.vehicle = pb.vehicle ?? stored.vehicle;
-					stored.date = pb.date ?? stored.date;
-					stored.syncStatus = 'pending';
-					await tx.objectStore('trash').put(stored);
-					update((items) => items.map((it) => (it.id === id ? stored : it)));
-				}
+				// Remove from Trash
+				await tx.objectStore('trash').delete(uniqueId);
+				update((items) => items.filter((it) => it.id !== uniqueId));
 
-				await tx.done;
-
-				// Sync Queue (Background)
+				// Enqueue Sync
 				const syncTarget =
 					restoreType === 'expense' ? 'expenses' : restoreType === 'millage' ? 'millage' : 'trips';
+
+				// [!code note] We queue the restore using the REAL ID so the server finds it
 				await syncManager.addToQueue({
 					action: 'restore',
-					tripId: id,
+					tripId: restored.id,
 					data: { store: syncTarget, type: restoreType }
 				});
 
+				await tx.done;
 				return restored;
 			} catch (err) {
 				console.error('❌ Failed to restore item:', err);
@@ -199,7 +182,10 @@ function createTrashStore() {
 			await tx.objectStore('trash').delete(id);
 			await tx.done;
 			update((l) => l.filter((t) => t.id !== id));
-			await syncManager.addToQueue({ action: 'permanentDelete', tripId: id });
+
+			// If it's a prefixed ID, send the real ID to the server
+			const realId = getRealId(id);
+			await syncManager.addToQueue({ action: 'permanentDelete', tripId: realId });
 		},
 
 		async emptyTrash(userId: string) {
@@ -220,7 +206,8 @@ function createTrashStore() {
 			update((current) => current.filter((item) => item.userId !== userId));
 
 			for (const item of userItems) {
-				await syncManager.addToQueue({ action: 'permanentDelete', tripId: item.id });
+				const realId = getRealId(item.id);
+				await syncManager.addToQueue({ action: 'permanentDelete', tripId: realId });
 			}
 			return userItems.length;
 		},
@@ -265,36 +252,26 @@ function createTrashStore() {
 
 					if (!flatItem.id) continue;
 
-					// [!code fix] Enhanced type inference so millage isn't confused for trip
+					// Infer Type
 					if (!flatItem.recordType && !flatItem.type) {
 						if (flatItem.originalKey?.startsWith('expense:')) flatItem.recordType = 'expense';
 						else if (flatItem.originalKey?.startsWith('millage:')) flatItem.recordType = 'millage';
 						else if (flatItem.originalKey?.startsWith('trip:')) flatItem.recordType = 'trip';
 						else if (typeof flatItem.miles === 'number' && !flatItem.stops)
-							// Heuristic: has miles but no stops likely millage log
 							flatItem.recordType = 'millage';
 						else flatItem.recordType = 'trip';
 					} else if (flatItem.type && !flatItem.recordType) {
 						flatItem.recordType = flatItem.type;
 					}
-
 					flatItem.type = flatItem.recordType;
-					// ... (rest of merging logic unchanged) ...
-					if (Array.isArray(flatItem.containsRecordTypes)) {
-						flatItem.recordTypes = Array.from(
-							new Set([flatItem.recordType, ...flatItem.containsRecordTypes])
-						);
-					} else if (flatItem.recordTypes && Array.isArray(flatItem.recordTypes)) {
-						flatItem.recordTypes = Array.from(
-							new Set(flatItem.recordTypes.concat(flatItem.recordType))
-						);
-					} else {
-						flatItem.recordTypes = [flatItem.recordType];
-					}
 
-					cloudIds.add(flatItem.id);
+					// [!code fix] Apply Unique ID for Mileage to avoid collision with Trip
+					const uniqueId = getUniqueTrashId(flatItem);
+					flatItem.id = uniqueId;
 
-					const local = await store.get(flatItem.id);
+					cloudIds.add(uniqueId);
+
+					const local = await store.get(uniqueId);
 					if (!local || new Date(flatItem.deletedAt) > new Date(local.deletedAt)) {
 						await store.put({
 							...flatItem,
@@ -304,12 +281,14 @@ function createTrashStore() {
 						savedCount++;
 					}
 				}
-				if (savedCount > 0)
-					console.debug(`[trash] Synced ${savedCount} items from cloud (type=${type})`);
 
+				// Reconciliation
 				const index = store.index('userId');
 				const localItems = await index.getAll(userId);
 				for (const localItem of localItems) {
+					// We only remove items that match the requested type sync, or all if generic
+					if (type && localItem.recordType !== type) continue;
+
 					if (!cloudIds.has(localItem.id)) {
 						if (localItem.syncStatus === 'pending') continue;
 						await store.delete(localItem.id);
@@ -317,7 +296,8 @@ function createTrashStore() {
 				}
 				await tx.done;
 
-				// Cleanup Active Stores
+				// Cleanup Active Stores (Remove items that appear in trash)
+				// We need to check against the REAL IDs
 				const cleanupTx = db.transaction(['trash', 'trips', 'expenses', 'millage'], 'readwrite');
 				const allTrash = await cleanupTx.objectStore('trash').getAll();
 				const tripStore = cleanupTx.objectStore('trips');
@@ -325,18 +305,15 @@ function createTrashStore() {
 				const millageStore = cleanupTx.objectStore('millage');
 
 				for (const trashItem of allTrash) {
-					const rt =
-						(trashItem.recordType as string) ||
-						(trashItem.originalKey && String(trashItem.originalKey).startsWith('expense:')
-							? 'expense'
-							: 'trip');
+					const realId = getRealId(trashItem.id);
+					const rt = trashItem.recordType;
 
 					if (rt === 'trip') {
-						if (await tripStore.get(trashItem.id)) await tripStore.delete(trashItem.id);
+						if (await tripStore.get(realId)) await tripStore.delete(realId);
 					} else if (rt === 'expense') {
-						if (await expenseStore.get(trashItem.id)) await expenseStore.delete(trashItem.id);
+						if (await expenseStore.get(realId)) await expenseStore.delete(realId);
 					} else if (rt === 'millage') {
-						if (await millageStore.get(trashItem.id)) await millageStore.delete(trashItem.id);
+						if (await millageStore.get(realId)) await millageStore.delete(realId);
 					}
 				}
 				await cleanupTx.done;
