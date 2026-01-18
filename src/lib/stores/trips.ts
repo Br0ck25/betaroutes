@@ -181,32 +181,33 @@ function createTripsStore() {
 				try {
 					if (Object.prototype.hasOwnProperty.call(changes, 'totalMiles')) {
 						const { millage } = await import('$lib/stores/millage');
-						try {
+						const existingMillage = await millage.get(id, userId);
+
+						if (existingMillage) {
+							// Update existing mileage record
 							await millage.updateMillage(
 								id,
 								{ miles: Number((changes as any).totalMiles) },
 								userId
 							);
-						} catch (err: any) {
-							if ((err?.message || '').includes('not found')) {
-								await millage.create(
-									{
-										id,
-										miles: Number((changes as any).totalMiles),
-										date: updated.date,
-										millageRate: (get(userSettings) as any)?.millageRate ?? undefined,
-										vehicle:
-											(get(userSettings) as any)?.vehicles?.[0]?.id ??
-											(get(userSettings) as any)?.vehicles?.[0]?.name ??
-											undefined,
-										createdAt: updated.createdAt,
-										updatedAt: updated.updatedAt
-									},
-									userId
-								);
-							} else {
-								throw err;
-							}
+						} else if (Number((changes as any).totalMiles) > 0) {
+							// Create new mileage record if none exists and miles > 0
+							await millage.create(
+								{
+									id,
+									tripId: id,
+									miles: Number((changes as any).totalMiles),
+									date: updated.date,
+									millageRate: (get(userSettings) as any)?.millageRate ?? undefined,
+									vehicle:
+										(get(userSettings) as any)?.vehicles?.[0]?.id ??
+										(get(userSettings) as any)?.vehicles?.[0]?.name ??
+										undefined,
+									createdAt: updated.createdAt,
+									updatedAt: updated.updatedAt
+								},
+								userId
+							);
 						}
 					}
 				} catch (err) {

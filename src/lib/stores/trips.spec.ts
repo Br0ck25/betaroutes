@@ -93,4 +93,25 @@ describe('Trips <-> Millage integration', () => {
 			)
 		).toBe(true);
 	});
+
+	it('updating trip mileage creates new mileage log when none exists', async () => {
+		const userId = 'u-deleted-mileage';
+		const trip = await trips.create({ date: '2025-01-03', totalMiles: 50 }, userId as any);
+
+		// Simulate: mileage was created server-side, synced down, then deleted
+		// (No mileage record exists in local IndexedDB)
+
+		// Update trip with new mileage - should create a new mileage log
+		await trips.updateTrip(trip.id, { totalMiles: 75 }, userId as any);
+
+		// Verify trip was updated
+		const updatedTrip = await trips.get(trip.id, userId as any);
+		expect(updatedTrip?.totalMiles).toBe(75);
+
+		// Verify a new mileage record was created with proper tripId linking
+		const m = await millage.get(trip.id, userId as any);
+		expect(m).toBeTruthy();
+		expect(m?.miles).toBe(75);
+		expect((m as any)?.tripId).toBe(trip.id);
+	});
 });
