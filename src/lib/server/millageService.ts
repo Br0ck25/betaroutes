@@ -6,6 +6,7 @@ import { log } from '$lib/server/log';
 export interface MillageRecord {
 	id: string;
 	userId: string;
+	tripId?: string; // [!code ++] Added tripId reference
 	date?: string;
 	startOdometer: number;
 	endOdometer: number;
@@ -18,7 +19,12 @@ export interface MillageRecord {
 	[key: string]: unknown;
 }
 
-export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNamespace) {
+// [!code change] Added tripKV argument to check parent status
+export function makeMillageService(
+	kv: KVNamespace,
+	tripIndexDO: DurableObjectNamespace,
+	tripKV?: KVNamespace
+) {
 	const getIndexStub = (userId: string) => {
 		const id = tripIndexDO.idFromName(userId);
 		return tripIndexDO.get(id);
@@ -103,8 +109,7 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				return millage.filter((m) => new Date(m.updatedAt || m.createdAt) > sinceDate);
 			}
 
-			// [!code fix] Full List: Filter out deleted items (Tombstones)
-			// This prevents deleted items from appearing on page load/refresh
+			// Full List: Filter out deleted items (Tombstones)
 			return millage
 				.filter((m) => !m.deleted)
 				.sort((a, b) =>
@@ -115,6 +120,23 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 		async get(userId: string, id: string) {
 			const all = await this.list(userId);
 			return all.find((m) => m.id === id) || null;
+		},
+
+		// [!code ++] NEW: Cascade delete helper
+		async deleteByTripId(userId: string, tripId: string) {
+			// Find all mileage logs associated with this trip ID
+			const all = await this.list(userId);
+			const targets = all.filter((m) => m.tripId === tripId);
+
+			if (targets.length > 0) {
+				log.info(
+					`[MillageService] Cascading delete for trip ${tripId}. Found ${targets.length} logs.`
+				);
+				// Delete each found record individually to generate proper tombstones
+				for (const m of targets) {
+					await this.delete(userId, m.id);
+				}
+			}
 		},
 
 		async put(item: MillageRecord) {
@@ -225,6 +247,7 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			);
 			return out;
 		},
+
 		async permanentDelete(userId: string, itemId: string) {
 			const key = `millage:${userId}:${itemId}`;
 			await kv.delete(key);
@@ -245,6 +268,24 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			if (!tombstone.deleted) throw new Error('Item not deleted');
 
 			const restored = tombstone.backup || tombstone.data || tombstone;
+
+			// [!code ++] GUARD: Check if parent trip is deleted
+			if (tripKV && restored.tripId) {
+				const tripKey = `trip:${userId}:${restored.tripId}`;
+				const tripRaw = await tripKV.get(tripKey);
+
+				// If trip exists in KV, check if it's marked as deleted
+				if (tripRaw) {
+					const trip = JSON.parse(tripRaw);
+					if (trip.deleted) {
+						throw new Error('Cannot restore mileage log because the parent trip is deleted.');
+					}
+				} else {
+					// If trip is missing entirely from KV (permanent delete?), we also block
+					throw new Error('Cannot restore mileage log because the parent trip does not exist.');
+				}
+			}
+
 			delete restored.deleted;
 			delete restored.deletedAt;
 			delete restored.metadata;

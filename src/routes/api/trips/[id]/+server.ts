@@ -18,7 +18,7 @@ function safeKV(env: unknown, name: string) {
 	return kv ?? undefined;
 }
 
-// [!code ++] Helper for fake Durable Object (Fallback)
+// Helper for fake Durable Object (Fallback)
 function fakeDO() {
 	return {
 		idFromName: () => ({ name: 'fake' }),
@@ -41,11 +41,11 @@ export const GET: RequestHandler = async (event) => {
 		// Connect to KVs
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
-		// [!code fix] Get DO binding
+		// Get DO binding
 		const tripIndexDO = safeDO(event.platform?.env, 'TRIP_INDEX_DO') ?? fakeDO();
 		const placesIndexDO = safeDO(event.platform?.env, 'PLACES_INDEX_DO') ?? tripIndexDO;
 
-		// [!code fix] Pass DO to service (add placesIndexDO)
+		// Pass DO to service (add placesIndexDO)
 		const svc = makeTripService(
 			kv as unknown as KVNamespace,
 			undefined,
@@ -104,11 +104,11 @@ export const PUT: RequestHandler = async (event) => {
 
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
-		// [!code fix] Get DO binding
+		// Get DO binding
 		const tripIndexDO = safeDO(event.platform?.env, 'TRIP_INDEX_DO') ?? fakeDO();
 		const placesIndexDO = safeDO(event.platform?.env, 'PLACES_INDEX_DO') ?? tripIndexDO;
 
-		// [!code fix] Pass DO to service (add placesIndexDO)
+		// Pass DO to service (add placesIndexDO)
 		const svc = makeTripService(
 			kv as unknown as KVNamespace,
 			undefined,
@@ -198,11 +198,11 @@ export const DELETE: RequestHandler = async (event) => {
 
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
-		// [!code fix] Get DO binding
+		// Get DO binding
 		const tripIndexDO = safeDO(event.platform?.env, 'TRIP_INDEX_DO') ?? fakeDO();
 		const placesIndexDO = safeDO(event.platform?.env, 'PLACES_INDEX_DO') ?? tripIndexDO;
 
-		// [!code fix] Pass DO to service
+		// Pass DO to service
 		const svc = makeTripService(
 			kv as unknown as KVNamespace,
 			undefined,
@@ -226,15 +226,22 @@ export const DELETE: RequestHandler = async (event) => {
 		// Perform soft delete
 		await svc.delete(storageId, id);
 
-		// Best-effort: soft-delete linked millage record so it doesn't re-appear independently
+		// [!code fix] Soft-delete linked millage records cleanly
 		try {
 			const millageKV = safeKV(event.platform?.env, 'BETA_MILLAGE_KV');
+			// [!code ++] Need Trip KV to initialize service correctly (although optional here)
+			const logsKV = safeKV(event.platform?.env, 'BETA_LOGS_KV');
+
 			if (millageKV) {
 				const millageSvc = makeMillageService(
 					millageKV as any,
-					safeDO(event.platform?.env, 'TRIP_INDEX_DO')!
+					safeDO(event.platform?.env, 'TRIP_INDEX_DO')!,
+					logsKV as any
 				);
-				const p = millageSvc.delete(storageId, id).catch(() => {});
+
+				// [!code fix] Use deleteByTripId instead of deleting by id (which was the trip ID, causing mismatch)
+				const p = millageSvc.deleteByTripId(storageId, id).catch(() => {});
+
 				try {
 					if (event.platform?.context?.waitUntil) event.platform.context.waitUntil(p as any);
 					else if ((event as any)?.context?.waitUntil) (event as any).context.waitUntil(p);
