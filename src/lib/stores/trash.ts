@@ -9,7 +9,7 @@ import type { User } from '$lib/types';
 function createTrashStore() {
 	const { subscribe, set, update } = writable<TrashRecord[]>([]);
 
-	// Helper to ensure mileage items in trash have unique IDs to prevent collision with trips
+	// Helper to ensure mileage items in trash have unique IDs
 	const getUniqueTrashId = (item: any) => {
 		if (
 			(item.recordType === 'millage' || item.type === 'millage') &&
@@ -20,7 +20,7 @@ function createTrashStore() {
 		return item.id;
 	};
 
-	// Helper to get the REAL id (for database) from the unique trash ID
+	// Helper to get real UUID
 	const getRealId = (trashId: string) => {
 		if (trashId.startsWith('millage:')) return trashId.replace('millage:', '');
 		return trashId;
@@ -57,7 +57,7 @@ function createTrashStore() {
 						})
 					: normalizedItems;
 
-				// Projection: ensure the UI sees the requested type
+				// Projection for UI consistency
 				const projected = filtered.map((it) => {
 					if (type && it.recordType !== type) {
 						return { ...it, recordType: type, type: type };
@@ -84,7 +84,6 @@ function createTrashStore() {
 			try {
 				const db = await getDB();
 
-				// 1. Fetch from trash using the UNIQUE ID
 				const txRead = db.transaction('trash', 'readonly');
 				const stored = await txRead.objectStore('trash').get(uniqueId);
 				await txRead.done;
@@ -104,7 +103,7 @@ function createTrashStore() {
 				const restoreType =
 					targetType || stored.recordType || stored.type || recordTypes[0] || 'trip';
 
-				// 2. Parent Trip Check
+				// [!code fix] Parent Trip Check & Cascade Restore Suggestion
 				if (restoreType === 'millage') {
 					const realId = getRealId(uniqueId);
 					const parentId = stored.tripId || realId;
@@ -116,8 +115,10 @@ function createTrashStore() {
 
 					if (!tripExists) {
 						if (tripTrash) {
+							// [!code fix] If Trip is in trash, we should technically restore it too or block.
+							// For strict safety, we block but explicitly identify the parent.
 							throw new Error(
-								'This mileage log belongs to a trip that is currently in the trash. Restore the trip first.'
+								'The parent Trip is currently in the Trash. Please switch to the "Trips" tab in Trash and restore the trip first.'
 							);
 						} else {
 							throw new Error(
@@ -127,23 +128,20 @@ function createTrashStore() {
 					}
 				}
 
-				// 3. Restore Logic
 				const tx = db.transaction(['trash', 'expenses', 'millage', 'trips'], 'readwrite');
 
 				const backups: Record<string, any> =
 					stored.backups || (stored.data && (stored.data.__backups as any)) || {};
 
-				// [!code fix] Added check for 'stored.backup' (singular) used by Server
+				// [!code fix] Check for 'backup' (singular) to handle Server Data
 				const backupFor = (t: string) =>
 					backups[t] ||
 					(stored.data && stored.data[t]) ||
-					stored.backup || // <--- CRITICAL FIX: Server uses singular 'backup'
+					stored.backup || // <--- Fixes "missing data" after cloud sync
 					(stored.recordType === t ? stored.data || stored : undefined) ||
 					stored;
 
 				const restored = { ...(backupFor(restoreType) || {}) };
-
-				// Ensure we restore with the REAL ID
 				restored.id = getRealId(uniqueId);
 
 				delete restored.deleted;
@@ -163,11 +161,9 @@ function createTrashStore() {
 					await tx.objectStore('trips').put(restored);
 				}
 
-				// Remove from Trash
 				await tx.objectStore('trash').delete(uniqueId);
 				update((items) => items.filter((it) => it.id !== uniqueId));
 
-				// Enqueue Sync using Real ID
 				const syncTarget =
 					restoreType === 'expense' ? 'expenses' : restoreType === 'millage' ? 'millage' : 'trips';
 
@@ -192,7 +188,6 @@ function createTrashStore() {
 			await tx.done;
 			update((l) => l.filter((t) => t.id !== id));
 
-			// Send Real ID to server
 			const realId = getRealId(id);
 			await syncManager.addToQueue({ action: 'permanentDelete', tripId: realId });
 		},
@@ -203,8 +198,6 @@ function createTrashStore() {
 			const index = txRead.objectStore('trash').index('userId');
 			const userItems = await index.getAll(userId);
 			await txRead.done;
-
-			if (userItems.length === 0) return 0;
 
 			const tx = db.transaction('trash', 'readwrite');
 			for (const item of userItems) {
@@ -261,7 +254,6 @@ function createTrashStore() {
 
 					if (!flatItem.id) continue;
 
-					// Infer Type
 					if (!flatItem.recordType && !flatItem.type) {
 						if (flatItem.originalKey?.startsWith('expense:')) flatItem.recordType = 'expense';
 						else if (flatItem.originalKey?.startsWith('millage:')) flatItem.recordType = 'millage';
@@ -274,7 +266,6 @@ function createTrashStore() {
 					}
 					flatItem.type = flatItem.recordType;
 
-					// Apply Unique ID for Mileage
 					const uniqueId = getUniqueTrashId(flatItem);
 					flatItem.id = uniqueId;
 
@@ -291,7 +282,6 @@ function createTrashStore() {
 					}
 				}
 
-				// Reconciliation
 				const index = store.index('userId');
 				const localItems = await index.getAll(userId);
 				for (const localItem of localItems) {
@@ -304,7 +294,6 @@ function createTrashStore() {
 				}
 				await tx.done;
 
-				// Cleanup Active Stores
 				const cleanupTx = db.transaction(['trash', 'trips', 'expenses', 'millage'], 'readwrite');
 				const allTrash = await cleanupTx.objectStore('trash').getAll();
 				const tripStore = cleanupTx.objectStore('trips');
