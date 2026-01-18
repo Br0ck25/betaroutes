@@ -91,6 +91,8 @@ export interface TrashRecord extends Partial<TripRecord>, Partial<ExpenseRecord>
 export interface MillageRecord {
 	id: string;
 	userId: string;
+	/** Optional link to parent trip */
+	tripId?: string;
 	date?: string;
 	startOdometer: number;
 	endOdometer: number;

@@ -2,7 +2,7 @@
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
 import { makeExpenseService } from '$lib/server/expenseService';
-import { makeMillageService } from '$lib/server/millageService';
+import { makeMillageService, type MillageRecord } from '$lib/server/millageService';
 import { safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { getStorageId } from '$lib/server/user';
@@ -58,8 +58,57 @@ export const POST: RequestHandler = async (event) => {
 					restored = await expenseSvc.restore(storageId, id);
 				} catch {
 					try {
+						// Get the mileage item from trash to check its tripId
+						const millageKV = safeKV(platformEnv, 'BETA_MILLAGE_KV');
+						if (millageKV) {
+							const raw = await (millageKV as any).get(`millage:${storageId}:${id}`);
+							if (raw) {
+								const tombstone = JSON.parse(raw);
+								const millageData = tombstone.backup || tombstone.data || tombstone;
+								
+								// Check if mileage has a linked trip
+								if (millageData.tripId) {
+									// Check if parent trip is deleted
+									const trip = await tripSvc.get(storageId, millageData.tripId);
+									if (!trip || trip.deleted) {
+										throw new Error('Cannot restore mileage: parent trip is deleted');
+									}
+									
+									// Check if another active mileage log exists for this trip
+									const activeMillage = await millageSvc.list(storageId);
+									const conflictingMillage = activeMillage.find(
+										(m: MillageRecord) => m.tripId === millageData.tripId && m.id !== id
+									);
+									if (conflictingMillage) {
+										throw new Error('Cannot restore mileage: another active mileage log exists for this trip');
+									}
+								}
+							}
+						}
+						
 						restored = await millageSvc.restore(storageId, id);
-					} catch {
+						
+						// If restored mileage has a tripId, sync the miles back to the trip
+						const restoredMillage = restored as MillageRecord | undefined;
+						if (restoredMillage && restoredMillage.tripId && typeof restoredMillage.miles === 'number') {
+							try {
+								const trip = await tripSvc.get(storageId, restoredMillage.tripId);
+								if (trip && !trip.deleted) {
+									trip.totalMiles = restoredMillage.miles;
+									trip.updatedAt = new Date().toISOString();
+									await tripSvc.put(trip);
+									log.info('Synced restored mileage to trip', { tripId: restoredMillage.tripId, miles: restoredMillage.miles });
+								}
+							} catch (e) {
+								log.warn('Failed to sync restored mileage to trip', { message: String(e) });
+							}
+						}
+					} catch (millageError) {
+						// Check if this is a validation error that we should surface
+						const errMsg = millageError instanceof Error ? millageError.message : String(millageError);
+						if (errMsg.includes('Cannot restore mileage')) {
+							return new Response(JSON.stringify({ error: errMsg }), { status: 409 });
+						}
 						// all attempts failed; no-op
 						void 0;
 					}

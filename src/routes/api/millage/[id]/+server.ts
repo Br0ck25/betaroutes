@@ -1,6 +1,7 @@
 // src/routes/api/millage/[id]/+server.ts
 import type { RequestHandler } from './$types';
 import { makeMillageService } from '$lib/server/millageService';
+import { makeTripService } from '$lib/server/tripService';
 import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
@@ -24,8 +25,35 @@ export const DELETE: RequestHandler = async (event) => {
 		const userId = getStorageId(sessionUser);
 		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 
+		// Get the mileage log before deleting to check for linked trip
+		const existing = await svc.get(userId, id);
+
 		// Soft delete via service
 		await svc.delete(userId, id);
+
+		// --- Set linked trip's totalMiles to 0 ---
+		if (existing && existing.tripId) {
+			try {
+				const tripIndexDO = safeDO(env, 'TRIP_INDEX_DO')!;
+				const placesIndexDO = safeDO(env, 'PLACES_INDEX_DO') || tripIndexDO;
+				const tripSvc = makeTripService(
+					safeKV(env, 'BETA_LOGS_KV')!,
+					undefined,
+					safeKV(env, 'BETA_PLACES_KV'),
+					tripIndexDO,
+					placesIndexDO
+				);
+				const trip = await tripSvc.get(userId, existing.tripId);
+				if (trip && !trip.deleted) {
+					trip.totalMiles = 0;
+					trip.updatedAt = new Date().toISOString();
+					await tripSvc.put(trip);
+					log.info('Set trip totalMiles to 0 after mileage delete', { tripId: existing.tripId });
+				}
+			} catch (e) {
+				log.warn('Failed to update trip after mileage delete', { tripId: existing.tripId, message: createSafeErrorMessage(e) });
+			}
+		}
 
 		return new Response(null, { status: 204 });
 	} catch (err) {
@@ -109,6 +137,31 @@ export const PUT: RequestHandler = async (event) => {
 		if (updated.vehicle === '') updated.vehicle = undefined;
 
 		await svc.put(updated);
+
+		// --- Bidirectional sync: Update linked trip's totalMiles ---
+		if (updated.tripId && typeof updated.miles === 'number') {
+			try {
+				const tripIndexDO = safeDO(env, 'TRIP_INDEX_DO')!;
+				const placesIndexDO = safeDO(env, 'PLACES_INDEX_DO') || tripIndexDO;
+				const tripSvc = makeTripService(
+					safeKV(env, 'BETA_LOGS_KV')!,
+					undefined,
+					safeKV(env, 'BETA_PLACES_KV'),
+					tripIndexDO,
+					placesIndexDO
+				);
+				const trip = await tripSvc.get(userId, updated.tripId);
+				if (trip && !trip.deleted) {
+					trip.totalMiles = updated.miles;
+					trip.updatedAt = new Date().toISOString();
+					await tripSvc.put(trip);
+					log.info('Updated trip totalMiles from mileage log', { tripId: updated.tripId, miles: updated.miles });
+				}
+			} catch (e) {
+				log.warn('Failed to sync mileage to trip', { tripId: updated.tripId, message: createSafeErrorMessage(e) });
+			}
+		}
+
 		return new Response(JSON.stringify(updated), {
 			headers: { 'Content-Type': 'application/json' }
 		});
