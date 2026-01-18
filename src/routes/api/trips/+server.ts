@@ -1,6 +1,7 @@
 // src/routes/api/trips/+server.ts
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
+import { makeMillageService } from '$lib/server/millageService';
 import { findUserById } from '$lib/server/userService';
 import { z } from 'zod';
 import { PLAN_LIMITS } from '$lib/constants';
@@ -392,6 +393,32 @@ export const POST: RequestHandler = async (event) => {
 		// Persist trip (coerce to TripRecord)
 		await svc.put(trip as TripRecord);
 
+		// --- Auto-create mileage log if trip has totalMiles > 0 ---
+		if (typeof validData.totalMiles === 'number' && validData.totalMiles > 0 && !existingTrip) {
+			try {
+				const millageKV = safeKV(env, 'BETA_MILLAGE_KV');
+				if (millageKV) {
+					const millageSvc = makeMillageService(millageKV, safeDO(env, 'TRIP_INDEX_DO')!);
+					const millageRecord = {
+						id: crypto.randomUUID(),
+						tripId: trip.id,
+						userId: storageId,
+						date: trip.date || now,
+						startOdometer: 0,
+						endOdometer: validData.totalMiles,
+						miles: validData.totalMiles,
+						notes: `Auto-created from trip`,
+						createdAt: now,
+						updatedAt: now
+					};
+					await millageSvc.put(millageRecord);
+					log.info('Auto-created mileage log for trip', { tripId: trip.id, miles: validData.totalMiles });
+				}
+			} catch (e) {
+				log.warn('Failed to auto-create mileage log', { tripId: trip.id, message: createSafeErrorMessage(e) });
+			}
+		}
+
 		// --- Direct compute & KV writes (bypass TripIndexDO)
 		try {
 			const directionsKV = safeKV(env, 'BETA_DIRECTIONS_KV');
@@ -587,6 +614,45 @@ export const PUT: RequestHandler = async (event) => {
 		};
 
 		await svc.put(trip as unknown as TripRecord);
+
+		// --- Bidirectional sync: Update linked mileage log if totalMiles changed ---
+		if (typeof validData.totalMiles === 'number' && existingTrip.totalMiles !== validData.totalMiles) {
+			try {
+				const millageKV = safeKV(env, 'BETA_MILLAGE_KV');
+				if (millageKV) {
+					const millageSvc = makeMillageService(millageKV, safeDO(env, 'TRIP_INDEX_DO')!);
+					const allMillage = await millageSvc.list(storageId);
+					const linkedMillage = allMillage.find((m: any) => m.tripId === trip.id);
+					
+					if (linkedMillage) {
+						// Update existing mileage log
+						linkedMillage.miles = validData.totalMiles;
+						linkedMillage.endOdometer = linkedMillage.startOdometer + validData.totalMiles;
+						linkedMillage.updatedAt = now;
+						await millageSvc.put(linkedMillage);
+						log.info('Updated mileage log from trip edit', { tripId: trip.id, miles: validData.totalMiles });
+					} else if (validData.totalMiles > 0) {
+						// Create new mileage log if none exists and miles > 0
+						const newMillage = {
+							id: crypto.randomUUID(),
+							tripId: trip.id,
+							userId: storageId,
+							date: trip.date || now,
+							startOdometer: 0,
+							endOdometer: validData.totalMiles,
+							miles: validData.totalMiles,
+							notes: 'Auto-created from trip edit',
+							createdAt: now,
+							updatedAt: now
+						};
+						await millageSvc.put(newMillage);
+						log.info('Created mileage log from trip edit', { tripId: trip.id, miles: validData.totalMiles });
+					}
+				}
+			} catch (e) {
+				log.warn('Failed to sync trip mileage to mileage log', { tripId: trip.id, message: createSafeErrorMessage(e) });
+			}
+		}
 
 		// --- Enqueue route computation in TripIndexDO (non-blocking)
 		try {
