@@ -10,7 +10,6 @@ interface StoreHandler {
 }
 
 class SyncManager {
-	// ... (keep existing properties) ...
 	private initialized = false;
 	private syncInterval: ReturnType<typeof setInterval> | null = null;
 	private isSyncing = false;
@@ -46,6 +45,7 @@ class SyncManager {
 
 		if (navigator.onLine) {
 			await this.syncNow();
+			// Initial pull
 			await this.syncDownAll();
 			this.startAutoSync();
 		}
@@ -127,18 +127,17 @@ class SyncManager {
 
 				for (const item of queue) {
 					try {
+						// Enrich only if it's a trip creation/update and not deleted
 						if (
 							(item.action === 'create' || item.action === 'update') &&
 							item.data &&
 							(!item.data.store || item.data.store === 'trips')
 						) {
+							// [!code fix] Safe enrichment block
 							try {
 								await this.enrichTripData(item.data);
 							} catch (enrichErr) {
-								console.warn(
-									'⚠️ Failed to enrich trip data (Google Maps likely blocked or offline). Proceeding with sync.',
-									enrichErr
-								);
+								console.warn('⚠️ Failed to enrich trip data (proceeding anyway):', enrichErr);
 							}
 						}
 
@@ -169,26 +168,21 @@ class SyncManager {
 			console.log(`🧮 Calculating offline route for trip ${trip.id}...`);
 
 			try {
+				// [!code fix] Explicitly catch Map loading errors
 				try {
 					await loadGoogleMaps(this.apiKey);
 				} catch (loaderErr) {
-					console.warn(
-						'⚠️ Google Maps API failed to load (likely blocked or offline). Skipping enrichment.',
-						loaderErr
-					);
+					console.warn('⚠️ Google Maps failed to load (blocked/offline). Skipping.', loaderErr);
 					return;
 				}
 
-				// [!code fix] Safety check: Ensure DirectionsService exists before instantiation
-				// This handles cases where API loads but key restrictions block the Directions/Places libraries
+				// [!code fix] Ensure service is available before constructing
 				if (
 					typeof google === 'undefined' ||
 					!google.maps ||
 					typeof google.maps.DirectionsService !== 'function'
 				) {
-					console.warn(
-						'⚠️ Google Maps DirectionsService not available. Key restriction or load error.'
-					);
+					console.warn('⚠️ Google Maps DirectionsService not available.');
 					return;
 				}
 
@@ -249,7 +243,6 @@ class SyncManager {
 		}
 	}
 
-	// ... (rest of class unchanged) ...
 	private async processSyncItem(item: SyncQueueItem) {
 		const { action, tripId, data } = item;
 
@@ -315,6 +308,7 @@ class SyncManager {
 		const db = await getDB();
 		const tx = db.transaction(store, 'readwrite');
 		const objectStore = tx.objectStore(store);
+		// [!code fix] Handle prefixed IDs (like millage:abc) by checking both if needed, or just standard get
 		const record = await objectStore.get(tripId);
 		if (record) {
 			record.syncStatus = 'synced';
