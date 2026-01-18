@@ -287,21 +287,10 @@ export function makeMillageService(
 					);
 				}
 
-				// Check if there's already an active mileage log for this trip
-				// Since mileage ID = trip ID, if the mileage record exists and is NOT deleted,
-				// we have a conflict. But since we're restoring the tombstone, we're fine.
-				// The only conflict would be if someone created a NEW mileage log while this was in trash.
-				const existingMillageRaw = await kv.get(key);
-				if (existingMillageRaw) {
-					const existingMillage = JSON.parse(existingMillageRaw);
-					// If there's a non-tombstone mileage record already, block restore
-					if (!existingMillage.deleted && existingMillage.id === itemId) {
-						// This shouldn't happen with same ID, but guard against it
-						log.warn(
-							`[MillageService] Attempted restore of mileage ${itemId} but active record exists`
-						);
-					}
-				}
+				// Note: We don't need to check for existing active mileage logs because
+				// the mileage ID equals the trip ID by design, ensuring at most ONE
+				// mileage log per trip. The tombstone we're restoring IS the only
+				// mileage record for this trip.
 			}
 
 			const restored = tombstone.backup || tombstone.data || tombstone;

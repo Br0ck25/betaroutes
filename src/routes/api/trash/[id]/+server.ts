@@ -62,9 +62,11 @@ export const POST: RequestHandler = async (event) => {
 					try {
 						restored = await millageSvc.restore(storageId, id);
 					} catch (err) {
-						// Capture mileage-specific validation errors
+						// Capture mileage-specific validation errors (restore blocked due to trip state)
 						const msg = err instanceof Error ? err.message : String(err);
-						if (msg.includes('Parent trip') || msg.includes('trip is deleted')) {
+						// These specific error messages are thrown by millageService.restore
+						// when validation fails - they should be surfaced to the user
+						if (msg.includes('Parent trip not found') || msg.includes('Parent trip is deleted')) {
 							millageError = msg;
 						}
 					}
