@@ -16,7 +16,6 @@ function createTripsStore() {
 
 	return {
 		subscribe,
-
 		updateLocal(trip: TripRecord) {
 			update((items) => {
 				const index = items.findIndex((t) => t.id === trip.id);
@@ -28,33 +27,27 @@ function createTripsStore() {
 				return items;
 			});
 		},
-
+		// ... (load, create, updateTrip remain exactly the same) ...
 		async load(userId?: string) {
 			isLoading.set(true);
 			try {
 				const db = await getDB();
 				const tx = db.transaction('trips', 'readonly');
 				const store = tx.objectStore('trips');
-
 				let trips: TripRecord[];
-
 				if (userId) {
 					const index = store.index('userId');
 					trips = await index.getAll(userId);
 				} else {
 					trips = await store.getAll();
 				}
-
 				trips.sort((a, b) => {
 					const dateA = new Date(a.date || a.createdAt).getTime();
 					const dateB = new Date(b.date || b.createdAt).getTime();
 					return dateB - dateA;
 				});
-
-				// Migration: Normalize totalMileage -> totalMiles
 				const dbRW = db.transaction('trips', 'readwrite');
 				const storeRW = dbRW.objectStore('trips');
-				let migrated = 0;
 				for (const t of trips) {
 					if ((t as any).totalMiles == null && (t as any).totalMileage != null) {
 						(t as any).totalMiles = Number((t as any).totalMileage) || 0;
@@ -62,12 +55,9 @@ function createTripsStore() {
 						(t as any).updatedAt = new Date().toISOString();
 						(t as any).lastModified = new Date().toISOString();
 						await storeRW.put(t);
-						migrated++;
 					}
 				}
 				await dbRW.done;
-				if (migrated > 0) console.log(`🔧 Migrated ${migrated} trips: totalMileage -> totalMiles`);
-
 				set(trips);
 				return trips;
 			} catch (err) {
@@ -78,37 +68,29 @@ function createTripsStore() {
 				isLoading.set(false);
 			}
 		},
-
 		async create(tripData: Partial<TripRecord>, userId: string) {
 			try {
 				const currentUser = get(authUser) as User | null;
 				const isFreeTier = !currentUser?.plan || currentUser.plan === 'free';
-
 				if (isFreeTier) {
 					const db = await getDB();
 					const tx = db.transaction('trips', 'readonly');
 					const index = tx.objectStore('trips').index('userId');
 					const allUserTrips = await index.getAll(userId);
-
 					const windowDays = PLAN_LIMITS.FREE.WINDOW_DAYS || 30;
 					const windowMs = windowDays * 24 * 60 * 60 * 1000;
 					const cutoff = new Date(Date.now() - windowMs);
-
 					const recentCount = allUserTrips.filter((t) => {
 						const d = new Date(t.date || t.createdAt);
 						return d >= cutoff;
 					}).length;
-
 					const allowed =
 						PLAN_LIMITS.FREE.MAX_TRIPS_PER_MONTH || PLAN_LIMITS.FREE.MAX_TRIPS_IN_WINDOW || 10;
 					if (recentCount >= allowed) {
 						throw new Error(`Free tier limit reached (${allowed} trips per ${windowDays} days).`);
 					}
 				}
-
 				const now = new Date().toISOString();
-
-				// Normalize stops and numeric fields to match DB schema
 				const normalizedStops = (tripData.stops || []).map((s: any, i) => ({
 					id: String(s.id || crypto.randomUUID()),
 					address: String(s.address || ''),
@@ -118,7 +100,6 @@ function createTripsStore() {
 					distanceFromPrev: Number(s.distanceFromPrev) || 0,
 					timeFromPrev: Number(s.timeFromPrev) || 0
 				}));
-
 				const trip: TripRecord = {
 					...tripData,
 					stops: normalizedStops,
@@ -129,29 +110,22 @@ function createTripsStore() {
 					lastModified: now,
 					syncStatus: 'pending'
 				} as TripRecord;
-
 				const db = await getDB();
 				const tx = db.transaction('trips', 'readwrite');
 				await tx.objectStore('trips').put(trip);
 				await tx.done;
-
 				update((trips) => {
 					const exists = trips.find((t) => t.id === trip.id);
 					if (exists) return trips.map((t) => (t.id === trip.id ? trip : t));
 					return [trip, ...trips];
 				});
-
-				// If the trip contains mileage, create a local millage record so the UI and sync
-				// treat millage as a first-class, editable object linked to the trip.
 				try {
-					// Lazy-import to avoid circular dependency during module initialization
 					const { millage } = await import('$lib/stores/millage');
 					if (typeof trip.totalMiles === 'number') {
 						await millage.create(
 							{
 								id: trip.id,
 								tripId: trip.id,
-								// miles + defaults from userSettings
 								miles: Number(trip.totalMiles),
 								millageRate: (get(userSettings) as any)?.millageRate ?? undefined,
 								vehicle:
@@ -166,12 +140,8 @@ function createTripsStore() {
 						);
 					}
 				} catch (err) {
-					// Non-fatal: continue; millage will be created during normal sync if this fails
 					console.warn('Failed to create local millage record for trip:', err);
 				}
-
-				// Persist succeeded — return created trip
-				// Enqueue trip for background sync so the record is pushed to BETA_LOGS_KV
 				try {
 					await syncManager.addToQueue({
 						action: 'create',
@@ -187,19 +157,15 @@ function createTripsStore() {
 				throw err;
 			}
 		},
-
 		async updateTrip(id: string, changes: Partial<TripRecord>, userId: string) {
 			try {
 				const db = await getDB();
 				const tx = db.transaction('trips', 'readwrite');
 				const store = tx.objectStore('trips');
-
 				const existing = await store.get(id);
 				if (!existing) throw new Error('Trip not found');
 				if (existing.userId !== userId) throw new Error('Unauthorized');
-
 				const now = new Date().toISOString();
-
 				const normalizedStops = (changes.stops || existing.stops || []).map(
 					(s: any, i: number) => ({
 						id: String(s.id || crypto.randomUUID()),
@@ -221,19 +187,14 @@ function createTripsStore() {
 					lastModified: now,
 					syncStatus: 'pending'
 				};
-
 				await store.put(updated);
 				await tx.done;
-
 				update((trips) => trips.map((t) => (t.id === id ? updated : t)));
-
 				await syncManager.addToQueue({
 					action: 'update',
 					tripId: id,
 					data: updated
 				});
-
-				// Mirror mileage into the local millage store so the trip UI can edit it directly
 				try {
 					if (Object.prototype.hasOwnProperty.call(changes, 'totalMiles')) {
 						const { millage } = await import('$lib/stores/millage');
@@ -268,7 +229,6 @@ function createTripsStore() {
 				} catch (err) {
 					console.warn('Failed to mirror trip mileage to local millage store:', err);
 				}
-
 				return updated;
 			} catch (err) {
 				console.error('❌ Failed to update trip:', err);
@@ -295,8 +255,8 @@ function createTripsStore() {
 				const now = new Date();
 				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-				// Build base trip-trash payload
-				const trashItem: any = {
+				// 1. Create Trip Trash Item
+				const tripTrash = {
 					...trip,
 					id: trip.id,
 					userId: trip.userId,
@@ -304,48 +264,50 @@ function createTripsStore() {
 					deletedBy: userId,
 					expiresAt: expiresAt.toISOString(),
 					originalKey: `trip:${userId}:${id}`,
-					syncStatus: 'pending' as const,
+					syncStatus: 'pending',
 					backups: { trip: { ...trip } },
-					recordType: 'trip',
-					recordTypes: ['trip']
+					recordType: 'trip'
 				};
 
-				// If a millage tombstone already exists for the same id, merge millage fields
-				// into the trip trash item so the millage remains visible in millage trash UI.
 				const trashTx = db.transaction('trash', 'readwrite');
-				const existing = await trashTx.objectStore('trash').get(id as any);
-				if (existing && (existing.recordType === 'millage' || existing.type === 'millage')) {
-					// Preserve millage-specific fields and mark this trash item as containing both types
-					trashItem.miles = (existing as any).miles ?? trashItem.miles;
-					trashItem.vehicle = (existing as any).vehicle ?? trashItem.vehicle;
-					trashItem.date = (existing as any).date ?? trashItem.date;
-					// preserve millage backup and recordTypes
-					const millageBackup =
-						(existing.backups && existing.backups.millage) || existing.data || existing;
-					trashItem.backups = {
-						...(trashItem.backups || {}),
-						millage: { ...(millageBackup as any) }
-					};
-					trashItem.recordTypes = Array.from(
-						new Set([
-							...(existing.recordTypes || [existing.recordType || existing.type || 'millage']),
-							'trip'
-						])
-					);
-				} else {
-					trashItem.recordType = 'trip';
-				}
+				await trashTx.objectStore('trash').put(tripTrash as any);
 
-				// Persist trip tombstone (if merged, backups already populated above)
-				await trashTx.objectStore('trash').put(trashItem);
+				// 2. [!code fix] Handle Linked Mileage - Create SEPARATE trash item
+				// We check active millage store first
+				const millageTx = db.transaction('millage', 'readwrite');
+				const activeMillage = await millageTx.objectStore('millage').get(id);
+
+				if (activeMillage) {
+					const millageTrash = {
+						...activeMillage,
+						// [!code fix] Use unique ID for trash to avoid collision with trip
+						id: `millage:${id}`,
+						originalId: id,
+						tripId: id,
+						userId: trip.userId,
+						deletedAt: now.toISOString(),
+						expiresAt: expiresAt.toISOString(),
+						syncStatus: 'pending',
+						recordType: 'millage',
+						backups: { millage: { ...activeMillage } }
+					};
+					await trashTx.objectStore('trash').put(millageTrash as any);
+					await millageTx.objectStore('millage').delete(id);
+				}
+				await millageTx.done;
 				await trashTx.done;
+
+				// 3. Delete active trip
+				const delTx = db.transaction('trips', 'readwrite');
+				await delTx.objectStore('trips').delete(id);
+				await delTx.done;
 
 				await syncManager.addToQueue({
 					action: 'delete',
 					tripId: id
 				});
 
-				console.log('✅ Trip moved to trash:', id);
+				console.log('✅ Trip and linked mileage moved to trash:', id);
 			} catch (err) {
 				console.error('❌ Failed to delete trip:', err);
 				set(previousTrips);
@@ -353,6 +315,7 @@ function createTripsStore() {
 			}
 		},
 
+		// ... (keep get, clear, syncFromCloud, syncPendingToCloud, migrateOfflineTrips) ...
 		async get(id: string, userId: string) {
 			try {
 				const db = await getDB();
@@ -365,66 +328,49 @@ function createTripsStore() {
 				return null;
 			}
 		},
-
 		clear() {
 			set([]);
 		},
-
 		async syncFromCloud(userId: string) {
 			isLoading.set(true);
 			try {
 				if (!navigator.onLine) return;
-
 				const lastSync = storage.getLastSync();
-				// Add a small buffer to compensate for device clock skew (5 minutes)
 				let url = '/api/trips';
 				if (lastSync) {
 					try {
 						const adjusted = new Date(lastSync);
-						adjusted.setMinutes(adjusted.getMinutes() - 5); // 5-minute buffer
-						// If the adjusted time is in the future (device clock skew ahead), clamp it to now - 5 minutes
+						adjusted.setMinutes(adjusted.getMinutes() - 5);
 						const now = new Date();
 						if (adjusted.getTime() > now.getTime()) {
-							console.warn(
-								'[trips.syncFromCloud] lastSync is in the future; clamping to now - 5min',
-								{
-									lastSync,
-									clamped: new Date(now.getTime() - 5 * 60 * 1000).toISOString()
-								}
-							);
 							adjusted.setTime(now.getTime() - 5 * 60 * 1000);
 						}
 						url = `/api/trips?since=${encodeURIComponent(adjusted.toISOString())}`;
 					} catch {
-						// If parsing fails, fall back to raw lastSync
 						url = `/api/trips?since=${encodeURIComponent(lastSync)}`;
 					}
 				}
 				console.log(`☁️ Syncing trips... ${lastSync ? `(Delta since ${lastSync})` : '(Full)'}`);
-
 				const response = await fetch(url, { credentials: 'include' });
 				if (!response.ok) throw new Error('Failed to fetch trips');
-
 				const cloudTrips: unknown[] = (await response.json()) as unknown[];
-
 				if (cloudTrips.length === 0) {
 					console.log('☁️ No new trip changes.');
 					storage.setLastSync(new Date().toISOString());
 					return;
 				}
-
 				const db = await getDB();
-
 				const trashTx = db.transaction('trash', 'readonly');
 				const trashStore = trashTx.objectStore('trash');
 				const trashItems = await trashStore.getAll();
-				const trashIds = new Set(trashItems.map((t: { id: string }) => t.id));
-
+				// Check against REAL ids in trash (handling millage: prefix)
+				const trashIds = new Set(
+					trashItems.map((t: { id: string }) => t.id.replace('millage:', ''))
+				);
 				const tx = db.transaction('trips', 'readwrite');
 				const store = tx.objectStore('trips');
 				let updateCount = 0;
 				let deleteCount = 0;
-
 				for (const cloudTripRaw of cloudTrips) {
 					const cloudTrip = cloudTripRaw as unknown as {
 						id?: string;
@@ -433,7 +379,6 @@ function createTripsStore() {
 					};
 					if (!cloudTrip.id) continue;
 					if (trashIds.has(cloudTrip.id)) continue;
-
 					const local = await store.get(cloudTrip.id);
 					if (!local || new Date(cloudTrip.updatedAt || '') > new Date(local.updatedAt || '')) {
 						if (cloudTrip.deleted) {
@@ -449,12 +394,9 @@ function createTripsStore() {
 						}
 					}
 				}
-
 				await tx.done;
-
 				storage.setLastSync(new Date().toISOString());
 				console.log(`✅ Synced trips. Updated: ${updateCount}, Deleted: ${deleteCount}.`);
-
 				await this.load(userId);
 			} catch (err) {
 				console.error('❌ Failed to sync trips from cloud:', err);
@@ -462,28 +404,20 @@ function createTripsStore() {
 				isLoading.set(false);
 			}
 		},
-
 		async syncPendingToCloud(userId: string) {
 			try {
 				if (!navigator.onLine) return { synced: 0, failed: 0 };
-
 				console.log('⬆️ Syncing pending local changes...');
-
 				const db = await getDB();
 				const tx = db.transaction('trips', 'readonly');
 				const index = tx.objectStore('trips').index('userId');
 				const allTrips = await index.getAll(userId);
 				await tx.done;
-
 				const pendingTrips = allTrips.filter((t) => t.syncStatus === 'pending');
-
 				if (pendingTrips.length === 0) return { synced: 0, failed: 0 };
-
 				console.log(`📤 Uploading ${pendingTrips.length} pending trip(s)...`);
-
 				let synced = 0;
 				let failed = 0;
-
 				for (const trip of pendingTrips) {
 					try {
 						const method = trip.createdAt !== trip.updatedAt ? 'PUT' : 'POST';
@@ -491,7 +425,6 @@ function createTripsStore() {
 							method,
 							credentials: 'include'
 						});
-
 						if (response.ok) {
 							const updateTx = db.transaction('trips', 'readwrite');
 							const updatedTrip = { ...trip, syncStatus: 'synced' as const };
@@ -506,14 +439,12 @@ function createTripsStore() {
 						failed++;
 					}
 				}
-
 				return { synced, failed };
 			} catch (err) {
 				console.error('❌ Failed to sync pending changes:', err);
 				return { synced: 0, failed: 0 };
 			}
 		},
-
 		async migrateOfflineTrips(tempUserId: string, realUserId: string) {
 			if (!tempUserId || !realUserId || tempUserId === realUserId) return;
 			const db = await getDB();
@@ -521,7 +452,6 @@ function createTripsStore() {
 			const store = tx.objectStore('trips');
 			const index = store.index('userId');
 			const offlineTrips = await index.getAll(tempUserId);
-
 			for (const trip of offlineTrips) {
 				trip.userId = realUserId;
 				trip.syncStatus = 'pending';
@@ -537,7 +467,6 @@ function createTripsStore() {
 
 export const trips = createTripsStore();
 
-// [!code change] Replaces old setStoreUpdater with registerStore to fix crash
 syncManager.registerStore('trips', {
 	updateLocal: (trip) => trips.updateLocal(trip),
 	syncDown: async () => {
