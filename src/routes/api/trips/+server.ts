@@ -415,23 +415,60 @@ export const POST: RequestHandler = async (event) => {
 				const millageKV = safeKV(env, 'BETA_MILLAGE_KV');
 				if (millageKV) {
 					const millageSvc = makeMillageService(millageKV, safeDO(env, 'TRIP_INDEX_DO')!);
+
+					// Fetch user settings for millageRate and vehicle
+					let millageRate: number | undefined;
+					let vehicle: string | undefined;
+					const userSettingsKV = safeKV(env, 'BETA_USER_SETTINGS_KV');
+					if (userSettingsKV && sessionUserSafe?.id) {
+						try {
+							const settingsRaw = await userSettingsKV.get(`settings:${sessionUserSafe.id}`);
+							if (settingsRaw) {
+								const settings = JSON.parse(settingsRaw);
+								millageRate =
+									typeof settings.millageRate === 'number' ? settings.millageRate : undefined;
+								const firstVehicle = settings.vehicles?.[0];
+								vehicle = firstVehicle?.id ?? firstVehicle?.name ?? undefined;
+							}
+						} catch (e) {
+							log.warn('Failed to fetch user settings for mileage', {
+								message: createSafeErrorMessage(e)
+							});
+						}
+					}
+
+					// Calculate reimbursement if millageRate is available
+					const reimbursement =
+						typeof millageRate === 'number'
+							? Number((validData.totalMiles * millageRate).toFixed(2))
+							: undefined;
+
 					const millageRecord = {
-						id: crypto.randomUUID(),
+						id: trip.id, // Use trip ID for 1:1 linking
 						tripId: trip.id,
 						userId: storageId,
 						date: trip.date || now,
 						startOdometer: 0,
 						endOdometer: validData.totalMiles,
 						miles: validData.totalMiles,
-						notes: `Auto-created from trip`,
+						millageRate,
+						vehicle,
+						reimbursement,
+						notes: '',
 						createdAt: now,
 						updatedAt: now
 					};
 					await millageSvc.put(millageRecord);
-					log.info('Auto-created mileage log for trip', { tripId: trip.id, miles: validData.totalMiles });
+					log.info('Auto-created mileage log for trip', {
+						tripId: trip.id,
+						miles: validData.totalMiles
+					});
 				}
 			} catch (e) {
-				log.warn('Failed to auto-create mileage log', { tripId: trip.id, message: createSafeErrorMessage(e) });
+				log.warn('Failed to auto-create mileage log', {
+					tripId: trip.id,
+					message: createSafeErrorMessage(e)
+				});
 			}
 		}
 
@@ -632,21 +669,27 @@ export const PUT: RequestHandler = async (event) => {
 		await svc.put(trip as unknown as TripRecord);
 
 		// --- Bidirectional sync: Update linked mileage log if totalMiles changed ---
-		if (typeof validData.totalMiles === 'number' && existingTrip.totalMiles !== validData.totalMiles) {
+		if (
+			typeof validData.totalMiles === 'number' &&
+			existingTrip.totalMiles !== validData.totalMiles
+		) {
 			try {
 				const millageKV = safeKV(env, 'BETA_MILLAGE_KV');
 				if (millageKV) {
 					const millageSvc = makeMillageService(millageKV, safeDO(env, 'TRIP_INDEX_DO')!);
 					const allMillage = await millageSvc.list(storageId);
 					const linkedMillage = allMillage.find((m: MillageRecord) => m.tripId === trip.id);
-					
+
 					if (linkedMillage) {
 						// Update existing mileage log
 						linkedMillage.miles = validData.totalMiles;
 						linkedMillage.endOdometer = linkedMillage.startOdometer + validData.totalMiles;
 						linkedMillage.updatedAt = now;
 						await millageSvc.put(linkedMillage);
-						log.info('Updated mileage log from trip edit', { tripId: trip.id, miles: validData.totalMiles });
+						log.info('Updated mileage log from trip edit', {
+							tripId: trip.id,
+							miles: validData.totalMiles
+						});
 					} else if (validData.totalMiles > 0) {
 						// Create new mileage log if none exists and miles > 0
 						const newMillage = {
@@ -662,11 +705,17 @@ export const PUT: RequestHandler = async (event) => {
 							updatedAt: now
 						};
 						await millageSvc.put(newMillage);
-						log.info('Created mileage log from trip edit', { tripId: trip.id, miles: validData.totalMiles });
+						log.info('Created mileage log from trip edit', {
+							tripId: trip.id,
+							miles: validData.totalMiles
+						});
 					}
 				}
 			} catch (e) {
-				log.warn('Failed to sync trip mileage to mileage log', { tripId: trip.id, message: createSafeErrorMessage(e) });
+				log.warn('Failed to sync trip mileage to mileage log', {
+					tripId: trip.id,
+					message: createSafeErrorMessage(e)
+				});
 			}
 		}
 
