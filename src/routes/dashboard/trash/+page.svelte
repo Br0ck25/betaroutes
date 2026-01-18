@@ -108,32 +108,32 @@
 						: 'trip');
 
 			const filtered = uniqueItems.filter((it) => {
-			// Prefer explicit recordTypes when present (merged tombstones list multiple types)
-			const recordTypes = Array.isArray(it.recordTypes)
-				? it.recordTypes
-				: it.recordType
-				? [it.recordType]
-				: [];
+				// Prefer explicit recordTypes when present (merged tombstones list multiple types)
+				const recordTypes = Array.isArray(it.recordTypes)
+					? it.recordTypes
+					: it.recordType
+						? [it.recordType]
+						: [];
 
-			if (recordTypes.length > 0) {
-				// If viewing 'all', show everything; otherwise include items whose recordTypes include the view
-				if (!type && !currentTypeParam) return true;
-				return recordTypes.includes(effectiveType);
-			}
+				if (recordTypes.length > 0) {
+					// If viewing 'all', show everything; otherwise include items whose recordTypes include the view
+					if (!type && !currentTypeParam) return true;
+					return recordTypes.includes(effectiveType);
+				}
 
-			// Fallback: infer from key or shape
-			const inferredFromKey =
-				it.recordType ||
-				it.type ||
-				(it.originalKey &&
-					(it.originalKey.startsWith('expense:')
-						? 'expense'
-						: it.originalKey.startsWith('millage:')
-							? 'millage'
-							: 'trip')) ||
-				'trip';
-			const hasMillageShape = typeof it.miles === 'number' || Boolean(it.vehicle);
-			const inferred = hasMillageShape ? 'millage' : inferredFromKey;
+				// Fallback: infer from key or shape
+				const inferredFromKey =
+					it.recordType ||
+					it.type ||
+					(it.originalKey &&
+						(it.originalKey.startsWith('expense:')
+							? 'expense'
+							: it.originalKey.startsWith('millage:')
+								? 'millage'
+								: 'trip')) ||
+					'trip';
+				const hasMillageShape = typeof it.miles === 'number' || Boolean(it.vehicle);
+				const inferred = hasMillageShape ? 'millage' : inferredFromKey;
 				return inferred === effectiveType;
 			});
 
@@ -155,13 +155,22 @@
 		restoring = restoring;
 
 		try {
-			await trash.restore(id, item.userId);
+			// Prefer current view when restoring ambiguous/merged tombstones
+			const displayType =
+				currentTypeParam === 'expenses'
+					? 'expense'
+					: currentTypeParam === 'millage'
+						? 'millage'
+						: Array.isArray((item as any).recordTypes) && (item as any).recordTypes.length
+							? (item as any).recordTypes[0]
+							: (item as any).recordType ||
+								(item as any).type ||
+								(typeof (item as any).miles === 'number' ? 'millage' : 'trip');
 
-			const isExpense = (item as any).recordType === 'expense' || (item as any).type === 'expense';
-			const isMillage = (item as any).recordType === 'millage' || (item as any).type === 'millage';
+			await trash.restore(id, item.userId, displayType);
 
-			if (isExpense) await expenses.load(item.userId);
-			else if (isMillage) await millage.load(item.userId);
+			if (displayType === 'expense') await expenses.load(item.userId);
+			else if (displayType === 'millage') await millage.load(item.userId);
 			else await trips.load(item.userId);
 
 			await loadTrash();
@@ -180,7 +189,17 @@
 		loading = true;
 		try {
 			for (const trip of trashedTrips) {
-				await trash.restore(trip.id, trip.userId);
+				const displayType =
+					currentTypeParam === 'expenses'
+						? 'expense'
+						: currentTypeParam === 'millage'
+							? 'millage'
+							: Array.isArray((trip as any).recordTypes) && (trip as any).recordTypes.length
+								? (trip as any).recordTypes[0]
+								: (trip as any).recordType ||
+									(trip as any).type ||
+									(typeof (trip as any).miles === 'number' ? 'millage' : 'trip');
+				await trash.restore(trip.id, trip.userId, displayType);
 			}
 			const userId = $user?.name || $user?.token;
 			if (userId) {
@@ -297,15 +316,19 @@
 					((t['metadata'] as any)?.deletedAt as string | undefined)}
 				{@const daysLeft = getDaysUntilExpiration(expiresAt)}
 
-				{@const isExpense =
-					(t['type'] as string | undefined) === 'expense' ||
-					(t['recordType'] as string | undefined) === 'expense' ||
-					(t['originalKey'] as string | undefined)?.startsWith('expense:')}
+				{@const displayType =
+					currentTypeParam === 'expenses'
+						? 'expense'
+						: currentTypeParam === 'millage'
+							? 'millage'
+							: Array.isArray(t['recordTypes']) && t['recordTypes'].length
+								? t['recordTypes'][0]
+								: t['recordType'] ||
+									t['type'] ||
+									(typeof t['miles'] === 'number' ? 'millage' : 'trip')}
 
-				{@const isMillage =
-					(t['type'] as string | undefined) === 'millage' ||
-					(t['recordType'] as string | undefined) === 'millage' ||
-					(t['originalKey'] as string | undefined)?.startsWith('millage:')}
+				{@const isExpense = displayType === 'expense'}
+				{@const isMillage = displayType === 'millage'}
 
 				<div class="trash-item">
 					<div class="trip-info">
