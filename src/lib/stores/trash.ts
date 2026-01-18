@@ -13,7 +13,22 @@ function createTrashStore() {
 	const getRealId = (trashId: string) => {
 		if (trashId.startsWith('millage:')) return trashId.replace('millage:', '');
 		if (trashId.startsWith('trip:')) return trashId.replace('trip:', '');
+		if (trashId.startsWith('expense:')) return trashId.replace('expense:', '');
 		return trashId;
+	};
+
+	// Generate a unique trash ID with type prefix to avoid collisions
+	const getUniqueTrashId = (item: { id: string; recordType?: string; type?: string }) => {
+		const id = item.id;
+		const recordType = item.recordType || item.type || 'trip';
+
+		// If ID already has a known prefix, return it as-is
+		if (id.startsWith('millage:') || id.startsWith('trip:') || id.startsWith('expense:')) {
+			return id;
+		}
+
+		// Otherwise, prefix based on record type
+		return `${recordType}:${id}`;
 	};
 
 	return {
