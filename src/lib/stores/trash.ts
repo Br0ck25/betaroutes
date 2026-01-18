@@ -80,6 +80,7 @@ function createTrashStore() {
 			try {
 				const db = await getDB();
 
+				// 1. Read (Guard Checks)
 				const txRead = db.transaction('trash', 'readonly');
 				const stored = await txRead.objectStore('trash').get(uniqueId);
 				await txRead.done;
@@ -121,12 +122,10 @@ function createTrashStore() {
 					}
 				}
 
-				const tx = db.transaction(['trash', 'expenses', 'millage', 'trips'], 'readwrite');
-
+				// 2. Prepare Data
 				const backups: Record<string, any> =
 					stored.backups || (stored.data && (stored.data.__backups as any)) || {};
 
-				// Fix: Check 'backup' (singular) for server data, 'backups' (plural) for local
 				const backupFor = (t: string) =>
 					backups[t] ||
 					(stored.data && stored.data[t]) ||
@@ -146,8 +145,26 @@ function createTrashStore() {
 				restored.updatedAt = new Date().toISOString();
 				restored.syncStatus = 'pending';
 
+				// 3. Write Database (Atomic Transaction)
+				const tx = db.transaction(['trash', 'expenses', 'millage', 'trips'], 'readwrite');
+
 				if (restoreType === 'expense') {
 					await tx.objectStore('expenses').put(restored);
+				} else if (restoreType === 'millage') {
+					await tx.objectStore('millage').put(restored);
+				} else {
+					await tx.objectStore('trips').put(restored);
+				}
+
+				// Delete from trash *inside* the transaction
+				await tx.objectStore('trash').delete(uniqueId);
+
+				// [!code fix] Wait for DB transaction to fully complete before calling async imports
+				await tx.done;
+
+				// 4. Update UI / Stores (Post-Transaction)
+				// Now it is safe to use 'await import' without breaking the DB lock
+				if (restoreType === 'expense') {
 					try {
 						const { expenses } = await import('$lib/stores/expenses');
 						expenses.updateLocal(restored);
@@ -155,8 +172,6 @@ function createTrashStore() {
 						/* ignore */
 					}
 				} else if (restoreType === 'millage') {
-					await tx.objectStore('millage').put(restored);
-					// [!code fix] Dynamically update millage store so UI shows data immediately
 					try {
 						const { millage } = await import('$lib/stores/millage');
 						millage.updateLocal(restored);
@@ -164,8 +179,6 @@ function createTrashStore() {
 						/* ignore */
 					}
 				} else {
-					await tx.objectStore('trips').put(restored);
-					// [!code fix] Dynamically update trips store
 					try {
 						const { trips } = await import('$lib/stores/trips');
 						trips.updateLocal(restored);
@@ -174,9 +187,9 @@ function createTrashStore() {
 					}
 				}
 
-				await tx.objectStore('trash').delete(uniqueId);
 				update((items) => items.filter((it) => it.id !== uniqueId));
 
+				// 5. Queue Sync
 				const syncTarget =
 					restoreType === 'expense' ? 'expenses' : restoreType === 'millage' ? 'millage' : 'trips';
 
@@ -186,7 +199,6 @@ function createTrashStore() {
 					data: { store: syncTarget, type: restoreType }
 				});
 
-				await tx.done;
 				return restored;
 			} catch (err) {
 				console.error('❌ Failed to restore item:', err);
@@ -307,6 +319,7 @@ function createTrashStore() {
 				}
 				await tx.done;
 
+				// Cleanup Active Stores
 				const cleanupTx = db.transaction(['trash', 'trips', 'expenses', 'millage'], 'readwrite');
 				const allTrash = await cleanupTx.objectStore('trash').getAll();
 				const tripStore = cleanupTx.objectStore('trips');
