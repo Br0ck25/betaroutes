@@ -128,10 +128,12 @@ class SyncManager {
 				for (const item of queue) {
 					try {
 						// Enrich only if it's a trip creation/update and not deleted
+						// Also skip if explicitly flagged (e.g., when updating trip after mileage deletion)
 						if (
 							(item.action === 'create' || item.action === 'update') &&
 							item.data &&
-							(!item.data.store || item.data.store === 'trips')
+							(!item.data.store || item.data.store === 'trips') &&
+							!item.data.skipEnrichment
 						) {
 							// [!code fix] Safe enrichment block
 							try {

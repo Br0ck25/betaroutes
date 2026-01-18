@@ -169,14 +169,9 @@ function createTrashStore() {
 					await tx.objectStore('millage').put(restored);
 				} else {
 					await tx.objectStore('trips').put(restored);
-					// Also restore bundled mileage if present
-					if (backups.millage) {
-						const bundledMillage = { ...backups.millage };
-						delete bundledMillage.deleted;
-						bundledMillage.updatedAt = new Date().toISOString();
-						bundledMillage.syncStatus = 'pending';
-						await tx.objectStore('millage').put(bundledMillage);
-					}
+					// Note: Bundled mileage is NOT auto-restored with trip.
+					// User must explicitly restore mileage from trash if needed.
+					// When editing the restored trip, a new mileage log will be created.
 				}
 
 				// Always delete the trash item
@@ -202,10 +197,7 @@ function createTrashStore() {
 					try {
 						const { trips } = await import('$lib/stores/trips');
 						trips.updateLocal(restored);
-						if (backups.millage) {
-							const { millage } = await import('$lib/stores/millage');
-							millage.updateLocal(backups.millage);
-						}
+						// Note: Bundled mileage is NOT auto-restored with trip.
 					} catch {
 						/* ignore */
 					}

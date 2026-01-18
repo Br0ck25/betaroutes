@@ -341,7 +341,7 @@ function createMillageStore() {
 						await syncManager.addToQueue({
 							action: 'update',
 							tripId: id,
-							data: { ...patched, store: 'trips' }
+							data: { ...patched, store: 'trips', skipEnrichment: true }
 						});
 					}
 					await tripsTx.done;
