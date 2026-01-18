@@ -22,7 +22,11 @@ export const DELETE: RequestHandler = async (event) => {
 
 		const id = event.params.id;
 		const userId = getStorageId(sessionUser);
-		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
+		const svc = makeMillageService(
+			safeKV(env, 'BETA_MILLAGE_KV')!,
+			safeDO(env, 'TRIP_INDEX_DO')!,
+			safeKV(env, 'BETA_LOGS_KV')
+		);
 
 		// Soft delete via service
 		await svc.delete(userId, id);
