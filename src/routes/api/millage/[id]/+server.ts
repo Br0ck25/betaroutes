@@ -1,6 +1,7 @@
 // src/routes/api/millage/[id]/+server.ts
 import type { RequestHandler } from './$types';
 import { makeMillageService } from '$lib/server/millageService';
+import { makeTripService } from '$lib/server/tripService';
 import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
@@ -28,8 +29,35 @@ export const DELETE: RequestHandler = async (event) => {
 			safeKV(env, 'BETA_LOGS_KV')
 		);
 
+		// Get the mileage log before deleting to check for linked trip
+		const existing = await svc.get(userId, id);
+
 		// Soft delete via service
 		await svc.delete(userId, id);
+
+		// --- Set linked trip's totalMiles to 0 ---
+		if (existing && existing.tripId) {
+			try {
+				const tripIndexDO = safeDO(env, 'TRIP_INDEX_DO')!;
+				const placesIndexDO = safeDO(env, 'PLACES_INDEX_DO') || tripIndexDO;
+				const tripSvc = makeTripService(
+					safeKV(env, 'BETA_LOGS_KV')!,
+					undefined,
+					safeKV(env, 'BETA_PLACES_KV'),
+					tripIndexDO,
+					placesIndexDO
+				);
+				const trip = await tripSvc.get(userId, existing.tripId);
+				if (trip && !trip.deleted) {
+					trip.totalMiles = 0;
+					trip.updatedAt = new Date().toISOString();
+					await tripSvc.put(trip);
+					log.info('Set trip totalMiles to 0 after mileage delete', { tripId: existing.tripId });
+				}
+			} catch (e) {
+				log.warn('Failed to update trip after mileage delete', { tripId: existing.tripId, message: createSafeErrorMessage(e) });
+			}
+		}
 
 		return new Response(null, { status: 204 });
 	} catch (err) {
@@ -171,35 +199,28 @@ export const PUT: RequestHandler = async (event) => {
 		// Persist authoritative millage
 		await svc.put(updated);
 
-		// Best-effort: mirror `miles` into the trip record stored in BETA_LOGS_KV so
-		// trips remain discoverable/consistent in the original trip logs KV.
-		try {
-			const tripKV = safeKV(env, 'BETA_LOGS_KV');
-			if (tripKV) {
-				const { makeTripService } = await import('$lib/server/tripService');
+		// --- Bidirectional sync: Update linked trip's totalMiles ---
+		if (updated.tripId && typeof updated.miles === 'number') {
+			try {
+				const tripIndexDO = safeDO(env, 'TRIP_INDEX_DO')!;
+				const placesIndexDO = safeDO(env, 'PLACES_INDEX_DO') || tripIndexDO;
 				const tripSvc = makeTripService(
-					tripKV as any,
+					safeKV(env, 'BETA_LOGS_KV')!,
 					undefined,
-					undefined,
-					safeDO(env, 'TRIP_INDEX_DO')! as any,
-					safeDO(env, 'PLACES_INDEX_DO')! as any
+					safeKV(env, 'BETA_PLACES_KV'),
+					tripIndexDO,
+					placesIndexDO
 				);
-				const existingTrip = await tripSvc.get(getStorageId(sessionUser), id);
-				if (existingTrip && typeof updated.miles === 'number') {
-					const patched = {
-						...existingTrip,
-						totalMiles: updated.miles,
-						updatedAt: new Date().toISOString()
-					} as any;
-					// best-effort write; do not fail the millage update if this fails
-					await tripSvc.put(patched).catch((err: unknown) => {
-						log.warn('Failed to mirror millage into trip KV (non-fatal):', String(err));
-						return null;
-					});
+				const trip = await tripSvc.get(userId, updated.tripId);
+				if (trip && !trip.deleted) {
+					trip.totalMiles = updated.miles;
+					trip.updatedAt = new Date().toISOString();
+					await tripSvc.put(trip);
+					log.info('Updated trip totalMiles from mileage log', { tripId: updated.tripId, miles: updated.miles });
 				}
+			} catch (e) {
+				log.warn('Failed to sync mileage to trip', { tripId: updated.tripId, message: createSafeErrorMessage(e) });
 			}
-		} catch (err) {
-			log.warn('Failed to mirror millage to trips KV (non-fatal):', String(err));
 		}
 
 		return new Response(JSON.stringify(updated), {

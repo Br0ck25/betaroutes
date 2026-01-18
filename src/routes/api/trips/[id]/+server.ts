@@ -1,7 +1,7 @@
 // src/routes/api/trips/[id]/+server.ts
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
-import { makeMillageService } from '$lib/server/millageService';
+import { makeMillageService, type MillageRecord } from '$lib/server/millageService';
 import type { TripRecord } from '$lib/server/tripService';
 import { log } from '$lib/server/log';
 import { safeDO } from '$lib/server/env';
@@ -226,24 +226,24 @@ export const DELETE: RequestHandler = async (event) => {
 		// Perform soft delete
 		await svc.delete(storageId, id);
 
-		// Best-effort: soft-delete linked millage record so it doesn't re-appear independently
+		// --- Cascade delete: Delete linked mileage log ---
 		try {
 			const millageKV = safeKV(event.platform?.env, 'BETA_MILLAGE_KV');
 			if (millageKV) {
 				const millageSvc = makeMillageService(
-					millageKV as any,
-					safeDO(event.platform?.env, 'TRIP_INDEX_DO')!
+					millageKV as unknown as KVNamespace,
+					tripIndexDO as unknown as DurableObjectNamespace
 				);
-				const p = millageSvc.delete(storageId, id).catch(() => {});
-				try {
-					if (event.platform?.context?.waitUntil) event.platform.context.waitUntil(p as any);
-					else if ((event as any)?.context?.waitUntil) (event as any).context.waitUntil(p);
-				} catch {
-					void p;
+				// Find mileage logs linked to this trip
+				const allMillage = await millageSvc.list(storageId);
+				const linkedMillage = allMillage.filter((m: MillageRecord) => m.tripId === id);
+				for (const m of linkedMillage) {
+					await millageSvc.delete(storageId, m.id);
+					log.info('Cascade deleted mileage log for trip', { tripId: id, millageId: m.id });
 				}
 			}
-		} catch (err) {
-			log.warn('Failed to delete linked millage for trip', { tripId: id, err });
+		} catch (e) {
+			log.warn('Failed to cascade delete mileage logs', { tripId: id, message: createSafeErrorMessage(e) });
 		}
 
 		await svc.incrementUserCounter(userSafe?.token ?? '', -1);

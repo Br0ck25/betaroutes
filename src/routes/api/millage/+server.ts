@@ -9,6 +9,7 @@ import { getStorageId } from '$lib/server/user';
 
 const millageSchema = z.object({
 	id: z.string().uuid().optional(),
+	tripId: z.string().uuid().optional(),
 	date: z.string().optional(),
 	startOdometer: z.number().nonnegative().optional(),
 	endOdometer: z.number().nonnegative().optional(),
@@ -130,6 +131,7 @@ export const POST: RequestHandler = async (event) => {
 		const record: any = {
 			id,
 			userId,
+			tripId: payload.tripId || undefined,
 			date: payload.date || new Date().toISOString(),
 			startOdometer: typeof payload.startOdometer === 'number' ? payload.startOdometer : undefined,
 			endOdometer: typeof payload.endOdometer === 'number' ? payload.endOdometer : undefined,
