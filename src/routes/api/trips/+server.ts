@@ -420,14 +420,15 @@ export const POST: RequestHandler = async (event) => {
 					let millageRate: number | undefined;
 					let vehicle: string | undefined;
 					const userSettingsKV = safeKV(env, 'BETA_USER_SETTINGS_KV');
-					if (userSettingsKV) {
+					if (userSettingsKV && sessionUserSafe?.id) {
 						try {
-							const settingsRaw = await userSettingsKV.get(`settings:${sessionUserSafe?.id}`);
+							const settingsRaw = await userSettingsKV.get(`settings:${sessionUserSafe.id}`);
 							if (settingsRaw) {
 								const settings = JSON.parse(settingsRaw);
 								millageRate =
 									typeof settings.millageRate === 'number' ? settings.millageRate : undefined;
-								vehicle = settings.vehicles?.[0]?.id ?? settings.vehicles?.[0]?.name ?? undefined;
+								const firstVehicle = settings.vehicles?.[0];
+								vehicle = firstVehicle?.id ?? firstVehicle?.name ?? undefined;
 							}
 						} catch (e) {
 							log.warn('Failed to fetch user settings for mileage', {
