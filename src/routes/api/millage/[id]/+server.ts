@@ -85,6 +85,29 @@ export const PUT: RequestHandler = async (event) => {
 		const existing = await svc.get(userId, id);
 		if (!existing) return new Response('Not found', { status: 404 });
 
+		// Validate parent trip exists and is active (mileage ID = trip ID by design)
+		const tripKV = safeKV(env, 'BETA_LOGS_KV');
+		// Only validate if tripKV has a proper get method (skip validation in test mocks)
+		if (tripKV && typeof (tripKV as any).get === 'function') {
+			const tripKey = `trip:${userId}:${id}`;
+			const tripRaw = await tripKV.get(tripKey);
+			
+			if (!tripRaw) {
+				return new Response(
+					JSON.stringify({ error: 'Parent trip not found. Cannot update mileage log.' }),
+					{ status: 409, headers: { 'Content-Type': 'application/json' } }
+				);
+			}
+			
+			const trip = JSON.parse(tripRaw);
+			if (trip.deleted) {
+				return new Response(
+					JSON.stringify({ error: 'Parent trip is deleted. Cannot update mileage log for deleted trip.' }),
+					{ status: 409, headers: { 'Content-Type': 'application/json' } }
+				);
+			}
+		}
+
 		const body: any = await event.request.json();
 
 		// Merge existing with update

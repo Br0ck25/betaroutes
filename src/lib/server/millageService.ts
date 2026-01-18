@@ -72,13 +72,11 @@ export function makeMillageService(
 						if (!raw) continue;
 						const parsed = JSON.parse(raw);
 
+						// Migrate all records including tombstones (to maintain deleted state)
 						if (parsed && parsed.deleted) {
-							if (parsed.backup) {
-								all.push(parsed.backup);
-								migratedCount++;
-							} else {
-								skippedTombstones++;
-							}
+							// Push the tombstone itself, not the backup
+							all.push(parsed);
+							migratedCount++;
 							continue;
 						}
 
@@ -95,7 +93,7 @@ export function makeMillageService(
 
 						millage = all;
 						log.info(
-							`[MillageService] Migrated ${migratedCount} items (${skippedTombstones} tombstones skipped)`
+							`[MillageService] Migrated ${migratedCount} items (${skippedTombstones} tombstones included)`
 						);
 					}
 				}
@@ -286,12 +284,12 @@ export function makeMillageService(
 						'Parent trip is deleted. Please restore the trip first before restoring the mileage log.'
 					);
 				}
-
-				// Note: We don't need to check for existing active mileage logs because
-				// the mileage ID equals the trip ID by design, ensuring at most ONE
-				// mileage log per trip. The tombstone we're restoring IS the only
-				// mileage record for this trip.
 			}
+
+			// Note: We don't need explicit checks for "another active mileage" or "newer mileage"
+			// because the mileage ID equals the trip ID by design, ensuring at most ONE
+			// mileage record per trip. The tombstone we're restoring IS the only
+			// mileage record for this trip, and we've already verified it's deleted.
 
 			const restored = tombstone.backup || tombstone.data || tombstone;
 			delete restored.deleted;

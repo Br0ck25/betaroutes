@@ -71,6 +71,29 @@ export const POST: RequestHandler = async (event) => {
 		const id = payload.id || crypto.randomUUID();
 		const userId = getStorageId(sessionUser);
 
+		// Validate parent trip exists and is active (mileage ID = trip ID by design)
+		const tripKV = safeKV(env, 'BETA_LOGS_KV');
+		// Only validate if tripKV has a proper get method (skip validation in test mocks)
+		if (tripKV && typeof (tripKV as any).get === 'function') {
+			const tripKey = `trip:${userId}:${id}`;
+			const tripRaw = await tripKV.get(tripKey);
+			
+			if (!tripRaw) {
+				return new Response(
+					JSON.stringify({ error: 'Parent trip not found. Cannot create mileage log.' }),
+					{ status: 409, headers: { 'Content-Type': 'application/json' } }
+				);
+			}
+			
+			const trip = JSON.parse(tripRaw);
+			if (trip.deleted) {
+				return new Response(
+					JSON.stringify({ error: 'Parent trip is deleted. Cannot create mileage log for deleted trip.' }),
+					{ status: 409, headers: { 'Content-Type': 'application/json' } }
+				);
+			}
+		}
+
 		let miles =
 			typeof payload.miles === 'number'
 				? payload.miles

@@ -390,6 +390,10 @@ export function makeTripService(
 			if (!raw) return;
 
 			const trip = JSON.parse(raw);
+			
+			// Set totalMiles to 0 before creating tombstone (per spec)
+			trip.totalMiles = 0;
+			
 			const now = new Date();
 			const expiresAt = new Date(now.getTime() + RETENTION.THIRTY_DAYS * 1000);
 
