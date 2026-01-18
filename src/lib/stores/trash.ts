@@ -9,18 +9,10 @@ import type { User } from '$lib/types';
 function createTrashStore() {
 	const { subscribe, set, update } = writable<TrashRecord[]>([]);
 
-	const getUniqueTrashId = (item: any) => {
-		if (
-			(item.recordType === 'millage' || item.type === 'millage') &&
-			!String(item.id).startsWith('millage:')
-		) {
-			return `millage:${item.id}`;
-		}
-		return item.id;
-	};
-
+	// Ensure we always work with prefixed ID if it exists
 	const getRealId = (trashId: string) => {
 		if (trashId.startsWith('millage:')) return trashId.replace('millage:', '');
+		if (trashId.startsWith('trip:')) return trashId.replace('trip:', '');
 		return trashId;
 	};
 
@@ -55,6 +47,8 @@ function createTrashStore() {
 					: normalizedItems;
 
 				const projected = filtered.map((it) => {
+					// If filtering for "millage" but found a bundled "trip+millage" item,
+					// present it as a mileage log for the UI
 					if (type && it.recordType !== type) {
 						return { ...it, recordType: type, type: type };
 					}
@@ -80,7 +74,7 @@ function createTrashStore() {
 			try {
 				const db = await getDB();
 
-				// 1. Read (Guard Checks)
+				// 1. Fetch Trash Item
 				const txRead = db.transaction('trash', 'readonly');
 				const stored = await txRead.objectStore('trash').get(uniqueId);
 				await txRead.done;
@@ -100,19 +94,24 @@ function createTrashStore() {
 				const restoreType =
 					targetType || stored.recordType || stored.type || recordTypes[0] || 'trip';
 
+				// 2. Logic Check: If restoring mileage, is parent trip safe?
 				if (restoreType === 'millage') {
 					const realId = getRealId(uniqueId);
+					// If this was a standalone mileage deletion, tripId is in the object
+					// If this is a bundled trip+mileage, realId IS the trip ID.
 					const parentId = stored.tripId || realId;
 
 					const txCheck = db.transaction(['trips', 'trash'], 'readonly');
 					const tripExists = await txCheck.objectStore('trips').get(parentId);
-					const tripTrash = await txCheck.objectStore('trash').get(parentId);
+					const tripTrash =
+						(await txCheck.objectStore('trash').get(`trip:${parentId}`)) ||
+						(await txCheck.objectStore('trash').get(parentId));
 					await txCheck.done;
 
 					if (!tripExists) {
 						if (tripTrash) {
 							throw new Error(
-								'The parent Trip is currently in the Trash. Please switch to the "Trips" tab in Trash and restore the trip first.'
+								'The parent Trip is currently in the Trash. Please restore the Trip first.'
 							);
 						} else {
 							throw new Error(
@@ -122,10 +121,11 @@ function createTrashStore() {
 					}
 				}
 
-				// 2. Prepare Data
+				// 3. Prepare Data
 				const backups: Record<string, any> =
 					stored.backups || (stored.data && (stored.data.__backups as any)) || {};
 
+				// Handle "backup" vs "backups" inconsistency from server vs local
 				const backupFor = (t: string) =>
 					backups[t] ||
 					(stored.data && stored.data[t]) ||
@@ -145,7 +145,7 @@ function createTrashStore() {
 				restored.updatedAt = new Date().toISOString();
 				restored.syncStatus = 'pending';
 
-				// 3. Write Database (Atomic Transaction)
+				// 4. Atomic Write
 				const tx = db.transaction(['trash', 'expenses', 'millage', 'trips'], 'readwrite');
 
 				if (restoreType === 'expense') {
@@ -154,16 +154,21 @@ function createTrashStore() {
 					await tx.objectStore('millage').put(restored);
 				} else {
 					await tx.objectStore('trips').put(restored);
+					// Also restore bundled mileage if present
+					if (backups.millage) {
+						const bundledMillage = { ...backups.millage };
+						delete bundledMillage.deleted;
+						bundledMillage.updatedAt = new Date().toISOString();
+						bundledMillage.syncStatus = 'pending';
+						await tx.objectStore('millage').put(bundledMillage);
+					}
 				}
 
-				// Delete from trash *inside* the transaction
+				// Always delete the trash item
 				await tx.objectStore('trash').delete(uniqueId);
+				await tx.done; // Finish transaction BEFORE updating Svelte stores
 
-				// [!code fix] Wait for DB transaction to fully complete before calling async imports
-				await tx.done;
-
-				// 4. Update UI / Stores (Post-Transaction)
-				// Now it is safe to use 'await import' without breaking the DB lock
+				// 5. Update Svelte Stores (Now safe to async import)
 				if (restoreType === 'expense') {
 					try {
 						const { expenses } = await import('$lib/stores/expenses');
@@ -182,6 +187,10 @@ function createTrashStore() {
 					try {
 						const { trips } = await import('$lib/stores/trips');
 						trips.updateLocal(restored);
+						if (backups.millage) {
+							const { millage } = await import('$lib/stores/millage');
+							millage.updateLocal(backups.millage);
+						}
 					} catch {
 						/* ignore */
 					}
@@ -189,7 +198,7 @@ function createTrashStore() {
 
 				update((items) => items.filter((it) => it.id !== uniqueId));
 
-				// 5. Queue Sync
+				// 6. Queue Sync
 				const syncTarget =
 					restoreType === 'expense' ? 'expenses' : restoreType === 'millage' ? 'millage' : 'trips';
 
@@ -291,6 +300,7 @@ function createTrashStore() {
 					}
 					flatItem.type = flatItem.recordType;
 
+					// [!code fix] Ensure Trash ID is unique on download
 					const uniqueId = getUniqueTrashId(flatItem);
 					flatItem.id = uniqueId;
 
@@ -319,7 +329,7 @@ function createTrashStore() {
 				}
 				await tx.done;
 
-				// Cleanup Active Stores
+				// Cleanup Active Stores based on REAL IDs
 				const cleanupTx = db.transaction(['trash', 'trips', 'expenses', 'millage'], 'readwrite');
 				const allTrash = await cleanupTx.objectStore('trash').getAll();
 				const tripStore = cleanupTx.objectStore('trips');

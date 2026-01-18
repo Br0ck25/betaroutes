@@ -12,44 +12,36 @@ function createMillageStore() {
 	const { subscribe, set, update } = writable<MillageRecord[]>([]);
 	let _hydrationPromise: Promise<void> | null = null;
 	let _resolveHydration: any = null;
-	// Referenced intentionally to avoid unused variable lint
 	void _hydrationPromise;
 	void _resolveHydration;
 
 	return {
 		subscribe,
 		set,
-
+		// ... (keep hydrate, updateLocal, load, create, updateMillage as they are) ...
 		async hydrate(data: MillageRecord[], _userId?: string) {
+			// ... copy from previous ...
 			void _userId;
 			_hydrationPromise = new Promise((res) => (_resolveHydration = res));
-
 			set(data);
-
 			if (typeof window === 'undefined') {
 				_resolveHydration?.();
 				_hydrationPromise = null;
 				return;
 			}
-
 			try {
 				const db = await getDB();
-
 				const trashTx = db.transaction('trash', 'readonly');
 				const trashItems = await trashTx.objectStore('trash').getAll();
 				const trashIds = new Set(trashItems.map((t: any) => t.id));
 				await trashTx.done;
-
 				const validServerData = data.filter(
 					(item) => !trashIds.has(item.id) && !trashIds.has(`millage:${item.id}`)
 				);
 				const serverIdSet = new Set(validServerData.map((i) => i.id));
-
 				set(validServerData);
-
 				const tx = db.transaction(['millage', 'trash'], 'readwrite');
 				const store = tx.objectStore('millage');
-
 				const localItems = await store.getAll();
 				for (const local of localItems) {
 					if (trashIds.has(local.id) || trashIds.has(`millage:${local.id}`)) {
@@ -58,13 +50,10 @@ function createMillageStore() {
 						await store.delete(local.id);
 					}
 				}
-
 				for (const item of validServerData) {
 					await store.put({ ...item, syncStatus: 'synced' });
 				}
-
 				await tx.done;
-
 				if (_resolveHydration) _resolveHydration();
 				_hydrationPromise = null;
 			} catch (err) {
@@ -73,8 +62,8 @@ function createMillageStore() {
 				_hydrationPromise = null;
 			}
 		},
-
 		updateLocal(record: MillageRecord) {
+			// ... copy from previous ...
 			update((items) => {
 				const index = items.findIndex((r) => r.id === record.id);
 				if (index !== -1) {
@@ -89,15 +78,14 @@ function createMillageStore() {
 				}
 			});
 		},
-
 		async load(userId?: string) {
+			// ... copy from previous ...
 			isLoading.set(true);
 			try {
 				const db = await getDB();
 				const tx = db.transaction(['millage', 'trash'], 'readonly');
 				const store = tx.objectStore('millage');
 				const trashStore = tx.objectStore('trash');
-
 				let items: MillageRecord[];
 				if (userId) {
 					const index = store.index('userId');
@@ -105,21 +93,16 @@ function createMillageStore() {
 				} else {
 					items = await store.getAll();
 				}
-
 				const trashItems = await trashStore.getAll();
 				const trashIds = new Set(trashItems.map((t: any) => t.id));
-
-				// Filter out items that are in trash (checking both raw ID and prefixed ID)
 				const activeItems = items.filter(
 					(item) => !trashIds.has(item.id) && !trashIds.has(`millage:${item.id}`)
 				);
-
 				activeItems.sort((a, b) => {
 					const dateA = new Date(a.date || a.createdAt).getTime();
 					const dateB = new Date(b.date || b.createdAt).getTime();
 					return dateB - dateA;
 				});
-
 				set(activeItems);
 				return activeItems;
 			} catch (err) {
@@ -130,9 +113,8 @@ function createMillageStore() {
 				isLoading.set(false);
 			}
 		},
-
-		// ... create, updateMillage remain same ...
 		async create(data: Partial<MillageRecord>, userId: string) {
+			// ... copy from previous ...
 			const record: MillageRecord = {
 				...data,
 				id: data.id || crypto.randomUUID(),
@@ -152,7 +134,6 @@ function createMillageStore() {
 				updatedAt: data.updatedAt || new Date().toISOString(),
 				syncStatus: 'pending'
 			};
-
 			if (typeof record.reimbursement !== 'number') {
 				let rate: number | undefined = record.millageRate;
 				if (rate == null) {
@@ -167,21 +148,17 @@ function createMillageStore() {
 					record.reimbursement = Number((record.miles * rate).toFixed(2));
 				}
 			}
-
 			update((items) => [record, ...items]);
-
 			try {
 				const db = await getDB();
 				const tx = db.transaction('millage', 'readwrite');
 				await tx.objectStore('millage').put(record);
 				await tx.done;
-
 				await syncManager.addToQueue({
 					action: 'create',
 					tripId: record.id,
 					data: { ...record, store: 'millage' }
 				});
-
 				return record;
 			} catch (err) {
 				console.error('❌ Failed to create millage record:', err);
@@ -189,23 +166,20 @@ function createMillageStore() {
 				throw err;
 			}
 		},
-
 		async updateMillage(id: string, changes: Partial<MillageRecord>, userId: string) {
+			// ... copy from previous ...
 			update((items) =>
 				items.map((r) =>
 					r.id === id ? { ...r, ...changes, updatedAt: new Date().toISOString() } : r
 				)
 			);
-
 			try {
 				const db = await getDB();
 				const tx = db.transaction('millage', 'readwrite');
 				const store = tx.objectStore('millage');
-
 				const existing = await store.get(id);
 				if (!existing) throw new Error('Millage record not found');
 				if (existing.userId !== userId) throw new Error('Unauthorized');
-
 				const updated: MillageRecord = {
 					...existing,
 					...changes,
@@ -214,7 +188,6 @@ function createMillageStore() {
 					updatedAt: new Date().toISOString(),
 					syncStatus: 'pending'
 				};
-
 				const odometerUpdated =
 					Object.prototype.hasOwnProperty.call(changes, 'startOdometer') ||
 					Object.prototype.hasOwnProperty.call(changes, 'endOdometer');
@@ -227,7 +200,6 @@ function createMillageStore() {
 				) {
 					updated.miles = Math.max(0, Number(updated.endOdometer) - Number(updated.startOdometer));
 				}
-
 				const milesChanged = Object.prototype.hasOwnProperty.call(changes, 'miles');
 				const rateChanged = Object.prototype.hasOwnProperty.call(changes, 'millageRate');
 				const reimbursementExplicit = Object.prototype.hasOwnProperty.call(
@@ -252,10 +224,8 @@ function createMillageStore() {
 						updated.reimbursement = Number((updated.miles * rate).toFixed(2));
 					}
 				}
-
 				await store.put(updated);
 				await tx.done;
-
 				try {
 					const tripsTx = db.transaction('trips', 'readwrite');
 					const tripStore = tripsTx.objectStore('trips');
@@ -280,13 +250,11 @@ function createMillageStore() {
 				} catch {
 					/* ignore */
 				}
-
 				await syncManager.addToQueue({
 					action: 'update',
 					tripId: id,
 					data: { ...updated, store: 'millage' }
 				});
-
 				return updated;
 			} catch (err) {
 				console.error('❌ Failed to update millage:', err);
@@ -295,6 +263,7 @@ function createMillageStore() {
 			}
 		},
 
+		// [!code focus] THE FIX IS HERE
 		async deleteMillage(id: string, userId: string) {
 			let previous: MillageRecord[] = [];
 			update((current) => {
@@ -304,7 +273,6 @@ function createMillageStore() {
 
 			try {
 				const db = await getDB();
-
 				const tx = db.transaction(['millage', 'trash'], 'readwrite');
 				const millageStore = tx.objectStore('millage');
 				const trashStore = tx.objectStore('trash');
@@ -327,10 +295,10 @@ function createMillageStore() {
 				const now = new Date();
 				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-				// [!code fix] Use prefixed ID 'millage:UUID' for trash to avoid colliding with Trip UUID
+				// Use prefixed ID "millage:..." to avoid collision
 				const trashItem = {
 					id: `millage:${rec.id}`,
-					tripId: rec.id, // Keep reference to original ID
+					tripId: rec.id,
 					type: 'millage',
 					recordType: 'millage',
 					data: rec,
@@ -349,7 +317,7 @@ function createMillageStore() {
 				await millageStore.delete(id);
 				await tx.done;
 
-				// If linked to a trip, zero its miles
+				// Update trip to 0 miles
 				try {
 					const tripsTx = db.transaction('trips', 'readwrite');
 					const tripStore = tripsTx.objectStore('trips');
@@ -390,7 +358,9 @@ function createMillageStore() {
 			}
 		},
 
+		// ... (keep get, clear, syncFromCloud, migrateOfflineMillage) ...
 		async get(id: string, userId: string) {
+			// ... copy existing get code ...
 			try {
 				const db = await getDB();
 				const tx = db.transaction('millage', 'readonly');
@@ -401,47 +371,37 @@ function createMillageStore() {
 				return null;
 			}
 		},
-
 		clear() {
 			set([]);
 		},
-
 		async syncFromCloud(userId: string) {
+			// ... copy existing syncFromCloud code ...
 			isLoading.set(true);
 			try {
 				if (!navigator.onLine) return;
-
 				const lastSync = localStorage.getItem('last_sync_millage');
 				const sinceDate = lastSync ? new Date(new Date(lastSync).getTime() - 5 * 60 * 1000) : null;
-
 				const url = sinceDate
 					? `/api/millage?since=${encodeURIComponent(sinceDate.toISOString())}`
 					: '/api/millage';
-
 				const response = await fetch(url, { credentials: 'include' });
 				if (!response.ok) throw new Error('Failed to fetch millage');
-
 				const cloud: any = await response.json();
-
 				if (cloud.length > 0) {
 					const db = await getDB();
 					const tx = db.transaction(['millage', 'trash'], 'readwrite');
 					const store = tx.objectStore('millage');
 					const trashStore = tx.objectStore('trash');
-
 					const trashItems = await trashStore.getAll();
 					const trashIds = new Set(trashItems.map((t: any) => t.id));
-
 					for (const rec of cloud) {
 						if (rec.deleted) {
 							const local = await store.get(rec.id);
 							if (local) await store.delete(rec.id);
 							continue;
 						}
-
-						// Check normal ID and prefixed ID
+						// Check both raw and prefixed IDs
 						if (trashIds.has(rec.id) || trashIds.has(`millage:${rec.id}`)) continue;
-
 						const local = await store.get(rec.id);
 						if (!local || new Date(rec.updatedAt) > new Date(local.updatedAt)) {
 							await store.put({
@@ -462,15 +422,14 @@ function createMillageStore() {
 				isLoading.set(false);
 			}
 		},
-
 		async migrateOfflineMillage(tempUserId: string, realUserId: string) {
+			// ... copy existing migrateOfflineMillage code ...
 			if (!tempUserId || !realUserId || tempUserId === realUserId) return;
 			const db = await getDB();
 			const tx = db.transaction('millage', 'readwrite');
 			const store = tx.objectStore('millage');
 			const index = store.index('userId');
 			const offline = await index.getAll(tempUserId);
-
 			for (const r of offline) {
 				r.userId = realUserId;
 				r.syncStatus = 'pending';
@@ -490,12 +449,6 @@ function createMillageStore() {
 
 export const millage = createMillageStore();
 
-// Backstop for tests or initialization races
-if (typeof (millage as any).deleteMillage !== 'function') {
-	// This block is no longer needed if the above implementation is correct,
-	// but kept as safety fallback (omitted for brevity as the main class now has it).
-}
-
 syncManager.registerStore('millage', {
 	updateLocal: (item) => {
 		if (item && typeof (item as any).miles === 'number') {
@@ -509,6 +462,7 @@ syncManager.registerStore('millage', {
 });
 
 function createDraftStore() {
+	// ... copy existing createDraftStore code ...
 	const STORAGE_KEY = 'draft_millage';
 	const getDraft = () => {
 		try {
