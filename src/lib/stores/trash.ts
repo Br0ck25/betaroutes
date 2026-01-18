@@ -6,10 +6,14 @@ import type { TrashRecord } from '$lib/db/types';
 import { user as authUser } from '$lib/stores/auth';
 import type { User } from '$lib/types';
 
+// [!code ++] Import stores to update them immediately after restore
+import { trips } from '$lib/stores/trips';
+import { millage } from '$lib/stores/millage';
+import { expenses } from '$lib/stores/expenses';
+
 function createTrashStore() {
 	const { subscribe, set, update } = writable<TrashRecord[]>([]);
 
-	// Helper to ensure mileage items in trash have unique IDs
 	const getUniqueTrashId = (item: any) => {
 		if (
 			(item.recordType === 'millage' || item.type === 'millage') &&
@@ -20,7 +24,6 @@ function createTrashStore() {
 		return item.id;
 	};
 
-	// Helper to get real UUID
 	const getRealId = (trashId: string) => {
 		if (trashId.startsWith('millage:')) return trashId.replace('millage:', '');
 		return trashId;
@@ -49,7 +52,6 @@ function createTrashStore() {
 					? normalizedItems.filter((it) => {
 							if (it.recordType === type || it.type === type) return true;
 							if (Array.isArray(it.recordTypes) && it.recordTypes.includes(type)) return true;
-							// Fallback heuristics
 							if (type === 'expense' && it.originalKey?.startsWith('expense:')) return true;
 							if (type === 'millage' && it.originalKey?.startsWith('millage:')) return true;
 							if (type === 'trip' && it.originalKey?.startsWith('trip:')) return true;
@@ -57,7 +59,6 @@ function createTrashStore() {
 						})
 					: normalizedItems;
 
-				// Projection for UI consistency
 				const projected = filtered.map((it) => {
 					if (type && it.recordType !== type) {
 						return { ...it, recordType: type, type: type };
@@ -103,7 +104,6 @@ function createTrashStore() {
 				const restoreType =
 					targetType || stored.recordType || stored.type || recordTypes[0] || 'trip';
 
-				// [!code fix] Parent Trip Check & Cascade Restore Suggestion
 				if (restoreType === 'millage') {
 					const realId = getRealId(uniqueId);
 					const parentId = stored.tripId || realId;
@@ -115,8 +115,6 @@ function createTrashStore() {
 
 					if (!tripExists) {
 						if (tripTrash) {
-							// [!code fix] If Trip is in trash, we should technically restore it too or block.
-							// For strict safety, we block but explicitly identify the parent.
 							throw new Error(
 								'The parent Trip is currently in the Trash. Please switch to the "Trips" tab in Trash and restore the trip first.'
 							);
@@ -133,11 +131,10 @@ function createTrashStore() {
 				const backups: Record<string, any> =
 					stored.backups || (stored.data && (stored.data.__backups as any)) || {};
 
-				// [!code fix] Check for 'backup' (singular) to handle Server Data
 				const backupFor = (t: string) =>
 					backups[t] ||
 					(stored.data && stored.data[t]) ||
-					stored.backup || // <--- Fixes "missing data" after cloud sync
+					stored.backup ||
 					(stored.recordType === t ? stored.data || stored : undefined) ||
 					stored;
 
@@ -155,10 +152,16 @@ function createTrashStore() {
 
 				if (restoreType === 'expense') {
 					await tx.objectStore('expenses').put(restored);
+					// [!code fix] Update Store immediately
+					expenses.updateLocal(restored);
 				} else if (restoreType === 'millage') {
 					await tx.objectStore('millage').put(restored);
+					// [!code fix] Update Store immediately
+					millage.updateLocal(restored);
 				} else {
 					await tx.objectStore('trips').put(restored);
+					// [!code fix] Update Store immediately
+					trips.updateLocal(restored);
 				}
 
 				await tx.objectStore('trash').delete(uniqueId);
@@ -294,6 +297,7 @@ function createTrashStore() {
 				}
 				await tx.done;
 
+				// Cleanup Active Stores
 				const cleanupTx = db.transaction(['trash', 'trips', 'expenses', 'millage'], 'readwrite');
 				const allTrash = await cleanupTx.objectStore('trash').getAll();
 				const tripStore = cleanupTx.objectStore('trips');
