@@ -345,6 +345,7 @@ function createMillageStore() {
 				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 				const trashItem = {
 					id: rec.id,
+					userId: rec.userId,
 					type: 'millage',
 					recordType: 'millage',
 					data: rec,
@@ -353,8 +354,8 @@ function createMillageStore() {
 					expiresAt: expiresAt.toISOString(),
 					originalKey: `millage:${userId}:${id}`,
 					syncStatus: 'pending',
-					miles: rec.miles,
-					vehicle: rec.vehicle,
+					backups: { millage: { ...rec } },
+					recordTypes: ['millage'],
 					date: rec.date
 				};
 
@@ -551,7 +552,12 @@ if (typeof (millage as any).deleteMillage !== 'function') {
 			// If a trip tombstone already exists for the same id, merge millage fields
 			// into that trip-trash record instead of clobbering it (avoids collisions).
 			const existing = await trashStore.get(id);
-			if (existing && (existing.recordType === 'trip' || existing.type === 'trip' || (existing.recordTypes || []).includes('trip'))) {
+			if (
+				existing &&
+				(existing.recordType === 'trip' ||
+					existing.type === 'trip' ||
+					(existing.recordTypes || []).includes('trip'))
+			) {
 				const tripBackup = (existing.backups && existing.backups.trip) || existing.data || existing;
 				const merged: any = {
 					...existing,

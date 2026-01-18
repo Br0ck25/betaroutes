@@ -64,30 +64,51 @@ function createTrashStore() {
 				if (stored.userId !== userId) throw new Error('Unauthorized');
 
 				// Normalize available backups and recordTypes
-				const backups: Record<string, any> = stored.backups || (stored.data && (stored.data.__backups as any)) || {};
+				const backups: Record<string, any> =
+					stored.backups || (stored.data && (stored.data.__backups as any)) || {};
 				const recordTypes: string[] = Array.from(
-					new Set([
-						...(Array.isArray(stored.recordTypes) ? stored.recordTypes : []),
-						stored.recordType || stored.type || (stored.originalKey ? String(stored.originalKey).split(':')[0] : undefined)
-					].filter(Boolean) as string[])
+					new Set(
+						[
+							...(Array.isArray(stored.recordTypes) ? stored.recordTypes : []),
+							stored.recordType ||
+								stored.type ||
+								(stored.originalKey ? String(stored.originalKey).split(':')[0] : undefined)
+						].filter(Boolean) as string[]
+					)
 				);
 
 				// Pick which type to restore: caller hint > tombstone primary > first available
-				const desired = targetType || stored.type || stored.recordType || (recordTypes.length ? recordTypes[0] : undefined);
-				if (!desired && recordTypes.length > 1) throw new Error('Ambiguous tombstone: specify which record type to restore');
+				const desired =
+					targetType ||
+					stored.type ||
+					stored.recordType ||
+					(recordTypes.length ? recordTypes[0] : undefined);
+				if (!desired && recordTypes.length > 1)
+					throw new Error('Ambiguous tombstone: specify which record type to restore');
 				const restoreType = desired || recordTypes[0] || 'trip';
 
 				// Enforce invariant: cannot restore millage if parent trip is deleted
 				if (restoreType === 'millage') {
 					const tripExists = await db.transaction('trips', 'readonly').objectStore('trips').get(id);
 					const tripTrash = await db.transaction('trash', 'readonly').objectStore('trash').get(id);
-					if (!tripExists && tripTrash && (tripTrash.recordType === 'trip' || String(tripTrash.originalKey || '').startsWith('trip:'))) {
-						throw new Error('This mileage log belongs to a trip that has been deleted. Restore the trip first to restore this mileage.');
+					if (
+						!tripExists &&
+						tripTrash &&
+						(tripTrash.recordType === 'trip' ||
+							String(tripTrash.originalKey || '').startsWith('trip:'))
+					) {
+						throw new Error(
+							'This mileage log belongs to a trip that has been deleted. Restore the trip first to restore this mileage.'
+						);
 					}
 				}
 
 				// Obtain the correct backup shape for the requested type
-				const backupFor = (t: string) => backups[t] || (stored.data && stored.data[t]) || (stored.recordType === t ? stored.data || stored : undefined) || stored;
+				const backupFor = (t: string) =>
+					backups[t] ||
+					(stored.data && stored.data[t]) ||
+					(stored.recordType === t ? stored.data || stored : undefined) ||
+					stored;
 				const restored = { ...(backupFor(restoreType) || {}) };
 				// Clean metadata
 				delete restored.deleted;
@@ -115,9 +136,9 @@ function createTrashStore() {
 					if (stored.backups && stored.backups[restoreType]) delete stored.backups[restoreType];
 					stored.recordTypes = remaining;
 					// refresh convenience fields from the first remaining backup
-				const primary = remaining[0] as string | undefined;
-				const pb = primary ? backupFor(primary) : {};
-				stored.miles = (pb as any).miles ?? stored.miles;
+					const primary = remaining[0] as string | undefined;
+					const pb = primary ? backupFor(primary) : {};
+					stored.miles = (pb as any).miles ?? stored.miles;
 					stored.vehicle = pb.vehicle ?? stored.vehicle;
 					stored.date = pb.date ?? stored.date;
 					stored.syncStatus = 'pending';
@@ -126,8 +147,14 @@ function createTrashStore() {
 				}
 
 				// Enqueue a sync that specifies which store/type was restored
-				const syncTarget = restoreType === 'expense' ? 'expenses' : restoreType === 'millage' ? 'millage' : 'trips';
-				await (async () => syncManager.addToQueue({ action: 'restore', tripId: id, data: { store: syncTarget, type: restoreType } }))();
+				const syncTarget =
+					restoreType === 'expense' ? 'expenses' : restoreType === 'millage' ? 'millage' : 'trips';
+				await (async () =>
+					syncManager.addToQueue({
+						action: 'restore',
+						tripId: id,
+						data: { store: syncTarget, type: restoreType }
+					}))();
 
 				await tx.done;
 				return restored;
