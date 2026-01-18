@@ -9,27 +9,30 @@ describe('Trips <-> Millage integration', () => {
 		await clearDatabase();
 	});
 
-	it('creating a trip also creates a linked millage record', async () => {
+	it('creating a trip enqueues sync for server-side mileage creation', async () => {
 		const userId = 'u-test';
 		const trip = await trips.create({ date: '2025-01-01', totalMiles: 42 }, userId as any);
 
-		// Millage record should be created with the same id
-		const m = await millage.get(trip.id, userId as any);
-		expect(m).toBeTruthy();
-		expect(m?.miles).toBe(42);
-		expect((m as any).tripId).toBe(trip.id);
-
-		// DB has millage
+		// Mileage is created server-side, not client-side
+		// Verify trip was queued for sync (server will create mileage)
 		const db = await getDB();
-		const tx = db.transaction('millage', 'readonly');
-		const stored = await tx.objectStore('millage').get(trip.id);
-		await tx.done;
-		expect(stored).toBeTruthy();
+		const syncTx = db.transaction('syncQueue', 'readonly');
+		const syncItems = await syncTx.objectStore('syncQueue').getAll();
+		await syncTx.done;
+
+		expect(syncItems.some((i: any) => i.tripId === trip.id && i.action === 'create')).toBe(true);
+		expect(trip.totalMiles).toBe(42);
 	});
 
 	it('updating millage reflects on the trip totalMiles', async () => {
 		const userId = 'u-test';
 		const trip = await trips.create({ date: '2025-01-02', totalMiles: 10 }, userId as any);
+
+		// Create mileage record (simulating server-side creation that was synced down)
+		await millage.create(
+			{ id: trip.id, tripId: trip.id, miles: 10, date: trip.date },
+			userId as any
+		);
 
 		// Update millage record
 		await millage.updateMillage(trip.id, { miles: 123 }, userId as any);

@@ -121,7 +121,7 @@ function createTripsStore() {
 					if (exists) return trips.map((t) => (t.id === trip.id ? trip : t));
 					return [trip, ...trips];
 				});
-				// Enqueue trip sync FIRST so parent trip exists on server before mileage
+				// Enqueue trip sync - mileage creation is handled server-side
 				try {
 					await syncManager.addToQueue({
 						action: 'create',
@@ -131,29 +131,8 @@ function createTripsStore() {
 				} catch (err) {
 					console.warn('Failed to enqueue trip for sync:', err);
 				}
-				try {
-					const { millage } = await import('$lib/stores/millage');
-					if (typeof trip.totalMiles === 'number') {
-						await millage.create(
-							{
-								id: trip.id,
-								tripId: trip.id,
-								miles: Number(trip.totalMiles),
-								millageRate: (get(userSettings) as any)?.millageRate ?? undefined,
-								vehicle:
-									(get(userSettings) as any)?.vehicles?.[0]?.id ??
-									(get(userSettings) as any)?.vehicles?.[0]?.name ??
-									undefined,
-								date: trip.date,
-								createdAt: trip.createdAt,
-								updatedAt: trip.updatedAt
-							},
-							userId
-						);
-					}
-				} catch (err) {
-					console.warn('Failed to create local millage record for trip:', err);
-				}
+				// NOTE: Mileage log creation is handled server-side in POST /api/trips
+				// to ensure a single source of truth and include user settings
 				return trip;
 			} catch (err) {
 				console.error('❌ Failed to create trip:', err);
