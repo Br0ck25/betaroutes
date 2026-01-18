@@ -10,6 +10,7 @@ interface StoreHandler {
 }
 
 class SyncManager {
+	// ... (keep existing properties) ...
 	private initialized = false;
 	private syncInterval: ReturnType<typeof setInterval> | null = null;
 	private isSyncing = false;
@@ -44,12 +45,8 @@ class SyncManager {
 		});
 
 		if (navigator.onLine) {
-			// 1. Push any pending local changes immediately
 			await this.syncNow();
-
-			// 2. Pull/Download data ONLY on initialization (Page Refresh)
 			await this.syncDownAll();
-
 			this.startAutoSync();
 		}
 
@@ -58,7 +55,6 @@ class SyncManager {
 		console.log('✅ Sync manager initialized');
 	}
 
-	// New helper to handle the "Refresh" logic
 	private async syncDownAll() {
 		console.log('⬇️ Downloading latest data (Refresh)...');
 		await Promise.all(
@@ -71,7 +67,7 @@ class SyncManager {
 	private async handleOnline() {
 		console.log('🌐 Back online!');
 		syncStatus.setOnline(true);
-		await this.syncNow(); // Only uploads
+		await this.syncNow();
 		this.startAutoSync();
 	}
 
@@ -122,7 +118,6 @@ class SyncManager {
 		syncStatus.setSyncing();
 
 		try {
-			// Process Upload Queue (Push Only)
 			const db = await getDB();
 			const queue = await db.getAll('syncQueue');
 
@@ -132,13 +127,11 @@ class SyncManager {
 
 				for (const item of queue) {
 					try {
-						// Only attempt enrichment for trip creation/updates
 						if (
 							(item.action === 'create' || item.action === 'update') &&
 							item.data &&
 							(!item.data.store || item.data.store === 'trips')
 						) {
-							// [!code fix] Safe enrichment call that won't throw on Map errors
 							try {
 								await this.enrichTripData(item.data);
 							} catch (enrichErr) {
@@ -176,7 +169,6 @@ class SyncManager {
 			console.log(`🧮 Calculating offline route for trip ${trip.id}...`);
 
 			try {
-				// [!code fix] Check map loading explicitly to catch 'ApiTargetBlockedMapError'
 				try {
 					await loadGoogleMaps(this.apiKey);
 				} catch (loaderErr) {
@@ -184,7 +176,20 @@ class SyncManager {
 						'⚠️ Google Maps API failed to load (likely blocked or offline). Skipping enrichment.',
 						loaderErr
 					);
-					return; // Exit enrichment safely, allowing the sync to proceed
+					return;
+				}
+
+				// [!code fix] Safety check: Ensure DirectionsService exists before instantiation
+				// This handles cases where API loads but key restrictions block the Directions/Places libraries
+				if (
+					typeof google === 'undefined' ||
+					!google.maps ||
+					typeof google.maps.DirectionsService !== 'function'
+				) {
+					console.warn(
+						'⚠️ Google Maps DirectionsService not available. Key restriction or load error.'
+					);
+					return;
 				}
 
 				const directionsService = new google.maps.DirectionsService();
@@ -239,12 +244,12 @@ class SyncManager {
 					}
 				}
 			} catch (e) {
-				// [!code fix] Swallow enrichment errors (like Map blocks) so sync continues
 				console.warn('⚠️ Could not calculate route for offline trip:', e);
 			}
 		}
 	}
 
+	// ... (rest of class unchanged) ...
 	private async processSyncItem(item: SyncQueueItem) {
 		const { action, tripId, data } = item;
 
