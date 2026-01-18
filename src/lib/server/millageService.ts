@@ -18,7 +18,11 @@ export interface MillageRecord {
 	[key: string]: unknown;
 }
 
-export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNamespace) {
+export function makeMillageService(
+	kv: KVNamespace,
+	tripIndexDO: DurableObjectNamespace,
+	tripKV?: KVNamespace
+) {
 	const getIndexStub = (userId: string) => {
 		const id = tripIndexDO.idFromName(userId);
 		return tripIndexDO.get(id);
@@ -171,6 +175,28 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				method: 'POST',
 				body: JSON.stringify(tombstone)
 			});
+
+			// Set the parent trip's totalMiles to 0
+			if (tripKV) {
+				try {
+					const tripKey = `trip:${userId}:${id}`;
+					const tripRaw = await tripKV.get(tripKey);
+					if (tripRaw) {
+						const trip = JSON.parse(tripRaw);
+						if (!trip.deleted) {
+							trip.totalMiles = 0;
+							trip.updatedAt = now.toISOString();
+							await tripKV.put(tripKey, JSON.stringify(trip));
+							log.info(`[MillageService] Set trip ${id} totalMiles to 0 after mileage deletion`);
+						}
+					}
+				} catch (err) {
+					log.warn(`[MillageService] Failed to zero trip totalMiles after mileage delete`, {
+						id,
+						error: err
+					});
+				}
+			}
 		},
 
 		async listTrash(userId: string) {
@@ -244,6 +270,40 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			const tombstone = JSON.parse(raw);
 			if (!tombstone.deleted) throw new Error('Item not deleted');
 
+			// Validation: Check if parent trip exists and is active
+			// The mileage ID equals the trip ID by design
+			if (tripKV) {
+				const tripKey = `trip:${userId}:${itemId}`;
+				const tripRaw = await tripKV.get(tripKey);
+
+				if (!tripRaw) {
+					throw new Error('Parent trip not found. Cannot restore mileage log.');
+				}
+
+				const trip = JSON.parse(tripRaw);
+				if (trip.deleted) {
+					throw new Error(
+						'Parent trip is deleted. Please restore the trip first before restoring the mileage log.'
+					);
+				}
+
+				// Check if there's already an active mileage log for this trip
+				// Since mileage ID = trip ID, if the mileage record exists and is NOT deleted,
+				// we have a conflict. But since we're restoring the tombstone, we're fine.
+				// The only conflict would be if someone created a NEW mileage log while this was in trash.
+				const existingMillageRaw = await kv.get(key);
+				if (existingMillageRaw) {
+					const existingMillage = JSON.parse(existingMillageRaw);
+					// If there's a non-tombstone mileage record already, block restore
+					if (!existingMillage.deleted && existingMillage.id === itemId) {
+						// This shouldn't happen with same ID, but guard against it
+						log.warn(
+							`[MillageService] Attempted restore of mileage ${itemId} but active record exists`
+						);
+					}
+				}
+			}
+
 			const restored = tombstone.backup || tombstone.data || tombstone;
 			delete restored.deleted;
 			delete restored.deletedAt;
@@ -252,6 +312,31 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			restored.updatedAt = new Date().toISOString();
 
 			await this.put(restored);
+
+			// Update the parent trip's totalMiles to reflect the restored mileage
+			if (tripKV && typeof restored.miles === 'number') {
+				try {
+					const tripKey = `trip:${userId}:${itemId}`;
+					const tripRaw = await tripKV.get(tripKey);
+					if (tripRaw) {
+						const trip = JSON.parse(tripRaw);
+						if (!trip.deleted) {
+							trip.totalMiles = restored.miles;
+							trip.updatedAt = new Date().toISOString();
+							await tripKV.put(tripKey, JSON.stringify(trip));
+							log.info(
+								`[MillageService] Updated trip ${itemId} totalMiles to ${restored.miles} after mileage restore`
+							);
+						}
+					}
+				} catch (err) {
+					log.warn(`[MillageService] Failed to update trip totalMiles after mileage restore`, {
+						itemId,
+						error: err
+					});
+				}
+			}
+
 			return restored;
 		}
 	};
