@@ -42,14 +42,14 @@ function createTrashStore() {
 						flat = { ...flat.data, ...flat };
 						delete flat.data;
 					}
-					// Ensure the UI sees the real ID for display, or keep the unique one for keys
 					return flat;
 				});
 
 				const filtered = type
 					? normalizedItems.filter((it) => {
 							if (it.recordType === type || it.type === type) return true;
-							// Fallback checks
+							if (Array.isArray(it.recordTypes) && it.recordTypes.includes(type)) return true;
+							// Fallback heuristics
 							if (type === 'expense' && it.originalKey?.startsWith('expense:')) return true;
 							if (type === 'millage' && it.originalKey?.startsWith('millage:')) return true;
 							if (type === 'trip' && it.originalKey?.startsWith('trip:')) return true;
@@ -57,14 +57,22 @@ function createTrashStore() {
 						})
 					: normalizedItems;
 
-				filtered.sort((a, b) => {
+				// Projection: ensure the UI sees the requested type
+				const projected = filtered.map((it) => {
+					if (type && it.recordType !== type) {
+						return { ...it, recordType: type, type: type };
+					}
+					return it;
+				});
+
+				projected.sort((a, b) => {
 					const aTime = a && a.deletedAt ? new Date(a.deletedAt).getTime() : 0;
 					const bTime = b && b.deletedAt ? new Date(b.deletedAt).getTime() : 0;
 					return bTime - aTime;
 				});
 
-				set(filtered);
-				return filtered;
+				set(projected);
+				return projected;
 			} catch (err) {
 				console.error('❌ Failed to load trash:', err);
 				set([]);
@@ -76,7 +84,7 @@ function createTrashStore() {
 			try {
 				const db = await getDB();
 
-				// 1. Fetch from trash using the UNIQUE ID (e.g. "millage:123")
+				// 1. Fetch from trash using the UNIQUE ID
 				const txRead = db.transaction('trash', 'readonly');
 				const stored = await txRead.objectStore('trash').get(uniqueId);
 				await txRead.done;
@@ -96,15 +104,14 @@ function createTrashStore() {
 				const restoreType =
 					targetType || stored.recordType || stored.type || recordTypes[0] || 'trip';
 
-				// 2. Parent Trip Check (Guard)
+				// 2. Parent Trip Check
 				if (restoreType === 'millage') {
-					// The parent ID is the stored.tripId OR the restored ID (if they share IDs)
 					const realId = getRealId(uniqueId);
 					const parentId = stored.tripId || realId;
 
 					const txCheck = db.transaction(['trips', 'trash'], 'readonly');
 					const tripExists = await txCheck.objectStore('trips').get(parentId);
-					const tripTrash = await txCheck.objectStore('trash').get(parentId); // Trip trash uses plain ID
+					const tripTrash = await txCheck.objectStore('trash').get(parentId);
 					await txCheck.done;
 
 					if (!tripExists) {
@@ -125,15 +132,18 @@ function createTrashStore() {
 
 				const backups: Record<string, any> =
 					stored.backups || (stored.data && (stored.data.__backups as any)) || {};
+
+				// [!code fix] Added check for 'stored.backup' (singular) used by Server
 				const backupFor = (t: string) =>
 					backups[t] ||
 					(stored.data && stored.data[t]) ||
+					stored.backup || // <--- CRITICAL FIX: Server uses singular 'backup'
 					(stored.recordType === t ? stored.data || stored : undefined) ||
 					stored;
 
 				const restored = { ...(backupFor(restoreType) || {}) };
 
-				// [!code fix] Ensure we restore with the REAL ID (stripping prefix)
+				// Ensure we restore with the REAL ID
 				restored.id = getRealId(uniqueId);
 
 				delete restored.deleted;
@@ -157,11 +167,10 @@ function createTrashStore() {
 				await tx.objectStore('trash').delete(uniqueId);
 				update((items) => items.filter((it) => it.id !== uniqueId));
 
-				// Enqueue Sync
+				// Enqueue Sync using Real ID
 				const syncTarget =
 					restoreType === 'expense' ? 'expenses' : restoreType === 'millage' ? 'millage' : 'trips';
 
-				// [!code note] We queue the restore using the REAL ID so the server finds it
 				await syncManager.addToQueue({
 					action: 'restore',
 					tripId: restored.id,
@@ -183,7 +192,7 @@ function createTrashStore() {
 			await tx.done;
 			update((l) => l.filter((t) => t.id !== id));
 
-			// If it's a prefixed ID, send the real ID to the server
+			// Send Real ID to server
 			const realId = getRealId(id);
 			await syncManager.addToQueue({ action: 'permanentDelete', tripId: realId });
 		},
@@ -265,7 +274,7 @@ function createTrashStore() {
 					}
 					flatItem.type = flatItem.recordType;
 
-					// [!code fix] Apply Unique ID for Mileage to avoid collision with Trip
+					// Apply Unique ID for Mileage
 					const uniqueId = getUniqueTrashId(flatItem);
 					flatItem.id = uniqueId;
 
@@ -286,7 +295,6 @@ function createTrashStore() {
 				const index = store.index('userId');
 				const localItems = await index.getAll(userId);
 				for (const localItem of localItems) {
-					// We only remove items that match the requested type sync, or all if generic
 					if (type && localItem.recordType !== type) continue;
 
 					if (!cloudIds.has(localItem.id)) {
@@ -296,8 +304,7 @@ function createTrashStore() {
 				}
 				await tx.done;
 
-				// Cleanup Active Stores (Remove items that appear in trash)
-				// We need to check against the REAL IDs
+				// Cleanup Active Stores
 				const cleanupTx = db.transaction(['trash', 'trips', 'expenses', 'millage'], 'readwrite');
 				const allTrash = await cleanupTx.objectStore('trash').getAll();
 				const tripStore = cleanupTx.objectStore('trips');
