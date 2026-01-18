@@ -39,13 +39,9 @@ export const POST: RequestHandler = async (event) => {
 			tripIndexDO as any
 		);
 
-		// [!code fix] Capture Trip KV for restore guard logic
-		const logsKV = safeKV(platformEnv, 'BETA_LOGS_KV');
-
 		const millageSvc = makeMillageService(
 			safeKV(platformEnv, 'BETA_MILLAGE_KV') as any,
-			tripIndexDO as any,
-			logsKV as any // [!code ++] Pass Trip KV to service
+			tripIndexDO as any
 		);
 
 		const currentUser = user as { id?: string; name?: string; token?: string };
@@ -62,7 +58,6 @@ export const POST: RequestHandler = async (event) => {
 					restored = await expenseSvc.restore(storageId, id);
 				} catch {
 					try {
-						// This will now throw if parent trip is deleted
 						restored = await millageSvc.restore(storageId, id);
 					} catch {
 						// all attempts failed; no-op

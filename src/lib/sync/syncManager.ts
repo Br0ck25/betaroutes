@@ -47,7 +47,7 @@ class SyncManager {
 			// 1. Push any pending local changes immediately
 			await this.syncNow();
 
-			// 2. [!code ++] Pull/Download data ONLY on initialization (Page Refresh)
+			// 2. Pull/Download data ONLY on initialization (Page Refresh)
 			await this.syncDownAll();
 
 			this.startAutoSync();
@@ -58,7 +58,7 @@ class SyncManager {
 		console.log('✅ Sync manager initialized');
 	}
 
-	// [!code ++] New helper to handle the "Refresh" logic
+	// New helper to handle the "Refresh" logic
 	private async syncDownAll() {
 		console.log('⬇️ Downloading latest data (Refresh)...');
 		await Promise.all(
@@ -132,12 +132,21 @@ class SyncManager {
 
 				for (const item of queue) {
 					try {
+						// Only attempt enrichment for trip creation/updates
 						if (
 							(item.action === 'create' || item.action === 'update') &&
 							item.data &&
 							(!item.data.store || item.data.store === 'trips')
 						) {
-							await this.enrichTripData(item.data);
+							// [!code fix] Safe enrichment call that won't throw on Map errors
+							try {
+								await this.enrichTripData(item.data);
+							} catch (enrichErr) {
+								console.warn(
+									'⚠️ Failed to enrich trip data (Google Maps likely blocked or offline). Proceeding with sync.',
+									enrichErr
+								);
+							}
 						}
 
 						await this.processSyncItem(item);
@@ -153,8 +162,6 @@ class SyncManager {
 				if (failCount > 0) syncStatus.setError(`${failCount} item(s) failed`);
 			}
 
-			// [!code delete] Removed the "Triggering downward sync..." block
-
 			syncStatus.setSynced();
 		} catch (err) {
 			console.error('❌ Sync error:', err);
@@ -169,7 +176,16 @@ class SyncManager {
 			console.log(`🧮 Calculating offline route for trip ${trip.id}...`);
 
 			try {
-				await loadGoogleMaps(this.apiKey);
+				// [!code fix] Check map loading explicitly to catch 'ApiTargetBlockedMapError'
+				try {
+					await loadGoogleMaps(this.apiKey);
+				} catch (loaderErr) {
+					console.warn(
+						'⚠️ Google Maps API failed to load (likely blocked or offline). Skipping enrichment.',
+						loaderErr
+					);
+					return; // Exit enrichment safely, allowing the sync to proceed
+				}
 
 				const directionsService = new google.maps.DirectionsService();
 				const waypoints = (trip.stops || []).map((s: any) => ({
@@ -223,6 +239,7 @@ class SyncManager {
 					}
 				}
 			} catch (e) {
+				// [!code fix] Swallow enrichment errors (like Map blocks) so sync continues
 				console.warn('⚠️ Could not calculate route for offline trip:', e);
 			}
 		}
