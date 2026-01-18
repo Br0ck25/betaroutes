@@ -70,7 +70,7 @@ describe('Mileage and Trip Lifecycle Rules', () => {
 			// The API handler validates this, but the service doesn't
 			// This test documents the expected API behavior
 			const svc = makeMillageService(millageKV, tripIndexDO, tripKV);
-			
+
 			// Service allows creation (internal operation)
 			const millageRecord = {
 				id: tripId,
@@ -82,7 +82,7 @@ describe('Mileage and Trip Lifecycle Rules', () => {
 				updatedAt: now
 			};
 			await svc.put(millageRecord as any);
-			
+
 			// But restore should block
 			await svc.delete(userId, tripId);
 			await expect(svc.restore(userId, tripId)).rejects.toThrow('Parent trip is deleted');
@@ -419,7 +419,7 @@ describe('Mileage and Trip Lifecycle Rules', () => {
 			// Verify mileage is not returned by get() (which filters deleted)
 			mileage = await millageSvc.get(userId, tripId);
 			expect(mileage).toBeFalsy(); // list() filters deleted
-			
+
 			let currentTrip = await tripSvc.get(userId, tripId);
 			expect(currentTrip?.totalMiles).toBe(0);
 

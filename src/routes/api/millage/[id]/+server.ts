@@ -91,18 +91,20 @@ export const PUT: RequestHandler = async (event) => {
 		if (tripKV && typeof (tripKV as any).get === 'function') {
 			const tripKey = `trip:${userId}:${id}`;
 			const tripRaw = await tripKV.get(tripKey);
-			
+
 			if (!tripRaw) {
 				return new Response(
 					JSON.stringify({ error: 'Parent trip not found. Cannot update mileage log.' }),
 					{ status: 409, headers: { 'Content-Type': 'application/json' } }
 				);
 			}
-			
+
 			const trip = JSON.parse(tripRaw);
 			if (trip.deleted) {
 				return new Response(
-					JSON.stringify({ error: 'Parent trip is deleted. Cannot update mileage log for deleted trip.' }),
+					JSON.stringify({
+						error: 'Parent trip is deleted. Cannot update mileage log for deleted trip.'
+					}),
 					{ status: 409, headers: { 'Content-Type': 'application/json' } }
 				);
 			}

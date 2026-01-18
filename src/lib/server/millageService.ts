@@ -66,7 +66,7 @@ export function makeMillageService(
 					}
 
 					let migratedCount = 0;
-					let skippedTombstones = 0;
+					const skippedTombstones = 0;
 					for (const key of keys) {
 						const raw = await kv.get(key.name);
 						if (!raw) continue;
