@@ -6,11 +6,6 @@ import type { TrashRecord } from '$lib/db/types';
 import { user as authUser } from '$lib/stores/auth';
 import type { User } from '$lib/types';
 
-// [!code ++] Import stores to update them immediately after restore
-import { trips } from '$lib/stores/trips';
-import { millage } from '$lib/stores/millage';
-import { expenses } from '$lib/stores/expenses';
-
 function createTrashStore() {
 	const { subscribe, set, update } = writable<TrashRecord[]>([]);
 
@@ -131,6 +126,7 @@ function createTrashStore() {
 				const backups: Record<string, any> =
 					stored.backups || (stored.data && (stored.data.__backups as any)) || {};
 
+				// Fix: Check 'backup' (singular) for server data, 'backups' (plural) for local
 				const backupFor = (t: string) =>
 					backups[t] ||
 					(stored.data && stored.data[t]) ||
@@ -152,16 +148,30 @@ function createTrashStore() {
 
 				if (restoreType === 'expense') {
 					await tx.objectStore('expenses').put(restored);
-					// [!code fix] Update Store immediately
-					expenses.updateLocal(restored);
+					try {
+						const { expenses } = await import('$lib/stores/expenses');
+						expenses.updateLocal(restored);
+					} catch {
+						/* ignore */
+					}
 				} else if (restoreType === 'millage') {
 					await tx.objectStore('millage').put(restored);
-					// [!code fix] Update Store immediately
-					millage.updateLocal(restored);
+					// [!code fix] Dynamically update millage store so UI shows data immediately
+					try {
+						const { millage } = await import('$lib/stores/millage');
+						millage.updateLocal(restored);
+					} catch {
+						/* ignore */
+					}
 				} else {
 					await tx.objectStore('trips').put(restored);
-					// [!code fix] Update Store immediately
-					trips.updateLocal(restored);
+					// [!code fix] Dynamically update trips store
+					try {
+						const { trips } = await import('$lib/stores/trips');
+						trips.updateLocal(restored);
+					} catch {
+						/* ignore */
+					}
 				}
 
 				await tx.objectStore('trash').delete(uniqueId);
@@ -297,7 +307,6 @@ function createTrashStore() {
 				}
 				await tx.done;
 
-				// Cleanup Active Stores
 				const cleanupTx = db.transaction(['trash', 'trips', 'expenses', 'millage'], 'readwrite');
 				const allTrash = await cleanupTx.objectStore('trash').getAll();
 				const tripStore = cleanupTx.objectStore('trips');
