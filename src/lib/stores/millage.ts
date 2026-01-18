@@ -541,6 +541,8 @@ if (typeof (millage as any).deleteMillage !== 'function') {
 				expiresAt: expiresAt.toISOString(),
 				originalKey: `millage:${userId}:${id}`,
 				syncStatus: 'pending',
+				backups: { millage: { ...rec } },
+				recordTypes: ['millage'],
 				miles: rec.miles,
 				vehicle: rec.vehicle,
 				date: rec.date
@@ -549,18 +551,20 @@ if (typeof (millage as any).deleteMillage !== 'function') {
 			// If a trip tombstone already exists for the same id, merge millage fields
 			// into that trip-trash record instead of clobbering it (avoids collisions).
 			const existing = await trashStore.get(id);
-			if (existing && (existing.recordType === 'trip' || existing.type === 'trip')) {
-				const merged = {
+			if (existing && (existing.recordType === 'trip' || existing.type === 'trip' || (existing.recordTypes || []).includes('trip'))) {
+				const tripBackup = (existing.backups && existing.backups.trip) || existing.data || existing;
+				const merged: any = {
 					...existing,
+					backups: {
+						...(existing.backups || {}),
+						millage: { ...rec },
+						trip: { ...(tripBackup as any) }
+					},
+					recordType: 'trip',
+					recordTypes: Array.from(new Set([...(existing.recordTypes || ['trip']), 'millage'])),
 					miles: rec.miles ?? existing.miles,
 					vehicle: rec.vehicle ?? existing.vehicle,
 					date: rec.date ?? existing.date,
-					containsRecordTypes: Array.from(
-						new Set([
-							...(existing.recordTypes || [existing.recordType || existing.type || 'trip']),
-							'millage'
-						])
-					),
 					syncStatus: 'pending'
 				};
 				await trashStore.put(merged);

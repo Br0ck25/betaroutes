@@ -108,27 +108,32 @@
 						: 'trip');
 
 			const filtered = uniqueItems.filter((it) => {
-				// Infer types from explicit discriminator, originalKey, or heuristics
-				const inferredFromKey =
-					it.recordType ||
-					it.type ||
-					(it.originalKey &&
-						(it.originalKey.startsWith('expense:')
-							? 'expense'
-							: it.originalKey.startsWith('millage:')
-								? 'millage'
-								: 'trip')) ||
-					'trip';
-				const hasMillageShape =
-					typeof it.miles === 'number' ||
-					Boolean(it.vehicle) ||
-					(Array.isArray(it.recordTypes) && it.recordTypes.includes('millage')) ||
-					(it.containsRecordTypes &&
-						it.containsRecordTypes.includes &&
-						it.containsRecordTypes.includes('millage'));
-				const inferred = hasMillageShape ? 'millage' : inferredFromKey;
-				// If viewing 'all', show everything, otherwise filter
+			// Prefer explicit recordTypes when present (merged tombstones list multiple types)
+			const recordTypes = Array.isArray(it.recordTypes)
+				? it.recordTypes
+				: it.recordType
+				? [it.recordType]
+				: [];
+
+			if (recordTypes.length > 0) {
+				// If viewing 'all', show everything; otherwise include items whose recordTypes include the view
 				if (!type && !currentTypeParam) return true;
+				return recordTypes.includes(effectiveType);
+			}
+
+			// Fallback: infer from key or shape
+			const inferredFromKey =
+				it.recordType ||
+				it.type ||
+				(it.originalKey &&
+					(it.originalKey.startsWith('expense:')
+						? 'expense'
+						: it.originalKey.startsWith('millage:')
+							? 'millage'
+							: 'trip')) ||
+				'trip';
+			const hasMillageShape = typeof it.miles === 'number' || Boolean(it.vehicle);
+			const inferred = hasMillageShape ? 'millage' : inferredFromKey;
 				return inferred === effectiveType;
 			});
 
