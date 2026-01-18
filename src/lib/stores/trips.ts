@@ -297,12 +297,18 @@ function createTripsStore() {
 
 				// Build base trip-trash payload
 				const trashItem: any = {
-					deletedAt: now.toISOString(),
-					deletedBy: userId,
-					expiresAt: expiresAt.toISOString(),
-					originalKey: `trip:${userId}:${id}`,
-					syncStatus: 'pending' as const
-				};
+				...trip,
+				id: trip.id,
+				userId: trip.userId,
+				deletedAt: now.toISOString(),
+				deletedBy: userId,
+				expiresAt: expiresAt.toISOString(),
+				originalKey: `trip:${userId}:${id}`,
+				syncStatus: 'pending' as const,
+				backups: { trip: { ...trip } },
+				recordType: 'trip',
+				recordTypes: ['trip'],
+			};
 
 				// If a millage tombstone already exists for the same id, merge millage fields
 				// into the trip trash item so the millage remains visible in millage trash UI.
@@ -313,19 +319,16 @@ function createTripsStore() {
 					trashItem.miles = (existing as any).miles ?? trashItem.miles;
 					trashItem.vehicle = (existing as any).vehicle ?? trashItem.vehicle;
 					trashItem.date = (existing as any).date ?? trashItem.date;
-					trashItem.containsRecordTypes = Array.from(
-						new Set([
-							...(existing.recordTypes || [existing.recordType || existing.type || 'millage']),
-							'trip'
-						])
-					);
-				} else {
+				// preserve millage backup and recordTypes
+				const millageBackup = (existing.backups && existing.backups.millage) || existing.data || existing;
+				trashItem.backups = { ...(trashItem.backups || {}), millage: { ...(millageBackup as any) } };
+				trashItem.recordTypes = Array.from(new Set([...(existing.recordTypes || [existing.recordType || existing.type || 'millage']), 'trip']));				} else {
 					trashItem.recordType = 'trip';
 				}
 
-				const deleteTx = db.transaction('trips', 'readwrite');
-				await deleteTx.objectStore('trips').delete(id);
-				await deleteTx.done;
+			// Persist trip tombstone (if merged, backups already populated above)
+			await trashTx.objectStore('trash').put(trashItem);
+			await trashTx.done;
 
 				await syncManager.addToQueue({
 					action: 'delete',
