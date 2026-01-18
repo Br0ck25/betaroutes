@@ -121,6 +121,16 @@ function createTripsStore() {
 					if (exists) return trips.map((t) => (t.id === trip.id ? trip : t));
 					return [trip, ...trips];
 				});
+				// Enqueue trip sync FIRST so parent trip exists on server before mileage
+				try {
+					await syncManager.addToQueue({
+						action: 'create',
+						tripId: trip.id,
+						data: { ...trip, store: 'trips' }
+					});
+				} catch (err) {
+					console.warn('Failed to enqueue trip for sync:', err);
+				}
 				try {
 					const { millage } = await import('$lib/stores/millage');
 					if (typeof trip.totalMiles === 'number') {
@@ -143,15 +153,6 @@ function createTripsStore() {
 					}
 				} catch (err) {
 					console.warn('Failed to create local millage record for trip:', err);
-				}
-				try {
-					await syncManager.addToQueue({
-						action: 'create',
-						tripId: trip.id,
-						data: { ...trip, store: 'trips' }
-					});
-				} catch (err) {
-					console.warn('Failed to enqueue trip for sync:', err);
 				}
 				return trip;
 			} catch (err) {
