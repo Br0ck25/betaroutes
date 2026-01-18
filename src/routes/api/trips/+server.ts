@@ -200,6 +200,22 @@ export const GET: RequestHandler = async (event) => {
 
 		const allTrips = await svc.list(storageId, { since: sinceParam, limit, offset });
 
+		// If millage KV is available, treat millage as the source-of-truth and merge
+		try {
+			const millageKV = safeKV(env, 'BETA_MILLAGE_KV');
+			if (millageKV) {
+				const millageSvc = makeMillageService(millageKV as any, safeDO(env, 'TRIP_INDEX_DO')!);
+				const ms = await millageSvc.list(storageId);
+				const mById = new Map(ms.map((m: any) => [m.id, m]));
+				for (const t of allTrips) {
+					const m = mById.get(t.id);
+					if (m && typeof m.miles === 'number') t.totalMiles = m.miles;
+				}
+			}
+		} catch (err) {
+			log.warn('Failed to merge millage into trips response', err);
+		}
+
 		return new Response(JSON.stringify(allTrips), {
 			status: 200,
 			headers: { 'Content-Type': 'application/json' }

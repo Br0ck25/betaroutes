@@ -41,7 +41,8 @@ export const POST: RequestHandler = async (event) => {
 
 		const millageSvc = makeMillageService(
 			safeKV(platformEnv, 'BETA_MILLAGE_KV') as any,
-			tripIndexDO as any
+			tripIndexDO as any,
+			safeKV(platformEnv, 'BETA_LOGS_KV') as any
 		);
 
 		const currentUser = user as { id?: string; name?: string; token?: string };
@@ -49,6 +50,7 @@ export const POST: RequestHandler = async (event) => {
 
 		if (storageId) {
 			let restored: unknown | null = null;
+			let millageError: string | null = null;
 
 			// Strategy: Try sequentially until one succeeds
 			try {
@@ -126,6 +128,11 @@ export const POST: RequestHandler = async (event) => {
 				}
 
 				return new Response(JSON.stringify({ success: true }), { status: 200 });
+			}
+
+			// If mileage restore failed with a validation error, surface it
+			if (millageError) {
+				return new Response(JSON.stringify({ error: millageError }), { status: 409 });
 			}
 		}
 
