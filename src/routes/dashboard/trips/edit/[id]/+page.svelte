@@ -244,6 +244,10 @@
 	$: tripData.mpg = mpgLocal;
 	$: tripData.gasPrice = gasPriceLocal;
 	$: tripData.totalMiles = totalMilesLocal;
+	// Keep the form-local value in sync when the app recalculates totals (e.g. route API results).
+	// Guarded assignment prevents an unnecessary reactive cycle when the user edits the input.
+	$: if (Number(tripData.totalMiles || 0) !== Number(totalMilesLocal || 0))
+		totalMilesLocal = Number(tripData.totalMiles || 0);
 	$: tripData.notes = notesLocal;
 
 	let newStop = { address: '', earnings: 0, notes: '' };
