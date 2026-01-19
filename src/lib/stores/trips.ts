@@ -24,7 +24,8 @@ function createTripsStore() {
 					newItems[index] = { ...newItems[index], ...trip };
 					return newItems;
 				}
-				return items;
+				// If trip doesn't exist in the store, add it (for restore from trash)
+				return [trip, ...items];
 			});
 		},
 		// ... (keep load, create, updateTrip exactly as they are) ...
