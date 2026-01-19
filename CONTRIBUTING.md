@@ -1,37 +1,59 @@
-Contributing Guidelines
+# Contributing
 
-These rules are mandatory and enforced by CI.
+Thank you for contributing to this project!
 
-Any violation will result in a failing build.
+This repository enforces **strict frontend and architectural standards**.
+All contributors (humans and AI) must follow these rules.
 
-General
+---
 
-All changes must begin from and end in a passing npm run check state
+## Svelte Rules
 
-Do not commit changes that leave the repository in a broken or partially migrated state
+This is a **mixed Svelte 4 / Svelte 5 codebase during migration**.
 
-HTML
+### Allowed States
 
-Follow the HTML Living Standard exclusively
+A file must be **exactly one** of the following:
 
-No XHTML syntax (including self-closing void misuse or XML-style attributes)
+- **Legacy Svelte 4**
+  - Must include `<!-- MIGRATION: SVELTE4-LEGACY -->` at the top
+  - Bug fixes only
+  - No new features
 
-Semantic, standards-compliant markup is required
+- **Migrated Svelte 5**
+  - Uses runes-based reactivity exclusively
+  - Represents the final architectural state
 
-Svelte
+### New Code Rule (Non-Negotiable)
 
-Svelte 5 only
+- **All new files and all newly migrated files MUST use Svelte 5**
+- Legacy Svelte 4 syntax is permitted **only** in files explicitly marked as legacy
 
-Runes-based reactivity only
+Mixing Svelte 4 and Svelte 5 syntax in the same file will fail CI.
 
-No legacy Svelte patterns, including:
+---
 
-$: reactive statements
+## HTML Rules
 
-onMount
+- Follow the **HTML Living Standard (WHATWG)** only
+- No XHTML or XML-style syntax
+- No deprecated elements or attributes
+- Prefer semantic HTML
 
-Svelte stores
+---
 
-Legacy lifecycle APIs
+## Mandatory Checks
 
-Violations of any rule above will fail CI.
+After any change:
+
+1. `npm run check`
+2. `npm run lint`
+3. `npx eslint`
+4. Fix **all** errors and warnings
+
+CI must pass cleanly before committing.
+
+---
+
+If anything is unclear:
+**STOP and ask instead of guessing.**
