@@ -337,7 +337,6 @@ function createTrashStore() {
 				const tx = db.transaction('trash', 'readwrite');
 				const store = tx.objectStore('trash');
 
-				let savedCount = 0;
 				for (const rawItem of cloudTrash) {
 					let flatItem: any = { ...rawItem };
 
@@ -387,7 +386,6 @@ function createTrashStore() {
 							syncStatus: 'synced',
 							lastSyncedAt: new Date().toISOString()
 						});
-						savedCount++;
 					}
 				}
 
