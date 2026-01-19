@@ -22,7 +22,8 @@ describe('HughesNet service archived write smoke test', () => {
 			platform.env['BETA_DIRECTIONS_KV'] as any,
 			platform.env['BETA_HUGHESNET_ORDERS_KV'] as any,
 			platform.env['BETA_LOGS_KV'] as any,
-			platform.env['TRIP_INDEX_DO'] as any
+			platform.env['TRIP_INDEX_DO'] as any,
+			platform.env['BETA_MILLAGE_KV'] as any
 		);
 
 		const owner = 'smoke_user';
