@@ -274,12 +274,12 @@ function createTrashStore() {
 
 		async permanentDelete(id: string) {
 			const db = await getDB();
-
+			
 			// First get the item to determine its record type
 			const txRead = db.transaction('trash', 'readonly');
 			const item = await txRead.objectStore('trash').get(id);
 			await txRead.done;
-
+			
 			const tx = db.transaction('trash', 'readwrite');
 			await tx.objectStore('trash').delete(id);
 			await tx.done;
@@ -288,8 +288,8 @@ function createTrashStore() {
 			const realId = getRealId(id);
 			// Get record type from prefix or from the item's recordType property
 			const recordType = getRecordType(id) || item?.recordType || item?.type;
-			await syncManager.addToQueue({
-				action: 'permanentDelete',
+			await syncManager.addToQueue({ 
+				action: 'permanentDelete', 
 				tripId: realId,
 				data: { recordType }
 			});
@@ -313,8 +313,8 @@ function createTrashStore() {
 			for (const item of userItems) {
 				const realId = getRealId(item.id);
 				const recordType = getRecordType(item.id) || item.recordType || (item as any).type;
-				await syncManager.addToQueue({
-					action: 'permanentDelete',
+				await syncManager.addToQueue({ 
+					action: 'permanentDelete', 
 					tripId: realId,
 					data: { recordType }
 				});
