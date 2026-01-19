@@ -2,6 +2,7 @@
 import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
 import { DO_ORIGIN, RETENTION } from '$lib/constants';
 import { log } from '$lib/server/log';
+import { calculateFuelCost } from '$lib/utils/calculations';
 
 export interface MillageRecord {
 	id: string;
@@ -314,15 +315,10 @@ export function makeMillageService(
 						const trip = JSON.parse(tripRaw);
 						if (!trip.deleted) {
 							trip.totalMiles = restored.miles;
-							// Recalculate fuel cost based on restored miles
+							// Recalculate fuel cost based on restored miles using shared utility
 							const mpg = Number(trip.mpg) || 0;
 							const gasPrice = Number(trip.gasPrice) || 0;
-							if (mpg > 0 && gasPrice > 0) {
-								const gallons = restored.miles / mpg;
-								trip.fuelCost = Math.round(gallons * gasPrice * 100) / 100;
-							} else {
-								trip.fuelCost = 0;
-							}
+							trip.fuelCost = calculateFuelCost(restored.miles, mpg, gasPrice);
 							trip.updatedAt = new Date().toISOString();
 							await tripKV.put(tripKey, JSON.stringify(trip));
 							log.info(

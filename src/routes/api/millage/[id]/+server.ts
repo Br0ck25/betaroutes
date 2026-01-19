@@ -6,6 +6,7 @@ import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 import { getStorageId } from '$lib/server/user';
+import { calculateFuelCost } from '$lib/utils/calculations';
 
 export const DELETE: RequestHandler = async (event) => {
 	try {
@@ -221,16 +222,11 @@ export const PUT: RequestHandler = async (event) => {
 				const trip = await tripSvc.get(userId, updated.tripId);
 				if (trip && !trip.deleted) {
 					trip.totalMiles = updated.miles;
-					// Recalculate fuel cost based on updated miles
+					// Recalculate fuel cost based on updated miles using shared utility
 					const tripAny = trip as any;
 					const mpg = Number(tripAny.mpg) || 0;
 					const gasPrice = Number(tripAny.gasPrice) || 0;
-					if (mpg > 0 && gasPrice > 0) {
-						const gallons = updated.miles / mpg;
-						tripAny.fuelCost = Math.round(gallons * gasPrice * 100) / 100;
-					} else {
-						tripAny.fuelCost = 0;
-					}
+					tripAny.fuelCost = calculateFuelCost(updated.miles, mpg, gasPrice);
 					trip.updatedAt = new Date().toISOString();
 					await tripSvc.put(trip);
 					log.info('Updated trip totalMiles and fuelCost from mileage log', {
