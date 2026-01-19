@@ -64,7 +64,7 @@ describe('DELETE /api/trash/[id] handler', () => {
 
 		const { DELETE } = await import('./+server');
 		const res = await DELETE(event);
-
+		
 		expect(res.status).toBe(204);
 		expect(mockMillageSvc.permanentDelete).toHaveBeenCalledWith('u1', 'test-id-123');
 		expect(mockTripSvc.permanentDelete).not.toHaveBeenCalled();
@@ -82,7 +82,7 @@ describe('DELETE /api/trash/[id] handler', () => {
 
 		const { DELETE } = await import('./+server');
 		const res = await DELETE(event);
-
+		
 		expect(res.status).toBe(204);
 		expect(mockTripSvc.permanentDelete).toHaveBeenCalledWith('u2', 'trip-id-456');
 		expect(mockMillageSvc.permanentDelete).not.toHaveBeenCalled();
@@ -100,7 +100,7 @@ describe('DELETE /api/trash/[id] handler', () => {
 
 		const { DELETE } = await import('./+server');
 		const res = await DELETE(event);
-
+		
 		expect(res.status).toBe(204);
 		expect(mockExpenseSvc.permanentDelete).toHaveBeenCalledWith('u3', 'expense-id-789');
 		expect(mockTripSvc.permanentDelete).not.toHaveBeenCalled();
@@ -111,14 +111,12 @@ describe('DELETE /api/trash/[id] handler', () => {
 		// Mock that only mileage KV has a tombstone
 		mockTripKV.get = vi.fn().mockResolvedValue(null);
 		mockExpenseKV.get = vi.fn().mockResolvedValue(null);
-		mockMillageKV.get = vi.fn().mockResolvedValue(
-			JSON.stringify({
-				deleted: true,
-				id: 'millage-id',
-				userId: 'u4',
-				miles: 100
-			})
-		);
+		mockMillageKV.get = vi.fn().mockResolvedValue(JSON.stringify({
+			deleted: true,
+			id: 'millage-id',
+			userId: 'u4',
+			miles: 100
+		}));
 
 		const event: any = {
 			request: {},
@@ -130,7 +128,7 @@ describe('DELETE /api/trash/[id] handler', () => {
 
 		const { DELETE } = await import('./+server');
 		const res = await DELETE(event);
-
+		
 		expect(res.status).toBe(204);
 		expect(mockMillageSvc.permanentDelete).toHaveBeenCalledWith('u4', 'millage-id');
 		expect(mockTripSvc.permanentDelete).not.toHaveBeenCalled();
@@ -139,14 +137,12 @@ describe('DELETE /api/trash/[id] handler', () => {
 
 	it('detects and deletes trip tombstone when no type is specified', async () => {
 		// Mock that only trip KV has a tombstone
-		mockTripKV.get = vi.fn().mockResolvedValue(
-			JSON.stringify({
-				deleted: true,
-				id: 'trip-id',
-				userId: 'u5',
-				startAddress: '123 Main St'
-			})
-		);
+		mockTripKV.get = vi.fn().mockResolvedValue(JSON.stringify({
+			deleted: true,
+			id: 'trip-id',
+			userId: 'u5',
+			startAddress: '123 Main St'
+		}));
 		mockExpenseKV.get = vi.fn().mockResolvedValue(null);
 		mockMillageKV.get = vi.fn().mockResolvedValue(null);
 
@@ -160,7 +156,7 @@ describe('DELETE /api/trash/[id] handler', () => {
 
 		const { DELETE } = await import('./+server');
 		const res = await DELETE(event);
-
+		
 		expect(res.status).toBe(204);
 		expect(mockTripSvc.permanentDelete).toHaveBeenCalledWith('u5', 'trip-id');
 		expect(mockMillageSvc.permanentDelete).not.toHaveBeenCalled();
@@ -183,7 +179,7 @@ describe('DELETE /api/trash/[id] handler', () => {
 
 		const { DELETE } = await import('./+server');
 		const res = await DELETE(event);
-
+		
 		expect(res.status).toBe(204);
 		expect(mockTripSvc.permanentDelete).not.toHaveBeenCalled();
 		expect(mockMillageSvc.permanentDelete).not.toHaveBeenCalled();

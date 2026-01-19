@@ -11,7 +11,7 @@ vi.mock('$lib/server/millageService', () => ({
 
 vi.mock('$lib/server/env', () => ({
 	getEnv: () => mockEnv,
-	safeKV: (_env: any, name: string) => {
+	safeKV: (env: any, name: string) => {
 		if (name === 'BETA_LOGS_KV') return mockTripKV;
 		return {};
 	},

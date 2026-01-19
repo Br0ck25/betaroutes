@@ -245,19 +245,14 @@ export const DELETE: RequestHandler = async (event) => {
 				// Find mileage logs linked to this trip
 				// Mileage logs can be linked by tripId OR by having the same id as the trip
 				const allMillage = await millageSvc.list(storageId);
-				const linkedMillage = allMillage.filter(
-					(m: MillageRecord) => m.tripId === id || m.id === id
-				);
+				const linkedMillage = allMillage.filter((m: MillageRecord) => m.tripId === id || m.id === id);
 				for (const m of linkedMillage) {
 					await millageSvc.delete(storageId, m.id);
 					log.info('Cascade deleted mileage log for trip', { tripId: id, millageId: m.id });
 				}
 			}
 		} catch (e) {
-			log.warn('Failed to cascade delete mileage logs', {
-				tripId: id,
-				message: createSafeErrorMessage(e)
-			});
+			log.warn('Failed to cascade delete mileage logs', { tripId: id, message: createSafeErrorMessage(e) });
 		}
 
 		await svc.incrementUserCounter(userSafe?.token ?? '', -1);

@@ -4,8 +4,6 @@ import { setupMockKV } from '$lib/server/dev-mock-db';
 import { makeMillageService } from '$lib/server/millageService';
 import { makeTripService } from '$lib/server/tripService';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 describe('Mileage and Trip Lifecycle Rules', () => {
 	let platform: { env: Record<string, unknown> };
 
@@ -131,8 +129,10 @@ describe('Mileage and Trip Lifecycle Rules', () => {
 
 			// Verify mileage is in trash
 			const trash = await svc.listTrash(userId);
-			expect(trash?.length ?? 0).toBe(1);
-			expect(trash?.[0]?.['id']).toBe(tripId);
+			expect(trash.length).toBe(1);
+			expect(trash[0].id).toBe(tripId);
+
+			// Verify trip miles are zeroed
 			const tripRaw = await tripKV.get(`trip:${userId}:${tripId}`);
 			expect(tripRaw).toBeTruthy();
 			const updatedTrip = JSON.parse(tripRaw as string);
@@ -191,8 +191,8 @@ describe('Mileage and Trip Lifecycle Rules', () => {
 
 			// Verify mileage is in trash
 			const millageTrash = await millageSvc.listTrash(userId);
-			expect(millageTrash?.length ?? 0).toBe(1);
-			expect(millageTrash?.[0]?.['id']).toBe(tripId);
+			expect(millageTrash.length).toBe(1);
+			expect(millageTrash[0].id).toBe(tripId);
 		});
 	});
 

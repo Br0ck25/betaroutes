@@ -277,7 +277,7 @@ class SyncManager {
 		else if (action === 'permanentDelete') {
 			// Include record type as query param so server knows which service to delete from
 			const recordType = (data as any)?.recordType;
-			const deleteUrl = recordType
+			const deleteUrl = recordType 
 				? `/api/trash/${tripId}?type=${encodeURIComponent(recordType)}`
 				: `/api/trash/${tripId}`;
 			await this.apiCall(deleteUrl, 'DELETE', null, null, tripId);
