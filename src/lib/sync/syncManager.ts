@@ -274,8 +274,14 @@ class SyncManager {
 		else if (action === 'delete') await this.apiCall(url, 'DELETE', null, 'trash', tripId);
 		else if (action === 'restore')
 			await this.apiCall(`/api/trash/${tripId}`, 'POST', null, 'trips', tripId);
-		else if (action === 'permanentDelete')
-			await this.apiCall(`/api/trash/${tripId}`, 'DELETE', null, null, tripId);
+		else if (action === 'permanentDelete') {
+			// Include record type as query param so server knows which service to delete from
+			const recordType = (data as any)?.recordType;
+			const deleteUrl = recordType 
+				? `/api/trash/${tripId}?type=${encodeURIComponent(recordType)}`
+				: `/api/trash/${tripId}`;
+			await this.apiCall(deleteUrl, 'DELETE', null, null, tripId);
+		}
 	}
 
 	private async apiCall(
