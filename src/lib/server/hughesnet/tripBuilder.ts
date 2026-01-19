@@ -1,29 +1,13 @@
 // src/lib/server/hughesnet/tripBuilder.ts
 import type { KVNamespace } from '@cloudflare/workers-types';
 import type { OrderData, OrderWithMeta, Trip, TripStop, SupplyItem } from './types';
+import type { MillageRecord } from '$lib/server/millageService';
 import { extractDateFromTs, parseDateOnly, parseTime, buildAddress, minutesToTime } from './utils';
 import { MIN_JOB_DURATION_MINS, MAX_JOB_DURATION_MINS } from './constants';
 import { log } from '$lib/server/log';
 
 // Minimal Route leg shape used by the router helper
 type RouteLeg = { duration?: number; distance?: number };
-
-// Minimal MillageRecord shape for mileage log creation
-type MillageRecord = {
-	id: string;
-	userId: string;
-	tripId?: string;
-	date?: string;
-	startOdometer: number;
-	endOdometer: number;
-	miles: number;
-	millageRate?: number;
-	vehicle?: string;
-	reimbursement?: number;
-	notes?: string;
-	createdAt: string;
-	updatedAt: string;
-};
 
 export async function createTripForDate(
 	userId: string,
