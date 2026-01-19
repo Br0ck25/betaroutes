@@ -11,6 +11,8 @@
 	import { getDB } from '$lib/db/indexedDB';
 	import type { TrashRecord } from '$lib/db/types';
 	import { get } from 'svelte/store';
+	import { userSettings } from '$lib/stores/userSettings';
+	import { getVehicleDisplayName } from '$lib/utils/vehicle';
 
 	const resolve = (href: string) => `${base}${href}`;
 
@@ -329,6 +331,9 @@
 
 				{@const isExpense = displayType === 'expense'}
 				{@const isMillage = displayType === 'millage'}
+				{@const rawVehicleName = getVehicleDisplayName(trip['vehicle'] as string | undefined, $userSettings?.vehicles)}
+				{@const vehicleDisplay = rawVehicleName && rawVehicleName !== '-' && rawVehicleName !== 'Unknown vehicle' ? rawVehicleName : null}
+				{@const millageLogDate = trip.date || trip.createdAt}
 
 				<div class="trash-item">
 					<div class="trip-info">
@@ -339,8 +344,9 @@
 									<span class="expense-category">{trip.category || 'Uncategorized'}</span>
 								{:else if isMillage}
 									<span class="badge-millage">Millage</span>
-									{trip['vehicle'] || 'Millage Log'}
+									{vehicleDisplay ? vehicleDisplay : (millageLogDate ? formatDate(millageLogDate) : 'Millage Log')}
 								{:else}
+									<span class="badge-trip">Trip</span>
 									{typeof trip.startAddress === 'string'
 										? trip.startAddress.split(',')[0]
 										: 'Unknown Trip'}
@@ -406,6 +412,16 @@
 	.badge-millage {
 		background-color: #d1fae5;
 		color: #065f46;
+		font-size: 0.8em;
+		padding: 2px 6px;
+		border-radius: 4px;
+		margin-right: 6px;
+		vertical-align: middle;
+		font-weight: 600;
+	}
+	.badge-trip {
+		background-color: #dbeafe;
+		color: #1e40af;
 		font-size: 0.8em;
 		padding: 2px 6px;
 		border-radius: 4px;
