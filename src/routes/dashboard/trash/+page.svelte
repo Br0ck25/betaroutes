@@ -348,6 +348,7 @@
 									<span class="badge-millage">Millage</span>
 									{vehicleDisplay ? vehicleDisplay : (millageLogDate ? formatDate(millageLogDate) : 'Millage Log')}
 								{:else}
+									<span class="badge-trip">Trip</span>
 									{typeof trip.startAddress === 'string'
 										? trip.startAddress.split(',')[0]
 										: 'Unknown Trip'}
@@ -413,6 +414,16 @@
 	.badge-millage {
 		background-color: #d1fae5;
 		color: #065f46;
+		font-size: 0.8em;
+		padding: 2px 6px;
+		border-radius: 4px;
+		margin-right: 6px;
+		vertical-align: middle;
+		font-weight: 600;
+	}
+	.badge-trip {
+		background-color: #dbeafe;
+		color: #1e40af;
 		font-size: 0.8em;
 		padding: 2px 6px;
 		border-radius: 4px;
