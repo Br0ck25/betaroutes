@@ -223,6 +223,14 @@ export const DELETE: RequestHandler = async (event) => {
 			});
 		}
 
+		// If trip is already deleted (tombstone), return success (idempotent)
+		if (existing.deleted) {
+			return new Response(JSON.stringify({ success: true }), {
+				status: 200,
+				headers: { 'Content-Type': 'application/json' }
+			});
+		}
+
 		// Perform soft delete
 		await svc.delete(storageId, id);
 
@@ -235,8 +243,9 @@ export const DELETE: RequestHandler = async (event) => {
 					tripIndexDO as unknown as DurableObjectNamespace
 				);
 				// Find mileage logs linked to this trip
+				// Mileage logs can be linked by tripId OR by having the same id as the trip
 				const allMillage = await millageSvc.list(storageId);
-				const linkedMillage = allMillage.filter((m: MillageRecord) => m.tripId === id);
+				const linkedMillage = allMillage.filter((m: MillageRecord) => m.tripId === id || m.id === id);
 				for (const m of linkedMillage) {
 					await millageSvc.delete(storageId, m.id);
 					log.info('Cascade deleted mileage log for trip', { tripId: id, millageId: m.id });
