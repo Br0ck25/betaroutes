@@ -331,10 +331,8 @@
 
 				{@const isExpense = displayType === 'expense'}
 				{@const isMillage = displayType === 'millage'}
-				{@const vehicleDisplay = (() => {
-					const name = getVehicleDisplayName(trip['vehicle'] as string | undefined, $userSettings?.vehicles);
-					return name && name !== '-' && name !== 'Unknown vehicle' ? name : null;
-				})()}
+				{@const rawVehicleName = getVehicleDisplayName(trip['vehicle'] as string | undefined, $userSettings?.vehicles)}
+				{@const vehicleDisplay = rawVehicleName && rawVehicleName !== '-' && rawVehicleName !== 'Unknown vehicle' ? rawVehicleName : null}
 				{@const millageLogDate = trip.date || trip.createdAt}
 
 				<div class="trash-item">

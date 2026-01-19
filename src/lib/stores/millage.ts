@@ -27,19 +27,21 @@ function buildTrashTimestampMap(trashItems: TrashItemLike[]): Map<string, string
 }
 
 // Helper to check if a mileage record should be filtered out based on trash entries
+// Accepts just the id and createdAt to avoid needing a full MillageRecord
 function shouldFilterOutMillage(
-	item: MillageRecord,
+	id: string,
+	createdAt: string,
 	trashMap: Map<string, string>
 ): boolean {
-	const rawTrashDeletedAt = trashMap.get(item.id);
-	const prefixedTrashDeletedAt = trashMap.get(`millage:${item.id}`);
+	const rawTrashDeletedAt = trashMap.get(id);
+	const prefixedTrashDeletedAt = trashMap.get(`millage:${id}`);
 	const trashDeletedAt = rawTrashDeletedAt || prefixedTrashDeletedAt;
 
 	// If not in trash at all, don't filter out
 	if (!trashDeletedAt) return false;
 
 	// If in trash, check if this item was created AFTER the trash item was deleted
-	const itemCreatedAt = new Date(item.createdAt).getTime();
+	const itemCreatedAt = new Date(createdAt).getTime();
 	const deletedTime = new Date(trashDeletedAt).getTime();
 
 	// If item was created after the trash entry, it's a new record - don't filter out
@@ -76,15 +78,14 @@ function createMillageStore() {
 				const trashItems = await trashTx.objectStore('trash').getAll();
 				const trashMap = buildTrashTimestampMap(trashItems as TrashItemLike[]);
 				await trashTx.done;
-				const validServerData = data.filter((item) => !shouldFilterOutMillage(item, trashMap));
+				const validServerData = data.filter((item) => !shouldFilterOutMillage(item.id, item.createdAt, trashMap));
 				const serverIdSet = new Set(validServerData.map((i) => i.id));
 				set(validServerData);
 				const tx = db.transaction(['millage', 'trash'], 'readwrite');
 				const store = tx.objectStore('millage');
 				const localItems = await store.getAll();
 				for (const local of localItems) {
-					// Check if local item should be deleted
-					if (shouldFilterOutMillage(local, trashMap)) {
+					if (shouldFilterOutMillage(local.id, local.createdAt, trashMap)) {
 						await store.delete(local.id);
 					} else if (local.syncStatus === 'synced' && !serverIdSet.has(local.id)) {
 						await store.delete(local.id);
@@ -135,7 +136,7 @@ function createMillageStore() {
 				}
 				const trashItems = await trashStore.getAll();
 				const trashMap = buildTrashTimestampMap(trashItems as TrashItemLike[]);
-				const activeItems = items.filter((item) => !shouldFilterOutMillage(item, trashMap));
+				const activeItems = items.filter((item) => !shouldFilterOutMillage(item.id, item.createdAt, trashMap));
 				activeItems.sort((a, b) => {
 					const dateA = new Date(a.date || a.createdAt).getTime();
 					const dateB = new Date(b.date || b.createdAt).getTime();
@@ -439,9 +440,7 @@ function createMillageStore() {
 							continue;
 						}
 						// Check if this record should be filtered out based on trash entries
-						// Create a temporary MillageRecord-like object for the helper
-						const tempRecord = { id: rec.id, createdAt: rec.createdAt } as MillageRecord;
-						if (shouldFilterOutMillage(tempRecord, trashMap)) {
+						if (shouldFilterOutMillage(rec.id, rec.createdAt, trashMap)) {
 							continue; // Skip - this is the deleted record
 						}
 						
