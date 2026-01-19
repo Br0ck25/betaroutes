@@ -16,6 +16,14 @@
 
 	const resolve = (href: string) => `${base}${href}`;
 
+	// Known user-friendly error messages that are safe to display
+	const KNOWN_RESTORE_ERROR_MESSAGES = [
+		'Item not found in trash',
+		'Unauthorized',
+		'The parent Trip is currently in the Trash. Please restore the Trip first.',
+		'This mileage log belongs to a trip that has been permanently deleted. It cannot be restored.'
+	];
+
 	let trashedTrips: TrashRecord[] = [];
 	let loading = true;
 	let restoring = new Set<string>();
@@ -177,7 +185,12 @@
 
 			await loadTrash();
 		} catch (err) {
-			alert('Failed to restore item.');
+			// Only show known user-friendly error messages, fallback to generic for unknown errors
+			const errorMessage = err instanceof Error ? err.message : '';
+			const message = KNOWN_RESTORE_ERROR_MESSAGES.includes(errorMessage)
+				? errorMessage
+				: 'Failed to restore item.';
+			alert(message);
 		} finally {
 			restoring.delete(id);
 			restoring = restoring;
@@ -211,7 +224,12 @@
 			}
 			await loadTrash();
 		} catch (err) {
-			alert('Failed to restore some items.');
+			// Only show known user-friendly error messages, fallback to generic for unknown errors
+			const errorMessage = err instanceof Error ? err.message : '';
+			const message = KNOWN_RESTORE_ERROR_MESSAGES.includes(errorMessage)
+				? errorMessage
+				: 'Failed to restore some items.';
+			alert(message);
 		} finally {
 			loading = false;
 		}
@@ -331,8 +349,14 @@
 
 				{@const isExpense = displayType === 'expense'}
 				{@const isMillage = displayType === 'millage'}
-				{@const rawVehicleName = getVehicleDisplayName(trip['vehicle'] as string | undefined, $userSettings?.vehicles)}
-				{@const vehicleDisplay = rawVehicleName && rawVehicleName !== '-' && rawVehicleName !== 'Unknown vehicle' ? rawVehicleName : null}
+				{@const rawVehicleName = getVehicleDisplayName(
+					trip['vehicle'] as string | undefined,
+					$userSettings?.vehicles
+				)}
+				{@const vehicleDisplay =
+					rawVehicleName && rawVehicleName !== '-' && rawVehicleName !== 'Unknown vehicle'
+						? rawVehicleName
+						: null}
 				{@const millageLogDate = trip.date || trip.createdAt}
 
 				<div class="trash-item">
@@ -344,7 +368,11 @@
 									<span class="expense-category">{trip.category || 'Uncategorized'}</span>
 								{:else if isMillage}
 									<span class="badge-millage">Millage</span>
-									{vehicleDisplay ? vehicleDisplay : (millageLogDate ? formatDate(millageLogDate) : 'Millage Log')}
+									{vehicleDisplay
+										? vehicleDisplay
+										: millageLogDate
+											? formatDate(millageLogDate)
+											: 'Millage Log'}
 								{:else}
 									<span class="badge-trip">Trip</span>
 									{typeof trip.startAddress === 'string'
