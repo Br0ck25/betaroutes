@@ -5,6 +5,7 @@ import { syncManager } from '$lib/sync/syncManager';
 import type { MillageRecord } from '$lib/db/types';
 import type { User } from '$lib/types';
 import { auth } from '$lib/stores/auth';
+import { calculateFuelCost } from '$lib/utils/calculations';
 
 export const isLoading = writable(false);
 
@@ -279,7 +280,7 @@ function createMillageStore() {
 						const newMiles = updated.miles || 0;
 						const mpg = trip.mpg || 25;
 						const gasPrice = trip.gasPrice || 3.5;
-						const newFuelCost = mpg > 0 ? Math.round((newMiles / mpg) * gasPrice * 100) / 100 : 0;
+						const newFuelCost = calculateFuelCost(newMiles, mpg, gasPrice);
 						const patched = {
 							...trip,
 							totalMiles: newMiles,
