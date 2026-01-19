@@ -201,6 +201,48 @@ function createTrashStore() {
 					} catch {
 						/* ignore */
 					}
+					// Also update the associated trip's totalMiles and fuelCost
+					try {
+						const parentId = stored.tripId || getRealId(uniqueId);
+						const tripTx = db.transaction('trips', 'readwrite');
+						const tripStore = tripTx.objectStore('trips');
+						const trip = await tripStore.get(parentId);
+						if (trip && trip.userId === userId) {
+							const { calculateFuelCost } = await import('$lib/utils/calculations');
+							const newMiles = restored.miles || 0;
+							const mpg = trip.mpg || 25;
+							const gasPrice = trip.gasPrice || 3.5;
+							const newFuelCost = calculateFuelCost(newMiles, mpg, gasPrice);
+							const nowIso = new Date().toISOString();
+							const patchedTrip = {
+								...trip,
+								totalMiles: newMiles,
+								fuelCost: newFuelCost,
+								updatedAt: nowIso,
+								syncStatus: 'pending'
+							};
+							await tripStore.put(patchedTrip);
+							await tripTx.done;
+							// Update the trips store
+							const { trips } = await import('$lib/stores/trips');
+							trips.updateLocal({
+								id: parentId,
+								totalMiles: newMiles,
+								fuelCost: newFuelCost,
+								updatedAt: nowIso
+							} as any);
+							// Queue sync for trip update
+							await syncManager.addToQueue({
+								action: 'update',
+								tripId: parentId,
+								data: { ...patchedTrip, store: 'trips', skipEnrichment: true }
+							});
+						} else {
+							await tripTx.done;
+						}
+					} catch {
+						/* ignore trip update errors */
+					}
 				} else {
 					try {
 						const { trips } = await import('$lib/stores/trips');
