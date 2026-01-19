@@ -2,6 +2,7 @@
 	import { millage, isLoading as millageLoading } from '$lib/stores/millage';
 	import { trips, isLoading as tripsLoading } from '$lib/stores/trips';
 	import { userSettings } from '$lib/stores/userSettings';
+	import { getVehicleDisplayName } from '$lib/utils/vehicle';
 	import SettingsModal from './components/SettingsModal.svelte';
 	import { user } from '$lib/stores/auth';
 	import { toasts } from '$lib/stores/toast';
@@ -34,10 +35,16 @@
 
 	// Derived totals
 	$: totalMiles = filteredExpenses.reduce((s, e) => s + (Number((e as any).miles) || 0), 0);
-	$: totalReimbursement = filteredExpenses.reduce(
-		(s, e) => s + (Number((e as any).reimbursement) || 0),
-		0
-	);
+	// Millage Deduction = sum of (miles * rate) per log — prefer stored `reimbursement` but compute if missing
+	$: totalMillageDeduction = filteredExpenses.reduce((s, e) => {
+		const rec = e as any;
+		if (typeof rec.reimbursement === 'number') return s + Number(rec.reimbursement);
+		const r =
+			typeof rec.millageRate === 'number'
+				? Number(rec.millageRate)
+				: Number($userSettings?.millageRate) || 0;
+		return s + (Number(rec.miles || 0) * r || 0);
+	}, 0);
 
 	// --- STATE ---
 	let searchQuery = '';
@@ -477,8 +484,8 @@
 		</div>
 
 		<div class="summary-card">
-			<div class="summary-label">Total Reimbursement</div>
-			<div class="summary-value">{formatCurrency(totalReimbursement)}</div>
+			<div class="summary-label">Millage Deduction</div>
+			<div class="summary-value">{formatCurrency(totalMillageDeduction)}</div>
 		</div>
 
 		{#if categories[0]}
@@ -719,7 +726,9 @@
 							</div>
 							<div class="stat-item">
 								<span class="stat-label">Vehicle</span>
-								<span class="stat-value">{expense.vehicle || '-'}</span>
+								<span class="stat-value"
+									>{getVehicleDisplayName(expense.vehicle, $userSettings?.vehicles)}</span
+								>
 							</div>
 							<div class="stat-item">
 								<span class="stat-label">Rate</span>

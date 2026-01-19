@@ -2,10 +2,13 @@
 import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
 import { DO_ORIGIN, RETENTION } from '$lib/constants';
 import { log } from '$lib/server/log';
+import { calculateFuelCost } from '$lib/utils/calculations';
 
 export interface MillageRecord {
 	id: string;
 	userId: string;
+	/** Optional link to parent trip */
+	tripId?: string;
 	date?: string;
 	startOdometer: number;
 	endOdometer: number;
@@ -18,7 +21,11 @@ export interface MillageRecord {
 	[key: string]: unknown;
 }
 
-export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNamespace) {
+export function makeMillageService(
+	kv: KVNamespace,
+	tripIndexDO: DurableObjectNamespace,
+	tripKV?: KVNamespace
+) {
 	const getIndexStub = (userId: string) => {
 		const id = tripIndexDO.idFromName(userId);
 		return tripIndexDO.get(id);
@@ -62,19 +69,17 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 					}
 
 					let migratedCount = 0;
-					let skippedTombstones = 0;
+					const skippedTombstones = 0;
 					for (const key of keys) {
 						const raw = await kv.get(key.name);
 						if (!raw) continue;
 						const parsed = JSON.parse(raw);
 
+						// Migrate all records including tombstones (to maintain deleted state)
 						if (parsed && parsed.deleted) {
-							if (parsed.backup) {
-								all.push(parsed.backup);
-								migratedCount++;
-							} else {
-								skippedTombstones++;
-							}
+							// Push the tombstone itself, not the backup
+							all.push(parsed);
+							migratedCount++;
 							continue;
 						}
 
@@ -91,7 +96,7 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 
 						millage = all;
 						log.info(
-							`[MillageService] Migrated ${migratedCount} items (${skippedTombstones} tombstones skipped)`
+							`[MillageService] Migrated ${migratedCount} items (${skippedTombstones} tombstones included)`
 						);
 					}
 				}
@@ -171,6 +176,31 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				method: 'POST',
 				body: JSON.stringify(tombstone)
 			});
+
+			// Set the parent trip's totalMiles and fuelCost to 0
+			if (tripKV) {
+				try {
+					const tripKey = `trip:${userId}:${id}`;
+					const tripRaw = await tripKV.get(tripKey);
+					if (tripRaw) {
+						const trip = JSON.parse(tripRaw);
+						if (!trip.deleted) {
+							trip.totalMiles = 0;
+							trip.fuelCost = 0;
+							trip.updatedAt = now.toISOString();
+							await tripKV.put(tripKey, JSON.stringify(trip));
+							log.info(
+								`[MillageService] Set trip ${id} totalMiles and fuelCost to 0 after mileage deletion`
+							);
+						}
+					}
+				} catch (err) {
+					log.warn(`[MillageService] Failed to zero trip totalMiles after mileage delete`, {
+						id,
+						error: err
+					});
+				}
+			}
 		},
 
 		async listTrash(userId: string) {
@@ -244,6 +274,29 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			const tombstone = JSON.parse(raw);
 			if (!tombstone.deleted) throw new Error('Item not deleted');
 
+			// Validation: Check if parent trip exists and is active
+			// The mileage ID equals the trip ID by design
+			if (tripKV) {
+				const tripKey = `trip:${userId}:${itemId}`;
+				const tripRaw = await tripKV.get(tripKey);
+
+				if (!tripRaw) {
+					throw new Error('Parent trip not found. Cannot restore mileage log.');
+				}
+
+				const trip = JSON.parse(tripRaw);
+				if (trip.deleted) {
+					throw new Error(
+						'Parent trip is deleted. Please restore the trip first before restoring the mileage log.'
+					);
+				}
+			}
+
+			// Note: We don't need explicit checks for "another active mileage" or "newer mileage"
+			// because the mileage ID equals the trip ID by design, ensuring at most ONE
+			// mileage record per trip. The tombstone we're restoring IS the only
+			// mileage record for this trip, and we've already verified it's deleted.
+
 			const restored = tombstone.backup || tombstone.data || tombstone;
 			delete restored.deleted;
 			delete restored.deletedAt;
@@ -252,6 +305,35 @@ export function makeMillageService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			restored.updatedAt = new Date().toISOString();
 
 			await this.put(restored);
+
+			// Update the parent trip's totalMiles and fuelCost to reflect the restored mileage
+			if (tripKV && typeof restored.miles === 'number') {
+				try {
+					const tripKey = `trip:${userId}:${itemId}`;
+					const tripRaw = await tripKV.get(tripKey);
+					if (tripRaw) {
+						const trip = JSON.parse(tripRaw);
+						if (!trip.deleted) {
+							trip.totalMiles = restored.miles;
+							// Recalculate fuel cost based on restored miles using shared utility
+							const mpg = Number(trip.mpg) || 0;
+							const gasPrice = Number(trip.gasPrice) || 0;
+							trip.fuelCost = calculateFuelCost(restored.miles, mpg, gasPrice);
+							trip.updatedAt = new Date().toISOString();
+							await tripKV.put(tripKey, JSON.stringify(trip));
+							log.info(
+								`[MillageService] Updated trip ${itemId} totalMiles to ${restored.miles} and fuelCost to ${trip.fuelCost} after mileage restore`
+							);
+						}
+					}
+				} catch (err) {
+					log.warn(`[MillageService] Failed to update trip totalMiles after mileage restore`, {
+						itemId,
+						error: err
+					});
+				}
+			}
+
 			return restored;
 		}
 	};

@@ -1,8 +1,6 @@
----
-applyTo: '**'
----
+# Repository Governance
 
-# Repository Governance Prompt
+This document defines **repository-wide governance rules**.
 
 This repository **enforces Svelte 5 runes-based reactivity and the HTML Living Standard**.
 It is a **mixed Svelte 4 / Svelte 5 codebase** with a controlled, file-by-file migration.
@@ -26,10 +24,10 @@ All changes must preserve:
 
 You MUST read and follow:
 
-- README.md
-- CONTRIBUTING.md
-- AI_GUARD.md
-- HTML_LIVING_STANDARD.md
+- `README.md`
+- `CONTRIBUTING.md`
+- `AI_GUARD.md`
+- `HTML_LIVING_STANDARD.md`
 
 If there is a conflict, **CI enforcement wins**.
 
@@ -73,7 +71,8 @@ Do NOT break or remove:
 - `manifest.json`
 - service worker registration
 - required meta tags
-- icons or theme colors
+- icons
+- theme colors
 
 Additional rules:
 

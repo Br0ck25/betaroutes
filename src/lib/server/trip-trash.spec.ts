@@ -53,4 +53,40 @@ describe('Trip trash behavior', () => {
 		expect(afterTrip.deleted).toBe(undefined);
 		expect(afterTrip.title).toBe('to trash');
 	});
+
+	it('deleting an already-deleted trip is idempotent (does not throw)', async () => {
+		const kv = platform.env['BETA_LOGS_KV'] as unknown as KVNamespace;
+		const svc = makeTripService(
+			kv,
+			undefined,
+			platform.env['BETA_PLACES_KV'] as unknown as KVNamespace,
+			platform.env['TRIP_INDEX_DO'] as unknown as DurableObjectNamespace,
+			platform.env['TRIP_INDEX_DO'] as unknown as DurableObjectNamespace
+		);
+
+		const userId = 'idempotent_user';
+		const id = 'trip-idempotent';
+		const now = new Date().toISOString();
+		const trip = { id, userId, title: 'idempotent test', createdAt: now, updatedAt: now };
+
+		await kv.put(`trip:${userId}:${id}`, JSON.stringify(trip));
+
+		// Delete once
+		await svc.delete(userId, id);
+
+		// Verify it's deleted
+		const rawAfterFirst = await kv.get(`trip:${userId}:${id}`);
+		expect(rawAfterFirst).toBeTruthy();
+		const parsedAfterFirst = JSON.parse(rawAfterFirst as string);
+		expect(parsedAfterFirst.deleted).toBe(true);
+
+		// Delete again - should not throw
+		await expect(svc.delete(userId, id)).resolves.not.toThrow();
+
+		// Verify the tombstone is still there
+		const rawAfterSecond = await kv.get(`trip:${userId}:${id}`);
+		expect(rawAfterSecond).toBeTruthy();
+		const parsedAfterSecond = JSON.parse(rawAfterSecond as string);
+		expect(parsedAfterSecond.deleted).toBe(true);
+	});
 });

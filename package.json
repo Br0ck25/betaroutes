@@ -15,7 +15,10 @@
 		"lint": "prettier --check \"src/**/*.{ts,js,svelte,css,md}\" && eslint \"src/**/*.{ts,js,svelte}\"",
 		"test:unit": "vitest",
 		"test": "npm run test:unit -- --run && npm run test:e2e",
-		"test:e2e": "playwright test"
+		"test:e2e": "playwright test",
+
+		"migrate:order": "node scripts/svelte5-migration-order.js",
+		"migrate:done": "node scripts/svelte5-migration-done.js"
 	},
 	"lint-staged": {
 		"*.{ts,js,svelte}": [

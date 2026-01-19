@@ -1,15 +1,17 @@
-name: Svelte 5 & HTML Living Standard Guard
-description: >
+# Svelte 5 & HTML Living Standard Guard
+
+## Description
+
 Enforces Svelte 5 runes-based reactivity and the HTML Living Standard.
-During migration from Svelte 4, limited legacy syntax is tolerated behind
-explicit migration boundaries. Use this agent for multi-file edits,
-migrations, audits, and CI-safe changes.
+This repository is a **PWA-first application** with strict CI enforcement
+and a controlled, file-by-file migration from Svelte 4 to Svelte 5.
 
-This project is a **Progressive Web App (PWA)**.
-All changes must preserve installability, offline behavior,
-service worker correctness, and manifest validity.
+This agent MUST treat repository governance documents as authoritative
+constraints, equivalent to compiler or CI rules.
 
-tools:
+---
+
+## Tools
 
 - workspace
 - edit
@@ -22,8 +24,7 @@ tools:
 This agent ensures all changes comply with **project-enforced frontend standards**
 while supporting a **controlled migration from Svelte 4 to Svelte 5**.
 
-This repository is a **PWA-first application**. Any change that risks breaking
-PWA functionality is disallowed.
+Any change that risks breaking PWA functionality is disallowed.
 
 Use this agent when:
 
@@ -31,7 +32,37 @@ Use this agent when:
 - Performing multi-file refactors
 - Modifying markup or layouts
 - Fixing CI or lint failures
-- Auditing the repo for legacy patterns
+- Auditing the repo for legacy or forbidden patterns
+
+---
+
+## Mandatory Governance Loading
+
+### Always Read (Before Every Action — No Exceptions)
+
+The following files must be read and applied **every time**, before analysis,
+planning, or code changes:
+
+1. Go Route Yourself.prompt.md
+2. AI_GUARD.md
+3. MIGRATION.md
+4. PWA.md
+5. CONTRIBUTING.md
+6. HTML_LIVING_STANDARD.md
+
+These documents define **hard constraints**. Violating them is equivalent
+to introducing a compile or CI failure.
+
+---
+
+### Read When Relevant (Contextual Reference)
+
+Consult these files when their subject matter applies:
+
+- README.md — project conventions and setup
+- ARCHITECTURE.md — target design and state model
+- EXAMPLES.md — canonical, approved Svelte 5 patterns
+- SVELTE5_MIGRATION_COMPLIANCE.md — audit and diagnostic reference
 
 ---
 
@@ -39,30 +70,36 @@ Use this agent when:
 
 ### Svelte
 
-- **Target: Svelte 5**
-- **Default expectation: runes-based reactivity**
+- Target: **Svelte 5**
+- **Runes-based reactivity only**
   - `$state`
   - `$derived`
   - `$effect`
 
-#### Temporary Migration Allowances (Must Be Removed)
+#### Temporary Migration Allowances
 
-Allowed **only in files not yet migrated**:
+Allowed **only** in files explicitly marked:
 
-- `export let` (props)
+```svelte
+<!-- MIGRATION: SVELTE4-LEGACY -->
+```
+
+Allowed only in those files:
+
+- `export let`
 - `$:` reactive labels
-- `on:click` DOM events
+- `on:click`
 
-❌ Permanently forbidden (even during migration):
+❌ Permanently forbidden (even in legacy files):
 
 - `svelte/store`
 - `onMount`
 - `beforeUpdate` / `afterUpdate`
 - `createEventDispatcher`
-- Class-style component instantiation (`new Component()`)
+- Class-style component instantiation
 
 Migration allowance ends immediately once a file is converted.
-Do not mix legacy and runes syntax in the same component.
+Never mix legacy and runes syntax in the same file.
 
 ---
 
@@ -71,81 +108,128 @@ Do not mix legacy and runes syntax in the same component.
 - Follow the **HTML Living Standard (WHATWG)**
 - ❌ No XHTML / XML-style syntax
 - ❌ No deprecated elements or attributes
-- Prefer semantic HTML
-- Valid, accessible markup is required
+- Prefer semantic, accessible HTML
 
 ---
 
 ### PWA Requirements (Non-Negotiable)
 
-- The app must remain a valid **Progressive Web App**
-- Do not break or remove:
-  - `manifest.json`
-  - service worker registration
-  - offline or caching behavior
-- Preserve installability and Lighthouse PWA compliance
-- Do not remove or weaken:
-  - required meta tags
-  - icons
-  - theme colors
-- Use modern, standards-based PWA patterns only
+- Preserve installability
+- Preserve offline behavior
+- Preserve service worker registration
+- Preserve manifest.json validity
+- Do not weaken Lighthouse PWA compliance
 
----
-
-## Required Reading (Before Making Changes)
-
-You MUST read and follow:
-
-1. `README.md`
-2. `CONTRIBUTING.md`
-3. `AI_GUARD.md`
-4. `HTML_LIVING_STANDARD.md`
-
-If there is a conflict, **CI enforcement wins**.
+Breaking PWA behavior is a **hard stop**.
 
 ---
 
 ## Workflow Expectations
 
 - Preserve existing structure unless explicitly asked to refactor
-- Migrate components incrementally, file-by-file
-- Never mix legacy and runes syntax in the same file
-- Remove migration allowances immediately after conversion
-- Never weaken lint rules, pre-commit hooks, or CI guards
-- This is a **PWA** — verify changes do not break installability or offline behavior
-
-### Mandatory Post-Change Verification
-
-After **any** code change or new code:
-
-1. Run `npm run check`
-2. Fix **all** errors and warnings
-3. Run `npm run lint`
-4. Fix **all** errors and warnings
-5. Run `npx eslint`
-6. Fix **all** eslint errors and warnings
-
-❌ Never ignore, suppress, downgrade, or bypass errors or warnings  
-✅ All changes must be CI-clean by default
-
-If checks or lint fail and the fix is unclear:
-**STOP and ask instead of committing a partial or unsafe change.**
+- Migrate components file-by-file
+- Never weaken lint rules, hooks, or CI guards
+- Never leave the repo in a partially migrated or failing state
 
 ---
 
-## Verification Checklist (Self-Check)
+## Mandatory Post-Change Verification
+
+After **any** code change:
+
+1. `npm run check`
+2. Fix all errors and warnings
+3. `npm run lint`
+4. Fix all errors and warnings
+5. `npx eslint`
+6. Fix all errors and warnings
+
+Never suppress, ignore, or bypass failures.
+All changes must be **CI-clean by default**.
+
+If a fix is unclear at any point:
+**STOP and ask instead of guessing.**
+
+---
+
+---
+
+## Testing Policy (Strict)
+
+❌ **Do NOT create test files unless explicitly requested**  
+❌ **Do NOT infer testing requirements**  
+❌ **Do NOT add specs, mocks, or fixtures by default**
+
+This project relies on the following as sufficient verification for changes:
+
+- `npm run check`
+- `npm run lint`
+- `npx eslint`
+
+Unless the user explicitly asks for tests, **no testing artifacts may be added**.
+
+---
+
+## Dependency Policy (Strict)
+
+❌ **Do NOT add, remove, or upgrade dependencies**  
+❌ **Do NOT modify `package.json`, `package-lock.json`, or `pnpm-lock.yaml`**
+
+Dependency changes require **explicit user approval**.
+
+---
+
+## Configuration & Infrastructure Safety
+
+❌ **Do NOT modify build, deploy, or platform configuration files without explicit approval**
+
+This includes (but is not limited to):
+
+- `svelte.config.*`
+- `vite.config.*`
+- `wrangler.*`
+- `cloudflare.*`
+- `.env*`
+- CI configuration files
+
+If a change appears necessary: **STOP and ask first**.
+
+---
+
+## File Creation Policy
+
+❌ **Do NOT create new files unless explicitly requested or strictly required**  
+❌ **Do NOT reorganize directories or move files implicitly**
+
+Prefer modifying existing files over creating new ones.
+
+---
+
+## Refusal & Stop Conditions
+
+The agent MUST stop and ask before proceeding if:
+
+- A rule conflict is detected
+- A migration boundary is unclear
+- A change could affect PWA behavior
+- CI compliance cannot be guaranteed
+
+Guessing is forbidden.
+
+---
+
+## Style Preservation
+
+❌ **Do NOT reformat code for style-only reasons**  
+❌ **Do NOT change whitespace, ordering, or naming unless required for correctness or compliance**
+
+## Final Self-Check (Required)
 
 Before finishing:
 
-- [ ] Migrated files use `$state`, `$derived`, `$effect`
-- [ ] No `onMount` or lifecycle APIs
-- [ ] No Svelte stores
-- [ ] No XHTML-style or deprecated HTML
-- [ ] Legacy syntax exists only in explicitly unmigrated files
-- [ ] PWA functionality preserved (manifest, service worker, installability)
-- [ ] `npm run check` passes with zero errors or warnings
-- [ ] `npm run lint` passes with zero errors or warnings
-- [ ] `npx eslint` passes with zero errors or warnings
-- [ ] Changes pass CI guards conceptually
-
-If unsure at any point, stop and ask instead of guessing.
+- [ ] Governance files respected
+- [ ] Svelte 5 runes only in migrated files
+- [ ] No forbidden APIs or syntax
+- [ ] HTML Living Standard compliant
+- [ ] PWA behavior preserved
+- [ ] CI would pass with zero warnings

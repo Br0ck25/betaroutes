@@ -7,6 +7,7 @@
 
 	const resolve = (href: string) => `${base}${href}`;
 	import { user } from '$lib/stores/auth';
+	import { millage } from '$lib/stores/millage';
 	import { page } from '$app/stores';
 	import { autocomplete } from '$lib/utils/autocomplete';
 	import { optimizeRoute } from '$lib/services/maps';
@@ -101,11 +102,12 @@
 		tripData.startAddress = String(src.startAddress || '');
 		tripData.endAddress = String(src.endAddress || '');
 		tripData.stops = safeStops as any as LocalStop[];
-		tripData.mpg = Number(src.mpg ?? $userSettings.defaultMPG ?? 25);
-		tripData.gasPrice = Number(src.gasPrice ?? $userSettings.defaultGasPrice ?? 3.5);
 		tripData.maintenanceItems = safeMaintenance as any;
 		tripData.suppliesItems = safeSupplies as any;
-		tripData.totalMiles = Number(src.totalMiles) || 0;
+		// Use trip's totalMiles as source of truth, millage store is for display on millage page
+		const milesFromMillage = $millage.find((m: any) => m.id === tripId)?.miles;
+		const milesValue = Number(milesFromMillage ?? src.totalMiles) || 0;
+		tripData.totalMiles = milesValue;
 		tripData.mpg = Number.isFinite(Number(src.mpg))
 			? Number(src.mpg)
 			: ($userSettings.defaultMPG ?? 25);
@@ -118,6 +120,19 @@
 		tripData.estimatedTime = Number(src.estimatedTime) || 0;
 		tripData.startTime = to24h(src.startTime as string | undefined);
 		tripData.endTime = to24h(src.endTime as string | undefined);
+		tripData.notes = String(src.notes || '');
+
+		// Sync local form-bound variables to prevent reactive statements from overwriting
+		startAddressLocal = tripData.startAddress;
+		endAddressLocal = tripData.endAddress;
+		dateLocal = tripData.date;
+		payDateLocal = tripData.payDate;
+		startTimeLocal = tripData.startTime;
+		endTimeLocal = tripData.endTime;
+		mpgLocal = tripData.mpg;
+		gasPriceLocal = tripData.gasPrice;
+		totalMilesLocal = milesValue;
+		notesLocal = tripData.notes;
 	}
 
 	// Local narrowed types for component-internal safety (NO index-signature inheritance)

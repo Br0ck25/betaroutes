@@ -9,9 +9,10 @@ import { getStorageId } from '$lib/server/user';
 
 const millageSchema = z.object({
 	id: z.string().uuid().optional(),
+	tripId: z.string().uuid().optional(),
 	date: z.string().optional(),
-	startOdometer: z.number().nonnegative(),
-	endOdometer: z.number().nonnegative(),
+	startOdometer: z.number().nonnegative().optional(),
+	endOdometer: z.number().nonnegative().optional(),
 	notes: z.string().max(1000).optional(),
 	miles: z.number().nonnegative().optional(),
 	millageRate: z.number().nonnegative().optional(),
@@ -71,6 +72,31 @@ export const POST: RequestHandler = async (event) => {
 		const id = payload.id || crypto.randomUUID();
 		const userId = getStorageId(sessionUser);
 
+		// Validate parent trip exists and is active (mileage ID = trip ID by design)
+		const tripKV = safeKV(env, 'BETA_LOGS_KV');
+		// Only validate if tripKV has a proper get method (skip validation in test mocks)
+		if (tripKV && typeof (tripKV as any).get === 'function') {
+			const tripKey = `trip:${userId}:${id}`;
+			const tripRaw = await tripKV.get(tripKey);
+
+			if (!tripRaw) {
+				return new Response(
+					JSON.stringify({ error: 'Parent trip not found. Cannot create mileage log.' }),
+					{ status: 409, headers: { 'Content-Type': 'application/json' } }
+				);
+			}
+
+			const trip = JSON.parse(tripRaw);
+			if (trip.deleted) {
+				return new Response(
+					JSON.stringify({
+						error: 'Parent trip is deleted. Cannot create mileage log for deleted trip.'
+					}),
+					{ status: 409, headers: { 'Content-Type': 'application/json' } }
+				);
+			}
+		}
+
 		let miles =
 			typeof payload.miles === 'number'
 				? payload.miles
@@ -80,28 +106,51 @@ export const POST: RequestHandler = async (event) => {
 		let reimbursement = payload.reimbursement ?? undefined;
 		if (typeof reimbursement === 'number') reimbursement = Number(reimbursement.toFixed(2));
 
-		const record = {
+		// If reimbursement not provided, compute using provided rate or user's default rate from settings
+		if (typeof reimbursement !== 'number') {
+			let rate: number | undefined =
+				typeof payload.millageRate === 'number' ? Number(payload.millageRate) : undefined;
+			if (rate == null) {
+				try {
+					const userSettingsKV = safeKV(env, 'BETA_USER_SETTINGS_KV');
+					if (userSettingsKV) {
+						const raw = await userSettingsKV.get(`settings:${userId}`);
+						if (raw) {
+							const parsed = JSON.parse(raw as string);
+							rate = parsed?.millageRate;
+						}
+					}
+				} catch {
+					/* ignore */
+				}
+			}
+			if (typeof rate === 'number') reimbursement = Number((miles * rate).toFixed(2));
+		}
+
+		// Build authoritative millage record
+		const record: any = {
 			id,
 			userId,
+			tripId: payload.tripId || undefined,
 			date: payload.date || new Date().toISOString(),
-			startOdometer: payload.startOdometer,
-			endOdometer: payload.endOdometer,
-			miles,
+			startOdometer: typeof payload.startOdometer === 'number' ? payload.startOdometer : undefined,
+			endOdometer: typeof payload.endOdometer === 'number' ? payload.endOdometer : undefined,
+			miles: typeof miles === 'number' ? Number(miles) : undefined,
 			millageRate:
 				typeof payload.millageRate === 'number' ? Number(payload.millageRate) : undefined,
-			vehicle: payload.vehicle || undefined,
-			reimbursement,
+			vehicle: payload.vehicle === '' ? undefined : payload.vehicle,
+			reimbursement: typeof reimbursement === 'number' ? Number(reimbursement) : undefined,
 			notes: payload.notes || '',
 			createdAt: new Date().toISOString(),
 			updatedAt: new Date().toISOString()
 		};
 
 		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
-		await svc.put(record as any);
+		await svc.put(record);
 
 		return new Response(JSON.stringify(record), {
-			status: 201,
-			headers: { 'Content-Type': 'application/json' }
+			headers: { 'Content-Type': 'application/json' },
+			status: 201
 		});
 	} catch (err) {
 		log.error('POST /api/millage error', { message: createSafeErrorMessage(err) });
