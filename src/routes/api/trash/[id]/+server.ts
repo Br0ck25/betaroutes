@@ -50,7 +50,7 @@ export const POST: RequestHandler = async (event) => {
 
 		if (storageId) {
 			let restored: unknown | null = null;
-			let millageError: string | null = null;
+			let lastError: string | null = null;
 
 			// Strategy: Try sequentially until one succeeds
 			try {
@@ -105,14 +105,14 @@ export const POST: RequestHandler = async (event) => {
 								log.warn('Failed to sync restored mileage to trip', { message: String(e) });
 							}
 						}
-					} catch (millageError) {
+					} catch (err) {
 						// Check if this is a validation error that we should surface
-						const errMsg = millageError instanceof Error ? millageError.message : String(millageError);
+						const errMsg = err instanceof Error ? err.message : String(err);
 						if (errMsg.includes('Cannot restore mileage')) {
 							return new Response(JSON.stringify({ error: errMsg }), { status: 409 });
 						}
-						// all attempts failed; no-op
-						void 0;
+						// Store the error for later use if no restore succeeded
+						lastError = errMsg;
 					}
 				}
 			}
@@ -130,9 +130,9 @@ export const POST: RequestHandler = async (event) => {
 				return new Response(JSON.stringify({ success: true }), { status: 200 });
 			}
 
-			// If mileage restore failed with a validation error, surface it
-			if (millageError) {
-				return new Response(JSON.stringify({ error: millageError }), { status: 409 });
+			// If all restore attempts failed with a validation error, surface it
+			if (lastError) {
+				return new Response(JSON.stringify({ error: lastError }), { status: 409 });
 			}
 		}
 
