@@ -35,7 +35,7 @@ export const DELETE: RequestHandler = async (event) => {
 		// Soft delete via service
 		await svc.delete(userId, id);
 
-		// --- Set linked trip's totalMiles to 0 ---
+		// --- Set linked trip's totalMiles to 0 and recalculate fuelCost ---
 		if (existing && existing.tripId) {
 			try {
 				const tripIndexDO = safeDO(env, 'TRIP_INDEX_DO')!;
@@ -50,12 +50,19 @@ export const DELETE: RequestHandler = async (event) => {
 				const trip = await tripSvc.get(userId, existing.tripId);
 				if (trip && !trip.deleted) {
 					trip.totalMiles = 0;
+					// Also reset fuelCost since there are no miles
+					(trip as any).fuelCost = 0;
 					trip.updatedAt = new Date().toISOString();
 					await tripSvc.put(trip);
-					log.info('Set trip totalMiles to 0 after mileage delete', { tripId: existing.tripId });
+					log.info('Set trip totalMiles and fuelCost to 0 after mileage delete', {
+						tripId: existing.tripId
+					});
 				}
 			} catch (e) {
-				log.warn('Failed to update trip after mileage delete', { tripId: existing.tripId, message: createSafeErrorMessage(e) });
+				log.warn('Failed to update trip after mileage delete', {
+					tripId: existing.tripId,
+					message: createSafeErrorMessage(e)
+				});
 			}
 		}
 
@@ -214,12 +221,29 @@ export const PUT: RequestHandler = async (event) => {
 				const trip = await tripSvc.get(userId, updated.tripId);
 				if (trip && !trip.deleted) {
 					trip.totalMiles = updated.miles;
+					// Recalculate fuel cost based on updated miles
+					const tripAny = trip as any;
+					const mpg = Number(tripAny.mpg) || 0;
+					const gasPrice = Number(tripAny.gasPrice) || 0;
+					if (mpg > 0 && gasPrice > 0) {
+						const gallons = updated.miles / mpg;
+						tripAny.fuelCost = Math.round(gallons * gasPrice * 100) / 100;
+					} else {
+						tripAny.fuelCost = 0;
+					}
 					trip.updatedAt = new Date().toISOString();
 					await tripSvc.put(trip);
-					log.info('Updated trip totalMiles from mileage log', { tripId: updated.tripId, miles: updated.miles });
+					log.info('Updated trip totalMiles and fuelCost from mileage log', {
+						tripId: updated.tripId,
+						miles: updated.miles,
+						fuelCost: tripAny.fuelCost
+					});
 				}
 			} catch (e) {
-				log.warn('Failed to sync mileage to trip', { tripId: updated.tripId, message: createSafeErrorMessage(e) });
+				log.warn('Failed to sync mileage to trip', {
+					tripId: updated.tripId,
+					message: createSafeErrorMessage(e)
+				});
 			}
 		}
 

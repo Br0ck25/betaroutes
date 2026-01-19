@@ -176,7 +176,7 @@ export function makeMillageService(
 				body: JSON.stringify(tombstone)
 			});
 
-			// Set the parent trip's totalMiles to 0
+			// Set the parent trip's totalMiles and fuelCost to 0
 			if (tripKV) {
 				try {
 					const tripKey = `trip:${userId}:${id}`;
@@ -185,9 +185,12 @@ export function makeMillageService(
 						const trip = JSON.parse(tripRaw);
 						if (!trip.deleted) {
 							trip.totalMiles = 0;
+							trip.fuelCost = 0;
 							trip.updatedAt = now.toISOString();
 							await tripKV.put(tripKey, JSON.stringify(trip));
-							log.info(`[MillageService] Set trip ${id} totalMiles to 0 after mileage deletion`);
+							log.info(
+								`[MillageService] Set trip ${id} totalMiles and fuelCost to 0 after mileage deletion`
+							);
 						}
 					}
 				} catch (err) {
@@ -302,7 +305,7 @@ export function makeMillageService(
 
 			await this.put(restored);
 
-			// Update the parent trip's totalMiles to reflect the restored mileage
+			// Update the parent trip's totalMiles and fuelCost to reflect the restored mileage
 			if (tripKV && typeof restored.miles === 'number') {
 				try {
 					const tripKey = `trip:${userId}:${itemId}`;
@@ -311,10 +314,19 @@ export function makeMillageService(
 						const trip = JSON.parse(tripRaw);
 						if (!trip.deleted) {
 							trip.totalMiles = restored.miles;
+							// Recalculate fuel cost based on restored miles
+							const mpg = Number(trip.mpg) || 0;
+							const gasPrice = Number(trip.gasPrice) || 0;
+							if (mpg > 0 && gasPrice > 0) {
+								const gallons = restored.miles / mpg;
+								trip.fuelCost = Math.round(gallons * gasPrice * 100) / 100;
+							} else {
+								trip.fuelCost = 0;
+							}
 							trip.updatedAt = new Date().toISOString();
 							await tripKV.put(tripKey, JSON.stringify(trip));
 							log.info(
-								`[MillageService] Updated trip ${itemId} totalMiles to ${restored.miles} after mileage restore`
+								`[MillageService] Updated trip ${itemId} totalMiles to ${restored.miles} and fuelCost to ${trip.fuelCost} after mileage restore`
 							);
 						}
 					}

@@ -71,8 +71,8 @@ describe('PUT /api/millage/[id] handler', () => {
 	});
 
 	it('also mirrors miles into the BETA_LOGS_KV trip record when present (best-effort)', async () => {
-		const existing = { id: 'rt1', userId: 'u1', totalMiles: 5 };
-		mockSvc.get.mockResolvedValue({ id: 'rt1', userId: 'u1', miles: 5 });
+		const existing = { id: 'rt1', userId: 'u1', totalMiles: 5, mpg: 25, gasPrice: 3.5 };
+		mockSvc.get.mockResolvedValue({ id: 'rt1', userId: 'u1', miles: 5, tripId: 'rt1' });
 
 		// Prepare mocked trip service (module-level holder populated below)
 		mockTripSvc = {
@@ -97,6 +97,8 @@ describe('PUT /api/millage/[id] handler', () => {
 		expect(mockTripSvc.get).toHaveBeenCalled();
 		expect(mockTripSvc.put).toHaveBeenCalled();
 		expect(mockTripSvc.put.mock.calls[0][0].totalMiles).toBeCloseTo(77, 6);
+		// Verify fuelCost is also calculated (77 miles / 25 mpg * 3.5 gasPrice = 10.78)
+		expect(mockTripSvc.put.mock.calls[0][0].fuelCost).toBeCloseTo(10.78, 2);
 	});
 
 	it('computes reimbursement when miles + rate are provided on PUT', async () => {
