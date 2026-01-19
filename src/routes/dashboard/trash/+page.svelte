@@ -11,6 +11,8 @@
 	import { getDB } from '$lib/db/indexedDB';
 	import type { TrashRecord } from '$lib/db/types';
 	import { get } from 'svelte/store';
+	import { userSettings } from '$lib/stores/userSettings';
+	import { getVehicleDisplayName } from '$lib/utils/vehicle';
 
 	const resolve = (href: string) => `${base}${href}`;
 
@@ -329,6 +331,11 @@
 
 				{@const isExpense = displayType === 'expense'}
 				{@const isMillage = displayType === 'millage'}
+				{@const vehicleDisplay = (() => {
+					const name = getVehicleDisplayName(trip['vehicle'] as string | undefined, $userSettings?.vehicles);
+					return name && name !== '-' && name !== 'Unknown vehicle' ? name : null;
+				})()}
+				{@const millageLogDate = trip.date || trip.createdAt}
 
 				<div class="trash-item">
 					<div class="trip-info">
@@ -339,7 +346,7 @@
 									<span class="expense-category">{trip.category || 'Uncategorized'}</span>
 								{:else if isMillage}
 									<span class="badge-millage">Millage</span>
-									{trip['vehicle'] || 'Millage Log'}
+									{vehicleDisplay ? vehicleDisplay : (millageLogDate ? formatDate(millageLogDate) : 'Millage Log')}
 								{:else}
 									{typeof trip.startAddress === 'string'
 										? trip.startAddress.split(',')[0]
