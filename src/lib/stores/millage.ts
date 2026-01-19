@@ -5,6 +5,7 @@ import { syncManager } from '$lib/sync/syncManager';
 import type { MillageRecord } from '$lib/db/types';
 import type { User } from '$lib/types';
 import { auth } from '$lib/stores/auth';
+import { calculateFuelCost } from '$lib/utils/calculations';
 
 export const isLoading = writable(false);
 
@@ -78,7 +79,9 @@ function createMillageStore() {
 				const trashItems = await trashTx.objectStore('trash').getAll();
 				const trashMap = buildTrashTimestampMap(trashItems as TrashItemLike[]);
 				await trashTx.done;
-				const validServerData = data.filter((item) => !shouldFilterOutMillage(item.id, item.createdAt, trashMap));
+				const validServerData = data.filter(
+					(item) => !shouldFilterOutMillage(item.id, item.createdAt, trashMap)
+				);
 				const serverIdSet = new Set(validServerData.map((i) => i.id));
 				set(validServerData);
 				const tx = db.transaction(['millage', 'trash'], 'readwrite');
@@ -136,7 +139,9 @@ function createMillageStore() {
 				}
 				const trashItems = await trashStore.getAll();
 				const trashMap = buildTrashTimestampMap(trashItems as TrashItemLike[]);
-				const activeItems = items.filter((item) => !shouldFilterOutMillage(item.id, item.createdAt, trashMap));
+				const activeItems = items.filter(
+					(item) => !shouldFilterOutMillage(item.id, item.createdAt, trashMap)
+				);
 				activeItems.sort((a, b) => {
 					const dateA = new Date(a.date || a.createdAt).getTime();
 					const dateB = new Date(b.date || b.createdAt).getTime();
@@ -271,16 +276,27 @@ function createMillageStore() {
 					const trip = await tripStore.get(id as any);
 					if (trip && trip.userId === userId) {
 						const nowIso = new Date().toISOString();
+						// Recalculate fuelCost based on new miles
+						const newMiles = updated.miles || 0;
+						const mpg = trip.mpg || 25;
+						const gasPrice = trip.gasPrice || 3.5;
+						const newFuelCost = calculateFuelCost(newMiles, mpg, gasPrice);
 						const patched = {
 							...trip,
-							totalMiles: updated.miles,
+							totalMiles: newMiles,
+							fuelCost: newFuelCost,
 							updatedAt: nowIso,
 							syncStatus: 'pending'
 						} as any;
 						await tripStore.put(patched);
 						try {
 							const { trips } = await import('$lib/stores/trips');
-							trips.updateLocal({ id, totalMiles: updated.miles, updatedAt: nowIso } as any);
+							trips.updateLocal({
+								id,
+								totalMiles: newMiles,
+								fuelCost: newFuelCost,
+								updatedAt: nowIso
+							} as any);
 						} catch {
 							/* ignore */
 						}
@@ -356,7 +372,7 @@ function createMillageStore() {
 				await millageStore.delete(id);
 				await tx.done;
 
-				// Update trip to 0 miles
+				// Update trip to 0 miles and 0 fuelCost
 				try {
 					const tripsTx = db.transaction('trips', 'readwrite');
 					const tripStore = tripsTx.objectStore('trips');
@@ -366,13 +382,14 @@ function createMillageStore() {
 						const patched = {
 							...trip,
 							totalMiles: 0,
+							fuelCost: 0,
 							updatedAt: nowIso,
 							syncStatus: 'pending'
 						} as any;
 						await tripStore.put(patched);
 						try {
 							const { trips } = await import('$lib/stores/trips');
-							trips.updateLocal({ id, totalMiles: 0, updatedAt: nowIso } as any);
+							trips.updateLocal({ id, totalMiles: 0, fuelCost: 0, updatedAt: nowIso } as any);
 						} catch {
 							/* ignore */
 						}
@@ -443,7 +460,7 @@ function createMillageStore() {
 						if (shouldFilterOutMillage(rec.id, rec.createdAt, trashMap)) {
 							continue; // Skip - this is the deleted record
 						}
-						
+
 						const local = await store.get(rec.id);
 						if (!local || new Date(rec.updatedAt) > new Date(local.updatedAt)) {
 							await store.put({
