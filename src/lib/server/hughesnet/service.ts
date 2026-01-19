@@ -1,6 +1,7 @@
 // src/lib/server/hughesnet/service.ts
 import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
 import { makeTripService } from '../tripService';
+import { makeMillageService } from '../millageService';
 import { HughesNetFetcher } from './fetcher';
 import { HughesNetAuth } from './auth';
 import { HughesNetRouter } from './router';
@@ -55,7 +56,8 @@ export class HughesNetService {
 		directionsKV: KVNamespace | undefined,
 		private ordersKV: KVNamespace,
 		private tripKV: KVNamespace,
-		private tripIndexDO: DurableObjectNamespace
+		private tripIndexDO: DurableObjectNamespace,
+		private millageKV?: KVNamespace
 	) {
 		this.fetcher = new HughesNetFetcher();
 		this.auth = new HughesNetAuth(kv, encryptionKey, this.fetcher);
@@ -748,6 +750,11 @@ export class HughesNetService {
 				this.tripIndexDO
 			);
 
+			// Create millage service if millageKV is available (for HNS trips to work like manual trips)
+			const millageService = this.millageKV
+				? makeMillageService(this.millageKV, this.tripIndexDO, this.tripKV)
+				: undefined;
+
 			for (const date of sortedDates) {
 				if (this.fetcher.shouldBatch()) {
 					this.log(
@@ -846,7 +853,8 @@ export class HughesNetService {
 					tripService,
 					this.settingsKV,
 					this.router,
-					(msg) => this.log(msg)
+					(msg) => this.log(msg),
+					millageService
 				);
 
 				if (!created) {

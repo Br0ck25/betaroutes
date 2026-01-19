@@ -8,8 +8,9 @@ import { createSafeErrorMessage } from '$lib/server/sanitize';
 import { getStorageId } from '$lib/server/user';
 
 const millageSchema = z.object({
-	id: z.string().uuid().optional(),
-	tripId: z.string().uuid().optional(),
+	// Allow any string ID to support HughesNet sync trip IDs (e.g., hns_James_2025-09-22)
+	id: z.string().max(200).optional(),
+	tripId: z.string().max(200).optional(),
 	date: z.string().optional(),
 	startOdometer: z.number().nonnegative().optional(),
 	endOdometer: z.number().nonnegative().optional(),
