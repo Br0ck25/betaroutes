@@ -17,6 +17,14 @@ function createTrashStore() {
 		return trashId;
 	};
 
+	// Extract record type from prefixed ID
+	const getRecordType = (trashId: string): string | undefined => {
+		if (trashId.startsWith('millage:')) return 'millage';
+		if (trashId.startsWith('trip:')) return 'trip';
+		if (trashId.startsWith('expense:')) return 'expense';
+		return undefined;
+	};
+
 	// Generate a unique trash ID with type prefix to avoid collisions
 	const getUniqueTrashId = (item: { id: string; recordType?: string; type?: string }) => {
 		const id = item.id;
@@ -224,13 +232,25 @@ function createTrashStore() {
 
 		async permanentDelete(id: string) {
 			const db = await getDB();
+			
+			// First get the item to determine its record type
+			const txRead = db.transaction('trash', 'readonly');
+			const item = await txRead.objectStore('trash').get(id);
+			await txRead.done;
+			
 			const tx = db.transaction('trash', 'readwrite');
 			await tx.objectStore('trash').delete(id);
 			await tx.done;
 			update((l) => l.filter((t) => t.id !== id));
 
 			const realId = getRealId(id);
-			await syncManager.addToQueue({ action: 'permanentDelete', tripId: realId });
+			// Get record type from prefix or from the item's recordType property
+			const recordType = getRecordType(id) || item?.recordType || item?.type;
+			await syncManager.addToQueue({ 
+				action: 'permanentDelete', 
+				tripId: realId,
+				data: { recordType }
+			});
 		},
 
 		async emptyTrash(userId: string) {
@@ -250,7 +270,12 @@ function createTrashStore() {
 
 			for (const item of userItems) {
 				const realId = getRealId(item.id);
-				await syncManager.addToQueue({ action: 'permanentDelete', tripId: realId });
+				const recordType = getRecordType(item.id) || item.recordType || (item as any).type;
+				await syncManager.addToQueue({ 
+					action: 'permanentDelete', 
+					tripId: realId,
+					data: { recordType }
+				});
 			}
 			return userItems.length;
 		},

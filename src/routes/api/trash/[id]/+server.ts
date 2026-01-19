@@ -150,6 +150,8 @@ export const DELETE: RequestHandler = async (event) => {
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
 		const { id } = event.params;
+		// Accept optional 'type' query param to specify which record type to delete
+		const recordType = event.url.searchParams.get('type');
 		const platformEnv = event.platform?.env as Record<string, unknown> | undefined;
 		const tripIndexDO = (platformEnv?.['TRIP_INDEX_DO'] as unknown) ?? fakeDO();
 		const placesIndexDO = (platformEnv?.['PLACES_INDEX_DO'] as unknown) ?? tripIndexDO;
@@ -177,13 +179,61 @@ export const DELETE: RequestHandler = async (event) => {
 		const storageId = getStorageId(currentUser);
 
 		if (storageId) {
-			// Try to delete from ALL possible locations to ensure cleanup
-			// We use Promise.allSettled to ensure one failure doesn't stop others
-			await Promise.allSettled([
-				tripSvc.permanentDelete(storageId, id),
-				expenseSvc.permanentDelete(storageId, id),
-				millageSvc.permanentDelete(storageId, id)
-			]);
+			// If record type is specified, only delete from that specific service
+			// This prevents accidentally deleting a trip when user only wants to delete mileage
+			if (recordType === 'millage') {
+				await millageSvc.permanentDelete(storageId, id);
+			} else if (recordType === 'expense') {
+				await expenseSvc.permanentDelete(storageId, id);
+			} else if (recordType === 'trip') {
+				await tripSvc.permanentDelete(storageId, id);
+			} else {
+				// No type specified - detect which service has this record in trash
+				// by checking which KV has a tombstone for this ID
+				const tripKV = safeKV(platformEnv, 'BETA_LOGS_KV');
+				const expenseKV = safeKV(platformEnv, 'BETA_EXPENSES_KV');
+				const millageKV = safeKV(platformEnv, 'BETA_MILLAGE_KV');
+
+				// Check each service for a tombstone record
+				let foundType: string | null = null;
+
+				if (tripKV) {
+					const tripRaw = await (tripKV as any).get(`trip:${storageId}:${id}`);
+					if (tripRaw) {
+						const parsed = JSON.parse(tripRaw);
+						if (parsed.deleted) foundType = 'trip';
+					}
+				}
+
+				if (!foundType && millageKV) {
+					const millageRaw = await (millageKV as any).get(`millage:${storageId}:${id}`);
+					if (millageRaw) {
+						const parsed = JSON.parse(millageRaw);
+						if (parsed.deleted) foundType = 'millage';
+					}
+				}
+
+				if (!foundType && expenseKV) {
+					const expenseRaw = await (expenseKV as any).get(`expense:${storageId}:${id}`);
+					if (expenseRaw) {
+						const parsed = JSON.parse(expenseRaw);
+						if (parsed.deleted) foundType = 'expense';
+					}
+				}
+
+				// Only delete from the service that has the tombstone
+				if (foundType === 'trip') {
+					await tripSvc.permanentDelete(storageId, id);
+				} else if (foundType === 'millage') {
+					await millageSvc.permanentDelete(storageId, id);
+				} else if (foundType === 'expense') {
+					await expenseSvc.permanentDelete(storageId, id);
+				} else {
+					// If no tombstone found, log warning but still try cleanup as fallback
+					// This handles edge cases where the tombstone was already deleted
+					log.warn('No tombstone found for permanent delete, skipping', { id, storageId });
+				}
+			}
 		}
 
 		return new Response(null, { status: 204 });
