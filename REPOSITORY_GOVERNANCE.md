@@ -5,18 +5,10 @@ This document defines **repository-wide governance rules**.
 This repository **enforces Svelte 5 runes-based reactivity and the HTML Living Standard**.
 It is a **mixed Svelte 4 / Svelte 5 codebase** with a controlled, file-by-file migration.
 
-Legacy syntax is allowed **only** in files explicitly marked with documented
-migration boundaries. Mixing legacy and runes syntax in the same file will fail
-local hooks and CI.
+Legacy syntax is allowed **only** in files explicitly marked with `<!-- MIGRATION: SVELTE4-LEGACY -->`.
+Mixing legacy and runes syntax in the same file will fail CI.
 
 This is a **Progressive Web App (PWA)**.
-
-All changes must preserve:
-
-- installability
-- service worker registration
-- offline / caching behavior
-- manifest validity
 
 ---
 
@@ -29,29 +21,45 @@ You MUST read and follow:
 - `AI_GUARD.md`
 - `HTML_LIVING_STANDARD.md`
 
-If there is a conflict, **CI enforcement wins**.
+If migrating files, also read:
+
+- `svelte-4-to-5-migration-agent-spec.v2.7.3.md` (authoritative)
+- `MIGRATION.md` (operational guidance)
+
+If there is a conflict, **the migration spec and CI enforcement win**.
 
 ---
 
 ## Svelte Rules (Strict)
 
-- Target: **Svelte 5**
-- **All new code must use runes-based reactivity**
-  - `$state`
-  - `$derived`
-  - `$effect`
+**Target:** Svelte 5
+
+**All new code must use runes-based reactivity:**
+
+- `$state`
+- `$derived`
+- `$effect`
+
+**File State Rules:**
+
 - Do not mix legacy and runes syntax in the same file
 - Files must clearly belong to either:
-  - **Svelte 4 (legacy)**, or
-  - **Svelte 5 (migrated)**
+  - **Svelte 4 (legacy)** with marker, or
+  - **Svelte 5 (migrated)** without marker
 
-### Permanently Forbidden (All Files)
+### Forbidden in Svelte 5 Files
+
+See `AI_GUARD.md` for the complete authoritative list:
 
 - `svelte/store`
-- `onMount`
-- `beforeUpdate` / `afterUpdate`
+- `$:` reactive statements
+- `onMount`, `beforeUpdate`, `afterUpdate`
 - `createEventDispatcher`
-- class-based component instantiation
+- Class-based component instantiation
+
+### Legacy Files (Temporary)
+
+Files marked `<!-- MIGRATION: SVELTE4-LEGACY -->` may temporarily contain forbidden patterns until pre-migration cleanup is performed. See `MIGRATION.md`.
 
 ---
 
@@ -62,6 +70,8 @@ If there is a conflict, **CI enforcement wins**.
 - No deprecated elements or attributes
 - Prefer semantic, accessible HTML
 
+See `HTML_LIVING_STANDARD.md` for complete rules.
+
 ---
 
 ## PWA Rules (Non-Negotiable)
@@ -69,15 +79,17 @@ If there is a conflict, **CI enforcement wins**.
 Do NOT break or remove:
 
 - `manifest.json`
-- service worker registration
-- required meta tags
-- icons
-- theme colors
+- Service worker registration
+- Required meta tags
+- Icons
+- Theme colors
 
 Additional rules:
 
-- No changes that reduce Lighthouse PWA compliance
+- No changes that reduce PWA functionality
 - Use modern, standards-based PWA patterns only
+
+See `PWA.md` for complete requirements.
 
 ---
 
@@ -92,6 +104,8 @@ After **any** code change:
 5. Run `npx eslint`
 6. Fix **all** eslint errors and warnings
 
+Optional but recommended: 7. Run `npm test`
+
 Never ignore, suppress, downgrade, or bypass errors or warnings.
 
 All changes must be **CI-clean by default**.
@@ -101,14 +115,6 @@ If checks or lint fail and the fix is unclear:
 
 ---
 
-## Design System — Approved Colors Only
+## Design System
 
-The following colors are the **only colors allowed** in this project:
-
-- `#F68A2E` — primary orange
-- `#2C507B` — primary blue
-- `#1FA8DB` — accent blue
-- `#8BC12D` — accent green
-- `#8F3D91` — accent purple
-
-Do not introduce new colors, shades, or CSS variables outside this palette.
+See `DESIGN_SYSTEM.md` for approved color palette and design guidelines.

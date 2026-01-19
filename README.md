@@ -8,15 +8,16 @@ powered by [`sv`](https://github.com/sveltejs/cli).
 ## ⚠️ Project Conventions (Important for GitHub Copilot)
 
 This repository enforces **strict frontend standards**.  
-GitHub Copilot (Raptor Mini) **must follow these rules** when adding or modifying code.
+GitHub Copilot (and all AI tools) **must follow these rules** when adding or modifying code.
 
 Violations will fail **linting, pre-commit hooks, and CI**.
 
 > **Note**
-> During the Svelte 4 → Svelte 5 migration, Copilot must also follow:
-> - `MIGRATION.md`
-> - `AI_GUARD.md`
-> - `SVELTE5_MIGRATION_COMPLIANCE.md`
+> During the Svelte 4 → Svelte 5 migration, AI tools must also follow:
+>
+> - `svelte-4-to-5-migration-agent-spec.v2.7.3.md` (authoritative migration rules)
+> - `MIGRATION.md` (operational guidance)
+> - `AI_GUARD.md` (AI behavior enforcement)
 
 ---
 
@@ -29,7 +30,7 @@ This project is currently undergoing a **controlled Svelte 4 → Svelte 5 migrat
 - Only **one file may be migrated at a time**
 - All rules are enforced by CI
 
-👉 See **`MIGRATION.md`** before making *any* Svelte changes.
+👉 See **`MIGRATION.md`** before making _any_ Svelte changes.
 
 ---
 
@@ -48,7 +49,7 @@ See: **`HTML_LIVING_STANDARD.md`**
 
 ## Svelte
 
-- **Svelte 5 only** (unless explicitly marked legacy)
+- **Svelte 5 only** for new files and migrated files
 - Use **runes-based reactivity exclusively**:
   - `$state`
   - `$derived`
@@ -63,11 +64,16 @@ Files marked with:
 ```
 
 are allowed to use Svelte 4 syntax **only until migrated**.
-See `MIGRATION.md` for rules.
+
+These files may temporarily contain patterns that are otherwise forbidden (stores, lifecycle hooks, dispatchers) until pre-migration cleanup is performed.
+
+See `MIGRATION.md` for complete rules.
 
 ---
 
-### Forbidden (No Exceptions)
+### Forbidden in Svelte 5 Files
+
+See `AI_GUARD.md` for the complete authoritative list:
 
 - ❌ `svelte/store`
 - ❌ `$:` reactive labels
@@ -84,6 +90,8 @@ See `MIGRATION.md` for rules.
 - Component communication via callback props
 - Slots replaced with **snippets** and `{@render}`
 
+See `EXAMPLES.md` for canonical code patterns.
+
 These rules are **non-negotiable**.
 
 ---
@@ -95,6 +103,13 @@ Before committing:
 ```sh
 npm run check
 npm run lint
+npx eslint
+```
+
+Optional but recommended:
+
+```sh
+npm test
 ```
 
 CI must pass with **zero warnings**.
@@ -117,10 +132,25 @@ npx sv create my-app
 
 ## Related Documentation
 
-- `MIGRATION.md` — Migration rules and checklist
-- `MIGRATION_ORDER.md` — Approved migration order
+### Core Governance
+
+- `REPOSITORY_GOVERNANCE.md` — Repository-wide rules
 - `AI_GUARD.md` — AI behavior and enforcement
-- `SVELTE5_MIGRATION_COMPLIANCE.md` — Svelte 5-only guarantees
+- `CONTRIBUTING.md` — Contributor guidelines
+
+### Standards
+
 - `HTML_LIVING_STANDARD.md` — HTML rules
-- `PWA.md` — PWA requirements
 - `ARCHITECTURE.md` — App structure and boundaries
+- `EXAMPLES.md` — Canonical code patterns
+- `DESIGN_SYSTEM.md` — Design guidelines and color palette
+
+### Migration
+
+- `svelte-4-to-5-migration-agent-spec.v2.7.3.md` — Authoritative migration rules
+- `MIGRATION.md` — Operational migration guidance
+- `MIGRATION_ORDER.md` — Approved migration order (generated)
+
+### PWA
+
+- `PWA.md` — PWA requirements and rules

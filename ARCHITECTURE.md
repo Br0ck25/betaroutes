@@ -8,16 +8,19 @@ It applies during and after the Svelte 4 → Svelte 5 migration.
 ## Target Architecture (Svelte 5)
 
 ### UI
+
 - Svelte 5 components only
 - No class-based components
 - No framework-agnostic component layers
 
 ### State
+
 - `$state` for local mutable state
 - `$derived` for computed values
 - No global or shared state abstractions by default
 
 ### Effects
+
 - `$effect` for all side effects
 - Effects must be:
   - deterministic
@@ -25,6 +28,7 @@ It applies during and after the Svelte 4 → Svelte 5 migration.
   - scoped to the component lifecycle implicitly
 
 ### Events & Communication
+
 - Callback props only
 - Standard DOM event attributes (`onclick`, etc.)
 - ❌ No event dispatchers
@@ -40,7 +44,7 @@ During migration, the following rules are **strictly enforced**:
 - A component must use **either**:
   - legacy Svelte 4 syntax, **or**
   - Svelte 5 runes  
-  **Never both**
+    **Never both**
 - Legacy syntax is tolerated **only** when the file is explicitly marked:
 
 ```svelte
@@ -51,8 +55,9 @@ During migration, the following rules are **strictly enforced**:
 - New features must only be added to fully migrated Svelte 5 components
 
 See:
-- `MIGRATION.md`
-- `SVELTE5_MIGRATION_COMPLIANCE.md`
+
+- `svelte-4-to-5-migration-agent-spec.v2.7.3.md` (authoritative migration rules)
+- `MIGRATION.md` (operational guidance)
 
 ---
 
@@ -61,7 +66,7 @@ See:
 The following are **out of scope** for this architecture:
 
 - Cross-framework abstractions
-- “Future-proof” indirection layers
+- "Future-proof" indirection layers
 - Shared UI logic designed to mimic React/Vue patterns
 - Premature optimization via abstraction
 
@@ -69,18 +74,16 @@ The following are **out of scope** for this architecture:
 
 ## Anti-Patterns (Forbidden)
 
-❌ React patterns:
+For detailed Svelte-specific forbidden patterns, see `AI_GUARD.md`.
+
+### ❌ React patterns:
+
 - Hooks (`useEffect`, `useState`, etc.)
 - Render props
 - Context-heavy trees
 
-❌ Svelte legacy patterns:
-- `svelte/store`
-- `$:` reactive labels
-- `onMount`, `beforeUpdate`, `afterUpdate`
-- `createEventDispatcher`
+### ❌ Architectural smells:
 
-❌ Architectural smells:
 - Framework-agnostic wrappers
 - Custom state machines for UI state
 - Event buses or pub/sub systems
@@ -90,9 +93,10 @@ The following are **out of scope** for this architecture:
 ## Enforcement
 
 This architecture is enforced by:
+
 - CI checks
 - Linting rules
-- Pre-commit hooks
+- Pre-commit hooks (when configured)
 - `AI_GUARD.md`
 
 Violations are treated as **build-breaking errors**.

@@ -1,13 +1,12 @@
 # Svelte 4 → Svelte 5 Migration Guide
 
-This document defines the **operational migration process** for this repository.
-It MUST be used together with:
+This document provides **operational migration guidance** for this repository.
 
-- **svelte-4-to-5-migration-agent-spec.v2.6.md** (authoritative rules)
-- `MIGRATION_ORDER.md` (mechanically generated order)
-- CI and pre-commit enforcement
+**AUTHORITATIVE RULES:** `svelte-4-to-5-migration-agent-spec.v2.7.3.md`
 
-If any conflict exists, **the migration agent spec wins**.
+This guide explains how to execute migrations within the constraints defined by the spec.
+
+If any conflict exists, **the migration spec wins**.
 
 ---
 
@@ -17,7 +16,7 @@ If any conflict exists, **the migration agent spec wins**.
 - A file must be **either** Svelte 4 **or** Svelte 5 — never both
 - Partial or mixed migrations are forbidden
 - CI must pass at all times
-- PWA behavior must remain intact
+- PWA behavior must remain intact (see `PWA.md`)
 - **Dependency order is mandatory**
 - Migration order is determined mechanically
 
@@ -28,19 +27,16 @@ If any rule cannot be followed:
 
 ## Migration Authority
 
-The following are binding, in order:
+The following are binding, in order of precedence:
 
-1. **svelte-4-to-5-migration-agent-spec.v2.6.md**
-2. `MIGRATION_ORDER.md`
+1. **svelte-4-to-5-migration-agent-spec.v2.7.3.md** (authoritative)
+2. `MIGRATION_ORDER.md` (generated order)
 3. CI / pre-commit hooks
-
-This file explains *how to execute* migrations within those constraints.
+4. This file (operational guidance)
 
 ---
 
-## Migration Tooling (Required)
-
-Migration order and progress tracking are handled by **local, non-AI scripts**.
+## Migration Tooling
 
 ### Generate migration order
 
@@ -50,33 +46,27 @@ npm run migrate:order
 
 This generates `MIGRATION_ORDER.md`, which defines the **only approved migration order**.
 
+If this script does not exist, it must be created before migration begins.
+
 Rules:
-- Files MUST be migrated **top-to-bottom**
+
+- Files MUST be migrated in the order specified
 - **Leaf components first**
 - **Shared UI components before pages/layouts**
 - **Routes, layouts, and pages last**
-- AI tools must **never** edit `MIGRATION_ORDER.md`
+- Manual reordering is forbidden unless a dependency cycle is discovered
 
 ---
 
-### Mark a file as migrated
+### Track migration progress
 
-After successfully migrating and committing a file:
-
-```bash
-npm run migrate:done path/to/file.svelte
-```
-
-This:
-- Checks off the file
-- Records completion
-- Prevents duplicate or skipped work
+After successfully migrating and committing a file, mark it complete in `MIGRATION_ORDER.md` by checking the box next to the filename.
 
 ---
 
-## File Categories
+## File States
 
-Every `.svelte` file must belong to exactly one category.
+Every `.svelte` file must belong to exactly one state.
 
 ### 1. Legacy File — Svelte 4
 
@@ -86,95 +76,102 @@ Must include this marker at the **very top** of the file:
 <!-- MIGRATION: SVELTE4-LEGACY -->
 ```
 
-Allowed:
-- `export let`
-- `$:` reactive labels
-- `on:click` directives
+**Allowed:**
 
-Restrictions:
+- Existing legacy syntax that was present before migration began
 - Bug fixes only
+
+**Restrictions:**
+
 - No new features
 - No stylistic refactors
+- No architectural changes
 
-Forbidden (even in legacy):
+**Temporarily Permitted (until pre-migration cleanup):**
+
+Legacy files discovered during migration inventory may contain:
+
 - `svelte/store`
-- `onMount`
-- `beforeUpdate` / `afterUpdate`
+- `onMount`, `beforeUpdate`, `afterUpdate`
 - `createEventDispatcher`
-- Class-based component instantiation
+
+These MUST be removed in a **pre-migration cleanup commit** (see below) before the file can be migrated to Svelte 5.
 
 ---
 
 ### 2. Migrated File — Svelte 5
 
 Characteristics:
+
 - **No migration marker**
 - Uses runes-based reactivity exclusively
 - Represents the final architectural state
 
-Requirements:
+**Requirements:**
+
 - `$state`, `$derived`, `$effect`
 - Props via `$props()`
 - DOM events via standard attributes (`onclick`)
 - Snippets instead of slots
 
-Forbidden:
+**Forbidden:**
+
 - Any legacy Svelte 4 syntax
-- Any lifecycle APIs
-- Any stores
+- Lifecycle APIs
+- Stores
+- Event dispatchers
+
+See `EXAMPLES.md` for canonical patterns.
 
 ---
 
-## Pre-Migration Requirements
+## Pre-Migration Cleanup Phase
 
-Before migrating a file:
+If a legacy file contains forbidden patterns (stores, lifecycle hooks, dispatchers, or Svelte-dependent utilities), you MUST clean them up before migration.
 
-### If the file uses `svelte/store`
-- Refactor to component-local state **in Svelte 4**
-- Keep the `SVELTE4-LEGACY` marker
-- Commit separately
-- **Do NOT introduce Svelte 5 syntax**
+### Cleanup Process:
 
-### If the file uses lifecycle hooks or `createEventDispatcher`
-- Refactor them out using Svelte 4 patterns
-- Keep the `SVELTE4-LEGACY` marker
-- Commit separately
+1. Refactor to remove forbidden patterns using **Svelte 4 syntax only**
+2. Keep the `SVELTE4-LEGACY` marker during cleanup
+3. Commit cleanup separately with message: `cleanup(svelte4): ComponentName - remove [pattern]`
+4. Verify CI passes
+5. Only then proceed with Svelte 5 migration
 
-🚫 Cleanup commits MUST NOT contain Svelte 5 runes.
+**Important:** Cleanup commits MUST NOT introduce Svelte 5 syntax. They are Svelte 4 → Svelte 4 refactors only.
 
 ---
 
 ## Migration Steps (Required Order)
 
 1. Confirm the file is next in `MIGRATION_ORDER.md`
-2. Ensure the file is CI-clean
-3. Convert all state to `$state`
-4. Convert derived values to `$derived`
-5. Replace lifecycle logic with `$effect`
-6. Replace `export let` with `$props()`
-7. Replace `on:click` with `onclick`
-8. Remove the migration marker
-9. Run:
-   - `npm run check`
-   - `npm run lint`
-   - `npx eslint`
-10. Run `npm test` and verify all tests pass
-11. Manually verify the component renders and behaves correctly
-12. Commit **only if all checks pass with zero warnings**
-13. Mark the file complete:
-   ```bash
-   npm run migrate:done path/to/file.svelte
-   ```
+2. Ensure the file is CI-clean pre-change
+3. Perform pre-migration cleanup if needed (separate commit)
+4. Convert all state to `$state`
+5. Convert derived values to `$derived`
+6. Replace lifecycle logic with `$effect`
+7. Replace `export let` with `$props()`
+8. Replace `on:event` with standard DOM attributes
+9. Replace slots with snippets
+10. Remove the migration marker
+11. Run:
+    - `npm run check`
+    - `npm run lint`
+    - `npx eslint`
+12. Run `npm test` **if tests exist** (optional but recommended)
+13. Manually verify the component renders and behaves correctly
+14. Commit **only if all checks pass with zero warnings**
+    - Use format: `migrate(svelte5): ComponentName`
+15. Check off the file in `MIGRATION_ORDER.md`
 
 ---
 
 ## Rollback Procedure
 
-If a migrated file causes runtime or behavioral issues:
+If a migrated file causes runtime or behavioral issues discovered after merge:
 
 1. Immediately revert the migration commit
 2. Re-add the `<!-- MIGRATION: SVELTE4-LEGACY -->` marker
-3. Document the issue in `MIGRATION_NOTES.md`
+3. Document the issue in `MIGRATION_NOTES.md` (create if doesn't exist)
 4. Fix the underlying problem
 5. Re-attempt migration — **do NOT skip the file**
 
@@ -190,7 +187,7 @@ If a migrated file causes runtime or behavioral issues:
 - Leave a file half-migrated
 - Remove a migration marker prematurely
 - Silence lint, test, or CI failures
-- Use automated migration tools
+- Use `npx sv migrate svelte-5` or other automated tools
 - Allow AI tools to plan or reorder migration work
 
 If unsure:
@@ -206,15 +203,17 @@ The migration is complete when:
 - All components use Svelte 5 runes
 - `MIGRATION_ORDER.md` is fully checked
 - CI passes cleanly
-- PWA functionality is verified
+- PWA functionality is verified (see `PWA.md`)
 
 ---
 
 ## Enforcement
 
 These rules are enforced by:
-- CI
-- Pre-commit hooks
-- AI_GUARD.md
+
+- The migration spec (`svelte-4-to-5-migration-agent-spec.v2.7.3.md`)
+- CI checks
+- Pre-commit hooks (when configured)
+- `AI_GUARD.md`
 
 Violations will fail the build.
