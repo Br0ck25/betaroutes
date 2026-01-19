@@ -1,6 +1,7 @@
 // src/lib/server/hughesnet/tripBuilder.ts
 import type { KVNamespace } from '@cloudflare/workers-types';
 import type { OrderData, OrderWithMeta, Trip, TripStop, SupplyItem } from './types';
+import type { MillageRecord } from '$lib/server/millageService';
 import { extractDateFromTs, parseDateOnly, parseTime, buildAddress, minutesToTime } from './utils';
 import { MIN_JOB_DURATION_MINS, MAX_JOB_DURATION_MINS } from './constants';
 import { log } from '$lib/server/log';
@@ -30,7 +31,8 @@ export async function createTripForDate(
 			raw: string
 		) => Promise<{ lat?: number; lon?: number; formattedAddress?: string } | null>;
 	},
-	logger: (msg: string) => void
+	logger: (msg: string) => void,
+	millageService?: { put: (m: MillageRecord) => Promise<void> }
 ): Promise<boolean> {
 	let defaultStart = '',
 		defaultEnd = '',
@@ -372,6 +374,56 @@ export async function createTripForDate(
 	};
 
 	await tripService.put(trip);
+
+	// Create corresponding mileage log if miles > 0 and millageService is available
+	// This ensures HNS trips work exactly like manually created trips
+	if (millageService && miles > 0) {
+		try {
+			// Fetch user settings for millageRate and vehicle
+			let millageRate: number | undefined;
+			let vehicle: string | undefined;
+			try {
+				const key = `settings:${settingsId || userId}`;
+				const sRaw = await settingsKV.get(key);
+				if (sRaw) {
+					const d = JSON.parse(sRaw);
+					const s = d.settings || d;
+					millageRate = typeof s.millageRate === 'number' ? s.millageRate : undefined;
+					const firstVehicle = s.vehicles?.[0];
+					vehicle = firstVehicle?.id ?? firstVehicle?.name ?? undefined;
+				}
+			} catch {
+				// Ignore settings fetch errors
+			}
+
+			// Calculate reimbursement if millageRate is available
+			const reimbursement =
+				typeof millageRate === 'number' ? Number((miles * millageRate).toFixed(2)) : undefined;
+
+			const now = new Date().toISOString();
+			const millageRecord: MillageRecord = {
+				id: trip.id, // Use trip ID for 1:1 linking
+				userId,
+				tripId: trip.id,
+				date: trip.date,
+				startOdometer: 0,
+				endOdometer: miles,
+				miles,
+				millageRate,
+				vehicle,
+				reimbursement,
+				notes: '',
+				createdAt: now,
+				updatedAt: now
+			};
+			await millageService.put(millageRecord);
+			logger(`  ${date}: Created mileage log (${miles} mi)`);
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			log.warn(`[Trip ${date}] Failed to create mileage log: ${msg}`);
+		}
+	}
+
 	logger(
 		`  ${date}: $${totalEarnings} - $${(fuelCost + totalSuppliesCost).toFixed(2)} = $${netProfit.toFixed(2)} (${hoursWorked}h)`
 	);
