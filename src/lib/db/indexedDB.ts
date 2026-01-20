@@ -162,6 +162,57 @@ export async function getDB(): Promise<IDBPDatabase<AppDB>> {
 
 		// Force resolution now so VersionError is thrown inside the try block
 		await dbPromise;
+
+		// Migration: If an older DB used the legacy 'millage' store name, migrate its
+		// data to the canonical 'mileage' store and drop the legacy store. We do this
+		// after opening so we can read the old data, then perform a version upgrade
+		// to create the new store and remove the old one.
+		try {
+			const db = await dbPromise;
+			if (db.objectStoreNames.contains('millage') && !db.objectStoreNames.contains('mileage')) {
+				console.log('🔁 Migrating legacy "millage" store to "mileage"...');
+				// Read all entries from legacy store
+				const readTx = db.transaction('millage', 'readonly');
+				const oldItems = await readTx.objectStore('millage').getAll();
+				await readTx.done;
+
+				// Close current connection and bump DB version to perform structural upgrades
+				db.close();
+				const newVersion = (db.version || DB_VERSION) + 1;
+
+				const migratedDB = await openDB<AppDB>(DB_NAME, newVersion, {
+					upgrade(upDb) {
+						if (!upDb.objectStoreNames.contains('mileage')) {
+							console.log('Creating "mileage" store during migration...');
+							const mileageStore = upDb.createObjectStore('mileage', { keyPath: 'id' });
+							mileageStore.createIndex('userId', 'userId', { unique: false });
+							mileageStore.createIndex('syncStatus', 'syncStatus', { unique: false });
+							mileageStore.createIndex('date', 'date', { unique: false });
+						}
+						if (upDb.objectStoreNames.contains('millage')) {
+							upDb.deleteObjectStore('millage');
+							console.log('Deleted legacy "millage" store');
+						}
+					}
+				});
+
+				// Populate migrated store with old entries
+				if (oldItems && oldItems.length > 0) {
+					const writeTx = migratedDB.transaction('mileage', 'readwrite');
+					const outStore = writeTx.objectStore('mileage');
+					for (const itm of oldItems) {
+						await outStore.put(itm as any);
+					}
+					await writeTx.done;
+					console.log(`✅ Migrated ${oldItems.length} mileage records`);
+				}
+
+				// Replace the cached dbPromise with the migrated instance
+				dbPromise = Promise.resolve(migratedDB);
+			}
+		} catch (migErr) {
+			console.warn('⚠️ Mileage migration failed or not necessary:', migErr);
+		}
 	} catch (err: any) {
 		if (
 			err?.name === 'VersionError' ||
