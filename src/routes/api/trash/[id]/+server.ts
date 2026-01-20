@@ -92,21 +92,21 @@ export const POST: RequestHandler = async (event) => {
 
 						restored = await mileageSvc.restore(storageId, id);
 						// If restored mileage has a tripId, sync the miles back to the trip
-						const restoredMillage = restored as MillageRecord | undefined;
+						const restoredMileage = restored as MileageRecord | undefined;
 						if (
-							restoredMillage &&
-							restoredMillage.tripId &&
-							typeof restoredMillage.miles === 'number'
+							restoredMileage &&
+							restoredMileage.tripId &&
+							typeof restoredMileage.miles === 'number'
 						) {
 							try {
-								const trip = await tripSvc.get(storageId, restoredMillage.tripId);
+								const trip = await tripSvc.get(storageId, restoredMileage.tripId);
 								if (trip && !trip.deleted) {
-									trip.totalMiles = restoredMillage.miles;
+									trip.totalMiles = restoredMileage.miles;
 									trip.updatedAt = new Date().toISOString();
 									await tripSvc.put(trip);
 									log.info('Synced restored mileage to trip', {
-										tripId: restoredMillage.tripId,
-										miles: restoredMillage.miles
+										tripId: restoredMileage.tripId,
+										miles: restoredMileage.miles
 									});
 								}
 							} catch (e) {
@@ -200,7 +200,7 @@ export const DELETE: RequestHandler = async (event) => {
 				// by checking which KV has a tombstone for this ID
 				const tripKV = safeKV(platformEnv, 'BETA_LOGS_KV');
 				const expenseKV = safeKV(platformEnv, 'BETA_EXPENSES_KV');
-				const millageKV = safeKV(platformEnv, 'BETA_MILLAGE_KV');
+				const mileageKV = safeKV(platformEnv, 'BETA_MILLAGE_KV');
 
 				// Check each service for a tombstone record
 				let foundType: string | null = null;

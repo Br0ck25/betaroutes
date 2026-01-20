@@ -256,8 +256,9 @@ function createTripsStore() {
 				};
 
 				// Check and capture mileage - create SEPARATE trash item for mileage
-				const mileageTx = db.transaction('mileage', 'readwrite');
-				const activeMileage = await mileageTx.objectStore('mileage').get(id);
+				const mileageStoreName = getMileageStoreName(db);
+				const mileageTx = db.transaction(mileageStoreName, 'readwrite');
+				const activeMileage = await mileageTx.objectStore(mileageStoreName).get(id);
 				let mileageTrashItem: any = null;
 				if (activeMileage) {
 					// Store mileage backup in trip item for reference
@@ -289,8 +290,8 @@ function createTripsStore() {
 				// Save trash items (trip and optionally mileage)
 				const trashTx = db.transaction('trash', 'readwrite');
 				await trashTx.objectStore('trash').put(trashItem);
-				if (millageTrashItem) {
-					await trashTx.objectStore('trash').put(millageTrashItem);
+				if (mileageTrashItem) {
+					await trashTx.objectStore('trash').put(mileageTrashItem);
 				}
 				await trashTx.done;
 

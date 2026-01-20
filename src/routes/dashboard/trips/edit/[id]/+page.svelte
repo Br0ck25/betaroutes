@@ -106,7 +106,7 @@
 		tripData.suppliesItems = safeSupplies as any;
 		// Use trip's totalMiles as source of truth, mileage store is for display on mileage page
 		const milesFromMileage = $mileage.find((m: any) => m.id === tripId)?.miles;
-		const milesValue = Number(milesFromMillage ?? src.totalMiles) || 0;
+		const milesValue = Number(milesFromMileage ?? src.totalMiles) || 0;
 		tripData.totalMiles = milesValue;
 		tripData.mpg = Number.isFinite(Number(src.mpg))
 			? Number(src.mpg)
