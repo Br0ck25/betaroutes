@@ -83,11 +83,11 @@ function createMileageStore() {
 					(item) => !shouldFilterOutMileage(item.id, item.createdAt, trashMap)
 				);
 				const serverIdSet = new Set(validServerData.map((i) => i.id));
-				set(validServerData);
 				const mileageStoreName = getMileageStoreName(db);
 				const tx = db.transaction([mileageStoreName, 'trash'], 'readwrite');
 				const store = tx.objectStore(mileageStoreName);
 				const localItems = await store.getAll();
+				const localById = new Map(localItems.map((item) => [item.id, item]));
 				for (const local of localItems) {
 					if (shouldFilterOutMileage(local.id, local.createdAt, trashMap)) {
 						await store.delete(local.id);
@@ -96,8 +96,38 @@ function createMileageStore() {
 					}
 				}
 				for (const item of validServerData) {
+					const local = localById.get(item.id);
+					if (local && local.syncStatus !== 'synced') continue;
 					await store.put({ ...item, syncStatus: 'synced' });
 				}
+
+				const mergedById = new Map<string, MileageRecord>();
+				for (const item of validServerData) {
+					mergedById.set(item.id, { ...item, syncStatus: 'synced' });
+				}
+				for (const local of localItems) {
+					if (shouldFilterOutMileage(local.id, local.createdAt, trashMap)) continue;
+					if (local.syncStatus === 'synced' && !serverIdSet.has(local.id)) continue;
+					if (local.syncStatus !== 'synced') {
+						const existing = mergedById.get(local.id);
+						if (!existing) {
+							mergedById.set(local.id, local);
+						} else {
+							const localUpdated = new Date(local.updatedAt || local.createdAt).getTime();
+							const existingUpdated = new Date(existing.updatedAt || existing.createdAt).getTime();
+							if (localUpdated >= existingUpdated) {
+								mergedById.set(local.id, local);
+							}
+						}
+					}
+				}
+
+				const merged = Array.from(mergedById.values()).sort((a, b) => {
+					const dateA = new Date(a.date || a.createdAt).getTime();
+					const dateB = new Date(b.date || b.createdAt).getTime();
+					return dateB - dateA;
+				});
+				set(merged);
 				await tx.done;
 				if (_resolveHydration) _resolveHydration();
 				_hydrationPromise = null;
