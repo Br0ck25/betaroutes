@@ -70,14 +70,17 @@ export const POST: RequestHandler = async (event) => {
 		}
 
 		const payload = parse.data;
-		const id = payload.id || crypto.randomUUID();
+		// Preserve existing behavior where a mileage that is linked to a trip uses the trip's id
+		// but allow standalone mileage logs (no trip) by defaulting id to payload.id || payload.tripId || uuid
+		const id = payload.id || payload.tripId || crypto.randomUUID();
 		const userId = getStorageId(sessionUser);
 
-		// Validate parent trip exists and is active (mileage ID = trip ID by design)
+		// Validate parent trip exists and is active only when payload.tripId is provided
 		const tripKV = safeKV(env, 'BETA_LOGS_KV');
-		// Only validate if tripKV has a proper get method (skip validation in test mocks)
-		if (tripKV && typeof (tripKV as any).get === 'function') {
-			const tripKey = `trip:${userId}:${id}`;
+		const tripIdToCheck = payload.tripId || undefined;
+		// Only validate if tripKV has a proper get method and a tripId was provided (skip validation in test mocks)
+		if (tripKV && typeof (tripKV as any).get === 'function' && tripIdToCheck) {
+			const tripKey = `trip:${userId}:${tripIdToCheck}`;
 			const tripRaw = await tripKV.get(tripKey);
 
 			if (!tripRaw) {
@@ -127,7 +130,6 @@ export const POST: RequestHandler = async (event) => {
 			}
 			if (typeof rate === 'number') reimbursement = Number((miles * rate).toFixed(2));
 		}
-
 		// Build authoritative mileage record
 		const record: any = {
 			id,

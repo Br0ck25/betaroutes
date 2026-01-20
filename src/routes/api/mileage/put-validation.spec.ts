@@ -40,11 +40,11 @@ describe('PUT /api/mileage/[id] - Parent trip validation', () => {
 		mockEnv = {};
 	});
 
-	it('returns 409 when parent trip does not exist', async () => {
+	it('returns 409 when parent trip does not exist (attaching tripId)', async () => {
 		// Mock: trip not found
 		mockTripKV.get.mockResolvedValue(null);
 
-		const body = { miles: 150 };
+		const body = { miles: 150, tripId: 'trip-123' };
 		const event: any = {
 			params: { id: 'trip-123' },
 			request: { json: async () => body },
@@ -58,6 +58,25 @@ describe('PUT /api/mileage/[id] - Parent trip validation', () => {
 		expect(res.status).toBe(409);
 		const json = JSON.parse(await res.text());
 		expect(json.error).toContain('Parent trip not found');
+	});
+
+	it('succeeds when updating a standalone mileage (no tripId)', async () => {
+		// Mock: trip not found but existing mileage has no tripId so validation is skipped
+		mockTripKV.get.mockResolvedValue(null);
+
+		const body = { miles: 150 };
+		const event: any = {
+			params: { id: 'trip-123' },
+			request: { json: async () => body },
+			locals: { user: { id: 'u1' } },
+			platform: { env: mockEnv }
+		};
+
+		const { PUT } = await import('./[id]/+server');
+		const res = await PUT(event as any);
+
+		expect(res.status).toBe(200);
+		expect(mockMillageSvc.put).toHaveBeenCalled();
 	});
 
 	it('returns 409 when parent trip is deleted', async () => {

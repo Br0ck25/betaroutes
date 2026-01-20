@@ -177,21 +177,24 @@ export function makeMileageService(
 				body: JSON.stringify(tombstone)
 			});
 
-			// Set the parent trip's totalMiles and fuelCost to 0
+			// If the deleted mileage was linked to a trip, set that trip's totalMiles and fuelCost to 0
 			if (tripKV) {
 				try {
-					const tripKey = `trip:${userId}:${id}`;
-					const tripRaw = await tripKV.get(tripKey);
-					if (tripRaw) {
-						const trip = JSON.parse(tripRaw);
-						if (!trip.deleted) {
-							trip.totalMiles = 0;
-							trip.fuelCost = 0;
-							trip.updatedAt = now.toISOString();
-							await tripKV.put(tripKey, JSON.stringify(trip));
-							log.info(
-								`[MileageService] Set trip ${id} totalMiles and fuelCost to 0 after mileage deletion`
-							);
+					const tripIdToUpdate = (item as any).tripId as string | undefined;
+					if (tripIdToUpdate) {
+						const tripKey = `trip:${userId}:${tripIdToUpdate}`;
+						const tripRaw = await tripKV.get(tripKey);
+						if (tripRaw) {
+							const trip = JSON.parse(tripRaw);
+							if (!trip.deleted) {
+								trip.totalMiles = 0;
+								trip.fuelCost = 0;
+								trip.updatedAt = now.toISOString();
+								await tripKV.put(tripKey, JSON.stringify(trip));
+								log.info(
+									`[MileageService] Set trip ${tripIdToUpdate} totalMiles and fuelCost to 0 after mileage deletion`
+								);
+							}
 						}
 					}
 				} catch (err) {
@@ -274,21 +277,24 @@ export function makeMileageService(
 			const tombstone = JSON.parse(raw);
 			if (!tombstone.deleted) throw new Error('Item not deleted');
 
-			// Validation: Check if parent trip exists and is active
-			// The mileage ID equals the trip ID by design
+			// Validation: Only validate parent trip if the tombstone being restored has a linked tripId
 			if (tripKV) {
-				const tripKey = `trip:${userId}:${itemId}`;
-				const tripRaw = await tripKV.get(tripKey);
+				const backup = (tombstone as any).backup || (tombstone as any).data || tombstone;
+				const linkedTripId = backup?.tripId as string | undefined;
+				if (linkedTripId) {
+					const tripKey = `trip:${userId}:${linkedTripId}`;
+					const tripRaw = await tripKV.get(tripKey);
 
-				if (!tripRaw) {
-					throw new Error('Parent trip not found. Cannot restore mileage log.');
-				}
+					if (!tripRaw) {
+						throw new Error('Parent trip not found. Cannot restore mileage log.');
+					}
 
-				const trip = JSON.parse(tripRaw);
-				if (trip.deleted) {
-					throw new Error(
-						'Parent trip is deleted. Please restore the trip first before restoring the mileage log.'
-					);
+					const trip = JSON.parse(tripRaw);
+					if (trip.deleted) {
+						throw new Error(
+							'Parent trip is deleted. Please restore the trip first before restoring the mileage log.'
+						);
+					}
 				}
 			}
 
@@ -306,10 +312,11 @@ export function makeMileageService(
 
 			await this.put(restored);
 
-			// Update the parent trip's totalMiles and fuelCost to reflect the restored mileage
-			if (tripKV && typeof restored.miles === 'number') {
+			// Update the parent trip's totalMiles and fuelCost to reflect the restored mileage (only if linked to a tripId)
+			const restoredTripId = (restored as any).tripId as string | undefined;
+			if (tripKV && restoredTripId && typeof restored.miles === 'number') {
 				try {
-					const tripKey = `trip:${userId}:${itemId}`;
+					const tripKey = `trip:${userId}:${restoredTripId}`;
 					const tripRaw = await tripKV.get(tripKey);
 					if (tripRaw) {
 						const trip = JSON.parse(tripRaw);
@@ -322,12 +329,12 @@ export function makeMileageService(
 							trip.updatedAt = new Date().toISOString();
 							await tripKV.put(tripKey, JSON.stringify(trip));
 							log.info(
-								`[MillageService] Updated trip ${itemId} totalMiles to ${restored.miles} and fuelCost to ${trip.fuelCost} after mileage restore`
+								`[MileageService] Updated trip ${restoredTripId} totalMiles to ${restored.miles} and fuelCost to ${trip.fuelCost} after mileage restore`
 							);
 						}
 					}
 				} catch (err) {
-					log.warn(`[MillageService] Failed to update trip totalMiles after mileage restore`, {
+					log.warn(`[MileageService] Failed to update trip totalMiles after mileage restore`, {
 						itemId,
 						error: err
 					});
