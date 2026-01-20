@@ -290,7 +290,7 @@
 </script>
 
 <svelte:head>
-	<title>Trip History - Go Route Yourself</title>
+	<title>Trips - Go Route Yourself</title>
 	<style>
 		/* FORCE OVERRIDE: Google Maps Autocomplete z-index */
 		.pac-container {

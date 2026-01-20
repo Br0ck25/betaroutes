@@ -140,7 +140,7 @@
 		const src = JSON.parse(JSON.stringify(found)) as any;
 		tripData.id = String(src.id || tripData.id);
 		tripData.date = normalizeDate(src.date);
-		tripData.payDate = normalizeDate(src.payDate) || '';
+		tripData.payDate = src.payDate ? normalizeDate(src.payDate) : '';
 		tripData.startAddress = String(src.startAddress || '');
 		tripData.endAddress = String(src.endAddress || '');
 		tripData.stops = safeStops as any as LocalStop[];

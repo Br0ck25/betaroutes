@@ -4,7 +4,7 @@
 	import { user } from '$lib/stores/auth';
 	import { userSettings } from '$lib/stores/userSettings';
 	import { toasts } from '$lib/stores/toast';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
 	import SelectMobile from '$lib/components/ui/SelectMobile.svelte';
 
@@ -103,6 +103,7 @@
 
 			await mileage.create(payload as any, userId);
 			toasts.success('Mileage log created');
+			await invalidateAll();
 			goto('/dashboard/mileage');
 		} catch (err) {
 			console.error(err);
