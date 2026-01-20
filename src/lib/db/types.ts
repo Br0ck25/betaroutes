@@ -127,5 +127,5 @@ export interface SyncQueueItem {
 /**
  * Database schema version
  */
-export const DB_VERSION = 4;
+export const DB_VERSION = 5;
 export const DB_NAME = 'go-route-yourself';

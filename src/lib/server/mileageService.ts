@@ -144,7 +144,7 @@ export function makeMileageService(
 			const raw = await kv.get(key);
 			if (!raw) return;
 
-			const item = JSON.parse(raw);
+			const item = JSON.parse(raw) as MileageRecord;
 			const now = new Date();
 			const expiresAt = new Date(now.getTime() + RETENTION.THIRTY_DAYS * 1000);
 
@@ -180,7 +180,7 @@ export function makeMileageService(
 			// If the deleted mileage was linked to a trip, set that trip's totalMiles and fuelCost to 0
 			if (tripKV) {
 				try {
-					const tripIdToUpdate = (item as any).tripId as string | undefined;
+					const tripIdToUpdate = typeof item.tripId === 'string' ? item.tripId : undefined;
 					if (tripIdToUpdate) {
 						const tripKey = `trip:${userId}:${tripIdToUpdate}`;
 						const tripRaw = await tripKV.get(tripKey);
@@ -274,13 +274,17 @@ export function makeMileageService(
 			const raw = await kv.get(key);
 			if (!raw) throw new Error('Item not found');
 
-			const tombstone = JSON.parse(raw);
-			if (!tombstone.deleted) throw new Error('Item not deleted');
+			const tombstone = JSON.parse(raw) as Record<string, unknown>;
+			if (!tombstone['deleted']) throw new Error('Item not deleted');
 
 			// Validation: Only validate parent trip if the tombstone being restored has a linked tripId
 			if (tripKV) {
-				const backup = (tombstone as any).backup || (tombstone as any).data || tombstone;
-				const linkedTripId = backup?.tripId as string | undefined;
+				const backup =
+					(tombstone['backup'] as Record<string, unknown> | undefined) ||
+					(tombstone['data'] as Record<string, unknown> | undefined) ||
+					tombstone;
+				const linkedTripId =
+					typeof backup['tripId'] === 'string' ? (backup['tripId'] as string) : undefined;
 				if (linkedTripId) {
 					const tripKey = `trip:${userId}:${linkedTripId}`;
 					const tripRaw = await tripKV.get(tripKey);
@@ -303,17 +307,19 @@ export function makeMileageService(
 			// mileage record per trip. The tombstone we're restoring IS the only
 			// mileage record for this trip, and we've already verified it's deleted.
 
-			const restored = tombstone.backup || tombstone.data || tombstone;
-			delete restored.deleted;
-			delete restored.deletedAt;
-			delete restored.metadata;
-			delete restored.backup;
+			const restored = ((tombstone['backup'] as Record<string, unknown> | undefined) ||
+				(tombstone['data'] as Record<string, unknown> | undefined) ||
+				tombstone) as MileageRecord & Record<string, unknown>;
+			delete restored['deleted'];
+			delete restored['deletedAt'];
+			delete restored['metadata'];
+			delete restored['backup'];
 			restored.updatedAt = new Date().toISOString();
 
 			await this.put(restored);
 
 			// Update the parent trip's totalMiles and fuelCost to reflect the restored mileage (only if linked to a tripId)
-			const restoredTripId = (restored as any).tripId as string | undefined;
+			const restoredTripId = typeof restored.tripId === 'string' ? restored.tripId : undefined;
 			if (tripKV && restoredTripId && typeof restored.miles === 'number') {
 				try {
 					const tripKey = `trip:${userId}:${restoredTripId}`;

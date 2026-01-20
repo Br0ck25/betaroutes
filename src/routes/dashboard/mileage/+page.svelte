@@ -177,7 +177,7 @@
 
 	async function deleteExpense(id: string, e?: MouseEvent) {
 		if (e) e.stopPropagation();
-		if (!confirm('Move this expense to trash? You can restore it later.')) return;
+		if (!confirm('Move this mileage log to trash? You can restore it later.')) return;
 		if (id.startsWith('trip-')) {
 			toasts.error('Cannot delete Trips here. Delete the Trip instead.');
 			return;
@@ -224,7 +224,7 @@
 
 		if (
 			!confirm(
-				`Move ${manualExpenses.length} expenses to trash? ${tripLogs > 0 ? `(${tripLogs} trips will be skipped)` : ''}`
+				`Move ${manualExpenses.length} mileage logs to trash? ${tripLogs > 0 ? `(${tripLogs} trips will be skipped)` : ''}`
 			)
 		)
 			return;
