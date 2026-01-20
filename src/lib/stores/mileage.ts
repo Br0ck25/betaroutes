@@ -332,7 +332,8 @@ function createMileageStore() {
 
 			try {
 				const db = await getDB();
-				const tx = db.transaction(['mileage', 'trash'], 'readwrite');
+				const mileageStoreName = getMileageStoreName(db);
+				const tx = db.transaction([mileageStoreName, 'trash'], 'readwrite');
 				const mileageStore = tx.objectStore(mileageStoreName);
 				const trashStore = tx.objectStore('trash');
 
