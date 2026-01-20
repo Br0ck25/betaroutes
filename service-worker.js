@@ -13,14 +13,35 @@ const urlsToCache = [
 	'/dashboard.css'
 ];
 
-// Install: Cache app shell
+// Install: Cache app shell (resilient)
 self.addEventListener('install', (event) => {
 	self.skipWaiting();
 	event.waitUntil(
-		caches.open(CACHE_NAME).then((cache) => {
+		(async () => {
+			const cache = await caches.open(CACHE_NAME);
 			console.log('✓ Caching app shell v2.2.0 (Stripe + Analytics)');
-			return cache.addAll(urlsToCache);
-		})
+			// Fast path: try addAll — if any asset fails (404 etc) it throws.
+			try {
+				await cache.addAll(urlsToCache);
+				return;
+			} catch (err) {
+				console.warn('service-worker: cache.addAll failed, fetching assets individually', err);
+			}
+
+			// Fallback: fetch assets one-by-one and store successful responses.
+			for (const url of urlsToCache) {
+				try {
+					const res = await fetch(url, { cache: 'no-cache' });
+					if (!res || !res.ok) {
+						console.warn(`service-worker: skipping ${url} (${res && res.status})`);
+						continue;
+					}
+					await cache.put(url, res.clone());
+				} catch (e) {
+					console.warn(`service-worker: error fetching ${url}`, e);
+				}
+			}
+		})()
 	);
 });
 

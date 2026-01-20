@@ -36,9 +36,9 @@ The following elements may be self-closing:
 - `wbr`
 
 Example:
+
 ```html
-<img src="/logo.png" alt="Logo">
-<input disabled>
+<img src="/logo.png" alt="Logo" /> <input disabled />
 ```
 
 ---
@@ -51,16 +51,74 @@ Boolean attributes:
 - MUST NOT use `="true"` or `="false"`
 
 Correct:
+
 ```html
-<input disabled>
-<button autofocus>
+<input disabled /> <button autofocus></button>
 ```
 
 Incorrect:
+
 ```html
-<input disabled="disabled">
-<input disabled="true">
+<input disabled="disabled" /> <input disabled="true" />
 ```
+
+---
+
+## Svelte-Specific Rules
+
+Svelte components must output valid HTML Living Standard markup.
+
+### Syntax Rules
+
+- Do NOT use XHTML syntax in `.svelte` files
+- Non-void elements must NOT be self-closing
+
+Correct:
+
+```svelte
+<div class="container"></div><p>Text</p>
+```
+
+Incorrect:
+
+```svelte
+<div class="container" /> <!-- Invalid! --><p /> <!-- Invalid! -->
+```
+
+### Boolean Attributes in Svelte
+
+Svelte has its own syntax for boolean attributes that compiles to valid HTML:
+
+Correct:
+
+```svelte
+<input disabled={isDisabled} />
+<!-- Compiles correctly -->
+<input disabled={true} />
+<!-- Compiles correctly -->
+<input disabled />
+<!-- Static true -->
+```
+
+Incorrect:
+
+```svelte
+<input disabled="true" />
+<!-- String, not boolean! -->
+<input disabled={false} />
+<!-- Use conditional rendering instead -->
+```
+
+### Conditional Boolean Attributes
+
+For conditional boolean attributes, use Svelte's reactive syntax:
+
+```svelte
+<button disabled={!isValid}>Submit</button>
+<input required={fieldIsRequired} />
+```
+
+Do NOT use string values for boolean attributes.
 
 ---
 
@@ -69,6 +127,7 @@ Incorrect:
 - Use proper labels for form controls
 - Use `alt` text for images
 - Prefer native elements over ARIA where possible
+- Ensure keyboard navigation works correctly
 
 ---
 
@@ -81,3 +140,14 @@ Violations will fail:
 - CI
 
 These rules are **non-negotiable**.
+
+---
+
+## Migration Note
+
+When migrating Svelte 4 → Svelte 5:
+
+- Verify all HTML output remains valid
+- Check that boolean attributes compile correctly
+- Ensure no XHTML syntax was introduced
+- Test accessibility features after migration

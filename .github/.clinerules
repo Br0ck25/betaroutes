@@ -1,0 +1,21 @@
+# Cline AI Rules
+
+Read these files before making ANY changes:
+
+1. AI_AGENTS.md
+2. GOVERNANCE.md
+3. svelte-mixed-migration-agent.md
+4. PWA.md
+5. HTML_LIVING_STANDARD.md
+6. DESIGN_SYSTEM.md
+
+## Non-Negotiable Rules
+
+- Don't migrate files just because you're editing them
+- New features = Svelte 5 only
+- Only use approved colors
+- Don't break PWA offline mode
+- Generate valid HTML only
+- STOP and ask when uncertain
+
+See AI_AGENTS.md for complete instructions.

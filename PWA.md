@@ -39,6 +39,7 @@ Rules:
 - Icons must exist at declared paths
 - No invalid MIME types
 - No breaking changes to `start_url`
+- Manifest must be served with correct MIME type (`application/manifest+json`)
 
 ---
 
@@ -54,6 +55,16 @@ Forbidden:
 - Uncontrolled cache clearing
 - Breaking offline navigation
 - Blocking critical routes when offline
+
+---
+
+## SvelteKit Integration
+
+- Service worker must be compatible with SvelteKit's build output
+- Ensure `service-worker.js` is in the correct static directory (`static/` or `src/service-worker.js`)
+- Verify manifest is accessible and served correctly
+- Service worker must handle SvelteKit's client-side routing
+- Prerendered pages should be cached appropriately
 
 ---
 
@@ -80,6 +91,7 @@ If an update requires cache invalidation:
 
 - Document the reason
 - Verify offline behavior manually
+- Test across multiple devices/browsers
 
 ---
 
@@ -91,6 +103,7 @@ After any change that could affect PWA behavior:
 - Verify install prompt still appears (where applicable)
 - Verify offline mode works via DevTools
 - Ensure Lighthouse PWA score does not regress
+- Test on actual mobile devices when possible
 
 ---
 
@@ -99,7 +112,9 @@ After any change that could affect PWA behavior:
 ❌ Removing PWA metadata  
 ❌ Disabling service workers  
 ❌ Regressing offline support  
-❌ Reducing Lighthouse PWA compliance
+❌ Reducing Lighthouse PWA compliance  
+❌ Breaking manifest.json structure  
+❌ Removing or invalidating icons
 
 ---
 
@@ -113,3 +128,14 @@ Violations of these rules will:
 
 If compliance is unclear:
 **STOP and ask instead of guessing.**
+
+---
+
+## Migration Note
+
+When migrating Svelte 4 → Svelte 5:
+
+- Verify service worker continues to work with new build output
+- Check that routing changes don't break offline navigation
+- Ensure build artifacts are still cacheable
+- Test PWA functionality after migration
