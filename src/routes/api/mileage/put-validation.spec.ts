@@ -5,8 +5,8 @@ let mockMillageSvc: any;
 let mockTripKV: any;
 let mockEnv: any;
 
-vi.mock('$lib/server/millageService', () => ({
-	makeMillageService: () => mockMillageSvc
+vi.mock('$lib/server/mileageService', () => ({
+	makeMileageService: () => mockMillageSvc
 }));
 
 vi.mock('$lib/server/env', () => ({
@@ -22,9 +22,18 @@ vi.mock('$lib/server/user', () => ({
 	getStorageId: (user: any) => user?.id || 'test_user'
 }));
 
-describe('POST /api/millage - Parent trip validation', () => {
+describe('PUT /api/mileage/[id] - Parent trip validation', () => {
 	beforeEach(() => {
-		mockMillageSvc = { put: vi.fn(), get: vi.fn() };
+		mockMillageSvc = {
+			put: vi.fn(),
+			get: vi.fn().mockResolvedValue({
+				id: 'trip-123',
+				userId: 'u1',
+				miles: 100,
+				startOdometer: 0,
+				endOdometer: 100
+			})
+		};
 		mockTripKV = {
 			get: vi.fn()
 		};
@@ -35,22 +44,16 @@ describe('POST /api/millage - Parent trip validation', () => {
 		// Mock: trip not found
 		mockTripKV.get.mockResolvedValue(null);
 
-		const tripId = '550e8400-e29b-41d4-a716-446655440000'; // valid UUID
-		const body = {
-			id: tripId,
-			miles: 50,
-			millageRate: 0.725,
-			startOdometer: 0,
-			endOdometer: 50
-		};
+		const body = { miles: 150 };
 		const event: any = {
+			params: { id: 'trip-123' },
 			request: { json: async () => body },
 			locals: { user: { id: 'u1' } },
 			platform: { env: mockEnv }
 		};
 
-		const { POST } = await import('./+server');
-		const res = await POST(event as any);
+		const { PUT } = await import('./[id]/+server');
+		const res = await PUT(event as any);
 
 		expect(res.status).toBe(409);
 		const json = JSON.parse(await res.text());
@@ -59,9 +62,8 @@ describe('POST /api/millage - Parent trip validation', () => {
 
 	it('returns 409 when parent trip is deleted', async () => {
 		// Mock: trip exists but is deleted
-		const tripId = '550e8400-e29b-41d4-a716-446655440001'; // valid UUID
 		const deletedTrip = {
-			id: tripId,
+			id: 'trip-123',
 			userId: 'u1',
 			deleted: true,
 			deletedAt: new Date().toISOString(),
@@ -69,21 +71,16 @@ describe('POST /api/millage - Parent trip validation', () => {
 		};
 		mockTripKV.get.mockResolvedValue(JSON.stringify(deletedTrip));
 
-		const body = {
-			id: tripId,
-			miles: 50,
-			millageRate: 0.725,
-			startOdometer: 0,
-			endOdometer: 50
-		};
+		const body = { miles: 150 };
 		const event: any = {
+			params: { id: 'trip-123' },
 			request: { json: async () => body },
 			locals: { user: { id: 'u1' } },
 			platform: { env: mockEnv }
 		};
 
-		const { POST } = await import('./+server');
-		const res = await POST(event as any);
+		const { PUT } = await import('./[id]/+server');
+		const res = await PUT(event as any);
 
 		expect(res.status).toBe(409);
 		const json = JSON.parse(await res.text());
@@ -92,55 +89,45 @@ describe('POST /api/millage - Parent trip validation', () => {
 
 	it('succeeds when parent trip exists and is active', async () => {
 		// Mock: trip exists and is active
-		const tripId = '550e8400-e29b-41d4-a716-446655440002'; // valid UUID
 		const activeTrip = {
-			id: tripId,
+			id: 'trip-123',
 			userId: 'u1',
 			title: 'Active Trip',
-			totalMiles: 0
+			totalMiles: 100
 		};
 		mockTripKV.get.mockResolvedValue(JSON.stringify(activeTrip));
 
-		const body = {
-			id: tripId,
-			miles: 50,
-			millageRate: 0.725,
-			startOdometer: 0,
-			endOdometer: 50
-		};
+		const body = { miles: 150 };
 		const event: any = {
+			params: { id: 'trip-123' },
 			request: { json: async () => body },
 			locals: { user: { id: 'u1' } },
 			platform: { env: mockEnv }
 		};
 
-		const { POST } = await import('./+server');
-		const res = await POST(event as any);
+		const { PUT } = await import('./[id]/+server');
+		const res = await PUT(event as any);
 
-		expect(res.status).toBe(201);
+		expect(res.status).toBe(200);
 		expect(mockMillageSvc.put).toHaveBeenCalled();
 	});
 
-	it('skips validation when tripKV is not available (e.g., tests)', async () => {
+	it('skips validation when tripKV is not available', async () => {
 		// Mock: tripKV returns empty object (no get method)
 		mockTripKV = {};
 
-		const body = {
-			miles: 50,
-			millageRate: 0.725,
-			startOdometer: 0,
-			endOdometer: 50
-		};
+		const body = { miles: 150 };
 		const event: any = {
+			params: { id: 'trip-123' },
 			request: { json: async () => body },
 			locals: { user: { id: 'u1' } },
 			platform: { env: mockEnv }
 		};
 
-		const { POST } = await import('./+server');
-		const res = await POST(event as any);
+		const { PUT } = await import('./[id]/+server');
+		const res = await PUT(event as any);
 
-		expect(res.status).toBe(201);
+		expect(res.status).toBe(200);
 		expect(mockMillageSvc.put).toHaveBeenCalled();
 	});
 });

@@ -1,7 +1,7 @@
 // src/routes/api/trips/[id]/+server.ts
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
-import { makeMillageService, type MillageRecord } from '$lib/server/millageService';
+import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
 import type { TripRecord } from '$lib/server/tripService';
 import { log } from '$lib/server/log';
 import { safeDO } from '$lib/server/env';
@@ -63,19 +63,19 @@ export const GET: RequestHandler = async (event) => {
 			return new Response('Not Found', { status: 404 });
 		}
 
-		// Prefer authoritative millage from BETA_MILLAGE_KV (merge if present)
+		// Prefer authoritative mileage from BETA_MILLAGE_KV (merge if present)
 		try {
-			const millageKV = safeKV(event.platform?.env, 'BETA_MILLAGE_KV');
-			if (millageKV) {
-				const millageSvc = makeMillageService(
-					millageKV as any,
+			const mileageKV = safeKV(event.platform?.env, 'BETA_MILLAGE_KV');
+			if (mileageKV) {
+				const mileageSvc = makeMileageService(
+					mileageKV as any,
 					safeDO(event.platform?.env, 'TRIP_INDEX_DO')!
 				);
-				const m = await millageSvc.get(storageId, id);
+				const m = await mileageSvc.get(storageId, id);
 				if (m && typeof m.miles === 'number') trip.totalMiles = m.miles;
 			}
 		} catch (err) {
-			log.warn('Failed to merge millage into trip response', { tripId: id, err });
+			log.warn('Failed to merge mileage into trip response', { tripId: id, err });
 		}
 
 		return new Response(JSON.stringify(trip), {
@@ -136,16 +136,16 @@ export const PUT: RequestHandler = async (event) => {
 
 		await svc.put(updated as unknown as TripRecord);
 
-		// If client edited totalMiles, persist authoritative millage to its own KV so updates propagate to other clients
+		// If client edited totalMiles, persist authoritative mileage to its own KV so updates propagate to other clients
 		try {
 			if (Object.prototype.hasOwnProperty.call(body, 'totalMiles')) {
-				const millageKV = safeKV(event.platform?.env, 'BETA_MILLAGE_KV');
-				if (millageKV) {
-					const millageSvc = makeMillageService(
-						millageKV as any,
+				const mileageKV = safeKV(event.platform?.env, 'BETA_MILLAGE_KV');
+				if (mileageKV) {
+					const mileageSvc = makeMileageService(
+						mileageKV as any,
 						safeDO(event.platform?.env, 'TRIP_INDEX_DO')!
 					);
-					const millageRec = {
+					const mileageRec = {
 						id,
 						userId: storageId,
 						date: (body['date'] as string) || (existing as any).date || new Date().toISOString(),
@@ -155,9 +155,9 @@ export const PUT: RequestHandler = async (event) => {
 						createdAt: (existing as any).createdAt || new Date().toISOString(),
 						updatedAt: new Date().toISOString()
 					};
-					const p = millageSvc
-						.put(millageRec as any)
-						.catch((err) => log.warn('millage.put failed for trip update', { tripId: id, err }));
+					const p = mileageSvc
+						.put(mileageRec as any)
+						.catch((err) => log.warn('mileage.put failed for trip update', { tripId: id, err }));
 					try {
 						if (event.platform?.context?.waitUntil) event.platform.context.waitUntil(p as any);
 						else if ((event as any)?.context?.waitUntil) (event as any).context.waitUntil(p);
@@ -167,7 +167,7 @@ export const PUT: RequestHandler = async (event) => {
 				}
 			}
 		} catch (err) {
-			log.warn('Failed to persist millage for trip update', {
+			log.warn('Failed to persist mileage for trip update', {
 				tripId: id,
 				message: createSafeErrorMessage(err)
 			});
@@ -236,21 +236,21 @@ export const DELETE: RequestHandler = async (event) => {
 
 		// --- Cascade delete: Delete linked mileage log ---
 		try {
-			const millageKV = safeKV(event.platform?.env, 'BETA_MILLAGE_KV');
-			if (millageKV) {
-				const millageSvc = makeMillageService(
-					millageKV as unknown as KVNamespace,
+			const mileageKV = safeKV(event.platform?.env, 'BETA_MILLAGE_KV');
+			if (mileageKV) {
+				const mileageSvc = makeMileageService(
+					mileageKV as unknown as KVNamespace,
 					tripIndexDO as unknown as DurableObjectNamespace
 				);
 				// Find mileage logs linked to this trip
 				// Mileage logs can be linked by tripId OR by having the same id as the trip
-				const allMillage = await millageSvc.list(storageId);
-				const linkedMillage = allMillage.filter(
-					(m: MillageRecord) => m.tripId === id || m.id === id
+				const allMileage = await mileageSvc.list(storageId);
+				const linkedMileage = allMileage.filter(
+					(m: MileageRecord) => m.tripId === id || m.id === id
 				);
-				for (const m of linkedMillage) {
-					await millageSvc.delete(storageId, m.id);
-					log.info('Cascade deleted mileage log for trip', { tripId: id, millageId: m.id });
+				for (const m of linkedMileage) {
+					await mileageSvc.delete(storageId, m.id);
+					log.info('Cascade deleted mileage log for trip', { tripId: id, mileageId: m.id });
 				}
 			}
 		} catch (e) {

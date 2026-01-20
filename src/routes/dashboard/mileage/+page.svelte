@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { millage, isLoading as millageLoading } from '$lib/stores/millage';
+	import { mileage, isLoading as mileageLoading } from '$lib/stores/mileage';
 	import { trips, isLoading as tripsLoading } from '$lib/stores/trips';
 	import { userSettings } from '$lib/stores/userSettings';
 	import { getVehicleDisplayName } from '$lib/utils/vehicle';
@@ -18,31 +18,31 @@
 	export let data: PageData;
 
 	// [!code fix] Only run hydration in the browser
-	$: if (browser && data.millage) {
+	$: if (browser && data.mileage) {
 		const normalize = (records: any[]) =>
 			records.map((r) => ({ ...r, syncStatus: (r as any).syncStatus ?? 'synced' }));
-		const normalized = normalize(data.millage);
+		const normalized = normalize(data.mileage);
 
 		// eslint-disable-next-line svelte/require-store-reactive-access
-		if ($user?.id && 'hydrate' in millage) {
-			millage.hydrate(normalized, $user.id);
+		if ($user?.id && 'hydrate' in mileage) {
+			mileage.hydrate(normalized, $user.id);
 		} else {
-			millage.set(normalized);
+			mileage.set(normalized);
 		}
 	}
 
-	let isMillageSettingsOpen = false;
+	let isMileageSettingsOpen = false;
 
 	// Derived totals
 	$: totalMiles = filteredExpenses.reduce((s, e) => s + (Number((e as any).miles) || 0), 0);
-	// Millage Deduction = sum of (miles * rate) per log — prefer stored `reimbursement` but compute if missing
+	// Mileage Deduction = sum of (miles * rate) per log — prefer stored `reimbursement` but compute if missing
 	$: totalMillageDeduction = filteredExpenses.reduce((s, e) => {
 		const rec = e as any;
 		if (typeof rec.reimbursement === 'number') return s + Number(rec.reimbursement);
 		const r =
-			typeof rec.millageRate === 'number'
-				? Number(rec.millageRate)
-				: Number($userSettings?.millageRate) || 0;
+			typeof rec.mileageRate === 'number'
+				? Number(rec.mileageRate)
+				: Number($userSettings?.mileageRate) || 0;
 		return s + (Number(rec.miles || 0) * r || 0);
 	}, 0);
 
@@ -66,7 +66,7 @@
 	$: visibleExpenses = filteredExpenses.slice(0, visibleLimit);
 	let _lastExpandedSize = 0;
 
-	$: loading = $millageLoading || $tripsLoading;
+	$: loading = $mileageLoading || $tripsLoading;
 
 	/* eslint-disable svelte/infinite-reactive-loop */
 	$: if (
@@ -110,7 +110,7 @@
 	$: tripExpenses = $trips.flatMap((_trip) => []);
 
 	$: allExpenses = [
-		...$millage.filter(
+		...$mileage.filter(
 			(r) =>
 				typeof (r as any).miles === 'number' ||
 				typeof (r as any).startOdometer === 'number' ||
@@ -164,14 +164,14 @@
 	$: allSelected = filteredExpenses.length > 0 && selectedExpenses.size === filteredExpenses.length;
 
 	function goToAdd() {
-		goto('/dashboard/millage/new');
+		goto('/dashboard/mileage/new');
 	}
 
 	function editExpense(expense: any) {
 		if ((expense as any).source === 'trip') {
 			goto(`/dashboard/trips?id=${expense.tripId}`);
 		} else {
-			goto(`/dashboard/millage/edit/${expense.id}`);
+			goto(`/dashboard/mileage/edit/${expense.id}`);
 		}
 	}
 
@@ -188,7 +188,7 @@
 			currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
 		if (userId) {
 			try {
-				await millage.deleteMillage(id, String(userId));
+				await mileage.deleteMileage(id, String(userId));
 				toasts.success('Log moved to trash');
 				if (selectedExpenses.has(id)) {
 					selectedExpenses.delete(id);
@@ -237,7 +237,7 @@
 		let successCount = 0;
 		for (const id of manualExpenses) {
 			try {
-				await millage.deleteMillage(id, String(userId));
+				await mileage.deleteMileage(id, String(userId));
 				successCount++;
 			} catch (err) {
 				console.error(`Failed to delete ${id}`, err);
@@ -403,20 +403,20 @@
 </script>
 
 <svelte:head>
-	<title>Millage Log - Go Route Yourself</title>
+	<title>Mileage Log - Go Route Yourself</title>
 </svelte:head>
 
 <div class="page-container">
 	<div class="page-header">
 		<div class="header-text">
-			<h1 class="page-title">Millage</h1>
+			<h1 class="page-title">Mileage</h1>
 			<p class="page-subtitle">Log odometer readings and miles</p>
 		</div>
 
 		<div class="header-actions">
 			<button
 				class="btn-secondary"
-				on:click={() => goto('/dashboard/trash?type=millage')}
+				on:click={() => goto('/dashboard/trash?type=mileage')}
 				aria-label="View Trash"
 			>
 				<svg
@@ -436,8 +436,8 @@
 			</button>
 			<button
 				class="btn-secondary"
-				on:click={() => (isMillageSettingsOpen = true)}
-				aria-label="Millage Settings"
+				on:click={() => (isMileageSettingsOpen = true)}
+				aria-label="Mileage Settings"
 			>
 				<svg
 					width="20"
@@ -455,7 +455,7 @@
 					<circle cx="12" cy="12" r="3"></circle>
 				</svg>
 			</button>
-			<SettingsModal bind:open={isMillageSettingsOpen} />
+			<SettingsModal bind:open={isMileageSettingsOpen} />
 
 			<button class="btn-primary" on:click={goToAdd}>
 				<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -467,7 +467,7 @@
 						stroke-linejoin="round"
 					/>
 				</svg>
-				New Millage
+				New Mileage
 			</button>
 		</div>
 	</div>
@@ -484,7 +484,7 @@
 		</div>
 
 		<div class="summary-card">
-			<div class="summary-label">Millage Deduction</div>
+			<div class="summary-label">Mileage Deduction</div>
 			<div class="summary-value">{formatCurrency(totalMillageDeduction)}</div>
 		</div>
 
@@ -536,7 +536,7 @@
 				id="search-expenses"
 				name="searchQuery"
 				type="text"
-				placeholder="Search millage logs..."
+				placeholder="Search mileage logs..."
 				bind:value={searchQuery}
 			/>
 		</div>
@@ -733,8 +733,8 @@
 							<div class="stat-item">
 								<span class="stat-label">Rate</span>
 								<span class="stat-value"
-									>{expense.millageRate != null
-										? `$${Number(expense.millageRate).toFixed(3)}/mi`
+									>{expense.mileageRate != null
+										? `$${Number(expense.mileageRate).toFixed(3)}/mi`
 										: '-'}</span
 								>
 							</div>
@@ -751,7 +751,7 @@
 		</div>
 	{:else}
 		<div class="empty-state">
-			<p>No millage logs found matching your filters.</p>
+			<p>No mileage logs found matching your filters.</p>
 		</div>
 	{/if}
 </div>

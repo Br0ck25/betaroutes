@@ -1,6 +1,6 @@
 // src/lib/stores/trips.ts
 import { writable, get } from 'svelte/store';
-import { getDB } from '$lib/db/indexedDB';
+import { getDB, getMileageStoreName } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
 import type { TripRecord } from '$lib/db/types';
 import { storage } from '$lib/utils/storage';
@@ -181,25 +181,25 @@ function createTripsStore() {
 				});
 				try {
 					if (Object.prototype.hasOwnProperty.call(changes, 'totalMiles')) {
-						const { millage } = await import('$lib/stores/millage');
-						const existingMillage = await millage.get(id, userId);
+						const { mileage } = await import('$lib/stores/mileage');
+						const existingMileage = await mileage.get(id, userId);
 
-						if (existingMillage) {
+						if (existingMileage) {
 							// Update existing mileage record
-							await millage.updateMillage(
+							await mileage.updateMileage(
 								id,
 								{ miles: Number((changes as any).totalMiles) },
 								userId
 							);
 						} else if (Number((changes as any).totalMiles) > 0) {
 							// Create new mileage record if none exists and miles > 0
-							await millage.create(
+							await mileage.create(
 								{
 									id,
 									tripId: id,
 									miles: Number((changes as any).totalMiles),
 									date: updated.date,
-									millageRate: (get(userSettings) as any)?.millageRate ?? undefined,
+									mileageRate: (get(userSettings) as any)?.mileageRate ?? undefined,
 									vehicle:
 										(get(userSettings) as any)?.vehicles?.[0]?.id ??
 										(get(userSettings) as any)?.vehicles?.[0]?.name ??
@@ -212,7 +212,7 @@ function createTripsStore() {
 						}
 					}
 				} catch (err) {
-					console.warn('Failed to mirror trip mileage to local millage store:', err);
+					console.warn('Failed to mirror trip mileage to local mileage store:', err);
 				}
 				return updated;
 			} catch (err) {
@@ -256,37 +256,36 @@ function createTripsStore() {
 				};
 
 				// Check and capture mileage - create SEPARATE trash item for mileage
-				const millageTx = db.transaction('millage', 'readwrite');
-				const activeMillage = await millageTx.objectStore('millage').get(id);
-				let millageTrashItem: any = null;
-				if (activeMillage) {
+				const mileageTx = db.transaction('mileage', 'readwrite');
+				const activeMileage = await mileageTx.objectStore('mileage').get(id);
+				let mileageTrashItem: any = null;
+				if (activeMileage) {
 					// Store mileage backup in trip item for reference
-					trashItem.backups.millage = { ...activeMillage };
+					trashItem.backups.mileage = { ...activeMileage };
 					// Also store top-level props for easy UI display
-					trashItem.miles = activeMillage.miles;
-					trashItem.vehicle = activeMillage.vehicle;
+					trashItem.miles = activeMileage.miles;
+					trashItem.vehicle = activeMileage.vehicle;
 
 					// Create SEPARATE trash item for mileage so user can restore it independently
-					millageTrashItem = {
-						...activeMillage,
-						id: `millage:${id}`,
+					mileageTrashItem = {
+						...activeMileage,
+						id: `mileage:${id}`,
 						originalId: id,
-						userId: activeMillage.userId,
+						userId: activeMileage.userId,
 						deletedAt: now.toISOString(),
 						deletedBy: userId,
 						expiresAt: expiresAt.toISOString(),
-						originalKey: `millage:${userId}:${id}`,
+						originalKey: `mileage:${userId}:${id}`,
 						syncStatus: 'pending',
-						recordType: 'millage',
+						recordType: 'mileage',
 						tripId: id,
-						backups: { millage: { ...activeMillage } }
+						backups: { mileage: { ...activeMileage } }
 					};
 
 					// Delete from active store
-					await millageTx.objectStore('millage').delete(id);
+					await mileageTx.objectStore(mileageStoreName).delete(id);
 				}
-				await millageTx.done;
-
+				await mileageTx.done;
 				// Save trash items (trip and optionally mileage)
 				const trashTx = db.transaction('trash', 'readwrite');
 				await trashTx.objectStore('trash').put(trashItem);

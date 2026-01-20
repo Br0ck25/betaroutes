@@ -1,10 +1,10 @@
-// src/lib/server/millageService.ts
+// src/lib/server/mileageService.ts
 import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
 import { DO_ORIGIN, RETENTION } from '$lib/constants';
 import { log } from '$lib/server/log';
 import { calculateFuelCost } from '$lib/utils/calculations';
 
-export interface MillageRecord {
+export interface MileageRecord {
 	id: string;
 	userId: string;
 	/** Optional link to parent trip */
@@ -21,7 +21,7 @@ export interface MillageRecord {
 	[key: string]: unknown;
 }
 
-export function makeMillageService(
+export function makeMileageService(
 	kv: KVNamespace,
 	tripIndexDO: DurableObjectNamespace,
 	tripKV?: KVNamespace
@@ -32,34 +32,34 @@ export function makeMillageService(
 	};
 
 	return {
-		async list(userId: string, since?: string): Promise<MillageRecord[]> {
+		async list(userId: string, since?: string): Promise<MileageRecord[]> {
 			const stub = getIndexStub(userId);
-			const prefix = `millage:${userId}:`;
+			const prefix = `mileage:${userId}:`;
 
 			// 1. Try to fetch from Durable Object index first
-			let millage: MillageRecord[] = [];
+			let mileage: MileageRecord[] = [];
 			try {
-				const res = await stub.fetch(`${DO_ORIGIN}/millage/list`);
+				const res = await stub.fetch(`${DO_ORIGIN}/mileage/list`);
 				if (res.ok) {
-					millage = (await res.json()) as MillageRecord[];
+					mileage = (await res.json()) as MileageRecord[];
 				} else {
-					log.error(`[MillageService] DO Error: ${res.status}`);
+					log.error(`[MileageService] DO Error: ${res.status}`);
 				}
 			} catch (err) {
-				log.warn('[MillageService] DO fetch failed, falling back to KV', err);
+				log.warn('[MileageService] DO fetch failed, falling back to KV', err);
 			}
 
 			// SELF-HEALING: If Index is empty but KV has data, force sync/migrate
-			if (millage.length === 0) {
+			if (mileage.length === 0) {
 				const kvCheck = await kv.list({ prefix, limit: 1 });
 
 				if (kvCheck.keys.length > 0) {
 					log.info(
-						`[MillageService] Detected desync for ${userId} (KV has data, Index empty). repairing...`
+						`[MileageService] Detected desync for ${userId} (KV has data, Index empty). repairing...`
 					);
 
 					// Fetch ALL data from KV
-					const all: MillageRecord[] = [];
+					const all: MileageRecord[] = [];
 					let list = await kv.list({ prefix });
 					let keys = list.keys;
 
@@ -89,14 +89,14 @@ export function makeMillageService(
 
 					// Force Push to DO
 					if (all.length > 0) {
-						await stub.fetch(`${DO_ORIGIN}/millage/migrate`, {
+						await stub.fetch(`${DO_ORIGIN}/mileage/migrate`, {
 							method: 'POST',
 							body: JSON.stringify(all)
 						});
 
-						millage = all;
+						mileage = all;
 						log.info(
-							`[MillageService] Migrated ${migratedCount} items (${skippedTombstones} tombstones included)`
+							`[MileageService] Migrated ${migratedCount} items (${skippedTombstones} tombstones included)`
 						);
 					}
 				}
@@ -105,12 +105,12 @@ export function makeMillageService(
 			// Delta Sync: Return everything (including deletions)
 			if (since) {
 				const sinceDate = new Date(since);
-				return millage.filter((m) => new Date(m.updatedAt || m.createdAt) > sinceDate);
+				return mileage.filter((m) => new Date(m.updatedAt || m.createdAt) > sinceDate);
 			}
 
 			// [!code fix] Full List: Filter out deleted items (Tombstones)
 			// This prevents deleted items from appearing on page load/refresh
-			return millage
+			return mileage
 				.filter((m) => !m.deleted)
 				.sort((a, b) =>
 					(b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || '')
@@ -122,16 +122,16 @@ export function makeMillageService(
 			return all.find((m) => m.id === id) || null;
 		},
 
-		async put(item: MillageRecord) {
+		async put(item: MileageRecord) {
 			item.updatedAt = new Date().toISOString();
 			delete item.deleted;
 
 			// Write to KV
-			await kv.put(`millage:${item.userId}:${item.id}`, JSON.stringify(item));
+			await kv.put(`mileage:${item.userId}:${item.id}`, JSON.stringify(item));
 
 			// Write to DO
 			const stub = getIndexStub(item.userId);
-			await stub.fetch(`${DO_ORIGIN}/millage/put`, {
+			await stub.fetch(`${DO_ORIGIN}/mileage/put`, {
 				method: 'POST',
 				body: JSON.stringify(item)
 			});
@@ -140,7 +140,7 @@ export function makeMillageService(
 		async delete(userId: string, id: string) {
 			const stub = getIndexStub(userId);
 
-			const key = `millage:${userId}:${id}`;
+			const key = `mileage:${userId}:${id}`;
 			const raw = await kv.get(key);
 			if (!raw) return;
 
@@ -172,7 +172,7 @@ export function makeMillageService(
 			});
 
 			// Update DO with tombstone (PUT)
-			await stub.fetch(`${DO_ORIGIN}/millage/put`, {
+			await stub.fetch(`${DO_ORIGIN}/mileage/put`, {
 				method: 'POST',
 				body: JSON.stringify(tombstone)
 			});
@@ -190,12 +190,12 @@ export function makeMillageService(
 							trip.updatedAt = now.toISOString();
 							await tripKV.put(tripKey, JSON.stringify(trip));
 							log.info(
-								`[MillageService] Set trip ${id} totalMiles and fuelCost to 0 after mileage deletion`
+								`[MileageService] Set trip ${id} totalMiles and fuelCost to 0 after mileage deletion`
 							);
 						}
 					}
 				} catch (err) {
-					log.warn(`[MillageService] Failed to zero trip totalMiles after mileage delete`, {
+					log.warn(`[MileageService] Failed to zero trip totalMiles after mileage delete`, {
 						id,
 						error: err
 					});
@@ -204,7 +204,7 @@ export function makeMillageService(
 		},
 
 		async listTrash(userId: string) {
-			const prefix = `millage:${userId}:`;
+			const prefix = `mileage:${userId}:`;
 			let list = await kv.list({ prefix });
 			let keys = list.keys;
 			while (!list.list_complete && list.cursor) {
@@ -238,7 +238,7 @@ export function makeMillageService(
 					id,
 					userId: uid,
 					metadata: metadata as Record<string, unknown>,
-					recordType: 'millage',
+					recordType: 'mileage',
 					miles:
 						typeof (backup['miles'] as number) === 'number'
 							? (backup['miles'] as number)
@@ -256,18 +256,18 @@ export function makeMillageService(
 			return out;
 		},
 		async permanentDelete(userId: string, itemId: string) {
-			const key = `millage:${userId}:${itemId}`;
+			const key = `mileage:${userId}:${itemId}`;
 			await kv.delete(key);
 
 			const stub = getIndexStub(userId);
-			await stub.fetch(`${DO_ORIGIN}/millage/delete`, {
+			await stub.fetch(`${DO_ORIGIN}/mileage/delete`, {
 				method: 'POST',
 				body: JSON.stringify({ id: itemId })
 			});
 		},
 
 		async restore(userId: string, itemId: string) {
-			const key = `millage:${userId}:${itemId}`;
+			const key = `mileage:${userId}:${itemId}`;
 			const raw = await kv.get(key);
 			if (!raw) throw new Error('Item not found');
 

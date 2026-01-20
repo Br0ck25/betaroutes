@@ -7,7 +7,7 @@
 
 	const resolve = (href: string) => `${base}${href}`;
 	import { user } from '$lib/stores/auth';
-	import { millage } from '$lib/stores/millage';
+	import { mileage } from '$lib/stores/mileage';
 	import { page } from '$app/stores';
 	import { autocomplete } from '$lib/utils/autocomplete';
 	import { optimizeRoute } from '$lib/services/maps';
@@ -104,8 +104,8 @@
 		tripData.stops = safeStops as any as LocalStop[];
 		tripData.maintenanceItems = safeMaintenance as any;
 		tripData.suppliesItems = safeSupplies as any;
-		// Use trip's totalMiles as source of truth, millage store is for display on millage page
-		const milesFromMillage = $millage.find((m: any) => m.id === tripId)?.miles;
+		// Use trip's totalMiles as source of truth, mileage store is for display on mileage page
+		const milesFromMileage = $mileage.find((m: any) => m.id === tripId)?.miles;
 		const milesValue = Number(milesFromMillage ?? src.totalMiles) || 0;
 		tripData.totalMiles = milesValue;
 		tripData.mpg = Number.isFinite(Number(src.mpg))

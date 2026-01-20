@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Module-level mocks are declared here so vitest's hoisting behaves predictably.
 let mockSvc: any;
 let mockTripSvc: any;
-vi.mock('$lib/server/millageService', () => ({
-	makeMillageService: () => mockSvc
+vi.mock('$lib/server/mileageService', () => ({
+	makeMileageService: () => mockSvc
 }));
 vi.mock('$lib/server/tripService', () => ({
 	makeTripService: () => mockTripSvc
@@ -15,7 +15,7 @@ vi.mock('$lib/server/env', () => ({
 	safeDO: () => ({})
 }));
 
-describe('PUT /api/millage/[id] handler', () => {
+describe('PUT /api/mileage/[id] handler', () => {
 	beforeEach(() => {
 		mockSvc = {
 			get: vi.fn(),
@@ -105,7 +105,7 @@ describe('PUT /api/millage/[id] handler', () => {
 		const existing = { id: 'r3', userId: 'u1', miles: 0 };
 		mockSvc.get.mockResolvedValue(existing);
 
-		const body = { miles: 10, millageRate: 0.725 };
+		const body = { miles: 10, mileageRate: 0.725 };
 		const event: any = {
 			params: { id: 'r3' },
 			locals: { user: { id: 'u1' } },

@@ -1,8 +1,8 @@
-// src/lib/stores/millage.ts
+// src/lib/stores/mileage.ts
 import { writable, get } from 'svelte/store';
-import { getDB } from '$lib/db/indexedDB';
+import { getDB, getMileageStoreName } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
-import type { MillageRecord } from '$lib/db/types';
+import type { MileageRecord } from '$lib/db/types';
 import type { User } from '$lib/types';
 import { auth } from '$lib/stores/auth';
 import { calculateFuelCost } from '$lib/utils/calculations';
@@ -29,13 +29,13 @@ function buildTrashTimestampMap(trashItems: TrashItemLike[]): Map<string, string
 
 // Helper to check if a mileage record should be filtered out based on trash entries
 // Accepts just the id and createdAt to avoid needing a full MillageRecord
-function shouldFilterOutMillage(
+function shouldFilterOutMileage(
 	id: string,
 	createdAt: string,
 	trashMap: Map<string, string>
 ): boolean {
 	const rawTrashDeletedAt = trashMap.get(id);
-	const prefixedTrashDeletedAt = trashMap.get(`millage:${id}`);
+	const prefixedTrashDeletedAt = trashMap.get(`mileage:${id}`);
 	const trashDeletedAt = rawTrashDeletedAt || prefixedTrashDeletedAt;
 
 	// If not in trash at all, don't filter out
@@ -52,8 +52,8 @@ function shouldFilterOutMillage(
 	return true;
 }
 
-function createMillageStore() {
-	const { subscribe, set, update } = writable<MillageRecord[]>([]);
+function createMileageStore() {
+	const { subscribe, set, update } = writable<MileageRecord[]>([]);
 	let _hydrationPromise: Promise<void> | null = null;
 	let _resolveHydration: any = null;
 	void _hydrationPromise;
@@ -63,7 +63,7 @@ function createMillageStore() {
 		subscribe,
 		set,
 		// ... (keep hydrate, updateLocal, load, create, updateMillage as they are) ...
-		async hydrate(data: MillageRecord[], _userId?: string) {
+		async hydrate(data: MileageRecord[], _userId?: string) {
 			// ... copy from previous ...
 			void _userId;
 			_hydrationPromise = new Promise((res) => (_resolveHydration = res));
@@ -80,15 +80,16 @@ function createMillageStore() {
 				const trashMap = buildTrashTimestampMap(trashItems as TrashItemLike[]);
 				await trashTx.done;
 				const validServerData = data.filter(
-					(item) => !shouldFilterOutMillage(item.id, item.createdAt, trashMap)
+					(item) => !shouldFilterOutMileage(item.id, item.createdAt, trashMap)
 				);
 				const serverIdSet = new Set(validServerData.map((i) => i.id));
 				set(validServerData);
-				const tx = db.transaction(['millage', 'trash'], 'readwrite');
-				const store = tx.objectStore('millage');
+				const mileageStoreName = getMileageStoreName(db);
+				const tx = db.transaction([mileageStoreName, 'trash'], 'readwrite');
+				const store = tx.objectStore(mileageStoreName);
 				const localItems = await store.getAll();
 				for (const local of localItems) {
-					if (shouldFilterOutMillage(local.id, local.createdAt, trashMap)) {
+					if (shouldFilterOutMileage(local.id, local.createdAt, trashMap)) {
 						await store.delete(local.id);
 					} else if (local.syncStatus === 'synced' && !serverIdSet.has(local.id)) {
 						await store.delete(local.id);
@@ -101,12 +102,12 @@ function createMillageStore() {
 				if (_resolveHydration) _resolveHydration();
 				_hydrationPromise = null;
 			} catch (err) {
-				console.error('Failed to hydrate millage cache:', err);
+				console.error('Failed to hydrate mileage cache:', err);
 				_resolveHydration?.();
 				_hydrationPromise = null;
 			}
 		},
-		updateLocal(record: MillageRecord) {
+		updateLocal(record: MileageRecord) {
 			// ... copy from previous ...
 			update((items) => {
 				const index = items.findIndex((r) => r.id === record.id);
@@ -127,10 +128,11 @@ function createMillageStore() {
 			isLoading.set(true);
 			try {
 				const db = await getDB();
-				const tx = db.transaction(['millage', 'trash'], 'readonly');
-				const store = tx.objectStore('millage');
+				const mileageStoreName = getMileageStoreName(db);
+				const tx = db.transaction([mileageStoreName, 'trash'], 'readonly');
+				const store = tx.objectStore(mileageStoreName);
 				const trashStore = tx.objectStore('trash');
-				let items: MillageRecord[];
+				let items: MileageRecord[];
 				if (userId) {
 					const index = store.index('userId');
 					items = await index.getAll(userId);
@@ -140,7 +142,7 @@ function createMillageStore() {
 				const trashItems = await trashStore.getAll();
 				const trashMap = buildTrashTimestampMap(trashItems as TrashItemLike[]);
 				const activeItems = items.filter(
-					(item) => !shouldFilterOutMillage(item.id, item.createdAt, trashMap)
+					(item) => !shouldFilterOutMileage(item.id, item.createdAt, trashMap)
 				);
 				activeItems.sort((a, b) => {
 					const dateA = new Date(a.date || a.createdAt).getTime();
@@ -150,16 +152,16 @@ function createMillageStore() {
 				set(activeItems);
 				return activeItems;
 			} catch (err) {
-				console.error('❌ Failed to load millage:', err);
+				console.error('❌ Failed to load mileage:', err);
 				set([]);
 				return [];
 			} finally {
 				isLoading.set(false);
 			}
 		},
-		async create(data: Partial<MillageRecord>, userId: string) {
+		async create(data: Partial<MileageRecord>, userId: string) {
 			// ... copy from previous ...
-			const record: MillageRecord = {
+			const record: MileageRecord = {
 				...data,
 				id: data.id || crypto.randomUUID(),
 				userId,
@@ -170,7 +172,7 @@ function createMillageStore() {
 					typeof data.miles === 'number'
 						? data.miles
 						: Math.max(0, Number(data.endOdometer) - Number(data.startOdometer)),
-				millageRate: typeof data.millageRate === 'number' ? data.millageRate : undefined,
+				mileageRate: typeof data.mileageRate === 'number' ? data.mileageRate : undefined,
 				vehicle: data.vehicle || undefined,
 				reimbursement: typeof data.reimbursement === 'number' ? data.reimbursement : undefined,
 				notes: data.notes || '',
@@ -179,11 +181,11 @@ function createMillageStore() {
 				syncStatus: 'pending'
 			};
 			if (typeof record.reimbursement !== 'number') {
-				let rate: number | undefined = record.millageRate;
+				let rate: number | undefined = record.mileageRate;
 				if (rate == null) {
 					try {
 						const { userSettings } = await import('$lib/stores/userSettings');
-						rate = (userSettings && (userSettings as any).millageRate) || undefined;
+						rate = (userSettings && (userSettings as any).mileageRate) || undefined;
 					} catch {
 						/* ignore */
 					}
@@ -195,22 +197,23 @@ function createMillageStore() {
 			update((items) => [record, ...items]);
 			try {
 				const db = await getDB();
-				const tx = db.transaction('millage', 'readwrite');
-				await tx.objectStore('millage').put(record);
+				const mileageStoreName = getMileageStoreName(db);
+				const tx = db.transaction(mileageStoreName, 'readwrite');
+				await tx.objectStore(mileageStoreName).put(record);
 				await tx.done;
 				await syncManager.addToQueue({
 					action: 'create',
 					tripId: record.id,
-					data: { ...record, store: 'millage' }
+					data: { ...record, store: 'mileage' }
 				});
 				return record;
 			} catch (err) {
-				console.error('❌ Failed to create millage record:', err);
+				console.error('❌ Failed to create mileage record:', err);
 				this.load(userId);
 				throw err;
 			}
 		},
-		async updateMillage(id: string, changes: Partial<MillageRecord>, userId: string) {
+		async updateMileage(id: string, changes: Partial<MileageRecord>, userId: string) {
 			// ... copy from previous ...
 			update((items) =>
 				items.map((r) =>
@@ -219,12 +222,13 @@ function createMillageStore() {
 			);
 			try {
 				const db = await getDB();
-				const tx = db.transaction('millage', 'readwrite');
-				const store = tx.objectStore('millage');
+				const mileageStoreName = getMileageStoreName(db);
+				const tx = db.transaction(mileageStoreName, 'readwrite');
+				const store = tx.objectStore(mileageStoreName);
 				const existing = await store.get(id);
-				if (!existing) throw new Error('Millage record not found');
+				if (!existing) throw new Error('Mileage record not found');
 				if (existing.userId !== userId) throw new Error('Unauthorized');
-				const updated: MillageRecord = {
+				const updated: MileageRecord = {
 					...existing,
 					...changes,
 					id,
@@ -245,7 +249,7 @@ function createMillageStore() {
 					updated.miles = Math.max(0, Number(updated.endOdometer) - Number(updated.startOdometer));
 				}
 				const milesChanged = Object.prototype.hasOwnProperty.call(changes, 'miles');
-				const rateChanged = Object.prototype.hasOwnProperty.call(changes, 'millageRate');
+				const rateChanged = Object.prototype.hasOwnProperty.call(changes, 'mileageRate');
 				const reimbursementExplicit = Object.prototype.hasOwnProperty.call(
 					changes,
 					'reimbursement'
@@ -255,11 +259,11 @@ function createMillageStore() {
 					(milesChanged || rateChanged) &&
 					typeof updated.miles === 'number'
 				) {
-					let rate = typeof updated.millageRate === 'number' ? updated.millageRate : undefined;
+					let rate = typeof updated.mileageRate === 'number' ? updated.mileageRate : undefined;
 					if (rate == null) {
 						try {
 							const { userSettings } = await import('$lib/stores/userSettings');
-							rate = (userSettings && (userSettings as any).millageRate) || undefined;
+							rate = (userSettings && (userSettings as any).mileageRate) || undefined;
 						} catch {
 							/* ignore */
 						}
@@ -308,19 +312,19 @@ function createMillageStore() {
 				await syncManager.addToQueue({
 					action: 'update',
 					tripId: id,
-					data: { ...updated, store: 'millage' }
+					data: { ...updated, store: 'mileage' }
 				});
 				return updated;
 			} catch (err) {
-				console.error('❌ Failed to update millage:', err);
+				console.error('❌ Failed to update mileage:', err);
 				this.load(userId);
 				throw err;
 			}
 		},
 
 		// [!code focus] THE FIX IS HERE
-		async deleteMillage(id: string, userId: string) {
-			let previous: MillageRecord[] = [];
+		async deleteMileage(id: string, userId: string) {
+			let previous: MileageRecord[] = [];
 			update((current) => {
 				previous = current;
 				return current.filter((r) => r.id !== id);
@@ -328,17 +332,17 @@ function createMillageStore() {
 
 			try {
 				const db = await getDB();
-				const tx = db.transaction(['millage', 'trash'], 'readwrite');
-				const millageStore = tx.objectStore('millage');
+				const tx = db.transaction(['mileage', 'trash'], 'readwrite');
+				const mileageStore = tx.objectStore(mileageStoreName);
 				const trashStore = tx.objectStore('trash');
 
-				const rec = await millageStore.get(id);
+				const rec = await mileageStore.get(id);
 				if (!rec) {
 					await tx.done;
 					await syncManager.addToQueue({
 						action: 'delete',
 						tripId: id,
-						data: { store: 'millage' }
+						data: { store: 'mileage' }
 					});
 					return;
 				}
@@ -350,27 +354,26 @@ function createMillageStore() {
 				const now = new Date();
 				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-				// Use prefixed ID "millage:..." to avoid collision
+				// Use prefixed ID "mileage:..." to avoid collision
 				const trashItem = {
-					id: `millage:${rec.id}`,
+					id: `mileage:${rec.id}`,
 					tripId: rec.id,
-					type: 'millage',
-					recordType: 'millage',
+					type: 'mileage',
+					recordType: 'mileage',
 					data: rec,
 					deletedAt: now.toISOString(),
 					deletedBy: userId,
 					expiresAt: expiresAt.toISOString(),
-					originalKey: `millage:${userId}:${id}`,
+					originalKey: `mileage:${userId}:${id}`,
 					syncStatus: 'pending',
 					miles: rec.miles,
 					vehicle: rec.vehicle,
 					date: rec.date,
-					backups: { millage: { ...rec } }
+					backups: { mileage: { ...rec } }
 				};
 
 				await trashStore.put(trashItem as any);
-				await millageStore.delete(id);
-				await tx.done;
+				await mileageStore.delete(id);
 
 				// Update trip to 0 miles and 0 fuelCost
 				try {
@@ -405,10 +408,10 @@ function createMillageStore() {
 					/* ignore */
 				}
 
-				await syncManager.addToQueue({ action: 'delete', tripId: id, data: { store: 'millage' } });
+				await syncManager.addToQueue({ action: 'delete', tripId: id, data: { store: 'mileage' } });
 				return;
 			} catch (err) {
-				console.error('❌ Failed to delete millage record:', err);
+				console.error('❌ Failed to delete mileage record:', err);
 				set(previous);
 				throw err;
 			}
@@ -419,8 +422,8 @@ function createMillageStore() {
 			// ... copy existing get code ...
 			try {
 				const db = await getDB();
-				const tx = db.transaction('millage', 'readonly');
-				const item = await tx.objectStore('millage').get(id);
+				const tx = db.transaction('mileage', 'readonly');
+				const item = await tx.objectStore('mileage').get(id);
 				if (!item || item.userId !== userId) return null;
 				return item;
 			} catch {
@@ -435,18 +438,18 @@ function createMillageStore() {
 			isLoading.set(true);
 			try {
 				if (!navigator.onLine) return;
-				const lastSync = localStorage.getItem('last_sync_millage');
+				const lastSync = localStorage.getItem('last_sync_mileage');
 				const sinceDate = lastSync ? new Date(new Date(lastSync).getTime() - 5 * 60 * 1000) : null;
 				const url = sinceDate
-					? `/api/millage?since=${encodeURIComponent(sinceDate.toISOString())}`
-					: '/api/millage';
+					? `/api/mileage?since=${encodeURIComponent(sinceDate.toISOString())}`
+					: '/api/mileage';
 				const response = await fetch(url, { credentials: 'include' });
-				if (!response.ok) throw new Error('Failed to fetch millage');
+				if (!response.ok) throw new Error('Failed to fetch mileage');
 				const cloud: any = await response.json();
 				if (cloud.length > 0) {
 					const db = await getDB();
-					const tx = db.transaction(['millage', 'trash'], 'readwrite');
-					const store = tx.objectStore('millage');
+					const tx = db.transaction(['mileage', 'trash'], 'readwrite');
+					const store = tx.objectStore('mileage');
 					const trashStore = tx.objectStore('trash');
 					const trashItems = await trashStore.getAll();
 					const trashMap = buildTrashTimestampMap(trashItems as TrashItemLike[]);
@@ -457,7 +460,7 @@ function createMillageStore() {
 							continue;
 						}
 						// Check if this record should be filtered out based on trash entries
-						if (shouldFilterOutMillage(rec.id, rec.createdAt, trashMap)) {
+						if (shouldFilterOutMileage(rec.id, rec.createdAt, trashMap)) {
 							continue; // Skip - this is the deleted record
 						}
 
@@ -474,19 +477,19 @@ function createMillageStore() {
 				}
 				localStorage.setItem('last_sync_millage', new Date().toISOString());
 			} catch (err) {
-				console.error('❌ Failed to sync millage from cloud:', err);
+				console.error('❌ Failed to sync mileage from cloud:', err);
 			} finally {
 				if (_hydrationPromise) await _hydrationPromise;
 				await this.load(userId);
 				isLoading.set(false);
 			}
 		},
-		async migrateOfflineMillage(tempUserId: string, realUserId: string) {
+		async migrateOfflineMileage(tempUserId: string, realUserId: string) {
 			// ... copy existing migrateOfflineMillage code ...
 			if (!tempUserId || !realUserId || tempUserId === realUserId) return;
 			const db = await getDB();
-			const tx = db.transaction('millage', 'readwrite');
-			const store = tx.objectStore('millage');
+			const tx = db.transaction('mileage', 'readwrite');
+			const store = tx.objectStore('mileage');
 			const index = store.index('userId');
 			const offline = await index.getAll(tempUserId);
 			for (const r of offline) {
@@ -497,7 +500,7 @@ function createMillageStore() {
 				await syncManager.addToQueue({
 					action: 'create',
 					tripId: r.id,
-					data: { ...r, store: 'millage' }
+					data: { ...r, store: 'mileage' }
 				});
 			}
 			await tx.done;
@@ -506,23 +509,23 @@ function createMillageStore() {
 	};
 }
 
-export const millage = createMillageStore();
+export const mileage = createMileageStore();
 
-syncManager.registerStore('millage', {
+syncManager.registerStore('mileage', {
 	updateLocal: (item) => {
 		if (item && typeof (item as any).miles === 'number') {
-			millage.updateLocal(item as MillageRecord);
+			mileage.updateLocal(item as MileageRecord);
 		}
 	},
 	syncDown: async () => {
 		const user = (get(auth) as { user?: User | null }).user;
-		if (user?.id) await millage.syncFromCloud(user.id);
+		if (user?.id) await mileage.syncFromCloud(user.id);
 	}
 });
 
 function createDraftStore() {
 	// ... copy existing createDraftStore code ...
-	const STORAGE_KEY = 'draft_millage';
+	const STORAGE_KEY = 'draft_mileage';
 	const getDraft = () => {
 		try {
 			const stored = localStorage.getItem(STORAGE_KEY);
@@ -546,4 +549,4 @@ function createDraftStore() {
 	};
 }
 
-export const draftMillage = createDraftStore();
+export const draftMileage = createDraftStore();

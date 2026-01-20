@@ -1,13 +1,13 @@
-// src/routes/api/millage/+server.ts
+// src/routes/api/mileage/+server.ts
 import type { RequestHandler } from './$types';
 import { z } from 'zod';
-import { makeMillageService } from '$lib/server/millageService';
+import { makeMileageService } from '$lib/server/mileageService';
 import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 import { getStorageId } from '$lib/server/user';
 
-const millageSchema = z.object({
+const mileageSchema = z.object({
 	// Allow any string ID to support HughesNet sync trip IDs (e.g., hns_James_2025-09-22)
 	id: z.string().max(200).optional(),
 	tripId: z.string().max(200).optional(),
@@ -16,7 +16,7 @@ const millageSchema = z.object({
 	endOdometer: z.number().nonnegative().optional(),
 	notes: z.string().max(1000).optional(),
 	miles: z.number().nonnegative().optional(),
-	millageRate: z.number().nonnegative().optional(),
+	mileageRate: z.number().nonnegative().optional(),
 	vehicle: z.string().optional(),
 	reimbursement: z.number().nonnegative().optional()
 });
@@ -36,7 +36,7 @@ export const GET: RequestHandler = async (event) => {
 		// Capture 'since' for differential sync
 		const since = event.url.searchParams.get('since') || undefined;
 
-		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
+		const svc = makeMileageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		const userId = getStorageId(user);
 
 		// Use service list logic which handles KV/DO fallback and syncing logic
@@ -44,7 +44,7 @@ export const GET: RequestHandler = async (event) => {
 
 		return new Response(JSON.stringify(items), { headers: { 'Content-Type': 'application/json' } });
 	} catch (err) {
-		log.error('GET /api/millage error', { message: createSafeErrorMessage(err) });
+		log.error('GET /api/mileage error', { message: createSafeErrorMessage(err) });
 		return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
 	}
 };
@@ -64,7 +64,7 @@ export const POST: RequestHandler = async (event) => {
 		}
 
 		const raw = (await event.request.json()) as unknown;
-		const parse = millageSchema.safeParse(raw);
+		const parse = mileageSchema.safeParse(raw);
 		if (!parse.success) {
 			return new Response(JSON.stringify({ error: 'Invalid Data' }), { status: 400 });
 		}
@@ -110,7 +110,7 @@ export const POST: RequestHandler = async (event) => {
 		// If reimbursement not provided, compute using provided rate or user's default rate from settings
 		if (typeof reimbursement !== 'number') {
 			let rate: number | undefined =
-				typeof payload.millageRate === 'number' ? Number(payload.millageRate) : undefined;
+				typeof payload.mileageRate === 'number' ? Number(payload.mileageRate) : undefined;
 			if (rate == null) {
 				try {
 					const userSettingsKV = safeKV(env, 'BETA_USER_SETTINGS_KV');
@@ -118,7 +118,7 @@ export const POST: RequestHandler = async (event) => {
 						const raw = await userSettingsKV.get(`settings:${userId}`);
 						if (raw) {
 							const parsed = JSON.parse(raw as string);
-							rate = parsed?.millageRate;
+							rate = parsed?.mileageRate;
 						}
 					}
 				} catch {
@@ -128,7 +128,7 @@ export const POST: RequestHandler = async (event) => {
 			if (typeof rate === 'number') reimbursement = Number((miles * rate).toFixed(2));
 		}
 
-		// Build authoritative millage record
+		// Build authoritative mileage record
 		const record: any = {
 			id,
 			userId,
@@ -137,8 +137,8 @@ export const POST: RequestHandler = async (event) => {
 			startOdometer: typeof payload.startOdometer === 'number' ? payload.startOdometer : undefined,
 			endOdometer: typeof payload.endOdometer === 'number' ? payload.endOdometer : undefined,
 			miles: typeof miles === 'number' ? Number(miles) : undefined,
-			millageRate:
-				typeof payload.millageRate === 'number' ? Number(payload.millageRate) : undefined,
+			mileageRate:
+				typeof payload.mileageRate === 'number' ? Number(payload.mileageRate) : undefined,
 			vehicle: payload.vehicle === '' ? undefined : payload.vehicle,
 			reimbursement: typeof reimbursement === 'number' ? Number(reimbursement) : undefined,
 			notes: payload.notes || '',
@@ -146,7 +146,7 @@ export const POST: RequestHandler = async (event) => {
 			updatedAt: new Date().toISOString()
 		};
 
-		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
+		const svc = makeMileageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		await svc.put(record);
 
 		return new Response(JSON.stringify(record), {
@@ -154,7 +154,7 @@ export const POST: RequestHandler = async (event) => {
 			status: 201
 		});
 	} catch (err) {
-		log.error('POST /api/millage error', { message: createSafeErrorMessage(err) });
+		log.error('POST /api/mileage error', { message: createSafeErrorMessage(err) });
 		return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
 	}
 };

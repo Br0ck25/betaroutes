@@ -50,10 +50,10 @@ const defaultSettings = {
 	includeCharts: true,
 	includeAnalytics: true,
 
-	// Millage rate (per mile). Editable in Millage tracker.
-	millageRate: 0.655,
+	// Mileage rate (per mile). Editable in Mileage tracker.
+	mileageRate: 0.655,
 
-	// Vehicles available for millage logs
+	// Vehicles available for mileage logs
 	vehicles: [] as Array<{ id: string; name: string }>,
 
 	// Automation Settings

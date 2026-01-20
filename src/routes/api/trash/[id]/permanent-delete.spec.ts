@@ -15,8 +15,8 @@ vi.mock('$lib/server/expenseService', () => ({
 	makeExpenseService: () => mockExpenseSvc
 }));
 
-vi.mock('$lib/server/millageService', () => ({
-	makeMillageService: () => mockMillageSvc
+vi.mock('$lib/server/mileageService', () => ({
+	makeMileageService: () => mockMillageSvc
 }));
 
 vi.mock('$lib/server/env', () => ({
@@ -53,13 +53,13 @@ describe('DELETE /api/trash/[id] handler', () => {
 		mockMillageKV = { get: vi.fn() };
 	});
 
-	it('deletes only from mileage service when type=millage is specified', async () => {
+	it('deletes only from mileage service when type=mileage is specified', async () => {
 		const event: any = {
 			request: {},
 			locals: { user: { id: 'u1', name: 'testuser' } },
 			platform: { env: {} },
 			params: { id: 'test-id-123' },
-			url: new URL('http://localhost/api/trash/test-id-123?type=millage')
+			url: new URL('http://localhost/api/trash/test-id-123?type=mileage')
 		};
 
 		const { DELETE } = await import('./+server');
@@ -114,7 +114,7 @@ describe('DELETE /api/trash/[id] handler', () => {
 		mockMillageKV.get = vi.fn().mockResolvedValue(
 			JSON.stringify({
 				deleted: true,
-				id: 'millage-id',
+				id: 'mileage-id',
 				userId: 'u4',
 				miles: 100
 			})
@@ -124,15 +124,15 @@ describe('DELETE /api/trash/[id] handler', () => {
 			request: {},
 			locals: { user: { id: 'u4', name: 'testuser4' } },
 			platform: { env: {} },
-			params: { id: 'millage-id' },
-			url: new URL('http://localhost/api/trash/millage-id')
+			params: { id: 'mileage-id' },
+			url: new URL('http://localhost/api/trash/mileage-id')
 		};
 
 		const { DELETE } = await import('./+server');
 		const res = await DELETE(event);
 
 		expect(res.status).toBe(204);
-		expect(mockMillageSvc.permanentDelete).toHaveBeenCalledWith('u4', 'millage-id');
+		expect(mockMillageSvc.permanentDelete).toHaveBeenCalledWith('u4', 'mileage-id');
 		expect(mockTripSvc.permanentDelete).not.toHaveBeenCalled();
 		expect(mockExpenseSvc.permanentDelete).not.toHaveBeenCalled();
 	});

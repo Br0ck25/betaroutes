@@ -1,7 +1,7 @@
 // src/lib/db/indexedDB.ts
 import { openDB, type IDBPDatabase } from 'idb';
 import { DB_NAME, DB_VERSION } from './types';
-import type { TripRecord, TrashRecord, SyncQueueItem, ExpenseRecord, MillageRecord } from './types';
+import type { TripRecord, TrashRecord, SyncQueueItem, ExpenseRecord, MileageRecord } from './types';
 
 /**
  * Database interface with typed stores
@@ -36,9 +36,9 @@ export interface AppDB {
 			expiresAt: string;
 		};
 	};
-	millage: {
+	mileage: {
 		key: string;
-		value: MillageRecord;
+		value: MileageRecord;
 		indexes: {
 			userId: string;
 			syncStatus: string;
@@ -121,17 +121,17 @@ export async function getDB(): Promise<IDBPDatabase<AppDB>> {
 					console.log('✅ Created "trash" store with indexes');
 				}
 
-				// [!code ++] Create millage store
-				if (!db.objectStoreNames.contains('millage')) {
-					console.log('Creating "millage" object store...');
-					const millageStore = db.createObjectStore('millage', { keyPath: 'id' });
+				// [!code ++] Create mileage store
+				if (!db.objectStoreNames.contains('mileage')) {
+					console.log('Creating "mileage" object store...');
+					const mileageStore = db.createObjectStore('mileage', { keyPath: 'id' });
 
 					// Indexes for efficient queries
-					millageStore.createIndex('userId', 'userId', { unique: false });
-					millageStore.createIndex('syncStatus', 'syncStatus', { unique: false });
-					millageStore.createIndex('date', 'date', { unique: false });
+					mileageStore.createIndex('userId', 'userId', { unique: false });
+					mileageStore.createIndex('syncStatus', 'syncStatus', { unique: false });
+					mileageStore.createIndex('date', 'date', { unique: false });
 
-					console.log('✅ Created "millage" store with indexes');
+					console.log('✅ Created "mileage" store with indexes');
 				}
 
 				// Create syncQueue store
@@ -182,6 +182,12 @@ export async function getDB(): Promise<IDBPDatabase<AppDB>> {
 	return dbPromise;
 }
 
+export function getMileageStoreName(db: IDBPDatabase<AppDB>): 'mileage' | 'millage' {
+	if (db.objectStoreNames.contains('mileage')) return 'mileage';
+	if (db.objectStoreNames.contains('millage')) return 'millage';
+	return 'mileage';
+}
+
 /**
  * Clear all data from the database (useful for testing/debugging)
  */
@@ -189,12 +195,12 @@ export async function clearDatabase(): Promise<void> {
 	const db = await getDB();
 
 	// [!code ++] Added expenses to transaction
-	const tx = db.transaction(['trips', 'expenses', 'millage', 'trash', 'syncQueue'], 'readwrite');
+	const tx = db.transaction(['trips', 'expenses', 'mileage', 'trash', 'syncQueue'], 'readwrite');
 
 	await Promise.all([
 		tx.objectStore('trips').clear(),
 		tx.objectStore('expenses').clear(),
-		tx.objectStore('millage').clear(),
+		tx.objectStore('mileage').clear(),
 		tx.objectStore('trash').clear(),
 		tx.objectStore('syncQueue').clear()
 	]);
@@ -211,12 +217,12 @@ export async function getDBStats() {
 	const db = await getDB();
 
 	// [!code ++] Added expenses
-	const tx = db.transaction(['trips', 'expenses', 'millage', 'trash', 'syncQueue'], 'readonly');
+	const tx = db.transaction(['trips', 'expenses', 'mileage', 'trash', 'syncQueue'], 'readonly');
 
-	const [tripCount, expenseCount, millageCount, trashCount, queueCount] = await Promise.all([
+	const [tripCount, expenseCount, mileageCount, trashCount, queueCount] = await Promise.all([
 		tx.objectStore('trips').count(),
 		tx.objectStore('expenses').count(),
-		tx.objectStore('millage').count(),
+		tx.objectStore('mileage').count(),
 		tx.objectStore('trash').count(),
 		tx.objectStore('syncQueue').count()
 	]);
@@ -224,7 +230,7 @@ export async function getDBStats() {
 	return {
 		trips: tripCount,
 		expenses: expenseCount,
-		millage: millageCount,
+		mileage: mileageCount,
 		trash: trashCount,
 		pendingSync: queueCount
 	};
@@ -237,12 +243,12 @@ export async function exportData() {
 	const db = await getDB();
 
 	// [!code ++] Added expenses
-	const tx = db.transaction(['trips', 'expenses', 'millage', 'trash', 'syncQueue'], 'readonly');
+	const tx = db.transaction(['trips', 'expenses', 'mileage', 'trash', 'syncQueue'], 'readonly');
 
-	const [trips, expenses, millage, trash, syncQueue] = await Promise.all([
+	const [trips, expenses, mileage, trash, syncQueue] = await Promise.all([
 		tx.objectStore('trips').getAll(),
 		tx.objectStore('expenses').getAll(),
-		tx.objectStore('millage').getAll(),
+		tx.objectStore('mileage').getAll(),
 		tx.objectStore('trash').getAll(),
 		tx.objectStore('syncQueue').getAll()
 	]);
@@ -250,7 +256,7 @@ export async function exportData() {
 	return {
 		trips,
 		expenses,
-		millage,
+		mileage,
 		trash,
 		syncQueue,
 		exportedAt: new Date().toISOString()
@@ -263,13 +269,13 @@ export async function exportData() {
 export async function importData(data: {
 	trips?: TripRecord[];
 	expenses?: ExpenseRecord[]; // [!code ++]
-	millage?: MillageRecord[];
+	mileage?: MileageRecord[];
 	trash?: TrashRecord[];
 	syncQueue?: SyncQueueItem[];
 }) {
 	const db = await getDB();
 
-	const tx = db.transaction(['trips', 'expenses', 'millage', 'trash', 'syncQueue'], 'readwrite');
+	const tx = db.transaction(['trips', 'expenses', 'mileage', 'trash', 'syncQueue'], 'readwrite');
 
 	// Import trips
 	if (data.trips) {
@@ -279,7 +285,7 @@ export async function importData(data: {
 		}
 	}
 
-	// [!code ++] Import expenses and millage
+	// [!code ++] Import expenses and mileage
 	if (data.expenses) {
 		const expenseStore = tx.objectStore('expenses');
 		for (const expense of data.expenses) {
@@ -287,10 +293,10 @@ export async function importData(data: {
 		}
 	}
 
-	if (data.millage) {
-		const millageStore = tx.objectStore('millage');
-		for (const m of data.millage) {
-			await millageStore.put(m as any);
+	if (data.mileage) {
+		const mileageStore = tx.objectStore('mileage');
+		for (const m of data.mileage) {
+			await mileageStore.put(m as any);
 		}
 	}
 

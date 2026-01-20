@@ -4,7 +4,7 @@
 	import { trash } from '$lib/stores/trash';
 	import { trips } from '$lib/stores/trips';
 	import { expenses } from '$lib/stores/expenses';
-	import { millage } from '$lib/stores/millage';
+	import { mileage } from '$lib/stores/mileage';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { user } from '$lib/stores/auth';
@@ -35,7 +35,7 @@
 		const params = new URLSearchParams(window.location.search);
 		const typeParam = params.get('type');
 		const type =
-			typeParam === 'expenses' ? 'expense' : typeParam === 'millage' ? 'millage' : undefined;
+			typeParam === 'expenses' ? 'expense' : typeParam === 'mileage' ? 'mileage' : undefined;
 
 		// 1. Load Local
 		loadTrash(type).catch(console.error);
@@ -52,7 +52,7 @@
 			const param = $p.url.searchParams.get('type');
 			if (param !== currentTypeParam) {
 				currentTypeParam = param;
-				const type = param === 'expenses' ? 'expense' : param === 'millage' ? 'millage' : undefined;
+				const type = param === 'expenses' ? 'expense' : param === 'mileage' ? 'mileage' : undefined;
 				loading = true;
 				try {
 					await loadTrash(type);
@@ -113,12 +113,11 @@
 				type ??
 				(currentTypeParam === 'expenses'
 					? 'expense'
-					: currentTypeParam === 'millage'
-						? 'millage'
-						: 'trip');
+					: currentTypeParam === 'mileage'
+						? 'mileage'
+						: undefined);
 
-			const filtered = uniqueItems.filter((it) => {
-				// Prefer explicit recordTypes when present (merged tombstones list multiple types)
+			const filtered = uniqueItems.filter((it: any) => {
 				const recordTypes = Array.isArray(it.recordTypes)
 					? it.recordTypes
 					: it.recordType
@@ -128,7 +127,7 @@
 				if (recordTypes.length > 0) {
 					// If viewing 'all', show everything; otherwise include items whose recordTypes include the view
 					if (!type && !currentTypeParam) return true;
-					return recordTypes.includes(effectiveType);
+					return recordTypes.includes(effectiveType as any);
 				}
 
 				// Fallback: infer from key or shape
@@ -138,15 +137,14 @@
 					(it.originalKey &&
 						(it.originalKey.startsWith('expense:')
 							? 'expense'
-							: it.originalKey.startsWith('millage:')
-								? 'millage'
+							: it.originalKey.startsWith('mileage:')
+								? 'mileage'
 								: 'trip')) ||
 					'trip';
-				const hasMillageShape = typeof it.miles === 'number' || Boolean(it.vehicle);
-				const inferred = hasMillageShape ? 'millage' : inferredFromKey;
+				const hasMileageShape = typeof it.miles === 'number' || Boolean(it.vehicle);
+				const inferred = hasMileageShape ? 'mileage' : inferredFromKey;
 				return inferred === effectiveType;
 			});
-
 			filtered.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
 			trashedTrips = filtered;
 		} catch (err) {
@@ -169,18 +167,15 @@
 			const displayType =
 				currentTypeParam === 'expenses'
 					? 'expense'
-					: currentTypeParam === 'millage'
-						? 'millage'
+					: currentTypeParam === 'mileage'
+						? 'mileage'
 						: Array.isArray((item as any).recordTypes) && (item as any).recordTypes.length
 							? (item as any).recordTypes[0]
 							: (item as any).recordType ||
 								(item as any).type ||
-								(typeof (item as any).miles === 'number' ? 'millage' : 'trip');
-
-			await trash.restore(id, item.userId, displayType);
-
+								(typeof (item as any).miles === 'number' ? 'mileage' : 'trip');
 			if (displayType === 'expense') await expenses.load(item.userId);
-			else if (displayType === 'millage') await millage.load(item.userId);
+			else if (displayType === 'mileage') await mileage.load(item.userId);
 			else await trips.load(item.userId);
 
 			await loadTrash();
@@ -207,20 +202,20 @@
 				const displayType =
 					currentTypeParam === 'expenses'
 						? 'expense'
-						: currentTypeParam === 'millage'
-							? 'millage'
+						: currentTypeParam === 'mileage'
+							? 'mileage'
 							: Array.isArray((trip as any).recordTypes) && (trip as any).recordTypes.length
 								? (trip as any).recordTypes[0]
 								: (trip as any).recordType ||
 									(trip as any).type ||
-									(typeof (trip as any).miles === 'number' ? 'millage' : 'trip');
+									(typeof (trip as any).miles === 'number' ? 'mileage' : 'trip');
 				await trash.restore(trip.id, trip.userId, displayType);
 			}
 			const userId = $user?.name || $user?.token;
 			if (userId) {
 				await trips.load(userId);
 				await expenses.load(userId);
-				await millage.load(userId);
+				await mileage.load(userId);
 			}
 			await loadTrash();
 		} catch (err) {
@@ -306,9 +301,9 @@
 				<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/expenses'))}>
 					Back to Expenses
 				</button>
-			{:else if currentTypeParam === 'millage'}
-				<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/millage'))}>
-					Back to Millage
+			{:else if currentTypeParam === 'mileage'}
+				<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/mileage'))}>
+					Back to Mileage
 				</button>
 			{:else}
 				<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/trips'))}>
@@ -339,16 +334,16 @@
 				{@const displayType =
 					currentTypeParam === 'expenses'
 						? 'expense'
-						: currentTypeParam === 'millage'
-							? 'millage'
+						: currentTypeParam === 'mileage'
+							? 'mileage'
 							: Array.isArray(t['recordTypes']) && t['recordTypes'].length
 								? t['recordTypes'][0]
 								: t['recordType'] ||
 									t['type'] ||
-									(typeof t['miles'] === 'number' ? 'millage' : 'trip')}
+									(typeof t['miles'] === 'number' ? 'mileage' : 'trip')}
 
 				{@const isExpense = displayType === 'expense'}
-				{@const isMillage = displayType === 'millage'}
+				{@const isMileage = displayType === 'mileage'}
 				{@const rawVehicleName = getVehicleDisplayName(
 					trip['vehicle'] as string | undefined,
 					$userSettings?.vehicles
@@ -357,7 +352,7 @@
 					rawVehicleName && rawVehicleName !== '-' && rawVehicleName !== 'Unknown vehicle'
 						? rawVehicleName
 						: null}
-				{@const millageLogDate = trip.date || trip.createdAt}
+				{@const mileageLogDate = trip.date || trip.createdAt}
 
 				<div class="trash-item">
 					<div class="trip-info">
@@ -366,13 +361,13 @@
 								{#if isExpense}
 									<span class="badge-expense">Expense</span>
 									<span class="expense-category">{trip.category || 'Uncategorized'}</span>
-								{:else if isMillage}
-									<span class="badge-millage">Millage</span>
+								{:else if isMileage}
+									<span class="badge-mileage">Mileage</span>
 									{vehicleDisplay
 										? vehicleDisplay
-										: millageLogDate
-											? formatDate(millageLogDate)
-											: 'Millage Log'}
+										: mileageLogDate
+											? formatDate(mileageLogDate)
+											: 'Mileage Log'}
 								{:else}
 									<span class="badge-trip">Trip</span>
 									{typeof trip.startAddress === 'string'
@@ -395,7 +390,7 @@
 								<span class="detail"
 									>{new Date(trip.date || trip.createdAt || '').toLocaleDateString()}</span
 								>
-							{:else if isMillage}
+							{:else if isMileage}
 								<span class="detail"
 									>{new Date(trip.date || trip.createdAt || '').toLocaleDateString()}</span
 								>
@@ -436,8 +431,8 @@
 </div>
 
 <style>
-	/* Add this new style for millage badges */
-	.badge-millage {
+	/* Add this new style for mileage badges */
+	.badge-mileage {
 		background-color: #d1fae5;
 		color: #065f46;
 		font-size: 0.8em;

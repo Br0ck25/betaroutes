@@ -2,7 +2,7 @@
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
 import { makeExpenseService } from '$lib/server/expenseService';
-import { makeMillageService } from '$lib/server/millageService';
+import { makeMileageService } from '$lib/server/mileageService';
 import { safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { getStorageId } from '$lib/server/user';
@@ -53,7 +53,7 @@ export const GET: RequestHandler = async (event) => {
 			tripIndexDO as any
 		);
 
-		const millageSvc = makeMillageService(
+		const mileageSvc = makeMileageService(
 			safeKV(platformEnv, 'BETA_MILLAGE_KV') as any,
 			tripIndexDO as any
 		);
@@ -75,19 +75,19 @@ export const GET: RequestHandler = async (event) => {
 			// Fetch based on filter or fetch all
 			if (type === 'expenses') {
 				cloudTrash = await expenseSvc.listTrash(storageId);
-			} else if (type === 'millage') {
-				cloudTrash = await millageSvc.listTrash(storageId);
+			} else if (type === 'mileage') {
+				cloudTrash = await mileageSvc.listTrash(storageId);
 			} else if (type === 'trips') {
 				cloudTrash = await tripSvc.listTrash(storageId);
 			} else {
 				// Fetch ALL and merge
-				const [trips, expenses, millage] = await Promise.all([
+				const [trips, expenses, mileage] = await Promise.all([
 					tripSvc.listTrash(storageId),
 					expenseSvc.listTrash(storageId),
-					millageSvc.listTrash(storageId)
+					mileageSvc.listTrash(storageId)
 				]);
 
-				cloudTrash = [...trips, ...expenses, ...millage].sort((a: any, b: any) =>
+				cloudTrash = [...trips, ...expenses, ...mileage].sort((a: any, b: any) =>
 					(b.metadata?.deletedAt || '').localeCompare(a.metadata?.deletedAt || '')
 				);
 			}

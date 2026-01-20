@@ -81,14 +81,14 @@ export interface TrashRecord extends Partial<TripRecord>, Partial<ExpenseRecord>
 	deletedBy: string;
 	expiresAt: string;
 	originalKey: string;
-	recordType?: 'trip' | 'expense' | 'millage'; // Added discriminator
+	recordType?: 'trip' | 'expense' | 'mileage'; // Added discriminator
 	[key: string]: unknown;
 }
 
 /**
- * Millage record stored in IndexedDB (client-side)
+ * Mileage record stored in IndexedDB (client-side)
  */
-export interface MillageRecord {
+export interface MileageRecord {
 	id: string;
 	userId: string;
 	/** Optional link to parent trip */
@@ -99,8 +99,8 @@ export interface MillageRecord {
 	miles: number;
 	// Optional vehicle name or id
 	vehicle?: string;
-	// Millage rate applied for this log (per mile)
-	millageRate?: number;
+	// Mileage rate applied for this log (per mile)
+	mileageRate?: number;
 	reimbursement?: number;
 	notes?: string;
 	// Metadata

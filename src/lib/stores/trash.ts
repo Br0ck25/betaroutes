@@ -1,6 +1,6 @@
 // src/lib/stores/trash.ts
 import { writable, get } from 'svelte/store';
-import { getDB } from '$lib/db/indexedDB';
+import { getDB, getMileageStoreName } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
 import type { TrashRecord } from '$lib/db/types';
 import { user as authUser } from '$lib/stores/auth';
@@ -11,7 +11,7 @@ function createTrashStore() {
 
 	// Ensure we always work with prefixed ID if it exists
 	const getRealId = (trashId: string) => {
-		if (trashId.startsWith('millage:')) return trashId.replace('millage:', '');
+		if (trashId.startsWith('mileage:')) return trashId.replace('mileage:', '');
 		if (trashId.startsWith('trip:')) return trashId.replace('trip:', '');
 		if (trashId.startsWith('expense:')) return trashId.replace('expense:', '');
 		return trashId;
@@ -19,7 +19,7 @@ function createTrashStore() {
 
 	// Extract record type from prefixed ID
 	const getRecordType = (trashId: string): string | undefined => {
-		if (trashId.startsWith('millage:')) return 'millage';
+		if (trashId.startsWith('mileage:')) return 'mileage';
 		if (trashId.startsWith('trip:')) return 'trip';
 		if (trashId.startsWith('expense:')) return 'expense';
 		return undefined;
@@ -31,7 +31,7 @@ function createTrashStore() {
 		const recordType = item.recordType || item.type || 'trip';
 
 		// If ID already has a known prefix, return it as-is
-		if (id.startsWith('millage:') || id.startsWith('trip:') || id.startsWith('expense:')) {
+		if (id.startsWith('mileage:') || id.startsWith('trip:') || id.startsWith('expense:')) {
 			return id;
 		}
 
@@ -63,14 +63,14 @@ function createTrashStore() {
 							if (it.recordType === type || it.type === type) return true;
 							if (Array.isArray(it.recordTypes) && it.recordTypes.includes(type)) return true;
 							if (type === 'expense' && it.originalKey?.startsWith('expense:')) return true;
-							if (type === 'millage' && it.originalKey?.startsWith('millage:')) return true;
+							if (type === 'mileage' && it.originalKey?.startsWith('mileage:')) return true;
 							if (type === 'trip' && it.originalKey?.startsWith('trip:')) return true;
 							return false;
 						})
 					: normalizedItems;
 
 				const projected = filtered.map((it) => {
-					// If filtering for "millage" but found a bundled "trip+millage" item,
+					// If filtering for "mileage" but found a bundled "trip+mileage" item,
 					// present it as a mileage log for the UI
 					if (type && it.recordType !== type) {
 						return { ...it, recordType: type, type: type };
@@ -118,10 +118,8 @@ function createTrashStore() {
 					targetType || stored.recordType || stored.type || recordTypes[0] || 'trip';
 
 				// 2. Logic Check: If restoring mileage, is parent trip safe?
-				if (restoreType === 'millage') {
+				if (restoreType === 'mileage') {
 					const realId = getRealId(uniqueId);
-					// If this was a standalone mileage deletion, tripId is in the object
-					// If this is a bundled trip+mileage, realId IS the trip ID.
 					const parentId = stored.tripId || realId;
 
 					const txCheck = db.transaction(['trips', 'trash'], 'readonly');
@@ -169,17 +167,12 @@ function createTrashStore() {
 				restored.syncStatus = 'pending';
 
 				// 4. Atomic Write
-				const tx = db.transaction(['trash', 'expenses', 'millage', 'trips'], 'readwrite');
-
+				const mileageStoreName = getMileageStoreName(db);
+				const tx = db.transaction(['trash', 'expenses', mileageStoreName, 'trips'], 'readwrite');
 				if (restoreType === 'expense') {
 					await tx.objectStore('expenses').put(restored);
-				} else if (restoreType === 'millage') {
-					await tx.objectStore('millage').put(restored);
-				} else {
-					await tx.objectStore('trips').put(restored);
-					// Note: Bundled mileage is NOT auto-restored with trip.
-					// User must explicitly restore mileage from trash if needed.
-					// When editing the restored trip, a new mileage log will be created.
+				} else if (restoreType === 'mileage') {
+					await tx.objectStore(mileageStoreName).put(restored);
 				}
 
 				// Always delete the trash item
@@ -194,10 +187,10 @@ function createTrashStore() {
 					} catch {
 						/* ignore */
 					}
-				} else if (restoreType === 'millage') {
+				} else if (restoreType === 'mileage') {
 					try {
-						const { millage } = await import('$lib/stores/millage');
-						millage.updateLocal(restored);
+						const { mileage } = await import('$lib/stores/mileage');
+						mileage.updateLocal(restored);
 					} catch {
 						/* ignore */
 					}
@@ -257,8 +250,7 @@ function createTrashStore() {
 
 				// 6. Queue Sync
 				const syncTarget =
-					restoreType === 'expense' ? 'expenses' : restoreType === 'millage' ? 'millage' : 'trips';
-
+					restoreType === 'expense' ? 'expenses' : restoreType === 'mileage' ? 'mileage' : 'trips';
 				await syncManager.addToQueue({
 					action: 'restore',
 					tripId: restored.id,
@@ -363,10 +355,10 @@ function createTrashStore() {
 
 					if (!flatItem.recordType && !flatItem.type) {
 						if (flatItem.originalKey?.startsWith('expense:')) flatItem.recordType = 'expense';
-						else if (flatItem.originalKey?.startsWith('millage:')) flatItem.recordType = 'millage';
+						else if (flatItem.originalKey?.startsWith('mileage:')) flatItem.recordType = 'mileage';
 						else if (flatItem.originalKey?.startsWith('trip:')) flatItem.recordType = 'trip';
 						else if (typeof flatItem.miles === 'number' && !flatItem.stops)
-							flatItem.recordType = 'millage';
+							flatItem.recordType = 'mileage';
 						else flatItem.recordType = 'trip';
 					} else if (flatItem.type && !flatItem.recordType) {
 						flatItem.recordType = flatItem.type;
@@ -402,12 +394,15 @@ function createTrashStore() {
 				await tx.done;
 
 				// Cleanup Active Stores based on REAL IDs
-				const cleanupTx = db.transaction(['trash', 'trips', 'expenses', 'millage'], 'readwrite');
+				const mileageStoreName = getMileageStoreName(db);
+				const cleanupTx = db.transaction(
+					['trash', 'trips', 'expenses', mileageStoreName],
+					'readwrite'
+				);
 				const allTrash = await cleanupTx.objectStore('trash').getAll();
 				const tripStore = cleanupTx.objectStore('trips');
 				const expenseStore = cleanupTx.objectStore('expenses');
-				const millageStore = cleanupTx.objectStore('millage');
-
+				const mileageStore = cleanupTx.objectStore(mileageStoreName);
 				for (const trashItem of allTrash) {
 					const realId = getRealId(trashItem.id);
 					const rt = trashItem.recordType;
@@ -416,8 +411,8 @@ function createTrashStore() {
 						if (await tripStore.get(realId)) await tripStore.delete(realId);
 					} else if (rt === 'expense') {
 						if (await expenseStore.get(realId)) await expenseStore.delete(realId);
-					} else if (rt === 'millage') {
-						if (await millageStore.get(realId)) await millageStore.delete(realId);
+					} else if (rt === 'mileage') {
+						if (await mileageStore.get(realId)) await mileageStore.delete(realId);
 					}
 				}
 				await cleanupTx.done;

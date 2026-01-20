@@ -1,40 +1,41 @@
 <script lang="ts">
-	import { millage } from '$lib/stores/millage';
+	import { mileage } from '$lib/stores/mileage';
+
 	import { user } from '$lib/stores/auth';
 	import { userSettings } from '$lib/stores/userSettings';
 	import { toasts } from '$lib/stores/toast';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import SelectMobile from '$lib/components/ui/SelectMobile.svelte';
-	const expenseId = $page.params.id;
 
-	// Settings modal removed for Millage edit page
+	// --- HELPER: Get Local Date (YYYY-MM-DD) ---
+	function getLocalDate() {
+		const now = new Date();
+		return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+	}
 
-	// Category options are not applicable for Millage edit
-
-	// Category selection state removed for Millage edit
-
-	// Category sync removed for Millage edit
-
-	// Category helper functions removed for Millage edit
+	// Settings modal removed for Mileage logs
 
 	let formData = {
-		date: '',
+		date: getLocalDate(),
 		startOdometer: '',
 		endOdometer: '',
 		miles: '',
 		vehicle: '',
-		millageRate: '',
+		mileageRate: '',
 		notes: '',
 		category: ''
 	};
 
+	// Reference to miles input so quick-action can focus it
+	let amountInput: HTMLInputElement | null = null;
 	// Whether the user manually edited the miles input; when true we stop auto-updating miles from odometers
 	let milesManual = false;
 
-	// default millageRate from settings if editing and none present
-	$: if ($userSettings && formData.millageRate === '' && $userSettings.millageRate != null) {
-		formData.millageRate = String($userSettings.millageRate);
+	// default mileageRate from user settings for new logs (only set if field empty)
+	$: if ($userSettings && formData.mileageRate === '') {
+		formData.mileageRate =
+			$userSettings.mileageRate != null ? String($userSettings.mileageRate) : '';
 	}
 
 	// Default vehicle selection if available and none selected
@@ -43,25 +44,15 @@
 		formData.vehicle = v0?.id ?? v0?.name ?? '';
 	}
 
-	// Find and prefill millage record when store or page params load
+	// Prefill category from the URL query parameter (e.g., ?category=fuel)
 	$: {
-		const id = $page.params.id;
-		const rec = $millage.find((e) => e.id === id);
-		if (rec && !formData.date) {
-			const r: any = rec as any;
-			formData = {
-				date: r.date || '',
-				startOdometer: String(r.startOdometer || ''),
-				endOdometer: String(r.endOdometer || ''),
-				miles: typeof r.miles === 'number' ? String(r.miles) : '',
-				vehicle: r.vehicle || '',
-				millageRate: typeof r.millageRate === 'number' ? String(r.millageRate) : '',
-				notes: r.notes || '',
-				category: r.category || ''
-			};
-		} else if ($millage && $millage.length > 0 && !rec) {
-			toasts.error('Millage log not found.');
-			goto('/dashboard/millage');
+		const q = $page.url.searchParams.get('category');
+		if (q) {
+			formData.category = q;
+			// if arrived via quick action, focus the miles input for quick logging
+			if (typeof window !== 'undefined') {
+				setTimeout(() => (amountInput as any)?.focus(), 60);
+			}
 		}
 	}
 
@@ -76,25 +67,16 @@
 
 	async function saveExpense() {
 		if (
-			formData.startOdometer === '' || formData.endOdometer === ''
-				? formData.miles !== ''
-				: !formData.date
+			!formData.date ||
+			((formData.startOdometer === '' || formData.endOdometer === '') && formData.miles === '')
 		) {
-			// Ensure either start & end are present or miles is provided
-			if (
-				!formData.date ||
-				((formData.startOdometer === '' || formData.endOdometer === '') && formData.miles === '')
-			) {
-				toasts.error('Please fill in required fields (either start & end odometer or miles).');
-				return;
-			}
+			toasts.error('Please fill in required fields (either start & end odometer or miles).');
+			return;
 		}
 
-		const currentUser = ($page.data as any)['user'] || $user;
+		const currentUser = $page.data['user'] || $user;
 		const userId =
-			(currentUser as any)?.name ||
-			(currentUser as any)?.token ||
-			localStorage.getItem('offline_user_id');
+			currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
 
 		if (!userId) {
 			toasts.error('User not identified. Cannot save.');
@@ -115,16 +97,16 @@
 				startOdometer: start,
 				endOdometer: end,
 				miles,
-				millageRate: formData.millageRate !== '' ? Number(formData.millageRate) : undefined,
+				mileageRate: formData.mileageRate !== '' ? Number(formData.mileageRate) : undefined,
 				vehicle: formData.vehicle || undefined
 			};
 
-			await millage.updateMillage(String(expenseId), payload as any, String(userId));
-			toasts.success('Millage log updated');
-			goto('/dashboard/millage');
+			await mileage.create(payload as any, userId);
+			toasts.success('Mileage log created');
+			goto('/dashboard/mileage');
 		} catch (err) {
 			console.error(err);
-			toasts.error('Failed to update millage log');
+			toasts.error('Failed to save mileage log');
 		}
 	}
 </script>
@@ -132,10 +114,10 @@
 <div class="expense-form-page">
 	<div class="page-header">
 		<div>
-			<h1 class="page-title">Edit Millage Log</h1>
-			<p class="page-subtitle">Update odometer readings and miles</p>
+			<h1 class="page-title">New Mileage Log</h1>
+			<p class="page-subtitle">Record start/end odometer and miles</p>
 		</div>
-		<a href="/dashboard/millage" class="btn-back">
+		<a href="/dashboard/mileage" class="btn-back">
 			<svg width="24" height="24" viewBox="0 0 20 20" fill="none"
 				><path
 					d="M12 4L6 10L12 16"
@@ -150,17 +132,18 @@
 
 	<div class="form-card">
 		<div class="card-header">
-			<h2 class="card-title">Millage Details</h2>
+			<h2 class="card-title">Mileage Details</h2>
 		</div>
 
 		<div class="form-grid">
 			<div class="form-group">
-				<label for="millage-date">Date</label>
-				<input id="millage-date" type="date" bind:value={formData.date} required />
+				<label for="mileage-date">Date</label>
+				<input id="mileage-date" type="date" bind:value={formData.date} required />
 			</div>
 
 			<div class="form-row">
 				<!-- Maintenance, Supplies, and Expenses options removed for Millage logs -->
+
 				<div class="form-group grid-3">
 					<div>
 						<label for="start-odo">Start Odometer</label>
@@ -189,6 +172,7 @@
 							type="number"
 							step="0.01"
 							inputmode="decimal"
+							bind:this={amountInput}
 							bind:value={formData.miles}
 							placeholder="0.0"
 							on:input={(e) => (milesManual = (e.target as HTMLInputElement).value !== '')}
@@ -210,7 +194,7 @@
 				<!-- tax deductible removed -->
 			</div>
 
-			<!-- Settings modal removed for Millage edit -->
+			<!-- Settings modal removed for Mileage logs -->
 
 			<div class="form-row vehicle-rate-row">
 				<div class="form-group">
@@ -220,28 +204,28 @@
 						id="vehicle-mobile"
 						placeholder={$userSettings.vehicles && $userSettings.vehicles.length > 0
 							? 'Select vehicle'
-							: 'No vehicles (open Millage Settings)'}
+							: 'No vehicles (open Mileage Settings)'}
 						options={$userSettings.vehicles
 							? $userSettings.vehicles.map((v) => ({ value: v.id || v.name, label: v.name }))
-							: [{ value: '', label: 'No vehicles (open Millage Settings)' }]}
+							: [{ value: '', label: 'No vehicles (open Mileage Settings)' }]}
 						bind:value={formData.vehicle}
 						on:change={(e) => (formData.vehicle = e.detail.value)}
 					/>
 				</div>
 				<div class="form-group">
-					<label for="millage-rate">Millage Rate (per mile)</label>
+					<label for="mileage-rate">Mileage Rate (per mile)</label>
 					<input
-						id="millage-rate"
+						id="mileage-rate"
 						type="number"
 						step="0.001"
-						bind:value={formData.millageRate}
+						bind:value={formData.mileageRate}
 						placeholder="0.655"
 					/>
 				</div>
 			</div>
 
 			<div class="form-actions">
-				<a href="/dashboard/millage" class="btn-secondary">Cancel</a>
+				<a href="/dashboard/mileage" class="btn-secondary">Cancel</a>
 				<button class="btn-primary" on:click={saveExpense}>Save Log</button>
 			</div>
 		</div>
@@ -326,6 +310,14 @@
 			grid-template-columns: 1fr;
 		}
 	}
+
+	/* Force millage rate below vehicle on small screens <= 711px */
+	@media (max-width: 711px) {
+		.vehicle-rate-row {
+			grid-template-columns: 1fr;
+		}
+	}
+
 	.form-group {
 		display: flex;
 		flex-direction: column;
@@ -348,6 +340,7 @@
 		background: white;
 		box-sizing: border-box;
 	}
+
 	input:focus,
 	textarea:focus {
 		outline: none;

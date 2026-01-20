@@ -2,7 +2,7 @@
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
 import { makeExpenseService } from '$lib/server/expenseService';
-import { makeMillageService, type MillageRecord } from '$lib/server/millageService';
+import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
 import { safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { getStorageId } from '$lib/server/user';
@@ -39,7 +39,7 @@ export const POST: RequestHandler = async (event) => {
 			tripIndexDO as any
 		);
 
-		const millageSvc = makeMillageService(
+		const mileageSvc = makeMileageService(
 			safeKV(platformEnv, 'BETA_MILLAGE_KV') as any,
 			tripIndexDO as any,
 			safeKV(platformEnv, 'BETA_LOGS_KV') as any
@@ -61,27 +61,27 @@ export const POST: RequestHandler = async (event) => {
 				} catch {
 					try {
 						// Get the mileage item from trash to check its tripId
-						const millageKV = safeKV(platformEnv, 'BETA_MILLAGE_KV');
-						if (millageKV) {
-							const raw = await (millageKV as any).get(`millage:${storageId}:${id}`);
+						const mileageKV = safeKV(platformEnv, 'BETA_MILLAGE_KV');
+						if (mileageKV) {
+							const raw = await (mileageKV as any).get(`mileage:${storageId}:${id}`);
 							if (raw) {
 								const tombstone = JSON.parse(raw);
-								const millageData = tombstone.backup || tombstone.data || tombstone;
+								const mileageData = tombstone.backup || tombstone.data || tombstone;
 
 								// Check if mileage has a linked trip
-								if (millageData.tripId) {
+								if (mileageData.tripId) {
 									// Check if parent trip is deleted
-									const trip = await tripSvc.get(storageId, millageData.tripId);
+									const trip = await tripSvc.get(storageId, mileageData.tripId);
 									if (!trip || trip.deleted) {
 										throw new Error('Cannot restore mileage: parent trip is deleted');
 									}
 
 									// Check if another active mileage log exists for this trip
-									const activeMillage = await millageSvc.list(storageId);
-									const conflictingMillage = activeMillage.find(
-										(m: MillageRecord) => m.tripId === millageData.tripId && m.id !== id
+									const activeMileage = await mileageSvc.list(storageId);
+									const conflictingMileage = activeMileage.find(
+										(m: MileageRecord) => m.tripId === mileageData.tripId && m.id !== id
 									);
-									if (conflictingMillage) {
+									if (conflictingMileage) {
 										throw new Error(
 											'Cannot restore mileage: another active mileage log exists for this trip'
 										);
@@ -90,8 +90,7 @@ export const POST: RequestHandler = async (event) => {
 							}
 						}
 
-						restored = await millageSvc.restore(storageId, id);
-
+						restored = await mileageSvc.restore(storageId, id);
 						// If restored mileage has a tripId, sync the miles back to the trip
 						const restoredMillage = restored as MillageRecord | undefined;
 						if (
@@ -179,7 +178,7 @@ export const DELETE: RequestHandler = async (event) => {
 			tripIndexDO as any
 		);
 
-		const millageSvc = makeMillageService(
+		const mileageSvc = makeMileageService(
 			safeKV(platformEnv, 'BETA_MILLAGE_KV') as any,
 			tripIndexDO as any
 		);
@@ -190,8 +189,8 @@ export const DELETE: RequestHandler = async (event) => {
 		if (storageId) {
 			// If record type is specified, only delete from that specific service
 			// This prevents accidentally deleting a trip when user only wants to delete mileage
-			if (recordType === 'millage') {
-				await millageSvc.permanentDelete(storageId, id);
+			if (recordType === 'mileage') {
+				await mileageSvc.permanentDelete(storageId, id);
 			} else if (recordType === 'expense') {
 				await expenseSvc.permanentDelete(storageId, id);
 			} else if (recordType === 'trip') {
@@ -214,11 +213,11 @@ export const DELETE: RequestHandler = async (event) => {
 					}
 				}
 
-				if (!foundType && millageKV) {
-					const millageRaw = await (millageKV as any).get(`millage:${storageId}:${id}`);
-					if (millageRaw) {
-						const parsed = JSON.parse(millageRaw);
-						if (parsed.deleted) foundType = 'millage';
+				if (!foundType && mileageKV) {
+					const mileageRaw = await (mileageKV as any).get(`mileage:${storageId}:${id}`);
+					if (mileageRaw) {
+						const parsed = JSON.parse(mileageRaw);
+						if (parsed.deleted) foundType = 'mileage';
 					}
 				}
 
@@ -233,8 +232,8 @@ export const DELETE: RequestHandler = async (event) => {
 				// Only delete from the service that has the tombstone
 				if (foundType === 'trip') {
 					await tripSvc.permanentDelete(storageId, id);
-				} else if (foundType === 'millage') {
-					await millageSvc.permanentDelete(storageId, id);
+				} else if (foundType === 'mileage') {
+					await mileageSvc.permanentDelete(storageId, id);
 				} else if (foundType === 'expense') {
 					await expenseSvc.permanentDelete(storageId, id);
 				} else {

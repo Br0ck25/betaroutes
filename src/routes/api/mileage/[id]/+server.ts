@@ -1,6 +1,6 @@
-// src/routes/api/millage/[id]/+server.ts
+// src/routes/api/mileage/[id]/+server.ts
 import type { RequestHandler } from './$types';
-import { makeMillageService } from '$lib/server/millageService';
+import { makeMileageService } from '$lib/server/mileageService';
 import { makeTripService } from '$lib/server/tripService';
 import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
@@ -24,7 +24,7 @@ export const DELETE: RequestHandler = async (event) => {
 
 		const id = event.params.id;
 		const userId = getStorageId(sessionUser);
-		const svc = makeMillageService(
+		const svc = makeMileageService(
 			safeKV(env, 'BETA_MILLAGE_KV')!,
 			safeDO(env, 'TRIP_INDEX_DO')!,
 			safeKV(env, 'BETA_LOGS_KV')
@@ -69,7 +69,7 @@ export const DELETE: RequestHandler = async (event) => {
 
 		return new Response(null, { status: 204 });
 	} catch (err) {
-		log.error('DELETE /api/millage/[id] error', { message: createSafeErrorMessage(err) });
+		log.error('DELETE /api/mileage/[id] error', { message: createSafeErrorMessage(err) });
 		return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
 	}
 };
@@ -90,12 +90,12 @@ export const GET: RequestHandler = async (event) => {
 
 		const id = event.params.id;
 		const userId = getStorageId(sessionUser);
-		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
+		const svc = makeMileageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		const item = await svc.get(userId, id);
 		if (!item) return new Response('Not found', { status: 404 });
 		return new Response(JSON.stringify(item), { headers: { 'Content-Type': 'application/json' } });
 	} catch (err) {
-		log.error('GET /api/millage/[id] error', { message: createSafeErrorMessage(err) });
+		log.error('GET /api/mileage/[id] error', { message: createSafeErrorMessage(err) });
 		return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
 	}
 };
@@ -117,7 +117,7 @@ export const PUT: RequestHandler = async (event) => {
 		const id = event.params.id;
 		const userId = getStorageId(sessionUser);
 
-		const svc = makeMillageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
+		const svc = makeMileageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		const existing = await svc.get(userId, id);
 		if (!existing) return new Response('Not found', { status: 404 });
 
@@ -175,7 +175,7 @@ export const PUT: RequestHandler = async (event) => {
 		// Recompute reimbursement when appropriate (respect explicit `reimbursement`)
 		const bodyHasReimbursement = Object.prototype.hasOwnProperty.call(body, 'reimbursement');
 		if (!bodyHasReimbursement && typeof updated.miles === 'number') {
-			let rate = typeof updated.millageRate === 'number' ? updated.millageRate : undefined;
+			let rate = typeof updated.mileageRate === 'number' ? updated.mileageRate : undefined;
 			if (rate == null) {
 				try {
 					const userSettingsKV = safeKV(env, 'BETA_USER_SETTINGS_KV');
@@ -183,7 +183,7 @@ export const PUT: RequestHandler = async (event) => {
 						const raw = await userSettingsKV.get(`settings:${userId}`);
 						if (raw) {
 							const parsed = JSON.parse(raw as string);
-							rate = parsed?.millageRate;
+							rate = parsed?.mileageRate;
 						}
 					}
 				} catch {
@@ -198,13 +198,13 @@ export const PUT: RequestHandler = async (event) => {
 			updated.reimbursement = Number(updated.reimbursement.toFixed(2));
 		}
 
-		if (typeof updated.millageRate === 'number') {
-			updated.millageRate = Number(updated.millageRate);
+		if (typeof updated.mileageRate === 'number') {
+			updated.mileageRate = Number(updated.mileageRate);
 		}
 
 		if (updated.vehicle === '') updated.vehicle = undefined;
 
-		// Persist authoritative millage
+		// Persist authoritative mileage
 		await svc.put(updated);
 
 		// --- Bidirectional sync: Update linked trip's totalMiles ---
@@ -247,7 +247,7 @@ export const PUT: RequestHandler = async (event) => {
 			headers: { 'Content-Type': 'application/json' }
 		});
 	} catch (err) {
-		log.error('PUT /api/millage/[id] error', { message: createSafeErrorMessage(err) });
+		log.error('PUT /api/mileage/[id] error', { message: createSafeErrorMessage(err) });
 		return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
 	}
 };

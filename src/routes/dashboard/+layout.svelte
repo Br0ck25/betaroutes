@@ -6,7 +6,7 @@
 	import { base } from '$app/paths';
 	import { trips } from '$lib/stores/trips';
 	import { expenses } from '$lib/stores/expenses';
-	import { millage } from '$lib/stores/millage';
+	import { mileage } from '$lib/stores/mileage';
 
 	const resolve = (href: string) => `${base}${href}`;
 	import { trash } from '$lib/stores/trash';
@@ -60,14 +60,14 @@
 			label: 'Expenses'
 		},
 		{
-			href: '/dashboard/millage/',
+			href: '/dashboard/mileage/',
 			icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-				<path d="M3 11h18v3a2 2 0 0 1-2 2h-1.5a2 2 0 0 1-4 0H11.5a2 2 0 0 1-4 0H6a2 2 0 0 1-2-2v-3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-				<path d="M5 11L7 6h10l2 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-				<circle cx="7.5" cy="17.5" r="1.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-				<circle cx="16.5" cy="17.5" r="1.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-			</svg>`,
-			label: 'Millage'
+					<path d="M3 11h18v3a2 2 0 0 1-2 2h-1.5a2 2 0 0 1-4 0H11.5a2 2 0 0 1-4 0H6a2 2 0 0 1-2-2v-3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+					<path d="M5 11L7 6h10l2 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+					<circle cx="7.5" cy="17.5" r="1.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+					<circle cx="16.5" cy="17.5" r="1.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+				</svg>`,
+			label: 'Mileage'
 		},
 		{
 			href: '/dashboard/trips/',
@@ -142,13 +142,13 @@
 					// Kick off loads without awaiting them so we don't block initial paint
 					trips.load(userId);
 					expenses.load(userId);
-					millage.load(userId);
+					mileage.load(userId);
 					trash.load(userId);
 
 					// Background syncs
 					trips.syncFromCloud(userId);
 					expenses.syncFromCloud(userId);
-					millage.syncFromCloud(userId);
+					mileage.syncFromCloud(userId);
 				} catch (err) {
 					console.error('[DASHBOARD LAYOUT] ❌ Failed to start data load:', err);
 				}

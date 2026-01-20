@@ -18,16 +18,16 @@
 
 	async function saveDefaultSettings() {
 		try {
-			const rate = Number(settings.millageRate || 0);
-			settings.millageRate = Number(isNaN(rate) ? 0 : Number(rate.toFixed(3)));
+			const rate = Number(settings.mileageRate || 0);
+			settings.mileageRate = Number(isNaN(rate) ? 0 : Number(rate.toFixed(3)));
 			userSettings.set(settings);
-			const result = await saveSettings({ millageRate: settings.millageRate });
+			const result = await saveSettings({ mileageRate: settings.mileageRate });
 			if (!result.ok) throw new Error(result.error);
-			toasts.success('Millage defaults saved');
+			toasts.success('Mileage defaults saved');
 			dispatch('success');
 			open = false;
 		} catch (e) {
-			console.error('Failed to save millage defaults', e);
+			console.error('Failed to save mileage defaults', e);
 			toasts.error('Saved locally, but cloud sync failed');
 		}
 	}
@@ -61,7 +61,7 @@
 	}
 </script>
 
-<Modal bind:open title="Millage Settings">
+<Modal bind:open title="Mileage Settings">
 	<div class="settings-modal-content">
 		<div class="top-tabs">
 			<button
@@ -78,17 +78,16 @@
 
 		{#if settingsTab === 'defaults'}
 			<div class="settings-form space-y-4">
-				<p class="text-sm text-gray-500 mb-2">Pre-fill new millage logs with these values.</p>
+				<p class="text-sm text-gray-500 mb-2">Pre-fill new mileage logs with these values.</p>
 
 				<div class="form-group">
-					<label for="default-millage" class="block text-sm font-medium text-gray-700 mb-1"
-						>Millage Rate (per mile)</label
+					<label for="default-mileage" class="block text-sm font-medium text-gray-700 mb-1"
+						>Mileage Rate (per mile)</label
 					>
 					<input
-						id="default-millage"
-						type="number"
+						id="default-mileage"
 						step="0.001"
-						bind:value={settings.millageRate}
+						bind:value={settings.mileageRate}
 						placeholder="0.00"
 						class="w-full p-2 border rounded-lg"
 					/>
@@ -102,7 +101,7 @@
 			</div>
 		{:else}
 			<div class="vehicles-list">
-				<p class="text-sm text-gray-500 mb-2">Add vehicles to associate with millage logs.</p>
+				<p class="text-sm text-gray-500 mb-2">Add vehicles to associate with mileage logs.</p>
 				<div class="form-group">
 					<label for="new-vehicle" class="block text-sm font-medium text-gray-700 mb-1"
 						>Add Vehicle</label

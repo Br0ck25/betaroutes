@@ -23,7 +23,7 @@ interface ExpenseRecord {
 	[key: string]: unknown;
 }
 
-interface MillageRecord {
+interface MileageRecord {
 	id: string;
 	userId: string;
 	date: string;
@@ -56,13 +56,13 @@ export class TripIndexDO {
 			this.state.storage.sql.exec(
 				'SELECT id, userId, date, category, createdAt, data FROM expenses LIMIT 1'
 			);
-			this.state.storage.sql.exec('SELECT id, userId, date, createdAt, data FROM millage LIMIT 1');
+			this.state.storage.sql.exec('SELECT id, userId, date, createdAt, data FROM mileage LIMIT 1');
 		} catch (e) {
 			log.warn('[TripIndexDO] Schema mismatch or corruption detected. Rebuilding tables...', e);
 			try {
 				this.state.storage.sql.exec('DROP TABLE IF EXISTS trips');
 				this.state.storage.sql.exec('DROP TABLE IF EXISTS expenses');
-				this.state.storage.sql.exec('DROP TABLE IF EXISTS millage');
+				this.state.storage.sql.exec('DROP TABLE IF EXISTS mileage');
 			} catch (dropErr) {
 				log.error('[TripIndexDO] Failed to drop tables during rebuild', dropErr);
 			}
@@ -87,7 +87,7 @@ export class TripIndexDO {
 					data TEXT
 				);
 
-				CREATE TABLE IF NOT EXISTS millage (
+				CREATE TABLE IF NOT EXISTS mileage (
 					id TEXT PRIMARY KEY,
 					userId TEXT,
 					date TEXT,
@@ -97,7 +97,7 @@ export class TripIndexDO {
 
 				CREATE INDEX IF NOT EXISTS idx_trips_user ON trips(userId);
 				CREATE INDEX IF NOT EXISTS idx_expenses_user ON expenses(userId);
-				CREATE INDEX IF NOT EXISTS idx_millage_user ON millage(userId);
+				CREATE INDEX IF NOT EXISTS idx_mileage_user ON mileage(userId);
 			`);
 			this.schemaEnsured = true;
 		} catch (err) {
@@ -161,7 +161,7 @@ export class TripIndexDO {
 				if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
 				this.state.storage.sql.exec('DELETE FROM trips');
 				this.state.storage.sql.exec('DELETE FROM expenses');
-				this.state.storage.sql.exec('DELETE FROM millage');
+				this.state.storage.sql.exec('DELETE FROM mileage');
 				return new Response('Account Data Wiped');
 			}
 
@@ -509,10 +509,10 @@ export class TripIndexDO {
 				}
 			}
 
-			// --- MILLAGE OPERATIONS ---
-			if (path === '/millage/list') {
+			// --- MILEAGE OPERATIONS ---
+			if (path === '/mileage/list') {
 				const cursor = this.state.storage.sql.exec(
-					`SELECT data FROM millage ORDER BY date DESC, createdAt DESC`
+					`SELECT data FROM mileage ORDER BY date DESC, createdAt DESC`
 				);
 				const records = [];
 				for (const row of cursor) {
@@ -521,13 +521,13 @@ export class TripIndexDO {
 				return new Response(JSON.stringify(records));
 			}
 
-			if (path === '/millage/put') {
-				const item = await parseBody<MillageRecord>();
+			if (path === '/mileage/put') {
+				const item = await parseBody<MileageRecord>();
 				// Basic validation
 				if (!item || !item.id || !item.userId) return new Response('Invalid Data', { status: 400 });
 
 				this.state.storage.sql.exec(
-					`INSERT OR REPLACE INTO millage (id, userId, date, createdAt, data) VALUES (?, ?, ?, ?, ?)`,
+					`INSERT OR REPLACE INTO mileage (id, userId, date, createdAt, data) VALUES (?, ?, ?, ?, ?)`,
 					item.id,
 					item.userId,
 					item.date || '',
@@ -537,19 +537,19 @@ export class TripIndexDO {
 				return new Response('OK');
 			}
 
-			if (path === '/millage/delete') {
+			if (path === '/mileage/delete') {
 				const { id } = await parseBody<{ id: string }>();
-				this.state.storage.sql.exec('DELETE FROM millage WHERE id = ?', id);
+				this.state.storage.sql.exec('DELETE FROM mileage WHERE id = ?', id);
 				return new Response('OK');
 			}
 
-			if (path === '/millage/migrate') {
-				const items = await parseBody<MillageRecord[]>();
+			if (path === '/mileage/migrate') {
+				const items = await parseBody<MileageRecord[]>();
 				this.state.storage.sql.exec('BEGIN TRANSACTION');
 				try {
 					for (const item of items) {
 						this.state.storage.sql.exec(
-							'INSERT OR REPLACE INTO millage (id, userId, date, createdAt, data) VALUES (?, ?, ?, ?, ?)',
+							'INSERT OR REPLACE INTO mileage (id, userId, date, createdAt, data) VALUES (?, ?, ?, ?, ?)',
 							item.id,
 							item.userId,
 							item.date || '',

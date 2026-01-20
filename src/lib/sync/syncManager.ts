@@ -252,8 +252,8 @@ class SyncManager {
 		const baseUrl =
 			storeName === 'expenses'
 				? '/api/expenses'
-				: storeName === 'millage'
-					? '/api/millage'
+				: storeName === 'mileage'
+					? '/api/mileage'
 					: '/api/trips';
 
 		const url =
@@ -263,8 +263,8 @@ class SyncManager {
 					? `${baseUrl}/${tripId}`
 					: `${baseUrl}/${tripId}`;
 
-		let targetStore: 'trips' | 'expenses' | 'millage' | 'trash' | null =
-			storeName === 'expenses' ? 'expenses' : storeName === 'millage' ? 'millage' : 'trips';
+		let targetStore: 'trips' | 'expenses' | 'mileage' | 'trash' | null =
+			storeName === 'expenses' ? 'expenses' : storeName === 'mileage' ? 'mileage' : 'trips';
 
 		if (action === 'delete') targetStore = 'trash';
 		if (action === 'permanentDelete') targetStore = null;
@@ -288,7 +288,7 @@ class SyncManager {
 		url: string,
 		method: string,
 		body: any,
-		updateStore: 'trips' | 'expenses' | 'millage' | 'trash' | null,
+		updateStore: 'trips' | 'expenses' | 'mileage' | 'trash' | null,
 		id: string
 	) {
 		const res = await fetch(url, {
@@ -312,11 +312,11 @@ class SyncManager {
 		if (updateStore) await this.markAsSynced(updateStore, id);
 	}
 
-	private async markAsSynced(store: 'trips' | 'expenses' | 'millage' | 'trash', tripId: string) {
+	private async markAsSynced(store: 'trips' | 'expenses' | 'mileage' | 'trash', tripId: string) {
 		const db = await getDB();
 		const tx = db.transaction(store, 'readwrite');
 		const objectStore = tx.objectStore(store);
-		// [!code fix] Handle prefixed IDs (like millage:abc) by checking both if needed, or just standard get
+		// [!code fix] Handle prefixed IDs (like mileage:abc) by checking both if needed, or just standard get
 		const record = await objectStore.get(tripId);
 		if (record) {
 			record.syncStatus = 'synced';

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { formatCurrency, calculateNetProfit, calculateHourlyPay } from '$lib/utils/trip-helpers';
-	import { millage } from '$lib/stores/millage';
+	import { mileage } from '$lib/stores/mileage';
 
 	export let trips: any[] = [];
 </script>
@@ -16,7 +16,7 @@
 		<div class="summary-value">
 			{trips
 				.reduce((sum, trip) => {
-					const m = $millage.find((x) => x.id === trip.id);
+					const m = $mileage.find((x) => x.id === trip.id);
 					return sum + (m?.miles ?? trip.totalMiles ?? 0);
 				}, 0)
 				.toFixed(1)}
