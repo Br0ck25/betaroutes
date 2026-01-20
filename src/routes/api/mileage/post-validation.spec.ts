@@ -31,13 +31,13 @@ describe('POST /api/mileage - Parent trip validation', () => {
 		mockEnv = {};
 	});
 
-	it('returns 409 when parent trip does not exist', async () => {
+	it('returns 409 when parent trip does not exist (tripId provided)', async () => {
 		// Mock: trip not found
 		mockTripKV.get.mockResolvedValue(null);
 
 		const tripId = '550e8400-e29b-41d4-a716-446655440000'; // valid UUID
 		const body = {
-			id: tripId,
+			tripId,
 			miles: 50,
 			mileageRate: 0.725,
 			startOdometer: 0,
@@ -57,7 +57,29 @@ describe('POST /api/mileage - Parent trip validation', () => {
 		expect(json.error).toContain('Parent trip not found');
 	});
 
-	it('returns 409 when parent trip is deleted', async () => {
+	it('succeeds when no tripId provided (create standalone mileage)', async () => {
+		// Mock: trip not found, but no tripId provided so validation should be skipped
+		mockTripKV.get.mockResolvedValue(null);
+
+		const body = {
+			miles: 20,
+			startOdometer: 100,
+			endOdometer: 120
+		};
+		const event: any = {
+			request: { json: async () => body },
+			locals: { user: { id: 'u1' } },
+			platform: { env: mockEnv }
+		};
+
+		const { POST } = await import('./+server');
+		const res = await POST(event as any);
+
+		expect(res.status).toBe(201);
+		expect(mockMillageSvc.put).toHaveBeenCalled();
+	});
+
+	it('returns 409 when parent trip is deleted (tripId provided)', async () => {
 		// Mock: trip exists but is deleted
 		const tripId = '550e8400-e29b-41d4-a716-446655440001'; // valid UUID
 		const deletedTrip = {
@@ -70,7 +92,7 @@ describe('POST /api/mileage - Parent trip validation', () => {
 		mockTripKV.get.mockResolvedValue(JSON.stringify(deletedTrip));
 
 		const body = {
-			id: tripId,
+			tripId: tripId,
 			miles: 50,
 			mileageRate: 0.725,
 			startOdometer: 0,
@@ -90,7 +112,7 @@ describe('POST /api/mileage - Parent trip validation', () => {
 		expect(json.error).toContain('Parent trip is deleted');
 	});
 
-	it('succeeds when parent trip exists and is active', async () => {
+	it('succeeds when parent trip exists and is active (tripId provided)', async () => {
 		// Mock: trip exists and is active
 		const tripId = '550e8400-e29b-41d4-a716-446655440002'; // valid UUID
 		const activeTrip = {
@@ -102,7 +124,7 @@ describe('POST /api/mileage - Parent trip validation', () => {
 		mockTripKV.get.mockResolvedValue(JSON.stringify(activeTrip));
 
 		const body = {
-			id: tripId,
+			tripId: tripId,
 			miles: 50,
 			mileageRate: 0.725,
 			startOdometer: 0,

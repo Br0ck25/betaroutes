@@ -121,32 +121,52 @@ export const PUT: RequestHandler = async (event) => {
 		const existing = await svc.get(userId, id);
 		if (!existing) return new Response('Not found', { status: 404 });
 
-		// Validate parent trip exists and is active (mileage ID = trip ID by design)
+		// Read the request body early so we can validate attaching to a trip if requested
+		const body: any = await event.request.json();
+
+		// Validate parent trip exists and is active when attaching or updating a tripId,
+		// or if an existing trip record is present for this mileage id (legacy behavior: id == trip id)
 		const tripKV = safeKV(env, 'BETA_LOGS_KV');
-		// Only validate if tripKV has a proper get method (skip validation in test mocks)
+		const tripIdToCheck = body.tripId ?? existing.tripId ?? undefined;
 		if (tripKV && typeof (tripKV as any).get === 'function') {
-			const tripKey = `trip:${userId}:${id}`;
-			const tripRaw = await tripKV.get(tripKey);
+			if (tripIdToCheck) {
+				// Validate the explicit tripId we're attaching/updating
+				const tripKey = `trip:${userId}:${tripIdToCheck}`;
+				const tripRaw = await tripKV.get(tripKey);
 
-			if (!tripRaw) {
-				return new Response(
-					JSON.stringify({ error: 'Parent trip not found. Cannot update mileage log.' }),
-					{ status: 409, headers: { 'Content-Type': 'application/json' } }
-				);
-			}
+				if (!tripRaw) {
+					return new Response(
+						JSON.stringify({ error: 'Parent trip not found. Cannot update mileage log.' }),
+						{ status: 409, headers: { 'Content-Type': 'application/json' } }
+					);
+				}
 
-			const trip = JSON.parse(tripRaw);
-			if (trip.deleted) {
-				return new Response(
-					JSON.stringify({
-						error: 'Parent trip is deleted. Cannot update mileage log for deleted trip.'
-					}),
-					{ status: 409, headers: { 'Content-Type': 'application/json' } }
-				);
+				const trip = JSON.parse(tripRaw);
+				if (trip.deleted) {
+					return new Response(
+						JSON.stringify({
+							error: 'Parent trip is deleted. Cannot update mileage log for deleted trip.'
+						}),
+						{ status: 409, headers: { 'Content-Type': 'application/json' } }
+					);
+				}
+			} else {
+				// No explicit tripId provided — check if a trip record exists for this mileage ID (legacy behavior)
+				const tripKey = `trip:${userId}:${id}`;
+				const tripRaw = await tripKV.get(tripKey);
+				if (tripRaw) {
+					const trip = JSON.parse(tripRaw);
+					if (trip.deleted) {
+						return new Response(
+							JSON.stringify({
+								error: 'Parent trip is deleted. Cannot update mileage log for deleted trip.'
+							}),
+							{ status: 409, headers: { 'Content-Type': 'application/json' } }
+						);
+					}
+				}
 			}
 		}
-
-		const body: any = await event.request.json();
 
 		// Merge existing with update
 		const updated = {
