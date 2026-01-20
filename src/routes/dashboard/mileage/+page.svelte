@@ -403,7 +403,7 @@
 </script>
 
 <svelte:head>
-	<title>Mileage Log - Go Route Yourself</title>
+	<title>Mileage - Go Route Yourself</title>
 </svelte:head>
 
 <div class="page-container">

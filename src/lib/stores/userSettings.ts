@@ -73,11 +73,29 @@ if (browser) {
 		// Merge defaults with saved to ensure integrity
 		userSettings.set({ ...defaultSettings, ...saved });
 
-		// 3. Auto-save changes
+		// 3. Auto-save changes to local storage
 		userSettings.subscribe((value) => {
 			storage.saveSettings(value);
 		});
+
+		// 4. Load settings from server to sync across devices
+		loadSettingsFromServer();
 	} catch (e) {
 		console.error('Failed to hydrate settings', e);
+	}
+}
+
+// Load settings from server API
+async function loadSettingsFromServer() {
+	try {
+		const response = await fetch('/api/settings');
+		if (response.ok) {
+			const serverSettings = await response.json();
+			// Merge server settings with current settings (server takes precedence)
+			userSettings.update((current) => ({ ...current, ...serverSettings }));
+		}
+	} catch (e) {
+		console.error('Failed to load settings from server', e);
+		// Continue with local settings if server load fails
 	}
 }
