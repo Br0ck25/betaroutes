@@ -45,9 +45,47 @@
 	let showUpgradeModal = false;
 	let upgradeMessage = '';
 
-	function getLocalDate() {
+	function getLocalDate(): string {
 		const now = new Date();
-		return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+		const isoStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString();
+		return isoStr.split('T')[0] ?? '';
+	}
+
+	/**
+	 * Normalize any date format to YYYY-MM-DD for HTML date inputs.
+	 * Handles: YYYY-MM-DD, MM/DD/YYYY, ISO timestamp strings
+	 */
+	function normalizeDate(dateStr: string | undefined | null): string {
+		const fallback = getLocalDate();
+		if (!dateStr) return fallback;
+
+		// If already in YYYY-MM-DD format, return as-is
+		if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+			return dateStr;
+		}
+
+		// Try MM/DD/YYYY format (from HughesNet)
+		const slashMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+		if (slashMatch) {
+			let y = slashMatch[3] ?? '1970';
+			if (y.length === 2) y = '20' + y;
+			const m = (slashMatch[1] ?? '1').padStart(2, '0');
+			const d = (slashMatch[2] ?? '1').padStart(2, '0');
+			return `${y}-${m}-${d}`;
+		}
+
+		// Try parsing as a Date object (handles ISO timestamps, etc.)
+		try {
+			const parsed = new Date(dateStr);
+			if (!isNaN(parsed.getTime())) {
+				const isoStr = parsed.toISOString();
+				return isoStr.split('T')[0] ?? fallback;
+			}
+		} catch {
+			// Fall through
+		}
+
+		return fallback;
 	}
 
 	onMount(async () => {
@@ -58,6 +96,10 @@
 		let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
 		if (!$trips || $trips.length === 0) {
 			if (userId) await trips.load(userId);
+		}
+		// Ensure mileage store is loaded to get accurate totalMiles
+		if (!$mileage || $mileage.length === 0) {
+			if (userId) await mileage.load(userId);
 		}
 		const found = $trips.find((t) => t.id === tripId);
 		if (!found) {
@@ -97,8 +139,8 @@
 		// Mutating the existing `tripData` preserves the narrow LocalTrip type for the template
 		const src = JSON.parse(JSON.stringify(found)) as any;
 		tripData.id = String(src.id || tripData.id);
-		tripData.date = String(src.date || getLocalDate());
-		tripData.payDate = String(src.payDate || '');
+		tripData.date = normalizeDate(src.date);
+		tripData.payDate = normalizeDate(src.payDate) || '';
 		tripData.startAddress = String(src.startAddress || '');
 		tripData.endAddress = String(src.endAddress || '');
 		tripData.stops = safeStops as any as LocalStop[];
@@ -106,7 +148,7 @@
 		tripData.suppliesItems = safeSupplies as any;
 		// Use trip's totalMiles as source of truth, mileage store is for display on mileage page
 		const milesFromMileage = $mileage.find((m: any) => m.id === tripId)?.miles;
-		const milesValue = Number(milesFromMillage ?? src.totalMiles) || 0;
+		const milesValue = Number(milesFromMileage ?? src.totalMiles) || 0;
 		tripData.totalMiles = milesValue;
 		tripData.mpg = Number.isFinite(Number(src.mpg))
 			? Number(src.mpg)
