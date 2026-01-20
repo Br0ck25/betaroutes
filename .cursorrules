@@ -1,0 +1,31 @@
+# Cursor AI Rules
+
+You are working on a governed Svelte project with strict rules.
+
+## CRITICAL: Read These Files First
+
+1. `AI_AGENTS.md` - Quick reference for AI agents
+2. `GOVERNANCE.md` - Rule hierarchy
+3. `svelte-mixed-migration-agent.md` - Complete migration rules
+4. `PWA.md` - PWA requirements
+5. `HTML_LIVING_STANDARD.md` - HTML rules
+6. `DESIGN_SYSTEM.md` - Color palette
+
+## Core Rules (Never Violate)
+
+- Editing a file ≠ Migrating it
+- New code must be Svelte 5
+- Only approved colors from DESIGN_SYSTEM.md
+- PWA functionality must be preserved
+- HTML must follow Living Standard (no `<div />`)
+- STOP and ask if any rule would be violated
+
+## Quick Reference
+
+- Fix bug in Svelte 4? → Fix in Svelte 4, don't migrate
+- New component? → Use Svelte 5
+- Need new color? → Check DESIGN_SYSTEM.md first
+- Touch service worker? → STOP and ask
+- Unsure? → STOP and ask
+
+See `AI_AGENTS.md` for complete instructions.

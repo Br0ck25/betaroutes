@@ -6,7 +6,7 @@
 	export let ordersCount = 0;
 	export let loading = false;
 	export let statusMessage = 'Sync Now';
-	export let currentBatch = 0;
+	export const currentBatch = 0;
 
 	let username = '';
 	let password = '';
@@ -56,77 +56,41 @@
 		</div>
 
 		<button class="btn-primary" on:click={handleConnect} disabled={loading}>
-			{statusMessage === 'Sync Now' ? 'Connect' : statusMessage}
+			{#if statusMessage === 'Sync Now'}Connect{:else}{statusMessage}{/if}
 		</button>
 	{:else}
 		<div class="success-state">
-			<div class="status-indicator">
-				<span class="dot"></span> Connected
-			</div>
+			<div class="status-indicator"><span class="dot"></span> Connected</div>
 			<p class="last-sync">Found {ordersCount} active orders in cache.</p>
 		</div>
 
 		<div class="warning-box">
 			<p>
-					⚠️ <strong>Important:</strong> Before syncing, ensure your Start/End addresses, MPG, and Gas Price defaults are updated in <button class="btn-link" on:click={() => dispatch('openTripSettings')} aria-label="Open Trip Settings">Trip Settings</button>.
-
-		{#if loading && currentBatch > 0}
-			<div class="sync-progress-container">
-				<div class="progress-info">
-					<span class="progress-label">Syncing Batch {currentBatch}</span>
-					<span class="progress-sub">Fetching orders...</span>
-				</div>
-				<div class="progress-bar">
-					<div class="progress-fill indeterminate"></div>
-				</div>
-			</div>
-		{:else}
+				<strong>Important:</strong> Check your Trip Settings before syncing (Start/End addresses, MPG,
+				Gas Price).
+			</p>
 			<div class="button-group mt-4">
-				<button class="btn-primary" on:click={() => dispatch('sync')} disabled={loading}>
-					<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-						><path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-						></path></svg
-					>
-					{statusMessage}
-				</button>
-
-				<button class="btn-secondary" on:click={() => dispatch('disconnect')} disabled={loading}>
-					Disconnect
-				</button>
-
-				<button
-					class="btn-secondary danger-hover"
-					on:click={() => dispatch('clear')}
-					disabled={loading}
+				<button class="btn-primary" on:click={() => dispatch('sync')} disabled={loading}
+					>{statusMessage}</button
 				>
-					Delete HNS Trips
-				</button>
-
-				<!-- Restore Archived Orders -->
+				<button class="btn-secondary" on:click={() => dispatch('disconnect')} disabled={loading}
+					>Disconnect</button
+				>
 				<button
 					class="btn-secondary"
-					on:click={() => (showRestore = !showRestore)}
-					disabled={loading}
+					on:click={() => dispatch('openTripSettings')}
+					disabled={loading}>Trip Settings</button
 				>
-					{showRestore ? 'Hide Archived' : 'Restore Archived Orders'}
-				</button>
 			</div>
-		{/if}
-
-		{#if showRestore}
-			<div class="mt-4">
-				<ArchivedRestore
-					on:restored={() => {
-						dispatch('reloaded');
-					}}
-					on:restoreAndSync={(e: CustomEvent) => dispatch('restoreAndSync', e.detail)}
-				/>
-			</div>
-		{/if}
+			{#if showRestore}
+				<div class="mt-4">
+					<ArchivedRestore
+						on:restored={() => dispatch('reloaded')}
+						on:restoreAndSync={(e: CustomEvent) => dispatch('restoreAndSync', e.detail)}
+					/>
+				</div>
+			{/if}
+		</div>
 	{/if}
 </div>
 
@@ -213,20 +177,6 @@
 		border: none;
 	}
 
-	/* Small link-style button used for inline hints */
-	.btn-link {
-		background: none;
-		border: none;
-		color: var(--accent-blue, #1FA8DB);
-		cursor: pointer;
-		padding: 0;
-		font-weight: 700;
-		text-decoration: underline;
-	}
-	.btn-link:focus {
-		outline: 2px solid rgba(31, 168, 219, 0.25);
-		outline-offset: 2px;
-	}
 	.btn-primary:hover {
 		transform: translateY(-2px);
 		box-shadow: 0 8px 16px rgba(255, 127, 80, 0.3);
@@ -246,10 +196,6 @@
 		border-color: #f97316;
 		color: #f97316;
 	}
-	.btn-secondary.danger-hover:hover {
-		border-color: #dc2626;
-		color: #dc2626;
-	}
 
 	.button-group {
 		display: flex;
@@ -257,56 +203,6 @@
 	}
 	.mt-4 {
 		margin-top: 16px;
-	}
-
-	.sync-progress-container {
-		background: #fff7ed;
-		border: 1px solid #fed7aa;
-		border-radius: 12px;
-		padding: 16px;
-		text-align: center;
-		margin-top: 16px;
-	}
-	.progress-info {
-		display: flex;
-		justify-content: space-between;
-		align-items: baseline;
-		margin-bottom: 8px;
-	}
-	.progress-label {
-		font-weight: 700;
-		color: #9a3412;
-		font-size: 14px;
-	}
-	.progress-sub {
-		color: #c2410c;
-		font-size: 12px;
-	}
-	.progress-bar {
-		height: 8px;
-		background: #ffedd5;
-		border-radius: 4px;
-		overflow: hidden;
-		position: relative;
-	}
-	.progress-fill {
-		height: 100%;
-		background: linear-gradient(90deg, #f97316, #ea580c);
-		border-radius: 4px;
-		width: 30%;
-	}
-	.progress-fill.indeterminate {
-		width: 50%;
-		animation: pulse-progress 1.5s infinite ease-in-out;
-	}
-
-	@keyframes pulse-progress {
-		0% {
-			transform: translateX(-100%);
-		}
-		100% {
-			transform: translateX(200%);
-		}
 	}
 
 	.success-state {
@@ -344,10 +240,5 @@
 		border-radius: 8px;
 		font-size: 13px;
 		color: #9a3412;
-	}
-	.warning-box a {
-		color: #c2410c;
-		text-decoration: underline;
-		font-weight: 600;
 	}
 </style>

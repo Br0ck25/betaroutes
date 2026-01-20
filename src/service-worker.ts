@@ -31,14 +31,14 @@ self.addEventListener('install', (event) => {
 			try {
 				const res = await fetch(asset, { cache: 'no-cache' });
 				if (!res || !res.ok) {
-					console.error(
+					console.warn(
 						`service-worker: failed to fetch ${asset}: ${res && res.status} ${res && res.statusText}`
 					);
 					continue;
 				}
 				await cache.put(asset, res.clone());
 			} catch (e) {
-				console.error(`service-worker: error fetching ${asset}`, e);
+				console.warn(`service-worker: error fetching ${asset}`, e);
 			}
 		}
 	}

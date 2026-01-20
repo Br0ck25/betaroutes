@@ -44,12 +44,9 @@ class SyncManager {
 		});
 
 		if (navigator.onLine) {
-			// 1. Push any pending local changes immediately
 			await this.syncNow();
-
-			// 2. [!code ++] Pull/Download data ONLY on initialization (Page Refresh)
+			// Initial pull
 			await this.syncDownAll();
-
 			this.startAutoSync();
 		}
 
@@ -58,7 +55,6 @@ class SyncManager {
 		console.log('✅ Sync manager initialized');
 	}
 
-	// [!code ++] New helper to handle the "Refresh" logic
 	private async syncDownAll() {
 		console.log('⬇️ Downloading latest data (Refresh)...');
 		await Promise.all(
@@ -71,7 +67,7 @@ class SyncManager {
 	private async handleOnline() {
 		console.log('🌐 Back online!');
 		syncStatus.setOnline(true);
-		await this.syncNow(); // Only uploads
+		await this.syncNow();
 		this.startAutoSync();
 	}
 
@@ -122,7 +118,6 @@ class SyncManager {
 		syncStatus.setSyncing();
 
 		try {
-			// Process Upload Queue (Push Only)
 			const db = await getDB();
 			const queue = await db.getAll('syncQueue');
 
@@ -132,12 +127,20 @@ class SyncManager {
 
 				for (const item of queue) {
 					try {
+						// Enrich only if it's a trip creation/update and not deleted
+						// Also skip if explicitly flagged (e.g., when updating trip after mileage deletion)
 						if (
 							(item.action === 'create' || item.action === 'update') &&
 							item.data &&
-							(!item.data.store || item.data.store === 'trips')
+							(!item.data.store || item.data.store === 'trips') &&
+							!item.data.skipEnrichment
 						) {
-							await this.enrichTripData(item.data);
+							// [!code fix] Safe enrichment block
+							try {
+								await this.enrichTripData(item.data);
+							} catch (enrichErr) {
+								console.warn('⚠️ Failed to enrich trip data (proceeding anyway):', enrichErr);
+							}
 						}
 
 						await this.processSyncItem(item);
@@ -153,8 +156,6 @@ class SyncManager {
 				if (failCount > 0) syncStatus.setError(`${failCount} item(s) failed`);
 			}
 
-			// [!code delete] Removed the "Triggering downward sync..." block
-
 			syncStatus.setSynced();
 		} catch (err) {
 			console.error('❌ Sync error:', err);
@@ -169,7 +170,23 @@ class SyncManager {
 			console.log(`🧮 Calculating offline route for trip ${trip.id}...`);
 
 			try {
-				await loadGoogleMaps(this.apiKey);
+				// [!code fix] Explicitly catch Map loading errors
+				try {
+					await loadGoogleMaps(this.apiKey);
+				} catch (loaderErr) {
+					console.warn('⚠️ Google Maps failed to load (blocked/offline). Skipping.', loaderErr);
+					return;
+				}
+
+				// [!code fix] Ensure service is available before constructing
+				if (
+					typeof google === 'undefined' ||
+					!google.maps ||
+					typeof google.maps.DirectionsService !== 'function'
+				) {
+					console.warn('⚠️ Google Maps DirectionsService not available.');
+					return;
+				}
 
 				const directionsService = new google.maps.DirectionsService();
 				const waypoints = (trip.stops || []).map((s: any) => ({
@@ -235,8 +252,8 @@ class SyncManager {
 		const baseUrl =
 			storeName === 'expenses'
 				? '/api/expenses'
-				: storeName === 'millage'
-					? '/api/millage'
+				: storeName === 'mileage'
+					? '/api/mileage'
 					: '/api/trips';
 
 		const url =
@@ -246,8 +263,8 @@ class SyncManager {
 					? `${baseUrl}/${tripId}`
 					: `${baseUrl}/${tripId}`;
 
-		let targetStore: 'trips' | 'expenses' | 'millage' | 'trash' | null =
-			storeName === 'expenses' ? 'expenses' : storeName === 'millage' ? 'millage' : 'trips';
+		let targetStore: 'trips' | 'expenses' | 'mileage' | 'trash' | null =
+			storeName === 'expenses' ? 'expenses' : storeName === 'mileage' ? 'mileage' : 'trips';
 
 		if (action === 'delete') targetStore = 'trash';
 		if (action === 'permanentDelete') targetStore = null;
@@ -257,15 +274,21 @@ class SyncManager {
 		else if (action === 'delete') await this.apiCall(url, 'DELETE', null, 'trash', tripId);
 		else if (action === 'restore')
 			await this.apiCall(`/api/trash/${tripId}`, 'POST', null, 'trips', tripId);
-		else if (action === 'permanentDelete')
-			await this.apiCall(`/api/trash/${tripId}`, 'DELETE', null, null, tripId);
+		else if (action === 'permanentDelete') {
+			// Include record type as query param so server knows which service to delete from
+			const recordType = (data as any)?.recordType;
+			const deleteUrl = recordType
+				? `/api/trash/${tripId}?type=${encodeURIComponent(recordType)}`
+				: `/api/trash/${tripId}`;
+			await this.apiCall(deleteUrl, 'DELETE', null, null, tripId);
+		}
 	}
 
 	private async apiCall(
 		url: string,
 		method: string,
 		body: any,
-		updateStore: 'trips' | 'expenses' | 'millage' | 'trash' | null,
+		updateStore: 'trips' | 'expenses' | 'mileage' | 'trash' | null,
 		id: string
 	) {
 		const res = await fetch(url, {
@@ -289,10 +312,11 @@ class SyncManager {
 		if (updateStore) await this.markAsSynced(updateStore, id);
 	}
 
-	private async markAsSynced(store: 'trips' | 'expenses' | 'millage' | 'trash', tripId: string) {
+	private async markAsSynced(store: 'trips' | 'expenses' | 'mileage' | 'trash', tripId: string) {
 		const db = await getDB();
 		const tx = db.transaction(store, 'readwrite');
 		const objectStore = tx.objectStore(store);
+		// [!code fix] Handle prefixed IDs (like mileage:abc) by checking both if needed, or just standard get
 		const record = await objectStore.get(tripId);
 		if (record) {
 			record.syncStatus = 'synced';

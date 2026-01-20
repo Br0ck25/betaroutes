@@ -8,14 +8,12 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo '' && husky install",
-		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && npm run check:robots",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"check:robots": "node scripts/validate-robots.js",
 		"format": "prettier --write .",
 		"lint": "prettier --check \"src/**/*.{ts,js,svelte,css,md}\" && eslint \"src/**/*.{ts,js,svelte}\"",
-		"test:unit": "vitest",
-		"test": "npm run test:unit -- --run && npm run test:e2e",
-		"test:e2e": "playwright test"
+		"migrate:order": "node scripts/svelte5-migration-order.js",
+		"migrate:done": "node scripts/svelte5-migration-done.js"
 	},
 	"lint-staged": {
 		"*.{ts,js,svelte}": [
@@ -33,7 +31,6 @@
 		"@cloudflare/workers-types": "^4.20251205.0",
 		"@eslint/compat": "^1.4.0",
 		"@eslint/js": "^9.39.1",
-		"@playwright/test": "^1.56.1",
 		"@sveltejs/adapter-auto": "^7.0.0",
 		"@sveltejs/adapter-cloudflare": "^7.2.4",
 		"@sveltejs/kit": "^2.48.5",

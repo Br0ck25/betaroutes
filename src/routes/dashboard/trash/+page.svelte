@@ -4,36 +4,55 @@
 	import { trash } from '$lib/stores/trash';
 	import { trips } from '$lib/stores/trips';
 	import { expenses } from '$lib/stores/expenses';
-	import { millage } from '$lib/stores/millage';
+	import { mileage } from '$lib/stores/mileage';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { user } from '$lib/stores/auth';
 	import { getDB } from '$lib/db/indexedDB';
 	import type { TrashRecord } from '$lib/db/types';
-    import { get } from 'svelte/store';
+	import { get } from 'svelte/store';
+	import { userSettings } from '$lib/stores/userSettings';
+	import { getVehicleDisplayName } from '$lib/utils/vehicle';
 
 	const resolve = (href: string) => `${base}${href}`;
+
+	// Known user-friendly error messages that are safe to display
+	const KNOWN_RESTORE_ERROR_MESSAGES = [
+		'Item not found in trash',
+		'Unauthorized',
+		'The parent Trip is currently in the Trash. Please restore the Trip first.',
+		'This mileage log belongs to a trip that has been permanently deleted. It cannot be restored.'
+	];
 
 	let trashedTrips: TrashRecord[] = [];
 	let loading = true;
 	let restoring = new Set<string>();
 	let deleting = new Set<string>();
 	let currentTypeParam: string | null = null;
-	let _pageUnsub: () => void | null = null;
+	let _pageUnsub: (() => void) | null = null;
 
 	onMount(() => {
 		const params = new URLSearchParams(window.location.search);
 		const typeParam = params.get('type');
-		loadTrash(
-			typeParam === 'expenses' ? 'expense' : typeParam === 'millage' ? 'millage' : undefined
-		).catch(console.error);
+		const type =
+			typeParam === 'expenses' ? 'expense' : typeParam === 'mileage' ? 'mileage' : undefined;
+
+		// 1. Load Local
+		loadTrash(type).catch(console.error);
+
+		// 2. [!code fix] Force Cloud Sync on Mount
+		const userState = get(user);
+		const userId = userState?.name || userState?.token;
+		if (userId) {
+			trash.syncFromCloud(userId, typeParam || undefined).then(() => loadTrash(type));
+		}
 
 		// Subscribe to page changes
 		_pageUnsub = page.subscribe(async ($p) => {
 			const param = $p.url.searchParams.get('type');
 			if (param !== currentTypeParam) {
 				currentTypeParam = param;
-				const type = param === 'expenses' ? 'expense' : param === 'millage' ? 'millage' : undefined;
+				const type = param === 'expenses' ? 'expense' : param === 'mileage' ? 'mileage' : undefined;
 				loading = true;
 				try {
 					await loadTrash(type);
@@ -94,27 +113,38 @@
 				type ??
 				(currentTypeParam === 'expenses'
 					? 'expense'
-					: currentTypeParam === 'millage'
-						? 'millage'
-						: 'trip');
+					: currentTypeParam === 'mileage'
+						? 'mileage'
+						: undefined);
 
-			const filtered = uniqueItems.filter((it) => {
-				const inferred =
+			const filtered = uniqueItems.filter((it: any) => {
+				const recordTypes = Array.isArray(it.recordTypes)
+					? it.recordTypes
+					: it.recordType
+						? [it.recordType]
+						: [];
+
+				if (recordTypes.length > 0) {
+					// If viewing 'all', show everything; otherwise include items whose recordTypes include the view
+					if (!type && !currentTypeParam) return true;
+					return recordTypes.includes(effectiveType as any);
+				}
+
+				// Fallback: infer from key or shape
+				const inferredFromKey =
 					it.recordType ||
 					it.type ||
 					(it.originalKey &&
 						(it.originalKey.startsWith('expense:')
 							? 'expense'
-							: it.originalKey.startsWith('millage:')
-								? 'millage'
+							: it.originalKey.startsWith('mileage:')
+								? 'mileage'
 								: 'trip')) ||
 					'trip';
-				
-				// If viewing 'all', show everything, otherwise filter
-				if (!type && !currentTypeParam) return true;
+				const hasMileageShape = typeof it.miles === 'number' || Boolean(it.vehicle);
+				const inferred = hasMileageShape ? 'mileage' : inferredFromKey;
 				return inferred === effectiveType;
 			});
-
 			filtered.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
 			trashedTrips = filtered;
 		} catch (err) {
@@ -133,18 +163,29 @@
 		restoring = restoring;
 
 		try {
-			await trash.restore(id, item.userId);
-
-			const isExpense = (item as any).recordType === 'expense' || (item as any).type === 'expense';
-			const isMillage = (item as any).recordType === 'millage' || (item as any).type === 'millage';
-
-			if (isExpense) await expenses.load(item.userId);
-			else if (isMillage) await millage.load(item.userId);
+			// Prefer current view when restoring ambiguous/merged tombstones
+			const displayType =
+				currentTypeParam === 'expenses'
+					? 'expense'
+					: currentTypeParam === 'mileage'
+						? 'mileage'
+						: Array.isArray((item as any).recordTypes) && (item as any).recordTypes.length
+							? (item as any).recordTypes[0]
+							: (item as any).recordType ||
+								(item as any).type ||
+								(typeof (item as any).miles === 'number' ? 'mileage' : 'trip');
+			if (displayType === 'expense') await expenses.load(item.userId);
+			else if (displayType === 'mileage') await mileage.load(item.userId);
 			else await trips.load(item.userId);
 
 			await loadTrash();
 		} catch (err) {
-			alert('Failed to restore item.');
+			// Only show known user-friendly error messages, fallback to generic for unknown errors
+			const errorMessage = err instanceof Error ? err.message : '';
+			const message = KNOWN_RESTORE_ERROR_MESSAGES.includes(errorMessage)
+				? errorMessage
+				: 'Failed to restore item.';
+			alert(message);
 		} finally {
 			restoring.delete(id);
 			restoring = restoring;
@@ -158,17 +199,32 @@
 		loading = true;
 		try {
 			for (const trip of trashedTrips) {
-				await trash.restore(trip.id, trip.userId);
+				const displayType =
+					currentTypeParam === 'expenses'
+						? 'expense'
+						: currentTypeParam === 'mileage'
+							? 'mileage'
+							: Array.isArray((trip as any).recordTypes) && (trip as any).recordTypes.length
+								? (trip as any).recordTypes[0]
+								: (trip as any).recordType ||
+									(trip as any).type ||
+									(typeof (trip as any).miles === 'number' ? 'mileage' : 'trip');
+				await trash.restore(trip.id, trip.userId, displayType);
 			}
 			const userId = $user?.name || $user?.token;
 			if (userId) {
 				await trips.load(userId);
 				await expenses.load(userId);
-				await millage.load(userId);
+				await mileage.load(userId);
 			}
 			await loadTrash();
 		} catch (err) {
-			alert('Failed to restore some items.');
+			// Only show known user-friendly error messages, fallback to generic for unknown errors
+			const errorMessage = err instanceof Error ? err.message : '';
+			const message = KNOWN_RESTORE_ERROR_MESSAGES.includes(errorMessage)
+				? errorMessage
+				: 'Failed to restore some items.';
+			alert(message);
 		} finally {
 			loading = false;
 		}
@@ -176,7 +232,7 @@
 
 	async function permanentDelete(id: string) {
 		if (!confirm('Permanently delete this item? Cannot be undone.')) return;
-		
+
 		if (deleting.has(id)) return;
 		deleting.add(id);
 		deleting = deleting;
@@ -237,21 +293,17 @@
 
 		<div class="header-actions">
 			{#if trashedTrips.length > 0}
-				<button class="btn-success" on:click={restoreAll}>
-					Restore All
-				</button>
-				<button class="btn-danger" on:click={emptyTrash}>
-					Empty Trash
-				</button>
+				<button class="btn-success" on:click={restoreAll}> Restore All </button>
+				<button class="btn-danger" on:click={emptyTrash}> Empty Trash </button>
 			{/if}
 
 			{#if currentTypeParam === 'expenses'}
 				<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/expenses'))}>
 					Back to Expenses
 				</button>
-			{:else if currentTypeParam === 'millage'}
-				<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/millage'))}>
-					Back to Millage
+			{:else if currentTypeParam === 'mileage'}
+				<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/mileage'))}>
+					Back to Mileage
 				</button>
 			{:else}
 				<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/trips'))}>
@@ -279,15 +331,28 @@
 					((t['metadata'] as any)?.deletedAt as string | undefined)}
 				{@const daysLeft = getDaysUntilExpiration(expiresAt)}
 
-				{@const isExpense =
-					(t['type'] as string | undefined) === 'expense' ||
-					(t['recordType'] as string | undefined) === 'expense' ||
-					(t['originalKey'] as string | undefined)?.startsWith('expense:')}
-				
-				{@const isMillage = 
-					(t['type'] as string | undefined) === 'millage' ||
-					(t['recordType'] as string | undefined) === 'millage' ||
-					(t['originalKey'] as string | undefined)?.startsWith('millage:')}
+				{@const displayType =
+					currentTypeParam === 'expenses'
+						? 'expense'
+						: currentTypeParam === 'mileage'
+							? 'mileage'
+							: Array.isArray(t['recordTypes']) && t['recordTypes'].length
+								? t['recordTypes'][0]
+								: t['recordType'] ||
+									t['type'] ||
+									(typeof t['miles'] === 'number' ? 'mileage' : 'trip')}
+
+				{@const isExpense = displayType === 'expense'}
+				{@const isMileage = displayType === 'mileage'}
+				{@const rawVehicleName = getVehicleDisplayName(
+					trip['vehicle'] as string | undefined,
+					$userSettings?.vehicles
+				)}
+				{@const vehicleDisplay =
+					rawVehicleName && rawVehicleName !== '-' && rawVehicleName !== 'Unknown vehicle'
+						? rawVehicleName
+						: null}
+				{@const mileageLogDate = trip.date || trip.createdAt}
 
 				<div class="trash-item">
 					<div class="trip-info">
@@ -296,10 +361,15 @@
 								{#if isExpense}
 									<span class="badge-expense">Expense</span>
 									<span class="expense-category">{trip.category || 'Uncategorized'}</span>
-								{:else if isMillage}
-									<span class="badge-millage">Millage</span>
-									{trip.vehicle || 'Millage Log'}
+								{:else if isMileage}
+									<span class="badge-mileage">Mileage</span>
+									{vehicleDisplay
+										? vehicleDisplay
+										: mileageLogDate
+											? formatDate(mileageLogDate)
+											: 'Mileage Log'}
 								{:else}
+									<span class="badge-trip">Trip</span>
 									{typeof trip.startAddress === 'string'
 										? trip.startAddress.split(',')[0]
 										: 'Unknown Trip'}
@@ -320,11 +390,11 @@
 								<span class="detail"
 									>{new Date(trip.date || trip.createdAt || '').toLocaleDateString()}</span
 								>
-							{:else if isMillage}
+							{:else if isMileage}
 								<span class="detail"
 									>{new Date(trip.date || trip.createdAt || '').toLocaleDateString()}</span
 								>
-								<span class="detail amount">{Number(trip.miles || 0).toFixed(2)} mi</span>
+								<span class="detail amount">{Number(trip['miles'] || 0).toFixed(2)} mi</span>
 								{#if trip.notes}<span class="detail">{trip.notes}</span>{/if}
 							{:else}
 								<span class="detail"
@@ -361,8 +431,8 @@
 </div>
 
 <style>
-    /* Add this new style for millage badges */
-    .badge-millage {
+	/* Add this new style for mileage badges */
+	.badge-mileage {
 		background-color: #d1fae5;
 		color: #065f46;
 		font-size: 0.8em;
@@ -372,7 +442,17 @@
 		vertical-align: middle;
 		font-weight: 600;
 	}
-    /* Keep existing styles */
+	.badge-trip {
+		background-color: #dbeafe;
+		color: #1e40af;
+		font-size: 0.8em;
+		padding: 2px 6px;
+		border-radius: 4px;
+		margin-right: 6px;
+		vertical-align: middle;
+		font-weight: 600;
+	}
+	/* Keep existing styles */
 	.trash-page {
 		padding: 16px;
 		max-width: 1200px;
@@ -536,9 +616,6 @@
 	.empty-state {
 		text-align: center;
 		padding: 40px 20px;
-	}
-	.empty-state svg {
-		margin-bottom: 16px;
 	}
 
 	.badge-expense {

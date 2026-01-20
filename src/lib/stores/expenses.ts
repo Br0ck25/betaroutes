@@ -12,16 +12,20 @@ export const isLoading = writable(false);
 
 function createExpensesStore() {
 	const { subscribe, set, update } = writable<ExpenseRecord[]>([]);
+	let _hydrationPromise: Promise<void> | null = null;
+	const _resolveHydration: any = null;
 
 	return {
 		subscribe,
 		set,
 
 		// [!code fix] Smart Hydrate: Removes stale items (deleted on other devices)
-		async hydrate(data: ExpenseRecord[], userId: string) {
+		async hydrate(data: ExpenseRecord[], _userId?: string) {
+			// parameter intentionally unused in this implementation — keep for API parity
+			void _userId;
 			try {
 				const db = await getDB();
-				
+
 				// 1. Check Trash to prevent resurrection of locally deleted items
 				const trashTx = db.transaction('trash', 'readonly');
 				const trashItems = await trashTx.objectStore('trash').getAll();
@@ -30,15 +34,15 @@ function createExpensesStore() {
 
 				// 2. Prepare Valid Data (Server data minus local trash)
 				const validServerData = data.filter((item) => !trashIds.has(item.id));
-				const serverIdSet = new Set(validServerData.map(i => i.id));
-				
+				const serverIdSet = new Set(validServerData.map((i) => i.id));
+
 				// 3. Update Screen Immediately
 				set(validServerData);
 
 				// 4. Update DB (ReadWrite)
 				const tx = db.transaction(['expenses', 'trash'], 'readwrite');
 				const store = tx.objectStore('expenses');
-				
+
 				// Get all local items to check for zombies (stale items)
 				const localItems = await store.getAll();
 
@@ -54,17 +58,21 @@ function createExpensesStore() {
 						await store.delete(local.id);
 					}
 				}
-				
+
 				// UPDATE/INSERT fresh server data
 				for (const item of validServerData) {
 					await store.put({ ...item, syncStatus: 'synced' });
 				}
 
 				await tx.done;
+				if (_resolveHydration) _resolveHydration();
+				_hydrationPromise = null;
 			} catch (err) {
 				console.error('Failed to hydrate expenses:', err);
 				// Fallback: just trust the server data
 				set(data);
+				if (_resolveHydration) _resolveHydration();
+				_hydrationPromise = null;
 			}
 		},
 
@@ -104,7 +112,7 @@ function createExpensesStore() {
 				const trashItems = await trashStore.getAll();
 				const trashIds = new Set(trashItems.map((t: any) => t.id));
 
-				const activeItems = expenses.filter(e => !trashIds.has(e.id));
+				const activeItems = expenses.filter((e) => !trashIds.has(e.id));
 
 				activeItems.sort((a, b) => {
 					const dateA = new Date(a.date || a.createdAt).getTime();
@@ -340,7 +348,7 @@ function createExpensesStore() {
 					const tx = db.transaction(['expenses', 'trash'], 'readwrite');
 					const store = tx.objectStore('expenses');
 					const trashStore = tx.objectStore('trash');
-					
+
 					const trashKeys = await trashStore.getAllKeys();
 					const trashIds = new Set(trashKeys.map(String));
 
@@ -371,6 +379,8 @@ function createExpensesStore() {
 			} catch (err) {
 				console.error('❌ Failed to sync expenses from cloud:', err);
 			} finally {
+				// Ensure hydration (if running) completes before loading DB to avoid races
+				if (_hydrationPromise) await _hydrationPromise;
 				await this.load(userId);
 				isLoading.set(false);
 			}

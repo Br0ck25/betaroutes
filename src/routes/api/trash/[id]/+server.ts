@@ -2,8 +2,8 @@
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
 import { makeExpenseService } from '$lib/server/expenseService';
-import { makeMillageService } from '$lib/server/millageService';
-import { safeKV, safeDO } from '$lib/server/env';
+import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
+import { safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { getStorageId } from '$lib/server/user';
 
@@ -39,17 +39,19 @@ export const POST: RequestHandler = async (event) => {
 			tripIndexDO as any
 		);
 
-		const millageSvc = makeMillageService(
+		const mileageSvc = makeMileageService(
 			safeKV(platformEnv, 'BETA_MILLAGE_KV') as any,
-			tripIndexDO as any
+			tripIndexDO as any,
+			safeKV(platformEnv, 'BETA_LOGS_KV') as any
 		);
 
 		const currentUser = user as { id?: string; name?: string; token?: string };
 		const storageId = getStorageId(currentUser);
-		
+
 		if (storageId) {
 			let restored: unknown | null = null;
-			
+			let lastError: string | null = null;
+
 			// Strategy: Try sequentially until one succeeds
 			try {
 				restored = await tripSvc.restore(storageId, id);
@@ -58,9 +60,67 @@ export const POST: RequestHandler = async (event) => {
 					restored = await expenseSvc.restore(storageId, id);
 				} catch {
 					try {
-						restored = await millageSvc.restore(storageId, id);
-					} catch {
-						/* All failed */
+						// Get the mileage item from trash to check its tripId
+						const mileageKV = safeKV(platformEnv, 'BETA_MILLAGE_KV');
+						if (mileageKV) {
+							const raw = await (mileageKV as any).get(`mileage:${storageId}:${id}`);
+							if (raw) {
+								const tombstone = JSON.parse(raw);
+								const mileageData = tombstone.backup || tombstone.data || tombstone;
+
+								// Check if mileage has a linked trip
+								if (mileageData.tripId) {
+									// Check if parent trip is deleted
+									const trip = await tripSvc.get(storageId, mileageData.tripId);
+									if (!trip || trip.deleted) {
+										throw new Error('Cannot restore mileage: parent trip is deleted');
+									}
+
+									// Check if another active mileage log exists for this trip
+									const activeMileage = await mileageSvc.list(storageId);
+									const conflictingMileage = activeMileage.find(
+										(m: MileageRecord) => m.tripId === mileageData.tripId && m.id !== id
+									);
+									if (conflictingMileage) {
+										throw new Error(
+											'Cannot restore mileage: another active mileage log exists for this trip'
+										);
+									}
+								}
+							}
+						}
+
+						restored = await mileageSvc.restore(storageId, id);
+						// If restored mileage has a tripId, sync the miles back to the trip
+						const restoredMillage = restored as MillageRecord | undefined;
+						if (
+							restoredMillage &&
+							restoredMillage.tripId &&
+							typeof restoredMillage.miles === 'number'
+						) {
+							try {
+								const trip = await tripSvc.get(storageId, restoredMillage.tripId);
+								if (trip && !trip.deleted) {
+									trip.totalMiles = restoredMillage.miles;
+									trip.updatedAt = new Date().toISOString();
+									await tripSvc.put(trip);
+									log.info('Synced restored mileage to trip', {
+										tripId: restoredMillage.tripId,
+										miles: restoredMillage.miles
+									});
+								}
+							} catch (e) {
+								log.warn('Failed to sync restored mileage to trip', { message: String(e) });
+							}
+						}
+					} catch (err) {
+						// Check if this is a validation error that we should surface
+						const errMsg = err instanceof Error ? err.message : String(err);
+						if (errMsg.includes('Cannot restore mileage')) {
+							return new Response(JSON.stringify({ error: errMsg }), { status: 409 });
+						}
+						// Store the error for later use if no restore succeeded
+						lastError = errMsg;
 					}
 				}
 			}
@@ -71,14 +131,20 @@ export const POST: RequestHandler = async (event) => {
 					if ((restored as any).stops || (restored as any).startAddress) {
 						await (tripSvc as any).incrementUserCounter?.(currentUser.token || '', 1);
 					}
-				} catch {}
-				
+				} catch {
+					void 0;
+				}
+
 				return new Response(JSON.stringify({ success: true }), { status: 200 });
+			}
+
+			// If all restore attempts failed with a validation error, surface it
+			if (lastError) {
+				return new Response(JSON.stringify({ error: lastError }), { status: 409 });
 			}
 		}
 
 		return new Response(JSON.stringify({ error: 'Item not found in trash' }), { status: 404 });
-
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		log.error('POST /api/trash/[id]/restore error', { message });
@@ -92,6 +158,8 @@ export const DELETE: RequestHandler = async (event) => {
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
 		const { id } = event.params;
+		// Accept optional 'type' query param to specify which record type to delete
+		const recordType = event.url.searchParams.get('type');
 		const platformEnv = event.platform?.env as Record<string, unknown> | undefined;
 		const tripIndexDO = (platformEnv?.['TRIP_INDEX_DO'] as unknown) ?? fakeDO();
 		const placesIndexDO = (platformEnv?.['PLACES_INDEX_DO'] as unknown) ?? tripIndexDO;
@@ -110,7 +178,7 @@ export const DELETE: RequestHandler = async (event) => {
 			tripIndexDO as any
 		);
 
-		const millageSvc = makeMillageService(
+		const mileageSvc = makeMileageService(
 			safeKV(platformEnv, 'BETA_MILLAGE_KV') as any,
 			tripIndexDO as any
 		);
@@ -119,13 +187,61 @@ export const DELETE: RequestHandler = async (event) => {
 		const storageId = getStorageId(currentUser);
 
 		if (storageId) {
-			// Try to delete from ALL possible locations to ensure cleanup
-			// We use Promise.allSettled to ensure one failure doesn't stop others
-			await Promise.allSettled([
-				tripSvc.permanentDelete(storageId, id),
-				expenseSvc.permanentDelete(storageId, id),
-				millageSvc.permanentDelete(storageId, id)
-			]);
+			// If record type is specified, only delete from that specific service
+			// This prevents accidentally deleting a trip when user only wants to delete mileage
+			if (recordType === 'mileage') {
+				await mileageSvc.permanentDelete(storageId, id);
+			} else if (recordType === 'expense') {
+				await expenseSvc.permanentDelete(storageId, id);
+			} else if (recordType === 'trip') {
+				await tripSvc.permanentDelete(storageId, id);
+			} else {
+				// No type specified - detect which service has this record in trash
+				// by checking which KV has a tombstone for this ID
+				const tripKV = safeKV(platformEnv, 'BETA_LOGS_KV');
+				const expenseKV = safeKV(platformEnv, 'BETA_EXPENSES_KV');
+				const millageKV = safeKV(platformEnv, 'BETA_MILLAGE_KV');
+
+				// Check each service for a tombstone record
+				let foundType: string | null = null;
+
+				if (tripKV) {
+					const tripRaw = await (tripKV as any).get(`trip:${storageId}:${id}`);
+					if (tripRaw) {
+						const parsed = JSON.parse(tripRaw);
+						if (parsed.deleted) foundType = 'trip';
+					}
+				}
+
+				if (!foundType && mileageKV) {
+					const mileageRaw = await (mileageKV as any).get(`mileage:${storageId}:${id}`);
+					if (mileageRaw) {
+						const parsed = JSON.parse(mileageRaw);
+						if (parsed.deleted) foundType = 'mileage';
+					}
+				}
+
+				if (!foundType && expenseKV) {
+					const expenseRaw = await (expenseKV as any).get(`expense:${storageId}:${id}`);
+					if (expenseRaw) {
+						const parsed = JSON.parse(expenseRaw);
+						if (parsed.deleted) foundType = 'expense';
+					}
+				}
+
+				// Only delete from the service that has the tombstone
+				if (foundType === 'trip') {
+					await tripSvc.permanentDelete(storageId, id);
+				} else if (foundType === 'mileage') {
+					await mileageSvc.permanentDelete(storageId, id);
+				} else if (foundType === 'expense') {
+					await expenseSvc.permanentDelete(storageId, id);
+				} else {
+					// If no tombstone found, log warning but still try cleanup as fallback
+					// This handles edge cases where the tombstone was already deleted
+					log.warn('No tombstone found for permanent delete, skipping', { id, storageId });
+				}
+			}
 		}
 
 		return new Response(null, { status: 204 });

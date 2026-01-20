@@ -1,7 +1,7 @@
 // src/lib/server/dev-mock-db.ts
 import fs from 'node:fs';
 import path from 'node:path';
-import { PRIVATE_GOOGLE_MAPS_API_KEY } from '$env/static/private';
+import { env as privateEnv } from '$env/dynamic/private';
 import { log } from '$lib/server/log';
 
 const DB_FILE = path.resolve('.kv-mock.json');
@@ -186,7 +186,7 @@ export function setupMockKV(event: { platform?: { env?: Record<string, unknown> 
 	const env = event.platform.env as Record<string, unknown>;
 
 	if (!env['PRIVATE_GOOGLE_MAPS_API_KEY']) {
-		env['PRIVATE_GOOGLE_MAPS_API_KEY'] = PRIVATE_GOOGLE_MAPS_API_KEY;
+		env['PRIVATE_GOOGLE_MAPS_API_KEY'] = privateEnv['PRIVATE_GOOGLE_MAPS_API_KEY'];
 	}
 
 	// Mock KVs
@@ -196,7 +196,7 @@ export function setupMockKV(event: { platform?: { env?: Record<string, unknown> 
 	if (!env['BETA_USER_SETTINGS_KV']) env['BETA_USER_SETTINGS_KV'] = createMockKV('SETTINGS');
 	if (!env['BETA_PLACES_KV']) env['BETA_PLACES_KV'] = createMockKV('PLACES');
 	if (!env['BETA_EXPENSES_KV']) env['BETA_EXPENSES_KV'] = createMockKV('EXPENSES');
-	if (!env['BETA_MILLAGE_KV']) env['BETA_MILLAGE_KV'] = createMockKV('MILLAGE');
+	if (!env['BETA_MILLAGE_KV']) env['BETA_MILLAGE_KV'] = createMockKV('MILEAGE');
 	if (!env['BETA_HUGHESNET_KV']) env['BETA_HUGHESNET_KV'] = createMockKV('HUGHESNET');
 	if (!env['BETA_HUGHESNET_ORDERS_KV'])
 		env['BETA_HUGHESNET_ORDERS_KV'] = createMockKV('HUGHESNET_ORDERS');

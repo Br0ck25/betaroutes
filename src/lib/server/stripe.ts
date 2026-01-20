@@ -8,7 +8,7 @@ let stripeInstance: Stripe | null = null;
 
 export const getStripe = () => {
 	if (!stripeInstance) {
-		const key = env.STRIPE_SECRET_KEY;
+		const key = env['STRIPE_SECRET_KEY'];
 		if (!key) {
 			log.warn('⚠️ STRIPE_SECRET_KEY is missing. Payments will fail.');
 			// Return a dummy instance or throw, depending on preference.

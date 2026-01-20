@@ -41,7 +41,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 			safeKV(env, 'BETA_DIRECTIONS_KV')!,
 			safeKV(env, 'BETA_HUGHESNET_ORDERS_KV')!,
 			safeKV(env, 'BETA_LOGS_KV')!,
-			safeDO(env, 'TRIP_INDEX_DO')!
+			safeDO(env, 'TRIP_INDEX_DO')!,
+			safeKV(env, 'BETA_MILLAGE_KV')
 		);
 
 		if (action === 'save_settings') {
@@ -149,7 +150,8 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
 			safeKV(env, 'BETA_DIRECTIONS_KV')!,
 			safeKV(env, 'BETA_HUGHESNET_ORDERS_KV')!,
 			safeKV(env, 'BETA_LOGS_KV')!,
-			safeDO(env, 'TRIP_INDEX_DO')!
+			safeDO(env, 'TRIP_INDEX_DO')!,
+			safeKV(env, 'BETA_MILLAGE_KV')
 		);
 		const orders = await service.getOrders(userId);
 

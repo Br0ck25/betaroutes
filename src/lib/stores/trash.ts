@@ -1,11 +1,43 @@
 // src/lib/stores/trash.ts
-import { writable } from 'svelte/store';
-import { getDB } from '$lib/db/indexedDB';
+import { writable, get } from 'svelte/store';
+import { getDB, getMileageStoreName } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
 import type { TrashRecord } from '$lib/db/types';
+import { user as authUser } from '$lib/stores/auth';
+import type { User } from '$lib/types';
 
 function createTrashStore() {
 	const { subscribe, set, update } = writable<TrashRecord[]>([]);
+
+	// Ensure we always work with prefixed ID if it exists
+	const getRealId = (trashId: string) => {
+		if (trashId.startsWith('mileage:')) return trashId.replace('mileage:', '');
+		if (trashId.startsWith('trip:')) return trashId.replace('trip:', '');
+		if (trashId.startsWith('expense:')) return trashId.replace('expense:', '');
+		return trashId;
+	};
+
+	// Extract record type from prefixed ID
+	const getRecordType = (trashId: string): string | undefined => {
+		if (trashId.startsWith('mileage:')) return 'mileage';
+		if (trashId.startsWith('trip:')) return 'trip';
+		if (trashId.startsWith('expense:')) return 'expense';
+		return undefined;
+	};
+
+	// Generate a unique trash ID with type prefix to avoid collisions
+	const getUniqueTrashId = (item: { id: string; recordType?: string; type?: string }) => {
+		const id = item.id;
+		const recordType = item.recordType || item.type || 'trip';
+
+		// If ID already has a known prefix, return it as-is
+		if (id.startsWith('mileage:') || id.startsWith('trip:') || id.startsWith('expense:')) {
+			return id;
+		}
+
+		// Otherwise, prefix based on record type
+		return `${recordType}:${id}`;
+	};
 
 	return {
 		subscribe,
@@ -17,7 +49,6 @@ function createTrashStore() {
 				const store = tx.objectStore('trash');
 				const items = userId ? await store.index('userId').getAll(userId) : await store.getAll();
 
-				// Normalize/Flatten similar to +page.svelte logic for consistency in store
 				const normalizedItems = items.map((item) => {
 					let flat = { ...item };
 					if (flat.data && typeof flat.data === 'object') {
@@ -27,25 +58,34 @@ function createTrashStore() {
 					return flat;
 				});
 
-				// Filter by type if provided (expense or trip)
 				const filtered = type
-					? normalizedItems.filter(
-							(it) =>
-								(it.recordType ||
-								it.type ||
-								(it.originalKey && it.originalKey.startsWith('expense:'))
-									? it.recordType || it.type || 'expense'
-									: 'trip') === type
-						)
+					? normalizedItems.filter((it) => {
+							if (it.recordType === type || it.type === type) return true;
+							if (Array.isArray(it.recordTypes) && it.recordTypes.includes(type)) return true;
+							if (type === 'expense' && it.originalKey?.startsWith('expense:')) return true;
+							if (type === 'mileage' && it.originalKey?.startsWith('mileage:')) return true;
+							if (type === 'trip' && it.originalKey?.startsWith('trip:')) return true;
+							return false;
+						})
 					: normalizedItems;
 
-				filtered.sort((a, b) => {
+				const projected = filtered.map((it) => {
+					// If filtering for "mileage" but found a bundled "trip+mileage" item,
+					// present it as a mileage log for the UI
+					if (type && it.recordType !== type) {
+						return { ...it, recordType: type, type: type };
+					}
+					return it;
+				});
+
+				projected.sort((a, b) => {
 					const aTime = a && a.deletedAt ? new Date(a.deletedAt).getTime() : 0;
 					const bTime = b && b.deletedAt ? new Date(b.deletedAt).getTime() : 0;
 					return bTime - aTime;
 				});
-				set(filtered);
-				return filtered;
+
+				set(projected);
+				return projected;
 			} catch (err) {
 				console.error('❌ Failed to load trash:', err);
 				set([]);
@@ -53,72 +93,171 @@ function createTrashStore() {
 			}
 		},
 
-		async restore(id: string, userId: string) {
+		async restore(uniqueId: string, userId: string, targetType?: string) {
 			try {
 				const db = await getDB();
-				const trashTx = db.transaction('trash', 'readonly');
-				const trashItem = await trashTx.objectStore('trash').get(id);
 
-				if (!trashItem) throw new Error('Item not found in trash');
-				if (trashItem.userId !== userId) throw new Error('Unauthorized');
+				// 1. Fetch Trash Item
+				const txRead = db.transaction('trash', 'readonly');
+				const stored = await txRead.objectStore('trash').get(uniqueId);
+				await txRead.done;
 
-				// Deep clone and handle potential nested structure
-				let restoredItem = { ...trashItem };
+				if (!stored) throw new Error('Item not found in trash');
+				if (stored.userId !== userId) throw new Error('Unauthorized');
 
-				// If stored as nested { data: ... }, flatten it first to get the actual fields
-				if (restoredItem.data && typeof restoredItem.data === 'object') {
-					restoredItem = { ...restoredItem.data, ...restoredItem };
-					delete restoredItem.data;
+				const recordTypes: string[] = Array.from(
+					new Set(
+						[
+							...(Array.isArray(stored.recordTypes) ? stored.recordTypes : []),
+							stored.recordType || stored.type
+						].filter(Boolean) as string[]
+					)
+				);
+
+				const restoreType =
+					targetType || stored.recordType || stored.type || recordTypes[0] || 'trip';
+
+				// 2. Logic Check: If restoring mileage, is parent trip safe?
+				if (restoreType === 'mileage') {
+					const realId = getRealId(uniqueId);
+					const parentId = stored.tripId || realId;
+
+					const txCheck = db.transaction(['trips', 'trash'], 'readonly');
+					const tripExists = await txCheck.objectStore('trips').get(parentId);
+					const tripTrash =
+						(await txCheck.objectStore('trash').get(`trip:${parentId}`)) ||
+						(await txCheck.objectStore('trash').get(parentId));
+					await txCheck.done;
+
+					if (!tripExists) {
+						if (tripTrash) {
+							throw new Error(
+								'The parent Trip is currently in the Trash. Please restore the Trip first.'
+							);
+						} else {
+							throw new Error(
+								'This mileage log belongs to a trip that has been permanently deleted. It cannot be restored.'
+							);
+						}
+					}
 				}
 
-				// Remove trash-specific metadata
-				delete (restoredItem as any).deletedAt;
-				delete (restoredItem as any).deletedBy;
-				delete (restoredItem as any).expiresAt;
+				// 3. Prepare Data
+				const backups: Record<string, any> =
+					stored.backups || (stored.data && (stored.data.__backups as any)) || {};
 
-				const originalKey = restoredItem.originalKey;
-				const type = restoredItem.type || restoredItem.recordType;
+				// Handle "backup" vs "backups" inconsistency from server vs local
+				const backupFor = (t: string) =>
+					backups[t] ||
+					(stored.data && stored.data[t]) ||
+					stored.backup ||
+					(stored.recordType === t ? stored.data || stored : undefined) ||
+					stored;
 
-				delete (restoredItem as any).originalKey;
-				delete (restoredItem as any).recordType;
-				delete (restoredItem as any).type; // Clean up convenience type if present
+				const restored = { ...(backupFor(restoreType) || {}) };
+				restored.id = getRealId(uniqueId);
 
-				restoredItem.updatedAt = new Date().toISOString();
-				restoredItem.syncStatus = 'pending';
+				delete restored.deleted;
+				delete restored.deletedAt;
+				delete restored.metadata;
+				delete restored.backup;
+				delete restored.backups;
+				delete restored.recordTypes;
+				restored.updatedAt = new Date().toISOString();
+				restored.syncStatus = 'pending';
 
-				// Detect type and restore to correct store
-				// Check 'type', 'recordType', or 'originalKey' prefix
-				if (type === 'expense' || (originalKey && originalKey.startsWith('expense:'))) {
-					console.log('Restoring expense:', id);
-					const tx = db.transaction('expenses', 'readwrite');
-					await tx.objectStore('expenses').put(restoredItem);
-					await tx.done;
+				// 4. Atomic Write
+				const mileageStoreName = getMileageStoreName(db);
+				const tx = db.transaction(['trash', 'expenses', mileageStoreName, 'trips'], 'readwrite');
+				if (restoreType === 'expense') {
+					await tx.objectStore('expenses').put(restored);
+				} else if (restoreType === 'mileage') {
+					await tx.objectStore(mileageStoreName).put(restored);
+				}
+
+				// Always delete the trash item
+				await tx.objectStore('trash').delete(uniqueId);
+				await tx.done; // Finish transaction BEFORE updating Svelte stores
+
+				// 5. Update Svelte Stores (Now safe to async import)
+				if (restoreType === 'expense') {
+					try {
+						const { expenses } = await import('$lib/stores/expenses');
+						expenses.updateLocal(restored);
+					} catch {
+						/* ignore */
+					}
+				} else if (restoreType === 'mileage') {
+					try {
+						const { mileage } = await import('$lib/stores/mileage');
+						mileage.updateLocal(restored);
+					} catch {
+						/* ignore */
+					}
+					// Also update the associated trip's totalMiles and fuelCost
+					try {
+						const parentId = stored.tripId || getRealId(uniqueId);
+						const tripTx = db.transaction('trips', 'readwrite');
+						const tripStore = tripTx.objectStore('trips');
+						const trip = await tripStore.get(parentId);
+						if (trip && trip.userId === userId) {
+							const { calculateFuelCost } = await import('$lib/utils/calculations');
+							const newMiles = restored.miles || 0;
+							const mpg = trip.mpg || 25;
+							const gasPrice = trip.gasPrice || 3.5;
+							const newFuelCost = calculateFuelCost(newMiles, mpg, gasPrice);
+							const nowIso = new Date().toISOString();
+							const patchedTrip = {
+								...trip,
+								totalMiles: newMiles,
+								fuelCost: newFuelCost,
+								updatedAt: nowIso,
+								syncStatus: 'pending'
+							};
+							await tripStore.put(patchedTrip);
+							await tripTx.done;
+							// Update the trips store
+							const { trips } = await import('$lib/stores/trips');
+							trips.updateLocal({
+								id: parentId,
+								totalMiles: newMiles,
+								fuelCost: newFuelCost,
+								updatedAt: nowIso
+							} as any);
+							// Queue sync for trip update
+							await syncManager.addToQueue({
+								action: 'update',
+								tripId: parentId,
+								data: { ...patchedTrip, store: 'trips', skipEnrichment: true }
+							});
+						} else {
+							await tripTx.done;
+						}
+					} catch {
+						/* ignore trip update errors */
+					}
 				} else {
-					console.log('Restoring trip:', id);
-					const tx = db.transaction('trips', 'readwrite');
-					await tx.objectStore('trips').put(restoredItem);
-					await tx.done;
+					try {
+						const { trips } = await import('$lib/stores/trips');
+						trips.updateLocal(restored);
+						// Note: Bundled mileage is NOT auto-restored with trip.
+					} catch {
+						/* ignore */
+					}
 				}
 
-				const deleteTx = db.transaction('trash', 'readwrite');
-				await deleteTx.objectStore('trash').delete(id);
-				await deleteTx.done;
+				update((items) => items.filter((it) => it.id !== uniqueId));
 
-				update((items) => items.filter((item) => item.id !== id));
-
-				// Determine target store for sync action
+				// 6. Queue Sync
 				const syncTarget =
-					type === 'expense' || (originalKey && originalKey.startsWith('expense:'))
-						? 'expenses'
-						: 'trips';
-
+					restoreType === 'expense' ? 'expenses' : restoreType === 'mileage' ? 'mileage' : 'trips';
 				await syncManager.addToQueue({
 					action: 'restore',
-					tripId: id,
-					data: { store: syncTarget } // Hint to worker where to restore
+					tripId: restored.id,
+					data: { store: syncTarget, type: restoreType }
 				});
 
-				return restoredItem;
+				return restored;
 			} catch (err) {
 				console.error('❌ Failed to restore item:', err);
 				throw err;
@@ -127,11 +266,25 @@ function createTrashStore() {
 
 		async permanentDelete(id: string) {
 			const db = await getDB();
+
+			// First get the item to determine its record type
+			const txRead = db.transaction('trash', 'readonly');
+			const item = await txRead.objectStore('trash').get(id);
+			await txRead.done;
+
 			const tx = db.transaction('trash', 'readwrite');
 			await tx.objectStore('trash').delete(id);
 			await tx.done;
 			update((l) => l.filter((t) => t.id !== id));
-			await syncManager.addToQueue({ action: 'permanentDelete', tripId: id });
+
+			const realId = getRealId(id);
+			// Get record type from prefix or from the item's recordType property
+			const recordType = getRecordType(id) || item?.recordType || item?.type;
+			await syncManager.addToQueue({
+				action: 'permanentDelete',
+				tripId: realId,
+				data: { recordType }
+			});
 		},
 
 		async emptyTrash(userId: string) {
@@ -141,19 +294,22 @@ function createTrashStore() {
 			const userItems = await index.getAll(userId);
 			await txRead.done;
 
-			if (userItems.length === 0) return 0;
-
 			const tx = db.transaction('trash', 'readwrite');
 			for (const item of userItems) {
 				await tx.objectStore('trash').delete(item.id);
 			}
 			await tx.done;
 
-			// Update store to remove deleted items
 			update((current) => current.filter((item) => item.userId !== userId));
 
 			for (const item of userItems) {
-				await syncManager.addToQueue({ action: 'permanentDelete', tripId: item.id });
+				const realId = getRealId(item.id);
+				const recordType = getRecordType(item.id) || item.recordType || (item as any).type;
+				await syncManager.addToQueue({
+					action: 'permanentDelete',
+					tripId: realId,
+					data: { recordType }
+				});
 			}
 			return userItems.length;
 		},
@@ -163,7 +319,7 @@ function createTrashStore() {
 				if (!navigator.onLine) return;
 
 				const url = type ? `/api/trash?type=${encodeURIComponent(type)}` : '/api/trash';
-				const response = await fetch(url, { credentials: 'include' });
+				const response = await fetch(url);
 				if (!response.ok) return;
 
 				const cloudTrash: any = await response.json();
@@ -173,17 +329,13 @@ function createTrashStore() {
 				const tx = db.transaction('trash', 'readwrite');
 				const store = tx.objectStore('trash');
 
-				let savedCount = 0;
 				for (const rawItem of cloudTrash) {
-					// Normalize Item
 					let flatItem: any = { ...rawItem };
 
-					// Handle generic 'data' wrapper if present from new API
 					if (flatItem.data) {
 						flatItem = { ...flatItem.data, ...flatItem };
 						delete flatItem.data;
 					}
-					// Handle legacy 'trip' wrapper
 					if (flatItem.trip) flatItem = { ...flatItem.trip, ...flatItem };
 					delete flatItem.trip;
 
@@ -192,49 +344,48 @@ function createTrashStore() {
 						flatItem.expiresAt = flatItem.metadata.expiresAt || flatItem.expiresAt;
 						flatItem.originalKey = flatItem.metadata.originalKey || flatItem.originalKey;
 
-						// If metadata includes originalKey but no userId, derive it (guarded)
 						if (!flatItem.userId && typeof flatItem.metadata.originalKey === 'string') {
 							const parts = flatItem.metadata.originalKey.split(':');
 							flatItem.userId = String(parts[1] || '');
 						}
-
 						delete flatItem.metadata;
 					}
 
-					// Fallback: derive userId from originalKey if absent (guarded)
-
 					if (!flatItem.id) continue;
 
-					// Determine Record Type
 					if (!flatItem.recordType && !flatItem.type) {
 						if (flatItem.originalKey?.startsWith('expense:')) flatItem.recordType = 'expense';
+						else if (flatItem.originalKey?.startsWith('mileage:')) flatItem.recordType = 'mileage';
+						else if (flatItem.originalKey?.startsWith('trip:')) flatItem.recordType = 'trip';
+						else if (typeof flatItem.miles === 'number' && !flatItem.stops)
+							flatItem.recordType = 'mileage';
 						else flatItem.recordType = 'trip';
 					} else if (flatItem.type && !flatItem.recordType) {
 						flatItem.recordType = flatItem.type;
 					}
-
-					// Keep a convenience 'type' aligned with recordType
 					flatItem.type = flatItem.recordType;
 
-					cloudIds.add(flatItem.id);
+					// [!code fix] Ensure Trash ID is unique on download
+					const uniqueId = getUniqueTrashId(flatItem);
+					flatItem.id = uniqueId;
 
-					const local = await store.get(flatItem.id);
+					cloudIds.add(uniqueId);
+
+					const local = await store.get(uniqueId);
 					if (!local || new Date(flatItem.deletedAt) > new Date(local.deletedAt)) {
 						await store.put({
 							...flatItem,
 							syncStatus: 'synced',
 							lastSyncedAt: new Date().toISOString()
 						});
-						savedCount++;
 					}
 				}
-				if (savedCount > 0)
-					console.debug(`[trash] Synced ${savedCount} items from cloud (type=${type})`);
 
-				// Reconciliation: Remove local items not in cloud (unless pending)
 				const index = store.index('userId');
 				const localItems = await index.getAll(userId);
 				for (const localItem of localItems) {
+					if (type && localItem.recordType !== type) continue;
+
 					if (!cloudIds.has(localItem.id)) {
 						if (localItem.syncStatus === 'pending') continue;
 						await store.delete(localItem.id);
@@ -242,23 +393,31 @@ function createTrashStore() {
 				}
 				await tx.done;
 
-				// Cleanup Active Stores (Safety Check to prevent duplicates in active lists)
-				const cleanupTx = db.transaction(['trash', 'trips', 'expenses'], 'readwrite');
+				// Cleanup Active Stores based on REAL IDs
+				const mileageStoreName = getMileageStoreName(db);
+				const cleanupTx = db.transaction(
+					['trash', 'trips', 'expenses', mileageStoreName],
+					'readwrite'
+				);
 				const allTrash = await cleanupTx.objectStore('trash').getAll();
 				const tripStore = cleanupTx.objectStore('trips');
 				const expenseStore = cleanupTx.objectStore('expenses');
-
+				const mileageStore = cleanupTx.objectStore(mileageStoreName);
 				for (const trashItem of allTrash) {
-					if (await tripStore.get(trashItem.id)) {
-						await tripStore.delete(trashItem.id);
-					}
-					if (await expenseStore.get(trashItem.id)) {
-						await expenseStore.delete(trashItem.id);
+					const realId = getRealId(trashItem.id);
+					const rt = trashItem.recordType;
+
+					if (rt === 'trip') {
+						if (await tripStore.get(realId)) await tripStore.delete(realId);
+					} else if (rt === 'expense') {
+						if (await expenseStore.get(realId)) await expenseStore.delete(realId);
+					} else if (rt === 'mileage') {
+						if (await mileageStore.get(realId)) await mileageStore.delete(realId);
 					}
 				}
 				await cleanupTx.done;
 
-				await this.load(userId, type === 'expenses' ? 'expense' : type);
+				await this.load(userId, type);
 			} catch (err) {
 				console.error('❌ Failed to sync trash:', err);
 			}
@@ -276,3 +435,11 @@ function createTrashStore() {
 }
 
 export const trash = createTrashStore();
+
+syncManager.registerStore('trash', {
+	updateLocal: () => {},
+	syncDown: async () => {
+		const user = get(authUser) as User | null;
+		if (user?.id) await trash.syncFromCloud(user.id);
+	}
+});

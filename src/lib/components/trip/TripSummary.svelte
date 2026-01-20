@@ -1,9 +1,12 @@
 <script lang="ts">
-	export let totalMileage: number;
-	export let distanceUnit: string;
-	export let totalTime: string;
-	export let fuelCost: number;
-	export let netProfit: number;
+	// [!code fix] Use Svelte 5 Runes for props
+	let {
+		totalMileage = 0,
+		distanceUnit = 'mi',
+		totalTime = '',
+		fuelCost = 0,
+		netProfit = 0
+	} = $props();
 </script>
 
 <div
@@ -13,13 +16,13 @@
 	<h3 class="text-green-800 font-bold text-lg mb-4">Trip Summary</h3>
 	<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
 		<div>
-			<div class="text-xs text-green-600 uppercase font-semibold">Distance</div>
+			<div class="text-xs text-green-600 uppercase font-semibold">Total Miles</div>
 			<div class="text-xl font-bold text-green-900">
 				<span data-testid="trip-distance">{totalMileage} {distanceUnit}</span>
 			</div>
 		</div>
 		<div>
-			<div class="text-xs text-green-600 uppercase font-semibold">Time</div>
+			<div class="text-xs text-green-600 uppercase font-semibold">Drive Time (Est)</div>
 			<div class="text-xl font-bold text-green-900">{totalTime}</div>
 		</div>
 		<div>
