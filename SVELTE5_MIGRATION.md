@@ -69,9 +69,10 @@ let { children, header }: { children?: Snippet; header?: Snippet } = $props();
 
 ### 6. Store Usage in Components
 ```svelte
-// Stores still work with $store syntax, but consider migrating to:
+// Stores still work with $store syntax in Svelte 5
+// The $ prefix auto-subscribes to the store
 import { auth } from '$lib/stores/auth';
-const authState = $derived($auth);
+// Use directly with $ prefix in templates: {$auth.user}
 ```
 
 ---
@@ -106,23 +107,14 @@ Files are ordered from **simplest** (fewer dependencies, leaf components) to **m
 | 13 | `src/lib/components/data/ExportView.svelte` | `$:` → `$derived/$effect`, `on:*` → native |
 | 14 | `src/lib/components/data/ImportView.svelte` | `on:*` → native |
 
-### Phase 3: Layout Components
-*Header and Footer used across the app.*
-
-| Priority | File | Changes Needed |
-|----------|------|----------------|
-| 15 | `src/lib/components/layout/Footer.svelte` | Already using runes ✅ |
-| 16 | `src/lib/components/layout/Header.svelte` | Already using runes ✅ |
-
-### Phase 4: Trip Components
+### Phase 3: Trip Components
 *Core business logic components for trips.*
 
 | Priority | File | Changes Needed |
 |----------|------|----------------|
-| 17 | `src/lib/components/trip/TripSummary.svelte` | Already using runes ✅ |
-| 18 | `src/lib/components/trip/DestinationList.svelte` | `export let` → `$props()`, dispatch → callback |
-| 19 | `src/lib/components/trip/TripDebug.svelte` | Check for legacy patterns |
-| 20 | `src/lib/components/trip/TripForm.svelte` | `on:*` → native, dispatch → callback, partial runes |
+| 15 | `src/lib/components/trip/DestinationList.svelte` | `export let` → `$props()`, dispatch → callback |
+| 16 | `src/lib/components/trip/TripDebug.svelte` | Check for legacy patterns |
+| 17 | `src/lib/components/trip/TripForm.svelte` | `on:*` → native, dispatch → callback (partial runes - needs completion) |
 
 ### Phase 5: HughesNet Components
 *Specialized integration components.*
@@ -171,7 +163,7 @@ Files are ordered from **simplest** (fewer dependencies, leaf components) to **m
 
 | Priority | File | Changes Needed |
 |----------|------|----------------|
-| 39 | `src/routes/+error.svelte` | `$:` → `$derived`, uses runes partially ✅ |
+| 39 | `src/routes/+error.svelte` | `$:` → `$derived` (partial runes - needs completion) |
 | 40 | `src/routes/privacy/+page.svelte` | Check for legacy patterns |
 | 41 | `src/routes/terms/+page.svelte` | Check for legacy patterns |
 | 42 | `src/routes/support/+page.svelte` | Check for legacy patterns |
@@ -246,7 +238,7 @@ Files are ordered from **simplest** (fewer dependencies, leaf components) to **m
 | 69 | `src/routes/dashboard/+page.svelte` | `$:` → `$derived/$effect`, `on:*` → native |
 | 70 | `src/routes/dashboard/+layout.svelte` | `export let` → `$props()`, `$:` → `$derived/$effect`, `on:*` → native |
 | 71 | `src/routes/+page.svelte` | `on:*` → native |
-| 72 | `src/routes/+layout.svelte` | dispatch → callback, uses runes partially ✅ |
+| 72 | `src/routes/+layout.svelte` | dispatch → callback (partial runes - needs completion) |
 
 ---
 
@@ -271,17 +263,23 @@ The stores in `src/lib/stores/` use Svelte 4's `writable`/`readable`/`derived` p
 
 ---
 
-## Files Already Migrated (No Changes Needed)
+## Files Already Fully Migrated (No Changes Needed)
 
-These files are already using Svelte 5 runes:
+These files are already using Svelte 5 runes completely:
 
 1. `src/lib/components/ErrorBoundary.svelte` ✅
 2. `src/lib/components/layout/Header.svelte` ✅
 3. `src/lib/components/layout/Footer.svelte` ✅
-4. `src/lib/components/trip/TripForm.svelte` (partial) ✅
-5. `src/lib/components/trip/TripSummary.svelte` ✅
-6. `src/lib/components/ui/Modal.svelte` ✅
-7. `src/routes/+layout.svelte` (partial) ✅
+4. `src/lib/components/trip/TripSummary.svelte` ✅
+5. `src/lib/components/ui/Modal.svelte` ✅
+
+## Files Partially Migrated (Need Completion)
+
+These files have started using runes but still contain legacy patterns:
+
+1. `src/lib/components/trip/TripForm.svelte` - has runes but still uses `on:*` and dispatch
+2. `src/routes/+layout.svelte` - has runes but still uses dispatch
+3. `src/routes/+error.svelte` - has runes but still uses `$:` statements
 
 ---
 
