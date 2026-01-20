@@ -12,26 +12,6 @@ async function checkSubscriptionStatus() {
 	const token = localStorage.getItem('token');
 	if (!token) return;
 
-	const username = localStorage.getItem('username');
-	console.log('Subscription Check: found username =', username);
-	if (username === 'James') {
-		currentSubscription = {
-			plan: 'pro',
-			status: 'active',
-			tripsThisMonth: 0,
-			maxTrips: Infinity,
-			resetDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString(),
-			features: ['cloud-sync', 'export', 'analytics', 'optimization']
-		};
-		console.log(
-			'!!! DEBUG MODE: User James forced to Pro Plan for testing. Current Username:',
-			username
-		);
-		updateSubscriptionUI();
-		updateSubscriptionInfoInMenu();
-		return;
-	}
-
 	try {
 		const response = await fetch('https://logs.gorouteyourself.com/api/subscription', {
 			headers: { Authorization: token }

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { resolve } from 'path';
 

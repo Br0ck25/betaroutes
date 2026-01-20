@@ -1,1 +1,0 @@
-import{Z as a,_ as r,a0 as u,D as n,G as o}from"./QmSBETrU.js";const s=Symbol("USER");class l{#t=u(null);get value(){return n(this.#t)}set value(t){o(this.#t,t,!0)}constructor(t){this.value=t}setUser(t){this.value=t}logout(){this.value=null}}function c(e){const t=new l(e);return a(s,t),t}function g(){return r(s)}export{g,c as s};
