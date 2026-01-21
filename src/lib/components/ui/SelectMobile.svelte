@@ -1,16 +1,26 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 
-	export let id: string | undefined;
-	export let options: { value: string; label: string }[] = [];
-	export let value: string | null = null;
-	export let placeholder: string = '';
-	export let className: string = '';
+	let {
+		id = undefined,
+		options = [],
+		value = $bindable(null),
+		placeholder = '',
+		className = '',
+		onchange
+	}: {
+		id?: string | undefined;
+		options?: { value: string; label: string }[];
+		value?: string | null;
+		placeholder?: string;
+		className?: string;
+		onchange?: (detail: { value: string }) => void;
+	} = $props();
 
-	let open = false;
-	let focusedIndex = -1;
-	let buttonEl: HTMLElement | null = null;
-	let listEl: HTMLElement | null = null;
+	let open = $state(false);
+	let focusedIndex = $state(-1);
+	let buttonEl: HTMLElement | null = $state(null);
+	let listEl: HTMLElement | null = $state(null);
 
 	function toggle() {
 		open = !open;
@@ -25,9 +35,8 @@
 	function selectOption(opt?: { value: string; label: string }) {
 		if (!opt) return;
 		value = opt.value;
-		// Dispatch a bubbling CustomEvent so parent components can listen with on:change
-		const rootEl = (buttonEl && buttonEl.parentElement) as HTMLElement | undefined;
-		rootEl?.dispatchEvent(new CustomEvent('change', { detail: { value }, bubbles: true }));
+		// Call the onchange callback if provided
+		onchange?.({ value: opt.value });
 		close();
 		setTimeout(() => (buttonEl as any)?.focus(), 0);
 	}
@@ -92,8 +101,8 @@
 		aria-expanded={open}
 		aria-controls={id ? `list-${id}` : undefined}
 		class="select-btn"
-		on:click={toggle}
-		on:keydown={onKeydown}
+		onclick={toggle}
+		onkeydown={onKeydown}
 	>
 		<span class="label">{options.find((o) => o.value === value)?.label ?? placeholder}</span>
 		<svg class="caret" width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -123,14 +132,14 @@
 					class:selected={opt.value === value}
 					aria-selected={opt.value === value}
 					tabindex="0"
-					on:click={() => selectOption(opt)}
-					on:keydown={(e) => {
+					onclick={() => selectOption(opt)}
+					onkeydown={(e) => {
 						if (e.key === 'Enter' || e.key === ' ') {
 							e.preventDefault();
 							selectOption(opt);
 						}
 					}}
-					on:mouseenter={() => (focusedIndex = i)}
+					onmouseenter={() => (focusedIndex = i)}
 					title={opt.label}
 				>
 					{opt.label}

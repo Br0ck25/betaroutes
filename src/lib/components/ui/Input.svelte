@@ -1,9 +1,17 @@
 <script lang="ts">
-	export let label = '';
-	export let type = 'text';
-	export let value = '';
-	export let placeholder = '';
-	export let id = '';
+	let {
+		label = '',
+		type = 'text',
+		value = $bindable(''),
+		placeholder = '',
+		id = ''
+	}: {
+		label?: string;
+		type?: string;
+		value?: string;
+		placeholder?: string;
+		id?: string;
+	} = $props();
 </script>
 
 <label class="block w-full">

@@ -92,7 +92,9 @@ async function loadSettingsFromServer() {
 		if (response.ok) {
 			const serverSettings = await response.json();
 			// Merge server settings with current settings (server takes precedence)
-			userSettings.update((current) => ({ ...current, ...serverSettings }));
+			if (typeof serverSettings === 'object' && serverSettings !== null) {
+				userSettings.update((current) => ({ ...current, ...serverSettings }));
+			}
 		}
 	} catch (e) {
 		console.error('Failed to load settings from server', e);

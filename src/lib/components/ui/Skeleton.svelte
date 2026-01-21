@@ -1,8 +1,15 @@
 <script lang="ts">
-	export let width = '100%';
-	export let height = 'auto';
-	export let className = '';
-	export let style = '';
+	let {
+		width = '100%',
+		height = 'auto',
+		className = '',
+		style = ''
+	}: {
+		width?: string;
+		height?: string;
+		className?: string;
+		style?: string;
+	} = $props();
 </script>
 
 <div

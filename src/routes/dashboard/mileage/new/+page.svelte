@@ -210,7 +210,7 @@
 							? $userSettings.vehicles.map((v) => ({ value: v.id || v.name, label: v.name }))
 							: [{ value: '', label: 'No vehicles (open Mileage Settings)' }]}
 						bind:value={formData.vehicle}
-						on:change={(e) => (formData.vehicle = e.detail.value)}
+						onchange={(e) => (formData.vehicle = e.value)}
 					/>
 				</div>
 				<div class="form-group">

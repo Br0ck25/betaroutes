@@ -1,6 +1,6 @@
 <!-- src/lib/components/Loading.svelte -->
 <script lang="ts">
-	export let message = 'Loading...';
+	let { message = 'Loading...' }: { message?: string } = $props();
 </script>
 
 <div class="loading-container">

@@ -1,9 +1,20 @@
 <script lang="ts">
-	export let variant: 'primary' | 'secondary' | 'outline' | 'danger' = 'primary';
-	export let disabled = false;
-	export let type: 'button' | 'submit' | 'reset' = 'button';
-	// Allow passing extra classes (e.g., margins, width)
-	export let className = '';
+	import type { Snippet } from 'svelte';
+	let {
+		variant = 'primary',
+		disabled = false,
+		type = 'button',
+		className = '',
+		onclick,
+		children
+	}: {
+		variant?: 'primary' | 'secondary' | 'outline' | 'danger';
+		disabled?: boolean;
+		type?: 'button' | 'submit' | 'reset';
+		className?: string;
+		onclick?: (event: MouseEvent) => void;
+		children?: Snippet;
+	} = $props();
 </script>
 
 <button
@@ -16,7 +27,7 @@
     ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
     ${className}`}
 	{disabled}
-	on:click
+	{onclick}
 >
-	<slot />
+	{@render children?.()}
 </button>

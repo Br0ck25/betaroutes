@@ -514,7 +514,7 @@
 		{/if}
 	</div>
 
-	<div class="filters-bar sticky-bar">
+	<div class="filters-bar">
 		<div class="search-box">
 			<svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
 				<path
@@ -1004,15 +1004,6 @@
 		flex-direction: column;
 		gap: 12px;
 		margin-bottom: 20px;
-	}
-	.sticky-bar {
-		position: sticky;
-		top: 0;
-		z-index: 10;
-		background: #f9fafb;
-		padding: 10px 12px;
-		margin: -12px -12px 10px -12px;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
 	}
 
 	.search-box {

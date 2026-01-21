@@ -7,7 +7,7 @@
 	export let sortOrder = 'desc';
 </script>
 
-<div class="filters-bar sticky-bar">
+<div class="filters-bar">
 	<div class="search-box">
 		<svg
 			class="search-icon"
@@ -90,15 +90,6 @@
 		flex-direction: column;
 		gap: 12px;
 		margin-bottom: 20px;
-	}
-	.sticky-bar {
-		position: sticky;
-		top: 0;
-		z-index: 10;
-		background: #f9fafb;
-		padding: 10px 12px;
-		margin: -12px -12px 10px -12px;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
 	}
 	.search-box {
 		position: relative;
