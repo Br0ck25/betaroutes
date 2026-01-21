@@ -122,22 +122,26 @@ function createTrashStore() {
 					const realId = getRealId(uniqueId);
 					const parentId = stored.tripId || realId;
 
-					const txCheck = db.transaction(['trips', 'trash'], 'readonly');
-					const tripExists = await txCheck.objectStore('trips').get(parentId);
-					const tripTrash =
-						(await txCheck.objectStore('trash').get(`trip:${parentId}`)) ||
-						(await txCheck.objectStore('trash').get(parentId));
-					await txCheck.done;
+					// Only check trip existence if this is an "auto" log (attached to a trip)
+					// Manual logs often have tripId undefined or equal to their own id
+					if (stored.tripId && stored.tripId !== realId) {
+						const txCheck = db.transaction(['trips', 'trash'], 'readonly');
+						const tripExists = await txCheck.objectStore('trips').get(parentId);
+						const tripTrash =
+							(await txCheck.objectStore('trash').get(`trip:${parentId}`)) ||
+							(await txCheck.objectStore('trash').get(parentId));
+						await txCheck.done;
 
-					if (!tripExists) {
-						if (tripTrash) {
-							throw new Error(
-								'The parent Trip is currently in the Trash. Please restore the Trip first.'
-							);
-						} else {
-							throw new Error(
-								'This mileage log belongs to a trip that has been permanently deleted. It cannot be restored.'
-							);
+						if (!tripExists) {
+							if (tripTrash) {
+								throw new Error(
+									'The parent Trip is currently in the Trash. Please restore the Trip first.'
+								);
+							} else {
+								throw new Error(
+									'This mileage log belongs to a trip that has been permanently deleted. It cannot be restored.'
+								);
+							}
 						}
 					}
 				}
