@@ -2,6 +2,8 @@
 	import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
 	import { userSettings } from '$lib/stores/userSettings';
 	import { trips } from '$lib/stores/trips';
+	import { expenses } from '$lib/stores/expenses';
+	import { mileage } from '$lib/stores/mileage';
 	import { user } from '$lib/stores/auth';
 	import { toasts } from '$lib/stores/toast';
 	import { createEventDispatcher } from 'svelte';
@@ -77,6 +79,8 @@
 		const data = {
 			settings: $userSettings,
 			trips: $trips,
+			expenses: $expenses,
+			mileage: $mileage,
 			exportDate: new Date().toISOString()
 		};
 		const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -102,6 +106,8 @@
 			reader.onload = async (e: any) => {
 				try {
 					const data = JSON.parse(e.target.result);
+					let importMessages: string[] = [];
+
 					if (data.settings) {
 						userSettings.set(data.settings);
 						// Try to persist to cloud and update canonical state
@@ -109,21 +115,44 @@
 						if (!result.ok) {
 							toasts.error('Settings imported locally, cloud sync failed');
 						} else {
-							dispatch('success', 'Settings imported successfully!');
+							importMessages.push('Settings imported');
 						}
 					}
 
+					let userId =
+						$user?.name || $user?.token || localStorage.getItem('offline_user_id') || 'offline';
+
 					if (data.trips && Array.isArray(data.trips)) {
 						if (confirm(`Found ${data.trips.length} trips in backup. Import them now?`)) {
-							let userId =
-								$user?.name || $user?.token || localStorage.getItem('offline_user_id') || 'offline';
 							for (const trip of data.trips) {
 								await trips.create(trip, userId);
 							}
-							dispatch('success', `Successfully imported ${data.trips.length} trips from JSON!`);
+							importMessages.push(`${data.trips.length} trips imported`);
 						}
+					}
+
+					if (data.expenses && Array.isArray(data.expenses)) {
+						if (confirm(`Found ${data.expenses.length} expenses in backup. Import them now?`)) {
+							for (const expense of data.expenses) {
+								await expenses.create(expense, userId);
+							}
+							importMessages.push(`${data.expenses.length} expenses imported`);
+						}
+					}
+
+					if (data.mileage && Array.isArray(data.mileage)) {
+						if (confirm(`Found ${data.mileage.length} mileage logs in backup. Import them now?`)) {
+							for (const log of data.mileage) {
+								await mileage.create(log, userId);
+							}
+							importMessages.push(`${data.mileage.length} mileage logs imported`);
+						}
+					}
+
+					if (importMessages.length > 0) {
+						dispatch('success', `Successfully imported: ${importMessages.join(', ')}`);
 					} else {
-						dispatch('success', 'Settings imported. No trips found in backup.');
+						dispatch('success', 'No data found in backup file.');
 					}
 				} catch (err) {
 					console.error(err);

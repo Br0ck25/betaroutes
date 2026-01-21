@@ -4,7 +4,7 @@
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#ffffff",
+  "theme_color": "#1e40af",
   "description": "Offline-first mileage tracking and route management",
   "scope": "/",
 
@@ -15,7 +15,7 @@
       "description": "Create a new trip",
       "url": "/dashboard/trips/new",
       "icons": [
-        { "src": "180x75.avif", "sizes": "180x75", "type": "image/avif" }
+        { "src": "/optimized/logo-120.png", "sizes": "120x120", "type": "image/png" }
       ]
     },
     {
@@ -24,15 +24,20 @@
       "description": "Quickly log a fuel expense",
       "url": "/dashboard/expenses/new?category=fuel",
       "icons": [
-        { "src": "180x75.avif", "sizes": "180x75", "type": "image/avif" }
+        { "src": "/optimized/logo-120.png", "sizes": "120x120", "type": "image/png" }
       ]
     }
   ],
 
   "icons": [
-    { "src": "180x75.avif", "sizes": "180x75", "type": "image/avif" },
-    { "src": "180x75.avif", "sizes": "180x75", "type": "image/avif" },
-    { "src": "180x75.avif", "sizes": "180x75", "type": "image/avif" },
-    { "src": "180x75.avif", "sizes": "180x75", "type": "image/avif", "purpose": "any maskable" }
+    { "src": "/optimized/logo-48.png", "sizes": "48x48", "type": "image/png" },
+    { "src": "/optimized/logo-48.avif", "sizes": "48x48", "type": "image/avif" },
+    { "src": "/optimized/logo-120.png", "sizes": "120x120", "type": "image/png" },
+    { "src": "/optimized/logo-120.avif", "sizes": "120x120", "type": "image/avif" },
+    { "src": "/optimized/logo-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/optimized/logo-192.avif", "sizes": "192x192", "type": "image/avif" },
+    { "src": "/optimized/logo-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/optimized/logo-512.avif", "sizes": "512x512", "type": "image/avif" },
+    { "src": "/optimized/logo-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ]
 }

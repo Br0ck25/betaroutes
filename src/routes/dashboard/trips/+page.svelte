@@ -29,13 +29,13 @@
 	let sortBy = 'date';
 	let sortOrder = 'desc';
 	let filterProfit = 'all';
-	// Default to current year (Jan 1 -> today)
+	// Default to current year (Jan 1 -> Dec 31)
 	const _now = new Date();
 	function _fmtInput(d: Date) {
 		return d.toISOString().slice(0, 10);
 	}
 	let startDate = _fmtInput(new Date(_now.getFullYear(), 0, 1));
-	let endDate = _fmtInput(_now);
+	let endDate = _fmtInput(new Date(_now.getFullYear(), 11, 31));
 
 	// Pagination
 	let currentPage = 1;

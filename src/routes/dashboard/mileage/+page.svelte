@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { mileage, isLoading as mileageLoading } from '$lib/stores/mileage';
-	import { trips, isLoading as tripsLoading } from '$lib/stores/trips';
 	import { userSettings } from '$lib/stores/userSettings';
 	import { getVehicleDisplayName } from '$lib/utils/vehicle';
 	import SettingsModal from './components/SettingsModal.svelte';
@@ -58,7 +57,7 @@
 		return d.toISOString().slice(0, 10);
 	}
 	let startDate = _fmtInput(new Date(_now.getFullYear(), 0, 1));
-	let endDate = _fmtInput(_now);
+	let endDate = _fmtInput(new Date(_now.getFullYear(), 11, 31));
 	let lastHadSelections = false;
 	let selectedExpenses = new Set<string>();
 	let visibleLimit = 20;
@@ -66,7 +65,7 @@
 	$: visibleExpenses = filteredExpenses.slice(0, visibleLimit);
 	let _lastExpandedSize = 0;
 
-	$: loading = $mileageLoading || $tripsLoading;
+	$: loading = $mileageLoading;
 
 	/* eslint-disable svelte/infinite-reactive-loop */
 	$: if (
@@ -107,16 +106,13 @@
 	let isManageCategoriesOpen = false;
 	let newCategoryName = '';
 
-	$: tripExpenses = $trips.flatMap((_trip) => []);
-
 	$: allExpenses = [
 		...$mileage.filter(
 			(r) =>
 				typeof (r as any).miles === 'number' ||
 				typeof (r as any).startOdometer === 'number' ||
 				typeof (r as any).endOdometer === 'number'
-		),
-		...tripExpenses
+		)
 	];
 
 	$: filteredExpenses = allExpenses
@@ -129,10 +125,23 @@
 				((item as any).source === 'trip' && 'trip'.includes(query));
 
 			if (!matchesSearch) return false;
-			if (filterCategory !== 'all' && item.category !== filterCategory) return false;
 
-			if (item.date) {
-				const itemDate = new Date(item.date);
+			// Category filtering (manual vs auto vs specific category)
+			if (filterCategory !== 'all') {
+				if (filterCategory === 'manual') {
+					// Show only mileage logs NOT created from trips (no tripId)
+					if ((item as any).tripId) return false;
+				} else if (filterCategory === 'auto') {
+					// Show only mileage logs created from trips (has tripId)
+					if (!(item as any).tripId) return false;
+				} else if (item.category !== filterCategory) {
+					return false;
+				}
+			}
+
+			// Date filtering
+			if (startDate || endDate) {
+				const itemDate = new Date((item as any).date || 0);
 				itemDate.setHours(0, 0, 0, 0);
 
 				if (startDate) {
@@ -146,6 +155,7 @@
 					if (itemDate > end) return false;
 				}
 			}
+
 			return true;
 		})
 		.sort((a, b) => {
@@ -536,7 +546,7 @@
 				id="search-expenses"
 				name="searchQuery"
 				type="text"
-				placeholder="Search mileage logs..."
+				placeholder="Search mileage..."
 				bind:value={searchQuery}
 			/>
 		</div>
@@ -573,16 +583,10 @@
 				{#each categories as cat}
 					<option value={cat}>{getCategoryLabel(cat)}</option>
 				{/each}
-				<option value="fuel">Fuel (Trips)</option>
-			</select>
-
-			<select
-				id="sort-by"
-				name="sortBy"
-				bind:value={sortBy}
-				class="filter-select"
-				aria-label="Sort results"
-			>
+				<option value="manual">Manual Trips</option>
+				<option value="auto">Auto Trips</option>
+				name="sortBy" bind:value={sortBy}
+				class="filter-select" aria-label="Sort results" >
 				<option value="date">By Date</option>
 				<option value="amount">By Cost</option>
 			</select>
@@ -702,12 +706,14 @@
 								</h2>
 							</div>
 
-							<span class="expense-amount-display" aria-label={`Miles: ${expense.miles ?? 0}`}>
-								{(expense.miles ?? 0).toFixed(2)}
-								{#if typeof expense.reimbursement === 'number' && expense.reimbursement > 0}
-									<div class="reimbursement">({formatCurrency(expense.reimbursement)})</div>
-								{/if}
-							</span>
+							{#if typeof expense.reimbursement === 'number' && expense.reimbursement > 0}
+								<span
+									class="expense-amount-display"
+									aria-label={`Reimbursement: ${formatCurrency(expense.reimbursement)}`}
+								>
+									{formatCurrency(expense.reimbursement)}
+								</span>
+							{/if}
 							<svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
 								<path
 									d="M9 18L15 12L9 6"

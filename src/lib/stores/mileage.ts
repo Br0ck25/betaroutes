@@ -6,6 +6,7 @@ import type { MileageRecord } from '$lib/db/types';
 import type { User } from '$lib/types';
 import { auth } from '$lib/stores/auth';
 import { calculateFuelCost } from '$lib/utils/calculations';
+import { PLAN_LIMITS } from '$lib/constants';
 
 export const isLoading = writable(false);
 
@@ -16,103 +17,92 @@ interface TrashItemLike {
 	metadata?: { deletedAt?: string };
 }
 
-// Helper to build a map of trash IDs to their deletedAt timestamps
-function buildTrashTimestampMap(trashItems: TrashItemLike[]): Map<string, string> {
-	const trashMap = new Map<string, string>();
-	for (const t of trashItems) {
-		const tid = t.id;
-		const deletedAt = t.deletedAt || t.metadata?.deletedAt;
-		if (tid && deletedAt) trashMap.set(tid, deletedAt);
-	}
-	return trashMap;
-}
-
-// Helper to check if a mileage record should be filtered out based on trash entries
-// Accepts just the id and createdAt to avoid needing a full MillageRecord
-function shouldFilterOutMileage(
-	id: string,
-	createdAt: string,
-	trashMap: Map<string, string>
-): boolean {
-	const rawTrashDeletedAt = trashMap.get(id);
-	const prefixedTrashDeletedAt = trashMap.get(`mileage:${id}`);
-	const trashDeletedAt = rawTrashDeletedAt || prefixedTrashDeletedAt;
-
-	// If not in trash at all, don't filter out
-	if (!trashDeletedAt) return false;
-
-	// If in trash, check if this item was created AFTER the trash item was deleted
-	const itemCreatedAt = new Date(createdAt).getTime();
-	const deletedTime = new Date(trashDeletedAt).getTime();
-
-	// If item was created after the trash entry, it's a new record - don't filter out
-	if (itemCreatedAt > deletedTime) return false;
-
-	// Otherwise, filter out this item (it's the deleted one)
-	return true;
-}
-
 function createMileageStore() {
 	const { subscribe, set, update } = writable<MileageRecord[]>([]);
 	let _hydrationPromise: Promise<void> | null = null;
 	let _resolveHydration: any = null;
-	void _hydrationPromise;
-	void _resolveHydration;
 
 	return {
 		subscribe,
 		set,
-		// ... (keep hydrate, updateLocal, load, create, updateMillage as they are) ...
+		// Simplified hydrate: Uses simple Set-based trash filtering like expenses store
 		async hydrate(data: MileageRecord[], _userId?: string) {
-			// ... copy from previous ...
 			void _userId;
 			_hydrationPromise = new Promise((res) => (_resolveHydration = res));
+
+			// Optimistically set data immediately for faster perceived load
 			set(data);
+
 			if (typeof window === 'undefined') {
 				_resolveHydration?.();
 				_hydrationPromise = null;
 				return;
 			}
+
 			try {
 				const db = await getDB();
+
+				// 1. Check Trash to prevent resurrection of locally deleted items
 				const trashTx = db.transaction('trash', 'readonly');
 				const trashItems = await trashTx.objectStore('trash').getAll();
-				const trashMap = buildTrashTimestampMap(trashItems as TrashItemLike[]);
+				// Simple Set-based ID check (no timestamp comparison)
+				const trashIds = new Set(trashItems.map((t: TrashItemLike) => t.id || `mileage:${t.id}`));
 				await trashTx.done;
+
+				// 2. Prepare Valid Data (Server data minus local trash)
 				const validServerData = data.filter(
-					(item) => !shouldFilterOutMileage(item.id, item.createdAt, trashMap)
+					(item) => !trashIds.has(item.id) && !trashIds.has(`mileage:${item.id}`)
 				);
 				const serverIdSet = new Set(validServerData.map((i) => i.id));
+
+				// 3. Update DB (ReadWrite)
 				const mileageStoreName = getMileageStoreName(db);
 				const tx = db.transaction([mileageStoreName, 'trash'], 'readwrite');
 				const store = tx.objectStore(mileageStoreName);
+
+				// Get all local items to check for zombies (stale items)
 				const localItems = await store.getAll();
 				const localById = new Map(localItems.map((item) => [item.id, item]));
+
+				// DELETE stale items
 				for (const local of localItems) {
-					if (shouldFilterOutMileage(local.id, local.createdAt, trashMap)) {
-						await store.delete(local.id);
-					} else if (local.syncStatus === 'synced' && !serverIdSet.has(local.id)) {
+					const isTrash = trashIds.has(local.id) || trashIds.has(`mileage:${local.id}`);
+					const isStale = local.syncStatus === 'synced' && !serverIdSet.has(local.id);
+
+					if (isTrash || isStale) {
 						await store.delete(local.id);
 					}
 				}
+
+				// UPDATE/INSERT fresh server data
 				for (const item of validServerData) {
 					const local = localById.get(item.id);
+					// Skip if local is unsynced (pending changes)
 					if (local && local.syncStatus !== 'synced') continue;
 					await store.put({ ...item, syncStatus: 'synced' });
 				}
 
+				// 4. Build merged result with local unsynced items taking precedence
 				const mergedById = new Map<string, MileageRecord>();
+
+				// Add synced server data
 				for (const item of validServerData) {
 					mergedById.set(item.id, { ...item, syncStatus: 'synced' });
 				}
+
+				// Overlay unsynced local items (they win)
 				for (const local of localItems) {
-					if (shouldFilterOutMileage(local.id, local.createdAt, trashMap)) continue;
-					if (local.syncStatus === 'synced' && !serverIdSet.has(local.id)) continue;
+					const isTrash = trashIds.has(local.id) || trashIds.has(`mileage:${local.id}`);
+					const isStale = local.syncStatus === 'synced' && !serverIdSet.has(local.id);
+
+					if (isTrash || isStale) continue;
+
 					if (local.syncStatus !== 'synced') {
 						const existing = mergedById.get(local.id);
 						if (!existing) {
 							mergedById.set(local.id, local);
 						} else {
+							// Keep the newer one based on updatedAt
 							const localUpdated = new Date(local.updatedAt || local.createdAt).getTime();
 							const existingUpdated = new Date(existing.updatedAt || existing.createdAt).getTime();
 							if (localUpdated >= existingUpdated) {
@@ -122,14 +112,16 @@ function createMileageStore() {
 					}
 				}
 
+				// Sort by date descending
 				const merged = Array.from(mergedById.values()).sort((a, b) => {
 					const dateA = new Date(a.date || a.createdAt).getTime();
 					const dateB = new Date(b.date || b.createdAt).getTime();
 					return dateB - dateA;
 				});
+
 				set(merged);
 				await tx.done;
-				if (_resolveHydration) _resolveHydration();
+				_resolveHydration?.();
 				_hydrationPromise = null;
 			} catch (err) {
 				console.error('Failed to hydrate mileage cache:', err);
@@ -170,9 +162,9 @@ function createMileageStore() {
 					items = await store.getAll();
 				}
 				const trashItems = await trashStore.getAll();
-				const trashMap = buildTrashTimestampMap(trashItems as TrashItemLike[]);
+				const trashIds = new Set(trashItems.map((t: TrashItemLike) => t.id || `mileage:${t.id}`));
 				const activeItems = items.filter(
-					(item) => !shouldFilterOutMileage(item.id, item.createdAt, trashMap)
+					(item) => !trashIds.has(item.id) && !trashIds.has(`mileage:${item.id}`)
 				);
 				activeItems.sort((a, b) => {
 					const dateA = new Date(a.date || a.createdAt).getTime();
@@ -190,6 +182,32 @@ function createMileageStore() {
 			}
 		},
 		async create(data: Partial<MileageRecord>, userId: string) {
+			// --- CHECK FREE TIER LIMITS ---
+			const currentUser = get(auth).user as User | null;
+			const isFreeTier = !currentUser?.plan || currentUser.plan === 'free';
+
+			if (isFreeTier) {
+				const db = await getDB();
+				const tx = db.transaction('mileage', 'readonly');
+				const index = tx.objectStore('mileage').index('userId');
+				const allUserMileage = await index.getAll(userId);
+				const windowDays = PLAN_LIMITS.FREE.WINDOW_DAYS || 30;
+				const windowMs = windowDays * 24 * 60 * 60 * 1000;
+				const cutoff = new Date(Date.now() - windowMs);
+				const recentCount = allUserMileage.filter((m) => {
+					const d = new Date(m.date || m.createdAt);
+					return d >= cutoff;
+				}).length;
+				const allowed =
+					PLAN_LIMITS.FREE.MAX_MILEAGE_PER_MONTH || PLAN_LIMITS.FREE.MAX_MILEAGE_IN_WINDOW || 10;
+
+				if (recentCount >= allowed) {
+					throw new Error(
+						`Free tier limit reached (${allowed} mileage logs per ${windowDays} days).`
+					);
+				}
+			}
+
 			// ... copy from previous ...
 			const record: MileageRecord = {
 				...data,
@@ -483,16 +501,16 @@ function createMileageStore() {
 					const store = tx.objectStore('mileage');
 					const trashStore = tx.objectStore('trash');
 					const trashItems = await trashStore.getAll();
-					const trashMap = buildTrashTimestampMap(trashItems as TrashItemLike[]);
+					const trashIds = new Set(trashItems.map((t: TrashItemLike) => t.id || `mileage:${t.id}`));
 					for (const rec of cloud) {
 						if (rec.deleted) {
 							const local = await store.get(rec.id);
 							if (local) await store.delete(rec.id);
 							continue;
 						}
-						// Check if this record should be filtered out based on trash entries
-						if (shouldFilterOutMileage(rec.id, rec.createdAt, trashMap)) {
-							continue; // Skip - this is the deleted record
+						// Check if this record is in trash (simple ID check)
+						if (trashIds.has(rec.id) || trashIds.has(`mileage:${rec.id}`)) {
+							continue; // Skip - this is deleted
 						}
 
 						const local = await store.get(rec.id);

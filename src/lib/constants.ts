@@ -19,8 +19,11 @@ export const PLAN_LIMITS = {
 		MAX_TRIPS_PER_MONTH: 10, // kept for compatibility; interpreted as per WINDOW_DAYS
 		MAX_TRIPS_IN_WINDOW: 10,
 		// How many expenses a Free user may create in a rolling window
-		MAX_EXPENSES_PER_MONTH: 20, // kept for compatibility
-		MAX_EXPENSES_IN_WINDOW: 20,
+		MAX_EXPENSES_PER_MONTH: 10, // Updated to match trips/mileage
+		MAX_EXPENSES_IN_WINDOW: 10,
+		// How many mileage logs a Free user may create in a rolling window
+		MAX_MILEAGE_PER_MONTH: 10,
+		MAX_MILEAGE_IN_WINDOW: 10,
 		// Rolling window length in days for the above limits
 		WINDOW_DAYS: 30,
 		// How many days of historical data to retain for Free users
