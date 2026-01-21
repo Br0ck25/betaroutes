@@ -70,8 +70,8 @@
 		"idb": "^8.0.3",
 		"isomorphic-dompurify": "^2.35.0",
 		"jspdf": "^3.0.4",
-		"jspdf-autotable": "^5.0.2",
-		"resend": "^6.6.0",
+		"jspdf-autotable": "^5.0.7",
+		"resend": "^6.8.0",
 		"stripe": "^14.14.0",
 		"tslib": "^2.8.1",
 		"xlsx": "^0.18.5"
