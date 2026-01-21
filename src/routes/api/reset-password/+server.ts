@@ -5,6 +5,7 @@ import { hashPassword } from '$lib/server/auth';
 import { findUserById, updatePasswordHash } from '$lib/server/userService';
 import { z } from 'zod';
 import { log } from '$lib/server/log';
+import { validatePassword } from '$lib/server/passwordValidation';
 
 // Input validation schema
 const resetSchema = z.object({
@@ -38,6 +39,12 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
 		}
 
 		const { token, password } = result.data;
+
+		// [!code fix] SECURITY (Issue #9): Comprehensive password strength validation
+		const passwordCheck = validatePassword(password);
+		if (!passwordCheck.valid) {
+			return json({ message: passwordCheck.error }, { status: 400 });
+		}
 
 		// 2. Validate Token
 		// Look up the User ID associated with this reset token

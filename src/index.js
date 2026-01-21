@@ -1,6 +1,23 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 
+/**
+ * @deprecated LEGACY FILE - DO NOT USE
+ *
+ * This file is a legacy Cloudflare Worker from before the SvelteKit migration.
+ * It is NOT used in production. The active worker is built from SvelteKit at:
+ *   .svelte-kit/cloudflare (see wrangler.toml pages_build_output_dir)
+ *
+ * SECURITY WARNINGS:
+ * 1. Uses timing-unsafe password comparison (line ~101)
+ * 2. Uses simple SHA-256 instead of PBKDF2 with salt
+ * 3. No rate limiting on authentication endpoints
+ *
+ * This file is kept for historical reference only. Consider deleting.
+ *
+ * @see src/worker-entry.ts for the current secure implementation
+ */
+
 function withCors(resp, req) {
 	const allowedOrigins = [
 		'https://gorouteyourself.com',

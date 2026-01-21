@@ -1,8 +1,14 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { log } from '$lib/server/log';
+import { dev } from '$app/environment';
 
 export const POST: RequestHandler = async ({ request, platform }) => {
+	// [SECURITY] Debug endpoints must not be accessible in production
+	if (!dev && process.env['NODE_ENV'] === 'production') {
+		return json({ error: 'Not available in production' }, { status: 403 });
+	}
+
 	// Dev/test helper: seed an entry into SESSIONS_KV
 	try {
 		// Accept both JSON and form-encoded bodies (Playwright Request may send form data)

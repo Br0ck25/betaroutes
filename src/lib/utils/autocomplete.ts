@@ -231,7 +231,23 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 			const key = it.place_id || it.formatted_address || JSON.stringify(it);
 			const isAcceptable = source === 'google' || (acceptableSet && acceptableSet.has(key));
 
-			const pinIcon = `<svg focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#9AA0A6" width="20px" height="20px"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`;
+			// [SECURITY FIX #12] Create SVG using createElementNS instead of innerHTML
+			// This prevents XSS risks from dynamic content injection patterns
+			const createPinIcon = (): SVGSVGElement => {
+				const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+				svg.setAttribute('focusable', 'false');
+				svg.setAttribute('viewBox', '0 0 24 24');
+				svg.setAttribute('fill', '#9AA0A6');
+				svg.setAttribute('width', '20px');
+				svg.setAttribute('height', '20px');
+				const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+				path.setAttribute(
+					'd',
+					'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z'
+				);
+				svg.appendChild(path);
+				return svg;
+			};
 
 			Object.assign(row.style, {
 				display: 'flex',
@@ -248,7 +264,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 				display: 'flex',
 				alignItems: 'center'
 			});
-			iconWrap.innerHTML = pinIcon;
+			iconWrap.appendChild(createPinIcon());
 
 			const content = document.createElement('div');
 			Object.assign(content.style, { flex: '1', overflow: 'hidden' });

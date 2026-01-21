@@ -8,6 +8,7 @@ import { createSafeErrorMessage } from '$lib/server/sanitize';
 import { getStorageId } from '$lib/server/user';
 import { PLAN_LIMITS } from '$lib/constants';
 import { findUserById } from '$lib/server/userService';
+import { checkRateLimitEnhanced } from '$lib/server/rateLimit';
 
 const mileageSchema = z.object({
 	// Allow any string ID to support HughesNet sync trip IDs (e.g., hns_James_2025-09-22)
@@ -63,6 +64,26 @@ export const POST: RequestHandler = async (event) => {
 			env = getEnv(event.platform as any);
 		} catch {
 			return new Response('Service Unavailable', { status: 503 });
+		}
+
+		// [!code fix] SECURITY (Issue #8): Rate limiting for mileage creation
+		const storageId = getStorageId(sessionUser);
+		const sessionsKV = safeKV(env, 'BETA_SESSIONS_KV');
+		if (sessionsKV) {
+			const rateLimitResult = await checkRateLimitEnhanced(
+				sessionsKV,
+				storageId,
+				'mileage_create',
+				100,
+				60
+			);
+			if (!rateLimitResult.allowed) {
+				log.warn('Mileage rate limit exceeded', { storageId });
+				return new Response(
+					JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
+					{ status: 429 }
+				);
+			}
 		}
 
 		const raw = (await event.request.json()) as unknown;

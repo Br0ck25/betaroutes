@@ -67,18 +67,9 @@ class LocalStorage {
 		this.remove(STORAGE_KEYS.DRAFT_TRIP);
 	}
 
-	// --- Auth ---
-	getToken(): string | null {
-		return this.isClient ? localStorage.getItem(STORAGE_KEYS.TOKEN) : null;
-	}
-
-	setToken(token: string): void {
-		if (this.isClient) localStorage.setItem(STORAGE_KEYS.TOKEN, token);
-	}
-
-	clearToken(): void {
-		this.remove(STORAGE_KEYS.TOKEN);
-	}
+	// --- Auth (Username only - sessions are in httpOnly cookies) ---
+	// [SECURITY FIX #52] Removed getToken/setToken/clearToken methods
+	// Session tokens should NEVER be in localStorage - they're in httpOnly cookies
 
 	getUsername(): string | null {
 		return this.isClient ? localStorage.getItem(STORAGE_KEYS.USERNAME) : null;
@@ -183,12 +174,11 @@ class LocalStorage {
 	}
 
 	clearAllExceptAuth(): void {
-		const token = this.getToken();
+		// [SECURITY FIX #52] Tokens no longer in localStorage
 		const username = this.getUsername();
 
 		this.clearAll();
 
-		if (token) this.setToken(token);
 		if (username) this.setUsername(username);
 	}
 }

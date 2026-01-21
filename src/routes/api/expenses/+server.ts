@@ -7,6 +7,7 @@ import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 import { PLAN_LIMITS } from '$lib/constants';
 import { getStorageId } from '$lib/server/user';
+import { checkRateLimitEnhanced } from '$lib/server/rateLimit';
 
 const expenseSchema = z.object({
 	id: z.string().uuid().optional(),
@@ -80,6 +81,25 @@ export const POST: RequestHandler = async (event) => {
 		if (!user) return new Response('Unauthorized', { status: 401 });
 		const storageId = getStorageId(user);
 		const env = getEnv(event.platform);
+
+		// [!code fix] SECURITY (Issue #8): Rate limiting for expense creation
+		const sessionsKV = safeKV(env, 'BETA_SESSIONS_KV');
+		if (sessionsKV) {
+			const rateLimitResult = await checkRateLimitEnhanced(
+				sessionsKV,
+				storageId,
+				'expense_create',
+				100,
+				60
+			);
+			if (!rateLimitResult.allowed) {
+				log.warn('Expense rate limit exceeded', { storageId });
+				return new Response(
+					JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
+					{ status: 429 }
+				);
+			}
+		}
 
 		const body = (await event.request.json()) as unknown;
 

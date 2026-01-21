@@ -7,6 +7,7 @@
 	import { trips } from '$lib/stores/trips';
 	import { expenses } from '$lib/stores/expenses';
 	import { mileage } from '$lib/stores/mileage';
+	import { sanitizeStaticSvg } from '$lib/utils/sanitize';
 
 	const resolve = (href: string) => `${base}${href}`;
 	import { trash } from '$lib/stores/trash';
@@ -47,41 +48,52 @@
 		}
 	}
 
+	// [!code fix] SECURITY (Issue #7, #43): Sanitize static SVG icons in navigation
 	const navItems = [
 		{
 			href: '/dashboard/',
-			icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 9L10 2L17 9V17C17 17.5304 16.7893 18.0391 16.4142 18.4142C16.0391 18.7893 15.5304 18 15 18H5C4.46957 18 3.96086 17.7893 3.58579 17.4142C3.21071 17.0391 3 16.5304 3 16V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+			icon: sanitizeStaticSvg(
+				`<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 9L10 2L17 9V17C17 17.5304 16.7893 18.0391 16.4142 18.4142C16.0391 18.7893 15.5304 18 15 18H5C4.46957 18 3.96086 17.7893 3.58579 17.4142C3.21071 17.0391 3 16.5304 3 16V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+			),
 			label: 'Home',
 			exact: true
 		},
 		{
 			href: '/dashboard/expenses/',
-			icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 1V23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M17 5H9.5C8.57174 5 7.6815 5.36875 7.02513 6.02513C6.36875 6.6815 6 7.57174 6 8.5C6 9.42826 6.36875 10.3185 7.02513 10.9749C7.6815 11.6313 8.57174 12 9.5 12H14.5C15.4283 12 16.3185 12.3688 16.9749 13.0251C17.6313 13.6815 18 14.5717 18 15.5C18 16.4283 17.6313 17.3185 16.9749 17.9749C16.3185 18.6313 15.4283 19 14.5 19H6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+			icon: sanitizeStaticSvg(
+				`<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 1V23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M17 5H9.5C8.57174 5 7.6815 5.36875 7.02513 6.02513C6.36875 6.6815 6 7.57174 6 8.5C6 9.42826 6.36875 10.3185 7.02513 10.9749C7.6815 11.6313 8.57174 12 9.5 12H14.5C15.4283 12 16.3185 12.3688 16.9749 13.0251C17.6313 13.6815 18 14.5717 18 15.5C18 16.4283 17.6313 17.3185 16.9749 17.9749C16.3185 18.6313 15.4283 19 14.5 19H6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+			),
 			label: 'Expenses'
 		},
 		{
 			href: '/dashboard/mileage/',
-			icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+			icon: sanitizeStaticSvg(
+				`<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
 					<path d="M3 11h18v3a2 2 0 0 1-2 2h-1.5a2 2 0 0 1-4 0H11.5a2 2 0 0 1-4 0H6a2 2 0 0 1-2-2v-3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 					<path d="M5 11L7 6h10l2 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 					<circle cx="7.5" cy="17.5" r="1.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 					<circle cx="16.5" cy="17.5" r="1.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-				</svg>`,
+				</svg>`
+			),
 			label: 'Mileage'
 		},
 		{
 			href: '/dashboard/trips/',
-			icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+			icon: sanitizeStaticSvg(
+				`<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
 				<path d="M12 2C8.13 2 5 5.13 5 9c0 5 7 11 7 11s7-6 7-11c0-3.87-3.13-7-7-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 				<circle cx="12" cy="9" r="2.5" stroke="currentColor" stroke-width="2"/>
 				<path d="M3 12c4-2 6 1 9-1s6 0 9 1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 3"/>
-			</svg>`,
+			</svg>`
+			),
 			label: 'Trips',
 			exclude: ['/dashboard/trips/new']
 		},
 		{
 			href: '/dashboard/settings/',
-			icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19.4 15C20.4 14.3 21 13.2 21 12C21 10.8 20.4 9.7 19.4 9L20 8C20.5 7.2 20.2 6.1 19.4 5.6L18.4 5C17.6 4.5 16.6 4.8 16.1 5.6L15.5 6.6C14.5 5.9 13.3 5.5 12 5.5C10.7 5.5 9.5 5.9 8.5 6.6L7.9 5.6C7.4 4.8 6.4 4.5 5.6 5L4.6 5.6C3.8 6.1 3.5 7.2 4 8L4.6 9C3.6 9.7 3 10.8 3 12C3 13.2 3.6 14.3 4.6 15L4 16C3.5 16.8 3.8 17.9 4.6 18.4L5.6 19C6.4 19.5 7.4 19.2 7.9 18.4L8.5 17.4C9.5 18.1 10.7 18.5 12 18.5C13.3 18.5 14.5 18.1 15.5 17.4L16.1 18.4C16.6 19.2 17.6 19.5 18.4 19L19.4 18.4C20.2 17.9 20.5 16.8 20 16L19.4 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+			icon: sanitizeStaticSvg(
+				`<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19.4 15C20.4 14.3 21 13.2 21 12C21 10.8 20.4 9.7 19.4 9L20 8C20.5 7.2 20.2 6.1 19.4 5.6L18.4 5C17.6 4.5 16.6 4.8 16.1 5.6L15.5 6.6C14.5 5.9 13.3 5.5 12 5.5C10.7 5.5 9.5 5.9 8.5 6.6L7.9 5.6C7.4 4.8 6.4 4.5 5.6 5L4.6 5.6C3.8 6.1 3.5 7.2 4 8L4.6 9C3.6 9.7 3 10.8 3 12C3 13.2 3.6 14.3 4.6 15L4 16C3.5 16.8 3.8 17.9 4.6 18.4L5.6 19C6.4 19.5 7.4 19.2 7.9 18.4L8.5 17.4C9.5 18.1 10.7 18.5 12 18.5C13.3 18.5 14.5 18.1 15.5 17.4L16.1 18.4C16.6 19.2 17.6 19.5 18.4 19L19.4 18.4C20.2 17.9 20.5 16.8 20 16L19.4 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+			),
 			label: 'Settings'
 		}
 	];

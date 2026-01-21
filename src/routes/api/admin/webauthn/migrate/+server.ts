@@ -4,7 +4,7 @@ import { normalizeCredentialID, toBase64Url } from '$lib/server/webauthn-utils';
 import { safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
 
-export const POST: RequestHandler = async ({ request, platform, url }) => {
+export const POST: RequestHandler = async ({ request, platform }) => {
 	const { getEnv } = await import('$lib/server/env');
 	const env = getEnv(platform);
 	const secret = (env as any)?.ADMIN_MIGRATE_SECRET;
@@ -13,8 +13,9 @@ export const POST: RequestHandler = async ({ request, platform, url }) => {
 		return json({ error: 'Migration disabled (no secret configured)' }, { status: 403 });
 	}
 
-	const provided =
-		request.headers.get('x-admin-secret') || url.searchParams.get('admin_secret') || '';
+	// [SECURITY FIX] Only accept admin secret via HTTP header, never via URL query parameter
+	// URL parameters are logged in access logs, browser history, and referrer headers
+	const provided = request.headers.get('x-admin-secret') || '';
 	if (provided !== secret) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}

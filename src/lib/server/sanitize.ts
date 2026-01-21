@@ -237,3 +237,96 @@ export function createSafeErrorMessage(error: unknown): string {
 	}
 	return 'An unexpected error occurred';
 }
+
+/**
+ * [SECURITY FIX #55] Create safe API error responses
+ * Returns generic error messages to clients while logging details server-side
+ */
+export function createSafeApiError(
+	error: unknown,
+	context?: string
+): { error: string; status: number } {
+	// Log full details server-side
+	if (error instanceof Error) {
+		log.error(`[API Error] ${context || 'Unknown'}`, {
+			message: error.message,
+			stack: error.stack,
+			name: error.name
+		});
+
+		// Return generic message to client
+		return {
+			error: 'An error occurred while processing your request',
+			status: 500
+		};
+	}
+
+	// Handle non-Error objects
+	log.error(`[API Error] ${context || 'Unknown'}`, { error });
+	return {
+		error: 'An unexpected error occurred',
+		status: 500
+	};
+}
+
+/**
+ * [SECURITY FIX #56] Prevent prototype pollution in JSON parsing
+ * Checks for dangerous keys that could pollute Object.prototype
+ */
+export function hasDangerousKeys(obj: unknown): boolean {
+	if (!obj || typeof obj !== 'object') return false;
+
+	const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
+
+	// Check current level
+	for (const key of dangerousKeys) {
+		if (key in obj) {
+			log.warn('[SECURITY] Prototype pollution attempt detected', { key });
+			return true;
+		}
+	}
+
+	// Recursively check nested objects
+	for (const key in obj) {
+		if (Object.prototype.hasOwnProperty.call(obj, key)) {
+			const value = (obj as Record<string, unknown>)[key];
+			if (value && typeof value === 'object') {
+				if (hasDangerousKeys(value)) {
+					return true;
+				}
+			}
+		}
+	}
+
+	return false;
+}
+
+/**
+ * [SECURITY FIX #56] Sanitize parsed JSON to remove dangerous keys
+ * Recursively removes __proto__, constructor, and prototype keys
+ */
+export function sanitizeJson<T>(obj: T): T {
+	if (!obj || typeof obj !== 'object') return obj;
+
+	const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
+
+	if (Array.isArray(obj)) {
+		return obj.map((item) => sanitizeJson(item)) as T;
+	}
+
+	const cleaned: Record<string, unknown> = {};
+	for (const key in obj) {
+		if (Object.prototype.hasOwnProperty.call(obj, key)) {
+			// Skip dangerous keys
+			if (dangerousKeys.includes(key)) {
+				log.warn('[SECURITY] Removed dangerous key from JSON', { key });
+				continue;
+			}
+
+			const value = (obj as Record<string, unknown>)[key];
+			cleaned[key] = value && typeof value === 'object' ? sanitizeJson(value) : value;
+		}
+	}
+
+	return cleaned as T;
+}

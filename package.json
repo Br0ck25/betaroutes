@@ -12,6 +12,8 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"format": "prettier --write .",
 		"lint": "prettier --check \"src/**/*.{ts,js,svelte,css,md}\" && eslint \"src/**/*.{ts,js,svelte}\"",
+		"audit": "npm audit --production",
+		"audit:fix": "npm audit fix",
 		"migrate:order": "node scripts/svelte5-migration-order.js",
 		"migrate:done": "node scripts/svelte5-migration-done.js"
 	},
@@ -66,6 +68,7 @@
 		"cheerio": "^1.1.2",
 		"date-fns": "^4.1.0",
 		"idb": "^8.0.3",
+		"isomorphic-dompurify": "^2.35.0",
 		"jspdf": "^3.0.4",
 		"jspdf-autotable": "^5.0.2",
 		"resend": "^6.6.0",

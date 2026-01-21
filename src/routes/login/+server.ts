@@ -23,17 +23,19 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 		}
 
 		// 2. Rate Limiting (Prevent Credential Stuffing)
-		// Skip this check in dev mode to prevent localhost lockouts
-		if (kv && !dev) {
+		// [!code fix] Issue #50: Use higher limit in dev instead of completely disabling
+		if (kv) {
 			const clientIp = request.headers.get('CF-Connecting-IP') || getClientAddress();
 
-			// Rule: 5 Login attempts per 60 seconds per IP
-			const limitResult = await checkRateLimit(kv, clientIp, 'login_attempt', 5, 60);
+			// Dev mode: 50 attempts per 60s (more lenient but still protected)
+			// Prod mode: 5 attempts per 60s
+			const limit = dev ? 50 : 5;
+			const limitResult = await checkRateLimit(kv, clientIp, 'login_attempt', limit, 60);
 
 			if (!limitResult.allowed) {
 				return json(
 					{
-						error: 'Too many login attempts. Please try again in a minute.'
+						error: `Too many login attempts. Please try again in a minute.${dev ? ' (Dev mode: limit 50/min)' : ''}`
 					},
 					{ status: 429 }
 				);
@@ -79,11 +81,11 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 		// @ts-expect-error - createSession signature is broad in some environments
 		const sessionId = await createSession(sessionKv, sessionData);
 
-		// 8. Set Cookie
+		// 8. Set Cookie (Issue #5: Changed sameSite from 'none' to 'lax' for better security)
 		cookies.set('session_id', sessionId, {
 			path: '/',
 			httpOnly: true,
-			sameSite: 'none',
+			sameSite: 'lax', // [!code fix] Changed from 'none' for CSRF protection
 			secure: true,
 			maxAge: 60 * 60 * 24 * 7
 		});

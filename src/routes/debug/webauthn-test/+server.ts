@@ -1,7 +1,14 @@
 import type { RequestHandler } from './$types';
 import { generateRegistrationOptions } from '$lib/server/webauthn';
+import { dev } from '$app/environment';
+import { json } from '@sveltejs/kit';
 
 export const GET: RequestHandler = async () => {
+	// [SECURITY] Debug endpoints must not be accessible in production
+	if (!dev && process.env['NODE_ENV'] === 'production') {
+		return json({ error: 'Not available in production' }, { status: 403 });
+	}
+
 	try {
 		const mockUser = {
 			id: 'test-user-123',

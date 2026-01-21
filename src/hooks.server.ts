@@ -4,8 +4,19 @@ import type { Handle } from '@sveltejs/kit';
 import { log } from '$lib/server/log';
 // [!code ++] Import the user finder to check real-time status
 import { findUserById } from '$lib/server/userService';
+// [!code ++] SECURITY (Issue #4): CSRF protection
+import { generateCsrfToken, csrfProtection } from '$lib/server/csrf';
 
 export const handle: Handle = async ({ event, resolve }) => {
+	// [!code ++] SECURITY (Issue #4): Generate CSRF token for all requests
+	generateCsrfToken(event);
+
+	// [!code ++] SECURITY (Issue #4): Validate CSRF token for state-changing API requests
+	const csrfError = csrfProtection(event);
+	if (csrfError) {
+		return csrfError;
+	}
+
 	// 1. Ensure KV bindings exist (mock in dev/test using FILE store)
 	// Also enable when tests manually start a preview server (PW_MANUAL_SERVER)
 	if (dev || process.env['NODE_ENV'] !== 'production' || process.env['PW_MANUAL_SERVER'] === '1') {
@@ -100,6 +111,33 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// - Other static assets (images, fonts, scripts, styles, media) => 30 days
 	// Do NOT override existing Cache-Control headers, and skip HTML/API responses.
 	const response = await resolve(event);
+
+	// [!code ++] SECURITY HEADERS (Issue #6, #48)
+	// Add security headers to all responses
+	response.headers.set('X-Frame-Options', 'DENY');
+	response.headers.set('X-Content-Type-Options', 'nosniff');
+	response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+	response.headers.set('Permissions-Policy', 'geolocation=(self), camera=(), microphone=()');
+
+	// Content Security Policy (Issue #6)
+	if (!response.headers.has('Content-Security-Policy')) {
+		response.headers.set(
+			'Content-Security-Policy',
+			[
+				"default-src 'self'",
+				"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://maps.googleapis.com https://maps.gstatic.com",
+				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+				"img-src 'self' data: https: blob:",
+				"font-src 'self' https://fonts.gstatic.com",
+				"connect-src 'self' https://maps.googleapis.com https://places.googleapis.com",
+				"frame-src 'none'",
+				"object-src 'none'",
+				"base-uri 'self'",
+				"form-action 'self'"
+			].join('; ')
+		);
+	}
+
 	try {
 		if (event.request.method === 'GET' && response.status === 200) {
 			const existing = response.headers.get('cache-control');
