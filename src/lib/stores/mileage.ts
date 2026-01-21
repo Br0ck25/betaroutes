@@ -406,7 +406,7 @@ function createMileageStore() {
 				// Use prefixed ID "mileage:..." to avoid collision
 				const trashItem = {
 					id: `mileage:${rec.id}`,
-					tripId: rec.id,
+					tripId: rec.tripId || undefined,
 					type: 'mileage',
 					recordType: 'mileage',
 					data: rec,

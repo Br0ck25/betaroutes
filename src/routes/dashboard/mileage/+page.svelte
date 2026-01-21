@@ -60,30 +60,15 @@
 	let endDate = _fmtInput(new Date(_now.getFullYear(), 11, 31));
 	let lastHadSelections = false;
 	let selectedExpenses = new Set<string>();
-	let visibleLimit = 20;
+	let visibleLimit = 50;
 	let visibleExpenses: any[] = [];
 	$: visibleExpenses = filteredExpenses.slice(0, visibleLimit);
-	let _lastExpandedSize = 0;
 
 	// Loading is only true when both store is loading AND we have no server data to show
 	$: loading = $mileageLoading && (!data.mileage || data.mileage.length === 0);
 
-	/* eslint-disable svelte/infinite-reactive-loop */
-	$: if (
-		!loading &&
-		typeof window !== 'undefined' &&
-		filteredExpenses.length > visibleLimit &&
-		filteredExpenses.length !== _lastExpandedSize
-	) {
-		const size = filteredExpenses.length;
-		_lastExpandedSize = size;
-		if ('requestIdleCallback' in window) {
-			requestIdleCallback(() => (visibleLimit = size));
-		} else {
-			setTimeout(() => (visibleLimit = size), 200);
-		}
-	}
-	/* eslint-enable svelte/infinite-reactive-loop */
+	// REMOVED: automatic expansion to full list size was causing severe rendering hits
+	// Instead, we just use a reasonable visible limit or implement a Load More button
 
 	$: if (typeof document !== 'undefined') {
 		const hasSelections = selectedExpenses.size > 0;
@@ -110,12 +95,19 @@
 	// Use store data, but fallback to server data during initial hydration to prevent flicker
 	$: {
 		const source = $mileage.length > 0 ? $mileage : data.mileage || [];
-		allExpenses = source.filter(
-			(r: any) =>
-				typeof r.miles === 'number' ||
-				typeof r.startOdometer === 'number' ||
-				typeof r.endOdometer === 'number'
-		);
+		allExpenses = source
+			.filter(
+				(r: any) =>
+					typeof r.miles === 'number' ||
+					typeof r.startOdometer === 'number' ||
+					typeof r.endOdometer === 'number'
+			)
+			.map((r: any) => ({
+				...r,
+				// Pre-calculate numeric values for super-fast sorting/filtering
+				_dateVal: new Date(r.date || 0).getTime(),
+				_amtVal: Number(r.amount || 0)
+			}));
 	}
 
 	$: filteredExpenses = allExpenses
@@ -144,18 +136,17 @@
 
 			// Date filtering
 			if (startDate || endDate) {
-				const itemDate = new Date((item as any).date || 0);
-				itemDate.setHours(0, 0, 0, 0);
+				const itemDateValue = (item as any)._dateVal;
 
 				if (startDate) {
 					const start = new Date(startDate);
 					start.setHours(0, 0, 0, 0);
-					if (itemDate < start) return false;
+					if (itemDateValue < start.getTime()) return false;
 				}
 				if (endDate) {
 					const end = new Date(endDate);
 					end.setHours(0, 0, 0, 0);
-					if (itemDate > end) return false;
+					if (itemDateValue > end.getTime()) return false;
 				}
 			}
 
@@ -165,11 +156,11 @@
 			let aVal: number = 0,
 				bVal: number = 0;
 			if (sortBy === 'date') {
-				aVal = new Date((a as any).date || 0).getTime();
-				bVal = new Date((b as any).date || 0).getTime();
+				aVal = (a as any)._dateVal;
+				bVal = (b as any)._dateVal;
 			} else {
-				aVal = Number((a as any).amount || 0);
-				bVal = Number((b as any).amount || 0);
+				aVal = (a as any)._amtVal;
+				bVal = (b as any)._amtVal;
 			}
 			return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
 		});
