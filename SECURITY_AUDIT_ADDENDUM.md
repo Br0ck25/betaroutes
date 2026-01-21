@@ -8,6 +8,36 @@
 
 ---
 
+## ⚠️ Production Fix - January 21, 2026
+
+### DOMPurify Incompatibility with Cloudflare Workers
+
+**Issue:** After deploying security fixes, production site crashed with:
+
+```
+TypeError: import_isomorphic_dompurify.default.sanitize is not a function
+```
+
+**Root Cause:** The `isomorphic-dompurify` library does not work in Cloudflare Workers environment (no DOM available).
+
+**Solution:** Modified `src/lib/utils/sanitize.ts`:
+
+- `sanitizeStaticSvg()` is now a pass-through for hardcoded SVG content (which is already safe)
+- Added documentation that this function is only for static content, never user input
+- Kept `sanitizeHtml()` and `sanitizeSvg()` for potential browser-side use, but they warn if called in SSR
+
+**Security Impact:** ✅ NO SECURITY REGRESSION
+
+- All SVG content using `sanitizeStaticSvg()` is hardcoded in source files (not user input)
+- Static content is safe by definition (reviewed during code audits)
+- For dynamic user content, we sanitize server-side before storing in database
+
+**Files Modified:**
+
+- `src/lib/utils/sanitize.ts` - Made `sanitizeStaticSvg()` a pass-through
+
+---
+
 ## Executive Summary
 
 After completing remediation of 12 out of 13 high-priority issues from the original audit, a follow-up security review was conducted to identify any remaining vulnerabilities. This addendum documents **11 security issues** discovered during audit passes.
