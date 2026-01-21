@@ -122,9 +122,9 @@ function createTrashStore() {
 					const realId = getRealId(uniqueId);
 					const parentId = stored.tripId || realId;
 
-					// Only check trip existence if this is an "auto" log (attached to a trip)
-					// Manual logs often have tripId undefined or equal to their own id
-					if (stored.tripId && stored.tripId !== realId) {
+					// Check trip existence if this mileage has a tripId (whether it's the same as realId or not)
+					// This handles both auto logs (tripId !== realId) and trip-attached mileage (tripId === realId)
+					if (stored.tripId) {
 						const txCheck = db.transaction(['trips', 'trash'], 'readonly');
 						const tripExists = await txCheck.objectStore('trips').get(parentId);
 						const tripTrash =
