@@ -57,7 +57,6 @@ export interface AppDB {
 }
 
 let dbPromise: Promise<IDBPDatabase<AppDB>> | null = null;
-let dbInstance: IDBPDatabase<AppDB> | null = null;
 
 /**
  * Open or create the IndexedDB database
@@ -68,12 +67,6 @@ let dbInstance: IDBPDatabase<AppDB> | null = null;
  * - syncQueue: Pending changes to sync to cloud
  */
 export async function getDB(): Promise<IDBPDatabase<AppDB>> {
-	// Return cached instance immediately
-	if (dbInstance) {
-		return dbInstance;
-	}
-
-	// Wait for in-progress open
 	if (dbPromise) {
 		return dbPromise;
 	}
@@ -170,9 +163,6 @@ export async function getDB(): Promise<IDBPDatabase<AppDB>> {
 		// Force resolution now so VersionError is thrown inside the try block
 		await dbPromise;
 
-		// Cache the instance
-		dbInstance = await dbPromise;
-
 		// Migration: If an older DB used the legacy 'millage' store name, migrate its
 		// data to the canonical 'mileage' store and drop the legacy store. We do this
 		// after opening so we can read the old data, then perform a version upgrade
@@ -219,7 +209,6 @@ export async function getDB(): Promise<IDBPDatabase<AppDB>> {
 
 				// Replace the cached dbPromise with the migrated instance
 				dbPromise = Promise.resolve(migratedDB);
-				dbInstance = migratedDB;
 			}
 		} catch (migErr) {
 			console.warn('⚠️ Mileage migration failed or not necessary:', migErr);
@@ -241,10 +230,7 @@ export async function getDB(): Promise<IDBPDatabase<AppDB>> {
 		}
 	}
 
-	// Cache instance before returning
-	const db = await dbPromise;
-	dbInstance = db;
-	return db;
+	return dbPromise;
 }
 
 export function getMileageStoreName(db: IDBPDatabase<AppDB>): 'mileage' | 'millage' {
@@ -273,38 +259,6 @@ export async function clearDatabase(): Promise<void> {
 	await tx.done;
 
 	console.log('🗑️ Database cleared');
-}
-
-/**
- * Reset IndexedDB completely (for recovery from corruption)
- */
-export async function resetDatabase(): Promise<void> {
-	try {
-		// Close existing connection
-		if (dbInstance) {
-			dbInstance.close();
-			dbInstance = null;
-		}
-		dbPromise = null;
-
-		// Delete the database
-		await new Promise<void>((resolve, reject) => {
-			const request = indexedDB.deleteDatabase(DB_NAME);
-			request.onsuccess = () => resolve();
-			request.onerror = () => reject(request.error);
-			request.onblocked = () => {
-				console.warn('Database deletion blocked - close all tabs');
-			};
-		});
-
-		console.log('✅ Database deleted successfully');
-
-		// Reopen fresh
-		await getDB();
-	} catch (err) {
-		console.error('Failed to reset database:', err);
-		throw err;
-	}
 }
 
 /**

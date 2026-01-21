@@ -14,8 +14,6 @@ class SyncManager {
 	private syncInterval: ReturnType<typeof setInterval> | null = null;
 	private isSyncing = false;
 	private apiKey: string = '';
-	private syncDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-	private pendingSyncRequest = false;
 
 	private registeredStores = new Map<string, StoreHandler>();
 	private storeUpdater?: (trip: TripRecord) => void;
@@ -102,23 +100,8 @@ class SyncManager {
 		console.log(`📋 Added to sync queue: ${item.action} ${item.tripId}`);
 
 		if (navigator.onLine && !this.isSyncing) {
-			// Debounce sync to avoid excessive calls
-			this.debouncedSync();
+			await this.syncNow();
 		}
-	}
-
-	private debouncedSync() {
-		if (this.syncDebounceTimer) {
-			clearTimeout(this.syncDebounceTimer);
-		}
-		this.pendingSyncRequest = true;
-		this.syncDebounceTimer = setTimeout(() => {
-			this.syncDebounceTimer = null;
-			if (this.pendingSyncRequest) {
-				this.pendingSyncRequest = false;
-				this.syncNow();
-			}
-		}, 300); // 300ms debounce
 	}
 
 	private async updatePendingCount() {
