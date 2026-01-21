@@ -38,12 +38,10 @@ export function makeMileageService(
 
 			// 1. Try to fetch from Durable Object index first
 			let mileage: MileageRecord[] = [];
-			let doFetchSuccess = false;
 			try {
 				const res = await stub.fetch(`${DO_ORIGIN}/mileage/list`);
 				if (res.ok) {
 					mileage = (await res.json()) as MileageRecord[];
-					doFetchSuccess = true;
 				} else {
 					log.error(`[MileageService] DO Error: ${res.status}`);
 				}
@@ -52,18 +50,17 @@ export function makeMileageService(
 			}
 
 			// SELF-HEALING: If Index is empty but KV has data, force sync/migrate
-			// Only check KV if DO fetch succeeded and returned empty (to avoid expensive KV scan)
-			if (doFetchSuccess && mileage.length === 0) {
+			if (mileage.length === 0) {
 				const kvCheck = await kv.list({ prefix, limit: 1 });
 
 				if (kvCheck.keys.length > 0) {
-					log.warn(
-						`[MileageService] Detected desync for ${userId} (KV has data, Index empty). Running one-time migration...`
+					log.info(
+						`[MileageService] Detected desync for ${userId} (KV has data, Index empty). repairing...`
 					);
 
-					// Fetch ALL data from KV (ONE-TIME ONLY)
+					// Fetch ALL data from KV
 					const all: MileageRecord[] = [];
-					let list = await kv.list({ prefix, limit: 1000 });
+					let list = await kv.list({ prefix });
 					let keys = list.keys;
 
 					while (!list.list_complete && list.cursor) {
