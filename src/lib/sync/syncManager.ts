@@ -14,6 +14,7 @@ class SyncManager {
 	private syncInterval: ReturnType<typeof setInterval> | null = null;
 	private isSyncing = false;
 	private apiKey: string = '';
+	private syncDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 	private registeredStores = new Map<string, StoreHandler>();
 	private storeUpdater?: (trip: TripRecord) => void;
@@ -99,9 +100,22 @@ class SyncManager {
 		await this.updatePendingCount();
 		console.log(`📋 Added to sync queue: ${item.action} ${item.tripId}`);
 
+		// PERFORMANCE: Debounce sync to avoid rapid-fire sync calls blocking UI
 		if (navigator.onLine && !this.isSyncing) {
-			await this.syncNow();
+			this.debouncedSync();
 		}
+	}
+
+	private debouncedSync() {
+		// Clear existing timer
+		if (this.syncDebounceTimer) {
+			clearTimeout(this.syncDebounceTimer);
+		}
+
+		// Set a new timer - sync after 500ms of inactivity
+		this.syncDebounceTimer = setTimeout(() => {
+			this.syncNow();
+		}, 500);
 	}
 
 	private async updatePendingCount() {

@@ -2,9 +2,6 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { trash } from '$lib/stores/trash';
-	import { trips } from '$lib/stores/trips';
-	import { expenses } from '$lib/stores/expenses';
-	import { mileage } from '$lib/stores/mileage';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { user } from '$lib/stores/auth';
@@ -175,14 +172,11 @@
 								(item as any).type ||
 								(typeof (item as any).miles === 'number' ? 'mileage' : 'trip');
 
-			// Actually restore the item from trash
+			// Actually restore the item from trash (this calls updateLocal internally)
 			await trash.restore(id, item.userId, displayType);
 
-			// Reload the appropriate store
-			if (displayType === 'expense') await expenses.load(item.userId);
-			else if (displayType === 'mileage') await mileage.load(item.userId);
-			else await trips.load(item.userId);
-
+			// PERFORMANCE: No need to reload stores - updateLocal already updated them optimistically
+			// Just reload trash to remove the restored item from trash view
 			await loadTrash();
 		} catch (err) {
 			// Only show known user-friendly error messages, fallback to generic for unknown errors
@@ -216,12 +210,7 @@
 									(typeof (trip as any).miles === 'number' ? 'mileage' : 'trip');
 				await trash.restore(trip.id, trip.userId, displayType);
 			}
-			const userId = $user?.name || $user?.token;
-			if (userId) {
-				await trips.load(userId);
-				await expenses.load(userId);
-				await mileage.load(userId);
-			}
+			// PERFORMANCE: No need to reload stores - updateLocal already updated them
 			await loadTrash();
 		} catch (err) {
 			// Only show known user-friendly error messages, fallback to generic for unknown errors
