@@ -302,19 +302,24 @@ export function makeMileageService(
 				}
 			}
 
-			// Note: We don't need explicit checks for "another active mileage" or "newer mileage"
-			// because the mileage ID equals the trip ID by design, ensuring at most ONE
-			// mileage record per trip. The tombstone we're restoring IS the only
-			// mileage record for this trip, and we've already verified it's deleted.
-
-			const restored = ((tombstone['backup'] as Record<string, unknown> | undefined) ||
+			// FIX: Get the full backup data and preserve ALL fields
+			const backup =
+				(tombstone['backup'] as Record<string, unknown> | undefined) ||
 				(tombstone['data'] as Record<string, unknown> | undefined) ||
-				tombstone) as MileageRecord & Record<string, unknown>;
+				tombstone;
+
+			// Create restored record with all original fields preserved
+			const restored = {
+				...backup,
+				updatedAt: new Date().toISOString()
+			} as MileageRecord & Record<string, unknown>;
+
+			// Clean up unwanted fields
 			delete restored['deleted'];
 			delete restored['deletedAt'];
 			delete restored['metadata'];
 			delete restored['backup'];
-			restored.updatedAt = new Date().toISOString();
+			delete restored['data'];
 
 			await this.put(restored);
 

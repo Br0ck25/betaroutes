@@ -25,13 +25,23 @@ function createMileageStore() {
 	return {
 		subscribe,
 		set,
-		// Simplified hydrate: Uses simple Set-based trash filtering like expenses store
+		// Optimized hydrate: Set data immediately, defer IndexedDB work
 		async hydrate(data: MileageRecord[], _userId?: string) {
 			void _userId;
 			_hydrationPromise = new Promise((res) => (_resolveHydration = res));
 
-			// Optimistically set data immediately for faster perceived load
-			set(data);
+			// PERFORMANCE: Set data immediately for instant UI response
+			const normalizedData = data
+				.map((item) => ({
+					...item,
+					syncStatus: (item as any).syncStatus ?? 'synced'
+				}))
+				.sort((a, b) => {
+					const dateA = new Date(a.date || a.createdAt).getTime();
+					const dateB = new Date(b.date || b.createdAt).getTime();
+					return dateB - dateA;
+				});
+			set(normalizedData);
 
 			if (typeof window === 'undefined') {
 				_resolveHydration?.();
@@ -39,95 +49,26 @@ function createMileageStore() {
 				return;
 			}
 
-			try {
-				const db = await getDB();
+			// PERFORMANCE: Do IndexedDB sync in background without blocking UI
+			setTimeout(async () => {
+				try {
+					const db = await getDB();
+					const mileageStoreName = getMileageStoreName(db);
+					const tx = db.transaction(mileageStoreName, 'readwrite');
+					const store = tx.objectStore(mileageStoreName);
 
-				// 1. Check Trash to prevent resurrection of locally deleted items
-				const trashTx = db.transaction('trash', 'readonly');
-				const trashItems = await trashTx.objectStore('trash').getAll();
-				// Simple Set-based ID check (no timestamp comparison)
-				const trashIds = new Set(trashItems.map((t: TrashItemLike) => t.id || `mileage:${t.id}`));
-				await trashTx.done;
-
-				// 2. Prepare Valid Data (Server data minus local trash)
-				const validServerData = data.filter(
-					(item) => !trashIds.has(item.id) && !trashIds.has(`mileage:${item.id}`)
-				);
-				const serverIdSet = new Set(validServerData.map((i) => i.id));
-
-				// 3. Update DB (ReadWrite)
-				const mileageStoreName = getMileageStoreName(db);
-				const tx = db.transaction([mileageStoreName, 'trash'], 'readwrite');
-				const store = tx.objectStore(mileageStoreName);
-
-				// Get all local items to check for zombies (stale items)
-				const localItems = await store.getAll();
-				const localById = new Map(localItems.map((item) => [item.id, item]));
-
-				// DELETE stale items
-				for (const local of localItems) {
-					const isTrash = trashIds.has(local.id) || trashIds.has(`mileage:${local.id}`);
-					const isStale = local.syncStatus === 'synced' && !serverIdSet.has(local.id);
-
-					if (isTrash || isStale) {
-						await store.delete(local.id);
+					// Batch write server data
+					for (const item of normalizedData) {
+						await store.put(item);
 					}
+
+					await tx.done;
+				} catch (err) {
+					console.error('Background hydration failed:', err);
 				}
-
-				// UPDATE/INSERT fresh server data
-				for (const item of validServerData) {
-					const local = localById.get(item.id);
-					// Skip if local is unsynced (pending changes)
-					if (local && local.syncStatus !== 'synced') continue;
-					await store.put({ ...item, syncStatus: 'synced' });
-				}
-
-				// 4. Build merged result with local unsynced items taking precedence
-				const mergedById = new Map<string, MileageRecord>();
-
-				// Add synced server data
-				for (const item of validServerData) {
-					mergedById.set(item.id, { ...item, syncStatus: 'synced' });
-				}
-
-				// Overlay unsynced local items (they win)
-				for (const local of localItems) {
-					const isTrash = trashIds.has(local.id) || trashIds.has(`mileage:${local.id}`);
-					const isStale = local.syncStatus === 'synced' && !serverIdSet.has(local.id);
-
-					if (isTrash || isStale) continue;
-
-					if (local.syncStatus !== 'synced') {
-						const existing = mergedById.get(local.id);
-						if (!existing) {
-							mergedById.set(local.id, local);
-						} else {
-							// Keep the newer one based on updatedAt
-							const localUpdated = new Date(local.updatedAt || local.createdAt).getTime();
-							const existingUpdated = new Date(existing.updatedAt || existing.createdAt).getTime();
-							if (localUpdated >= existingUpdated) {
-								mergedById.set(local.id, local);
-							}
-						}
-					}
-				}
-
-				// Sort by date descending
-				const merged = Array.from(mergedById.values()).sort((a, b) => {
-					const dateA = new Date(a.date || a.createdAt).getTime();
-					const dateB = new Date(b.date || b.createdAt).getTime();
-					return dateB - dateA;
-				});
-
-				set(merged);
-				await tx.done;
 				_resolveHydration?.();
 				_hydrationPromise = null;
-			} catch (err) {
-				console.error('Failed to hydrate mileage cache:', err);
-				_resolveHydration?.();
-				_hydrationPromise = null;
-			}
+			}, 0);
 		},
 		updateLocal(record: MileageRecord) {
 			// ... copy from previous ...
@@ -146,31 +87,44 @@ function createMileageStore() {
 			});
 		},
 		async load(userId?: string) {
-			// ... copy from previous ...
 			isLoading.set(true);
 			try {
 				const db = await getDB();
 				const mileageStoreName = getMileageStoreName(db);
+				// PERFORMANCE: Use single transaction and build trash set efficiently
 				const tx = db.transaction([mileageStoreName, 'trash'], 'readonly');
 				const store = tx.objectStore(mileageStoreName);
 				const trashStore = tx.objectStore('trash');
-				let items: MileageRecord[];
-				if (userId) {
-					const index = store.index('userId');
-					items = await index.getAll(userId);
-				} else {
-					items = await store.getAll();
+
+				// Fetch in parallel
+				const [items, trashItems] = await Promise.all([
+					userId ? store.index('userId').getAll(userId) : store.getAll(),
+					trashStore.getAll()
+				]);
+
+				// PERFORMANCE: Build trash set once with both ID formats
+				const trashIds = new Set<string>();
+				for (const t of trashItems) {
+					const id = (t as TrashItemLike).id;
+					if (id) {
+						trashIds.add(id);
+						if (id.startsWith('mileage:')) {
+							trashIds.add(id.replace('mileage:', ''));
+						} else {
+							trashIds.add(`mileage:${id}`);
+						}
+					}
 				}
-				const trashItems = await trashStore.getAll();
-				const trashIds = new Set(trashItems.map((t: TrashItemLike) => t.id || `mileage:${t.id}`));
-				const activeItems = items.filter(
-					(item) => !trashIds.has(item.id) && !trashIds.has(`mileage:${item.id}`)
-				);
-				activeItems.sort((a, b) => {
-					const dateA = new Date(a.date || a.createdAt).getTime();
-					const dateB = new Date(b.date || b.createdAt).getTime();
-					return dateB - dateA;
-				});
+
+				// PERFORMANCE: Filter and sort in one pass
+				const activeItems = items
+					.filter((item) => !trashIds.has(item.id))
+					.sort((a, b) => {
+						const dateA = new Date(a.date || a.createdAt).getTime();
+						const dateB = new Date(b.date || b.createdAt).getTime();
+						return dateB - dateA;
+					});
+
 				set(activeItems);
 				return activeItems;
 			} catch (err) {
@@ -249,11 +203,14 @@ function createMileageStore() {
 				const tx = db.transaction(mileageStoreName, 'readwrite');
 				await tx.objectStore(mileageStoreName).put(record);
 				await tx.done;
-				await syncManager.addToQueue({
-					action: 'create',
-					tripId: record.id,
-					data: { ...record, store: 'mileage' }
-				});
+				// PERFORMANCE: Queue sync in background without blocking
+				setTimeout(() => {
+					syncManager.addToQueue({
+						action: 'create',
+						tripId: record.id,
+						data: { ...record, store: 'mileage' }
+					});
+				}, 0);
 				return record;
 			} catch (err) {
 				console.error('❌ Failed to create mileage record:', err);
@@ -357,11 +314,14 @@ function createMileageStore() {
 				} catch {
 					/* ignore */
 				}
-				await syncManager.addToQueue({
-					action: 'update',
-					tripId: id,
-					data: { ...updated, store: 'mileage' }
-				});
+				// PERFORMANCE: Queue sync in background without blocking
+				setTimeout(() => {
+					syncManager.addToQueue({
+						action: 'update',
+						tripId: id,
+						data: { ...updated, store: 'mileage' }
+					});
+				}, 0);
 				return updated;
 			} catch (err) {
 				console.error('❌ Failed to update mileage:', err);
@@ -370,8 +330,8 @@ function createMileageStore() {
 			}
 		},
 
-		// [!code focus] THE FIX IS HERE
 		async deleteMileage(id: string, userId: string) {
+			// PERFORMANCE: Optimistic update - remove from UI immediately
 			let previous: MileageRecord[] = [];
 			update((current) => {
 				previous = current;
@@ -388,11 +348,14 @@ function createMileageStore() {
 				const rec = await mileageStore.get(id);
 				if (!rec) {
 					await tx.done;
-					await syncManager.addToQueue({
-						action: 'delete',
-						tripId: id,
-						data: { store: 'mileage' }
-					});
+					// Queue sync in background without blocking
+					setTimeout(() => {
+						syncManager.addToQueue({
+							action: 'delete',
+							tripId: id,
+							data: { store: 'mileage' }
+						});
+					}, 0);
 					return;
 				}
 				if (rec.userId !== userId) {
@@ -457,7 +420,10 @@ function createMileageStore() {
 					/* ignore */
 				}
 
-				await syncManager.addToQueue({ action: 'delete', tripId: id, data: { store: 'mileage' } });
+				// PERFORMANCE: Queue sync in background without blocking UI
+				setTimeout(() => {
+					syncManager.addToQueue({ action: 'delete', tripId: id, data: { store: 'mileage' } });
+				}, 0);
 				return;
 			} catch (err) {
 				console.error('❌ Failed to delete mileage record:', err);

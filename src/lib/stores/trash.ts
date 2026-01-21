@@ -177,6 +177,9 @@ function createTrashStore() {
 					await tx.objectStore('expenses').put(restored);
 				} else if (restoreType === 'mileage') {
 					await tx.objectStore(mileageStoreName).put(restored);
+				} else if (restoreType === 'trip') {
+					// FIX: Write restored trip to IndexedDB so it persists
+					await tx.objectStore('trips').put(restored);
 				}
 
 				// Always delete the trash item

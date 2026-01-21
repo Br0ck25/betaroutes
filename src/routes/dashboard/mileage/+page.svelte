@@ -32,18 +32,13 @@
 
 	let isMileageSettingsOpen = false;
 
-	// Derived totals
+	// Derived totals - use pre-computed values
 	$: totalMiles = filteredExpenses.reduce((s, e) => s + (Number((e as any).miles) || 0), 0);
-	// Mileage Deduction = sum of (miles * rate) per log — prefer stored `reimbursement` but compute if missing
-	$: totalMillageDeduction = filteredExpenses.reduce((s, e) => {
-		const rec = e as any;
-		if (typeof rec.reimbursement === 'number') return s + Number(rec.reimbursement);
-		const r =
-			typeof rec.mileageRate === 'number'
-				? Number(rec.mileageRate)
-				: Number($userSettings?.mileageRate) || 0;
-		return s + (Number(rec.miles || 0) * r || 0);
-	}, 0);
+	// PERFORMANCE: Use pre-computed reimbursement
+	$: totalMillageDeduction = filteredExpenses.reduce(
+		(s, e) => s + ((e as any)._reimbursement || 0),
+		0
+	);
 
 	// --- STATE ---
 	let searchQuery = '';
@@ -95,6 +90,7 @@
 	// Use store data, but fallback to server data during initial hydration to prevent flicker
 	$: {
 		const source = $mileage.length > 0 ? $mileage : data.mileage || [];
+		// PERFORMANCE: Pre-calculate all values once to avoid repeated computations
 		allExpenses = source
 			.filter(
 				(r: any) =>
@@ -102,12 +98,23 @@
 					typeof r.startOdometer === 'number' ||
 					typeof r.endOdometer === 'number'
 			)
-			.map((r: any) => ({
-				...r,
-				// Pre-calculate numeric values for super-fast sorting/filtering
-				_dateVal: new Date(r.date || 0).getTime(),
-				_amtVal: Number(r.amount || 0)
-			}));
+			.map((r: any) => {
+				const dateVal = new Date(r.date || 0).getTime();
+				const amtVal = Number(r.amount || 0);
+				// Pre-compute reimbursement if not stored
+				const reimbursement =
+					typeof r.reimbursement === 'number'
+						? r.reimbursement
+						: Number(r.miles || 0) *
+							(Number(r.mileageRate) || Number($userSettings?.mileageRate) || 0);
+
+				return {
+					...r,
+					_dateVal: dateVal,
+					_amtVal: amtVal,
+					_reimbursement: reimbursement
+				};
+			});
 	}
 
 	$: filteredExpenses = allExpenses
