@@ -95,6 +95,9 @@ async function loadSettingsFromServer() {
 			if (typeof serverSettings === 'object' && serverSettings !== null) {
 				userSettings.update((current) => ({ ...current, ...serverSettings }));
 			}
+		} else if (response.status === 401) {
+			// User not authenticated - this is expected, silently continue with local settings
+			return;
 		}
 	} catch (e) {
 		console.error('Failed to load settings from server', e);
