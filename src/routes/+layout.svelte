@@ -1,7 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import Footer from '$lib/components/layout/Footer.svelte';
-	import PWAInstall from '$lib/components/PWAInstall.svelte';
+	// PWAInstall removed per user request
 	import { setUserContext } from '$lib/stores/user.svelte';
 	import { onMount } from 'svelte';
 	import { syncManager } from '$lib/sync/syncManager';
@@ -83,13 +83,10 @@
 
 <div class="flex flex-col min-h-dvh bg-neutral-bg-primary font-inter text-neutral-primary">
 	<main class="flex-grow w-full">
-		<PWAInstall />
 		{@render children()}
 	</main>
 
 	{#if $page.url.pathname !== '/'}
 		<Footer class="hidden tablet:block" />
-	{:else}
-		<Footer />
 	{/if}
 </div>
