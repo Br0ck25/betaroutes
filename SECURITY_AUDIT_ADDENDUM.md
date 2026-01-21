@@ -20,7 +20,7 @@
 - Mileage tracking
 - All settings updates
 
-**Root Cause:**
+**Root Cause:** 
 
 1. CSRF protection was implemented in `hooks.server.ts` (server-side) and `src/lib/utils/csrf.ts` (client-side utilities)
 2. **Client-side utilities (`csrfFetch`, `addCsrfHeader`) were NEVER INTEGRATED** with existing codebase
