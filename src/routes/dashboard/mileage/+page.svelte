@@ -92,11 +92,9 @@
 	let isManageCategoriesOpen = false;
 	let newCategoryName = '';
 
-	// Use store data after hydration, fallback to server data only on initial load
-	// Fix: Don't use .length check as empty array is valid state after delete
+	// Use store data, but fallback to server data during initial hydration to prevent flicker
 	$: {
-		// Always prefer store data (even if empty) once hydrated
-		const source = $mileage;
+		const source = $mileage.length > 0 ? $mileage : data.mileage || [];
 		allExpenses = source
 			.filter(
 				(r: any) =>

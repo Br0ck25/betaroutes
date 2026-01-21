@@ -30,11 +30,12 @@ function createMileageStore() {
 			void _userId;
 			_hydrationPromise = new Promise((res) => (_resolveHydration = res));
 
-			// Don't immediately set data - wait until we've merged with local pending items
-			// to avoid flashing/losing unsaved changes
+			console.log('[Mileage Store] Hydrate called with', data.length, 'server records');
+
+			// Optimistically set data immediately for faster perceived load
+			set(data);
 
 			if (typeof window === 'undefined') {
-				set(data);
 				_resolveHydration?.();
 				_hydrationPromise = null;
 				return;
@@ -49,6 +50,8 @@ function createMileageStore() {
 				// Simple Set-based ID check (no timestamp comparison)
 				const trashIds = new Set(trashItems.map((t: TrashItemLike) => t.id || `mileage:${t.id}`));
 				await trashTx.done;
+
+				console.log('[Mileage Store] Found', trashItems.length, 'items in trash');
 
 				// 2. Prepare Valid Data (Server data minus local trash)
 				const validServerData = data.filter(
@@ -65,12 +68,22 @@ function createMileageStore() {
 				const localItems = await store.getAll();
 				const localById = new Map(localItems.map((item) => [item.id, item]));
 
+				console.log('[Mileage Store] Found', localItems.length, 'items in IndexedDB');
+				console.log(
+					'[Mileage Store] Pending items:',
+					localItems.filter((i) => i.syncStatus === 'pending').length
+				);
+
 				// DELETE stale items
 				for (const local of localItems) {
 					const isTrash = trashIds.has(local.id) || trashIds.has(`mileage:${local.id}`);
 					const isStale = local.syncStatus === 'synced' && !serverIdSet.has(local.id);
 
 					if (isTrash || isStale) {
+						console.log('[Mileage Store] Deleting stale/trash item:', local.id, {
+							isTrash,
+							isStale
+						});
 						await store.delete(local.id);
 					}
 				}
@@ -119,6 +132,8 @@ function createMileageStore() {
 					const dateB = new Date(b.date || b.createdAt).getTime();
 					return dateB - dateA;
 				});
+
+				console.log('[Mileage Store] Final merged result:', merged.length, 'items');
 
 				set(merged);
 				await tx.done;
