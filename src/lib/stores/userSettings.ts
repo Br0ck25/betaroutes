@@ -14,8 +14,8 @@ const defaultSettings = {
 	distanceUnit: 'mi',
 	timeFormat: '12h',
 	expenseCategories: ['maintenance', 'insurance', 'supplies', 'other'],
-	maintenanceCategories: ['oil change', 'tire rotation', 'repair', 'inspection', 'wash'],
-	supplyCategories: ['water', 'snacks', 'cleaning', 'office', 'equipment'],
+	maintenanceCategories: ['Oil Change', 'Tire Rotation', 'Repair', 'Inspection', 'Wash'],
+	supplyCategories: ['Water', 'Snacks', 'Cleaning', 'Office', 'Equipment'],
 
 	// Business Information
 	companyName: '',

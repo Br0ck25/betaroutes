@@ -697,8 +697,7 @@ export const PUT: RequestHandler = async (event) => {
 							tripId: trip.id,
 							userId: storageId,
 							date: trip.date || now,
-							startOdometer: 0,
-							endOdometer: validData.totalMiles,
+
 							miles: validData.totalMiles,
 							notes: 'Auto-created from trip edit',
 							createdAt: now,

@@ -38,7 +38,7 @@
 		return d.toISOString().slice(0, 10);
 	}
 	let startDate = _fmtInput(new Date(_now.getFullYear(), 0, 1));
-	let endDate = _fmtInput(_now);
+	let endDate = _fmtInput(new Date(_now.getFullYear(), 11, 31));
 
 	let lastHadSelections = false;
 
