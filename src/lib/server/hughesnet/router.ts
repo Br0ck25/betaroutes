@@ -22,16 +22,68 @@ export class HughesNetRouter {
 		return controller.signal;
 	}
 
-	async resolveAddress(rawAddress: string): Promise<GeocodedPoint | null> {
-		const cleanAddr = rawAddress.trim().toLowerCase();
-		// Use consistent key format
-		const kvKey = `geo:${cleanAddr.replace(/[^a-z0-9]/g, '_')}`;
+	/**
+	 * Normalize address to handle common variations for cache lookups.
+	 * Examples: "6131 highway 541" -> "6131 ky-541", "hwy 541" -> "ky-541"
+	 */
+	private normalizeAddressForCache(address: string): string {
+		let normalized = address.trim().toLowerCase();
 
-		// 1. Check KV Cache
+		// Handle highway variations - convert "highway 123" to "ky-123" format
+		// Match: highway 541, hwy 541, us 60, route 80, etc.
+		normalized = normalized
+			.replace(/\bhighway\s+(\d+)/gi, 'ky-$1')
+			.replace(/\bhwy\.?\s+(\d+)/gi, 'ky-$1')
+			.replace(/\bus\s+(\d+)/gi, 'us-$1')
+			.replace(/\broute\s+(\d+)/gi, 'ky-$1')
+			.replace(/\brt\.?\s+(\d+)/gi, 'ky-$1');
+
+		return normalized;
+	}
+
+	/**
+	 * Generate multiple cache key variations for an address to check.
+	 * This helps find cached results even when address format varies.
+	 */
+	private getCacheKeyVariations(rawAddress: string): string[] {
+		const normalized = this.normalizeAddressForCache(rawAddress);
+		const cleanKey = normalized.replace(/[^a-z0-9]/g, '_');
+
+		// Also try the original format in case it was already cached
+		const originalKey = rawAddress
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9]/g, '_');
+
+		const keys = [`geo:${cleanKey}`];
+		if (originalKey !== cleanKey) {
+			keys.push(`geo:${originalKey}`);
+		}
+		return keys;
+	}
+
+	async resolveAddress(rawAddress: string): Promise<GeocodedPoint | null> {
+		const cacheKeys = this.getCacheKeyVariations(rawAddress);
+		const primaryKey = cacheKeys[0]!; // Always defined - array has at least one element
+
+		// 1. Check KV Cache with all key variations
 		if (this.kv) {
 			try {
-				const cached = await this.kv.get(kvKey);
-				if (cached) return JSON.parse(cached);
+				for (const kvKey of cacheKeys) {
+					const cached = await this.kv.get(kvKey);
+					if (cached) {
+						const point = JSON.parse(cached);
+						// Cache hit - also store under primary key for future lookups
+						if (kvKey !== primaryKey) {
+							try {
+								await this.kv.put(primaryKey, cached);
+							} catch {
+								// Ignore cache update errors
+							}
+						}
+						return point;
+					}
+				}
 			} catch (e) {
 				log.warn('Failed to get cached geocode:', e);
 			}
@@ -50,7 +102,8 @@ export class HughesNetRouter {
 				// Save to KV (Permanent Cache)
 				if (this.kv) {
 					try {
-						await this.kv.put(kvKey, JSON.stringify(point));
+						// Store under primary normalized key
+						await this.kv.put(primaryKey, JSON.stringify(point));
 					} catch (err) {
 						log.warn('Failed to cache geocode:', err);
 					}
@@ -82,7 +135,7 @@ export class HughesNetRouter {
 					// Save to KV (Permanent Cache)
 					if (this.kv) {
 						try {
-							await this.kv.put(kvKey, JSON.stringify(point));
+							await this.kv.put(primaryKey, JSON.stringify(point));
 						} catch (e) {
 							log.warn('Failed to cache geocode:', e);
 						}

@@ -1,17 +1,32 @@
 # Cursor AI Rules
 
-You are working on a governed Svelte project with strict rules.
+**⚠️ CRITICAL: This app handles passwords, financial data, and location data.**
+
+You are working on a governed Svelte project with strict security and governance rules.
 
 ## CRITICAL: Read These Files First
 
-1. `AI_AGENTS.md` - Quick reference for AI agents
-2. `GOVERNANCE.md` - Rule hierarchy
-3. `svelte-mixed-migration-agent.md` - Complete migration rules
-4. `PWA.md` - PWA requirements
-5. `HTML_LIVING_STANDARD.md` - HTML rules
-6. `DESIGN_SYSTEM.md` - Color palette
+1. **`SECURITY.md`** - **READ FIRST** - Absolute highest priority
+2. `AI_AGENTS.md` - Quick reference for AI agents
+3. `GOVERNANCE.md` - Rule hierarchy
+4. `svelte-mixed-migration-agent.md` - Complete migration rules
+5. `PWA.md` - PWA requirements
+6. `HTML_LIVING_STANDARD.md` - HTML rules
+7. `DESIGN_SYSTEM.md` - Color palette
 
 ## Core Rules (Never Violate)
+
+### SECURITY (HIGHEST PRIORITY)
+
+- NEVER store passwords in plaintext or localStorage
+- NEVER log passwords, financial data, or addresses
+- NEVER use `{@html}` with user input (XSS risk)
+- NEVER trust client-provided userId in API
+- ALWAYS verify user owns data before returning it
+- ALWAYS sanitize user input
+- ALWAYS use HTTPS for API calls
+
+### General Rules
 
 - Editing a file ≠ Migrating it
 - New code must be Svelte 5
@@ -24,8 +39,10 @@ You are working on a governed Svelte project with strict rules.
 
 - Fix bug in Svelte 4? → Fix in Svelte 4, don't migrate
 - New component? → Use Svelte 5
+- Handling user data? → Check SECURITY.md FIRST
+- Creating API endpoint? → Verify user ownership check
 - Need new color? → Check DESIGN_SYSTEM.md first
 - Touch service worker? → STOP and ask
 - Unsure? → STOP and ask
 
-See `AI_AGENTS.md` for complete instructions.
+See `SECURITY.md` and `AI_AGENTS.md` for complete instructions.

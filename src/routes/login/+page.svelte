@@ -406,7 +406,15 @@
 </script>
 
 <svelte:head>
-	<title>{isLogin ? 'Sign In' : 'Sign Up'} - Go Route Yourself</title>
+	<title>{isLogin ? 'Sign In' : 'Create Account'} - Go Route Yourself</title>
+	<meta
+		name="description"
+		content={isLogin
+			? 'Sign in to Go Route Yourself to access your route plans, profit tracking, and mileage logs.'
+			: 'Create your free Go Route Yourself account. Start tracking routes, profits, and mileage in minutes.'}
+	/>
+	<meta name="robots" content="noindex, follow" />
+	<link rel="canonical" href="https://gorouteyourself.com/login" />
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
 	<link

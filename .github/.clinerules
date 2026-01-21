@@ -1,15 +1,29 @@
 # Cline AI Rules
 
+**⚠️ This app handles sensitive data: passwords, financial info, location data.**
+
 Read these files before making ANY changes:
 
-1. AI_AGENTS.md
-2. GOVERNANCE.md
-3. svelte-mixed-migration-agent.md
-4. PWA.md
-5. HTML_LIVING_STANDARD.md
-6. DESIGN_SYSTEM.md
+1. **SECURITY.md** - READ FIRST
+2. AI_AGENTS.md
+3. GOVERNANCE.md
+4. svelte-mixed-migration-agent.md
+5. PWA.md
+6. HTML_LIVING_STANDARD.md
+7. DESIGN_SYSTEM.md
 
 ## Non-Negotiable Rules
+
+### SECURITY (ABSOLUTE PRIORITY)
+
+- NEVER store passwords in localStorage
+- NEVER log sensitive data
+- NEVER use {@html} with user input
+- NEVER trust client-provided userId
+- ALWAYS verify user owns data
+- ALWAYS read SECURITY.md when handling user data
+
+### General
 
 - Don't migrate files just because you're editing them
 - New features = Svelte 5 only
@@ -18,4 +32,4 @@ Read these files before making ANY changes:
 - Generate valid HTML only
 - STOP and ask when uncertain
 
-See AI_AGENTS.md for complete instructions.
+See SECURITY.md and AI_AGENTS.md for complete instructions.

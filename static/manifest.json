@@ -4,7 +4,7 @@
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#1e40af",
+  "theme_color": "#ffffff",
   "description": "Offline-first mileage tracking and route management",
   "scope": "/",
 

@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	const resolve = (href: string) => `${base}${href}`;
+
+	let { class: className = '' } = $props();
 </script>
 
 <footer
-	class="w-full border-t border-neutral-border bg-neutral-bg-secondary mt-10"
+	class="w-full border-t border-neutral-border bg-neutral-bg-secondary mt-10 {className}"
 	style="padding-bottom: calc(env(safe-area-inset-bottom, 20px) + 12px);"
 >
 	<div

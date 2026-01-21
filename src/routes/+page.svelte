@@ -82,7 +82,7 @@
 				"ratingValue": "4.8",
 				"ratingCount": "500"
 			},
-			"featureList": "Route Optimization, Profit Tracking, Expense Management, Mileage Log"
+			"featureList": "Route Optimization, Profit Tracking, Mileage Tracking, Expense Management, Analytics Dashboard, Tax Reports"
 		}
 	</script>
 </svelte:head>
@@ -208,6 +208,15 @@
 				</div>
 
 				<div class="feature-card green">
+					<div class="feature-icon">�</div>
+					<h3>Mileage Tracking</h3>
+					<p>
+						Automatically log every mile driven with GPS precision. IRS-compliant mileage logs for
+						tax deductions and reimbursements.
+					</p>
+				</div>
+
+				<div class="feature-card navy">
 					<div class="feature-icon">📊</div>
 					<h3>Analytics Dashboard</h3>
 					<p>
@@ -215,7 +224,7 @@
 					</p>
 				</div>
 
-				<div class="feature-card navy">
+				<div class="feature-card purple">
 					<div class="feature-icon">📱</div>
 					<h3>Mobile Friendly</h3>
 					<p>
@@ -224,7 +233,7 @@
 					</p>
 				</div>
 
-				<div class="feature-card purple">
+				<div class="feature-card orange">
 					<div class="feature-icon">📤</div>
 					<h3>Export Reports</h3>
 					<p>
@@ -232,7 +241,7 @@
 					</p>
 				</div>
 
-				<div class="feature-card orange">
+				<div class="feature-card blue">
 					<div class="feature-icon">💾</div>
 					<h3>Cloud Sync</h3>
 					<p>Your data syncs automatically across all devices. Never lose a trip log again.</p>

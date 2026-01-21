@@ -2,17 +2,20 @@
 
 **CRITICAL:** You are working on a governed codebase with strict, non-negotiable rules.
 
+**⚠️ This application handles sensitive data: passwords, financial information, trip addresses, and personal data.**
+
 ---
 
 ## ⚠️ READ THESE FIRST (MANDATORY)
 
 Before making ANY changes, read these documents in order:
 
-1. **`GOVERNANCE.md`** — Rule hierarchy and conflict resolution
-2. **`svelte-mixed-migration-agent.md`** — Complete migration strategy
-3. **`PWA.md`** — PWA requirements (HIGHER precedence than migration)
-4. **`HTML_LIVING_STANDARD.md`** — HTML syntax rules (HIGHER precedence than migration)
-5. **`DESIGN_SYSTEM.md`** — Color palette (HIGHER precedence than migration)
+1. **`SECURITY.md`** — **READ FIRST** - Security has absolute highest priority
+2. **`GOVERNANCE.md`** — Rule hierarchy and conflict resolution
+3. **`svelte-mixed-migration-agent.md`** — Complete migration strategy
+4. **`PWA.md`** — PWA requirements (HIGHER precedence than migration)
+5. **`HTML_LIVING_STANDARD.md`** — HTML syntax rules (HIGHER precedence than migration)
+6. **`DESIGN_SYSTEM.md`** — Color palette (HIGHER precedence than migration)
 
 ---
 
@@ -20,14 +23,14 @@ Before making ANY changes, read these documents in order:
 
 When rules conflict, this is the hierarchy (highest to lowest):
 
-1. Safety & Security
+1. **SECURITY** ← **ABSOLUTE HIGHEST** - Passwords, financial data, location data
 2. **PWA Compliance** ← Can block migration
 3. **HTML Living Standard** ← Can block migration
 4. **Design System** ← Can block migration
 5. Migration Agent Rules
 6. Code Style
 
-**If migration conflicts with rules 2-4, DO NOT MIGRATE.**
+**If migration conflicts with rules 1-4, DO NOT MIGRATE.**
 
 ---
 
@@ -65,6 +68,12 @@ ALL new files and features MUST use Svelte 5 syntax:
 
 You MUST NEVER:
 
+❌ **STORE PASSWORDS in plaintext, localStorage, or anywhere insecure**  
+❌ **LOG sensitive data (passwords, addresses, dollar amounts)**  
+❌ **EXPOSE financial or location data** in logs, errors, or cache  
+❌ **USE `{@html}` with user input** (XSS vulnerability)  
+❌ **TRUST client-provided userId** in API without verification  
+❌ **RETURN data without verifying user owns it**  
 ❌ Migrate a file just because you're editing it  
 ❌ Introduce colors outside the approved palette  
 ❌ Break PWA offline functionality  
@@ -93,7 +102,10 @@ You MUST ALWAYS:
 ✅ Make minimal, localized changes  
 ✅ Cite specific governance documents when declining requests  
 ✅ Suggest governance-compliant alternatives  
-✅ Read migration annotations (`// MIGRATED_TO_SVELTE_5 - DATE`)
+✅ Read migration annotations (`// MIGRATED_TO_SVELTE_5 - DATE`)  
+✅ **Verify user owns data before returning it from API**  
+✅ **Never trust client-provided userId - use authenticated user**  
+✅ **Sanitize all user input before display**
 
 ---
 
@@ -121,18 +133,54 @@ You MUST ALWAYS:
 
 ---
 
-### Scenario 2: User asks to add a new feature
+### Scenario 2: User asks to add API endpoint to fetch trips
 
 **CORRECT:**
 
-- Create a NEW Svelte 5 component
-- Use `$state`, `$derived`, `$effect` as needed
-- Ensure it can be consumed by existing Svelte 4 code if necessary
+```javascript
+// Cloudflare Worker
+export default {
+	async fetch(request, env) {
+		// 1. Authenticate
+		const user = await authenticateUser(request);
+		if (!user) {
+			return new Response('Unauthorized', { status: 401 });
+		}
+
+		// 2. Get requested userId
+		const url = new URL(request.url);
+		const requestedUserId = url.searchParams.get('userId');
+
+		// 3. CRITICAL: Verify user is requesting their own data
+		if (requestedUserId !== user.id) {
+			return new Response('Forbidden', { status: 403 });
+		}
+
+		// 4. Fetch trips
+		const prefix = `trip:${user.id}:`;
+		const trips = await env.TRIPS_KV.list({ prefix });
+
+		return new Response(JSON.stringify(trips));
+	}
+};
+```
 
 **WRONG:**
 
-- Creating new Svelte 4 components
-- Migrating existing components to "match" the new one
+```javascript
+// DANGEROUS - Trusts client userId
+export default {
+	async fetch(request, env) {
+		const { userId } = await request.json();
+
+		// Client could send someone else's userId!
+		const prefix = `trip:${userId}:`;
+		const trips = await env.TRIPS_KV.list({ prefix });
+
+		return new Response(JSON.stringify(trips));
+	}
+};
+```
 
 ---
 
@@ -161,18 +209,29 @@ I cannot use #FF5722 as it's not in the approved color palette
 
 ---
 
-### Scenario 4: User asks to add offline functionality
+### Scenario 4: User asks to display trip addresses in UI
 
-**Before making changes:**
+**CORRECT:**
 
-1. Check if this affects service worker
-2. Check if this affects caching strategy
-3. Review `PWA.md` requirements
+```svelte
+<script>
+	let { address = '' } = $props();
 
-**If uncertain:**
-This change affects PWA offline behavior. Before proceeding, I need
-to verify it won't break existing offline functionality. Can you
-confirm this is intended to modify the service worker?
+	// Svelte automatically escapes - SAFE
+</script>
+
+<p>{address}</p>
+```
+
+**WRONG:**
+
+```svelte
+<script>
+	let { address = '' } = $props();
+</script>
+
+<!-- DANGEROUS - XSS vulnerability --><p>{@html address}</p>
+```
 
 ---
 
@@ -207,6 +266,10 @@ Leave it in Svelte 4 and address only the specific issue?
 - Service worker or manifest.json would be modified
 - Breaking changes are required
 - You're unsure if a governance rule applies
+- **An API endpoint doesn't verify user owns data**
+- **Client-provided userId would be trusted**
+- **Sensitive data would be logged or cached**
+- **User input wouldn't be sanitized**
 
 **Better to ask than to violate governance.**
 
@@ -224,6 +287,10 @@ Leave it in Svelte 4 and address only the specific issue?
 | Invalid HTML in existing file | ✅ Fix to be valid HTML                        |
 | Component needs new prop      | ✅ Add prop in current version (don't migrate) |
 | Routing change                | ⚠️ Verify PWA offline still works              |
+| Creating API endpoint         | ❌ STOP - verify user ownership check          |
+| Displaying user input         | ✅ Use `{variable}` NOT `{@html variable}`     |
+| Storing passwords             | ❌ STOP - NEVER store passwords client-side    |
+| Logging for debugging         | ⚠️ Ensure NO sensitive data in logs            |
 
 ---
 
@@ -269,6 +336,7 @@ After making changes:
 ```bash
 npm run check  # Type checking
 npm run lint   # Linting
+npm audit      # Security vulnerabilities
 ```
 
 If you modified:
@@ -277,6 +345,8 @@ If you modified:
 - **HTML markup** → Verify it's valid (no self-closing non-void elements)
 - **Styles** → Verify colors are from approved palette
 - **Service worker** → Don't do this without explicit approval
+- **API endpoints** → Verify user ownership checks exist
+- **User input display** → Verify using `{variable}` not `{@html variable}`
 
 ---
 
@@ -290,16 +360,22 @@ If you modified:
 4. **Keep Svelte 4** over migrating unnecessarily
 5. **Use approved colors** over introducing new ones
 6. **Maintain PWA functionality** over new features
+7. **Verify user ownership** before returning data
+8. **Sanitize input** before displaying
+9. **Never trust client data** - always validate server-side
 
 ---
 
 ## Remember
 
-- This is a **governance-first, migration-second** project
+- This is a **governance-first, security-first, migration-second** project
 - Editing ≠ Migrating
-- PWA, HTML, and Design System rules trump migration preferences
+- Security, PWA, HTML, and Design System rules trump migration preferences
 - When rules conflict, check `GOVERNANCE.md` for precedence
 - When uncertain, STOP and ask
 - Better to be cautious than to violate governance
+- **Always verify user owns data in API**
+- **Never trust client-provided userId**
+- **Always sanitize user input**
 
-**Your goal:** Make Svelte 5 inevitable while respecting all constraints.
+**Your goal:** Make Svelte 5 inevitable while respecting all constraints and keeping user data secure.

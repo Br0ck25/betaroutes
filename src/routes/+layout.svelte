@@ -88,6 +88,8 @@
 	</main>
 
 	{#if $page.url.pathname !== '/'}
+		<Footer class="hidden tablet:block" />
+	{:else}
 		<Footer />
 	{/if}
 </div>
