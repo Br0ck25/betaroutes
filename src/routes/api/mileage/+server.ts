@@ -6,6 +6,8 @@ import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 import { getStorageId } from '$lib/server/user';
+import { PLAN_LIMITS } from '$lib/constants';
+import { findUserById } from '$lib/server/userService';
 
 const mileageSchema = z.object({
 	// Allow any string ID to support HughesNet sync trip IDs (e.g., hns_James_2025-09-22)
@@ -74,6 +76,41 @@ export const POST: RequestHandler = async (event) => {
 		// but allow standalone mileage logs (no trip) by defaulting id to payload.id || payload.tripId || uuid
 		const id = payload.id || payload.tripId || crypto.randomUUID();
 		const userId = getStorageId(sessionUser);
+
+		// --- ENFORCE MILEAGE LIMIT FOR FREE USERS ---
+		let currentPlan: 'free' | 'premium' | 'pro' | 'business' | undefined = (sessionUser as any)
+			?.plan;
+		const usersKV = safeKV(env, 'BETA_USERS_KV');
+		if (usersKV) {
+			try {
+				const freshUser = await findUserById(usersKV, sessionUser?.id ?? '');
+				if (freshUser) currentPlan = freshUser.plan;
+			} catch (e) {
+				log.warn('Failed to fetch fresh plan', { message: createSafeErrorMessage(e) });
+			}
+		}
+
+		if (currentPlan === 'free') {
+			const windowDays = PLAN_LIMITS.FREE.WINDOW_DAYS || 30;
+			const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
+			const svc = makeMileageService(
+				safeKV(env, 'BETA_MILLAGE_KV')!,
+				safeDO(env, 'TRIP_INDEX_DO')!
+			);
+			const recentMileage = await svc.list(userId, since);
+			const allowed =
+				PLAN_LIMITS.FREE.MAX_MILEAGE_PER_MONTH || PLAN_LIMITS.FREE.MAX_MILEAGE_IN_WINDOW || 10;
+
+			if (recentMileage.length >= allowed) {
+				return new Response(
+					JSON.stringify({
+						error: 'Plan Limit Exceeded',
+						message: `The Free plan is limited to ${allowed} mileage logs per ${windowDays} days. Please upgrade to add more.`
+					}),
+					{ status: 403, headers: { 'Content-Type': 'application/json' } }
+				);
+			}
+		}
 
 		// Validate parent trip exists and is active only when payload.tripId is provided
 		const tripKV = safeKV(env, 'BETA_LOGS_KV');

@@ -448,15 +448,14 @@ export const POST: RequestHandler = async (event) => {
 						tripId: trip.id,
 						userId: storageId,
 						date: trip.date || now,
-						startOdometer: 0,
-						endOdometer: validData.totalMiles,
 						miles: validData.totalMiles,
 						mileageRate,
 						vehicle,
 						reimbursement,
-						notes: '',
+						notes: 'Auto-created from trip',
 						createdAt: now,
-						updatedAt: now
+						updatedAt: now,
+						syncStatus: 'synced' as const
 					};
 					await mileageSvc.put(mileageRecord);
 					log.info('Auto-created mileage log for trip', {
@@ -683,7 +682,7 @@ export const PUT: RequestHandler = async (event) => {
 					if (linkedMileage) {
 						// Update existing mileage log
 						linkedMileage.miles = validData.totalMiles;
-						linkedMileage.endOdometer = linkedMileage.startOdometer + validData.totalMiles;
+
 						linkedMileage.updatedAt = now;
 						await mileageSvc.put(linkedMileage);
 						log.info('Updated mileage log from trip edit', {
@@ -701,7 +700,8 @@ export const PUT: RequestHandler = async (event) => {
 							miles: validData.totalMiles,
 							notes: 'Auto-created from trip edit',
 							createdAt: now,
-							updatedAt: now
+							updatedAt: now,
+							syncStatus: 'synced' as const
 						};
 						await mileageSvc.put(newMileage);
 						log.info('Created mileage log from trip edit', {

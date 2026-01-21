@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { mileage, isLoading as mileageLoading } from '$lib/stores/mileage';
-	import { trips, isLoading as tripsLoading } from '$lib/stores/trips';
 	import { userSettings } from '$lib/stores/userSettings';
 	import { getVehicleDisplayName } from '$lib/utils/vehicle';
 	import SettingsModal from './components/SettingsModal.svelte';
@@ -66,7 +65,7 @@
 	$: visibleExpenses = filteredExpenses.slice(0, visibleLimit);
 	let _lastExpandedSize = 0;
 
-	$: loading = $mileageLoading || $tripsLoading;
+	$: loading = $mileageLoading;
 
 	/* eslint-disable svelte/infinite-reactive-loop */
 	$: if (
@@ -113,8 +112,7 @@
 				typeof (r as any).miles === 'number' ||
 				typeof (r as any).startOdometer === 'number' ||
 				typeof (r as any).endOdometer === 'number'
-		),
-		...tripExpenses
+		)
 	];
 
 	$: filteredExpenses = allExpenses

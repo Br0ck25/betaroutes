@@ -412,7 +412,8 @@ export async function createTripForDate(
 				reimbursement,
 				notes: 'Auto-created from HughesNet trip',
 				createdAt: now,
-				updatedAt: now
+				updatedAt: now,
+				syncStatus: 'synced'
 			};
 			await mileageService.put(mileageRecord);
 			logger(`  ${date}: Created mileage log (${miles} mi)`);

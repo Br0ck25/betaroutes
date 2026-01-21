@@ -94,8 +94,8 @@ export interface MileageRecord {
 	/** Optional link to parent trip */
 	tripId?: string;
 	date?: string;
-	startOdometer: number;
-	endOdometer: number;
+	startOdometer?: number;
+	endOdometer?: number;
 	miles: number;
 	// Optional vehicle name or id
 	vehicle?: string;

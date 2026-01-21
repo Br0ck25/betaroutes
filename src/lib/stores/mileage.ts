@@ -6,6 +6,7 @@ import type { MileageRecord } from '$lib/db/types';
 import type { User } from '$lib/types';
 import { auth } from '$lib/stores/auth';
 import { calculateFuelCost } from '$lib/utils/calculations';
+import { PLAN_LIMITS } from '$lib/constants';
 
 export const isLoading = writable(false);
 
@@ -161,9 +162,9 @@ function createMileageStore() {
 					items = await store.getAll();
 				}
 				const trashItems = await trashStore.getAll();
-				const trashMap = buildTrashTimestampMap(trashItems as TrashItemLike[]);
+				const trashIds = new Set(trashItems.map((t: TrashItemLike) => t.id || `mileage:${t.id}`));
 				const activeItems = items.filter(
-					(item) => !shouldFilterOutMileage(item.id, item.createdAt, trashMap)
+					(item) => !trashIds.has(item.id) && !trashIds.has(`mileage:${item.id}`)
 				);
 				activeItems.sort((a, b) => {
 					const dateA = new Date(a.date || a.createdAt).getTime();
@@ -181,6 +182,32 @@ function createMileageStore() {
 			}
 		},
 		async create(data: Partial<MileageRecord>, userId: string) {
+			// --- CHECK FREE TIER LIMITS ---
+			const currentUser = get(auth).user as User | null;
+			const isFreeTier = !currentUser?.plan || currentUser.plan === 'free';
+
+			if (isFreeTier) {
+				const db = await getDB();
+				const tx = db.transaction('mileage', 'readonly');
+				const index = tx.objectStore('mileage').index('userId');
+				const allUserMileage = await index.getAll(userId);
+				const windowDays = PLAN_LIMITS.FREE.WINDOW_DAYS || 30;
+				const windowMs = windowDays * 24 * 60 * 60 * 1000;
+				const cutoff = new Date(Date.now() - windowMs);
+				const recentCount = allUserMileage.filter((m) => {
+					const d = new Date(m.date || m.createdAt);
+					return d >= cutoff;
+				}).length;
+				const allowed =
+					PLAN_LIMITS.FREE.MAX_MILEAGE_PER_MONTH || PLAN_LIMITS.FREE.MAX_MILEAGE_IN_WINDOW || 10;
+
+				if (recentCount >= allowed) {
+					throw new Error(
+						`Free tier limit reached (${allowed} mileage logs per ${windowDays} days).`
+					);
+				}
+			}
+
 			// ... copy from previous ...
 			const record: MileageRecord = {
 				...data,
@@ -474,16 +501,16 @@ function createMileageStore() {
 					const store = tx.objectStore('mileage');
 					const trashStore = tx.objectStore('trash');
 					const trashItems = await trashStore.getAll();
-					const trashMap = buildTrashTimestampMap(trashItems as TrashItemLike[]);
+					const trashIds = new Set(trashItems.map((t: TrashItemLike) => t.id || `mileage:${t.id}`));
 					for (const rec of cloud) {
 						if (rec.deleted) {
 							const local = await store.get(rec.id);
 							if (local) await store.delete(rec.id);
 							continue;
 						}
-						// Check if this record should be filtered out based on trash entries
-						if (shouldFilterOutMileage(rec.id, rec.createdAt, trashMap)) {
-							continue; // Skip - this is the deleted record
+						// Check if this record is in trash (simple ID check)
+						if (trashIds.has(rec.id) || trashIds.has(`mileage:${rec.id}`)) {
+							continue; // Skip - this is deleted
 						}
 
 						const local = await store.get(rec.id);
