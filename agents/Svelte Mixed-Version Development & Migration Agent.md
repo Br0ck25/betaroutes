@@ -162,7 +162,7 @@ When a file is migrated, add ONE of the following comments at the top with the c
 // PARTIALLY_MIGRATED_TO_SVELTE_5 - YYYY-MM-DD
 
 Example:
-javascript// MIGRATED_TO_SVELTE_5 - 2024-01-19
+javascript// MIGRATED_TO_SVELTE_5 - 2026-01-19
 Do NOT annotate untouched files.
 Also update CHANGELOG.md with migration details:
 

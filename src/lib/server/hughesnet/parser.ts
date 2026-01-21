@@ -259,10 +259,11 @@ export function parseOrderPage(html: string, id: string): OrderData {
 		out.hasVoip = true;
 	}
 	// Detect VOIP from image tag: <img src="../images2/icoPhoneVoipMed.gif" ... title="VOIP" alt="VOIP">
+	// Use raw HTML for image tag detection since bodyText only contains text, not HTML tags
 	if (
-		bodyText.includes('icoPhoneVoipMed.gif') ||
-		bodyText.match(/title\s*=\s*["']VOIP["']/i) ||
-		bodyText.match(/alt\s*=\s*["']VOIP["']/i)
+		html.includes('icoPhoneVoipMed.gif') ||
+		html.match(/title\s*=\s*["']VOIP["']/i) ||
+		html.match(/alt\s*=\s*["']VOIP["']/i)
 	) {
 		out.hasVoip = true;
 	}
