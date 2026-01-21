@@ -30,10 +30,11 @@ function createMileageStore() {
 			void _userId;
 			_hydrationPromise = new Promise((res) => (_resolveHydration = res));
 
-			// Optimistically set data immediately for faster perceived load
-			set(data);
+			// Don't immediately set data - wait until we've merged with local pending items
+			// to avoid flashing/losing unsaved changes
 
 			if (typeof window === 'undefined') {
+				set(data);
 				_resolveHydration?.();
 				_hydrationPromise = null;
 				return;
