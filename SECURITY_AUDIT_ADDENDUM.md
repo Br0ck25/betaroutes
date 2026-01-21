@@ -3,8 +3,52 @@
 **Date:** January 21, 2026  
 **Auditor:** GitHub Copilot AI Agent  
 **Scope:** Follow-up security review after initial remediation  
-**Status:** ✅ 11 of 11 issues remediated (100% complete) + 2 legacy code issues identified & fixed  
+**Status:** ⚠️ 11 of 11 issues remediated + CSRF temporarily disabled  
 **Last Updated:** January 21, 2026
+
+---
+
+## ⚠️ Critical Production Issue - CSRF Disabled (January 21, 2026)
+
+### CSRF Protection Blocking All State-Changing Requests
+
+**Issue:** After deploying security fixes including CSRF protection, all POST/PUT/DELETE requests failed with 403 "CSRF validation failed". This broke:
+
+- User logout
+- Trip creation/editing/deletion
+- Expense creation/editing/deletion
+- Mileage tracking
+- All settings updates
+
+**Root Cause:** 
+
+1. CSRF protection was implemented in `hooks.server.ts` (server-side) and `src/lib/utils/csrf.ts` (client-side utilities)
+2. **Client-side utilities (`csrfFetch`, `addCsrfHeader`) were NEVER INTEGRATED** with existing codebase
+3. All existing fetch calls throughout the app still use plain `fetch()` without CSRF tokens
+4. The security audit created the infrastructure but didn't update the ~100+ fetch calls to use it
+
+**Solution:** TEMPORARILY DISABLED CSRF protection in `src/hooks.server.ts` by commenting out:
+
+- `generateCsrfToken(event)` - Token generation
+- `csrfProtection(event)` - Token validation
+
+**Security Impact:** ⚠️ TEMPORARY REGRESSION - CSRF vulnerability re-introduced
+
+- App is vulnerable to CSRF attacks until properly implemented
+- Need to update ALL fetch calls to use `csrfFetch()` utility from `$lib/utils/csrf`
+- Estimated ~100-200 fetch calls need updating across components and routes
+
+**TODO for Future Re-enablement:**
+
+1. Search codebase for all `fetch(` calls
+2. Replace with `csrfFetch()` from `$lib/utils/csrf` OR add `headers: addCsrfHeader()` to options
+3. Test thoroughly in development
+4. Re-enable CSRF protection in hooks.server.ts
+5. Deploy and verify all functionality works
+
+**Files Modified:**
+
+- `src/hooks.server.ts` - Commented out CSRF calls with explanation
 
 ---
 
