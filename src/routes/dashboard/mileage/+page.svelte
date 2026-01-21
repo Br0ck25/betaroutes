@@ -65,7 +65,8 @@
 	$: visibleExpenses = filteredExpenses.slice(0, visibleLimit);
 	let _lastExpandedSize = 0;
 
-	$: loading = $mileageLoading;
+	// Loading is only true when both store is loading AND we have no server data to show
+	$: loading = $mileageLoading && (!data.mileage || data.mileage.length === 0);
 
 	/* eslint-disable svelte/infinite-reactive-loop */
 	$: if (
@@ -106,14 +107,16 @@
 	let isManageCategoriesOpen = false;
 	let newCategoryName = '';
 
-	$: allExpenses = [
-		...$mileage.filter(
-			(r) =>
-				typeof (r as any).miles === 'number' ||
-				typeof (r as any).startOdometer === 'number' ||
-				typeof (r as any).endOdometer === 'number'
-		)
-	];
+	// Use store data, but fallback to server data during initial hydration to prevent flicker
+	$: {
+		const source = $mileage.length > 0 ? $mileage : data.mileage || [];
+		allExpenses = source.filter(
+			(r: any) =>
+				typeof r.miles === 'number' ||
+				typeof r.startOdometer === 'number' ||
+				typeof r.endOdometer === 'number'
+		);
+	}
 
 	$: filteredExpenses = allExpenses
 		.filter((item) => {
@@ -585,8 +588,15 @@
 				{/each}
 				<option value="manual">Manual Trips</option>
 				<option value="auto">Auto Trips</option>
-				name="sortBy" bind:value={sortBy}
-				class="filter-select" aria-label="Sort results" >
+			</select>
+
+			<select
+				id="sort-by"
+				name="sortBy"
+				bind:value={sortBy}
+				class="filter-select"
+				aria-label="Sort results"
+			>
 				<option value="date">By Date</option>
 				<option value="amount">By Cost</option>
 			</select>

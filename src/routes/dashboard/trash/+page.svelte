@@ -174,6 +174,11 @@
 							: (item as any).recordType ||
 								(item as any).type ||
 								(typeof (item as any).miles === 'number' ? 'mileage' : 'trip');
+
+			// Actually restore the item from trash
+			await trash.restore(id, item.userId, displayType);
+
+			// Reload the appropriate store
 			if (displayType === 'expense') await expenses.load(item.userId);
 			else if (displayType === 'mileage') await mileage.load(item.userId);
 			else await trips.load(item.userId);

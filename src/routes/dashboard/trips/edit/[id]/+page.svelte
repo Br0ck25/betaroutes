@@ -86,9 +86,11 @@
 		return fallback;
 	}
 
-	(async () => {
-		await loadTripData();
-	})();
+	import { onMount } from 'svelte';
+
+	onMount(() => {
+		loadTripData();
+	});
 
 	async function loadTripData() {
 		const currentUser = $page.data['user'] || $user;
