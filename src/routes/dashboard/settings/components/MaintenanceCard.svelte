@@ -77,7 +77,9 @@
 	subtitle="Service interval & last service"
 	storageKey="settings:maintenance"
 >
-	<span slot="icon">🔧</span>
+	{#snippet icon()}
+		<span>🔧</span>
+	{/snippet}
 
 	<div class="form-group">
 		<label for="interval-miles">Service interval (miles)</label>

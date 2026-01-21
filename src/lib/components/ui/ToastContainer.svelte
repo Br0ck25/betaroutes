@@ -42,7 +42,7 @@
 			<button
 				type="button"
 				class="ml-auto -mx-1.5 -my-1.5 rounded-lg focus:ring-2 p-1.5 inline-flex h-8 w-8 hover:bg-black/5"
-				on:click={() => toasts.dismiss(toast.id)}
+				onclick={() => toasts.dismiss(toast.id)}
 				aria-label="Close"
 			>
 				<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"

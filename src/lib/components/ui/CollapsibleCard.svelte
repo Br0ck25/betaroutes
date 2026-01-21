@@ -1,9 +1,21 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	export let title: string = '';
-	export let subtitle: string = '';
-	export let open: boolean = true;
-	export let storageKey: string | null = null; // optional localStorage key to persist open state
+	import type { Snippet } from 'svelte';
+	let {
+		title = '',
+		subtitle = '',
+		open = $bindable(true),
+		storageKey = null,
+		icon,
+		children
+	}: {
+		title?: string;
+		subtitle?: string;
+		open?: boolean;
+		storageKey?: string | null;
+		icon?: Snippet;
+		children?: Snippet;
+	} = $props();
 
 	let contentId = `collapsible-${Math.random().toString(36).slice(2, 9)}`;
 
@@ -26,8 +38,8 @@
 	<div
 		class="card-header clickable"
 		role="button"
-		on:click={toggle}
-		on:keydown={(e) => {
+		onclick={toggle}
+		onkeydown={(e) => {
 			if (e.key === 'Enter' || e.key === ' ') {
 				e.preventDefault();
 				toggle();
@@ -36,7 +48,7 @@
 		tabindex="0"
 	>
 		<div class="card-icon-wrapper">
-			<slot name="icon" />
+			{@render icon?.()}
 		</div>
 		<div class="card-header-text">
 			<h2 id={contentId + '-title'} class="card-title">{title}</h2>
@@ -50,7 +62,10 @@
 			type="button"
 			aria-expanded={open}
 			aria-controls={contentId}
-			on:click|stopPropagation={toggle}
+			onclick={(e) => {
+				e.stopPropagation();
+				toggle();
+			}}
 			aria-label={open ? 'Collapse' : 'Expand'}
 		>
 			{#if open}
@@ -82,7 +97,7 @@
 	</div>
 
 	<div id={contentId} class:closed={!open} class:open class="collapsible-body" hidden={!open}>
-		<slot />
+		{@render children?.()}
 	</div>
 </section>
 
