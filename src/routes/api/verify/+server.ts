@@ -63,11 +63,11 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
 			expirationTtl: sessionTTL
 		});
 
-		// Set Cookie
+		// Set Cookie (Issue #5: Changed sameSite from 'none' to 'lax')
 		cookies.set('session_id', sessionId, {
 			path: '/',
 			httpOnly: true,
-			sameSite: 'none',
+			sameSite: 'lax', // [!code fix] Changed from 'none' for CSRF protection
 			secure: true,
 			maxAge: sessionTTL
 		});

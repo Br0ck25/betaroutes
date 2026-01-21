@@ -12,8 +12,36 @@ import type Stripe from 'stripe';
 export const POST: RequestHandler = async ({ request, platform }) => {
 	log.info('Stripe webhook received');
 
+	// [!code fix] SECURITY (Issue #13): Validate webhook payload size
+	const contentLength = request.headers.get('content-length');
+	const MAX_WEBHOOK_SIZE = 1024 * 1024; // 1MB limit for webhook payloads
+
+	if (contentLength && parseInt(contentLength, 10) > MAX_WEBHOOK_SIZE) {
+		log.error('Stripe webhook payload too large', { size: contentLength });
+		return json({ error: 'Payload too large' }, { status: 413 });
+	}
+
 	const sig = request.headers.get('stripe-signature');
-	const body = await request.text();
+
+	// [!code fix] SECURITY (Issue #13): Add timeout for webhook body read
+	let body: string;
+	try {
+		const bodyPromise = request.text();
+		const timeoutPromise = new Promise<never>((_, reject) =>
+			setTimeout(() => reject(new Error('Request timeout')), 10000)
+		);
+		body = await Promise.race([bodyPromise, timeoutPromise]);
+	} catch (err) {
+		log.error('Stripe webhook body read timeout', { message: createSafeErrorMessage(err) });
+		return json({ error: 'Request timeout' }, { status: 408 });
+	}
+
+	// [!code fix] SECURITY (Issue #13): Verify body size after read
+	if (body.length > MAX_WEBHOOK_SIZE) {
+		log.error('Stripe webhook body exceeds limit', { size: body.length });
+		return json({ error: 'Payload too large' }, { status: 413 });
+	}
+
 	const stripe = getStripe();
 	const env = platform?.env as Record<string, unknown> | undefined;
 

@@ -1,0 +1,46 @@
+# [!code fix] SECURITY (Issue #11): Automated dependency scanning and updates
+# This file configures Dependabot to automatically check for dependency updates
+# and security vulnerabilities in the project
+
+version: 2
+updates:
+  # Enable version updates for npm
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+    open-pull-requests-limit: 5
+    reviewers:
+      - 'maintainers'
+    labels:
+      - 'dependencies'
+      - 'security'
+    # Group minor and patch updates together
+    groups:
+      development-dependencies:
+        dependency-type: 'development'
+        update-types:
+          - 'minor'
+          - 'patch'
+      production-dependencies:
+        dependency-type: 'production'
+        update-types:
+          - 'minor'
+          - 'patch'
+    # Always create PRs for security updates
+    versioning-strategy: increase
+    # Ignore specific packages if needed
+    # ignore:
+    #   - dependency-name: "package-name"
+    #     versions: ["1.x"]
+
+  # Monitor GitHub Actions for updates
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    labels:
+      - 'dependencies'
+      - 'github-actions'

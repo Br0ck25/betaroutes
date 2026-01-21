@@ -17,18 +17,41 @@ const getOfflineId = () => {
 	return localStorage.getItem('offline_user_id');
 };
 
-// Helper: Cache user data for offline access
+// [SECURITY FIX #54] Cache user data in sessionStorage instead of localStorage
+// sessionStorage clears on tab close, reducing XSS exposure window
 const saveUserCache = (user: User) => {
 	if (typeof window !== 'undefined') {
-		localStorage.setItem('user_cache', JSON.stringify(user));
+		// Only cache non-sensitive display data
+		const safeCache = {
+			plan: user.plan,
+			tripsThisMonth: user.tripsThisMonth,
+			maxTrips: user.maxTrips,
+			resetDate: user.resetDate,
+			name: user.name || ''
+			// Note: email and token are NOT cached
+		};
+		sessionStorage.setItem('user_cache', JSON.stringify(safeCache));
 	}
 };
 
 // Helper: Retrieve cached user data
 const getUserCache = (): User | null => {
 	if (typeof window === 'undefined') return null;
-	const cached = localStorage.getItem('user_cache');
-	return cached ? JSON.parse(cached) : null;
+	const cached = sessionStorage.getItem('user_cache');
+	if (!cached) return null;
+	try {
+		const parsed = JSON.parse(cached);
+		return {
+			token: '', // Never cached
+			plan: parsed.plan || 'free',
+			tripsThisMonth: parsed.tripsThisMonth ?? 0,
+			maxTrips: parsed.maxTrips ?? 10,
+			resetDate: parsed.resetDate || '',
+			name: parsed.name || ''
+		};
+	} catch {
+		return null;
+	}
 };
 
 function createAuthStore() {
@@ -48,10 +71,10 @@ function createAuthStore() {
 
 			if (typeof window !== 'undefined') {
 				localName = storage.getUsername() || '';
-				localEmail = localStorage.getItem('user_email') || '';
-				if (userData.token) {
-					storage.setToken(userData.token);
-				}
+				// [SECURITY FIX #54] Email now in sessionStorage, not localStorage
+				localEmail = sessionStorage.getItem('user_email') || '';
+				// [SECURITY FIX #52] Session tokens are now in httpOnly cookies
+				// No need to store token in localStorage
 			}
 
 			const mergedUser = {
@@ -72,24 +95,31 @@ function createAuthStore() {
 		},
 
 		init: async () => {
-			const token = storage.getToken();
+			// [SECURITY FIX #52] Session tokens are now in httpOnly cookies
+			// Check authentication status via server call instead of localStorage
 			const username = storage.getUsername();
-			const email = typeof window !== 'undefined' ? localStorage.getItem('user_email') : null;
+			// [SECURITY FIX #54] Email now in sessionStorage, not localStorage
+			const email = typeof window !== 'undefined' ? sessionStorage.getItem('user_email') : null;
 
-			if (token) {
-				update((state) => ({ ...state, isLoading: true }));
-				try {
-					// 1. Try fetching fresh data from API
-					const subscription = await api.getSubscription(token);
+			// Try to verify session with server (cookies sent automatically)
+			update((state) => ({ ...state, isLoading: true }));
+			try {
+				const response = await fetch('/api/auth/session', {
+					method: 'GET',
+					credentials: 'include'
+				});
 
+				if (response.ok) {
+					const responseData = (await response.json()) as { user?: Partial<User> };
+					const data = responseData.user || {};
 					const user: User = {
-						token,
-						plan: subscription.plan,
-						tripsThisMonth: subscription.tripsThisMonth,
-						maxTrips: subscription.maxTrips,
-						resetDate: subscription.resetDate,
-						name: username || '',
-						email: email || ''
+						token: '', // No longer stored client-side
+						plan: data.plan || 'free',
+						tripsThisMonth: data.tripsThisMonth ?? 0,
+						maxTrips: data.maxTrips ?? 10,
+						resetDate: data.resetDate || '',
+						name: data.name || username || '',
+						email: data.email || email || ''
 					};
 
 					// Success: Update offline cache
@@ -102,42 +132,51 @@ function createAuthStore() {
 						error: null
 					});
 
-					const syncId = user.name || user.token;
+					const syncId = user.name || 'user';
 					if (syncId) await trips.syncFromCloud(syncId);
-				} catch (error) {
-					console.warn('Failed to load user data, checking offline cache...', error);
-
-					// 2. Fallback to offline cache if API fails
+				} else {
+					// Not authenticated - check offline cache
 					const cachedUser = getUserCache();
-
-					// Only use cache if the token matches (simple security check)
-					if (cachedUser && cachedUser.token === token) {
+					if (cachedUser && username) {
 						console.log('✅ Restored user session from offline cache');
 						set({
 							user: cachedUser,
 							isAuthenticated: true,
 							isLoading: false,
-							error: null // Do not show error so app works normally
+							error: null
 						});
-
-						// Load local trips immediately
-						await trips.load(cachedUser.name || cachedUser.token);
+						await trips.load(cachedUser.name || 'user');
 					} else {
 						set({
 							user: null,
 							isAuthenticated: false,
 							isLoading: false,
-							error: 'Session expired'
+							error: null
 						});
 					}
 				}
-			} else {
-				set({
-					user: null,
-					isAuthenticated: false,
-					isLoading: false,
-					error: null
-				});
+			} catch (error) {
+				console.warn('Failed to verify session, checking offline cache...', error);
+
+				// Fallback to offline cache if server unreachable
+				const cachedUser = getUserCache();
+				if (cachedUser && username) {
+					console.log('✅ Restored user session from offline cache');
+					set({
+						user: cachedUser,
+						isAuthenticated: true,
+						isLoading: false,
+						error: null
+					});
+					await trips.load(cachedUser.name || 'user');
+				} else {
+					set({
+						user: null,
+						isAuthenticated: false,
+						isLoading: false,
+						error: null
+					});
+				}
 			}
 		},
 
@@ -149,7 +188,8 @@ function createAuthStore() {
 
 				if (typeof window !== 'undefined') {
 					if (data.name) storage.setUsername(data.name);
-					if (data.email) localStorage.setItem('user_email', data.email);
+					// [SECURITY FIX #54] Email now in sessionStorage, not localStorage
+					if (data.email) sessionStorage.setItem('user_email', data.email);
 					saveUserCache(updatedUser); // Keep cache in sync
 				}
 
@@ -166,7 +206,7 @@ function createAuthStore() {
 				const response = (await api.signup(username, password)) as AuthResponse;
 				const offlineId = getOfflineId();
 
-				storage.setToken(response.token || '');
+				// [SECURITY FIX #52] Only store username, not token
 				storage.setUsername(username);
 
 				// Create server-side session so cloud endpoints (/api/trips) are authorized
@@ -222,7 +262,7 @@ function createAuthStore() {
 				const response = (await api.login(username, password)) as AuthResponse;
 				const offlineId = getOfflineId();
 
-				storage.setToken(response.token || '');
+				// [SECURITY FIX #52] Only store username, not token
 				storage.setUsername(username);
 
 				// Create server-side session cookie so /api/trips and other server endpoints recognize the user
@@ -237,8 +277,9 @@ function createAuthStore() {
 					console.warn('Failed to create server session on login:', e);
 				}
 
+				// [SECURITY FIX #54] Email now in sessionStorage, not localStorage
 				const savedEmail =
-					typeof window !== 'undefined' ? localStorage.getItem('user_email') || '' : '';
+					typeof window !== 'undefined' ? sessionStorage.getItem('user_email') || '' : '';
 				const subscription = await api.getSubscription(response.token || '');
 				const user: User = {
 					token: response.token || '',
@@ -276,12 +317,22 @@ function createAuthStore() {
 			}
 		},
 
-		logout: () => {
-			storage.clearToken();
+		logout: async () => {
+			// [SECURITY FIX #52] Clear server session (cookie cleared server-side)
+			try {
+				await fetch('/logout', {
+					method: 'POST',
+					credentials: 'include'
+				});
+			} catch (e) {
+				console.warn('Failed to clear server session:', e);
+			}
+
 			storage.clearUsername();
+			// [SECURITY FIX #54] Clear from sessionStorage, not localStorage
 			if (typeof window !== 'undefined') {
-				localStorage.removeItem('user_email');
-				localStorage.removeItem('user_cache'); // Clear cache
+				sessionStorage.removeItem('user_email');
+				sessionStorage.removeItem('user_cache');
 			}
 
 			set({
@@ -328,13 +379,12 @@ function createAuthStore() {
 			update((state) => ({ ...state, isLoading: true, error: null }));
 
 			try {
-				const token = storage.getToken();
-
+				// [SECURITY FIX #52] Use credentials:include for cookie-based auth
 				const response = await fetch('/api/user', {
 					method: 'DELETE',
+					credentials: 'include',
 					headers: {
-						'Content-Type': 'application/json',
-						...(token ? { Authorization: token } : {})
+						'Content-Type': 'application/json'
 					},
 					body: JSON.stringify({ username, password })
 				});
@@ -345,9 +395,10 @@ function createAuthStore() {
 				}
 
 				storage.clearAll();
+				// [SECURITY FIX #54] Clear from sessionStorage, not localStorage
 				if (typeof window !== 'undefined') {
-					localStorage.removeItem('user_email');
-					localStorage.removeItem('user_cache');
+					sessionStorage.removeItem('user_email');
+					sessionStorage.removeItem('user_cache');
 				}
 				trips.clear();
 
@@ -370,19 +421,26 @@ function createAuthStore() {
 		},
 
 		refreshSubscription: async () => {
-			const token = storage.getToken();
-			if (!token) return;
-
+			// [SECURITY FIX #52] Use server session via credentials:include
 			try {
-				const subscription = await api.getSubscription(token);
+				const response = await fetch('/api/auth/session', {
+					method: 'GET',
+					credentials: 'include'
+				});
+
+				if (!response.ok) return;
+
+				const data = (await response.json()) as { user?: Partial<User> };
+				if (!data.user) return;
+
 				update((state) => {
 					if (!state.user) return state;
-					const updated = {
+					const updated: User = {
 						...state.user,
-						plan: subscription.plan,
-						tripsThisMonth: subscription.tripsThisMonth,
-						maxTrips: subscription.maxTrips,
-						resetDate: subscription.resetDate
+						plan: data.user?.plan || state.user.plan,
+						tripsThisMonth: data.user?.tripsThisMonth ?? state.user.tripsThisMonth,
+						maxTrips: data.user?.maxTrips ?? state.user.maxTrips,
+						resetDate: data.user?.resetDate || state.user.resetDate
 					};
 					saveUserCache(updated); // Update cache
 					return { ...state, user: updated };

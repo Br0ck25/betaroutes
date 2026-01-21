@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
+	import { sanitizeStaticSvg } from '$lib/utils/sanitize';
 	const resolve = (href: string) => `${base}${href}`;
 
 	let errorDetails = $state({
@@ -51,33 +52,34 @@
 		return descriptions[status] || 'An unexpected error occurred while processing your request.';
 	}
 
+	// [!code fix] SECURITY (Issue #7, #43): Sanitize static SVG icons
 	function getErrorIcon(status: number): string {
 		if (status === 404) {
-			return `<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+			return sanitizeStaticSvg(`<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<circle cx="12" cy="12" r="10"/>
 				<path d="M16 16s-1.5-2-4-2-4 2-4 2"/>
 				<line x1="9" y1="9" x2="9.01" y2="9"/>
 				<line x1="15" y1="9" x2="15.01" y2="9"/>
-			</svg>`;
+			</svg>`);
 		}
 		if (status === 403) {
-			return `<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+			return sanitizeStaticSvg(`<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
 				<path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-			</svg>`;
+			</svg>`);
 		}
 		if (status === 429) {
-			return `<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+			return sanitizeStaticSvg(`<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<circle cx="12" cy="12" r="10"/>
 				<polyline points="12 6 12 12 16 14"/>
-			</svg>`;
+			</svg>`);
 		}
 		// Default error icon
-		return `<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+		return sanitizeStaticSvg(`<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 			<circle cx="12" cy="12" r="10"/>
 			<line x1="12" y1="8" x2="12" y2="12"/>
 			<line x1="12" y1="16" x2="12.01" y2="16"/>
-		</svg>`;
+		</svg>`);
 	}
 
 	// ← FIXED: Use $derived instead of $:

@@ -5,10 +5,11 @@ import type { AuthResponse, Subscription, Trip } from '$lib/types';
 const API_BASE = 'https://logs.gorouteyourself.com';
 
 class ApiClient {
+	// [SECURITY FIX #52] Removed localStorage token usage
+	// Sessions are in httpOnly cookies and automatically included in requests
 	private getAuthHeader(token?: string): HeadersInit {
-		const storedToken =
-			token || (typeof window !== 'undefined' ? localStorage.getItem('token') : null);
-		return storedToken ? { Authorization: storedToken } : {};
+		// Token parameter only used for explicit API key auth (not session tokens)
+		return token ? { Authorization: token } : {};
 	}
 
 	private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {

@@ -63,6 +63,13 @@ id = "05f8026102b54e82ba5ecd5c427d05b8"
 # ---------------------------------------------------
 [env.preview]
 
+# Public environment variables (non-sensitive)
+# Note: Browser-exposed Maps API keys are ACCEPTABLE here since they're public by design.
+# Security is enforced via Google Cloud Console restrictions:
+#   - HTTP referrer restrictions (your domain only)
+#   - API restrictions (Maps JavaScript API only)
+#   - Usage quotas and billing alerts
+# For server-only API keys, use: wrangler secret put PRIVATE_GOOGLE_MAPS_API_KEY
 [env.preview.vars]
 PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyC_M5PjI9-Dix0dOr_Sg2bKkXhNAIbr2Xs"
 

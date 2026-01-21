@@ -7,6 +7,7 @@ import { sendVerificationEmail } from '$lib/server/email';
 import { checkRateLimit } from '$lib/server/rateLimit';
 import { randomUUID } from 'node:crypto';
 import { log } from '$lib/server/log';
+import { validatePassword } from '$lib/server/passwordValidation';
 
 export const POST: RequestHandler = async ({ request, platform, url, getClientAddress }) => {
 	log.info('[Register] START REGISTRATION', {
@@ -92,8 +93,16 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
 			);
 		}
 
-		if (password.length < 8) {
-			return json({ message: 'Password must be at least 8 characters' }, { status: 400 });
+		// Validate password strength
+		const passwordValidation = validatePassword(password);
+		if (!passwordValidation.valid) {
+			return json(
+				{
+					message: passwordValidation.error || 'Password does not meet security requirements',
+					passwordStrength: passwordValidation.strength
+				},
+				{ status: 400 }
+			);
 		}
 
 		const normEmail = email.toLowerCase().trim();

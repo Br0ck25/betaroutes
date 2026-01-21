@@ -284,7 +284,8 @@ export class HughesNetService {
 			driveTimeBonus
 		});
 		const lockKey = `lock:sync:${userId}`;
-		const ownerId = `${userId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+		// [SECURITY FIX #53] Use cryptographically secure random instead of Math.random()
+		const ownerId = `${userId}_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
 		let lockAcquired = false;
 		try {
 			lockAcquired = await this.waitForLock(lockKey, ownerId);
