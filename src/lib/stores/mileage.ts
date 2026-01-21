@@ -70,10 +70,6 @@ function createMileageStore() {
 					const isStale = local.syncStatus === 'synced' && !serverIdSet.has(local.id);
 
 					if (isTrash || isStale) {
-						console.log('[Mileage Store] Deleting stale/trash item:', local.id, {
-							isTrash,
-							isStale
-						});
 						await store.delete(local.id);
 					}
 				}
@@ -253,14 +249,11 @@ function createMileageStore() {
 				const tx = db.transaction(mileageStoreName, 'readwrite');
 				await tx.objectStore(mileageStoreName).put(record);
 				await tx.done;
-				// Queue for server sync (non-blocking)
-				syncManager
-					.addToQueue({
-						action: 'create',
-						tripId: record.id,
-						data: { ...record, store: 'mileage' }
-					})
-					.catch((err) => console.error('Failed to queue mileage create:', err));
+				await syncManager.addToQueue({
+					action: 'create',
+					tripId: record.id,
+					data: { ...record, store: 'mileage' }
+				});
 				return record;
 			} catch (err) {
 				console.error('❌ Failed to create mileage record:', err);
@@ -364,14 +357,11 @@ function createMileageStore() {
 				} catch {
 					/* ignore */
 				}
-				// Queue for server sync (non-blocking)
-				syncManager
-					.addToQueue({
-						action: 'update',
-						tripId: id,
-						data: { ...updated, store: 'mileage' }
-					})
-					.catch((err) => console.error('Failed to queue mileage update:', err));
+				await syncManager.addToQueue({
+					action: 'update',
+					tripId: id,
+					data: { ...updated, store: 'mileage' }
+				});
 				return updated;
 			} catch (err) {
 				console.error('❌ Failed to update mileage:', err);
@@ -398,14 +388,11 @@ function createMileageStore() {
 				const rec = await mileageStore.get(id);
 				if (!rec) {
 					await tx.done;
-					// Queue for server sync (non-blocking)
-					syncManager
-						.addToQueue({
-							action: 'delete',
-							tripId: id,
-							data: { store: 'mileage' }
-						})
-						.catch((err) => console.error('Failed to queue mileage delete:', err));
+					await syncManager.addToQueue({
+						action: 'delete',
+						tripId: id,
+						data: { store: 'mileage' }
+					});
 					return;
 				}
 				if (rec.userId !== userId) {
@@ -459,24 +446,18 @@ function createMileageStore() {
 							/* ignore */
 						}
 
-						// Queue trip update (non-blocking)
-						syncManager
-							.addToQueue({
-								action: 'update',
-								tripId: id,
-								data: { ...patched, store: 'trips', skipEnrichment: true }
-							})
-							.catch((err) => console.error('Failed to queue trip update:', err));
+						await syncManager.addToQueue({
+							action: 'update',
+							tripId: id,
+							data: { ...patched, store: 'trips', skipEnrichment: true }
+						});
 					}
 					await tripsTx.done;
 				} catch {
 					/* ignore */
 				}
 
-				// Queue mileage delete (non-blocking)
-				syncManager
-					.addToQueue({ action: 'delete', tripId: id, data: { store: 'mileage' } })
-					.catch((err) => console.error('Failed to queue mileage delete:', err));
+				await syncManager.addToQueue({ action: 'delete', tripId: id, data: { store: 'mileage' } });
 				return;
 			} catch (err) {
 				console.error('❌ Failed to delete mileage record:', err);
