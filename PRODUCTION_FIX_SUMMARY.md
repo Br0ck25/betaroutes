@@ -5,30 +5,25 @@
 ### Issue #1: CSRF Protection Blocking All Requests ✅ FIXED
 
 **Problem:**
-
 - All POST/PUT/DELETE requests returned 403 "CSRF validation failed"
 - Affected: logout, trip creation, expenses, mileage, settings updates
 - Root cause: CSRF infrastructure created but never integrated with existing fetch calls
 
 **Solution:**
-
 - Temporarily disabled CSRF protection in [hooks.server.ts](src/hooks.server.ts)
 - Commented out `generateCsrfToken()` and `csrfProtection()` calls
 - Added documentation explaining why and what's needed to re-enable
 
 **Files Modified:**
-
 - `src/hooks.server.ts` - CSRF calls commented out with TODO notes
 
 **Security Impact:**
-
 - ⚠️ App is temporarily vulnerable to CSRF attacks
 - This is a **controlled regression** to restore functionality
 - Need to properly integrate `csrfFetch()` utilities before re-enabling
 
 **Future Work:**
 To re-enable CSRF protection, need to:
-
 1. Update all ~100+ `fetch()` calls to use `csrfFetch()` from `$lib/utils/csrf`
 2. Test thoroughly in development
 3. Re-enable CSRF in hooks.server.ts
@@ -39,17 +34,14 @@ To re-enable CSRF protection, need to:
 ### Issue #2: CSP Blocking Cloudflare Insights ✅ FIXED
 
 **Problem:**
-
 - Console error: "Loading the script 'https://static.cloudflareinsights.com/beacon.min.js' violates CSP directive"
 - Cloudflare Analytics not working
 
 **Solution:**
-
 - Added `https://static.cloudflareinsights.com` to `script-src` CSP directive
 - Added `https://cloudflareinsights.com` to `connect-src` CSP directive
 
 **Files Modified:**
-
 - `src/hooks.server.ts` - Updated CSP headers
 
 ---
@@ -57,24 +49,20 @@ To re-enable CSRF protection, need to:
 ### Issue #3: Service Worker /offline.html Errors ✅ LIKELY FIXED
 
 **Problem:**
-
 - Service worker reported 404/500 errors for /offline.html
 - `cache.addAll()` failing
 
 **Root Cause:**
-
 - Likely caused by CSRF protection blocking the service worker's cache requests
 - Or CSP restrictions
 
 **Solution:**
-
 - File exists at `static/offline.html` ✓
 - Service worker properly configured ✓
 - CSRF disabled should resolve cache failures ✓
 - CSP updated to allow necessary resources ✓
 
 **Files Checked:**
-
 - `static/offline.html` - EXISTS
 - `src/service-worker.ts` - Properly configured
 
@@ -83,15 +71,12 @@ To re-enable CSRF protection, need to:
 ### Issue #4: Mileage Page Not Loading ✅ LIKELY FIXED
 
 **Problem:**
-
 - Mileage page wouldn't load (reported by user)
 
 **Root Cause:**
-
 - Likely caused by CSRF protection blocking API requests
 
 **Solution:**
-
 - CSRF disabled should restore mileage page functionality
 
 ---
@@ -119,14 +104,12 @@ After deployment, verify the following work:
 ## Deployment Instructions
 
 1. **Commit changes:**
-
    ```bash
    git add src/hooks.server.ts SECURITY_AUDIT_ADDENDUM.md PRODUCTION_FIX_SUMMARY.md
    git commit -m "fix: disable CSRF and update CSP to resolve production issues"
    ```
 
 2. **Push to production:**
-
    ```bash
    git push origin main
    ```
@@ -150,7 +133,6 @@ After deployment, verify the following work:
 **Effort:** Medium-High (need to update ~100+ fetch calls)
 
 **Steps:**
-
 1. Create subagent task to find all fetch calls
 2. Systematically replace with `csrfFetch()` or `addCsrfHeader()`
 3. Test each section (trips, expenses, mileage, settings, etc.)
@@ -188,14 +170,12 @@ After deployment, verify the following work:
 **Lesson learned:**
 
 When adding authentication/security layers that require client cooperation:
-
 1. ✅ Create server-side enforcement
 2. ✅ Create client-side utilities
 3. ❌ **MISSED:** Update all existing code to use utilities
 4. ❌ **MISSED:** Test that existing functionality still works
 
 **Prevention for future:**
-
 - Always test security features in development with existing functionality
 - Search codebase for patterns that need updating (e.g., `fetch(`)
 - Consider making security features opt-in per route instead of global
