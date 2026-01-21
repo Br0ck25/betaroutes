@@ -178,11 +178,17 @@
 			// Actually restore the item from trash
 			await trash.restore(id, item.userId, displayType);
 
-			// Reload the appropriate store
-			if (displayType === 'expense') await expenses.load(item.userId);
-			else if (displayType === 'mileage') await mileage.load(item.userId);
-			else await trips.load(item.userId);
+			// Optimistic update - add item back to appropriate store immediately
+			const itemData = (item as any).data || (item as any).backups?.[displayType] || item;
+			if (displayType === 'expense' && itemData) {
+				expenses.updateLocal(itemData);
+			} else if (displayType === 'mileage' && itemData) {
+				mileage.updateLocal(itemData);
+			} else if (itemData) {
+				trips.updateLocal(itemData);
+			}
 
+			// Reload trash to remove restored item from view
 			await loadTrash();
 		} catch (err) {
 			// Only show known user-friendly error messages, fallback to generic for unknown errors

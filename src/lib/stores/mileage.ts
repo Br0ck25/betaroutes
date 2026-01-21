@@ -249,11 +249,14 @@ function createMileageStore() {
 				const tx = db.transaction(mileageStoreName, 'readwrite');
 				await tx.objectStore(mileageStoreName).put(record);
 				await tx.done;
-				await syncManager.addToQueue({
-					action: 'create',
-					tripId: record.id,
-					data: { ...record, store: 'mileage' }
-				});
+				// Queue for server sync (non-blocking)
+				syncManager
+					.addToQueue({
+						action: 'create',
+						tripId: record.id,
+						data: { ...record, store: 'mileage' }
+					})
+					.catch((err) => console.error('Failed to queue mileage create:', err));
 				return record;
 			} catch (err) {
 				console.error('❌ Failed to create mileage record:', err);
@@ -357,11 +360,14 @@ function createMileageStore() {
 				} catch {
 					/* ignore */
 				}
-				await syncManager.addToQueue({
-					action: 'update',
-					tripId: id,
-					data: { ...updated, store: 'mileage' }
-				});
+				// Queue for server sync (non-blocking)
+				syncManager
+					.addToQueue({
+						action: 'update',
+						tripId: id,
+						data: { ...updated, store: 'mileage' }
+					})
+					.catch((err) => console.error('Failed to queue mileage update:', err));
 				return updated;
 			} catch (err) {
 				console.error('❌ Failed to update mileage:', err);
@@ -446,18 +452,24 @@ function createMileageStore() {
 							/* ignore */
 						}
 
-						await syncManager.addToQueue({
-							action: 'update',
-							tripId: id,
-							data: { ...patched, store: 'trips', skipEnrichment: true }
-						});
+						// Queue trip update (non-blocking)
+						syncManager
+							.addToQueue({
+								action: 'update',
+								tripId: id,
+								data: { ...patched, store: 'trips', skipEnrichment: true }
+							})
+							.catch((err) => console.error('Failed to queue trip update:', err));
 					}
 					await tripsTx.done;
 				} catch {
 					/* ignore */
 				}
 
-				await syncManager.addToQueue({ action: 'delete', tripId: id, data: { store: 'mileage' } });
+				// Queue mileage delete (non-blocking)
+				syncManager
+					.addToQueue({ action: 'delete', tripId: id, data: { store: 'mileage' } })
+					.catch((err) => console.error('Failed to queue mileage delete:', err));
 				return;
 			} catch (err) {
 				console.error('❌ Failed to delete mileage record:', err);
