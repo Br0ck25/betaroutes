@@ -30,8 +30,6 @@ function createMileageStore() {
 			void _userId;
 			_hydrationPromise = new Promise((res) => (_resolveHydration = res));
 
-			console.log('[Mileage Store] Hydrate called with', data.length, 'server records');
-
 			// Optimistically set data immediately for faster perceived load
 			set(data);
 
@@ -51,8 +49,6 @@ function createMileageStore() {
 				const trashIds = new Set(trashItems.map((t: TrashItemLike) => t.id || `mileage:${t.id}`));
 				await trashTx.done;
 
-				console.log('[Mileage Store] Found', trashItems.length, 'items in trash');
-
 				// 2. Prepare Valid Data (Server data minus local trash)
 				const validServerData = data.filter(
 					(item) => !trashIds.has(item.id) && !trashIds.has(`mileage:${item.id}`)
@@ -67,12 +63,6 @@ function createMileageStore() {
 				// Get all local items to check for zombies (stale items)
 				const localItems = await store.getAll();
 				const localById = new Map(localItems.map((item) => [item.id, item]));
-
-				console.log('[Mileage Store] Found', localItems.length, 'items in IndexedDB');
-				console.log(
-					'[Mileage Store] Pending items:',
-					localItems.filter((i) => i.syncStatus === 'pending').length
-				);
 
 				// DELETE stale items
 				for (const local of localItems) {
@@ -132,8 +122,6 @@ function createMileageStore() {
 					const dateB = new Date(b.date || b.createdAt).getTime();
 					return dateB - dateA;
 				});
-
-				console.log('[Mileage Store] Final merged result:', merged.length, 'items');
 
 				set(merged);
 				await tx.done;
