@@ -258,6 +258,14 @@ export function parseOrderPage(html: string, id: string): OrderData {
 	if (bodyText.includes('Install, VOIP Phone [Task]')) {
 		out.hasVoip = true;
 	}
+	// Detect VOIP from image tag: <img src="../images2/icoPhoneVoipMed.gif" ... title="VOIP" alt="VOIP">
+	if (
+		bodyText.includes('icoPhoneVoipMed.gif') ||
+		bodyText.match(/title\s*=\s*["']VOIP["']/i) ||
+		bodyText.match(/alt\s*=\s*["']VOIP["']/i)
+	) {
+		out.hasVoip = true;
+	}
 
 	// --- Timestamp & Duration (Updated for Split Visits) ---
 	// 1. Get ALL timestamps

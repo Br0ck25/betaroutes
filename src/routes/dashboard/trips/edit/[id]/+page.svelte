@@ -3,7 +3,6 @@
 	import { userSettings } from '$lib/stores/userSettings';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import { onMount } from 'svelte';
 
 	const resolve = (href: string) => `${base}${href}`;
 	import { user } from '$lib/stores/auth';
@@ -20,7 +19,6 @@
 	$: API_KEY = String(data.googleMapsApiKey ?? '');
 	const tripId = $page.params.id;
 
-	let step = 1;
 	let isCalculating = false;
 	let dragItemIndex: number | null = null;
 
@@ -88,9 +86,10 @@
 		return fallback;
 	}
 
-	onMount(async () => {
+	(async () => {
 		await loadTripData();
-	});
+	})();
+
 	async function loadTripData() {
 		const currentUser = $page.data['user'] || $user;
 		let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
@@ -747,12 +746,6 @@
 			tripData.hoursWorked = Math.round((diff / 60) * 10) / 10;
 		}
 	}
-	function nextStep() {
-		if (step < 4) step++;
-	}
-	function prevStep() {
-		if (step > 1) step--;
-	}
 
 	async function saveTrip() {
 		const currentUser = $page.data['user'] || $user;
@@ -842,449 +835,415 @@
 		>
 	</div>
 
-	<div class="progress-steps">
-		<div class="step-item" class:active={step >= 1} class:completed={step > 1}>
-			<div class="step-circle">{step > 1 ? '✓' : '1'}</div>
-			<div class="step-label">Route</div>
-		</div>
-		<div class="step-line" class:completed={step > 1}></div>
-		<div class="step-item" class:active={step >= 2} class:completed={step > 2}>
-			<div class="step-circle">{step > 2 ? '✓' : '2'}</div>
-			<div class="step-label">Basics</div>
-		</div>
-		<div class="step-line" class:completed={step > 2}></div>
-		<div class="step-item" class:active={step >= 3} class:completed={step > 3}>
-			<div class="step-circle">{step > 3 ? '✓' : '3'}</div>
-			<div class="step-label">Costs</div>
-		</div>
-		<div class="step-line" class:completed={step > 3}></div>
-		<div class="step-item" class:active={step >= 4}>
-			<div class="step-circle">4</div>
-			<div class="step-label">Review</div>
-		</div>
-	</div>
-
 	<div class="form-content">
-		{#if step === 1}
-			<div class="form-card">
-				<div class="card-header">
-					<h2 class="card-title">Route & Stops</h2>
-					<button
-						class="btn-small primary"
-						on:click={handleOptimize}
-						type="button"
-						disabled={isCalculating}
-						title="Reorder stops efficiently">{isCalculating ? 'Optimizing...' : 'Optimize'}</button
-					>
-				</div>
+		<!-- Basic Information Section -->
+		<div class="form-card">
+			<div class="card-header"><h2 class="card-title">Basic Information</h2></div>
+			<div class="form-grid">
 				<div class="form-group">
-					<label for="start-address">Starting Address</label><input
-						id="start-address"
-						type="text"
-						value={startAddressLocal}
-						on:input={(e) =>
-							(startAddressLocal = String((e.target as HTMLInputElement).value || ''))}
-						use:autocomplete={{ apiKey: API_KEY }}
-						on:place-selected={(e) => handleMainAddressChange('start', e.detail)}
-						on:blur={() =>
-							handleMainAddressChange('start', { formatted_address: tripData.startAddress })}
-						class="address-input"
-						placeholder="Enter start address..."
+					<label for="trip-date">Date</label><input
+						id="trip-date"
+						type="date"
+						bind:value={dateLocal}
+						required
 					/>
 				</div>
-				<div class="stops-container">
-					<div class="stops-header">
-						<h3>Stops</h3>
-						<span class="count">{tripData.stops.length} added</span>
+				<div class="form-group">
+					<label for="trip-pay-date">Pay Date <span class="hint">(Optional)</span></label><input
+						id="trip-pay-date"
+						type="date"
+						bind:value={payDateLocal}
+					/>
+					<div class="hint">Tax purposes</div>
+				</div>
+				<div class="form-row">
+					<div class="form-group">
+						<label for="start-time">Start Time</label><input
+							id="start-time"
+							type="time"
+							bind:value={startTimeLocal}
+						/>
 					</div>
-					{#if tripData.stops.length > 0}
-						<div class="stops-list">
-							{#each tripData.stops as stop, i (stop.id)}
-								<div
-									class="stop-card"
-									role="button"
-									tabindex="0"
-									draggable="true"
-									on:dragstart={(e) => handleDragStart(e, i)}
-									on:drop={(e) => handleDrop(e, i)}
-									on:dragover={handleDragOver}
-								>
-									<div class="stop-header">
-										<div class="stop-number">{i + 1}</div>
-										<div class="stop-actions">
-											<button
-												class="btn-icon delete"
-												on:click={() => removeStop(String(stop.id ?? ''))}>✕</button
-											>
-											<div class="drag-handle">☰</div>
-										</div>
-									</div>
-									<div class="stop-inputs">
-										<input
-											type="text"
-											value={String(stop.address ?? '')}
-											on:input={(e) => (stop.address = (e.target as HTMLInputElement).value || '')}
-											use:autocomplete={{ apiKey: API_KEY }}
-											on:place-selected={(e) => handleStopChange(i, e.detail)}
-											on:blur={() => handleStopChange(i, { formatted_address: stop.address })}
-											class="address-input"
-											placeholder="Address"
-										/>
-										<div class="input-money-wrapper">
-											<span class="symbol">$</span><input
-												type="number"
-												class="input-money"
-												value={String(stop.earnings ?? 0)}
-												on:input={(e) =>
-													(stop.earnings = Number((e.target as HTMLInputElement).value) || 0)}
-												step="0.01"
-												placeholder="Earnings"
-											/>
-										</div>
+					<div class="form-group">
+						<label for="end-time">End Time</label><input
+							id="end-time"
+							type="time"
+							bind:value={endTimeLocal}
+						/>
+					</div>
+				</div>
+				<div class="form-group">
+					<label for="hours-display">Hours Worked</label>
+					<div id="hours-display" class="readonly-field">
+						{tripData.hoursWorked.toFixed(1)} hours
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Route & Stops Section -->
+		<div class="form-card">
+			<div class="card-header">
+				<h2 class="card-title">Route & Stops</h2>
+				<button
+					class="btn-small primary"
+					on:click={handleOptimize}
+					type="button"
+					disabled={isCalculating}
+					title="Reorder stops efficiently">{isCalculating ? 'Optimizing...' : 'Optimize'}</button
+				>
+			</div>
+			<div class="form-group">
+				<label for="start-address">Starting Address</label><input
+					id="start-address"
+					type="text"
+					value={startAddressLocal}
+					on:input={(e) => (startAddressLocal = String((e.target as HTMLInputElement).value || ''))}
+					use:autocomplete={{ apiKey: API_KEY }}
+					on:place-selected={(e) => handleMainAddressChange('start', e.detail)}
+					on:blur={() =>
+						handleMainAddressChange('start', { formatted_address: tripData.startAddress })}
+					class="address-input"
+					placeholder="Enter start address..."
+				/>
+			</div>
+			<div class="stops-container">
+				<div class="stops-header">
+					<h3>Stops</h3>
+					<span class="count">{tripData.stops.length} added</span>
+				</div>
+				{#if tripData.stops.length > 0}
+					<div class="stops-list">
+						{#each tripData.stops as stop, i (stop.id)}
+							<div
+								class="stop-card"
+								role="button"
+								tabindex="0"
+								draggable="true"
+								on:dragstart={(e) => handleDragStart(e, i)}
+								on:drop={(e) => handleDrop(e, i)}
+								on:dragover={handleDragOver}
+							>
+								<div class="stop-header">
+									<div class="stop-number">{i + 1}</div>
+									<div class="stop-actions">
+										<button
+											class="btn-icon delete"
+											on:click={() => removeStop(String(stop.id ?? ''))}>✕</button
+										>
+										<div class="drag-handle">☰</div>
 									</div>
 								</div>
-							{/each}
-						</div>
-					{/if}
-					<div class="add-stop-form">
-						<div class="stop-inputs new">
-							<input
-								type="text"
-								bind:value={newStop.address}
-								placeholder="New stop address..."
-								use:autocomplete={{ apiKey: API_KEY }}
-								on:place-selected={handleNewStopSelect}
-								class="address-input"
-							/>
-							<div class="input-money-wrapper">
-								<span class="symbol">$</span><input
-									type="number"
-									class="input-money"
-									placeholder="0.00"
-									bind:value={newStop.earnings}
-									step="0.01"
-									min="0"
-								/>
+								<div class="stop-inputs">
+									<input
+										type="text"
+										value={String(stop.address ?? '')}
+										on:input={(e) => (stop.address = (e.target as HTMLInputElement).value || '')}
+										use:autocomplete={{ apiKey: API_KEY }}
+										on:place-selected={(e) => handleStopChange(i, e.detail)}
+										on:blur={() => handleStopChange(i, { formatted_address: stop.address })}
+										class="address-input"
+										placeholder="Address"
+									/>
+									<div class="input-money-wrapper">
+										<span class="symbol">$</span><input
+											type="number"
+											class="input-money"
+											value={String(stop.earnings ?? 0)}
+											on:input={(e) =>
+												(stop.earnings = Number((e.target as HTMLInputElement).value) || 0)}
+											step="0.01"
+											placeholder="Earnings"
+										/>
+									</div>
+								</div>
 							</div>
-						</div>
+						{/each}
 					</div>
-				</div>
-				<div class="form-group">
-					<label for="end-address">End Address (Optional)</label><input
-						id="end-address"
-						type="text"
-						value={endAddressLocal}
-						on:input={(e) => (endAddressLocal = (e.target as HTMLInputElement).value || '')}
-						use:autocomplete={{ apiKey: API_KEY }}
-						on:place-selected={(e) => handleMainAddressChange('end', e.detail)}
-						on:blur={() => handleMainAddressChange('end', { formatted_address: endAddressLocal })}
-						class="address-input"
-						placeholder="Same as start if empty"
-					/>
-				</div>
-				<div class="form-row">
-					<div class="form-group">
-						<label for="total-miles">Total Miles</label><input
-							id="total-miles"
-							type="number"
-							bind:value={totalMilesLocal}
-							step="0.1"
+				{/if}
+				<div class="add-stop-form">
+					<div class="stop-inputs new">
+						<input
+							type="text"
+							bind:value={newStop.address}
+							placeholder="New stop address..."
+							use:autocomplete={{ apiKey: API_KEY }}
+							on:place-selected={handleNewStopSelect}
+							class="address-input"
 						/>
-					</div>
-					<div class="form-group">
-						<label for="drive-time">Drive Time <span class="hint">(Est)</span></label>
-						<div id="drive-time" class="readonly-field">
-							{formatDuration(tripData.estimatedTime)}
-						</div>
-					</div>
-				</div>
-				<div class="form-actions">
-					<button class="btn-primary full-width" on:click={nextStep}>Continue</button>
-				</div>
-			</div>
-		{/if}
-		{#if step === 2}
-			<div class="form-card">
-				<div class="card-header"><h2 class="card-title">Basic Information</h2></div>
-				<div class="form-grid">
-					<div class="form-group">
-						<label for="trip-date">Date</label><input
-							id="trip-date"
-							type="date"
-							bind:value={dateLocal}
-							required
-						/>
-					</div>
-					<div class="form-group">
-						<label for="trip-pay-date">Pay Date <span class="hint">(Optional)</span></label><input
-							id="trip-pay-date"
-							type="date"
-							bind:value={payDateLocal}
-						/>
-						<div class="hint">Tax purposes</div>
-					</div>
-					<div class="form-row">
-						<div class="form-group">
-							<label for="start-time">Start Time</label><input
-								id="start-time"
-								type="time"
-								bind:value={startTimeLocal}
-							/>
-						</div>
-						<div class="form-group">
-							<label for="end-time">End Time</label><input
-								id="end-time"
-								type="time"
-								bind:value={endTimeLocal}
-							/>
-						</div>
-					</div>
-					<div class="form-group">
-						<label for="hours-display">Hours Worked</label>
-						<div id="hours-display" class="readonly-field">
-							{tripData.hoursWorked.toFixed(1)} hours
-						</div>
-					</div>
-				</div>
-				<div class="form-actions">
-					<button class="btn-secondary" on:click={prevStep}>Back</button><button
-						class="btn-primary"
-						on:click={nextStep}>Continue</button
-					>
-				</div>
-			</div>
-		{/if}
-		{#if step === 3}
-			<div class="form-card">
-				<div class="card-header"><h2 class="card-title">Costs</h2></div>
-				<div class="form-row">
-					<div class="form-group">
-						<label for="mpg">MPG</label><input
-							id="mpg"
-							type="number"
-							bind:value={mpgLocal}
-							step="0.1"
-						/>
-					</div>
-					<div class="form-group">
-						<label for="gas-price">Gas Price</label>
 						<div class="input-money-wrapper">
 							<span class="symbol">$</span><input
-								id="gas-price"
 								type="number"
-								bind:value={gasPriceLocal}
+								class="input-money"
+								placeholder="0.00"
+								bind:value={newStop.earnings}
 								step="0.01"
+								min="0"
 							/>
 						</div>
 					</div>
 				</div>
-				<div class="summary-box" style="margin: 40px 0;">
-					<span>Estimated Fuel Cost</span><strong>{formatCurrency(tripData.fuelCost)}</strong>
-				</div>
-				<div class="section-group">
-					<div class="section-top">
-						<h3>Maintenance</h3>
-						<button
-							class="btn-icon gear"
-							on:click={() => openSettings('maintenance')}
-							title="Manage Options"
-							><svg
-								width="20"
-								height="20"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								><circle cx="12" cy="12" r="3"></circle><path
-									d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
-								></path></svg
-							></button
-						>
-					</div>
-					<div class="add-row">
-						<select
-							bind:value={selectedMaintenance}
-							class="select-input"
-							aria-label="Maintenance type"
-							><option value="" disabled selected>Select Item...</option
-							>{#each maintenanceOptions as option}<option value={option}>{option}</option
-								>{/each}</select
-						><button
-							class="btn-small primary"
-							on:click={addMaintenanceItem}
-							disabled={!selectedMaintenance}>Add</button
-						>
-					</div>
-					{#each tripData.maintenanceItems as item}<div class="expense-row">
-							<span class="name">{item.type}</span>
-							<div class="input-money-wrapper small">
-								<span class="symbol">$</span><input
-									type="number"
-									bind:value={item.cost}
-									placeholder="0.00"
-								/>
-							</div>
-							<div class="item-controls">
-								<button
-									type="button"
-									class="tax-pill"
-									on:click={() => (item.taxDeductible = !item.taxDeductible)}
-									aria-pressed={item.taxDeductible}
-									title="Mark this item as tax deductible"
-									>{item.taxDeductible ? 'Tax' : 'No Tax'}</button
-								>
-								<label class="inline-label sr-only"
-									><input type="checkbox" bind:checked={item.taxDeductible} /></label
-								>
-							</div>
-							<button
-								class="btn-icon delete"
-								on:click={() => removeMaintenanceItem(String(item.id ?? ''))}>✕</button
-							>
-						</div>{/each}
-				</div>
-				<div class="section-group">
-					<div class="section-top">
-						<h3>Supplies</h3>
-						<button
-							class="btn-icon gear"
-							on:click={() => openSettings('supplies')}
-							title="Manage Options"
-							><svg
-								width="20"
-								height="20"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								><circle cx="12" cy="12" r="3"></circle><path
-									d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
-								></path></svg
-							></button
-						>
-					</div>
-					<div class="add-row">
-						<select bind:value={selectedSupply} class="select-input" aria-label="Supply type"
-							><option value="" disabled selected>Select Item...</option
-							>{#each suppliesOptions as option}<option value={option}>{option}</option
-								>{/each}</select
-						><button class="btn-small primary" on:click={addSupplyItem} disabled={!selectedSupply}
-							>Add</button
-						>
-					</div>
-					{#each tripData.suppliesItems as item}<div class="expense-row">
-							<span class="name">{item.type}</span>
-							<div class="input-money-wrapper small">
-								<span class="symbol">$</span><input
-									type="number"
-									bind:value={item.cost}
-									placeholder="0.00"
-								/>
-							</div>
-							<div class="item-controls">
-								<button
-									type="button"
-									class="tax-pill"
-									on:click={() => (item.taxDeductible = !item.taxDeductible)}
-									aria-pressed={item.taxDeductible}
-									title="Mark this item as tax deductible"
-									>{item.taxDeductible ? 'Tax' : 'No Tax'}</button
-								>
-								<label class="inline-label sr-only"
-									><input type="checkbox" bind:checked={item.taxDeductible} /></label
-								>
-							</div>
-							<button
-								class="btn-icon delete"
-								on:click={() => removeSupplyItem(String(item.id ?? ''))}>✕</button
-							>
-						</div>{/each}
+			</div>
+			<div class="form-group">
+				<label for="end-address">End Address (Optional)</label><input
+					id="end-address"
+					type="text"
+					value={endAddressLocal}
+					on:input={(e) => (endAddressLocal = (e.target as HTMLInputElement).value || '')}
+					use:autocomplete={{ apiKey: API_KEY }}
+					on:place-selected={(e) => handleMainAddressChange('end', e.detail)}
+					on:blur={() => handleMainAddressChange('end', { formatted_address: endAddressLocal })}
+					class="address-input"
+					placeholder="Same as start if empty"
+				/>
+			</div>
+			<div class="form-row">
+				<div class="form-group">
+					<label for="total-miles">Total Miles</label><input
+						id="total-miles"
+						type="number"
+						bind:value={totalMilesLocal}
+						step="0.1"
+					/>
 				</div>
 				<div class="form-group">
-					<label for="notes">Notes</label><textarea
-						id="notes"
-						bind:value={notesLocal}
-						rows="3"
-						placeholder="Trip details..."
-					></textarea>
-				</div>
-				<div class="form-actions">
-					<button class="btn-secondary" on:click={prevStep}>Back</button><button
-						class="btn-primary"
-						on:click={saveTrip}>Update Trip</button
-					>
+					<label for="drive-time">Drive Time <span class="hint">(Est)</span></label>
+					<div id="drive-time" class="readonly-field">
+						{formatDuration(tripData.estimatedTime)}
+					</div>
 				</div>
 			</div>
-		{/if}
-		{#if step === 4}
-			<div class="form-card">
-				<div class="card-header"><h2 class="card-title">Review</h2></div>
-				<div class="review-grid">
-					<div class="review-tile">
-						<span class="review-label">Date</span>
-						<div>{formatDateLocal(String(tripData.date || ''))}</div>
-					</div>
-					<div class="review-tile">
-						<span class="review-label">Total Time</span>
-						<div>{tripData.hoursWorked.toFixed(1)} hrs</div>
-					</div>
-					<div class="review-tile">
-						<span class="review-label">Drive Time</span>
-						<div>{formatDuration(tripData.estimatedTime)}</div>
-					</div>
-					<div class="review-tile">
-						<span class="review-label">Hours Worked</span>
-						<div>
-							{Math.max(0, tripData.hoursWorked - tripData.estimatedTime / 60).toFixed(1)} hrs
-						</div>
-					</div>
-					<div class="review-tile">
-						<span class="review-label">Distance</span>
-						<div>
-							{tripData.totalMiles} mi
-							{#if tripData.roundTripMiles && tripData.roundTripMiles !== tripData.totalMiles}
-								• Round trip: {tripData.roundTripMiles} mi • {tripData.roundTripTime} min
-							{/if}
-						</div>
-					</div>
-					<div class="review-tile">
-						<span class="review-label">Stops</span>
-						<div>{tripData.stops.length}</div>
-					</div>
+		</div>
+
+		<!-- Costs Section -->
+		<div class="form-card">
+			<div class="card-header"><h2 class="card-title">Costs</h2></div>
+			<div class="form-row">
+				<div class="form-group">
+					<label for="mpg">MPG</label><input
+						id="mpg"
+						type="number"
+						bind:value={mpgLocal}
+						step="0.1"
+					/>
 				</div>
-				<div class="financial-summary">
-					<div class="row">
-						<span>Earnings</span> <span class="val positive">{formatCurrency(totalEarnings)}</span>
+				<div class="form-group">
+					<label for="gas-price">Gas Price</label>
+					<div class="input-money-wrapper">
+						<span class="symbol">$</span><input
+							id="gas-price"
+							type="number"
+							bind:value={gasPriceLocal}
+							step="0.01"
+						/>
 					</div>
-					<div class="row subheader"><span>Expenses Breakdown</span></div>
-					{#if tripData.fuelCost > 0}<div class="row detail">
-							<span>Fuel</span> <span class="val">{formatCurrency(tripData.fuelCost)}</span>
-						</div>{/if}{#each tripData.maintenanceItems as item}<div class="row detail">
-							<span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span>
-						</div>{/each}{#each tripData.suppliesItems as item}<div class="row detail">
-							<span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span>
-						</div>{/each}
-					<div class="row total-expenses">
-						<span>Total Expenses</span>
-						<span class="val negative">-{formatCurrency(totalCosts)}</span>
-					</div>
-					<div class="row total">
-						<span>Net Profit</span>
-						<span class="val" class:positive={totalProfit >= 0}>{formatCurrency(totalProfit)}</span>
-					</div>
-				</div>
-				<div class="form-actions">
-					<button class="btn-secondary" on:click={prevStep}>Back</button><button
-						class="btn-primary"
-						on:click={saveTrip}>Update Trip</button
-					>
 				</div>
 			</div>
-		{/if}
+			<div class="summary-box" style="margin: 40px 0;">
+				<span>Estimated Fuel Cost</span><strong>{formatCurrency(tripData.fuelCost)}</strong>
+			</div>
+
+			<div class="info-note">
+				<span
+					><strong>Note:</strong> Use the checkboxes next to each Maintenance or Supplies item to mark
+					that individual item as tax-deductible.</span
+				>
+			</div>
+			<div class="section-group">
+				<div class="section-top">
+					<h3>Maintenance</h3>
+					<button
+						class="btn-icon gear"
+						on:click={() => openSettings('maintenance')}
+						title="Manage Options"
+						><svg
+							width="20"
+							height="20"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							><circle cx="12" cy="12" r="3"></circle><path
+								d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+							></path></svg
+						></button
+					>
+				</div>
+				<div class="add-row">
+					<select
+						bind:value={selectedMaintenance}
+						class="select-input"
+						aria-label="Maintenance type"
+						><option value="" disabled selected>Select Item...</option
+						>{#each maintenanceOptions as option}<option value={option}>{option}</option
+							>{/each}</select
+					><button
+						class="btn-small primary"
+						on:click={addMaintenanceItem}
+						disabled={!selectedMaintenance}>Add</button
+					>
+				</div>
+				{#each tripData.maintenanceItems as item}<div class="expense-row">
+						<span class="name">{item.type}</span>
+						<div class="input-money-wrapper small">
+							<span class="symbol">$</span><input
+								type="number"
+								bind:value={item.cost}
+								placeholder="0.00"
+							/>
+						</div>
+						<div class="item-controls">
+							<button
+								type="button"
+								class="tax-pill"
+								on:click={() => (item.taxDeductible = !item.taxDeductible)}
+								aria-pressed={item.taxDeductible}
+								title="Mark this item as tax deductible"
+								>{item.taxDeductible ? 'Tax' : 'No Tax'}</button
+							>
+							<label class="inline-label sr-only"
+								><input type="checkbox" bind:checked={item.taxDeductible} /></label
+							>
+						</div>
+						<button
+							class="btn-icon delete"
+							on:click={() => removeMaintenanceItem(String(item.id ?? ''))}>✕</button
+						>
+					</div>{/each}
+			</div>
+			<div class="section-group">
+				<div class="section-top">
+					<h3>Supplies</h3>
+					<button
+						class="btn-icon gear"
+						on:click={() => openSettings('supplies')}
+						title="Manage Options"
+						><svg
+							width="20"
+							height="20"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							><circle cx="12" cy="12" r="3"></circle><path
+								d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+							></path></svg
+						></button
+					>
+				</div>
+				<div class="add-row">
+					<select bind:value={selectedSupply} class="select-input" aria-label="Supply type"
+						><option value="" disabled selected>Select Item...</option
+						>{#each suppliesOptions as option}<option value={option}>{option}</option
+							>{/each}</select
+					><button class="btn-small primary" on:click={addSupplyItem} disabled={!selectedSupply}
+						>Add</button
+					>
+				</div>
+				{#each tripData.suppliesItems as item}<div class="expense-row">
+						<span class="name">{item.type}</span>
+						<div class="input-money-wrapper small">
+							<span class="symbol">$</span><input
+								type="number"
+								bind:value={item.cost}
+								placeholder="0.00"
+							/>
+						</div>
+						<div class="item-controls">
+							<button
+								type="button"
+								class="tax-pill"
+								on:click={() => (item.taxDeductible = !item.taxDeductible)}
+								aria-pressed={item.taxDeductible}
+								title="Mark this item as tax deductible"
+								>{item.taxDeductible ? 'Tax' : 'No Tax'}</button
+							>
+							<label class="inline-label sr-only"
+								><input type="checkbox" bind:checked={item.taxDeductible} /></label
+							>
+						</div>
+						<button class="btn-icon delete" on:click={() => removeSupplyItem(String(item.id ?? ''))}
+							>✕</button
+						>
+					</div>{/each}
+			</div>
+			<div class="form-group">
+				<label for="notes">Notes</label><textarea
+					id="notes"
+					bind:value={notesLocal}
+					rows="3"
+					placeholder="Trip details..."
+				></textarea>
+			</div>
+		</div>
+
+		<!-- Review Section -->
+		<div class="form-card">
+			<div class="card-header"><h2 class="card-title">Review</h2></div>
+			<div class="review-grid">
+				<div class="review-tile">
+					<span class="review-label">Date</span>
+					<div>{formatDateLocal(String(tripData.date || ''))}</div>
+				</div>
+				<div class="review-tile">
+					<span class="review-label">Total Time</span>
+					<div>{tripData.hoursWorked.toFixed(1)} hrs</div>
+				</div>
+				<div class="review-tile">
+					<span class="review-label">Drive Time</span>
+					<div>{formatDuration(tripData.estimatedTime)}</div>
+				</div>
+				<div class="review-tile">
+					<span class="review-label">Hours Worked</span>
+					<div>
+						{Math.max(0, tripData.hoursWorked - tripData.estimatedTime / 60).toFixed(1)} hrs
+					</div>
+				</div>
+				<div class="review-tile">
+					<span class="review-label">Distance</span>
+					<div>
+						{tripData.totalMiles} mi
+						{#if tripData.roundTripMiles && tripData.roundTripMiles !== tripData.totalMiles}
+							• Round trip: {tripData.roundTripMiles} mi • {tripData.roundTripTime} min
+						{/if}
+					</div>
+				</div>
+				<div class="review-tile">
+					<span class="review-label">Stops</span>
+					<div>{tripData.stops.length}</div>
+				</div>
+			</div>
+			<div class="financial-summary">
+				<div class="row">
+					<span>Earnings</span> <span class="val positive">{formatCurrency(totalEarnings)}</span>
+				</div>
+				<div class="row subheader"><span>Expenses Breakdown</span></div>
+				{#if tripData.fuelCost > 0}<div class="row detail">
+						<span>Fuel</span> <span class="val">{formatCurrency(tripData.fuelCost)}</span>
+					</div>{/if}{#each tripData.maintenanceItems as item}<div class="row detail">
+						<span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span>
+					</div>{/each}{#each tripData.suppliesItems as item}<div class="row detail">
+						<span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span>
+					</div>{/each}
+				<div class="row total-expenses">
+					<span>Total Expenses</span>
+					<span class="val negative">-{formatCurrency(totalCosts)}</span>
+				</div>
+				<div class="row total">
+					<span>Net Profit</span>
+					<span class="val" class:positive={totalProfit >= 0}>{formatCurrency(totalProfit)}</span>
+				</div>
+			</div>
+
+			<!-- Save Button -->
+			<div class="form-actions">
+				<button class="btn-primary full-width" on:click={saveTrip}>Update Trip</button>
+			</div>
+		</div>
 	</div>
 </div>
 
@@ -1457,60 +1416,6 @@
 		color: #6b7280;
 		text-decoration: none;
 		font-size: 14px;
-	}
-	.progress-steps {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		margin-bottom: 26px;
-		padding: 0 8px;
-	}
-	.step-item {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 6px;
-		z-index: 1;
-	}
-	.step-circle {
-		width: 42px;
-		height: 42px;
-		border-radius: 50%;
-		background: #f3f4f6;
-		color: #9ca3af;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-weight: 700;
-		font-size: 16px;
-		border: 2px solid #fff;
-	}
-	.step-item.active .step-circle {
-		background: #ff7f50;
-		color: white;
-	}
-	.step-item.completed .step-circle {
-		background: #10b981;
-		color: white;
-	}
-	.step-label {
-		font-size: 14px;
-		font-weight: 600;
-		color: #9ca3af;
-	}
-	.step-item.active .step-label {
-		color: #111827;
-	}
-	.step-line {
-		flex: 1;
-		height: 3px;
-		background: #e5e7eb;
-		margin: 0 -4px 22px -4px;
-		position: relative;
-		z-index: 0;
-	}
-	.step-line.completed {
-		background: #10b981;
 	}
 	.form-card {
 		background: white;
@@ -1960,11 +1865,6 @@
 		}
 		.form-card {
 			padding: 48px;
-		}
-		.step-circle {
-			width: 48px;
-			height: 48px;
-			font-size: 20px;
 		}
 		.stop-card {
 			flex-direction: row;

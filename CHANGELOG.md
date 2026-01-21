@@ -32,6 +32,12 @@ _None yet._
 
 _None yet._
 
+### Security
+
+<!-- Security improvements -->
+
+_None yet._
+
 ### Deprecated
 
 <!-- Features marked for removal -->
@@ -70,6 +76,12 @@ _None yet._
 
 ### [1.0.0] - 2024-01-19
 
+### Security
+
+- Added comprehensive SECURITY.md with Cloudflare KV guidelines
+- Implemented API authentication for trip data
+- Added user ownership verification in all API endpoints
+
 ### Migrated to Svelte 5
 
 - `src/lib/components/Button.svelte` - 2024-01-19
@@ -80,7 +92,7 @@ _None yet._
 
 ### Added (Svelte 5)
 
-- `src/lib/components/NewFeature.svelte` - 2024-01-19
+- `src/lib/components/TripCard.svelte` - 2024-01-19
   - New feature component built with Svelte 5
   - Uses `$state` for local state management
   - Fully PWA compatible
@@ -106,3 +118,4 @@ _None yet._
 - Migration entries should note API compatibility
 - All entries should include dates
 - Breaking changes should be clearly marked with ⚠️
+- Security changes should be documented in dedicated section

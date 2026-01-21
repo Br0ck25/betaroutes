@@ -171,13 +171,16 @@
 			position: relative;
 			top: 0;
 			height: auto;
-			overflow: auto;
+			overflow-x: auto;
+			overflow-y: hidden;
 			padding: 8px 0 12px;
+			-webkit-overflow-scrolling: touch;
 		}
 		.side-nav ul {
 			flex-direction: row;
 			gap: 6px;
 			padding-left: 6px;
+			padding-right: 6px;
 		}
 		.side-nav li button {
 			padding: 8px 14px;

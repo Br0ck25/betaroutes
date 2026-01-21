@@ -135,7 +135,13 @@
 						/>
 						<div class="meta">
 							<div class="addr">{o.order.address || 'No address'}</div>
-							<div class="info">ID: {o.id} · Stored: {new Date(o.storedAt).toLocaleString()}</div>
+							<div class="info">
+								ID: {o.id}
+								{#if o.order.confirmScheduleDate}
+									· Order Date: {o.order.confirmScheduleDate}
+								{/if}
+								· Stored: {new Date(o.storedAt).toLocaleString()}
+							</div>
 						</div>
 					</li>
 				{/each}

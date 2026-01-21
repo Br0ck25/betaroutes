@@ -499,9 +499,28 @@
 
 	import ArchivedRestore from '$lib/components/hughesnet/ArchivedRestore.svelte';
 
+	// Track session timeout - force relogin after 15 minutes of inactivity
+	const SESSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+	const LAST_VISIT_KEY = 'hughesnet_last_visit';
+
+	function checkSessionTimeout() {
+		const lastVisit = localStorage.getItem(LAST_VISIT_KEY);
+		if (lastVisit && isConnected) {
+			const elapsed = Date.now() - parseInt(lastVisit, 10);
+			if (elapsed > SESSION_TIMEOUT_MS) {
+				addLog('⚠️ Session expired (15+ minutes inactive). Please reconnect.');
+				alert('Your HughesNet session has expired due to inactivity. Please reconnect.');
+				handleDisconnect();
+			}
+		}
+		// Update last visit time
+		localStorage.setItem(LAST_VISIT_KEY, Date.now().toString());
+	}
+
 	onMount(() => {
 		loadSettings();
 		loadOrders();
+		checkSessionTimeout();
 	});
 
 	onDestroy(() => {
