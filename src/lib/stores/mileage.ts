@@ -410,11 +410,14 @@ function createMileageStore() {
 				const rec = await mileageStore.get(id);
 				if (!rec) {
 					await tx.done;
-					await syncManager.addToQueue({
-						action: 'delete',
-						tripId: id,
-						data: { store: 'mileage' }
-					});
+					// Queue for server sync (non-blocking)
+					syncManager
+						.addToQueue({
+							action: 'delete',
+							tripId: id,
+							data: { store: 'mileage' }
+						})
+						.catch((err) => console.error('Failed to queue mileage delete:', err));
 					return;
 				}
 				if (rec.userId !== userId) {
