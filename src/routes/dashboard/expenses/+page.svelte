@@ -235,13 +235,86 @@
 		}
 	}
 
+	/**
+	 * Delete a trip-derived expense by updating the parent trip.
+	 * Parses the trip-prefixed ID to determine which field to update.
+	 * @param id - The trip-derived expense ID (e.g., trip-fuel-{tripId}, trip-maint-{tripId}-{index})
+	 */
+	async function deleteTripDerivedExpense(id: string): Promise<boolean> {
+		// Parse the ID to get tripId and expense type
+		// Formats: trip-fuel-{tripId}, trip-maint-{tripId}-{index}, trip-supply-{tripId}-{index}
+		const fuelMatch = id.match(/^trip-fuel-(.+)$/);
+		const maintMatch = id.match(/^trip-maint-(.+)-(\d+)$/);
+		const supplyMatch = id.match(/^trip-supply-(.+)-(\d+)$/);
+
+		let tripId: string | null = null;
+		let updateData: Record<string, unknown> = {};
+
+		if (fuelMatch && fuelMatch[1]) {
+			tripId = fuelMatch[1];
+			updateData = { fuelCost: 0 };
+		} else if (maintMatch && maintMatch[1] && maintMatch[2]) {
+			tripId = maintMatch[1];
+			const index = parseInt(maintMatch[2], 10);
+			// Get the current trip to update the array
+			const trip = $trips.find((t) => t.id === tripId);
+			if (trip) {
+				const maint = [...((trip as any).maintenanceItems || [])];
+				maint.splice(index, 1);
+				updateData = { maintenanceItems: maint };
+			}
+		} else if (supplyMatch && supplyMatch[1] && supplyMatch[2]) {
+			tripId = supplyMatch[1];
+			const index = parseInt(supplyMatch[2], 10);
+			// Get the current trip to update the array
+			const trip = $trips.find((t) => t.id === tripId);
+			if (trip) {
+				const supplies = [...((trip as any).supplyItems || (trip as any).suppliesItems || [])];
+				supplies.splice(index, 1);
+				updateData = { supplyItems: supplies };
+			}
+		}
+
+		if (!tripId || Object.keys(updateData).length === 0) {
+			return false;
+		}
+
+		try {
+			const res = await fetch(`/api/trips/${tripId}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(updateData)
+			});
+
+			if (!res.ok) {
+				throw new Error('Failed to update trip');
+			}
+
+			// Refresh trips store to update the derived expenses
+			await invalidateAll();
+			return true;
+		} catch (err) {
+			console.error('Failed to delete trip-derived expense:', err);
+			return false;
+		}
+	}
+
 	async function deleteExpense(id: string, e?: MouseEvent) {
 		if (e) e.stopPropagation();
 		if (!confirm('Move this expense to trash? You can restore it later.')) return;
 
-		// Check if it's a trip log
+		// Check if it's a trip-derived expense
 		if (id.startsWith('trip-')) {
-			toasts.error('Cannot delete Trips here. Delete the Trip instead.');
+			const success = await deleteTripDerivedExpense(id);
+			if (success) {
+				toasts.success('Expense removed from trip');
+				if (selectedExpenses.has(id)) {
+					selectedExpenses.delete(id);
+					selectedExpenses = selectedExpenses;
+				}
+			} else {
+				toasts.error('Failed to remove expense from trip');
+			}
 			return;
 		}
 
@@ -290,19 +363,19 @@
 	async function deleteSelected() {
 		const ids = Array.from(selectedExpenses);
 		const manualExpenses = ids.filter((id) => !id.startsWith('trip-'));
-		const tripLogs = ids.length - manualExpenses.length;
+		const tripDerivedExpenses = ids.filter((id) => id.startsWith('trip-'));
 
-		if (manualExpenses.length === 0 && tripLogs > 0) {
-			toasts.error(`Cannot delete ${tripLogs} Trip Logs. Edit them in Trips.`);
-			return;
-		}
+		const total = manualExpenses.length + tripDerivedExpenses.length;
+		if (total === 0) return;
 
-		if (
-			!confirm(
-				`Move ${manualExpenses.length} expenses to trash? ${tripLogs > 0 ? `(${tripLogs} trips will be skipped)` : ''}`
-			)
-		)
-			return;
+		const confirmMsg =
+			tripDerivedExpenses.length > 0 && manualExpenses.length > 0
+				? `Delete ${manualExpenses.length} expense(s) and remove ${tripDerivedExpenses.length} expense(s) from trips?`
+				: tripDerivedExpenses.length > 0
+					? `Remove ${tripDerivedExpenses.length} expense(s) from trips?`
+					: `Move ${manualExpenses.length} expense(s) to trash?`;
+
+		if (!confirm(confirmMsg)) return;
 
 		const currentUser = $page.data['user'] || $user;
 		// [!code fix] Use UUID (id) as primary, fall back to name for legacy support
@@ -315,6 +388,9 @@
 		if (!userId) return;
 
 		let successCount = 0;
+		let tripSuccessCount = 0;
+
+		// Delete manual expenses
 		for (const id of manualExpenses) {
 			try {
 				await expenses.deleteExpense(id, userId);
@@ -324,7 +400,26 @@
 			}
 		}
 
-		toasts.success(`Moved ${successCount} expenses to trash.`);
+		// Delete trip-derived expenses by updating trips
+		for (const id of tripDerivedExpenses) {
+			try {
+				const success = await deleteTripDerivedExpense(id);
+				if (success) tripSuccessCount++;
+			} catch (err) {
+				console.error(`Failed to delete trip-derived expense ${id}`, err);
+			}
+		}
+
+		if (successCount > 0 || tripSuccessCount > 0) {
+			const msg =
+				successCount > 0 && tripSuccessCount > 0
+					? `Moved ${successCount} to trash, removed ${tripSuccessCount} from trips.`
+					: tripSuccessCount > 0
+						? `Removed ${tripSuccessCount} expense(s) from trips.`
+						: `Moved ${successCount} expense(s) to trash.`;
+			toasts.success(msg);
+		}
+
 		selectedExpenses = new Set();
 		// [!code fix] Refresh page data to ensure server sync
 		await invalidateAll();

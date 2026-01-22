@@ -37,9 +37,9 @@
 		// 1. Load Local
 		loadTrash(type).catch(console.error);
 
-		// 2. [!code fix] Force Cloud Sync on Mount
+		// 2. [!code fix] Force Cloud Sync on Mount - use UUID as primary
 		const userState = get(user);
-		const userId = userState?.name || userState?.token;
+		const userId = userState?.id || userState?.name || userState?.token;
 		if (userId) {
 			trash.syncFromCloud(userId, typeParam || undefined).then(() => loadTrash(type));
 		}
@@ -54,7 +54,7 @@
 				try {
 					await loadTrash(type);
 					const userState = get(user);
-					const userId = userState?.name || userState?.token;
+					const userId = userState?.id || userState?.name || userState?.token;
 					if (userId) {
 						await trash.syncFromCloud(userId, param || undefined);
 						await loadTrash(type);
@@ -75,7 +75,9 @@
 	async function loadTrash(type?: string) {
 		loading = true;
 		try {
+			// [!code fix] Include user.id (UUID) as primary identifier
 			const potentialIds = new Set<string>();
+			if ($user?.id) potentialIds.add($user.id);
 			if ($user?.name) potentialIds.add($user.name);
 			if ($user?.token) potentialIds.add($user.token);
 			const offlineId =
