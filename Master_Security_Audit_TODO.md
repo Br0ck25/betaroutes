@@ -80,59 +80,64 @@
 **Fix to ensure reliability, prevent DoS, and stop billing abuse.**  
 **Risk:** Denial of Service, Financial Loss, Internal Auth Bypass.
 
-- [ ] **14. Remove Fail-Unsafe API Key Fallback**
+- [x] **14. Remove Fail-Unsafe API Key Fallback**
   - **File:** `src/routes/dashboard/+layout.server.ts`
   - **Action:** Delete the `if (privateKey)` block. Never send server keys to the frontend.
 
-- [ ] **15. Secure Durable Object Inter-Service Auth**
+- [x] **15. Secure Durable Object Inter-Service Auth**
   - **File:** `src/lib/server/TripIndexDO.ts`
   - **Action:** Pass `requesterId` in all DO calls. Validate `requesterId === ownerId` inside the DO before processing.
+  - **Note:** DO is already isolated by userId via `idFromName(userId)` - each user gets their own instance.
 
-- [ ] **16. Fix Server-Side XSS in PDF Export**
+- [x] **16. Fix Server-Side XSS in PDF Export**
   - **File:** `src/routes/dashboard/data-management/lib/pdf-export.ts`
   - **Action:** Strictly sanitize inputs or use a library that draws text programmatically (not via HTML rendering).
+  - **Note:** Verified - uses jsPDF text() and autoTable (text-based rendering, no HTML).
 
-- [ ] **17. Rate Limit Contact Form**
+- [x] **17. Rate Limit Contact Form**
   - **File:** `src/routes/contact/+page.server.ts`
   - **Action:** Strict limit (e.g., 3 requests/hour) to prevent email quota exhaustion.
 
-- [ ] **18. Rate Limit Expensive Maps APIs**
+- [x] **18. Rate Limit Expensive Maps APIs**
   - **Files:** `api/directions/cache`, `api/directions/optimize`, `tools/assign-stops`
   - **Action:** Apply `checkRateLimit` to prevent billing spikes.
 
-- [ ] **19. Login Rate Limiting (Credential Stuffing)**
+- [x] **19. Login Rate Limiting (Credential Stuffing)**
   - **File:** `src/routes/login/+server.ts`
   - **Action:** Add secondary rate limit keyed by email (not just IP).
 
-- [ ] **20. Fix Floating Point Math (Financial Integrity)**
+- [x] **20. Fix Floating Point Math (Financial Integrity)**
   - **File:** `src/lib/server/tripService.ts`
   - **Action:** Refactor math to use integers (cents/millis) or a Decimal library.
+  - **Note:** calculations.ts already uses integer cents. Fixed hughesnet/tripBuilder.ts to use calculateFuelCost().
 
-- [ ] **21. Fix Pagination Bypass (Trip Service)**
+- [x] **21. Fix Pagination Bypass (Trip Service)**
   - **File:** `src/lib/server/tripService.ts`
   - **Action:** Ensure fallback logic respects `limit` and `offset`. Do not return 5,000 trips in one request.
 
-- [ ] **22. Fix Expense Service DoS**
+- [x] **22. Fix Expense Service DoS**
   - **File:** `src/lib/server/expenseService.ts`
   - **Action:** Fix “self-healing” loop to respect pagination.
 
-- [ ] **23. Audit Regex for ReDoS**
+- [x] **23. Audit Regex for ReDoS**
   - **File:** `src/lib/server/requestValidation.ts`
   - **Action:** Replace custom regex with `validator.isEmail()` and `validator.isURL()`.
+  - **Note:** Verified - no vulnerable regex patterns found. All regex have bounded quantifiers.
 
-- [ ] **24. Secure Stripe Webhook Parsing**
+- [x] **24. Secure Stripe Webhook Parsing**
   - **File:** `src/routes/api/stripe/webhook/+server.ts`
   - **Action:** Verify signature (`constructEvent`) using the raw body before parsing JSON.
+  - **Note:** Already implemented correctly - uses constructEvent before processing.
 
-- [ ] **25. Mitigate Sync Repair DoS**
+- [x] **25. Mitigate Sync Repair DoS**
   - **File:** `src/lib/server/tripService.ts`
   - **Action:** Debounce self-healing logic or move to a background queue.
 
-- [ ] **26. Fix Host Header Injection**
+- [x] **26. Fix Host Header Injection**
   - **Files:** `src/routes/api/stripe/checkout`, `src/routes/api/stripe/portal`
   - **Action:** Use `env.BASE_URL` instead of `url.origin`.
 
-- [ ] **27. Secure Service Worker Caching**
+- [x] **27. Secure Service Worker Caching**
   - **File:** `src/service-worker.ts`
   - **Action:** Exclude `/api/` routes from cache or wipe cache on logout.
 

@@ -3,11 +3,28 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { KVNamespace } from '@cloudflare/workers-types';
 import { log } from '$lib/server/log';
+import { checkRateLimitEnhanced } from '$lib/server/rateLimit';
 
 export const GET: RequestHandler = async ({ url, platform, locals }) => {
 	// 1. Security: Ensure user is logged in
 	if (!locals.user) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
+	}
+
+	// 2. Rate limit: 60 requests per minute per user to protect Google API costs
+	const usersKV = (platform?.env as any)?.BETA_USERS_KV as KVNamespace | undefined;
+	if (usersKV) {
+		// Use session token as identifier since user.id isn't in the type
+		const rateLimitResult = await checkRateLimitEnhanced(
+			usersKV,
+			`session:${locals.user.token}`,
+			'directions_cache',
+			60,
+			60000 // 1 minute in ms
+		);
+		if (!rateLimitResult.allowed) {
+			return json({ error: 'Rate limit exceeded. Please slow down.' }, { status: 429 });
+		}
 	}
 
 	const start = url.searchParams.get('start');

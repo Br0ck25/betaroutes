@@ -3,6 +3,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { log } from '$lib/server/log';
 import type { KVNamespace } from '@cloudflare/workers-types';
+import { checkRateLimitEnhanced } from '$lib/server/rateLimit';
 
 /**
  * Helper: Server geocoding is handled via Google (geocode helper) — Photon removed.
@@ -35,6 +36,21 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	// 1. Security Check
 	if (!locals.user) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
+	}
+
+	// 2. Rate limit: 30 optimizations per minute per user (more expensive than simple directions)
+	const usersKV = (platform?.env as any)?.BETA_USERS_KV as KVNamespace | undefined;
+	if (usersKV) {
+		const rateLimitResult = await checkRateLimitEnhanced(
+			usersKV,
+			`session:${locals.user.token}`,
+			'directions_optimize',
+			30,
+			60000 // 1 minute in ms
+		);
+		if (!rateLimitResult.allowed) {
+			return json({ error: 'Rate limit exceeded. Please slow down.' }, { status: 429 });
+		}
 	}
 
 	const __body: any = await request.json();
