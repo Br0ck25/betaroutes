@@ -57,8 +57,8 @@ Before making **ANY** changes, read these documents **in order**:
 
 ### Error Pattern #1: Forgetting `lang="ts"`
 
-**Symptom:** 50+ parse errors like `'<` cannot be applied to types`, `'string' only refers to a type`
-**Cause:** Added TypeScript syntax without`lang="ts"`
+**Symptom:** 50+ parse errors like `'<` cannot be applied to types, `'string'` only refers to a type
+**Cause:** Added TypeScript syntax without `lang="ts"`
 
 ❌ **Wrong:**
 
@@ -142,33 +142,28 @@ export const POST: RequestHandler = async ({ locals }) => {
 
 ---
 
-### Error Pattern #4: Passing possibly undefined values
+### Error Pattern #4: Unguarded Optional Values
 
-**Symptom:** `Object is possibly 'undefined'`, `T | undefined is not assignable`
-**Cause:** Passing array elements or optional values without checking
+**Symptom:** `Object is possibly 'undefined'`, `Operator '<' cannot be applied to types ... and 'undefined'`
+**Cause:** Using optional values in comparisons, math, or array indexing without checking if they exist first.
 
 ❌ **Wrong:**
 
-```ts
-const index = items.indexOf(target);
-const item = items[index]; // could be undefined if index is -1
-doSomething(item);
-```
+````typescript
+// Array Indexing
+const item = items[index]; // Error: index might be -1
+
+// Comparisons
+if (user.age > 18) { ... } // Error: user.age might be undefined
 
 ✅ **Correct:**
 
-```ts
-const index = items.indexOf(target);
+// Array Indexing
+if (index === -1) return;
+const item = items[index];
 
-if (index === -1) {
-	return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
-}
-
-const item = items[index]!;
-doSomething(item);
-```
-
-**Prevention:** Guard array indexing and optional values before use.
+// Comparisons
+if (user.age && user.age > 18) { ... } // Guard added
 
 ---
 
@@ -181,10 +176,10 @@ doSomething(item);
 
 ```ts
 if (error) {
-	return new Response(JSON.stringify({ error: 'Failed' }), { status: 500 });
-	assignments[idx].stops.push(stop); // unreachable
+    return new Response(JSON.stringify({ error: 'Failed' }), { status: 500 });
+    assignments[idx].stops.push(stop); // unreachable
 }
-```
+````
 
 ✅ **Correct:**
 
@@ -254,10 +249,10 @@ const dispatch = createEventDispatcher();
 
 ```ts
 try {
-	await riskyOperation();
+    await riskyOperation();
 } catch (e) {
-	// ESLint: unused variable + silent failure
-	return fallbackValue;
+    // ESLint: unused variable + silent failure
+    return fallbackValue;
 }
 ````
 
@@ -322,11 +317,11 @@ When adding error logging, do **not** accidentally delete the operation itself.
 ```ts
 try {
 	if (kv) {
-		// const raw = await kv.get(key); // deleted
+		const raw = await kv.get(key);
 		if (raw) return JSON.parse(String(raw));
 	}
 } catch (e) {
-	log.warn('[CACHE] Failed', { err: (e as Error).message });
+	log.warn('[CACHE] Read failed', { key, err: (e as Error).message });
 }
 ```
 
@@ -398,7 +393,7 @@ log.warn('[ROUTE CACHE] Read failed', { key: cacheKey, err: (e as Error).message
 
 ## 🎯 Decision Tree: Edit vs. Migrate
 
-```
+```text
 Is this a .svelte file?
 ├─ NO → Proceed with TypeScript best practices
 └─ YES → Does it use $props() or $state()?

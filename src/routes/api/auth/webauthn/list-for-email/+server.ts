@@ -1,12 +1,17 @@
-import { json } from '@sveltejs/kit';
+import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { findUserByEmail } from '$lib/server/userService';
 import { safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 
-export const GET: RequestHandler = async ({ url, platform }) => {
+export const GET: RequestHandler = async ({ url, platform, locals }) => {
 	try {
+		// SECURITY: Require authentication to prevent user enumeration
+		if (!locals.user) {
+			return error(401, 'Unauthorized');
+		}
+
 		const email = url.searchParams.get('email');
 		if (!email) return json({ error: 'Email required' }, { status: 400 });
 
