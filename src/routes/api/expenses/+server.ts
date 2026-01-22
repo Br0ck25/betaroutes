@@ -33,6 +33,8 @@ export const GET: RequestHandler = async (event) => {
 
 		const env = getEnv(event.platform);
 		const storageId = getStorageId(user);
+		// [!code fix] Legacy migration: also check username-based keys
+		const legacyUserId = user.name || undefined;
 		let since = event.url.searchParams.get('since') || undefined;
 
 		// Add buffer and clamp future times (5 minutes) to compensate for client clock skew
@@ -60,7 +62,7 @@ export const GET: RequestHandler = async (event) => {
 
 		// Inject DO Binding (use safe accessors)
 		const svc = makeExpenseService(safeKV(env, 'BETA_EXPENSES_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
-		const expenses = await svc.list(storageId, since);
+		const expenses = await svc.list(storageId, since, legacyUserId);
 
 		return new Response(JSON.stringify(expenses), {
 			headers: {
