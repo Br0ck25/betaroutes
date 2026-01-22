@@ -18,11 +18,9 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 
 	const service = makeMileageService(kv, tripDO);
 	const userId = getStorageId(user);
-	// [!code fix] Legacy migration: also check username-based keys
-	const legacyUserId = user.name || undefined;
 
 	// Fetch full list without 'since' to get all active records
-	const mileage = await service.list(userId, undefined, legacyUserId);
+	const mileage = await service.list(userId);
 
 	return {
 		mileage

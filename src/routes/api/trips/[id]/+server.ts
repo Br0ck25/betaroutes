@@ -54,8 +54,7 @@ export const GET: RequestHandler = async (event) => {
 			placesIndexDO as unknown as DurableObjectNamespace
 		);
 
-		const userSafe = user as { name?: string; token?: string } | undefined;
-		const storageId = userSafe?.name || userSafe?.token || '';
+		const storageId = user.id;
 
 		const trip = await svc.get(storageId, id);
 
@@ -117,8 +116,7 @@ export const PUT: RequestHandler = async (event) => {
 			placesIndexDO as unknown as DurableObjectNamespace
 		);
 
-		const userSafe = user as { name?: string; token?: string } | undefined;
-		const storageId = userSafe?.name || userSafe?.token || '';
+		const storageId = user.id;
 
 		// Verify existing ownership
 		const existing = await svc.get(storageId, id);
@@ -211,8 +209,7 @@ export const DELETE: RequestHandler = async (event) => {
 			placesIndexDO as unknown as DurableObjectNamespace
 		);
 
-		const userSafe = user as { name?: string; token?: string } | undefined;
-		const storageId = userSafe?.name || userSafe?.token || '';
+		const storageId = user.id;
 
 		// Check if trip exists
 		const existing = await svc.get(storageId, id);
@@ -260,7 +257,7 @@ export const DELETE: RequestHandler = async (event) => {
 			});
 		}
 
-		await svc.incrementUserCounter(userSafe?.token ?? '', -1);
+		await svc.incrementUserCounter(user.token ?? '', -1);
 
 		return new Response(JSON.stringify({ success: true }), {
 			status: 200,

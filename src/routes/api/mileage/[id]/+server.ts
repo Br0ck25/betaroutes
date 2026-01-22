@@ -24,7 +24,6 @@ export const DELETE: RequestHandler = async (event) => {
 
 		const id = event.params.id;
 		const userId = getStorageId(sessionUser);
-		const legacyUserId = sessionUser.name; // For legacy key lookup
 		const svc = makeMileageService(
 			safeKV(env, 'BETA_MILLAGE_KV')!,
 			safeDO(env, 'TRIP_INDEX_DO')!,
@@ -32,10 +31,10 @@ export const DELETE: RequestHandler = async (event) => {
 		);
 
 		// Get the mileage log before deleting to check for linked trip
-		const existing = await svc.get(userId, id, legacyUserId);
+		const existing = await svc.get(userId, id);
 
 		// Soft delete via service
-		await svc.delete(userId, id, legacyUserId);
+		await svc.delete(userId, id);
 
 		// --- Set linked trip's totalMiles to 0 and recalculate fuelCost ---
 		if (existing && existing.tripId) {
@@ -91,9 +90,8 @@ export const GET: RequestHandler = async (event) => {
 
 		const id = event.params.id;
 		const userId = getStorageId(sessionUser);
-		const legacyUserId = sessionUser.name; // For legacy key lookup
 		const svc = makeMileageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
-		const item = await svc.get(userId, id, legacyUserId);
+		const item = await svc.get(userId, id);
 		if (!item) return new Response('Not found', { status: 404 });
 		return new Response(JSON.stringify(item), { headers: { 'Content-Type': 'application/json' } });
 	} catch (err) {

@@ -41,11 +41,9 @@ export const GET: RequestHandler = async (event) => {
 
 		const svc = makeMileageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		const userId = getStorageId(user);
-		// [!code fix] Legacy migration: also check username-based keys
-		const legacyUserId = user.name || undefined;
 
 		// Use service list logic which handles KV/DO fallback and syncing logic
-		const items = await svc.list(userId, since, legacyUserId);
+		const items = await svc.list(userId, since);
 
 		return new Response(JSON.stringify(items), { headers: { 'Content-Type': 'application/json' } });
 	} catch (err) {
