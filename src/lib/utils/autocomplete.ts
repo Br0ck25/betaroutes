@@ -194,7 +194,8 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 
 	async function savePlaceToKV(place: Record<string, unknown>) {
 		try {
-			fetch('/api/places/cache', {
+			// POST to the authenticated autocomplete endpoint which records user selections in KV
+			fetch('/api/autocomplete', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(place)
