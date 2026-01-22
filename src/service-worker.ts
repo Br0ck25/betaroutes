@@ -61,6 +61,13 @@ self.addEventListener('fetch', (event) => {
 	// ignore non-GET requests
 	if (event.request.method !== 'GET') return;
 
+	// [!code fix] SECURITY: Never cache API responses - they contain user-specific data
+	const url = new URL(event.request.url);
+	if (url.pathname.startsWith('/api/')) {
+		// Let API requests pass through to network without caching
+		return;
+	}
+
 	// Handle navigation requests (HTML pages) with a network-first strategy
 	if (event.request.mode === 'navigate') {
 		event.respondWith(

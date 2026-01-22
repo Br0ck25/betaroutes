@@ -3,6 +3,15 @@ import { getStripe } from '$lib/server/stripe';
 import { env } from '$env/dynamic/private';
 import { log } from '$lib/server/log';
 
+// [!code fix] SECURITY: Use configured base URL to prevent host header injection
+function getBaseUrl(urlOrigin: string): string {
+	// In production, use the configured BASE_URL; in dev, allow url.origin
+	const baseUrl = env['BASE_URL'] || env['SITE_URL'];
+	if (baseUrl) return baseUrl;
+	// Fallback to origin only in dev/test (when BASE_URL not set)
+	return urlOrigin;
+}
+
 export async function POST({ locals, url }) {
 	const user = locals.user as Record<string, unknown> | undefined;
 	if (!user) {
@@ -16,6 +25,8 @@ export async function POST({ locals, url }) {
 		log.error('Missing STRIPE_PRICE_ID_PRO env var');
 		throw error(500, 'Configuration error');
 	}
+
+	const baseUrl = getBaseUrl(url.origin);
 
 	try {
 		const session = await stripe.checkout.sessions.create({
@@ -38,8 +49,8 @@ export async function POST({ locals, url }) {
 			},
 			// Customer email pre-fill allows One-Click Link checkout
 			customer_email: String(user['email'] ?? ''),
-			success_url: `${url.origin}/dashboard/settings?payment=success`,
-			cancel_url: `${url.origin}/dashboard/settings?payment=cancelled`
+			success_url: `${baseUrl}/dashboard/settings?payment=success`,
+			cancel_url: `${baseUrl}/dashboard/settings?payment=cancelled`
 		});
 
 		return json({ url: session.url });

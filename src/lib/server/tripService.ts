@@ -255,12 +255,18 @@ export function makeTripService(
 					})
 					.catch((e) => log.warn('[TripService] Repair failed', e));
 
+				let result = kvTrips;
 				if (options.since) {
 					const sinceDate = new Date(options.since);
-					return kvTrips.filter((t) => new Date(t.updatedAt || t.createdAt) > sinceDate);
+					result = result.filter((t) => new Date(t.updatedAt || t.createdAt) > sinceDate);
+				} else {
+					// If full sync, we DON'T want to return deleted items
+					result = result.filter((t) => !t.deleted);
 				}
-				// If full sync, we DON'T want to return deleted items
-				return kvTrips.filter((t) => !t.deleted);
+				// [!code fix] SECURITY: Enforce pagination limits on dirty fallback
+				const limit = options.limit || 100;
+				const offset = options.offset || 0;
+				return result.slice(offset, offset + Math.min(limit, 500));
 			}
 
 			const stub = getIndexStub(userId);
@@ -276,12 +282,17 @@ export function makeTripService(
 			// --- FAILSAFE 1: If DO is completely down (500), fallback to KV ---
 			if (!res.ok) {
 				log.error(`[TripService] DO Error: ${res.status} - Falling back to KV`);
-				const kvTrips = await listFromKV(userId);
+				let kvTrips = await listFromKV(userId);
 				if (options.since) {
 					const sinceDate = new Date(options.since);
-					return kvTrips.filter((t) => new Date(t.updatedAt || t.createdAt) > sinceDate);
+					kvTrips = kvTrips.filter((t) => new Date(t.updatedAt || t.createdAt) > sinceDate);
+				} else {
+					kvTrips = kvTrips.filter((t) => !t.deleted);
 				}
-				return kvTrips.filter((t) => !t.deleted);
+				// [!code fix] SECURITY: Enforce pagination limits on KV fallback to prevent DoS
+				const limit = options.limit || 100; // Default max 100 per request
+				const offset = options.offset || 0;
+				return kvTrips.slice(offset, offset + Math.min(limit, 500)); // Hard cap at 500
 			}
 
 			const data = (await res.json()) as
@@ -306,6 +317,21 @@ export function makeTripService(
 			const expectedCount = expectedCountStr ? parseInt(expectedCountStr, 10) : 0;
 
 			if (needsMigration || (expectedCount > 0 && doCount < expectedCount)) {
+				// [!code fix] SECURITY: Debounce self-healing to prevent DoS (1 repair per minute per user)
+				const repairKey = `meta:trip_repair:${userId}`;
+				const lastRepair = await kv.get(repairKey);
+				if (lastRepair) {
+					log.info(`[TripService] Skipping repair for ${userId} - throttled`);
+					// Return what we have from DO
+					if (options.since) {
+						const sinceDate = new Date(options.since);
+						return trips.filter((t) => new Date(t.updatedAt || t.createdAt) > sinceDate);
+					}
+					return trips.filter((t) => !t.deleted);
+				}
+				// Mark that we're repairing (expires in 60 seconds)
+				await kv.put(repairKey, new Date().toISOString(), { expirationTtl: 60 });
+
 				log.info(`[TripService] Sync mismatch (DO: ${doCount} < KV: ${expectedCount}). Repairing.`);
 
 				const repairedTrips = await listFromKV(userId);
@@ -320,11 +346,17 @@ export function makeTripService(
 						.catch((e) => log.warn('[TripService] Repair failed', e));
 				}
 
+				let result = repairedTrips;
 				if (options.since) {
 					const sinceDate = new Date(options.since);
-					return repairedTrips.filter((t) => new Date(t.updatedAt || t.createdAt) > sinceDate);
+					result = result.filter((t) => new Date(t.updatedAt || t.createdAt) > sinceDate);
+				} else {
+					result = result.filter((t) => !t.deleted);
 				}
-				return repairedTrips.filter((t) => !t.deleted);
+				// [!code fix] SECURITY: Enforce pagination limits on fallback
+				const limit = options.limit || 100;
+				const offset = options.offset || 0;
+				return result.slice(offset, offset + Math.min(limit, 500));
 			}
 
 			if (options.since) {
@@ -391,8 +423,9 @@ export function makeTripService(
 
 			const trip = JSON.parse(raw);
 
-			// Set totalMiles to 0 before creating tombstone (per spec)
-			trip.totalMiles = 0;
+			// SECURITY: Clone the trip BEFORE any modifications
+			// This preserves the original data in the backup for restoration
+			const backup = JSON.parse(JSON.stringify(trip));
 
 			const now = new Date();
 			const expiresAt = new Date(now.getTime() + RETENTION.THIRTY_DAYS * 1000);
@@ -411,7 +444,7 @@ export function makeTripService(
 				deletedAt: now.toISOString(),
 				deletedBy: userId,
 				metadata,
-				backup: trip,
+				backup: backup, // Use the cloned, unmodified backup
 				updatedAt: now.toISOString(),
 				createdAt: trip.createdAt
 			};

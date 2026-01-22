@@ -198,7 +198,7 @@ assignments[idx].stops.push(stop);
 ### Error Pattern #6: Unused / speculative state (clean code)
 
 **Symptom:** `'selectedMileage' is declared but its value is never read`
-**Cause:** Declaring variables/state “just in case” (unused)
+**Cause:** Declaring variables "just in case," or destructuring unused SvelteKit parameters (e.g., `platform`, `url`) in load functions.
 
 ❌ **Wrong:**
 
@@ -278,7 +278,31 @@ try {
 }
 ```
 
+### Error Pattern #8: Type & Signature Hallucinations
+
+**Symptom:** `Property 'id' does not exist on type 'User'`, `Expected 3 arguments, but got 6`
+
+**Cause:** Guessing types or utility function signatures instead of reading the definition.
+
+❌ **Wrong:**
+
+````typescript
+// Guessing that 'checkRateLimit' takes an IP address and 6 args
+checkRateLimit(kv, userId, ip, 'action', 10, 60);
+
+// Guessing that 'user' has an 'id' field without checking app.d.ts
+const id = locals.user.id;
+
+✅ **Correct:**
+
+// Checked actual signature: checkRateLimit(kv, id, action, limit, window)
+checkRateLimit(kv, userId, 'action', 10, 60);
+
+// Checked app.d.ts: User has 'token' but not 'id'?
+// Either update app.d.ts OR use the correct field.
+
 ---
+
 
 ### Client-Side & Intentional Silence
 
@@ -295,7 +319,7 @@ try {
 	// No variable created, no lint error
 	resetForm();
 }
-```
+````
 
 **B. Function Parameters:**
 Use the underscore prefix (`_`) for unused arguments.

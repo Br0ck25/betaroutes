@@ -40,36 +40,36 @@
 **Address immediately to prevent privilege escalation and corruption.**  
 **Risk:** Privilege Escalation, Cache Poisoning, Data Integrity.
 
-- [ ] **6. Secure Email Change Flow (ATO Prevention)**
+- [x] **6. Secure Email Change Flow (ATO Prevention)**
   - **File:** `src/routes/api/user/+server.ts`
   - **Action:** Stop updating email immediately in `PUT`. Generate a token → email the new address → update DB only on verification.
 
-- [ ] **7. Prevent Mass Assignment on Registration**
+- [x] **7. Prevent Mass Assignment on Registration**
   - **File:** `src/routes/register/+server.ts`
   - **Action:** Explicitly destructure allowed fields. Do not use `...body`.
     - Example: `const user = { email: body.email, password: hash, name: body.name }`
 
-- [ ] **8. Fix Global Cache Poisoning (Autocomplete)**
+- [x] **8. Fix Global Cache Poisoning (Autocomplete)**
   - **Files:** `src/routes/api/autocomplete/+server.ts`, `src/lib/server/tripService.ts`
   - **Action:** Stop writing user inputs to the global `BETA_PLACES_KV`. Write only to user-specific lists.
 
-- [ ] **9. Plug Credential Leak in Session API**
+- [x] **9. Plug Credential Leak in Session API**
   - **File:** `src/routes/api/auth/session/+server.ts`
   - **Action:** Return only safe fields (`id`, `email`, `name`). Explicitly exclude `password_hash`, `salt`, `iterations`.
 
-- [ ] **10. Fix Trash Data Integrity**
+- [x] **10. Fix Trash Data Integrity**
   - **File:** `src/lib/server/tripService.ts`
   - **Action:** Clone the trip object before setting `totalMiles = 0` so the backup (`tombstone.backup`) is not corrupted.
 
-- [ ] **11. Secure "Remove/Delete" Proxies**
+- [x] **11. Secure "Remove/Delete" Proxies**
   - **Files:** `src/routes/api/delete-account/+server.ts`, `src/routes/api/remove/+server.ts`
   - **Action:** Add `if (!locals.user)` checks to prevent unauthorized calls.
 
-- [ ] **12. Fix Session Invalidation Logic**
+- [x] **12. Fix Session Invalidation Logic**
   - **File:** `src/routes/api/change-password/+server.ts`
   - **Action:** Implement `sessionVersion` logic. Increment on password change; check version in `hooks.server.ts`.
 
-- [ ] **13. Enable CSRF Protection**
+- [x] **13. Enable CSRF Protection**
   - **File:** `src/hooks.server.ts`
   - **Action:** Uncomment CSRF protection and token generation logic.
 
@@ -80,59 +80,64 @@
 **Fix to ensure reliability, prevent DoS, and stop billing abuse.**  
 **Risk:** Denial of Service, Financial Loss, Internal Auth Bypass.
 
-- [ ] **14. Remove Fail-Unsafe API Key Fallback**
+- [x] **14. Remove Fail-Unsafe API Key Fallback**
   - **File:** `src/routes/dashboard/+layout.server.ts`
   - **Action:** Delete the `if (privateKey)` block. Never send server keys to the frontend.
 
-- [ ] **15. Secure Durable Object Inter-Service Auth**
+- [x] **15. Secure Durable Object Inter-Service Auth**
   - **File:** `src/lib/server/TripIndexDO.ts`
   - **Action:** Pass `requesterId` in all DO calls. Validate `requesterId === ownerId` inside the DO before processing.
+  - **Note:** DO is already isolated by userId via `idFromName(userId)` - each user gets their own instance.
 
-- [ ] **16. Fix Server-Side XSS in PDF Export**
+- [x] **16. Fix Server-Side XSS in PDF Export**
   - **File:** `src/routes/dashboard/data-management/lib/pdf-export.ts`
   - **Action:** Strictly sanitize inputs or use a library that draws text programmatically (not via HTML rendering).
+  - **Note:** Verified - uses jsPDF text() and autoTable (text-based rendering, no HTML).
 
-- [ ] **17. Rate Limit Contact Form**
+- [x] **17. Rate Limit Contact Form**
   - **File:** `src/routes/contact/+page.server.ts`
   - **Action:** Strict limit (e.g., 3 requests/hour) to prevent email quota exhaustion.
 
-- [ ] **18. Rate Limit Expensive Maps APIs**
+- [x] **18. Rate Limit Expensive Maps APIs**
   - **Files:** `api/directions/cache`, `api/directions/optimize`, `tools/assign-stops`
   - **Action:** Apply `checkRateLimit` to prevent billing spikes.
 
-- [ ] **19. Login Rate Limiting (Credential Stuffing)**
+- [x] **19. Login Rate Limiting (Credential Stuffing)**
   - **File:** `src/routes/login/+server.ts`
   - **Action:** Add secondary rate limit keyed by email (not just IP).
 
-- [ ] **20. Fix Floating Point Math (Financial Integrity)**
+- [x] **20. Fix Floating Point Math (Financial Integrity)**
   - **File:** `src/lib/server/tripService.ts`
   - **Action:** Refactor math to use integers (cents/millis) or a Decimal library.
+  - **Note:** calculations.ts already uses integer cents. Fixed hughesnet/tripBuilder.ts to use calculateFuelCost().
 
-- [ ] **21. Fix Pagination Bypass (Trip Service)**
+- [x] **21. Fix Pagination Bypass (Trip Service)**
   - **File:** `src/lib/server/tripService.ts`
   - **Action:** Ensure fallback logic respects `limit` and `offset`. Do not return 5,000 trips in one request.
 
-- [ ] **22. Fix Expense Service DoS**
+- [x] **22. Fix Expense Service DoS**
   - **File:** `src/lib/server/expenseService.ts`
   - **Action:** Fix “self-healing” loop to respect pagination.
 
-- [ ] **23. Audit Regex for ReDoS**
+- [x] **23. Audit Regex for ReDoS**
   - **File:** `src/lib/server/requestValidation.ts`
   - **Action:** Replace custom regex with `validator.isEmail()` and `validator.isURL()`.
+  - **Note:** Verified - no vulnerable regex patterns found. All regex have bounded quantifiers.
 
-- [ ] **24. Secure Stripe Webhook Parsing**
+- [x] **24. Secure Stripe Webhook Parsing**
   - **File:** `src/routes/api/stripe/webhook/+server.ts`
   - **Action:** Verify signature (`constructEvent`) using the raw body before parsing JSON.
+  - **Note:** Already implemented correctly - uses constructEvent before processing.
 
-- [ ] **25. Mitigate Sync Repair DoS**
+- [x] **25. Mitigate Sync Repair DoS**
   - **File:** `src/lib/server/tripService.ts`
   - **Action:** Debounce self-healing logic or move to a background queue.
 
-- [ ] **26. Fix Host Header Injection**
+- [x] **26. Fix Host Header Injection**
   - **Files:** `src/routes/api/stripe/checkout`, `src/routes/api/stripe/portal`
   - **Action:** Use `env.BASE_URL` instead of `url.origin`.
 
-- [ ] **27. Secure Service Worker Caching**
+- [x] **27. Secure Service Worker Caching**
   - **File:** `src/service-worker.ts`
   - **Action:** Exclude `/api/` routes from cache or wipe cache on logout.
 

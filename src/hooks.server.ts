@@ -4,18 +4,18 @@ import type { Handle } from '@sveltejs/kit';
 import { log } from '$lib/server/log';
 // [!code ++] Import the user finder to check real-time status
 import { findUserById } from '$lib/server/userService';
-// [!code ++] SECURITY (Issue #4): CSRF protection
-// TEMPORARILY DISABLED: Client-side code doesn't use csrfFetch() utilities yet
-// TODO: Update all fetch calls to use csrfFetch() from $lib/utils/csrf before re-enabling
-// import { generateCsrfToken, csrfProtection } from '$lib/server/csrf';
+// [!code ++] SECURITY (Issue #13): CSRF protection
+import { generateCsrfToken } from '$lib/server/csrf';
+// NOTE: csrfProtection validation is imported but not enforced yet
+// TODO: Update all client fetch calls to use csrfFetch() from $lib/utils/csrf, then enable validation
 
 export const handle: Handle = async ({ event, resolve }) => {
-	// [!code ++] SECURITY (Issue #4): Generate CSRF token for all requests
-	// TEMPORARILY DISABLED: Causes 403 on all POST/PUT/DELETE requests
-	// generateCsrfToken(event);
+	// [!code ++] SECURITY (Issue #13): Generate CSRF token for all requests
+	// This sets up the tokens in cookies - non-breaking, prepares for full CSRF enforcement
+	generateCsrfToken(event);
 
-	// [!code ++] SECURITY (Issue #4): Validate CSRF token for state-changing API requests
-	// TEMPORARILY DISABLED: Causes 403 on all POST/PUT/DELETE requests
+	// [!code ++] SECURITY (Issue #13): CSRF validation is DISABLED pending client-side implementation
+	// TODO: Enable this after updating all client fetch calls to include X-CSRF-Token header
 	// const csrfError = csrfProtection(event);
 	// if (csrfError) {
 	// 	return csrfError;

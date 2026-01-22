@@ -55,10 +55,23 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			}
 
 			// SELF-HEALING: If Index is empty but KV has data, force sync.
+			// [!code fix] SECURITY: Rate limit self-healing to prevent DoS (1 repair per minute per user)
 			if (expenses.length === 0) {
 				const kvCheck = await kv.list({ prefix, limit: 1 });
 
 				if (kvCheck.keys.length > 0) {
+					// Check if we recently did a repair (debounce)
+					const repairKey = `meta:expense_repair:${userId}`;
+					const lastRepair = await kv.get(repairKey);
+					if (lastRepair) {
+						log.info(`[ExpenseService] Skipping repair for ${userId} - throttled (recent repair)`);
+						// Return empty to avoid DoS; client will retry later
+						return [];
+					}
+
+					// Mark that we're repairing (expires in 60 seconds)
+					await kv.put(repairKey, new Date().toISOString(), { expirationTtl: 60 });
+
 					log.info(
 						`[ExpenseService] Detected desync for ${userId} (KV has data, Index empty). repairing...`
 					);

@@ -46,6 +46,25 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 		const body = (await request.json()) as { email?: string; password?: string };
 		const { email, password } = body;
 
+		// 3a. Email-based rate limiting (prevents distributed attacks targeting single account)
+		// [!code fix] SECURITY: Rate limit by email in addition to IP
+		if (kv && email) {
+			const emailHash = email
+				.toLowerCase()
+				.trim()
+				.replace(/[^a-z0-9@.]/g, '');
+			const emailLimitResult = await checkRateLimit(kv, emailHash, 'login_email', 10, 900); // 10 attempts per 15 minutes per email
+			if (!emailLimitResult.allowed) {
+				return json(
+					{
+						error:
+							'This account is temporarily locked due to too many failed attempts. Please try again later.'
+					},
+					{ status: 429 }
+				);
+			}
+		}
+
 		// 4. Authenticate
 		// @ts-expect-error - authenticateUser has broader types; casting result safely below
 		const authResult = await authenticateUser(kv, email, password);

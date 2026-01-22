@@ -5,6 +5,7 @@ import type { MileageRecord } from '$lib/server/mileageService';
 import { extractDateFromTs, parseDateOnly, parseTime, buildAddress, minutesToTime } from './utils';
 import { MIN_JOB_DURATION_MINS, MAX_JOB_DURATION_MINS } from './constants';
 import { log } from '$lib/server/log';
+import { calculateFuelCost } from '$lib/utils/calculations';
 
 // Minimal Route leg shape used by the router helper
 type RouteLeg = { duration?: number; distance?: number };
@@ -287,7 +288,8 @@ export async function createTripForDate(
 	}
 
 	const hoursWorked = Number((totalWorkMins / 60).toFixed(2));
-	const fuelCost = mpg > 0 ? (miles / mpg) * gas : 0;
+	// [!code fix] SECURITY: Use integer cents to avoid floating-point errors
+	const fuelCost = calculateFuelCost(miles, mpg, gas);
 	let totalEarnings = 0;
 	let totalSuppliesCost = 0;
 	const suppliesMap = new Map<string, number>();
