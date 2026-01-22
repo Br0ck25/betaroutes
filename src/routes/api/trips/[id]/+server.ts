@@ -2,6 +2,7 @@
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
 import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
+import { makeExpenseService, type ExpenseRecord } from '$lib/server/expenseService';
 import type { TripRecord } from '$lib/server/tripService';
 import { log } from '$lib/server/log';
 import { safeDO } from '$lib/server/env';
@@ -231,7 +232,7 @@ export const DELETE: RequestHandler = async (event) => {
 		// Perform soft delete
 		await svc.delete(storageId, id);
 
-		// --- Cascade delete: Delete linked mileage log ---
+		// --- Cascade delete: Delete linked mileage logs (marked as cascade deleted) ---
 		try {
 			const mileageKV = safeKV(event.platform?.env, 'BETA_MILLAGE_KV');
 			if (mileageKV) {
@@ -246,12 +247,39 @@ export const DELETE: RequestHandler = async (event) => {
 					(m: MileageRecord) => m.tripId === id || m.id === id
 				);
 				for (const m of linkedMileage) {
-					await mileageSvc.delete(storageId, m.id);
+					// Pass cascadeDeleted: true so these don't show in trash UI
+					await mileageSvc.delete(storageId, m.id, { cascadeDeleted: true });
 					log.info('Cascade deleted mileage log for trip', { tripId: id, mileageId: m.id });
 				}
 			}
 		} catch (e) {
 			log.warn('Failed to cascade delete mileage logs', {
+				tripId: id,
+				message: createSafeErrorMessage(e)
+			});
+		}
+
+		// --- Cascade delete: Delete linked expense logs (marked as cascade deleted) ---
+		try {
+			const expenseKV = safeKV(event.platform?.env, 'BETA_EXPENSES_KV');
+			if (expenseKV) {
+				const expenseSvc = makeExpenseService(
+					expenseKV as unknown as KVNamespace,
+					tripIndexDO as unknown as DurableObjectNamespace
+				);
+				// Find expenses linked to this trip by tripId
+				const allExpenses = await expenseSvc.list(storageId);
+				const linkedExpenses = allExpenses.filter(
+					(e: ExpenseRecord) => (e as { tripId?: string }).tripId === id
+				);
+				for (const e of linkedExpenses) {
+					// Pass cascadeDeleted: true so these don't show in trash UI
+					await expenseSvc.delete(storageId, e.id, { cascadeDeleted: true });
+					log.info('Cascade deleted expense log for trip', { tripId: id, expenseId: e.id });
+				}
+			}
+		} catch (e) {
+			log.warn('Failed to cascade delete expense logs', {
 				tripId: id,
 				message: createSafeErrorMessage(e)
 			});

@@ -147,8 +147,12 @@ export function makeMileageService(
 			});
 		},
 
-		async delete(userId: string, id: string) {
-			log.info(`[MileageService] delete() called`, { userId, id });
+		async delete(userId: string, id: string, options?: { cascadeDeleted?: boolean }) {
+			log.info(`[MileageService] delete() called`, {
+				userId,
+				id,
+				cascadeDeleted: options?.cascadeDeleted
+			});
 			const stub = getIndexStub(userId);
 
 			// Try to find the item under the current userId key
@@ -176,8 +180,10 @@ export function makeMileageService(
 			const tombstone = {
 				id: item.id,
 				userId,
+				tripId: item.tripId, // Preserve tripId for cascade restore
 				deleted: true,
 				deletedAt: now.toISOString(),
+				cascadeDeleted: options?.cascadeDeleted || false, // Mark if cascade deleted with trip
 				metadata,
 				backup: item,
 				updatedAt: now.toISOString(),
@@ -245,6 +251,10 @@ export function makeMileageService(
 				if (!raw) continue;
 				const parsed = JSON.parse(raw) as Record<string, unknown> | undefined;
 				if (!parsed || !(parsed['deleted'] as boolean)) continue;
+
+				// Skip cascade-deleted items (deleted with parent trip) - they don't show in trash UI
+				if (parsed['cascadeDeleted']) continue;
+
 				tombstoneCount++;
 
 				const id = (parsed['id'] as string) || String(k.name.split(':').pop() || '');
@@ -265,6 +275,7 @@ export function makeMileageService(
 				out.push({
 					id,
 					userId: uid,
+					tripId: parsed['tripId'] || (backup['tripId'] as string | undefined),
 					metadata: metadata as Record<string, unknown>,
 					recordType: 'mileage',
 					miles:
