@@ -6,25 +6,51 @@
 	import { userSettings } from '$lib/stores/userSettings';
 	import { user } from '$lib/stores/auth';
 	import { browser } from '$app/environment';
+	import { exportMileageCSV, parseMileageCSV } from './lib/mileage-export';
+	import {
+		exportTripsPDF,
+		exportExpensesPDF,
+		exportMileagePDF,
+		exportTaxBundlePDF
+	} from './lib/pdf-export';
 
-	let exportFormat = 'csv';
-	let dataType: 'trips' | 'expenses' | 'tax-bundle' = 'trips';
+	let exportFormat: 'csv' | 'pdf' = 'csv';
+	let dataType: 'trips' | 'expenses' | 'mileage' | 'tax-bundle' = 'trips';
 	let dateFrom = '';
 	let dateTo = '';
 	let selectedTrips = new Set<string>();
 	let selectedExpenses = new Set<string>();
+	let selectedMileage = new Set<string>();
 	let selectAll = false;
 	let includeSummary = true;
+
+	// Search state
+	let searchQuery = '';
+
+	// Pagination state
+	let tripsDisplayCount = 10;
+	let expensesDisplayCount = 10;
+	let mileageDisplayCount = 10;
 
 	// Import/Backup/Restore state
 	let importFile: FileList | null = null;
 	let importPreview: any[] = [];
-	let importType: 'trips' | 'expenses' = 'trips';
+	let importType: 'trips' | 'expenses' | 'mileage' = 'trips';
 	let showImportPreview = false;
 	let restoreFile: FileList | null = null;
 	let showClearConfirm = false;
 
-	// Filter trips by date
+	// Search helper function
+	function matchesSearch(item: any, query: string): boolean {
+		if (!query.trim()) return true;
+		const lowerQuery = query.toLowerCase();
+
+		// Convert item to searchable string
+		const searchableText = JSON.stringify(item).toLowerCase();
+		return searchableText.includes(lowerQuery);
+	}
+
+	// Filter trips by date and search
 	$: filteredTrips = $trips.filter((trip) => {
 		if (!trip.date) return false;
 		const tripDate = new Date(trip.date);
@@ -39,10 +65,12 @@
 			if (tripDate > to) return false;
 		}
 
+		if (!matchesSearch(trip, searchQuery)) return false;
+
 		return true;
 	});
 
-	// Filter expenses by date
+	// Filter expenses by date and search
 	$: filteredExpenses = $expenses.filter((expense) => {
 		if (!expense.date) return false;
 		const expenseDate = new Date(expense.date);
@@ -57,13 +85,61 @@
 			if (expenseDate > to) return false;
 		}
 
+		if (!matchesSearch(expense, searchQuery)) return false;
+
 		return true;
 	});
+
+	// Filter mileage by date and search
+	$: filteredMileage = $mileage.filter((m) => {
+		if (!m.date) return false;
+		const mileageDate = new Date(m.date);
+
+		if (dateFrom) {
+			const from = new Date(dateFrom);
+			if (mileageDate < from) return false;
+		}
+
+		if (dateTo) {
+			const to = new Date(dateTo);
+			if (mileageDate > to) return false;
+		}
+
+		if (!matchesSearch(m, searchQuery)) return false;
+
+		return true;
+	});
+
+	// Paginated data for display
+	$: displayedTrips = filteredTrips.slice(0, tripsDisplayCount);
+	$: displayedExpenses = filteredExpenses.slice(0, expensesDisplayCount);
+	$: displayedMileage = filteredMileage.slice(0, mileageDisplayCount);
+
+	// Reset pagination when filters change
+	$: if (searchQuery || dateFrom || dateTo) {
+		tripsDisplayCount = 10;
+		expensesDisplayCount = 10;
+		mileageDisplayCount = 10;
+	}
+
+	// Load more functions
+	function loadMoreTrips() {
+		tripsDisplayCount += 10;
+	}
+
+	function loadMoreExpenses() {
+		expensesDisplayCount += 10;
+	}
+
+	function loadMoreMileage() {
+		mileageDisplayCount += 10;
+	}
 
 	// Update selection when dataType changes
 	$: if (dataType === 'tax-bundle') {
 		selectedTrips = new Set(filteredTrips.map((t) => t.id));
 		selectedExpenses = new Set(filteredExpenses.map((e) => e.id));
+		selectedMileage = new Set(filteredMileage.map((m) => m.id));
 		selectAll = true;
 	}
 
@@ -73,6 +149,8 @@
 			selectedTrips = new Set(filteredTrips.map((t) => t.id));
 		} else if (dataType === 'expenses') {
 			selectedExpenses = new Set(filteredExpenses.map((e) => e.id));
+		} else if (dataType === 'mileage') {
+			selectedMileage = new Set(filteredMileage.map((m) => m.id));
 		}
 	}
 
@@ -88,6 +166,12 @@
 				selectedExpenses = new Set();
 			} else {
 				selectedExpenses = new Set(filteredExpenses.map((e) => e.id));
+			}
+		} else if (dataType === 'mileage') {
+			if (selectAll) {
+				selectedMileage = new Set();
+			} else {
+				selectedMileage = new Set(filteredMileage.map((m) => m.id));
 			}
 		}
 		selectAll = !selectAll;
@@ -110,6 +194,16 @@
 		} else {
 			selectedExpenses.add(id);
 			selectedExpenses = selectedExpenses;
+		}
+	}
+
+	function toggleMileage(id: string) {
+		if (selectedMileage.has(id)) {
+			selectedMileage.delete(id);
+			selectedMileage = selectedMileage;
+		} else {
+			selectedMileage.add(id);
+			selectedMileage = selectedMileage;
 		}
 	}
 
@@ -237,161 +331,44 @@
 	function exportTaxBundle() {
 		const tripsToExport = filteredTrips.filter((t) => selectedTrips.has(t.id));
 		const expensesToExport = filteredExpenses.filter((e) => selectedExpenses.has(e.id));
+		const mileageToExport = filteredMileage.filter((m) => selectedMileage.has(m.id));
 
-		if (tripsToExport.length === 0 && expensesToExport.length === 0) {
+		if (
+			tripsToExport.length === 0 &&
+			expensesToExport.length === 0 &&
+			mileageToExport.length === 0
+		) {
 			alert('No data available in the selected date range');
 			return;
 		}
 
-		// 1. Mileage Log CSV
-		let mileageCSV = 'Date,Start Time,End Time,Start Location,End Location,Purpose,Miles,Notes\n';
-		let totalMiles = 0;
+		// Generate PDF tax bundle
+		const pdfBlob = exportTaxBundlePDF(
+			tripsToExport,
+			expensesToExport,
+			mileageToExport,
+			dateFrom,
+			dateTo
+		);
 
-		tripsToExport.forEach((trip) => {
-			const lastStop =
-				trip.stops && trip.stops.length > 0 ? trip.stops[trip.stops.length - 1] : undefined;
-			const destination = lastStop?.address || trip.endAddress || '';
-
-			const row = [
-				formatDate(trip.date || ''),
-				trip.startTime || '',
-				trip.endTime || '',
-				`"${trip.startAddress || ''}"`,
-				`"${destination}"`,
-				'Business',
-				(Number((trip as any).totalMiles) || 0).toFixed(2),
-				`"${trip.notes || ''}"`
-			];
-
-			mileageCSV += row.join(',') + '\n';
-			totalMiles += trip.totalMiles || 0;
-		});
-
-		// 2. Expense Log CSV
-		let expenseCSV = 'Date,Category,Amount,Description,Vendor\n';
-		let totalByCategory: Record<string, number> = {};
-		let grandTotal = 0;
-
-		expensesToExport.forEach((expense) => {
-			const row = [
-				formatDate(expense.date),
-				`"${expense.category}"`,
-				expense.amount.toFixed(2),
-				`"${expense.description || ''}"`,
-				'""'
-			];
-
-			expenseCSV += row.join(',') + '\n';
-
-			if (!totalByCategory[expense.category]) {
-				totalByCategory[expense.category] = 0;
-			}
-			totalByCategory[expense.category] = (totalByCategory[expense.category] || 0) + expense.amount;
-			grandTotal += expense.amount;
-		});
-
-		// 3. Tax Summary Text
-		const period =
-			dateFrom && dateTo
-				? `${formatDate(dateFrom)} to ${formatDate(dateTo)}`
-				: dateFrom
-					? `From ${formatDate(dateFrom)}`
-					: dateTo
-						? `Through ${formatDate(dateTo)}`
-						: 'All Records';
-
-		let summary = `TAX SUMMARY REPORT
-Generated: ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}
-Period: ${period}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-MILEAGE DEDUCTION
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Total Business Miles: ${totalMiles.toFixed(2)} miles
-Number of Trips: ${tripsToExport.length}
-
-Standard Mileage Rate (2024): $0.67/mile
-Estimated Deduction: ${formatCurrency(totalMiles * 0.67)}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-BUSINESS EXPENSES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-`;
-
-		if (Object.keys(totalByCategory).length > 0) {
-			Object.entries(totalByCategory).forEach(([category, total]) => {
-				summary += `${category.padEnd(30)} ${formatCurrency(total).padStart(12)}\n`;
-			});
-			summary += `\n${'Total Expenses'.padEnd(30)} ${formatCurrency(grandTotal).padStart(12)}\n`;
-		} else {
-			summary += 'No expenses recorded for this period\n';
-		}
-
-		summary += `
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-TOTAL TAX DEDUCTIONS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Mileage Deduction:   ${formatCurrency(totalMiles * 0.67).padStart(12)}
-Business Expenses:   ${formatCurrency(grandTotal).padStart(12)}
-                     ${'─'.repeat(12)}
-Total Deductions:    ${formatCurrency(totalMiles * 0.67 + grandTotal).padStart(12)}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-NOTES:
-• This report is for informational purposes only
-• Consult with a tax professional for specific advice
-• Keep all receipts and documentation for 7 years
-• Standard mileage rate may change annually
-
-Generated by Go Route Yourself - Professional Route Tracking
-`;
-
-		// Create and download all three files
-		const timestamp = Date.now();
-
-		// Download Mileage Log
-		const mileageBlob = new Blob([mileageCSV], { type: 'text/csv' });
-		const mileageUrl = URL.createObjectURL(mileageBlob);
-		const mileageLink = document.createElement('a');
-		mileageLink.href = mileageUrl;
-		mileageLink.download = `mileage-log-${timestamp}.csv`;
-		mileageLink.click();
-		URL.revokeObjectURL(mileageUrl);
-
-		// Download Expense Log
-		setTimeout(() => {
-			const expenseBlob = new Blob([expenseCSV], { type: 'text/csv' });
-			const expenseUrl = URL.createObjectURL(expenseBlob);
-			const expenseLink = document.createElement('a');
-			expenseLink.href = expenseUrl;
-			expenseLink.download = `expense-log-${timestamp}.csv`;
-			expenseLink.click();
-			URL.revokeObjectURL(expenseUrl);
-		}, 100);
-
-		// Download Tax Summary
-		setTimeout(() => {
-			const summaryBlob = new Blob([summary], { type: 'text/plain' });
-			const summaryUrl = URL.createObjectURL(summaryBlob);
-			const summaryLink = document.createElement('a');
-			summaryLink.href = summaryUrl;
-			summaryLink.download = `tax-summary-${timestamp}.txt`;
-			summaryLink.click();
-			URL.revokeObjectURL(summaryUrl);
-		}, 200);
+		const url = URL.createObjectURL(pdfBlob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = `tax-bundle-${Date.now()}.pdf`;
+		a.click();
+		URL.revokeObjectURL(url);
 	}
 
 	function handleExport() {
 		if (dataType === 'tax-bundle') {
 			exportTaxBundle();
 		} else if (dataType === 'trips') {
+			const tripsToExport = filteredTrips.filter((t) => selectedTrips.has(t.id));
+			if (tripsToExport.length === 0) {
+				alert('Please select at least one trip to export');
+				return;
+			}
+
 			if (exportFormat === 'csv') {
 				const csv = exportTripsCSV();
 				if (csv) {
@@ -403,15 +380,72 @@ Generated by Go Route Yourself - Professional Route Tracking
 					a.click();
 					URL.revokeObjectURL(url);
 				}
-			}
-		} else if (dataType === 'expenses') {
-			const csv = exportExpensesCSV();
-			if (csv) {
-				const blob = new Blob([csv], { type: 'text/csv' });
-				const url = URL.createObjectURL(blob);
+			} else if (exportFormat === 'pdf') {
+				const pdfBlob = exportTripsPDF(tripsToExport, dateFrom, dateTo);
+				const url = URL.createObjectURL(pdfBlob);
 				const a = document.createElement('a');
 				a.href = url;
-				a.download = `expenses-export-${Date.now()}.csv`;
+				a.download = `trips-export-${Date.now()}.pdf`;
+				a.click();
+				URL.revokeObjectURL(url);
+			}
+		} else if (dataType === 'expenses') {
+			const expensesToExport = filteredExpenses.filter((e) => selectedExpenses.has(e.id));
+			if (expensesToExport.length === 0) {
+				alert('Please select at least one expense to export');
+				return;
+			}
+
+			if (exportFormat === 'csv') {
+				const csv = exportExpensesCSV();
+				if (csv) {
+					const blob = new Blob([csv], { type: 'text/csv' });
+					const url = URL.createObjectURL(blob);
+					const a = document.createElement('a');
+					a.href = url;
+					a.download = `expenses-export-${Date.now()}.csv`;
+					a.click();
+					URL.revokeObjectURL(url);
+				}
+			} else if (exportFormat === 'pdf') {
+				const pdfBlob = exportExpensesPDF(expensesToExport, dateFrom, dateTo);
+				const url = URL.createObjectURL(pdfBlob);
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = `expenses-export-${Date.now()}.pdf`;
+				a.click();
+				URL.revokeObjectURL(url);
+			}
+		} else if (dataType === 'mileage') {
+			const mileageToExport = filteredMileage.filter((m) => selectedMileage.has(m.id));
+			if (mileageToExport.length === 0) {
+				alert('Please select at least one mileage log to export');
+				return;
+			}
+
+			if (exportFormat === 'csv') {
+				const csv = exportMileageCSV(
+					mileageToExport,
+					selectedMileage,
+					includeSummary,
+					formatDate,
+					formatCurrency
+				);
+				if (csv) {
+					const blob = new Blob([csv], { type: 'text/csv' });
+					const url = URL.createObjectURL(blob);
+					const a = document.createElement('a');
+					a.href = url;
+					a.download = `mileage-export-${Date.now()}.csv`;
+					a.click();
+					URL.revokeObjectURL(url);
+				}
+			} else if (exportFormat === 'pdf') {
+				const pdfBlob = exportMileagePDF(mileageToExport, dateFrom, dateTo);
+				const url = URL.createObjectURL(pdfBlob);
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = `mileage-export-${Date.now()}.pdf`;
 				a.click();
 				URL.revokeObjectURL(url);
 			}
@@ -425,6 +459,18 @@ Generated by Go Route Yourself - Professional Route Tracking
 		if (!file) return;
 
 		const text = await file.text();
+
+		if (importType === 'mileage') {
+			try {
+				const parsed = parseMileageCSV(text);
+				importPreview = parsed.slice(0, 10);
+				showImportPreview = true;
+			} catch (error) {
+				alert('Failed to parse mileage CSV: ' + (error as Error).message);
+			}
+			return;
+		}
+
 		const lines = text.split('\n').filter((line) => line.trim());
 		if (lines.length < 2) {
 			alert('CSV file is empty or invalid');
@@ -451,6 +497,39 @@ Generated by Go Route Yourself - Professional Route Tracking
 		const text = await importFile?.[0]?.text();
 		if (!text) return;
 
+		const userId = $user?.id || $user?.token;
+		if (!userId) {
+			alert('User not authenticated');
+			return;
+		}
+
+		if (importType === 'mileage') {
+			try {
+				const parsed = parseMileageCSV(text);
+				for (const mileageLog of parsed) {
+					await mileage.create(
+						{
+							date: mileageLog.date,
+							vehicle: mileageLog.vehicle,
+							startOdometer: mileageLog.startOdometer,
+							endOdometer: mileageLog.endOdometer,
+							miles: mileageLog.miles,
+							purpose: mileageLog['purpose'],
+							notes: mileageLog.notes
+						},
+						userId
+					);
+				}
+				alert(`Imported ${parsed.length} mileage logs successfully`);
+				showImportPreview = false;
+				importFile = null;
+				return;
+			} catch (error) {
+				alert('Failed to import mileage CSV: ' + (error as Error).message);
+				return;
+			}
+		}
+
 		const lines = text.split('\n').filter((line) => line.trim());
 		const headers = lines[0]?.split(',').map((h) => h.trim().toLowerCase()) ?? [];
 		const data = lines.slice(1).map((line) => {
@@ -464,12 +543,6 @@ Generated by Go Route Yourself - Professional Route Tracking
 
 		// Import based on type
 		if (importType === 'trips') {
-			const userId = $user?.id || $user?.token;
-			if (!userId) {
-				alert('User not authenticated');
-				return;
-			}
-
 			for (const row of data) {
 				await trips.create(
 					{
@@ -486,12 +559,6 @@ Generated by Go Route Yourself - Professional Route Tracking
 			}
 			alert(`Imported ${data.length} trips successfully`);
 		} else if (importType === 'expenses') {
-			const userId = $user?.id || $user?.token;
-			if (!userId) {
-				alert('User not authenticated');
-				return;
-			}
-
 			for (const row of data) {
 				await expenses.create(
 					{
@@ -671,6 +738,28 @@ Generated by Go Route Yourself - Professional Route Tracking
 					</button>
 
 					<button
+						class="type-btn"
+						class:active={dataType === 'mileage'}
+						on:click={() => (dataType = 'mileage')}
+					>
+						<svg
+							width="20"
+							height="20"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+						>
+							<circle cx="12" cy="12" r="10"></circle>
+							<polyline points="12 6 12 12 16 14"></polyline>
+						</svg>
+						<div>
+							<div class="type-name">Mileage</div>
+							<div class="type-desc">Odometer logs</div>
+						</div>
+					</button>
+
+					<button
 						class="type-btn tax-bundle"
 						class:active={dataType === 'tax-bundle'}
 						on:click={() => (dataType = 'tax-bundle')}
@@ -688,8 +777,8 @@ Generated by Go Route Yourself - Professional Route Tracking
 							<line x1="9" y1="15" x2="15" y2="15"></line>
 						</svg>
 						<div>
-							<div class="type-name">Tax Bundle ⭐</div>
-							<div class="type-desc">All records + summary</div>
+							<div class="type-name">Tax Bundle</div>
+							<div class="type-desc">Professional PDF report</div>
 						</div>
 					</button>
 				</div>
@@ -720,26 +809,32 @@ Generated by Go Route Yourself - Professional Route Tracking
 								<div class="format-desc">Spreadsheet format</div>
 							</div>
 						</button>
+						<button
+							class="format-btn"
+							class:active={exportFormat === 'pdf'}
+							on:click={() => (exportFormat = 'pdf')}
+						>
+							<svg
+								width="20"
+								height="20"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+							>
+								<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+								<polyline points="14 2 14 8 20 8"></polyline>
+								<line x1="16" y1="13" x2="8" y2="13"></line>
+								<line x1="16" y1="17" x2="8" y2="17"></line>
+								<polyline points="10 9 9 9 8 9"></polyline>
+							</svg>
+							<div>
+								<div class="format-name">PDF</div>
+								<div class="format-desc">Professional report</div>
+							</div>
+						</button>
 					</div>
 				</fieldset>
-			{/if}
-
-			<fieldset class="option-group">
-				<legend class="option-label">Date Range</legend>
-				<div class="date-inputs">
-					<input id="export-date-from" type="date" bind:value={dateFrom} placeholder="From" />
-					<span class="date-separator">to</span>
-					<input id="export-date-to" type="date" bind:value={dateTo} placeholder="To" />
-				</div>
-			</fieldset>
-
-			{#if dataType !== 'tax-bundle'}
-				<div class="option-group">
-					<label class="checkbox-label">
-						<input type="checkbox" bind:checked={includeSummary} />
-						Include summary totals
-					</label>
-				</div>
 			{/if}
 
 			<button
@@ -749,7 +844,9 @@ Generated by Go Route Yourself - Professional Route Tracking
 					? selectedTrips.size === 0
 					: dataType === 'expenses'
 						? selectedExpenses.size === 0
-						: filteredTrips.length === 0 && filteredExpenses.length === 0}
+						: dataType === 'mileage'
+							? selectedMileage.size === 0
+							: filteredTrips.length === 0 && filteredExpenses.length === 0}
 			>
 				<svg
 					width="20"
@@ -764,21 +861,18 @@ Generated by Go Route Yourself - Professional Route Tracking
 					<line x1="12" y1="15" x2="12" y2="3"></line>
 				</svg>
 				{#if dataType === 'tax-bundle'}
-					Export Tax Bundle (3 files)
+					Export Tax Bundle PDF
+				{:else if dataType === 'trips'}
+					Export {selectedTrips.size} Trips ({exportFormat.toUpperCase()})
+				{:else if dataType === 'expenses'}
+					Export {selectedExpenses.size} Expenses ({exportFormat.toUpperCase()})
 				{:else}
-					Export {dataType === 'trips' ? selectedTrips.size : selectedExpenses.size}
-					{dataType === 'trips' ? 'Trips' : 'Expenses'}
+					Export {selectedMileage.size} Mileage Logs ({exportFormat.toUpperCase()})
 				{/if}
 			</button>
-		</div>
 
-		<!-- Selection Card -->
-		<div class="selection-card">
+			<!-- Selection Card -->
 			{#if dataType === 'tax-bundle'}
-				<div class="selection-header">
-					<h2 class="card-title">Tax Bundle Preview</h2>
-				</div>
-
 				<div class="bundle-preview">
 					<div class="preview-section">
 						<div class="preview-header">
@@ -865,20 +959,42 @@ Generated by Go Route Yourself - Professional Route Tracking
 			{:else}
 				<div class="selection-header">
 					<h2 class="card-title">
-						Select {dataType === 'trips' ? 'Trips' : 'Expenses'}
-						({dataType === 'trips' ? filteredTrips.length : filteredExpenses.length})
+						Select {dataType === 'trips'
+							? 'Trips'
+							: dataType === 'expenses'
+								? 'Expenses'
+								: 'Mileage Logs'}
+						({dataType === 'trips'
+							? filteredTrips.length
+							: dataType === 'expenses'
+								? filteredExpenses.length
+								: filteredMileage.length})
 					</h2>
-					{#if (dataType === 'trips' && filteredTrips.length > 0) || (dataType === 'expenses' && filteredExpenses.length > 0)}
+					{#if (dataType === 'trips' && filteredTrips.length > 0) || (dataType === 'expenses' && filteredExpenses.length > 0) || (dataType === 'mileage' && filteredMileage.length > 0)}
 						<button class="btn-select-all" on:click={toggleSelectAll}>
 							{selectAll ? 'Deselect All' : 'Select All'}
 						</button>
 					{/if}
 				</div>
 
+				<!-- Search Input -->
+				<div class="search-container">
+					<input
+						type="text"
+						bind:value={searchQuery}
+						placeholder="Search {dataType === 'trips'
+							? 'trips'
+							: dataType === 'expenses'
+								? 'expenses'
+								: 'mileage logs'}..."
+						class="search-input"
+					/>
+				</div>
+
 				{#if dataType === 'trips'}
 					{#if filteredTrips.length > 0}
 						<div class="trips-list">
-							{#each filteredTrips as trip}
+							{#each displayedTrips as trip}
 								{@const tripAny = trip as any}
 
 								{@const earnings =
@@ -929,6 +1045,11 @@ Generated by Go Route Yourself - Professional Route Tracking
 								</label>
 							{/each}
 						</div>
+						{#if displayedTrips.length < filteredTrips.length}
+							<button class="btn-load-more" on:click={loadMoreTrips}>
+								Load More ({filteredTrips.length - displayedTrips.length} remaining)
+							</button>
+						{/if}
 					{:else}
 						<div class="empty-state">
 							<svg
@@ -950,64 +1071,123 @@ Generated by Go Route Yourself - Professional Route Tracking
 							<p>No trips found in selected date range</p>
 						</div>
 					{/if}
-				{:else if filteredExpenses.length > 0}
-					<div class="trips-list">
-						{#each filteredExpenses as expense}
-							<label class="trip-checkbox">
-								<input
-									type="checkbox"
-									checked={selectedExpenses.has(expense.id)}
-									on:change={() => toggleExpense(expense.id)}
-								/>
-								<div class="trip-info">
-									<div class="trip-header">
-										<span class="trip-date">{formatDate(expense.date)}</span>
-										<span class="trip-profit negative">
-											{formatCurrency(expense.amount)}
-										</span>
-									</div>
-									<div class="trip-route">
-										{expense.category}
-									</div>
-									{#if expense.description}
-										<div class="trip-meta">
-											{expense.description}
+				{:else if dataType === 'expenses'}
+					{#if filteredExpenses.length > 0}
+						<div class="trips-list">
+							{#each displayedExpenses as expense}
+								<label class="trip-checkbox">
+									<input
+										type="checkbox"
+										checked={selectedExpenses.has(expense.id)}
+										on:change={() => toggleExpense(expense.id)}
+									/>
+									<div class="trip-info">
+										<div class="trip-header">
+											<span class="trip-date">{formatDate(expense.date)}</span>
+											<span class="trip-profit negative">
+												{formatCurrency(expense.amount)}
+											</span>
 										</div>
-									{/if}
-								</div>
-							</label>
-						{/each}
-					</div>
-				{:else}
-					<div class="empty-state">
-						<svg
-							width="48"
-							height="48"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-						>
-							<rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
-							<path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
-						</svg>
-						<p>No expenses found in selected date range</p>
-					</div>
+										<div class="trip-route">
+											{expense.category}
+										</div>
+										{#if expense.description}
+											<div class="trip-meta">
+												{expense.description}
+											</div>
+										{/if}
+									</div>
+								</label>
+							{/each}
+						</div>
+						{#if displayedExpenses.length < filteredExpenses.length}
+							<button class="btn-load-more" on:click={loadMoreExpenses}>
+								Load More ({filteredExpenses.length - displayedExpenses.length} remaining)
+							</button>
+						{/if}
+					{:else}
+						<div class="empty-state">
+							<svg
+								width="48"
+								height="48"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+							>
+								<rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
+								<path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+							</svg>
+							<p>No expenses found in selected date range</p>
+						</div>
+					{/if}
+				{:else if dataType === 'mileage'}
+					{#if filteredMileage.length > 0}
+						<div class="trips-list">
+							{#each displayedMileage as mileageLog}
+								<label class="trip-checkbox">
+									<input
+										type="checkbox"
+										checked={selectedMileage.has(mileageLog.id)}
+										on:change={() => toggleMileage(mileageLog.id)}
+									/>
+									<div class="trip-info">
+										<div class="trip-header">
+											<span class="trip-date">{formatDate(mileageLog.date || '')}</span>
+											<span class="trip-profit positive">
+												{mileageLog.miles.toFixed(1)} mi
+											</span>
+										</div>
+										<div class="trip-route">
+											{mileageLog.vehicle || 'Default Vehicle'}
+										</div>
+										<div class="trip-meta">
+											{mileageLog.startOdometer} → {mileageLog.endOdometer} • {mileageLog[
+												'purpose'
+											] || 'Business'}
+										</div>
+										{#if mileageLog.notes}
+											<div class="trip-meta">
+												{mileageLog.notes}
+											</div>
+										{/if}
+									</div>
+								</label>
+							{/each}
+						</div>
+						{#if displayedMileage.length < filteredMileage.length}
+							<button class="btn-load-more" on:click={loadMoreMileage}>
+								Load More ({filteredMileage.length - displayedMileage.length} remaining)
+							</button>
+						{/if}
+					{:else}
+						<div class="empty-state">
+							<svg
+								width="48"
+								height="48"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+							>
+								<circle cx="12" cy="12" r="10"></circle>
+								<polyline points="12 6 12 12 16 14"></polyline>
+							</svg>
+							<p>No mileage logs found in selected date range</p>
+						</div>
+					{/if}
 				{/if}
 			{/if}
 		</div>
-	</div>
 
-	<!-- Import CSV Section -->
-	<div class="options-card">
-		<h2 class="card-title">Import CSV</h2>
-		<p class="card-desc">Import trips or expenses from a CSV file</p>
-
-		<div class="option-group">
-			<label class="option-label" for="import-type-select">Import Type</label>
+		<!-- Import Section -->
+		<div class="options-card">
+			<h2 class="card-title">Import Data</h2>
+			<p class="card-desc">Import trips, expenses, or mileage from a CSV file</p>
 			<select id="import-type-select" bind:value={importType} class="select-input">
 				<option value="trips">Trips</option>
 				<option value="expenses">Expenses</option>
+				<option value="mileage">Mileage</option>
 			</select>
 		</div>
 
@@ -1389,6 +1569,46 @@ Generated by Go Route Yourself - Professional Route Tracking
 	}
 
 	.btn-select-all:hover {
+		background: var(--orange);
+		color: white;
+	}
+
+	.search-container {
+		margin: 20px 0;
+	}
+
+	.search-input {
+		width: 100%;
+		padding: 12px 16px;
+		border: 2px solid #e5e7eb;
+		border-radius: 8px;
+		font-size: 14px;
+		font-family: inherit;
+		transition: all 0.2s;
+	}
+
+	.search-input:focus {
+		outline: none;
+		border-color: var(--orange);
+		box-shadow: 0 0 0 3px rgba(246, 138, 46, 0.1);
+	}
+
+	.btn-load-more {
+		width: 100%;
+		padding: 12px 24px;
+		margin-top: 16px;
+		background: white;
+		color: var(--orange);
+		border: 2px solid var(--orange);
+		border-radius: 8px;
+		font-weight: 600;
+		font-size: 14px;
+		cursor: pointer;
+		transition: all 0.2s;
+		font-family: inherit;
+	}
+
+	.btn-load-more:hover {
 		background: var(--orange);
 		color: white;
 	}

@@ -215,7 +215,7 @@
 		<div class="card-stats">
 			<div class="stat-item">
 				<span class="stat-label">Miles</span>
-				<span class="stat-value">{displayMiles?.toFixed(1) || '0.0'}</span>
+				<span class="stat-value">{displayMiles?.toFixed(2) || '0.00'}</span>
 			</div>
 			<div class="stat-item">
 				<span class="stat-label">Stops</span>
