@@ -4,6 +4,21 @@ import { dev } from '$app/environment';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 
+// --- HTML Escaping for XSS Prevention ---
+
+/**
+ * Escape HTML special characters to prevent XSS attacks in email content.
+ * SECURITY: Always use this for any user-provided data interpolated into HTML emails.
+ */
+function escapeHtml(unsafe: string): string {
+	return unsafe
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#039;');
+}
+
 // --- Email Template Helpers ---
 
 function getVerificationHtml(verifyUrl: string, logoUrl: string) {
@@ -144,6 +159,12 @@ function getContactInquiryHtml(data: {
 }) {
 	const brandColor = '#FF7F50';
 
+	// SECURITY: Escape all user-provided data to prevent XSS
+	const safeName = escapeHtml(data.name);
+	const safeEmail = escapeHtml(data.email);
+	const safeCompany = escapeHtml(data.company || 'N/A');
+	const safeMessage = escapeHtml(data.message);
+
 	return `
 <!DOCTYPE html>
 <html lang="en">
@@ -153,12 +174,12 @@ function getContactInquiryHtml(data: {
 </head>
 <body style="font-family: sans-serif; padding: 20px; color: #333;">
     <h1 style="color: ${brandColor};">New Sales Inquiry</h1>
-    <p><strong>Name:</strong> ${data.name}</p>
-    <p><strong>Email:</strong> ${data.email}</p>
-    <p><strong>Company:</strong> ${data.company || 'N/A'}</p>
+    <p><strong>Name:</strong> ${safeName}</p>
+    <p><strong>Email:</strong> ${safeEmail}</p>
+    <p><strong>Company:</strong> ${safeCompany}</p>
     <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
     <h3 style="margin-bottom: 10px;">Message:</h3>
-    <p style="white-space: pre-wrap; background: #f9f9f9; padding: 15px; border-radius: 5px;">${data.message}</p>
+    <p style="white-space: pre-wrap; background: #f9f9f9; padding: 15px; border-radius: 5px;">${safeMessage}</p>
 </body>
 </html>
     `;
