@@ -23,6 +23,13 @@ function createExpensesStore() {
 		async hydrate(data: ExpenseRecord[], _userId?: string) {
 			// parameter intentionally unused in this implementation — keep for API parity
 			void _userId;
+
+			// Guard against server-side execution (IndexedDB not available)
+			if (typeof window === 'undefined') {
+				set(data);
+				return;
+			}
+
 			try {
 				const db = await getDB();
 
