@@ -120,7 +120,12 @@ export function makeMileageService(
 
 					// Filter out duplicates and merge
 					const newItems: MileageRecord[] = [];
+					const keysToDelete: string[] = [];
+
 					for (const item of legacyItems) {
+						const legacyKey = `mileage:${legacyUserId}:${item.id}`;
+						keysToDelete.push(legacyKey);
+
 						if (!existingIds.has(item.id)) {
 							// Update userId to the new format
 							const updatedItem = { ...item, userId };
@@ -144,6 +149,20 @@ export function makeMileageService(
 							`[MileageService] Migrated ${newItems.length} legacy items from ${legacyUserId}`
 						);
 					}
+
+					// [!code fix] Delete old legacy keys to prevent re-migration
+					for (const key of keysToDelete) {
+						try {
+							await kv.delete(key);
+						} catch (e) {
+							log.warn(`[MileageService] Failed to delete legacy key: ${key}`, {
+								message: (e as Error).message
+							});
+						}
+					}
+					log.info(
+						`[MileageService] Cleaned up ${keysToDelete.length} legacy keys for ${legacyUserId}`
+					);
 				}
 			}
 
