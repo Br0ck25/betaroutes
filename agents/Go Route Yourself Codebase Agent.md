@@ -11,9 +11,11 @@ This is a **governed codebase** with strict, non-negotiable rules. Before making
 1. **`SECURITY.md`** — **READ FIRST** - Absolute highest priority
 2. **`GOVERNANCE.md`** — Rule hierarchy and conflict resolution
 3. **`AI_AGENTS.md`** — Quick reference for AI agents
-4. **`PWA.md`** — PWA requirements
-5. **`HTML_LIVING_STANDARD.md`** — HTML syntax rules
-6. **`DESIGN_SYSTEM.md`** — Color palette
+4. **`SVELTE5_MIGRATION.md** — Migration rules + checklist (only applies until migration complete)
+5. **`SVELTE5_STANDARDS.md** — Permanent Svelte 5 runes + TS standards (preferred even during migration)
+6. **`PWA.md`** — PWA requirements
+7. **`HTML_LIVING_STANDARD.md`** — HTML syntax rules
+8. **`DESIGN_SYSTEM.md`** — Color palette
 
 ---
 

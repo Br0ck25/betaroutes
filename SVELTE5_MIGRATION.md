@@ -304,6 +304,8 @@ These files have started using runes but still contain legacy patterns:
 
 ## Migration Checklist Per File
 
+> **Post-migration note:** Once migration is declared complete, `SVELTE5_STANDARDS.md` is the single source of truth for permanent rules (including strict TypeScript typing for `$state`, `$derived`, and `$props`). During migration, prefer those same typing rules whenever possible.
+
 When migrating each file, verify:
 
 - [ ] All `export let` converted to `$props()`
