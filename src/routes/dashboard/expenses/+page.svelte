@@ -1790,10 +1790,25 @@
 		}
 	}
 
-	@media (max-width: 639px) {
+	@media (max-width: 640px) {
 		.page-container {
-			padding-bottom: 32px;
+			padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1px);
 		}
+
+		.expense-list-cards {
+			gap: 8px;
+		}
+
+		/* Reduce extra space above pagination on mobile */
+		.pagination-controls {
+			margin-top: 16px;
+		}
+
+		/* Compact empty-state padding on mobile */
+		.empty-state {
+			padding: 24px 12px;
+		}
+
 		.hidden-mobile {
 			display: none;
 		}

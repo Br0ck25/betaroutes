@@ -1717,10 +1717,25 @@
 		}
 	}
 
-	@media (max-width: 639px) {
+	@media (max-width: 640px) {
 		.page-container {
-			padding-bottom: 32px;
+			padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1px);
 		}
+
+		.expense-list-cards,
+		.mileage-list-cards {
+			gap: 8px;
+		}
+
+		.pagination-controls,
+		.pagination-container {
+			margin-top: 16px;
+		}
+
+		.empty-state {
+			padding: 24px 12px;
+		}
+
 		.hidden-mobile {
 			display: none;
 		}

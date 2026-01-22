@@ -1279,92 +1279,92 @@
 				</div>
 			{/if}
 		</div>
-	</div>
 
-	<!-- Backup & Restore Section -->
-	<div class="options-card">
-		<h2 class="card-title">Backup & Restore</h2>
-		<p class="card-desc">Backup all your data or restore from a previous backup</p>
+		<!-- Backup & Restore (under Export Options) -->
+		<div class="options-card">
+			<h2 class="card-title">Backup & Restore</h2>
+			<p class="card-desc">Backup all your data or restore from a previous backup</p>
 
-		<div class="option-group">
-			<button class="export-btn full-width" on:click={backupFullData}>
-				<svg
-					width="20"
-					height="20"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-				>
-					<path
-						d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15"
+			<div class="option-group">
+				<button class="export-btn full-width" on:click={backupFullData}>
+					<svg
+						width="20"
+						height="20"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+					>
+						<path
+							d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15"
+						/>
+						<path d="M7 10L12 15L17 10" />
+						<path d="M12 15V3" />
+					</svg>
+					Backup Full Data (JSON)
+				</button>
+			</div>
+
+			<div class="option-group">
+				<label class="export-btn secondary full-width">
+					<input
+						type="file"
+						accept=".json"
+						on:change={handleRestoreFile}
+						bind:files={restoreFile}
+						style="display: none;"
 					/>
-					<path d="M7 10L12 15L17 10" />
-					<path d="M12 15V3" />
-				</svg>
-				Backup Full Data (JSON)
-			</button>
+					<svg
+						width="20"
+						height="20"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+					>
+						<path
+							d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15"
+						/>
+						<path d="M17 8L12 3L7 8" />
+						<path d="M12 3V15" />
+					</svg>
+					Restore from Backup
+				</label>
+			</div>
 		</div>
 
-		<div class="option-group">
-			<label class="export-btn secondary full-width">
-				<input
-					type="file"
-					accept=".json"
-					on:change={handleRestoreFile}
-					bind:files={restoreFile}
-					style="display: none;"
-				/>
-				<svg
-					width="20"
-					height="20"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-				>
-					<path
-						d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15"
-					/>
-					<path d="M17 8L12 3L7 8" />
-					<path d="M12 3V15" />
-				</svg>
-				Restore from Backup
-			</label>
-		</div>
-	</div>
+		<!-- Clear Local Data (under Import Data) -->
+		<div class="options-card danger-card">
+			<h2 class="card-title">Clear Local Data</h2>
+			<p class="card-desc">
+				⚠️ This will permanently delete all your local trips, expenses, and mileage data. This
+				cannot be undone.
+			</p>
 
-	<!-- Clear Local Data Section -->
-	<div class="options-card danger-card">
-		<h2 class="card-title">Clear Local Data</h2>
-		<p class="card-desc">
-			⚠️ This will permanently delete all your local trips, expenses, and mileage data. This cannot
-			be undone.
-		</p>
+			<div class="option-group">
+				<button class="export-btn danger full-width" on:click={confirmClearData}>
+					Clear All Local Data
+				</button>
+			</div>
 
-		<div class="option-group">
-			<button class="export-btn danger full-width" on:click={confirmClearData}>
-				Clear All Local Data
-			</button>
-		</div>
-
-		{#if showClearConfirm}
-			<div class="confirm-modal">
-				<div class="modal-content">
-					<h3>Are you absolutely sure?</h3>
-					<p>This will delete ALL your data from this device. This action cannot be undone.</p>
-					<p><strong>Make sure you have a backup before proceeding!</strong></p>
-					<div class="modal-actions">
-						<button class="export-btn danger" on:click={clearLocalData}
-							>Yes, Delete Everything</button
-						>
-						<button class="export-btn secondary" on:click={() => (showClearConfirm = false)}
-							>Cancel</button
-						>
+			{#if showClearConfirm}
+				<div class="confirm-modal">
+					<div class="modal-content">
+						<h3>Are you absolutely sure?</h3>
+						<p>This will delete ALL your data from this device. This action cannot be undone.</p>
+						<p><strong>Make sure you have a backup before proceeding!</strong></p>
+						<div class="modal-actions">
+							<button class="export-btn danger" on:click={clearLocalData}
+								>Yes, Delete Everything</button
+							>
+							<button class="export-btn secondary" on:click={() => (showClearConfirm = false)}
+								>Cancel</button
+							>
+						</div>
 					</div>
 				</div>
-			</div>
-		{/if}
+			{/if}
+		</div>
 	</div>
 </div>
 
@@ -1391,7 +1391,8 @@
 
 	.export-grid {
 		display: grid;
-		grid-template-columns: 400px 1fr;
+		/* Wider left column on desktop so option cards can take up more space */
+		grid-template-columns: 640px 1fr;
 		gap: 24px;
 	}
 
@@ -1402,6 +1403,9 @@
 		padding: 28px;
 		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 		margin-bottom: 24px;
+		width: 100%;
+		max-width: none; /* allow the grid column to control width */
+		box-sizing: border-box;
 	}
 
 	.card-title {
@@ -1683,7 +1687,11 @@
 	.bundle-preview {
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: 8px;
+	}
+
+	.preview-section {
+		margin-top: 20px; /* small buffer to ensure consistent spacing under the year selector */
 	}
 
 	.year-selector {
@@ -1899,10 +1907,6 @@
 	@media (max-width: 1024px) {
 		.export-grid {
 			grid-template-columns: 1fr;
-		}
-
-		.options-card {
-			order: 2;
 		}
 	}
 

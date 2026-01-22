@@ -367,7 +367,7 @@
 
 	@media (max-width: 640px) {
 		.settings {
-			padding-bottom: 32px;
+			padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1px);
 		}
 	}
 </style>
