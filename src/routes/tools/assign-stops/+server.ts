@@ -52,6 +52,7 @@ async function getDistanceMatrix(
 						try {
 							cached = JSON.parse(String(raw));
 						} catch (e) {
+							log.warn('[DM CACHE] Invalid JSON in cache', { key, err: (e as Error).message });
 							cached = null;
 						}
 						if (cached) {
@@ -62,7 +63,11 @@ async function getDistanceMatrix(
 					}
 				}
 			} catch (e) {
-				// ignore KV read failures
+				log.warn('[DM CACHE] KV read failed for pair', {
+					origin: `${origins[i]!.lat},${origins[i]!.lon}`,
+					dest: `${destinations[j]!.lat},${destinations[j]!.lon}`,
+					err: (e as Error).message
+				});
 			}
 			missingPairs.push({ oIdx: i, dIdx: j });
 		}

@@ -5,7 +5,6 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import ProfileCard from './components/ProfileCard.svelte';
-	import DataCard from './components/DataCard.svelte';
 	import SecurityCard from './components/SecurityCard.svelte';
 	import ExportModal from './components/ExportModal.svelte';
 	import MaintenanceCard from './components/MaintenanceCard.svelte';
@@ -25,18 +24,6 @@
 		const remote = data.remoteSettings?.profile || {};
 		if (!profile.name) profile.name = remote.name || $user?.name || '';
 		if (!profile.email) profile.email = remote.email || $user?.email || '';
-	}
-
-	import { saveSettings } from './lib/save-settings';
-
-	async function syncToCloud(type: 'settings' | 'profile', payload: any) {
-		try {
-			const key = type === 'profile' ? 'profile' : 'settings';
-			const result = await saveSettings({ [key]: payload });
-			if (!result.ok) console.error('Failed to sync settings to cloud', result.error);
-		} catch (e) {
-			console.error('Sync error:', e);
-		}
 	}
 
 	$: monthlyUsage = $trips.filter((t) => {
@@ -163,16 +150,6 @@
 
 		<section id="maintenance" class="settings-section">
 			<MaintenanceCard on:success={(e) => showSuccessMsg(e.detail)} />
-		</section>
-
-		<section id="data" class="settings-section">
-			<DataCard
-				on:success={(e) => showSuccessMsg(e.detail)}
-				on:sync={(e) => syncToCloud(e.detail.type, e.detail.payload)}
-				on:openAdvancedExport={() => {
-					showAdvancedExport = true;
-				}}
-			/>
 		</section>
 
 		<section id="integrations" class="settings-section">
