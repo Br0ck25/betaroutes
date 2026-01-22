@@ -167,6 +167,71 @@ ALL new files MUST use Svelte 5:
 </script>
 ```
 
+Common Errors (Svelte 5 Runes Mode) — REQUIRED Fix Patterns
+
+1. export let is Forbidden
+
+Error: Cannot use export let in runes mode — use $props() instead
+
+Fix: Replace export let with destructuring from $props().
+
+Svelte
+
+<script>
+  export let foo;
+</script>
+
+<script>
+  let { foo } = $props();
+</script>
+
+2. $: Reactive Statements are Forbidden
+
+Error: $: is not allowed in runes mode
+
+Fix: Use $derived for computed values, $effect for side effects.
+
+Svelte
+
+<script>
+  $: total = a + b;
+  $: if (ready) doThing();
+</script>
+
+<script>
+  let total = $derived(a + b);
+
+  $effect(() => {
+    if (ready) doThing();
+  });
+</script>
+
+3. TypeScript: () => string is not assignable to string
+
+Cause: Passing a function where a value is expected.
+
+Fix: Call the function or derive the value.
+
+Svelte
+<Component label={getLabel} />
+
+<Component label={getLabel()} />
+
+<script>
+  let label = $derived(getLabel());
+</script>
+
+<Component {label} /> 4) Event Attributes (Custom Events)
+
+Cause: Missing on: directive or using wrong casing for custom events.
+
+Fix: Ensure correct syntax. Do NOT use onplace-selected.
+
+Svelte
+<input onplace-selected={handlePlaceSelected} />
+
+<input on:place-selected={handlePlaceSelected} />
+
 ### Svelte 4 Syntax (for existing files)
 
 ```svelte

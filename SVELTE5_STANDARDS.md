@@ -1,23 +1,29 @@
 # SVELTE5_STANDARDS.md
 
-**Status:** Post-migration standards (Svelte 5 runes mode)  
-**Applies to:** All new and modified Svelte code once migration is complete  
-**Goal:** Keep the codebase 100% Svelte 5 runes-mode, strongly typed, and CI-safe.
+**Single source of truth** for Svelte 5 + TypeScript standards in this repo.
+
+- **Mode:** Svelte 5 **runes mode**
+- **Applies to:** all new code and all modified files
+- **Non-goal:** migration guidance (see `SVELTE5_MIGRATION.md` only when doing legacy conversions)
 
 ---
 
-## Non‑Negotiables (RUNE‑ONLY)
+## Non‑negotiables (RUNES ONLY)
 
-### ✅ Props
+### Props
 
-- Use `$props()` only.
-- **Never** use `export let` in runes mode.
+- ✅ Use `$props()` only.
+- ❌ Never use `export let` in runes mode.
 
 ✅
 
 ```svelte
 <script lang="ts">
-	type Props = { title: string; subtitle?: string };
+	type Props = {
+		title: string;
+		subtitle?: string;
+	};
+
 	let { title, subtitle }: Props = $props();
 </script>
 ```
@@ -32,16 +38,16 @@
 
 ---
 
-### ✅ State
+### State
 
-- Use `$state` for reactive state.
-- Prefer specific types or inference.
+- ✅ Use `$state(...)` for reactive state.
 
 ✅
 
 ```svelte
 <script lang="ts">
 	type Item = { id: string; name: string };
+
 	let items = $state<Item[]>([]);
 	let selectedId = $state<string | null>(null);
 </script>
@@ -49,10 +55,10 @@
 
 ---
 
-### ✅ Derived values (computed)
+### Derived values (computed)
 
-- Use `$derived` for computed values.
-- **Never** use `$:` reactive statements.
+- ✅ Use `$derived(...)` for computed values.
+- ❌ Never use `$:` reactive statements.
 
 ✅
 
@@ -60,6 +66,7 @@
 <script lang="ts">
 	let a = $state(0);
 	let b = $state(0);
+
 	let total = $derived(a + b);
 </script>
 ```
@@ -74,9 +81,9 @@
 
 ---
 
-### ✅ Effects (side effects)
+### Effects (side effects)
 
-- Use `$effect` for side effects (subscriptions, DOM effects, fetches tied to state).
+- ✅ Use `$effect(() => { ... })` for side effects.
 - Keep effects small and deterministic.
 
 ✅
@@ -87,19 +94,56 @@
 
 	$effect(() => {
 		if (!ready) return;
-		// side effect here (e.g., start polling, subscribe, etc.)
+
+		// side effect here (subscribe, fetch, write to storage, etc.)
+		// return a cleanup function if needed
+		return () => {
+			// cleanup
+		};
 	});
 </script>
 ```
 
 ---
 
+## Rendering (Snippets only)
+
+- ✅ Use snippet props + `{@render ...}`.
+- ❌ Do not use `<slot />` in new code.
+
+✅
+
+```svelte
+<script lang="ts">
+	let { children } = $props<{ children?: () => any }>();
+</script>
+
+{@render children?.()}
+```
+
+For named regions, use snippet props:
+
+✅
+
+```svelte
+<script lang="ts">
+	let { header, footer } = $props<{
+		header?: () => any;
+		footer?: () => any;
+	}>();
+</script>
+
+<header>{@render header?.()}</header><footer>{@render footer?.()}</footer>
+```
+
+---
+
 ## Event Handling (Svelte 5)
 
-### Use event attributes (not `on:` directives)
+### DOM events (preferred)
 
-- Prefer native DOM event attributes like: `onclick`, `oninput`, `onchange`, etc.
-- Use camelCase where required by the underlying event attribute name.
+- ✅ Use DOM event properties: `onclick`, `oninput`, `onchange`, etc.
+- ❌ Do not use `on:click`, `on:input`, etc.
 
 ✅
 
@@ -108,18 +152,24 @@
 <input oninput={handleInput} />
 ```
 
-### Custom events
+---
 
-- For custom elements / custom events, bind using the correct Svelte event attribute form.
-- **Do not** use `onplace-selected` or similar “raw attribute” forms.
+### Custom DOM events (web components / custom elements)
+
+**Preferred standard**
+
+- ✅ Use the event property form (remove the colon):
+  - `onplace-selected={handler}` for a `place-selected` event
 
 ✅
 
 ```svelte
-<MyElement onplaceselected={handlePlaceSelected} />
+<MyElement onplace-selected={handlePlaceSelected} />
 ```
 
-> If the emitted event name contains dashes (e.g. `place-selected`), ensure the binding matches how the component emits it in Svelte 5. If TypeScript complains, add explicit typing to the handler:
+Type the handler as needed:
+
+✅
 
 ```svelte
 <script lang="ts">
@@ -129,11 +179,45 @@
 </script>
 ```
 
+**Allowed temporary exception (only when unavoidable)**
+
+- If TypeScript cannot be satisfied promptly (missing/3rd‑party typings), you may use `on:place-selected={...}` **only as a temporary bridge** and must add a `TODO` to replace it with proper typings + event property form.
+- This exception is **only** for custom DOM events (not for standard DOM events).
+
 ---
 
-## TypeScript Standards (STRICT)
+### Component “events” (Svelte components)
 
-### TypeScript typing for Svelte 5 runes (STRICT)
+- ✅ Prefer **callback props**.
+- ❌ Do not introduce `createEventDispatcher` in new code.
+
+✅ Parent
+
+```svelte
+<script lang="ts">
+	import Child from './Child.svelte';
+
+	function onSave(id: string) {
+		// ...
+	}
+</script>
+
+<Child {onSave} />
+```
+
+✅ Child
+
+```svelte
+<script lang="ts">
+	let { onSave } = $props<{ onSave?: (id: string) => void }>();
+</script>
+
+<button onclick={() => onSave?.('123')}>Save</button>
+```
+
+---
+
+## TypeScript typing for Svelte 5 runes (STRICT)
 
 - `$state`, `$derived`, and `$props` are the reactive primitives; TypeScript types may be applied to them.
 - Prefer **explicit, specific types** (or rely on inference) instead of `any`.
@@ -142,20 +226,27 @@
 - If the shape is unknown (e.g., untrusted JSON), use `unknown` and narrow/validate before use.
 - `any` is allowed ONLY as a temporary bridge for a 3rd-party library or legacy boundary, and MUST be narrowed to a real type as soon as possible with a comment explaining why.
 
-### TypeScript typing for Svelte 5 runes (STRICT)
+### `unknown` for untrusted data
 
-- `$state`, `$derived`, and `$props` are the reactive primitives; TypeScript types may be applied to them.
-- Prefer **explicit, specific types** (or rely on inference) instead of `any`.
-- ❌ Avoid: `let data = $state<any>(null);`
-- ✅ Prefer: `let data = $state<MyType | null>(null);` or initialize with a typed value so TS infers.
-- If the shape is unknown (e.g., untrusted JSON), use `unknown` and narrow/validate before use.
-- `any` is allowed ONLY as a temporary bridge for a 3rd-party library or legacy boundary, and MUST be narrowed to a real type as soon as possible with a comment explaining why.
+✅
 
-### Common TS pitfall: function vs value
+```ts
+let raw: unknown;
+
+function isApiResponse(x: unknown): x is { ok: boolean } {
+	return typeof x === 'object' && x !== null && 'ok' in x;
+}
+```
+
+---
+
+## Common TypeScript pitfalls (Fix patterns)
+
+### Function vs value
 
 **Error:** `Type '() => string' is not assignable to type 'string'.`
 
-Cause: You passed a function where a string value is expected.
+Cause: you passed a function where a string value is expected.
 
 Fix options:
 
@@ -170,24 +261,56 @@ Fix options:
 	function getLabel() {
 		return 'Hello';
 	}
+
 	let label = $derived(getLabel());
 </script>
 
 <MyComponent {label} />
 ```
 
+### Unknown prop / wrong attribute name
+
+**Error:** `Object literal may only specify known properties ... 'onplace-selected' does not exist in type ...`
+
+Fix checklist:
+
+1. Confirm you’re binding the **right thing** (prop vs event).
+2. For custom DOM events: use `onplace-selected={...}` and type the handler.
+3. If TS still complains, add typings for the custom element/event (preferred), or use the temporary `on:place-selected` exception with a TODO.
+
 ---
 
-## DOM + Markup Rules (Quick)
+## Markup & HTML rules (Quick)
 
 - Prefer semantic HTML.
-- Avoid invalid nesting and interactive element nesting (button-in-button, link-in-link).
+- Avoid invalid nesting (e.g., button inside button, link inside link).
 - Keep ARIA accurate and minimal; do not add ARIA unless needed.
 - Follow `HTML_LIVING_STANDARD.md` when in doubt.
 
 ---
 
-## Lint / Check Requirements (Definition of Done)
+## Promise / async safety (TypeScript)
+
+- Do not use `await` inside `Array.prototype.map`. Use `Promise.all`.
+- Do not mix `await` with `forEach`. Use `for...of` or `Promise.all`.
+
+✅
+
+```ts
+const results = await Promise.all(items.map(async (item) => compute(item)));
+```
+
+✅
+
+```ts
+for (const item of items) {
+	await compute(item);
+}
+```
+
+---
+
+## Definition of Done (Required)
 
 Before committing changes that touch Svelte/TS:
 
@@ -195,43 +318,35 @@ Before committing changes that touch Svelte/TS:
 - `npm run lint`
 - `npx eslint .`
 
-If CI enforces additional commands, match CI.
-
 ---
 
-## Hard “No Regression” Checks (Recommended)
+## No‑regression checks (Recommended)
 
-Run these after migration completion to prevent legacy syntax reappearing.
+Reject legacy syntax after migration:
 
-### Reject legacy `export let`
+### Reject `export let`
 
 ```bash
 git grep -n "export\s+let\s" -- "*.svelte"
 ```
 
-### Reject legacy `$:` reactive labels
+### Reject `$:` reactive labels
 
 ```bash
 git grep -n "^\s*\$:" -- "*.svelte"
 ```
 
-> If either grep returns matches, the PR is not acceptable in post‑migration mode.
+### Reject `<slot`
+
+```bash
+git grep -n "<slot" -- "*.svelte"
+```
 
 ---
 
-## Post‑Migration Mode (Enforcement)
-
-When the repository is declared **migration complete**:
-
-- **All** new and modified files MUST comply with this document.
-- Legacy/migration-only patterns are not permitted anywhere in the repo.
-- If a change would require reintroducing legacy syntax, the change must be redesigned.
-
----
-
-## Canonical Error Fixes (Quick Reference)
+## Canonical error fixes (Quick reference)
 
 - **Cannot use `export let` in runes mode** → Replace with `$props()`.
 - **`$:` not allowed in runes mode** → Replace with `$derived` / `$effect`.
-- **`() => string` not assignable to `string`** → Call it, or change the prop type, or compute via `$derived`.
-- **“Object literal may only specify known properties … onplace-selected …”** → Fix event binding to Svelte 5 event attribute form and/or type the event handler.
+- **`() => string` not assignable to `string`** → Call it, widen the type, or compute via `$derived`.
+- **Unknown `on...` property / event typing** → Use correct event property form + add typings; only use `on:` as a temporary custom-event exception with a TODO.

@@ -21,6 +21,104 @@ function haversineMiles(a: { lat: number; lon: number }, b: { lat: number; lon: 
 const ROAD_FACTOR = 1.25; // conservative multiplier
 const EST_SPEED_MPH = 35; // for drive time estimate
 
+// Helper: Distance Matrix caching keys (per origin/destination pair)
+function dmKey(o: { lat: number; lon: number }, d: { lat: number; lon: number }) {
+	return `dm:${Number(o.lat).toFixed(5)},${Number(o.lon).toFixed(5)}:${Number(d.lat).toFixed(5)},${Number(d.lon).toFixed(5)}`;
+}
+
+// Get pairwise distances (meters) and durations (seconds) between an array of origins and destinations
+// Uses KV cache (BETA_PLACES_KV) -> Google Distance Matrix -> caches individual pair results
+async function getDistanceMatrix(
+	origins: Array<{ lat: number; lon: number }>,
+	destinations: Array<{ lat: number; lon: number }>,
+	apiKey?: string,
+	kv?: any
+): Promise<number[][]> {
+	// Build cache lookups
+	const out: number[][] = Array.from({ length: origins.length }, () =>
+		Array(destinations.length).fill(NaN)
+	);
+	const missingPairs: { oIdx: number; dIdx: number }[] = [];
+
+	for (let i = 0; i < origins.length; i++) {
+		for (let j = 0; j < destinations.length; j++) {
+			const dest = destinations[j]!;
+			const key = dmKey(origins[i]!, dest);
+			try {
+				if (kv) {
+					const raw = await kv.get(key);
+					if (raw) {
+						let cached: any = null;
+						try {
+							cached = JSON.parse(String(raw));
+						} catch (e) {
+							cached = null;
+						}
+						if (cached) {
+							const row = out[i]!;
+							row[j] = Number(cached.distanceMeters ?? NaN) || NaN;
+							continue;
+						}
+					}
+				}
+			} catch (e) {
+				// ignore KV read failures
+			}
+			missingPairs.push({ oIdx: i, dIdx: j });
+		}
+	}
+
+	if (missingPairs.length === 0) return out; // all cached
+
+	// If no API key, return what's available (may contain NaN)
+	if (!apiKey) return out;
+
+	// Prepare origin/destination strings for Distance Matrix request
+	const originsStr = origins.map((o) => `${o.lat},${o.lon}`).join('|');
+	const destinationsStr = destinations.map((d) => `${d.lat},${d.lon}`).join('|');
+
+	try {
+		const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(originsStr)}&destinations=${encodeURIComponent(destinationsStr)}&key=${apiKey}&mode=driving&units=metric`;
+		const res = await fetch(url);
+		const data: any = await res.json();
+		if (data && data.status === 'OK' && Array.isArray(data.rows)) {
+			for (let i = 0; i < data.rows.length; i++) {
+				const elements = (data.rows[i] && data.rows[i].elements) || [];
+				for (let j = 0; j < elements.length; j++) {
+					const elem = elements[j];
+					if (elem && elem.status === 'OK') {
+						const distanceMeters = Number((elem.distance && elem.distance.value) ?? 0);
+						const durationSeconds = Number((elem.duration && elem.duration.value) ?? 0);
+						const row = out[i]!;
+						row[j] = distanceMeters;
+
+						// Cache individual pair
+						try {
+							if (kv) {
+								const key = dmKey(origins[i]!, destinations[j]!);
+								await kv.put(
+									key,
+									JSON.stringify({
+										distanceMeters,
+										durationSeconds,
+										cachedAt: new Date().toISOString()
+									})
+								);
+							}
+						} catch (e) {
+							log.warn('[DM CACHE] write failed', { err: (e as Error).message });
+						}
+					}
+				}
+			}
+		}
+	} catch (e) {
+		log.warn('[DM] request failed', { err: (e as Error).message });
+	}
+
+	return out;
+}
+
 export const POST: RequestHandler = async ({ request, locals, platform }) => {
 	// Enforce authentication
 	if (!locals.user) {
@@ -134,8 +232,16 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 	}
 
 	// Preassign rank-marked stops: ensure each equally maps to distinct techs per rank
-	// For each rank, assign each stop to the nearest available tech (based on start distance) and mark them taken for that rank
+	// For each rank, assign each stop to the nearest available tech (based on Distance Matrix or haversine) and mark them taken for that rank
 	const assignments = techs.map((t) => ({ tech: t, stops: [] as any[] }));
+
+	// Use Distance Matrix to decide nearest techs where possible
+	const placesKV = (platform?.env as any)?.BETA_PLACES_KV as any | undefined;
+	const dmApiKey = (platform?.env as any)?.PRIVATE_GOOGLE_MAPS_API_KEY || undefined;
+
+	const techOrigins = techs.map((t) => ({ lat: t.startLoc!.lat, lon: t.startLoc!.lon }));
+	const stopDests = stops.map((s) => ({ lat: s.loc!.lat, lon: s.loc!.lon }));
+	const dm = await getDistanceMatrix(techOrigins, stopDests, dmApiKey, placesKV);
 
 	for (const pair of rankMap.entries()) {
 		const arr = pair[1] as any[];
@@ -143,8 +249,18 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 		const available = new Set(techs.map((_, i) => i));
 		// sort stops by nearest tech distance to make greedy assignment deterministic
 		arr.sort((a: any, b: any) => {
-			const aMin = Math.min(...techs.map((t) => haversineMiles(t.startLoc, a.loc)));
-			const bMin = Math.min(...techs.map((t) => haversineMiles(t.startLoc, b.loc)));
+			const aIdx = stops.indexOf(a);
+			const bIdx = stops.indexOf(b);
+			const aMin = Math.min(
+				...techs.map(
+					(_, ti) => Number(dm?.[ti]?.[aIdx] ?? NaN) || haversineMiles(techs[ti].startLoc, a.loc)
+				)
+			);
+			const bMin = Math.min(
+				...techs.map(
+					(_, ti) => Number(dm?.[ti]?.[bIdx] ?? NaN) || haversineMiles(techs[ti].startLoc, b.loc)
+				)
+			);
 			return aMin - bMin;
 		});
 
@@ -152,8 +268,9 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 			// find nearest available tech
 			let bestIdx = -1;
 			let bestDist = Infinity;
+			const sIdx = stops.indexOf(s);
 			for (const i of available) {
-				const d = haversineMiles(techs[i].startLoc, s.loc);
+				const d = Number(dm?.[i]?.[sIdx] ?? NaN) || haversineMiles(techs[i].startLoc, s.loc);
 				if (d < bestDist) {
 					bestDist = d;
 					bestIdx = i;
@@ -186,24 +303,37 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 		target[i] = Math.max(0, (target[i] ?? 0) - pre);
 	}
 
-	// For each unassigned stop, assign to nearest tech with remaining capacity
-	for (const s of unassigned) {
+	// Prepare DM rows for tech starts -> unassigned stops
+	const unassignedIdxs = unassigned.map((s) => stops.indexOf(s)).filter((i) => i >= 0);
+	const unassignedDests = unassignedIdxs
+		.map((i) => stopDests[i])
+		.filter((p): p is { lat: number; lon: number } => !!p);
+	const dmForUnassigned =
+		unassignedDests.length > 0
+			? await getDistanceMatrix(techOrigins, unassignedDests, dmApiKey, placesKV)
+			: Array.from({ length: techOrigins.length }, () => []);
+
+	// For each unassigned stop, assign to nearest tech with remaining capacity using DM when available
+	for (let u = 0; u < unassigned.length; u++) {
+		const s = unassigned[u];
 		let bestIdx = -1;
 		let bestCost = Infinity;
 		for (let i = 0; i < techs.length; i++) {
 			if ((target[i] ?? 0) <= 0) continue;
-			const d = haversineMiles(techs[i].startLoc, s.loc);
+			const d =
+				Number(dmForUnassigned?.[i]?.[u] ?? NaN) || haversineMiles(techs[i].startLoc, s.loc);
 			if (d < bestCost) {
 				bestCost = d;
 				bestIdx = i;
 			}
 		}
-		// If no one left with capacity, assign to tech that increases total the least
+		// If no one left with capacity, assign to the tech with minimal distance irrespective of capacity
 		if (bestIdx === -1) {
 			let bestIdx2 = 0;
 			let bestInc = Infinity;
 			for (let i = 0; i < techs.length; i++) {
-				const d = haversineMiles(techs[i].startLoc, s.loc);
+				const d =
+					Number(dmForUnassigned?.[i]?.[u] ?? NaN) || haversineMiles(techs[i].startLoc, s.loc);
 				if (d < bestInc) {
 					bestInc = d;
 					bestIdx2 = i;

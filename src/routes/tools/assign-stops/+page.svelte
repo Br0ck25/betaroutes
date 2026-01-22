@@ -1,6 +1,6 @@
 <script lang="ts">
 	// Svelte 5 runes
-	import { autocomplete } from '$lib/utils/autocomplete';
+	import { autocomplete, loadGoogleMaps } from '$lib/utils/autocomplete';
 
 	let { data } = $props();
 	let API_KEY = $derived(() => String((data as any)?.googleMapsApiKey ?? ''));
@@ -32,20 +32,7 @@
 	};
 	type Result = { assignments: Assignment[]; totals: { miles: number; minutes: number } };
 
-	function buildStaticMapUrl(a: Assignment) {
-		const key = API_KEY();
-		if (!key) return '';
-		const markers: string[] = [];
-		if (a.tech.startLoc)
-			markers.push(`markers=label:S|${a.tech.startLoc.lat},${a.tech.startLoc.lon}`);
-		a.stops.forEach((s, i) => {
-			if (s.loc) markers.push(`markers=label:${(i + 1) % 10}|${s.loc.lat},${s.loc.lon}`);
-		});
-		if (a.tech.endLoc) markers.push(`markers=label:E|${a.tech.endLoc.lat},${a.tech.endLoc.lon}`);
-		return `https://maps.googleapis.com/maps/api/staticmap?size=600x200&${markers.join('&')}&key=${encodeURIComponent(
-			key
-		)}`;
-	}
+	// Static map generation removed in favor of interactive JS maps (use the built-in map preview).
 
 	function buildGoogleMapsDirectionsUrl(a: Assignment) {
 		const origin = a.tech.startLoc
@@ -59,6 +46,15 @@
 			.join('|');
 		return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving${waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : ''}`;
 	}
+
+	function formatMinutes(mins: number) {
+		if (!isFinite(mins) || isNaN(mins)) return '-';
+		const total = Math.round(mins);
+		const hrs = Math.floor(total / 60);
+		const m = total % 60;
+		return hrs > 0 ? `${hrs}h ${m}m` : `${m}m`;
+	}
+
 	let techName = $state('');
 	let techStart = $state('');
 	let techEnd = $state('');
@@ -222,6 +218,88 @@
 			loading = false;
 		}
 	}
+
+	function initMap(node: HTMLElement, params: { assignment: Assignment }) {
+		let map: google.maps.Map | null = null;
+		let poly: google.maps.Polyline | null = null;
+		let markers: google.maps.Marker[] = [];
+		let destroyed = false;
+
+		loadGoogleMaps(API_KEY())
+			.then(() => {
+				if (destroyed) return;
+				const a = params.assignment;
+				const path: google.maps.LatLngLiteral[] = [];
+				if (a.tech.startLoc) path.push({ lat: a.tech.startLoc.lat, lng: a.tech.startLoc.lon });
+				a.stops.forEach((s) => {
+					if (s.loc) path.push({ lat: s.loc.lat, lng: s.loc.lon });
+				});
+				if (a.tech.endLoc) path.push({ lat: a.tech.endLoc.lat, lng: a.tech.endLoc.lon });
+
+				if (path.length === 0) return;
+				map = new google.maps.Map(node, {
+					center: path[0],
+					zoom: 12,
+					gestureHandling: 'none',
+					disableDefaultUI: true
+				});
+
+				poly = new google.maps.Polyline({
+					path,
+					strokeColor: '#1FA8DB',
+					strokeOpacity: 0.95,
+					strokeWeight: 3,
+					clickable: false
+				});
+				poly.setMap(map);
+
+				if (a.tech.startLoc)
+					markers.push(
+						new google.maps.Marker({
+							position: { lat: a.tech.startLoc.lat, lng: a.tech.startLoc.lon },
+							map,
+							label: 'S'
+						})
+					);
+				a.stops.forEach((s, idx) => {
+					if (s.loc)
+						markers.push(
+							new google.maps.Marker({
+								position: { lat: s.loc.lat, lng: s.loc.lon },
+								map,
+								label: ((idx + 1) % 10).toString()
+							})
+						);
+				});
+				if (a.tech.endLoc)
+					markers.push(
+						new google.maps.Marker({
+							position: { lat: a.tech.endLoc.lat, lng: a.tech.endLoc.lon },
+							map,
+							label: 'E'
+						})
+					);
+
+				const bounds = new google.maps.LatLngBounds();
+				path.forEach((p) => bounds.extend(p));
+				map.fitBounds(bounds);
+			})
+			.catch((e) => {
+				console.warn('[Map] load failed', e);
+			});
+
+		return {
+			update(_newParams: { assignment: Assignment }) {
+				// No-op for now. Could implement rerendering if assignments change.
+			},
+			destroy() {
+				destroyed = true;
+				if (poly) poly.setMap(null);
+				markers.forEach((m) => m.setMap(null));
+				markers = [];
+			}
+		};
+	}
 </script>
 
 <svelte:head>
@@ -258,11 +336,17 @@
 		</div>
 
 		{#if techs.length > 0}
-			<ul class="list">
+			<ul class="list tech-list">
 				{#each techs as t}
-					<li>
-						<strong>{t.name}</strong> — {t.start} → {t.end}
-						<button class="small" onclick={() => removeTech(t.id)}>Remove</button>
+					<li class="tech-row">
+						<div class="tech-head">
+							<strong class="tech-name">{t.name}</strong>
+							<button class="small" onclick={() => removeTech(t.id)}>Remove</button>
+						</div>
+						<div class="tech-addrs">
+							<div class="addr"><span class="label">Start:</span> {t.start}</div>
+							<div class="addr"><span class="label">End:</span> {t.end}</div>
+						</div>
 					</li>
 				{/each}
 			</ul>
@@ -320,31 +404,45 @@
 		<h2>Assignment Result</h2>
 		{#each result.assignments as a}
 			<div class="card small-card">
-				<h3>{a.tech.name}</h3>
+				<div class="card-head">
+					<h3>{a.tech.name}</h3>
+					<div class="tech-addrs">
+						<div class="addr">
+							<span class="label">Start:</span>
+							{a.tech.startLoc
+								? `${a.tech.startLoc.lat.toFixed(5)}, ${a.tech.startLoc.lon.toFixed(5)}`
+								: '—'}
+						</div>
+						<div class="addr">
+							<span class="label">End:</span>
+							{a.tech.endLoc
+								? `${a.tech.endLoc.lat.toFixed(5)}, ${a.tech.endLoc.lon.toFixed(5)}`
+								: '—'}
+						</div>
+					</div>
+				</div>
 				<p><strong>Stops:</strong> {a.stops.length}</p>
 				<p><strong>Mileage:</strong> {a.miles.toFixed(1)} mi</p>
-				<p><strong>Drive time:</strong> {a.minutes.toFixed(0)} min</p>
+				<p><strong>Drive time:</strong> {formatMinutes(a.minutes)}</p>
 				<ul>
 					{#each a.stops as s}
 						<li>{s.address} {s.rank ? ` (rank ${s.rank})` : ''}</li>
 					{/each}
 				</ul>
 				{#if API_KEY() && (a.tech.startLoc || a.tech.endLoc || a.stops.some((s) => s.loc))}
-					<div class="map-preview">
-						<img src={buildStaticMapUrl(a)} alt="Route map" />
-						<p style="margin-top:0.5rem">
-							<a href={buildGoogleMapsDirectionsUrl(a)} target="_blank" rel="noopener"
-								>Open in Google Maps</a
-							>
-						</p>
-					</div>
+					<div class="map-preview interactive-map" use:initMap={{ assignment: a }}></div>
+					<p class="map-link">
+						<a href={buildGoogleMapsDirectionsUrl(a)} target="_blank" rel="noopener"
+							>Open in Google Maps</a
+						>
+					</p>
 				{/if}
 			</div>
 		{/each}
 
 		<div style="margin-top:1rem">
 			<p><strong>Total miles:</strong> {result.totals.miles.toFixed(1)} mi</p>
-			<p><strong>Total minutes:</strong> {result.totals.minutes.toFixed(0)} min</p>
+			<p><strong>Total time:</strong> {formatMinutes(result.totals.minutes)}</p>
 		</div>
 	{/if}
 </div>
@@ -405,16 +503,17 @@
 		background: var(--card-bg, #fff);
 		border: 1px solid var(--border, #eaeaea);
 	}
-	.map-preview img {
+	.map-preview.interactive-map {
 		width: 100%;
 		height: 160px;
-		object-fit: cover;
 		border-radius: 6px;
-		display: block;
+		overflow: hidden;
+		background: #f5f7fa;
 	}
-	.map-preview p {
-		margin: 0.5rem 0 0 0;
+	.map-link {
+		margin-top: 0.5rem;
 		font-size: 0.9rem;
+		display: block;
 	}
 	.error {
 		color: #b00020;
@@ -443,5 +542,47 @@
 		.card > section:nth-of-type(3) {
 			grid-column: 1 / 3;
 		}
+	}
+
+	/* Tech list and card layout improvements */
+	.tech-list {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+	}
+	.tech-row {
+		padding: 0.5rem 0;
+		border-bottom: 1px solid #f5f5f5;
+	}
+	.tech-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.tech-name {
+		font-size: 1.05rem;
+	}
+	.tech-addrs {
+		margin-top: 0.4rem;
+		font-size: 0.9rem;
+		color: #444;
+	}
+	.addr {
+		display: block;
+		white-space: normal;
+		word-break: break-word;
+	}
+	.label {
+		font-weight: 600;
+		color: #666;
+		margin-right: 0.25rem;
+	}
+
+	.card-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		gap: 0.8rem;
 	}
 </style>
