@@ -897,4 +897,10 @@
 	:global(body.has-selections .bottom-nav) {
 		display: none !important;
 	}
+
+	@media (max-width: 640px) {
+		.trip-history {
+			padding-bottom: 32px;
+		}
+	}
 </style>

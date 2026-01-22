@@ -364,4 +364,10 @@
 			margin-bottom: 18px;
 		}
 	}
+
+	@media (max-width: 640px) {
+		.settings {
+			padding-bottom: 32px;
+		}
+	}
 </style>

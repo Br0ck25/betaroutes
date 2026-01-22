@@ -42,33 +42,20 @@
 
 	let lastHadSelections = false;
 
+	// Pagination
+	let currentPage = 1;
+	const itemsPerPage = 20;
+
 	// Selection State
 	let selectedExpenses = new Set<string>();
 
-	// Render a small slice of the list initially to reduce initial DOM work and main-thread blocking.
-	// We'll expand to the full list when the browser is idle or after loading finishes.
-	let visibleLimit = 20;
+	// Pagination state
 	let visibleExpenses: any[] = [];
-	$: visibleExpenses = filteredExpenses.slice(0, visibleLimit);
-
-	// Expand visible window when more items become available (guarded to avoid reactive loops)
-	let _lastExpandedSize = 0; // non-reactive guard variable
-	/* eslint-disable svelte/infinite-reactive-loop */
-	$: if (
-		!loading &&
-		typeof window !== 'undefined' &&
-		filteredExpenses.length > visibleLimit &&
-		filteredExpenses.length !== _lastExpandedSize
-	) {
-		const size = filteredExpenses.length;
-		_lastExpandedSize = size;
-		if ('requestIdleCallback' in window) {
-			requestIdleCallback(() => (visibleLimit = size));
-		} else {
-			setTimeout(() => (visibleLimit = size), 200);
-		}
-	}
-	/* eslint-enable svelte/infinite-reactive-loop */
+	$: totalPages = Math.ceil(filteredExpenses.length / itemsPerPage);
+	$: visibleExpenses = filteredExpenses.slice(
+		(currentPage - 1) * itemsPerPage,
+		currentPage * itemsPerPage
+	);
 
 	$: if (typeof document !== 'undefined') {
 		const hasSelections = selectedExpenses.size > 0;
@@ -173,6 +160,7 @@
 	// Reset selection when filters change
 	$: if (searchQuery || sortBy || sortOrder || filterCategory || startDate || endDate) {
 		selectedExpenses = new Set();
+		currentPage = 1;
 	}
 
 	$: filteredExpenses = allExpenses
@@ -183,7 +171,15 @@
 				!query ||
 				(item.description && item.description.toLowerCase().includes(query)) ||
 				item.amount.toString().includes(query) ||
-				((item as any).source === 'trip' && 'trip'.includes(query));
+				((item as any).source === 'trip' && 'trip'.includes(query)) ||
+				(item.category && item.category.toLowerCase().includes(query)) ||
+				((item as any).tags &&
+					Array.isArray((item as any).tags) &&
+					(item as any).tags.some((tag: string) => tag.toLowerCase().includes(query))) ||
+				((item as any).taxDeductible &&
+					('tax deductible'.includes(query) ||
+						'deductible'.includes(query) ||
+						'tax'.includes(query)));
 
 			if (!matchesSearch) return false;
 
@@ -278,6 +274,12 @@
 	function toggleSelectAll() {
 		if (allSelected) selectedExpenses = new Set();
 		else selectedExpenses = new Set(filteredExpenses.map((e) => e.id));
+	}
+
+	function changePage(newPage: number) {
+		if (newPage >= 1 && newPage <= totalPages) {
+			currentPage = newPage;
+		}
 	}
 
 	async function deleteSelected() {
@@ -839,6 +841,25 @@
 				</div>
 			{/each}
 		</div>
+
+		<!-- Pagination Controls -->
+		{#if totalPages > 1}
+			<div class="pagination-container">
+				<div class="pagination">
+					<button
+						class="pagination-btn"
+						disabled={currentPage === 1}
+						on:click={() => changePage(currentPage - 1)}>← Prev</button
+					>
+					<span class="page-status">Page {currentPage} of {totalPages}</span>
+					<button
+						class="pagination-btn"
+						disabled={currentPage === totalPages}
+						on:click={() => changePage(currentPage + 1)}>Next →</button
+					>
+				</div>
+			</div>
+		{/if}
 	{:else}
 		<div class="empty-state">
 			<p>No expenses found matching your filters.</p>
@@ -1770,8 +1791,54 @@
 	}
 
 	@media (max-width: 639px) {
+		.page-container {
+			padding-bottom: 32px;
+		}
 		.hidden-mobile {
 			display: none;
 		}
+	}
+
+	/* Pagination Controls */
+	.pagination-container {
+		margin-top: 32px;
+		display: flex;
+		justify-content: center;
+	}
+
+	.pagination {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 16px;
+	}
+
+	.pagination-btn {
+		padding: 8px 16px;
+		background: white;
+		border: 1px solid #e5e7eb;
+		border-radius: 8px;
+		font-weight: 600;
+		font-size: 14px;
+		color: #374151;
+		cursor: pointer;
+		transition: all 0.2s;
+		font-family: inherit;
+	}
+
+	.pagination-btn:hover:not(:disabled) {
+		border-color: var(--orange);
+		color: var(--orange);
+	}
+
+	.pagination-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.page-status {
+		font-size: 14px;
+		color: #4b5563;
+		font-weight: 500;
 	}
 </style>
