@@ -88,17 +88,12 @@
 	// Filter trips by date and search
 	$: filteredTrips = $trips.filter((trip) => {
 		if (!trip.date) return false;
-		const tripDate = new Date(trip.date);
 
-		if (dateFrom) {
-			const from = new Date(dateFrom);
-			if (tripDate < from) return false;
-		}
+		// Extract YYYY-MM-DD for comparison (avoids timezone issues)
+		const tripDateStr = trip.date.includes('T') ? trip.date.split('T')[0]! : trip.date;
 
-		if (dateTo) {
-			const to = new Date(dateTo);
-			if (tripDate > to) return false;
-		}
+		if (dateFrom && tripDateStr < dateFrom) return false;
+		if (dateTo && tripDateStr > dateTo) return false;
 
 		if (!matchesSearch(trip, searchQuery)) return false;
 
@@ -108,17 +103,12 @@
 	// Filter expenses by date and search
 	$: filteredExpenses = $expenses.filter((expense) => {
 		if (!expense.date) return false;
-		const expenseDate = new Date(expense.date);
 
-		if (dateFrom) {
-			const from = new Date(dateFrom);
-			if (expenseDate < from) return false;
-		}
+		// Extract YYYY-MM-DD for comparison (avoids timezone issues)
+		const expenseDateStr = expense.date.includes('T') ? expense.date.split('T')[0]! : expense.date;
 
-		if (dateTo) {
-			const to = new Date(dateTo);
-			if (expenseDate > to) return false;
-		}
+		if (dateFrom && expenseDateStr < dateFrom) return false;
+		if (dateTo && expenseDateStr > dateTo) return false;
 
 		if (!matchesSearch(expense, searchQuery)) return false;
 
@@ -128,17 +118,12 @@
 	// Filter mileage by date and search
 	$: filteredMileage = $mileage.filter((m) => {
 		if (!m.date) return false;
-		const mileageDate = new Date(m.date);
 
-		if (dateFrom) {
-			const from = new Date(dateFrom);
-			if (mileageDate < from) return false;
-		}
+		// Extract YYYY-MM-DD for comparison (avoids timezone issues)
+		const mileageDateStr = m.date.includes('T') ? m.date.split('T')[0]! : m.date;
 
-		if (dateTo) {
-			const to = new Date(dateTo);
-			if (mileageDate > to) return false;
-		}
+		if (dateFrom && mileageDateStr < dateFrom) return false;
+		if (dateTo && mileageDateStr > dateTo) return false;
 
 		if (!matchesSearch(m, searchQuery)) return false;
 
