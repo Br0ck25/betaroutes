@@ -57,7 +57,7 @@ Before making **ANY** changes, read these documents **in order**:
 
 ### Error Pattern #1: Forgetting `lang="ts"`
 
-**Symptom:** 50+ parse errors like `'<` cannot be applied to types`, `'string' only refers to a type` 
+**Symptom:** 50+ parse errors like `'<` cannot be applied to types`, `'string' only refers to a type`
 **Cause:** Added TypeScript syntax without`lang="ts"`
 
 ❌ **Wrong:**
@@ -82,7 +82,7 @@ Before making **ANY** changes, read these documents **in order**:
 
 ### Error Pattern #2: Partial Migration (Svelte 4 + 5 mix)
 
-**Symptom:** File uses both `export let` **and** `$state()`, errors everywhere  
+**Symptom:** File uses both `export let` **and** `$state()`, errors everywhere
 **Cause:** Attempted to add Svelte 5 features to a Svelte 4 file
 
 ❌ **Wrong:**
@@ -108,7 +108,7 @@ If **NO** to questions 2–3, **stay in the current version**.
 
 ### Error Pattern #3: Server routes missing returns
 
-**Symptom:** `Not all code paths return a value`, `Type 'undefined' is not assignable to type 'Response'`  
+**Symptom:** `Not all code paths return a value`, `Type 'undefined' is not assignable to type 'Response'`
 **Cause:** `RequestHandler` does not `return` a `Response` on every path
 
 ❌ **Wrong:**
@@ -144,7 +144,7 @@ export const POST: RequestHandler = async ({ locals }) => {
 
 ### Error Pattern #4: Passing possibly undefined values
 
-**Symptom:** `Object is possibly 'undefined'`, `T | undefined is not assignable`  
+**Symptom:** `Object is possibly 'undefined'`, `T | undefined is not assignable`
 **Cause:** Passing array elements or optional values without checking
 
 ❌ **Wrong:**
@@ -174,7 +174,7 @@ doSomething(item);
 
 ### Error Pattern #5: Unreachable code
 
-**Symptom:** `Unreachable code detected`  
+**Symptom:** `Unreachable code detected`
 **Cause:** Code placed after a `return`
 
 ❌ **Wrong:**
@@ -202,7 +202,7 @@ assignments[idx].stops.push(stop);
 
 ### Error Pattern #6: Unused / speculative state (clean code)
 
-**Symptom:** `'selectedMileage' is declared but its value is never read`  
+**Symptom:** `'selectedMileage' is declared but its value is never read`
 **Cause:** Declaring variables/state “just in case” (unused)
 
 ❌ **Wrong:**
@@ -217,6 +217,30 @@ let selectedMileage = new Set<string>(); // unused -> check/lint error
 - If a variable/arg must exist for signature reasons, prefix with `_` (e.g. `_req`, `_unusedIndex`).
 
 **Prevention:** Make the smallest diff possible. Do not add placeholder code.
+
+### Error Pattern #7: Missing Imports & Exports (Lazy Coding)
+
+**Symptom:** `Cannot find name 'createEventDispatcher'`, `declares 'x' locally but it is not exported`
+
+**Cause:** Using standard Svelte functions without importing them, or creating utility functions without making them public.
+
+❌ **Wrong:**
+
+````typescript
+// in utils/dates.ts
+function parseToDate(d) { ... } // Not exported!
+
+// in Component.svelte (Svelte 4)
+const dispatch = createEventDispatcher(); // Not imported!
+
+✅ **Correct:**
+
+// in utils/dates.ts
+export function parseToDate(d) { ... } // Export added
+
+// in Component.svelte (Svelte 4)
+import { createEventDispatcher } from 'svelte'; // Import added
+const dispatch = createEventDispatcher();
 
 ---
 
@@ -235,7 +259,7 @@ try {
 	// ESLint: unused variable + silent failure
 	return fallbackValue;
 }
-```
+````
 
 ✅ **Always log errors in server code (do not log sensitive data):**
 
@@ -265,7 +289,7 @@ try {
 
 **Rule:** If an error variable is genuinely not needed (e.g., in a UI utility or optional parsing), handle it cleanly.
 
-**A. Catch Blocks (Preferred):**  
+**A. Catch Blocks (Preferred):**
 Use **Optional Catch Binding** (`catch {}`) when the error object is unused.
 
 ```typescript
@@ -278,7 +302,7 @@ try {
 }
 ```
 
-**B. Function Parameters:**  
+**B. Function Parameters:**
 Use the underscore prefix (`_`) for unused arguments.
 
 ```typescript
@@ -511,5 +535,5 @@ If any command fails:
 
 This is a **governance-first, security-first, migration-second** project.
 
-**Editing ≠ migrating.**  
+**Editing ≠ migrating.**
 When in doubt: **do less** and **ask**.
