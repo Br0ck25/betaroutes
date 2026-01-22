@@ -146,6 +146,7 @@ export class TripIndexDO {
 
 		const url = new URL(request.url);
 		const path = url.pathname;
+		log.info(`[TripIndexDO] fetch() called`, { path, method: request.method });
 
 		try {
 			const parseBody = async <T>() => {
@@ -444,6 +445,7 @@ export class TripIndexDO {
 
 			// --- EXPENSE OPERATIONS ---
 			if (path === '/expenses/list') {
+				log.info(`[TripIndexDO] Handling /expenses/list`);
 				const cursor = this.state.storage.sql.exec(
 					`SELECT data FROM expenses ORDER BY date DESC, createdAt DESC`
 				);
@@ -451,6 +453,7 @@ export class TripIndexDO {
 				for (const row of cursor) {
 					expenses.push(JSON.parse((row as Record<string, unknown>)['data'] as string));
 				}
+				log.info(`[TripIndexDO] /expenses/list returning ${expenses.length} records`);
 				return new Response(JSON.stringify(expenses));
 			}
 
@@ -511,6 +514,7 @@ export class TripIndexDO {
 
 			// --- MILEAGE OPERATIONS ---
 			if (path === '/mileage/list') {
+				log.info(`[TripIndexDO] Handling /mileage/list`);
 				const cursor = this.state.storage.sql.exec(
 					`SELECT data FROM mileage ORDER BY date DESC, createdAt DESC`
 				);
@@ -518,6 +522,7 @@ export class TripIndexDO {
 				for (const row of cursor) {
 					records.push(JSON.parse((row as Record<string, unknown>)['data'] as string));
 				}
+				log.info(`[TripIndexDO] /mileage/list returning ${records.length} records`);
 				return new Response(JSON.stringify(records));
 			}
 
