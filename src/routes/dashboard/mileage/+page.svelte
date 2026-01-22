@@ -55,9 +55,11 @@
 	let endDate = _fmtInput(new Date(_now.getFullYear(), _now.getMonth() + 1, 0));
 	let lastHadSelections = false;
 	let selectedExpenses = new Set<string>();
-	let visibleLimit = 50;
+
+	// Pagination
+	let currentPage = 1;
+	const itemsPerPage = 20;
 	let visibleExpenses: any[] = [];
-	$: visibleExpenses = filteredExpenses.slice(0, visibleLimit);
 
 	// Loading is only true when both store is loading AND we have no server data to show
 	$: loading = $mileageLoading && (!data.mileage || data.mileage.length === 0);
@@ -124,6 +126,11 @@
 				!query ||
 				((item as any).description && (item as any).description.toLowerCase().includes(query)) ||
 				String((item as any).amount || '').includes(query) ||
+				String((item as any).miles || '').includes(query) ||
+				((item as any).vehicle &&
+					String((item as any).vehicle)
+						.toLowerCase()
+						.includes(query)) ||
 				((item as any).source === 'trip' && 'trip'.includes(query));
 
 			if (!matchesSearch) return false;
@@ -172,6 +179,18 @@
 			}
 			return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
 		});
+
+	$: totalPages = Math.ceil(filteredExpenses.length / itemsPerPage);
+	$: visibleExpenses = filteredExpenses.slice(
+		(currentPage - 1) * itemsPerPage,
+		currentPage * itemsPerPage
+	);
+
+	// Reset selection and pagination when filters change
+	$: if (searchQuery || sortBy || sortOrder || filterCategory || startDate || endDate) {
+		selectedExpenses = new Set();
+		currentPage = 1;
+	}
 
 	$: allSelected = filteredExpenses.length > 0 && selectedExpenses.size === filteredExpenses.length;
 
@@ -223,6 +242,12 @@
 	function toggleSelectAll() {
 		if (allSelected) selectedExpenses = new Set();
 		else selectedExpenses = new Set(filteredExpenses.map((e) => e.id));
+	}
+
+	function changePage(newPage: number) {
+		if (newPage >= 1 && newPage <= totalPages) {
+			currentPage = newPage;
+		}
 	}
 
 	async function deleteSelected() {
@@ -764,6 +789,25 @@
 				</div>
 			{/each}
 		</div>
+
+		<!-- Pagination Controls -->
+		{#if totalPages > 1}
+			<div class="pagination-container">
+				<div class="pagination">
+					<button
+						class="pagination-btn"
+						disabled={currentPage === 1}
+						on:click={() => changePage(currentPage - 1)}>← Prev</button
+					>
+					<span class="page-status">Page {currentPage} of {totalPages}</span>
+					<button
+						class="pagination-btn"
+						disabled={currentPage === totalPages}
+						on:click={() => changePage(currentPage + 1)}>Next →</button
+					>
+				</div>
+			</div>
+		{/if}
 	{:else}
 		<div class="empty-state">
 			<p>No mileage logs found matching your filters.</p>
@@ -1674,8 +1718,54 @@
 	}
 
 	@media (max-width: 639px) {
+		.page-container {
+			padding-bottom: 32px;
+		}
 		.hidden-mobile {
 			display: none;
 		}
+	}
+
+	/* Pagination Controls */
+	.pagination-container {
+		margin-top: 32px;
+		display: flex;
+		justify-content: center;
+	}
+
+	.pagination {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 16px;
+	}
+
+	.pagination-btn {
+		padding: 8px 16px;
+		background: white;
+		border: 1px solid #e5e7eb;
+		border-radius: 8px;
+		font-weight: 600;
+		font-size: 14px;
+		color: #374151;
+		cursor: pointer;
+		transition: all 0.2s;
+		font-family: inherit;
+	}
+
+	.pagination-btn:hover:not(:disabled) {
+		border-color: var(--orange);
+		color: var(--orange);
+	}
+
+	.pagination-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.page-status {
+		font-size: 14px;
+		color: #4b5563;
+		font-weight: 500;
 	}
 </style>

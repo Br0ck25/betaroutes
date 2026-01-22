@@ -1225,20 +1225,28 @@
 			{/if}
 		</div>
 
-		<!-- Import Section -->
+		<!-- Import Data Card -->
 		<div class="options-card">
 			<h2 class="card-title">Import Data</h2>
 			<p class="card-desc">Import trips, expenses, or mileage from a CSV file</p>
-			<select id="import-type-select" bind:value={importType} class="select-input">
-				<option value="trips">Trips</option>
-				<option value="expenses">Expenses</option>
-				<option value="mileage">Mileage</option>
-			</select>
-		</div>
 
-		<div class="option-group">
-			<label class="file-upload-btn">
-				<input type="file" accept=".csv" on:change={handleImportFile} bind:files={importFile} />
+			<fieldset class="option-group">
+				<legend class="option-label">Import Type</legend>
+				<select id="import-type-select" bind:value={importType} class="select-input">
+					<option value="trips">Trips</option>
+					<option value="expenses">Expenses</option>
+					<option value="mileage">Mileage</option>
+				</select>
+			</fieldset>
+
+			<label class="btn-import">
+				<input
+					type="file"
+					accept=".csv"
+					on:change={handleImportFile}
+					bind:files={importFile}
+					style="display: none;"
+				/>
 				<svg
 					width="20"
 					height="20"
@@ -1247,32 +1255,30 @@
 					stroke="currentColor"
 					stroke-width="2"
 				>
-					<path
-						d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15"
-					/>
-					<path d="M17 8L12 3L7 8" />
-					<path d="M12 3V15" />
+					<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+					<polyline points="17 8 12 3 7 8"></polyline>
+					<line x1="12" y1="3" x2="12" y2="15"></line>
 				</svg>
 				Choose CSV File
 			</label>
-		</div>
 
-		{#if showImportPreview}
-			<div class="import-preview">
-				<p>Preview (first 10 rows):</p>
-				<div class="preview-table">
-					{#each importPreview as row}
-						<div class="preview-row">
-							{JSON.stringify(row)}
-						</div>
-					{/each}
+			{#if showImportPreview}
+				<div class="import-preview">
+					<p class="preview-label">Preview (first 10 rows):</p>
+					<div class="preview-table">
+						{#each importPreview as row}
+							<div class="preview-row">
+								{JSON.stringify(row)}
+							</div>
+						{/each}
+					</div>
+					<button class="btn-export" on:click={confirmImport}>Confirm Import</button>
+					<button class="btn-export secondary" on:click={() => (showImportPreview = false)}
+						>Cancel</button
+					>
 				</div>
-				<button class="export-btn" on:click={confirmImport}>Confirm Import</button>
-				<button class="export-btn secondary" on:click={() => (showImportPreview = false)}
-					>Cancel</button
-				>
-			</div>
-		{/if}
+			{/if}
+		</div>
 	</div>
 
 	<!-- Backup & Restore Section -->
@@ -1539,6 +1545,7 @@
 		cursor: pointer;
 		transition: all 0.2s;
 		font-family: inherit;
+		margin-bottom: 24px;
 	}
 
 	.btn-export:hover:not(:disabled) {
@@ -1549,6 +1556,62 @@
 	.btn-export:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	.btn-import {
+		width: 100%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		padding: 16px;
+		background: linear-gradient(135deg, var(--orange) 0%, #ff6a3d 100%);
+		color: white;
+		border: none;
+		border-radius: 12px;
+		font-weight: 600;
+		font-size: 15px;
+		cursor: pointer;
+		transition: all 0.2s;
+		font-family: inherit;
+	}
+
+	.btn-import:hover {
+		transform: translateY(-2px);
+		box-shadow: 0 8px 16px rgba(255, 127, 80, 0.3);
+	}
+
+	.import-preview {
+		margin-top: 20px;
+		padding: 16px;
+		background: #f9fafb;
+		border: 2px solid #e5e7eb;
+		border-radius: 12px;
+	}
+
+	.preview-label {
+		font-size: 14px;
+		font-weight: 600;
+		color: #374151;
+		margin-bottom: 12px;
+	}
+
+	.preview-table {
+		max-height: 300px;
+		overflow-y: auto;
+		margin-bottom: 16px;
+	}
+
+	.preview-row {
+		padding: 8px;
+		background: white;
+		border: 1px solid #e5e7eb;
+		border-radius: 6px;
+		margin-bottom: 8px;
+		font-size: 12px;
+		font-family: monospace;
+		color: #374151;
+		word-break: break-all;
 	}
 
 	.selection-header {
@@ -1894,51 +1957,6 @@
 		font-size: 14px;
 		background: white;
 		cursor: pointer;
-	}
-
-	.file-upload-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 8px;
-		padding: 12px 20px;
-		background: #f3f4f6;
-		border: 1px solid #e5e7eb;
-		border-radius: 8px;
-		font-size: 14px;
-		font-weight: 600;
-		color: #374151;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-
-	.file-upload-btn:hover {
-		background: #e5e7eb;
-	}
-
-	.file-upload-btn input[type='file'] {
-		display: none;
-	}
-
-	.import-preview {
-		margin-top: 16px;
-		padding: 16px;
-		background: #f9fafb;
-		border-radius: 8px;
-	}
-
-	.preview-table {
-		max-height: 200px;
-		overflow-y: auto;
-		margin: 12px 0;
-	}
-
-	.preview-row {
-		padding: 8px;
-		background: white;
-		border-radius: 4px;
-		margin-bottom: 4px;
-		font-size: 12px;
-		font-family: monospace;
 	}
 
 	.export-btn.full-width {
