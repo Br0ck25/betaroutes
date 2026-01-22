@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	export let sections: string[] = ['profile', 'maintenance', 'data', 'integrations', 'security'];
+	export let sections: string[] = ['profile', 'maintenance', 'integrations', 'security'];
 
 	// Ensure `active` is a string even if sections is empty
 	let active: string = sections?.[0] ?? '';

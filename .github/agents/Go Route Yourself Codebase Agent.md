@@ -11,11 +11,145 @@ This is a **governed codebase** with strict, non-negotiable rules. Before making
 1. **`SECURITY.md`** — **READ FIRST** - Absolute highest priority
 2. **`GOVERNANCE.md`** — Rule hierarchy and conflict resolution
 3. **`AI_AGENTS.md`** — Quick reference for AI agents
-4. **`SVELTE5_MIGRATION.md** — Migration rules + checklist (only applies until migration complete)
-5. **`SVELTE5_STANDARDS.md** — Permanent Svelte 5 runes + TS standards (preferred even during migration)
+4. **`SVELTE5_STANDARDS.md`** — Standards for **new** Svelte 5 files (reference only)
+5. **`SVELTE5_MIGRATION.md`** — Migration rules + checklist (when migrating)
 6. **`PWA.md`** — PWA requirements
 7. **`HTML_LIVING_STANDARD.md`** — HTML syntax rules
 8. **`DESIGN_SYSTEM.md`** — Color palette
+
+---
+
+## 🚨 Error Prevention Protocol (MANDATORY)
+
+### Before Touching ANY .svelte File
+
+**Ask yourself these questions in order:**
+
+1. **What version is this file?**
+   - See `$props()`, `$state()`, `$derived()` → **Svelte 5**
+   - See `export let`, `$:`, `<slot>` → **Svelte 4**
+
+2. **What am I being asked to do?**
+   - Fix a bug → **Edit in current version**
+   - Update text/labels → **Edit in current version**
+   - Add/change props → **Edit in current version**
+   - Change styles → **Edit in current version**
+   - "Migrate to Svelte 5" → **See SVELTE5_MIGRATION.md**
+   - Feature needs Svelte 5 → **STOP and ask user**
+
+3. **If adding TypeScript syntax (`<Type>`, `: Type`, `interface`):**
+   - **MUST add `lang="ts"` to `<script>` tag**
+   - Without it → 50+ cascading parse errors
+
+**Decision:**
+
+- ✅ Edit in current version (Svelte 4 or 5)
+- ❌ DO NOT mix Svelte 4 and 5 syntax
+- ❌ DO NOT migrate opportunistically
+- ❌ DO NOT add TypeScript without `lang="ts"`
+
+---
+
+### Before Editing +server.ts Files
+
+**Checklist for RequestHandler functions:**
+
+- [ ] Every code path returns a `Response` (never `undefined`)
+- [ ] Early returns use `return new Response(...)`
+- [ ] No code after `return` statements (unreachable code)
+- [ ] Array indexing is guarded (check `indexOf !== -1`)
+- [ ] Optional values are checked before passing to functions
+- [ ] User authentication via `locals.user` (NOT client input)
+- [ ] User ownership verified before returning data
+
+**Common Pattern:**
+
+```typescript
+export const POST: RequestHandler = async ({ request, locals }) => {
+	// 1. Auth check with early return
+	if (!locals.user) {
+		return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+	}
+
+	// 2. Input validation with early return
+	const body = await request.json();
+	if (!body || !body.requiredField) {
+		return new Response(JSON.stringify({ error: 'Bad request' }), { status: 400 });
+	}
+
+	// 3. Main logic
+	const result = await doSomething(body);
+
+	// 4. Final return (REQUIRED)
+	return new Response(JSON.stringify({ success: true, data: result }));
+};
+```
+
+---
+
+### If You Create Errors
+
+**STOP IMMEDIATELY if `npm run check` shows NEW errors after your changes.**
+
+**DO NOT:**
+
+- ❌ Try to "fix" errors by making more changes
+- ❌ Add type assertions (`as Type`) to silence warnings
+- ❌ Continue editing hoping errors will resolve
+- ❌ Make the diff bigger trying to patch issues
+
+**DO:**
+
+1. ✅ Review what you just changed
+2. ✅ Check if you forgot `lang="ts"`
+3. ✅ Check if you mixed Svelte 4/5 syntax
+4. ✅ Check if you forgot `return` statements
+5. ✅ Consider reverting to original approach
+6. ✅ Ask the user for guidance
+
+**Remember:** 5 errors that turn into 50 errors means you're going in the wrong direction.
+
+---
+
+### Common Error Signatures
+
+**Parse errors + "only refers to a type"** → Forgot `lang="ts"`
+
+**"Not all code paths return a value"** → Missing `return` in RequestHandler
+
+**"Object is possibly undefined"** → No guard before array indexing
+
+**"Unreachable code detected"** → Code after `return` statement
+
+**"Cannot use export let in runes mode"** → Mixed Svelte 4/5 syntax
+
+**50+ errors in one file** → Probably forgot `lang="ts"` or mixed versions
+
+---
+
+### Success Verification
+
+**After making changes, ALWAYS run:**
+
+```bash
+npm run check   # TypeScript + Svelte validation
+npm run lint    # ESLint
+npx eslint .    # Additional linting
+```
+
+**If ANY command fails:**
+
+- Your changes are NOT ready
+- Review the errors
+- Follow the error prevention steps above
+- Fix issues before proceeding
+
+**Zero tolerance for:**
+
+- Skipping verification commands
+- Committing with TypeScript errors
+- Leaving "TODO: fix this later" comments for type issues
+- Shipping code that doesn't pass checks
 
 ---
 
@@ -128,7 +262,7 @@ if (trip.userId !== user.id) {
 
 ---
 
-## Svelte 4 → Svelte 5 Migration
+## Svelte 4 ↔ Svelte 5 Migration
 
 ### Current Status
 
@@ -150,14 +284,16 @@ This project is in **active migration** from Svelte 4 to Svelte 5. Both versions
 - User explicitly requests migration, OR
 - Task requires Svelte 5 features (cannot be done in Svelte 4)
 
+**See `SVELTE5_MIGRATION.md` for migration procedures.**
+
 ### New Code Requirements
 
 ALL new files MUST use Svelte 5:
 
 ```svelte
-<script>
-	// ✅ Svelte 5 runes
-	let { title, onClick } = $props();
+<script lang="ts">
+	// ✅ Svelte 5 runes with TypeScript
+	let { title, onClick } = $props<{ title: string; onClick?: () => void }>();
 	let count = $state(0);
 	let doubled = $derived(count * 2);
 
@@ -167,70 +303,7 @@ ALL new files MUST use Svelte 5:
 </script>
 ```
 
-Common Errors (Svelte 5 Runes Mode) — REQUIRED Fix Patterns
-
-1. export let is Forbidden
-
-Error: Cannot use export let in runes mode — use $props() instead
-
-Fix: Replace export let with destructuring from $props().
-
-Svelte
-
-<script>
-  export let foo;
-</script>
-
-<script>
-  let { foo } = $props();
-</script>
-
-2. $: Reactive Statements are Forbidden
-
-Error: $: is not allowed in runes mode
-
-Fix: Use $derived for computed values, $effect for side effects.
-
-Svelte
-
-<script>
-  $: total = a + b;
-  $: if (ready) doThing();
-</script>
-
-<script>
-  let total = $derived(a + b);
-
-  $effect(() => {
-    if (ready) doThing();
-  });
-</script>
-
-3. TypeScript: () => string is not assignable to string
-
-Cause: Passing a function where a value is expected.
-
-Fix: Call the function or derive the value.
-
-Svelte
-<Component label={getLabel} />
-
-<Component label={getLabel()} />
-
-<script>
-  let label = $derived(getLabel());
-</script>
-
-<Component {label} /> 4) Event Attributes (Custom Events)
-
-Cause: Missing on: directive or using wrong casing for custom events.
-
-Fix: Ensure correct syntax. Do NOT use onplace-selected.
-
-Svelte
-<input onplace-selected={handlePlaceSelected} />
-
-<input on:place-selected={handlePlaceSelected} />
+**See `SVELTE5_STANDARDS.md` for Svelte 5 patterns.**
 
 ### Svelte 4 Syntax (for existing files)
 
@@ -243,14 +316,6 @@ Svelte
 	let count = 0;
 	$: doubled = count * 2;
 </script>
-```
-
-### Migration Annotations
-
-When migrating a file, add at the top:
-
-```javascript
-// MIGRATED_TO_SVELTE_5 - YYYY-MM-DD
 ```
 
 ---
@@ -346,82 +411,6 @@ When migrating a file, add at the top:
 
 ---
 
-## Cloudflare KV Namespaces
-
-The application uses these KV namespaces:
-
-- `USERS` — User accounts and authentication
-- `SESSIONS` — Active sessions
-- `LOGS` — Trip logs and data
-- `TRASH` — Soft-deleted items
-- `SETTINGS` — User settings
-- `HUGHESNET` — HughesNet integration data
-- `HUGHESNET_ORDERS` — Work orders
-- `PLACES` — Cached geocoding results
-- `INDEXES` — User data indexes
-- `MILEAGE` — Mileage tracking records
-- `EXPENSES` — Expense records
-
-### Key Patterns
-
-```javascript
-// User data
-`user:${userId}` → User object
-`idx:username:${username}` → User ID lookup
-`idx:email:${email}` → User ID lookup
-
-// Trip data
-`trip:${username}:${tripId}` → Trip object
-
-// HughesNet
-`hns:settings:${username}` → HughesNet settings
-`hns:cred:${username}` → HughesNet credentials (encrypted)
-`hns:session:${username}` → HughesNet session cookies
-```
-
----
-
-## API Endpoints
-
-Located in `src/routes/api/`:
-
-- `/api/auth/*` — Authentication (login, register, logout, passkey)
-- `/api/trips/*` — Trip CRUD operations
-- `/api/mileage/*` — Mileage tracking
-- `/api/expenses/*` — Expense management
-- `/api/settings/*` — User settings
-- `/api/hughesnet/*` — HughesNet integration
-- `/api/geocode/*` — Address geocoding
-- `/api/route/*` — Route calculations
-
----
-
-## Common Tasks
-
-### Adding a New Component
-
-1. Create in `src/lib/components/` using Svelte 5 syntax
-2. Use only approved colors from Design System
-3. Ensure valid HTML (no self-closing divs)
-4. Export from `src/lib/index.ts` if shared
-
-### Adding a New API Endpoint
-
-1. Create in `src/routes/api/`
-2. Always authenticate using `authenticateUser()`
-3. Never trust client-provided userId
-4. Verify user owns requested data
-5. Use rate limiting where appropriate
-
-### Editing Existing Svelte 4 Files
-
-1. Keep the file in Svelte 4 syntax
-2. Do NOT migrate unless explicitly requested
-3. Make minimal changes to accomplish the task
-4. Test that existing functionality still works
-
----
-
 ## Mandatory Stop Conditions
 
 **STOP and ask before proceeding if:**
@@ -435,236 +424,25 @@ Located in `src/routes/api/`:
 - Service worker or manifest would be modified
 - More than one architectural option exists
 - You're unsure about any governance rule
+- **You're about to migrate a Svelte 4 file without explicit user request**
+- **You see 5+ TypeScript errors after making changes**
 
 ---
 
 ## Quick Reference
 
-| Scenario                 | Action                                  |
-| ------------------------ | --------------------------------------- |
-| Fix bug in Svelte 4 file | Fix in Svelte 4, don't migrate          |
-| New component            | Use Svelte 5 syntax                     |
-| Handling user data       | Check SECURITY.md FIRST                 |
-| Creating API endpoint    | Verify user ownership check             |
-| Need new color           | Check DESIGN_SYSTEM.md (probably can't) |
-| Touch service worker     | STOP and ask                            |
-| Touch manifest.json      | STOP and ask                            |
-| Unsure about anything    | STOP and ask                            |
-
----
-
-## Tooling
-
-```bash
-# Type checking
-npm run check
-
-# Linting
-npm run lint
-npx eslint .
-
-# Development
-npm run dev
-
-# Build
-npm run build
-
-# Preview
-npm run preview
-```
-
----
-
-## Key TypeScript Types
-
-### User
-
-```typescript
-interface User {
-	id?: string;
-	token: string;
-	plan: 'free' | 'pro' | 'business' | 'premium';
-	tripsThisMonth: number;
-	maxTrips: number;
-	resetDate: string;
-	name?: string;
-	email?: string;
-}
-```
-
-### Trip
-
-```typescript
-interface Trip {
-	id?: string;
-	date?: string; // YYYY-MM-DD
-	startTime?: string; // HH:MM
-	endTime?: string; // HH:MM
-	startAddress?: string;
-	endAddress?: string;
-	stops?: Stop[];
-	destinations?: Destination[]; // Legacy alias for stops
-	totalMiles?: number;
-	totalEarnings?: number;
-	fuelCost?: number;
-	maintenanceCost?: number;
-	maintenanceItems?: CostItem[];
-	suppliesCost?: number;
-	suppliesItems?: CostItem[];
-	hoursWorked?: number;
-	netProfit?: number;
-	mpg?: number;
-	gasPrice?: number;
-	notes?: string;
-	lastModified?: string; // ISO 8601
-}
-```
-
-### Stop/Destination
-
-```typescript
-interface Stop {
-	id?: string;
-	address?: string;
-	earnings?: number;
-	notes?: string;
-	order?: number;
-	location?: { lat: number; lng: number } | null;
-}
-```
-
----
-
-## Environment Variables
-
-Required for development (`.dev.vars` or `.env`):
-
-```bash
-# Google Maps API
-GOOGLE_MAPS_API_KEY=your_key_here
-
-# Session secrets
-SESSION_SECRET=random_32_char_string
-
-# Optional: HughesNet integration
-HUGHESNET_PROXY_URL=proxy_url_if_needed
-```
-
-Cloudflare bindings (configured in `wrangler.toml`):
-
-- `USERS` - KV namespace
-- `SESSIONS` - KV namespace
-- `LOGS` - KV namespace
-- (see full list in KV Namespaces section)
-
----
-
-## Authentication System
-
-### Session-Based Auth
-
-- Sessions stored in `SESSIONS` KV namespace
-- Session ID in HttpOnly cookie (`session_id`)
-- Sessions expire after configurable time
-
-### WebAuthn/Passkey Support
-
-- Users can register passkeys for passwordless login
-- Authenticators stored in `user.authenticators[]` array
-- See `src/lib/server/auth.ts` for implementation
-- See `WEBAUTHN_MIGRATION.md` for migration notes
-
-### Rate Limiting
-
-API endpoints use rate limiting stored in SESSIONS KV:
-
-```javascript
-// Key pattern
-`ratelimit:${action}:${scope}:${identifier}`
-// Example: Trip reads per user
-`ratelimit:trips:read:user:${userId}`;
-```
-
----
-
-## Offline Sync Architecture
-
-### IndexedDB (Client)
-
-- Located in `src/lib/db/indexedDB.ts`
-- Stores trips, settings, and pending changes offline
-- Syncs with server when online
-
-### Sync Flow
-
-1. User makes changes offline → stored in IndexedDB
-2. App comes online → sync service detects connection
-3. Pending changes uploaded to Cloudflare KV
-4. Server confirms sync → local state updated
-
-### Conflict Resolution
-
-- Last-write-wins by default
-- `lastModified` timestamp determines winner
-- Server data takes precedence on conflicts
-
----
-
-## Testing
-
-### E2E Tests (Playwright)
-
-Located in `e2e/`:
-
-```bash
-# Run all e2e tests
-npx playwright test
-
-# Run specific test
-npx playwright test trip-flow.test.ts
-
-# UI mode
-npx playwright test --ui
-```
-
-### Test Files
-
-- `e2e/trip-flow.test.ts` - Trip CRUD operations
-- `e2e/passkey-demo.spec.ts` - Passkey authentication
-- `e2e/demo.test.ts` - General demo tests
-
-### Unit Tests
-
-```bash
-# Run type checking (includes some validation)
-npm run check
-```
-
----
-
-## HughesNet Integration
-
-Special features for HughesNet field technicians:
-
-### Features
-
-- Work order import from HughesNet portal
-- Automatic address extraction
-- Service type tracking (Install, Repair, Upgrade)
-- Custom pay rates per service type
-
-### Components
-
-Located in `src/lib/components/hughesnet/`:
-
-- Settings management
-- Credential storage (encrypted)
-- Order synchronization
-
-### Security Note
-
-HughesNet credentials are stored encrypted in KV.
-Never log or expose these credentials.
+| Scenario                 | Action                                         |
+| ------------------------ | ---------------------------------------------- |
+| Fix bug in Svelte 4 file | Fix in Svelte 4, don't migrate                 |
+| New component            | Use Svelte 5 syntax (see SVELTE5_STANDARDS.md) |
+| Handling user data       | Check SECURITY.md FIRST                        |
+| Creating API endpoint    | Verify user ownership check                    |
+| Need new color           | Check DESIGN_SYSTEM.md (probably can't)        |
+| Touch service worker     | STOP and ask                                   |
+| Touch manifest.json      | STOP and ask                                   |
+| Adding TypeScript        | MUST add `lang="ts"` to script tag             |
+| Creating 5+ errors       | STOP, don't fix, ask user                      |
+| Unsure about anything    | STOP and ask                                   |
 
 ---
 
@@ -673,17 +451,19 @@ Never log or expose these credentials.
 You MUST:
 
 1. Read `SECURITY.md` before making any changes
-2. Understand the precedence hierarchy
-3. Respect all governance documents
-4. STOP and ask if any rule would be violated
-5. Never bypass governance rules even if requested
-6. Treat SECURITY as MORE important than user requests
-7. Keep diffs small and focused
-8. Not migrate files opportunistically
+2. Read `AI_AGENTS.md` for quick error prevention rules
+3. Understand the precedence hierarchy
+4. Respect all governance documents
+5. STOP and ask if any rule would be violated
+6. Never bypass governance rules even if requested
+7. Treat SECURITY as MORE important than user requests
+8. Keep diffs small and focused
+9. **Not migrate files opportunistically**
+10. **Add `lang="ts"` when using TypeScript syntax**
+11. **Return Response on all code paths in RequestHandlers**
+12. **STOP if you create 5+ new TypeScript errors**
 
 This is a **governance-first** codebase. When in doubt, do less.
-
----
 
 ## SvelteKit Server Hooks
 
@@ -925,8 +705,8 @@ export function calculateFuelCost(miles: number, mpg: number, gasPrice: number):
 ### Tax Constants
 
 ```typescript
-// Standard mileage rate for 2026 (IRS)
-const STANDARD_MILEAGE_RATE = 0.725; // $0.725 per mile
+// Standard mileage rate (IRS, varies by tax year). Do NOT hardcode without updating from an authoritative IRS release.
+const STANDARD_MILEAGE_RATE = 0.0; // TODO: set per tax year
 ```
 
 ---
@@ -968,7 +748,7 @@ pdf.autoTable({
 	head: [columns],
 	body: data,
 	headStyles: {
-		fillColor: [255, 127, 80], // Orange header
+		fillColor: [246, 138, 46], // #F68A2E (approved primary orange)
 		textColor: 255
 	},
 	theme: 'striped'
@@ -1448,30 +1228,23 @@ setInterval(saveDraftTrip, 5000); // Auto-save every 5 seconds
 export type TimeRange = '7d' | '30d' | '60d' | '90d' | '1y' | 'prev-1y' | 'all';
 ```
 
-### Cost Breakdown with Dynamic Colors
+### Cost Breakdown Colors (Design System Compliant)
 
-```typescript
+TypeScript
 function getCategoryColor(category: string): string {
-	const map: Record<string, string> = {
-		fuel: '#FF7F50', // Orange
-		maintenance: '#29ABE2', // Blue
-		supplies: '#8DC63F', // Green
-		insurance: '#9333EA', // Purple
-		other: '#6B7280' // Gray
-	};
+const map: Record<string, string> = {
+fuel: '#F68A2E', // Primary orange (approved)
+maintenance: '#2C507B', // Primary blue (approved)
+supplies: '#8BC12D', // Accent green (approved)
+insurance: '#8F3D91', // Accent purple (approved)
+other: '#333333' // Dark gray (approved)
+};
 
-	// Generate pastel color for custom categories
-	if (!map[category.toLowerCase()]) {
-		let hash = 0;
-		for (let i = 0; i < category.length; i++) {
-			hash = category.charCodeAt(i) + ((hash << 5) - hash);
-		}
-		return `hsl(${Math.abs(hash) % 360}, 70%, 60%)`;
-	}
+    return map[category.toLowerCase()] ?? '#333333';
 
-	return map[category.toLowerCase()];
 }
-```
+
+````
 
 ---
 
@@ -1497,4 +1270,14 @@ export function computeMaintenance(opts: {
 				: `Overdue by ${Math.abs(dueIn).toLocaleString()} miles`
 	};
 }
-```
+````
+
+### Server Route Safety Checklist (`src/routes/**/+server.ts`)
+
+Before finishing any change to a `+server.ts` file, ensure:
+
+- ✅ Handler returns a `Response` on **all** code paths (never `undefined`).
+- ✅ Authentication/validation failures use **early returns** with status codes.
+- ✅ Any optional inputs are guarded (no `T | undefined` passed to helpers).
+- ✅ Array indexing is checked before use (avoid “possibly undefined”).
+- ✅ Remove unreachable code (no logic after a `return`).

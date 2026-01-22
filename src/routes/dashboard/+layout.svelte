@@ -88,6 +88,17 @@
 			),
 			label: 'Trips',
 			exclude: ['/dashboard/trips/new']
+		}
+	];
+
+	// Hamburger menu items (Data Management, Settings)
+	const hamburgerItems = [
+		{
+			href: '/dashboard/data-management/',
+			icon: sanitizeStaticSvg(
+				`<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 10L12 15L17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+			),
+			label: 'Data Management'
 		},
 		{
 			href: '/dashboard/settings/',
@@ -272,6 +283,20 @@
 					<span class="nav-label">{item.label}</span>
 				</a>
 			{/each}
+
+			<div class="nav-divider"></div>
+
+			{#each hamburgerItems as item}
+				<a
+					href={item.href}
+					class="nav-item"
+					class:active={isActive(item.href, $page.url.pathname)}
+					on:click={(e) => handleNav(e, item.href)}
+				>
+					<span class="nav-icon">{@html item.icon}</span>
+					<span class="nav-label">{item.label}</span>
+				</a>
+			{/each}
 		</nav>
 
 		<div class="sidebar-footer">
@@ -332,6 +357,24 @@
 				<span class="bottom-nav-label">{item.label}</span>
 			</a>
 		{/each}
+		<button
+			class="bottom-nav-item hamburger-nav-btn"
+			on:click={() => (sidebarOpen = !sidebarOpen)}
+			aria-label="Open menu"
+			aria-expanded={sidebarOpen}
+		>
+			<span class="bottom-nav-icon">
+				<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+					<path
+						d="M3 12H21M3 6H21M3 18H21"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+					/>
+				</svg>
+			</span>
+			<span class="bottom-nav-label">Menu</span>
+		</button>
 	</nav>
 </div>
 
@@ -485,6 +528,12 @@
 		font-size: 15px;
 	}
 
+	.nav-divider {
+		height: 1px;
+		background: #e5e7eb;
+		margin: 12px 16px;
+	}
+
 	.sidebar-footer {
 		padding: 20px;
 		border-top: 1px solid #e5e7eb;
@@ -575,7 +624,7 @@
 	}
 
 	.overlay {
-		display: none;
+		display: block;
 		position: fixed;
 		top: 0;
 		left: 0;
@@ -637,6 +686,12 @@
 	.bottom-nav-icon :global(svg) {
 		width: 24px;
 		height: 24px;
+	}
+
+	.hamburger-nav-btn {
+		background: none;
+		border: none;
+		cursor: pointer;
 	}
 
 	/* --- Desktop Overrides --- */

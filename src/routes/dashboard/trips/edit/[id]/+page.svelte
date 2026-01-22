@@ -1425,6 +1425,7 @@
 		border-radius: 18px;
 		padding: 16px;
 		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+		margin-bottom: 20px;
 	}
 	.card-header {
 		display: flex;
