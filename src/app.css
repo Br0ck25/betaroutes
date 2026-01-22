@@ -68,3 +68,10 @@ select:focus {
 	outline: none;
 	border-color: #ff7f50;
 }
+
+/* Mobile: avoid forcing full viewport height so short content doesn't leave large gaps above bottom nav */
+@media (max-width: 640px) {
+	.min-h-dvh {
+		min-height: auto !important;
+	}
+}

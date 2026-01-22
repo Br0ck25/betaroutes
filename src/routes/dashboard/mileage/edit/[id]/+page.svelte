@@ -257,6 +257,12 @@
 		padding-bottom: 90px;
 	}
 
+	@media (max-width: 640px) {
+		.expense-form-page {
+			padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1px);
+		}
+	}
+
 	.page-header {
 		display: flex;
 		justify-content: space-between;

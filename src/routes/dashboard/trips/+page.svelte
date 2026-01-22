@@ -899,8 +899,24 @@
 	}
 
 	@media (max-width: 640px) {
+		/* Keep only the safe-area inset plus a small buffer so content sits close to the bottom nav */
 		.trip-history {
-			padding-bottom: 32px;
+			padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1px);
+		}
+
+		/* Slightly compact card spacing on small screens */
+		.trip-list-cards {
+			gap: 8px;
+		}
+
+		/* Reduce extra space above pagination on mobile */
+		.pagination-controls {
+			margin-top: 16px;
+		}
+
+		/* Compact empty-state padding on mobile */
+		.empty-state {
+			padding: 24px 12px;
 		}
 	}
 </style>

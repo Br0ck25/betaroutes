@@ -241,6 +241,12 @@
 		line-height: 1.6;
 	}
 
+	@media (max-width: 640px) {
+		.legal-page {
+			padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1px);
+		}
+	}
+
 	.container {
 		max-width: 800px;
 		margin: 0 auto;
