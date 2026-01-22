@@ -162,8 +162,8 @@ export function makeMileageService(
 				);
 		},
 
-		async get(userId: string, id: string) {
-			const all = await this.list(userId);
+		async get(userId: string, id: string, legacyUserId?: string) {
+			const all = await this.list(userId, undefined, legacyUserId);
 			return all.find((m) => m.id === id) || null;
 		},
 
@@ -182,11 +182,23 @@ export function makeMileageService(
 			});
 		},
 
-		async delete(userId: string, id: string) {
+		async delete(userId: string, id: string, legacyUserId?: string) {
 			const stub = getIndexStub(userId);
 
-			const key = `mileage:${userId}:${id}`;
-			const raw = await kv.get(key);
+			// Try to find the item under the current userId key first
+			let key = `mileage:${userId}:${id}`;
+			let raw = await kv.get(key);
+
+			// [!code fix] If not found under UUID key, check legacy username key
+			if (!raw && legacyUserId && legacyUserId !== userId) {
+				const legacyKey = `mileage:${legacyUserId}:${id}`;
+				raw = await kv.get(legacyKey);
+				if (raw) {
+					key = legacyKey; // Use the legacy key for the tombstone
+					log.info(`[MileageService] Found item under legacy key for delete: ${legacyKey}`);
+				}
+			}
+
 			if (!raw) return;
 
 			const item = JSON.parse(raw) as MileageRecord;

@@ -178,9 +178,9 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			return expenses.filter((e) => !e.deleted);
 		},
 
-		async get(userId: string, id: string) {
+		async get(userId: string, id: string, legacyUserId?: string) {
 			// Reuse list to ensure consistent behavior
-			const all = await this.list(userId);
+			const all = await this.list(userId, undefined, legacyUserId);
 			return all.find((e) => e.id === id) || null;
 		},
 
@@ -228,13 +228,24 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			}
 		},
 
-		async delete(userId: string, id: string) {
+		async delete(userId: string, id: string, legacyUserId?: string) {
 			const stub = getIndexStub(userId);
 
 			// We need to fetch from KV directly to ensure we get the latest data for backup
 			// (even if DO is slightly behind)
-			const key = `expense:${userId}:${id}`;
-			const raw = await kv.get(key);
+			let key = `expense:${userId}:${id}`;
+			let raw = await kv.get(key);
+
+			// [!code fix] If not found under UUID key, check legacy username key
+			if (!raw && legacyUserId && legacyUserId !== userId) {
+				const legacyKey = `expense:${legacyUserId}:${id}`;
+				raw = await kv.get(legacyKey);
+				if (raw) {
+					key = legacyKey; // Use the legacy key for the tombstone
+					log.info(`[ExpenseService] Found item under legacy key for delete: ${legacyKey}`);
+				}
+			}
+
 			if (!raw) return;
 
 			const item = JSON.parse(raw) as Record<string, unknown>;
