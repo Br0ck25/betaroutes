@@ -6,7 +6,7 @@ import { log } from '$lib/server/log';
 
 // --- PBKDF2 CONFIGURATION (Web Crypto) ---
 // [!code fix] Increased to 600,000 (OWASP 2025 Recommendation)
-const PBKDF2_ITERATIONS = 100000;
+const PBKDF2_ITERATIONS = 600000;
 const SALT_SIZE = 16;
 const HASH_ALGO = 'SHA-256';
 
@@ -107,6 +107,22 @@ async function verifyPBKDF2(password: string, storedHash: string): Promise<boole
 
 	// [!code fix] Use constant-time comparison
 	return constantTimeEqual(new Uint8Array(derivedBits), originalHashBuffer);
+}
+
+/**
+ * [!code fix] Exported function to verify password for re-authentication.
+ * Supports both PBKDF2 (new) and bcrypt (legacy) formats.
+ */
+export async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
+	// PBKDF2 (New Standard)
+	if (storedHash && storedHash.startsWith('v1:')) {
+		return verifyPBKDF2(password, storedHash);
+	}
+	// Bcrypt (Legacy)
+	if (storedHash && storedHash.startsWith('$2')) {
+		return bcrypt.compare(password, storedHash);
+	}
+	return false;
 }
 
 /**

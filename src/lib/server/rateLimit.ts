@@ -151,21 +151,13 @@ export function getClientIdentifier(
 	request: Request,
 	locals?: { user?: Partial<User> | null }
 ): string {
-	// Prefer user ID/name if authenticated
+	// [!code fix] Issue #38: Only use user ID (not name) - name could be spoofable
+	// Prefer user ID if authenticated
 	if (locals?.user?.id) {
 		return `user:${locals.user.id}`;
 	}
 
-	if (locals?.user?.name) {
-		return `user:${locals.user.name}`;
-	}
-
-	// Use session token if available
-	if (locals?.user?.token) {
-		return `session:${locals.user.token}`;
-	}
-
-	// Fall back to IP address
+	// Fall back to IP address (don't use name or session token as identifiers)
 	const cfConnectingIp = request.headers.get('cf-connecting-ip');
 	const xForwardedFor = request.headers.get('x-forwarded-for');
 	const xRealIp = request.headers.get('x-real-ip');

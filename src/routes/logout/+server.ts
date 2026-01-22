@@ -7,7 +7,7 @@ export const POST: RequestHandler = async ({ cookies, platform }) => {
 	const sessionId = cookies.get('session_id');
 
 	// 1. Delete cookie
-	cookies.delete('session_id', { path: '/' });
+	cookies.delete('session_id', { path: '/', secure: true });
 
 	// 2. Delete session from SESSIONS_KV
 	if (sessionId) {

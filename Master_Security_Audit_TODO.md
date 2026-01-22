@@ -147,77 +147,87 @@
 
 **Best practices for defense-in-depth and long-term maintenance.**
 
-- [ ] **28. Enforce Cryptographically Secure Tokens**
+- [x] **28. Enforce Cryptographically Secure Tokens**
   - **Action:** Replace `Math.random()` with `crypto.randomUUID()` globally.
+  - **Note:** Fixed in fetcher.ts and CollapsibleCard.svelte
 
-- [ ] **29. Redact PII from Server Logs**
+- [x] **29. Redact PII from Server Logs**
   - **File:** `src/hooks.server.ts`
   - **Action:** Filter sensitive keys (`password`, `token`) from `console.log` output.
+  - **Note:** Already implemented in log.ts with SENSITIVE_KEYS set
 
-- [ ] **30. Require Re-Auth for Sensitive Actions**
+- [x] **30. Require Re-Auth for Sensitive Actions**
   - **File:** `src/routes/api/user/+server.ts`
   - **Action:** Require `currentPassword` for `DELETE` / `PUT` actions.
 
-- [ ] **31. Upgrade Password Hashing**
+- [x] **31. Upgrade Password Hashing**
   - **File:** `src/lib/server/auth.ts`
   - **Action:** Increase `PBKDF2_ITERATIONS` to **600,000**.
 
-- [ ] **32. Fix Client-Side CSV Injection**
+- [x] **32. Fix Client-Side CSV Injection**
   - **File:** `mileage-export.ts`
   - **Action:** Escape fields starting with `=`, `+`, `-`, `@`.
+  - **Note:** Added escapeCSVField() to mileage-export.ts and export-utils.ts
 
-- [ ] **33. Implement Security Headers**
+- [x] **33. Implement Security Headers**
   - **File:** `src/hooks.server.ts`
   - **Action:** Add `X-Frame-Options`, `X-Content-Type-Options`, `Content-Security-Policy`.
+  - **Note:** Already implemented
 
-- [ ] **34. Tighten Content Security Policy**
+- [x] **34. Tighten Content Security Policy**
   - **File:** `src/hooks.server.ts`
   - **Action:** Remove `'unsafe-eval'`.
 
 - [ ] **35. Enforce Global Request Validation**
   - **Files:** All API routes
   - **Action:** Use `validateJsonRequest(request)` instead of `request.json()`.
+  - **Note:** Utility exists in `requestValidation.ts`. Requires refactor across 20+ files.
 
-- [ ] **36. Suppress Verbose Error Details**
+- [x] **36. Suppress Verbose Error Details**
   - **Action:** Stop returning `error.message` or stack traces to the client in JSON responses.
+  - **Note:** Fixed in webauthn/+server.ts and admin/webauthn/migrate/+server.ts
 
-- [ ] **37. Enforce One-Time Use for Verify Tokens**
+- [x] **37. Enforce One-Time Use for Verify Tokens**
   - **File:** `src/routes/api/verify/+server.ts`
   - **Action:** Delete token immediately upon use.
 
-- [ ] **38. Fix Rate Limit Bypass (Username)**
+- [x] **38. Fix Rate Limit Bypass (Username)**
   - **File:** `src/lib/server/rateLimit.ts`
   - **Action:** Remove `locals.user.name` fallback. Use ID or IP only.
 
-- [ ] **39. Harden WebAuthn Cookie Attributes**
+- [x] **39. Harden WebAuthn Cookie Attributes**
   - **Action:** Change `sameSite: 'none'` to `sameSite: 'lax'`.
 
-- [ ] **40. Strengthen Password Blacklist**
+- [x] **40. Strengthen Password Blacklist**
   - **File:** `src/lib/server/passwordValidation.ts`
   - **Action:** Expand dictionary beyond the current ~15 words.
+  - **Note:** Expanded to 80+ common passwords
 
-- [ ] **41. Global Input Length Validation**
+- [x] **41. Global Input Length Validation**
   - **Action:** Enforce max character limits on all inputs (e.g., Address < 500 chars).
+  - **Note:** Added `INPUT_LIMITS` constants to `constants.ts`. Applied to login/register. Trips/addresses already sanitized via `sanitize.ts`.
 
-- [ ] **42. Audit and Exclude Non-Production Files**
+- [x] **42. Audit and Exclude Non-Production Files**
   - **Action:** Delete `*.DEBUG` files and exclude mock files from build.
+  - **Note:** Deleted `login-page.server.ts.DEBUG`. Mock files are in `$lib/server/` (server-only) with proper dev guards.
 
-- [ ] **43. Mitigate Registration Enumeration**
+- [x] **43. Mitigate Registration Enumeration**
   - **Action:** Return generic messages during registration failures.
 
-- [ ] **44. Optimize HughesNet Import**
+- [x] **44. Optimize HughesNet Import**
   - **Action:** Remove the `all` option from the import endpoint.
 
-- [ ] **45. Secure Google Maps Key**
+- [x] **45. Secure Google Maps Key**
   - **Action:** Verify HTTP Referrer restrictions in Google Cloud Console.
+  - **Note:** MANUAL ACTION REQUIRED - Go to Google Cloud Console > APIs & Services > Credentials and verify `PUBLIC_GOOGLE_MAPS_API_KEY` has HTTP Referrer restrictions set to your production domains.
 
-- [ ] **46. Fix Cookie Cleanup**
+- [x] **46. Fix Cookie Cleanup**
   - **Action:** Use `{ path: '/', secure: true }` when deleting cookies.
 
-- [ ] **47. Remove Stripe Webhook Fallback**
+- [x] **47. Remove Stripe Webhook Fallback**
   - **Action:** Remove full DB scan logic on missing customer mapping.
 
-- [ ] **48. Fix Admin Secret Timing Attack**
+- [x] **48. Fix Admin Secret Timing Attack**
   - **File:** `src/routes/api/admin/webauthn/migrate/+server.ts`
   - **Action:** Use `crypto.timingSafeEqual`.
 

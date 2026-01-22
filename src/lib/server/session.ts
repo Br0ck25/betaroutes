@@ -19,7 +19,7 @@ export function setSessionCookie(cookies: Cookies, user: unknown) {
 }
 
 export function clearSessionCookie(cookies: Cookies) {
-	cookies.delete(COOKIE_NAME, { path: '/' });
+	cookies.delete(COOKIE_NAME, { path: '/', secure: true });
 }
 
 export function getUserFromCookies(cookies: Cookies) {

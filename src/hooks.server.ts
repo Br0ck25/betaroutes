@@ -124,12 +124,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 	response.headers.set('Permissions-Policy', 'geolocation=(self), camera=(), microphone=()');
 
 	// Content Security Policy (Issue #6)
+	// [!code fix] Removed 'unsafe-eval' per Issue #34
 	if (!response.headers.has('Content-Security-Policy')) {
 		response.headers.set(
 			'Content-Security-Policy',
 			[
 				"default-src 'self'",
-				"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://maps.googleapis.com https://maps.gstatic.com https://static.cloudflareinsights.com",
+				"script-src 'self' 'unsafe-inline' https://maps.googleapis.com https://maps.gstatic.com https://static.cloudflareinsights.com",
 				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
 				"img-src 'self' data: https: blob:",
 				"font-src 'self' https://fonts.gstatic.com",

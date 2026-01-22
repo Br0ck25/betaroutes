@@ -26,9 +26,9 @@ export const POST: RequestHandler = async ({ request, fetch, cookies, locals }) 
 
 		// 2. If successful, clear the authentication cookies immediately
 		if (externalResponse.ok) {
-			cookies.delete('token', { path: '/' });
+			cookies.delete('token', { path: '/', secure: true });
 			// Ensure 'session_id' is also cleared if it exists (common pattern in this app)
-			cookies.delete('session_id', { path: '/' });
+			cookies.delete('session_id', { path: '/', secure: true });
 		}
 
 		// 3. Return the backend's response to the client

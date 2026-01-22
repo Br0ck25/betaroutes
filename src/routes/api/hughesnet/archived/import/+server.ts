@@ -25,28 +25,17 @@ export const POST: RequestHandler = async ({ platform, locals, request }) => {
 		const hnsKV = safeKV(env, 'BETA_HUGHESNET_KV')!;
 
 		let ids: string[] = [];
-		if (bodyObj['all']) {
-			const listRes = await kv.list({ prefix: 'hns:order:' });
-			const keys = listRes.keys || [];
-			for (const k of keys) {
-				const raw = await kv.get(k.name);
-				if (!raw) continue;
-				try {
-					const p = JSON.parse(raw);
-					if (p && p.ownerId === userId && p.order && p.order.id) ids.push(String(p.order.id));
-				} catch (err: unknown) {
-					log.warn('Skipping corrupt archived order key during ids gather', {
-						key: k.name,
-						message: createSafeErrorMessage(err)
-					});
-				}
-			}
-		} else if (Array.isArray(bodyObj['ids'])) {
+		// [!code fix] Issue #44: Removed 'all' option to prevent full DB scans
+		// Users must now specify specific IDs to import
+		if (Array.isArray(bodyObj['ids'])) {
 			ids = (bodyObj['ids'] as unknown[]).map(String);
 		} else if (bodyObj['id']) {
 			ids = [String(bodyObj['id'])];
 		} else {
-			return json({ success: false, error: 'No ids supplied' }, { status: 400 });
+			return json(
+				{ success: false, error: 'Please provide specific ids to import' },
+				{ status: 400 }
+			);
 		}
 
 		// Load user's HNS DB

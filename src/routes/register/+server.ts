@@ -8,6 +8,7 @@ import { checkRateLimit } from '$lib/server/rateLimit';
 import { randomUUID } from 'node:crypto';
 import { log } from '$lib/server/log';
 import { validatePassword } from '$lib/server/passwordValidation';
+import { INPUT_LIMITS } from '$lib/constants';
 
 export const POST: RequestHandler = async ({ request, platform, url, getClientAddress }) => {
 	log.info('[Register] START REGISTRATION', {
@@ -93,6 +94,17 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
 			);
 		}
 
+		// [SECURITY FIX #41] Input length validation
+		if (username.length > INPUT_LIMITS.USERNAME) {
+			return json({ message: 'Username is too long' }, { status: 400 });
+		}
+		if (email.length > INPUT_LIMITS.EMAIL) {
+			return json({ message: 'Email is too long' }, { status: 400 });
+		}
+		if (password.length > INPUT_LIMITS.PASSWORD) {
+			return json({ message: 'Password is too long' }, { status: 400 });
+		}
+
 		// Validate password strength
 		const passwordValidation = validatePassword(password);
 		if (!passwordValidation.valid) {
@@ -110,15 +122,24 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
 		log.info('[Register] ✅ Validation passed');
 
 		// 5. Check Existing Users
+		// [!code fix] Issue #43: Use generic message to prevent enumeration attacks
 		log.info('[Register] Checking for existing users');
 		const existingEmail = await findUserByEmail(usersKV, normEmail);
 		if (existingEmail) {
-			return json({ message: 'Email already in use.' }, { status: 409 });
+			log.info('[Register] Email already exists (not disclosed to user)');
+			return json(
+				{ message: 'If this account does not exist, a verification email will be sent.' },
+				{ status: 200 }
+			);
 		}
 
 		const existingUser = await findUserByUsername(usersKV, normUser);
 		if (existingUser) {
-			return json({ message: 'Username taken.' }, { status: 409 });
+			log.info('[Register] Username already exists (not disclosed to user)');
+			return json(
+				{ message: 'If this account does not exist, a verification email will be sent.' },
+				{ status: 200 }
+			);
 		}
 		log.info('[Register] ✅ User is new');
 
@@ -130,7 +151,11 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
 		]);
 
 		if (resUser || resEmail) {
-			return json({ message: 'Username or Email is pending verification.' }, { status: 409 });
+			log.info('[Register] Pending reservation exists (not disclosed to user)');
+			return json(
+				{ message: 'If this account does not exist, a verification email will be sent.' },
+				{ status: 200 }
+			);
 		}
 		log.info('[Register] ✅ No conflicting reservations');
 

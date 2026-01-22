@@ -27,6 +27,9 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
 		throw redirect(303, '/login?error=expired_verification');
 	}
 
+	// [!code fix] Issue #37: Delete token IMMEDIATELY to prevent replay attacks
+	await usersKV.delete(pendingKey);
+
 	const pendingData = JSON.parse(pendingDataRaw);
 
 	try {
@@ -72,9 +75,8 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
 			maxAge: sessionTTL
 		});
 
-		// 4. Cleanup (Remove all temporary keys)
+		// 4. Cleanup (Remove remaining temporary keys - pendingKey already deleted)
 		await Promise.all([
-			usersKV.delete(pendingKey),
 			usersKV.delete(`reservation:username:${pendingData.username}`),
 			usersKV.delete(`reservation:email:${pendingData.email}`),
 			usersKV.delete(`lookup:pending:${pendingData.email}`)

@@ -291,10 +291,10 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
 	} catch (error: unknown) {
 		const msg = error instanceof Error ? error.message : String(error);
 		log.error('[WebAuthn] GET Error', { message: msg });
+		// [!code fix] Issue #36: Don't expose error details to client
 		return json(
 			{
-				error: 'Failed to generate options',
-				details: msg
+				error: 'Failed to generate options'
 			},
 			{ status: 500 }
 		);
@@ -616,8 +616,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
 				);
 			} catch (e) {
 				log.error('[WebAuthn] Verification threw error', {
-					message: e instanceof Error ? e.message : String(e),
-					stack: e instanceof Error ? e.stack : undefined
+					message: e instanceof Error ? e.message : String(e)
 				});
 
 				// Log minimal authData metadata for debugging without exposing secrets
@@ -626,10 +625,8 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
 					counter: authData.counter
 				});
 
-				return json(
-					{ error: 'Verification failed: ' + (e instanceof Error ? e.message : String(e)) },
-					{ status: 400 }
-				);
+				// [!code fix] Issue #36: Don't expose error details to client
+				return json({ error: 'Verification failed' }, { status: 400 });
 			}
 
 			if (!verification.verified) {
@@ -695,7 +692,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
 			cookies.set('session_id', sessionId, {
 				path: '/',
 				httpOnly: true,
-				sameSite: 'none', // Allow cookie on fetches; requires secure in production
+				sameSite: 'lax', // [!code fix] Changed from 'none' for CSRF protection
 				secure: true,
 				maxAge: 60 * 60 * 24 * 7
 			});
@@ -714,10 +711,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
 		const msg = error instanceof Error ? error.message : String(error);
 		log.error('[WebAuthn] POST Error', { message: msg });
 
-		if (error instanceof Error) {
-			return json({ error: 'Verification failed', details: error.message }, { status: 400 });
-		}
-
-		return json({ error: 'Unexpected error' }, { status: 500 });
+		// [!code fix] Issue #36: Don't expose error details to client
+		return json({ error: 'Verification failed' }, { status: 400 });
 	}
 };
