@@ -51,8 +51,8 @@
 	function _fmtInput(d: Date) {
 		return d.toISOString().slice(0, 10);
 	}
-	let startDate = _fmtInput(new Date(_now.getFullYear(), 0, 1));
-	let endDate = _fmtInput(new Date(_now.getFullYear(), 11, 31));
+	let startDate = _fmtInput(new Date(_now.getFullYear(), _now.getMonth(), 1));
+	let endDate = _fmtInput(new Date(_now.getFullYear(), _now.getMonth() + 1, 0));
 	let lastHadSelections = false;
 	let selectedExpenses = new Set<string>();
 	let visibleLimit = 50;
@@ -165,9 +165,10 @@
 			if (sortBy === 'date') {
 				aVal = (a as any)._dateVal;
 				bVal = (b as any)._dateVal;
-			} else {
-				aVal = (a as any)._amtVal;
-				bVal = (b as any)._amtVal;
+			} else if (sortBy === 'amount') {
+				// Sort by reimbursement/cost value
+				aVal = (a as any)._reimbursement || 0;
+				bVal = (b as any)._reimbursement || 0;
 			}
 			return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
 		});
@@ -637,7 +638,7 @@
 				Select All ({filteredExpenses.length})
 			</label>
 
-			<span class="page-info">Showing {filteredExpenses.length} items</span>
+			<span class="page-info">Showing {visibleExpenses.length} of {filteredExpenses.length}</span>
 		</div>
 	{/if}
 

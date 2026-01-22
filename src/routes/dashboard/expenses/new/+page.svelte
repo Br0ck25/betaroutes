@@ -383,7 +383,7 @@
 						type="checkbox"
 						bind:checked={formData.taxDeductible}
 					/>
-					<span>Tax deductible</span>
+					<span>Tax Deductible</span>
 				</label>
 			</div>
 		</div>

@@ -4,6 +4,7 @@
 		formatDate,
 		formatTime,
 		formatDuration,
+		formatHours,
 		calculateNetProfit,
 		calculateHourlyPay
 	} from '$lib/utils/trip-helpers';
@@ -223,7 +224,7 @@
 			</div>
 			<div class="stat-item">
 				<span class="stat-label">Hours</span>
-				<span class="stat-value">{trip.hoursWorked?.toFixed(1) || '-'}</span>
+				<span class="stat-value">{formatHours(trip.hoursWorked)}</span>
 			</div>
 			<div class="stat-item">
 				<span class="stat-label">Drive</span>

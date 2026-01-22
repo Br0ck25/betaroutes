@@ -4,6 +4,9 @@ import autoTable from 'jspdf-autotable';
 import type { Trip, Stop } from '$lib/types';
 import type { ExpenseRecord } from '$lib/db/types';
 import type { MileageRecord } from '$lib/db/types';
+import { getVehicleDisplayName } from '$lib/utils/vehicle';
+
+type Vehicle = { id?: string; name?: string };
 
 // Brand colors from design system
 const ORANGE = [246, 138, 46] as [number, number, number]; // #F68A2E
@@ -31,12 +34,23 @@ function formatDate(dateString: string): string {
 	});
 }
 
+// Logo as base64 (120x120 PNG)
+const LOGO_BASE64 =
+	'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAMAAAAOusbgAAACEFBMVEVMaXEtUXtbeHnbjFY4VIrNlVcrUX2Vg0/ijks1U4oxU3ks';
+
 /**
  * Add header to PDF page
  */
 function addHeader(doc: jsPDF, title: string, subtitle?: string) {
 	doc.setFillColor(...ORANGE);
 	doc.rect(0, 0, doc.internal.pageSize.width, 35, 'F');
+
+	// Add logo if available
+	try {
+		doc.addImage(LOGO_BASE64, 'PNG', doc.internal.pageSize.width - 40, 5, 25, 25);
+	} catch {
+		// Silently fail if logo can't be added
+	}
 
 	doc.setTextColor(255, 255, 255);
 	doc.setFontSize(20);
@@ -292,6 +306,7 @@ export function exportExpensesPDF(
  */
 export function exportMileagePDF(
 	mileageLogs: MileageRecord[],
+	vehicles?: Vehicle[],
 	dateFrom?: string,
 	dateTo?: string
 ): Blob {
@@ -317,7 +332,7 @@ export function exportMileagePDF(
 	// Prepare table data
 	const tableData = mileageLogs.map((log) => [
 		formatDate(log.date || ''),
-		log.vehicle || 'Default',
+		getVehicleDisplayName(log.vehicle, vehicles),
 		(log.startOdometer || 0).toLocaleString(),
 		(log.endOdometer || 0).toLocaleString(),
 		log.miles.toFixed(2),
@@ -392,6 +407,7 @@ export function exportTaxBundlePDF(
 	trips: Trip[],
 	expenses: ExpenseRecord[],
 	mileageLogs: MileageRecord[],
+	vehicles?: Vehicle[],
 	dateFrom?: string,
 	dateTo?: string
 ): Blob {
@@ -497,20 +513,60 @@ export function exportTaxBundlePDF(
 	doc.setTextColor(0, 0, 0);
 	yPos += 15;
 
-	const totalByCategory: Record<string, number> = {};
-	let totalExpenses = 0;
+	// Separate deductible and non-deductible expenses
+	const deductibleByCategory: Record<string, number> = {};
+	const nonDeductibleByCategory: Record<string, number> = {};
+	let totalDeductible = 0;
+	let totalNonDeductible = 0;
 
 	expenses.forEach((expense) => {
-		totalByCategory[expense.category] = (totalByCategory[expense.category] || 0) + expense.amount;
-		totalExpenses += expense.amount;
+		const isDeductible = (expense as any).taxDeductible !== false; // default to true if not specified
+		if (isDeductible) {
+			deductibleByCategory[expense.category] =
+				(deductibleByCategory[expense.category] || 0) + expense.amount;
+			totalDeductible += expense.amount;
+		} else {
+			nonDeductibleByCategory[expense.category] =
+				(nonDeductibleByCategory[expense.category] || 0) + expense.amount;
+			totalNonDeductible += expense.amount;
+		}
 	});
 
 	doc.setFontSize(10);
-	Object.entries(totalByCategory).forEach(([category, total]) => {
-		doc.text(category, 20, yPos);
+	doc.setFont('helvetica', 'bold');
+	doc.text('Tax Deductible:', 20, yPos);
+	yPos += 7;
+	doc.setFont('helvetica', 'normal');
+
+	Object.entries(deductibleByCategory).forEach(([category, total]) => {
+		doc.text(category, 25, yPos);
 		doc.text(formatCurrency(total), 150, yPos, { align: 'right' });
 		yPos += 7;
 	});
+
+	doc.setFont('helvetica', 'bold');
+	doc.text('Deductible Subtotal:', 25, yPos);
+	doc.text(formatCurrency(totalDeductible), 150, yPos, { align: 'right' });
+	yPos += 10;
+
+	if (Object.keys(nonDeductibleByCategory).length > 0) {
+		doc.text('Non-Deductible:', 20, yPos);
+		yPos += 7;
+		doc.setFont('helvetica', 'normal');
+
+		Object.entries(nonDeductibleByCategory).forEach(([category, total]) => {
+			doc.text(category, 25, yPos);
+			doc.text(formatCurrency(total), 150, yPos, { align: 'right' });
+			yPos += 7;
+		});
+
+		doc.setFont('helvetica', 'bold');
+		doc.text('Non-Deductible Subtotal:', 25, yPos);
+		doc.text(formatCurrency(totalNonDeductible), 150, yPos, { align: 'right' });
+		yPos += 10;
+	}
+
+	const totalExpenses = totalDeductible + totalNonDeductible;
 
 	doc.setFont('helvetica', 'bold');
 	doc.text('Total Expenses', 20, yPos + 3);
@@ -564,7 +620,7 @@ export function exportTaxBundlePDF(
 
 	const mileageTableData: any[] = mileageLogs.map((log) => [
 		formatDate(log.date || ''),
-		log.vehicle || 'Default',
+		getVehicleDisplayName(log.vehicle, vehicles),
 		(log.startOdometer || 0).toLocaleString(),
 		(log.endOdometer || 0).toLocaleString(),
 		log.miles.toFixed(2),

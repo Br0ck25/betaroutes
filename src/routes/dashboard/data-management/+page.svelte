@@ -13,11 +13,13 @@
 		exportMileagePDF,
 		exportTaxBundlePDF
 	} from './lib/pdf-export';
+	import { getVehicleDisplayName } from '$lib/utils/vehicle';
 
 	let exportFormat: 'csv' | 'pdf' = 'csv';
 	let dataType: 'trips' | 'expenses' | 'mileage' | 'tax-bundle' = 'trips';
 	let dateFrom = '';
 	let dateTo = '';
+	let taxYear = new Date().getFullYear(); // Default to current year
 	let selectedTrips = new Set<string>();
 	let selectedExpenses = new Set<string>();
 	let selectedMileage = new Set<string>();
@@ -26,6 +28,12 @@
 
 	// Search state
 	let searchQuery = '';
+
+	// Update date range when tax year changes
+	$: if (dataType === 'tax-bundle' && taxYear) {
+		dateFrom = `${taxYear}-01-01`;
+		dateTo = `${taxYear}-12-31`;
+	}
 
 	// Pagination state
 	let tripsDisplayCount = 10;
@@ -40,13 +48,40 @@
 	let restoreFile: FileList | null = null;
 	let showClearConfirm = false;
 
-	// Search helper function
+	// Search helper function - improved to search through nested objects and arrays
 	function matchesSearch(item: any, query: string): boolean {
 		if (!query.trim()) return true;
 		const lowerQuery = query.toLowerCase();
 
-		// Convert item to searchable string
-		const searchableText = JSON.stringify(item).toLowerCase();
+		// Helper to recursively extract searchable text from nested objects/arrays
+		function extractText(obj: any, depth: number = 0): string {
+			if (depth > 3) return ''; // Prevent infinite recursion
+			if (obj === null || obj === undefined) return '';
+			if (typeof obj === 'string' || typeof obj === 'number' || typeof obj === 'boolean') {
+				return String(obj).toLowerCase() + ' ';
+			}
+			if (Array.isArray(obj)) {
+				return obj.map((v) => extractText(v, depth + 1)).join(' ');
+			}
+			if (typeof obj === 'object') {
+				return Object.values(obj)
+					.map((v) => extractText(v, depth + 1))
+					.join(' ');
+			}
+			return '';
+		}
+
+		const searchableText = extractText(item);
+
+		// Also resolve vehicle names for search
+		if (item.vehicle || item.vehicleId) {
+			const vehicleName = getVehicleDisplayName(
+				item.vehicle || item.vehicleId,
+				$userSettings.vehicles
+			);
+			if (vehicleName.toLowerCase().includes(lowerQuery)) return true;
+		}
+
 		return searchableText.includes(lowerQuery);
 	}
 
@@ -347,6 +382,7 @@
 			tripsToExport,
 			expensesToExport,
 			mileageToExport,
+			$userSettings.vehicles,
 			dateFrom,
 			dateTo
 		);
@@ -441,7 +477,7 @@
 					URL.revokeObjectURL(url);
 				}
 			} else if (exportFormat === 'pdf') {
-				const pdfBlob = exportMileagePDF(mileageToExport, dateFrom, dateTo);
+				const pdfBlob = exportMileagePDF(mileageToExport, $userSettings.vehicles, dateFrom, dateTo);
 				const url = URL.createObjectURL(pdfBlob);
 				const a = document.createElement('a');
 				a.href = url;
@@ -873,6 +909,15 @@
 
 			<!-- Selection Card -->
 			{#if dataType === 'tax-bundle'}
+				<div class="year-selector">
+					<label for="tax-year" class="year-label">Tax Year</label>
+					<select id="tax-year" bind:value={taxYear} class="year-select">
+						{#each Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i) as year}
+							<option value={year}>{year}</option>
+						{/each}
+					</select>
+				</div>
+
 				<div class="bundle-preview">
 					<div class="preview-section">
 						<div class="preview-header">
@@ -1139,7 +1184,7 @@
 											</span>
 										</div>
 										<div class="trip-route">
-											{mileageLog.vehicle || 'Default Vehicle'}
+											{getVehicleDisplayName(mileageLog.vehicle, $userSettings.vehicles)}
 										</div>
 										<div class="trip-meta">
 											{mileageLog.startOdometer} → {mileageLog.endOdometer} • {mileageLog[
@@ -1344,8 +1389,7 @@
 		gap: 24px;
 	}
 
-	.options-card,
-	.selection-card {
+	.options-card {
 		background: white;
 		border: 1px solid #e5e7eb;
 		border-radius: 16px;
@@ -1479,47 +1523,6 @@
 		color: #6b7280;
 	}
 
-	.date-inputs {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-	}
-
-	.date-inputs input {
-		flex: 1;
-		padding: 12px 16px;
-		border: 2px solid #e5e7eb;
-		border-radius: 10px;
-		font-size: 14px;
-		font-family: inherit;
-	}
-
-	.date-inputs input:focus {
-		outline: none;
-		border-color: var(--orange);
-		box-shadow: 0 0 0 3px rgba(255, 127, 80, 0.1);
-	}
-
-	.date-separator {
-		font-size: 14px;
-		color: #6b7280;
-	}
-
-	.checkbox-label {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		cursor: pointer;
-		font-size: 14px;
-		color: #374151;
-	}
-
-	.checkbox-label input[type='checkbox'] {
-		width: 20px;
-		height: 20px;
-		cursor: pointer;
-	}
-
 	.btn-export {
 		width: 100%;
 		display: flex;
@@ -1574,7 +1577,8 @@
 	}
 
 	.search-container {
-		margin: 20px 0;
+		margin: 24px 0;
+		padding-top: 8px;
 	}
 
 	.search-input {
@@ -1617,6 +1621,44 @@
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
+	}
+
+	.year-selector {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 16px 20px;
+		background: #f9fafb;
+		border: 2px solid #e5e7eb;
+		border-radius: 12px;
+	}
+
+	.year-label {
+		font-size: 14px;
+		font-weight: 600;
+		color: #374151;
+	}
+
+	.year-select {
+		padding: 8px 12px;
+		border: 1px solid #d1d5db;
+		border-radius: 8px;
+		font-size: 14px;
+		font-weight: 500;
+		color: #111827;
+		background: white;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.year-select:hover {
+		border-color: var(--orange);
+	}
+
+	.year-select:focus {
+		outline: none;
+		border-color: var(--orange);
+		box-shadow: 0 0 0 3px rgba(246, 138, 46, 0.1);
 	}
 
 	.preview-section {
@@ -1799,24 +1841,11 @@
 		.options-card {
 			order: 2;
 		}
-
-		.selection-card {
-			order: 1;
-		}
 	}
 
 	@media (max-width: 640px) {
 		.format-buttons {
 			grid-template-columns: 1fr;
-		}
-
-		.date-inputs {
-			flex-direction: column;
-			align-items: stretch;
-		}
-
-		.date-separator {
-			text-align: center;
 		}
 
 		.preview-stats {

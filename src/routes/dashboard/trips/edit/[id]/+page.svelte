@@ -86,6 +86,14 @@
 		return fallback;
 	}
 
+	function formatDuration(minutes: number): string {
+		if (!minutes) return '0 min';
+		const h = Math.floor(minutes / 60);
+		const m = Math.round(minutes % 60);
+		if (h > 0) return `${h} hr ${m} min`;
+		return `${m} min`;
+	}
+
 	import { onMount } from 'svelte';
 
 	onMount(() => {
@@ -294,13 +302,6 @@
 	$: tripData.notes = notesLocal;
 
 	let newStop = { address: '', earnings: 0, notes: '' };
-	function formatDuration(minutes: number): string {
-		if (!minutes) return '0 min';
-		const h = Math.floor(minutes / 60);
-		const m = Math.round(minutes % 60);
-		if (h > 0) return `${h} hr ${m} min`;
-		return `${m} min`;
-	}
 
 	function generateRouteKey(start: string, end: string) {
 		const s = start
