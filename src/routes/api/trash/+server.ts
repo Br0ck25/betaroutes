@@ -60,6 +60,7 @@ export const GET: RequestHandler = async (event) => {
 
 		const currentUser = user as { id?: string; name?: string; token?: string };
 		const storageId = getStorageId(currentUser);
+		const legacyUserId = currentUser.name; // For legacy key lookup
 
 		if (!storageId) {
 			return new Response(JSON.stringify([]), {
@@ -73,18 +74,19 @@ export const GET: RequestHandler = async (event) => {
 			const type = (event.url.searchParams.get('type') || '').toLowerCase();
 
 			// Fetch based on filter or fetch all
+			// [!code fix] Also pass legacyUserId to check for tombstones under legacy keys
 			if (type === 'expenses') {
-				cloudTrash = await expenseSvc.listTrash(storageId);
+				cloudTrash = await expenseSvc.listTrash(storageId, legacyUserId);
 			} else if (type === 'mileage') {
-				cloudTrash = await mileageSvc.listTrash(storageId);
+				cloudTrash = await mileageSvc.listTrash(storageId, legacyUserId);
 			} else if (type === 'trips') {
 				cloudTrash = await tripSvc.listTrash(storageId);
 			} else {
 				// Fetch ALL and merge
 				const [trips, expenses, mileage] = await Promise.all([
 					tripSvc.listTrash(storageId),
-					expenseSvc.listTrash(storageId),
-					mileageSvc.listTrash(storageId)
+					expenseSvc.listTrash(storageId, legacyUserId),
+					mileageSvc.listTrash(storageId, legacyUserId)
 				]);
 
 				cloudTrash = [...trips, ...expenses, ...mileage].sort((a: any, b: any) =>

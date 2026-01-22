@@ -39,8 +39,8 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 		return tripIndexDO.get(id);
 	};
 
-	// Helper to fetch all expenses from KV for a given prefix
-	async function fetchFromKV(prefix: string): Promise<ExpenseRecord[]> {
+	// Helper to fetch all expenses from KV for a given prefix (including tombstones for migration)
+	async function fetchFromKV(prefix: string, includeTombstones = false): Promise<ExpenseRecord[]> {
 		const all: ExpenseRecord[] = [];
 		let list = await kv.list({ prefix });
 		let keys = list.keys;
@@ -57,8 +57,16 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				const parsed = JSON.parse(raw) as Record<string, unknown>;
 				if (parsed) {
 					if (parsed['deleted'] && parsed['backup']) {
-						all.push(parsed['backup'] as ExpenseRecord);
+						if (includeTombstones) {
+							// For migration: return the full tombstone with deleted flag
+							all.push(parsed as ExpenseRecord);
+						} else {
+							all.push(parsed['backup'] as ExpenseRecord);
+						}
 					} else if (!parsed['deleted']) {
+						all.push(parsed as ExpenseRecord);
+					} else if (parsed['deleted'] && includeTombstones) {
+						// Tombstone without backup - still include for migration
 						all.push(parsed as ExpenseRecord);
 					}
 				}
@@ -136,7 +144,8 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 						`[ExpenseService] Found legacy data for ${legacyUserId}. Migrating to ${userId}...`
 					);
 
-					const legacyItems = await fetchFromKV(legacyPrefix);
+					// [!code fix] Include tombstones in migration to clean up legacy keys properly
+					const legacyItems = await fetchFromKV(legacyPrefix, true);
 					const existingIds = new Set(expenses.map((e) => e.id));
 
 					// Filter out duplicates and merge
@@ -157,16 +166,18 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 						}
 					}
 
-					if (newItems.length > 0) {
+					// [!code fix] Only migrate non-deleted items to DO
+					const activeItems = newItems.filter((i) => !i.deleted);
+					if (activeItems.length > 0) {
 						// Migrate to DO
 						await stub.fetch(`${DO_ORIGIN}/expenses/migrate`, {
 							method: 'POST',
-							body: JSON.stringify(newItems)
+							body: JSON.stringify(activeItems)
 						});
 
-						expenses = [...expenses, ...newItems];
+						expenses = [...expenses, ...activeItems];
 						log.info(
-							`[ExpenseService] Migrated ${newItems.length} legacy items from ${legacyUserId}`
+							`[ExpenseService] Migrated ${activeItems.length} legacy items from ${legacyUserId}`
 						);
 					}
 
@@ -252,15 +263,15 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 
 			// We need to fetch from KV directly to ensure we get the latest data for backup
 			// (even if DO is slightly behind)
-			let key = `expense:${userId}:${id}`;
-			let raw = await kv.get(key);
+			const newKey = `expense:${userId}:${id}`;
+			let raw = await kv.get(newKey);
+			let legacyKey: string | null = null;
 
 			// [!code fix] If not found under UUID key, check legacy username key
 			if (!raw && legacyUserId && legacyUserId !== userId) {
-				const legacyKey = `expense:${legacyUserId}:${id}`;
+				legacyKey = `expense:${legacyUserId}:${id}`;
 				raw = await kv.get(legacyKey);
 				if (raw) {
-					key = legacyKey; // Use the legacy key for the tombstone
 					log.info(`[ExpenseService] Found item under legacy key for delete: ${legacyKey}`);
 				}
 			}
@@ -275,13 +286,13 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			const metadata = {
 				deletedAt: now.toISOString(),
 				deletedBy: userId,
-				originalKey: key,
+				originalKey: legacyKey || newKey,
 				expiresAt: expiresAt.toISOString()
 			};
 
 			const tombstone = {
 				id: (item['id'] as string) || id,
-				userId: (item['userId'] as string) || userId,
+				userId, // [!code fix] Always use the UUID, not the legacy username
 				deleted: true,
 				deletedAt: now.toISOString(),
 				deletedBy: userId,
@@ -291,12 +302,24 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				createdAt: (item['createdAt'] as string) || ''
 			};
 
-			// 1. Update KV with tombstone
-			await kv.put(key, JSON.stringify(tombstone), {
+			// 1. [!code fix] Always write tombstone to the UUID-based key so listTrash can find it
+			await kv.put(newKey, JSON.stringify(tombstone), {
 				expirationTtl: RETENTION.THIRTY_DAYS
 			});
 
-			// 2. [!code fix] Update DO with tombstone (PUT) instead of deleting
+			// 2. [!code fix] Delete the legacy key if it existed
+			if (legacyKey) {
+				try {
+					await kv.delete(legacyKey);
+					log.info(`[ExpenseService] Deleted legacy key after tombstone migration: ${legacyKey}`);
+				} catch (e) {
+					log.warn(`[ExpenseService] Failed to delete legacy key: ${legacyKey}`, {
+						message: (e as Error).message
+					});
+				}
+			}
+
+			// 3. Update DO with tombstone (PUT) instead of deleting
 			// This is CRITICAL for sync to work. Devices need to download this record
 			// to know it has been deleted.
 			await stub.fetch(`${DO_ORIGIN}/expenses/put`, {
@@ -305,50 +328,67 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			});
 		},
 
-		async listTrash(userId: string) {
-			const prefix = `expense:${userId}:`;
-			let list = await kv.list({ prefix });
-			let keys = list.keys;
-			while (!list.list_complete && list.cursor) {
-				list = await kv.list({ prefix, cursor: list.cursor });
-				keys = keys.concat(list.keys);
+		async listTrash(userId: string, legacyUserId?: string) {
+			const out: TrashRecord[] = [];
+			const seenIds = new Set<string>();
+
+			// Helper to process keys from a prefix
+			async function processPrefix(prefix: string) {
+				let list = await kv.list({ prefix });
+				let keys = list.keys;
+				while (!list.list_complete && list.cursor) {
+					list = await kv.list({ prefix, cursor: list.cursor });
+					keys = keys.concat(list.keys);
+				}
+
+				for (const k of keys) {
+					const raw = await kv.get(k.name);
+					if (!raw) continue;
+					const parsed = JSON.parse(raw) as Record<string, unknown>;
+					if (!parsed || !parsed['deleted']) continue;
+
+					const id = (parsed['id'] as string) || String(k.name.split(':').pop() || '');
+
+					// Skip if we already have this item (prefer UUID key)
+					if (seenIds.has(id)) continue;
+					seenIds.add(id);
+
+					const uid = (parsed['userId'] as string) || String(k.name.split(':')[1] || '');
+					const metadata = (parsed['metadata'] as Record<string, unknown>) || {
+						deletedAt: (parsed['deletedAt'] as string) || '',
+						deletedBy: (parsed['deletedBy'] as string) || uid,
+						originalKey: k.name,
+						expiresAt: (parsed['metadata'] as Record<string, unknown>)?.['expiresAt'] || ''
+					};
+
+					const backup =
+						(parsed['backup'] as Record<string, unknown>) ||
+						(parsed['data'] as Record<string, unknown>) ||
+						(parsed['expense'] as Record<string, unknown>) ||
+						(parsed as Record<string, unknown>) ||
+						{};
+					out.push({
+						id,
+						userId: uid,
+						metadata: metadata as TrashRecord['metadata'],
+						recordType: 'expense',
+						category: (backup['category'] as string) || undefined,
+						amount:
+							typeof (backup['amount'] as unknown) === 'number'
+								? (backup['amount'] as number)
+								: undefined,
+						description: (backup['description'] as string) || undefined,
+						date: (backup['date'] as string) || undefined
+					});
+				}
 			}
 
-			const out: TrashRecord[] = [];
-			for (const k of keys) {
-				const raw = await kv.get(k.name);
-				if (!raw) continue;
-				const parsed = JSON.parse(raw) as Record<string, unknown>;
-				if (!parsed || !parsed['deleted']) continue;
+			// First, check UUID-based keys
+			await processPrefix(`expense:${userId}:`);
 
-				const id = (parsed['id'] as string) || String(k.name.split(':').pop() || '');
-				const uid = (parsed['userId'] as string) || String(k.name.split(':')[1] || '');
-				const metadata = (parsed['metadata'] as Record<string, unknown>) || {
-					deletedAt: (parsed['deletedAt'] as string) || '',
-					deletedBy: (parsed['deletedBy'] as string) || uid,
-					originalKey: k.name,
-					expiresAt: (parsed['metadata'] as Record<string, unknown>)?.['expiresAt'] || ''
-				};
-
-				const backup =
-					(parsed['backup'] as Record<string, unknown>) ||
-					(parsed['data'] as Record<string, unknown>) ||
-					(parsed['expense'] as Record<string, unknown>) ||
-					(parsed as Record<string, unknown>) ||
-					{};
-				out.push({
-					id,
-					userId: uid,
-					metadata: metadata as TrashRecord['metadata'],
-					recordType: 'expense',
-					category: (backup['category'] as string) || undefined,
-					amount:
-						typeof (backup['amount'] as unknown) === 'number'
-							? (backup['amount'] as number)
-							: undefined,
-					description: (backup['description'] as string) || undefined,
-					date: (backup['date'] as string) || undefined
-				});
+			// Also check legacy username-based keys
+			if (legacyUserId && legacyUserId !== userId) {
+				await processPrefix(`expense:${legacyUserId}:`);
 			}
 
 			out.sort((a, b) => (b.metadata?.deletedAt || '').localeCompare(a.metadata?.deletedAt || ''));
