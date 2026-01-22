@@ -9,6 +9,7 @@ import { makeTripService } from '$lib/server/tripService';
 import { checkRateLimit } from '$lib/server/rateLimit';
 import { dev } from '$app/environment';
 import { log } from '$lib/server/log';
+import { INPUT_LIMITS } from '$lib/constants';
 
 export const POST: RequestHandler = async ({ request, platform, cookies, getClientAddress }) => {
 	try {
@@ -45,6 +46,14 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 		// 3. Parse Body
 		const body = (await request.json()) as { email?: string; password?: string };
 		const { email, password } = body;
+
+		// [SECURITY FIX #41] Input length validation
+		if (email && email.length > INPUT_LIMITS.EMAIL) {
+			return json({ error: 'Email is too long' }, { status: 400 });
+		}
+		if (password && password.length > INPUT_LIMITS.PASSWORD) {
+			return json({ error: 'Password is too long' }, { status: 400 });
+		}
 
 		// 3a. Email-based rate limiting (prevents distributed attacks targeting single account)
 		// [!code fix] SECURITY: Rate limit by email in addition to IP

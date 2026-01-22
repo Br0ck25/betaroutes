@@ -10,6 +10,25 @@ export const RETENTION = {
 	SESSION_TTL: 24 * 60 * 60 // 86,400 seconds
 };
 
+/**
+ * [SECURITY FIX #41] Input length limits to prevent abuse
+ * All user input should be validated against these limits before processing
+ */
+export const INPUT_LIMITS = {
+	USERNAME: 64,
+	EMAIL: 254, // RFC 5321 limit
+	PASSWORD: 128, // Reasonable max - bcrypt/PBKDF2 will hash anyway
+	NAME: 100,
+	ADDRESS: 500,
+	NOTES: 1000,
+	URL: 2048,
+	PHONE: 20,
+	VEHICLE_NAME: 100,
+	CATEGORY_NAME: 50,
+	TRIP_PURPOSE: 200,
+	WORK_ORDER: 50
+};
+
 // [!code ++]
 export const PLAN_LIMITS = {
 	FREE: {

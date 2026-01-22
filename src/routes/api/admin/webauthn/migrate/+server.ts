@@ -4,6 +4,30 @@ import { normalizeCredentialID, toBase64Url } from '$lib/server/webauthn-utils';
 import { safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
 
+/**
+ * [!code fix] Issue #48: Constant-time comparison for admin secret to prevent timing attacks
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+	if (a.length !== b.length) {
+		// Still do comparison work to avoid timing leak on length mismatch
+		const dummy = 'x'.repeat(Math.max(a.length, b.length));
+		timingSafeEqualHelper(dummy, dummy);
+		return false;
+	}
+	return timingSafeEqualHelper(a, b);
+}
+
+function timingSafeEqualHelper(a: string, b: string): boolean {
+	const enc = new TextEncoder();
+	const bufA = enc.encode(a);
+	const bufB = enc.encode(b);
+	let result = 0;
+	for (let i = 0; i < bufA.length; i++) {
+		result |= (bufA[i] ?? 0) ^ (bufB[i] ?? 0);
+	}
+	return result === 0;
+}
+
 export const POST: RequestHandler = async ({ request, platform }) => {
 	const { getEnv } = await import('$lib/server/env');
 	const env = getEnv(platform);
@@ -16,7 +40,8 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 	// [SECURITY FIX] Only accept admin secret via HTTP header, never via URL query parameter
 	// URL parameters are logged in access logs, browser history, and referrer headers
 	const provided = request.headers.get('x-admin-secret') || '';
-	if (provided !== secret) {
+	// [!code fix] Issue #48: Use constant-time comparison
+	if (!timingSafeEqual(provided, secret)) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}
 
@@ -118,13 +143,12 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		});
 	} catch (err) {
 		log.error('[webauthn migrate] error', {
-			message: err instanceof Error ? err.message : String(err),
-			stack: err instanceof Error ? err.stack : undefined
+			message: err instanceof Error ? err.message : String(err)
 		});
+		// [!code fix] Issue #36: Don't expose error details to client
 		return json(
 			{
-				error: 'Migration failed',
-				details: err instanceof Error ? err.message : String(err)
+				error: 'Migration failed'
 			},
 			{ status: 500 }
 		);

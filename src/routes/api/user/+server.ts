@@ -1,8 +1,9 @@
 // src/routes/api/user/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-// [!code change] Import updateUser
-import { deleteUser, updateUser } from '$lib/server/userService';
+// [!code change] Import updateUser and verifyPassword
+import { deleteUser, updateUser, findUserById } from '$lib/server/userService';
+import { verifyPassword } from '$lib/server/auth';
 import { log } from '$lib/server/log';
 import { safeKV, safeDO } from '$lib/server/env';
 import { sendVerificationEmail } from '$lib/server/email';
@@ -26,8 +27,23 @@ export const PUT: RequestHandler = async ({ request, locals, platform, url }) =>
 			return json({ error: 'No data to update' }, { status: 400 });
 		}
 
-		// SECURITY: Email changes require verification - do NOT update immediately
+		// [!code fix] SECURITY: Email changes require re-authentication
 		if (body.email && body.email !== user.email) {
+			if (!body.currentPassword) {
+				return json({ error: 'Current password required to change email' }, { status: 400 });
+			}
+
+			// Verify current password
+			const fullUser = await findUserById(env.BETA_USERS_KV as any, user.id);
+			if (!fullUser || !fullUser.password) {
+				return json({ error: 'User not found' }, { status: 404 });
+			}
+
+			const passwordValid = await verifyPassword(body.currentPassword, fullUser.password);
+			if (!passwordValid) {
+				return json({ error: 'Current password is incorrect' }, { status: 403 });
+			}
+
 			const newEmail = body.email.toLowerCase().trim();
 
 			// Check if email is already in use
@@ -103,7 +119,7 @@ export const PUT: RequestHandler = async ({ request, locals, platform, url }) =>
 	}
 };
 
-export const DELETE: RequestHandler = async ({ locals, platform, cookies }) => {
+export const DELETE: RequestHandler = async ({ request, locals, platform, cookies }) => {
 	try {
 		const user = locals.user as any;
 		if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
@@ -113,6 +129,23 @@ export const DELETE: RequestHandler = async ({ locals, platform, cookies }) => {
 			return json({ error: 'Service Unavailable' }, { status: 503 });
 		}
 
+		// [!code fix] SECURITY: Account deletion requires re-authentication
+		const body: any = await request.json().catch(() => ({}));
+		if (!body.currentPassword) {
+			return json({ error: 'Current password required to delete account' }, { status: 400 });
+		}
+
+		// Verify current password
+		const fullUser = await findUserById(env.BETA_USERS_KV as any, user.id);
+		if (!fullUser || !fullUser.password) {
+			return json({ error: 'User not found' }, { status: 404 });
+		}
+
+		const passwordValid = await verifyPassword(body.currentPassword, fullUser.password);
+		if (!passwordValid) {
+			return json({ error: 'Current password is incorrect' }, { status: 403 });
+		}
+
 		await deleteUser(safeKV(env, 'BETA_USERS_KV')!, user.id, {
 			tripsKV: safeKV(env, 'BETA_LOGS_KV')!,
 			settingsKV: safeKV(env, 'BETA_USER_SETTINGS_KV'),
@@ -120,8 +153,8 @@ export const DELETE: RequestHandler = async ({ locals, platform, cookies }) => {
 		});
 
 		// Cleanup Cookies
-		cookies.delete('session_id', { path: '/' });
-		cookies.delete('token', { path: '/' });
+		cookies.delete('session_id', { path: '/', secure: true });
+		cookies.delete('token', { path: '/', secure: true });
 
 		return json({ success: true });
 	} catch (err: any) {

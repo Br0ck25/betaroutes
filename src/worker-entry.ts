@@ -10,7 +10,8 @@ export { TripIndexSQL, PlacesIndexSQL } from './do-worker';
  * matching the security standard in src/lib/server/auth.ts
  */
 async function hashPassword(password: string, salt?: Uint8Array): Promise<string> {
-	const PBKDF2_ITERATIONS = 100000;
+	// [!code fix] OWASP 2025 recommends 600,000 iterations for PBKDF2-SHA-256
+	const PBKDF2_ITERATIONS = 600000;
 	const SALT_SIZE = 16;
 	const HASH_ALGO = 'SHA-256';
 	const enc = new TextEncoder();

@@ -1,5 +1,29 @@
 // Lazy-load heavy PDF libs only when needed to avoid inflating the initial bundle
 
+/**
+ * [!code fix] Escape CSV field to prevent CSV injection attacks.
+ * Prefixes cells starting with =, +, -, @, tab, or CR with a single quote.
+ * This prevents Excel/Sheets from interpreting formulas.
+ */
+function escapeCSVField(value: string | number): string {
+	const str = String(value ?? '');
+	// Escape internal quotes by doubling them
+	const escaped = str.replace(/"/g, '""');
+	// Check for formula injection characters
+	const firstChar = escaped.charAt(0);
+	if (
+		firstChar === '=' ||
+		firstChar === '+' ||
+		firstChar === '-' ||
+		firstChar === '@' ||
+		firstChar === '\t' ||
+		firstChar === '\r'
+	) {
+		return `"'${escaped}"`;
+	}
+	return `"${escaped}"`;
+}
+
 // Helper functions
 export function formatCurrency(amount: number): string {
 	return `$${amount.toFixed(2)}`;
@@ -61,23 +85,17 @@ export function generateTripsCSV(trips: any[], includeSummary: boolean = true): 
 
 	const rows = trips.map((trip) => {
 		const date = trip.date ? new Date(trip.date).toLocaleDateString() : '';
-		const start = `"${(trip.startAddress || '').replace(/"/g, '""')}"`;
 
+		// [!code fix] Use escapeCSVField for all user-controlled values
 		const intermediateStops =
 			trip.stops && trip.stops.length > 0
 				? trip.stops.map((s: any) => `${s.address} ($${(s.earnings || 0).toFixed(2)})`).join(' | ')
 				: '';
-		const stopsStr = `"${intermediateStops.replace(/"/g, '""')}"`;
 
 		const rawEnd =
 			trip.endAddress ||
 			(trip.stops && trip.stops.length > 0 ? trip.stops[trip.stops.length - 1].address : '') ||
 			trip.startAddress;
-		const end = `"${(rawEnd || '').replace(/"/g, '""')}"`;
-
-		const miles = (trip.totalMiles || 0).toFixed(1);
-		const driveTime = `"${formatDuration(trip.estimatedTime || 0)}"`;
-		const hoursWorked = (trip.hoursWorked || 0).toFixed(1);
 
 		const revenue =
 			trip.stops?.reduce((sum: number, stop: any) => sum + (stop.earnings || 0), 0) || 0;
@@ -85,38 +103,35 @@ export function generateTripsCSV(trips: any[], includeSummary: boolean = true): 
 
 		const maint = trip.maintenanceCost || 0;
 		const maintItemsStr = trip.maintenanceItems
-			? `"${trip.maintenanceItems.map((i: any) => `${i.type}:${i.cost}`).join(' | ')}"`
-			: '""';
+			? trip.maintenanceItems.map((i: any) => `${i.type}:${i.cost}`).join(' | ')
+			: '';
 
 		const supplies = trip.suppliesCost || 0;
 		const sItems = trip.suppliesItems || trip.supplyItems;
-		const supplyItemsStr = sItems
-			? `"${sItems.map((i: any) => `${i.type}:${i.cost}`).join(' | ')}"`
-			: '""';
+		const supplyItemsStr = sItems ? sItems.map((i: any) => `${i.type}:${i.cost}`).join(' | ') : '';
 
 		const totalExpenses = fuel + maint + supplies;
 		const netProfit = revenue - totalExpenses;
 		const hourlyPay = trip.hoursWorked > 0 ? netProfit / trip.hoursWorked : 0;
-		const notes = `"${(trip.notes || '').replace(/"/g, '""')}"`;
 
 		return [
-			date,
-			start,
-			stopsStr,
-			end,
-			miles,
-			driveTime,
-			hoursWorked,
-			hourlyPay.toFixed(2),
-			revenue.toFixed(2),
-			fuel.toFixed(2),
-			maint.toFixed(2),
-			maintItemsStr,
-			supplies.toFixed(2),
-			supplyItemsStr,
-			totalExpenses.toFixed(2),
-			netProfit.toFixed(2),
-			notes
+			escapeCSVField(date),
+			escapeCSVField(trip.startAddress || ''),
+			escapeCSVField(intermediateStops),
+			escapeCSVField(rawEnd || ''),
+			escapeCSVField((trip.totalMiles || 0).toFixed(1)),
+			escapeCSVField(formatDuration(trip.estimatedTime || 0)),
+			escapeCSVField((trip.hoursWorked || 0).toFixed(1)),
+			escapeCSVField(hourlyPay.toFixed(2)),
+			escapeCSVField(revenue.toFixed(2)),
+			escapeCSVField(fuel.toFixed(2)),
+			escapeCSVField(maint.toFixed(2)),
+			escapeCSVField(maintItemsStr),
+			escapeCSVField(supplies.toFixed(2)),
+			escapeCSVField(supplyItemsStr),
+			escapeCSVField(totalExpenses.toFixed(2)),
+			escapeCSVField(netProfit.toFixed(2)),
+			escapeCSVField(trip.notes || '')
 		].join(',');
 	});
 
@@ -247,22 +262,23 @@ export function generateExpensesCSV(
 	});
 
 	const categoryList = Array.from(categories).sort();
-	let csv = 'Date,' + categoryList.join(',') + ',Daily Total\n';
+	// [!code fix] Use escapeCSVField for all headers including user-defined categories
+	let csv = 'Date,' + categoryList.map((c) => escapeCSVField(c)).join(',') + ',Daily Total\n';
 
 	const categoryTotals: Record<string, number> = {};
 	categoryList.forEach((cat) => (categoryTotals[cat] = 0));
 	let grandTotal = 0;
 
 	Object.entries(expensesByDate).forEach(([date, cats]) => {
-		const row: string[] = [date];
+		const row: string[] = [escapeCSVField(date)];
 		let dailyTotal = 0;
 		categoryList.forEach((category) => {
 			const amount = cats[category] ?? 0;
-			row.push(amount.toFixed(2));
+			row.push(escapeCSVField(amount.toFixed(2)));
 			categoryTotals[category] = (categoryTotals[category] || 0) + amount;
 			dailyTotal += amount;
 		});
-		row.push(dailyTotal.toFixed(2));
+		row.push(escapeCSVField(dailyTotal.toFixed(2)));
 		grandTotal += dailyTotal;
 		csv += row.join(',') + '\n';
 	});
@@ -270,9 +286,9 @@ export function generateExpensesCSV(
 	if (includeSummary) {
 		csv += '\n';
 		const totalRow = [
-			'TOTALS',
-			...categoryList.map((cat) => (categoryTotals[cat] || 0).toFixed(2)),
-			grandTotal.toFixed(2)
+			escapeCSVField('TOTALS'),
+			...categoryList.map((cat) => escapeCSVField((categoryTotals[cat] || 0).toFixed(2))),
+			escapeCSVField(grandTotal.toFixed(2))
 		];
 		csv += totalRow.join(',') + '\n';
 	}
