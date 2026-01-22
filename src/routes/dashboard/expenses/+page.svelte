@@ -9,12 +9,13 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onDestroy } from 'svelte';
+	import { browser } from '$app/environment';
 	import type { PageData } from './$types';
 
 	export let data: PageData;
 
-	// [!code fix] HYDRATION
-	$: if (data.expenses) {
+	// [!code fix] HYDRATION - Only run in browser to avoid IndexedDB errors on server
+	$: if (browser && data.expenses) {
 		const normalize = (records: any[]) =>
 			records.map((r) => ({ ...r, syncStatus: (r as any).syncStatus ?? 'synced' }));
 		const normalized = normalize(data.expenses);

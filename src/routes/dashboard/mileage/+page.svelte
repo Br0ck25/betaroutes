@@ -93,12 +93,16 @@
 	$: {
 		const source = $mileage.length > 0 ? $mileage : data.mileage || [];
 		// PERFORMANCE: Pre-calculate all values once to avoid repeated computations
+		// [!code fix] Use looser check - allow string or number values that are truthy
+		// Data may come from various sources with different types
+		const hasNumericValue = (v: unknown) =>
+			v !== undefined && v !== null && v !== '' && !isNaN(Number(v));
 		allExpenses = source
 			.filter(
 				(r: any) =>
-					typeof r.miles === 'number' ||
-					typeof r.startOdometer === 'number' ||
-					typeof r.endOdometer === 'number'
+					hasNumericValue(r.miles) ||
+					hasNumericValue(r.startOdometer) ||
+					hasNumericValue(r.endOdometer)
 			)
 			.map((r: any) => {
 				const dateVal = new Date(r.date || 0).getTime();
