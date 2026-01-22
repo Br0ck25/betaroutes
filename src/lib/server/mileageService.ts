@@ -60,9 +60,8 @@ export function makeMileageService(
 		 * List mileage records for a user.
 		 * @param userId - Primary storage ID (UUID)
 		 * @param since - Optional ISO date for delta sync
-		 * @param legacyUserId - Optional legacy username to also check (for migration)
 		 */
-		async list(userId: string, since?: string, legacyUserId?: string): Promise<MileageRecord[]> {
+		async list(userId: string, since?: string): Promise<MileageRecord[]> {
 			const stub = getIndexStub(userId);
 			const prefix = `mileage:${userId}:`;
 
@@ -104,72 +103,6 @@ export function makeMileageService(
 				}
 			}
 
-			// [!code fix] LEGACY MIGRATION: Also check old username-based keys
-			// This handles users who have data stored under their username instead of UUID
-			if (legacyUserId && legacyUserId !== userId) {
-				const legacyPrefix = `mileage:${legacyUserId}:`;
-				const legacyCheck = await kv.list({ prefix: legacyPrefix, limit: 1 });
-
-				if (legacyCheck.keys.length > 0) {
-					log.info(
-						`[MileageService] Found legacy data for ${legacyUserId}. Migrating to ${userId}...`
-					);
-
-					const legacyItems = await fetchFromKV(legacyPrefix);
-					const existingIds = new Set(mileage.map((m) => m.id));
-
-					// Filter out duplicates and merge
-					const newItems: MileageRecord[] = [];
-					const keysToDelete: string[] = [];
-
-					for (const item of legacyItems) {
-						const legacyKey = `mileage:${legacyUserId}:${item.id}`;
-						keysToDelete.push(legacyKey);
-
-						if (!existingIds.has(item.id)) {
-							// Update userId to the new format
-							const updatedItem = { ...item, userId };
-							newItems.push(updatedItem);
-
-							// Also write to new KV key for future access
-							await kv.put(`mileage:${userId}:${item.id}`, JSON.stringify(updatedItem));
-						}
-					}
-
-					if (newItems.length > 0) {
-						// [!code fix] Only migrate non-deleted items to DO
-						const activeItems = newItems.filter((i) => !i.deleted);
-						if (activeItems.length > 0) {
-							// Migrate to DO
-							const stub = getIndexStub(userId);
-							await stub.fetch(`${DO_ORIGIN}/mileage/migrate`, {
-								method: 'POST',
-								body: JSON.stringify(activeItems)
-							});
-
-							mileage = [...mileage, ...activeItems];
-							log.info(
-								`[MileageService] Migrated ${activeItems.length} legacy items from ${legacyUserId}`
-							);
-						}
-					}
-
-					// [!code fix] Delete old legacy keys to prevent re-migration
-					for (const key of keysToDelete) {
-						try {
-							await kv.delete(key);
-						} catch (e) {
-							log.warn(`[MileageService] Failed to delete legacy key: ${key}`, {
-								message: (e as Error).message
-							});
-						}
-					}
-					log.info(
-						`[MileageService] Cleaned up ${keysToDelete.length} legacy keys for ${legacyUserId}`
-					);
-				}
-			}
-
 			// Delta Sync: Return everything (including deletions)
 			if (since) {
 				const sinceDate = new Date(since);
@@ -194,8 +127,8 @@ export function makeMileageService(
 			return activeItems;
 		},
 
-		async get(userId: string, id: string, legacyUserId?: string) {
-			const all = await this.list(userId, undefined, legacyUserId);
+		async get(userId: string, id: string) {
+			const all = await this.list(userId);
 			return all.find((m) => m.id === id) || null;
 		},
 
@@ -214,28 +147,17 @@ export function makeMileageService(
 			});
 		},
 
-		async delete(userId: string, id: string, legacyUserId?: string) {
-			log.info(`[MileageService] delete() called`, { userId, id, legacyUserId });
+		async delete(userId: string, id: string) {
+			log.info(`[MileageService] delete() called`, { userId, id });
 			const stub = getIndexStub(userId);
 
-			// Try to find the item under the current userId key first
-			const newKey = `mileage:${userId}:${id}`;
-			log.info(`[MileageService] Checking UUID key: ${newKey}`);
-			let raw = await kv.get(newKey);
-			let legacyKey: string | null = null;
-
-			// [!code fix] If not found under UUID key, check legacy username key
-			if (!raw && legacyUserId && legacyUserId !== userId) {
-				legacyKey = `mileage:${legacyUserId}:${id}`;
-				log.info(`[MileageService] UUID key empty, checking legacy key: ${legacyKey}`);
-				raw = await kv.get(legacyKey);
-				if (raw) {
-					log.info(`[MileageService] Found item under legacy key for delete: ${legacyKey}`);
-				}
-			}
+			// Try to find the item under the current userId key
+			const key = `mileage:${userId}:${id}`;
+			log.info(`[MileageService] Checking key: ${key}`);
+			const raw = await kv.get(key);
 
 			if (!raw) {
-				log.warn(`[MileageService] delete() - Item not found in KV`, { newKey, legacyKey });
+				log.warn(`[MileageService] delete() - Item not found in KV`, { key });
 				return;
 			}
 			log.info(`[MileageService] Found item to delete, creating tombstone`);
@@ -247,13 +169,13 @@ export function makeMileageService(
 			const metadata = {
 				deletedAt: now.toISOString(),
 				deletedBy: userId,
-				originalKey: legacyKey || newKey,
+				originalKey: key,
 				expiresAt: expiresAt.toISOString()
 			};
 
 			const tombstone = {
 				id: item.id,
-				userId, // [!code fix] Always use the UUID, not the legacy username
+				userId,
 				deleted: true,
 				deletedAt: now.toISOString(),
 				metadata,
@@ -262,25 +184,13 @@ export function makeMileageService(
 				createdAt: item.createdAt
 			};
 
-			// 1. [!code fix] Always write tombstone to the UUID-based key so listTrash can find it
-			await kv.put(newKey, JSON.stringify(tombstone), {
+			// 1. Write tombstone to KV
+			await kv.put(key, JSON.stringify(tombstone), {
 				expirationTtl: RETENTION.THIRTY_DAYS
 			});
-			log.info(`[MileageService] Wrote tombstone to: ${newKey}`);
+			log.info(`[MileageService] Wrote tombstone to: ${key}`);
 
-			// 2. [!code fix] Delete the legacy key if it existed
-			if (legacyKey) {
-				try {
-					await kv.delete(legacyKey);
-					log.info(`[MileageService] Deleted legacy key after tombstone migration: ${legacyKey}`);
-				} catch (e) {
-					log.warn(`[MileageService] Failed to delete legacy key: ${legacyKey}`, {
-						message: (e as Error).message
-					});
-				}
-			}
-
-			// 3. Update DO with tombstone (PUT)
+			// 2. Update DO with tombstone (PUT)
 			await stub.fetch(`${DO_ORIGIN}/mileage/put`, {
 				method: 'POST',
 				body: JSON.stringify(tombstone)
@@ -315,73 +225,57 @@ export function makeMileageService(
 			}
 		},
 
-		async listTrash(userId: string, legacyUserId?: string) {
-			log.info(`[MileageService] listTrash() called`, { userId, legacyUserId });
+		async listTrash(userId: string) {
+			log.info(`[MileageService] listTrash() called`, { userId });
 			const out: Record<string, unknown>[] = [];
-			const seenIds = new Set<string>();
+			const prefix = `mileage:${userId}:`;
 
-			// Helper to process keys from a prefix
-			async function processPrefix(prefix: string) {
-				log.info(`[MileageService] listTrash scanning prefix: ${prefix}`);
-				let list = await kv.list({ prefix });
-				let keys = list.keys;
-				while (!list.list_complete && list.cursor) {
-					list = await kv.list({ prefix, cursor: list.cursor });
-					keys = keys.concat(list.keys);
-				}
-				log.info(`[MileageService] listTrash found ${keys.length} keys under ${prefix}`);
-
-				let tombstoneCount = 0;
-				for (const k of keys) {
-					const raw = await kv.get(k.name);
-					if (!raw) continue;
-					const parsed = JSON.parse(raw) as Record<string, unknown> | undefined;
-					if (!parsed || !(parsed['deleted'] as boolean)) continue;
-					tombstoneCount++;
-
-					const id = (parsed['id'] as string) || String(k.name.split(':').pop() || '');
-
-					// Skip if we already have this item (prefer UUID key)
-					if (seenIds.has(id)) continue;
-					seenIds.add(id);
-
-					const uid = (parsed['userId'] as string) || String(k.name.split(':')[1] || '');
-					const parsedMetadata = parsed['metadata'] as Record<string, unknown> | undefined;
-					const metadata = parsedMetadata || {
-						deletedAt: (parsed['deletedAt'] as string) || '',
-						deletedBy: uid,
-						originalKey: k.name,
-						expiresAt: (parsedMetadata && (parsedMetadata['expiresAt'] as string)) || ''
-					};
-
-					const backup =
-						(parsed['backup'] as Record<string, unknown> | undefined) ||
-						(parsed['data'] as Record<string, unknown> | undefined) ||
-						(parsed as Record<string, unknown>);
-
-					out.push({
-						id,
-						userId: uid,
-						metadata: metadata as Record<string, unknown>,
-						recordType: 'mileage',
-						miles:
-							typeof (backup['miles'] as number) === 'number'
-								? (backup['miles'] as number)
-								: undefined,
-						vehicle: backup['vehicle'],
-						date: backup['date']
-					});
-				}
-				log.info(`[MileageService] listTrash found ${tombstoneCount} tombstones under ${prefix}`);
+			log.info(`[MileageService] listTrash scanning prefix: ${prefix}`);
+			let list = await kv.list({ prefix });
+			let keys = list.keys;
+			while (!list.list_complete && list.cursor) {
+				list = await kv.list({ prefix, cursor: list.cursor });
+				keys = keys.concat(list.keys);
 			}
+			log.info(`[MileageService] listTrash found ${keys.length} keys under ${prefix}`);
 
-			// First, check UUID-based keys
-			await processPrefix(`mileage:${userId}:`);
+			let tombstoneCount = 0;
+			for (const k of keys) {
+				const raw = await kv.get(k.name);
+				if (!raw) continue;
+				const parsed = JSON.parse(raw) as Record<string, unknown> | undefined;
+				if (!parsed || !(parsed['deleted'] as boolean)) continue;
+				tombstoneCount++;
 
-			// Also check legacy username-based keys
-			if (legacyUserId && legacyUserId !== userId) {
-				await processPrefix(`mileage:${legacyUserId}:`);
+				const id = (parsed['id'] as string) || String(k.name.split(':').pop() || '');
+				const uid = (parsed['userId'] as string) || String(k.name.split(':')[1] || '');
+				const parsedMetadata = parsed['metadata'] as Record<string, unknown> | undefined;
+				const metadata = parsedMetadata || {
+					deletedAt: (parsed['deletedAt'] as string) || '',
+					deletedBy: uid,
+					originalKey: k.name,
+					expiresAt: (parsedMetadata && (parsedMetadata['expiresAt'] as string)) || ''
+				};
+
+				const backup =
+					(parsed['backup'] as Record<string, unknown> | undefined) ||
+					(parsed['data'] as Record<string, unknown> | undefined) ||
+					(parsed as Record<string, unknown>);
+
+				out.push({
+					id,
+					userId: uid,
+					metadata: metadata as Record<string, unknown>,
+					recordType: 'mileage',
+					miles:
+						typeof (backup['miles'] as number) === 'number'
+							? (backup['miles'] as number)
+							: undefined,
+					vehicle: backup['vehicle'],
+					date: backup['date']
+				});
 			}
+			log.info(`[MileageService] listTrash found ${tombstoneCount} tombstones under ${prefix}`);
 
 			log.info(`[MileageService] listTrash returning ${out.length} tombstones`);
 			out.sort((a, b) =>

@@ -16,11 +16,9 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 
 	const service = makeExpenseService(kv, tripDO);
 	const userId = getStorageId(user);
-	// [!code fix] Legacy migration: also check username-based keys
-	const legacyUserId = user.name || undefined;
 
 	// Fetch all active expenses
-	const expenses = await service.list(userId, undefined, legacyUserId);
+	const expenses = await service.list(userId);
 
 	return {
 		expenses

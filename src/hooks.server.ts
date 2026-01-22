@@ -55,48 +55,43 @@ export const handle: Handle = async ({ event, resolve }) => {
 			if (sessionDataStr) {
 				const session = JSON.parse(sessionDataStr);
 
-				// [!code ++] FETCH FRESH USER DATA
-				// Assume session is stale; check the main DB for the absolute latest plan
-				let freshPlan: 'free' | 'premium' = (session.plan ?? 'free') as 'free' | 'premium';
-				let freshStripeId = session.stripeCustomerId;
-				let freshMaxTrips = session.maxTrips ?? 10;
+				// Skip if session doesn't have an id (required for data lookups)
+				if (!session.id) {
+					log.warn('[HOOK] Session missing id, skipping user hydration', { sessionId });
+					event.locals.user = null;
+				} else {
+					// FETCH FRESH USER DATA
+					// Assume session is stale; check the main DB for the absolute latest plan
+					let freshPlan: 'free' | 'premium' = (session.plan ?? 'free') as 'free' | 'premium';
+					let freshStripeId = session.stripeCustomerId;
+					let freshMaxTrips = session.maxTrips ?? 10;
 
-				if (usersKV && session.id) {
-					try {
-						const freshUser = await findUserById(usersKV, session.id);
-						if (freshUser) {
-							freshPlan = freshUser.plan as 'free' | 'premium';
-							freshStripeId = freshUser.stripeCustomerId;
-							// Only update maxTrips if the user record has it, otherwise keep session's
-							if (freshUser.maxTrips) freshMaxTrips = freshUser.maxTrips;
+					if (usersKV && session.id) {
+						try {
+							const freshUser = await findUserById(usersKV, session.id);
+							if (freshUser) {
+								freshPlan = freshUser.plan as 'free' | 'premium';
+								freshStripeId = freshUser.stripeCustomerId;
+								// Only update maxTrips if the user record has it, otherwise keep session's
+								if (freshUser.maxTrips) freshMaxTrips = freshUser.maxTrips;
+							}
+						} catch (err: unknown) {
+							const msg = err instanceof Error ? err.message : String(err);
+							log.error('[HOOK] Failed to fetch fresh user data:', { message: msg });
 						}
-					} catch (err: unknown) {
-						const msg = err instanceof Error ? err.message : String(err);
-						log.error('[HOOK] Failed to fetch fresh user data:', { message: msg });
 					}
+					event.locals.user = {
+						id: session.id as string,
+						token: sessionId,
+						plan: freshPlan,
+						tripsThisMonth: session.tripsThisMonth ?? 0,
+						maxTrips: freshMaxTrips,
+						resetDate: session.resetDate ?? new Date().toISOString(),
+						name: session.name,
+						email: session.email,
+						stripeCustomerId: freshStripeId
+					};
 				}
-				event.locals.user = {
-					id: session.id,
-					token: sessionId,
-					// [!code fix] Use the FRESH values from DB
-					plan: freshPlan,
-					tripsThisMonth: session.tripsThisMonth ?? 0,
-					maxTrips: freshMaxTrips,
-					resetDate: session.resetDate ?? new Date().toISOString(),
-					name: session.name,
-					email: session.email,
-					stripeCustomerId: freshStripeId // [!code ++] Required for Portal
-				} as {
-					id?: string;
-					token: string;
-					plan: 'free' | 'premium';
-					tripsThisMonth: number;
-					maxTrips: number;
-					resetDate: string;
-					name?: string;
-					email?: string;
-					stripeCustomerId?: string | undefined;
-				};
 			} else {
 				// Session ID cookie exists, but data is gone from KV (expired/deleted)
 				if (event.url.pathname.startsWith('/dashboard')) {

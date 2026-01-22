@@ -13,11 +13,10 @@ export const DELETE: RequestHandler = async (event) => {
 
 		const env = getEnv(event.platform);
 		const storageId = getStorageId(user);
-		const legacyUserId = user.name; // For legacy key lookup
 
 		// Use the expenses KV so tombstones are written to the expenses namespace
 		const svc = makeExpenseService(safeKV(env, 'BETA_EXPENSES_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
-		await svc.delete(storageId, event.params.id, legacyUserId);
+		await svc.delete(storageId, event.params.id);
 
 		return new Response(JSON.stringify({ success: true }));
 	} catch (err: unknown) {
