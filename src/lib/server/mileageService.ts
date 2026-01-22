@@ -31,8 +31,38 @@ export function makeMileageService(
 		return tripIndexDO.get(id);
 	};
 
+	// Helper to fetch all mileage from KV for a given prefix
+	async function fetchFromKV(prefix: string): Promise<MileageRecord[]> {
+		const all: MileageRecord[] = [];
+		let list = await kv.list({ prefix });
+		let keys = list.keys;
+
+		while (!list.list_complete && list.cursor) {
+			list = await kv.list({ prefix, cursor: list.cursor });
+			keys = keys.concat(list.keys);
+		}
+
+		for (const key of keys) {
+			const raw = await kv.get(key.name);
+			if (!raw) continue;
+			try {
+				const parsed = JSON.parse(raw);
+				if (parsed) all.push(parsed);
+			} catch {
+				// Skip corrupt entries
+			}
+		}
+		return all;
+	}
+
 	return {
-		async list(userId: string, since?: string): Promise<MileageRecord[]> {
+		/**
+		 * List mileage records for a user.
+		 * @param userId - Primary storage ID (UUID)
+		 * @param since - Optional ISO date for delta sync
+		 * @param legacyUserId - Optional legacy username to also check (for migration)
+		 */
+		async list(userId: string, since?: string, legacyUserId?: string): Promise<MileageRecord[]> {
 			const stub = getIndexStub(userId);
 			const prefix = `mileage:${userId}:`;
 
@@ -58,34 +88,8 @@ export function makeMileageService(
 						`[MileageService] Detected desync for ${userId} (KV has data, Index empty). repairing...`
 					);
 
-					// Fetch ALL data from KV
-					const all: MileageRecord[] = [];
-					let list = await kv.list({ prefix });
-					let keys = list.keys;
-
-					while (!list.list_complete && list.cursor) {
-						list = await kv.list({ prefix, cursor: list.cursor });
-						keys = keys.concat(list.keys);
-					}
-
-					let migratedCount = 0;
-					const skippedTombstones = 0;
-					for (const key of keys) {
-						const raw = await kv.get(key.name);
-						if (!raw) continue;
-						const parsed = JSON.parse(raw);
-
-						// Migrate all records including tombstones (to maintain deleted state)
-						if (parsed && parsed.deleted) {
-							// Push the tombstone itself, not the backup
-							all.push(parsed);
-							migratedCount++;
-							continue;
-						}
-
-						all.push(parsed);
-						migratedCount++;
-					}
+					const all = await fetchFromKV(prefix);
+					const migratedCount = all.length;
 
 					// Force Push to DO
 					if (all.length > 0) {
@@ -95,8 +99,49 @@ export function makeMileageService(
 						});
 
 						mileage = all;
+						log.info(`[MileageService] Migrated ${migratedCount} items (0 tombstones included)`);
+					}
+				}
+			}
+
+			// [!code fix] LEGACY MIGRATION: Also check old username-based keys
+			// This handles users who have data stored under their username instead of UUID
+			if (legacyUserId && legacyUserId !== userId) {
+				const legacyPrefix = `mileage:${legacyUserId}:`;
+				const legacyCheck = await kv.list({ prefix: legacyPrefix, limit: 1 });
+
+				if (legacyCheck.keys.length > 0) {
+					log.info(
+						`[MileageService] Found legacy data for ${legacyUserId}. Migrating to ${userId}...`
+					);
+
+					const legacyItems = await fetchFromKV(legacyPrefix);
+					const existingIds = new Set(mileage.map((m) => m.id));
+
+					// Filter out duplicates and merge
+					const newItems: MileageRecord[] = [];
+					for (const item of legacyItems) {
+						if (!existingIds.has(item.id)) {
+							// Update userId to the new format
+							const updatedItem = { ...item, userId };
+							newItems.push(updatedItem);
+
+							// Also write to new KV key for future access
+							await kv.put(`mileage:${userId}:${item.id}`, JSON.stringify(updatedItem));
+						}
+					}
+
+					if (newItems.length > 0) {
+						// Migrate to DO
+						const stub = getIndexStub(userId);
+						await stub.fetch(`${DO_ORIGIN}/mileage/migrate`, {
+							method: 'POST',
+							body: JSON.stringify(newItems)
+						});
+
+						mileage = [...mileage, ...newItems];
 						log.info(
-							`[MileageService] Migrated ${migratedCount} items (${skippedTombstones} tombstones included)`
+							`[MileageService] Migrated ${newItems.length} legacy items from ${legacyUserId}`
 						);
 					}
 				}

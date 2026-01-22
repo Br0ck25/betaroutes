@@ -39,8 +39,44 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 		return tripIndexDO.get(id);
 	};
 
+	// Helper to fetch all expenses from KV for a given prefix
+	async function fetchFromKV(prefix: string): Promise<ExpenseRecord[]> {
+		const all: ExpenseRecord[] = [];
+		let list = await kv.list({ prefix });
+		let keys = list.keys;
+
+		while (!list.list_complete && list.cursor) {
+			list = await kv.list({ prefix, cursor: list.cursor });
+			keys = keys.concat(list.keys);
+		}
+
+		for (const key of keys) {
+			const raw = await kv.get(key.name);
+			if (!raw) continue;
+			try {
+				const parsed = JSON.parse(raw) as Record<string, unknown>;
+				if (parsed) {
+					if (parsed['deleted'] && parsed['backup']) {
+						all.push(parsed['backup'] as ExpenseRecord);
+					} else if (!parsed['deleted']) {
+						all.push(parsed as ExpenseRecord);
+					}
+				}
+			} catch {
+				// Skip corrupt entries
+			}
+		}
+		return all;
+	}
+
 	return {
-		async list(userId: string, since?: string): Promise<ExpenseRecord[]> {
+		/**
+		 * List expense records for a user.
+		 * @param userId - Primary storage ID (UUID)
+		 * @param since - Optional ISO date for delta sync
+		 * @param legacyUserId - Optional legacy username to also check (for migration)
+		 */
+		async list(userId: string, since?: string, legacyUserId?: string): Promise<ExpenseRecord[]> {
 			const stub = getIndexStub(userId);
 			const prefix = `expense:${userId}:`;
 
@@ -76,35 +112,7 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 						`[ExpenseService] Detected desync for ${userId} (KV has data, Index empty). repairing...`
 					);
 
-					const allExpenses: ExpenseRecord[] = [];
-					let list = await kv.list({ prefix });
-					let keys = list.keys;
-
-					while (!list.list_complete && list.cursor) {
-						list = await kv.list({ prefix, cursor: list.cursor });
-						keys = keys.concat(list.keys);
-					}
-
-					let migratedCount = 0;
-					let skippedTombstones = 0;
-					for (const key of keys) {
-						const raw = await kv.get(key.name);
-						if (!raw) continue;
-						const parsed = JSON.parse(raw) as Record<string, unknown>;
-
-						if (parsed && parsed['deleted']) {
-							if (parsed['backup']) {
-								allExpenses.push(parsed['backup'] as ExpenseRecord);
-								migratedCount++;
-							} else {
-								skippedTombstones++;
-							}
-							continue;
-						}
-
-						allExpenses.push(parsed as ExpenseRecord);
-						migratedCount++;
-					}
+					const allExpenses = await fetchFromKV(prefix);
 					if (allExpenses.length > 0) {
 						await stub.fetch(`${DO_ORIGIN}/expenses/migrate`, {
 							method: 'POST',
@@ -112,8 +120,48 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 						});
 
 						expenses = allExpenses;
+						log.info(`[ExpenseService] Migrated ${allExpenses.length} items`);
+					}
+				}
+			}
+
+			// [!code fix] LEGACY MIGRATION: Also check old username-based keys
+			// This handles users who have data stored under their username instead of UUID
+			if (legacyUserId && legacyUserId !== userId) {
+				const legacyPrefix = `expense:${legacyUserId}:`;
+				const legacyCheck = await kv.list({ prefix: legacyPrefix, limit: 1 });
+
+				if (legacyCheck.keys.length > 0) {
+					log.info(
+						`[ExpenseService] Found legacy data for ${legacyUserId}. Migrating to ${userId}...`
+					);
+
+					const legacyItems = await fetchFromKV(legacyPrefix);
+					const existingIds = new Set(expenses.map((e) => e.id));
+
+					// Filter out duplicates and merge
+					const newItems: ExpenseRecord[] = [];
+					for (const item of legacyItems) {
+						if (!existingIds.has(item.id)) {
+							// Update userId to the new format
+							const updatedItem = { ...item, userId };
+							newItems.push(updatedItem);
+
+							// Also write to new KV key for future access
+							await kv.put(`expense:${userId}:${item.id}`, JSON.stringify(updatedItem));
+						}
+					}
+
+					if (newItems.length > 0) {
+						// Migrate to DO
+						await stub.fetch(`${DO_ORIGIN}/expenses/migrate`, {
+							method: 'POST',
+							body: JSON.stringify(newItems)
+						});
+
+						expenses = [...expenses, ...newItems];
 						log.info(
-							`[ExpenseService] Migrated ${migratedCount} items (${skippedTombstones} tombstones skipped)`
+							`[ExpenseService] Migrated ${newItems.length} legacy items from ${legacyUserId}`
 						);
 					}
 				}
