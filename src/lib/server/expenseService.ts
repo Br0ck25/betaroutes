@@ -141,7 +141,12 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 
 					// Filter out duplicates and merge
 					const newItems: ExpenseRecord[] = [];
+					const keysToDelete: string[] = [];
+
 					for (const item of legacyItems) {
+						const legacyKey = `expense:${legacyUserId}:${item.id}`;
+						keysToDelete.push(legacyKey);
+
 						if (!existingIds.has(item.id)) {
 							// Update userId to the new format
 							const updatedItem = { ...item, userId };
@@ -164,6 +169,20 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 							`[ExpenseService] Migrated ${newItems.length} legacy items from ${legacyUserId}`
 						);
 					}
+
+					// [!code fix] Delete old legacy keys to prevent re-migration
+					for (const key of keysToDelete) {
+						try {
+							await kv.delete(key);
+						} catch (e) {
+							log.warn(`[ExpenseService] Failed to delete legacy key: ${key}`, {
+								message: (e as Error).message
+							});
+						}
+					}
+					log.info(
+						`[ExpenseService] Cleaned up ${keysToDelete.length} legacy keys for ${legacyUserId}`
+					);
 				}
 			}
 

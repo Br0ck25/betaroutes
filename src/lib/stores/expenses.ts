@@ -268,9 +268,24 @@ function createExpensesStore() {
 				}
 
 				if (rec.userId !== userId) {
-					await tx.done;
-					this.load(userId);
-					throw new Error('Unauthorized');
+					// [!code fix] Also allow delete if the user's name matches (legacy support)
+					// This handles the case where local IndexedDB has old username-based userId
+					// but the caller is passing the new UUID-based userId
+					const { get } = await import('svelte/store');
+					const { user: userStore } = await import('$lib/stores/auth');
+					const currentUser = get(userStore) as { id?: string; name?: string } | null;
+
+					const isOwner =
+						rec.userId === currentUser?.id ||
+						rec.userId === currentUser?.name ||
+						userId === currentUser?.id ||
+						userId === currentUser?.name;
+
+					if (!isOwner) {
+						await tx.done;
+						this.load(userId);
+						throw new Error('Unauthorized');
+					}
 				}
 
 				const now = new Date();

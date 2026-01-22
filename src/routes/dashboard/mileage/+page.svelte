@@ -219,8 +219,12 @@
 		}
 
 		const currentUser = $page.data['user'] || $user;
+		// [!code fix] Use UUID (id) as primary, fall back to name for legacy support
 		const userId =
-			currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
+			currentUser?.id ||
+			currentUser?.name ||
+			currentUser?.token ||
+			localStorage.getItem('offline_user_id');
 		if (userId) {
 			try {
 				await mileage.deleteMileage(id, String(userId));
@@ -270,8 +274,12 @@
 		)
 			return;
 		const currentUser = $page.data['user'] || $user;
+		// [!code fix] Use UUID (id) as primary, fall back to name for legacy support
 		const userId =
-			currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
+			currentUser?.id ||
+			currentUser?.name ||
+			currentUser?.token ||
+			localStorage.getItem('offline_user_id');
 
 		if (!userId) return;
 
