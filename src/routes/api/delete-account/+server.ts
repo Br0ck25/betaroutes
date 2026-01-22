@@ -3,8 +3,13 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { log } from '$lib/server/log';
 
-export const POST: RequestHandler = async ({ request, fetch, cookies }) => {
+export const POST: RequestHandler = async ({ request, fetch, cookies, locals }) => {
 	try {
+		// SECURITY: Require authentication before processing delete request
+		if (!locals.user) {
+			return json({ error: 'Unauthorized' }, { status: 401 });
+		}
+
 		// Use standard Promise methods for the body
 		const body = (await request.json()) as any;
 		const token = request.headers.get('Authorization');

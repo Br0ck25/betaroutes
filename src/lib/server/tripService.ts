@@ -391,8 +391,9 @@ export function makeTripService(
 
 			const trip = JSON.parse(raw);
 
-			// Set totalMiles to 0 before creating tombstone (per spec)
-			trip.totalMiles = 0;
+			// SECURITY: Clone the trip BEFORE any modifications
+			// This preserves the original data in the backup for restoration
+			const backup = JSON.parse(JSON.stringify(trip));
 
 			const now = new Date();
 			const expiresAt = new Date(now.getTime() + RETENTION.THIRTY_DAYS * 1000);
@@ -411,7 +412,7 @@ export function makeTripService(
 				deletedAt: now.toISOString(),
 				deletedBy: userId,
 				metadata,
-				backup: trip,
+				backup: backup, // Use the cloned, unmodified backup
 				updatedAt: now.toISOString(),
 				createdAt: trip.createdAt
 			};

@@ -40,36 +40,36 @@
 **Address immediately to prevent privilege escalation and corruption.**  
 **Risk:** Privilege Escalation, Cache Poisoning, Data Integrity.
 
-- [ ] **6. Secure Email Change Flow (ATO Prevention)**
+- [x] **6. Secure Email Change Flow (ATO Prevention)**
   - **File:** `src/routes/api/user/+server.ts`
   - **Action:** Stop updating email immediately in `PUT`. Generate a token → email the new address → update DB only on verification.
 
-- [ ] **7. Prevent Mass Assignment on Registration**
+- [x] **7. Prevent Mass Assignment on Registration**
   - **File:** `src/routes/register/+server.ts`
   - **Action:** Explicitly destructure allowed fields. Do not use `...body`.
     - Example: `const user = { email: body.email, password: hash, name: body.name }`
 
-- [ ] **8. Fix Global Cache Poisoning (Autocomplete)**
+- [x] **8. Fix Global Cache Poisoning (Autocomplete)**
   - **Files:** `src/routes/api/autocomplete/+server.ts`, `src/lib/server/tripService.ts`
   - **Action:** Stop writing user inputs to the global `BETA_PLACES_KV`. Write only to user-specific lists.
 
-- [ ] **9. Plug Credential Leak in Session API**
+- [x] **9. Plug Credential Leak in Session API**
   - **File:** `src/routes/api/auth/session/+server.ts`
   - **Action:** Return only safe fields (`id`, `email`, `name`). Explicitly exclude `password_hash`, `salt`, `iterations`.
 
-- [ ] **10. Fix Trash Data Integrity**
+- [x] **10. Fix Trash Data Integrity**
   - **File:** `src/lib/server/tripService.ts`
   - **Action:** Clone the trip object before setting `totalMiles = 0` so the backup (`tombstone.backup`) is not corrupted.
 
-- [ ] **11. Secure "Remove/Delete" Proxies**
+- [x] **11. Secure "Remove/Delete" Proxies**
   - **Files:** `src/routes/api/delete-account/+server.ts`, `src/routes/api/remove/+server.ts`
   - **Action:** Add `if (!locals.user)` checks to prevent unauthorized calls.
 
-- [ ] **12. Fix Session Invalidation Logic**
+- [x] **12. Fix Session Invalidation Logic**
   - **File:** `src/routes/api/change-password/+server.ts`
   - **Action:** Implement `sessionVersion` logic. Increment on password change; check version in `hooks.server.ts`.
 
-- [ ] **13. Enable CSRF Protection**
+- [x] **13. Enable CSRF Protection**
   - **File:** `src/hooks.server.ts`
   - **Action:** Uncomment CSRF protection and token generation logic.
 
