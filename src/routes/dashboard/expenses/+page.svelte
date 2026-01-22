@@ -37,8 +37,8 @@
 	function _fmtInput(d: Date) {
 		return d.toISOString().slice(0, 10);
 	}
-	let startDate = _fmtInput(new Date(_now.getFullYear(), 0, 1));
-	let endDate = _fmtInput(new Date(_now.getFullYear(), 11, 31));
+	let startDate = _fmtInput(new Date(_now.getFullYear(), _now.getMonth(), 1));
+	let endDate = _fmtInput(new Date(_now.getFullYear(), _now.getMonth() + 1, 0));
 
 	let lastHadSelections = false;
 
@@ -730,7 +730,7 @@
 				Select All ({filteredExpenses.length})
 			</label>
 
-			<span class="page-info">Showing {filteredExpenses.length} items</span>
+			<span class="page-info">Showing {visibleExpenses.length} of {filteredExpenses.length}</span>
 		</div>
 	{/if}
 

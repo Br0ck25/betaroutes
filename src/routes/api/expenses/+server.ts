@@ -15,6 +15,7 @@ const expenseSchema = z.object({
 	category: z.string(),
 	amount: z.number(),
 	description: z.string().optional(),
+	taxDeductible: z.boolean().optional(),
 	createdAt: z.string().optional(),
 	updatedAt: z.string().optional(),
 	store: z.string().optional()

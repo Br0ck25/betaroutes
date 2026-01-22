@@ -37,6 +37,15 @@ export function formatDuration(minutes: number): string {
 	return `${m}m`;
 }
 
+export function formatHours(hours: number): string {
+	if (!hours || hours === 0) return '-';
+	const h = Math.floor(hours);
+	const m = Math.round((hours - h) * 60);
+	if (h > 0 && m > 0) return `${h}h ${m}m`;
+	if (h > 0) return `${h}h`;
+	return `${m}m`;
+}
+
 export function calculateNetProfit(trip: any): number {
 	const earnings = trip.stops?.reduce((s: number, stop: any) => s + (stop.earnings || 0), 0) || 0;
 	const costs = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);

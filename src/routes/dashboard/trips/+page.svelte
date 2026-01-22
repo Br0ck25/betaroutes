@@ -29,13 +29,13 @@
 	let sortBy = 'date';
 	let sortOrder = 'desc';
 	let filterProfit = 'all';
-	// Default to current year (Jan 1 -> Dec 31)
+	// Default to current month (first day to last day)
 	const _now = new Date();
 	function _fmtInput(d: Date) {
 		return d.toISOString().slice(0, 10);
 	}
-	let startDate = _fmtInput(new Date(_now.getFullYear(), 0, 1));
-	let endDate = _fmtInput(new Date(_now.getFullYear(), 11, 31));
+	let startDate = _fmtInput(new Date(_now.getFullYear(), _now.getMonth(), 1));
+	let endDate = _fmtInput(new Date(_now.getFullYear(), _now.getMonth() + 1, 0));
 
 	// Pagination
 	let currentPage = 1;
