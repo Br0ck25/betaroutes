@@ -32,6 +32,12 @@
 
 	let isMileageSettingsOpen = false;
 
+	// Track if the store has been initialized to avoid falling back to stale server data
+	let storeInitialized = false;
+	$: if ($mileage !== undefined) {
+		storeInitialized = true;
+	}
+
 	// Derived totals - use pre-computed values
 	$: totalMiles = filteredExpenses.reduce((s, e) => s + (Number((e as any).miles) || 0), 0);
 	// PERFORMANCE: Use pre-computed reimbursement
@@ -89,9 +95,10 @@
 	let isManageCategoriesOpen = false;
 	let newCategoryName = '';
 
-	// Use store data, but fallback to server data during initial hydration to prevent flicker
+	// Use store data once initialized, fallback to server data only during initial hydration
+	// [!code fix] Use storeInitialized flag instead of length check to prevent stale data after delete
 	$: {
-		const source = $mileage.length > 0 ? $mileage : data.mileage || [];
+		const source = storeInitialized ? $mileage : data.mileage || [];
 		// PERFORMANCE: Pre-calculate all values once to avoid repeated computations
 		// [!code fix] Use looser check - allow string or number values that are truthy
 		// Data may come from various sources with different types

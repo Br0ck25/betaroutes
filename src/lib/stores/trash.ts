@@ -400,29 +400,12 @@ function createTrashStore() {
 				}
 				await tx.done;
 
-				// Cleanup Active Stores based on REAL IDs
-				const mileageStoreName = getMileageStoreName(db);
-				const cleanupTx = db.transaction(
-					['trash', 'trips', 'expenses', mileageStoreName],
-					'readwrite'
-				);
-				const allTrash = await cleanupTx.objectStore('trash').getAll();
-				const tripStore = cleanupTx.objectStore('trips');
-				const expenseStore = cleanupTx.objectStore('expenses');
-				const mileageStore = cleanupTx.objectStore(mileageStoreName);
-				for (const trashItem of allTrash) {
-					const realId = getRealId(trashItem.id);
-					const rt = trashItem.recordType;
-
-					if (rt === 'trip') {
-						if (await tripStore.get(realId)) await tripStore.delete(realId);
-					} else if (rt === 'expense') {
-						if (await expenseStore.get(realId)) await expenseStore.delete(realId);
-					} else if (rt === 'mileage') {
-						if (await mileageStore.get(realId)) await mileageStore.delete(realId);
-					}
-				}
-				await cleanupTx.done;
+				// [!code fix] REMOVED: Cleanup Active Stores logic
+				// This code was incorrectly deleting restored items from active stores.
+				// When a user restores an item, it's added back to the active store but still exists
+				// in cloud trash until the next sync cycle. The cleanup would see the cloud trash entry
+				// and delete the just-restored item, making it "disappear" from the UI.
+				// Instead, rely on each store's load() function to filter out trash items by ID.
 
 				await this.load(userId, type);
 			} catch (err) {
