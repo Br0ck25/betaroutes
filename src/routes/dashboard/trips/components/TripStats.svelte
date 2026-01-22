@@ -19,7 +19,7 @@
 					const m = $mileage.find((x) => x.id === trip.id);
 					return sum + (m?.miles ?? trip.totalMiles ?? 0);
 				}, 0)
-				.toFixed(1)}
+				.toFixed(2)}
 		</div>
 	</div>
 	<div class="summary-card">
