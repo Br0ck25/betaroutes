@@ -7,6 +7,7 @@ import { log } from '$lib/server/log';
 export interface TrashRecord {
 	id: string;
 	userId: string;
+	tripId?: string; // Link to parent trip (if any)
 	metadata: {
 		deletedAt: string;
 		deletedBy: string;
@@ -200,8 +201,12 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			}
 		},
 
-		async delete(userId: string, id: string) {
-			log.info(`[ExpenseService] delete() called`, { userId, id });
+		async delete(userId: string, id: string, options?: { cascadeDeleted?: boolean }) {
+			log.info(`[ExpenseService] delete() called`, {
+				userId,
+				id,
+				cascadeDeleted: options?.cascadeDeleted
+			});
 			const stub = getIndexStub(userId);
 
 			// We need to fetch from KV directly to ensure we get the latest data for backup
@@ -230,9 +235,11 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			const tombstone = {
 				id: (item['id'] as string) || id,
 				userId,
+				tripId: item['tripId'] as string | undefined, // Preserve tripId for cascade restore
 				deleted: true,
 				deletedAt: now.toISOString(),
 				deletedBy: userId,
+				cascadeDeleted: options?.cascadeDeleted || false, // Mark if cascade deleted with trip
 				metadata,
 				backup: item,
 				updatedAt: now.toISOString(),
@@ -274,6 +281,10 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				if (!raw) continue;
 				const parsed = JSON.parse(raw) as Record<string, unknown>;
 				if (!parsed || !parsed['deleted']) continue;
+
+				// Skip cascade-deleted items (deleted with parent trip) - they don't show in trash UI
+				if (parsed['cascadeDeleted']) continue;
+
 				tombstoneCount++;
 
 				const id = (parsed['id'] as string) || String(k.name.split(':').pop() || '');
@@ -294,6 +305,7 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				out.push({
 					id,
 					userId: uid,
+					tripId: (parsed['tripId'] as string) || (backup['tripId'] as string | undefined),
 					metadata: metadata as TrashRecord['metadata'],
 					recordType: 'expense',
 					category: (backup['category'] as string) || undefined,
