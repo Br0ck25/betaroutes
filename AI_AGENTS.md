@@ -217,41 +217,7 @@ let selectedMileage = new Set<string>(); // Unused -> lint/check error
 - Do **not** declare it until you write the code that uses it.
 - If a variable/arg must exist for signature reasons, prefix with `_` (e.g. `_req`, `_unusedIndex`).
 
-**Fix:** Prefix unused arguments with `_` or use `catch` without a variable.
-
-❌ **Wrong:**
-
-```ts
-// 'ctx' unused
-const load = async ({ ctx }) => {
-	/* ... */
-};
-
-// 'e' unused
-try {
-	/* ... */
-} catch (e) {
-	/* ... */
-}
-```
-
-✅ **Correct:**
-
-```ts
-// Prefix with underscore
-const load = async ({ _ctx }) => {
-	/* ... */
-};
-
-// Omit catch variable
-try {
-	/* ... */
-} catch {
-	/* ... */
-}
-```
-
-**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
+**Prevention:** Make the smallest diff possible. Do not add placeholder code.
 
 ---
 
@@ -313,7 +279,7 @@ checkRateLimit(kv, userId, 'action', 10, 60);
 // Either update app.d.ts OR use the correct field.
 ```
 
-**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
+**Prevention:** Never assume a function signature or type definition. Read the source file (`app.d.ts` or the utility file) first.
 
 ---
 
@@ -343,7 +309,7 @@ if (!email) return fail(400, { error: 'Missing email', email }); // Return the d
 <input value={form?.email ?? ''} /> // Works.
 ```
 
-**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
+**Prevention:** If your UI repopulates fields on error, your server `fail()` must return those fields.
 
 ---
 
@@ -370,7 +336,7 @@ if (!user?.id) throw new Error('User ID missing');
 return user.id;
 ```
 
-**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
+**Prevention:** Never implement “fallbacks” for identity. It exists, or the request fails.
 
 ---
 
@@ -400,7 +366,7 @@ const newUser = {
 };
 ```
 
-**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
+**Prevention:** Never use spread syntax (`...`) on user input for DB writes. Destructure explicitly.
 
 ---
 
@@ -423,7 +389,7 @@ await env.PLACES_KV.put('recent_places', JSON.stringify(places));
 await env.PLACES_KV.put(`places:${userId}`, JSON.stringify(places));
 ```
 
-**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
+**Prevention:** Every KV write MUST include `${userId}` in the key.
 
 ---
 
@@ -451,7 +417,7 @@ const key = env.STRIPE_KEY; // Loaded from environment
 // Run: wrangler secret put STRIPE_KEY
 ```
 
-**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
+**Prevention:** If it looks like a key/token, it must be an env variable.
 
 ---
 
@@ -476,7 +442,7 @@ export const POST = async ({ platform }) => {
 - Use unit tests or local scripts for seeding data.
 - If testing is needed, use `vitest` with mock data, not live endpoints.
 
-**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
+**Prevention:** The word **"debug"** (or **"test"**) in a route path is strictly forbidden.
 
 ---
 
@@ -501,7 +467,7 @@ let items = $state<Item[]>([]);
 const activeUser = writable<User | null>(null);
 ```
 
-**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
+**Prevention:** Never initialize empty state without `<Type>`.
 
 ---
 
@@ -526,198 +492,7 @@ if (trip.userId === user.name) {
 if (trip.userId !== user.id) return error(403);
 ```
 
-**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
-
----
-
-### Error Pattern #17: Structural Nesting & Scope
-
-**Symptom:** `Modifiers cannot appear here`, `Cannot find name 'x'` (when 'x' is clearly defined above), `Error: '}' expected`.
-**Cause:** Defining utility functions _inside_ the main handler function, or losing track of closing brackets `}`.
-
-❌ **Wrong:**
-
-```ts
-export async function mainHandler() {
-	// ... logic ...
-
-	// ERROR: Nested export!
-	export async function helper() {
-		/* ... */
-	}
-}
-```
-
-✅ **Correct:**
-
-```ts
-// Define helpers at the TOP LEVEL
-async function helper() {
-	/* ... */
-}
-
-export async function mainHandler() {
-	await helper();
-}
-```
-
-**Prevention:** All helper functions must be defined at the top level of the file, never nested inside other functions.
-
----
-
-### Error Pattern #18: Cloudflare Type Conflicts
-
-**Symptom:** `Type 'KVNamespace' is not assignable to type 'KVNamespace'.`
-**Cause:** Manually importing types from `@cloudflare/workers-types` instead of using the global ambient types.
-
-❌ **Wrong:**
-
-```ts
-import { KVNamespace } from '@cloudflare/workers-types'; // CONFLICT!
-function save(kv: KVNamespace) {
-	/* ... */
-}
-```
-
-✅ **Correct:**
-
-```ts
-// Use the global type (no import needed)
-function save(kv: KVNamespace) {
-	/* ... */
-}
-```
-
-**Prevention:** **NEVER** import `KVNamespace`, `DurableObject`, or `ExecutionContext`. Use the globals from `app.d.ts`.
-
----
-
-### Error Pattern #19: Invalid JSON Syntax
-
-**Symptom:** `npm error code EJSONPARSE`, `JSONParseError: Expected ','`
-**Cause:** Editing `package.json` or config files and forgetting commas between items.
-
-❌ **Wrong:**
-
-```json
-{
-  "scripts": {
-    "test": "vitest"  // MISSING COMMA
-    "format": "prettier"
-  }
-}
-```
-
-✅ **Correct:**
-
-```json
-{
-	"scripts": {
-		"test": "vitest", // Comma added
-		"format": "prettier"
-	}
-}
-```
-
-**Prevention:** Always validate JSON syntax (commas and braces) before outputting config files.
-
----
-
-### Error Pattern #20: Structural Nesting
-
-**Symptom:** `Modifiers cannot appear here`, `'}' expected`
-**Cause:** Defining an `export` function inside another function, usually due to missing or misplaced closing braces `}`.
-
-❌ **Wrong:**
-
-```ts
-export async function main() {
-	// ... logic ...
-	// MISSING closing brace for main()
-
-	export async function helper() {
-		/* ... */
-	} // ERROR: Nested export
-}
-```
-
-✅ **Correct:**
-
-```ts
-// 1. Close the previous function
-export async function main() {
-	// ... logic ...
-}
-
-// 2. Define helper at top level
-export async function helper() {
-	/* ... */
-}
-```
-
-**Prevention:** Maintain a flat structure. Never nest `export` functions. Count your closing braces.
-
----
-
-### Error Pattern #21: Index Signature Access
-
-**Symptom:** `Property 'X' comes from an index signature, so it must be accessed with ['X']`
-**Cause:** Accessing properties via dot notation (`env.KEY`) on an object typed as a generic record (e.g., `Env` or `Record<string, any>`).
-
-❌ **Wrong:**
-
-```ts
-// If env is typed as Record<string, KVNamespace>
-await env.BETA_LOGS_KV.put(/* ... */); // TS Error
-```
-
-✅ **Correct:**
-
-```ts
-// Option A: Use brackets
-await env['BETA_LOGS_KV'].put(/* ... */);
-
-// Option B (Preferred): Cast to specific type
-const specificEnv = env as { BETA_LOGS_KV: KVNamespace };
-await specificEnv.BETA_LOGS_KV.put(/* ... */);
-```
-
-**Prevention:** If an object has an index signature, use `['bracket']` notation or cast it to a strict interface.
-
----
-
-### Error Pattern #22: Lazy Typing (Explicit Any)
-
-**Symptom:** `Unexpected any. Specify a different type @typescript-eslint/no-explicit-any`
-**Cause:** Using `any` to silence TypeScript instead of defining a proper interface or using `unknown`.
-
-❌ **Wrong:**
-
-```ts
-function handleData(data: any) {
-	// Lazy!
-	return (data as any).id;
-}
-```
-
-✅ **Correct:**
-
-```ts
-// Option A: Define the shape (Preferred)
-function handleData(data: { id: string }) {
-	return data.id;
-}
-
-// Option B: Use 'unknown' and narrow (Safe fallback)
-function handleData(data: unknown) {
-	if (typeof data === 'object' && data !== null && 'id' in data) {
-		return (data as { id: string }).id;
-	}
-	throw new Error('Invalid data shape');
-}
-```
-
-**Prevention:** **NEVER** use `any`. Use `unknown` if the type is truly dynamic, then validate it.
+**Prevention:** Ownership MUST be verified using `locals.user.id`. No exceptions.
 
 ## System Prompt Additions (Paste-into-Chat Guardrails)
 
