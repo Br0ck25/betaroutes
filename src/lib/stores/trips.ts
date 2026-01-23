@@ -9,7 +9,6 @@ import { userSettings } from '$lib/stores/userSettings';
 import type { User } from '$lib/types';
 import { PLAN_LIMITS } from '$lib/constants';
 import { csrfFetch } from '$lib/utils/csrf';
-import { isRecordOwner } from '$lib/utils/keys';
 
 export const isLoading = writable(false);
 
@@ -142,7 +141,7 @@ function createTripsStore() {
 				throw err;
 			}
 		},
-		async updateTrip(id: string, changes: Partial<TripRecord>, userId: string, userName?: string) {
+		async updateTrip(id: string, changes: Partial<TripRecord>, userId: string) {
 			// ... copy existing updateTrip code ...
 			try {
 				const db = await getDB();
@@ -150,8 +149,7 @@ function createTripsStore() {
 				const store = tx.objectStore('trips');
 				const existing = await store.get(id);
 				if (!existing) throw new Error('Trip not found');
-				// MIGRATION FIX: Check ownership against both userId (UUID) and userName (legacy)
-				if (!isRecordOwner(existing.userId, userId, userName)) throw new Error('Unauthorized');
+				if (existing.userId !== userId) throw new Error('Unauthorized');
 				const now = new Date().toISOString();
 				const normalizedStops = (changes.stops || existing.stops || []).map(
 					(s: any, i: number) => ({
@@ -225,7 +223,7 @@ function createTripsStore() {
 		},
 
 		// [!code focus] THE FIX IS HERE
-		async deleteTrip(id: string, userId: string, userName?: string) {
+		async deleteTrip(id: string, userId: string) {
 			let previousTrips: TripRecord[] = [];
 			update((current) => {
 				previousTrips = current;
@@ -237,8 +235,7 @@ function createTripsStore() {
 				const tripsTx = db.transaction('trips', 'readonly');
 				const trip = await tripsTx.objectStore('trips').get(id);
 				if (!trip) throw new Error('Trip not found');
-				// MIGRATION FIX: Check ownership against both userId (UUID) and userName (legacy)
-				if (!isRecordOwner(trip.userId, userId, userName)) throw new Error('Unauthorized');
+				if (trip.userId !== userId) throw new Error('Unauthorized');
 
 				const now = new Date();
 				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -313,14 +310,13 @@ function createTripsStore() {
 		},
 
 		// ... (keep get, clear, syncFromCloud, syncPendingToCloud, migrateOfflineTrips) ...
-		async get(id: string, userId: string, userName?: string) {
+		async get(id: string, userId: string) {
 			// ... copy existing get code ...
 			try {
 				const db = await getDB();
 				const tx = db.transaction('trips', 'readonly');
 				const trip = await tx.objectStore('trips').get(id);
-				// MIGRATION FIX: Check ownership against both userId (UUID) and userName (legacy)
-				if (!trip || !isRecordOwner(trip.userId, userId, userName)) return null;
+				if (!trip || trip.userId !== userId) return null;
 				return trip;
 			} catch (err) {
 				console.error('❌ Failed to get trip:', err);
