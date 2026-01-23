@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Svelte 5 runes
 	import { autocomplete, loadGoogleMaps } from '$lib/utils/autocomplete';
+	import { csrfFetch } from '$lib/utils/csrf';
 
 	let { data } = $props();
 	let API_KEY = $derived(() => String((data as any)?.googleMapsApiKey ?? ''));
@@ -199,7 +200,7 @@
 				}))
 			};
 
-			const res = await fetch(location.pathname, {
+			const res = await csrfFetch(location.pathname, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(payload)

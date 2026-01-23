@@ -36,7 +36,13 @@ export const POST: RequestHandler = async (event) => {
 
 		// Clear the DO index by calling the admin wipe endpoint
 		const stub = tripIndexDO.get(tripIndexDO.idFromName(userId));
-		const clearRes = await stub.fetch('https://fake-host/admin/wipe-user', { method: 'POST' });
+		const doSecret = ((event.platform?.env as Record<string, unknown> | undefined)?.[
+			'DO_INTERNAL_SECRET'
+		] ?? '') as string;
+		const clearRes = await stub.fetch('https://fake-host/admin/wipe-user', {
+			method: 'POST',
+			headers: { 'x-do-internal-secret': doSecret }
+		});
 
 		if (!clearRes.ok) {
 			const errorText = await clearRes.text().catch(() => 'Unable to read error');

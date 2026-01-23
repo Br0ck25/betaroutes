@@ -446,6 +446,54 @@ export const POST = async ({ platform }) => {
 
 ---
 
+### Error Pattern #15: Untyped State / Store Initialization
+
+**Symptom:** `Property 'id' does not exist on type 'never'`, `Variable implicitly has an 'any' type`
+**Cause:** Initializing state, arrays, or stores with `null` or `[]` but no generic type.
+
+❌ **Wrong:**
+
+```ts
+// TypeScript infers 'never[]' or 'null'
+let items = $state([]);
+const activeUser = writable(null);
+```
+
+✅ **Correct:**
+
+```ts
+// Explicitly define the type
+let items = $state<Item[]>([]);
+const activeUser = writable<User | null>(null);
+```
+
+**Prevention:** Never initialize empty state without `<Type>`.
+
+---
+
+### Error Pattern #16: Insecure Logic Fallbacks (IDOR Risk)
+
+**Symptom:** Ownership checks use `user.name` or `user.email` instead of `user.id`
+**Cause:** Trying to "fix" a missing ID by checking other fields.
+
+❌ **Wrong:**
+
+```ts
+// SECURITY RISK: Names are not unique/immutable
+if (trip.userId === user.name) {
+	// ...
+}
+```
+
+✅ **Correct:**
+
+```ts
+// STRICT: ID check only.
+if (trip.userId !== user.id) return error(403);
+```
+
+**Prevention:** Ownership MUST be verified using `locals.user.id`. No exceptions.
+
 ## System Prompt Additions (Paste-into-Chat Guardrails)
 
 Add these lines to your chat/system prompt under **STRICT NON-NEGOTIABLES**:

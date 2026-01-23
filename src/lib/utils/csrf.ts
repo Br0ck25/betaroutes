@@ -22,13 +22,25 @@ export function getCsrfToken(): string | null {
 }
 
 /**
+ * Create headers with CSRF token included
+ * Use this to add CSRF token to existing headers
+ */
+export function withCsrfToken(headers: HeadersInit = {}): Headers {
+	const headersObj = new Headers(headers);
+	const token = getCsrfToken();
+	if (token) {
+		headersObj.set('X-CSRF-Token', token);
+	}
+	return headersObj;
+}
+
+/**
  * Add CSRF token to fetch headers
  * Use this to wrap fetch calls that perform state-changing operations
  */
 export function addCsrfHeader(headers: HeadersInit = {}): HeadersInit {
 	const token = getCsrfToken();
 	if (!token) {
-		// [SECURITY FIX #58] Client-side logging removed (console.warn removed for production)
 		// Silently return headers if no token found
 		return headers;
 	}
@@ -52,5 +64,28 @@ export async function csrfFetch(url: string, options: RequestInit = {}): Promise
 		options.headers = addCsrfHeader(options.headers);
 	}
 
+	// Always include credentials for same-origin requests
+	if (!options.credentials) {
+		options.credentials = 'same-origin';
+	}
+
 	return fetch(url, options);
+}
+
+/**
+ * Helper to create common fetch options with CSRF token
+ * For JSON API calls
+ */
+export function jsonFetchOptions(
+	method: 'POST' | 'PUT' | 'DELETE' | 'PATCH',
+	body: unknown
+): RequestInit {
+	return {
+		method,
+		headers: withCsrfToken({
+			'Content-Type': 'application/json'
+		}),
+		credentials: 'same-origin',
+		body: JSON.stringify(body)
+	};
 }

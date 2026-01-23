@@ -176,6 +176,7 @@ export function makeTripService(
 	}
 
 	// [!code change] Helper to fetch directly from KV (Source of Truth)
+	// [!code fix] SECURITY: Use batched fetch to avoid Cloudflare subrequest limits (1000 per request)
 	async function listFromKV(userId: string): Promise<TripRecord[]> {
 		const prefix = prefixForUser(userId);
 		const out: TripRecord[] = [];
@@ -187,16 +188,21 @@ export function makeTripService(
 			keys = keys.concat(list.keys);
 		}
 
-		for (const k of keys) {
-			const raw = await kv.get(k.name);
-			if (!raw) continue;
-			try {
-				const t = JSON.parse(raw);
-				// [!code change] CRITICAL FIX: Do NOT filter out deleted items here.
-				// We must return them so the sync logic knows to tell the client to delete them.
-				out.push(t);
-			} catch {
-				// ignore corrupt JSON in KV
+		// Batch KV fetches to avoid subrequest bomb (max 50 concurrent to stay safe)
+		const BATCH_SIZE = 50;
+		for (let i = 0; i < keys.length; i += BATCH_SIZE) {
+			const batch = keys.slice(i, i + BATCH_SIZE);
+			const results = await Promise.all(batch.map((k) => kv.get(k.name)));
+			for (const raw of results) {
+				if (!raw) continue;
+				try {
+					const t = JSON.parse(raw);
+					// [!code change] CRITICAL FIX: Do NOT filter out deleted items here.
+					// We must return them so the sync logic knows to tell the client to delete them.
+					out.push(t);
+				} catch {
+					// ignore corrupt JSON in KV
+				}
 			}
 		}
 
@@ -449,40 +455,49 @@ export function makeTripService(
 			}
 
 			const out: TrashItem[] = [];
-			for (const k of keys) {
-				const raw = await kv.get(k.name);
-				if (!raw) continue;
-				const parsed = JSON.parse(raw);
-				if (!parsed || !parsed.deleted) continue;
 
-				const id = parsed.id || String(k.name.split(':').pop() || '');
-				const uid = parsed.userId || String(k.name.split(':')[1] || '');
-				const metadata: TrashMetadata = parsed.metadata || {
-					deletedAt: parsed.deletedAt || '',
-					deletedBy: parsed.deletedBy || uid,
-					originalKey: k.name,
-					expiresAt: parsed.metadata?.expiresAt || ''
-				};
+			// [!code fix] SECURITY: Use batched fetch to avoid Cloudflare subrequest limits (1000 per request)
+			const BATCH_SIZE = 50;
+			for (let i = 0; i < keys.length; i += BATCH_SIZE) {
+				const batch = keys.slice(i, i + BATCH_SIZE);
+				const results = await Promise.all(batch.map((k) => kv.get(k.name)));
+				for (let j = 0; j < results.length; j++) {
+					const raw = results[j];
+					if (!raw) continue;
+					const parsed = JSON.parse(raw);
+					if (!parsed || !parsed.deleted) continue;
 
-				const backup = parsed.backup || parsed.data || parsed.trip || parsed || {};
-				let type: 'trip' | 'expense' = 'trip';
-				if (parsed.type === 'expense' || (backup && (backup.category || backup.amount))) {
-					type = 'expense';
-				}
+					const k = batch[j];
+					if (!k) continue;
+					const id = parsed.id || String(k.name.split(':').pop() || '');
+					const uid = parsed.userId || String(k.name.split(':')[1] || '');
+					const metadata: TrashMetadata = parsed.metadata || {
+						deletedAt: parsed.deletedAt || '',
+						deletedBy: parsed.deletedBy || uid,
+						originalKey: k.name,
+						expiresAt: parsed.metadata?.expiresAt || ''
+					};
 
-				if (type === 'trip') {
-					out.push({
-						id,
-						userId: uid,
-						metadata,
-						recordType: 'trip',
-						title: (backup.title as string) || (backup.startAddress as string) || undefined,
-						date: (backup.date as string) || undefined,
-						createdAt: (backup.createdAt as string) || undefined,
-						stops: (backup.stops as unknown[]) || undefined,
-						totalMiles: typeof backup.totalMiles === 'number' ? backup.totalMiles : undefined,
-						startAddress: (backup.startAddress as string) || undefined
-					});
+					const backup = parsed.backup || parsed.data || parsed.trip || parsed || {};
+					let type: 'trip' | 'expense' = 'trip';
+					if (parsed.type === 'expense' || (backup && (backup.category || backup.amount))) {
+						type = 'expense';
+					}
+
+					if (type === 'trip') {
+						out.push({
+							id,
+							userId: uid,
+							metadata,
+							recordType: 'trip',
+							title: (backup.title as string) || (backup.startAddress as string) || undefined,
+							date: (backup.date as string) || undefined,
+							createdAt: (backup.createdAt as string) || undefined,
+							stops: (backup.stops as unknown[]) || undefined,
+							totalMiles: typeof backup.totalMiles === 'number' ? backup.totalMiles : undefined,
+							startAddress: (backup.startAddress as string) || undefined
+						});
+					}
 				}
 			}
 

@@ -70,21 +70,27 @@ export function makeMileageService(
 
 					let migratedCount = 0;
 					const skippedTombstones = 0;
-					for (const key of keys) {
-						const raw = await kv.get(key.name);
-						if (!raw) continue;
-						const parsed = JSON.parse(raw);
 
-						// Migrate all records including tombstones (to maintain deleted state)
-						if (parsed && parsed.deleted) {
-							// Push the tombstone itself, not the backup
+					// [!code fix] SECURITY: Use batched fetch to avoid Cloudflare subrequest limits (1000 per request)
+					const BATCH_SIZE = 50;
+					for (let i = 0; i < keys.length; i += BATCH_SIZE) {
+						const batch = keys.slice(i, i + BATCH_SIZE);
+						const results = await Promise.all(batch.map((k) => kv.get(k.name)));
+						for (const raw of results) {
+							if (!raw) continue;
+							const parsed = JSON.parse(raw);
+
+							// Migrate all records including tombstones (to maintain deleted state)
+							if (parsed && parsed.deleted) {
+								// Push the tombstone itself, not the backup
+								all.push(parsed);
+								migratedCount++;
+								continue;
+							}
+
 							all.push(parsed);
 							migratedCount++;
-							continue;
 						}
-
-						all.push(parsed);
-						migratedCount++;
 					}
 
 					// Force Push to DO

@@ -4,6 +4,7 @@
 	import { trips } from '$lib/stores/trips';
 	import { expenses } from '$lib/stores/expenses';
 	import { generateTripsCSV, generateExpensesCSV, generateTaxBundleCSV } from '../lib/export-utils';
+	import { csrfFetch } from '$lib/utils/csrf';
 
 	import { createEventDispatcher } from 'svelte';
 
@@ -70,7 +71,7 @@
 						body.trips = filteredTrips;
 					}
 
-					const res = await fetch('/api/generate-pdf', {
+					const res = await csrfFetch('/api/generate-pdf', {
 						method: 'POST',
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify(body)

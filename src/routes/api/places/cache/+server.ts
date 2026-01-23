@@ -11,6 +11,13 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}
 
+	// SECURITY (Issue #8): Get user ID for per-user cache isolation
+
+	const userId = (locals.user as any).id;
+	if (!userId) {
+		return json({ error: 'Invalid session' }, { status: 401 });
+	}
+
 	try {
 		const rawPlace: any = await request.json();
 		const placesKV = platform?.env?.BETA_PLACES_KV as KVNamespace;
@@ -33,19 +40,19 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 			geometry: rawPlace.geometry,
 			source: 'autocomplete_selection', // Force source to ensure it looks 'local'
 			cachedAt: new Date().toISOString(),
-			contributedBy: (locals.user as any).id
+			contributedBy: userId
 		};
 
 		const keyText = place.formatted_address || place.name;
 
-		// 1. Save "Detail" Record (place:<hash>)
-		// This is used if we ever need to look up a specific place ID directly
+		// 1. Save "Detail" Record (place:<userId>:<hash>)
+		// SECURITY: Scope to user to prevent cache poisoning
 		const key = await generatePlaceKey(keyText);
-		// Save detail record permanently so user-selected places remain cached indefinitely
-		await placesKV.put(key, JSON.stringify(place));
+		const userScopedKey = `place:${userId}:${key.replace('place:', '')}`;
+		await placesKV.put(userScopedKey, JSON.stringify(place));
 
-		// 2. [!code ++] Update Search Index Buckets (prefix:...)
-		// This ensures the place shows up in future autocomplete searches
+		// 2. Update per-user Search Index Buckets (user:<userId>:prefix:...)
+		// SECURITY (Issue #8): Scope buckets to user to prevent global cache poisoning
 		const normalized = keyText.toLowerCase().replace(/\s+/g, '');
 
 		// We update specific prefixes to ensure it appears as the user types
@@ -55,14 +62,16 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 			prefixesToUpdate.push(normalized.substring(0, len));
 		}
 
-		// Process bucket updates in parallel
+		// Process bucket updates in parallel (user-scoped)
 		await Promise.all(
 			prefixesToUpdate.map(async (prefix) => {
-				const bucketKey = `prefix:${prefix}`;
+				// SECURITY: Prefix with userId to isolate user's autocomplete data
+				const bucketKey = `user:${userId}:prefix:${prefix}`;
 				const existingRaw = await placesKV.get(bucketKey);
 				let bucket = existingRaw ? JSON.parse(existingRaw) : [];
 
 				// Remove if exists (to update it), then add to top
+
 				bucket = bucket.filter(
 					(b: any) =>
 						b.formatted_address !== place.formatted_address && b.place_id !== place.place_id
@@ -73,14 +82,14 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 				// Cap bucket size
 				if (bucket.length > 20) bucket = bucket.slice(0, 20);
 
-				// Save prefix bucket permanently so cached search results don't expire
+				// Save prefix bucket (user-scoped)
 				await placesKV.put(bucketKey, JSON.stringify(bucket));
 			})
 		);
 
 		return json({ success: true });
 	} catch (e) {
-		log.error('Cache Error', { message: (e as any)?.message });
+		log.error('Cache Error', { message: (e as Error)?.message });
 		return json({ success: false, error: String(e) }, { status: 500 });
 	}
 };

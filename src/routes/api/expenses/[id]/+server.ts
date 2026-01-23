@@ -13,10 +13,18 @@ export const DELETE: RequestHandler = async (event) => {
 
 		const env = getEnv(event.platform);
 		const storageId = getStorageId(user);
+		const expenseId = event.params.id;
 
 		// Use the expenses KV so tombstones are written to the expenses namespace
 		const svc = makeExpenseService(safeKV(env, 'BETA_EXPENSES_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
-		await svc.delete(storageId, event.params.id);
+
+		// SECURITY: Verify the expense exists and belongs to this user (IDOR prevention)
+		const existing = await svc.get(storageId, expenseId);
+		if (!existing) {
+			return new Response(JSON.stringify({ error: 'Expense not found' }), { status: 404 });
+		}
+
+		await svc.delete(storageId, expenseId);
 
 		return new Response(JSON.stringify({ success: true }));
 	} catch (err: unknown) {
@@ -32,14 +40,22 @@ export const PUT: RequestHandler = async (event) => {
 
 		const env = getEnv(event.platform);
 		const storageId = getStorageId(user);
+		const expenseId = event.params.id;
+
+		const svc = makeExpenseService(safeKV(env, 'BETA_EXPENSES_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
+
+		// SECURITY: Verify the expense exists and belongs to this user (IDOR prevention)
+		const existing = await svc.get(storageId, expenseId);
+		if (!existing) {
+			return new Response(JSON.stringify({ error: 'Expense not found' }), { status: 404 });
+		}
 
 		const body = (await event.request.json()) as unknown;
-		const svc = makeExpenseService(safeKV(env, 'BETA_EXPENSES_KV')!, safeDO(env, 'TRIP_INDEX_DO')!); // Trash KV not needed for update
 
-		// Ensure ID matches URL
+		// Ensure ID and userId cannot be overwritten by client
 		const expense = {
 			...(body as Record<string, unknown>),
-			id: event.params.id,
+			id: expenseId,
 			userId: storageId
 		};
 		await svc.put(expense as ExpenseRecord);

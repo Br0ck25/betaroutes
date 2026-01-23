@@ -73,7 +73,7 @@ const tripSchema = z.object({
 	maintenanceCost: z.number().optional(),
 	suppliesCost: z.number().optional(),
 	totalEarnings: z.number().optional(),
-	netProfit: z.number().optional(),
+	// NOTE: netProfit is calculated server-side, removed from schema to prevent client manipulation
 	notes: z.string().max(1000).optional(),
 	stops: z.array(stopSchema).optional(),
 	destinations: z.array(destinationSchema).optional(),
@@ -81,6 +81,15 @@ const tripSchema = z.object({
 	suppliesItems: z.array(costItemSchema).optional(),
 	lastModified: z.string().optional()
 });
+
+// Calculate net profit server-side (SECURITY: never trust client calculations)
+function calculateNetProfit(trip: Record<string, unknown>): number {
+	const earnings = Number(trip['totalEarnings']) || 0;
+	const fuel = Number(trip['fuelCost']) || 0;
+	const maintenance = Number(trip['maintenanceCost']) || 0;
+	const supplies = Number(trip['suppliesCost']) || 0;
+	return earnings - fuel - maintenance - supplies;
+}
 
 function getEnv(platform: App.Platform | undefined): App.Env {
 	const env = platform?.env;
@@ -397,13 +406,15 @@ export const POST: RequestHandler = async (event) => {
 		const now = new Date().toISOString();
 
 		// Set lastModified to mark this as a manual user update
+		// SECURITY: Calculate netProfit server-side (never trust client)
 		const trip = {
 			...validData,
 			id,
 			userId: storageId,
 			createdAt: existingTrip ? existingTrip.createdAt : now,
 			updatedAt: now,
-			lastModified: now // Critical for conflict detection
+			lastModified: now, // Critical for conflict detection
+			netProfit: calculateNetProfit(validData as Record<string, unknown>)
 		};
 
 		// Persist trip (coerce to TripRecord)

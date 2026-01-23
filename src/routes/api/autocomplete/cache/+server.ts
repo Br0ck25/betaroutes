@@ -3,7 +3,17 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { log } from '$lib/server/log';
 
-export const POST: RequestHandler = async ({ request, platform }) => {
+export const POST: RequestHandler = async ({ request, platform, locals }) => {
+	// SECURITY (Issue #8): Require authentication to prevent anonymous cache poisoning
+	if (!locals.user) {
+		return json({ error: 'Unauthorized' }, { status: 401 });
+	}
+
+	const userId = (locals.user as any).id;
+	if (!userId) {
+		return json({ error: 'Invalid session' }, { status: 401 });
+	}
+
 	try {
 		const body: any = await request.json();
 		const { query, results } = body;
@@ -21,6 +31,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 
 		// 1. Group new items by their potential prefixes
 		// Map<Prefix, Place[]>
+
 		const prefixMap = new Map<string, any[]>();
 
 		for (const result of results) {
@@ -30,7 +41,8 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 			// Generate prefixes for this result (lengths 2 to 10)
 			for (let len = 2; len <= Math.min(10, normalized.length); len++) {
 				const prefix = normalized.substring(0, len);
-				const key = `prefix:${prefix}`;
+				// SECURITY: Use user-scoped key to prevent cache poisoning
+				const key = `user:${userId}:prefix:${prefix}`;
 
 				if (!prefixMap.has(key)) {
 					prefixMap.set(key, []);
@@ -39,8 +51,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 			}
 		}
 
-		// 2. Process each prefix bucket
-		// We do this in parallel, but limited to avoid hitting concurrency limits
+		// 2. Process each prefix bucket (user-scoped)
 		const updatePromises = Array.from(prefixMap.entries()).map(async ([key, newItems]) => {
 			// A. Read existing bucket
 			const existingRaw = await kv.get(key);
@@ -65,8 +76,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 				bucket = bucket.slice(0, 20);
 			}
 
-			// D. Write back
-			// Save bucket permanently so autocomplete caches don't expire
+			// D. Write back (user-scoped)
 			await kv.put(key, JSON.stringify(bucket));
 		});
 
@@ -78,7 +88,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 			bucketsUpdated: prefixMap.size
 		});
 	} catch (err) {
-		log.error('Autocomplete cache error', { message: (err as any)?.message });
+		log.error('Autocomplete cache error', { message: (err as Error)?.message });
 		return json({ error: 'Failed to cache' }, { status: 500 });
 	}
 };

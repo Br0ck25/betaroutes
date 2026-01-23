@@ -74,23 +74,29 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 
 					let migratedCount = 0;
 					let skippedTombstones = 0;
-					for (const key of keys) {
-						const raw = await kv.get(key.name);
-						if (!raw) continue;
-						const parsed = JSON.parse(raw) as Record<string, unknown>;
 
-						if (parsed && parsed['deleted']) {
-							if (parsed['backup']) {
-								allExpenses.push(parsed['backup'] as ExpenseRecord);
-								migratedCount++;
-							} else {
-								skippedTombstones++;
+					// [!code fix] SECURITY: Use batched fetch to avoid Cloudflare subrequest limits (1000 per request)
+					const BATCH_SIZE = 50;
+					for (let i = 0; i < keys.length; i += BATCH_SIZE) {
+						const batch = keys.slice(i, i + BATCH_SIZE);
+						const results = await Promise.all(batch.map((k) => kv.get(k.name)));
+						for (const raw of results) {
+							if (!raw) continue;
+							const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+							if (parsed && parsed['deleted']) {
+								if (parsed['backup']) {
+									allExpenses.push(parsed['backup'] as ExpenseRecord);
+									migratedCount++;
+								} else {
+									skippedTombstones++;
+								}
+								continue;
 							}
-							continue;
-						}
 
-						allExpenses.push(parsed as ExpenseRecord);
-						migratedCount++;
+							allExpenses.push(parsed as ExpenseRecord);
+							migratedCount++;
+						}
 					}
 					if (allExpenses.length > 0) {
 						await stub.fetch(`${DO_ORIGIN}/expenses/migrate`, {
@@ -224,40 +230,49 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			}
 
 			const out: TrashRecord[] = [];
-			for (const k of keys) {
-				const raw = await kv.get(k.name);
-				if (!raw) continue;
-				const parsed = JSON.parse(raw) as Record<string, unknown>;
-				if (!parsed || !parsed['deleted']) continue;
 
-				const id = (parsed['id'] as string) || String(k.name.split(':').pop() || '');
-				const uid = (parsed['userId'] as string) || String(k.name.split(':')[1] || '');
-				const metadata = (parsed['metadata'] as Record<string, unknown>) || {
-					deletedAt: (parsed['deletedAt'] as string) || '',
-					deletedBy: (parsed['deletedBy'] as string) || uid,
-					originalKey: k.name,
-					expiresAt: (parsed['metadata'] as Record<string, unknown>)?.['expiresAt'] || ''
-				};
+			// [!code fix] SECURITY: Use batched fetch to avoid Cloudflare subrequest limits (1000 per request)
+			const BATCH_SIZE = 50;
+			for (let i = 0; i < keys.length; i += BATCH_SIZE) {
+				const batch = keys.slice(i, i + BATCH_SIZE);
+				const results = await Promise.all(batch.map((k) => kv.get(k.name)));
+				for (let j = 0; j < results.length; j++) {
+					const raw = results[j];
+					if (!raw) continue;
+					const parsed = JSON.parse(raw) as Record<string, unknown>;
+					if (!parsed || !parsed['deleted']) continue;
 
-				const backup =
-					(parsed['backup'] as Record<string, unknown>) ||
-					(parsed['data'] as Record<string, unknown>) ||
-					(parsed['expense'] as Record<string, unknown>) ||
-					(parsed as Record<string, unknown>) ||
-					{};
-				out.push({
-					id,
-					userId: uid,
-					metadata: metadata as TrashRecord['metadata'],
-					recordType: 'expense',
-					category: (backup['category'] as string) || undefined,
-					amount:
-						typeof (backup['amount'] as unknown) === 'number'
-							? (backup['amount'] as number)
-							: undefined,
-					description: (backup['description'] as string) || undefined,
-					date: (backup['date'] as string) || undefined
-				});
+					const k = batch[j];
+					if (!k) continue;
+					const id = (parsed['id'] as string) || String(k.name.split(':').pop() || '');
+					const uid = (parsed['userId'] as string) || String(k.name.split(':')[1] || '');
+					const metadata = (parsed['metadata'] as Record<string, unknown>) || {
+						deletedAt: (parsed['deletedAt'] as string) || '',
+						deletedBy: (parsed['deletedBy'] as string) || uid,
+						originalKey: k.name,
+						expiresAt: (parsed['metadata'] as Record<string, unknown>)?.['expiresAt'] || ''
+					};
+
+					const backup =
+						(parsed['backup'] as Record<string, unknown>) ||
+						(parsed['data'] as Record<string, unknown>) ||
+						(parsed['expense'] as Record<string, unknown>) ||
+						(parsed as Record<string, unknown>) ||
+						{};
+					out.push({
+						id,
+						userId: uid,
+						metadata: metadata as TrashRecord['metadata'],
+						recordType: 'expense',
+						category: (backup['category'] as string) || undefined,
+						amount:
+							typeof (backup['amount'] as unknown) === 'number'
+								? (backup['amount'] as number)
+								: undefined,
+						description: (backup['description'] as string) || undefined,
+						date: (backup['date'] as string) || undefined
+					});
+				}
 			}
 
 			out.sort((a, b) => (b.metadata?.deletedAt || '').localeCompare(a.metadata?.deletedAt || ''));
@@ -273,22 +288,42 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				keys = keys.concat(list.keys);
 			}
 			let count = 0;
-			for (const k of keys) {
-				const raw = await kv.get(k.name);
-				if (!raw) continue;
-				const parsed = JSON.parse(raw);
-				if (parsed && parsed.deleted) {
-					await kv.delete(k.name);
-					// Also ensure it's gone from DO
-					const stub = getIndexStub(userId);
-					const id = k.name.split(':').pop();
-					if (id) {
-						await stub.fetch(`${DO_ORIGIN}/expenses/delete`, {
-							method: 'POST',
-							body: JSON.stringify({ id })
-						});
+
+			// [!code fix] SECURITY: Use batched fetch to avoid Cloudflare subrequest limits (1000 per request)
+			const BATCH_SIZE = 50;
+			for (let i = 0; i < keys.length; i += BATCH_SIZE) {
+				const batch = keys.slice(i, i + BATCH_SIZE);
+				const results = await Promise.all(batch.map((k) => kv.get(k.name)));
+
+				// Collect items to delete
+				const toDelete: { key: string; id: string }[] = [];
+				for (let j = 0; j < results.length; j++) {
+					const raw = results[j];
+					if (!raw) continue;
+					const parsed = JSON.parse(raw);
+					if (parsed && parsed.deleted) {
+						const batchItem = batch[j];
+						if (!batchItem) continue;
+						const id = batchItem.name.split(':').pop();
+						if (id) {
+							toDelete.push({ key: batchItem.name, id });
+						}
 					}
-					count++;
+				}
+
+				// Batch delete from KV and DO
+				if (toDelete.length > 0) {
+					const stub = getIndexStub(userId);
+					await Promise.all([
+						...toDelete.map((item) => kv.delete(item.key)),
+						...toDelete.map((item) =>
+							stub.fetch(`${DO_ORIGIN}/expenses/delete`, {
+								method: 'POST',
+								body: JSON.stringify({ id: item.id })
+							})
+						)
+					]);
+					count += toDelete.length;
 				}
 			}
 			return count;

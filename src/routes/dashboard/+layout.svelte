@@ -8,6 +8,7 @@
 	import { expenses } from '$lib/stores/expenses';
 	import { mileage } from '$lib/stores/mileage';
 	import { sanitizeStaticSvg } from '$lib/utils/sanitize';
+	import { csrfFetch } from '$lib/utils/csrf';
 
 	const resolve = (href: string) => `${base}${href}`;
 	import { trash } from '$lib/stores/trash';
@@ -39,7 +40,7 @@
 
 	async function handleLogout() {
 		if (confirm('Are you sure you want to logout?')) {
-			await fetch('/api/logout', { method: 'POST' });
+			await csrfFetch('/api/logout', { method: 'POST' });
 			auth.logout();
 			trips.clear();
 			expenses.clear();

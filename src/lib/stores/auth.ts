@@ -4,6 +4,7 @@ import type { User, AuthResponse } from '$lib/types';
 import { storage } from '$lib/utils/storage';
 import { api } from '$lib/utils/api';
 import { trips } from './trips';
+import { csrfFetch } from '$lib/utils/csrf';
 
 interface AuthState {
 	user: User | null;
@@ -380,7 +381,7 @@ function createAuthStore() {
 
 			try {
 				// [SECURITY FIX #52] Use credentials:include for cookie-based auth
-				const response = await fetch('/api/user', {
+				const response = await csrfFetch('/api/user', {
 					method: 'DELETE',
 					credentials: 'include',
 					headers: {
