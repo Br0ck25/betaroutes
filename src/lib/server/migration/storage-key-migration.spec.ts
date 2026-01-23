@@ -72,4 +72,59 @@ describe('storage-key-migration (rebuild mode)', () => {
 		const marker = await env['BETA_LOGS_KV'].get(`migration:username_to_id:completed:${userId}`);
 		expect(marker).toBeTruthy();
 	});
+
+	it('handles username case-insensitively (seeds with different casing)', async () => {
+		const seededUsername = 'James';
+		const usedUsername = 'james'; // lowercase passed into migration
+		const userId = 'e0d2b3a8-1111-2222-3333-444444444444';
+
+		// Seed legacy trip with capitalized username
+		await env['BETA_LOGS_KV'].put(
+			`trip:${seededUsername}:trip-ci-1`,
+			JSON.stringify({
+				id: 'trip-ci-1',
+				userId: seededUsername,
+				createdAt: new Date().toISOString()
+			})
+		);
+
+		// Seed hns settings with capitalized username
+		await env['BETA_HUGHESNET_KV'].put(
+			`hns:settings:${seededUsername}`,
+			JSON.stringify({ some: 'settings' })
+		);
+
+		const res = await migrateUserStorageKeys(
+			{
+				BETA_LOGS_KV: env['BETA_LOGS_KV'],
+				BETA_EXPENSES_KV: env['BETA_EXPENSES_KV'],
+				BETA_MILLAGE_KV: env['BETA_MILLAGE_KV'],
+				BETA_TRASH_KV: env['BETA_TRASH_KV'],
+				BETA_HUGHESNET_KV: env['BETA_HUGHESNET_KV'],
+				BETA_HUGHESNET_ORDERS_KV: env['BETA_HUGHESNET_ORDERS_KV']
+			},
+			userId,
+			usedUsername,
+			{ mode: 'rebuild', force: true }
+		);
+
+		expect(res.success).toBe(true);
+		expect(res.errors.length).toBe(0);
+
+		// Original seeded record remains
+		const original = await env['BETA_LOGS_KV'].get(`trip:${seededUsername}:trip-ci-1`);
+		expect(original).toBeTruthy();
+
+		// New copy exists under UUID
+		const copied = await env['BETA_LOGS_KV'].get(`trip:${userId}:trip-ci-1`);
+		expect(copied).toBeTruthy();
+
+		// HNS settings copy exists
+		const newHns = await env['BETA_HUGHESNET_KV'].get(`hns:settings:${userId}`);
+		expect(newHns).toBeTruthy();
+
+		// Migration marker should be set
+		const marker = await env['BETA_LOGS_KV'].get(`migration:username_to_id:completed:${userId}`);
+		expect(marker).toBeTruthy();
+	});
 });
