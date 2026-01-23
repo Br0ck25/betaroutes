@@ -139,17 +139,23 @@ async function main() {
 		usage();
 		process.exit(1);
 	}
-	if (!args.mapping) {
-		console.error('Mapping file required via --mapping');
+	let mappingPath = args.mapping ? path.resolve(args.mapping) : null;
+	// Try common fallback locations if mapping not specified
+	if (!mappingPath) {
+		const candA = path.resolve(process.cwd(), 'tools', 'migrations', 'nameToId.json');
+		const candB = path.resolve(process.cwd(), 'migrate-username-to-id', 'nameToId.json');
+		if (fs.existsSync(candA)) mappingPath = candA;
+		else if (fs.existsSync(candB)) mappingPath = candB;
+	}
+	if (!mappingPath || !fs.existsSync(mappingPath)) {
+		console.error(
+			'Mapping file required via --mapping or placed at tools/migrations/nameToId.json or migrate-username-to-id/nameToId.json'
+		);
 		usage();
 		process.exit(1);
 	}
-	const mappingPath = path.resolve(args.mapping);
-	if (!fs.existsSync(mappingPath)) {
-		console.error('Mapping file not found:', mappingPath);
-		process.exit(1);
-	}
-	const nameToId = JSON.parse(fs.readFileSync(mappingPath, 'utf-8'));
+	const mappingPathResolved = mappingPath;
+	const nameToId = JSON.parse(fs.readFileSync(mappingPathResolved, 'utf-8'));
 	if (!nameToId || Object.keys(nameToId).length === 0) {
 		console.warn(
 			'Warning: mapping is empty. The worker will attempt heuristics (USERS_KV / AUTH_KV) which may not find all users.'

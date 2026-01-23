@@ -4,6 +4,8 @@ This folder contains the Cloudflare Worker `migrate-username-to-id` and a safe h
 
 Quick safety checklist (MUST):
 
+Live worker: https://migrate-username-to-id.jamesbrock25.workers.dev/ (deployed from folder: `migrate-username-to-id`)
+
 1. Verify you have a recent backup of KV namespaces involved. The worker will write backups under `migration_backup:{timestamp}:{origKey}` by default.
 2. Prepare a `nameToId` JSON mapping of legacy usernames -> UUIDs. Example: `nameToId.example.json`.
 3. Dry-run first and inspect results carefully.
