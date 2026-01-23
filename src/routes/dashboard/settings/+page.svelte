@@ -10,6 +10,7 @@
 	import MaintenanceCard from './components/MaintenanceCard.svelte';
 	import SettingsLayout from './SettingsLayout.svelte';
 	import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
+	import OrphanedMileageCleanup from '$lib/components/ui/OrphanedMileageCleanup.svelte';
 	import { csrfFetch } from '$lib/utils/csrf';
 
 	export let data: any;
@@ -248,6 +249,47 @@
 
 		<section id="security" class="settings-section">
 			<SecurityCard on:success={(e) => showSuccessMsg(e.detail)} />
+		</section>
+
+		<section id="data-cleanup" class="settings-section">
+			<CollapsibleCard
+				title="Data Cleanup"
+				subtitle="Clean up orphaned or corrupted records"
+				storageKey="settings:data-cleanup"
+			>
+				{#snippet icon()}
+					<span>
+						<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+							<path
+								d="M7 4V2H13V4M4 4H16M15 4V16C15 16.5304 14.7893 17.0391 14.4142 17.4142C14.0391 17.7893 13.5304 18 13 18H7C6.46957 18 5.96086 17.7893 5.58579 17.4142C5.21071 17.0391 5 16.5304 5 16V4H15Z"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							/>
+						</svg>
+					</span>
+				{/snippet}
+				<div class="card-header">
+					<div class="card-icon purple">
+						<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+							<path
+								d="M7 4V2H13V4M4 4H16M15 4V16C15 16.5304 14.7893 17.0391 14.4142 17.4142C14.0391 17.7893 13.5304 18 13 18H7C6.46957 18 5.96086 17.7893 5.58579 17.4142C5.21071 17.0391 5 16.5304 5 16V4H15Z"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							/>
+						</svg>
+					</div>
+					<div>
+						<h2 class="card-title">Data Cleanup</h2>
+						<p class="card-subtitle">Clean up orphaned or corrupted records</p>
+					</div>
+				</div>
+
+				<OrphanedMileageCleanup />
+			</CollapsibleCard>
 		</section>
 	</SettingsLayout>
 </div>
