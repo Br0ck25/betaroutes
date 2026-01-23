@@ -1,0 +1,31 @@
+name = "migrate-username-to-id"
+main = "index.ts"
+compatibility_date = "2026-01-23"
+
+# Replace the id values below with your actual KV namespace IDs from Cloudflare dashboard.
+# You can also set different namespace IDs per environment (preview/production) if needed.
+[[kv_namespaces]]
+binding = "DATA_KV"
+id = "REPLACE_WITH_YOUR_DATA_KV_ID"
+
+[[kv_namespaces]]
+binding = "MIGRATION_LOG_KV"
+id = "REPLACE_WITH_YOUR_MIGRATION_LOG_KV_ID"
+
+[[kv_namespaces]]
+binding = "USERS_KV"
+id = "OPTIONAL_USERS_KV_ID"
+
+[[kv_namespaces]]
+binding = "AUTH_KV"
+id = "OPTIONAL_AUTH_KV_ID"
+
+# Optional: set account_id or environment specific options if you deploy across multiple accounts/environments.
+# account_id = "your-account-id"
+
+[build]
+command = ""
+
+[dev]
+# optionally override host/port
+```
