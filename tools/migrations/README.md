@@ -14,20 +14,30 @@ Using the helper script `run-bulk-migration.js`:
 
 - Place a mapping file, e.g. `tools/migrations/nameToId.json`.
 - Set `WORKER_URL` to the URL of your deployed worker (or a Tail worker URL from Wrangler).
-- Dry run example:
+- Dry run example (using your deployed worker):
 
-  WORKER_URL="https://your-worker.example.workers.dev" \
+  WORKER_URL="https://migrate-username-to-id.jamesbrock25.workers.dev/" \
   node tools/migrations/run-bulk-migration.js --mapping tools/migrations/nameToId.json
 
 - Confirmed run (writes, safe default no delete):
 
-  WORKER_URL="https://your-worker.example.workers.dev" \
+  WORKER_URL="https://migrate-username-to-id.jamesbrock25.workers.dev/" \
   node tools/migrations/run-bulk-migration.js --mapping tools/migrations/nameToId.json --confirm --loop
 
 - To enable deletion of old keys (only after backups and verification):
 
-  WORKER_URL="https://your-worker.example.workers.dev" \
+  WORKER_URL="https://migrate-username-to-id.jamesbrock25.workers.dev/" \
   node tools/migrations/run-bulk-migration.js --mapping tools/migrations/nameToId.json --confirm --delete-old --loop
+
+- To deploy the worker from this repo (if you make changes locally):
+
+  cd migrate-username-to-id
+
+  # edit wrangler.toml: replace placeholder KV ids with your KV namespace ids
+
+  npx wrangler publish
+
+Note: the worker code lives in `migrate-username-to-id/index.ts` in this repo.
 
 Notes:
 
