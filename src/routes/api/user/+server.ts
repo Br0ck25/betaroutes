@@ -1,16 +1,13 @@
 // src/routes/api/user/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-// [!code change] Import updateUser and verifyPassword
-import { deleteUser, updateUser, findUserById } from '$lib/server/userService';
-import { verifyPassword } from '$lib/server/auth';
+// [!code change] Import updateUser
+import { deleteUser, updateUser } from '$lib/server/userService';
 import { log } from '$lib/server/log';
 import { safeKV, safeDO } from '$lib/server/env';
-import { sendVerificationEmail } from '$lib/server/email';
-import { randomUUID } from 'node:crypto';
 
 // [!code ++] Add PUT handler for profile updates
-export const PUT: RequestHandler = async ({ request, locals, platform, url }) => {
+export const PUT: RequestHandler = async ({ request, locals, platform }) => {
 	try {
 		const user = locals.user as any;
 		if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
@@ -27,99 +24,20 @@ export const PUT: RequestHandler = async ({ request, locals, platform, url }) =>
 			return json({ error: 'No data to update' }, { status: 400 });
 		}
 
-		// [!code fix] SECURITY: Email changes require re-authentication
-		if (body.email && body.email !== user.email) {
-			if (!body.currentPassword) {
-				return json({ error: 'Current password required to change email' }, { status: 400 });
-			}
-
-			// Verify current password
-			const fullUser = await findUserById(env.BETA_USERS_KV as any, user.id);
-			if (!fullUser || !fullUser.password) {
-				return json({ error: 'User not found' }, { status: 404 });
-			}
-
-			const passwordValid = await verifyPassword(body.currentPassword, fullUser.password);
-			if (!passwordValid) {
-				return json({ error: 'Current password is incorrect' }, { status: 403 });
-			}
-
-			const newEmail = body.email.toLowerCase().trim();
-
-			// Check if email is already in use
-			const { findUserByEmail } = await import('$lib/server/userService');
-			const existingUser = await findUserByEmail(env.BETA_USERS_KV as any, newEmail);
-			if (existingUser && existingUser.id !== user.id) {
-				return json({ error: 'Email already in use' }, { status: 409 });
-			}
-
-			// Generate verification token
-			const verificationToken = randomUUID();
-			const ttl = 86400; // 24 hours
-
-			// Store pending email change
-			const pendingChange = {
-				userId: user.id,
-				currentEmail: user.email,
-				newEmail: newEmail,
-				createdAt: new Date().toISOString()
-			};
-
-			await (env.BETA_USERS_KV as any).put(
-				`pending_email_change:${verificationToken}`,
-				JSON.stringify(pendingChange),
-				{ expirationTtl: ttl }
-			);
-
-			// Send verification email to the NEW email address
-			try {
-				const resendApiKey = (env as any)['RESEND_API_KEY'] as string | undefined;
-				await sendVerificationEmail(newEmail, verificationToken, url.origin, resendApiKey);
-			} catch (emailErr) {
-				log.error('Failed to send email verification', { message: (emailErr as any)?.message });
-				// Cleanup pending change
-				await (env.BETA_USERS_KV as any).delete(`pending_email_change:${verificationToken}`);
-				return json({ error: 'Failed to send verification email' }, { status: 500 });
-			}
-
-			// If only email was provided (no name change), return here
-			if (!body.name) {
-				return json({
-					success: true,
-					message: 'Verification email sent to new address. Please confirm to complete the change.',
-					emailPending: true
-				});
-			}
-		}
-
-		// Update name only (email requires verification)
-		const updateData: { name?: string } = {};
-		if (body.name) {
-			updateData.name = body.name;
-		}
-
-		if (Object.keys(updateData).length > 0) {
-			await updateUser(env.BETA_USERS_KV as any, (user as any).id, updateData);
-		}
-
-		const responseMessage =
-			body.email && body.email !== user.email
-				? 'Profile updated. Verification email sent to new address.'
-				: 'Profile updated successfully.';
-
-		return json({
-			success: true,
-			message: responseMessage,
-			user: { ...user, ...updateData },
-			emailPending: body.email && body.email !== user.email
+		// Update the core user record in KV (cast KV typing to any)
+		await updateUser(env.BETA_USERS_KV as any, (user as any).id, {
+			name: body.name,
+			email: body.email
 		});
+
+		return json({ success: true, user: { ...user, ...body } });
 	} catch (err: any) {
 		log.error('Update profile error', { message: err?.message });
 		return json({ error: 'Internal Server Error' }, { status: 500 });
 	}
 };
 
-export const DELETE: RequestHandler = async ({ request, locals, platform, cookies }) => {
+export const DELETE: RequestHandler = async ({ locals, platform, cookies }) => {
 	try {
 		const user = locals.user as any;
 		if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
@@ -129,23 +47,6 @@ export const DELETE: RequestHandler = async ({ request, locals, platform, cookie
 			return json({ error: 'Service Unavailable' }, { status: 503 });
 		}
 
-		// [!code fix] SECURITY: Account deletion requires re-authentication
-		const body: any = await request.json().catch(() => ({}));
-		if (!body.currentPassword) {
-			return json({ error: 'Current password required to delete account' }, { status: 400 });
-		}
-
-		// Verify current password
-		const fullUser = await findUserById(env.BETA_USERS_KV as any, user.id);
-		if (!fullUser || !fullUser.password) {
-			return json({ error: 'User not found' }, { status: 404 });
-		}
-
-		const passwordValid = await verifyPassword(body.currentPassword, fullUser.password);
-		if (!passwordValid) {
-			return json({ error: 'Current password is incorrect' }, { status: 403 });
-		}
-
 		await deleteUser(safeKV(env, 'BETA_USERS_KV')!, user.id, {
 			tripsKV: safeKV(env, 'BETA_LOGS_KV')!,
 			settingsKV: safeKV(env, 'BETA_USER_SETTINGS_KV'),
@@ -153,8 +54,8 @@ export const DELETE: RequestHandler = async ({ request, locals, platform, cookie
 		});
 
 		// Cleanup Cookies
-		cookies.delete('session_id', { path: '/', secure: true });
-		cookies.delete('token', { path: '/', secure: true });
+		cookies.delete('session_id', { path: '/' });
+		cookies.delete('token', { path: '/' });
 
 		return json({ success: true });
 	} catch (err: any) {

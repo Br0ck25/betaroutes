@@ -5,7 +5,7 @@ import { safeKV, safeDO } from '$lib/server/env';
 import { getStorageId } from '$lib/server/user';
 
 export const load: PageServerLoad = async ({ locals, platform }) => {
-	const user = locals.user as { id?: string; name?: string; token?: string } | null;
+	const user = locals.user;
 	if (!user) return { mileage: [] };
 
 	// Safely access bindings

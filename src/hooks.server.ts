@@ -4,18 +4,18 @@ import type { Handle } from '@sveltejs/kit';
 import { log } from '$lib/server/log';
 // [!code ++] Import the user finder to check real-time status
 import { findUserById } from '$lib/server/userService';
-// [!code ++] SECURITY (Issue #13): CSRF protection
-import { generateCsrfToken } from '$lib/server/csrf';
-// NOTE: csrfProtection validation is imported but not enforced yet
-// TODO: Update all client fetch calls to use csrfFetch() from $lib/utils/csrf, then enable validation
+// [!code ++] SECURITY (Issue #4): CSRF protection
+// TEMPORARILY DISABLED: Client-side code doesn't use csrfFetch() utilities yet
+// TODO: Update all fetch calls to use csrfFetch() from $lib/utils/csrf before re-enabling
+// import { generateCsrfToken, csrfProtection } from '$lib/server/csrf';
 
 export const handle: Handle = async ({ event, resolve }) => {
-	// [!code ++] SECURITY (Issue #13): Generate CSRF token for all requests
-	// This sets up the tokens in cookies - non-breaking, prepares for full CSRF enforcement
-	generateCsrfToken(event);
+	// [!code ++] SECURITY (Issue #4): Generate CSRF token for all requests
+	// TEMPORARILY DISABLED: Causes 403 on all POST/PUT/DELETE requests
+	// generateCsrfToken(event);
 
-	// [!code ++] SECURITY (Issue #13): CSRF validation is DISABLED pending client-side implementation
-	// TODO: Enable this after updating all client fetch calls to include X-CSRF-Token header
+	// [!code ++] SECURITY (Issue #4): Validate CSRF token for state-changing API requests
+	// TEMPORARILY DISABLED: Causes 403 on all POST/PUT/DELETE requests
 	// const csrfError = csrfProtection(event);
 	// if (csrfError) {
 	// 	return csrfError;
@@ -55,43 +55,48 @@ export const handle: Handle = async ({ event, resolve }) => {
 			if (sessionDataStr) {
 				const session = JSON.parse(sessionDataStr);
 
-				// Skip if session doesn't have an id (required for data lookups)
-				if (!session.id) {
-					log.warn('[HOOK] Session missing id, skipping user hydration', { sessionId });
-					event.locals.user = null;
-				} else {
-					// FETCH FRESH USER DATA
-					// Assume session is stale; check the main DB for the absolute latest plan
-					let freshPlan: 'free' | 'premium' = (session.plan ?? 'free') as 'free' | 'premium';
-					let freshStripeId = session.stripeCustomerId;
-					let freshMaxTrips = session.maxTrips ?? 10;
+				// [!code ++] FETCH FRESH USER DATA
+				// Assume session is stale; check the main DB for the absolute latest plan
+				let freshPlan: 'free' | 'premium' = (session.plan ?? 'free') as 'free' | 'premium';
+				let freshStripeId = session.stripeCustomerId;
+				let freshMaxTrips = session.maxTrips ?? 10;
 
-					if (usersKV && session.id) {
-						try {
-							const freshUser = await findUserById(usersKV, session.id);
-							if (freshUser) {
-								freshPlan = freshUser.plan as 'free' | 'premium';
-								freshStripeId = freshUser.stripeCustomerId;
-								// Only update maxTrips if the user record has it, otherwise keep session's
-								if (freshUser.maxTrips) freshMaxTrips = freshUser.maxTrips;
-							}
-						} catch (err: unknown) {
-							const msg = err instanceof Error ? err.message : String(err);
-							log.error('[HOOK] Failed to fetch fresh user data:', { message: msg });
+				if (usersKV && session.id) {
+					try {
+						const freshUser = await findUserById(usersKV, session.id);
+						if (freshUser) {
+							freshPlan = freshUser.plan as 'free' | 'premium';
+							freshStripeId = freshUser.stripeCustomerId;
+							// Only update maxTrips if the user record has it, otherwise keep session's
+							if (freshUser.maxTrips) freshMaxTrips = freshUser.maxTrips;
 						}
+					} catch (err: unknown) {
+						const msg = err instanceof Error ? err.message : String(err);
+						log.error('[HOOK] Failed to fetch fresh user data:', { message: msg });
 					}
-					event.locals.user = {
-						id: session.id as string,
-						token: sessionId,
-						plan: freshPlan,
-						tripsThisMonth: session.tripsThisMonth ?? 0,
-						maxTrips: freshMaxTrips,
-						resetDate: session.resetDate ?? new Date().toISOString(),
-						name: session.name,
-						email: session.email,
-						stripeCustomerId: freshStripeId
-					};
 				}
+				event.locals.user = {
+					id: session.id,
+					token: sessionId,
+					// [!code fix] Use the FRESH values from DB
+					plan: freshPlan,
+					tripsThisMonth: session.tripsThisMonth ?? 0,
+					maxTrips: freshMaxTrips,
+					resetDate: session.resetDate ?? new Date().toISOString(),
+					name: session.name,
+					email: session.email,
+					stripeCustomerId: freshStripeId // [!code ++] Required for Portal
+				} as {
+					id?: string;
+					token: string;
+					plan: 'free' | 'premium';
+					tripsThisMonth: number;
+					maxTrips: number;
+					resetDate: string;
+					name?: string;
+					email?: string;
+					stripeCustomerId?: string | undefined;
+				};
 			} else {
 				// Session ID cookie exists, but data is gone from KV (expired/deleted)
 				if (event.url.pathname.startsWith('/dashboard')) {
@@ -119,13 +124,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 	response.headers.set('Permissions-Policy', 'geolocation=(self), camera=(), microphone=()');
 
 	// Content Security Policy (Issue #6)
-	// [!code fix] Removed 'unsafe-eval' per Issue #34
 	if (!response.headers.has('Content-Security-Policy')) {
 		response.headers.set(
 			'Content-Security-Policy',
 			[
 				"default-src 'self'",
-				"script-src 'self' 'unsafe-inline' https://maps.googleapis.com https://maps.gstatic.com https://static.cloudflareinsights.com",
+				"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://maps.googleapis.com https://maps.gstatic.com https://static.cloudflareinsights.com",
 				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
 				"img-src 'self' data: https: blob:",
 				"font-src 'self' https://fonts.gstatic.com",

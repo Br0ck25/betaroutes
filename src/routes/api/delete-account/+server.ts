@@ -3,13 +3,8 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { log } from '$lib/server/log';
 
-export const POST: RequestHandler = async ({ request, fetch, cookies, locals }) => {
+export const POST: RequestHandler = async ({ request, fetch, cookies }) => {
 	try {
-		// SECURITY: Require authentication before processing delete request
-		if (!locals.user) {
-			return json({ error: 'Unauthorized' }, { status: 401 });
-		}
-
 		// Use standard Promise methods for the body
 		const body = (await request.json()) as any;
 		const token = request.headers.get('Authorization');
@@ -26,9 +21,9 @@ export const POST: RequestHandler = async ({ request, fetch, cookies, locals }) 
 
 		// 2. If successful, clear the authentication cookies immediately
 		if (externalResponse.ok) {
-			cookies.delete('token', { path: '/', secure: true });
+			cookies.delete('token', { path: '/' });
 			// Ensure 'session_id' is also cleared if it exists (common pattern in this app)
-			cookies.delete('session_id', { path: '/', secure: true });
+			cookies.delete('session_id', { path: '/' });
 		}
 
 		// 3. Return the backend's response to the client

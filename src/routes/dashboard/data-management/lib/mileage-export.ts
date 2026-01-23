@@ -1,29 +1,5 @@
 // Mileage export utility functions for data-management page
 
-/**
- * [!code fix] Escape CSV field to prevent CSV injection attacks.
- * Prefixes cells starting with =, +, -, @, tab, or CR with a single quote.
- * This prevents Excel/Sheets from interpreting formulas.
- */
-function escapeCSVField(value: string | number): string {
-	const str = String(value ?? '');
-	// Escape internal quotes by doubling them
-	const escaped = str.replace(/"/g, '""');
-	// Check for formula injection characters
-	const firstChar = escaped.charAt(0);
-	if (
-		firstChar === '=' ||
-		firstChar === '+' ||
-		firstChar === '-' ||
-		firstChar === '@' ||
-		firstChar === '\t' ||
-		firstChar === '\r'
-	) {
-		return `"'${escaped}"`;
-	}
-	return `"${escaped}"`;
-}
-
 export function exportMileageCSV(
 	mileageRecords: any[],
 	selectedIds: Set<string>,
@@ -45,15 +21,14 @@ export function exportMileageCSV(
 		const miles = Number(m.miles || 0);
 		totalMiles += miles;
 
-		// [!code fix] Use escapeCSVField for all user-controlled values
 		const row = [
-			escapeCSVField(formatDate(m.date || '')),
-			escapeCSVField(m.vehicle || 'Default'),
-			escapeCSVField(m.startOdometer || ''),
-			escapeCSVField(m.endOdometer || ''),
-			escapeCSVField(miles.toFixed(2)),
-			escapeCSVField(m.purpose || 'Business'),
-			escapeCSVField(m.notes || '')
+			formatDate(m.date || ''),
+			`"${m.vehicle || 'Default'}"`,
+			m.startOdometer || '',
+			m.endOdometer || '',
+			miles.toFixed(2),
+			`"${m.purpose || 'Business'}"`,
+			`"${m.notes || ''}"`
 		];
 
 		csv += row.join(',') + '\n';

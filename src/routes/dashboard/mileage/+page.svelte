@@ -32,12 +32,6 @@
 
 	let isMileageSettingsOpen = false;
 
-	// Track if the store has been initialized to avoid falling back to stale server data
-	let storeInitialized = false;
-	$: if ($mileage !== undefined) {
-		storeInitialized = true;
-	}
-
 	// Derived totals - use pre-computed values
 	$: totalMiles = filteredExpenses.reduce((s, e) => s + (Number((e as any).miles) || 0), 0);
 	// PERFORMANCE: Use pre-computed reimbursement
@@ -95,21 +89,16 @@
 	let isManageCategoriesOpen = false;
 	let newCategoryName = '';
 
-	// Use store data once initialized, fallback to server data only during initial hydration
-	// [!code fix] Use storeInitialized flag instead of length check to prevent stale data after delete
+	// Use store data, but fallback to server data during initial hydration to prevent flicker
 	$: {
-		const source = storeInitialized ? $mileage : data.mileage || [];
+		const source = $mileage.length > 0 ? $mileage : data.mileage || [];
 		// PERFORMANCE: Pre-calculate all values once to avoid repeated computations
-		// [!code fix] Use looser check - allow string or number values that are truthy
-		// Data may come from various sources with different types
-		const hasNumericValue = (v: unknown) =>
-			v !== undefined && v !== null && v !== '' && !isNaN(Number(v));
 		allExpenses = source
 			.filter(
 				(r: any) =>
-					hasNumericValue(r.miles) ||
-					hasNumericValue(r.startOdometer) ||
-					hasNumericValue(r.endOdometer)
+					typeof r.miles === 'number' ||
+					typeof r.startOdometer === 'number' ||
+					typeof r.endOdometer === 'number'
 			)
 			.map((r: any) => {
 				const dateVal = new Date(r.date || 0).getTime();
@@ -226,12 +215,8 @@
 		}
 
 		const currentUser = $page.data['user'] || $user;
-		// [!code fix] Use UUID (id) as primary, fall back to name for legacy support
 		const userId =
-			currentUser?.id ||
-			currentUser?.name ||
-			currentUser?.token ||
-			localStorage.getItem('offline_user_id');
+			currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
 		if (userId) {
 			try {
 				await mileage.deleteMileage(id, String(userId));
@@ -281,12 +266,8 @@
 		)
 			return;
 		const currentUser = $page.data['user'] || $user;
-		// [!code fix] Use UUID (id) as primary, fall back to name for legacy support
 		const userId =
-			currentUser?.id ||
-			currentUser?.name ||
-			currentUser?.token ||
-			localStorage.getItem('offline_user_id');
+			currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
 
 		if (!userId) return;
 

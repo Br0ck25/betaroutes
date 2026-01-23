@@ -48,221 +48,100 @@ export const POST: RequestHandler = async (event) => {
 		const currentUser = user as { id?: string; name?: string; token?: string };
 		const storageId = getStorageId(currentUser);
 
-		if (!storageId) {
-			return new Response(JSON.stringify({ error: 'Invalid user' }), { status: 400 });
-		}
+		if (storageId) {
+			let restored: unknown | null = null;
+			let lastError: string | null = null;
 
-		let restored: unknown | null = null;
-		let restoredType: 'trip' | 'expense' | 'mileage' | null = null;
-		let lastError: string | null = null;
-
-		// Step 1: Try to restore as a trip first
-		try {
-			restored = await tripSvc.restore(storageId, id);
-			restoredType = 'trip';
-			log.info('Restored trip from trash', { tripId: id });
-		} catch {
-			// Not a trip, try expense
+			// Strategy: Try sequentially until one succeeds
 			try {
-				// Check if this expense has a tripId and that trip is deleted
-				const expenseKV = safeKV(platformEnv, 'BETA_EXPENSES_KV');
-				if (expenseKV) {
-					const raw = await (expenseKV as any).get(`expense:${storageId}:${id}`);
-					if (raw) {
-						const tombstone = JSON.parse(raw);
-						const expenseData = tombstone.backup || tombstone.data || tombstone;
-
-						// If this expense was cascade deleted, user shouldn't see it in trash
-						// but allow restore via API if trip is restored first
-						if (expenseData.tripId && !tombstone.cascadeDeleted) {
-							const trip = await tripSvc.get(storageId, expenseData.tripId);
-							if (!trip || trip.deleted) {
-								throw new Error('Cannot restore expense: parent trip is deleted');
-							}
-						}
-					}
-				}
-				restored = await expenseSvc.restore(storageId, id);
-				restoredType = 'expense';
-				log.info('Restored expense from trash', { expenseId: id });
-			} catch (err) {
-				const errMsg = err instanceof Error ? err.message : String(err);
-				if (errMsg.includes('Cannot restore expense')) {
-					return new Response(JSON.stringify({ error: errMsg }), { status: 409 });
-				}
-
-				// Not an expense, try mileage
+				restored = await tripSvc.restore(storageId, id);
+			} catch {
 				try {
-					// Get the mileage item from trash to check its tripId
-					const mileageKV = safeKV(platformEnv, 'BETA_MILLAGE_KV');
-					if (mileageKV) {
-						const raw = await (mileageKV as any).get(`mileage:${storageId}:${id}`);
-						if (raw) {
-							const tombstone = JSON.parse(raw);
-							const mileageData = tombstone.backup || tombstone.data || tombstone;
+					restored = await expenseSvc.restore(storageId, id);
+				} catch {
+					try {
+						// Get the mileage item from trash to check its tripId
+						const mileageKV = safeKV(platformEnv, 'BETA_MILLAGE_KV');
+						if (mileageKV) {
+							const raw = await (mileageKV as any).get(`mileage:${storageId}:${id}`);
+							if (raw) {
+								const tombstone = JSON.parse(raw);
+								const mileageData = tombstone.backup || tombstone.data || tombstone;
 
-							// Check if mileage has a linked trip (and wasn't cascade deleted)
-							if (mileageData.tripId && !tombstone.cascadeDeleted) {
-								// Check if parent trip is deleted
-								const trip = await tripSvc.get(storageId, mileageData.tripId);
-								if (!trip || trip.deleted) {
-									throw new Error('Cannot restore mileage: parent trip is deleted');
-								}
+								// Check if mileage has a linked trip
+								if (mileageData.tripId) {
+									// Check if parent trip is deleted
+									const trip = await tripSvc.get(storageId, mileageData.tripId);
+									if (!trip || trip.deleted) {
+										throw new Error('Cannot restore mileage: parent trip is deleted');
+									}
 
-								// Check if another active mileage log exists for this trip
-								const activeMileage = await mileageSvc.list(storageId);
-								const conflictingMileage = activeMileage.find(
-									(m: MileageRecord) => m.tripId === mileageData.tripId && m.id !== id
-								);
-								if (conflictingMileage) {
-									throw new Error(
-										'Cannot restore mileage: another active mileage log exists for this trip'
+									// Check if another active mileage log exists for this trip
+									const activeMileage = await mileageSvc.list(storageId);
+									const conflictingMileage = activeMileage.find(
+										(m: MileageRecord) => m.tripId === mileageData.tripId && m.id !== id
 									);
+									if (conflictingMileage) {
+										throw new Error(
+											'Cannot restore mileage: another active mileage log exists for this trip'
+										);
+									}
 								}
 							}
 						}
-					}
 
-					restored = await mileageSvc.restore(storageId, id);
-					restoredType = 'mileage';
-					log.info('Restored mileage from trash', { mileageId: id });
-
-					// If restored mileage has a tripId, sync the miles back to the trip
-					const restoredMileage = restored as MileageRecord | undefined;
-					if (
-						restoredMileage &&
-						restoredMileage.tripId &&
-						typeof restoredMileage.miles === 'number'
-					) {
-						try {
-							const trip = await tripSvc.get(storageId, restoredMileage.tripId);
-							if (trip && !trip.deleted) {
-								trip.totalMiles = restoredMileage.miles;
-								trip.updatedAt = new Date().toISOString();
-								await tripSvc.put(trip);
-								log.info('Synced restored mileage to trip', {
-									tripId: restoredMileage.tripId,
-									miles: restoredMileage.miles
-								});
-							}
-						} catch (e) {
-							log.warn('Failed to sync restored mileage to trip', { message: String(e) });
-						}
-					}
-				} catch (mileageErr) {
-					// Check if this is a validation error that we should surface
-					const mileageErrMsg =
-						mileageErr instanceof Error ? mileageErr.message : String(mileageErr);
-					if (mileageErrMsg.includes('Cannot restore mileage')) {
-						return new Response(JSON.stringify({ error: mileageErrMsg }), { status: 409 });
-					}
-					// Store the error for later use if no restore succeeded
-					lastError = mileageErrMsg;
-				}
-			}
-		}
-
-		// Step 2: If we restored a trip, cascade restore linked mileage and expenses
-		if (restoredType === 'trip') {
-			// Cascade restore mileage logs that were cascade-deleted with this trip
-			try {
-				const mileageKV = safeKV(platformEnv, 'BETA_MILLAGE_KV');
-				if (mileageKV) {
-					const prefix = `mileage:${storageId}:`;
-					let list = await (mileageKV as any).list({ prefix });
-					let keys = list.keys;
-					while (!list.list_complete && list.cursor) {
-						list = await (mileageKV as any).list({ prefix, cursor: list.cursor });
-						keys = keys.concat(list.keys);
-					}
-
-					for (const k of keys) {
-						const raw = await (mileageKV as any).get(k.name);
-						if (!raw) continue;
-						const parsed = JSON.parse(raw);
-						// Only restore if it was cascade deleted AND linked to this trip
+						restored = await mileageSvc.restore(storageId, id);
+						// If restored mileage has a tripId, sync the miles back to the trip
+						const restoredMileage = restored as MileageRecord | undefined;
 						if (
-							parsed.deleted &&
-							parsed.cascadeDeleted &&
-							(parsed.tripId === id || (parsed.backup && parsed.backup.tripId === id))
+							restoredMileage &&
+							restoredMileage.tripId &&
+							typeof restoredMileage.miles === 'number'
 						) {
 							try {
-								await mileageSvc.restore(storageId, parsed.id);
-								log.info('Cascade restored mileage with trip', {
-									tripId: id,
-									mileageId: parsed.id
-								});
+								const trip = await tripSvc.get(storageId, restoredMileage.tripId);
+								if (trip && !trip.deleted) {
+									trip.totalMiles = restoredMileage.miles;
+									trip.updatedAt = new Date().toISOString();
+									await tripSvc.put(trip);
+									log.info('Synced restored mileage to trip', {
+										tripId: restoredMileage.tripId,
+										miles: restoredMileage.miles
+									});
+								}
 							} catch (e) {
-								log.warn('Failed to cascade restore mileage', {
-									mileageId: parsed.id,
-									error: String(e)
-								});
+								log.warn('Failed to sync restored mileage to trip', { message: String(e) });
 							}
 						}
-					}
-				}
-			} catch (e) {
-				log.warn('Failed to cascade restore mileage logs', { tripId: id, error: String(e) });
-			}
-
-			// Cascade restore expense logs that were cascade-deleted with this trip
-			try {
-				const expenseKV = safeKV(platformEnv, 'BETA_EXPENSES_KV');
-				if (expenseKV) {
-					const prefix = `expense:${storageId}:`;
-					let list = await (expenseKV as any).list({ prefix });
-					let keys = list.keys;
-					while (!list.list_complete && list.cursor) {
-						list = await (expenseKV as any).list({ prefix, cursor: list.cursor });
-						keys = keys.concat(list.keys);
-					}
-
-					for (const k of keys) {
-						const raw = await (expenseKV as any).get(k.name);
-						if (!raw) continue;
-						const parsed = JSON.parse(raw);
-						// Only restore if it was cascade deleted AND linked to this trip
-						if (
-							parsed.deleted &&
-							parsed.cascadeDeleted &&
-							(parsed.tripId === id || (parsed.backup && parsed.backup.tripId === id))
-						) {
-							try {
-								await expenseSvc.restore(storageId, parsed.id);
-								log.info('Cascade restored expense with trip', {
-									tripId: id,
-									expenseId: parsed.id
-								});
-							} catch (e) {
-								log.warn('Failed to cascade restore expense', {
-									expenseId: parsed.id,
-									error: String(e)
-								});
-							}
+					} catch (err) {
+						// Check if this is a validation error that we should surface
+						const errMsg = err instanceof Error ? err.message : String(err);
+						if (errMsg.includes('Cannot restore mileage')) {
+							return new Response(JSON.stringify({ error: errMsg }), { status: 409 });
 						}
+						// Store the error for later use if no restore succeeded
+						lastError = errMsg;
 					}
 				}
-			} catch (e) {
-				log.warn('Failed to cascade restore expense logs', { tripId: id, error: String(e) });
 			}
-		}
 
-		if (restored) {
-			// Only trips need counter incrementing
-			if (restoredType === 'trip') {
+			if (restored) {
+				// Only trips need counter incrementing
 				try {
-					await (tripSvc as any).incrementUserCounter?.(currentUser.token || '', 1);
+					if ((restored as any).stops || (restored as any).startAddress) {
+						await (tripSvc as any).incrementUserCounter?.(currentUser.token || '', 1);
+					}
 				} catch {
 					void 0;
 				}
+
+				return new Response(JSON.stringify({ success: true }), { status: 200 });
 			}
 
-			return new Response(JSON.stringify({ success: true }), { status: 200 });
-		}
-
-		// If all restore attempts failed with a validation error, surface it
-		if (lastError) {
-			return new Response(JSON.stringify({ error: lastError }), { status: 409 });
+			// If all restore attempts failed with a validation error, surface it
+			if (lastError) {
+				return new Response(JSON.stringify({ error: lastError }), { status: 409 });
+			}
 		}
 
 		return new Response(JSON.stringify({ error: 'Item not found in trash' }), { status: 404 });

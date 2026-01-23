@@ -1,15 +1,10 @@
-// src/routes/api/remove/+server.ts
+// src/routes/api/delete-account/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { log } from '$lib/server/log';
 
-export const POST: RequestHandler = async ({ request, fetch, cookies, locals }) => {
+export const POST: RequestHandler = async ({ request, fetch, cookies }) => {
 	try {
-		// SECURITY: Require authentication before processing delete request
-		if (!locals.user) {
-			return json({ error: 'Unauthorized' }, { status: 401 });
-		}
-
 		const body: any = await request.json();
 		const token = request.headers.get('Authorization');
 
@@ -25,8 +20,7 @@ export const POST: RequestHandler = async ({ request, fetch, cookies, locals }) 
 
 		// 2. If successful, clear the cookie immediately so the user is logged out
 		if (response.ok) {
-			cookies.delete('token', { path: '/', secure: true });
-			cookies.delete('session_id', { path: '/', secure: true });
+			cookies.delete('token', { path: '/' });
 		}
 
 		// 3. Return the backend's response to the client

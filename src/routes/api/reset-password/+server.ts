@@ -85,8 +85,8 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
 		}
 
 		// Clear any session cookies on this client
-		cookies.delete('session_id', { path: '/', secure: true });
-		cookies.delete('__Host-session_id', { path: '/', secure: true });
+		cookies.delete('session_id', { path: '/' });
+		cookies.delete('__Host-session_id', { path: '/' });
 
 		return json({ success: true, message: 'Password reset successfully. Please log in.' });
 	} catch (err) {
