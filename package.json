@@ -10,7 +10,6 @@
 		"prepare": "svelte-kit sync || echo '' && husky install",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"test": "vitest",
 		"format": "prettier --write .",
 		"lint": "prettier --check \"src/**/*.{ts,js,svelte,css,md}\" && eslint \"src/**/*.{ts,js,svelte}\"",
 		"audit": "npm audit --production",

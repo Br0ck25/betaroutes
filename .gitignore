@@ -50,9 +50,3 @@ vite.config.ts.timestamp-*
 .idea/
 *.swp
 *.swo
-
-# Migration mapping & output (local only)
-/tools/migrations/nameToId.json
-/tools/migrations/output/
-/migrate-username-to-id/nameToId.json
-/migrate-username-to-id/output/
