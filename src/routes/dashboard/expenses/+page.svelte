@@ -279,6 +279,13 @@
 			return false;
 		}
 
+		// [!code fix] Check if trip exists in local store before trying to update
+		const tripExists = $trips.some((t) => t.id === tripId);
+		if (!tripExists) {
+			toasts.error('Cannot modify expense: the parent trip was deleted');
+			return false;
+		}
+
 		try {
 			const res = await fetch(`/api/trips/${tripId}`, {
 				method: 'PUT',
@@ -287,6 +294,11 @@
 			});
 
 			if (!res.ok) {
+				// [!code fix] Better error message for 404
+				if (res.status === 404) {
+					toasts.error('Cannot modify expense: trip not found on server');
+					return false;
+				}
 				throw new Error('Failed to update trip');
 			}
 

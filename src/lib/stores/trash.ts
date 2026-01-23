@@ -103,7 +103,19 @@ function createTrashStore() {
 				await txRead.done;
 
 				if (!stored) throw new Error('Item not found in trash');
-				if (stored.userId !== userId) throw new Error('Unauthorized');
+
+				// [!code fix] Flexible ownership check - allow if userId matches stored's userId OR deletedBy
+				// This handles legacy data where userId might be username instead of UUID
+				const { get: svelteGet } = await import('svelte/store');
+				const { user: authUserStore } = await import('$lib/stores/auth');
+				const currentUser = svelteGet(authUserStore) as { id?: string; name?: string } | null;
+				const isOwner =
+					stored.userId === userId ||
+					stored.userId === currentUser?.id ||
+					stored.userId === currentUser?.name ||
+					stored.deletedBy === userId ||
+					stored.deletedBy === currentUser?.id;
+				if (!isOwner) throw new Error('Unauthorized');
 
 				const recordTypes: string[] = Array.from(
 					new Set(
@@ -160,6 +172,8 @@ function createTrashStore() {
 
 				const restored = { ...(backupFor(restoreType) || {}) };
 				restored.id = getRealId(uniqueId);
+				// [!code fix] Ensure userId is set to current user's UUID to allow future operations
+				restored.userId = userId;
 
 				delete restored.deleted;
 				delete restored.deletedAt;
