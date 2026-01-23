@@ -46,11 +46,13 @@ export async function listAllMileage(): Promise<void> {
 
 /**
  * Check which mileage logs are orphaned (not in KV).
+ * @param userId - User's UUID
+ * @param username - Optional legacy username
  */
-export async function listOrphanedMileage(userId: string): Promise<void> {
+export async function listOrphanedMileage(userId: string, username?: string): Promise<void> {
 	console.log('🔍 Scanning for orphaned mileage logs...');
 
-	const result = await identifyOrphanedMileage(userId);
+	const result = await identifyOrphanedMileage(userId, username);
 
 	console.group('🗑️ Orphaned Mileage Logs');
 	console.log(`Total mileage logs: ${result.totalMileage}`);
@@ -77,9 +79,11 @@ export async function listOrphanedMileage(userId: string): Promise<void> {
 
 /**
  * Remove orphaned mileage logs from IndexedDB.
+ * @param userId - User's UUID
+ * @param username - Optional legacy username
  */
-export async function clearOrphanedMileage(userId: string): Promise<void> {
-	const result = await cleanupOrphanedMileage(userId);
+export async function clearOrphanedMileage(userId: string, username?: string): Promise<void> {
+	const result = await cleanupOrphanedMileage(userId, username);
 
 	console.group('🗑️ Orphaned Mileage Cleanup');
 	console.log(`Scanned: ${result.scanned} records`);
@@ -180,16 +184,24 @@ export async function forceDeleteFromIndexedDB(mileageId: string): Promise<void>
 
 /**
  * Compare IndexedDB vs Server for all mileage logs.
+ * @param userId - User's UUID
+ * @param username - Optional legacy username
  */
-export async function auditMileageSync(userId: string): Promise<void> {
+export async function auditMileageSync(userId: string, username?: string): Promise<void> {
 	console.log('🔍 Auditing mileage sync between IndexedDB and server...');
 
 	const db = await getDB();
 	const mileageStoreName = getMileageStoreName(db);
 	const tx = db.transaction(mileageStoreName, 'readonly');
 	const store = tx.objectStore(mileageStoreName);
-	const index = store.index('userId');
-	const localMileage = await index.getAll(userId);
+	const userIndex = store.index('userId');
+
+	// Try userId first, then username if provided
+	let localMileage = await userIndex.getAll(userId);
+	if (localMileage.length === 0 && username) {
+		console.log('⚠️ No records with UUID, trying username...');
+		localMileage = await userIndex.getAll(username);
+	}
 
 	console.log(`📦 Found ${localMileage.length} mileage logs in IndexedDB`);
 

@@ -26,9 +26,14 @@ export interface OrphanCheckResult {
 /**
  * Check for orphaned mileage logs by attempting to fetch from server.
  * Logs that return 404 from the server are considered orphaned.
+ *
+ * Handles both UUID-based userIds and legacy username-based userIds.
  */
-export async function identifyOrphanedMileage(userId: string): Promise<OrphanCheckResult> {
-	console.log('🔍 identifyOrphanedMileage called with userId:', userId);
+export async function identifyOrphanedMileage(
+	userId: string,
+	username?: string
+): Promise<OrphanCheckResult> {
+	console.log('🔍 identifyOrphanedMileage called with:', { userId, username });
 
 	const db = await getDB();
 	const mileageStoreName = getMileageStoreName(db);
@@ -45,10 +50,27 @@ export async function identifyOrphanedMileage(userId: string): Promise<OrphanChe
 		console.log('UserIds in DB:', [...new Set(allRecords.map((r) => r.userId))]);
 	}
 
-	// Now get records for this specific user
+	// Try to get records using userId (UUID)
 	const index = store.index('userId');
-	const allMileage = await index.getAll(userId);
-	console.log(`📊 Mileage records for user '${userId}': ${allMileage.length}`);
+	let allMileage = await index.getAll(userId);
+	console.log(`📊 Mileage records for userId '${userId}': ${allMileage.length}`);
+
+	// If no records found with UUID and username is provided, try username
+	if (allMileage.length === 0 && username) {
+		console.log(`⚠️ No records found with UUID, trying username '${username}'...`);
+		allMileage = await index.getAll(username);
+		console.log(`📊 Mileage records for username '${username}': ${allMileage.length}`);
+	}
+
+	// If still no records, try getting all records and filtering manually
+	// (in case userId format doesn't match index)
+	if (allMileage.length === 0 && allRecords.length > 0) {
+		console.log('⚠️ No records found via index, checking all records...');
+		allMileage = allRecords.filter(
+			(r) => r.userId === userId || (username && r.userId === username)
+		);
+		console.log(`📊 Found ${allMileage.length} records via manual filter`);
+	}
 
 	const orphaned: MileageRecord[] = [];
 	const valid: MileageRecord[] = [];
@@ -116,8 +138,14 @@ export async function removeOrphanedMileage(orphanedRecords: MileageRecord[]): P
 /**
  * Full cleanup: identify and remove all orphaned mileage logs.
  * Returns summary of what was removed.
+ *
+ * @param userId - User's UUID
+ * @param username - Optional legacy username (for backwards compatibility)
  */
-export async function cleanupOrphanedMileage(userId: string): Promise<{
+export async function cleanupOrphanedMileage(
+	userId: string,
+	username?: string
+): Promise<{
 	scanned: number;
 	orphaned: number;
 	removed: number;
@@ -125,7 +153,7 @@ export async function cleanupOrphanedMileage(userId: string): Promise<{
 }> {
 	console.log('🔍 Scanning for orphaned mileage logs...');
 
-	const result = await identifyOrphanedMileage(userId);
+	const result = await identifyOrphanedMileage(userId, username);
 
 	console.log(`📊 Scan complete:
   - Total mileage logs: ${result.totalMileage}
