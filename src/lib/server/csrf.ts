@@ -57,25 +57,18 @@ export function validateCsrfToken(event: RequestEvent): boolean {
 
 /**
  * Timing-safe string comparison to prevent timing attacks
- * SECURITY: This function always takes O(max(a.length, b.length)) time,
- * preventing timing-based information leakage
  */
-export function safeCompare(a: string, b: string): boolean {
-	// Use constant-time comparison that doesn't leak length
-	const maxLen = Math.max(a.length, b.length);
-
-	// Pad both strings to same length to prevent length timing leak
-	const paddedA = a.padEnd(maxLen, '\0');
-	const paddedB = b.padEnd(maxLen, '\0');
-
-	let result = 0;
-	// XOR every character - difference in any character sets result bits
-	for (let i = 0; i < maxLen; i++) {
-		result |= paddedA.charCodeAt(i) ^ paddedB.charCodeAt(i);
+function safeCompare(a: string, b: string): boolean {
+	if (a.length !== b.length) {
+		return false;
 	}
 
-	// Only return true if all chars matched AND lengths were equal
-	return result === 0 && a.length === b.length;
+	let result = 0;
+	for (let i = 0; i < a.length; i++) {
+		result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+	}
+
+	return result === 0;
 }
 
 /**

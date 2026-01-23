@@ -196,23 +196,13 @@
 		try {
 			const trip = $trips.find((t) => t.id === id);
 			const currentUser = $page.data['user'] || $user;
-			// MIGRATION FIX: Check user.id (UUID), user.name (username), and token
-			// Old trips have userId as username, new trips have UUID
 			let userId =
-				(currentUser as any)?.id ||
-				currentUser?.name ||
-				currentUser?.token ||
-				localStorage.getItem('offline_user_id') ||
-				'';
-			// Also pass userName so store can check ownership against both
-			const userName = currentUser?.name || '';
+				currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
 			if (trip && currentUser) {
-				// Match trip's userId format to what we pass
-				if (trip.userId === (currentUser as any).id) userId = (currentUser as any).id;
-				else if (trip.userId === (currentUser as any).name) userId = (currentUser as any).name;
+				if (trip.userId === (currentUser as any).name) userId = (currentUser as any).name;
 				else if (trip.userId === (currentUser as any).token) userId = (currentUser as any).token;
 			}
-			if (userId) await trips.deleteTrip(id, userId as string, userName);
+			if (userId) await trips.deleteTrip(id, userId as string);
 		} catch (err) {
 			toasts.error('Failed to delete trip. Changes reverted.');
 		}
@@ -222,14 +212,8 @@
 		const count = selectedTrips.size;
 		if (!confirm(`Are you sure you want to delete ${count} trip(s)?`)) return;
 		const currentUser = $page.data['user'] || $user;
-		// MIGRATION FIX: Prefer user.id (UUID) for new data format
 		let userId =
-			(currentUser as any)?.id ||
-			currentUser?.name ||
-			currentUser?.token ||
-			localStorage.getItem('offline_user_id') ||
-			'';
-		const userName = currentUser?.name || '';
+			currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
 		if (!userId) {
 			toasts.error('User identity missing.');
 			return;
@@ -239,15 +223,7 @@
 		const ids = Array.from(selectedTrips);
 		for (const id of ids) {
 			try {
-				// Find the trip to match the correct userId format
-				const trip = $trips.find((t) => t.id === id);
-				let tripUserId = userId;
-				if (trip) {
-					if (trip.userId === (currentUser as any)?.id) tripUserId = (currentUser as any).id;
-					else if (trip.userId === (currentUser as any)?.name)
-						tripUserId = (currentUser as any).name;
-				}
-				await trips.deleteTrip(id, tripUserId, userName);
+				await trips.deleteTrip(id, userId);
 				successCount++;
 			} catch (err) {
 				console.error(`Failed to delete trip ${id}`, err);

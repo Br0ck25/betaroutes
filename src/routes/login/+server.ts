@@ -46,27 +46,6 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 		const body = (await request.json()) as { email?: string; password?: string };
 		const { email, password } = body;
 
-		// [SECURITY] Rate limit per username/email to prevent distributed attacks
-		if (kv && email) {
-			const normalizedEmail = email.toLowerCase().trim();
-			// 10 attempts per username per 60 seconds (prevents targeting same account from multiple IPs)
-			const userLimit = dev ? 50 : 10;
-			const userLimitResult = await checkRateLimit(
-				kv,
-				normalizedEmail,
-				'login_user',
-				userLimit,
-				60
-			);
-
-			if (!userLimitResult.allowed) {
-				return json(
-					{ error: 'Too many login attempts for this account. Please try again later.' },
-					{ status: 429 }
-				);
-			}
-		}
-
 		// 4. Authenticate
 		// @ts-expect-error - authenticateUser has broader types; casting result safely below
 		const authResult = await authenticateUser(kv, email, password);

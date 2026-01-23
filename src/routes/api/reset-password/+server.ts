@@ -6,7 +6,6 @@ import { findUserById, updatePasswordHash } from '$lib/server/userService';
 import { z } from 'zod';
 import { log } from '$lib/server/log';
 import { validatePassword } from '$lib/server/passwordValidation';
-import { checkRateLimit } from '$lib/server/rateLimit';
 
 // Input validation schema
 const resetSchema = z.object({
@@ -14,7 +13,7 @@ const resetSchema = z.object({
 	password: z.string().min(8, 'Password must be at least 8 characters')
 });
 
-export const POST: RequestHandler = async ({ request, platform, cookies, getClientAddress }) => {
+export const POST: RequestHandler = async ({ request, platform, cookies }) => {
 	try {
 		const { getEnv, safeKV } = await import('$lib/server/env');
 		const env = getEnv(platform);
@@ -23,16 +22,6 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 
 		if (!kv) {
 			return json({ message: 'Service Unavailable' }, { status: 503 });
-		}
-
-		// SECURITY: Rate limit token verification attempts to prevent brute-force
-		const clientIp = request.headers.get('CF-Connecting-IP') || getClientAddress();
-		const { allowed } = await checkRateLimit(kv, clientIp, 'reset_password_attempt', 10, 3600);
-		if (!allowed) {
-			return json(
-				{ message: 'Too many password reset attempts. Please try again later.' },
-				{ status: 429 }
-			);
 		}
 
 		const body: any = await request.json();

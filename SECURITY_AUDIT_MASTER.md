@@ -177,75 +177,50 @@ Issues that lead to data loss, 500 errors, denial of service, or billing spikes.
 
 Defense-in-depth, security headers, and long-term maintenance hardening.
 
-- [x] **28. Enforce Cryptographically Secure Tokens**
-  - **Status:** ✅ ALREADY SECURE - `randomUUID()` from `node:crypto` uses cryptographically secure randomness
-- [x] **29. Redact PII from Server Logs**
-  - **Status:** ✅ COMPLETED - Added `maskEmail()` helper in email.ts. Updated all production log calls in email.ts, userService.ts, and stripe webhook to use masked emails.
+- [ ] **28. Enforce Cryptographically Secure Tokens**
+- [ ] **29. Redact PII from Server Logs**
 - [ ] **30. Require Re-Auth for Sensitive Actions**
 - [ ] **31. Upgrade Password Hashing**
-- [x] **32. Fix Client-Side CSV Injection**
-  - **Status:** ✅ ALREADY IMPLEMENTED - `sanitizeCSVField()` in export-utils.ts prefixes dangerous characters (=, +, -, @, tab) with single quote
-- [x] **33. Implement Security Headers**
-  - **Status:** ✅ COMPLETED - Added HSTS (production only), frame-ancestors 'none', removed X-Powered-By/Server headers in hooks.server.ts
+- [ ] **32. Fix Client-Side CSV Injection**
+- [ ] **33. Implement Security Headers**
 - [ ] **34. Tighten Content Security Policy**
 - [ ] **35. Enforce Global Request Validation**
-- [x] **36. Suppress Verbose Error Details**
-  - **Status:** ✅ COMPLETED - +error.svelte now only shows technical details and logs errors in dev mode
-- [x] **37. Enforce One-Time Use for Verify Tokens**
-  - **Status:** ✅ ALREADY IMPLEMENTED - /api/verify and /api/reset-password both delete tokens after successful use
-- [x] **38. Fix Rate Limit Bypass (Username)**
-  - **Status:** ✅ COMPLETED - Added per-username rate limiting in login/+server.ts (10/min prod, 50/min dev) in addition to per-IP limiting
-- [x] **39. Harden WebAuthn Cookie Attributes**
-  - **Status:** ✅ ALREADY SECURE - All auth cookies have httpOnly, secure, sameSite: 'lax' attributes
-- [x] **40. Strengthen Password Blacklist**
-  - **Status:** ✅ COMPLETED - Expanded commonPasswords list in passwordValidation.ts from 15 to 65+ entries including common patterns
+- [ ] **36. Suppress Verbose Error Details**
+- [ ] **37. Enforce One-Time Use for Verify Tokens**
+- [ ] **38. Fix Rate Limit Bypass (Username)**
+- [ ] **39. Harden WebAuthn Cookie Attributes**
+- [ ] **40. Strengthen Password Blacklist**
 - [ ] **41. Global Input Length Validation**
 - [ ] **42. Audit and Exclude Non-Production Files**
-- [x] **43. Mitigate Registration Enumeration**
-  - **Status:** ✅ COMPLETED - Changed to generic message "Registration failed. Please try a different email or username." for both email and username conflicts
+- [ ] **43. Mitigate Registration Enumeration**
 - [ ] **44. Optimize HughesNet Import**
 - [ ] **45. Secure Google Maps Key**
-- [x] **46. Fix Cookie Cleanup**
-  - **Status:** ✅ COMPLETED - Both /logout and /api/logout now delete all auth cookies (session_id, token, csrf_token, csrf_token_readable, webauthn-challenge)
+- [ ] **46. Fix Cookie Cleanup**
 - [ ] **47. Remove Stripe Webhook Fallback**
-- [x] **48. Fix Admin Secret Timing Attack**
-  - **Status:** ✅ COMPLETED - Fixed safeCompare() in csrf.ts to be truly timing-safe (pads strings, constant-time length check). Updated webauthn/migrate and TripIndexDO to use safeCompare().
-- [x] **[Headers] Missing HSTS:** `Strict-Transport-Security` not set in `hooks.server.ts`.
-  - **Status:** ✅ COMPLETED - Same as #33, HSTS added with max-age=31536000; includeSubDomains; preload
+- [ ] **48. Fix Admin Secret Timing Attack**
+- [ ] **[Headers] Missing HSTS:** `Strict-Transport-Security` not set in `hooks.server.ts`.
 - [ ] **[Cookies] Missing Secure Prefixes:** Rename session cookies to `__Host-session_id`.
-- [x] **[Cryptography] Weak Session ID Generation:** Switch `randomUUID` to `crypto.getRandomValues`.
-  - **Status:** ✅ NOT NEEDED - `randomUUID()` from `node:crypto` is already cryptographically secure
-- [x] **[Logging] PII in Logs:** `hooks.server.ts` logs full request bodies, including passwords.
-  - **Status:** ✅ COMPLETED - Same as #29, all email logging now uses maskEmail()
-- [x] **[Hardening] Sanitize Error Messages:** Stack traces are visible in production 500 errors.
-  - **Status:** ✅ COMPLETED - Same as #36, error details dev-only
+- [ ] **[Cryptography] Weak Session ID Generation:** Switch `randomUUID` to `crypto.getRandomValues`.
+- [ ] **[Logging] PII in Logs:** `hooks.server.ts` logs full request bodies, including passwords.
+- [ ] **[Hardening] Sanitize Error Messages:** Stack traces are visible in production 500 errors.
 - [ ] **[Hardening] Google Maps Restrictions:** API keys lack HTTP Referrer locking in the Google Console.
 - [ ] **[Hardening] Scoped Restore Logic:** `api/trash/[id]` doesn't verify the item type during restoration.
 - [ ] **[Hardening] Session Rotation:** Session ID should change when a user connects a third-party service (HughesNet).
 - [ ] **[Hardening] WebAuthn Policy:** Switch `requireUserVerification` to `true` to force PIN/Biometrics.
 - [ ] **[CSP] Unsafe-Inline:** CSP allows `'unsafe-inline'`; needs implementation of nonces.
-- [x] **[Headers] Missing Permissions-Policy:** Need to restrict Camera/Mic/Geolocation.
-  - **Status:** ✅ ALREADY IMPLEMENTED - `geolocation=(self), camera=(), microphone=()` set in hooks.server.ts
-- [x] **[Headers] Missing Referrer-Policy:** Set to `strict-origin-when-cross-origin`.
-  - **Status:** ✅ ALREADY IMPLEMENTED - `strict-origin-when-cross-origin` set in hooks.server.ts
-- [x] **[Privacy] Missing Cache-Control:** Sensitive dashboard pages are cached in the browser "Back" button.
-  - **Status:** ✅ COMPLETED - Added `no-store, no-cache, must-revalidate, private` for /dashboard, /settings, and /api/ paths in hooks.server.ts
-- [x] **[Phishing] Open Redirects:** Login flow doesn't validate the `redirectTo` parameter.
-  - **Status:** ✅ NO ISSUE - Login uses hardcoded `goto('/dashboard')` redirect, no user-controlled redirect parameter exists
-- [x] **[Privacy] Email Enumeration:** Login returns specific "User not found" errors.
-  - **Status:** ✅ ALREADY FIXED - Login returns generic "Invalid credentials", forgot-password returns "If an account exists..." with timing padding
+- [ ] **[Headers] Missing Permissions-Policy:** Need to restrict Camera/Mic/Geolocation.
+- [ ] **[Headers] Missing Referrer-Policy:** Set to `strict-origin-when-cross-origin`.
+- [ ] **[Privacy] Missing Cache-Control:** Sensitive dashboard pages are cached in the browser "Back" button.
+- [ ] **[Phishing] Open Redirects:** Login flow doesn't validate the `redirectTo` parameter.
+- [ ] **[Privacy] Email Enumeration:** Login returns specific "User not found" errors.
 - [x] **[DoS] ReDoS in Email Regex:** Complex regex in `auth.ts` is vulnerable to catastrophic backtracking.
   - **Status:** ✅ NO ISSUE - Email regex `/^[^\s@]+@[^\s@]+\.[^\s@]+$/` uses negated character classes (no nested quantifiers). Located in contact/+page.server.ts, not auth.ts.
-- [x] **[Headers] Server Fingerprinting:** `X-Powered-By` header is not deleted.
-  - **Status:** ✅ COMPLETED - Same as #33, X-Powered-By and Server headers removed
-- [x] **[CSP] Frame Ancestors:** CSP missing `frame-ancestors 'none'` to prevent clickjacking.
-  - **Status:** ✅ COMPLETED - Same as #33, frame-ancestors 'none' added to CSP
-- [x] **[Disclosure] Path Leakage:** Custom error pages render the full error object.
-  - **Status:** ✅ COMPLETED - Same as #36, technical details dev-only
+- [ ] **[Headers] Server Fingerprinting:** `X-Powered-By` header is not deleted.
+- [ ] **[CSP] Frame Ancestors:** CSP missing `frame-ancestors 'none'` to prevent clickjacking.
+- [ ] **[Disclosure] Path Leakage:** Custom error pages render the full error object.
 - [ ] **[Logic] Unbounded Array (Trips Schema):** Missing `.max()` on stops/destinations.
 - [ ] **[Logic] Unbounded Array (Settings Schema):** Missing `.max()` on categories.
-- [x] **[DoS] Reset Password Rate Limit:** Missing check on token verification attempts.
-  - **Status:** ✅ COMPLETED - Added rate limiting (10/hour/IP) to reset-password/+server.ts
+- [ ] **[DoS] Reset Password Rate Limit:** Missing check on token verification attempts.
 - [ ] **[Maintenance] Explicit Null Checks:** Import logic crashes on empty file buffers.
 - [ ] **[Audit] Third-Party Script Review:** Periodic audit needed for Google Maps/Stripe tags.
 - [ ] **[Hardening] Subresource Integrity:** Missing SRI tags for external scripts.
