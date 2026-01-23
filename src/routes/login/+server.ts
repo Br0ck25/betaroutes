@@ -2,10 +2,9 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { authenticateUser } from '$lib/server/auth';
-import { getEnv, safeKV, safeDO } from '$lib/server/env';
+import { getEnv, safeKV } from '$lib/server/env';
 import { createSession } from '$lib/server/sessionService';
 import { findUserById } from '$lib/server/userService';
-import { makeTripService } from '$lib/server/tripService';
 import { checkRateLimit } from '$lib/server/rateLimit';
 import { dev } from '$app/environment';
 import { log } from '$lib/server/log';
@@ -92,31 +91,17 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 
 		// 9. AUTO-MIGRATION
 		// Move legacy data (username key) to new storage (UUID key) in background
-		if (
-			platform?.context &&
-			safeKV(env, 'BETA_LOGS_KV') &&
-			(safeDO(env, 'TRIP_INDEX_DO') || (env as unknown as Record<string, unknown>)['TRIP_INDEX_DO'])
-		) {
+		if (platform?.context) {
 			const userId = authResult.id;
 			const username = authResult.username;
 
 			platform.context.waitUntil(
 				(async () => {
 					try {
-						const tripIndexDO =
-							safeDO(env, 'TRIP_INDEX_DO') ||
-							(env as unknown as Record<string, unknown>)['TRIP_INDEX_DO'];
-						const placesIndexDO = safeDO(env, 'PLACES_INDEX_DO') || tripIndexDO;
-						const svc = makeTripService(
-							safeKV(env, 'BETA_LOGS_KV') as any,
-							undefined,
-							safeKV(env, 'BETA_PLACES_KV') as any,
-							tripIndexDO as any,
-							placesIndexDO as any
-						);
-
-						// Trigger the move. If keys exist under 'username', they move to 'userId'.
-						await (svc as any).migrateUser?.(username, userId);
+						// Use the dedicated migration utility (safe, idempotent, background)
+						const { migrateUserStorageKeys } =
+							await import('$lib/server/migration/storage-key-migration');
+						await migrateUserStorageKeys(env as any, userId, username, { mode: 'rebuild' });
 					} catch (e: unknown) {
 						const msg = e instanceof Error ? e.message : String(e);
 						log.error('[Auto-Migration] Failed', { username, message: msg });

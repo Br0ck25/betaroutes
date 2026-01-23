@@ -217,7 +217,7 @@ let selectedMileage = new Set<string>(); // Unused -> lint/check error
 - Do **not** declare it until you write the code that uses it.
 - If a variable/arg must exist for signature reasons, prefix with `_` (e.g. `_req`, `_unusedIndex`).
 
-**Prevention:** Make the smallest diff possible. Do not add placeholder code.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
 
 ---
 
@@ -279,7 +279,7 @@ checkRateLimit(kv, userId, 'action', 10, 60);
 // Either update app.d.ts OR use the correct field.
 ```
 
-**Prevention:** Never assume a function signature or type definition. Read the source file (`app.d.ts` or the utility file) first.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
 
 ---
 
@@ -309,7 +309,7 @@ if (!email) return fail(400, { error: 'Missing email', email }); // Return the d
 <input value={form?.email ?? ''} /> // Works.
 ```
 
-**Prevention:** If your UI repopulates fields on error, your server `fail()` must return those fields.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
 
 ---
 
@@ -336,7 +336,7 @@ if (!user?.id) throw new Error('User ID missing');
 return user.id;
 ```
 
-**Prevention:** Never implement “fallbacks” for identity. It exists, or the request fails.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
 
 ---
 
@@ -366,7 +366,7 @@ const newUser = {
 };
 ```
 
-**Prevention:** Never use spread syntax (`...`) on user input for DB writes. Destructure explicitly.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
 
 ---
 
@@ -389,7 +389,7 @@ await env.PLACES_KV.put('recent_places', JSON.stringify(places));
 await env.PLACES_KV.put(`places:${userId}`, JSON.stringify(places));
 ```
 
-**Prevention:** Every KV write MUST include `${userId}` in the key.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
 
 ---
 
@@ -417,7 +417,7 @@ const key = env.STRIPE_KEY; // Loaded from environment
 // Run: wrangler secret put STRIPE_KEY
 ```
 
-**Prevention:** If it looks like a key/token, it must be an env variable.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
 
 ---
 
@@ -442,7 +442,7 @@ export const POST = async ({ platform }) => {
 - Use unit tests or local scripts for seeding data.
 - If testing is needed, use `vitest` with mock data, not live endpoints.
 
-**Prevention:** The word **"debug"** (or **"test"**) in a route path is strictly forbidden.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
 
 ---
 
@@ -467,7 +467,7 @@ let items = $state<Item[]>([]);
 const activeUser = writable<User | null>(null);
 ```
 
-**Prevention:** Never initialize empty state without `<Type>`.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
 
 ---
 
@@ -492,7 +492,69 @@ if (trip.userId === user.name) {
 if (trip.userId !== user.id) return error(403);
 ```
 
-**Prevention:** Ownership MUST be verified using `locals.user.id`. No exceptions.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
+
+---
+
+### Error Pattern #17: Structural Nesting & Scope
+
+**Symptom:** `Modifiers cannot appear here`, `Cannot find name 'x'` (when 'x' is clearly defined above), `Error: '}' expected`.
+**Cause:** Defining utility functions _inside_ the main handler function, or losing track of closing brackets `}`.
+
+❌ **Wrong:**
+
+```ts
+export async function mainHandler() {
+	// ... logic ...
+
+	// ERROR: Nested export!
+	export async function helper() {
+		/* ... */
+	}
+}
+```
+
+✅ **Correct:**
+
+```ts
+// Define helpers at the TOP LEVEL
+async function helper() {
+	/* ... */
+}
+
+export async function mainHandler() {
+	await helper();
+}
+```
+
+**Prevention:** All helper functions must be defined at the top level of the file, never nested inside other functions.
+
+---
+
+### Error Pattern #18: Cloudflare Type Conflicts
+
+**Symptom:** `Type 'KVNamespace' is not assignable to type 'KVNamespace'.`
+**Cause:** Manually importing types from `@cloudflare/workers-types` instead of using the global ambient types.
+
+❌ **Wrong:**
+
+```ts
+import { KVNamespace } from '@cloudflare/workers-types'; // CONFLICT!
+function save(kv: KVNamespace) {
+	/* ... */
+}
+```
+
+✅ **Correct:**
+
+```ts
+// Use the global type (no import needed)
+function save(kv: KVNamespace) {
+	/* ... */
+}
+```
+
+**Prevention:** **NEVER** import `KVNamespace`, `DurableObject`, or `ExecutionContext`. Use the globals from `app.d.ts`.
 
 ## System Prompt Additions (Paste-into-Chat Guardrails)
 
