@@ -5,6 +5,7 @@
 	import { trash } from '$lib/stores/trash';
 	import { user } from '$lib/stores/auth';
 	import { page } from '$app/stores';
+	import { csrfFetch } from '$lib/utils/csrf';
 	import SettingsModal from '../trips/components/SettingsModal.svelte';
 	let showTripSettings = false;
 	// Access via bracket notation because `page.data` exposes properties through an index signature
@@ -79,7 +80,7 @@
 	// Load Settings from Server (KV)
 	async function loadSettings() {
 		try {
-			const res = await fetch('/api/hughesnet', {
+			const res = await csrfFetch('/api/hughesnet', {
 				method: 'POST',
 				body: JSON.stringify({ action: 'get_settings' })
 			});
@@ -130,7 +131,7 @@
 		};
 
 		try {
-			const res = await fetch('/api/hughesnet', {
+			const res = await csrfFetch('/api/hughesnet', {
 				method: 'POST',
 				body: JSON.stringify({
 					action: 'save_settings',
@@ -202,7 +203,7 @@
 		statusMessage = 'Connecting...';
 		addLog('Connecting...');
 		try {
-			const res = await fetch('/api/hughesnet', {
+			const res = await csrfFetch('/api/hughesnet', {
 				method: 'POST',
 				body: JSON.stringify({ action: 'connect', username, password })
 			});
@@ -230,7 +231,7 @@
 		loading = true;
 		addLog('Disconnecting...');
 		try {
-			const res = await fetch('/api/hughesnet', {
+			const res = await csrfFetch('/api/hughesnet', {
 				method: 'POST',
 				body: JSON.stringify({ action: 'disconnect' })
 			});
@@ -293,7 +294,7 @@
 		}
 
 		try {
-			const res = await fetch('/api/hughesnet', {
+			const res = await csrfFetch('/api/hughesnet', {
 				method: 'POST',
 				body: JSON.stringify({
 					action: 'sync',
@@ -403,7 +404,7 @@
 		statusMessage = 'Clearing...';
 		addLog('🗑️ Clearing HNS trips...');
 		try {
-			const res = await fetch('/api/hughesnet', {
+			const res = await csrfFetch('/api/hughesnet', {
 				method: 'POST',
 				body: JSON.stringify({ action: 'clear' })
 			});

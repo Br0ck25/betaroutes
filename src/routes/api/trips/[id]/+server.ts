@@ -28,6 +28,53 @@ function fakeDO() {
 	};
 }
 
+// SECURITY: Allowed fields for trip updates (prevents mass assignment)
+const ALLOWED_UPDATE_FIELDS = new Set([
+	'title',
+	'stops',
+	'date',
+	'payDate',
+	'startAddress',
+	'endAddress',
+	'startLocation',
+	'endLocation',
+	'destinations',
+	'startTime',
+	'endTime',
+	'totalEarnings',
+	'fuelCost',
+	'maintenanceCost',
+	'suppliesCost',
+	'maintenanceItems',
+	'supplyItems',
+	'suppliesItems',
+	'totalMiles',
+	'hoursWorked',
+	'estimatedTime',
+	'totalTime'
+	// NOTE: netProfit is calculated server-side, not accepted from client
+]);
+
+// Pick only allowed fields from body
+function pickAllowedFields(body: Record<string, unknown>): Record<string, unknown> {
+	const result: Record<string, unknown> = {};
+	for (const key of ALLOWED_UPDATE_FIELDS) {
+		if (Object.prototype.hasOwnProperty.call(body, key)) {
+			result[key] = body[key];
+		}
+	}
+	return result;
+}
+
+// Calculate net profit server-side (SECURITY: never trust client calculations)
+function calculateNetProfit(trip: Record<string, unknown>): number {
+	const earnings = Number(trip['totalEarnings']) || 0;
+	const fuel = Number(trip['fuelCost']) || 0;
+	const maintenance = Number(trip['maintenanceCost']) || 0;
+	const supplies = Number(trip['suppliesCost']) || 0;
+	return earnings - fuel - maintenance - supplies;
+}
+
 /**
  * GET /api/trips/[id] - Retrieve a single trip
  */
@@ -126,12 +173,21 @@ export const PUT: RequestHandler = async (event) => {
 			return new Response('Not Found', { status: 404 });
 		}
 
+		// SECURITY: Only pick allowed fields from body (prevents mass assignment)
+		const allowedUpdates = pickAllowedFields(body);
+
 		const updated = {
 			...(existing as Record<string, unknown>),
-			...(body as Record<string, unknown>),
-			id,
-			userId: storageId,
-			updatedAt: new Date().toISOString()
+			...allowedUpdates,
+			id, // immutable
+			userId: storageId, // immutable
+			createdAt: existing.createdAt, // immutable
+			updatedAt: new Date().toISOString(),
+			// SECURITY: Calculate netProfit server-side (never trust client)
+			netProfit: calculateNetProfit({
+				...(existing as Record<string, unknown>),
+				...allowedUpdates
+			})
 		};
 
 		await svc.put(updated as unknown as TripRecord);

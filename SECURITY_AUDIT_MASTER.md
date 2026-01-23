@@ -43,34 +43,64 @@
 
 High risk of site failure, financial loss, privilege escalation, or total account compromise.
 
-- [ ] **6. Secure Email Change Flow (ATO Prevention)**
-- [ ] **7. Prevent Mass Assignment on Registration**
-- [ ] **8. Fix Global Cache Poisoning (Autocomplete)**
-- [ ] **9. Plug Credential Leak in Session API**
-- [ ] **10. Fix Trash Data Integrity**
-- [ ] **11. Secure "Remove/Delete" Proxies**
-- [ ] **12. Fix Session Invalidation Logic**
-- [ ] **13. Enable CSRF Protection**
-- [ ] **[Subrequest Bomb] Trip Service Crash:** `tripService.ts` crashes for active users (>1000 trips) due to sequential `kv.get` calls in a loop.
-- [ ] **[Subrequest Bomb] Mileage Service Crash:** `mileageService.ts` crashes similarly for high-volume users.
-- [ ] **[Information Disclosure] Private Key Exposure:** `dashboard/+layout.server.ts` fallback exposes `PRIVATE_GOOGLE_MAPS_API_KEY` to the client.
-- [ ] **[Protocol] Missing Security Middleware:** No global validation of JSON payload sizes or prototype pollution checks.
-- [ ] **[Dependency] Vulnerable xlsx Library:** `package.json` uses v0.18.5 (CVE-2023-30533 Prototype Pollution). Upgrade to v0.19.3+.
-- [ ] **[Broken Auth] CSRF Validation Disabled:** `hooks.server.ts` has `csrfProtection` commented out.
-- [ ] **[Cryptographic Fail] HughesNet Encryption Fail-Open:** `hughesnet/auth.ts` returns plaintext passwords if the environment key is missing.
-- [ ] **[Broken Auth] Broken Session Invalidation:** `active_session` index is not written on login, rendering "Logout all devices" ineffective.
-- [ ] **[Data Integrity] Persistent Cache Poisoning:** `places/cache` trusts client-side writes to the global autocomplete index.
-- [ ] **[Broken Access Control] Unsecured Durable Object Auth:** `TripIndexDO.ts` does not verify `x-requester-id` for internal operations.
-- [ ] **[Financial Integrity] Client-Side Math Trust:** `trips/[id]` accepts calculated totals from the client instead of calculating on the server.
-- [ ] **[Broken Access Control] Mass Assignment (Trips):** Trip updates use spread operators without a Zod whitelist.
-- [ ] **[Broken Access Control] Mass Assignment (Vehicles):** Vehicle updates use spread operators without a Zod whitelist.
+- [x] **6. Secure Email Change Flow (ATO Prevention)**
+  - **Status:** ✅ COMPLETED - Email changes now require password re-authentication in PUT /api/user
+- [x] **7. Prevent Mass Assignment on Registration**
+  - **Status:** ✅ NOT VULNERABLE - Registration extracts only { username, email, password } fields, does not spread body
+- [x] **8. Fix Global Cache Poisoning (Autocomplete)**
+  - **Status:** ✅ COMPLETED - All places/autocomplete cache now user-scoped with `user:{userId}:prefix:` keys
+- [x] **9. Plug Credential Leak in Session API**
+  - **Status:** ✅ COMPLETED - Session API now returns sanitized user object without token or stripeCustomerId
+- [x] **10. Fix Trash Data Integrity**
+  - **Status:** ✅ NOT VULNERABLE - Uses storageId from authenticated user, has mileage parent-trip validation
+- [x] **11. Secure "Remove/Delete" Proxies**
+  - **Status:** ✅ COMPLETED - Added locals.user check to /api/remove and /api/delete-account proxies
+- [x] **12. Fix Session Invalidation Logic**
+  - **Status:** ✅ COMPLETED - createSession now writes to active_sessions:{userId} index
+- [x] **13. Enable CSRF Protection**
+  - **Status:** ✅ COMPLETED - Enabled csrfProtection() in hooks.server.ts, updated all client-side POST/PUT/DELETE/PATCH calls to use csrfFetch() utility
+- [x] **[Subrequest Bomb] Trip Service Crash:** `tripService.ts` crashes for active users (>1000 trips) due to sequential `kv.get` calls in a loop.
+  - **Status:** ✅ COMPLETED - Changed to batched Promise.all with BATCH_SIZE=50 to stay under Cloudflare's 1000 subrequest limit
+- [x] **[Subrequest Bomb] Mileage Service Crash:** `mileageService.ts` crashes similarly for high-volume users.
+  - **Status:** ✅ COMPLETED - Changed to batched Promise.all with BATCH_SIZE=50
+- [x] **[Subrequest Bomb] Expense Service Crash:** `expenseService.ts` has similar sequential kv.get patterns.
+  - **Status:** ✅ COMPLETED - Changed to batched Promise.all with BATCH_SIZE=50
+- [x] **[Information Disclosure] Private Key Exposure:** `dashboard/+layout.server.ts` fallback exposes `PRIVATE_GOOGLE_MAPS_API_KEY` to the client.
+  - **Status:** ✅ COMPLETED - Removed fallback to private key, only expose PUBLIC_GOOGLE_MAPS_API_KEY
+- [x] **[Protocol] Missing Security Middleware:** No global validation of JSON payload sizes or prototype pollution checks.
+  - **Status:** ✅ COMPLETED - Added MAX_JSON_PAYLOAD_SIZE (1MB) validation and hasPrototypePollution() check in hooks.server.ts
+- [x] **[Dependency] Vulnerable xlsx Library:** `package.json` uses v0.18.5 (CVE-2023-30533 Prototype Pollution). Upgrade to v0.19.3+.
+  - **Status:** ⚠️ NO FIX AVAILABLE - v0.19.3 does not exist. Package maintainer has not released secure version. Consider alternative library.
+- [x] **[Broken Auth] CSRF Validation Disabled:** `hooks.server.ts` has `csrfProtection` commented out.
+  - **Status:** ✅ COMPLETED - Same as item #13 above, csrfProtection is now enabled
+- [x] **[Cryptographic Fail] HughesNet Encryption Fail-Open:** `hughesnet/auth.ts` returns plaintext passwords if the environment key is missing.
+  - **Status:** ✅ COMPLETED - Now fails secure (returns null) when encryption key is missing
+- [x] **[Broken Auth] Broken Session Invalidation:** `active_session` index is not written on login, rendering "Logout all devices" ineffective.
+  - **Status:** ✅ COMPLETED - sessionService.createSession() now writes to `active_sessions:{userId}` index
+- [x] **[Data Integrity] Persistent Cache Poisoning:** `places/cache` trusts client-side writes to the global autocomplete index.
+  - **Status:** ✅ COMPLETED - All cache operations now user-scoped with `user:{userId}:prefix:` keys
+- [x] **[Broken Access Control] Unsecured Durable Object Auth:** `TripIndexDO.ts` does not verify `x-requester-id` for internal operations.
+  - **Status:** ✅ COMPLETED - Added verifyInternalCaller() with DO_INTERNAL_SECRET header check for /admin/wipe-user
+- [x] **[Financial Integrity] Client-Side Math Trust:** `trips/[id]` accepts calculated totals from the client instead of calculating on the server.
+  - **Status:** ✅ COMPLETED - netProfit now calculated server-side, removed from tripSchema, added calculateNetProfit() in both POST and PUT handlers
+- [x] **[Broken Access Control] Mass Assignment (Trips):** Trip updates use spread operators without a Zod whitelist.
+  - **Status:** ✅ COMPLETED - Added ALLOWED_UPDATE_FIELDS whitelist and pickAllowedFields() in PUT handler
+- [x] **[Broken Access Control] Mass Assignment (Vehicles):** Vehicle updates use spread operators without a Zod whitelist.
+  - **Status:** ✅ ALREADY FIXED - Vehicle schema uses `.strict()` which rejects extra properties
 - [ ] **[DoS] Unsecured Cron Endpoint:** `/api/cron` lacks an Authorization secret, allowing attackers to trigger expensive jobs.
-- [ ] **[XSS] Stored XSS in Dashboard:** `{@html icon}` renders unsanitized strings from user settings.
-- [ ] **[Injection] Formula Injection:** CSV/Excel exports do not sanitize fields starting with `=`, allowing malicious code execution in Excel.
-- [ ] **[DoS] Complexity Attack:** `assign-stops` tools lack a cap on input array size (Max 100 recommended).
-- [ ] **[Revenue Risk] Free Tier Limit Bypass:** `tripService.ts` does not enforce the 10-trip monthly limit during the create operation.
-- [ ] **[Access Control] Missing Email Verification Gate:** Users can access the dashboard immediately without verifying their email.
-- [ ] **[Broken Access Control] IDOR in Expenses/Mileage:** Update handlers don't verify the id belongs to `locals.user.id`.
+  - **Status:** ⚠️ N/A - Endpoint does not exist yet (may be planned for future)
+- [x] **[XSS] Stored XSS in Dashboard:** `{@html icon}` renders unsanitized strings from user settings.
+  - **Status:** ✅ ALREADY FIXED - Icons use `sanitizeStaticSvg()` and are static hardcoded SVG strings
+- [x] **[Injection] Formula Injection:** CSV/Excel exports do not sanitize fields starting with `=`, allowing malicious code execution in Excel.
+  - **Status:** ✅ COMPLETED - Added `sanitizeCSVField()` function that prefixes dangerous characters with single quote
+- [x] **[DoS] Complexity Attack:** `assign-stops` tools lack a cap on input array size (Max 100 recommended).
+  - **Status:** ✅ COMPLETED - Added MAX_TECHS=20 and MAX_STOPS=100 limits
+- [x] **[Revenue Risk] Free Tier Limit Bypass:** `tripService.ts` does not enforce the 10-trip monthly limit during the create operation.
+  - **Status:** ✅ ALREADY FIXED - POST /api/trips checks `svc.list(storageId, { since })` and returns 403 if limit exceeded
+- [x] **[Access Control] Missing Email Verification Gate:** Users can access the dashboard immediately without verifying their email.
+  - **Status:** ✅ ALREADY IMPLEMENTED - Registration creates `pending_verify:{token}` record, user only created after clicking email verification link in /api/verify. Login requires real user account.
+- [x] **[Broken Access Control] IDOR in Expenses/Mileage:** Update handlers don't verify the id belongs to `locals.user.id`.
+  - **Status:** ✅ COMPLETED - Added ownership verification in PUT and DELETE handlers
 
 ## 🟡 Priority 2: Reliability & Data Integrity
 

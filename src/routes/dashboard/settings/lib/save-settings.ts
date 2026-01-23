@@ -1,5 +1,6 @@
 import { get } from 'svelte/store';
 import { userSettings } from '$lib/stores/userSettings';
+import { csrfFetch } from '$lib/utils/csrf';
 
 export type SaveResult = { ok: true; data: any } | { ok: false; error: string };
 
@@ -8,7 +9,7 @@ export async function saveSettings(payload: Partial<Record<string, any>>): Promi
 	userSettings.update((s) => ({ ...s, ...payload }));
 
 	try {
-		const res = await fetch('/api/settings', {
+		const res = await csrfFetch('/api/settings', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ settings: payload })

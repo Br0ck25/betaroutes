@@ -135,6 +135,21 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 		return new Response(JSON.stringify({ error: 'Invalid payload' }), { status: 400 });
 	}
 
+	// SECURITY: Limit array sizes to prevent DoS/complexity attacks
+	const MAX_TECHS = 20;
+	const MAX_STOPS = 100;
+
+	if (body.techs.length > MAX_TECHS) {
+		return new Response(JSON.stringify({ error: `Maximum ${MAX_TECHS} technicians allowed` }), {
+			status: 400
+		});
+	}
+	if (body.stops.length > MAX_STOPS) {
+		return new Response(JSON.stringify({ error: `Maximum ${MAX_STOPS} stops allowed` }), {
+			status: 400
+		});
+	}
+
 	const rawTechs = body.techs || [];
 	const rawStops = body.stops || [];
 

@@ -2,6 +2,7 @@
 	import { auth } from '$lib/stores/auth';
 	import { createEventDispatcher } from 'svelte';
 	import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
+	import { csrfFetch } from '$lib/utils/csrf';
 
 	export let profile: { name: string; email: string };
 	export let monthlyUsage: number;
@@ -15,7 +16,7 @@
 	async function saveProfile() {
 		auth.updateProfile({ name: profile.name, email: profile.email });
 		try {
-			const res = await fetch('/api/user', {
+			const res = await csrfFetch('/api/user', {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ name: profile.name, email: profile.email })

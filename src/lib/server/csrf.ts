@@ -84,8 +84,17 @@ export function csrfProtection(event: RequestEvent): Response | null {
 		return null;
 	}
 
-	// Skip CSRF for specific endpoints that need it (e.g., Stripe webhooks)
-	const skipPaths = ['/api/webhooks/stripe'];
+	// Skip CSRF for specific endpoints that need exemption
+	const skipPaths = [
+		'/api/webhooks/stripe',
+		'/api/stripe/webhook', // Stripe needs its own signature validation
+		'/login', // Login form (no session yet)
+		'/register', // Registration (no session yet)
+		'/api/forgot-password', // Password reset (no session)
+		'/api/reset-password', // Password reset token validation
+		'/api/verify', // Email verification token
+		'/api/verify/resend' // Resend verification email
+	];
 	if (skipPaths.some((path) => url.startsWith(path))) {
 		return null;
 	}

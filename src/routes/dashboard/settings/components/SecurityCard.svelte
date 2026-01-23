@@ -5,6 +5,7 @@
 	import { toasts } from '$lib/stores/toast';
 	import { startRegistration } from '@simplewebauthn/browser';
 	import { onMount, createEventDispatcher } from 'svelte';
+	import { csrfFetch } from '$lib/utils/csrf';
 
 	const dispatch = createEventDispatcher();
 
@@ -40,7 +41,7 @@
 		}
 
 		try {
-			const response = await fetch('/api/change-password', {
+			const response = await csrfFetch('/api/change-password', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
@@ -101,7 +102,7 @@
 
 	async function handleLogout() {
 		if (confirm('Are you sure you want to logout?')) {
-			await fetch('/api/logout', { method: 'POST' });
+			await csrfFetch('/api/logout', { method: 'POST' });
 			auth.logout();
 			goto('/login');
 		}
@@ -195,7 +196,7 @@
 		if (!confirm('Unregister this passkey from this device?')) return;
 		unregistering = true;
 		try {
-			const res = await fetch('/api/auth/webauthn/delete', {
+			const res = await csrfFetch('/api/auth/webauthn/delete', {
 				method: 'POST',
 				credentials: 'same-origin',
 				headers: { 'Content-Type': 'application/json' },
@@ -267,7 +268,7 @@
 
 			const credential = await startRegistration({ optionsJSON: options as any });
 
-			const verifyRes = await fetch('/api/auth/webauthn?type=register', {
+			const verifyRes = await csrfFetch('/api/auth/webauthn?type=register', {
 				method: 'POST',
 				credentials: 'same-origin',
 				headers: { 'Content-Type': 'application/json' },

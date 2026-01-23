@@ -5,21 +5,111 @@ import { log } from '$lib/server/log';
 // [!code ++] Import the user finder to check real-time status
 import { findUserById } from '$lib/server/userService';
 // [!code ++] SECURITY (Issue #4): CSRF protection
-// TEMPORARILY DISABLED: Client-side code doesn't use csrfFetch() utilities yet
-// TODO: Update all fetch calls to use csrfFetch() from $lib/utils/csrf before re-enabling
-// import { generateCsrfToken, csrfProtection } from '$lib/server/csrf';
+import { generateCsrfToken, csrfProtection } from '$lib/server/csrf';
+
+// [!code ++] SECURITY: JSON payload size limit (1MB default, prevents DoS)
+const MAX_JSON_PAYLOAD_SIZE = 1 * 1024 * 1024; // 1MB
+
+// [!code ++] SECURITY: Prototype pollution dangerous keys
+const DANGEROUS_KEYS = ['__proto__', 'constructor', 'prototype'];
+
+/**
+ * Recursively check for prototype pollution keys in an object
+ */
+function hasPrototypePollution(obj: unknown, depth = 0): boolean {
+	// Prevent infinite recursion
+	if (depth > 20) return false;
+	if (obj === null || typeof obj !== 'object') return false;
+
+	if (Array.isArray(obj)) {
+		for (const item of obj) {
+			if (hasPrototypePollution(item, depth + 1)) return true;
+		}
+		return false;
+	}
+
+	for (const key of Object.keys(obj as Record<string, unknown>)) {
+		if (DANGEROUS_KEYS.includes(key)) {
+			return true;
+		}
+		if (hasPrototypePollution((obj as Record<string, unknown>)[key], depth + 1)) {
+			return true;
+		}
+	}
+	return false;
+}
 
 export const handle: Handle = async ({ event, resolve }) => {
 	// [!code ++] SECURITY (Issue #4): Generate CSRF token for all requests
-	// TEMPORARILY DISABLED: Causes 403 on all POST/PUT/DELETE requests
-	// generateCsrfToken(event);
+	// This sets up the double-submit cookie pattern
+	generateCsrfToken(event);
 
 	// [!code ++] SECURITY (Issue #4): Validate CSRF token for state-changing API requests
-	// TEMPORARILY DISABLED: Causes 403 on all POST/PUT/DELETE requests
-	// const csrfError = csrfProtection(event);
-	// if (csrfError) {
-	// 	return csrfError;
-	// }
+	// Exempt paths are configured in csrf.ts (login, register, webhooks, etc.)
+	const csrfError = csrfProtection(event);
+	if (csrfError) {
+		return csrfError;
+	}
+
+	// [!code ++] SECURITY: Validate JSON payload size and prototype pollution
+	// Only check for methods that typically have JSON bodies
+	const method = event.request.method;
+	if (['POST', 'PUT', 'PATCH'].includes(method)) {
+		const contentType = event.request.headers.get('content-type');
+		if (contentType?.includes('application/json')) {
+			// Check Content-Length header first (fast path)
+			const contentLength = event.request.headers.get('content-length');
+			if (contentLength && parseInt(contentLength, 10) > MAX_JSON_PAYLOAD_SIZE) {
+				log.warn('[SECURITY] Payload too large', {
+					path: event.url.pathname,
+					size: contentLength
+				});
+				return new Response(JSON.stringify({ error: 'Payload too large' }), {
+					status: 413,
+					headers: { 'Content-Type': 'application/json' }
+				});
+			}
+
+			// Clone the request to read body without consuming it
+			const clonedRequest = event.request.clone();
+			try {
+				const bodyText = await clonedRequest.text();
+
+				// Verify actual size
+				if (bodyText.length > MAX_JSON_PAYLOAD_SIZE) {
+					log.warn('[SECURITY] Payload too large (actual)', {
+						path: event.url.pathname,
+						size: bodyText.length
+					});
+					return new Response(JSON.stringify({ error: 'Payload too large' }), {
+						status: 413,
+						headers: { 'Content-Type': 'application/json' }
+					});
+				}
+
+				// Parse and check for prototype pollution
+				if (bodyText.trim()) {
+					try {
+						const parsed = JSON.parse(bodyText);
+						if (hasPrototypePollution(parsed)) {
+							log.warn('[SECURITY] Prototype pollution attempt blocked', {
+								path: event.url.pathname
+							});
+							return new Response(JSON.stringify({ error: 'Invalid request body' }), {
+								status: 400,
+								headers: { 'Content-Type': 'application/json' }
+							});
+						}
+					} catch {
+						// Invalid JSON - let downstream handlers deal with it
+					}
+				}
+			} catch (err) {
+				log.error('[SECURITY] Failed to read request body', err);
+				// Don't block on read errors - let the request continue
+			}
+		}
+	}
 
 	// 1. Ensure KV bindings exist (mock in dev/test using FILE store)
 	// Also enable when tests manually start a preview server (PW_MANUAL_SERVER)

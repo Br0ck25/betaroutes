@@ -1,5 +1,24 @@
 // Lazy-load heavy PDF libs only when needed to avoid inflating the initial bundle
 
+// SECURITY: Prevent CSV Formula Injection
+/**
+ * Sanitizes CSV field to prevent formula injection attacks
+ * Excel/Sheets interpret cells starting with =, +, -, @, or tab as formulas
+ * @param value - The value to sanitize
+ * @returns Sanitized value safe for CSV export
+ */
+function sanitizeCSVField(value: string | number | null | undefined): string {
+	if (value === null || value === undefined) return '';
+	const str = String(value);
+
+	// If starts with dangerous characters, prefix with single quote
+	if (str.length > 0 && /^[=+\-@\t]/.test(str)) {
+		return `'${str}`;
+	}
+
+	return str;
+}
+
 // Helper functions
 export function formatCurrency(amount: number): string {
 	return `$${amount.toFixed(2)}`;
@@ -61,11 +80,14 @@ export function generateTripsCSV(trips: any[], includeSummary: boolean = true): 
 
 	const rows = trips.map((trip) => {
 		const date = trip.date ? new Date(trip.date).toLocaleDateString() : '';
-		const start = `"${(trip.startAddress || '').replace(/"/g, '""')}"`;
+		// SECURITY: Sanitize user addresses to prevent formula injection
+		const start = `"${sanitizeCSVField(trip.startAddress || '').replace(/"/g, '""')}"`;
 
 		const intermediateStops =
 			trip.stops && trip.stops.length > 0
-				? trip.stops.map((s: any) => `${s.address} ($${(s.earnings || 0).toFixed(2)})`).join(' | ')
+				? trip.stops
+						.map((s: any) => `${sanitizeCSVField(s.address)} ($${(s.earnings || 0).toFixed(2)})`)
+						.join(' | ')
 				: '';
 		const stopsStr = `"${intermediateStops.replace(/"/g, '""')}"`;
 
@@ -73,7 +95,7 @@ export function generateTripsCSV(trips: any[], includeSummary: boolean = true): 
 			trip.endAddress ||
 			(trip.stops && trip.stops.length > 0 ? trip.stops[trip.stops.length - 1].address : '') ||
 			trip.startAddress;
-		const end = `"${(rawEnd || '').replace(/"/g, '""')}"`;
+		const end = `"${sanitizeCSVField(rawEnd || '').replace(/"/g, '""')}"`;
 
 		const miles = (trip.totalMiles || 0).toFixed(1);
 		const driveTime = `"${formatDuration(trip.estimatedTime || 0)}"`;
@@ -85,19 +107,20 @@ export function generateTripsCSV(trips: any[], includeSummary: boolean = true): 
 
 		const maint = trip.maintenanceCost || 0;
 		const maintItemsStr = trip.maintenanceItems
-			? `"${trip.maintenanceItems.map((i: any) => `${i.type}:${i.cost}`).join(' | ')}"`
+			? `"${trip.maintenanceItems.map((i: any) => `${sanitizeCSVField(i.type)}:${i.cost}`).join(' | ')}"`
 			: '""';
 
 		const supplies = trip.suppliesCost || 0;
 		const sItems = trip.suppliesItems || trip.supplyItems;
 		const supplyItemsStr = sItems
-			? `"${sItems.map((i: any) => `${i.type}:${i.cost}`).join(' | ')}"`
+			? `"${sItems.map((i: any) => `${sanitizeCSVField(i.type)}:${i.cost}`).join(' | ')}"`
 			: '""';
 
 		const totalExpenses = fuel + maint + supplies;
 		const netProfit = revenue - totalExpenses;
 		const hourlyPay = trip.hoursWorked > 0 ? netProfit / trip.hoursWorked : 0;
-		const notes = `"${(trip.notes || '').replace(/"/g, '""')}"`;
+		// SECURITY: Sanitize notes field
+		const notes = `"${sanitizeCSVField(trip.notes || '').replace(/"/g, '""')}"`;
 
 		return [
 			date,
@@ -176,9 +199,9 @@ export function generateExpensesCSV(
 	expenses.forEach((expense) => {
 		allExpenses.push({
 			date: expense.date,
-			category: expense.category,
+			category: sanitizeCSVField(expense.category),
 			amount: expense.amount,
-			description: expense.description || ''
+			description: sanitizeCSVField(expense.description || '')
 		});
 	});
 
@@ -199,7 +222,7 @@ export function generateExpensesCSV(
 					date: trip.date || '',
 					category: 'Maintenance',
 					amount: item.cost,
-					description: item.type
+					description: sanitizeCSVField(item.type)
 				});
 			});
 		} else if (trip.maintenanceCost > 0) {
@@ -218,7 +241,7 @@ export function generateExpensesCSV(
 					date: trip.date || '',
 					category: 'Supplies',
 					amount: item.cost,
-					description: item.type
+					description: sanitizeCSVField(item.type)
 				});
 			});
 		} else if (trip.suppliesCost > 0) {

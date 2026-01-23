@@ -2,6 +2,7 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
 import type { HughesNetFetcher } from './fetcher';
 import { BASE_URL } from './parser';
+import { log } from '$lib/server/log';
 
 const LOGIN_URL = 'https://dwayinstalls.hns.com/start/login.jsp?UsrAction=submit';
 const HOME_URL = 'https://dwayinstalls.hns.com/start/Home.jsp';
@@ -147,7 +148,11 @@ export class HughesNetAuth {
 	// --- Encryption ---
 
 	private async encrypt(plain: string): Promise<string | null> {
-		if (!this.encryptionKey) return plain;
+		// SECURITY: Fail secure - never return plaintext when encryption key is missing
+		if (!this.encryptionKey) {
+			log.error('[HughesNet Auth] Cannot encrypt: encryption key not configured');
+			return null;
+		}
 		try {
 			const keyRaw = Uint8Array.from(atob(this.encryptionKey), (c) => c.charCodeAt(0));
 			const key = await crypto.subtle.importKey('raw', keyRaw, 'AES-GCM', false, ['encrypt']);
@@ -176,7 +181,11 @@ export class HughesNetAuth {
 	}
 
 	private async decrypt(cipherB64: string): Promise<string | null> {
-		if (!this.encryptionKey) return cipherB64;
+		// SECURITY: Fail secure - never return ciphertext as plaintext when encryption key is missing
+		if (!this.encryptionKey) {
+			log.error('[HughesNet Auth] Cannot decrypt: encryption key not configured');
+			return null;
+		}
 		try {
 			const binary = atob(cipherB64);
 			const combined = new Uint8Array(binary.length);

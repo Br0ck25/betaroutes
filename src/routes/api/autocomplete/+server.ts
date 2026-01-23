@@ -117,14 +117,20 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 	const kv = platform?.env?.BETA_PLACES_KV;
 	const normalizedQuery = query.toLowerCase().replace(/\s+/g, '');
 	const searchPrefix = normalizedQuery.substring(0, 10);
-	const bucketKey = `prefix:${searchPrefix}`;
+
+	// SECURITY (Issue #8): Use user-scoped bucket key if authenticated
+
+	const userId = locals.user ? (locals.user as any).id : null;
+	const bucketKey = userId ? `user:${userId}:prefix:${searchPrefix}` : null;
 
 	try {
 		// 1. Try KV Cache First (Skip if forceGoogle is true)
-		if (kv && !forceGoogle) {
+		// Only check cache if user is authenticated (prevents poisoned global data exposure)
+		if (kv && !forceGoogle && bucketKey) {
 			const bucketRaw = await kv.get(bucketKey);
 			if (bucketRaw) {
 				const bucket = JSON.parse(bucketRaw);
+
 				const matches = bucket.filter((item: any) => {
 					const str = (item.formatted_address || item.name || '').toLowerCase();
 					return str.includes(query.toLowerCase());
@@ -186,9 +192,10 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 				source: 'google_proxy'
 			}));
 
-			// [!code ++] Save Google results to KV with Fan-Out (Background)
-			if (kv && results.length > 0) {
-				const cacheTask = fanOutCache(kv, results);
+			// Save Google results to KV with Fan-Out (Background)
+			// SECURITY (Issue #8): Only cache if user is authenticated (user-scoped)
+			if (kv && results.length > 0 && userId) {
+				const cacheTask = fanOutCache(kv, results, userId);
 				if (platform && platform.context && platform.context.waitUntil) {
 					platform.context.waitUntil(cacheTask);
 				} else {
@@ -206,17 +213,20 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 
 		return json([]);
 	} catch (err) {
-		log.error('Autocomplete Error', { message: (err as any)?.message });
+		log.error('Autocomplete Error', { message: (err as Error)?.message });
 		return json([]);
 	}
 };
 
 /**
  * Helper: Fan-out Cache Logic
- * Caches results into multiple prefix buckets (2..10 chars)
+ * Caches results into multiple user-scoped prefix buckets (2..10 chars)
+ * SECURITY (Issue #8): Now requires userId for per-user cache isolation
  */
-async function fanOutCache(kv: any, results: any[]) {
+
+async function fanOutCache(kv: any, results: any[], userId: string) {
 	// 1. Group new items by their potential prefixes
+
 	const prefixMap = new Map<string, any[]>();
 
 	for (const result of results) {
@@ -226,7 +236,8 @@ async function fanOutCache(kv: any, results: any[]) {
 		// Generate prefixes for this result (lengths 2 to 10)
 		for (let len = 2; len <= Math.min(10, normalized.length); len++) {
 			const prefix = normalized.substring(0, len);
-			const key = `prefix:${prefix}`;
+			// SECURITY: Use user-scoped key to prevent cache poisoning
+			const key = `user:${userId}:prefix:${prefix}`;
 
 			if (!prefixMap.has(key)) {
 				prefixMap.set(key, []);
@@ -235,7 +246,7 @@ async function fanOutCache(kv: any, results: any[]) {
 		}
 	}
 
-	// 2. Process each prefix bucket
+	// 2. Process each prefix bucket (user-scoped)
 	const updatePromises = Array.from(prefixMap.entries()).map(async ([key, newItems]) => {
 		const existingRaw = await kv.get(key);
 		let bucket = existingRaw ? JSON.parse(existingRaw) : [];

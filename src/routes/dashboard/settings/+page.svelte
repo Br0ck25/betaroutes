@@ -10,6 +10,7 @@
 	import MaintenanceCard from './components/MaintenanceCard.svelte';
 	import SettingsLayout from './SettingsLayout.svelte';
 	import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
+	import { csrfFetch } from '$lib/utils/csrf';
 
 	export let data: any;
 
@@ -53,7 +54,7 @@
 		if (isCheckingOut) return;
 		isCheckingOut = true;
 		try {
-			const res = await fetch('/api/stripe/checkout', { method: 'POST' });
+			const res = await csrfFetch('/api/stripe/checkout', { method: 'POST' });
 			const json: any = await res.json();
 			if (!res.ok) throw new Error(json?.message || 'Checkout failed');
 			if (json?.url) window.location.href = json.url;
@@ -68,7 +69,7 @@
 		if (isOpeningPortal) return;
 		isOpeningPortal = true;
 		try {
-			const res = await fetch('/api/stripe/portal', { method: 'POST' });
+			const res = await csrfFetch('/api/stripe/portal', { method: 'POST' });
 			const json: any = await res.json();
 			if (!res.ok) throw new Error(json?.message || 'Failed to open portal');
 			if (json?.url) window.location.href = json.url;

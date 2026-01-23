@@ -8,6 +8,7 @@ import { user as authUser } from '$lib/stores/auth';
 import { userSettings } from '$lib/stores/userSettings';
 import type { User } from '$lib/types';
 import { PLAN_LIMITS } from '$lib/constants';
+import { csrfFetch } from '$lib/utils/csrf';
 
 export const isLoading = writable(false);
 
@@ -415,7 +416,7 @@ function createTripsStore() {
 				for (const trip of pendingTrips) {
 					try {
 						const method = trip.createdAt !== trip.updatedAt ? 'PUT' : 'POST';
-						const response = await fetch('/api/trips', {
+						const response = await csrfFetch('/api/trips', {
 							method,
 							credentials: 'include'
 						});

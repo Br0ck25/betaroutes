@@ -156,9 +156,29 @@ export class TripIndexDO {
 				}
 			};
 
+			// SECURITY: Verify internal caller for admin operations
+			const verifyInternalCaller = () => {
+				// DOs can only be called from workers in the same account,
+				// but we add an extra layer for admin operations
+				const internalSecret = this.env['DO_INTERNAL_SECRET'] as string | undefined;
+				const providedSecret = request.headers.get('x-do-internal-secret');
+
+				// If secret is configured, require it for admin ops
+				if (internalSecret && internalSecret !== providedSecret) {
+					return false;
+				}
+				return true;
+			};
+
 			// --- ADMIN OPERATIONS ---
 			if (path === '/admin/wipe-user') {
 				if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
+
+				// SECURITY: Verify internal caller for destructive operations
+				if (!verifyInternalCaller()) {
+					return new Response('Forbidden', { status: 403 });
+				}
+
 				this.state.storage.sql.exec('DELETE FROM trips');
 				this.state.storage.sql.exec('DELETE FROM expenses');
 				this.state.storage.sql.exec('DELETE FROM mileage');

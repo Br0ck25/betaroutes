@@ -94,6 +94,16 @@ The following patterns were identified as high-risk during the **2026 Audit** an
 ❌ **NEVER** store user data in global keys (e.g., `KV.put('recent_places')`).
 ✅ **ALWAYS** scope keys to the user (e.g., ``KV.put(`places:${userId}`)``).
 
+### 5. No Client-Side Math Trust
+
+❌ **NEVER** trust financial totals or mileage calculated by the client (e.g., receiving `{ total: 500 }` in the API).
+✅ **ALWAYS** recalculate totals on the server using the raw line items.
+
+### 6. No Unbounded Arrays (DoS Risk)
+
+❌ **NEVER** push to an array without a size limit check (e.g., adding logs/stops infinitely).
+✅ **ALWAYS** enforce a maximum limit (e.g., `if (stops.length > 100) throw Error`).
+
 ---
 
 ### Cloudflare KV Storage (Trip Data)

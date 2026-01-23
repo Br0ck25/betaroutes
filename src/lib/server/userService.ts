@@ -322,6 +322,7 @@ export async function deleteUser(
 		tripsKV?: KVNamespace;
 		settingsKV?: KVNamespace;
 		tripIndexDO?: DurableObjectNamespace;
+		env?: { DO_INTERNAL_SECRET?: string };
 	}
 ): Promise<void> {
 	const user = await findUserById(kv, userId);
@@ -356,9 +357,11 @@ export async function deleteUser(
 			const id = resources.tripIndexDO.idFromName(user.username);
 			const stub = resources.tripIndexDO.get(id);
 
-			// Call the new WIPE endpoint
+			// Call the new WIPE endpoint with internal secret
+			const doSecret = resources.env?.DO_INTERNAL_SECRET ?? '';
 			await stub.fetch('http://internal/admin/wipe-user', {
-				method: 'POST'
+				method: 'POST',
+				headers: { 'x-do-internal-secret': doSecret }
 			});
 			log.debug(`[UserService] Sent WIPE command to DO for ${user.username}`);
 		} catch (e) {
