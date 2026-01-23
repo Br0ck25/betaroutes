@@ -105,7 +105,9 @@ export const GET: RequestHandler = async (event) => {
 			| undefined;
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
-		const userSafe = user as { name?: string; token?: string } | undefined;
+		// SECURITY FIX Phase 1: Use user.id for storage, pass username for migration dual-read
+		const userId = user.id || '';
+		const userName = user.name;
 
 		let env: App.Env;
 		try {
@@ -148,7 +150,9 @@ export const GET: RequestHandler = async (event) => {
 			}
 		}
 
-		const storageId = userSafe?.name || userSafe?.token || '';
+		// PHASE 1 MIGRATION: Use userId for lookups, pass userName for legacy dual-read
+		log.info('[GET /api/trips] Fetching trips', { userId, userName });
+
 		let sinceParam = sanitizeQueryParam(event.url.searchParams.get('since'), 50);
 
 		// Add a small buffer to the sinceParam to account for client clock skew (5 minutes)
@@ -161,7 +165,7 @@ export const GET: RequestHandler = async (event) => {
 				const now = Date.now();
 				if (s.getTime() > now) {
 					log.info('[GET /api/trips] since param in future; clamping to now - buffer', {
-						storageId,
+						userId,
 						original: sinceParam,
 						clamped: new Date(now - bufMs).toISOString()
 					});
@@ -198,14 +202,15 @@ export const GET: RequestHandler = async (event) => {
 			safeDO(env, 'PLACES_INDEX_DO')!
 		);
 
-		const allTrips = await svc.list(storageId, { since: sinceParam, limit, offset });
+		// Pass both userId and userName to support Phase 1 dual-read migration
+		const allTrips = await svc.list(userId, { since: sinceParam, limit, offset, userName });
 
 		// If mileage KV is available, treat mileage as the source-of-truth and merge
 		try {
 			const mileageKV = safeKV(env, 'BETA_MILLAGE_KV');
 			if (mileageKV) {
 				const mileageSvc = makeMileageService(mileageKV as any, safeDO(env, 'TRIP_INDEX_DO')!);
-				const ms = await mileageSvc.list(storageId);
+				const ms = await mileageSvc.list(userId, undefined, userName);
 				const mById = new Map(ms.map((m: any) => [m.id, m]));
 				for (const t of allTrips) {
 					const m = mById.get(t.id);
