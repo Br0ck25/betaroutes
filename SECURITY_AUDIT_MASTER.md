@@ -10,11 +10,10 @@
 **Do not deploy or leave production running without these fixes.**  
 **Risk:** Account Takeover, Data Destruction, Total System Compromise.
 
-- [x] **1. Fix Root Cause of Account Takeover (`getStorageId`)**
+- [ ] **1. Fix Root Cause of Account Takeover (`getStorageId`)**
   - **File:** `src/lib/server/user.ts`
   - **Action:** Change function to strictly return `user?.id || ''`. Never fallback to `user.name` or `user.token`.
   - **Impact:** Fixes critical ATO flaws in Trips, Mileage, Expenses, and HughesNet.
-  - **Status:** ✅ COMPLETED - getStorageId() now returns ONLY user.id, never falls back to name or token
 
 - [x] **2. Delete ALL Dangerous Debug Endpoints**
   - **Target:** Entire folder `src/routes/api/debug/` and file `src/routes/debug/seed-session/+server.ts`
@@ -182,18 +181,14 @@ Defense-in-depth, security headers, and long-term maintenance hardening.
   - **Status:** ✅ ALREADY SECURE - `randomUUID()` from `node:crypto` uses cryptographically secure randomness
 - [x] **29. Redact PII from Server Logs**
   - **Status:** ✅ COMPLETED - Added `maskEmail()` helper in email.ts. Updated all production log calls in email.ts, userService.ts, and stripe webhook to use masked emails.
-- [x] **30. Require Re-Auth for Sensitive Actions**
-  - **Status:** ✅ ALREADY IMPLEMENTED - Email changes require password (PUT /api/user), password changes require current password (/api/change-password), passkey deletion requires password (/api/auth/webauthn/delete)
-- [x] **31. Upgrade Password Hashing**
-  - **Status:** ⚠️ NOT NEEDED - Using PBKDF2 with 100k iterations (OWASP recommended). Argon2 not available on Cloudflare Workers (requires WASM). Legacy bcrypt passwords auto-migrate on login.
+- [ ] **30. Require Re-Auth for Sensitive Actions**
+- [ ] **31. Upgrade Password Hashing**
 - [x] **32. Fix Client-Side CSV Injection**
   - **Status:** ✅ ALREADY IMPLEMENTED - `sanitizeCSVField()` in export-utils.ts prefixes dangerous characters (=, +, -, @, tab) with single quote
 - [x] **33. Implement Security Headers**
   - **Status:** ✅ COMPLETED - Added HSTS (production only), frame-ancestors 'none', removed X-Powered-By/Server headers in hooks.server.ts
-- [x] **34. Tighten Content Security Policy**
-  - **Status:** ⚠️ DEFERRED - CSP currently requires 'unsafe-inline' for SvelteKit hydration. Implementing nonces requires build tool changes. Current CSP provides clickjacking protection via frame-ancestors.
-- [x] **35. Enforce Global Request Validation**
-  - **Status:** ✅ ALREADY IMPLEMENTED - hooks.server.ts has MAX_JSON_PAYLOAD_SIZE (1MB) and hasPrototypePollution() recursive check
+- [ ] **34. Tighten Content Security Policy**
+- [ ] **35. Enforce Global Request Validation**
 - [x] **36. Suppress Verbose Error Details**
   - **Status:** ✅ COMPLETED - +error.svelte now only shows technical details and logs errors in dev mode
 - [x] **37. Enforce One-Time Use for Verify Tokens**
@@ -204,42 +199,31 @@ Defense-in-depth, security headers, and long-term maintenance hardening.
   - **Status:** ✅ ALREADY SECURE - All auth cookies have httpOnly, secure, sameSite: 'lax' attributes
 - [x] **40. Strengthen Password Blacklist**
   - **Status:** ✅ COMPLETED - Expanded commonPasswords list in passwordValidation.ts from 15 to 65+ entries including common patterns
-- [x] **41. Global Input Length Validation**
-  - **Status:** ✅ ALREADY IMPLEMENTED - hooks.server.ts enforces MAX_JSON_PAYLOAD_SIZE (1MB) globally. Individual endpoints have specific Zod schema limits.
-- [x] **42. Audit and Exclude Non-Production Files**
-  - **Status:** ✅ ALREADY PROTECTED - Debug routes (/debug/\*) are protected with `!dev && process.env['NODE_ENV'] === 'production'` checks that return 403. Files excluded from production builds.
+- [ ] **41. Global Input Length Validation**
+- [ ] **42. Audit and Exclude Non-Production Files**
 - [x] **43. Mitigate Registration Enumeration**
   - **Status:** ✅ COMPLETED - Changed to generic message "Registration failed. Please try a different email or username." for both email and username conflicts
-- [x] **44. Optimize HughesNet Import**
-  - **Status:** ✅ ALREADY IMPLEMENTED - MAX_IMPORT_BATCH=500 limit in /api/hughesnet/archived/import prevents unbounded processing
-- [x] **45. Secure Google Maps Key**
-  - **Status:** ⚠️ MANUAL ACTION REQUIRED - Set HTTP Referrer restrictions in Google Cloud Console. Add production domains only. Cannot be done via code.
+- [ ] **44. Optimize HughesNet Import**
+- [ ] **45. Secure Google Maps Key**
 - [x] **46. Fix Cookie Cleanup**
   - **Status:** ✅ COMPLETED - Both /logout and /api/logout now delete all auth cookies (session_id, token, csrf_token, csrf_token_readable, webauthn-challenge)
-- [x] **47. Remove Stripe Webhook Fallback**
-  - **Status:** ✅ NOT A SECURITY ISSUE - The fallback KV scan in downgradeUserByCustomerId() is a resilience pattern for migrated customers lacking stripe:customer: mapping. Scan is authenticated and only triggered on valid Stripe webhook signatures.
+- [ ] **47. Remove Stripe Webhook Fallback**
 - [x] **48. Fix Admin Secret Timing Attack**
   - **Status:** ✅ COMPLETED - Fixed safeCompare() in csrf.ts to be truly timing-safe (pads strings, constant-time length check). Updated webauthn/migrate and TripIndexDO to use safeCompare().
 - [x] **[Headers] Missing HSTS:** `Strict-Transport-Security` not set in `hooks.server.ts`.
   - **Status:** ✅ COMPLETED - Same as #33, HSTS added with max-age=31536000; includeSubDomains; preload
 - [ ] **[Cookies] Missing Secure Prefixes:** Rename session cookies to `__Host-session_id`.
-  - **Status:** ⚠️ DEFERRED - Requires careful testing as \_\_Host- prefix requires Path=/ and Secure. Consider for future hardening.
 - [x] **[Cryptography] Weak Session ID Generation:** Switch `randomUUID` to `crypto.getRandomValues`.
   - **Status:** ✅ NOT NEEDED - `randomUUID()` from `node:crypto` is already cryptographically secure
 - [x] **[Logging] PII in Logs:** `hooks.server.ts` logs full request bodies, including passwords.
   - **Status:** ✅ COMPLETED - Same as #29, all email logging now uses maskEmail()
 - [x] **[Hardening] Sanitize Error Messages:** Stack traces are visible in production 500 errors.
   - **Status:** ✅ COMPLETED - Same as #36, error details dev-only
-- [x] **[Hardening] Google Maps Restrictions:** API keys lack HTTP Referrer locking in the Google Console.
-  - **Status:** ⚠️ MANUAL ACTION REQUIRED - Same as #45. Set HTTP Referrer restrictions in Google Cloud Console.
-- [x] **[Hardening] Scoped Restore Logic:** `api/trash/[id]` doesn't verify the item type during restoration.
-  - **Status:** ✅ LOW RISK - Current implementation tries services sequentially until one succeeds; ownership verified via storageId; only succeeds for items that exist. Type verification would be an enhancement but not a security risk.
-- [x] **[Hardening] Session Rotation:** Session ID should change when a user connects a third-party service (HughesNet).
-  - **Status:** ⚠️ DEFERRED - Low risk as HughesNet connection is authenticated. Session rotation would require logout/re-login flow.
-- [x] **[Hardening] WebAuthn Policy:** Switch `requireUserVerification` to `true` to force PIN/Biometrics.
-  - **Status:** ⚠️ UX TRADEOFF - Currently 'preferred' for maximum compatibility. Switching to 'required' would block users with security keys lacking biometrics.
-- [x] **[CSP] Unsafe-Inline:** CSP allows `'unsafe-inline'`; needs implementation of nonces.
-  - **Status:** ⚠️ DEFERRED - Same as #34. Requires build tool changes for SvelteKit nonce support.
+- [ ] **[Hardening] Google Maps Restrictions:** API keys lack HTTP Referrer locking in the Google Console.
+- [ ] **[Hardening] Scoped Restore Logic:** `api/trash/[id]` doesn't verify the item type during restoration.
+- [ ] **[Hardening] Session Rotation:** Session ID should change when a user connects a third-party service (HughesNet).
+- [ ] **[Hardening] WebAuthn Policy:** Switch `requireUserVerification` to `true` to force PIN/Biometrics.
+- [ ] **[CSP] Unsafe-Inline:** CSP allows `'unsafe-inline'`; needs implementation of nonces.
 - [x] **[Headers] Missing Permissions-Policy:** Need to restrict Camera/Mic/Geolocation.
   - **Status:** ✅ ALREADY IMPLEMENTED - `geolocation=(self), camera=(), microphone=()` set in hooks.server.ts
 - [x] **[Headers] Missing Referrer-Policy:** Set to `strict-origin-when-cross-origin`.
@@ -258,28 +242,18 @@ Defense-in-depth, security headers, and long-term maintenance hardening.
   - **Status:** ✅ COMPLETED - Same as #33, frame-ancestors 'none' added to CSP
 - [x] **[Disclosure] Path Leakage:** Custom error pages render the full error object.
   - **Status:** ✅ COMPLETED - Same as #36, technical details dev-only
-- [x] **[Logic] Unbounded Array (Trips Schema):** Missing `.max()` on stops/destinations.
-  - **Status:** ✅ COMPLETED - Added .max(100) to stops/destinations, .max(50) to maintenance/supplies items in trips/+server.ts
-- [x] **[Logic] Unbounded Array (Settings Schema):** Missing `.max()` on categories.
-  - **Status:** ✅ COMPLETED - Added .max(50) to category arrays, .max(100) to category strings, .max(20) to vehicles array in settings/+server.ts
+- [ ] **[Logic] Unbounded Array (Trips Schema):** Missing `.max()` on stops/destinations.
+- [ ] **[Logic] Unbounded Array (Settings Schema):** Missing `.max()` on categories.
 - [x] **[DoS] Reset Password Rate Limit:** Missing check on token verification attempts.
   - **Status:** ✅ COMPLETED - Added rate limiting (10/hour/IP) to reset-password/+server.ts
-- [x] **[Maintenance] Explicit Null Checks:** Import logic crashes on empty file buffers.
-  - **Status:** ✅ ALREADY HANDLED - Import handlers check file size and content before processing. validateCSVContent() and validatePDFMagicBytes() reject empty files.
-- [x] **[Audit] Third-Party Script Review:** Periodic audit needed for Google Maps/Stripe tags.
-  - **Status:** ⚠️ MANUAL PROCESS - Not automatable. Recommend quarterly review of external script dependencies.
-- [x] **[Hardening] Subresource Integrity:** Missing SRI tags for external scripts.
-  - **Status:** ⚠️ DEFERRED - Google Maps and Stripe scripts are loaded dynamically, making SRI difficult. Consider Content-Security-Policy nonces instead.
-- [x] **[Logic] Odometer Validation:** No check to ensure new odometer readings > previous readings.
-  - **Status:** ⚠️ LOW RISK - Odometer is user-input field. Backend accepts user's value. Client could add validation but server-side enforcement would require historical lookups.
-- [x] **[Logic] Stripe Webhook Size:** Missing content-length check on incoming webhooks.
-  - **Status:** ✅ ALREADY IMPLEMENTED - MAX_WEBHOOK_SIZE (1MB) check exists in stripe/webhook/+server.ts on both content-length header and actual body length
-- [x] **[Protocol] Secure Internal Logic:** `internal_notes` fields should be stripped from all client-side JSON.
-  - **Status:** ✅ NOT APPLICABLE - No `internal_notes` field exists in any schema or API response. Trip notes are user-facing, not internal.
-- [x] **[Hardening] CSS Injection:** Sanitize custom styling options in settings.
-  - **Status:** ✅ NOT APPLICABLE - No custom CSS/styling input exists. Users cannot enter arbitrary CSS.
-- [x] **[Maintenance] Dead Code Removal:** Remove `fakeKV` and `fakeDO` logic entirely from the production build.
-  - **Status:** ✅ ALREADY COMPLETED - No fakeKV/fakeDO implementations exist in codebase; only comments noting their removal remain
+- [ ] **[Maintenance] Explicit Null Checks:** Import logic crashes on empty file buffers.
+- [ ] **[Audit] Third-Party Script Review:** Periodic audit needed for Google Maps/Stripe tags.
+- [ ] **[Hardening] Subresource Integrity:** Missing SRI tags for external scripts.
+- [ ] **[Logic] Odometer Validation:** No check to ensure new odometer readings > previous readings.
+- [ ] **[Logic] Stripe Webhook Size:** Missing content-length check on incoming webhooks.
+- [ ] **[Protocol] Secure Internal Logic:** `internal_notes` fields should be stripped from all client-side JSON.
+- [ ] **[Hardening] CSS Injection:** Sanitize custom styling options in settings.
+- [ ] **[Maintenance] Dead Code Removal:** Remove `fakeKV` and `fakeDO` logic entirely from the production build.
 
 ---
 

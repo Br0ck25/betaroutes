@@ -4,7 +4,6 @@ import type { RequestHandler } from './$types';
 import { toIsoDate, extractDateFromTs } from '$lib/server/hughesnet/utils';
 
 import { getEnv, safeKV } from '$lib/server/env';
-import { getStorageId } from '$lib/server/user';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 
@@ -21,8 +20,7 @@ export const POST: RequestHandler = async ({ platform, locals, request }) => {
 	}
 
 	const user = locals.user as SessionUser | undefined;
-	// SECURITY FIX (P0 Item #1): Use getStorageId() to get user UUID, never name/token
-	const userId = getStorageId(user);
+	const userId = user?.name || user?.token || user?.id || 'default_user';
 	try {
 		const body = (await request.json()) as unknown;
 		const bodyObj = body as Record<string, unknown>;

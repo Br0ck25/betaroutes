@@ -22,7 +22,6 @@ import type { TripRecord } from '$lib/server/tripService';
 import { computeAndCacheDirections } from '$lib/server/directionsCache';
 
 import { safeKV, safeDO } from '$lib/server/env';
-import { getStorageId } from '$lib/server/user';
 
 const latLngSchema = z
 	.object({
@@ -76,11 +75,10 @@ const tripSchema = z.object({
 	totalEarnings: z.number().optional(),
 	// NOTE: netProfit is calculated server-side, removed from schema to prevent client manipulation
 	notes: z.string().max(1000).optional(),
-	// SECURITY: Limit array sizes to prevent DoS via large payloads
-	stops: z.array(stopSchema).max(100).optional(),
-	destinations: z.array(destinationSchema).max(100).optional(),
-	maintenanceItems: z.array(costItemSchema).max(50).optional(),
-	suppliesItems: z.array(costItemSchema).max(50).optional(),
+	stops: z.array(stopSchema).optional(),
+	destinations: z.array(destinationSchema).optional(),
+	maintenanceItems: z.array(costItemSchema).optional(),
+	suppliesItems: z.array(costItemSchema).optional(),
 	lastModified: z.string().optional()
 });
 
@@ -115,6 +113,8 @@ export const GET: RequestHandler = async (event) => {
 			  }
 			| undefined;
 		if (!user) return new Response('Unauthorized', { status: 401 });
+
+		const userSafe = user as { name?: string; token?: string } | undefined;
 
 		let env: App.Env;
 		try {
@@ -157,8 +157,7 @@ export const GET: RequestHandler = async (event) => {
 			}
 		}
 
-		// SECURITY FIX (P0 Item #1): Use getStorageId() to get user UUID, never name/token
-		const storageId = getStorageId(user);
+		const storageId = userSafe?.name || userSafe?.token || '';
 		let sinceParam = sanitizeQueryParam(event.url.searchParams.get('since'), 50);
 
 		// Add a small buffer to the sinceParam to account for client clock skew (5 minutes)
@@ -294,8 +293,7 @@ export const POST: RequestHandler = async (event) => {
 			}
 		}
 
-		// SECURITY FIX (P0 Item #1): Use getStorageId() to get user UUID, never name/token
-		const storageId = getStorageId(sessionUser);
+		const storageId = sessionUserSafe?.name || sessionUserSafe?.token || '';
 		const rawBody = (await event.request.json()) as unknown;
 
 		let sanitizedBody;
@@ -547,8 +545,7 @@ export const POST: RequestHandler = async (event) => {
 		}
 
 		if (!existingTrip) {
-			// SECURITY FIX (P0 Item #1): Use storageId (user UUID) instead of token
-			await svc.incrementUserCounter(storageId, 1);
+			await svc.incrementUserCounter(sessionUserSafe?.token || '', 1);
 		}
 
 		return new Response(JSON.stringify(trip), {
@@ -569,6 +566,15 @@ export const PUT: RequestHandler = async (event) => {
 	try {
 		const sessionUser = event.locals.user;
 		if (!sessionUser) return new Response('Unauthorized', { status: 401 });
+
+		const sessionUserSafe = sessionUser as
+			| {
+					id?: string;
+					name?: string;
+					token?: string;
+					plan?: 'free' | 'premium' | 'pro' | 'business';
+			  }
+			| undefined;
 
 		let env: App.Env;
 		try {
@@ -604,8 +610,7 @@ export const PUT: RequestHandler = async (event) => {
 			}
 		}
 
-		// SECURITY FIX (P0 Item #1): Use getStorageId() to get user UUID, never name/token
-		const storageId = getStorageId(sessionUser);
+		const storageId = sessionUserSafe?.name || sessionUserSafe?.token || '';
 		const rawBody = (await event.request.json()) as unknown;
 
 		let sanitizedBody;

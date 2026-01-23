@@ -123,18 +123,9 @@ export function makeMileageService(
 				);
 		},
 
-		async get(userId: string, id: string, legacyUserId?: string) {
-			// Try the current userId first
-			let all = await this.list(userId);
-			let record = all.find((m) => m.id === id) || null;
-
-			// If not found and legacyUserId is provided, try the legacy username-based lookup
-			if (!record && legacyUserId && legacyUserId !== userId) {
-				all = await this.list(legacyUserId);
-				record = all.find((m) => m.id === id) || null;
-			}
-
-			return record;
+		async get(userId: string, id: string) {
+			const all = await this.list(userId);
+			return all.find((m) => m.id === id) || null;
 		},
 
 		async put(item: MileageRecord) {
@@ -152,24 +143,11 @@ export function makeMileageService(
 			});
 		},
 
-		async delete(userId: string, id: string, legacyUserId?: string) {
-			// Try the primary key first
-			let key = `mileage:${userId}:${id}`;
-			let raw = await kv.get(key);
-			let effectiveUserId = userId;
+		async delete(userId: string, id: string) {
+			const stub = getIndexStub(userId);
 
-			// If not found and legacyUserId is provided, try the legacy username-based key
-			if (!raw && legacyUserId && legacyUserId !== userId) {
-				const legacyKey = `mileage:${legacyUserId}:${id}`;
-				raw = await kv.get(legacyKey);
-				if (raw) {
-					key = legacyKey;
-					effectiveUserId = legacyUserId;
-				}
-			}
-
-			const stub = getIndexStub(effectiveUserId);
-
+			const key = `mileage:${userId}:${id}`;
+			const raw = await kv.get(key);
 			if (!raw) return;
 
 			const item = JSON.parse(raw) as MileageRecord;
@@ -210,19 +188,8 @@ export function makeMileageService(
 				try {
 					const tripIdToUpdate = typeof item.tripId === 'string' ? item.tripId : undefined;
 					if (tripIdToUpdate) {
-						// Try primary key first, then legacy key
-						let tripKey = `trip:${userId}:${tripIdToUpdate}`;
-						let tripRaw = await tripKV.get(tripKey);
-
-						// If not found and legacyUserId is provided, try the legacy username-based key
-						if (!tripRaw && legacyUserId && legacyUserId !== userId) {
-							const legacyTripKey = `trip:${legacyUserId}:${tripIdToUpdate}`;
-							tripRaw = await tripKV.get(legacyTripKey);
-							if (tripRaw) {
-								tripKey = legacyTripKey;
-							}
-						}
-
+						const tripKey = `trip:${userId}:${tripIdToUpdate}`;
+						const tripRaw = await tripKV.get(tripKey);
 						if (tripRaw) {
 							const trip = JSON.parse(tripRaw);
 							if (!trip.deleted) {
