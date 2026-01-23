@@ -234,16 +234,7 @@ function createTripsStore() {
 				const tripsTx = db.transaction('trips', 'readonly');
 				const trip = await tripsTx.objectStore('trips').get(id);
 				if (!trip) throw new Error('Trip not found');
-
-				// [!code fix] Flexible ownership check - allow if userId matches current user's id OR name
-				const currentUser = get(authUser) as { id?: string; name?: string } | null;
-				const isOwner =
-					trip.userId === userId ||
-					trip.userId === currentUser?.id ||
-					trip.userId === currentUser?.name ||
-					userId === currentUser?.id ||
-					userId === currentUser?.name;
-				if (!isOwner) throw new Error('Unauthorized');
+				if (trip.userId !== userId) throw new Error('Unauthorized');
 
 				const now = new Date();
 				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);

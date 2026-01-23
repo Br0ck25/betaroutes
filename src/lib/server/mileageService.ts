@@ -31,36 +31,7 @@ export function makeMileageService(
 		return tripIndexDO.get(id);
 	};
 
-	// Helper to fetch all mileage from KV for a given prefix
-	async function fetchFromKV(prefix: string): Promise<MileageRecord[]> {
-		const all: MileageRecord[] = [];
-		let list = await kv.list({ prefix });
-		let keys = list.keys;
-
-		while (!list.list_complete && list.cursor) {
-			list = await kv.list({ prefix, cursor: list.cursor });
-			keys = keys.concat(list.keys);
-		}
-
-		for (const key of keys) {
-			const raw = await kv.get(key.name);
-			if (!raw) continue;
-			try {
-				const parsed = JSON.parse(raw);
-				if (parsed) all.push(parsed);
-			} catch {
-				// Skip corrupt entries
-			}
-		}
-		return all;
-	}
-
 	return {
-		/**
-		 * List mileage records for a user.
-		 * @param userId - Primary storage ID (UUID)
-		 * @param since - Optional ISO date for delta sync
-		 */
 		async list(userId: string, since?: string): Promise<MileageRecord[]> {
 			const stub = getIndexStub(userId);
 			const prefix = `mileage:${userId}:`;
@@ -87,8 +58,34 @@ export function makeMileageService(
 						`[MileageService] Detected desync for ${userId} (KV has data, Index empty). repairing...`
 					);
 
-					const all = await fetchFromKV(prefix);
-					const migratedCount = all.length;
+					// Fetch ALL data from KV
+					const all: MileageRecord[] = [];
+					let list = await kv.list({ prefix });
+					let keys = list.keys;
+
+					while (!list.list_complete && list.cursor) {
+						list = await kv.list({ prefix, cursor: list.cursor });
+						keys = keys.concat(list.keys);
+					}
+
+					let migratedCount = 0;
+					const skippedTombstones = 0;
+					for (const key of keys) {
+						const raw = await kv.get(key.name);
+						if (!raw) continue;
+						const parsed = JSON.parse(raw);
+
+						// Migrate all records including tombstones (to maintain deleted state)
+						if (parsed && parsed.deleted) {
+							// Push the tombstone itself, not the backup
+							all.push(parsed);
+							migratedCount++;
+							continue;
+						}
+
+						all.push(parsed);
+						migratedCount++;
+					}
 
 					// Force Push to DO
 					if (all.length > 0) {
@@ -98,7 +95,9 @@ export function makeMileageService(
 						});
 
 						mileage = all;
-						log.info(`[MileageService] Migrated ${migratedCount} items (0 tombstones included)`);
+						log.info(
+							`[MileageService] Migrated ${migratedCount} items (${skippedTombstones} tombstones included)`
+						);
 					}
 				}
 			}
@@ -106,25 +105,16 @@ export function makeMileageService(
 			// Delta Sync: Return everything (including deletions)
 			if (since) {
 				const sinceDate = new Date(since);
-				const filtered = mileage.filter((m) => new Date(m.updatedAt || m.createdAt) > sinceDate);
-				log.info(
-					`[MileageService] list() delta sync returning ${filtered.length} of ${mileage.length} items`
-				);
-				return filtered;
+				return mileage.filter((m) => new Date(m.updatedAt || m.createdAt) > sinceDate);
 			}
 
 			// [!code fix] Full List: Filter out deleted items (Tombstones)
 			// This prevents deleted items from appearing on page load/refresh
-			const deletedCount = mileage.filter((m) => m.deleted).length;
-			const activeItems = mileage
+			return mileage
 				.filter((m) => !m.deleted)
 				.sort((a, b) =>
 					(b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || '')
 				);
-			log.info(
-				`[MileageService] list() returning ${activeItems.length} active items (${deletedCount} deleted filtered out)`
-			);
-			return activeItems;
 		},
 
 		async get(userId: string, id: string) {
@@ -147,24 +137,12 @@ export function makeMileageService(
 			});
 		},
 
-		async delete(userId: string, id: string, options?: { cascadeDeleted?: boolean }) {
-			log.info(`[MileageService] delete() called`, {
-				userId,
-				id,
-				cascadeDeleted: options?.cascadeDeleted
-			});
+		async delete(userId: string, id: string) {
 			const stub = getIndexStub(userId);
 
-			// Try to find the item under the current userId key
 			const key = `mileage:${userId}:${id}`;
-			log.info(`[MileageService] Checking key: ${key}`);
 			const raw = await kv.get(key);
-
-			if (!raw) {
-				log.warn(`[MileageService] delete() - Item not found in KV`, { key });
-				return;
-			}
-			log.info(`[MileageService] Found item to delete, creating tombstone`);
+			if (!raw) return;
 
 			const item = JSON.parse(raw) as MileageRecord;
 			const now = new Date();
@@ -179,24 +157,21 @@ export function makeMileageService(
 
 			const tombstone = {
 				id: item.id,
-				userId,
-				tripId: item.tripId, // Preserve tripId for cascade restore
+				userId: item.userId,
 				deleted: true,
 				deletedAt: now.toISOString(),
-				cascadeDeleted: options?.cascadeDeleted || false, // Mark if cascade deleted with trip
 				metadata,
 				backup: item,
 				updatedAt: now.toISOString(),
 				createdAt: item.createdAt
 			};
 
-			// 1. Write tombstone to KV
+			// Update KV with tombstone
 			await kv.put(key, JSON.stringify(tombstone), {
 				expirationTtl: RETENTION.THIRTY_DAYS
 			});
-			log.info(`[MileageService] Wrote tombstone to: ${key}`);
 
-			// 2. Update DO with tombstone (PUT)
+			// Update DO with tombstone (PUT)
 			await stub.fetch(`${DO_ORIGIN}/mileage/put`, {
 				method: 'POST',
 				body: JSON.stringify(tombstone)
@@ -232,30 +207,20 @@ export function makeMileageService(
 		},
 
 		async listTrash(userId: string) {
-			log.info(`[MileageService] listTrash() called`, { userId });
-			const out: Record<string, unknown>[] = [];
 			const prefix = `mileage:${userId}:`;
-
-			log.info(`[MileageService] listTrash scanning prefix: ${prefix}`);
 			let list = await kv.list({ prefix });
 			let keys = list.keys;
 			while (!list.list_complete && list.cursor) {
 				list = await kv.list({ prefix, cursor: list.cursor });
 				keys = keys.concat(list.keys);
 			}
-			log.info(`[MileageService] listTrash found ${keys.length} keys under ${prefix}`);
 
-			let tombstoneCount = 0;
+			const out: Record<string, unknown>[] = [];
 			for (const k of keys) {
 				const raw = await kv.get(k.name);
 				if (!raw) continue;
 				const parsed = JSON.parse(raw) as Record<string, unknown> | undefined;
 				if (!parsed || !(parsed['deleted'] as boolean)) continue;
-
-				// Skip cascade-deleted items (deleted with parent trip) - they don't show in trash UI
-				if (parsed['cascadeDeleted']) continue;
-
-				tombstoneCount++;
 
 				const id = (parsed['id'] as string) || String(k.name.split(':').pop() || '');
 				const uid = (parsed['userId'] as string) || String(k.name.split(':')[1] || '');
@@ -275,7 +240,6 @@ export function makeMileageService(
 				out.push({
 					id,
 					userId: uid,
-					tripId: parsed['tripId'] || (backup['tripId'] as string | undefined),
 					metadata: metadata as Record<string, unknown>,
 					recordType: 'mileage',
 					miles:
@@ -286,9 +250,7 @@ export function makeMileageService(
 					date: backup['date']
 				});
 			}
-			log.info(`[MileageService] listTrash found ${tombstoneCount} tombstones under ${prefix}`);
 
-			log.info(`[MileageService] listTrash returning ${out.length} tombstones`);
 			out.sort((a, b) =>
 				String((b['metadata'] as Record<string, unknown>)['deletedAt'] ?? '').localeCompare(
 					String((a['metadata'] as Record<string, unknown>)['deletedAt'] ?? '')

@@ -4,14 +4,6 @@ import { getStripe } from '$lib/server/stripe';
 import { findUserById } from '$lib/server/userService';
 import { getEnv, safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
-import { env as privateEnv } from '$env/dynamic/private';
-
-// [!code fix] SECURITY: Use configured base URL to prevent host header injection
-function getBaseUrl(urlOrigin: string): string {
-	const baseUrl = privateEnv['BASE_URL'] || privateEnv['SITE_URL'];
-	if (baseUrl) return baseUrl;
-	return urlOrigin;
-}
 
 export async function POST({ locals, url, platform }) {
 	const currentUser = locals.user as Record<string, unknown> | undefined;
@@ -28,8 +20,6 @@ export async function POST({ locals, url, platform }) {
 		throw error(500, 'Service unavailable');
 	}
 
-	const baseUrl = getBaseUrl(url.origin);
-
 	try {
 		// Fetch full user record to get Stripe Customer ID
 		const user = await findUserById(usersKV, userId);
@@ -41,7 +31,7 @@ export async function POST({ locals, url, platform }) {
 		const stripe = getStripe();
 		const session = await stripe.billingPortal.sessions.create({
 			customer: user.stripeCustomerId,
-			return_url: `${baseUrl}/dashboard/settings?portal=success`
+			return_url: `${url.origin}/dashboard/settings?portal=success`
 		});
 
 		return json({ url: session.url });

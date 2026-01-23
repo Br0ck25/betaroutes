@@ -1,5 +1,29 @@
 /// <reference types="@sveltejs/kit" />
 /// <reference types="@cloudflare/workers-types" />
 
-// NOTE: The App.Locals and App.Platform interfaces are defined in app.d.ts
-// This file only contains additional type references for Cloudflare Workers
+declare namespace App {
+	// Define the user object shape in locals
+	interface Locals {
+		user: {
+			token: string;
+			plan: 'free' | 'premium';
+			tripsThisMonth: number;
+			maxTrips: number;
+			resetDate: string;
+		} | null;
+	}
+
+	// Cloudflare Platform types
+	interface Platform {
+		env: {
+			BETA_LOGS_KV: KVNamespace;
+			BETA_USERS_KV: KVNamespace;
+			BETA_EXPENSES_KV?: KVNamespace;
+			BETA_PLACES_KV?: KVNamespace;
+		};
+		context: {
+			waitUntil(promise: Promise<unknown>): void;
+		};
+		caches: CacheStorage & { default: Cache };
+	}
+}

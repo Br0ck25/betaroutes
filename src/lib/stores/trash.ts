@@ -103,19 +103,7 @@ function createTrashStore() {
 				await txRead.done;
 
 				if (!stored) throw new Error('Item not found in trash');
-
-				// [!code fix] Flexible ownership check - allow if userId matches stored's userId OR deletedBy
-				// This handles legacy data where userId might be username instead of UUID
-				const { get: svelteGet } = await import('svelte/store');
-				const { user: authUserStore } = await import('$lib/stores/auth');
-				const currentUser = svelteGet(authUserStore) as { id?: string; name?: string } | null;
-				const isOwner =
-					stored.userId === userId ||
-					stored.userId === currentUser?.id ||
-					stored.userId === currentUser?.name ||
-					stored.deletedBy === userId ||
-					stored.deletedBy === currentUser?.id;
-				if (!isOwner) throw new Error('Unauthorized');
+				if (stored.userId !== userId) throw new Error('Unauthorized');
 
 				const recordTypes: string[] = Array.from(
 					new Set(
@@ -172,8 +160,6 @@ function createTrashStore() {
 
 				const restored = { ...(backupFor(restoreType) || {}) };
 				restored.id = getRealId(uniqueId);
-				// [!code fix] Ensure userId is set to current user's UUID to allow future operations
-				restored.userId = userId;
 
 				delete restored.deleted;
 				delete restored.deletedAt;
@@ -414,12 +400,29 @@ function createTrashStore() {
 				}
 				await tx.done;
 
-				// [!code fix] REMOVED: Cleanup Active Stores logic
-				// This code was incorrectly deleting restored items from active stores.
-				// When a user restores an item, it's added back to the active store but still exists
-				// in cloud trash until the next sync cycle. The cleanup would see the cloud trash entry
-				// and delete the just-restored item, making it "disappear" from the UI.
-				// Instead, rely on each store's load() function to filter out trash items by ID.
+				// Cleanup Active Stores based on REAL IDs
+				const mileageStoreName = getMileageStoreName(db);
+				const cleanupTx = db.transaction(
+					['trash', 'trips', 'expenses', mileageStoreName],
+					'readwrite'
+				);
+				const allTrash = await cleanupTx.objectStore('trash').getAll();
+				const tripStore = cleanupTx.objectStore('trips');
+				const expenseStore = cleanupTx.objectStore('expenses');
+				const mileageStore = cleanupTx.objectStore(mileageStoreName);
+				for (const trashItem of allTrash) {
+					const realId = getRealId(trashItem.id);
+					const rt = trashItem.recordType;
+
+					if (rt === 'trip') {
+						if (await tripStore.get(realId)) await tripStore.delete(realId);
+					} else if (rt === 'expense') {
+						if (await expenseStore.get(realId)) await expenseStore.delete(realId);
+					} else if (rt === 'mileage') {
+						if (await mileageStore.get(realId)) await mileageStore.delete(realId);
+					}
+				}
+				await cleanupTx.done;
 
 				await this.load(userId, type);
 			} catch (err) {

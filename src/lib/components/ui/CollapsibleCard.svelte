@@ -17,8 +17,7 @@
 		children?: Snippet;
 	} = $props();
 
-	// [!code fix] Use crypto.randomUUID() for secure unique ID
-	let contentId = `collapsible-${crypto.randomUUID().slice(0, 8)}`;
+	let contentId = `collapsible-${Math.random().toString(36).slice(2, 9)}`;
 
 	onMount(() => {
 		if (storageKey && typeof localStorage !== 'undefined') {

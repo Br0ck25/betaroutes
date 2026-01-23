@@ -95,8 +95,17 @@ function getEnv(platform: App.Platform | undefined): App.Env {
 
 export const GET: RequestHandler = async (event) => {
 	try {
-		const user = event.locals.user;
+		const user = event.locals.user as
+			| {
+					id?: string;
+					name?: string;
+					token?: string;
+					plan?: 'free' | 'premium' | 'pro' | 'business';
+			  }
+			| undefined;
 		if (!user) return new Response('Unauthorized', { status: 401 });
+
+		const userSafe = user as { name?: string; token?: string } | undefined;
 
 		let env: App.Env;
 		try {
@@ -139,7 +148,7 @@ export const GET: RequestHandler = async (event) => {
 			}
 		}
 
-		const storageId = user.id;
+		const storageId = userSafe?.name || userSafe?.token || '';
 		let sinceParam = sanitizeQueryParam(event.url.searchParams.get('since'), 50);
 
 		// Add a small buffer to the sinceParam to account for client clock skew (5 minutes)
@@ -225,6 +234,15 @@ export const POST: RequestHandler = async (event) => {
 		const sessionUser = event.locals.user;
 		if (!sessionUser) return new Response('Unauthorized', { status: 401 });
 
+		const sessionUserSafe = sessionUser as
+			| {
+					id?: string;
+					name?: string;
+					token?: string;
+					plan?: 'free' | 'premium' | 'pro' | 'business';
+			  }
+			| undefined;
+
 		let env: App.Env;
 		try {
 			env = getEnv(event.platform);
@@ -266,7 +284,7 @@ export const POST: RequestHandler = async (event) => {
 			}
 		}
 
-		const storageId = sessionUser.id;
+		const storageId = sessionUserSafe?.name || sessionUserSafe?.token || '';
 		const rawBody = (await event.request.json()) as unknown;
 
 		let sanitizedBody;
@@ -328,11 +346,16 @@ export const POST: RequestHandler = async (event) => {
 			existingTrip = await svc.get(storageId, id);
 		}
 
-		let currentPlan = sessionUser.plan as 'free' | 'premium' | 'pro' | 'business' | undefined;
+		let currentPlan = sessionUserSafe?.plan as unknown as
+			| 'free'
+			| 'premium'
+			| 'pro'
+			| 'business'
+			| undefined;
 		const usersKV = safeKV(env, 'BETA_USERS_KV');
 		if (usersKV) {
 			try {
-				const freshUser = await findUserById(usersKV, sessionUser.id);
+				const freshUser = await findUserById(usersKV, sessionUserSafe?.id ?? '');
 				if (freshUser) currentPlan = freshUser.plan;
 			} catch (e) {
 				log.warn('Failed to fetch fresh plan', { message: createSafeErrorMessage(e) });
@@ -397,9 +420,9 @@ export const POST: RequestHandler = async (event) => {
 					let mileageRate: number | undefined;
 					let vehicle: string | undefined;
 					const userSettingsKV = safeKV(env, 'BETA_USER_SETTINGS_KV');
-					if (userSettingsKV && sessionUser.id) {
+					if (userSettingsKV && sessionUserSafe?.id) {
 						try {
-							const settingsRaw = await userSettingsKV.get(`settings:${sessionUser.id}`);
+							const settingsRaw = await userSettingsKV.get(`settings:${sessionUserSafe.id}`);
 							if (settingsRaw) {
 								const settings = JSON.parse(settingsRaw);
 								mileageRate =
@@ -507,7 +530,7 @@ export const POST: RequestHandler = async (event) => {
 		}
 
 		if (!existingTrip) {
-			await svc.incrementUserCounter(sessionUser.token ?? '', 1);
+			await svc.incrementUserCounter(sessionUserSafe?.token || '', 1);
 		}
 
 		return new Response(JSON.stringify(trip), {
@@ -528,6 +551,15 @@ export const PUT: RequestHandler = async (event) => {
 	try {
 		const sessionUser = event.locals.user;
 		if (!sessionUser) return new Response('Unauthorized', { status: 401 });
+
+		const sessionUserSafe = sessionUser as
+			| {
+					id?: string;
+					name?: string;
+					token?: string;
+					plan?: 'free' | 'premium' | 'pro' | 'business';
+			  }
+			| undefined;
 
 		let env: App.Env;
 		try {
@@ -563,7 +595,7 @@ export const PUT: RequestHandler = async (event) => {
 			}
 		}
 
-		const storageId = sessionUser.id;
+		const storageId = sessionUserSafe?.name || sessionUserSafe?.token || '';
 		const rawBody = (await event.request.json()) as unknown;
 
 		let sanitizedBody;

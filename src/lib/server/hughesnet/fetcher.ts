@@ -20,10 +20,7 @@ export class HughesNetFetcher {
 	constructor(hardLimit: number = HARD_REQUEST_LIMIT, softLimit: number = SOFT_REQUEST_LIMIT) {
 		this.hardLimit = hardLimit;
 		this.softLimit = softLimit;
-		// [!code fix] Use crypto for secure random selection
-		const randomBytes = new Uint32Array(1);
-		crypto.getRandomValues(randomBytes);
-		this.userAgent = USER_AGENTS[randomBytes[0]! % USER_AGENTS.length]!;
+		this.userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)]!;
 	}
 
 	resetCount() {

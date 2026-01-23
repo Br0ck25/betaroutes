@@ -8,13 +8,13 @@ declare global {
 			user: {
 				id: string;
 				token: string;
-				plan: 'free' | 'premium' | 'pro' | 'business';
+				plan: string;
 				tripsThisMonth: number;
 				maxTrips: number;
 				resetDate: string;
 				name?: string;
 				email?: string;
-				stripeCustomerId?: string;
+				stripeCustomerId?: string; // [!code ++] Add this line
 			} | null;
 		}
 

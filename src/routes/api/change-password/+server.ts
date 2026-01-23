@@ -54,21 +54,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	// 4. Hash New Password
 	const newHash = await hashPassword(newPassword);
 
-	// 5. Update in KV with incremented sessionVersion
-	// SECURITY: sessionVersion is used to invalidate all sessions on password change
-	const currentVersion = (fullUser as any).sessionVersion || 0;
-	const newVersion = currentVersion + 1;
-
+	// 5. Update in KV
 	await updatePasswordHash(usersKV, fullUser, newHash);
-
-	// Also update the sessionVersion on the user record
-	const updatedUser = {
-		...fullUser,
-		password: newHash,
-		sessionVersion: newVersion,
-		updatedAt: new Date().toISOString()
-	};
-	await usersKV.put(`user:${fullUser.id}`, JSON.stringify(updatedUser));
 
 	// [!code fix] SECURITY (Issue #10): Invalidate all sessions after password change
 	const sessionsKV = safeKV(env, 'BETA_SESSIONS_KV');
@@ -95,20 +82,6 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 				await sessionsKV.put(activeSessionsKey, JSON.stringify([currentSessionId]));
 			} catch (err) {
 				log.error('[ChangePassword] Failed to invalidate sessions', { error: String(err) });
-			}
-		}
-
-		// Update current session with new sessionVersion
-		if (currentSessionId) {
-			const currentSessionData = await sessionsKV.get(currentSessionId);
-			if (currentSessionData) {
-				try {
-					const sessionObj = JSON.parse(currentSessionData);
-					sessionObj.sessionVersion = newVersion;
-					await sessionsKV.put(currentSessionId, JSON.stringify(sessionObj));
-				} catch {
-					// Ignore parse errors
-				}
 			}
 		}
 	}

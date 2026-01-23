@@ -213,22 +213,13 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 
 /**
  * Helper: Fan-out Cache Logic
- * SECURITY: Only cache verified Google API results, never user-provided inputs.
- * Results are cached by prefix for efficient lookup.
- * NOTE: This caches Google's verified place data, not arbitrary user input.
+ * Caches results into multiple prefix buckets (2..10 chars)
  */
 async function fanOutCache(kv: any, results: any[]) {
-	// Only cache results that came directly from Google API (verified data)
-	const verifiedResults = results.filter(
-		(r) => r.source === 'google_proxy' && r.place_id && r.formatted_address
-	);
-
-	if (verifiedResults.length === 0) return;
-
 	// 1. Group new items by their potential prefixes
 	const prefixMap = new Map<string, any[]>();
 
-	for (const result of verifiedResults) {
+	for (const result of results) {
 		const address = result.formatted_address || result.name || '';
 		const normalized = address.toLowerCase().replace(/\s+/g, '');
 
@@ -268,8 +259,7 @@ async function fanOutCache(kv: any, results: any[]) {
 
 /**
  * POST Handler
- * Caches a user selection to user-specific storage only.
- * SECURITY: User selections are stored per-user to prevent cache poisoning.
+ * Caches a user selection to the KV store.
  */
 export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
@@ -297,8 +287,6 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 
 		if (!placesKV || !rawPlace) return json({ success: false });
 
-		const userId = (locals.user as any).id;
-
 		const place = {
 			formatted_address: sanitizeString(rawPlace.formatted_address, 500),
 			name: sanitizeString(rawPlace.name, 200),
@@ -309,23 +297,23 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		};
 
 		const keyText = place.formatted_address || place.name;
-		// SECURITY: Use user-scoped key to prevent cache poisoning
-		const userScopedKey = `user:${userId}:place:${await generatePlaceKey(keyText)}`;
+		const key = await generatePlaceKey(keyText);
 
 		await placesKV.put(
-			userScopedKey,
+			key,
 			JSON.stringify({
 				...place,
 				cachedAt: new Date().toISOString(),
 				source: 'autocomplete_selection',
-				contributedBy: userId
+				contributedBy: (locals.user as any).id
 			})
 		);
 		// Log the place key for debugging/verification
-		log.info('[Autocomplete] Cached user place detail', { key: userScopedKey, userId });
+		log.info('[Autocomplete] Cached place detail', { key, keyText });
 
-		// Also record this selection in per-user recent list (non-blocking)
+		// Also record this selection in PLACES KV (bypass PlacesIndexDO) — keep a per-user recent list (non-blocking)
 		try {
+			const userId = (locals.user as any).id;
 			const recentKey = `recent:${userId}`;
 			void (async () => {
 				try {

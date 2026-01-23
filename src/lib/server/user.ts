@@ -2,11 +2,12 @@
 
 /**
  * Normalize a user object into a consistent storage id used for KV keys.
- * SECURITY: Strictly return only the user's unique ID.
- * Never fallback to name or token - this prevents account takeover vulnerabilities.
+ * Prefer the `name` when available (username), then `id`, then `token`.
+ * This ensures KV keys are always based on the human-readable username.
  */
 export function getStorageId(
 	user: { id?: string; name?: string; token?: string } | undefined
 ): string {
-	return user?.id || '';
+	if (!user) return '';
+	return user.name || user.id || user.token || '';
 }

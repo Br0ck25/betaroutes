@@ -145,16 +145,49 @@ export const POST: RequestHandler = async ({ request, platform }) => {
  */
 async function downgradeUserByCustomerId(kv: KVNamespace, stripeCustomerId: string) {
 	try {
-		// [!code fix] Issue #47: Only use fast mapping lookup, no fallback scan
-		const mappedUserId = await kv.get(`stripe:customer:${stripeCustomerId}`);
-		if (mappedUserId) {
-			await updateUserPlan(kv, String(mappedUserId), 'free');
-			log.info('Downgraded user via mapping', { userId: String(mappedUserId) });
-			return;
+		// First, try the fast lookup mapping -> avoids scanning entire KV
+		try {
+			const mappedUserId = await kv.get(`stripe:customer:${stripeCustomerId}`);
+			if (mappedUserId) {
+				await updateUserPlan(kv, String(mappedUserId), 'free');
+				log.info('Downgraded user via mapping', { userId: String(mappedUserId) });
+				return;
+			}
+		} catch (mapErr: unknown) {
+			log.warn('Failed to read stripe customer mapping, falling back to scan', {
+				message: createSafeErrorMessage(mapErr)
+			});
 		}
 
-		// If no mapping exists, log and exit - don't scan the entire DB
-		log.warn('No customer mapping found for stripeCustomerId', { stripeCustomerId });
+		// Fallback: Search through user records if mapping not found
+		const prefix = 'user:';
+		let cursor: string | undefined = undefined;
+
+		do {
+			type KVListResult = {
+				keys: Array<{ name: string }>;
+				list_complete?: boolean;
+				cursor?: string;
+			};
+			const list: KVListResult = (await kv.list({ prefix, cursor })) as unknown as KVListResult;
+
+			for (const key of list.keys) {
+				const raw = await kv.get(key.name);
+				if (raw) {
+					const user = JSON.parse(raw) as Record<string, unknown>;
+					if (user['stripeCustomerId'] === stripeCustomerId) {
+						// Found the user - downgrade them
+						await updateUserPlan(kv, String(user['id']), 'free');
+						log.info('Downgraded user', { userId: user['id'], email: user['email'] });
+						return;
+					}
+				}
+			}
+
+			cursor = list.list_complete ? undefined : list.cursor;
+		} while (cursor);
+
+		log.warn('No user found with stripeCustomerId', { stripeCustomerId });
 	} catch (err: unknown) {
 		log.error('Error downgrading user', { message: createSafeErrorMessage(err) });
 		throw err;

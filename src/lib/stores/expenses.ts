@@ -23,13 +23,6 @@ function createExpensesStore() {
 		async hydrate(data: ExpenseRecord[], _userId?: string) {
 			// parameter intentionally unused in this implementation — keep for API parity
 			void _userId;
-
-			// Guard against server-side execution (IndexedDB not available)
-			if (typeof window === 'undefined') {
-				set(data);
-				return;
-			}
-
 			try {
 				const db = await getDB();
 
@@ -268,24 +261,9 @@ function createExpensesStore() {
 				}
 
 				if (rec.userId !== userId) {
-					// [!code fix] Also allow delete if the user's name matches (legacy support)
-					// This handles the case where local IndexedDB has old username-based userId
-					// but the caller is passing the new UUID-based userId
-					const { get } = await import('svelte/store');
-					const { user: userStore } = await import('$lib/stores/auth');
-					const currentUser = get(userStore) as { id?: string; name?: string } | null;
-
-					const isOwner =
-						rec.userId === currentUser?.id ||
-						rec.userId === currentUser?.name ||
-						userId === currentUser?.id ||
-						userId === currentUser?.name;
-
-					if (!isOwner) {
-						await tx.done;
-						this.load(userId);
-						throw new Error('Unauthorized');
-					}
+					await tx.done;
+					this.load(userId);
+					throw new Error('Unauthorized');
 				}
 
 				const now = new Date();

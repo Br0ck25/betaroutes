@@ -7,7 +7,6 @@ import { log } from '$lib/server/log';
 export interface TrashRecord {
 	id: string;
 	userId: string;
-	tripId?: string; // Link to parent trip (if any)
 	metadata: {
 		deletedAt: string;
 		deletedBy: string;
@@ -40,50 +39,7 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 		return tripIndexDO.get(id);
 	};
 
-	// Helper to fetch all expenses from KV for a given prefix (including tombstones for migration)
-	async function fetchFromKV(prefix: string, includeTombstones = false): Promise<ExpenseRecord[]> {
-		const all: ExpenseRecord[] = [];
-		let list = await kv.list({ prefix });
-		let keys = list.keys;
-
-		while (!list.list_complete && list.cursor) {
-			list = await kv.list({ prefix, cursor: list.cursor });
-			keys = keys.concat(list.keys);
-		}
-
-		for (const key of keys) {
-			const raw = await kv.get(key.name);
-			if (!raw) continue;
-			try {
-				const parsed = JSON.parse(raw) as Record<string, unknown>;
-				if (parsed) {
-					if (parsed['deleted'] && parsed['backup']) {
-						if (includeTombstones) {
-							// For migration: return the full tombstone with deleted flag
-							all.push(parsed as ExpenseRecord);
-						} else {
-							all.push(parsed['backup'] as ExpenseRecord);
-						}
-					} else if (!parsed['deleted']) {
-						all.push(parsed as ExpenseRecord);
-					} else if (parsed['deleted'] && includeTombstones) {
-						// Tombstone without backup - still include for migration
-						all.push(parsed as ExpenseRecord);
-					}
-				}
-			} catch {
-				// Skip corrupt entries
-			}
-		}
-		return all;
-	}
-
 	return {
-		/**
-		 * List expense records for a user.
-		 * @param userId - Primary storage ID (UUID)
-		 * @param since - Optional ISO date for delta sync
-		 */
 		async list(userId: string, since?: string): Promise<ExpenseRecord[]> {
 			const stub = getIndexStub(userId);
 			const prefix = `expense:${userId}:`;
@@ -103,23 +59,39 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				const kvCheck = await kv.list({ prefix, limit: 1 });
 
 				if (kvCheck.keys.length > 0) {
-					// Check if we recently did a repair (debounce)
-					const repairKey = `meta:expense_repair:${userId}`;
-					const lastRepair = await kv.get(repairKey);
-					if (lastRepair) {
-						log.info(`[ExpenseService] Skipping repair for ${userId} - throttled (recent repair)`);
-						// Return empty to avoid DoS; client will retry later
-						return [];
-					}
-
-					// Mark that we're repairing (expires in 60 seconds)
-					await kv.put(repairKey, new Date().toISOString(), { expirationTtl: 60 });
-
 					log.info(
 						`[ExpenseService] Detected desync for ${userId} (KV has data, Index empty). repairing...`
 					);
 
-					const allExpenses = await fetchFromKV(prefix);
+					const allExpenses: ExpenseRecord[] = [];
+					let list = await kv.list({ prefix });
+					let keys = list.keys;
+
+					while (!list.list_complete && list.cursor) {
+						list = await kv.list({ prefix, cursor: list.cursor });
+						keys = keys.concat(list.keys);
+					}
+
+					let migratedCount = 0;
+					let skippedTombstones = 0;
+					for (const key of keys) {
+						const raw = await kv.get(key.name);
+						if (!raw) continue;
+						const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+						if (parsed && parsed['deleted']) {
+							if (parsed['backup']) {
+								allExpenses.push(parsed['backup'] as ExpenseRecord);
+								migratedCount++;
+							} else {
+								skippedTombstones++;
+							}
+							continue;
+						}
+
+						allExpenses.push(parsed as ExpenseRecord);
+						migratedCount++;
+					}
 					if (allExpenses.length > 0) {
 						await stub.fetch(`${DO_ORIGIN}/expenses/migrate`, {
 							method: 'POST',
@@ -127,7 +99,9 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 						});
 
 						expenses = allExpenses;
-						log.info(`[ExpenseService] Migrated ${allExpenses.length} items`);
+						log.info(
+							`[ExpenseService] Migrated ${migratedCount} items (${skippedTombstones} tombstones skipped)`
+						);
 					}
 				}
 			}
@@ -135,20 +109,12 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			// Delta Sync Logic: Return everything (including tombstones) that changed
 			if (since) {
 				const sinceDate = new Date(since);
-				const filtered = expenses.filter((e) => new Date(e.updatedAt || e.createdAt) > sinceDate);
-				log.info(
-					`[ExpenseService] list() delta sync returning ${filtered.length} of ${expenses.length} items`
-				);
-				return filtered;
+				return expenses.filter((e) => new Date(e.updatedAt || e.createdAt) > sinceDate);
 			}
 
-			// Full List Logic: MUST filter out deleted items
-			const deletedCount = expenses.filter((e) => e.deleted).length;
-			const activeItems = expenses.filter((e) => !e.deleted);
-			log.info(
-				`[ExpenseService] list() returning ${activeItems.length} active items (${deletedCount} deleted filtered out)`
-			);
-			return activeItems;
+			// [!code fix] Full List Logic: MUST filter out deleted items
+			// This ensures 'hydrate' sees items missing and removes them locally
+			return expenses.filter((e) => !e.deleted);
 		},
 
 		async get(userId: string, id: string) {
@@ -201,24 +167,14 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			}
 		},
 
-		async delete(userId: string, id: string, options?: { cascadeDeleted?: boolean }) {
-			log.info(`[ExpenseService] delete() called`, {
-				userId,
-				id,
-				cascadeDeleted: options?.cascadeDeleted
-			});
+		async delete(userId: string, id: string) {
 			const stub = getIndexStub(userId);
 
 			// We need to fetch from KV directly to ensure we get the latest data for backup
+			// (even if DO is slightly behind)
 			const key = `expense:${userId}:${id}`;
-			log.info(`[ExpenseService] Checking key: ${key}`);
 			const raw = await kv.get(key);
-
-			if (!raw) {
-				log.warn(`[ExpenseService] delete() - Item not found in KV`, { key });
-				return;
-			}
-			log.info(`[ExpenseService] Found item to delete, creating tombstone`);
+			if (!raw) return;
 
 			const item = JSON.parse(raw) as Record<string, unknown>;
 
@@ -234,25 +190,22 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 
 			const tombstone = {
 				id: (item['id'] as string) || id,
-				userId,
-				tripId: item['tripId'] as string | undefined, // Preserve tripId for cascade restore
+				userId: (item['userId'] as string) || userId,
 				deleted: true,
 				deletedAt: now.toISOString(),
 				deletedBy: userId,
-				cascadeDeleted: options?.cascadeDeleted || false, // Mark if cascade deleted with trip
 				metadata,
 				backup: item,
 				updatedAt: now.toISOString(),
 				createdAt: (item['createdAt'] as string) || ''
 			};
 
-			// 1. Write tombstone to KV
+			// 1. Update KV with tombstone
 			await kv.put(key, JSON.stringify(tombstone), {
 				expirationTtl: RETENTION.THIRTY_DAYS
 			});
-			log.info(`[ExpenseService] Wrote tombstone to: ${key}`);
 
-			// 2. Update DO with tombstone (PUT) instead of deleting
+			// 2. [!code fix] Update DO with tombstone (PUT) instead of deleting
 			// This is CRITICAL for sync to work. Devices need to download this record
 			// to know it has been deleted.
 			await stub.fetch(`${DO_ORIGIN}/expenses/put`, {
@@ -262,30 +215,20 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 		},
 
 		async listTrash(userId: string) {
-			log.info(`[ExpenseService] listTrash() called`, { userId });
-			const out: TrashRecord[] = [];
 			const prefix = `expense:${userId}:`;
-
-			log.info(`[ExpenseService] listTrash scanning prefix: ${prefix}`);
 			let list = await kv.list({ prefix });
 			let keys = list.keys;
 			while (!list.list_complete && list.cursor) {
 				list = await kv.list({ prefix, cursor: list.cursor });
 				keys = keys.concat(list.keys);
 			}
-			log.info(`[ExpenseService] listTrash found ${keys.length} keys under ${prefix}`);
 
-			let tombstoneCount = 0;
+			const out: TrashRecord[] = [];
 			for (const k of keys) {
 				const raw = await kv.get(k.name);
 				if (!raw) continue;
 				const parsed = JSON.parse(raw) as Record<string, unknown>;
 				if (!parsed || !parsed['deleted']) continue;
-
-				// Skip cascade-deleted items (deleted with parent trip) - they don't show in trash UI
-				if (parsed['cascadeDeleted']) continue;
-
-				tombstoneCount++;
 
 				const id = (parsed['id'] as string) || String(k.name.split(':').pop() || '');
 				const uid = (parsed['userId'] as string) || String(k.name.split(':')[1] || '');
@@ -305,7 +248,6 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 				out.push({
 					id,
 					userId: uid,
-					tripId: (parsed['tripId'] as string) || (backup['tripId'] as string | undefined),
 					metadata: metadata as TrashRecord['metadata'],
 					recordType: 'expense',
 					category: (backup['category'] as string) || undefined,
@@ -317,9 +259,7 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 					date: (backup['date'] as string) || undefined
 				});
 			}
-			log.info(`[ExpenseService] listTrash found ${tombstoneCount} tombstones under ${prefix}`);
 
-			log.info(`[ExpenseService] listTrash returning ${out.length} tombstones`);
 			out.sort((a, b) => (b.metadata?.deletedAt || '').localeCompare(a.metadata?.deletedAt || ''));
 			return out;
 		},
