@@ -5,7 +5,7 @@ import { makeMileageService, type MileageRecord } from '$lib/server/mileageServi
 import type { TripRecord } from '$lib/server/tripService';
 import { log } from '$lib/server/log';
 import { safeDO, safeKV } from '$lib/server/env';
-import { getStorageId } from '$lib/server/user';
+import { getStorageId, getLegacyStorageId } from '$lib/server/user';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
 import { dev } from '$app/environment';
@@ -92,8 +92,11 @@ export const GET: RequestHandler = async (event) => {
 
 		// SECURITY FIX (P0 Item #1): Use getStorageId() to get user UUID, never name/token
 		const storageId = getStorageId(user);
+		// MIGRATION COMPATIBILITY: Also get legacy username for fallback lookups
+		const legacyStorageId = getLegacyStorageId(user);
 
-		const trip = await svc.get(storageId, id);
+		// Try UUID key first, then legacy username key
+		const trip = await svc.get(storageId, id, legacyStorageId);
 
 		if (!trip) {
 			return new Response('Not Found', { status: 404 });
@@ -159,9 +162,11 @@ export const PUT: RequestHandler = async (event) => {
 
 		// SECURITY FIX (P0 Item #1): Use getStorageId() to get user UUID, never name/token
 		const storageId = getStorageId(user);
+		// MIGRATION COMPATIBILITY: Also get legacy username for fallback lookups
+		const legacyStorageId = getLegacyStorageId(user);
 
-		// Verify existing ownership
-		const existing = await svc.get(storageId, id);
+		// Verify existing ownership (try UUID key first, then legacy username key)
+		const existing = await svc.get(storageId, id, legacyStorageId);
 		if (!existing) {
 			return new Response('Not Found', { status: 404 });
 		}
@@ -266,9 +271,11 @@ export const DELETE: RequestHandler = async (event) => {
 
 		// SECURITY FIX (P0 Item #1): Use getStorageId() to get user UUID, never name/token
 		const storageId = getStorageId(user);
+		// MIGRATION COMPATIBILITY: Also get legacy username for fallback lookups
+		const legacyStorageId = getLegacyStorageId(user);
 
-		// Check if trip exists
-		const existing = await svc.get(storageId, id);
+		// Check if trip exists (try UUID key first, then legacy username key)
+		const existing = await svc.get(storageId, id, legacyStorageId);
 		if (!existing) {
 			return new Response(JSON.stringify({ error: 'Trip not found' }), {
 				status: 404,
@@ -284,8 +291,8 @@ export const DELETE: RequestHandler = async (event) => {
 			});
 		}
 
-		// Perform soft delete
-		await svc.delete(storageId, id);
+		// Perform soft delete (pass legacyStorageId for fallback key lookup)
+		await svc.delete(storageId, id, legacyStorageId);
 
 		// --- Cascade delete: Delete linked mileage log ---
 		try {
@@ -295,14 +302,25 @@ export const DELETE: RequestHandler = async (event) => {
 					mileageKV as unknown as KVNamespace,
 					tripIndexDO as unknown as DurableObjectNamespace
 				);
-				// Find mileage logs linked to this trip
-				// Mileage logs can be linked by tripId OR by having the same id as the trip
+				// Find mileage logs linked to this trip (try both UUID and legacy username)
 				const allMileage = await mileageSvc.list(storageId);
+				// Also check legacy key if we have one
+				if (legacyStorageId && legacyStorageId !== storageId) {
+					const legacyMileage = await mileageSvc.list(legacyStorageId);
+					// Merge without duplicates
+					const ids = new Set(allMileage.map((m: MileageRecord) => m.id));
+					for (const m of legacyMileage) {
+						if (!ids.has(m.id)) {
+							allMileage.push(m);
+						}
+					}
+				}
 				const linkedMileage = allMileage.filter(
 					(m: MileageRecord) => m.tripId === id || m.id === id
 				);
 				for (const m of linkedMileage) {
-					await mileageSvc.delete(storageId, m.id);
+					// Pass legacyStorageId for fallback key lookup
+					await mileageSvc.delete(storageId, m.id, legacyStorageId);
 					log.info('Cascade deleted mileage log for trip', { tripId: id, mileageId: m.id });
 				}
 			}

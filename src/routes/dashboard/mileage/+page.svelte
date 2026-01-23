@@ -215,11 +215,16 @@
 		}
 
 		const currentUser = $page.data['user'] || $user;
+		// MIGRATION FIX: Prefer user.id (UUID) for new data format
 		const userId =
-			currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
+			(currentUser as any)?.id ||
+			currentUser?.name ||
+			currentUser?.token ||
+			localStorage.getItem('offline_user_id');
+		const userName = currentUser?.name || '';
 		if (userId) {
 			try {
-				await mileage.deleteMileage(id, String(userId));
+				await mileage.deleteMileage(id, String(userId), userName);
 				toasts.success('Log moved to trash');
 				if (selectedExpenses.has(id)) {
 					selectedExpenses.delete(id);
@@ -266,15 +271,20 @@
 		)
 			return;
 		const currentUser = $page.data['user'] || $user;
+		// MIGRATION FIX: Prefer user.id (UUID) for new data format
 		const userId =
-			currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
+			(currentUser as any)?.id ||
+			currentUser?.name ||
+			currentUser?.token ||
+			localStorage.getItem('offline_user_id');
+		const userName = currentUser?.name || '';
 
 		if (!userId) return;
 
 		let successCount = 0;
 		for (const id of manualExpenses) {
 			try {
-				await mileage.deleteMileage(id, String(userId));
+				await mileage.deleteMileage(id, String(userId), userName);
 				successCount++;
 			} catch (err) {
 				console.error(`Failed to delete ${id}`, err);

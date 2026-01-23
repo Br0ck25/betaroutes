@@ -1,5 +1,30 @@
 // src/lib/utils/keys.ts
 
+/**
+ * Check if a record belongs to the current user.
+ *
+ * MIGRATION COMPATIBILITY: During the migration period, legacy records may have
+ * `userId` set to the username (e.g., "James") while the session has the UUID.
+ * This function checks ownership against BOTH the UUID and the username.
+ *
+ * @param recordUserId - The userId stored on the record (may be UUID or username)
+ * @param sessionUserId - The user's UUID from the session
+ * @param sessionUserName - The user's username/name from the session (optional)
+ * @returns true if the record belongs to the user
+ */
+export function isRecordOwner(
+	recordUserId: string | undefined,
+	sessionUserId: string,
+	sessionUserName?: string
+): boolean {
+	if (!recordUserId) return false;
+	// Match by UUID (new format)
+	if (recordUserId === sessionUserId) return true;
+	// Match by username (legacy format) - only if username is provided
+	if (sessionUserName && recordUserId === sessionUserName) return true;
+	return false;
+}
+
 export function normalizeSearchString(str: string): string {
 	if (!str) return '';
 	return str.toLowerCase().trim().replace(/\s+/g, ' ');

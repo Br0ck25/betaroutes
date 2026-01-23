@@ -5,6 +5,7 @@ import { syncManager } from '$lib/sync/syncManager';
 import type { TrashRecord } from '$lib/db/types';
 import { user as authUser } from '$lib/stores/auth';
 import type { User } from '$lib/types';
+import { isRecordOwner } from '$lib/utils/keys';
 
 function createTrashStore() {
 	const { subscribe, set, update } = writable<TrashRecord[]>([]);
@@ -93,7 +94,7 @@ function createTrashStore() {
 			}
 		},
 
-		async restore(uniqueId: string, userId: string, targetType?: string) {
+		async restore(uniqueId: string, userId: string, targetType?: string, userName?: string) {
 			try {
 				const db = await getDB();
 
@@ -103,7 +104,8 @@ function createTrashStore() {
 				await txRead.done;
 
 				if (!stored) throw new Error('Item not found in trash');
-				if (stored.userId !== userId) throw new Error('Unauthorized');
+				// MIGRATION FIX: Check ownership against both userId (UUID) and userName (legacy)
+				if (!isRecordOwner(stored.userId, userId, userName)) throw new Error('Unauthorized');
 
 				const recordTypes: string[] = Array.from(
 					new Set(

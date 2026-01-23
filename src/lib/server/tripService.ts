@@ -341,9 +341,31 @@ export function makeTripService(
 			}
 		},
 
-		async get(userId: string, tripId: string) {
+		/**
+		 * Get a single trip by ID.
+		 * MIGRATION COMPATIBILITY: Tries UUID-based key first, then legacy username-based key.
+		 * @param userId - The storage ID (UUID from getStorageId)
+		 * @param tripId - The trip ID
+		 * @param legacyUserId - Optional legacy user ID (username) for fallback lookup
+		 */
+		async get(userId: string, tripId: string, legacyUserId?: string) {
+			// Try new UUID-based key first
 			const key = `trip:${userId}:${tripId}`;
-			const raw = await kv.get(key);
+			let raw = await kv.get(key);
+
+			// If not found and legacyUserId provided, try legacy username-based key
+			if (!raw && legacyUserId && legacyUserId !== userId) {
+				const legacyKey = `trip:${legacyUserId}:${tripId}`;
+				raw = await kv.get(legacyKey);
+				if (raw) {
+					log.info('[TripService] Found trip under legacy key', {
+						tripId,
+						legacyKey,
+						newKey: key
+					});
+				}
+			}
+
 			return raw ? (JSON.parse(raw) as TripRecord) : null;
 		},
 
@@ -390,9 +412,22 @@ export function makeTripService(
 			}
 		},
 
-		async delete(userId: string, tripId: string) {
-			const key = `trip:${userId}:${tripId}`;
-			const raw = await kv.get(key);
+		async delete(userId: string, tripId: string, legacyUserId?: string) {
+			// Try the primary key first
+			let key = `trip:${userId}:${tripId}`;
+			let raw = await kv.get(key);
+			let effectiveUserId = userId;
+
+			// If not found and legacyUserId is provided, try the legacy username-based key
+			if (!raw && legacyUserId && legacyUserId !== userId) {
+				const legacyKey = `trip:${legacyUserId}:${tripId}`;
+				raw = await kv.get(legacyKey);
+				if (raw) {
+					key = legacyKey;
+					effectiveUserId = legacyUserId;
+				}
+			}
+
 			if (!raw) return;
 
 			const trip = JSON.parse(raw);
@@ -424,7 +459,8 @@ export function makeTripService(
 
 			await kv.put(key, JSON.stringify(tombstone), { expirationTtl: RETENTION.THIRTY_DAYS });
 
-			const stub = getIndexStub(userId);
+			// Use effectiveUserId to update the correct DO index (legacy data may be indexed under username)
+			const stub = getIndexStub(effectiveUserId);
 
 			try {
 				const r = await stub.fetch(`${DO_ORIGIN}/put`, {
