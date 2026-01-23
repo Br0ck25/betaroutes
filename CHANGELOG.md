@@ -18,7 +18,17 @@ _None yet._
 
 <!-- New features/components built with Svelte 5 -->
 
-_None yet._
+- **Orphaned Mileage Cleanup Tool** (2026-01-22)
+  - Added `OrphanedMileageCleanup.svelte` component in Settings → Data Cleanup
+  - Detects and removes mileage logs that exist in IndexedDB but not on server
+  - Visual scan results with detailed reporting
+  - One-click cleanup with progress indicator
+
+- **Debug Utilities** (2026-01-22)
+  - Added `debug-helpers.ts` with browser console commands
+  - Exposed as `window.debugGRY` in development mode
+  - Commands: `listOrphanedMileage()`, `clearOrphanedMileage()`, `auditMileageSync()`, etc.
+  - Comprehensive IndexedDB inspection tools
 
 ### Changed (Svelte 4)
 
@@ -30,7 +40,20 @@ _None yet._
 
 <!-- Bug fixes -->
 
-_None yet._
+- **Ghost Mileage Logs** (2026-01-22) 🐛
+  - Fixed persistent "zombie" mileage logs that couldn't be deleted
+  - DELETE endpoint now logs warning when record doesn't exist in KV
+  - Returns 204 status to allow client cleanup even when record is missing
+  - Improved logging for troubleshooting orphaned records
+  - Added utilities to detect and remove orphaned records from IndexedDB
+  - Files changed:
+    - `src/routes/api/mileage/[id]/+server.ts` - Enhanced DELETE handler
+    - `src/lib/utils/cleanup-orphaned-mileage.ts` - New cleanup utility
+    - `src/routes/dashboard/settings/+page.svelte` - Added Data Cleanup section
+  - Documentation:
+    - `docs/ORPHANED_MILEAGE_TROUBLESHOOTING.md` - Comprehensive guide
+    - `docs/ORPHANED_MILEAGE_FIX_SUMMARY.md` - Technical summary
+    - `docs/QUICK_FIX_GHOST_MILEAGE.md` - Quick reference card
 
 ### Security
 
