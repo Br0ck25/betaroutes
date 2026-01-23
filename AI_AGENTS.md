@@ -6,7 +6,7 @@
 
 ---
 
-## ⚠️ Read These First (Mandatory)
+## ⚠️ READ THESE FIRST (MANDATORY)
 
 Before making **ANY** changes, read these documents **in order**:
 
@@ -21,7 +21,7 @@ Before making **ANY** changes, read these documents **in order**:
 
 ---
 
-## 🛑 Stop Conditions (Mandatory)
+## 🛑 STOP CONDITIONS (Mandatory)
 
 **STOP and ask the user before proceeding if:**
 
@@ -32,7 +32,7 @@ Before making **ANY** changes, read these documents **in order**:
 
 2. **New `npm run check` / lint errors after your changes**
    - Your changes would introduce **NEW** errors (TypeScript / Svelte diagnostics / ESLint)
-   - **Do NOT** try to “fix” these errors by making more changes
+   - **DO NOT** try to “fix” these errors by making more changes
    - **STOP**, review your diff, consider reverting, ask the user if the approach is correct
 
 3. **Security impact**
@@ -53,12 +53,12 @@ Before making **ANY** changes, read these documents **in order**:
 
 ---
 
-## ⚠️ Critical Errors to Avoid
+## ⚠️ CRITICAL ERRORS TO AVOID
 
 ### Error Pattern #1: Forgetting `lang="ts"`
 
-**Symptom:** 50+ parse errors like `'<` cannot be applied to types`, `'string' only refers to a type`
-**Cause:** Added TypeScript syntax without`lang="ts"`
+**Symptom:** 50+ parse errors like `'<` cannot be applied to types, `'string'` only refers to a type
+**Cause:** Added TypeScript syntax without `lang="ts"`
 
 ❌ **Wrong:**
 
@@ -80,7 +80,7 @@ Before making **ANY** changes, read these documents **in order**:
 
 ---
 
-### Error Pattern #2: Partial Migration (Svelte 4 + 5 mix)
+### Error Pattern #2: Partial Migration (Svelte 4 + 5 Mix)
 
 **Symptom:** File uses both `export let` **and** `$state()`, errors everywhere
 **Cause:** Attempted to add Svelte 5 features to a Svelte 4 file
@@ -106,7 +106,7 @@ If **NO** to questions 2–3, **stay in the current version**.
 
 ---
 
-### Error Pattern #3: Server routes missing returns
+### Error Pattern #3: Server Routes Missing Returns
 
 **Symptom:** `Not all code paths return a value`, `Type 'undefined' is not assignable to type 'Response'`
 **Cause:** `RequestHandler` does not `return` a `Response` on every path
@@ -142,47 +142,47 @@ export const POST: RequestHandler = async ({ locals }) => {
 
 ---
 
-### Error Pattern #4: Passing possibly undefined values
+### Error Pattern #4: Passing Possibly Undefined Values
 
-**Symptom:** `Object is possibly 'undefined'`, `T | undefined is not assignable`
-**Cause:** Passing array elements or optional values without checking
+**Symptom:** `Object is possibly 'undefined'`, `Operator '<' cannot be applied to types ... and 'undefined'`
+**Cause:** Passing array elements or using optional values in comparisons without checking.
 
 ❌ **Wrong:**
 
 ```ts
-const index = items.indexOf(target);
-const item = items[index]; // could be undefined if index is -1
-doSomething(item);
+// Array Indexing
+const item = items[index]; // Error: index might be -1
+
+// Comparisons
+if (user.age > 18) { ... } // Error: user.age might be undefined
 ```
 
 ✅ **Correct:**
 
 ```ts
-const index = items.indexOf(target);
-
-if (index === -1) {
-	return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
-}
-
+// Array Indexing
+if (index === -1) return;
 const item = items[index]!;
-doSomething(item);
+
+// Comparisons
+if (user.age && user.age > 18) { ... } // Guard added
 ```
 
-**Prevention:** Guard array indexing and optional values before use.
+**Prevention:** Always guard array indexing and optional values before passing to functions or operators.
 
 ---
 
-### Error Pattern #5: Unreachable code
+### Error Pattern #5: Unreachable Code
 
 **Symptom:** `Unreachable code detected`
-**Cause:** Code placed after a `return`
+**Cause:** Code placed after a `return` statement
 
 ❌ **Wrong:**
 
 ```ts
 if (error) {
 	return new Response(JSON.stringify({ error: 'Failed' }), { status: 500 });
-	assignments[idx].stops.push(stop); // unreachable
+	assignments[idx].stops.push(stop); // UNREACHABLE!
 }
 ```
 
@@ -190,25 +190,26 @@ if (error) {
 
 ```ts
 if (error) {
+	console.error('Failed:', error);
 	return new Response(JSON.stringify({ error: 'Failed' }), { status: 500 });
 }
 
-assignments[idx].stops.push(stop);
+assignments[idx].stops.push(stop); // Reachable
 ```
 
-**Prevention:** Never place code after a `return`.
+**Prevention:** Never place code after a `return` statement.
 
 ---
 
-### Error Pattern #6: Unused / speculative state (clean code)
+### Error Pattern #6: Unused / Speculative State (Clean Code)
 
 **Symptom:** `'selectedMileage' is declared but its value is never read`
-**Cause:** Declaring variables/state “just in case” (unused)
+**Cause:** Declaring variables "just in case," or destructuring unused SvelteKit parameters (e.g., `platform`, `url`) in load functions.
 
 ❌ **Wrong:**
 
 ```ts
-let selectedMileage = new Set<string>(); // unused -> check/lint error
+let selectedMileage = new Set<string>(); // Unused -> lint/check error
 ```
 
 ✅ **Correct:**
@@ -218,35 +219,246 @@ let selectedMileage = new Set<string>(); // unused -> check/lint error
 
 **Prevention:** Make the smallest diff possible. Do not add placeholder code.
 
-### Error Pattern #7: Missing Imports & Exports (Lazy Coding)
+---
+
+### Error Pattern #7: Missing Imports & Exports
 
 **Symptom:** `Cannot find name 'createEventDispatcher'`, `declares 'x' locally but it is not exported`
-
-**Cause:** Using standard Svelte functions without importing them, or creating utility functions without making them public.
+**Cause:** Using standard Svelte functions without importing them, or creating utility functions without exporting them.
 
 ❌ **Wrong:**
 
-````typescript
+```ts
 // in utils/dates.ts
-function parseToDate(d) { ... } // Not exported!
+function parseToDate(d) {
+	// ...
+} // Not exported!
 
 // in Component.svelte (Svelte 4)
 const dispatch = createEventDispatcher(); // Not imported!
+```
 
 ✅ **Correct:**
 
+```ts
 // in utils/dates.ts
-export function parseToDate(d) { ... } // Export added
+export function parseToDate(d) {
+	// ...
+} // Exported
 
 // in Component.svelte (Svelte 4)
-import { createEventDispatcher } from 'svelte'; // Import added
+import { createEventDispatcher } from 'svelte';
 const dispatch = createEventDispatcher();
+```
+
+---
+
+### Error Pattern #8: Type & Signature Hallucinations
+
+**Symptom:** `Property 'id' does not exist on type 'User'`, `Expected 3 arguments, but got 6`
+
+**Cause:** Guessing types or utility function signatures instead of reading the definition.
+
+❌ **Wrong:**
+
+```ts
+// Guessing that 'checkRateLimit' takes an IP address and 6 args
+checkRateLimit(kv, userId, ip, 'action', 10, 60);
+
+// Guessing that 'user' has an 'id' field without checking app.d.ts
+const id = locals.user.id;
+```
+
+✅ **Correct:**
+
+```ts
+// Checked actual signature: checkRateLimit(kv, id, action, limit, window)
+checkRateLimit(kv, userId, 'action', 10, 60);
+
+// Checked app.d.ts: User has 'token' but not 'id'?
+// Either update app.d.ts OR use the correct field.
+```
+
+**Prevention:** Never assume a function signature or type definition. Read the source file (`app.d.ts` or the utility file) first.
+
+---
+
+### Error Pattern #9: Incomplete Form Error Handling
+
+**Symptom:** `Property 'email' does not exist on type '{ error: string }'` in a `.svelte` file.
+
+**Cause:** The Svelte page tries to repopulate form fields (`value={form?.email}`), but the server `fail()` return only contains the error message.
+
+❌ **Wrong:**
+
+```ts
+// +page.server.ts
+if (!email) return fail(400, { error: 'Missing email' });
+
+// +page.svelte
+<input value={form?.email} /> // Error! 'email' is undefined on error.
+```
+
+✅ **Correct:**
+
+```ts
+// +page.server.ts
+if (!email) return fail(400, { error: 'Missing email', email }); // Return the data!
+
+// +page.svelte
+<input value={form?.email ?? ''} /> // Works.
+```
+
+**Prevention:** If your UI repopulates fields on error, your server `fail()` must return those fields.
+
+---
+
+## 🛡️ SECURITY ERROR PATTERNS (Audit Remediation)
+
+### Error Pattern #10: Insecure ID Fallback (ATO Risk)
+
+**Symptom:** Vulnerability allowing Account Takeover if `user.id` is missing.
+**Cause:** Falling back to insecure fields (`name`, `token`, `email`) when an ID is undefined.
+
+❌ **Wrong:**
+
+```ts
+// DANGEROUS: If id is missing, it returns the name or token!
+// A user named "admin" could steal the admin account.
+return user?.id || user?.name || user?.token || '';
+```
+
+✅ **Correct:**
+
+```ts
+// STRICT: Only accept the true ID. If missing, fail secure.
+if (!user?.id) throw new Error('User ID missing');
+return user.id;
+```
+
+**Prevention:** Never implement “fallbacks” for identity. It exists, or the request fails.
+
+---
+
+### Error Pattern #11: Mass Assignment (Data Injection)
+
+**Symptom:** Users registering with `{ "role": "admin" }` or overwriting protected fields.
+**Cause:** Spreading `...body` directly into database/KV objects.
+
+❌ **Wrong:**
+
+```ts
+const body = await request.json();
+// DANGEROUS: User can send ANY field (e.g., is_admin: true)
+const newUser = { ...body, id: crypto.randomUUID() };
+```
+
+✅ **Correct:**
+
+```ts
+const body = await request.json();
+// STRICT: Only extract exactly what is allowed
+const newUser = {
+	id: crypto.randomUUID(),
+	email: body.email,
+	name: body.name
+	// Explicitly do NOT copy other fields
+};
+```
+
+**Prevention:** Never use spread syntax (`...`) on user input for DB writes. Destructure explicitly.
+
+---
+
+### Error Pattern #12: Global Data Leaks (Cache Poisoning)
+
+**Symptom:** User A sees User B’s autocomplete data or recent trips.
+**Cause:** Writing user-specific data to a global KV key or variable.
+
+❌ **Wrong:**
+
+```ts
+// DANGEROUS: Shared across ALL users
+await env.PLACES_KV.put('recent_places', JSON.stringify(places));
+```
+
+✅ **Correct:**
+
+```ts
+// STRICT: Key MUST be scoped to the specific user
+await env.PLACES_KV.put(`places:${userId}`, JSON.stringify(places));
+```
+
+**Prevention:** Every KV write MUST include `${userId}` in the key.
+
+---
+
+### Error Pattern #13: Hardcoded Secrets
+
+**Symptom:** Secrets committed to `wrangler.toml` or code.
+**Cause:** Convenience during development.
+
+❌ **Wrong:**
+
+```ts
+const STRIPE_KEY = 'sk_live_...'; // Committed to git!
+// OR in wrangler.toml:
+// [vars]
+// API_KEY = "secret"
+```
+
+✅ **Correct:**
+
+```ts
+// Code:
+const key = env.STRIPE_KEY; // Loaded from environment
+
+// Infrastructure:
+// Run: wrangler secret put STRIPE_KEY
+```
+
+**Prevention:** If it looks like a key/token, it must be an env variable.
+
+---
+
+### Error Pattern #14: Creating "Debug" Backdoors
+
+**Symptom:** Routes like `/api/debug/wipe-db` or `/debug/seed`.
+**Cause:** Creating “helper” endpoints for testing that bypass security.
+
+❌ **Wrong:**
+
+```ts
+// src/routes/api/debug/+server.ts
+export const POST = async ({ platform }) => {
+	await platform.env.KV.empty(); // DATA DESTRUCTION RISK
+	return json({ success: true });
+};
+```
+
+✅ **Correct:**
+
+- Do not create debug routes.
+- Use unit tests or local scripts for seeding data.
+- If testing is needed, use `vitest` with mock data, not live endpoints.
+
+**Prevention:** The word **"debug"** (or **"test"**) in a route path is strictly forbidden.
+
+---
+
+## System Prompt Additions (Paste-into-Chat Guardrails)
+
+Add these lines to your chat/system prompt under **STRICT NON-NEGOTIABLES**:
+
+1. **DATA ISOLATION:** Every KV write MUST include `userId` in the key. No global cache.
+2. **NO BACKDOORS:** Do not create `debug/*` or `test/*` routes.
+3. **EXPLICIT ASSIGNMENT:** Never use `...body` for DB writes. Destructure fields manually.
 
 ---
 
 ## Error Handling & Logging (Mandatory)
 
-### Server-side code (`+server.ts`, API routes, server utilities)
+### 1. Server-Side Code (`+server.ts`, API routes, server utilities)
 
 **Rule:** You **MUST** log errors. Never swallow exceptions silently.
 
@@ -259,7 +471,7 @@ try {
 	// ESLint: unused variable + silent failure
 	return fallbackValue;
 }
-````
+```
 
 ✅ **Always log errors in server code (do not log sensitive data):**
 
@@ -285,14 +497,14 @@ try {
 
 ---
 
-### Client-Side & Intentional Silence
+### 2. Client-Side & Intentional Silence
 
 **Rule:** If an error variable is genuinely not needed (e.g., in a UI utility or optional parsing), handle it cleanly.
 
 **A. Catch Blocks (Preferred):**
 Use **Optional Catch Binding** (`catch {}`) when the error object is unused.
 
-```typescript
+```ts
 // ✅ PREFERRED (Client-side only)
 try {
 	JSON.parse(userInput);
@@ -305,71 +517,23 @@ try {
 **B. Function Parameters:**
 Use the underscore prefix (`_`) for unused arguments.
 
-```typescript
+```ts
 items.map((_item, index) => index);
 ```
 
-**Note:** Ensure ESLint is configured to ignore unused variables/args that start with `_`, or this will still fail `@typescript-eslint/no-unused-vars`.
+**ESLint reminder:** Ensure your ESLint config ignores unused variables/args starting with `_`, or `@typescript-eslint/no-unused-vars` will still fail.
 
 ---
 
-### Critical: Don’t delete actual operations
+### Critical: Don’t Delete Actual Operations
 
 When adding error logging, do **not** accidentally delete the operation itself.
 
-❌ **Wrong (deleted KV read):**
-
-```ts
-try {
-	if (kv) {
-		// const raw = await kv.get(key); // deleted
-		if (raw) return JSON.parse(String(raw));
-	}
-} catch (e) {
-	log.warn('[CACHE] Failed', { err: (e as Error).message });
-}
-```
-
-✅ **Correct:**
-
-```ts
-try {
-	if (kv) {
-		const raw = await kv.get(key);
-		if (raw) return JSON.parse(String(raw));
-	}
-} catch (e) {
-	log.warn('[CACHE] Read failed', { key, err: (e as Error).message });
-}
-```
+✅ Keep the original operation and add logging around it. Never “refactor away” the failing call.
 
 ---
 
-### Server logging best practices
-
-✅ Include context:
-
-```ts
-log.warn('[ROUTE CACHE] Read failed', { key: cacheKey, err: (e as Error).message });
-```
-
-✅ Use appropriate log levels:
-
-- `log.info()` — normal milestones
-- `log.warn()` — recoverable failures (fallback used)
-- `log.error()` — serious failures / data integrity risk
-
-🚫 Never log sensitive data:
-
-- passwords, tokens
-- full addresses
-- dollar amounts
-- raw payloads
-- user identifiers (unless SECURITY.md explicitly allows a safe form)
-
----
-
-## 📋 Pre-flight Checklist (Before Making Any Change)
+## 📋 Pre-Flight Checklist (Before Making ANY Change)
 
 ### For `.svelte` files
 
@@ -398,7 +562,7 @@ log.warn('[ROUTE CACHE] Read failed', { key: cacheKey, err: (e as Error).message
 
 ## 🎯 Decision Tree: Edit vs. Migrate
 
-```
+```text
 Is this a .svelte file?
 ├─ NO → Proceed with TypeScript best practices
 └─ YES → Does it use $props() or $state()?
@@ -417,7 +581,7 @@ Is this a .svelte file?
 
 When you successfully migrate a file to Svelte 5, you **MUST** add this comment at the top of the file:
 
-```javascript
+```js
 // MIGRATED_TO_SVELTE_5 - YYYY-MM-DD
 ```
 
@@ -490,6 +654,11 @@ You MUST NEVER:
 - Break PWA offline functionality
 - Generate invalid HTML (`<div />` etc.)
 - Modify `manifest.json` / service worker without explicit approval
+- Create **"Debug"** or **"Test"** endpoints (e.g., `/api/debug/*`) that bypass auth or manipulate data
+- Use **fallbacks** for user IDs (e.g., `user.id || user.name`)
+- Spread request body (`...body`) directly into storage objects (mass assignment)
+- Write to **global KV keys** without a `${userId}` prefix
+- Hardcode secrets in code or configuration files
 - Create “fix loops” (adding more code to patch new errors)
 - Leave unused variables/imports/speculative state in committed code
 
@@ -531,7 +700,7 @@ If any command fails:
 
 ---
 
-## Reminder
+## Remember
 
 This is a **governance-first, security-first, migration-second** project.
 
