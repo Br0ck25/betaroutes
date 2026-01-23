@@ -15,7 +15,9 @@ export const GET: RequestHandler = async ({ platform, locals, url }) => {
 	}
 
 	const user = locals.user as SessionUser | undefined;
-	const userId = user?.name || user?.token || user?.id || 'default_user';
+	// SECURITY FIX: Only use user.id for storage keys
+	const userId = user?.id || '';
+	const userName = user?.name; // For legacy reads during migration
 	const id = url.searchParams.get('id');
 
 	try {
@@ -41,7 +43,17 @@ export const GET: RequestHandler = async ({ platform, locals, url }) => {
 			const hnsKV = safeKV(env, 'BETA_HUGHESNET_KV');
 			if (hnsKV) {
 				try {
-					const dbRaw = await hnsKV.get(`hns:db:${userId}`);
+					// Try new key format first (user ID based)
+					let dbRaw = await hnsKV.get(`hns:db:${userId}`);
+
+					// MIGRATION: If not found and we have username, try legacy key
+					if (!dbRaw && userName) {
+						dbRaw = await hnsKV.get(`hns:db:${userName}`);
+						if (dbRaw) {
+							log.info('[MIGRATION] Found HNS DB via legacy key', { userId, userName });
+						}
+					}
+
 					if (dbRaw) {
 						const db = JSON.parse(dbRaw) as Record<string, unknown>;
 						if (db && Object.prototype.hasOwnProperty.call(db, id)) {

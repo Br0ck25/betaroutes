@@ -176,7 +176,8 @@ export function makeTripService(
 	}
 
 	// [!code change] Helper to fetch directly from KV (Source of Truth)
-	async function listFromKV(userId: string): Promise<TripRecord[]> {
+	// MIGRATION: Now supports reading from both user ID and username keys
+	async function listFromKV(userId: string, userName?: string): Promise<TripRecord[]> {
 		const prefix = prefixForUser(userId);
 		const out: TripRecord[] = [];
 		let list = await kv.list({ prefix });
@@ -185,6 +186,25 @@ export function makeTripService(
 		while (!list.list_complete && list.cursor) {
 			list = await kv.list({ prefix, cursor: list.cursor });
 			keys = keys.concat(list.keys);
+		}
+
+		// MIGRATION: If we have a username, also check legacy keys
+		if (userName && userName !== userId) {
+			const legacyPrefix = `trip:${userName}:`;
+			let legacyList = await kv.list({ prefix: legacyPrefix });
+			if (legacyList.keys.length > 0) {
+				log.info('[MIGRATION] Found legacy trips', {
+					userId,
+					userName,
+					count: legacyList.keys.length
+				});
+				keys = keys.concat(legacyList.keys);
+
+				while (!legacyList.list_complete && legacyList.cursor) {
+					legacyList = await kv.list({ prefix: legacyPrefix, cursor: legacyList.cursor });
+					keys = keys.concat(legacyList.keys);
+				}
+			}
 		}
 
 		for (const k of keys) {
@@ -231,7 +251,7 @@ export function makeTripService(
 
 		async list(
 			userId: string,
-			options: { since?: string; limit?: number; offset?: number } = {}
+			options: { since?: string; limit?: number; offset?: number; userName?: string } = {}
 		): Promise<TripRecord[]> {
 			const dirtyKey = `meta:user:${userId}:index_dirty`;
 			const isDirty = await kv.get(dirtyKey);
@@ -240,7 +260,7 @@ export function makeTripService(
 			// If the index is marked dirty, SKIP the DO and fetch from KV immediately.
 			if (isDirty) {
 				log.info(`[TripService] Dirty index detected for ${userId}. Fetching from KV & repairing.`);
-				const kvTrips = await listFromKV(userId);
+				const kvTrips = await listFromKV(userId, options.userName);
 
 				// Trigger background repair
 				const stub = getIndexStub(userId);
@@ -335,9 +355,20 @@ export function makeTripService(
 			}
 		},
 
-		async get(userId: string, tripId: string) {
+		async get(userId: string, tripId: string, userName?: string) {
+			// Try new key format first (user ID based)
 			const key = `trip:${userId}:${tripId}`;
-			const raw = await kv.get(key);
+			let raw = await kv.get(key);
+
+			// MIGRATION: If not found and we have username, try legacy key
+			if (!raw && userName && userName !== userId) {
+				const legacyKey = `trip:${userName}:${tripId}`;
+				raw = await kv.get(legacyKey);
+				if (raw) {
+					log.info('[MIGRATION] Found trip via legacy key', { userId, tripId, legacyKey });
+				}
+			}
+
 			return raw ? (JSON.parse(raw) as TripRecord) : null;
 		},
 
