@@ -328,6 +328,51 @@ export async function migrateUserStorageKeys(
 	return results;
 }
 
+function escapeRegExp(s: string) {
+	return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Normalize known owner/user fields inside stored JSON values.
+ * - If top-level `userId` or `ownerId` matches the legacy username (case-insensitive), replace with UUID
+ * - Also try to fix metadata.originalKey occurrences
+ */
+function normalizeStoredRecord(
+	raw: string,
+	userId: string,
+	userName: string
+): { data: string; changed: boolean } {
+	try {
+		const obj = JSON.parse(raw);
+		let changed = false;
+		const normalizedUsername = String(userName).toLowerCase();
+
+		if (obj && typeof obj === 'object') {
+			if (obj.userId && String(obj.userId).toLowerCase() === normalizedUsername) {
+				obj.userId = userId;
+				changed = true;
+			}
+			if (obj.ownerId && String(obj.ownerId).toLowerCase() === normalizedUsername) {
+				obj.ownerId = userId;
+				changed = true;
+			}
+			if (obj.metadata && typeof obj.metadata === 'object' && obj.metadata.originalKey) {
+				obj.metadata.originalKey = String(obj.metadata.originalKey).replace(
+					new RegExp(`:${escapeRegExp(userName)}:`, 'gi'),
+					`:${userId}:`
+				);
+				changed = true;
+			}
+
+			return { data: JSON.stringify(obj), changed };
+		}
+		return { data: raw, changed: false };
+	} catch {
+		// Not JSON or parse failed - leave as-is
+		return { data: raw, changed: false };
+	}
+}
+
 /**
  * Migrates a single keyspace (trips, expenses, or mileage)
  * @param kv - KV namespace to migrate
@@ -425,32 +470,75 @@ async function migrateKeyspace(
 				metadata = (metaRes as any)?.metadata;
 			}
 
+			// Normalize stored JSON value (if it's JSON and contains username)
+			const { data: normalizedData, changed: normalizedChanged } = normalizeStoredRecord(
+				data,
+				userId,
+				userName
+			);
+
 			// Check if new key already exists
 			const existing = (await kv.get(newKey)) as string | null;
 			if (existing) {
-				// If identical, count as migrated; otherwise record conflict or create a rebuilt copy
+				// If identical to the legacy raw data
 				if (existing === data) {
-					log.info('[MIGRATION] New key already exists and identical, skipping legacy delete', {
-						oldKey,
-						newKey
-					});
-					migrated++;
-					if (mode === 'move') {
-						await kv.delete(oldKey);
+					// If normalization changed the value, write normalized result either as rebuilt copy or overwrite
+					if (normalizedChanged) {
+						if (mode === 'rebuild') {
+							const altKey = `${newKey}:rebuild:${userId}`;
+							log.info(
+								'[MIGRATION] New key existed (identical) but value normalized - creating rebuilt copy',
+								{
+									oldKey,
+									newKey: altKey
+								}
+							);
+							if (metadata) {
+								await kv.put(altKey, normalizedData, { metadata });
+							} else {
+								await kv.put(altKey, normalizedData);
+							}
+							migrated++;
+							continue;
+						} else {
+							// move mode: overwrite existing with normalized data
+							if (metadata) {
+								await kv.put(newKey, normalizedData, { metadata });
+							} else {
+								await kv.put(newKey, normalizedData);
+							}
+							if (mode === 'move') await kv.delete(oldKey);
+							migrated++;
+							log.info('[MIGRATION] New key existed and was updated (overwrite normalized value)', {
+								oldKey,
+								newKey
+							});
+							continue;
+						}
+					} else {
+						log.info('[MIGRATION] New key already exists and identical, skipping legacy delete', {
+							oldKey,
+							newKey
+						});
+						migrated++;
+						if (mode === 'move') {
+							await kv.delete(oldKey);
+						}
+						continue;
 					}
-					continue;
 				} else if (mode === 'rebuild') {
-					// Create a rebuilt copy to avoid overwriting differing data
+					// Create a rebuilt copy to avoid overwriting differing data. Prefer normalized content if available.
 					const altKey = `${newKey}:rebuild:${userId}`;
+					const payloadToWrite = normalizedChanged ? normalizedData : data;
 					log.info('[MIGRATION] New key exists with different data - creating rebuilt copy', {
 						oldKey,
 						newKey: altKey
 					});
 					// Preserve metadata when available
 					if (metadata) {
-						await kv.put(altKey, data, { metadata });
+						await kv.put(altKey, payloadToWrite, { metadata });
 					} else {
-						await kv.put(altKey, data);
+						await kv.put(altKey, payloadToWrite);
 					}
 					migrated++;
 					continue;
@@ -466,9 +554,9 @@ async function migrateKeyspace(
 
 			// Write to new key (preserve metadata when available)
 			if (metadata) {
-				await kv.put(newKey, data, { metadata });
+				await kv.put(newKey, normalizedData, { metadata });
 			} else {
-				await kv.put(newKey, data);
+				await kv.put(newKey, normalizedData);
 			}
 
 			// Only delete old key if we're in 'move' mode
@@ -478,13 +566,23 @@ async function migrateKeyspace(
 
 			migrated++;
 
-			log.info('[MIGRATION] Migrated record', {
-				recordType,
-				oldKey,
-				newKey,
-				userId,
-				mode
-			});
+			if (normalizedChanged) {
+				log.info('[MIGRATION] Migrated record and normalized userId in value', {
+					recordType,
+					oldKey,
+					newKey,
+					userId,
+					mode
+				});
+			} else {
+				log.info('[MIGRATION] Migrated record', {
+					recordType,
+					oldKey,
+					newKey,
+					userId,
+					mode
+				});
+			}
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			log.error('[MIGRATION] Failed to migrate key', {
