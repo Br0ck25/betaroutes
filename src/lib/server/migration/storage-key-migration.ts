@@ -71,14 +71,44 @@ export async function migrateUserStorageKeys(
 
 		try {
 			// Migrate HughesNet settings
-			const settingsKey = `hns:settings:${userName}`;
-			const settings = await hughesnetKV.get(settingsKey);
-			if (settings) {
+			// Helper to try multiple casing variants for hughesnet keys
+			async function tryHnsKeyVariants(kv: KVNamespace, keyBase: string) {
+				// Attempt variants focused on the username suffix only (safer than general-case transformations)
+				const lastColon = keyBase.lastIndexOf(':');
+				const prefix = lastColon !== -1 ? keyBase.slice(0, lastColon + 1) : keyBase;
+				const namePart = lastColon !== -1 ? keyBase.slice(lastColon + 1) : '';
+
+				function capitalize(s: string) {
+					return s.length ? s[0].toUpperCase() + s.slice(1) : s;
+				}
+
+				const variants = [
+					`${prefix}${namePart}`,
+					`${prefix}${namePart.toLowerCase()}`,
+					`${prefix}${namePart.toUpperCase()}`,
+					`${prefix}${capitalize(namePart)}`
+				].filter(Boolean);
+
+				for (const k of variants) {
+					try {
+						const v = await kv.get(k);
+						if (v) return { key: k, value: v };
+					} catch {
+						// ignore
+					}
+				}
+				return null;
+			}
+
+			// Migrate HughesNet settings
+			const settingsRes = await tryHnsKeyVariants(hughesnetKV, `hns:settings:${userName}`);
+			if (settingsRes) {
+				const { key: settingsKey, value: settings } = settingsRes;
 				const newSettingsKey = `hns:settings:${userId}`;
 				const existing = await hughesnetKV.get(newSettingsKey);
 				if (!existing) {
 					await hughesnetKV.put(newSettingsKey, settings);
-					log.info('[MIGRATION] Migrated HughesNet settings', { userId, mode });
+					log.info('[MIGRATION] Migrated HughesNet settings', { userId, mode, settingsKey });
 				}
 				if (mode === 'move') {
 					await hughesnetKV.delete(settingsKey);
@@ -87,14 +117,14 @@ export async function migrateUserStorageKeys(
 			}
 
 			// Migrate HughesNet order database
-			const dbKey = `hns:db:${userName}`;
-			const db = await hughesnetKV.get(dbKey);
-			if (db) {
+			const dbRes = await tryHnsKeyVariants(hughesnetKV, `hns:db:${userName}`);
+			if (dbRes) {
+				const { key: dbKey, value: db } = dbRes;
 				const newDbKey = `hns:db:${userId}`;
 				const existing = await hughesnetKV.get(newDbKey);
 				if (!existing) {
 					await hughesnetKV.put(newDbKey, db);
-					log.info('[MIGRATION] Migrated HughesNet database', { userId, mode });
+					log.info('[MIGRATION] Migrated HughesNet database', { userId, mode, dbKey });
 				}
 				if (mode === 'move') {
 					await hughesnetKV.delete(dbKey);
@@ -103,17 +133,14 @@ export async function migrateUserStorageKeys(
 			}
 
 			// Migrate HughesNet session/credentials
-			const sessionKey = `hns:session:${userName}`;
-			const session = await hughesnetKV.get(sessionKey);
-			if (session) {
+			const sessionRes = await tryHnsKeyVariants(hughesnetKV, `hns:session:${userName}`);
+			if (sessionRes) {
+				const { key: sessionKey, value: session } = sessionRes;
 				const newSessionKey = `hns:session:${userId}`;
 				const existing = await hughesnetKV.get(newSessionKey);
 				if (!existing) {
 					await hughesnetKV.put(newSessionKey, session);
-					log.info('[MIGRATION] Migrated HughesNet session', { userId, mode });
-				}
-				if (mode === 'move') {
-					await hughesnetKV.delete(sessionKey);
+					log.info('[MIGRATION] Migrated HughesNet session', { userId, mode, sessionKey });
 				}
 				migrated++;
 			}
@@ -129,15 +156,15 @@ export async function migrateUserStorageKeys(
 				orderKeys = orderKeys.concat(list.keys);
 			}
 
+			// Robust, case-insensitive processing for HughesNet orders (handles ownerId with different casing)
+			const normalizedUsername = userName.toLowerCase();
 			for (const { name: orderKey } of orderKeys) {
 				try {
 					const raw = await ordersKV.get(orderKey);
 					if (!raw) continue;
 
 					const orderWrapper = JSON.parse(raw) as HughesNetOrderWrapper;
-
-					// Check if this order belongs to this user and needs migration
-					if (orderWrapper.ownerId === userName) {
+					if (String(orderWrapper.ownerId).toLowerCase() === normalizedUsername) {
 						if (mode === 'rebuild') {
 							const newKey = `${orderKey}:rebuild:${userId}`;
 							orderWrapper.ownerId = userId;
@@ -150,15 +177,18 @@ export async function migrateUserStorageKeys(
 						}
 						migrated++;
 					}
-				} catch (error) {
-					const errorMsg = error instanceof Error ? error.message : String(error);
-					log.error('[MIGRATION] Failed to migrate HughesNet order', {
+				} catch (err) {
+					const errorMsg = err instanceof Error ? err.message : String(err);
+					log.error('[MIGRATION] Failed to migrate HughesNet order (robust)', {
 						orderKey,
 						error: errorMsg
 					});
 					errors.push(`error:${orderKey}:${errorMsg}`);
 				}
 			}
+
+			// Prevent the older loop below from running again over the same keys
+			orderKeys = [];
 
 			log.info('[MIGRATION] HughesNet data migration completed', {
 				userId,
@@ -316,17 +346,56 @@ async function migrateKeyspace(
 	const mode = options?.mode ?? 'move';
 	const errors: string[] = [];
 	let migrated = 0;
-	const legacyPrefix = `${recordType}:${userName}:`;
 	const newPrefix = `${recordType}:${userId}:`;
 
-	// List all legacy keys for this user
-	let list = await kv.list({ prefix: legacyPrefix });
-	let keys = list.keys;
+	// Helper: try listing by several username variants to avoid missing case differences
+	function usernameVariants(name: string) {
+		const variants = new Set<string>();
+		variants.add(name);
+		variants.add(name.toLowerCase());
+		variants.add(name.toUpperCase());
+		// Capitalize first letter variant
+		if (name.length > 0) {
+			variants.add(name[0].toUpperCase() + name.slice(1));
+		}
+		return Array.from(variants);
+	}
 
-	// Handle pagination if there are many keys
-	while (!list.list_complete && list.cursor) {
-		list = await kv.list({ prefix: legacyPrefix, cursor: list.cursor });
-		keys = keys.concat(list.keys);
+	// First attempt: try common casing variants to avoid listing full keyspace
+	let keys: Array<{ name: string }> = [];
+	for (const variant of usernameVariants(userName)) {
+		const prefix = `${recordType}:${variant}:`;
+		let list = await kv.list({ prefix });
+		let found = list.keys;
+		while (!list.list_complete && list.cursor) {
+			list = await kv.list({ prefix, cursor: list.cursor });
+			found = found.concat(list.keys);
+		}
+		if (found.length > 0) {
+			keys = found;
+			break; // found matching-cased keys
+		}
+	}
+
+	// Fallback: scan the entire keyspace for this recordType and filter case-insensitively
+	if (keys.length === 0) {
+		log.info(
+			'[MIGRATION] No keys found with prefixed username variants, falling back to full scan (case-insensitive match)',
+			{
+				userId,
+				userName
+			}
+		);
+		let list = await kv.list({ prefix: `${recordType}:` });
+		let all = list.keys;
+		while (!list.list_complete && list.cursor) {
+			list = await kv.list({ prefix: `${recordType}:`, cursor: list.cursor });
+			all = all.concat(list.keys);
+		}
+		keys = all.filter((k) => {
+			const parts = k.name.split(':');
+			return parts[1] && parts[1].toLowerCase() === userName.toLowerCase();
+		});
 	}
 
 	log.info(`[MIGRATION] Found ${keys.length} legacy ${recordType} records`, { userId, userName });
@@ -349,10 +418,17 @@ async function migrateKeyspace(
 			const recordId = parts.slice(2).join(':'); // Handle IDs that might contain colons
 			const newKey = `${newPrefix}${recordId}`;
 
+			// Get metadata if available (some KVs don't support getWithMetadata in test mocks)
+			let metadata: Record<string, unknown> | undefined = undefined;
+			if (typeof (kv as any).getWithMetadata === 'function') {
+				const metaRes = await (kv as any).getWithMetadata(oldKey);
+				metadata = (metaRes as any)?.metadata;
+			}
+
 			// Check if new key already exists
 			const existing = (await kv.get(newKey)) as string | null;
 			if (existing) {
-				// If identical, count as migrated; otherwise record conflict and skip
+				// If identical, count as migrated; otherwise record conflict or create a rebuilt copy
 				if (existing === data) {
 					log.info('[MIGRATION] New key already exists and identical, skipping legacy delete', {
 						oldKey,
@@ -363,6 +439,21 @@ async function migrateKeyspace(
 						await kv.delete(oldKey);
 					}
 					continue;
+				} else if (mode === 'rebuild') {
+					// Create a rebuilt copy to avoid overwriting differing data
+					const altKey = `${newKey}:rebuild:${userId}`;
+					log.info('[MIGRATION] New key exists with different data - creating rebuilt copy', {
+						oldKey,
+						newKey: altKey
+					});
+					// Preserve metadata when available
+					if (metadata) {
+						await kv.put(altKey, data, { metadata });
+					} else {
+						await kv.put(altKey, data);
+					}
+					migrated++;
+					continue;
 				} else {
 					log.warn('[MIGRATION] Conflict: new key exists with different data - skipping', {
 						oldKey,
@@ -371,13 +462,6 @@ async function migrateKeyspace(
 					errors.push(`conflict:${oldKey}`);
 					continue;
 				}
-			}
-
-			// Get metadata if available (some KVs don't support getWithMetadata in test mocks)
-			let metadata: Record<string, unknown> | undefined = undefined;
-			if (typeof (kv as any).getWithMetadata === 'function') {
-				const metaRes = await (kv as any).getWithMetadata(oldKey);
-				metadata = (metaRes as any)?.metadata;
 			}
 
 			// Write to new key (preserve metadata when available)
@@ -448,14 +532,14 @@ async function migrateTrash(
 
 			const item = JSON.parse(raw) as TrashItem;
 
-			// Check if this trash item belongs to this user
-			if (item.userId !== userName && item.userId !== userId) {
+			// Check if this trash item belongs to this user (case-insensitive match on username)
+			if (String(item.userId).toLowerCase() !== userName.toLowerCase() && item.userId !== userId) {
 				continue; // Not this user's trash
 			}
 
 			// Update userId from username to user ID - but in 'rebuild' mode we create a new copy
 			const originalId = item.id;
-			if (item.userId === userName) {
+			if (String(item.userId).toLowerCase() === userName.toLowerCase()) {
 				if (mode === 'rebuild') {
 					// Create a copy with userId set to UUID and a reproducible key so it can be found later
 					const newItem: TrashItem = {
@@ -468,7 +552,7 @@ async function migrateTrash(
 
 					if (newItem.metadata?.originalKey) {
 						newItem.metadata.originalKey = newItem.metadata.originalKey.replace(
-							`:${userName}:`,
+							new RegExp(`:${escapeRegExp(userName)}:`, 'gi'),
 							`:${userId}:`
 						);
 					}
@@ -485,7 +569,7 @@ async function migrateTrash(
 					item.userId = userId;
 					if (item.metadata?.originalKey) {
 						item.metadata.originalKey = item.metadata.originalKey.replace(
-							`:${userName}:`,
+							new RegExp(`:${escapeRegExp(userName)}:`, 'gi'),
 							`:${userId}:`
 						);
 					}
