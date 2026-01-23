@@ -10,9 +10,6 @@
 	import { sanitizeStaticSvg } from '$lib/utils/sanitize';
 	import { csrfFetch } from '$lib/utils/csrf';
 
-	// Import debug helpers to make them available in console
-	import '$lib/utils/debug-helpers';
-
 	const resolve = (href: string) => `${base}${href}`;
 	import { trash } from '$lib/stores/trash';
 	import { syncManager } from '$lib/sync/syncManager';

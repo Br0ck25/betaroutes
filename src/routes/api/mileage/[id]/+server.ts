@@ -33,19 +33,8 @@ export const DELETE: RequestHandler = async (event) => {
 		// Get the mileage log before deleting to check for linked trip
 		const existing = await svc.get(userId, id);
 
-		// If record doesn't exist in KV, it might be orphaned in IndexedDB
-		if (!existing) {
-			log.warn('[MILEAGE DELETE] Record not found in KV (may be orphaned in IndexedDB)', {
-				userId,
-				mileageId: id
-			});
-			// Return 204 anyway so client can clean up local copy
-			return new Response(null, { status: 204 });
-		}
-
 		// Soft delete via service
 		await svc.delete(userId, id);
-		log.info('[MILEAGE DELETE] Successfully deleted', { userId, mileageId: id });
 
 		// --- Set linked trip's totalMiles to 0 and recalculate fuelCost ---
 		if (existing && existing.tripId) {
