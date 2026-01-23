@@ -12,17 +12,15 @@ Press **F12** → **Console** tab, then copy/paste:
 
 ### Step 1: Clean Up Orphaned Records
 
-```javascript
-// This will now work with your username 'James'
-await window.debugGRY.clearOrphanedMileage('your-uuid-here', 'James');
-```
-
-**Note:** Replace `'your-uuid-here'` with your actual UUID. To find it:
+Since your records are stored with userId `'James'`, just run:
 
 ```javascript
-console.log('My UUID:', window.$page?.data?.user?.id);
-console.log('My username:', window.$page?.data?.user?.name);
+// Use 'James' as both parameters - simple and works!
+await window.debugGRY.clearOrphanedMileage('James', 'James');
+location.reload();
 ```
+
+That's it! This will find all records stored under userId `'James'`, validate them against the server, and remove orphaned ones.
 
 ### Step 2: Or Use Settings UI (Now Fixed!)
 
