@@ -2,11 +2,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { authenticateUser } from '$lib/server/auth';
-import { getEnv, safeKV } from '$lib/server/env';
+import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { createSession } from '$lib/server/sessionService';
 import { findUserById } from '$lib/server/userService';
+import { makeTripService } from '$lib/server/tripService';
 import { checkRateLimit } from '$lib/server/rateLimit';
-import { migrateUserStorageKeys } from '$lib/server/migration/storage-key-migration';
 import { dev } from '$app/environment';
 import { log } from '$lib/server/log';
 
@@ -90,84 +90,36 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 			maxAge: 60 * 60 * 24 * 7
 		});
 
-		// 9. PHASE 2: AUTO-MIGRATION
-		// Migrate all user data from username-based keys to user ID-based keys
-		// This fixes the P0 account takeover vulnerability (STORAGE_KEY_MIGRATION.md)
-		// Runs in background using waitUntil (non-blocking)
-		if (platform?.context && authResult.username) {
+		// 9. AUTO-MIGRATION
+		// Move legacy data (username key) to new storage (UUID key) in background
+		if (
+			platform?.context &&
+			safeKV(env, 'BETA_LOGS_KV') &&
+			(safeDO(env, 'TRIP_INDEX_DO') || (env as unknown as Record<string, unknown>)['TRIP_INDEX_DO'])
+		) {
 			const userId = authResult.id;
 			const username = authResult.username;
 
 			platform.context.waitUntil(
 				(async () => {
 					try {
-						log.info('[MIGRATION] Starting background storage key migration', {
-							userId,
-							username
-						});
-
-						// Run comprehensive migration for all data types
-						const result = await migrateUserStorageKeys(
-							{
-								BETA_LOGS_KV: safeKV(env, 'BETA_LOGS_KV') as KVNamespace | undefined,
-								BETA_EXPENSES_KV: safeKV(env, 'BETA_EXPENSES_KV') as KVNamespace | undefined,
-								BETA_MILLAGE_KV: safeKV(env, 'BETA_MILLAGE_KV') as KVNamespace | undefined,
-								BETA_TRASH_KV: safeKV(env, 'BETA_TRASH_KV') as KVNamespace | undefined,
-								BETA_HUGHESNET_KV: safeKV(env, 'BETA_HUGHESNET_KV') as KVNamespace | undefined,
-								BETA_HUGHESNET_ORDERS_KV: safeKV(env, 'BETA_HUGHESNET_ORDERS_KV') as
-									| KVNamespace
-									| undefined
-							},
-							userId,
-							username
+						const tripIndexDO =
+							safeDO(env, 'TRIP_INDEX_DO') ||
+							(env as unknown as Record<string, unknown>)['TRIP_INDEX_DO'];
+						const placesIndexDO = safeDO(env, 'PLACES_INDEX_DO') || tripIndexDO;
+						const svc = makeTripService(
+							safeKV(env, 'BETA_LOGS_KV') as any,
+							undefined,
+							safeKV(env, 'BETA_PLACES_KV') as any,
+							tripIndexDO as any,
+							placesIndexDO as any
 						);
 
-						if (result.success) {
-							log.info('[MIGRATION] Background migration completed successfully', {
-								userId,
-								username,
-								recordsMigrated: result.migrated
-							});
-
-							// Update user record with migration status
-							if (kv) {
-								try {
-									const userKey = `user:${userId}`;
-									const userRaw = await kv.get(userKey);
-									if (userRaw) {
-										const user = JSON.parse(userRaw);
-										user.migrationStatus = {
-											storageKeysMigrated: true,
-											migratedAt: new Date().toISOString(),
-											recordsMigrated: result.migrated
-										};
-										await kv.put(userKey, JSON.stringify(user));
-										log.info('[MIGRATION] Updated user record with migration status', {
-											userId
-										});
-									}
-								} catch (statusErr) {
-									log.error('[MIGRATION] Failed to update user migration status', {
-										userId,
-										error: statusErr instanceof Error ? statusErr.message : String(statusErr)
-									});
-								}
-							}
-						} else {
-							log.error('[MIGRATION] Background migration completed with errors', {
-								userId,
-								username,
-								recordsMigrated: result.migrated,
-								errors: result.errors
-							});
-						}
+						// Trigger the move. If keys exist under 'username', they move to 'userId'.
+						await (svc as any).migrateUser?.(username, userId);
 					} catch (e: unknown) {
 						const msg = e instanceof Error ? e.message : String(e);
-						log.error('[MIGRATION] Background migration threw exception', {
-							userId,
-							username,
-							error: msg
-						});
+						log.error('[Auto-Migration] Failed', { username, message: msg });
 					}
 				})()
 			);

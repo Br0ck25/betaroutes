@@ -176,8 +176,7 @@ export function makeTripService(
 	}
 
 	// [!code change] Helper to fetch directly from KV (Source of Truth)
-	// MIGRATION: Now supports reading from both user ID and username keys
-	async function listFromKV(userId: string, userName?: string): Promise<TripRecord[]> {
+	async function listFromKV(userId: string): Promise<TripRecord[]> {
 		const prefix = prefixForUser(userId);
 		const out: TripRecord[] = [];
 		let list = await kv.list({ prefix });
@@ -186,25 +185,6 @@ export function makeTripService(
 		while (!list.list_complete && list.cursor) {
 			list = await kv.list({ prefix, cursor: list.cursor });
 			keys = keys.concat(list.keys);
-		}
-
-		// MIGRATION: If we have a username, also check legacy keys
-		if (userName && userName !== userId) {
-			const legacyPrefix = `trip:${userName}:`;
-			let legacyList = await kv.list({ prefix: legacyPrefix });
-			if (legacyList.keys.length > 0) {
-				log.info('[MIGRATION] Found legacy trips', {
-					userId,
-					userName,
-					count: legacyList.keys.length
-				});
-				keys = keys.concat(legacyList.keys);
-
-				while (!legacyList.list_complete && legacyList.cursor) {
-					legacyList = await kv.list({ prefix: legacyPrefix, cursor: legacyList.cursor });
-					keys = keys.concat(legacyList.keys);
-				}
-			}
 		}
 
 		for (const k of keys) {
@@ -251,7 +231,7 @@ export function makeTripService(
 
 		async list(
 			userId: string,
-			options: { since?: string; limit?: number; offset?: number; userName?: string } = {}
+			options: { since?: string; limit?: number; offset?: number } = {}
 		): Promise<TripRecord[]> {
 			const dirtyKey = `meta:user:${userId}:index_dirty`;
 			const isDirty = await kv.get(dirtyKey);
@@ -260,7 +240,7 @@ export function makeTripService(
 			// If the index is marked dirty, SKIP the DO and fetch from KV immediately.
 			if (isDirty) {
 				log.info(`[TripService] Dirty index detected for ${userId}. Fetching from KV & repairing.`);
-				const kvTrips = await listFromKV(userId, options.userName);
+				const kvTrips = await listFromKV(userId);
 
 				// Trigger background repair
 				const stub = getIndexStub(userId);
@@ -355,20 +335,9 @@ export function makeTripService(
 			}
 		},
 
-		async get(userId: string, tripId: string, userName?: string) {
-			// Try new key format first (user ID based)
+		async get(userId: string, tripId: string) {
 			const key = `trip:${userId}:${tripId}`;
-			let raw = await kv.get(key);
-
-			// MIGRATION: If not found and we have username, try legacy key
-			if (!raw && userName && userName !== userId) {
-				const legacyKey = `trip:${userName}:${tripId}`;
-				raw = await kv.get(legacyKey);
-				if (raw) {
-					log.info('[MIGRATION] Found trip via legacy key', { userId, tripId, legacyKey });
-				}
-			}
-
+			const raw = await kv.get(key);
 			return raw ? (JSON.parse(raw) as TripRecord) : null;
 		},
 
@@ -381,35 +350,19 @@ export function makeTripService(
 
 			// 1. Update the Summary Index
 			try {
-				const summary = toSummary(trip);
-				log.info('[TripService] Writing trip to DO', {
-					tripId: trip.id,
-					userId: trip.userId,
-					summarySize: JSON.stringify(summary).length
-				});
-
 				const r = await stub.fetch(`${DO_ORIGIN}/put`, {
 					method: 'POST',
-					body: JSON.stringify(summary)
+					body: JSON.stringify(toSummary(trip))
 				});
-
 				if (!r.ok) {
-					const errorText = await r.text().catch(() => 'Unable to read error');
-					log.error('[TripService] DO put returned non-ok status', {
-						status: r.status,
-						tripId: trip.id,
-						error: errorText
+					log.warn('[TripService] DO put returned non-ok status - marking dirty', {
+						status: r.status
 					});
+					// CRITICAL: Mark index as dirty so next list() fetches from KV
 					await markDirty(trip.userId);
-				} else {
-					log.info('[TripService] Trip successfully written to DO', { tripId: trip.id });
 				}
 			} catch (e) {
-				log.error('[TripService] DO put failed with exception', {
-					tripId: trip.id,
-					message: (e as Error).message,
-					stack: (e as Error).stack
-				});
+				log.error('[TripService] DO put failed - marking dirty', { message: (e as Error).message });
 				await markDirty(trip.userId);
 			}
 

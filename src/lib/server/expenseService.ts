@@ -40,7 +40,7 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 	};
 
 	return {
-		async list(userId: string, since?: string, userName?: string): Promise<ExpenseRecord[]> {
+		async list(userId: string, since?: string): Promise<ExpenseRecord[]> {
 			const stub = getIndexStub(userId);
 			const prefix = `expense:${userId}:`;
 
@@ -58,18 +58,7 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			if (expenses.length === 0) {
 				const kvCheck = await kv.list({ prefix, limit: 1 });
 
-				// MIGRATION: Also check legacy key if userName provided
-				let hasLegacyData = false;
-				if (kvCheck.keys.length === 0 && userName && userName !== userId) {
-					const legacyPrefix = `expense:${userName}:`;
-					const legacyCheck = await kv.list({ prefix: legacyPrefix, limit: 1 });
-					hasLegacyData = legacyCheck.keys.length > 0;
-					if (hasLegacyData) {
-						log.info('[MIGRATION] Found legacy expenses', { userId, userName });
-					}
-				}
-
-				if (kvCheck.keys.length > 0 || hasLegacyData) {
+				if (kvCheck.keys.length > 0) {
 					log.info(
 						`[ExpenseService] Detected desync for ${userId} (KV has data, Index empty). repairing...`
 					);
@@ -81,19 +70,6 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 					while (!list.list_complete && list.cursor) {
 						list = await kv.list({ prefix, cursor: list.cursor });
 						keys = keys.concat(list.keys);
-					}
-
-					// MIGRATION: Also fetch from legacy keys if userName provided
-					if (userName && userName !== userId) {
-						const legacyPrefix = `expense:${userName}:`;
-						let legacyList = await kv.list({ prefix: legacyPrefix });
-						if (legacyList.keys.length > 0) {
-							keys = keys.concat(legacyList.keys);
-							while (!legacyList.list_complete && legacyList.cursor) {
-								legacyList = await kv.list({ prefix: legacyPrefix, cursor: legacyList.cursor });
-								keys = keys.concat(legacyList.keys);
-							}
-						}
 					}
 
 					let migratedCount = 0;
@@ -141,40 +117,30 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			return expenses.filter((e) => !e.deleted);
 		},
 
-		async get(userId: string, id: string, userName?: string) {
-			// Try new key format first (user ID based)
-			const key = `expense:${userId}:${id}`;
-			let raw = await kv.get(key);
-
-			// MIGRATION: If not found and we have username, try legacy key
-			if (!raw && userName && userName !== userId) {
-				const legacyKey = `expense:${userName}:${id}`;
-				raw = await kv.get(legacyKey);
-				if (raw) {
-					log.info('[MIGRATION] Found expense via legacy key', { userId, id, legacyKey });
-				}
-			}
-
-			return raw ? (JSON.parse(raw) as ExpenseRecord) : null;
+		async get(userId: string, id: string) {
+			// Reuse list to ensure consistent behavior
+			const all = await this.list(userId);
+			return all.find((e) => e.id === id) || null;
 		},
 
 		async put(expense: ExpenseRecord) {
 			expense.updatedAt = new Date().toISOString();
 			delete expense.deleted;
+			delete (expense as Record<string, unknown>)['deletedAt'];
 
 			await kv.put(`expense:${expense.userId}:${expense.id}`, JSON.stringify(expense));
 
-			// Write to DO index
+			const stub = getIndexStub(expense.userId);
 			try {
-				const stub = getIndexStub(expense.userId);
 				const res = await stub.fetch(`${DO_ORIGIN}/expenses/put`, {
 					method: 'POST',
 					body: JSON.stringify(expense)
 				});
-
 				if (!res.ok) {
-					log.error('[ExpenseService] DO put failed', { status: res.status, id: expense.id });
-					// Retry once
+					log.warn('[ExpenseService] DO put returned non-ok status', {
+						status: res.status,
+						id: expense.id
+					});
 					try {
 						const retry = await stub.fetch(`${DO_ORIGIN}/expenses/put`, {
 							method: 'POST',

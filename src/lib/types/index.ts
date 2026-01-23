@@ -10,12 +10,6 @@ export interface User {
 	resetDate: string;
 	name?: string;
 	email?: string;
-	/** Phase 2 migration tracking - tracks storage key migration from username to user ID */
-	migrationStatus?: {
-		storageKeysMigrated: boolean;
-		migratedAt?: string; // ISO timestamp
-		recordsMigrated?: number;
-	};
 }
 
 /** Geo helpers */
