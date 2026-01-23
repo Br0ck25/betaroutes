@@ -46,23 +46,74 @@ export function validatePassword(password: string): PasswordValidationResult {
 		};
 	}
 
-	// Common password check (top 100 most common passwords)
+	// Common password check (expanded list based on HaveIBeenPwned and rockyou)
 	const commonPasswords = [
+		// Top breached passwords
 		'password',
 		'password123',
+		'password1',
+		'password12',
+		'password123!',
 		'12345678',
 		'123456789',
 		'1234567890',
 		'qwerty123',
+		'qwertyuiop',
 		'abc123456',
-		'password1',
 		'welcome123',
 		'admin123',
 		'letmein123',
+		'letmein',
 		'monkey123',
 		'iloveyou',
 		'trustno1',
-		'dragon123'
+		'dragon123',
+		'sunshine',
+		'princess',
+		'football',
+		'baseball',
+		'whatever',
+		'shadow123',
+		'master123',
+		'michael',
+		'superman',
+		'batman123',
+		'starwars',
+		'computer',
+		'passw0rd',
+		'p@ssword',
+		'p@ssw0rd',
+		'asdfghjkl',
+		'zxcvbnm',
+		'changeme',
+		'admin1234',
+		'welcome1',
+		'summer2023',
+		'summer2024',
+		'winter2023',
+		'winter2024',
+		'spring2023',
+		'spring2024',
+		'fall2023',
+		'fall2024',
+		// Common keyboard patterns
+		'1q2w3e4r5t',
+		'qazwsxedc',
+		'1qaz2wsx',
+		'zaq1xsw2',
+		'qwerty12345',
+		// Common phrases
+		'iloveyou1',
+		'ihateyou',
+		'fuckyou',
+		'letmein1',
+		'access123',
+		'login123',
+		'hello123',
+		'abc12345',
+		'test1234',
+		'testing123',
+		'guest1234'
 	];
 
 	const lowerPassword = password.toLowerCase();

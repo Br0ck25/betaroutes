@@ -2,6 +2,7 @@
 import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
 import { randomUUID } from 'node:crypto';
 import { log } from '$lib/server/log';
+import { maskEmail } from '$lib/server/email';
 
 // 1. Define Split Types
 
@@ -331,7 +332,7 @@ export async function deleteUser(
 	const user = await findUserById(kv, userId);
 	if (!user) return;
 
-	log.debug(`[UserService] 🗑️ START Account Wipe: ${userId} (${user.email})`);
+	log.debug(`[UserService] 🗑️ START Account Wipe: ${userId} (${maskEmail(user.email)})`);
 
 	// 1. Delete Core User Data (Auth)
 	const authPromises = [

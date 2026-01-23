@@ -5,6 +5,7 @@ import { makeMileageService, type MileageRecord } from '$lib/server/mileageServi
 import type { TripRecord } from '$lib/server/tripService';
 import { log } from '$lib/server/log';
 import { safeDO, safeKV } from '$lib/server/env';
+import { getStorageId } from '$lib/server/user';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
 import { dev } from '$app/environment';
@@ -89,8 +90,8 @@ export const GET: RequestHandler = async (event) => {
 			placesIndexDO as unknown as DurableObjectNamespace
 		);
 
-		const userSafe = user as { name?: string; token?: string } | undefined;
-		const storageId = userSafe?.name || userSafe?.token || '';
+		// SECURITY FIX (P0 Item #1): Use getStorageId() to get user UUID, never name/token
+		const storageId = getStorageId(user);
 
 		const trip = await svc.get(storageId, id);
 
@@ -156,8 +157,8 @@ export const PUT: RequestHandler = async (event) => {
 			placesIndexDO as unknown as DurableObjectNamespace
 		);
 
-		const userSafe = user as { name?: string; token?: string } | undefined;
-		const storageId = userSafe?.name || userSafe?.token || '';
+		// SECURITY FIX (P0 Item #1): Use getStorageId() to get user UUID, never name/token
+		const storageId = getStorageId(user);
 
 		// Verify existing ownership
 		const existing = await svc.get(storageId, id);
@@ -263,8 +264,8 @@ export const DELETE: RequestHandler = async (event) => {
 			placesIndexDO as unknown as DurableObjectNamespace
 		);
 
-		const userSafe = user as { name?: string; token?: string } | undefined;
-		const storageId = userSafe?.name || userSafe?.token || '';
+		// SECURITY FIX (P0 Item #1): Use getStorageId() to get user UUID, never name/token
+		const storageId = getStorageId(user);
 
 		// Check if trip exists
 		const existing = await svc.get(storageId, id);
@@ -312,7 +313,8 @@ export const DELETE: RequestHandler = async (event) => {
 			});
 		}
 
-		await svc.incrementUserCounter(userSafe?.token ?? '', -1);
+		// SECURITY FIX (P0 Item #1): Use storageId (user UUID) instead of token
+		await svc.incrementUserCounter(storageId, -1);
 
 		return new Response(JSON.stringify({ success: true }), {
 			status: 200,

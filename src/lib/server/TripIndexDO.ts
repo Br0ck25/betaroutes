@@ -1,6 +1,7 @@
 // src/lib/server/TripIndexDO.ts
 import type { DurableObjectState, KVNamespace } from '@cloudflare/workers-types';
 import { log } from '$lib/server/log';
+import { safeCompare } from '$lib/server/csrf';
 
 interface TripSummary {
 	id: string;
@@ -161,10 +162,11 @@ export class TripIndexDO {
 				// DOs can only be called from workers in the same account,
 				// but we add an extra layer for admin operations
 				const internalSecret = this.env['DO_INTERNAL_SECRET'] as string | undefined;
-				const providedSecret = request.headers.get('x-do-internal-secret');
+				const providedSecret = request.headers.get('x-do-internal-secret') || '';
 
 				// If secret is configured, require it for admin ops
-				if (internalSecret && internalSecret !== providedSecret) {
+				// SECURITY: Use timing-safe comparison to prevent timing attacks
+				if (internalSecret && !safeCompare(providedSecret, internalSecret)) {
 					return false;
 				}
 				return true;

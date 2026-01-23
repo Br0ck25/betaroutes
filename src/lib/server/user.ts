@@ -1,13 +1,16 @@
 // src/lib/server/user.ts
 
 /**
- * Normalize a user object into a consistent storage id used for KV keys.
- * Prefer the `name` when available (username), then `id`, then `token`.
- * This ensures KV keys are always based on the human-readable username.
+ * Get the storage ID for a user - MUST be the user's UUID.
+ * SECURITY (Issue #1): NEVER fall back to name or token.
+ * Using name/token as storage keys enables Account Takeover attacks
+ * where attacker data can overwrite victim data.
+ *
+ * @returns The user's UUID or empty string if not available
  */
 export function getStorageId(
 	user: { id?: string; name?: string; token?: string } | undefined
 ): string {
-	if (!user) return '';
-	return user.name || user.id || user.token || '';
+	// SECURITY: Only return the user's UUID, never name or token
+	return user?.id || '';
 }

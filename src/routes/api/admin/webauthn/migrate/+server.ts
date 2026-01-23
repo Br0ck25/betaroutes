@@ -4,6 +4,7 @@ import { normalizeCredentialID, toBase64Url } from '$lib/server/webauthn-utils';
 import { safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { logAdminAction } from '$lib/server/auditLog';
+import { safeCompare } from '$lib/server/csrf';
 
 export const POST: RequestHandler = async ({ request, platform, getClientAddress }) => {
 	const { getEnv } = await import('$lib/server/env');
@@ -25,8 +26,9 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
 
 	// [SECURITY FIX] Only accept admin secret via HTTP header, never via URL query parameter
 	// URL parameters are logged in access logs, browser history, and referrer headers
+	// [SECURITY FIX] Use timing-safe comparison to prevent timing attacks
 	const provided = request.headers.get('x-admin-secret') || '';
-	if (provided !== secret) {
+	if (!safeCompare(provided, secret)) {
 		await logAdminAction(auditKV, 'webauthn_migrate', { reason: 'unauthorized' }, false, clientIp);
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}

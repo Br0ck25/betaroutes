@@ -2,11 +2,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { authenticateUser } from '$lib/server/auth';
-import { getEnv, safeKV, safeDO } from '$lib/server/env';
+import { getEnv, safeKV } from '$lib/server/env';
 import { createSession } from '$lib/server/sessionService';
 import { findUserById } from '$lib/server/userService';
-import { makeTripService } from '$lib/server/tripService';
 import { checkRateLimit } from '$lib/server/rateLimit';
+import { migrateUserStorageKeys } from '$lib/server/migration/storage-key-migration';
 import { dev } from '$app/environment';
 import { log } from '$lib/server/log';
 
@@ -45,6 +45,27 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 		// 3. Parse Body
 		const body = (await request.json()) as { email?: string; password?: string };
 		const { email, password } = body;
+
+		// [SECURITY] Rate limit per username/email to prevent distributed attacks
+		if (kv && email) {
+			const normalizedEmail = email.toLowerCase().trim();
+			// 10 attempts per username per 60 seconds (prevents targeting same account from multiple IPs)
+			const userLimit = dev ? 50 : 10;
+			const userLimitResult = await checkRateLimit(
+				kv,
+				normalizedEmail,
+				'login_user',
+				userLimit,
+				60
+			);
+
+			if (!userLimitResult.allowed) {
+				return json(
+					{ error: 'Too many login attempts for this account. Please try again later.' },
+					{ status: 429 }
+				);
+			}
+		}
 
 		// 4. Authenticate
 		// @ts-expect-error - authenticateUser has broader types; casting result safely below
@@ -90,38 +111,47 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 			maxAge: 60 * 60 * 24 * 7
 		});
 
-		// 9. AUTO-MIGRATION
-		// Move legacy data (username key) to new storage (UUID key) in background
-		if (
-			platform?.context &&
-			safeKV(env, 'BETA_LOGS_KV') &&
-			(safeDO(env, 'TRIP_INDEX_DO') || (env as unknown as Record<string, unknown>)['TRIP_INDEX_DO'])
-		) {
+		// 9. AUTO-MIGRATION: Move legacy data (username key) to new storage (UUID key)
+		// This runs in background and doesn't block the login response.
+		// See docs/MIGRATION_LOGIN_INTEGRATION.md for full documentation.
+		//
+		// WHY: Security fix (P0 Item #1) changed getStorageId() to return ONLY user.id.
+		//      Old data keyed by username would be orphaned without this migration.
+		//
+		// WHAT: Migrates trips, expenses, mileage, trash, and HughesNet data
+		//       from `{type}:{username}:{id}` to `{type}:{userId}:{id}` keys.
+		//
+		// SAFE: Idempotent (skips if new key exists), continues on individual errors.
+		if (platform?.context && authResult.username) {
 			const userId = authResult.id;
 			const username = authResult.username;
 
+			// Type assertion needed: safeKV returns @cloudflare/workers-types KVNamespace,
+			// but migration function uses the global KVNamespace type. They're compatible at runtime.
 			platform.context.waitUntil(
-				(async () => {
-					try {
-						const tripIndexDO =
-							safeDO(env, 'TRIP_INDEX_DO') ||
-							(env as unknown as Record<string, unknown>)['TRIP_INDEX_DO'];
-						const placesIndexDO = safeDO(env, 'PLACES_INDEX_DO') || tripIndexDO;
-						const svc = makeTripService(
-							safeKV(env, 'BETA_LOGS_KV') as any,
-							undefined,
-							safeKV(env, 'BETA_PLACES_KV') as any,
-							tripIndexDO as any,
-							placesIndexDO as any
-						);
-
-						// Trigger the move. If keys exist under 'username', they move to 'userId'.
-						await (svc as any).migrateUser?.(username, userId);
-					} catch (e: unknown) {
-						const msg = e instanceof Error ? e.message : String(e);
-						log.error('[Auto-Migration] Failed', { username, message: msg });
-					}
-				})()
+				migrateUserStorageKeys(
+					{
+						BETA_LOGS_KV: safeKV(env, 'BETA_LOGS_KV') as unknown as KVNamespace | undefined,
+						BETA_EXPENSES_KV: safeKV(env, 'BETA_EXPENSES_KV') as unknown as KVNamespace | undefined,
+						BETA_MILLAGE_KV: safeKV(env, 'BETA_MILLAGE_KV') as unknown as KVNamespace | undefined,
+						BETA_HUGHESNET_KV: safeKV(env, 'BETA_HUGHESNET_KV') as unknown as
+							| KVNamespace
+							| undefined,
+						BETA_HUGHESNET_ORDERS_KV: safeKV(env, 'BETA_HUGHESNET_ORDERS_KV') as unknown as
+							| KVNamespace
+							| undefined
+						// BETA_TRASH_KV intentionally omitted - not in wrangler.toml bindings
+					},
+					userId,
+					username
+				).catch((err) => {
+					const msg = err instanceof Error ? err.message : String(err);
+					log.error('[Auto-Migration] Storage key migration failed', {
+						userId,
+						username,
+						message: msg
+					});
+				})
 			);
 		}
 

@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
+	import { dev } from '$app/environment';
 	import { sanitizeStaticSvg } from '$lib/utils/sanitize';
 	const resolve = (href: string) => `${base}${href}`;
 
@@ -11,9 +12,9 @@
 		showDetails: false
 	});
 
-	// Log error for debugging
+	// SECURITY: Only log detailed errors in dev mode
 	onMount(() => {
-		if ($page.error) {
+		if ($page.error && dev) {
 			console.error('Error caught by boundary:', {
 				status: $page.status,
 				error: $page.error,
@@ -139,14 +140,14 @@
 				Go Back
 			</button>
 
-			{#if errorDetails.status >= 500}
+			{#if errorDetails.status >= 500 && dev}
 				<button onclick={toggleDetails} class="btn-text">
 					{errorDetails.showDetails ? 'Hide' : 'Show'} Technical Details
 				</button>
 			{/if}
 		</div>
 
-		{#if errorDetails.showDetails && $page.error}
+		{#if errorDetails.showDetails && $page.error && dev}
 			<div class="error-details">
 				<h3>Technical Information</h3>
 				<pre><code
