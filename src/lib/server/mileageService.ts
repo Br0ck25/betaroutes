@@ -32,7 +32,7 @@ export function makeMileageService(
 	};
 
 	return {
-		async list(userId: string, since?: string, userName?: string): Promise<MileageRecord[]> {
+		async list(userId: string, since?: string): Promise<MileageRecord[]> {
 			const stub = getIndexStub(userId);
 			const prefix = `mileage:${userId}:`;
 
@@ -53,18 +53,7 @@ export function makeMileageService(
 			if (mileage.length === 0) {
 				const kvCheck = await kv.list({ prefix, limit: 1 });
 
-				// MIGRATION: Also check legacy key if userName provided
-				let hasLegacyData = false;
-				if (kvCheck.keys.length === 0 && userName && userName !== userId) {
-					const legacyPrefix = `mileage:${userName}:`;
-					const legacyCheck = await kv.list({ prefix: legacyPrefix, limit: 1 });
-					hasLegacyData = legacyCheck.keys.length > 0;
-					if (hasLegacyData) {
-						log.info('[MIGRATION] Found legacy mileage records', { userId, userName });
-					}
-				}
-
-				if (kvCheck.keys.length > 0 || hasLegacyData) {
+				if (kvCheck.keys.length > 0) {
 					log.info(
 						`[MileageService] Detected desync for ${userId} (KV has data, Index empty). repairing...`
 					);
@@ -77,19 +66,6 @@ export function makeMileageService(
 					while (!list.list_complete && list.cursor) {
 						list = await kv.list({ prefix, cursor: list.cursor });
 						keys = keys.concat(list.keys);
-					}
-
-					// MIGRATION: Also fetch from legacy keys if userName provided
-					if (userName && userName !== userId) {
-						const legacyPrefix = `mileage:${userName}:`;
-						let legacyList = await kv.list({ prefix: legacyPrefix });
-						if (legacyList.keys.length > 0) {
-							keys = keys.concat(legacyList.keys);
-							while (!legacyList.list_complete && legacyList.cursor) {
-								legacyList = await kv.list({ prefix: legacyPrefix, cursor: legacyList.cursor });
-								keys = keys.concat(legacyList.keys);
-							}
-						}
 					}
 
 					let migratedCount = 0;
@@ -141,73 +117,34 @@ export function makeMileageService(
 				);
 		},
 
-		async get(userId: string, id: string, userName?: string) {
-			// Try new key format first (user ID based)
-			const key = `mileage:${userId}:${id}`;
-			let raw = await kv.get(key);
-
-			// MIGRATION: If not found and we have username, try legacy key
-			if (!raw && userName && userName !== userId) {
-				const legacyKey = `mileage:${userName}:${id}`;
-				raw = await kv.get(legacyKey);
-				if (raw) {
-					log.info('[MIGRATION] Found mileage record via legacy key', { userId, id, legacyKey });
-				}
-			}
-
-			return raw ? (JSON.parse(raw) as MileageRecord) : null;
+		async get(userId: string, id: string) {
+			const all = await this.list(userId);
+			return all.find((m) => m.id === id) || null;
 		},
 
 		async put(item: MileageRecord) {
 			item.updatedAt = new Date().toISOString();
 			delete item.deleted;
 
+			// Write to KV
 			await kv.put(`mileage:${item.userId}:${item.id}`, JSON.stringify(item));
 
-			// Write to DO index
-			try {
-				const stub = getIndexStub(item.userId);
-				const res = await stub.fetch(`${DO_ORIGIN}/mileage/put`, {
-					method: 'POST',
-					body: JSON.stringify(item)
-				});
-
-				if (!res.ok) {
-					log.error('[MileageService] DO put failed', { status: res.status, id: item.id });
-					// Retry once
-					try {
-						const retry = await stub.fetch(`${DO_ORIGIN}/mileage/put`, {
-							method: 'POST',
-							body: JSON.stringify(item)
-						});
-						if (!retry.ok) {
-							log.error('[MileageService] DO put retry failed', {
-								status: retry.status,
-								id: item.id
-							});
-						}
-					} catch (e) {
-						log.error('[MileageService] DO put retry threw', {
-							message: (e as Error).message,
-							id: item.id
-						});
-					}
-				}
-			} catch (e) {
-				log.error('[MileageService] DO put failed', {
-					message: (e as Error).message,
-					id: item.id
-				});
-			}
+			// Write to DO
+			const stub = getIndexStub(item.userId);
+			await stub.fetch(`${DO_ORIGIN}/mileage/put`, {
+				method: 'POST',
+				body: JSON.stringify(item)
+			});
 		},
 
 		async delete(userId: string, id: string) {
 			const stub = getIndexStub(userId);
+
 			const key = `mileage:${userId}:${id}`;
 			const raw = await kv.get(key);
 			if (!raw) return;
 
-			const item = JSON.parse(raw);
+			const item = JSON.parse(raw) as MileageRecord;
 			const now = new Date();
 			const expiresAt = new Date(now.getTime() + RETENTION.THIRTY_DAYS * 1000);
 

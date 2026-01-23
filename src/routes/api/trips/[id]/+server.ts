@@ -54,10 +54,10 @@ export const GET: RequestHandler = async (event) => {
 			placesIndexDO as unknown as DurableObjectNamespace
 		);
 
-		const userId = (user as { id?: string }).id || '';
-		const userName = (user as { name?: string }).name;
+		const userSafe = user as { name?: string; token?: string } | undefined;
+		const storageId = userSafe?.name || userSafe?.token || '';
 
-		const trip = await svc.get(userId, id, userName);
+		const trip = await svc.get(storageId, id);
 
 		if (!trip) {
 			return new Response('Not Found', { status: 404 });
@@ -71,7 +71,7 @@ export const GET: RequestHandler = async (event) => {
 					mileageKV as any,
 					safeDO(event.platform?.env, 'TRIP_INDEX_DO')!
 				);
-				const m = await mileageSvc.get(userId, id, userName);
+				const m = await mileageSvc.get(storageId, id);
 				if (m && typeof m.miles === 'number') trip.totalMiles = m.miles;
 			}
 		} catch (err) {
@@ -117,11 +117,11 @@ export const PUT: RequestHandler = async (event) => {
 			placesIndexDO as unknown as DurableObjectNamespace
 		);
 
-		const userId = (user as { id?: string }).id || '';
-		const userName = (user as { name?: string }).name;
+		const userSafe = user as { name?: string; token?: string } | undefined;
+		const storageId = userSafe?.name || userSafe?.token || '';
 
 		// Verify existing ownership
-		const existing = await svc.get(userId, id, userName);
+		const existing = await svc.get(storageId, id);
 		if (!existing) {
 			return new Response('Not Found', { status: 404 });
 		}
@@ -130,7 +130,7 @@ export const PUT: RequestHandler = async (event) => {
 			...(existing as Record<string, unknown>),
 			...(body as Record<string, unknown>),
 			id,
-			userId,
+			userId: storageId,
 			updatedAt: new Date().toISOString()
 		};
 
@@ -147,7 +147,7 @@ export const PUT: RequestHandler = async (event) => {
 					);
 					const mileageRec = {
 						id,
-						userId,
+						userId: storageId,
 						date: (body['date'] as string) || (existing as any).date || new Date().toISOString(),
 						startOdometer: 0,
 						endOdometer: 0,
@@ -211,11 +211,11 @@ export const DELETE: RequestHandler = async (event) => {
 			placesIndexDO as unknown as DurableObjectNamespace
 		);
 
-		const userId = (user as { id?: string }).id || '';
-		const userName = (user as { name?: string }).name;
+		const userSafe = user as { name?: string; token?: string } | undefined;
+		const storageId = userSafe?.name || userSafe?.token || '';
 
 		// Check if trip exists
-		const existing = await svc.get(userId, id, userName);
+		const existing = await svc.get(storageId, id);
 		if (!existing) {
 			return new Response(JSON.stringify({ error: 'Trip not found' }), {
 				status: 404,
@@ -232,7 +232,7 @@ export const DELETE: RequestHandler = async (event) => {
 		}
 
 		// Perform soft delete
-		await svc.delete(userId, id);
+		await svc.delete(storageId, id);
 
 		// --- Cascade delete: Delete linked mileage log ---
 		try {
@@ -244,12 +244,12 @@ export const DELETE: RequestHandler = async (event) => {
 				);
 				// Find mileage logs linked to this trip
 				// Mileage logs can be linked by tripId OR by having the same id as the trip
-				const allMileage = await mileageSvc.list(userId, undefined, userName);
+				const allMileage = await mileageSvc.list(storageId);
 				const linkedMileage = allMileage.filter(
 					(m: MileageRecord) => m.tripId === id || m.id === id
 				);
 				for (const m of linkedMileage) {
-					await mileageSvc.delete(userId, m.id);
+					await mileageSvc.delete(storageId, m.id);
 					log.info('Cascade deleted mileage log for trip', { tripId: id, mileageId: m.id });
 				}
 			}
@@ -260,7 +260,7 @@ export const DELETE: RequestHandler = async (event) => {
 			});
 		}
 
-		await svc.incrementUserCounter(user.token ?? '', -1);
+		await svc.incrementUserCounter(userSafe?.token ?? '', -1);
 
 		return new Response(JSON.stringify({ success: true }), {
 			status: 200,

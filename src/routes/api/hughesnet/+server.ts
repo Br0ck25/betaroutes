@@ -21,9 +21,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		const body = (await request.json()) as unknown;
 		const bodyObj = body as Record<string, unknown>;
 		const user = locals.user as SessionUser | undefined;
-		// SECURITY FIX: Only use user.id for storage keys
-		const userId = user?.id || '';
-		// const userName = user?.name; // TODO Phase 2: Pass to services for legacy reads
+		const userId = user?.name || user?.token || user?.id || 'default_user';
 		const settingsId = user?.id;
 
 		const action = String(bodyObj['action'] || '');
@@ -134,8 +132,7 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
 	if (!safeKV(env, 'BETA_HUGHESNET_KV')) return json({ orders: {} });
 	try {
 		const user = locals.user as SessionUser | undefined;
-		// SECURITY FIX: Only use user.id for storage keys
-		const userId = user?.id || '';
+		const userId = user?.name || user?.token || user?.id || 'default_user';
 
 		const HNS_ENCRYPTION_KEY = (env as Record<string, unknown>)['HNS_ENCRYPTION_KEY'] as
 			| string

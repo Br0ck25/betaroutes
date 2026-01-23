@@ -70,32 +70,6 @@ console.log('Password:', password); // Logged
 
 ## Data Storage Security
 
-## 🚫 Forbidden Patterns (Zero Tolerance)
-
-The following patterns were identified as high-risk during the **2026 Audit** and are **STRICTLY PROHIBITED**:
-
-### 1. No "Debug" or "Backdoor" Routes
-
-❌ **NEVER** create API endpoints for testing or debugging that bypass auth or wipe data (e.g., `/api/debug/*`, `/test/seed`).
-✅ **USE** local seed scripts or unit tests instead.
-
-### 2. No Identity Fallbacks
-
-❌ **NEVER** fall back to insecure fields if a User ID is missing (e.g., `user.id || user.name`).
-✅ **ALWAYS** throw an error if the unique ID is missing.
-
-### 3. No Mass Assignment
-
-❌ **NEVER** spread request bodies directly into database objects (e.g., `const user = { ...body }`).
-✅ **ALWAYS** destructure and allow only specific fields (e.g., `const user = { email: body.email }`).
-
-### 4. No Global/Shared Cache Keys
-
-❌ **NEVER** store user data in global keys (e.g., `KV.put('recent_places')`).
-✅ **ALWAYS** scope keys to the user (e.g., ``KV.put(`places:${userId}`)``).
-
----
-
 ### Cloudflare KV Storage (Trip Data)
 
 **Current Architecture:**
@@ -389,8 +363,6 @@ export default {
 - ✅ **MUST use HTTPS** for all authentication
 - ✅ **MUST implement session timeout** (30 minutes recommended)
 - ✅ **MUST implement logout** functionality
-- ✅ **MUST implement CSRF protection** for all state-changing requests (POST/PUT/DELETE)
-- ✅ **MUST invalidate all sessions** when a user changes their password
 - ✅ **SHOULD implement "Remember Me"** securely (if needed)
 - ❌ **NEVER trust client-side** authentication state alone
 - ❌ **NEVER use weak session tokens**
@@ -421,10 +393,7 @@ localStorage.setItem('authToken', token); // Vulnerable to XSS
 - ✅ **MUST use HTTPS** for all API calls
 - ✅ **MUST validate all inputs** server-side
 - ✅ **MUST sanitize all outputs** to prevent XSS
-- ✅ **MUST implement rate limiting** on:
-- Authentication endpoints (Login, Register)
-- Expensive APIs (Maps, Optimization)
-- Communication endpoints (Email, SMS)
+- ✅ **SHOULD implement rate limiting** to prevent abuse
 - ❌ **NEVER trust client data** without validation
 - ❌ **NEVER expose sensitive data** in error messages
 
@@ -495,12 +464,10 @@ localStorage.setItem('authToken', token); // Vulnerable to XSS
 **What NOT to log:**
 
 - ❌ Passwords (plaintext or hashed)
-- ❌ Session tokens
-- ❌ Secrets: any object containing `password`, `token`, `secret`, `key`, or `hash`
 - ❌ Full addresses
 - ❌ Dollar amounts (in production)
 - ❌ Credit card numbers
-- ❌ PII (names, emails, phones) in production info logs
+- ❌ Session tokens
 - ❌ Any PII unnecessarily
 
 ---
@@ -749,7 +716,7 @@ This document should be reviewed and updated:
 - ✅ When adding new third-party services
 - ✅ At least annually
 
-**Last Updated:** 2026-01-22
+**Last Updated:** 2026-01-20
 
 ---
 
