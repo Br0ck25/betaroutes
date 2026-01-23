@@ -66,17 +66,29 @@ export class HughesNetService {
 		void this._logsKV;
 	}
 
+	// [!code fix] SECURITY: Limit log array size to prevent OOM during long syncs
+	private static readonly MAX_LOGS = 1000;
+
+	private pushLog(msg: string) {
+		if (this.logs.length >= HughesNetService.MAX_LOGS) {
+			// Remove oldest entries to make room
+			this.logs.splice(0, 100);
+			this.logs.push('... [older logs trimmed] ...');
+		}
+		this.logs.push(msg);
+	}
+
 	private log(msg: string) {
 		log.debug(msg);
-		this.logs.push(msg);
+		this.pushLog(msg);
 	}
 	private warn(msg: string) {
 		log.warn(msg);
-		this.logs.push(`⚠️ ${msg}`);
+		this.pushLog(`⚠️ ${msg}`);
 	}
 	private error(msg: string, e?: unknown) {
 		log.error(msg, e as Error | undefined);
-		this.logs.push(`❌ ${msg}`);
+		this.pushLog(`❌ ${msg}`);
 	}
 
 	// --- Locking Logic ---

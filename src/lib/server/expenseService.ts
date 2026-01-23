@@ -123,6 +123,27 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 			return expenses.filter((e) => !e.deleted);
 		},
 
+		/**
+		 * Atomically check and increment the monthly expense quota.
+		 * Uses Durable Object to prevent race conditions.
+		 * @returns { allowed: boolean, count: number }
+		 */
+		async checkMonthlyQuota(
+			userId: string,
+			limit: number
+		): Promise<{ allowed: boolean; count: number }> {
+			const date = new Date();
+			const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+			const stub = getIndexStub(userId);
+
+			const res = await stub.fetch(`${DO_ORIGIN}/expenses/check-increment`, {
+				method: 'POST',
+				body: JSON.stringify({ monthKey, limit })
+			});
+			if (!res.ok) return { allowed: false, count: limit };
+			return (await res.json()) as { allowed: boolean; count: number };
+		},
+
 		async get(userId: string, id: string) {
 			// Reuse list to ensure consistent behavior
 			const all = await this.list(userId);

@@ -4,29 +4,13 @@ import { makeTripService } from '$lib/server/tripService';
 import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
 import type { TripRecord } from '$lib/server/tripService';
 import { log } from '$lib/server/log';
-import { safeDO } from '$lib/server/env';
+import { safeDO, safeKV } from '$lib/server/env';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
+import { dev } from '$app/environment';
 
-// Helper to safely get KV namespace
-function safeKV(env: unknown, name: string) {
-	const bindings = env as Record<string, unknown> | undefined;
-	const kv = bindings?.[name];
-	if (!kv) {
-		log.warn(`[API] KV Binding '${name}' not found.`);
-	}
-	return kv ?? undefined;
-}
-
-// [!code ++] Helper for fake Durable Object (Fallback)
-function fakeDO() {
-	return {
-		idFromName: () => ({ name: 'fake' }),
-		get: () => ({
-			fetch: async () => new Response(JSON.stringify([]))
-		})
-	};
-}
+// [!code fix] SECURITY: Removed dangerous fakeDO fallback that caused silent data loss.
+// In production, missing DO bindings now properly error. Dev mode uses a noop stub for testing only.
 
 // SECURITY: Allowed fields for trip updates (prevents mass assignment)
 const ALLOWED_UPDATE_FIELDS = new Set([
@@ -88,8 +72,12 @@ export const GET: RequestHandler = async (event) => {
 		// Connect to KVs
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
-		// [!code fix] Get DO binding
-		const tripIndexDO = safeDO(event.platform?.env, 'TRIP_INDEX_DO') ?? fakeDO();
+		// [!code fix] SECURITY: Fail properly in production if DO bindings are missing
+		const tripIndexDO = safeDO(event.platform?.env, 'TRIP_INDEX_DO');
+		if (!tripIndexDO && !dev) {
+			log.error('[API/trips/[id]] TRIP_INDEX_DO binding missing in production');
+			return new Response('Service Unavailable', { status: 503 });
+		}
 		const placesIndexDO = safeDO(event.platform?.env, 'PLACES_INDEX_DO') ?? tripIndexDO;
 
 		// [!code fix] Pass DO to service (add placesIndexDO)
@@ -151,8 +139,12 @@ export const PUT: RequestHandler = async (event) => {
 
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
-		// [!code fix] Get DO binding
-		const tripIndexDO = safeDO(event.platform?.env, 'TRIP_INDEX_DO') ?? fakeDO();
+		// [!code fix] SECURITY: Fail properly in production if DO bindings are missing
+		const tripIndexDO = safeDO(event.platform?.env, 'TRIP_INDEX_DO');
+		if (!tripIndexDO && !dev) {
+			log.error('[API/trips/[id]] TRIP_INDEX_DO binding missing in production');
+			return new Response('Service Unavailable', { status: 503 });
+		}
 		const placesIndexDO = safeDO(event.platform?.env, 'PLACES_INDEX_DO') ?? tripIndexDO;
 
 		// [!code fix] Pass DO to service (add placesIndexDO)
@@ -254,8 +246,12 @@ export const DELETE: RequestHandler = async (event) => {
 
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
-		// [!code fix] Get DO binding
-		const tripIndexDO = safeDO(event.platform?.env, 'TRIP_INDEX_DO') ?? fakeDO();
+		// [!code fix] SECURITY: Fail properly in production if DO bindings are missing
+		const tripIndexDO = safeDO(event.platform?.env, 'TRIP_INDEX_DO');
+		if (!tripIndexDO && !dev) {
+			log.error('[API/trips/[id]] TRIP_INDEX_DO binding missing in production');
+			return new Response('Service Unavailable', { status: 503 });
+		}
 		const placesIndexDO = safeDO(event.platform?.env, 'PLACES_INDEX_DO') ?? tripIndexDO;
 
 		// [!code fix] Pass DO to service

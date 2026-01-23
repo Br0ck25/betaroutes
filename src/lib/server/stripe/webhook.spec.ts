@@ -27,9 +27,9 @@ function makeReq(body: string, sig = 'sig') {
 describe('Stripe webhook handler', () => {
 	let platform: any;
 
-	beforeEach(() => {
+	beforeEach(async () => {
 		const event: any = { platform: { env: {} } };
-		setupMockKV(event);
+		await setupMockKV(event);
 		platform = event.platform;
 		// Set webhook secret
 		platform.env.STRIPE_WEBHOOK_SECRET = 'whsec_test';

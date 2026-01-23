@@ -30,6 +30,12 @@
 	let sessionExpired = false;
 	let rememberThisDevice = false;
 
+	// Passkey Removal State (Sudo Mode)
+	let showPasskeyRemoveConfirm = false;
+	let passkeyRemovePassword = '';
+	let passkeyRemoveError = '';
+	let pendingRemoveCredentialID: string | null = null;
+
 	async function changePassword() {
 		if (passwordData.new !== passwordData.confirm) {
 			passwordError = 'Passwords do not match';
@@ -193,26 +199,54 @@
 
 	async function unregisterThisDevice() {
 		if (!deviceCredentialID) return;
-		if (!confirm('Unregister this passkey from this device?')) return;
+		// Show sudo mode confirmation dialog instead of browser confirm
+		pendingRemoveCredentialID = deviceCredentialID;
+		passkeyRemovePassword = '';
+		passkeyRemoveError = '';
+		showPasskeyRemoveConfirm = true;
+	}
+
+	async function confirmPasskeyRemoval() {
+		if (!pendingRemoveCredentialID) return;
+		if (!passkeyRemovePassword) {
+			passkeyRemoveError = 'Please enter your password to confirm.';
+			return;
+		}
+
 		unregistering = true;
+		passkeyRemoveError = '';
 		try {
 			const res = await csrfFetch('/api/auth/webauthn/delete', {
 				method: 'POST',
 				credentials: 'same-origin',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ credentialID: deviceCredentialID })
+				body: JSON.stringify({
+					credentialID: pendingRemoveCredentialID,
+					password: passkeyRemovePassword
+				})
 			});
 			const json: any = await res.json();
 			if (!res.ok) {
 				if (res.status === 401) {
+					if (json?.error === 'Invalid password') {
+						passkeyRemoveError = 'Incorrect password. Please try again.';
+						return;
+					}
 					sessionExpired = true;
 					toasts.error('Session expired. Please reload or sign in again.');
+					return;
+				}
+				if (res.status === 403 && json?.requiresPassword) {
+					passkeyRemoveError = 'Password is required to remove passkeys.';
 					return;
 				}
 				throw new Error(json?.error || 'Failed to unregister');
 			}
 
 			sessionExpired = false;
+			showPasskeyRemoveConfirm = false;
+			passkeyRemovePassword = '';
+			pendingRemoveCredentialID = null;
 			dispatch('success', 'This device was unregistered');
 			toasts.success('This device was unregistered');
 
@@ -230,10 +264,17 @@
 			await loadAuthenticators();
 		} catch (err) {
 			console.error('[Passkey] Unregister failed', err);
-			toasts.error('Failed to unregister this device.');
+			passkeyRemoveError = 'Failed to unregister this device.';
 		} finally {
 			unregistering = false;
 		}
+	}
+
+	function cancelPasskeyRemoval() {
+		showPasskeyRemoveConfirm = false;
+		passkeyRemovePassword = '';
+		passkeyRemoveError = '';
+		pendingRemoveCredentialID = null;
 	}
 
 	async function registerPasskey() {
@@ -398,7 +439,11 @@
 			</div>
 
 			{#if deviceRegistered}
-				<button class="btn-secondary" on:click={unregisterThisDevice} disabled={unregistering}>
+				<button
+					class="btn-secondary"
+					on:click={unregisterThisDevice}
+					disabled={unregistering || showPasskeyRemoveConfirm}
+				>
 					<svg
 						width="16"
 						height="16"
@@ -412,6 +457,32 @@
 					</svg>
 					{unregistering ? 'Unregistering...' : 'Unregister This Device'}
 				</button>
+
+				{#if showPasskeyRemoveConfirm}
+					<div class="delete-confirmation" style="margin-top: 12px;">
+						<p class="delete-warning">To confirm passkey removal, please enter your password:</p>
+						<input
+							type="password"
+							bind:value={passkeyRemovePassword}
+							placeholder="Enter your password"
+							class="delete-input"
+						/>
+						{#if passkeyRemoveError}<p class="error-text">{passkeyRemoveError}</p>{/if}
+
+						<div class="button-group">
+							<button
+								class="btn-delete-confirm"
+								on:click={confirmPasskeyRemoval}
+								disabled={unregistering}
+							>
+								{unregistering ? 'Removing...' : 'Confirm Removal'}
+							</button>
+							<button class="btn-secondary" on:click={cancelPasskeyRemoval} disabled={unregistering}
+								>Cancel</button
+							>
+						</div>
+					</div>
+				{/if}
 
 				<div style="margin-top: 8px; display:flex; align-items:center; gap:10px;">
 					<label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#374151;">

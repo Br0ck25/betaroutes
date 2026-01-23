@@ -3,6 +3,12 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { log } from '$lib/server/log';
 import type { KVNamespace } from '@cloudflare/workers-types';
+import {
+	checkRateLimitEnhanced,
+	createRateLimitHeaders,
+	getClientIdentifier
+} from '$lib/server/rateLimit';
+import { safeKV } from '$lib/server/env';
 
 /**
  * Helper: Server geocoding is handled via Google (geocode helper) — Photon removed.
@@ -35,6 +41,32 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	// 1. Security Check
 	if (!locals.user) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
+	}
+
+	// [!code fix] SECURITY: Rate limit expensive route optimization (10/min per user)
+	const sessionsKV = safeKV(platform?.env, 'BETA_SESSIONS_KV');
+	if (sessionsKV) {
+		const identifier = getClientIdentifier(request, locals);
+		const rateLimitResult = await checkRateLimitEnhanced(
+			sessionsKV,
+			identifier,
+			'directions_optimize',
+			10, // 10 requests per minute (expensive operation)
+			60000
+		);
+
+		const headers = createRateLimitHeaders(rateLimitResult);
+
+		if (!rateLimitResult.allowed) {
+			log.warn('[DirectionsOptimize] Rate limit exceeded', { identifier });
+			return json(
+				{
+					error: 'Too many optimization requests. Please try again later.',
+					resetAt: rateLimitResult.resetAt
+				},
+				{ status: 429, headers }
+			);
+		}
 	}
 
 	const __body: any = await request.json();

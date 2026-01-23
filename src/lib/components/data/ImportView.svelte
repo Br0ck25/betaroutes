@@ -6,6 +6,35 @@
 	let isProcessing = false;
 	let previewTrips: any[] = [];
 
+	// [SECURITY] Validate file content matches expected format (not just extension)
+	const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
+	function validateCSVContent(text: string): boolean {
+		// CSV should have at least a header row and be mostly printable ASCII
+		if (!text || text.length < 5) return false;
+
+		// Check for binary/null bytes that shouldn't be in CSV
+		// Check first 1000 chars for null byte (char code 0)
+		const sample = text.slice(0, 1000);
+		if (sample.includes('\0')) return false;
+
+		// Should have at least one line break
+		if (!/\r?\n/.test(text)) return false;
+
+		// First line should look like comma-separated values (not binary)
+		const firstLine = text.split(/\r?\n/)[0] || '';
+		if (firstLine.length < 3) return false;
+
+		return true;
+	}
+
+	function validatePDFMagicBytes(buffer: ArrayBuffer): boolean {
+		// PDF files start with "%PDF-" (magic bytes)
+		const header = new Uint8Array(buffer.slice(0, 5));
+		const magic = String.fromCharCode(...header);
+		return magic === '%PDF-';
+	}
+
 	async function handleFileUpload(e: Event) {
 		const input = e.target as HTMLInputElement;
 		const files = input.files;
@@ -13,13 +42,40 @@
 
 		const file = files.item(0);
 		if (!file) return;
+
+		// [SECURITY] Validate file size
+		if (file.size > MAX_FILE_SIZE) {
+			alert('File is too large. Please use a file smaller than 5MB.');
+			return;
+		}
+
 		isProcessing = true;
 
 		try {
 			if (importFormat === 'csv') {
 				const text = await file.text();
+
+				// [SECURITY] Validate CSV content structure
+				if (!validateCSVContent(text)) {
+					alert(
+						'The file does not appear to be a valid CSV file. Please ensure you are uploading a CSV file.'
+					);
+					previewTrips = [];
+					return;
+				}
+
 				parseCSV(text);
 			} else {
+				// [SECURITY] Validate PDF magic bytes
+				const buffer = await file.arrayBuffer();
+				if (!validatePDFMagicBytes(buffer)) {
+					alert(
+						'The file does not appear to be a valid PDF file. Please ensure you are uploading a PDF file.'
+					);
+					previewTrips = [];
+					return;
+				}
+
 				alert('PDF import is not fully supported yet. Please use CSV for best results.');
 				previewTrips = [];
 			}

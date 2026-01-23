@@ -494,6 +494,25 @@ export class TripIndexDO {
 				return new Response('OK');
 			}
 
+			// --- EXPENSE BILLING/QUOTA (atomic to prevent race conditions) ---
+			if (path === '/expenses/check-increment') {
+				const { monthKey, limit } = await parseBody<{ monthKey: string; limit: number }>();
+				const key = `expense_count:${monthKey}`;
+				const current = (await this.state.storage.get<number>(key)) || 0;
+				if (current >= limit)
+					return new Response(JSON.stringify({ allowed: false, count: current }));
+				await this.state.storage.put(key, current + 1);
+				return new Response(JSON.stringify({ allowed: true, count: current + 1 }));
+			}
+
+			if (path === '/expenses/decrement') {
+				const { monthKey } = await parseBody<{ monthKey: string }>();
+				const key = `expense_count:${monthKey}`;
+				const current = (await this.state.storage.get<number>(key)) || 0;
+				await this.state.storage.put(key, Math.max(0, current - 1));
+				return new Response(JSON.stringify({ count: Math.max(0, current - 1) }));
+			}
+
 			if (path === '/expenses/migrate') {
 				const items = await parseBody<ExpenseRecord[]>();
 				this.state.storage.sql.exec('BEGIN TRANSACTION');

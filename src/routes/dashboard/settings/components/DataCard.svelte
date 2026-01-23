@@ -169,6 +169,18 @@
 		const MAX_IMPORT_ROWS = 2000; // safety cap
 		const MAX_COLUMNS = 200;
 
+		// [SECURITY] Validate file content matches expected CSV format
+		function validateCSVContent(text: string): boolean {
+			if (!text || text.length < 5) return false;
+			// Check for binary/null bytes that shouldn't be in CSV
+			// Check first 1000 chars for null byte (char code 0)
+			const sample = text.slice(0, 1000);
+			if (sample.includes('\0')) return false;
+			// Should have at least one line break
+			if (!/\r?\n/.test(text)) return false;
+			return true;
+		}
+
 		const input = document.createElement('input');
 		input.type = 'file';
 		input.accept = '.csv';
@@ -184,6 +196,15 @@
 
 			try {
 				const text = await file.text();
+
+				// [SECURITY] Validate CSV content structure
+				if (!validateCSVContent(text)) {
+					alert(
+						'The file does not appear to be a valid CSV file. Please ensure you are uploading a CSV file.'
+					);
+					return;
+				}
+
 				const lines = text.split(/\r?\n/);
 				if (lines.length < 2) throw new Error('Empty CSV');
 

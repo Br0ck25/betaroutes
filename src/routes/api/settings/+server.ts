@@ -3,6 +3,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { z } from 'zod';
 import { log } from '$lib/server/log';
+import { checkRateLimit } from '$lib/server/rateLimit';
 
 const settingsSchema = z.object({
 	defaultStartAddress: z.string().max(500).optional(),
@@ -59,6 +60,13 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 	const env = getEnv(platform);
 	const kv = safeKV(env, 'BETA_USER_SETTINGS_KV');
 	if (!kv) return json({ error: 'Service Unavailable' }, { status: 503 });
+
+	// [!code fix] SECURITY: Rate limit settings updates to prevent KV write abuse
+	// Allow 30 settings updates per minute per user (generous for UI, but limits abuse)
+	const { allowed } = await checkRateLimit(kv, user.id, 'settings_update', 30, 60);
+	if (!allowed) {
+		return json({ error: 'Too many settings updates. Please wait.' }, { status: 429 });
+	}
 
 	try {
 		const body: any = await request.json();

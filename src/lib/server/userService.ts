@@ -313,13 +313,16 @@ export async function updatePasswordHash(kv: KVNamespace, user: User, newHash: s
 }
 
 /**
- * Completely delete a user and ALL associated data (Trips, Settings, Indexes)
+ * Completely delete a user and ALL associated data (Trips, Expenses, Mileage, Settings, Indexes, Trash)
  */
 export async function deleteUser(
 	kv: KVNamespace,
 	userId: string,
 	resources?: {
 		tripsKV?: KVNamespace;
+		expensesKV?: KVNamespace;
+		mileageKV?: KVNamespace;
+		trashKV?: KVNamespace;
 		settingsKV?: KVNamespace;
 		tripIndexDO?: DurableObjectNamespace;
 		env?: { DO_INTERNAL_SECRET?: string };
@@ -391,6 +394,27 @@ export async function deleteUser(
 	if (resources?.tripsKV) {
 		cleanupTasks.push(wipeNamespace(resources.tripsKV, `trip:${user.username}:`));
 		cleanupTasks.push(wipeNamespace(resources.tripsKV, `trip:${userId}:`));
+	}
+
+	// [SECURITY] Delete all expenses for this user
+	if (resources?.expensesKV) {
+		cleanupTasks.push(wipeNamespace(resources.expensesKV, `expense:${user.username}:`));
+		cleanupTasks.push(wipeNamespace(resources.expensesKV, `expense:${userId}:`));
+		log.debug(`[UserService] Queued expense cleanup for ${userId}`);
+	}
+
+	// [SECURITY] Delete all mileage logs for this user
+	if (resources?.mileageKV) {
+		cleanupTasks.push(wipeNamespace(resources.mileageKV, `mileage:${user.username}:`));
+		cleanupTasks.push(wipeNamespace(resources.mileageKV, `mileage:${userId}:`));
+		log.debug(`[UserService] Queued mileage cleanup for ${userId}`);
+	}
+
+	// [SECURITY] Delete all trash for this user
+	if (resources?.trashKV) {
+		cleanupTasks.push(wipeNamespace(resources.trashKV, `trash:${user.username}:`));
+		cleanupTasks.push(wipeNamespace(resources.trashKV, `trash:${userId}:`));
+		log.debug(`[UserService] Queued trash cleanup for ${userId}`);
 	}
 
 	await Promise.all(authPromises);
