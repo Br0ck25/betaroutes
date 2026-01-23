@@ -381,19 +381,35 @@ export function makeTripService(
 
 			// 1. Update the Summary Index
 			try {
+				const summary = toSummary(trip);
+				log.info('[TripService] Writing trip to DO', {
+					tripId: trip.id,
+					userId: trip.userId,
+					summarySize: JSON.stringify(summary).length
+				});
+
 				const r = await stub.fetch(`${DO_ORIGIN}/put`, {
 					method: 'POST',
-					body: JSON.stringify(toSummary(trip))
+					body: JSON.stringify(summary)
 				});
+
 				if (!r.ok) {
-					log.warn('[TripService] DO put returned non-ok status - marking dirty', {
-						status: r.status
+					const errorText = await r.text().catch(() => 'Unable to read error');
+					log.error('[TripService] DO put returned non-ok status', {
+						status: r.status,
+						tripId: trip.id,
+						error: errorText
 					});
-					// CRITICAL: Mark index as dirty so next list() fetches from KV
 					await markDirty(trip.userId);
+				} else {
+					log.info('[TripService] Trip successfully written to DO', { tripId: trip.id });
 				}
 			} catch (e) {
-				log.error('[TripService] DO put failed - marking dirty', { message: (e as Error).message });
+				log.error('[TripService] DO put failed with exception', {
+					tripId: trip.id,
+					message: (e as Error).message,
+					stack: (e as Error).stack
+				});
 				await markDirty(trip.userId);
 			}
 
