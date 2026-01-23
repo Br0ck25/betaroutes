@@ -14,14 +14,16 @@ const settingsSchema = z.object({
 	distanceUnit: z.enum(['mi', 'km']).optional(),
 	currency: z.enum(['USD', 'EUR', 'GBP', 'JPY']).optional(),
 	theme: z.enum(['light', 'dark', 'system']).optional(),
-	expenseCategories: z.array(z.string()).optional(),
-	maintenanceCategories: z.array(z.string()).optional(),
-	supplyCategories: z.array(z.string()).optional(),
+	// SECURITY: Limit category arrays to prevent DoS via large payloads
+	expenseCategories: z.array(z.string().max(100)).max(50).optional(),
+	maintenanceCategories: z.array(z.string().max(100)).max(50).optional(),
+	supplyCategories: z.array(z.string().max(100)).max(50).optional(),
 
 	// Mileage defaults
 	mileageRate: z.number().nonnegative().optional(),
 	vehicles: z
 		.array(z.object({ id: z.string().max(100), name: z.string().max(200) }).strict())
+		.max(20)
 		.optional(),
 
 	// Vehicle & maintenance settings

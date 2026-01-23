@@ -7,6 +7,23 @@ import { createSafeErrorMessage } from '$lib/server/sanitize';
 // --- Security Helpers ---
 
 /**
+ * Mask email for logging (e.g., "john@example.com" -> "j***@e***.com")
+ * SECURITY: Prevents full email exposure in logs
+ */
+export function maskEmail(email: string): string {
+	if (!email || !email.includes('@')) return '***';
+	const parts = email.split('@');
+	const local = parts[0] ?? '';
+	const domain = parts[1] ?? '';
+	const domainParts = domain.split('.');
+	const domainName = domainParts[0] ?? '';
+	const tlds = domainParts.slice(1);
+	const maskedLocal = local.length > 1 ? local[0] + '***' : '***';
+	const maskedDomain = domainName.length > 1 ? domainName[0] + '***' : '***';
+	return `${maskedLocal}@${maskedDomain}.${tlds.join('.')}`;
+}
+
+/**
  * Escape HTML special characters to prevent XSS
  * SECURITY: Always use this when interpolating user input into HTML
  */
@@ -303,7 +320,7 @@ export async function sendVerificationEmail(
 			throw new Error(`Resend API error: ${res.status} - ${errorText}`);
 		}
 
-		log.debug('✅ Verification email sent successfully to', email);
+		log.debug('✅ Verification email sent successfully to', maskEmail(email));
 		return true;
 	} catch (e: unknown) {
 		log.error('❌ Email send failed', { message: createSafeErrorMessage(e) });
@@ -365,7 +382,7 @@ export async function sendPasswordResetEmail(
 			throw new Error(`Resend API error: ${res.status} - ${errorText}`);
 		}
 
-		log.info('Password reset email sent', { email });
+		log.info('Password reset email sent', { email: maskEmail(email) });
 		return true;
 	} catch (e: unknown) {
 		log.error('❌ Email send failed', { message: createSafeErrorMessage(e) });
@@ -626,7 +643,7 @@ export async function sendSecurityAlertEmail(
 			return false;
 		}
 
-		log.info('[SecurityAlert] Email sent', { alertType, email: email.slice(0, 3) + '***' });
+		log.info('[SecurityAlert] Email sent', { alertType, email: maskEmail(email) });
 		return true;
 	} catch (e) {
 		log.error('❌ Security alert email send failed:', e);

@@ -213,6 +213,19 @@ export const handle: Handle = async ({ event, resolve }) => {
 	response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
 	response.headers.set('Permissions-Policy', 'geolocation=(self), camera=(), microphone=()');
 
+	// HSTS: Force HTTPS for 1 year, include subdomains
+	// Only set in production to avoid localhost issues
+	if (!dev) {
+		response.headers.set(
+			'Strict-Transport-Security',
+			'max-age=31536000; includeSubDomains; preload'
+		);
+	}
+
+	// Remove server fingerprinting headers
+	response.headers.delete('X-Powered-By');
+	response.headers.delete('Server');
+
 	// Content Security Policy (Issue #6)
 	if (!response.headers.has('Content-Security-Policy')) {
 		response.headers.set(
@@ -225,6 +238,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 				"font-src 'self' https://fonts.gstatic.com",
 				"connect-src 'self' https://maps.googleapis.com https://places.googleapis.com https://cloudflareinsights.com",
 				"frame-src 'none'",
+				"frame-ancestors 'none'",
 				"object-src 'none'",
 				"base-uri 'self'",
 				"form-action 'self'"
@@ -235,8 +249,20 @@ export const handle: Handle = async ({ event, resolve }) => {
 	try {
 		if (event.request.method === 'GET' && response.status === 200) {
 			const existing = response.headers.get('cache-control');
-			if (!existing) {
-				const urlPath = event.url.pathname.toLowerCase();
+			const urlPath = event.url.pathname.toLowerCase();
+
+			// SECURITY: Prevent caching of sensitive pages (dashboard, settings, etc.)
+			// This prevents the browser "back button" from showing stale sensitive data
+			const isSensitivePage =
+				urlPath.startsWith('/dashboard') ||
+				urlPath.startsWith('/settings') ||
+				urlPath.startsWith('/api/');
+
+			if (isSensitivePage) {
+				response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+				response.headers.set('Pragma', 'no-cache');
+				response.headers.set('Expires', '0');
+			} else if (!existing) {
 				const oneYear = 'public, max-age=31536000, immutable';
 				const thirtyDays = 'public, max-age=2592000, immutable';
 

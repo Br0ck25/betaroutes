@@ -6,8 +6,12 @@ import { log } from '$lib/server/log';
 export const POST: RequestHandler = async ({ cookies, platform }) => {
 	const sessionId = cookies.get('session_id');
 
-	// 1. Delete cookie
+	// 1. Delete all auth-related cookies (both current and legacy names)
 	cookies.delete('session_id', { path: '/' });
+	cookies.delete('token', { path: '/' }); // Legacy cookie
+	cookies.delete('csrf_token', { path: '/' });
+	cookies.delete('csrf_token_readable', { path: '/' });
+	cookies.delete('webauthn-challenge', { path: '/' });
 
 	// 2. Delete session from KV
 	if (sessionId) {

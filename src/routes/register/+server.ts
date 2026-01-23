@@ -113,15 +113,24 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
 		log.info('[Register] ✅ Validation passed');
 
 		// 5. Check Existing Users
+		// SECURITY: Use generic message to prevent email/username enumeration
 		log.info('[Register] Checking for existing users');
 		const existingEmail = await findUserByEmail(usersKV, normEmail);
 		if (existingEmail) {
-			return json({ message: 'Email already in use.' }, { status: 409 });
+			// Generic message to prevent enumeration
+			return json(
+				{ message: 'Registration failed. Please try a different email or username.' },
+				{ status: 409 }
+			);
 		}
 
 		const existingUser = await findUserByUsername(usersKV, normUser);
 		if (existingUser) {
-			return json({ message: 'Username taken.' }, { status: 409 });
+			// Generic message to prevent enumeration
+			return json(
+				{ message: 'Registration failed. Please try a different email or username.' },
+				{ status: 409 }
+			);
 		}
 		log.info('[Register] ✅ User is new');
 
