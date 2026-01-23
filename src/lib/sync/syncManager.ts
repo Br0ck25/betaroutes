@@ -3,6 +3,7 @@ import { getDB } from '$lib/db/indexedDB';
 import { syncStatus } from '$lib/stores/sync';
 import type { SyncQueueItem, TripRecord } from '$lib/db/types';
 import { loadGoogleMaps } from '$lib/utils/autocomplete';
+import { csrfFetch } from '$lib/utils/csrf';
 
 interface StoreHandler {
 	updateLocal: (data: any) => void;
@@ -305,7 +306,7 @@ class SyncManager {
 		updateStore: 'trips' | 'expenses' | 'mileage' | 'trash' | null,
 		id: string
 	) {
-		const res = await fetch(url, {
+		const res = await csrfFetch(url, {
 			method,
 			keepalive: true,
 			credentials: 'include',

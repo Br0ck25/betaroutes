@@ -1,5 +1,6 @@
 // src/lib/services/maps.ts
 import type { Destination } from '$lib/types';
+import { csrfFetch } from '$lib/utils/csrf';
 
 export interface RouteResult {
 	totalMiles: number;
@@ -17,7 +18,7 @@ export async function optimizeRoute(
 	endAddress: string,
 	destinations: Destination[]
 ) {
-	const res = await fetch('/api/directions/optimize', {
+	const res = await csrfFetch('/api/directions/optimize', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({
