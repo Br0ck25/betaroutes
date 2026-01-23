@@ -122,7 +122,7 @@ export const POST: RequestHandler = async (event) => {
 			updatedAt: new Date().toISOString()
 		};
 
-		// --- FREE TIER EXPENSE QUOTA (rolling window) ---
+		// --- FREE TIER EXPENSE QUOTA (atomic via Durable Object to prevent race conditions) ---
 		let currentPlan: string = String(user.plan || '');
 		try {
 			// Attempt to fetch fresh user plan if available
@@ -142,20 +142,22 @@ export const POST: RequestHandler = async (event) => {
 		}
 
 		if (currentPlan === 'free') {
-			const windowDays = PLAN_LIMITS.FREE.WINDOW_DAYS || 30;
-			const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
-			const recentExpenses = await svc.list(storageId, since);
 			const allowed =
 				PLAN_LIMITS.FREE.MAX_EXPENSES_PER_MONTH || PLAN_LIMITS.FREE.MAX_EXPENSES_IN_WINDOW || 20;
-			if (recentExpenses.length >= allowed) {
+
+			// Use atomic check-and-increment in Durable Object to prevent race conditions
+			const quotaResult = await svc.checkMonthlyQuota(storageId, allowed);
+
+			if (!quotaResult.allowed) {
 				return new Response(
 					JSON.stringify({
 						error: 'Limit Reached',
-						message: `You have reached your free limit of ${allowed} expenses in the last ${windowDays} days (Used: ${recentExpenses.length}).`
+						message: `You have reached your free limit of ${allowed} expenses this month (Used: ${quotaResult.count}).`
 					}),
 					{ status: 403, headers: { 'Content-Type': 'application/json' } }
 				);
 			}
+			// Note: Counter was already incremented atomically by checkMonthlyQuota
 		}
 
 		const savedExpense = { ...expense } as Record<string, unknown>;

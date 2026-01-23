@@ -174,3 +174,38 @@ export async function authenticateUser(
 
 	return { id: user.id, username: user.username, email: user.email };
 }
+
+/**
+ * Verifies a password for sudo mode / re-authentication.
+ * Used for sensitive actions like WebAuthn management, email change, etc.
+ * @param kv - KV namespace
+ * @param userId - User ID
+ * @param password - Password to verify
+ * @returns true if password matches, false otherwise
+ */
+export async function verifyPasswordForUser(
+	kv: KVNamespace,
+	userId: string,
+	password: string
+): Promise<boolean> {
+	const { findUserById } = await import('./userService');
+	const user = await findUserById(kv, userId);
+
+	if (!user || !user.password) {
+		// Consume same CPU time to prevent timing attacks
+		const dummyHash = 'v1:100000:00000000000000000000000000000000:00000000000000000000000000000000';
+		await verifyPBKDF2(password, dummyHash);
+		return false;
+	}
+
+	// --- Path A: PBKDF2 (New Standard) ---
+	if (user.password.startsWith('v1:')) {
+		return await verifyPBKDF2(password, user.password);
+	}
+	// --- Path B: Bcrypt (Legacy) ---
+	else if (user.password.startsWith('$2')) {
+		return await bcrypt.compare(password, user.password);
+	}
+
+	return false;
+}

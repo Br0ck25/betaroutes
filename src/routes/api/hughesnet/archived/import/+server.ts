@@ -9,6 +9,9 @@ import { createSafeErrorMessage } from '$lib/server/sanitize';
 
 type SessionUser = { id?: string; name?: string; token?: string };
 
+// [SECURITY FIX] Limit imports to prevent OOM and unbounded processing
+const MAX_IMPORT_BATCH = 500;
+
 export const POST: RequestHandler = async ({ platform, locals, request }) => {
 	// Use helper to normalize platform env access in type-checks
 	const env = getEnv(platform);
@@ -47,6 +50,12 @@ export const POST: RequestHandler = async ({ platform, locals, request }) => {
 			ids = [String(bodyObj['id'])];
 		} else {
 			return json({ success: false, error: 'No ids supplied' }, { status: 400 });
+		}
+
+		// [SECURITY FIX] Limit batch size to prevent OOM/timeouts
+		const wasTruncated = ids.length > MAX_IMPORT_BATCH;
+		if (wasTruncated) {
+			ids = ids.slice(0, MAX_IMPORT_BATCH);
 		}
 
 		// Load user's HNS DB
@@ -123,7 +132,13 @@ export const POST: RequestHandler = async ({ platform, locals, request }) => {
 		// Deduplicate dates
 		const uniqueDates = Array.from(new Set(importedDates));
 
-		return json({ success: true, imported, skipped, importedDates: uniqueDates });
+		return json({
+			success: true,
+			imported,
+			skipped,
+			importedDates: uniqueDates,
+			...(wasTruncated && { truncated: true, maxBatch: MAX_IMPORT_BATCH })
+		});
 	} catch (err: unknown) {
 		return json({ success: false, error: createSafeErrorMessage(err) }, { status: 500 });
 	}

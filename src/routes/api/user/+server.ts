@@ -5,6 +5,7 @@ import { deleteUser, updateUser } from '$lib/server/userService';
 import { authenticateUser } from '$lib/server/auth';
 import { log } from '$lib/server/log';
 import { safeKV, safeDO } from '$lib/server/env';
+import { checkRateLimit } from '$lib/server/rateLimit';
 
 // SECURITY (Issue #6): Secure email change flow - requires password re-authentication
 export const PUT: RequestHandler = async ({ request, locals, platform }) => {
@@ -15,6 +16,19 @@ export const PUT: RequestHandler = async ({ request, locals, platform }) => {
 		const env = platform?.env;
 		if (!env || !env.BETA_USERS_KV) {
 			return json({ error: 'Service Unavailable' }, { status: 503 });
+		}
+
+		// [!code fix] SECURITY: Rate limit profile updates to prevent KV write abuse
+		// Allow 10 profile updates per minute per user
+		const { allowed } = await checkRateLimit(
+			env.BETA_USERS_KV as any,
+			user.id,
+			'profile_update',
+			10,
+			60
+		);
+		if (!allowed) {
+			return json({ error: 'Too many profile updates. Please wait.' }, { status: 429 });
 		}
 
 		const body = (await request.json()) as any;
@@ -84,6 +98,9 @@ export const DELETE: RequestHandler = async ({ locals, platform, cookies }) => {
 
 		await deleteUser(safeKV(env, 'BETA_USERS_KV')!, user.id, {
 			tripsKV: safeKV(env, 'BETA_LOGS_KV')!,
+			expensesKV: safeKV(env, 'BETA_EXPENSES_KV'),
+			mileageKV: safeKV(env, 'BETA_MILEAGE_KV'),
+			trashKV: safeKV(env, 'BETA_TRASH_KV'),
 			settingsKV: safeKV(env, 'BETA_USER_SETTINGS_KV'),
 			tripIndexDO: safeDO(env, 'TRIP_INDEX_DO')!,
 			env: {

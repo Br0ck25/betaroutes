@@ -1,9 +1,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { removeAuthenticator } from '$lib/server/authenticatorService';
+import { verifyPasswordForUser } from '$lib/server/auth';
 import { safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
+import { sendSecurityAlertEmail } from '$lib/server/email';
 
 export const POST: RequestHandler = async ({ request, platform, locals, cookies }) => {
 	try {
@@ -21,13 +23,25 @@ export const POST: RequestHandler = async ({ request, platform, locals, cookies 
 		const usersKV = safeKV(env, 'BETA_USERS_KV')!;
 		const sessionsKV = safeKV(env, 'BETA_SESSIONS_KV')!;
 
-		// Get the credential ID to delete
+		// Get the credential ID and password from request
 		const body = (await request.json()) as Record<string, unknown>;
 		const credentialID =
 			typeof body['credentialID'] === 'string' ? (body['credentialID'] as string) : undefined;
+		const password =
+			typeof body['password'] === 'string' ? (body['password'] as string) : undefined;
 
 		if (!credentialID) {
 			return json({ error: 'Invalid credential ID' }, { status: 400 });
+		}
+
+		// [SECURITY] Sudo Mode: Require password re-entry for sensitive WebAuthn operations
+		if (!password) {
+			return json({ error: 'Password required', requiresPassword: true }, { status: 403 });
+		}
+
+		const passwordValid = await verifyPasswordForUser(usersKV, user.id, password);
+		if (!passwordValid) {
+			return json({ error: 'Invalid password' }, { status: 401 });
 		}
 
 		// Remove the authenticator
@@ -54,6 +68,13 @@ export const POST: RequestHandler = async ({ request, platform, locals, cookies 
 		} catch (e) {
 			log.warn('[WebAuthn Delete] Failed to clear session info', {
 				message: createSafeErrorMessage(e)
+			});
+		}
+
+		// [SECURITY] Send security alert email (best-effort, don't block on failure)
+		if (user.email) {
+			sendSecurityAlertEmail(user.email, 'passkey_removed').catch((err) => {
+				log.error('[WebAuthn Delete] Security alert email failed', { error: String(err) });
 			});
 		}
 

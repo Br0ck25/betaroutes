@@ -4,11 +4,17 @@ import type { RequestHandler } from './$types';
 import { sendVerificationEmail } from '$lib/server/email';
 import { checkRateLimit } from '$lib/server/rateLimit';
 
-export const POST: RequestHandler = async ({ request, platform, url, getClientAddress }) => {
+// [!code fix] Hardcode production URL to prevent Host Header Injection
+const PRODUCTION_BASE_URL = 'https://gorouteyourself.com';
+
+export const POST: RequestHandler = async ({ request, platform, getClientAddress }) => {
 	const { getEnv, safeKV } = await import('$lib/server/env');
 	const env = getEnv(platform);
 	const usersKV = safeKV(env, 'BETA_USERS_KV');
 	if (!usersKV) return json({ message: 'DB Error' }, { status: 500 });
+
+	// [!code fix] SECURITY: Use server-configured BASE_URL to prevent Host Header Injection
+	const baseUrl = (env['BASE_URL'] as string) || PRODUCTION_BASE_URL;
 
 	// 1. Rate Limit
 	const clientIp = request.headers.get('CF-Connecting-IP') || getClientAddress();
@@ -35,7 +41,7 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
 	}
 
 	// 3. Resend
-	const emailSent = await sendVerificationEmail(normEmail, token, url.origin);
+	const emailSent = await sendVerificationEmail(normEmail, token, baseUrl);
 
 	if (!emailSent) {
 		return json({ message: 'Failed to send email provider error.' }, { status: 500 });

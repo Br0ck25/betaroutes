@@ -115,7 +115,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// Also enable when tests manually start a preview server (PW_MANUAL_SERVER)
 	if (dev || process.env['NODE_ENV'] !== 'production' || process.env['PW_MANUAL_SERVER'] === '1') {
 		const { setupMockKV } = await import('$lib/server/dev-mock-db');
-		setupMockKV(event);
+		await setupMockKV(event);
 	}
 
 	// 2. User auth logic: Check for 'session_id' cookie

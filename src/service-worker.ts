@@ -61,6 +61,22 @@ self.addEventListener('fetch', (event) => {
 	// ignore non-GET requests
 	if (event.request.method !== 'GET') return;
 
+	const url = new URL(event.request.url);
+
+	// [!code fix] SECURITY: Never cache API responses (may contain user data)
+	// Also exclude auth-related routes and external URLs
+	if (
+		url.pathname.startsWith('/api/') ||
+		url.pathname.startsWith('/login') ||
+		url.pathname.startsWith('/register') ||
+		url.pathname.startsWith('/logout') ||
+		url.pathname.startsWith('/reset-password') ||
+		url.pathname.startsWith('/forgot-password') ||
+		url.origin !== self.location.origin
+	) {
+		return; // Let the browser handle these requests without service worker interference
+	}
+
 	// Handle navigation requests (HTML pages) with a network-first strategy
 	if (event.request.mode === 'navigate') {
 		event.respondWith(

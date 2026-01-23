@@ -3,13 +3,23 @@ import { json } from '@sveltejs/kit';
 import { normalizeCredentialID, toBase64Url } from '$lib/server/webauthn-utils';
 import { safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
+import { logAdminAction } from '$lib/server/auditLog';
 
-export const POST: RequestHandler = async ({ request, platform }) => {
+export const POST: RequestHandler = async ({ request, platform, getClientAddress }) => {
 	const { getEnv } = await import('$lib/server/env');
 	const env = getEnv(platform);
 	const secret = (env as any)?.ADMIN_MIGRATE_SECRET;
+	const clientIp = request.headers.get('CF-Connecting-IP') || getClientAddress();
+	const auditKV = safeKV(env, 'BETA_USERS_KV');
 
 	if (!secret) {
+		await logAdminAction(
+			auditKV,
+			'webauthn_migrate',
+			{ reason: 'no_secret_configured' },
+			false,
+			clientIp
+		);
 		return json({ error: 'Migration disabled (no secret configured)' }, { status: 403 });
 	}
 
@@ -17,6 +27,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 	// URL parameters are logged in access logs, browser history, and referrer headers
 	const provided = request.headers.get('x-admin-secret') || '';
 	if (provided !== secret) {
+		await logAdminAction(auditKV, 'webauthn_migrate', { reason: 'unauthorized' }, false, clientIp);
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}
 
@@ -24,6 +35,13 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		// List authenticator keys
 		const kv = safeKV(env, 'BETA_USERS_KV') as KVNamespace | undefined;
 		if (!kv || !kv.list) {
+			await logAdminAction(
+				auditKV,
+				'webauthn_migrate',
+				{ reason: 'kv_unavailable' },
+				false,
+				clientIp
+			);
 			return json(
 				{ error: 'KV not available or unsupported in this environment' },
 				{ status: 500 }
@@ -34,7 +52,11 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		let cursor: string | undefined = undefined;
 		let migrated = 0;
 		let skipped = 0;
-		const updatedUsers: string[] = [];
+		// [SECURITY FIX] Use counter instead of array to prevent OOM on large user bases
+		let updatedUsersCount = 0;
+		// Only keep a small sample for debugging (circular buffer behavior)
+		const SAMPLE_SIZE = 10;
+		const sampleUsers: string[] = [];
 
 		do {
 			const res = (await kv.list({ prefix, cursor, limit: 100 })) as any;
@@ -98,7 +120,11 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 
 					if (modified) {
 						await kv.put(key, JSON.stringify(data));
-						updatedUsers.push(userId);
+						updatedUsersCount++;
+						// Keep only a sample for debugging (don't grow unbounded)
+						if (sampleUsers.length < SAMPLE_SIZE) {
+							sampleUsers.push(userId);
+						}
 					}
 				} catch (e) {
 					log.warn('[webauthn migrate] error processing key', {
@@ -109,14 +135,38 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 			}
 		} while (cursor);
 
+		// [AUDIT] Log successful migration
+		await logAdminAction(
+			auditKV,
+			'webauthn_migrate',
+			{
+				migrated,
+				skipped,
+				updatedUsersCount
+			},
+			true,
+			clientIp
+		);
+
 		return json({
 			success: true,
 			migrated,
 			skipped,
-			updatedUsersCount: updatedUsers.length,
-			updatedUsers: updatedUsers.slice(0, 10) // Return first 10 for debugging
+			updatedUsersCount,
+			sampleUsers // First 10 for debugging (fixed size, no OOM risk)
 		});
 	} catch (err) {
+		// [AUDIT] Log failed migration
+		await logAdminAction(
+			auditKV,
+			'webauthn_migrate',
+			{
+				error: err instanceof Error ? err.message : String(err)
+			},
+			false,
+			clientIp
+		);
+
 		log.error('[webauthn migrate] error', {
 			message: err instanceof Error ? err.message : String(err),
 			stack: err instanceof Error ? err.stack : undefined

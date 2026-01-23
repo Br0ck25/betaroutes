@@ -385,22 +385,26 @@ export const POST: RequestHandler = async (event) => {
 			}
 		}
 
+		// --- ATOMIC QUOTA CHECK via Durable Object (prevents race conditions) ---
 		if (!existingTrip) {
 			if (currentPlan === 'free') {
-				const windowDays = PLAN_LIMITS.FREE.WINDOW_DAYS || 30;
-				const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
-				const recentTrips = await svc.list(storageId, { since });
 				const allowed =
 					PLAN_LIMITS.FREE.MAX_TRIPS_PER_MONTH || PLAN_LIMITS.FREE.MAX_TRIPS_IN_WINDOW || 10;
-				if (recentTrips.length >= allowed) {
+
+				// Use atomic check-and-increment in Durable Object to prevent race conditions
+				// This increments the counter atomically and returns whether it was allowed
+				const quotaResult = await svc.checkMonthlyQuota(storageId, allowed);
+
+				if (!quotaResult.allowed) {
 					return new Response(
 						JSON.stringify({
 							error: 'Limit Reached',
-							message: `You have reached your free limit of ${allowed} trips in the last ${windowDays} days (Used: ${recentTrips.length}).`
+							message: `You have reached your free limit of ${allowed} trips this month (Used: ${quotaResult.count}).`
 						}),
 						{ status: 403, headers: { 'Content-Type': 'application/json' } }
 					);
 				}
+				// Note: Counter was already incremented atomically by checkMonthlyQuota
 			}
 		}
 		const now = new Date().toISOString();

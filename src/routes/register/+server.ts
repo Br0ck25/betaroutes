@@ -9,6 +9,9 @@ import { randomUUID } from 'node:crypto';
 import { log } from '$lib/server/log';
 import { validatePassword } from '$lib/server/passwordValidation';
 
+// [!code fix] Hardcode production URL to prevent Host Header Injection
+const PRODUCTION_BASE_URL = 'https://gorouteyourself.com';
+
 export const POST: RequestHandler = async ({ request, platform, url, getClientAddress }) => {
 	log.info('[Register] START REGISTRATION', {
 		hostname: url.hostname,
@@ -180,12 +183,9 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
 
 			// CRITICAL: Pass the API key from env helper
 			const resendApiKey = env['RESEND_API_KEY'] as string | undefined;
-			emailSent = await sendVerificationEmail(
-				normEmail,
-				verificationToken,
-				url.origin,
-				resendApiKey
-			);
+			// [!code fix] Use server-configured BASE_URL to prevent Host Header Injection
+			const baseUrl = (env['BASE_URL'] as string) || PRODUCTION_BASE_URL;
+			emailSent = await sendVerificationEmail(normEmail, verificationToken, baseUrl, resendApiKey);
 			log.info('[Register] ✅ Email sent successfully');
 		} catch (emailErr: unknown) {
 			const msg = emailErr instanceof Error ? emailErr.message : String(emailErr);

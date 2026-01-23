@@ -3,11 +3,43 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import type { KVNamespace } from '@cloudflare/workers-types';
 import { log } from '$lib/server/log';
+import {
+	checkRateLimitEnhanced,
+	createRateLimitHeaders,
+	getClientIdentifier
+} from '$lib/server/rateLimit';
+import { safeKV } from '$lib/server/env';
 
-export const GET: RequestHandler = async ({ url, platform, locals }) => {
+export const GET: RequestHandler = async ({ url, platform, locals, request }) => {
 	// 1. Security: Ensure user is logged in
 	if (!locals.user) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
+	}
+
+	// [!code fix] SECURITY: Rate limit directions API (60/min per user - higher since cached results are fast)
+	const sessionsKV = safeKV(platform?.env, 'BETA_SESSIONS_KV');
+	if (sessionsKV) {
+		const identifier = getClientIdentifier(request, locals);
+		const rateLimitResult = await checkRateLimitEnhanced(
+			sessionsKV,
+			identifier,
+			'directions_cache',
+			60, // 60 requests per minute
+			60000
+		);
+
+		const headers = createRateLimitHeaders(rateLimitResult);
+
+		if (!rateLimitResult.allowed) {
+			log.warn('[DirectionsCache] Rate limit exceeded', { identifier });
+			return json(
+				{
+					error: 'Too many direction requests. Please try again later.',
+					resetAt: rateLimitResult.resetAt
+				},
+				{ status: 429, headers }
+			);
+		}
 	}
 
 	const start = url.searchParams.get('start');

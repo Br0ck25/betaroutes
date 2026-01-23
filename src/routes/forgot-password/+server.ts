@@ -5,16 +5,24 @@ import { sendPasswordResetEmail } from '$lib/server/email';
 import { checkRateLimit } from '$lib/server/rateLimit';
 import { randomUUID } from 'node:crypto';
 import type { KVNamespace } from '@cloudflare/workers-types';
+import { getEnv } from '$lib/server/env';
 
-export const POST: RequestHandler = async ({ request, platform, url, getClientAddress }) => {
+// [!code fix] Hardcode production URL to prevent Host Header Injection
+const PRODUCTION_BASE_URL = 'https://gorouteyourself.com';
+
+export const POST: RequestHandler = async ({ request, platform, getClientAddress }) => {
 	const start = Date.now();
 	// [!code fix] SECURITY: Pad response time to mask internal logic (Enumeration Protection)
 	const MIN_DURATION = 500;
 
+	const env = getEnv(platform);
 	const usersKV = platform?.env?.BETA_USERS_KV as KVNamespace | undefined;
 	if (!usersKV) {
 		return json({ message: 'Database Unavailable' }, { status: 503 });
 	}
+
+	// [!code fix] SECURITY: Use server-configured BASE_URL to prevent Host Header Injection
+	const baseUrl = (env['BASE_URL'] as string) || PRODUCTION_BASE_URL;
 
 	// [!code fix] SECURITY: Rate limit to prevent abuse (5 requests per hour per IP)
 	const ip = getClientAddress();
@@ -53,7 +61,8 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
 	await usersKV.put(resetKey, user.id, { expirationTtl: 3600 });
 
 	// 4. Send Email (use waitUntil if available for background sending)
-	const emailJob = sendPasswordResetEmail(email, token, url.origin);
+	// [!code fix] Use baseUrl instead of url.origin to prevent Host Header Injection
+	const emailJob = sendPasswordResetEmail(email, token, baseUrl);
 	if (platform?.context?.waitUntil) {
 		platform.context.waitUntil(emailJob);
 	} else {

@@ -6,6 +6,7 @@ import { findUserById, updatePasswordHash } from '$lib/server/userService';
 import { getEnv, safeKV } from '$lib/server/env';
 import { validatePassword } from '$lib/server/passwordValidation';
 import { log } from '$lib/server/log';
+import { sendSecurityAlertEmail } from '$lib/server/email';
 
 export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	// 1. Ensure user is logged in
@@ -84,6 +85,14 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 				log.error('[ChangePassword] Failed to invalidate sessions', { error: String(err) });
 			}
 		}
+	}
+
+	// [SECURITY] Send security alert email (best-effort, don't block on failure)
+	const userEmail = fullUser.email;
+	if (userEmail) {
+		sendSecurityAlertEmail(userEmail, 'password_changed').catch((err) => {
+			log.error('[ChangePassword] Security alert email failed', { error: String(err) });
+		});
 	}
 
 	return json({

@@ -19,6 +19,7 @@ import { createSession } from '$lib/server/sessionService';
 import { findUserById } from '$lib/server/userService';
 import { dev } from '$app/environment';
 import { log } from '$lib/server/log';
+import { sendSecurityAlertEmail } from '$lib/server/email';
 
 function getRpID(context: { url: URL }): string {
 	const hostname = context.url.hostname;
@@ -471,6 +472,13 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
 				registered: true,
 				hasCredential: !!storedCredentialID
 			});
+
+			// [SECURITY] Send security alert email (best-effort, don't block on failure)
+			if (user.email) {
+				sendSecurityAlertEmail(user.email, 'passkey_added').catch((err) => {
+					log.error('[WebAuthn] Security alert email failed', { error: String(err) });
+				});
+			}
 
 			// Return the created authenticator so the client can update UI immediately
 			return json({
