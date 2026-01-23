@@ -2,7 +2,6 @@
 import { json } from '@sveltejs/kit';
 import { HughesNetService } from '$lib/server/hughesnet/service';
 import { getEnv, safeKV, safeDO } from '$lib/server/env';
-import { getStorageId } from '$lib/server/user';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 import type { RequestHandler } from './$types';
@@ -22,8 +21,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		const body = (await request.json()) as unknown;
 		const bodyObj = body as Record<string, unknown>;
 		const user = locals.user as SessionUser | undefined;
-		// SECURITY FIX (P0 Item #1): Use getStorageId() to get user UUID, never name/token
-		const userId = getStorageId(user);
+		const userId = user?.name || user?.token || user?.id || 'default_user';
 		const settingsId = user?.id;
 
 		const action = String(bodyObj['action'] || '');
@@ -134,8 +132,7 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
 	if (!safeKV(env, 'BETA_HUGHESNET_KV')) return json({ orders: {} });
 	try {
 		const user = locals.user as SessionUser | undefined;
-		// SECURITY FIX (P0 Item #1): Use getStorageId() to get user UUID, never name/token
-		const userId = getStorageId(user);
+		const userId = user?.name || user?.token || user?.id || 'default_user';
 
 		const HNS_ENCRYPTION_KEY = (env as Record<string, unknown>)['HNS_ENCRYPTION_KEY'] as
 			| string

@@ -7,7 +7,6 @@ import type { User } from '$lib/types';
 
 import { auth } from '$lib/stores/auth';
 import { PLAN_LIMITS } from '$lib/constants';
-import { isRecordOwner } from '$lib/utils/keys';
 
 export const isLoading = writable(false);
 
@@ -205,8 +204,7 @@ function createExpensesStore() {
 
 				const existing = await store.get(id);
 				if (!existing) throw new Error('Expense not found');
-				// MIGRATION FIX: Check ownership against both userId (UUID) and userName (legacy)
-				if (!isRecordOwner(existing.userId, userId)) throw new Error('Unauthorized');
+				if (existing.userId !== userId) throw new Error('Unauthorized');
 
 				const updated = {
 					...existing,
@@ -262,7 +260,7 @@ function createExpensesStore() {
 					return;
 				}
 
-				if (!isRecordOwner(rec.userId, userId)) {
+				if (rec.userId !== userId) {
 					await tx.done;
 					this.load(userId);
 					throw new Error('Unauthorized');
@@ -307,13 +305,12 @@ function createExpensesStore() {
 			}
 		},
 
-		async get(id: string, userId: string, userName?: string) {
+		async get(id: string, userId: string) {
 			try {
 				const db = await getDB();
 				const tx = db.transaction('expenses', 'readonly');
 				const expense = await tx.objectStore('expenses').get(id);
-				// MIGRATION FIX: Check ownership against both userId (UUID) and userName (legacy)
-				if (!expense || !isRecordOwner(expense.userId, userId, userName)) return null;
+				if (!expense || expense.userId !== userId) return null;
 				return expense;
 			} catch (err) {
 				console.error('❌ Failed to get expense:', err);

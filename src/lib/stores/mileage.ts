@@ -7,7 +7,6 @@ import type { User } from '$lib/types';
 import { auth } from '$lib/stores/auth';
 import { calculateFuelCost } from '$lib/utils/calculations';
 import { PLAN_LIMITS } from '$lib/constants';
-import { isRecordOwner } from '$lib/utils/keys';
 
 export const isLoading = writable(false);
 
@@ -219,12 +218,7 @@ function createMileageStore() {
 				throw err;
 			}
 		},
-		async updateMileage(
-			id: string,
-			changes: Partial<MileageRecord>,
-			userId: string,
-			userName?: string
-		) {
+		async updateMileage(id: string, changes: Partial<MileageRecord>, userId: string) {
 			// ... copy from previous ...
 			update((items) =>
 				items.map((r) =>
@@ -238,8 +232,7 @@ function createMileageStore() {
 				const store = tx.objectStore(mileageStoreName);
 				const existing = await store.get(id);
 				if (!existing) throw new Error('Mileage record not found');
-				// MIGRATION FIX: Check ownership against both userId (UUID) and userName (legacy)
-				if (!isRecordOwner(existing.userId, userId, userName)) throw new Error('Unauthorized');
+				if (existing.userId !== userId) throw new Error('Unauthorized');
 				const updated: MileageRecord = {
 					...existing,
 					...changes,
@@ -337,7 +330,7 @@ function createMileageStore() {
 			}
 		},
 
-		async deleteMileage(id: string, userId: string, userName?: string) {
+		async deleteMileage(id: string, userId: string) {
 			// PERFORMANCE: Optimistic update - remove from UI immediately
 			let previous: MileageRecord[] = [];
 			update((current) => {
@@ -365,8 +358,7 @@ function createMileageStore() {
 					}, 0);
 					return;
 				}
-				// MIGRATION FIX: Check ownership against both userId (UUID) and userName (legacy)
-				if (!isRecordOwner(rec.userId, userId, userName)) {
+				if (rec.userId !== userId) {
 					await tx.done;
 					throw new Error('Unauthorized');
 				}
@@ -441,14 +433,13 @@ function createMileageStore() {
 		},
 
 		// ... (keep get, clear, syncFromCloud, migrateOfflineMillage) ...
-		async get(id: string, userId: string, userName?: string) {
+		async get(id: string, userId: string) {
 			// ... copy existing get code ...
 			try {
 				const db = await getDB();
 				const tx = db.transaction('mileage', 'readonly');
 				const item = await tx.objectStore('mileage').get(id);
-				// MIGRATION FIX: Check ownership against both userId (UUID) and userName (legacy)
-				if (!item || !isRecordOwner(item.userId, userId, userName)) return null;
+				if (!item || item.userId !== userId) return null;
 				return item;
 			} catch {
 				return null;

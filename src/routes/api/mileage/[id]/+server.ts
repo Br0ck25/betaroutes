@@ -5,7 +5,7 @@ import { makeTripService } from '$lib/server/tripService';
 import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
-import { getStorageId, getLegacyStorageId } from '$lib/server/user';
+import { getStorageId } from '$lib/server/user';
 import { calculateFuelCost } from '$lib/utils/calculations';
 
 export const DELETE: RequestHandler = async (event) => {
@@ -24,16 +24,14 @@ export const DELETE: RequestHandler = async (event) => {
 
 		const id = event.params.id;
 		const userId = getStorageId(sessionUser);
-		// MIGRATION COMPATIBILITY: Also get legacy username for fallback lookups
-		const legacyUserId = getLegacyStorageId(sessionUser);
 		const svc = makeMileageService(
 			safeKV(env, 'BETA_MILLAGE_KV')!,
 			safeDO(env, 'TRIP_INDEX_DO')!,
 			safeKV(env, 'BETA_LOGS_KV')
 		);
 
-		// Get the mileage log before deleting to check for linked trip (try UUID key first, then legacy username key)
-		const existing = await svc.get(userId, id, legacyUserId);
+		// Get the mileage log before deleting to check for linked trip
+		const existing = await svc.get(userId, id);
 
 		// If record doesn't exist in KV, it might be orphaned in IndexedDB
 		if (!existing) {
@@ -45,8 +43,8 @@ export const DELETE: RequestHandler = async (event) => {
 			return new Response(null, { status: 204 });
 		}
 
-		// Soft delete via service (pass legacyUserId for fallback key lookup)
-		await svc.delete(userId, id, legacyUserId);
+		// Soft delete via service
+		await svc.delete(userId, id);
 		log.info('[MILEAGE DELETE] Successfully deleted', { userId, mileageId: id });
 
 		// --- Set linked trip's totalMiles to 0 and recalculate fuelCost ---
@@ -103,11 +101,8 @@ export const GET: RequestHandler = async (event) => {
 
 		const id = event.params.id;
 		const userId = getStorageId(sessionUser);
-		// MIGRATION COMPATIBILITY: Also get legacy username for fallback lookups
-		const legacyUserId = getLegacyStorageId(sessionUser);
 		const svc = makeMileageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
-		// Try UUID key first, then legacy username key
-		const item = await svc.get(userId, id, legacyUserId);
+		const item = await svc.get(userId, id);
 		if (!item) return new Response('Not found', { status: 404 });
 		return new Response(JSON.stringify(item), { headers: { 'Content-Type': 'application/json' } });
 	} catch (err) {
@@ -132,12 +127,9 @@ export const PUT: RequestHandler = async (event) => {
 
 		const id = event.params.id;
 		const userId = getStorageId(sessionUser);
-		// MIGRATION COMPATIBILITY: Also get legacy username for fallback lookups
-		const legacyUserId = getLegacyStorageId(sessionUser);
 
 		const svc = makeMileageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
-		// Try UUID key first, then legacy username key
-		const existing = await svc.get(userId, id, legacyUserId);
+		const existing = await svc.get(userId, id);
 		if (!existing) return new Response('Not found', { status: 404 });
 
 		// Read the request body early so we can validate attaching to a trip if requested
