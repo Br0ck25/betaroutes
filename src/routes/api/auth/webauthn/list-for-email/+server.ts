@@ -5,8 +5,13 @@ import { safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 
-export const GET: RequestHandler = async ({ url, platform }) => {
+export const GET: RequestHandler = async ({ url, platform, locals }) => {
 	try {
+		// SECURITY: Require authentication to prevent user enumeration
+		if (!locals.user) {
+			return json({ error: 'Unauthorized' }, { status: 401 });
+		}
+
 		const email = url.searchParams.get('email');
 		if (!email) return json({ error: 'Email required' }, { status: 400 });
 
