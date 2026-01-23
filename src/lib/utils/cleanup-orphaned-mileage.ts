@@ -28,13 +28,27 @@ export interface OrphanCheckResult {
  * Logs that return 404 from the server are considered orphaned.
  */
 export async function identifyOrphanedMileage(userId: string): Promise<OrphanCheckResult> {
+	console.log('🔍 identifyOrphanedMileage called with userId:', userId);
+
 	const db = await getDB();
 	const mileageStoreName = getMileageStoreName(db);
+	console.log('📦 Using mileage store:', mileageStoreName);
+
 	const tx = db.transaction(mileageStoreName, 'readonly');
 	const store = tx.objectStore(mileageStoreName);
-	const index = store.index('userId');
 
+	// First, get ALL mileage records to see what we have
+	const allRecords = await store.getAll();
+	console.log(`📊 Total mileage records in IndexedDB (all users): ${allRecords.length}`);
+	if (allRecords.length > 0) {
+		console.log('Sample record:', allRecords[0]);
+		console.log('UserIds in DB:', [...new Set(allRecords.map((r) => r.userId))]);
+	}
+
+	// Now get records for this specific user
+	const index = store.index('userId');
 	const allMileage = await index.getAll(userId);
+	console.log(`📊 Mileage records for user '${userId}': ${allMileage.length}`);
 
 	const orphaned: MileageRecord[] = [];
 	const valid: MileageRecord[] = [];

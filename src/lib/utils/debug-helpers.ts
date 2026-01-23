@@ -237,8 +237,8 @@ export const debugHelpers = {
 	auditMileageSync
 };
 
-// Expose to window for easy console access in development
-if (typeof window !== 'undefined' && import.meta.env.DEV) {
+// Expose to window for easy console access (always available, not just in dev)
+if (typeof window !== 'undefined') {
 	(window as any).debugGRY = debugHelpers;
 	console.log(
 		'🛠️ Debug helpers loaded. Available commands:',
