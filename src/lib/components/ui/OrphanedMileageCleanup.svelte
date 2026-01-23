@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { cleanupOrphanedMileage } from '$lib/utils/cleanup-orphaned-mileage';
 	import { mileage } from '$lib/stores/mileage';
-	import { auth } from '$lib/stores/auth';
-	import { get } from 'svelte/store';
+	import { page } from '$app/stores';
 
 	let isScanning = $state(false);
 	let scanResult = $state<{
@@ -14,18 +13,21 @@
 	let error = $state<string | null>(null);
 
 	async function runCleanup() {
-		const user = get(auth).user;
+		const user = $page.data?.['user'];
 		if (!user?.id) {
-			error = 'No user logged in';
+			error = 'No user logged in. Please refresh the page.';
+			console.error('User data:', user);
 			return;
 		}
 
+		console.log('Starting cleanup for user:', user.id);
 		isScanning = true;
 		error = null;
 		scanResult = null;
 
 		try {
 			const result = await cleanupOrphanedMileage(user.id);
+			console.log('Cleanup result:', result);
 			scanResult = result;
 
 			// Reload mileage store to reflect changes
