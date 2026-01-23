@@ -55,8 +55,12 @@
 
 ## Common pitfalls & quick examples
 
-- TypeScript in Svelte without `lang="ts"` → many parse errors. Add `lang="ts"` when using `: Type` or interfaces.
+- TypeScript in Svelte without `lang="ts"` → many parse errors. Add `lang="ts"` everywhere.
 - Request handlers must `return` a Response on every code path. (See examples in `AI_AGENTS.md`.)
+- **Flat Structure:** Define helper functions at the top level. NEVER nest `export` functions inside others.
+- **Global Types:** Do NOT manually import `KVNamespace` from `@cloudflare/workers-types`. Use the global ambient types.
+- **Strict Typing:** Do NOT use `any`. Use interfaces or `unknown`.
+- **JSON Syntax:** Double-check commas between properties in `package.json` or config files.
 - **Unused variables:** Delete them. If a param is required but unused, prefix with `_` (e.g., `_req`).
 - **Imports/Exports:** Always export utility functions and import them in components.
 - Never use `{@html}` with user-provided input (XSS risk).
