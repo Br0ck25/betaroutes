@@ -3,8 +3,12 @@
 // Ensure this file is kept in-sync with the canonical implementation in tools/migrations.
 
 export interface Env {
-	DATA_KV: KVNamespace;
+	DATA_KV?: KVNamespace;
+	LOGS_KV?: KVNamespace;
+	EXPENSES_KV?: KVNamespace;
+	MILEAGE_KV?: KVNamespace;
 	USERS_KV?: KVNamespace;
+	USER_SETTINGS_KV?: KVNamespace;
 	AUTH_KV?: KVNamespace;
 	MIGRATION_LOG_KV?: KVNamespace;
 }
@@ -139,7 +143,22 @@ interface MigrateResult {
 
 async function migrateKeysForPrefix(env: Env, options: MigrateOptions) {
 	const { prefix, dryRun, nameToId, batchSize, deleteOld, backup, cursor } = options;
-	const kv = env.DATA_KV;
+	// Choose KV per prefix so this works in multi-KV setups
+	let kv: KVNamespace | undefined;
+	if (prefix.startsWith('trip:') || prefix.startsWith('hns:') || prefix.startsWith('hns:settings:')) {
+		kv = env.LOGS_KV ?? env.DATA_KV;
+	} else if (prefix.startsWith('expense:')) {
+		kv = env.EXPENSES_KV ?? env.DATA_KV;
+	} else if (prefix.startsWith('mileage:')) {
+		kv = env.MILEAGE_KV ?? env.DATA_KV;
+	} else if (prefix.startsWith('settings:') || prefix.startsWith('user_settings:')) {
+		kv = env.USER_SETTINGS_KV ?? env.LOGS_KV ?? env.DATA_KV;
+	} else {
+		kv = env.DATA_KV ?? env.LOGS_KV;
+	}
+
+	if (!kv) throw new Error('No KV binding available for prefix: ' + prefix);
+
 	let nextCursor = cursor;
 	let processed = 0;
 	let migrated = 0;
@@ -249,10 +268,12 @@ export default {
 			await new Promise((res) => setTimeout(res, 250));
 		}
 
-		if (env.MIGRATION_LOG_KV) {
+		// Prefer MIGRATION_LOG_KV if provided, otherwise fall back to LOGS_KV when available
+		const logKv = env.MIGRATION_LOG_KV ?? env.LOGS_KV;
+		if (logKv) {
 			const id = `migration_summary:${nowISO()}`;
 			try {
-				await env.MIGRATION_LOG_KV.put(id, JSON.stringify({ time: new Date().toISOString(), dryRun, results }));
+				await logKv.put(id, JSON.stringify({ time: new Date().toISOString(), dryRun, results }));
 			} catch {
 				console.warn('Failed to write migration log');
 			}
