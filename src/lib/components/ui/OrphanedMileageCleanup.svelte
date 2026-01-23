@@ -20,19 +20,21 @@
 			return;
 		}
 
-		console.log('Starting cleanup for user:', user.id);
+		console.log('Starting cleanup for user:', { id: user.id, name: user.name });
 		isScanning = true;
 		error = null;
 		scanResult = null;
 
 		try {
-			const result = await cleanupOrphanedMileage(user.id);
+			// Pass both userId (UUID) and username (for legacy records)
+			const result = await cleanupOrphanedMileage(user.id, user.name);
 			console.log('Cleanup result:', result);
 			scanResult = result;
 
 			// Reload mileage store to reflect changes
 			if (result.removed > 0) {
-				await mileage.load(user.id);
+				// Try loading with both userId and username
+				await mileage.load(user.name || user.id);
 			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to scan for orphaned records';
