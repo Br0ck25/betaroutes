@@ -43,6 +43,14 @@ const getUserCache = (): User | null => {
 	if (!cached) return null;
 	try {
 		const parsed = JSON.parse(cached);
+
+		// [!code fix] CRITICAL: Invalidate cache if ID is missing.
+		// This forces a fresh fetch from the server to get the correct UUID.
+		if (!parsed.id) {
+			sessionStorage.removeItem('user_cache');
+			return null;
+		}
+
 		return {
 			id: parsed.id, // [!code fix] Restore the UUID
 			token: '', // Never cached
