@@ -7,6 +7,6 @@
 export function getStorageId(
 	user: { id?: string; name?: string; token?: string } | undefined
 ): string {
-	// [!code fix] strictly return ID or empty string. never fallback to mutable fields.
+	// [!code fix] Strictly use ID. Never fallback to mutable username.
 	return user?.id || '';
 }

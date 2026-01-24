@@ -114,8 +114,6 @@ export const GET: RequestHandler = async (event) => {
 			| undefined;
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
-		const userSafe = user as { name?: string; token?: string } | undefined;
-
 		let env: App.Env;
 		try {
 			env = getEnv(event.platform);
@@ -157,7 +155,8 @@ export const GET: RequestHandler = async (event) => {
 			}
 		}
 
-		const storageId = userSafe?.name || userSafe?.token || '';
+		// [!code fix] Strictly use ID. Prevents username spoofing.
+		const storageId = user?.id || '';
 		let sinceParam = sanitizeQueryParam(event.url.searchParams.get('since'), 50);
 
 		// Add a small buffer to the sinceParam to account for client clock skew (5 minutes)
@@ -293,7 +292,8 @@ export const POST: RequestHandler = async (event) => {
 			}
 		}
 
-		const storageId = sessionUserSafe?.name || sessionUserSafe?.token || '';
+		// [!code fix] Strictly use ID. Prevents username spoofing.
+		const storageId = sessionUserSafe?.id || '';
 		const rawBody = (await event.request.json()) as unknown;
 
 		let sanitizedBody;
@@ -610,7 +610,8 @@ export const PUT: RequestHandler = async (event) => {
 			}
 		}
 
-		const storageId = sessionUserSafe?.name || sessionUserSafe?.token || '';
+		// [!code fix] Strictly use ID. Prevents username spoofing.
+		const storageId = sessionUserSafe?.id || '';
 		const rawBody = (await event.request.json()) as unknown;
 
 		let sanitizedBody;

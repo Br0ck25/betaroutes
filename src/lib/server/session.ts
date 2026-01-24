@@ -1,3 +1,4 @@
+// src/lib/server/session.ts
 import type { Cookies } from '@sveltejs/kit';
 import { dev } from '$app/environment';
 

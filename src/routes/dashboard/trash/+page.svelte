@@ -39,7 +39,11 @@
 
 		// 2. [!code fix] Force Cloud Sync on Mount
 		const userState = get(user);
-		const userId = userState?.name || userState?.token;
+		// [!code fix] Strictly use ID.
+		const userId =
+			userState?.id ||
+			(typeof localStorage !== 'undefined' ? localStorage.getItem('offline_user_id') : null);
+
 		if (userId) {
 			trash.syncFromCloud(userId, typeParam || undefined).then(() => loadTrash(type));
 		}
@@ -54,7 +58,11 @@
 				try {
 					await loadTrash(type);
 					const userState = get(user);
-					const userId = userState?.name || userState?.token;
+					// [!code fix] Strictly use ID.
+					const userId =
+						userState?.id ||
+						(typeof localStorage !== 'undefined' ? localStorage.getItem('offline_user_id') : null);
+
 					if (userId) {
 						await trash.syncFromCloud(userId, param || undefined);
 						await loadTrash(type);
@@ -76,8 +84,9 @@
 		loading = true;
 		try {
 			const potentialIds = new Set<string>();
-			if ($user?.name) potentialIds.add($user.name);
-			if ($user?.token) potentialIds.add($user.token);
+			// [!code fix] Strictly use ID.
+			if ($user?.id) potentialIds.add($user.id);
+
 			const offlineId =
 				typeof localStorage !== 'undefined' ? localStorage.getItem('offline_user_id') : null;
 			if (offlineId) potentialIds.add(offlineId);

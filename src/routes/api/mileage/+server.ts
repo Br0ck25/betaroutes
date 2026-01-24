@@ -5,7 +5,6 @@ import { makeMileageService } from '$lib/server/mileageService';
 import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
-import { getStorageId } from '$lib/server/user';
 import { PLAN_LIMITS } from '$lib/constants';
 import { findUserById } from '$lib/server/userService';
 import { checkRateLimitEnhanced } from '$lib/server/rateLimit';
@@ -40,7 +39,9 @@ export const GET: RequestHandler = async (event) => {
 		const since = event.url.searchParams.get('since') || undefined;
 
 		const svc = makeMileageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
-		const userId = getStorageId(user);
+
+		// [!code fix] Strictly use ID. Prevents username spoofing.
+		const userId = user.id || '';
 
 		// Use service list logic which handles KV/DO fallback and syncing logic
 		const items = await svc.list(userId, since);
@@ -66,8 +67,9 @@ export const POST: RequestHandler = async (event) => {
 			return new Response('Service Unavailable', { status: 503 });
 		}
 
-		// [!code fix] SECURITY (Issue #8): Rate limiting for mileage creation
-		const storageId = getStorageId(sessionUser);
+		// [!code fix] Strictly use ID for rate limiting and storage
+		const storageId = sessionUser.id || '';
+
 		const sessionsKV = safeKV(env, 'BETA_SESSIONS_KV');
 		if (sessionsKV) {
 			const rateLimitResult = await checkRateLimitEnhanced(
@@ -96,7 +98,9 @@ export const POST: RequestHandler = async (event) => {
 		// Preserve existing behavior where a mileage that is linked to a trip uses the trip's id
 		// but allow standalone mileage logs (no trip) by defaulting id to payload.id || payload.tripId || uuid
 		const id = payload.id || payload.tripId || crypto.randomUUID();
-		const userId = getStorageId(sessionUser);
+
+		// [!code fix] Strictly use ID.
+		const userId = sessionUser.id || '';
 
 		// --- ENFORCE MILEAGE LIMIT FOR FREE USERS ---
 		let currentPlan: 'free' | 'premium' | 'pro' | 'business' | undefined = (sessionUser as any)
