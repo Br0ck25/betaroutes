@@ -129,7 +129,7 @@ export const POST: RequestHandler = async (event) => {
 				// Only trips need counter incrementing
 				try {
 					if ((restored as any).stops || (restored as any).startAddress) {
-						await (tripSvc as any).incrementUserCounter?.(currentUser.token || '', 1);
+						await (tripSvc as any).incrementUserCounter?.(storageId, 1);
 					}
 				} catch {
 					void 0;

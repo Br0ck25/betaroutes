@@ -301,7 +301,13 @@ function createTripsStore() {
 				await delTx.objectStore('trips').delete(id);
 				await delTx.done;
 
-				await syncManager.addToQueue({ action: 'delete', tripId: id });
+				// Only enqueue server sync if client is authenticated as the same user to avoid 401s
+				const currentUser = get(authUser) as User | null;
+				if (currentUser && currentUser.id && currentUser.id === trip.userId) {
+					await syncManager.addToQueue({ action: 'delete', tripId: id });
+				} else {
+					// Skip server sync for unauthenticated/offline users. Sync will occur when a valid session is available.
+				}
 			} catch (err) {
 				console.error('❌ Failed to delete trip:', err);
 				set(previousTrips);

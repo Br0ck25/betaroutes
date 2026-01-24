@@ -315,7 +315,7 @@ export const DELETE: RequestHandler = async (event) => {
 			});
 		}
 
-		await svc.incrementUserCounter(userSafe?.token ?? '', -1);
+		await svc.incrementUserCounter(storageId, -1);
 
 		return new Response(JSON.stringify({ success: true }), {
 			status: 200,
