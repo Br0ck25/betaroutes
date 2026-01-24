@@ -47,16 +47,24 @@ async function hashPassword(password) {
 
 // Helper function to get username from token
 async function getUsernameFromToken(env, token) {
-	const list = await env.LOGS_KV.list({ prefix: 'user:' });
-	for (const key of list.keys) {
-		const userData = await env.LOGS_KV.get(key.name);
-		if (userData) {
-			const user = JSON.parse(userData);
-			if (user.token === token) {
-				return key.name.replace('user:', '');
+	// Prefer session mapping in SESSIONS_KV if available
+	const sessionsKV = env.SESSIONS_KV || env.BETA_SESSIONS_KV;
+	if (sessionsKV) {
+		const s = await sessionsKV.get(token);
+		if (s) {
+			try {
+				const session = JSON.parse(s);
+				if (session.name) return session.name;
+				if (session.email) return session.email;
+				if (session.id) return session.id; // fallback to id-like identifier
+			} catch {
+				// continue to fallback
 			}
 		}
 	}
+
+	// Do NOT search users KV for legacy tokens — session tokens are stored in SESSIONS_KV.
+	// Return null when no session mapping found.
 	return null;
 }
 
@@ -72,7 +80,6 @@ export default {
 
 			const json = async () => await request.json().catch(() => ({}));
 			const getUserKey = (username) => `user:${username}`;
-			const getLogsKey = (token) => `logs:${token}`;
 
 			if (pathname === '/api/signup' && request.method === 'POST') {
 				const { username, password } = await json();
@@ -100,7 +107,8 @@ export default {
 					})
 				);
 
-				return withCors(Response.json({ token, resetKey }), request);
+				// Do NOT expose session tokens in legacy signup response
+				return withCors(Response.json({ resetKey }), request);
 			}
 
 			if (pathname === '/api/login' && request.method === 'POST') {
@@ -124,7 +132,8 @@ export default {
 					return withCors(new Response('Invalid password', { status: 403 }), request);
 				}
 
-				return withCors(Response.json({ token: user.token }), request);
+				// Do NOT expose session tokens in legacy login response
+				return withCors(Response.json({ success: true }), request);
 			}
 
 			if (pathname === '/api/change-password' && request.method === 'POST') {
@@ -138,9 +147,10 @@ export default {
 				const user = JSON.parse(data);
 				const token = request.headers.get('Authorization');
 				const hashedCurrent = await hashPassword(currentPassword);
+				const usernameFromToken = token ? await getUsernameFromToken(env, token) : null;
 
 				if (
-					user.token !== token ||
+					usernameFromToken !== username ||
 					(user.password !== currentPassword && user.password !== hashedCurrent)
 				) {
 					return withCors(new Response('Unauthorized', { status: 403 }), request);
@@ -171,14 +181,16 @@ export default {
 				if (!data) return withCors(new Response('User not found', { status: 404 }), request);
 				const user = JSON.parse(data);
 				const token = request.headers.get('Authorization');
+				const usernameFromToken = token ? await getUsernameFromToken(env, token) : null;
 				const hashedPassword = await hashPassword(password);
 
-				if (user.token !== token || user.password !== hashedPassword) {
+				if (usernameFromToken !== username || user.password !== hashedPassword) {
 					return withCors(new Response('Unauthorized', { status: 403 }), request);
 				}
 
 				await env.LOGS_KV.delete(userKey);
-				await env.LOGS_KV.delete(getLogsKey(user.token));
+				// Remove per-user logs keyed by username (do not use token as storage key)
+				await env.LOGS_KV.delete(`logs:${username}`);
 				return withCors(new Response('Account deleted'), request);
 			}
 
@@ -204,8 +216,8 @@ export default {
 					);
 				}
 
-				// Get user data to check subscription
-				const userData = await env.LOGS_KV.get(`subscription:${token}`);
+				// Get user data to check subscription - key by username (do not rely on token as a storage key)
+				const userData = username ? await env.LOGS_KV.get(`subscription:${username}`) : null;
 				if (!userData) {
 					// Default to free plan if no subscription data
 					return withCors(
@@ -227,7 +239,9 @@ export default {
 			if (pathname === '/logs' && request.method === 'GET') {
 				const token = request.headers.get('Authorization');
 				if (!token) return withCors(new Response('Missing token', { status: 401 }), request);
-				const logs = await env.LOGS_KV.get(getLogsKey(token));
+				const username = await getUsernameFromToken(env, token);
+				if (!username) return withCors(new Response('Unauthorized', { status: 401 }), request);
+				const logs = await env.LOGS_KV.get(`logs:${username}`);
 				return withCors(
 					new Response(logs || '[]', {
 						headers: { 'Content-Type': 'application/json' }
@@ -239,15 +253,19 @@ export default {
 			if (pathname === '/logs' && request.method === 'POST') {
 				const token = request.headers.get('Authorization');
 				if (!token) return withCors(new Response('Missing token', { status: 401 }), request);
+				const username = await getUsernameFromToken(env, token);
+				if (!username) return withCors(new Response('Unauthorized', { status: 401 }), request);
 				const body = await request.text();
-				await env.LOGS_KV.put(getLogsKey(token), body);
+				await env.LOGS_KV.put(`logs:${username}`, body);
 				return withCors(new Response('Logs saved'), request);
 			}
 
 			if (pathname === '/categories' && request.method === 'GET') {
 				const token = request.headers.get('Authorization');
 				if (!token) return withCors(new Response('Missing token', { status: 401 }), request);
-				const categories = await env.LOGS_KV.get(`categories:${token}`);
+				const username = await getUsernameFromToken(env, token);
+				if (!username) return withCors(new Response('Unauthorized', { status: 401 }), request);
+				const categories = await env.LOGS_KV.get(`categories:${username}`);
 				return withCors(
 					new Response(categories || '{"maintenance":[],"supplies":[]}', {
 						headers: { 'Content-Type': 'application/json' }
@@ -259,8 +277,10 @@ export default {
 			if (pathname === '/categories' && request.method === 'POST') {
 				const token = request.headers.get('Authorization');
 				if (!token) return withCors(new Response('Missing token', { status: 401 }), request);
+				const username = await getUsernameFromToken(env, token);
+				if (!username) return withCors(new Response('Unauthorized', { status: 401 }), request);
 				const body = await request.text();
-				await env.LOGS_KV.put(`categories:${token}`, body);
+				await env.LOGS_KV.put(`categories:${username}`, body);
 				return withCors(new Response('Categories saved'), request);
 			}
 
@@ -442,7 +462,8 @@ export default {
 
 				if (action === 'delete') {
 					await env.LOGS_KV.delete(userKey);
-					await env.LOGS_KV.delete(`logs:${user.token}`);
+					// Delete per-user logs keyed by username (do not use token as storage key)
+					await env.LOGS_KV.delete(`logs:${username}`);
 					return new Response('✓ User deleted');
 				}
 

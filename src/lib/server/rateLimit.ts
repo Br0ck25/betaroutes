@@ -151,21 +151,12 @@ export function getClientIdentifier(
 	request: Request,
 	locals?: { user?: Partial<User> | null }
 ): string {
-	// Prefer user ID/name if authenticated
+	// Prefer user ID if authenticated
 	if (locals?.user?.id) {
 		return `user:${locals.user.id}`;
 	}
 
-	if (locals?.user?.name) {
-		return `user:${locals.user.name}`;
-	}
-
-	// Use session token if available
-	if (locals?.user?.token) {
-		return `session:${locals.user.token}`;
-	}
-
-	// Fall back to IP address
+	// Fall back to IP address only - do not use name or token for identification
 	const cfConnectingIp = request.headers.get('cf-connecting-ip');
 	const xForwardedFor = request.headers.get('x-forwarded-for');
 	const xRealIp = request.headers.get('x-real-ip');
@@ -179,7 +170,7 @@ export function getClientIdentifier(
  * Check if user is authenticated
  */
 export function isAuthenticated(locals?: { user?: Partial<User> | null }): boolean {
-	return !!(locals?.user?.id || locals?.user?.token || locals?.user?.name);
+	return !!locals?.user?.id;
 }
 
 /**

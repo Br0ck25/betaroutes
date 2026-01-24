@@ -143,8 +143,7 @@
 
 		const apiKey = data.googleMapsApiKey;
 
-		let userId =
-			(data?.user as any)?.name || $user?.name || (data?.user as any)?.token || $user?.token;
+		let userId = (data?.user as any)?.id || $user?.id;
 
 		if (!userId) {
 			userId = localStorage.getItem('offline_user_id');

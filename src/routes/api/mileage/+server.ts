@@ -7,6 +7,7 @@ import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 import { PLAN_LIMITS } from '$lib/constants';
 import { findUserById } from '$lib/server/userService';
+import { getStorageId } from '$lib/server/user';
 import { checkRateLimitEnhanced } from '$lib/server/rateLimit';
 
 const mileageSchema = z.object({
@@ -40,9 +41,10 @@ export const GET: RequestHandler = async (event) => {
 
 		const svc = makeMileageService(safeKV(env, 'BETA_MILEAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 
-		// Use service list logic which handles KV/DO fallback and syncing logic
-		const userId = user?.id || user?.name || user?.token || '';
-		const items = await svc.list(userId, since);
+		// Use canonical storage id only
+		const storageId = getStorageId(user);
+		if (!storageId) return new Response('Unauthorized', { status: 401 });
+		const items = await svc.list(storageId, since);
 
 		return new Response(JSON.stringify(items), { headers: { 'Content-Type': 'application/json' } });
 	} catch (err) {

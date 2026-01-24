@@ -639,7 +639,7 @@
 
 	async function saveTrip() {
 		const currentUser = $page.data['user'] || $user;
-		let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
+		let userId = currentUser?.id || localStorage.getItem('offline_user_id');
 		if (!userId) {
 			toasts.error('Authentication error.');
 			return;

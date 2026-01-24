@@ -125,8 +125,13 @@
 	async function saveTrips() {
 		if (previewTrips.length === 0) return;
 
-		const maybeUserId = $user?.name ?? $user?.token ?? localStorage.getItem('offline_user_id');
-		const userId: string = maybeUserId ?? 'offline';
+		// [!code fix] Strictly use ID. Prevents usage of legacy username.
+		const userId = $user?.id || localStorage.getItem('offline_user_id');
+
+		if (!userId) {
+			alert('You must be logged in to import trips.');
+			return;
+		}
 
 		try {
 			for (const trip of previewTrips) {

@@ -23,7 +23,7 @@
 	let profile = { name: '', email: '' };
 	$: if ($user || data.remoteSettings?.profile) {
 		const remote = data.remoteSettings?.profile || {};
-		if (!profile.name) profile.name = remote.name || $user?.name || '';
+		if (!profile.name) profile.name = remote.name || $user?.id || '';
 		if (!profile.email) profile.email = remote.email || $user?.email || '';
 	}
 

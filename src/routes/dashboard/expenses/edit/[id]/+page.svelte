@@ -111,11 +111,7 @@
 		}
 
 		const currentUser = ($page.data as any)['user'] || $user;
-		const userId =
-			(currentUser as any)?.name ||
-			(currentUser as any)?.token ||
-			localStorage.getItem('offline_user_id');
-
+		const userId = (currentUser as any)?.id || localStorage.getItem('offline_user_id');
 		if (!userId) {
 			toasts.error('User not identified. Cannot save.');
 			return;

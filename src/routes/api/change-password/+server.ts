@@ -1,14 +1,14 @@
 // src/routes/api/change-password/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { authenticateUser, hashPassword } from '$lib/server/auth';
+import { hashPassword, verifyPasswordForUser } from '$lib/server/auth';
 import { findUserById, updatePasswordHash } from '$lib/server/userService';
 import { getEnv, safeKV } from '$lib/server/env';
 import { validatePassword } from '$lib/server/passwordValidation';
 import { log } from '$lib/server/log';
 import { sendSecurityAlertEmail } from '$lib/server/email';
 
-export const POST: RequestHandler = async ({ request, platform, locals }) => {
+export const POST: RequestHandler = async ({ request, platform, locals, cookies }) => {
 	// 1. Ensure user is logged in
 	if (!locals.user) {
 		return json({ message: 'Unauthorized' }, { status: 401 });
@@ -34,20 +34,20 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	}
 
 	// 2. Verify Current Password
-	// Use the session's email or name to verify the "currentPassword" provided by the user
-	const authUser = await authenticateUser(
-		usersKV,
-		(locals.user as any).email || (locals.user as any).name,
-		currentPassword
-	);
+	// Use the session's id to verify the "currentPassword" provided by the user
+	const currentUserId = (locals.user as any)?.id;
+	if (!currentUserId) {
+		return json({ message: 'Unauthorized' }, { status: 401 });
+	}
 
-	if (!authUser) {
+	const valid = await verifyPasswordForUser(usersKV, currentUserId, currentPassword);
+	if (!valid) {
 		return json({ message: 'Incorrect current password' }, { status: 401 });
 	}
 
 	// 3. Get Full User Record
 	// We need the full record (including internal fields) to update it safely
-	const fullUser = await findUserById(usersKV, authUser.id);
+	const fullUser = await findUserById(usersKV, currentUserId);
 	if (!fullUser) {
 		return json({ message: 'User record not found' }, { status: 404 });
 	}
@@ -61,7 +61,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	// [!code fix] SECURITY (Issue #10): Invalidate all sessions after password change
 	const sessionsKV = safeKV(env, 'BETA_SESSIONS_KV');
 	if (sessionsKV) {
-		const currentSessionId = locals.user?.token;
+		// Get current session id from cookie instead of locals.user.token to avoid relying on legacy fields
+		const currentSessionId = cookies.get('session_id');
 
 		// Try to find and invalidate other sessions for this user
 		const activeSessionsKey = `active_sessions:${fullUser.id}`;

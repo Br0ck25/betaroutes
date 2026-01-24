@@ -130,7 +130,7 @@ export const POST: RequestHandler = async (event) => {
 			const usersKV = safeKV(env, 'BETA_USERS_KV');
 			if (usersKV) {
 				try {
-					const fresh = await findUserById(usersKV, user.id || user.token || '');
+					const fresh = await findUserById(usersKV, user.id || '');
 					if (fresh && fresh.plan) currentPlan = fresh.plan;
 				} catch (err: unknown) {
 					log.warn('Failed to fetch fresh user plan', { message: createSafeErrorMessage(err) });

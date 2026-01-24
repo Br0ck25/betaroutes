@@ -92,6 +92,7 @@ class ApiClient {
 	async getSubscription(token?: string): Promise<Subscription> {
 		return this.request<Subscription>('/api/subscription', {
 			method: 'GET',
+			credentials: 'include',
 			headers: this.getAuthHeader(token)
 		});
 	}
@@ -110,6 +111,7 @@ class ApiClient {
 	async getTrips(token?: string): Promise<Trip[]> {
 		return this.request<Trip[]>('/logs', {
 			method: 'GET',
+			credentials: 'include',
 			headers: this.getAuthHeader(token)
 		});
 	}

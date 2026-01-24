@@ -93,7 +93,7 @@
 
 		isDeleting = true;
 		try {
-			const result = await auth.deleteAccount($user?.name || '', deletePassword);
+			const result = await auth.deleteAccount($user?.id || '', deletePassword);
 			if (result.success) {
 				goto('/');
 			} else {

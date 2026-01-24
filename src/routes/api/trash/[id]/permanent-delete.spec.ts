@@ -31,7 +31,7 @@ vi.mock('$lib/server/env', () => ({
 }));
 
 vi.mock('$lib/server/user', () => ({
-	getStorageId: (u: { id?: string; name?: string }) => u.id || u.name || 'mock-storage-id'
+	getStorageId: (u: { id?: string }) => u.id || 'mock-storage-id'
 }));
 
 vi.mock('$lib/server/log', () => ({

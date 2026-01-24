@@ -119,9 +119,7 @@
 						}
 					}
 
-					let userId =
-						$user?.name || $user?.token || localStorage.getItem('offline_user_id') || 'offline';
-
+					let userId = $user?.id || localStorage.getItem('offline_user_id') || 'offline';
 					if (data.trips && Array.isArray(data.trips)) {
 						if (confirm(`Found ${data.trips.length} trips in backup. Import them now?`)) {
 							for (const trip of data.trips) {
@@ -297,8 +295,7 @@
 
 				if (parsed.length > 0) {
 					if (confirm(`Found ${parsed.length} trips. Import them now?`)) {
-						let userId =
-							$user?.name || $user?.token || localStorage.getItem('offline_user_id') || 'offline';
+						let userId = $user?.id || localStorage.getItem('offline_user_id') || 'offline';
 						for (const trip of parsed) {
 							await trips.create(trip, userId);
 						}

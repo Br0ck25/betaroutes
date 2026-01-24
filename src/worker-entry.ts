@@ -106,7 +106,8 @@ export default {
 					})
 				);
 
-				return withCors(Response.json({ token }), request);
+				// Do NOT return session tokens from legacy login/signup endpoints
+				return withCors(Response.json({ success: true }), request);
 			}
 
 			if (pathname === '/api/login' && request.method === 'POST') {
@@ -137,7 +138,8 @@ export default {
 				}
 
 				if (!matches) return withCors(new Response('Invalid', { status: 403 }), request);
-				return withCors(Response.json({ token: user.token }), request);
+				// Do NOT expose session token from legacy login endpoint
+				return withCors(Response.json({ success: true }), request);
 			}
 
 			// ... (Rest of your endpoint logic using same verification patterns)

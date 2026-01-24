@@ -6,6 +6,7 @@ import { authenticateUser } from '$lib/server/auth';
 import { log } from '$lib/server/log';
 import { safeKV, safeDO } from '$lib/server/env';
 import { checkRateLimit } from '$lib/server/rateLimit';
+import { getUserDisplayName } from '$lib/utils/user-display';
 
 // SECURITY (Issue #6): Secure email change flow - requires password re-authentication
 export const PUT: RequestHandler = async ({ request, locals, platform }) => {
@@ -71,7 +72,11 @@ export const PUT: RequestHandler = async ({ request, locals, platform }) => {
 
 		return json({
 			success: true,
-			user: { ...user, name: body.name ?? user.name, email: body.email ?? user.email }
+			user: {
+				...user,
+				name: body.name ?? getUserDisplayName(user),
+				email: body.email ?? user.email
+			}
 		});
 	} catch (err: unknown) {
 		const message = err instanceof Error ? err.message : 'Unknown error';

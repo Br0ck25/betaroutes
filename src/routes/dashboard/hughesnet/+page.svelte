@@ -271,7 +271,7 @@
 
 			// CRITICAL: Sync local changes to cloud BEFORE HughesNet sync
 			// This ensures any manual edits are uploaded so conflict detection works
-			const userId = $user?.name || $user?.token;
+			const userId = $user?.id;
 			if (userId) {
 				addLog('⬆️ Uploading local changes first...');
 				try {
@@ -361,7 +361,7 @@
 				statusMessage = 'Sync Complete';
 				currentBatch = 0;
 
-				const userId = $user?.name || $user?.token;
+				const userId = $user?.id;
 				if (userId) {
 					addLog('⬇️ Downloading generated trips...');
 					await trips.syncFromCloud(userId);
@@ -414,7 +414,7 @@
 			addLog(`✅ Cleared ${data.count} trips.`);
 			showSuccessMsg(`Cleared ${data.count} trips.`);
 
-			const userId = $user?.name || $user?.token;
+			const userId = $user?.id;
 			if (userId) {
 				addLog('🔄 Syncing removal with local database...');
 				await trash.syncFromCloud(userId);
@@ -794,7 +794,7 @@
 						/>
 					</div>
 
-					{#if $user?.name?.toLowerCase() === 'james'}
+					{#if $user?.id?.toLowerCase() === 'james'}
 						<div class="form-group">
 							<label for="drive-time-bonus">Drive Time Bonus ($)</label>
 							<input

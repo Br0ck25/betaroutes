@@ -20,6 +20,7 @@ import { findUserById } from '$lib/server/userService';
 import { dev } from '$app/environment';
 import { log } from '$lib/server/log';
 import { sendSecurityAlertEmail } from '$lib/server/email';
+import { getUserDisplayName } from '$lib/utils/user-display';
 
 function getRpID(context: { url: URL }): string {
 	const hostname = context.url.hostname;
@@ -159,7 +160,7 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
 				rpID,
 				userID: new TextEncoder().encode(user.id), // CRITICAL: Must be Uint8Array
 				userName: user.email,
-				userDisplayName: user.name || user.email,
+				userDisplayName: getUserDisplayName(user),
 				attestationType: 'none',
 				excludeCredentials: authenticators.map((auth) => ({
 					id: auth.credentialID, // Keep as string - library handles conversion

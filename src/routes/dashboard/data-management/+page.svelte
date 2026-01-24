@@ -518,7 +518,7 @@
 		const text = await importFile?.[0]?.text();
 		if (!text) return;
 
-		const userId = $user?.id || $user?.token;
+		const userId = $user?.id;
 		if (!userId) {
 			alert('User not authenticated');
 			return;
@@ -602,7 +602,7 @@
 	async function backupFullData() {
 		if (!browser) return;
 
-		const userId = $user?.id || $user?.token;
+		const userId = $user?.id;
 		if (!userId) {
 			alert('User not authenticated');
 			return;
@@ -647,14 +647,14 @@
 			const text = await file.text();
 			const backup = JSON.parse(text);
 
-			const userId = $user?.id || $user?.token;
+			const userId = $user?.id;
 			if (!userId) {
-				alert('User not authenticated');
+				alert('You must be signed in to restore data.');
 				return;
 			}
 
 			// Validate backup structure
-			if (!backup.trips || !backup.expenses) {
+			if (!backup || !backup.trips || !backup.expenses) {
 				alert('Invalid backup file format');
 				return;
 			}
@@ -680,7 +680,7 @@
 	async function clearLocalData() {
 		if (!browser) return;
 
-		const userId = $user?.id || $user?.token;
+		const userId = $user?.id;
 		if (!userId) return;
 
 		trips.clear();

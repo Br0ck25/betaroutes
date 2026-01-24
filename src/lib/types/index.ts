@@ -12,6 +12,16 @@ export interface User {
 	email?: string;
 }
 
+/** Lightweight public user object exposed to client (no token or sensitive fields) */
+export interface PublicUser {
+	id?: string;
+	name?: string;
+	plan: 'free' | 'pro' | 'business' | 'premium';
+	tripsThisMonth?: number;
+	maxTrips?: number;
+	resetDate?: string;
+}
+
 /** Geo helpers */
 export interface LatLng {
 	lat: number;
