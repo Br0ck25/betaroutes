@@ -247,7 +247,7 @@ function showUpgradeModal() {
               <span style="position: absolute; left: 0;">✓</span> Priority support
             </li>
           </ul>
-          <button onclick="upgradeToPlan('pro')" style="
+          <button data-plan="pro" onclick="upgradeToPlan(event,'pro')" style="
             width: 100%;
             padding: 12px;
             background: linear-gradient(135deg, #4caf50, #45a049);
@@ -293,7 +293,7 @@ function showUpgradeModal() {
               <span style="position: absolute; left: 0;">✓</span> Dedicated support
             </li>
           </ul>
-          <button onclick="upgradeToPlan('business')" style="
+          <button data-plan="business" onclick="upgradeToPlan(event,'business')" style="
             width: 100%;
             padding: 12px;
             background: #2196f3;
@@ -327,7 +327,17 @@ function closeUpgradeModal() {
 }
 
 // Handle upgrade to selected plan
-async function upgradeToPlan(plan) {
+async function upgradeToPlan(a, b) {
+	// Support both upgradeToPlan('plan') and upgradeToPlan(event, 'plan')
+	let event = null;
+	let plan = null;
+	if (typeof a === 'string') {
+		plan = a;
+	} else {
+		event = a;
+		plan = b;
+	}
+
 	const token = localStorage.getItem('token');
 	if (!token) {
 		closeUpgradeModal();
@@ -335,11 +345,20 @@ async function upgradeToPlan(plan) {
 		return;
 	}
 
-	// Show loading state
-	const button = event.target;
-	const originalText = button.textContent;
-	button.textContent = 'Processing...';
-	button.disabled = true;
+	// Best-effort: find the button to show processing state
+	const button =
+		(event && event.target) ||
+		document.querySelector(`#upgrade-modal button[data-plan="${plan}"]`) ||
+		null;
+	const originalText = button?.textContent;
+	try {
+		if (button) {
+			button.textContent = 'Processing...';
+			button.disabled = true;
+		}
+	} catch (err) {
+		console.warn('Could not set button state', err);
+	}
 
 	try {
 		const response = await fetch('https://logs.gorouteyourself.com/api/create-checkout-session', {
@@ -361,8 +380,14 @@ async function upgradeToPlan(plan) {
 		window.location.href = data.url;
 	} catch (err) {
 		console.error('❌ Upgrade error:', err);
-		button.textContent = originalText;
-		button.disabled = false;
+		try {
+			if (button) {
+				if (originalText !== undefined) button.textContent = originalText;
+				button.disabled = false;
+			}
+		} catch (e) {
+			// ignore
+		}
 		showAlertModal('❌ Failed to start checkout. Please try again or contact support.');
 	}
 }

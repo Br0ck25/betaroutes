@@ -24,6 +24,7 @@ const saveUserCache = (user: User) => {
 	if (typeof window !== 'undefined') {
 		// Only cache non-sensitive display data
 		const safeCache = {
+			id: user.id, // [!code fix] Cache the UUID
 			plan: user.plan,
 			tripsThisMonth: user.tripsThisMonth,
 			maxTrips: user.maxTrips,
@@ -43,6 +44,7 @@ const getUserCache = (): User | null => {
 	try {
 		const parsed = JSON.parse(cached);
 		return {
+			id: parsed.id, // [!code fix] Restore the UUID
 			token: '', // Never cached
 			plan: parsed.plan || 'free',
 			tripsThisMonth: parsed.tripsThisMonth ?? 0,
@@ -114,6 +116,7 @@ function createAuthStore() {
 					const responseData = (await response.json()) as { user?: Partial<User> };
 					const data = responseData.user || {};
 					const user: User = {
+						id: data.id, // [!code fix] Critical: Capture UUID from server session
 						token: '', // No longer stored client-side
 						plan: data.plan || 'free',
 						tripsThisMonth: data.tripsThisMonth ?? 0,
@@ -133,7 +136,8 @@ function createAuthStore() {
 						error: null
 					});
 
-					const syncId = user.name || 'user';
+					// Prefer ID for sync, fallback to name for legacy support
+					const syncId = user.id || user.name || 'user';
 					if (syncId) await trips.syncFromCloud(syncId);
 				} else {
 					// Not authenticated - check offline cache
@@ -146,7 +150,7 @@ function createAuthStore() {
 							isLoading: false,
 							error: null
 						});
-						await trips.load(cachedUser.name || 'user');
+						await trips.load(cachedUser.id || cachedUser.name || 'user');
 					} else {
 						set({
 							user: null,
@@ -169,7 +173,7 @@ function createAuthStore() {
 						isLoading: false,
 						error: null
 					});
-					await trips.load(cachedUser.name || 'user');
+					await trips.load(cachedUser.id || cachedUser.name || 'user');
 				} else {
 					set({
 						user: null,
@@ -224,6 +228,7 @@ function createAuthStore() {
 
 				const subscription = await api.getSubscription(response.token || '');
 				const user: User = {
+					id: response.id, // [!code fix] Capture UUID from signup response
 					token: response.token || '',
 					plan: subscription.plan,
 					tripsThisMonth: subscription.tripsThisMonth,
@@ -240,11 +245,11 @@ function createAuthStore() {
 				});
 
 				if (offlineId) {
-					await trips.migrateOfflineTrips(offlineId, username);
+					await trips.migrateOfflineTrips(offlineId, user.id || username);
 					localStorage.removeItem('offline_user_id');
 				}
 
-				await trips.syncFromCloud(username);
+				await trips.syncFromCloud(user.id || username);
 
 				return { success: true, resetKey: response.resetKey };
 			} catch (error: any) {
@@ -282,7 +287,9 @@ function createAuthStore() {
 				const savedEmail =
 					typeof window !== 'undefined' ? sessionStorage.getItem('user_email') || '' : '';
 				const subscription = await api.getSubscription(response.token || '');
+
 				const user: User = {
+					id: response.id, // [!code fix] Capture UUID from login response
 					token: response.token || '',
 					plan: subscription.plan,
 					tripsThisMonth: subscription.tripsThisMonth,
@@ -301,11 +308,11 @@ function createAuthStore() {
 				});
 
 				if (offlineId) {
-					await trips.migrateOfflineTrips(offlineId, username);
+					await trips.migrateOfflineTrips(offlineId, user.id || username);
 					localStorage.removeItem('offline_user_id');
 				}
 
-				await trips.syncFromCloud(username);
+				await trips.syncFromCloud(user.id || username);
 
 				return { success: true };
 			} catch (error: any) {
@@ -438,6 +445,7 @@ function createAuthStore() {
 					if (!state.user) return state;
 					const updated: User = {
 						...state.user,
+						id: data.user?.id || state.user.id, // [!code fix] Ensure ID is preserved/updated
 						plan: data.user?.plan || state.user.plan,
 						tripsThisMonth: data.user?.tripsThisMonth ?? state.user.tripsThisMonth,
 						maxTrips: data.user?.maxTrips ?? state.user.maxTrips,
