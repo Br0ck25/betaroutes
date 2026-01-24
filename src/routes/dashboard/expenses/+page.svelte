@@ -245,8 +245,9 @@
 		}
 
 		const currentUser = $page.data['user'] || $user;
-		const userId =
-			currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
+		// [!code fix] Strictly use ID.
+		const userId = currentUser?.id || localStorage.getItem('offline_user_id');
+
 		if (userId) {
 			try {
 				await expenses.deleteExpense(id, userId);
@@ -300,8 +301,8 @@
 			return;
 
 		const currentUser = $page.data['user'] || $user;
-		const userId =
-			currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
+		// [!code fix] Strictly use ID.
+		const userId = currentUser?.id || localStorage.getItem('offline_user_id');
 
 		if (!userId) return;
 
@@ -842,7 +843,6 @@
 			{/each}
 		</div>
 
-		<!-- Pagination Controls -->
 		{#if totalPages > 1}
 			<div class="pagination-container">
 				<div class="pagination">

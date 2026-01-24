@@ -21,8 +21,13 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		const body = (await request.json()) as unknown;
 		const bodyObj = body as Record<string, unknown>;
 		const user = locals.user as SessionUser | undefined;
-		const userId = user?.name || user?.token || user?.id || 'default_user';
-		const settingsId = user?.id;
+
+		// [!code fix] Strictly use ID. Remove 'default_user' fallback to prevent unauthorized access.
+		const userId = user?.id;
+		if (!userId) {
+			return json({ success: false, error: 'Unauthorized' }, { status: 401 });
+		}
+		const settingsId = userId;
 
 		const action = String(bodyObj['action'] || '');
 		log.info('HughesNet action', { action, userId });
@@ -87,7 +92,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 			const recentOnly = bodyObj['recentOnly'] === true;
 			const forceDates = Array.isArray(bodyObj['forceDates'])
 				? (bodyObj['forceDates'] as unknown[]).map(String)
-				: []; // [!code ++] Extract forceDates
+				: [];
 
 			const result = await service.sync(
 				userId,
@@ -103,14 +108,14 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 				driveTimeBonus,
 				skipScan,
 				recentOnly,
-				forceDates as string[] // [!code ++] Pass param
+				forceDates as string[]
 			);
 
 			return json({
 				success: true,
 				orders: result.orders,
 				incomplete: result.incomplete,
-				conflicts: result.conflicts, // [!code ++] Return conflicts
+				conflicts: result.conflicts,
 				logs: service.logs
 			});
 		}
@@ -132,7 +137,9 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
 	if (!safeKV(env, 'BETA_HUGHESNET_KV')) return json({ orders: {} });
 	try {
 		const user = locals.user as SessionUser | undefined;
-		const userId = user?.name || user?.token || user?.id || 'default_user';
+		// [!code fix] Strictly use ID.
+		const userId = user?.id;
+		if (!userId) return json({ orders: {} });
 
 		const HNS_ENCRYPTION_KEY = (env as Record<string, unknown>)['HNS_ENCRYPTION_KEY'] as
 			| string

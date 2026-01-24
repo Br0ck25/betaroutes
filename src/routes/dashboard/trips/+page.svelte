@@ -196,12 +196,10 @@
 		try {
 			const trip = $trips.find((t) => t.id === id);
 			const currentUser = $page.data['user'] || $user;
-			let userId =
-				currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
-			if (trip && currentUser) {
-				if (trip.userId === (currentUser as any).name) userId = (currentUser as any).name;
-				else if (trip.userId === (currentUser as any).token) userId = (currentUser as any).token;
-			}
+
+			// [!code fix] Strictly use ID. Removed fallback to name/token and legacy legacy checks.
+			const userId = currentUser?.id || localStorage.getItem('offline_user_id') || '';
+
 			if (userId) await trips.deleteTrip(id, userId as string);
 		} catch (err) {
 			toasts.error('Failed to delete trip. Changes reverted.');
@@ -212,8 +210,10 @@
 		const count = selectedTrips.size;
 		if (!confirm(`Are you sure you want to delete ${count} trip(s)?`)) return;
 		const currentUser = $page.data['user'] || $user;
-		let userId =
-			currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id') || '';
+
+		// [!code fix] Strictly use ID.
+		const userId = currentUser?.id || localStorage.getItem('offline_user_id') || '';
+
 		if (!userId) {
 			toasts.error('User identity missing.');
 			return;

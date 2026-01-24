@@ -1,11 +1,12 @@
+// src/routes/dashboard/expenses/+page.server.ts
 import type { PageServerLoad } from './$types';
 import { makeExpenseService } from '$lib/server/expenseService';
 import { safeKV, safeDO } from '$lib/server/env';
-import { getStorageId } from '$lib/server/user';
 
 export const load: PageServerLoad = async ({ locals, platform }) => {
 	const user = locals.user;
-	if (!user) return { expenses: [] };
+	// Ensure user exists and has an ID before proceeding
+	if (!user || !user.id) return { expenses: [] };
 
 	const kv = safeKV(platform?.env, 'BETA_EXPENSES_KV');
 	const tripDO = safeDO(platform?.env, 'TRIP_INDEX_DO');
@@ -15,7 +16,9 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 	}
 
 	const service = makeExpenseService(kv, tripDO);
-	const userId = getStorageId(user);
+
+	// [!code fix] Strictly use ID. Prevents username spoofing.
+	const userId = user.id;
 
 	// Fetch all active expenses
 	const expenses = await service.list(userId);

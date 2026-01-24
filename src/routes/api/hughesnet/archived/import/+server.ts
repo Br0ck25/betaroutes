@@ -1,3 +1,4 @@
+// src/routes/api/hughesnet/archived/import/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
@@ -20,7 +21,12 @@ export const POST: RequestHandler = async ({ platform, locals, request }) => {
 	}
 
 	const user = locals.user as SessionUser | undefined;
-	const userId = user?.name || user?.token || user?.id || 'default_user';
+	// [!code fix] Strictly use ID.
+	const userId = user?.id;
+	if (!userId) {
+		return json({ success: false, error: 'Unauthorized' }, { status: 401 });
+	}
+
 	try {
 		const body = (await request.json()) as unknown;
 		const bodyObj = body as Record<string, unknown>;

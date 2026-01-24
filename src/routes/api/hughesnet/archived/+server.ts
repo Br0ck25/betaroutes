@@ -15,7 +15,12 @@ export const GET: RequestHandler = async ({ platform, locals, url }) => {
 	}
 
 	const user = locals.user as SessionUser | undefined;
-	const userId = user?.name || user?.token || user?.id || 'default_user';
+	// [!code fix] Strictly use ID.
+	const userId = user?.id;
+	if (!userId) {
+		return json({ success: false, error: 'Unauthorized' }, { status: 401 });
+	}
+
 	const id = url.searchParams.get('id');
 
 	try {
@@ -124,7 +129,11 @@ export const POST: RequestHandler = async ({ platform, locals, request }) => {
 	if (!allowInsert) return json({ success: false, error: 'Not allowed' }, { status: 403 });
 
 	const user = locals.user as SessionUser | undefined;
-	const userId = user?.name || user?.token || user?.id || 'default_user';
+	// [!code fix] Strictly use ID.
+	const userId = user?.id;
+	if (!userId) {
+		return json({ success: false, error: 'Unauthorized' }, { status: 401 });
+	}
 
 	try {
 		const body = (await request.json()) as unknown;
