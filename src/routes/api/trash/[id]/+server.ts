@@ -5,10 +5,9 @@ import { makeExpenseService } from '$lib/server/expenseService';
 import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
 import { safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
-import { getStorageId } from '$lib/server/user';
 import { dev } from '$app/environment';
 
-// [!code fix] SECURITY: Removed fakeDO fallback that caused silent data loss in production.
+// [!code fix] SECURITY: Removed dangerous fakeDO fallback that caused silent data loss in production.
 
 export const POST: RequestHandler = async (event) => {
 	try {
@@ -46,7 +45,8 @@ export const POST: RequestHandler = async (event) => {
 		);
 
 		const currentUser = user as { id?: string; name?: string; token?: string };
-		const storageId = getStorageId(currentUser);
+		// [!code fix] Strictly use ID. Prevents username spoofing.
+		const storageId = currentUser?.id || '';
 
 		if (storageId) {
 			let restored: unknown | null = null;
@@ -190,7 +190,8 @@ export const DELETE: RequestHandler = async (event) => {
 		);
 
 		const currentUser = user as { id?: string; name?: string; token?: string };
-		const storageId = getStorageId(currentUser);
+		// [!code fix] Strictly use ID. Prevents username spoofing.
+		const storageId = currentUser?.id || '';
 
 		if (storageId) {
 			// If record type is specified, only delete from that specific service
