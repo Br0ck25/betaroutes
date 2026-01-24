@@ -4,7 +4,7 @@ import { makeExpenseService } from '$lib/server/expenseService';
 import { safeKV, safeDO } from '$lib/server/env';
 
 export const load: PageServerLoad = async ({ locals, platform }) => {
-	const user = locals.user;
+	const user = locals.user as { id?: string; name?: string; token?: string } | undefined;
 	// Ensure user exists and has an ID before proceeding
 	if (!user || !user.id) return { expenses: [] };
 

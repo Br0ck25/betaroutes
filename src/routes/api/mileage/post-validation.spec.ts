@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock the services and env
-let mockMillageSvc: any;
+let mockMileageSvc: any;
 let mockTripKV: any;
 let mockEnv: any;
 
 vi.mock('$lib/server/mileageService', () => ({
-	makeMileageService: () => mockMillageSvc
+	makeMileageService: () => mockMileageSvc
 }));
 
 vi.mock('$lib/server/env', () => ({
@@ -24,7 +24,7 @@ vi.mock('$lib/server/user', () => ({
 
 describe('POST /api/mileage - Parent trip validation', () => {
 	beforeEach(() => {
-		mockMillageSvc = { put: vi.fn(), get: vi.fn() };
+		mockMileageSvc = { put: vi.fn(), get: vi.fn() };
 		mockTripKV = {
 			get: vi.fn()
 		};
@@ -76,7 +76,7 @@ describe('POST /api/mileage - Parent trip validation', () => {
 		const res = await POST(event as any);
 
 		expect(res.status).toBe(201);
-		expect(mockMillageSvc.put).toHaveBeenCalled();
+		expect(mockMileageSvc.put).toHaveBeenCalled();
 	});
 
 	it('returns 409 when parent trip is deleted (tripId provided)', async () => {
@@ -140,7 +140,7 @@ describe('POST /api/mileage - Parent trip validation', () => {
 		const res = await POST(event as any);
 
 		expect(res.status).toBe(201);
-		expect(mockMillageSvc.put).toHaveBeenCalled();
+		expect(mockMileageSvc.put).toHaveBeenCalled();
 	});
 
 	it('skips validation when tripKV is not available (e.g., tests)', async () => {
@@ -163,6 +163,6 @@ describe('POST /api/mileage - Parent trip validation', () => {
 		const res = await POST(event as any);
 
 		expect(res.status).toBe(201);
-		expect(mockMillageSvc.put).toHaveBeenCalled();
+		expect(mockMileageSvc.put).toHaveBeenCalled();
 	});
 });

@@ -143,7 +143,7 @@
 			</div>
 
 			<div class="form-row">
-				<!-- Maintenance, Supplies, and Expenses options removed for Millage logs -->
+				<!-- Maintenance, Supplies, and Expenses options removed for Mileage logs -->
 
 				<div class="form-group grid-3">
 					<div>
@@ -318,7 +318,7 @@
 		}
 	}
 
-	/* Force millage rate below vehicle on small screens <= 711px */
+	/* Force mileage rate below vehicle on small screens <= 711px */
 	@media (max-width: 711px) {
 		.vehicle-rate-row {
 			grid-template-columns: 1fr;

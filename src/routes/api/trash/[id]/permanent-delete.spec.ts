@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 let mockTripSvc: any;
 let mockExpenseSvc: any;
-let mockMillageSvc: any;
+let mockMileageSvc: any;
 let mockTripKV: any;
 let mockExpenseKV: any;
-let mockMillageKV: any;
+let mockMileageKV: any;
 
 vi.mock('$lib/server/tripService', () => ({
 	makeTripService: () => mockTripSvc
@@ -16,14 +16,14 @@ vi.mock('$lib/server/expenseService', () => ({
 }));
 
 vi.mock('$lib/server/mileageService', () => ({
-	makeMileageService: () => mockMillageSvc
+	makeMileageService: () => mockMileageSvc
 }));
 
 vi.mock('$lib/server/env', () => ({
 	safeKV: (_env: unknown, name: string) => {
 		if (name === 'BETA_LOGS_KV') return mockTripKV;
 		if (name === 'BETA_EXPENSES_KV') return mockExpenseKV;
-		if (name === 'BETA_MILEAGE_KV') return mockMillageKV;
+		if (name === 'BETA_MILEAGE_KV') return mockMileageKV;
 		if (name === 'BETA_PLACES_KV') return undefined;
 		return undefined;
 	},
@@ -47,10 +47,10 @@ describe('DELETE /api/trash/[id] handler', () => {
 		vi.clearAllMocks();
 		mockTripSvc = { permanentDelete: vi.fn() };
 		mockExpenseSvc = { permanentDelete: vi.fn() };
-		mockMillageSvc = { permanentDelete: vi.fn() };
+		mockMileageSvc = { permanentDelete: vi.fn() };
 		mockTripKV = { get: vi.fn() };
 		mockExpenseKV = { get: vi.fn() };
-		mockMillageKV = { get: vi.fn() };
+		mockMileageKV = { get: vi.fn() };
 	});
 
 	it('deletes only from mileage service when type=mileage is specified', async () => {
@@ -66,7 +66,7 @@ describe('DELETE /api/trash/[id] handler', () => {
 		const res = await DELETE(event);
 
 		expect(res.status).toBe(204);
-		expect(mockMillageSvc.permanentDelete).toHaveBeenCalledWith('u1', 'test-id-123');
+		expect(mockMileageSvc.permanentDelete).toHaveBeenCalledWith('u1', 'test-id-123');
 		expect(mockTripSvc.permanentDelete).not.toHaveBeenCalled();
 		expect(mockExpenseSvc.permanentDelete).not.toHaveBeenCalled();
 	});
@@ -85,7 +85,7 @@ describe('DELETE /api/trash/[id] handler', () => {
 
 		expect(res.status).toBe(204);
 		expect(mockTripSvc.permanentDelete).toHaveBeenCalledWith('u2', 'trip-id-456');
-		expect(mockMillageSvc.permanentDelete).not.toHaveBeenCalled();
+		expect(mockMileageSvc.permanentDelete).not.toHaveBeenCalled();
 		expect(mockExpenseSvc.permanentDelete).not.toHaveBeenCalled();
 	});
 
@@ -104,14 +104,14 @@ describe('DELETE /api/trash/[id] handler', () => {
 		expect(res.status).toBe(204);
 		expect(mockExpenseSvc.permanentDelete).toHaveBeenCalledWith('u3', 'expense-id-789');
 		expect(mockTripSvc.permanentDelete).not.toHaveBeenCalled();
-		expect(mockMillageSvc.permanentDelete).not.toHaveBeenCalled();
+		expect(mockMileageSvc.permanentDelete).not.toHaveBeenCalled();
 	});
 
 	it('detects and deletes mileage tombstone when no type is specified', async () => {
 		// Mock that only mileage KV has a tombstone
 		mockTripKV.get = vi.fn().mockResolvedValue(null);
 		mockExpenseKV.get = vi.fn().mockResolvedValue(null);
-		mockMillageKV.get = vi.fn().mockResolvedValue(
+		mockMileageKV.get = vi.fn().mockResolvedValue(
 			JSON.stringify({
 				deleted: true,
 				id: 'mileage-id',
@@ -132,7 +132,7 @@ describe('DELETE /api/trash/[id] handler', () => {
 		const res = await DELETE(event);
 
 		expect(res.status).toBe(204);
-		expect(mockMillageSvc.permanentDelete).toHaveBeenCalledWith('u4', 'mileage-id');
+		expect(mockMileageSvc.permanentDelete).toHaveBeenCalledWith('u4', 'mileage-id');
 		expect(mockTripSvc.permanentDelete).not.toHaveBeenCalled();
 		expect(mockExpenseSvc.permanentDelete).not.toHaveBeenCalled();
 	});
@@ -148,7 +148,7 @@ describe('DELETE /api/trash/[id] handler', () => {
 			})
 		);
 		mockExpenseKV.get = vi.fn().mockResolvedValue(null);
-		mockMillageKV.get = vi.fn().mockResolvedValue(null);
+		mockMileageKV.get = vi.fn().mockResolvedValue(null);
 
 		const event: any = {
 			request: {},
@@ -163,7 +163,7 @@ describe('DELETE /api/trash/[id] handler', () => {
 
 		expect(res.status).toBe(204);
 		expect(mockTripSvc.permanentDelete).toHaveBeenCalledWith('u5', 'trip-id');
-		expect(mockMillageSvc.permanentDelete).not.toHaveBeenCalled();
+		expect(mockMileageSvc.permanentDelete).not.toHaveBeenCalled();
 		expect(mockExpenseSvc.permanentDelete).not.toHaveBeenCalled();
 	});
 
@@ -171,7 +171,7 @@ describe('DELETE /api/trash/[id] handler', () => {
 		// Mock that no KV has a tombstone
 		mockTripKV.get = vi.fn().mockResolvedValue(null);
 		mockExpenseKV.get = vi.fn().mockResolvedValue(null);
-		mockMillageKV.get = vi.fn().mockResolvedValue(null);
+		mockMileageKV.get = vi.fn().mockResolvedValue(null);
 
 		const event: any = {
 			request: {},
@@ -186,7 +186,7 @@ describe('DELETE /api/trash/[id] handler', () => {
 
 		expect(res.status).toBe(204);
 		expect(mockTripSvc.permanentDelete).not.toHaveBeenCalled();
-		expect(mockMillageSvc.permanentDelete).not.toHaveBeenCalled();
+		expect(mockMileageSvc.permanentDelete).not.toHaveBeenCalled();
 		expect(mockExpenseSvc.permanentDelete).not.toHaveBeenCalled();
 	});
 });
