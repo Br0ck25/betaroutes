@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { createEventDispatcher } from 'svelte';
 	let {
 		variant = 'primary',
 		disabled = false,
@@ -15,6 +16,27 @@
 		onclick?: (event: MouseEvent) => void;
 		children?: Snippet;
 	} = $props();
+
+	const dispatch = createEventDispatcher();
+
+	function handleClick(e: MouseEvent) {
+		if (disabled) {
+			e.preventDefault();
+			return;
+		}
+
+		// Call legacy onclick prop if provided
+		if (typeof onclick === 'function') {
+			try {
+				onclick(e as MouseEvent);
+			} catch (err) {
+				console.error('Button onclick prop error', err);
+			}
+		}
+
+		// Dispatch 'click' so parent components using on:click receive it
+		dispatch('click', e);
+	}
 </script>
 
 <button
@@ -27,7 +49,7 @@
     ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
     ${className}`}
 	{disabled}
-	{onclick}
+	onclick={handleClick}
 >
 	{@render children?.()}
 </button>
