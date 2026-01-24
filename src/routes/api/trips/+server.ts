@@ -545,7 +545,7 @@ export const POST: RequestHandler = async (event) => {
 		}
 
 		if (!existingTrip) {
-			await svc.incrementUserCounter(sessionUserSafe?.token || '', 1);
+			await svc.incrementUserCounter(storageId, 1);
 		}
 
 		return new Response(JSON.stringify(trip), {

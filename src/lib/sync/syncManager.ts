@@ -315,6 +315,10 @@ class SyncManager {
 		});
 
 		if (!res.ok) {
+			if (res.status === 401) {
+				// Authentication required: pause sync and retry later
+				throw new Error('AUTH_REQUIRED');
+			}
 			if (res.status >= 400 && res.status < 500) {
 				const errText = await res.text().catch(() => '');
 				throw new Error(
@@ -346,7 +350,15 @@ class SyncManager {
 		const tx = db.transaction('syncQueue', 'readwrite');
 		const store = tx.objectStore('syncQueue');
 
+		const isAuthRequired = error.message?.includes('AUTH_REQUIRED');
 		const isFatal = error.message?.includes('ABORT_RETRY');
+
+		if (isAuthRequired) {
+			console.warn(`Sync paused due to authentication required for item ${item.id}`);
+			syncStatus.setError('Authentication required. Please refresh or sign in to resume sync.');
+			// Pause sync processing by throwing to outer handler so we don't drop the queue item
+			throw new Error('PAUSE_SYNC');
+		}
 
 		if (isFatal) {
 			console.error(
