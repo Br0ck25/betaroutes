@@ -217,7 +217,7 @@ let selectedMileage = new Set<string>(); // Unused -> lint/check error
 - Do **not** declare it until you write the code that uses it.
 - If a variable/arg must exist for signature reasons, prefix with `_` (e.g. `_req`, `_unusedIndex`).
 
-**Prevention:** Make the smallest diff possible. Do not add placeholder code.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
 
 ---
 
@@ -279,7 +279,7 @@ checkRateLimit(kv, userId, 'action', 10, 60);
 // Either update app.d.ts OR use the correct field.
 ```
 
-**Prevention:** Never assume a function signature or type definition. Read the source file (`app.d.ts` or the utility file) first.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
 
 ---
 
@@ -309,7 +309,7 @@ if (!email) return fail(400, { error: 'Missing email', email }); // Return the d
 <input value={form?.email ?? ''} /> // Works.
 ```
 
-**Prevention:** If your UI repopulates fields on error, your server `fail()` must return those fields.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
 
 ---
 
@@ -336,7 +336,7 @@ if (!user?.id) throw new Error('User ID missing');
 return user.id;
 ```
 
-**Prevention:** Never implement “fallbacks” for identity. It exists, or the request fails.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
 
 ---
 
@@ -366,7 +366,7 @@ const newUser = {
 };
 ```
 
-**Prevention:** Never use spread syntax (`...`) on user input for DB writes. Destructure explicitly.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
 
 ---
 
@@ -389,7 +389,7 @@ await env.PLACES_KV.put('recent_places', JSON.stringify(places));
 await env.PLACES_KV.put(`places:${userId}`, JSON.stringify(places));
 ```
 
-**Prevention:** Every KV write MUST include `${userId}` in the key.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
 
 ---
 
@@ -417,7 +417,7 @@ const key = env.STRIPE_KEY; // Loaded from environment
 // Run: wrangler secret put STRIPE_KEY
 ```
 
-**Prevention:** If it looks like a key/token, it must be an env variable.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
 
 ---
 
@@ -442,7 +442,7 @@ export const POST = async ({ platform }) => {
 - Use unit tests or local scripts for seeding data.
 - If testing is needed, use `vitest` with mock data, not live endpoints.
 
-**Prevention:** The word **"debug"** (or **"test"**) in a route path is strictly forbidden.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
 
 ---
 
@@ -467,7 +467,7 @@ let items = $state<Item[]>([]);
 const activeUser = writable<User | null>(null);
 ```
 
-**Prevention:** Never initialize empty state without `<Type>`.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
 
 ---
 
@@ -492,7 +492,497 @@ if (trip.userId === user.name) {
 if (trip.userId !== user.id) return error(403);
 ```
 
-**Prevention:** Ownership MUST be verified using `locals.user.id`. No exceptions.
+**Prevention:** Run `npm run lint` before showing the code. If you delete logic, you MUST delete the imports and variables that supported it. Zero tolerance for unused code.
+
+---
+
+### Error Pattern #17: Structural Nesting & Scope
+
+**Symptom:** `Modifiers cannot appear here`, `Cannot find name 'x'` (when 'x' is clearly defined above), `Error: '}' expected`.
+**Cause:** Defining utility functions _inside_ the main handler function, or losing track of closing brackets `}`.
+
+❌ **Wrong:**
+
+```ts
+export async function mainHandler() {
+	// ... logic ...
+
+	// ERROR: Nested export!
+	export async function helper() {
+		/* ... */
+	}
+}
+```
+
+✅ **Correct:**
+
+```ts
+// Define helpers at the TOP LEVEL
+async function helper() {
+	/* ... */
+}
+
+export async function mainHandler() {
+	await helper();
+}
+```
+
+**Prevention:** All helper functions must be defined at the top level of the file, never nested inside other functions.
+
+---
+
+### Error Pattern #18: Cloudflare Type Conflicts
+
+**Symptom:** `Type 'KVNamespace' is not assignable to type 'KVNamespace'.`
+**Cause:** Manually importing types from `@cloudflare/workers-types` instead of using the global ambient types.
+
+❌ **Wrong:**
+
+```ts
+import { KVNamespace } from '@cloudflare/workers-types'; // CONFLICT!
+function save(kv: KVNamespace) {
+	/* ... */
+}
+```
+
+✅ **Correct:**
+
+```ts
+// Use the global type (no import needed)
+function save(kv: KVNamespace) {
+	/* ... */
+}
+```
+
+**Also:** Cloudflare KV `list()` results can be a union where `cursor` may be absent when `list_complete: true`.
+
+❌ **Wrong:**
+
+```ts
+const list = await kv.list({ prefix, cursor });
+cursor = list.cursor; // Error: cursor may not exist / may be undefined
+```
+
+✅ **Correct:**
+
+```ts
+const list = await kv.list({ prefix, cursor });
+cursor = list.list_complete ? undefined : list.cursor; // Guard the union
+```
+
+**Prevention:** Treat KV `list()` results as a union. Guard `cursor` with `list_complete` (or check `'cursor' in list`) before reading it.
+
+**Prevention:** **NEVER** import `KVNamespace`, `DurableObject`, or `ExecutionContext`. Use the globals from `app.d.ts`.
+
+---
+
+### Error Pattern #19: Invalid JSON Syntax
+
+**Symptom:** `npm error code EJSONPARSE`, `JSONParseError: Expected ','`
+**Cause:** Editing `package.json` or config files and forgetting commas between items.
+
+❌ **Wrong:**
+
+```json
+{
+  "scripts": {
+    "test": "vitest"  // MISSING COMMA
+    "format": "prettier"
+  }
+}
+```
+
+✅ **Correct:**
+
+```json
+{
+	"scripts": {
+		"test": "vitest", // Comma added
+		"format": "prettier"
+	}
+}
+```
+
+**Prevention:** Always validate JSON syntax (commas and braces) before outputting config files.
+
+---
+
+### Error Pattern #21: Index Signature Access
+
+**Symptom:** `Property 'X' comes from an index signature, so it must be accessed with ['X']`
+**Cause:** Accessing properties via dot notation (`env.KEY`) on an object typed as a generic record (e.g., `Env` or `Record<string, any>`).
+
+❌ **Wrong:**
+
+```ts
+// If env is typed as Record<string, KVNamespace>
+await env.BETA_LOGS_KV.put(/* ... */); // TS Error
+```
+
+✅ **Correct:**
+
+```ts
+// Option A: Use brackets
+await env['BETA_LOGS_KV'].put(/* ... */);
+
+// Option B (Preferred): Cast to specific type
+const specificEnv = env as { BETA_LOGS_KV: KVNamespace };
+await specificEnv.BETA_LOGS_KV.put(/* ... */);
+```
+
+**Prevention:** If an object has an index signature, use `['bracket']` notation or cast it to a strict interface.
+
+---
+
+### Error Pattern #22: Lazy Typing (Explicit Any)
+
+**Symptom:** `Unexpected any. Specify a different type @typescript-eslint/no-explicit-any`
+**Cause:** Using `any` to silence TypeScript instead of defining a proper interface or using `unknown`.
+
+❌ **Wrong:**
+
+```ts
+function handleData(data: any) {
+	// Lazy!
+	return (data as any).id;
+}
+```
+
+✅ **Correct:**
+
+```ts
+// Option A: Define the shape (Preferred)
+function handleData(data: { id: string }) {
+	return data.id;
+}
+
+// Option B: Use 'unknown' and narrow (Safe fallback)
+function handleData(data: unknown) {
+	if (typeof data === 'object' && data !== null && 'id' in data) {
+		return (data as { id: string }).id;
+	}
+	throw new Error('Invalid data shape');
+}
+```
+
+**Prevention:** **NEVER** use `any`. Use `unknown` if the type is truly dynamic, then validate it.
+
+---
+
+---
+
+### Error Pattern #23: Missing CSRF Headers in Client Fetch
+
+**Symptom:** `403 Forbidden`, `CSRF validation failed` in console.
+**Cause:** Generating manual `fetch()` calls without the `x-csrf-token` header.
+
+❌ **Wrong:**
+
+```js
+await fetch('/api/update', {
+	method: 'POST',
+	body: JSON.stringify(data)
+}); // Fails: No CSRF token
+```
+
+✅ **Correct:**
+
+```js
+await fetch('/api/update', {
+	method: 'POST',
+	headers: {
+		'content-type': 'application/json',
+		'x-csrf-token': document.querySelector('meta[name="csrf-token"]').content
+		// OR pass the token variable if available in scope
+	},
+	body: JSON.stringify(data)
+});
+```
+
+**Prevention:** All manual `fetch()` calls to mutation endpoints **MUST** include `x-csrf-token`.
+
+### Error Pattern #24: Function Signature Mismatch
+
+**Symptom:** `Expected X arguments, but got Y`, `Argument of type '...' is not assignable to parameter`
+**Cause:** Guessing a function's arguments based on similar functions instead of reading the actual definition.
+
+❌ **Wrong:**
+
+```ts
+// Guessing that listTrash takes 'legacyName' because list() does
+await service.listTrash(id, legacyName); // Error!
+```
+
+✅ **Correct:**
+
+```ts
+// 1. Read the definition of listTrash() first
+// 2. Call it correctly
+await service.listTrash(id);
+```
+
+**Prevention:** **NEVER** guess arguments. If you import a function, you **MUST** read its definition file first.
+
+---
+
+### Error Pattern #25: Broken Control Flow (Syntax Collapse)
+
+**Symptom:** `'try' expected`, `'catch' or 'finally' expected`, `'}' expected`
+**Cause:** Opening a `try` block without a matching `catch`/`finally`, or losing track of closing braces during an edit.
+
+❌ **Wrong:**
+
+```ts
+try {
+  await doWork();
+  // ERROR: Missing catch/finally and closing brace!
+```
+
+✅ **Correct:**
+
+```ts
+try {
+	await doWork();
+} catch (err) {
+	log.error('Error', { err });
+	return error(500);
+}
+```
+
+**Prevention:** When writing control flow, write the skeleton first (`try {} catch {}`), then fill it in. Count your braces.
+
+---
+
+### Error Pattern #26: Incomplete Test Context (Missing Mocks)
+
+**Symptom:** `TypeError: kv.get is not a function`, `Cannot read properties of undefined (reading 'put')` in `vitest` logs.
+**Cause:** Invoking a SvelteKit handler in a test without mocking the `platform.env` bindings.
+
+❌ **Wrong:**
+
+```ts
+// Test file
+const event = { locals: { user } } as RequestEvent; // Missing platform!
+await POST(event); // Crashes because env.KV is missing
+```
+
+✅ **Correct:**
+
+```ts
+// Test file
+import { createMockKV } from '$lib/server/mockKv'; // Use your mock helper
+
+const event = {
+	locals: { user },
+	platform: {
+		env: {
+			USERS_KV: createMockKV() // Explicitly provide the KV mock
+			// ... other bindings
+		}
+	}
+} as unknown as RequestEvent;
+
+await POST(event);
+```
+
+**Prevention:** When testing `+server.ts` files, you **MUST** construct a full `platform.env` object with valid mocks for every KV/DO used.
+
+---
+
+### Error Pattern #27: Strict Union Assignment
+
+**Symptom:** `Type 'string | undefined' is not assignable to type 'string'`.
+**Cause:** Assigning an optional value (like `cursor`) to a mandatory field without a fallback.
+
+❌ **Wrong:**
+
+```ts
+interface State {
+	cursor: string;
+}
+state.cursor = result.cursor; // Error: result.cursor might be undefined
+```
+
+✅ **Correct:**
+
+```ts
+// Option A: Allow undefined in interface
+interface State {
+	cursor?: string;
+}
+
+// Option B: Provide default
+state.cursor = result.cursor ?? '';
+```
+
+**Prevention:** Always check if a source value is optional before assigning it to a strict target.
+
+---
+
+### Error Pattern #28: Lazy Variable Declaration (Prefer Const)
+
+**Symptom:** `error 'x' is never reassigned. Use 'const' instead`
+**Cause:** Defaulting to `let` for variables that are never mutated.
+
+❌ **Wrong:**
+
+```ts
+let userId = event.locals.user.id; // Error: userId never changes
+let config = {
+	/* ... */
+};
+```
+
+✅ **Correct:**
+
+```ts
+const userId = event.locals.user.id;
+const config = {
+	/* ... */
+};
+```
+
+**Prevention:** Always use `const` by default. Only use `let` if you explicitly intend to reassign the variable.
+
+---
+
+### Error Pattern #29: Forbidden TS Ignore
+
+**Symptom:** `Use "@ts-expect-error" instead of "@ts-ignore"`
+**Cause:** Using `@ts-ignore` to silence TypeScript errors.
+
+❌ **Wrong:**
+
+```ts
+// @ts-ignore
+const res = await POST(event as any);
+```
+
+✅ **Correct:**
+
+```ts
+// @ts-expect-error - Testing invalid input handling
+const res = await POST(event as any);
+```
+
+**Prevention:** **NEVER** use `@ts-ignore`. If you must suppress an error (e.g., in tests), use `@ts-expect-error` and add a comment explaining why.
+
+---
+
+### Error Pattern #30: The Cloudflare Cursor Trap
+
+**Symptom:** `Property 'cursor' does not exist on type 'KVNamespaceListResult<...>'`
+**Cause:** Trying to access `list.cursor` directly. In Cloudflare types, if `list_complete` is true, the `cursor` property does not exist on the type union.
+**Prevention:** You **MUST** guard access to the cursor or check `list_complete` first.
+
+❌ **Wrong:**
+
+```ts
+return { cursor: list.cursor }; // TS Error: cursor might not exist
+```
+
+✅ **Correct:**
+
+```ts
+// Check list_complete first
+const cursor = list.list_complete ? undefined : list.cursor;
+return { cursor };
+```
+
+---
+
+### Error Pattern #31: Mock Drift (Incomplete Mocks)
+
+**Symptom:** `TypeError: kv.get is not a function` or `mock.get is undefined` in tests.
+**Cause:** Creating a mock object that only implements part of the interface (e.g., only `put`) when the code under test calls other methods (e.g., `get` or `getWithMetadata`).
+**Prevention:** When mocking a service or KV, strictly define **ALL** methods used by the function under test, or use a factory that provides safe defaults for everything.
+
+❌ **Wrong:**
+
+```ts
+// Code calls kv.get(), but mock only has put
+const mockKV = { put: vi.fn() };
+```
+
+✅ **Correct:**
+
+```ts
+// Provide defaults for all used methods
+const mockKV = {
+	put: vi.fn(),
+	get: vi.fn().mockResolvedValue(null),
+	getWithMetadata: vi.fn().mockResolvedValue({ value: null, metadata: null })
+};
+```
+
+---
+
+### Error Pattern #32: The "Zombie" Variable (Unused Args)
+
+**Symptom:** `'e' is defined but never used`, `'_env' is defined but never used`.
+**Cause:** Declaring variables in `catch` blocks or function arguments “just in case” they are needed later.
+**Prevention:** If a variable is not used, delete it. Do **not** just prefix it with `_`.
+
+❌ **Wrong:**
+
+```ts
+catch (e) { return null; } // 'e' is unused
+const run = async (_env) => { /* ... */ } // '_env' is unused
+```
+
+✅ **Correct:**
+
+```ts
+catch { return null; } // Optional catch binding (ES2019)
+const run = async () => { /* ... */ } // Remove the argument entirely
+```
+
+---
+
+### Error Pattern #33: The CommonJS Relic
+
+**Symptom:** A `require()` style import is forbidden.
+**Cause:** Using Node.js `require()` in tools/scripts instead of ES Module syntax. Your project is `type: module`.
+**Prevention:** Always use `import` / `export`, even in standalone scripts.
+
+❌ **Wrong:**
+
+```js
+const fs = require('fs');
+module.exports = {
+	/* ... */
+};
+```
+
+✅ **Correct:**
+
+```js
+import fs from 'fs';
+export default {
+	/* ... */
+};
+```
+
+---
+
+### Error Pattern #34: Console Pollution
+
+**Symptom:** `Unexpected console statement.`
+**Cause:** Leaving debugging logs (`console.log`) in the code.
+**Prevention:** Use the application logger (`$lib/server/log`) for persistent logs, or remove the log entirely.
+
+❌ **Wrong:**
+
+```ts
+console.log('Migrating user...', userId);
+```
+
+✅ **Correct:**
+
+```ts
+import { log } from '$lib/server/log';
+log.info('Migrating user', { userId });
+```
 
 ## System Prompt Additions (Paste-into-Chat Guardrails)
 
@@ -500,7 +990,6 @@ Add these lines to your chat/system prompt under **STRICT NON-NEGOTIABLES**:
 
 1. **DATA ISOLATION:** Every KV write MUST include `userId` in the key. No global cache.
 2. **NO BACKDOORS:** Do not create `debug/*` or `test/*` routes.
-3. **EXPLICIT ASSIGNMENT:** Never use `...body` for DB writes. Destructure fields manually.
 
 ---
 
