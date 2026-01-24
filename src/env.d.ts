@@ -5,11 +5,14 @@ declare namespace App {
 	// Define the user object shape in locals
 	interface Locals {
 		user: {
+			id?: string;
 			token: string;
 			plan: 'free' | 'premium';
 			tripsThisMonth: number;
 			maxTrips: number;
 			resetDate: string;
+			name?: string;
+			email?: string;
 		} | null;
 	}
 

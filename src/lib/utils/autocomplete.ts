@@ -1,6 +1,7 @@
 // src/lib/utils/autocomplete.ts
 import type { Action } from 'svelte/action';
 import { isAcceptableGeocode } from './geocode';
+import { csrfFetch, jsonFetchOptions } from '$lib/utils/csrf';
 
 // Singleton Promise to prevent race conditions
 let loadingPromise: Promise<void> | null = null;
@@ -195,14 +196,28 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 	async function savePlaceToKV(place: Record<string, unknown>) {
 		try {
 			// POST to the authenticated autocomplete endpoint which records user selections in KV
-			fetch('/api/autocomplete', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(place)
-			});
+			// Use the CSRF wrapper so the double-submit token is included and cookies are sent.
+			// Also avoid mass-assignment by whitelisting fields.
+			const payload = {
+				formatted_address:
+					(place as Record<string, unknown>)['formatted_address'] ||
+					(place as Record<string, unknown>)['name'] ||
+					undefined,
+				name: (place as Record<string, unknown>)['name'] || undefined,
+				secondary_text: (place as Record<string, unknown>)['secondary_text'] || undefined,
+				place_id: (place as Record<string, unknown>)['place_id'] || undefined,
+				geometry: (place as Record<string, unknown>)['geometry'] || undefined,
+				source: (place as Record<string, unknown>)['source'] || undefined
+			};
+
+			void csrfFetch('/api/autocomplete', jsonFetchOptions('POST', payload)).catch(
+				(err: unknown) => {
+					console.error('[autocomplete] savePlaceToKV failed', err);
+				}
+			);
 		} catch (_e: unknown) {
 			void _e;
-			console.error('Failed to save place details');
+			console.error('[autocomplete] Failed to save place details');
 		}
 	}
 

@@ -126,6 +126,7 @@ export interface Subscription {
 }
 
 export interface AuthResponse {
+	id?: string;
 	token: string;
 	resetKey?: string;
 }
