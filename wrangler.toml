@@ -10,12 +10,12 @@ pages_build_output_dir = ".svelte-kit/cloudflare"
 
 [[env.production.durable_objects.bindings]]
 name = "TRIP_INDEX_DO"
-class_name = "TripIndexFresh" # UPDATED
+class_name = "TripIndexSQLv2" # UPDATED to v2
 script_name = "trip-index-worker"
 
 [[env.production.durable_objects.bindings]]
 name = "PLACES_INDEX_DO"
-class_name = "PlacesIndexSQL"
+class_name = "PlacesIndexSQLv2" # UPDATED to v2
 script_name = "trip-index-worker"
 
 [[env.production.kv_namespaces]]
@@ -75,12 +75,12 @@ PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyC_M5PjI9-Dix0dOr_Sg2bKkXhNAIbr2Xs"
 
 [[env.preview.durable_objects.bindings]]
 name = "TRIP_INDEX_DO"
-class_name = "TripIndexFresh" # UPDATED
+class_name = "TripIndexSQLv2" # UPDATED to v2
 script_name = "trip-index-worker"
 
 [[env.preview.durable_objects.bindings]]
 name = "PLACES_INDEX_DO"
-class_name = "PlacesIndexSQL"
+class_name = "PlacesIndexSQLv2" # UPDATED to v2
 script_name = "trip-index-worker"
 
 [[env.preview.kv_namespaces]]
