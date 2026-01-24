@@ -1,0 +1,40 @@
+name: E2E Migration Tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  e2e-migration-tests:
+    name: Migration E2E Tests (isolated)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Ensure clean KV mock
+        run: node tools/clear-kv-mock.js
+
+      - name: Run E2E migration tests
+        run: |
+          npm run pretest:e2e
+          npm run test:e2e
+        env:
+          CI: true
+
+      - name: Cleanup KV mock (best-effort)
+        if: always()
+        run: node tools/clear-kv-mock.js

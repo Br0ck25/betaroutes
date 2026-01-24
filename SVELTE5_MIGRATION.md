@@ -183,8 +183,8 @@ STOP CONDITIONS:
 
 ```svelte
 <script>
-  <!-- Missing lang="ts" -->
-  let items = $state<Item[]>([]);  <!-- TypeScript syntax without lang="ts" -->
+	/* Missing lang="ts" */
+	let items = $state<Item[]>([]); /* TypeScript syntax without lang="ts" */
 </script>
 ```
 
@@ -192,8 +192,8 @@ STOP CONDITIONS:
 
 ```svelte
 <script lang="ts">
-  <!-- Added lang="ts" -->
-  let items = $state<Item[]>([]);
+	/* Added lang="ts" */
+	let items = $state<Item[]>([]);
 </script>
 ```
 

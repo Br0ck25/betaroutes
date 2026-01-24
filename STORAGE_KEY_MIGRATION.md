@@ -168,9 +168,41 @@ const result = await service.sync(
 );
 ```
 
-**Impact:** Users can continue using the app while we prepare for migration. No data loss.
+## **Impact:** Users can continue using the app while we prepare for migration. No data loss.
 
----
+### PRECONDITION: DO NOT change `getStorageId()` alone — Atomic deploy REQUIRED
+
+**DO NOT** deploy a change that makes `getStorageId()` return `user.id` in production without deploying the following items in the _same_ release (or gating `getStorageId()` behind a feature flag). Changing the helper in isolation will make all runtime reads only look under `trip:{uuid}:*` and will immediately cause users with legacy `trip:{username}:*` data to see empty dashboards.
+
+Required items (must be implemented and tested before switching canonical `getStorageId()`):
+
+1. HughesNet hardcoded fix (manual)
+
+- File: `src/routes/api/hughesnet/+server.ts`
+- Replace constructs like `const userId = user?.name || user?.token || user?.id || 'default_user'` with:
+
+```ts
+const userId = user?.id || '';
+const legacyName = user?.name; // pass to service calls for dual-read
+if (!userId) return json({ error: 'Unauthorized' }, { status: 401 });
+```
+
+2. Service dual-read (trip/expense/mileage)
+
+- Files: `src/lib/server/tripService.ts`, `expenseService.ts`, `mileageService.ts`
+- Update signatures to accept an optional `legacyName?: string` and implement the dual-read fallback (check `trip:{userId}:` first, then `trip:{legacyName}:`), enqueue migration for legacy keys found, and deduplicate by record id.
+
+3. API call sites must pass `legacyName`
+
+- Files: `src/routes/api/trips/*`, `src/routes/api/trash/*`, `src/routes/api/expenses/*`, `src/routes/api/mileage/*`, `src/routes/api/hughesnet/*`, etc.
+- Use `const storageId = getStorageId(user)` and `const legacyName = user?.name` and pass both into service calls: `tripService.list(storageId, legacyName)`.
+
+4. Defensive restore (server-side)
+
+- File: `src/lib/server/tripService.ts`
+- Update `restore(userId, itemId, legacyName?)` to attempt tombstone lookup on both `trip:{userId}:{itemId}` and `trip:{legacyName}:{itemId}` (if provided). Sanitize restored payload prior to persisting: force `backup.userId = userId` and rewrite any `hns_{legacyName}_` ids to `hns_{userId}_`.
+
+## Add unit/integration tests that simulate legacy-keyed records/tombstones and ensure migration + restore results in items only under the UUID-based keyspace.
 
 ### Phase 2: Background Migration on Login (Next - WITHIN 2 WEEKS)
 
@@ -225,6 +257,47 @@ export async function migrateUserStorageKeys(
 		);
 		results.migrated += hnsCount;
 
+		// Migrate Settings (Critical for User Preferences)
+		if (env.BETA_USER_SETTINGS_KV) {
+			const settingsCount = await migrateSingleKey(
+				env.BETA_USER_SETTINGS_KV,
+				`settings:${userName}`,
+				`settings:${userId}`
+			);
+			results.migrated += settingsCount;
+		}
+
+		// Migrate Authenticators (Critical for Passkey Login)
+		if (env.BETA_USERS_KV) {
+			const authCount = await migrateSingleKey(
+				env.BETA_USERS_KV, // or the proper auth KV binding
+				`authenticators:${userName}`,
+				`authenticators:${userId}`
+			);
+			results.migrated += authCount;
+		}
+
+		// Migrate Dashboard Counters (Fixes "Empty Dashboard")
+		const metaCount = await migrateSingleKey(
+			env.BETA_LOGS_KV,
+			`meta:user:${userName}:trip_count`,
+			`meta:user:${userId}:trip_count`
+		);
+		results.migrated += metaCount;
+
+		// Backfill Stripe Customer Mapping (Fixes Webhook Timeouts)
+		try {
+			const userRaw = await env.BETA_USERS_KV.get(userId);
+			if (userRaw) {
+				const user = JSON.parse(userRaw as string);
+				if (user.stripeCustomerId) {
+					await env.BETA_USERS_KV.put(`stripe:customer:${user.stripeCustomerId}`, userId);
+				}
+			}
+		} catch (e) {
+			log.warn('[MIGRATION] Failed to backfill stripe mapping', { userId, error: e });
+		}
+
 		log.info('[MIGRATION] User storage keys migrated', {
 			userId,
 			userName,
@@ -258,39 +331,64 @@ async function migrateKeyspace(
 
 	for (const { name: oldKey } of keys) {
 		try {
-			// Read from old key
+			// 1. Read Data
 			const data = await kv.get(oldKey, { type: 'json' });
 			if (!data) continue;
 
-			// Extract the record ID (after second colon)
-			const recordId = oldKey.split(':')[2];
+			// 2. Extract & RENAME Record ID (Fixes HughesNet Duplicates)
+			let recordId = oldKey.split(':')[2];
+			if (recordId.startsWith(`hns_${userName}_`)) {
+				recordId = recordId.replace(`hns_${userName}_`, `hns_${userId}_`);
+			}
+
 			const newKey = `${newPrefix}${recordId}`;
 
-			// Check if new key already exists
+			// 3. Check Existence
 			const existing = await kv.get(newKey);
 			if (existing) {
-				log.warn('[MIGRATION] New key already exists, skipping', {
-					oldKey,
-					newKey
-				});
+				// Log warning but continue
+				log.warn('[MIGRATION] New key already exists, skipping', { oldKey, newKey });
 				continue;
 			}
 
-			// Write to new key (preserve metadata)
-			const metadata = await kv.getWithMetadata(oldKey);
-			await kv.put(newKey, JSON.stringify(data), {
-				metadata: metadata.metadata
-			});
+			// 4. MODIFY PAYLOAD (Fixes Reversion Loop & Tombstone Time Bomb)
+			const record = data as any;
+			let modified = false;
 
-			// Delete old key
+			// A. Fix top-level userId
+			if (record.userId === userName) {
+				record.userId = userId;
+				modified = true;
+			}
+
+			// B. Fix internal ID if we renamed the key (HughesNet)
+			if (record.id && recordId !== oldKey.split(':')[2]) {
+				record.id = recordId;
+				modified = true;
+			}
+
+			// C. Fix "Tombstone Time Bomb" (Soft Deletes)
+			if (record.deleted && record.backup) {
+				if (record.backup.userId === userName) {
+					record.backup.userId = userId;
+					modified = true;
+				}
+				if (record.backup.id && recordId !== oldKey.split(':')[2]) {
+					record.backup.id = recordId;
+					modified = true;
+				}
+			}
+
+			// 5. Write to New Key (preserve metadata)
+			const { metadata } = await kv.getWithMetadata(oldKey);
+			await kv.put(newKey, JSON.stringify(record), { metadata: metadata });
+
+			// 6. Delete Old Key
 			await kv.delete(oldKey);
 
 			migrated++;
 		} catch (error) {
-			log.error('[MIGRATION] Failed to migrate key', {
-				oldKey,
-				error
-			});
+			log.error('[MIGRATION] Failed to migrate key', { oldKey, error });
 		}
 	}
 
