@@ -160,7 +160,7 @@
 			</div>
 
 			<div class="form-row">
-				<!-- Maintenance, Supplies, and Expenses options removed for Millage logs -->
+				<!-- Maintenance, Supplies, and Expenses options removed for Mileage logs -->
 				<div class="form-group grid-3">
 					<div>
 						<label for="start-odo">Start Odometer</label>
@@ -210,7 +210,7 @@
 				<!-- tax deductible removed -->
 			</div>
 
-			<!-- Settings modal removed for Millage edit -->
+			<!-- Settings modal removed for Mileage edit -->
 
 			<div class="form-row vehicle-rate-row">
 				<div class="form-group">
@@ -220,10 +220,10 @@
 						id="vehicle-mobile"
 						placeholder={$userSettings.vehicles && $userSettings.vehicles.length > 0
 							? 'Select vehicle'
-							: 'No vehicles (open Millage Settings)'}
+							: 'No vehicles (open Mileage Settings)'}
 						options={$userSettings.vehicles
 							? $userSettings.vehicles.map((v) => ({ value: v.id || v.name, label: v.name }))
-							: [{ value: '', label: 'No vehicles (open Millage Settings)' }]}
+							: [{ value: '', label: 'No vehicles (open Mileage Settings)' }]}
 						bind:value={formData.vehicle}
 						onchange={(e) => (formData.vehicle = e.value)}
 					/>

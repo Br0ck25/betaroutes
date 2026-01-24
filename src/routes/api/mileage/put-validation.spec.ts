@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock the services and env
-let mockMillageSvc: any;
+let mockMileageSvc: any;
 let mockTripKV: any;
 let mockEnv: any;
 
 vi.mock('$lib/server/mileageService', () => ({
-	makeMileageService: () => mockMillageSvc
+	makeMileageService: () => mockMileageSvc
 }));
 
 vi.mock('$lib/server/env', () => ({
@@ -24,7 +24,7 @@ vi.mock('$lib/server/user', () => ({
 
 describe('PUT /api/mileage/[id] - Parent trip validation', () => {
 	beforeEach(() => {
-		mockMillageSvc = {
+		mockMileageSvc = {
 			put: vi.fn(),
 			get: vi.fn().mockResolvedValue({
 				id: 'trip-123',
@@ -76,7 +76,7 @@ describe('PUT /api/mileage/[id] - Parent trip validation', () => {
 		const res = await PUT(event as any);
 
 		expect(res.status).toBe(200);
-		expect(mockMillageSvc.put).toHaveBeenCalled();
+		expect(mockMileageSvc.put).toHaveBeenCalled();
 	});
 
 	it('returns 409 when parent trip is deleted', async () => {
@@ -128,7 +128,7 @@ describe('PUT /api/mileage/[id] - Parent trip validation', () => {
 		const res = await PUT(event as any);
 
 		expect(res.status).toBe(200);
-		expect(mockMillageSvc.put).toHaveBeenCalled();
+		expect(mockMileageSvc.put).toHaveBeenCalled();
 	});
 
 	it('skips validation when tripKV is not available', async () => {
@@ -147,6 +147,6 @@ describe('PUT /api/mileage/[id] - Parent trip validation', () => {
 		const res = await PUT(event as any);
 
 		expect(res.status).toBe(200);
-		expect(mockMillageSvc.put).toHaveBeenCalled();
+		expect(mockMileageSvc.put).toHaveBeenCalled();
 	});
 });

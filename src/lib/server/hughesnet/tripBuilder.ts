@@ -379,7 +379,7 @@ export async function createTripForDate(
 	// This ensures HNS trips work exactly like manually created trips
 	if (mileageService && miles > 0) {
 		try {
-			// Fetch user settings for millageRate and vehicle
+			// Fetch user settings for mileageRate and vehicle
 			let mileageRate: number | undefined;
 			let vehicle: string | undefined;
 			try {

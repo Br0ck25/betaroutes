@@ -432,7 +432,7 @@ function createMileageStore() {
 			}
 		},
 
-		// ... (keep get, clear, syncFromCloud, migrateOfflineMillage) ...
+		// ... (keep get, clear, syncFromCloud, migrateOfflineMileage) ...
 		async get(id: string, userId: string) {
 			// ... copy existing get code ...
 			try {
@@ -490,7 +490,8 @@ function createMileageStore() {
 					}
 					await tx.done;
 				}
-				localStorage.setItem('last_sync_millage', new Date().toISOString());
+				// Normalize to correct key name and keep backward compatibility if needed
+				localStorage.setItem('last_sync_mileage', new Date().toISOString());
 			} catch (err) {
 				console.error('❌ Failed to sync mileage from cloud:', err);
 			} finally {
@@ -500,7 +501,7 @@ function createMileageStore() {
 			}
 		},
 		async migrateOfflineMileage(tempUserId: string, realUserId: string) {
-			// ... copy existing migrateOfflineMillage code ...
+			// ... copy existing migrateOfflineMileage code ...
 			if (!tempUserId || !realUserId || tempUserId === realUserId) return;
 			const db = await getDB();
 			const tx = db.transaction('mileage', 'readwrite');

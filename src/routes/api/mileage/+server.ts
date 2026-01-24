@@ -38,12 +38,10 @@ export const GET: RequestHandler = async (event) => {
 		// Capture 'since' for differential sync
 		const since = event.url.searchParams.get('since') || undefined;
 
-		const svc = makeMileageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
-
-		// [!code fix] Strictly use ID. Prevents username spoofing.
-		const userId = user.id || '';
+		const svc = makeMileageService(safeKV(env, 'BETA_MILEAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 
 		// Use service list logic which handles KV/DO fallback and syncing logic
+		const userId = user?.id || user?.name || user?.token || '';
 		const items = await svc.list(userId, since);
 
 		return new Response(JSON.stringify(items), { headers: { 'Content-Type': 'application/json' } });
@@ -210,7 +208,7 @@ export const POST: RequestHandler = async (event) => {
 			updatedAt: new Date().toISOString()
 		};
 
-		const svc = makeMileageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
+		const svc = makeMileageService(safeKV(env, 'BETA_MILEAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		await svc.put(record);
 
 		return new Response(JSON.stringify(record), {

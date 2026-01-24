@@ -35,7 +35,7 @@
 	// Derived totals - use pre-computed values
 	$: totalMiles = filteredExpenses.reduce((s, e) => s + (Number((e as any).miles) || 0), 0);
 	// PERFORMANCE: Use pre-computed reimbursement
-	$: totalMillageDeduction = filteredExpenses.reduce(
+	$: totalMileageDeduction = filteredExpenses.reduce(
 		(s, e) => s + ((e as any)._reimbursement || 0),
 		0
 	);
@@ -523,7 +523,7 @@
 
 		<div class="summary-card">
 			<div class="summary-label">Mileage Deduction</div>
-			<div class="summary-value">{formatCurrency(totalMillageDeduction)}</div>
+			<div class="summary-value">{formatCurrency(totalMileageDeduction)}</div>
 		</div>
 
 		{#if categories[0]}

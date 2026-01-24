@@ -194,7 +194,6 @@
 	async function deleteTrip(id: string) {
 		if (!confirm('Move trip to trash?')) return;
 		try {
-			const trip = $trips.find((t) => t.id === id);
 			const currentUser = $page.data['user'] || $user;
 
 			// [!code fix] Strictly use ID. Removed fallback to name/token and legacy legacy checks.
