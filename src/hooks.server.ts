@@ -3,7 +3,7 @@ import { dev } from '$app/environment';
 import type { Handle } from '@sveltejs/kit';
 import { log } from '$lib/server/log';
 // [!code ++] Import the user finder to check real-time status
-import { findUserById } from '$lib/server/userService';
+import { findUserById, findUserByUsername } from '$lib/server/userService';
 // [!code ++] SECURITY (Issue #4): CSRF protection
 import { generateCsrfToken, csrfProtection } from '$lib/server/csrf';
 
@@ -150,10 +150,28 @@ export const handle: Handle = async ({ event, resolve }) => {
 				let freshPlan: 'free' | 'premium' = (session.plan ?? 'free') as 'free' | 'premium';
 				let freshStripeId = session.stripeCustomerId;
 				let freshMaxTrips = session.maxTrips ?? 10;
+				let freshUserId = session.id;
 
-				if (usersKV && session.id) {
+				if (usersKV) {
 					try {
-						const freshUser = await findUserById(usersKV, session.id);
+						let freshUser = null;
+
+						// Case 1: Session has ID (Standard)
+						if (session.id) {
+							freshUser = await findUserById(usersKV, session.id);
+						}
+						// Case 2: Legacy Session (No ID, only name/email) - Backfill ID
+						else if (session.name) {
+							freshUser = await findUserByUsername(usersKV, session.name);
+							if (freshUser) {
+								log.info('[HOOK] Backfilled missing ID from legacy session', {
+									username: session.name,
+									id: freshUser.id
+								});
+								freshUserId = freshUser.id; // Correctly populate ID
+							}
+						}
+
 						if (freshUser) {
 							freshPlan = freshUser.plan as 'free' | 'premium';
 							freshStripeId = freshUser.stripeCustomerId;
@@ -165,8 +183,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 						log.error('[HOOK] Failed to fetch fresh user data:', { message: msg });
 					}
 				}
+
 				event.locals.user = {
-					id: session.id,
+					id: freshUserId, // [!code fix] Ensure ID is populated
 					token: sessionId,
 					// [!code fix] Use the FRESH values from DB
 					plan: freshPlan,
