@@ -2,12 +2,11 @@
 
 /**
  * Normalize a user object into a consistent storage id used for KV keys.
- * Prefer the `name` when available (username), then `id`, then `token`.
- * This ensures KV keys are always based on the human-readable username.
+ * STRICTLY uses the `id` to prevent Account Takeover (ATO) attacks via username spoofing.
  */
 export function getStorageId(
 	user: { id?: string; name?: string; token?: string } | undefined
 ): string {
-	if (!user) return '';
-	return user.name || user.id || user.token || '';
+	// [!code fix] strictly return ID or empty string. never fallback to mutable fields.
+	return user?.id || '';
 }
