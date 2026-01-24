@@ -984,6 +984,40 @@ import { log } from '$lib/server/log';
 log.info('Migrating user', { userId });
 ```
 
+---
+
+### Error Pattern #35: Type Definition Desync
+
+**Symptom:** `Property 'x' does not exist on type 'Y'`, but you are sure `x` exists in the database/logic.
+**Cause:** Updating the code to use a new property (e.g., `user.name`) without updating the central type definition (e.g., `app.d.ts` or `types.ts`).
+
+❌ **Wrong:**
+
+```ts
+// Code
+const name = user.name; // Error: Property 'name' does not exist on type 'SessionUser'
+```
+
+✅ **Correct:**
+
+Update the type definition first:
+
+```ts
+// app.d.ts
+interface SessionUser {
+	id: string;
+	name?: string; // Add the missing property
+}
+```
+
+Then update the code:
+
+```ts
+const name = user.name; // Now valid
+```
+
+**Prevention:** Before using a new property on a shared type (User, Trip, Session), verify and update its interface definition first.
+
 ## System Prompt Additions (Paste-into-Chat Guardrails)
 
 Add these lines to your chat/system prompt under **STRICT NON-NEGOTIABLES**:
