@@ -89,8 +89,9 @@ export const GET: RequestHandler = async (event) => {
 			placesIndexDO as unknown as DurableObjectNamespace
 		);
 
-		const userSafe = user as { name?: string; token?: string } | undefined;
-		const storageId = userSafe?.name || userSafe?.token || '';
+		const userSafe = user as { id?: string; name?: string; token?: string } | undefined;
+		// [!code fix] Strictly use ID. Prevents username spoofing.
+		const storageId = userSafe?.id || '';
 
 		const trip = await svc.get(storageId, id);
 
@@ -156,8 +157,9 @@ export const PUT: RequestHandler = async (event) => {
 			placesIndexDO as unknown as DurableObjectNamespace
 		);
 
-		const userSafe = user as { name?: string; token?: string } | undefined;
-		const storageId = userSafe?.name || userSafe?.token || '';
+		const userSafe = user as { id?: string; name?: string; token?: string } | undefined;
+		// [!code fix] Strictly use ID. Prevents username spoofing.
+		const storageId = userSafe?.id || '';
 
 		// Verify existing ownership
 		const existing = await svc.get(storageId, id);
@@ -263,8 +265,9 @@ export const DELETE: RequestHandler = async (event) => {
 			placesIndexDO as unknown as DurableObjectNamespace
 		);
 
-		const userSafe = user as { name?: string; token?: string } | undefined;
-		const storageId = userSafe?.name || userSafe?.token || '';
+		const userSafe = user as { id?: string; name?: string; token?: string } | undefined;
+		// [!code fix] Strictly use ID. Prevents username spoofing.
+		const storageId = userSafe?.id || '';
 
 		// Check if trip exists
 		const existing = await svc.get(storageId, id);

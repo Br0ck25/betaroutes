@@ -5,7 +5,6 @@ import { makeTripService } from '$lib/server/tripService';
 import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
-import { getStorageId } from '$lib/server/user';
 import { calculateFuelCost } from '$lib/utils/calculations';
 
 export const DELETE: RequestHandler = async (event) => {
@@ -23,7 +22,10 @@ export const DELETE: RequestHandler = async (event) => {
 		}
 
 		const id = event.params.id;
-		const userId = getStorageId(sessionUser);
+
+		// [!code fix] Strictly use ID. Prevents username spoofing.
+		const userId = sessionUser.id || '';
+
 		const svc = makeMileageService(
 			safeKV(env, 'BETA_MILLAGE_KV')!,
 			safeDO(env, 'TRIP_INDEX_DO')!,
@@ -89,7 +91,10 @@ export const GET: RequestHandler = async (event) => {
 		}
 
 		const id = event.params.id;
-		const userId = getStorageId(sessionUser);
+
+		// [!code fix] Strictly use ID. Prevents username spoofing.
+		const userId = sessionUser.id || '';
+
 		const svc = makeMileageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		const item = await svc.get(userId, id);
 		if (!item) return new Response('Not found', { status: 404 });
@@ -115,7 +120,9 @@ export const PUT: RequestHandler = async (event) => {
 		}
 
 		const id = event.params.id;
-		const userId = getStorageId(sessionUser);
+
+		// [!code fix] Strictly use ID. Prevents username spoofing.
+		const userId = sessionUser.id || '';
 
 		const svc = makeMileageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		const existing = await svc.get(userId, id);
