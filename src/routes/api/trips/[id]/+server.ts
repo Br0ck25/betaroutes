@@ -99,9 +99,9 @@ export const GET: RequestHandler = async (event) => {
 			return new Response('Not Found', { status: 404 });
 		}
 
-		// Prefer authoritative mileage from BETA_MILLAGE_KV (merge if present)
+		// Prefer authoritative mileage from BETA_MILEAGE_KV (merge if present)
 		try {
-			const mileageKV = safeKV(event.platform?.env, 'BETA_MILLAGE_KV');
+			const mileageKV = safeKV(event.platform?.env, 'BETA_MILEAGE_KV');
 			if (mileageKV) {
 				const mileageSvc = makeMileageService(
 					mileageKV as any,
@@ -189,7 +189,7 @@ export const PUT: RequestHandler = async (event) => {
 		// If client edited totalMiles, persist authoritative mileage to its own KV so updates propagate to other clients
 		try {
 			if (Object.prototype.hasOwnProperty.call(body, 'totalMiles')) {
-				const mileageKV = safeKV(event.platform?.env, 'BETA_MILLAGE_KV');
+				const mileageKV = safeKV(event.platform?.env, 'BETA_MILEAGE_KV');
 				if (mileageKV) {
 					const mileageSvc = makeMileageService(
 						mileageKV as any,
@@ -291,7 +291,7 @@ export const DELETE: RequestHandler = async (event) => {
 
 		// --- Cascade delete: Delete linked mileage log ---
 		try {
-			const mileageKV = safeKV(event.platform?.env, 'BETA_MILLAGE_KV');
+			const mileageKV = safeKV(event.platform?.env, 'BETA_MILEAGE_KV');
 			if (mileageKV) {
 				const mileageSvc = makeMileageService(
 					mileageKV as unknown as KVNamespace,

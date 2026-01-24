@@ -222,7 +222,7 @@ export async function setupMockKV(event: { platform?: { env?: Record<string, unk
 	if (!env['BETA_USER_SETTINGS_KV']) env['BETA_USER_SETTINGS_KV'] = createMockKV('SETTINGS');
 	if (!env['BETA_PLACES_KV']) env['BETA_PLACES_KV'] = createMockKV('PLACES');
 	if (!env['BETA_EXPENSES_KV']) env['BETA_EXPENSES_KV'] = createMockKV('EXPENSES');
-	if (!env['BETA_MILLAGE_KV']) env['BETA_MILLAGE_KV'] = createMockKV('MILEAGE');
+	if (!env['BETA_MILEAGE_KV']) env['BETA_MILEAGE_KV'] = createMockKV('MILEAGE');
 	if (!env['BETA_HUGHESNET_KV']) env['BETA_HUGHESNET_KV'] = createMockKV('HUGHESNET');
 	if (!env['BETA_HUGHESNET_ORDERS_KV'])
 		env['BETA_HUGHESNET_ORDERS_KV'] = createMockKV('HUGHESNET_ORDERS');

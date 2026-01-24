@@ -47,7 +47,7 @@ export async function migrateUserStorageKeys(
 	env: {
 		BETA_LOGS_KV?: KVNamespace;
 		BETA_EXPENSES_KV?: KVNamespace;
-		BETA_MILLAGE_KV?: KVNamespace; // Note: typo in original KV name
+		BETA_MILEAGE_KV?: KVNamespace;
 		BETA_TRASH_KV?: KVNamespace;
 		BETA_HUGHESNET_KV?: KVNamespace;
 		BETA_HUGHESNET_ORDERS_KV?: KVNamespace;
@@ -79,8 +79,8 @@ export async function migrateUserStorageKeys(
 		}
 
 		// Migrate mileage
-		if (env.BETA_MILLAGE_KV) {
-			const mileageCount = await migrateKeyspace(env.BETA_MILLAGE_KV, 'mileage', userId, userName);
+		if (env.BETA_MILEAGE_KV) {
+			const mileageCount = await migrateKeyspace(env.BETA_MILEAGE_KV, 'mileage', userId, userName);
 			results.migrated += mileageCount;
 			log.info('[MIGRATION] Mileage records migrated', { userId, count: mileageCount });
 		}

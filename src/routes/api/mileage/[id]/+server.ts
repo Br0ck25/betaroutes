@@ -27,7 +27,8 @@ export const DELETE: RequestHandler = async (event) => {
 		const userId = sessionUser.id || '';
 
 		const svc = makeMileageService(
-			safeKV(env, 'BETA_MILLAGE_KV')!,
+			safeKV(env, 'BETA_MILEAGE_KV')!,
+
 			safeDO(env, 'TRIP_INDEX_DO')!,
 			safeKV(env, 'BETA_LOGS_KV')
 		);
@@ -95,7 +96,7 @@ export const GET: RequestHandler = async (event) => {
 		// [!code fix] Strictly use ID. Prevents username spoofing.
 		const userId = sessionUser.id || '';
 
-		const svc = makeMileageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
+		const svc = makeMileageService(safeKV(env, 'BETA_MILEAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		const item = await svc.get(userId, id);
 		if (!item) return new Response('Not found', { status: 404 });
 		return new Response(JSON.stringify(item), { headers: { 'Content-Type': 'application/json' } });
@@ -124,7 +125,7 @@ export const PUT: RequestHandler = async (event) => {
 		// [!code fix] Strictly use ID. Prevents username spoofing.
 		const userId = sessionUser.id || '';
 
-		const svc = makeMileageService(safeKV(env, 'BETA_MILLAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
+		const svc = makeMileageService(safeKV(env, 'BETA_MILEAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		const existing = await svc.get(userId, id);
 		if (!existing) return new Response('Not found', { status: 404 });
 

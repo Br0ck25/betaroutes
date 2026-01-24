@@ -49,7 +49,7 @@ export const GET: RequestHandler = async (event) => {
 		);
 
 		const mileageSvc = makeMileageService(
-			safeKV(platformEnv, 'BETA_MILLAGE_KV') as any,
+			safeKV(platformEnv, 'BETA_MILEAGE_KV') as any,
 			tripIndexDO as any
 		);
 

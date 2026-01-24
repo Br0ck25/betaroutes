@@ -39,7 +39,7 @@ export const POST: RequestHandler = async (event) => {
 		);
 
 		const mileageSvc = makeMileageService(
-			safeKV(platformEnv, 'BETA_MILLAGE_KV') as any,
+			safeKV(platformEnv, 'BETA_MILEAGE_KV') as any,
 			tripIndexDO as any,
 			safeKV(platformEnv, 'BETA_LOGS_KV') as any
 		);
@@ -61,7 +61,7 @@ export const POST: RequestHandler = async (event) => {
 				} catch {
 					try {
 						// Get the mileage item from trash to check its tripId
-						const mileageKV = safeKV(platformEnv, 'BETA_MILLAGE_KV');
+						const mileageKV = safeKV(platformEnv, 'BETA_MILEAGE_KV');
 						if (mileageKV) {
 							const raw = await (mileageKV as any).get(`mileage:${storageId}:${id}`);
 							if (raw) {
@@ -207,9 +207,7 @@ export const DELETE: RequestHandler = async (event) => {
 				// by checking which KV has a tombstone for this ID
 				const tripKV = safeKV(platformEnv, 'BETA_LOGS_KV');
 				const expenseKV = safeKV(platformEnv, 'BETA_EXPENSES_KV');
-				const mileageKV = safeKV(platformEnv, 'BETA_MILLAGE_KV');
-
-				// Check each service for a tombstone record
+				const mileageKV = safeKV(platformEnv, 'BETA_MILEAGE_KV');
 				let foundType: string | null = null;
 
 				if (tripKV) {

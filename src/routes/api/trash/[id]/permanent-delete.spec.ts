@@ -23,7 +23,7 @@ vi.mock('$lib/server/env', () => ({
 	safeKV: (_env: unknown, name: string) => {
 		if (name === 'BETA_LOGS_KV') return mockTripKV;
 		if (name === 'BETA_EXPENSES_KV') return mockExpenseKV;
-		if (name === 'BETA_MILLAGE_KV') return mockMillageKV;
+		if (name === 'BETA_MILEAGE_KV') return mockMillageKV;
 		if (name === 'BETA_PLACES_KV') return undefined;
 		return undefined;
 	},

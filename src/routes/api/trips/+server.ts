@@ -210,7 +210,7 @@ export const GET: RequestHandler = async (event) => {
 
 		// If mileage KV is available, treat mileage as the source-of-truth and merge
 		try {
-			const mileageKV = safeKV(env, 'BETA_MILLAGE_KV');
+			const mileageKV = safeKV(env, 'BETA_MILEAGE_KV');
 			if (mileageKV) {
 				const mileageSvc = makeMileageService(mileageKV as any, safeDO(env, 'TRIP_INDEX_DO')!);
 				const ms = await mileageSvc.list(storageId);
@@ -427,7 +427,7 @@ export const POST: RequestHandler = async (event) => {
 		// --- Auto-create mileage log if trip has totalMiles > 0 ---
 		if (typeof validData.totalMiles === 'number' && validData.totalMiles > 0 && !existingTrip) {
 			try {
-				const mileageKV = safeKV(env, 'BETA_MILLAGE_KV');
+				const mileageKV = safeKV(env, 'BETA_MILEAGE_KV');
 				if (mileageKV) {
 					const mileageSvc = makeMileageService(mileageKV, safeDO(env, 'TRIP_INDEX_DO')!);
 
@@ -689,7 +689,7 @@ export const PUT: RequestHandler = async (event) => {
 			existingTrip.totalMiles !== validData.totalMiles
 		) {
 			try {
-				const mileageKV = safeKV(env, 'BETA_MILLAGE_KV');
+				const mileageKV = safeKV(env, 'BETA_MILEAGE_KV');
 				if (mileageKV) {
 					const mileageSvc = makeMileageService(mileageKV, safeDO(env, 'TRIP_INDEX_DO')!);
 					const allMileage = await mileageSvc.list(storageId);

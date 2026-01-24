@@ -119,7 +119,7 @@ export const POST: RequestHandler = async (event) => {
 			const windowDays = PLAN_LIMITS.FREE.WINDOW_DAYS || 30;
 			const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
 			const svc = makeMileageService(
-				safeKV(env, 'BETA_MILLAGE_KV')!,
+				safeKV(env, 'BETA_MILEAGE_KV')!,
 				safeDO(env, 'TRIP_INDEX_DO')!
 			);
 			const recentMileage = await svc.list(userId, since);
