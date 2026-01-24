@@ -9,7 +9,7 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 	if (!user) return { mileage: [] };
 
 	// Safely access bindings
-	const kv = safeKV(platform?.env, 'BETA_MILLAGE_KV');
+	const kv = safeKV(platform?.env, 'BETA_MILEAGE_KV');
 	const tripDO = safeDO(platform?.env, 'TRIP_INDEX_DO');
 
 	if (!kv || !tripDO) {

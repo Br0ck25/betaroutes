@@ -55,8 +55,8 @@ binding = "BETA_SESSIONS_KV"
 id = "d395b64dcd0641f5a44d94c5ef5628eb"
 
 [[env.production.kv_namespaces]]
-binding = "BETA_MILLAGE_KV"
-id = "05f8026102b54e82ba5ecd5c427d05b8"
+binding = "BETA_MILEAGE_KV"
+id = "d5a88eb9bfd4486fbaa26e033e92104f"
 
 # ---------------------------------------------------
 # Preview environment
