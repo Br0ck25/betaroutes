@@ -7,7 +7,7 @@
 
 ## 🚨 Priority 0: EMERGENCY FIXES
 
-**Do not deploy or leave production running without these fixes.**  
+**Do not deploy or leave production running without these fixes.**
 **Risk:** Account Takeover, Data Destruction, Total System Compromise.
 
 - [ ] **1. Fix Root Cause of Account Takeover (`getStorageId`)**
@@ -87,8 +87,20 @@ High risk of site failure, financial loss, privilege escalation, or total accoun
   - **Status:** ✅ COMPLETED - Added ALLOWED_UPDATE_FIELDS whitelist and pickAllowedFields() in PUT handler
 - [x] **[Broken Access Control] Mass Assignment (Vehicles):** Vehicle updates use spread operators without a Zod whitelist.
   - **Status:** ✅ ALREADY FIXED - Vehicle schema uses `.strict()` which rejects extra properties
-- [ ] **[DoS] Unsecured Cron Endpoint:** `/api/cron` lacks an Authorization secret, allowing attackers to trigger expensive jobs.
-  - **Status:** ⚠️ N/A - Endpoint does not exist yet (may be planned for future)
+- [x] **[DoS] Unsecured Cron Endpoint:** `/api/cron` lacks an Authorization secret, allowing attackers to trigger expensive jobs.
+  - **Status:** ✅ COMPLETED - Implemented a protected endpoint `/api/cron/trash-purge` that validates `CRON_ADMIN_SECRET` (timing-safe comparison), added unit tests, and documented the deployment workflow.
+  - **Deployment Notes:**
+    - Local: copy `.dev.vars.example` to `.dev.vars` and set `CRON_ADMIN_SECRET=<secret>` (DO NOT commit `.dev.vars`).
+    - Production: use `npx wrangler pages secret put CRON_ADMIN_SECRET` or set it in the Cloudflare Pages dashboard (do not put secrets in `wrangler.toml`).
+    - Optional: add a cron schedule in `wrangler.toml` under `[triggers]` to automate runs (example below). Keep secrets out of source control.
+
+```
+[triggers]
+crons = ["0 0 * * *"] # daily at midnight UTC
+```
+
+    - Notes: Confirm the schedule in your Cloudflare timezone and ensure the secret is present in the environment before enabling the trigger.
+
 - [x] **[XSS] Stored XSS in Dashboard:** `{@html icon}` renders unsanitized strings from user settings.
   - **Status:** ✅ ALREADY FIXED - Icons use `sanitizeStaticSvg()` and are static hardcoded SVG strings
 - [x] **[Injection] Formula Injection:** CSV/Excel exports do not sanitize fields starting with `=`, allowing malicious code execution in Excel.

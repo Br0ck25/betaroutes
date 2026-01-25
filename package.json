@@ -11,11 +11,15 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"format": "prettier --write .",
-		"lint": "prettier --check \"src/**/*.{ts,js,svelte,css,md}\" && eslint \"src/**/*.{ts,js,svelte}\"",
+		"lint": "node tools/check-env.js && prettier --check \"src/**/*.{ts,js,svelte,css,md}\" && eslint \"src/**/*.{ts,js,svelte}\"",
 		"audit": "npm audit --production",
 		"audit:fix": "npm audit fix",
 		"migrate:order": "node scripts/svelte5-migration-order.js",
-		"migrate:done": "node scripts/svelte5-migration-done.js"
+		"migrate:done": "node scripts/svelte5-migration-done.js",
+		"test": "vitest run --watch=false",
+		"test:watch": "vitest",
+		"test:run": "npm test",
+		"gate": "npm run check && npm run lint && npm test"
 	},
 	"lint-staged": {
 		"*.{ts,js,svelte}": [
