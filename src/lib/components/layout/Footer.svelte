@@ -2,7 +2,7 @@
 	import { base } from '$app/paths';
 	const resolve = (href: string) => `${base}${href}`;
 
-	let { class: className = '' } = $props();
+	const { class: className = '' } = $props();
 </script>
 
 <footer

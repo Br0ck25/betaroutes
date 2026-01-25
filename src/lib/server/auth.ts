@@ -1,6 +1,5 @@
 // src/lib/server/auth.ts
 import bcrypt from 'bcryptjs'; // [!code note] Kept for legacy verification
-import type { KVNamespace, ExecutionContext } from '@cloudflare/workers-types';
 import { findUserByEmail, findUserByUsername, updatePasswordHash, type User } from './userService';
 import { log } from '$lib/server/log';
 
@@ -156,7 +155,7 @@ export async function authenticateUser(
 
 	// --- Auto-Migration ---
 	if (needsMigration) {
-		log.debug(`[AUTH] Migrating user "${user.username}" to optimized PBKDF2 hash.`);
+		log.debug(`[AUTH] Migrating user ${user.id} to optimized PBKDF2 hash.`);
 
 		const migrationTask = async () => {
 			const newHash = await hashPassword(password);
@@ -172,7 +171,7 @@ export async function authenticateUser(
 		}
 	}
 
-	return { id: user.id, username: user.username, email: user.email };
+	return { id: user.id } as { id: string };
 }
 
 /**

@@ -1,18 +1,38 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 let mockSvc: any;
+let mockEnv: any;
 vi.mock('$lib/server/mileageService', () => ({
 	makeMileageService: () => mockSvc
 }));
 vi.mock('$lib/server/env', () => ({
-	getEnv: () => ({}),
-	safeKV: () => ({}),
+	getEnv: () => mockEnv,
+	safeKV: (env: any, name: string) => {
+		if (env && typeof env[name] !== 'undefined') return env[name];
+		return {};
+	},
 	safeDO: () => ({})
 }));
 
 describe('POST /api/mileage handler', () => {
 	beforeEach(() => {
-		mockSvc = { put: vi.fn() };
+		mockSvc = { put: vi.fn().mockResolvedValue(undefined), list: vi.fn().mockResolvedValue([]) };
+		// Mock platform env: BETA_USERS_KV for findUserById and a context.waitUntil for background tasks
+		mockEnv = {
+			BETA_USERS_KV: {
+				get: vi.fn().mockResolvedValue(
+					JSON.stringify({
+						id: 'u1',
+						plan: 'free',
+						username: 'u1',
+						email: 'u1@example.com',
+						password: 'pw',
+						name: 'u1',
+						createdAt: new Date().toISOString()
+					})
+				)
+			}
+		};
 	});
 
 	it('accepts miles + rate and computes reimbursement', async () => {
@@ -20,7 +40,7 @@ describe('POST /api/mileage handler', () => {
 		const event: any = {
 			request: { json: async () => body },
 			locals: { user: { id: 'u1' } },
-			platform: {}
+			platform: { env: mockEnv, context: { waitUntil: vi.fn() } }
 		};
 
 		const { POST } = await import('./+server');

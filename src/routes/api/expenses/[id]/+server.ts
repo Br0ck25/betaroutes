@@ -7,7 +7,7 @@ import { log } from '$lib/server/log';
 
 export const DELETE: RequestHandler = async (event) => {
 	try {
-		const user = event.locals.user as { id?: string; name?: string; token?: string } | undefined;
+		const user = event.locals.user as { id?: string } | undefined;
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
 		const env = getEnv(event.platform);
@@ -37,7 +37,7 @@ export const DELETE: RequestHandler = async (event) => {
 
 export const PUT: RequestHandler = async (event) => {
 	try {
-		const user = event.locals.user as { id?: string; name?: string; token?: string } | undefined;
+		const user = event.locals.user as { id?: string } | undefined;
 		if (!user) return new Response('Unauthorized', { status: 401 });
 
 		const env = getEnv(event.platform);
@@ -55,15 +55,41 @@ export const PUT: RequestHandler = async (event) => {
 			return new Response(JSON.stringify({ error: 'Expense not found' }), { status: 404 });
 		}
 
-		const body = (await event.request.json()) as unknown;
+		const rawBody = (await event.request.json()) as unknown;
+		const body =
+			typeof rawBody === 'object' && rawBody !== null ? (rawBody as Record<string, unknown>) : {};
 
-		// Ensure ID and userId cannot be overwritten by client
-		const expense = {
-			...(body as Record<string, unknown>),
+		// Merge updates explicitly (prevent mass-assignment)
+		const expense: ExpenseRecord = {
 			id: expenseId,
-			userId: storageId
+			userId: storageId,
+			date: existing.date,
+			category: existing.category,
+			amount: existing.amount,
+			description: existing['description'] as string | undefined,
+			createdAt: existing.createdAt,
+			updatedAt: new Date().toISOString(),
+			// optional fields accessed via index signature
+			...(existing['taxDeductible'] !== undefined
+				? { taxDeductible: existing['taxDeductible'] as boolean }
+				: {}),
+			...(existing['store'] !== undefined ? { store: existing['store'] as string } : {})
 		};
-		await svc.put(expense as ExpenseRecord);
+
+		if (typeof body['date'] === 'string') expense.date = body['date'] as string;
+		if (typeof body['category'] === 'string') expense.category = body['category'] as string;
+		if (body['amount'] !== undefined) {
+			const num = Number(body['amount']);
+			if (!Number.isNaN(num)) expense.amount = num;
+		}
+		if (typeof body['description'] === 'string')
+			expense.description = body['description'] as string;
+		if (typeof body['taxDeductible'] === 'boolean')
+			(expense as Record<string, unknown>)['taxDeductible'] = body['taxDeductible'] as boolean;
+		if (typeof body['store'] === 'string')
+			(expense as Record<string, unknown>)['store'] = body['store'] as string;
+
+		await svc.put(expense);
 
 		return new Response(JSON.stringify(expense));
 	} catch (err: unknown) {

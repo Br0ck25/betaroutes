@@ -13,7 +13,7 @@
 	const dispatch = createEventDispatcher();
 
 	// Local UI toggle for showing restore panel
-	let showRestore = false;
+	const showRestore = false;
 
 	function handleConnect() {
 		dispatch('connect', { username, password });

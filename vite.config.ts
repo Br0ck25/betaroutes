@@ -23,6 +23,8 @@ export default defineConfig({
 	test: {
 		// [!code changed] Simplified test config
 		include: ['src/**/*.{test,spec}.{js,ts}'],
+		// Setup file to provide minimal shims for test environment (e.g., indexedDB)
+		setupFiles: ['./src/vitest.setup.ts'],
 		// Optional: explicit environment (defaults to node in Vitest,
 		// usually 'jsdom' is preferred for Svelte component testing if you add that later)
 		environment: 'node'

@@ -1,10 +1,14 @@
 // src/lib/server/hughesnet/tripBuilder.ts
-import type { KVNamespace } from '@cloudflare/workers-types';
 import type { OrderData, OrderWithMeta, Trip, TripStop, SupplyItem } from './types';
 import type { MileageRecord } from '$lib/server/mileageService';
 import { extractDateFromTs, parseDateOnly, parseTime, buildAddress, minutesToTime } from './utils';
 import { MIN_JOB_DURATION_MINS, MAX_JOB_DURATION_MINS } from './constants';
 import { log } from '$lib/server/log';
+
+// Small helper to avoid `any` casts
+function isRecord(obj: unknown): obj is Record<string, unknown> {
+	return typeof obj === 'object' && obj !== null;
+}
 
 // Minimal Route leg shape used by the router helper
 type RouteLeg = { duration?: number; distance?: number };
@@ -121,14 +125,16 @@ export async function createTripForDate(
 	// Prefer autocompleted / geocoded formatted addresses when available
 	const resolvedCache = new Map<string, string>();
 	async function resolveIfPossible(raw: string) {
-		if (!raw || !(router as any)?.resolveAddress) return raw;
+		if (!raw || typeof router.resolveAddress !== 'function') return raw;
 		const key = raw.trim();
 		if (resolvedCache.has(key)) return resolvedCache.get(key)!;
 		try {
-			const pt = await (router as any).resolveAddress(key);
-			if (pt && (pt as any).formattedAddress) {
-				resolvedCache.set(key, (pt as any).formattedAddress);
-				return (pt as any).formattedAddress;
+			const resolveFn = router.resolveAddress;
+			if (!resolveFn) return key;
+			const pt: unknown = await resolveFn(key);
+			if (pt && isRecord(pt) && typeof pt['formattedAddress'] === 'string') {
+				resolvedCache.set(key, String(pt['formattedAddress']));
+				return String(pt['formattedAddress']);
 			}
 			resolvedCache.set(key, key);
 			return key;
@@ -220,7 +226,7 @@ export async function createTripForDate(
 	for (const o of ordersWithMeta) {
 		const rawAddr = buildAddress(o);
 		let resolvedAddr = rawAddr;
-		if (rawAddr && (router as any)?.resolveAddress) {
+		if (rawAddr && typeof router.resolveAddress === 'function') {
 			try {
 				resolvedAddr = await resolveIfPossible(rawAddr);
 			} catch (err: unknown) {

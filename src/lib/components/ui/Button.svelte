@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { createEventDispatcher } from 'svelte';
-	let {
+	const {
 		variant = 'primary',
 		disabled = false,
 		type = 'button',

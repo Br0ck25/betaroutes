@@ -33,8 +33,9 @@ const settingsSchema = z.object({
 });
 
 export const GET: RequestHandler = async ({ locals, platform }) => {
-	const user = locals.user as any;
-	if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
+	const user = locals.user;
+	if (!user?.id || typeof user.id !== 'string')
+		return json({ error: 'Unauthorized' }, { status: 401 });
 
 	const { getEnv, safeKV } = await import('$lib/server/env');
 	const env = getEnv(platform);
@@ -43,18 +44,25 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
 
 	try {
 		// [!code fix] Ensure consistency with write key
-		const raw = await kv.get(`settings:${(user as any).id}`);
-		const settings = raw ? JSON.parse(raw) : {};
-		return json(settings);
-	} catch (err: any) {
-		log.error('Failed to load settings', { message: err?.message });
+		const raw = await kv.get(`settings:${user.id}`);
+		if (!raw || typeof raw !== 'string') return json({});
+		try {
+			const settings = JSON.parse(raw);
+			return json(settings);
+		} catch (err: unknown) {
+			log.error('Failed to parse settings JSON', { message: String(err) });
+			return json({});
+		}
+	} catch (err: unknown) {
+		log.error('Failed to load settings', { message: String(err) });
 		return json({});
 	}
 };
 
 export const POST: RequestHandler = async ({ request, locals, platform }) => {
-	const user = locals.user as any;
-	if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
+	const user = locals.user;
+	if (!user?.id || typeof user.id !== 'string')
+		return json({ error: 'Unauthorized' }, { status: 401 });
 
 	const { getEnv, safeKV } = await import('$lib/server/env');
 	const env = getEnv(platform);
@@ -69,10 +77,12 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 	}
 
 	try {
-		const body: any = await request.json();
+		const bodyJson: unknown = await request.json();
+		const incoming =
+			bodyJson && typeof bodyJson === 'object' ? (bodyJson as Record<string, unknown>) : {};
 
 		// Handle both wrapped { settings: {...} } and flat payloads
-		const payload = body.settings || body;
+		const payload = (incoming['settings'] ?? incoming) as unknown;
 		const result = settingsSchema.safeParse(payload);
 
 		if (!result.success) {
@@ -86,16 +96,17 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 		}
 
 		// [!code fix] Use the namespaced key
-		const key = `settings:${(user as any).id}`;
+		const key = `settings:${user.id}`;
 		const existingRaw = await kv.get(key);
-		const existing = existingRaw ? JSON.parse(existingRaw) : {};
+		const existing = existingRaw && typeof existingRaw === 'string' ? JSON.parse(existingRaw) : {};
 
+		// Merge validated data only
 		const updated = { ...existing, ...result.data };
 		await kv.put(key, JSON.stringify(updated));
 
 		return json(updated);
-	} catch (e: any) {
-		log.error('Settings update failed', { message: e?.message });
+	} catch (err: unknown) {
+		log.error('Settings update failed', { message: String(err) });
 		return json({ error: 'Internal Error' }, { status: 500 });
 	}
 };

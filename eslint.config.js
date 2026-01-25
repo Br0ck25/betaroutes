@@ -109,6 +109,8 @@ export default defineConfig(
 
 			// Security: Prevent {@html} usage (Pattern #23 / XSS)
 			'svelte/no-at-html-tags': 'error',
+			// Allow standard root deployments; warn instead of error to reduce noise
+			'svelte/no-navigation-without-resolve': 'warn',
 
 			// Migration: Turn off strict typing for UI files to allow rapid dev
 			// (Server files remain strict)

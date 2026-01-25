@@ -1,7 +1,7 @@
 // src/routes/api/mileage/[id]/+server.ts
 import type { RequestHandler } from './$types';
-import { makeMileageService } from '$lib/server/mileageService';
-import { makeTripService } from '$lib/server/tripService';
+import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
+import { makeTripService, type TripRecord } from '$lib/server/tripService';
 import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
@@ -9,14 +9,12 @@ import { calculateFuelCost } from '$lib/utils/calculations';
 
 export const DELETE: RequestHandler = async (event) => {
 	try {
-		const sessionUser = event.locals.user as
-			| { id?: string; name?: string; token?: string }
-			| undefined;
+		const sessionUser = event.locals.user as { id?: string } | undefined;
 		if (!sessionUser) return new Response('Unauthorized', { status: 401 });
 
-		let env: any;
+		let env: Record<string, unknown> | undefined;
 		try {
-			env = getEnv(event.platform as any);
+			env = getEnv(event.platform);
 		} catch {
 			return new Response('Service Unavailable', { status: 503 });
 		}
@@ -35,6 +33,15 @@ export const DELETE: RequestHandler = async (event) => {
 
 		// Get the mileage log before deleting to check for linked trip
 		const existing = await svc.get(userId, id);
+		if (!existing) {
+			return new Response('Not found', { status: 404 });
+		}
+
+		// Verify ownership explicitly before deletion (defense-in-depth)
+		if (existing.userId !== userId) {
+			log.warn('Unauthorized delete attempt for mileage', { mileageId: id, userIdAttempt: userId });
+			return new Response('Forbidden', { status: 403 });
+		}
 
 		// Soft delete via service
 		await svc.delete(userId, id);
@@ -53,11 +60,12 @@ export const DELETE: RequestHandler = async (event) => {
 				);
 				const trip = await tripSvc.get(userId, existing.tripId);
 				if (trip && !trip.deleted) {
-					trip.totalMiles = 0;
+					const tripRecord = trip as TripRecord & Record<string, unknown>;
+					tripRecord.totalMiles = 0;
 					// Also reset fuelCost since there are no miles
-					(trip as any).fuelCost = 0;
-					trip.updatedAt = new Date().toISOString();
-					await tripSvc.put(trip);
+					tripRecord.fuelCost = 0;
+					tripRecord.updatedAt = new Date().toISOString();
+					await tripSvc.put(tripRecord as TripRecord);
 					log.info('Set trip totalMiles and fuelCost to 0 after mileage delete', {
 						tripId: existing.tripId
 					});
@@ -79,14 +87,12 @@ export const DELETE: RequestHandler = async (event) => {
 
 export const GET: RequestHandler = async (event) => {
 	try {
-		const sessionUser = event.locals.user as
-			| { id?: string; name?: string; token?: string }
-			| undefined;
+		const sessionUser = event.locals.user as { id?: string } | undefined;
 		if (!sessionUser) return new Response('Unauthorized', { status: 401 });
 
-		let env: any;
+		let env: Record<string, unknown> | undefined;
 		try {
-			env = getEnv(event.platform as any);
+			env = getEnv(event.platform);
 		} catch {
 			return new Response('Service Unavailable', { status: 503 });
 		}
@@ -108,14 +114,12 @@ export const GET: RequestHandler = async (event) => {
 
 export const PUT: RequestHandler = async (event) => {
 	try {
-		const sessionUser = event.locals.user as
-			| { id?: string; name?: string; token?: string }
-			| undefined;
+		const sessionUser = event.locals.user as { id?: string } | undefined;
 		if (!sessionUser) return new Response('Unauthorized', { status: 401 });
 
-		let env: any;
+		let env: Record<string, unknown> | undefined;
 		try {
-			env = getEnv(event.platform as any);
+			env = getEnv(event.platform);
 		} catch {
 			return new Response('Service Unavailable', { status: 503 });
 		}
@@ -129,14 +133,19 @@ export const PUT: RequestHandler = async (event) => {
 		const existing = await svc.get(userId, id);
 		if (!existing) return new Response('Not found', { status: 404 });
 
-		// Read the request body early so we can validate attaching to a trip if requested
-		const body: any = await event.request.json();
+		// Read and validate request body (defensive: do not trust client)
+		const rawBody = (await event.request.json()) as unknown;
+		const body =
+			typeof rawBody === 'object' && rawBody !== null ? (rawBody as Record<string, unknown>) : {};
 
 		// Validate parent trip exists and is active when attaching or updating a tripId,
 		// or if an existing trip record is present for this mileage id (legacy behavior: id == trip id)
 		const tripKV = safeKV(env, 'BETA_LOGS_KV');
-		const tripIdToCheck = body.tripId ?? existing.tripId ?? undefined;
-		if (tripKV && typeof (tripKV as any).get === 'function') {
+		const tripIdToCheck =
+			typeof body['tripId'] === 'string'
+				? (body['tripId'] as string)
+				: (existing.tripId ?? undefined);
+		if (tripKV && typeof (tripKV as KVNamespace).get === 'function') {
 			if (tripIdToCheck) {
 				// Validate the explicit tripId we're attaching/updating
 				const tripKey = `trip:${userId}:${tripIdToCheck}`;
@@ -176,14 +185,49 @@ export const PUT: RequestHandler = async (event) => {
 			}
 		}
 
-		// Merge existing with update
-		const updated = {
+		// Merge existing with validated fields from the client (PREVENT mass-assignment)
+		const updated: MileageRecord = {
 			...existing,
-			...body,
 			userId, // Ensure userId cannot be changed
 			id, // Ensure ID cannot be changed
 			updatedAt: new Date().toISOString()
 		};
+
+		const allowedFields = [
+			'tripId',
+			'date',
+			'startOdometer',
+			'endOdometer',
+			'miles',
+			'reimbursement',
+			'mileageRate',
+			'vehicle',
+			'notes'
+		] as const;
+
+		for (const key of allowedFields) {
+			if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
+			const val = body[key];
+			switch (key) {
+				case 'tripId':
+				case 'date':
+				case 'vehicle':
+				case 'notes':
+					if (typeof val === 'string') {
+						(updated as Record<string, unknown>)[key] = val === '' ? undefined : val;
+					}
+					break;
+				case 'startOdometer':
+				case 'endOdometer':
+				case 'miles':
+				case 'reimbursement':
+				case 'mileageRate': {
+					const num = Number(val);
+					if (!Number.isNaN(num)) (updated as Record<string, unknown>)[key] = num;
+					break;
+				}
+			}
+		}
 
 		// Re-calculate fields if inputs changed — but respect an explicitly provided `miles`.
 		const bodyHasMiles = Object.prototype.hasOwnProperty.call(body, 'miles');
@@ -203,7 +247,10 @@ export const PUT: RequestHandler = async (event) => {
 		// Recompute reimbursement when appropriate (respect explicit `reimbursement`)
 		const bodyHasReimbursement = Object.prototype.hasOwnProperty.call(body, 'reimbursement');
 		if (!bodyHasReimbursement && typeof updated.miles === 'number') {
-			let rate = typeof updated.mileageRate === 'number' ? updated.mileageRate : undefined;
+			let rate =
+				typeof (updated as Record<string, unknown>)['mileageRate'] === 'number'
+					? ((updated as Record<string, unknown>)['mileageRate'] as number)
+					: undefined;
 			if (rate == null) {
 				try {
 					const userSettingsKV = safeKV(env, 'BETA_USER_SETTINGS_KV');
@@ -226,11 +273,14 @@ export const PUT: RequestHandler = async (event) => {
 			updated.reimbursement = Number(updated.reimbursement.toFixed(2));
 		}
 
-		if (typeof updated.mileageRate === 'number') {
-			updated.mileageRate = Number(updated.mileageRate);
+		if (typeof (updated as Record<string, unknown>)['mileageRate'] === 'number') {
+			(updated as Record<string, unknown>)['mileageRate'] = Number(
+				(updated as Record<string, unknown>)['mileageRate'] as number
+			);
 		}
 
-		if (updated.vehicle === '') updated.vehicle = undefined;
+		if ((updated as Record<string, unknown>)['vehicle'] === '')
+			(updated as Record<string, unknown>)['vehicle'] = undefined;
 
 		// Persist authoritative mileage
 		await svc.put(updated);
@@ -249,18 +299,18 @@ export const PUT: RequestHandler = async (event) => {
 				);
 				const trip = await tripSvc.get(userId, updated.tripId);
 				if (trip && !trip.deleted) {
-					trip.totalMiles = updated.miles;
+					const tripRecord = trip as TripRecord & Record<string, unknown>;
+					tripRecord.totalMiles = updated.miles;
 					// Recalculate fuel cost based on updated miles using shared utility
-					const tripAny = trip as any;
-					const mpg = Number(tripAny.mpg) || 0;
-					const gasPrice = Number(tripAny.gasPrice) || 0;
-					tripAny.fuelCost = calculateFuelCost(updated.miles, mpg, gasPrice);
-					trip.updatedAt = new Date().toISOString();
-					await tripSvc.put(trip);
+					const mpg = Number(tripRecord['mpg'] ?? 0) || 0;
+					const gasPrice = Number(tripRecord['gasPrice'] ?? 0) || 0;
+					tripRecord.fuelCost = calculateFuelCost(updated.miles, mpg, gasPrice);
+					tripRecord.updatedAt = new Date().toISOString();
+					await tripSvc.put(tripRecord as TripRecord);
 					log.info('Updated trip totalMiles and fuelCost from mileage log', {
 						tripId: updated.tripId,
 						miles: updated.miles,
-						fuelCost: tripAny.fuelCost
+						fuelCost: tripRecord.fuelCost
 					});
 				}
 			} catch (e) {

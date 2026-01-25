@@ -16,7 +16,7 @@
 
 	// Settings modal removed for Mileage logs
 
-	let formData = {
+	const formData = {
 		date: getLocalDate(),
 		startOdometer: '',
 		endOdometer: '',

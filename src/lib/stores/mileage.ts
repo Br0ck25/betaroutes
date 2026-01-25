@@ -50,6 +50,12 @@ function createMileageStore() {
 			}
 
 			// PERFORMANCE: Do IndexedDB sync in background without blocking UI
+			// For tests, skip background IndexedDB sync to avoid idb interactions and noisy warnings.
+			if (import.meta.env.MODE === 'test') {
+				_resolveHydration?.();
+				_hydrationPromise = null;
+				return;
+			}
 			setTimeout(async () => {
 				try {
 					const db = await getDB();

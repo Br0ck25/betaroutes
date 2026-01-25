@@ -1,6 +1,6 @@
 <script lang="ts">
 	// [!code fix] Use Svelte 5 Runes for props
-	let {
+	const {
 		totalMileage = 0,
 		distanceUnit = 'mi',
 		totalTime = '',

@@ -85,7 +85,7 @@
 		}
 	});
 
-	let categories: string[] = [];
+	const categories: string[] = [];
 	let isManageCategoriesOpen = false;
 	let newCategoryName = '';
 

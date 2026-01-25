@@ -2,9 +2,32 @@
 import type { RequestHandler } from './$types';
 import { makeTripService } from '$lib/server/tripService';
 import { safeKV, safeDO } from '$lib/server/env';
+
+// Helper guards to avoid 'any' and to validate KV shape
+function hasList(v: unknown): v is {
+	list: (
+		opts?: Record<string, unknown>
+	) => Promise<{ keys: Array<{ name: string }>; list_complete?: boolean; cursor?: string }>;
+} {
+	return (
+		typeof v === 'object' &&
+		v !== null &&
+		typeof (v as Record<string, unknown>)['list'] === 'function'
+	);
+}
+
+function hasGet(v: unknown): v is {
+	get: (k: string, type?: 'json' | 'text' | 'arrayBuffer' | 'stream') => Promise<unknown>;
+} {
+	return (
+		typeof v === 'object' &&
+		v !== null &&
+		typeof (v as Record<string, unknown>)['get'] === 'function'
+	);
+}
+import type { TripRecord } from '$lib/server/tripService';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
-import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
 
 /**
  * POST /api/trips/reindex - Clear DO index and force rebuild from KV
@@ -57,24 +80,28 @@ export const POST: RequestHandler = async (event) => {
 		// Now rebuild the index from KV
 		// List all trips from KV with the userId prefix
 		const prefix = `trip:${userId}:`;
-		const listResult = await (kv as any).list({ prefix });
-
 		let rebuiltCount = 0;
-		for (const key of listResult.keys) {
-			const tripData = await (kv as any).get(key.name, { type: 'json' });
-			if (tripData && !tripData.deleted) {
-				try {
-					await svc.put(tripData);
-					rebuiltCount++;
-				} catch (e) {
-					log.warn('[Reindex] Failed to reindex trip', {
-						tripId: tripData.id,
-						error: createSafeErrorMessage(e)
-					});
+		if (kv && hasList(kv) && hasGet(kv)) {
+			const listResult = await kv.list({ prefix });
+			for (const key of listResult.keys) {
+				const tripData = (await kv.get(key.name, 'json')) as TripRecord | null;
+				if (tripData && !(tripData as unknown as Record<string, unknown>)['deleted']) {
+					if (typeof (tripData as unknown as Record<string, unknown>)['id'] === 'string') {
+						try {
+							await svc.put(tripData as TripRecord);
+							rebuiltCount++;
+						} catch (e) {
+							log.warn('[Reindex] Failed to reindex trip', {
+								tripId: (tripData as unknown as Record<string, unknown>)['id'],
+								error: createSafeErrorMessage(e)
+							});
+						}
+					}
 				}
 			}
+		} else {
+			log.warn('[Reindex] KV bindings do not support listing; skipping rebuild');
 		}
-
 		log.info('[Reindex] Rebuilt DO index from KV', { userId, tripCount: rebuiltCount });
 
 		return new Response(

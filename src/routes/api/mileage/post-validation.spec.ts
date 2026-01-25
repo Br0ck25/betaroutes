@@ -11,8 +11,9 @@ vi.mock('$lib/server/mileageService', () => ({
 
 vi.mock('$lib/server/env', () => ({
 	getEnv: () => mockEnv,
-	safeKV: (_env: any, name: string) => {
+	safeKV: (envParam: any, name: string) => {
 		if (name === 'BETA_LOGS_KV') return mockTripKV;
+		if (envParam && typeof envParam[name] !== 'undefined') return envParam[name];
 		return {};
 	},
 	safeDO: () => ({})
@@ -24,11 +25,29 @@ vi.mock('$lib/server/user', () => ({
 
 describe('POST /api/mileage - Parent trip validation', () => {
 	beforeEach(() => {
-		mockMileageSvc = { put: vi.fn(), get: vi.fn() };
+		mockMileageSvc = {
+			put: vi.fn().mockResolvedValue(undefined),
+			list: vi.fn().mockResolvedValue([]),
+			get: vi.fn()
+		};
 		mockTripKV = {
 			get: vi.fn()
 		};
 		mockEnv = {};
+		// Provide BETA_USERS_KV for user lookups
+		mockEnv.BETA_USERS_KV = {
+			get: vi.fn().mockResolvedValue(
+				JSON.stringify({
+					id: 'u1',
+					plan: 'free',
+					username: 'u1',
+					email: 'u1@example.com',
+					password: 'pw',
+					name: 'u1',
+					createdAt: new Date().toISOString()
+				})
+			)
+		};
 	});
 
 	it('returns 409 when parent trip does not exist (tripId provided)', async () => {
@@ -46,7 +65,7 @@ describe('POST /api/mileage - Parent trip validation', () => {
 		const event: any = {
 			request: { json: async () => body },
 			locals: { user: { id: 'u1' } },
-			platform: { env: mockEnv }
+			platform: { env: mockEnv, context: { waitUntil: vi.fn() } }
 		};
 
 		const { POST } = await import('./+server');
@@ -69,7 +88,7 @@ describe('POST /api/mileage - Parent trip validation', () => {
 		const event: any = {
 			request: { json: async () => body },
 			locals: { user: { id: 'u1' } },
-			platform: { env: mockEnv }
+			platform: { env: mockEnv, context: { waitUntil: vi.fn() } }
 		};
 
 		const { POST } = await import('./+server');
@@ -101,7 +120,7 @@ describe('POST /api/mileage - Parent trip validation', () => {
 		const event: any = {
 			request: { json: async () => body },
 			locals: { user: { id: 'u1' } },
-			platform: { env: mockEnv }
+			platform: { env: mockEnv, context: { waitUntil: vi.fn() } }
 		};
 
 		const { POST } = await import('./+server');
@@ -133,7 +152,7 @@ describe('POST /api/mileage - Parent trip validation', () => {
 		const event: any = {
 			request: { json: async () => body },
 			locals: { user: { id: 'u1' } },
-			platform: { env: mockEnv }
+			platform: { env: mockEnv, context: { waitUntil: vi.fn() } }
 		};
 
 		const { POST } = await import('./+server');
@@ -156,7 +175,7 @@ describe('POST /api/mileage - Parent trip validation', () => {
 		const event: any = {
 			request: { json: async () => body },
 			locals: { user: { id: 'u1' } },
-			platform: { env: mockEnv }
+			platform: { env: mockEnv, context: { waitUntil: vi.fn() } }
 		};
 
 		const { POST } = await import('./+server');

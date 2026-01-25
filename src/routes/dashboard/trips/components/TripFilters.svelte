@@ -1,10 +1,18 @@
 <script lang="ts">
-	export let searchQuery = '';
-	export let startDate = '';
-	export let endDate = '';
-	export let filterProfit = 'all';
-	export let sortBy = 'date';
-	export let sortOrder = 'desc';
+	// Explicitly typed props (security & type hygiene rules)
+	export let searchQuery: string = '';
+	export let startDate: string = '';
+	export let endDate: string = '';
+	export let filterProfit: 'all' | 'positive' | 'negative' = 'all';
+	export let sortBy: 'date' | 'profit' | 'miles' = 'date';
+	export let sortOrder: 'asc' | 'desc' = 'desc';
+
+	let rotation: string = '0deg';
+	$: rotation = sortOrder === 'asc' ? '180deg' : '0deg';
+
+	function toggleSortOrder(): void {
+		sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+	}
 </script>
 
 <div class="filters-bar">
@@ -59,17 +67,13 @@
 			<option value="miles">By Miles</option>
 		</select>
 
-		<button
-			class="sort-btn"
-			aria-label="Toggle sort order"
-			onclick={() => (sortOrder = sortOrder === 'asc' ? 'desc' : 'asc')}
-		>
+		<button class="sort-btn" aria-label="Toggle sort order" on:click={toggleSortOrder}>
 			<svg
 				width="20"
 				height="20"
 				viewBox="0 0 20 20"
 				fill="none"
-				style="transform: rotate({sortOrder === 'asc' ? '180deg' : '0deg'})"
+				style="transform: rotate({rotation})"
 				aria-hidden="true"
 			>
 				<path

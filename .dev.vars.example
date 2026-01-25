@@ -4,7 +4,7 @@
 
 # --- CRON & AUTOMATION ---
 # Secret used to authorize the `/api/cron/trash-purge` endpoint
-CRON_ADMIN_SECRET=generate_a_long_random_string_here
+CRON_ADMIN_SECRET=HTSYC/W8cvqomtO/fcSCM4oJ+sQg48VyAgP3NjPoP88=
 
 # Example: other local development secrets
 # HNS_ENCRYPTION_KEY=your-secure-key-here

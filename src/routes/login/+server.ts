@@ -55,18 +55,14 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 		}
 
 		// 5. Fetch Full User details
-		const fullUser = await findUserById(
-			kv as unknown as import('@cloudflare/workers-types').KVNamespace,
-			authResult.id
-		);
+		const fullUser = await findUserById(kv as unknown as KVNamespace, authResult.id);
 		const now = new Date().toISOString();
 
-		// 6. Prepare Session Data
+		// 6. Prepare Session Data (Do NOT rely on authResult for sensitive fields)
 		const sessionData = {
 			id: authResult.id,
-			// [!code fix] Use the display name (e.g. "James") if available, otherwise fallback to username
-			name: fullUser?.name || authResult.username,
-			email: authResult.email,
+			name: fullUser?.name ?? fullUser?.username ?? '',
+			email: fullUser?.email ?? '',
 			plan: fullUser?.plan || 'free',
 			tripsThisMonth: fullUser?.tripsThisMonth || 0,
 			maxTrips: fullUser?.maxTrips || 10,
@@ -98,7 +94,7 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 			(safeDO(env, 'TRIP_INDEX_DO') || (env as unknown as Record<string, unknown>)['TRIP_INDEX_DO'])
 		) {
 			const userId = authResult.id;
-			const username = authResult.username;
+			const username = fullUser?.username ?? '';
 
 			platform.context.waitUntil(
 				(async () => {

@@ -1,5 +1,5 @@
 // src/lib/server/expenseService.ts
-import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
+
 import { DO_ORIGIN, RETENTION } from '$lib/constants';
 import { log } from '$lib/server/log';
 

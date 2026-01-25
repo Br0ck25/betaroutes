@@ -1,9 +1,12 @@
 // src/lib/server/hughesnet/router.ts
-import type { KVNamespace } from '@cloudflare/workers-types';
 import type { GeocodedPoint, RouteLeg } from './types';
 import type { HughesNetFetcher } from './fetcher';
 import { log } from '$lib/server/log';
 import { geocode } from '$lib/server/geocode';
+
+function isRecord(obj: unknown): obj is Record<string, unknown> {
+	return typeof obj === 'object' && obj !== null;
+}
 
 // Issue #9: Timeout constant for external API calls
 const EXTERNAL_API_TIMEOUT_MS = 10000; // 10 seconds
@@ -72,16 +75,37 @@ export class HughesNetRouter {
 				for (const kvKey of cacheKeys) {
 					const cached = await this.kv.get(kvKey);
 					if (cached) {
-						const point = JSON.parse(cached);
-						// Cache hit - also store under primary key for future lookups
-						if (kvKey !== primaryKey) {
-							try {
-								await this.kv.put(primaryKey, cached);
-							} catch {
-								// Ignore cache update errors
-							}
+						let parsed: unknown;
+						try {
+							parsed = JSON.parse(cached);
+						} catch {
+							parsed = undefined;
 						}
-						return point;
+
+						if (
+							isRecord(parsed) &&
+							typeof parsed['lat'] === 'number' &&
+							typeof parsed['lon'] === 'number'
+						) {
+							const point: GeocodedPoint = {
+								lat: Number(parsed['lat']),
+								lon: Number(parsed['lon']),
+								formattedAddress:
+									typeof parsed['formattedAddress'] === 'string'
+										? (parsed['formattedAddress'] as string)
+										: ''
+							};
+
+							// Cache hit - also store under primary key for future lookups
+							if (kvKey !== primaryKey) {
+								try {
+									await this.kv.put(primaryKey, cached);
+								} catch {
+									// Ignore cache update errors
+								}
+							}
+							return point;
+						}
 					}
 				}
 			} catch (e) {
@@ -123,23 +147,35 @@ export class HughesNetRouter {
 				});
 				const data = (await res.json()) as { results?: unknown[] };
 
-				const first = data.results?.[0] as any;
-				if (first && first.geometry && first.geometry.location) {
-					const loc = first.geometry.location;
-					const point: GeocodedPoint = {
-						lat: Number(loc.lat),
-						lon: Number(loc.lng),
-						formattedAddress: first['formatted_address']
-					};
+				const first = data.results?.[0];
+				if (
+					isRecord(first) &&
+					isRecord((first as Record<string, unknown>)['geometry']) &&
+					isRecord(
+						((first as Record<string, unknown>)['geometry'] as Record<string, unknown>)['location']
+					)
+				) {
+					const loc = ((first as Record<string, unknown>)['geometry'] as Record<string, unknown>)[
+						'location'
+					] as Record<string, unknown>;
+					const lat = Number(loc['lat']);
+					const lng = Number(loc['lng']);
+					const formatted =
+						typeof (first as Record<string, unknown>)['formatted_address'] === 'string'
+							? String((first as Record<string, unknown>)['formatted_address'])
+							: '';
+
+					const point: GeocodedPoint = { lat, lon: lng, formattedAddress: formatted };
 
 					// Save to KV (Permanent Cache)
 					if (this.kv) {
 						try {
 							await this.kv.put(primaryKey, JSON.stringify(point));
-						} catch (e) {
-							log.warn('Failed to cache geocode:', e);
+						} catch (err) {
+							log.warn('Failed to cache geocode:', err);
 						}
 					}
+
 					return point;
 				}
 			} catch (e) {
@@ -163,7 +199,21 @@ export class HughesNetRouter {
 		if (this.kv) {
 			try {
 				const cached = await this.kv.get(key);
-				if (cached) return JSON.parse(cached);
+				if (cached) {
+					let parsed: unknown;
+					try {
+						parsed = JSON.parse(cached);
+					} catch {
+						parsed = undefined;
+					}
+					if (
+						isRecord(parsed) &&
+						typeof parsed['distance'] === 'number' &&
+						typeof parsed['duration'] === 'number'
+					) {
+						return { distance: Number(parsed['distance']), duration: Number(parsed['duration']) };
+					}
+				}
 			} catch (e) {
 				log.warn('Failed to get cached route:', e);
 			}
@@ -180,25 +230,47 @@ export class HughesNetRouter {
 					headers: { Referer: 'https://gorouteyourself.com/' }
 				});
 
-				const data: any = await res.json();
+				const data: unknown = await res.json();
 
-				if (data.routes?.[0]?.legs?.[0]) {
-					const result = {
-						distance: data.routes[0].legs[0].distance.value,
-						duration: data.routes[0].legs[0].duration.value
-					};
-
-					// Save to KV (Permanent Cache)
-					if (this.kv) {
-						try {
-							await this.kv.put(key, JSON.stringify(result));
-						} catch (e) {
-							log.warn('Failed to cache route:', e);
+				if (isRecord(data) && Array.isArray((data as Record<string, unknown>)['routes'])) {
+					const routes = (data as Record<string, unknown>)['routes'] as unknown[];
+					const firstRoute = routes?.[0];
+					if (
+						isRecord(firstRoute) &&
+						Array.isArray((firstRoute as Record<string, unknown>)['legs'])
+					) {
+						const firstLeg = ((firstRoute as Record<string, unknown>)['legs'] as unknown[])[0];
+						if (
+							isRecord(firstLeg) &&
+							isRecord((firstLeg as Record<string, unknown>)['distance']) &&
+							isRecord((firstLeg as Record<string, unknown>)['duration'])
+						) {
+							const distance = Number(
+								((firstLeg as Record<string, unknown>)['distance'] as Record<string, unknown>)[
+									'value'
+								]
+							);
+							const duration = Number(
+								((firstLeg as Record<string, unknown>)['duration'] as Record<string, unknown>)[
+									'value'
+								]
+							);
+							if (Number.isFinite(distance) && Number.isFinite(duration)) {
+								const result: RouteLeg = { distance, duration };
+								// Save to KV (Permanent Cache)
+								if (this.kv) {
+									try {
+										await this.kv.put(key, JSON.stringify(result));
+									} catch (e) {
+										log.warn('Failed to cache route:', e);
+									}
+								}
+								return result;
+							}
 						}
 					}
-					return result;
 				}
-			} catch (e: unknown) {
+			} catch (e) {
 				const emsg =
 					typeof e === 'object' && e !== null && 'message' in e
 						? String((e as { message: unknown }).message)

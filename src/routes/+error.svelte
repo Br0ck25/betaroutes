@@ -5,7 +5,7 @@
 	import { sanitizeStaticSvg } from '$lib/utils/sanitize';
 	const resolve = (href: string) => `${base}${href}`;
 
-	let errorDetails = $state({
+	const errorDetails = $state({
 		status: $page.status || 500,
 		message: $page.error?.message || 'An unexpected error occurred',
 		showDetails: false
@@ -83,9 +83,9 @@
 	}
 
 	// ← FIXED: Use $derived instead of $:
-	let errorIcon = $derived(getErrorIcon(errorDetails.status));
-	let errorTitle = $derived(getErrorTitle(errorDetails.status));
-	let errorDescription = $derived(getErrorDescription(errorDetails.status));
+	const errorIcon = $derived(getErrorIcon(errorDetails.status));
+	const errorTitle = $derived(getErrorTitle(errorDetails.status));
+	const errorDescription = $derived(getErrorDescription(errorDetails.status));
 </script>
 
 <svelte:head>

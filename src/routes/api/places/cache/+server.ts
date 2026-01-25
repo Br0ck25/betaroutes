@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import type { KVNamespace } from '@cloudflare/workers-types';
+
 import { generatePlaceKey } from '$lib/utils/keys';
 import { sanitizeString } from '$lib/server/sanitize';
 import { log } from '$lib/server/log';

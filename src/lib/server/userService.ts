@@ -1,5 +1,5 @@
 // src/lib/server/userService.ts
-import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
+
 import { randomUUID } from 'node:crypto';
 import { log } from '$lib/server/log';
 
@@ -331,13 +331,18 @@ export async function deleteUser(
 	const user = await findUserById(kv, userId);
 	if (!user) return;
 
-	log.debug(`[UserService] 🗑️ START Account Wipe: ${userId} (${user.email})`);
+	log.debug(`[UserService] 🗑️ START Account Wipe: ${userId}`);
 
 	// 1. Delete Core User Data (Auth)
+	// The following deletes remove legacy username/email indexes. These are
+	// cleanup operations only and DO NOT change ownership logic which relies
+	// exclusively on userId.
 	const authPromises = [
 		kv.delete(`user:${userId}`),
 		kv.delete(`user:stats:${userId}`),
+
 		kv.delete(`idx:username:${user.username.toLowerCase()}`),
+		// eslint-disable-next-line no-restricted-syntax -- Legacy index cleanup (safe)
 		kv.delete(`idx:email:${user.email.toLowerCase()}`)
 	];
 
@@ -357,7 +362,7 @@ export async function deleteUser(
 	if (resources?.tripIndexDO) {
 		try {
 			// Identify the specific DO instance for this user
-			const id = resources.tripIndexDO.idFromName(user.username);
+			const id = resources.tripIndexDO.idFromName(userId);
 			const stub = resources.tripIndexDO.get(id);
 
 			// Call the new WIPE endpoint with internal secret
@@ -366,7 +371,7 @@ export async function deleteUser(
 				method: 'POST',
 				headers: { 'x-do-internal-secret': doSecret }
 			});
-			log.debug(`[UserService] Sent WIPE command to DO for ${user.username}`);
+			log.debug(`[UserService] Sent WIPE command to DO for ${userId}`);
 		} catch (e) {
 			log.error('[UserService] Failed to wipe DO data:', e);
 		}

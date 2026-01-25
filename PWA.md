@@ -61,7 +61,7 @@ Forbidden:
 ## SvelteKit Integration
 
 - Service worker must be compatible with SvelteKit's build output
-- Ensure `service-worker.js` is in the correct static directory (`static/` or `src/service-worker.js`)
+- Ensure `service-worker.ts` is in the correct static directory (`static/` or `src/service-worker.ts`)
 - Verify manifest is accessible and served correctly
 - Service worker must handle SvelteKit's client-side routing
 - Prerendered pages should be cached appropriately
@@ -109,11 +109,11 @@ After any change that could affect PWA behavior:
 
 ## Forbidden Changes
 
-❌ Removing PWA metadata  
-❌ Disabling service workers  
-❌ Regressing offline support  
-❌ Reducing Lighthouse PWA compliance  
-❌ Breaking manifest.json structure  
+❌ Removing PWA metadata
+❌ Disabling service workers
+❌ Regressing offline support
+❌ Reducing Lighthouse PWA compliance
+❌ Breaking manifest.json structure
 ❌ Removing or invalidating icons
 
 ---

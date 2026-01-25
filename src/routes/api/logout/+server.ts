@@ -2,6 +2,7 @@
 import { redirect } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { log } from '$lib/server/log';
+import { getEnv, safeKV } from '$lib/server/env';
 
 export const POST: RequestHandler = async ({ cookies, platform }) => {
 	const sessionId = cookies.get('session_id');
@@ -12,14 +13,16 @@ export const POST: RequestHandler = async ({ cookies, platform }) => {
 	// 2. Delete session from KV
 	if (sessionId) {
 		try {
-			// [!code fix] Delete from SESSIONS_KV
-			const sessionKV = (platform?.env as any)?.BETA_SESSIONS_KV;
-			if (sessionKV) {
-				await sessionKV.delete(sessionId);
+			const env = getEnv(platform);
+			const sessionsKV = safeKV(env, 'BETA_SESSIONS_KV');
+			if (sessionsKV) {
+				await sessionsKV.delete(sessionId);
 				log.info('[LOGOUT] Session deleted', { sessionId });
 			}
-		} catch (error) {
-			log.error('[LOGOUT] Failed to delete session', { message: (error as any)?.message });
+		} catch (err: unknown) {
+			log.error('[LOGOUT] Failed to delete session', {
+				message: String((err as Error)?.message ?? err)
+			});
 		}
 	}
 

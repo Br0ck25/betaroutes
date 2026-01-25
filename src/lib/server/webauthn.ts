@@ -9,7 +9,7 @@ import {
 	type VerifyAuthenticationResponseOpts
 } from '@simplewebauthn/server';
 import { isoBase64URL } from '@simplewebauthn/server/helpers';
-import { getUserDisplayName } from '$lib/utils/user-display';
+import { getUserDisplayName, getUserEmail } from '$lib/utils/user-display';
 
 const RP_NAME = 'Go Route Yourself';
 
@@ -93,7 +93,7 @@ export async function generateRegistrationOptions(user: UserWithAuthenticators, 
 		rpName: RP_NAME,
 		rpID: rpID,
 		userID: new TextEncoder().encode(user.id), // Must be Uint8Array
-		userName: user.email,
+		userName: getUserEmail(user) ?? '',
 		userDisplayName: getUserDisplayName(user),
 		attestationType: 'none',
 		excludeCredentials,

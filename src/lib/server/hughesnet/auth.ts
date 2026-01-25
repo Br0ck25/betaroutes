@@ -1,5 +1,5 @@
 // src/lib/server/hughesnet/auth.ts
-import type { KVNamespace } from '@cloudflare/workers-types';
+
 import type { HughesNetFetcher } from './fetcher';
 import { BASE_URL } from './parser';
 import { log } from '$lib/server/log';

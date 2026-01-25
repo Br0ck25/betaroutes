@@ -102,7 +102,7 @@
 
 	async function loadTripData() {
 		const currentUser = $page.data['user'] || $user;
-		let userId = currentUser?.id || localStorage.getItem('offline_user_id');
+		const userId = currentUser?.id || localStorage.getItem('offline_user_id');
 		if (!$trips || $trips.length === 0) {
 			if (userId) await trips.load(userId);
 		}
@@ -752,7 +752,7 @@
 
 	async function saveTrip() {
 		const currentUser = $page.data['user'] || $user;
-		let userId = currentUser?.id || localStorage.getItem('offline_user_id');
+		const userId = currentUser?.id || localStorage.getItem('offline_user_id');
 		if (!userId) {
 			toasts.error('Authentication error. Please login.');
 			return;

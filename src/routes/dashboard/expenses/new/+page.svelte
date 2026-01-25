@@ -83,7 +83,7 @@
 		selectedSupply = '';
 	}
 
-	let formData = {
+	const formData = {
 		date: getLocalDate(),
 		category: '',
 		amount: '',

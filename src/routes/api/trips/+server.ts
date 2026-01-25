@@ -23,6 +23,16 @@ import { computeAndCacheDirections } from '$lib/server/directionsCache';
 
 import { safeKV, safeDO } from '$lib/server/env';
 
+// Type guard for location objects returned from clients/places
+function isLatLng(obj: unknown): obj is { lat: number; lng: number } {
+	return (
+		typeof obj === 'object' &&
+		obj !== null &&
+		typeof (obj as Record<string, unknown>)['lat'] === 'number' &&
+		typeof (obj as Record<string, unknown>)['lng'] === 'number'
+	);
+}
+
 const latLngSchema = z
 	.object({
 		lat: z.number(),
@@ -91,6 +101,143 @@ function calculateNetProfit(trip: Record<string, unknown>): number {
 	return earnings - fuel - maintenance - supplies;
 }
 
+// Strongly typed aliases from Zod schemas
+type TripInput = z.infer<typeof tripSchema>;
+type StopInput = z.infer<typeof stopSchema>;
+type CostItemInput = z.infer<typeof costItemSchema>;
+
+interface SessionUser {
+	id: string;
+	plan?: 'free' | 'premium' | 'pro' | 'business';
+	name?: string;
+	token?: string;
+}
+
+// Helper: Schedule work via platform.context.waitUntil when available
+function safeWaitUntil(event: Parameters<RequestHandler>[0], p: Promise<unknown>) {
+	try {
+		if (event.platform?.context?.waitUntil) {
+			event.platform.context.waitUntil(p);
+			return;
+		}
+	} catch {
+		// ignore
+	}
+	// Fallback: fire-and-forget
+	void p;
+}
+
+// Build a sanitized TripRecord for storage (prevent mass-assignment)
+function buildTripForSave(
+	validData: TripInput,
+	id: string,
+	storageId: string,
+	existing?: Partial<TripRecord>
+): TripRecord {
+	const now = new Date().toISOString();
+	return {
+		id,
+		userId: storageId,
+		date: validData.date,
+		payDate: validData.payDate,
+		startTime: validData.startTime,
+		endTime: validData.endTime,
+		hoursWorked: validData.hoursWorked,
+		startAddress: validData.startAddress,
+		startLocation: isLatLng(validData.startLocation) ? validData.startLocation : undefined,
+		endAddress: validData.endAddress,
+		endLocation: isLatLng(validData.endLocation) ? validData.endLocation : undefined,
+		totalMiles: validData.totalMiles,
+		estimatedTime: validData.estimatedTime,
+		totalTime: validData.totalTime,
+		fuelCost: validData.fuelCost,
+		maintenanceCost: validData.maintenanceCost,
+		suppliesCost: validData.suppliesCost,
+		totalEarnings: validData.totalEarnings,
+		stops: Array.isArray(validData.stops)
+			? (validData.stops as StopInput[]).map((s) => ({
+					id: s.id ?? crypto.randomUUID(),
+					address: s.address ?? '',
+					earnings: s.earnings,
+					notes: s.notes,
+					order: s.order ?? 0,
+					location: s.location as { lat: number; lng: number } | undefined
+				}))
+			: undefined,
+		destinations: Array.isArray(validData.destinations)
+			? (
+					validData.destinations as { address: string; location?: { lat: number; lng: number } }[]
+				).map((d) => ({
+					address: d.address,
+					location: isLatLng(d.location) ? d.location : undefined
+				}))
+			: undefined,
+		maintenanceItems: Array.isArray(validData.maintenanceItems)
+			? (validData.maintenanceItems as CostItemInput[])
+			: undefined,
+		suppliesItems: Array.isArray(validData.suppliesItems)
+			? (validData.suppliesItems as CostItemInput[])
+			: undefined,
+		createdAt: existing?.createdAt ?? now,
+		updatedAt: now,
+		lastModified: now,
+		netProfit: calculateNetProfit(validData as Record<string, unknown>)
+	};
+}
+
+// Merge and update trip from incoming validated data (prevent mass-assignment)
+function mergeTripForUpdate(
+	existing: TripRecord,
+	validData: TripInput,
+	storageId: string
+): TripRecord {
+	const now = new Date().toISOString();
+	return {
+		...existing,
+		date: validData.date ?? existing.date,
+		payDate: validData.payDate ?? existing.payDate,
+		startTime: validData.startTime ?? existing.startTime,
+		endTime: validData.endTime ?? existing.endTime,
+		hoursWorked: validData.hoursWorked ?? existing.hoursWorked,
+		startAddress: validData.startAddress ?? existing.startAddress,
+		startLocation: isLatLng(validData.startLocation)
+			? validData.startLocation
+			: existing.startLocation,
+		endAddress: validData.endAddress ?? existing.endAddress,
+		endLocation: isLatLng(validData.endLocation) ? validData.endLocation : existing.endLocation,
+		totalMiles: validData.totalMiles ?? existing.totalMiles,
+		estimatedTime: validData.estimatedTime ?? existing.estimatedTime,
+		totalTime: validData.totalTime ?? existing.totalTime,
+		fuelCost: validData.fuelCost ?? existing.fuelCost,
+		maintenanceCost: validData.maintenanceCost ?? existing.maintenanceCost,
+		suppliesCost: validData.suppliesCost ?? existing.suppliesCost,
+		totalEarnings: validData.totalEarnings ?? existing.totalEarnings,
+		stops: Array.isArray(validData.stops)
+			? (validData.stops as StopInput[]).map((s) => ({
+					id: s.id ?? crypto.randomUUID(),
+					address: s.address ?? '',
+					earnings: s.earnings,
+					notes: s.notes,
+					order: s.order ?? 0,
+					location: isLatLng(s.location) ? (s.location as { lat: number; lng: number }) : undefined
+				}))
+			: existing.stops,
+		destinations: Array.isArray(validData.destinations)
+			? (validData.destinations as { address: string; location?: { lat: number; lng: number } }[])
+			: existing.destinations,
+		maintenanceItems: Array.isArray(validData.maintenanceItems)
+			? (validData.maintenanceItems as CostItemInput[])
+			: existing.maintenanceItems,
+		suppliesItems: Array.isArray(validData.suppliesItems)
+			? (validData.suppliesItems as CostItemInput[])
+			: existing.suppliesItems,
+		userId: storageId,
+		updatedAt: now,
+		lastModified: now,
+		netProfit: calculateNetProfit(validData as Record<string, unknown>)
+	};
+}
+
 function getEnv(platform: App.Platform | undefined): App.Env {
 	const env = platform?.env;
 
@@ -104,15 +251,8 @@ function getEnv(platform: App.Platform | undefined): App.Env {
 
 export const GET: RequestHandler = async (event) => {
 	try {
-		const user = event.locals.user as
-			| {
-					id?: string;
-					name?: string;
-					token?: string;
-					plan?: 'free' | 'premium' | 'pro' | 'business';
-			  }
-			| undefined;
-		if (!user) return new Response('Unauthorized', { status: 401 });
+		const user = event.locals.user as SessionUser | undefined;
+		if (!user || !user.id) return new Response('Unauthorized', { status: 401 });
 
 		let env: App.Env;
 		try {
@@ -212,9 +352,9 @@ export const GET: RequestHandler = async (event) => {
 		try {
 			const mileageKV = safeKV(env, 'BETA_MILEAGE_KV');
 			if (mileageKV) {
-				const mileageSvc = makeMileageService(mileageKV as any, safeDO(env, 'TRIP_INDEX_DO')!);
-				const ms = await mileageSvc.list(storageId);
-				const mById = new Map(ms.map((m: any) => [m.id, m]));
+				const mileageSvc = makeMileageService(mileageKV, safeDO(env, 'TRIP_INDEX_DO')!);
+				const ms = (await mileageSvc.list(storageId)) as MileageRecord[];
+				const mById = new Map(ms.map((m: MileageRecord) => [m.id, m]));
 				for (const t of allTrips) {
 					const m = mById.get(t.id);
 					if (m && typeof m.miles === 'number') t.totalMiles = m.miles;
@@ -334,22 +474,21 @@ export const POST: RequestHandler = async (event) => {
 
 		// Sanity check: warn if stops exist but addresses are empty (helps catch client-side payload issues)
 		try {
-			if (validData.stops && Array.isArray(validData.stops)) {
-				const missing = (validData.stops as any[]).filter(
-					(s) => !s || !s.address || String(s.address).trim() === ''
-				);
+			if (Array.isArray(validData.stops)) {
+				const stops = validData.stops as StopInput[];
+				const missing = stops.filter((s) => !s || !s.address || String(s.address).trim() === '');
 				if (missing.length > 0) {
 					log.warn('POST /api/trips: some stops missing address after sanitization', {
 						tripId: id,
 						missingCount: missing.length,
-						sample: (validData.stops as any[]).slice(0, 5)
+						sample: stops.slice(0, 5)
 					});
 				}
 			}
 		} catch (e) {
-			log.warn('POST /api/trips: sanity check failed', e);
+			log.warn('POST /api/trips: sanity check failed', { message: createSafeErrorMessage(e) });
 		}
-		let existingTrip = null;
+		let existingTrip: TripRecord | null = null;
 
 		if (validData.id) {
 			existingTrip = await svc.get(storageId, id);
@@ -409,22 +548,14 @@ export const POST: RequestHandler = async (event) => {
 		}
 		const now = new Date().toISOString();
 
-		// Set lastModified to mark this as a manual user update
-		// SECURITY: Calculate netProfit server-side (never trust client)
-		const trip = {
-			...validData,
-			id,
-			userId: storageId,
-			createdAt: existingTrip ? existingTrip.createdAt : now,
-			updatedAt: now,
-			lastModified: now, // Critical for conflict detection
-			netProfit: calculateNetProfit(validData as Record<string, unknown>)
-		};
+		// Build explicit TripRecord (prevent mass-assignment)
+		const trip = buildTripForSave(validData, id, storageId, existingTrip ?? undefined);
 
-		// Persist trip (coerce to TripRecord)
-		await svc.put(trip as TripRecord);
+		// Persist trip
+		await svc.put(trip);
 
 		// --- Auto-create mileage log if trip has totalMiles > 0 ---
+		// ...continue...
 		if (typeof validData.totalMiles === 'number' && validData.totalMiles > 0 && !existingTrip) {
 			try {
 				const mileageKV = safeKV(env, 'BETA_MILEAGE_KV');
@@ -494,19 +625,7 @@ export const POST: RequestHandler = async (event) => {
 					const msg = e instanceof Error ? e.message : String(e);
 					log.warn('Direct compute failed', { message: msg });
 				});
-				try {
-					if (event.platform?.context?.waitUntil) {
-						event.platform.context.waitUntil(p as any);
-					} else if ((event as any)?.context?.waitUntil) {
-						(event as any).context.waitUntil(p);
-					} else {
-						// Fallback to fire-and-forget
-						void p;
-					}
-				} catch {
-					// ignore waitUntil failures
-					void p;
-				}
+				safeWaitUntil(event, p);
 			}
 		} catch (e) {
 			log.warn('Direct compute scheduling failed', { message: (e as Error).message });
@@ -524,18 +643,11 @@ export const POST: RequestHandler = async (event) => {
 				});
 				// Prefer using platform.context.waitUntil to reliably schedule work after response
 				try {
-					if (event.platform?.context?.waitUntil) {
-						event.platform.context.waitUntil(computeReq);
-					} else if ((event as any)?.context?.waitUntil) {
-						(event as any).context.waitUntil(computeReq);
-					} else {
-						// Fallback to fire-and-forget
-						void computeReq;
-					}
+					safeWaitUntil(event, computeReq);
 					log.info('Enqueued route computation', { tripId: trip.id });
 				} catch (err) {
 					// If waitUntil itself throws, still fallback
-					log.warn('Failed to waitUntil compute job, continuing', { message: String(err) });
+					log.warn('Failed to schedule compute job, continuing', { message: String(err) });
 					void computeReq;
 				}
 			}
@@ -584,7 +696,7 @@ export const PUT: RequestHandler = async (event) => {
 		}
 
 		// Rate Limiting (Same as POST)
-		const sessionsKV = env.BETA_SESSIONS_KV;
+		const sessionsKV = safeKV(env, 'BETA_SESSIONS_KV');
 		if (sessionsKV) {
 			const identifier = getClientIdentifier(event.request, event.locals);
 			const authenticated = isAuthenticated(event.locals);
@@ -652,7 +764,7 @@ export const PUT: RequestHandler = async (event) => {
 		}
 
 		// --- ENFORCE STOP LIMIT ON UPDATES ---
-		if (sessionUser.plan === 'free') {
+		if (sessionUserSafe?.plan === 'free') {
 			const stopCount = validData.stops ? validData.stops.length : 0;
 			if (stopCount > PLAN_LIMITS.FREE.MAX_STOPS) {
 				return new Response(
@@ -673,15 +785,9 @@ export const PUT: RequestHandler = async (event) => {
 		const now = new Date().toISOString();
 
 		// CRITICAL: Force lastModified on Edit to trigger conflict detection next sync
-		const trip = {
-			...existingTrip, // Preserve original creation date etc.
-			...validData, // Apply new edits
-			userId: storageId,
-			updatedAt: now,
-			lastModified: now // <--- Tag this update as user-initiated
-		};
+		const trip = mergeTripForUpdate(existingTrip as TripRecord, validData, storageId);
 
-		await svc.put(trip as unknown as TripRecord);
+		await svc.put(trip);
 
 		// --- Bidirectional sync: Update linked mileage log if totalMiles changed ---
 		if (

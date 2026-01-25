@@ -7,7 +7,7 @@
 		onError?: (error: Error, errorInfo?: any) => void;
 	}
 
-	let { children, fallback, onError }: Props = $props();
+	const { children, fallback, onError }: Props = $props();
 
 	let hasError = $state(false);
 	let error = $state<Error | null>(null);

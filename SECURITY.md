@@ -1,4 +1,4 @@
-markdown# Security Policy
+# Security Policy
 
 **CRITICAL:** This application handles sensitive user data including credentials, financial information, and location data.
 
@@ -39,16 +39,16 @@ Code Style
 
 ### Storage Rules
 
-❌ **NEVER store passwords in plaintext**  
-❌ **NEVER log passwords** (not even hashed)  
-❌ **NEVER transmit passwords** without encryption  
-❌ **NEVER store passwords in localStorage/sessionStorage**  
-❌ **NEVER include passwords in URLs or query parameters**  
+❌ **NEVER store passwords in plaintext**
+❌ **NEVER log passwords** (not even hashed)
+❌ **NEVER transmit passwords** without encryption
+❌ **NEVER store passwords in localStorage/sessionStorage**
+❌ **NEVER include passwords in URLs or query parameters**
 ❌ **NEVER commit passwords to version control**
 
-✅ **ALWAYS hash passwords** using bcrypt, Argon2, or PBKDF2  
-✅ **ALWAYS use HTTPS** for password transmission  
-✅ **ALWAYS validate password strength** (minimum 8 characters, complexity rules)  
+✅ **ALWAYS hash passwords** using bcrypt, Argon2, or PBKDF2
+✅ **ALWAYS use HTTPS** for password transmission
+✅ **ALWAYS validate password strength** (minimum 8 characters, complexity rules)
 ✅ **ALWAYS use secure password reset flows**
 
 ### Implementation Requirements
@@ -180,9 +180,9 @@ const key = `trip:${tripId}`;
 
 Since KV storage is server-side with access control, the following IS allowed:
 
-✅ Full street addresses (startAddress, endAddress, stop addresses)  
-✅ Real user names/IDs (userId field)  
-✅ Financial data (earnings, costs, profit)  
+✅ Full street addresses (startAddress, endAddress, stop addresses)
+✅ Real user names/IDs (userId field)
+✅ Financial data (earnings, costs, profit)
 ✅ Complete trip details and metadata
 
 **Why this is acceptable:**

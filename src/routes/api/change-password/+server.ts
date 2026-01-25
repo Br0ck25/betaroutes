@@ -7,6 +7,7 @@ import { getEnv, safeKV } from '$lib/server/env';
 import { validatePassword } from '$lib/server/passwordValidation';
 import { log } from '$lib/server/log';
 import { sendSecurityAlertEmail } from '$lib/server/email';
+import { getUserEmail } from '$lib/utils/user-display';
 
 export const POST: RequestHandler = async ({ request, platform, locals, cookies }) => {
 	// 1. Ensure user is logged in
@@ -14,8 +15,15 @@ export const POST: RequestHandler = async ({ request, platform, locals, cookies 
 		return json({ message: 'Unauthorized' }, { status: 401 });
 	}
 
-	const body: any = await request.json();
-	const { currentPassword, newPassword } = body;
+	const bodyJson: unknown = await request.json();
+	if (!bodyJson || typeof bodyJson !== 'object') {
+		return json({ message: 'Bad request' }, { status: 400 });
+	}
+	const body = bodyJson as Record<string, unknown>;
+	const currentPassword =
+		typeof body['currentPassword'] === 'string' ? (body['currentPassword'] as string) : '';
+	const newPassword =
+		typeof body['newPassword'] === 'string' ? (body['newPassword'] as string) : '';
 
 	if (!currentPassword || !newPassword) {
 		return json({ message: 'Current and new password are required' }, { status: 400 });
@@ -35,8 +43,8 @@ export const POST: RequestHandler = async ({ request, platform, locals, cookies 
 
 	// 2. Verify Current Password
 	// Use the session's id to verify the "currentPassword" provided by the user
-	const currentUserId = (locals.user as any)?.id;
-	if (!currentUserId) {
+	const currentUserId = locals.user?.id;
+	if (!currentUserId || typeof currentUserId !== 'string') {
 		return json({ message: 'Unauthorized' }, { status: 401 });
 	}
 
@@ -68,20 +76,26 @@ export const POST: RequestHandler = async ({ request, platform, locals, cookies 
 		const activeSessionsKey = `active_sessions:${fullUser.id}`;
 		const sessionsList = await sessionsKV.get(activeSessionsKey);
 
-		if (sessionsList) {
+		if (sessionsList && typeof sessionsList === 'string') {
 			try {
-				const sessions = JSON.parse(sessionsList) as string[];
+				const parsed = JSON.parse(sessionsList);
+				if (Array.isArray(parsed)) {
+					const sessions: string[] = parsed.filter((s) => typeof s === 'string');
 
-				// Delete all sessions except current one
-				for (const sessionId of sessions) {
-					if (sessionId !== currentSessionId) {
-						await sessionsKV.delete(sessionId);
-						log.info('[ChangePassword] Invalidated session', { sessionId: sessionId.slice(0, 8) });
+					// Delete all sessions except current one
+					for (const sessionId of sessions) {
+						if (currentSessionId && sessionId !== currentSessionId) {
+							await sessionsKV.delete(sessionId);
+							log.info('[ChangePassword] Invalidated session', {
+								sessionId: sessionId.slice(0, 8)
+							});
+						}
 					}
-				}
 
-				// Update active sessions list with only current session
-				await sessionsKV.put(activeSessionsKey, JSON.stringify([currentSessionId]));
+					// Update active sessions list with only current session (if defined)
+					const toStore = currentSessionId ? [currentSessionId] : [];
+					await sessionsKV.put(activeSessionsKey, JSON.stringify(toStore));
+				}
 			} catch (err) {
 				log.error('[ChangePassword] Failed to invalidate sessions', { error: String(err) });
 			}
@@ -89,9 +103,9 @@ export const POST: RequestHandler = async ({ request, platform, locals, cookies 
 	}
 
 	// [SECURITY] Send security alert email (best-effort, don't block on failure)
-	const userEmail = fullUser.email;
-	if (userEmail) {
-		sendSecurityAlertEmail(userEmail, 'password_changed').catch((err) => {
+	const email = getUserEmail(fullUser);
+	if (email) {
+		sendSecurityAlertEmail(email, 'password_changed').catch((err) => {
 			log.error('[ChangePassword] Security alert email failed', { error: String(err) });
 		});
 	}

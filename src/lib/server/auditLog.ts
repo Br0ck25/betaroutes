@@ -6,7 +6,6 @@
  * SECURITY: These logs should never be deleted and should be backed up regularly.
  */
 
-import type { KVNamespace } from '@cloudflare/workers-types';
 import { log } from '$lib/server/log';
 
 export interface AuditEntry {

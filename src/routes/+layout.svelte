@@ -8,7 +8,7 @@
 	import { trips } from '$lib/stores/trips';
 	import { env } from '$env/dynamic/public';
 	import { page } from '$app/stores';
-	let { data, children } = $props();
+	const { data, children } = $props();
 
 	// 1. Initialize Context
 	const userState = setUserContext(undefined);

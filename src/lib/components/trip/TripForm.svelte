@@ -20,10 +20,10 @@
 	import { PLAN_LIMITS } from '$lib/constants';
 
 	// Svelte 5 Props using Runes
-	let { googleApiKey = '', loading = false, trip = null } = $props();
+	const { googleApiKey = '', loading = false, trip = null } = $props();
 
 	const settings = get(userSettings);
-	let API_KEY = $derived(() => googleApiKey || 'dummy_key');
+	const API_KEY = $derived(() => googleApiKey || 'dummy_key');
 
 	const userState = getUserState();
 
@@ -46,7 +46,7 @@
 	let mpg = $state(settings.defaultMPG ?? storage.getSetting('defaultMPG') ?? 25);
 	let gasPrice = $state(settings.defaultGasPrice ?? storage.getSetting('defaultGasPrice') ?? 3.5);
 
-	let distanceUnit = $state(settings.distanceUnit || 'mi');
+	const distanceUnit = $state(settings.distanceUnit || 'mi');
 
 	// Destinations State
 	let destinations = $state<Destination[]>([{ address: '', earnings: 0 }]);
@@ -67,8 +67,8 @@
 	let fuelCost = $state(0);
 
 	// Computed Costs
-	let suppliesCost = $derived(supplies.reduce((sum, item) => sum + (Number(item.cost) || 0), 0));
-	let maintenanceCost = $derived(
+	const suppliesCost = $derived(supplies.reduce((sum, item) => sum + (Number(item.cost) || 0), 0));
+	const maintenanceCost = $derived(
 		maintenance.reduce((sum, item) => sum + (Number(item.cost) || 0), 0)
 	);
 
@@ -79,7 +79,7 @@
 	let upgradeReason = $state<'stops' | 'optimize' | 'trips' | 'general'>('general');
 
 	// Computed upgrade message based on reason
-	let upgradeMessage = $derived(() => {
+	const upgradeMessage = $derived(() => {
 		switch (upgradeReason) {
 			case 'stops':
 				return `You've hit the ${PLAN_LIMITS.FREE.MAX_STOPS || 5}-stop limit for Free plans. Upgrade to Pro for unlimited stops per trip!`;

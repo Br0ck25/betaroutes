@@ -24,7 +24,7 @@
 	let selectedExpenses = new Set<string>();
 	let selectedMileage = new Set<string>();
 	let selectAll = false;
-	let includeSummary = true;
+	const includeSummary = true;
 
 	// Search state
 	let searchQuery = '';
@@ -317,7 +317,7 @@
 
 		let csv = 'Date,Category,Amount,Description\n';
 
-		let totalByCategory: Record<string, number> = {};
+		const totalByCategory: Record<string, number> = {};
 		let grandTotal = 0;
 
 		expensesToExport.forEach((expense) => {

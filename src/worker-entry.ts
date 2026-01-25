@@ -1,7 +1,6 @@
 // src/worker-entry.ts
 
 // [!code fix] Export the correct class names defined in wrangler.toml
-import type { KVNamespace } from '@cloudflare/workers-types';
 export { TripIndexSQL, PlacesIndexSQL } from './do-worker';
 
 /**

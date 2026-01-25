@@ -2,13 +2,16 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { log } from '$lib/server/log';
-import type { KVNamespace } from '@cloudflare/workers-types';
+
 import {
 	checkRateLimitEnhanced,
 	createRateLimitHeaders,
 	getClientIdentifier
 } from '$lib/server/rateLimit';
-import { safeKV } from '$lib/server/env';
+
+function isRecord(obj: unknown): obj is Record<string, unknown> {
+	return typeof obj === 'object' && obj !== null;
+}
 
 /**
  * Helper: Server geocoding is handled via Google (geocode helper) — Photon removed.
@@ -44,7 +47,9 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	}
 
 	// [!code fix] SECURITY: Rate limit expensive route optimization (10/min per user)
-	const sessionsKV = safeKV(platform?.env, 'BETA_SESSIONS_KV');
+	const { getEnv, safeKV } = await import('$lib/server/env');
+	const env = getEnv(platform);
+	const sessionsKV = safeKV(env, 'BETA_SESSIONS_KV');
 	if (sessionsKV) {
 		const identifier = getClientIdentifier(request, locals);
 		const rateLimitResult = await checkRateLimitEnhanced(
@@ -69,31 +74,47 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		}
 	}
 
-	const __body: any = await request.json();
-	const { startAddress, endAddress, stops } = __body;
+	const body: unknown = await request.json();
+	if (!isRecord(body)) return json({ error: 'Invalid request' }, { status: 400 });
+	const startAddress = typeof body['startAddress'] === 'string' ? body['startAddress'] : '';
+	const endAddress = typeof body['endAddress'] === 'string' ? body['endAddress'] : undefined;
+	const rawStops = Array.isArray(body['stops']) ? body['stops'] : [];
+	// Validate stops and cap length (Google limits waypoints; cap conservatively)
+	const MAX_STOPS = 20;
+	const stops: string[] = rawStops
+		.map((s) => (isRecord(s) && typeof s['address'] === 'string' ? s['address'].trim() : undefined))
+		.filter(Boolean)
+		.slice(0, MAX_STOPS) as string[];
 
-	if (!startAddress || !stops || stops.length < 2) {
+	if (!startAddress || stops.length < 2) {
 		return json({ error: 'Not enough data to optimize' }, { status: 400 });
 	}
 
-	const kv = (platform?.env as any)?.BETA_DIRECTIONS_KV as KVNamespace;
-	const apiKey = (platform?.env as any)?.PRIVATE_GOOGLE_MAPS_API_KEY;
-	const cacheKey = generateOptimizationKey(
-		startAddress,
-		endAddress || '',
-		stops.map((s: any) => s.address)
-	);
+	const kv = safeKV(env, 'BETA_DIRECTIONS_KV');
+	const apiKey =
+		typeof env['PRIVATE_GOOGLE_MAPS_API_KEY'] === 'string'
+			? env['PRIVATE_GOOGLE_MAPS_API_KEY']
+			: undefined;
+	const userId =
+		isRecord(locals.user) && typeof locals.user['id'] === 'string' ? locals.user['id'] : undefined;
+	if (!userId) return json({ error: 'Unauthorized' }, { status: 401 });
+	const cacheKey = `user:${userId}:${generateOptimizationKey(startAddress, endAddress || '', stops)}`;
 
 	// 3. Check KV Cache
 	if (kv) {
 		const cached = await kv.get(cacheKey);
-		if (cached) {
-			return json(JSON.parse(cached));
+		if (typeof cached === 'string') {
+			try {
+				const parsed = JSON.parse(cached);
+				if (isRecord(parsed)) return json(parsed);
+			} catch {
+				// ignore corrupt
+			}
 		}
 	}
 
 	// Prepare Addresses
-	const stopAddresses = stops.map((s: any) => s.address);
+	const stopAddresses = stops;
 	const allAddresses = [startAddress, ...stopAddresses];
 	if (endAddress) allAddresses.push(endAddress);
 
@@ -118,26 +139,50 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		}
 
 		const waypointsStr = waypointsList.map((w: string) => encodeURIComponent(w)).join('|');
-		const gUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&waypoints=optimize:true|${waypointsStr}&key=${apiKey}`;
+		const gUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination || '')}&waypoints=optimize:true|${waypointsStr}&key=${apiKey}`;
 
 		const gRes = await fetch(gUrl);
-		const gData: any = await gRes.json();
+		const gData: unknown = await gRes.json();
 
-		if (gData.status === 'OK' && gData.routes && gData.routes.length > 0) {
-			const route = gData.routes[0];
+		if (
+			isRecord(gData) &&
+			gData['status'] === 'OK' &&
+			Array.isArray(gData['routes']) &&
+			gData['routes'].length > 0 &&
+			isRecord(gData['routes'][0])
+		) {
+			const route = gData['routes'][0] as Record<string, unknown>;
+			const optimizedOrder = Array.isArray(route['waypoint_order'])
+				? (route['waypoint_order'] as unknown[])
+						.filter((n) => typeof n === 'number')
+						.map((n) => Number(n))
+				: undefined;
+			const legs = Array.isArray(route['legs']) ? (route['legs'] as unknown[]) : undefined;
+
+			if (!Array.isArray(optimizedOrder) || !Array.isArray(legs)) {
+				return json({ error: 'Invalid response from Google' }, { status: 502 });
+			}
+
 			const result = {
 				source: 'google',
-				optimizedOrder: route.waypoint_order,
-				legs: route.legs // Include legs for distance calculations
+				optimizedOrder: optimizedOrder as number[],
+				legs: legs
 			};
 
 			if (kv) await kv.put(cacheKey, JSON.stringify(result));
 			return json(result);
 		}
 
-		return json({ error: gData.status }, { status: 400 });
-	} catch (e) {
-		log.error('Google Optimization Error', { message: (e as any)?.message });
+		return json(
+			{
+				error:
+					isRecord(gData) && typeof gData['status'] === 'string' ? gData['status'] : 'Bad response'
+			},
+			{ status: 400 }
+		);
+	} catch (e: unknown) {
+		const errMsg = e instanceof Error ? e.message : String(e);
+		log.error('Google Optimization Error', { message: errMsg });
 		return json({ error: 'Optimization failed' }, { status: 500 });
 	}
 };

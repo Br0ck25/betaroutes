@@ -10,6 +10,7 @@
 	import { toasts } from '$lib/stores/toast';
 	import { onMount, onDestroy } from 'svelte';
 	import { calculateNetProfit } from '$lib/utils/trip-helpers';
+	import type { Trip, Stop, SupplyCost, MaintenanceCost } from '$lib/types';
 
 	// Import Components
 	import TripStats from './components/TripStats.svelte';
@@ -19,16 +20,20 @@
 	import SettingsModal from './components/SettingsModal.svelte';
 	import UpgradeModal from './components/UpgradeModal.svelte';
 
-	let tripsBoundary: any;
+	let tripsBoundary: {
+		setSuccess?: () => void;
+		setLoading?: () => void;
+		setError?: (e: Error) => void;
+	} | null = null;
 	let hasLoadedOnce = false;
 	let isMounted = false;
 	let lastHadSelections = false;
 
 	// Filter State
-	let searchQuery = '';
-	let sortBy = 'date';
-	let sortOrder = 'desc';
-	let filterProfit = 'all';
+	let searchQuery: string = '';
+	let sortBy: 'date' | 'profit' | 'miles' = 'date';
+	let sortOrder: 'asc' | 'desc' = 'desc';
+	let filterProfit: 'all' | 'positive' | 'negative' = 'all';
 	// Default to current month (first day to last day)
 	const _now = new Date();
 	function _fmtInput(d: Date) {
@@ -42,6 +47,7 @@
 	const itemsPerPage = 20;
 
 	// Selection
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
 	let selectedTrips = new Set<string>();
 
 	// Modals
@@ -59,16 +65,16 @@
 	async function loadTrips() {
 		try {
 			if ($trips.length > 0) {
-				tripsBoundary?.setSuccess();
+				tripsBoundary?.setSuccess?.();
 				return;
 			}
-			if (!hasLoadedOnce) tripsBoundary?.setLoading();
+			if (!hasLoadedOnce) tripsBoundary?.setLoading?.();
 			await trips.load();
 			hasLoadedOnce = true;
-			tripsBoundary?.setSuccess();
+			tripsBoundary?.setSuccess?.();
 		} catch (error) {
 			console.error('Failed to load trips:', error);
-			tripsBoundary?.setError(error as Error);
+			tripsBoundary?.setError?.(error as Error);
 			toasts.error('Failed to load trips. Click retry to try again.');
 			throw error;
 		}
@@ -97,28 +103,31 @@
 
 	// --- Filtering Logic ---
 	$: allFilteredTrips = $trips
-		.filter((trip) => {
+		.filter((trip: Trip) => {
 			const query = searchQuery.toLowerCase();
-			const supplies = (trip as any)['supplyItems'] || (trip as any)['suppliesItems'] || [];
+			const supplies: SupplyCost[] = (trip.supplyItems ?? trip.suppliesItems) || [];
 			const matchesSearch =
 				!query ||
-				trip.date?.includes(query) ||
-				trip.startAddress?.toLowerCase().includes(query) ||
-				trip.endAddress?.toLowerCase().includes(query) ||
-				trip.notes?.toLowerCase().includes(query) ||
-				trip.totalMiles?.toString().includes(query) ||
-				trip.fuelCost?.toString().includes(query) ||
+				(trip.date && trip.date.includes(query)) ||
+				(trip.startAddress && trip.startAddress.toLowerCase().includes(query)) ||
+				(trip.endAddress && trip.endAddress.toLowerCase().includes(query)) ||
+				(trip.notes && trip.notes.toLowerCase().includes(query)) ||
+				(trip.totalMiles != null && trip.totalMiles.toString().includes(query)) ||
+				(trip.fuelCost != null && trip.fuelCost.toString().includes(query)) ||
 				trip.stops?.some(
-					(stop: any) =>
-						stop.address?.toLowerCase().includes(query) || stop.earnings?.toString().includes(query)
+					(stop: Stop) =>
+						(!!stop.address && stop.address.toLowerCase().includes(query)) ||
+						(stop.earnings != null && stop.earnings.toString().includes(query))
 				) ||
-				(trip as any)['maintenanceItems']?.some(
-					(item: any) =>
-						item.type?.toLowerCase().includes(query) || item.cost?.toString().includes(query)
+				trip.maintenanceItems?.some(
+					(item: MaintenanceCost) =>
+						(!!item.type && item.type.toLowerCase().includes(query)) ||
+						(item.cost != null && item.cost.toString().includes(query))
 				) ||
 				supplies.some(
-					(item: any) =>
-						item.type?.toLowerCase().includes(query) || item.cost?.toString().includes(query)
+					(item: SupplyCost) =>
+						(!!item.type && item.type.toLowerCase().includes(query)) ||
+						(item.cost != null && item.cost.toString().includes(query))
 				);
 
 			if (!matchesSearch) return false;
@@ -130,14 +139,17 @@
 			}
 
 			if (trip.date) {
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity
 				const tripDate = new Date(trip.date);
 				tripDate.setHours(0, 0, 0, 0);
 				if (startDate) {
+					// eslint-disable-next-line svelte/prefer-svelte-reactivity
 					const start = new Date(startDate);
 					start.setHours(0, 0, 0, 0);
 					if (tripDate < start) return false;
 				}
 				if (endDate) {
+					// eslint-disable-next-line svelte/prefer-svelte-reactivity
 					const end = new Date(endDate);
 					end.setHours(0, 0, 0, 0);
 					if (tripDate > end) return false;
@@ -200,7 +212,7 @@
 			const userId = currentUser?.id || localStorage.getItem('offline_user_id') || '';
 
 			if (userId) await trips.deleteTrip(id, userId as string);
-		} catch (err) {
+		} catch (_err) {
 			toasts.error('Failed to delete trip. Changes reverted.');
 		}
 	}
@@ -224,8 +236,8 @@
 			try {
 				await trips.deleteTrip(id, userId);
 				successCount++;
-			} catch (err) {
-				console.error(`Failed to delete trip ${id}`, err);
+			} catch (_err) {
+				console.error(`Failed to delete trip ${id}`, _err);
 			}
 		}
 		toasts.success(`Moved ${successCount} trips to trash.`);
@@ -259,6 +271,7 @@
 		selectedTrips = new Set();
 	}
 
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
 	let expandedTrips = new Set<string>();
 	function toggleExpand(id: string) {
 		if (expandedTrips.has(id)) expandedTrips.delete(id);
@@ -311,7 +324,7 @@
 			<div class="header-actions">
 				<button
 					class="btn-secondary"
-					onclick={() => goto(resolve('/dashboard/trash'))}
+					on:click={() => goto(resolve('/dashboard/trash'))}
 					aria-label="View Trash"
 				>
 					<svg
@@ -330,7 +343,7 @@
 				</button>
 				<button
 					class="btn-secondary"
-					onclick={() => (isSettingsOpen = true)}
+					on:click={() => (isSettingsOpen = true)}
 					aria-label="Trip Settings"
 				>
 					<svg
@@ -376,7 +389,7 @@
 		{#if visibleTrips.length > 0}
 			<div class="batch-header" class:visible={allFilteredTrips.length > 0}>
 				<label class="checkbox-container">
-					<input type="checkbox" checked={allSelected} onchange={toggleSelectAll} />
+					<input type="checkbox" checked={allSelected} on:change={toggleSelectAll} />
 					<span class="checkmark"></span>
 					Select All ({allFilteredTrips.length})
 				</label>
@@ -402,13 +415,13 @@
 					<button
 						class="page-btn"
 						disabled={currentPage === 1}
-						onclick={() => changePage(currentPage - 1)}>← Prev</button
+						on:click={() => changePage(currentPage - 1)}>← Prev</button
 					>
 					<span class="page-status">Page {currentPage} of {totalPages}</span>
 					<button
 						class="page-btn"
 						disabled={currentPage === totalPages}
-						onclick={() => changePage(currentPage + 1)}>Next →</button
+						on:click={() => changePage(currentPage + 1)}>Next →</button
 					>
 				</div>
 			{/if}
@@ -439,14 +452,14 @@
 				<div class="skeleton skeleton-button"></div>
 			</div>
 			<div class="loading-stats">
-				{#each Array(4) as _}<div class="skeleton skeleton-stat"></div>{/each}
+				{#each Array(4) as _, i (i)}<div class="skeleton skeleton-stat"></div>{/each}
 			</div>
 			<div class="loading-filters">
 				<div class="skeleton skeleton-input"></div>
 				<div class="skeleton skeleton-select"></div>
 			</div>
 			<div class="trip-list-cards">
-				{#each Array(6) as _}<div class="trip-skeleton">
+				{#each Array(6) as _, i (i)}<div class="trip-skeleton">
 						<div class="skeleton-top">
 							<div class="skeleton skeleton-text" style="width: 30%; height: 14px;"></div>
 							<div
@@ -455,7 +468,7 @@
 							></div>
 						</div>
 						<div class="skeleton-stats-grid">
-							{#each Array(5) as _}<div>
+							{#each Array(5) as _, j (j)}<div>
 									<div
 										class="skeleton skeleton-text"
 										style="width: 80%; height: 10px; margin-bottom: 4px;"
@@ -502,7 +515,7 @@
 					{/if}
 				</p>
 				<div class="error-actions">
-					<button onclick={retry} class="btn-primary"
+					<button on:click={retry} class="btn-primary"
 						><svg
 							width="20"
 							height="20"

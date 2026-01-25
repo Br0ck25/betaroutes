@@ -17,7 +17,7 @@
 		children?: Snippet;
 	} = $props();
 
-	let contentId = `collapsible-${Math.random().toString(36).slice(2, 9)}`;
+	const contentId = `collapsible-${Math.random().toString(36).slice(2, 9)}`;
 
 	onMount(() => {
 		if (storageKey && typeof localStorage !== 'undefined') {

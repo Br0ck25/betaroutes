@@ -1,0 +1,16 @@
+{
+	"files": 228,
+	"errors": 549,
+	"warnings": 0,
+	"topRules": [
+		["@typescript-eslint/no-explicit-any", 302],
+		["svelte/no-navigation-without-resolve", 111],
+		["svelte/require-each-key", 67],
+		["@typescript-eslint/no-unused-vars", 23],
+		["svelte/prefer-svelte-reactivity", 22],
+		["prefer-const", 16],
+		["svelte/no-at-html-tags", 5],
+		["no-empty", 2],
+		["no-restricted-imports", 1]
+	]
+}

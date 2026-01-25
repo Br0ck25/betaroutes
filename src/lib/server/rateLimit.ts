@@ -1,5 +1,5 @@
 // src/lib/server/rateLimit.ts
-import type { KVNamespace } from '@cloudflare/workers-types';
+
 import type { RateLimitData, User } from '$lib/types';
 import { log } from '$lib/server/log';
 
