@@ -1,6 +1,8 @@
 // src/lib/stores/mileage.ts
 import { writable, get } from 'svelte/store';
 import { getDB, getMileageStoreName } from '$lib/db/indexedDB';
+import type { IDBPDatabase } from 'idb';
+import type { AppDB } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
 import type { MileageRecord, TrashRecord, TripRecord } from '$lib/db/types';
 import type { User } from '$lib/types';
@@ -9,6 +11,10 @@ import { calculateFuelCost } from '$lib/utils/calculations';
 import { PLAN_LIMITS } from '$lib/constants';
 
 export const isLoading = writable(false);
+
+function resolveMileageStoreName(db: IDBPDatabase<AppDB>): 'mileage' | 'millage' {
+	return typeof getMileageStoreName === 'function' ? getMileageStoreName(db) : 'mileage';
+}
 
 // Type for trash items to avoid repeated `as any` casts
 interface TrashItemLike {
@@ -59,7 +65,7 @@ function createMileageStore() {
 			setTimeout(async () => {
 				try {
 					const db = await getDB();
-					const mileageStoreName = getMileageStoreName(db);
+					const mileageStoreName = resolveMileageStoreName(db);
 					const tx = db.transaction(mileageStoreName, 'readwrite');
 					const store = tx.objectStore(mileageStoreName);
 
@@ -96,7 +102,7 @@ function createMileageStore() {
 			isLoading.set(true);
 			try {
 				const db = await getDB();
-				const mileageStoreName = getMileageStoreName(db);
+				const mileageStoreName = resolveMileageStoreName(db);
 				// PERFORMANCE: Use single transaction and build trash set efficiently
 				const tx = db.transaction([mileageStoreName, 'trash'], 'readonly');
 				const store = tx.objectStore(mileageStoreName);
@@ -206,7 +212,7 @@ function createMileageStore() {
 			update((items) => [record, ...items]);
 			try {
 				const db = await getDB();
-				const mileageStoreName = getMileageStoreName(db);
+				const mileageStoreName = resolveMileageStoreName(db);
 				const tx = db.transaction(mileageStoreName, 'readwrite');
 				await tx.objectStore(mileageStoreName).put(record);
 				await tx.done;
@@ -234,7 +240,7 @@ function createMileageStore() {
 			);
 			try {
 				const db = await getDB();
-				const mileageStoreName = getMileageStoreName(db);
+				const mileageStoreName = resolveMileageStoreName(db);
 				const tx = db.transaction(mileageStoreName, 'readwrite');
 				const store = tx.objectStore(mileageStoreName);
 				const existing = await store.get(id);
@@ -348,7 +354,7 @@ function createMileageStore() {
 
 			try {
 				const db = await getDB();
-				const mileageStoreName = getMileageStoreName(db);
+				const mileageStoreName = resolveMileageStoreName(db);
 				const tx = db.transaction([mileageStoreName, 'trash'], 'readwrite');
 				const mileageStore = tx.objectStore(mileageStoreName);
 				const trashStore = tx.objectStore('trash');

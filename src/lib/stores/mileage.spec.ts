@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { IDBPDatabase } from 'idb';
+import type { AppDB } from '$lib/db/indexedDB';
 
 vi.mock('$lib/sync/syncManager', () => ({
 	syncManager: { addToQueue: vi.fn(), registerStore: vi.fn() }
@@ -45,6 +47,7 @@ const mockTripLegacy = {
 const tripStorePut = vi.fn();
 
 vi.mock('$lib/db/indexedDB', () => ({
+	getMileageStoreName: (_db: IDBPDatabase<AppDB>) => 'mileage',
 	getDB: async () => {
 		return {
 			transaction: (_stores: string | string[], _mode: string) => {
