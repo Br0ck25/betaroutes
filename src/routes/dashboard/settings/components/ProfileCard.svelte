@@ -14,6 +14,7 @@
 	let buttonHighlight = false;
 
 	async function saveProfile() {
+		// Optimistic local update
 		auth.updateProfile({ name: profile.name, email: profile.email });
 		try {
 			const res = await csrfFetch('/api/user', {
@@ -21,18 +22,21 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ name: profile.name, email: profile.email })
 			});
-			if (res.ok) {
+			const json = await res.json().catch(() => ({}) as Record<string, any>);
+			if (res.ok && json?.user) {
+				// Apply authoritative server values
+				auth.updateProfile({ name: json.user.name, email: json.user.email });
 				dispatch('success', 'Profile updated successfully!');
 				buttonHighlight = true;
 				setTimeout(() => (buttonHighlight = false), 3000);
 			} else {
-				console.error('Failed to save profile to server');
+				console.error('Failed to save profile to server', { status: res.status, body: json });
 				dispatch('success', 'Saved locally (Server error)');
 				buttonHighlight = true;
 				setTimeout(() => (buttonHighlight = false), 3000);
 			}
-		} catch (e) {
-			console.error('Save error:', e);
+		} catch {
+			console.error('Save error: Network issue');
 			dispatch('success', 'Saved locally (Network error)');
 			buttonHighlight = true;
 			setTimeout(() => (buttonHighlight = false), 3000);

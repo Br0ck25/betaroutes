@@ -205,9 +205,8 @@ function createAuthStore() {
 				const updatedUser = { ...state.user, ...data };
 
 				if (typeof window !== 'undefined') {
-					if (data.name) storage.setUsername(data.name);
-					// [SECURITY FIX #54] Email now in sessionStorage, not localStorage
-					if (data.email) sessionStorage.setItem('user_email', data.email);
+					// Do not overwrite stored login username when only changing display name.
+					// Email still saved to sessionStorage for convenience.
 					saveUserCache(updatedUser); // Keep cache in sync
 				}
 
