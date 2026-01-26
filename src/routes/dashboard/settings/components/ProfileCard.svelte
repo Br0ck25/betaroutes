@@ -22,10 +22,20 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ name: profile.name, email: profile.email })
 			});
-			const json = await res.json().catch(() => ({}) as Record<string, any>);
-			if (res.ok && json?.user) {
+			const json = await res.json().catch(() => ({}) as Record<string, unknown>);
+			if (
+				res.ok &&
+				json &&
+				typeof json === 'object' &&
+				'user' in json &&
+				typeof (json as Record<string, unknown>)['user'] === 'object'
+			) {
 				// Apply authoritative server values
-				auth.updateProfile({ name: json.user.name, email: json.user.email });
+				const userObj = (json as Record<string, unknown>)['user'] as Record<string, unknown>;
+				const name = typeof userObj['name'] === 'string' ? (userObj['name'] as string) : undefined;
+				const email =
+					typeof userObj['email'] === 'string' ? (userObj['email'] as string) : undefined;
+				auth.updateProfile({ name, email });
 				dispatch('success', 'Profile updated successfully!');
 				buttonHighlight = true;
 				setTimeout(() => (buttonHighlight = false), 3000);
