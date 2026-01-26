@@ -140,6 +140,17 @@
 		return name ? name.charAt(0).toUpperCase() : 'U';
 	}
 
+	/** Capitalize the first letter of a display name for UI only. Leaves other characters unchanged. */
+	function formatDisplayName(name?: string | null): string {
+		if (!name) return '';
+		const trimmed = name.trim();
+		if (!trimmed) return '';
+		const first = trimmed.charAt(0);
+		// Only transform if first character is a letter
+		if (!/^[A-Za-z]$/.test(first)) return trimmed;
+		return first.toUpperCase() + trimmed.slice(1);
+	}
+
 	onMount(async () => {
 		const apiKey = data.googleMapsApiKey;
 
@@ -313,7 +324,7 @@
 						{getInitial($user.name || $user.email || '')}
 					</div>
 					<div class="user-info">
-						<div class="user-name">{$user.name || 'User'}</div>
+						<div class="user-name">{formatDisplayName($user.name) || 'User'}</div>
 						<div class="user-plan">{$user.plan || 'Free'} Plan</div>
 					</div>
 				</a>

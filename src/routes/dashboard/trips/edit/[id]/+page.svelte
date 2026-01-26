@@ -303,9 +303,12 @@
 		try {
 			// SSR safety: only run DOM checks in the browser
 			if (typeof document !== 'undefined') {
-				// If the user is actively editing the miles input, skip sync to avoid clobbering
-				if ((document.activeElement as HTMLElement | null)?.id === 'total-miles') {
-					// no-op while user types
+				// If the user is actively editing the miles input, or they have manually overridden it, skip sync to avoid clobbering
+				if (
+					(document.activeElement as HTMLElement | null)?.id === 'total-miles' ||
+					manualMilesOverride
+				) {
+					// no-op while user types or has manually overridden the value
 				} else {
 					const updatedTrip = $trips.find((t) => t.id === tripId);
 					const mileageRec = $mileage.find((m) => m.id === tripId);
