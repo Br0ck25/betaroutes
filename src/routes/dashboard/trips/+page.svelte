@@ -244,6 +244,21 @@
 		selectedTrips = new SvelteSet();
 	}
 
+	// Open Trip Settings with a safe fallback for native dialog
+	function openSettings(): void {
+		isSettingsOpen = true;
+		requestAnimationFrame(() => {
+			try {
+				const dlg = document.querySelector('dialog');
+				if (dlg && 'showModal' in dlg && !(dlg as HTMLDialogElement).open) {
+					(dlg as HTMLDialogElement).showModal();
+				}
+			} catch {
+				/* ignore */
+			}
+		});
+	}
+
 	function exportSelected() {
 		if (typeof document === 'undefined' || typeof window === 'undefined') return;
 		const selectedData = allFilteredTrips.filter((t) => selectedTrips.has(t.id));
@@ -337,11 +352,7 @@
 						></path></svg
 					>
 				</button>
-				<button
-					class="btn-secondary"
-					on:click={() => (isSettingsOpen = true)}
-					aria-label="Trip Settings"
-				>
+				<button class="btn-secondary" on:click={openSettings} aria-label="Trip Settings">
 					<svg
 						width="20"
 						height="20"

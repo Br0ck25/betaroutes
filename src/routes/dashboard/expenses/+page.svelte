@@ -98,6 +98,20 @@
 
 	// --- MODAL STATE (Only for Categories now) ---
 	let isManageCategoriesOpen = false;
+
+	function openManageCategories(): void {
+		isManageCategoriesOpen = true;
+		requestAnimationFrame(() => {
+			try {
+				const dlg = document.querySelector('dialog');
+				if (dlg && 'showModal' in dlg && !(dlg as HTMLDialogElement).open) {
+					(dlg as HTMLDialogElement).showModal();
+				}
+			} catch {
+				/* ignore */
+			}
+		});
+	}
 	let newCategoryName = '';
 
 	// --- DERIVE TRIP EXPENSES ---
@@ -555,11 +569,7 @@
 				</svg>
 			</button>
 
-			<button
-				class="btn-secondary"
-				on:click={() => (isManageCategoriesOpen = true)}
-				aria-label="Expense Settings"
-			>
+			<button class="btn-secondary" on:click={openManageCategories} aria-label="Expense Settings">
 				<svg
 					width="20"
 					height="20"

@@ -34,6 +34,20 @@
 
 	let isMileageSettingsOpen = false;
 
+	function openMileageSettings(): void {
+		isMileageSettingsOpen = true;
+		requestAnimationFrame(() => {
+			try {
+				const dlg = document.querySelector('dialog');
+				if (dlg && 'showModal' in dlg && !(dlg as HTMLDialogElement).open) {
+					(dlg as HTMLDialogElement).showModal();
+				}
+			} catch {
+				/* ignore */
+			}
+		});
+	}
+
 	// Derived totals - use pre-computed values
 	$: totalMiles = filteredExpenses.reduce((s, e) => s + (Number((e as any).miles) || 0), 0);
 	// PERFORMANCE: Use pre-computed reimbursement
@@ -477,11 +491,7 @@
 					></path>
 				</svg>
 			</button>
-			<button
-				class="btn-secondary"
-				on:click={() => (isMileageSettingsOpen = true)}
-				aria-label="Mileage Settings"
-			>
+			<button class="btn-secondary" on:click={openMileageSettings} aria-label="Mileage Settings">
 				<svg
 					width="20"
 					height="20"
