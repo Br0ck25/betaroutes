@@ -285,6 +285,7 @@
 	let gasPriceLocal: number = Number(tripData.gasPrice ?? 3.5);
 	let totalMilesLocal: number = Number(tripData.totalMiles ?? 0);
 	let notesLocal: string = tripData.notes ?? '';
+	let manualMilesOverride = false; // true when user manually edits miles to prevent auto-overwrite
 	$: tripData.startAddress = startAddressLocal;
 	$: tripData.endAddress = endAddressLocal;
 	$: tripData.date = dateLocal;
@@ -294,8 +295,33 @@
 	$: tripData.mpg = mpgLocal;
 	$: tripData.gasPrice = gasPriceLocal;
 	$: tripData.totalMiles = totalMilesLocal;
-	// Keep the form-local value in sync when the app recalculates totals (e.g. route API results).
-	// Guarded assignment prevents an unnecessary reactive cycle when the user edits the input.
+
+	// Keep the form-local value in sync when the app recalculates totals (e.g. route API results)
+	// and when authoritative stores (trips/mileage) change. Do not clobber if the user is actively
+	// editing the input (focus) to avoid interrupting typing.
+	$: {
+		try {
+			// SSR safety: only run DOM checks in the browser
+			if (typeof document !== 'undefined') {
+				// If the user is actively editing the miles input, skip sync to avoid clobbering
+				if ((document.activeElement as HTMLElement | null)?.id === 'total-miles') {
+					// no-op while user types
+				} else {
+					const updatedTrip = $trips.find((t) => t.id === tripId);
+					const mileageRec = $mileage.find((m) => m.id === tripId);
+					const authoritative = Number(mileageRec?.miles ?? updatedTrip?.totalMiles ?? 0);
+					if (Number(tripData.totalMiles || 0) !== authoritative) {
+						tripData.totalMiles = authoritative;
+						totalMilesLocal = authoritative;
+						manualMilesOverride = false;
+					}
+				}
+			}
+		} catch {
+			/* ignore */
+		}
+	}
+
 	$: if (Number(tripData.totalMiles || 0) !== Number(totalMilesLocal || 0))
 		totalMilesLocal = Number(tripData.totalMiles || 0);
 	$: tripData.notes = notesLocal;
@@ -427,7 +453,7 @@
 			}
 		}
 
-		tripData.totalMiles = parseFloat(miles.toFixed(1));
+		if (!manualMilesOverride) tripData.totalMiles = parseFloat(miles.toFixed(1));
 		tripData.estimatedTime = Math.round(mins);
 		tripData.roundTripMiles = parseFloat((miles + returnMiles).toFixed(1));
 		tripData.roundTripTime = Math.round(mins + returnMins);
@@ -1006,6 +1032,10 @@
 						id="total-miles"
 						type="number"
 						bind:value={totalMilesLocal}
+						on:input={(e) => {
+							totalMilesLocal = Number((e.target as HTMLInputElement).value || 0);
+							manualMilesOverride = true;
+						}}
 						step="0.1"
 					/>
 				</div>
