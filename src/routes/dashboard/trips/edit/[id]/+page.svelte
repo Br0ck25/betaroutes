@@ -283,7 +283,7 @@
 	let endTimeLocal: string = tripData.endTime ?? '17:00';
 	let mpgLocal: number = Number(tripData.mpg ?? 25);
 	let gasPriceLocal: number = Number(tripData.gasPrice ?? 3.5);
-	let totalMilesLocal: number = Number(tripData.totalMiles ?? 0);
+	let totalMilesLocal: string = String(tripData.totalMiles ?? 0);
 	let notesLocal: string = tripData.notes ?? '';
 	let manualMilesOverride = false; // true when user manually edits miles to prevent auto-overwrite
 	$: tripData.startAddress = startAddressLocal;
@@ -294,7 +294,7 @@
 	$: tripData.endTime = endTimeLocal;
 	$: tripData.mpg = mpgLocal;
 	$: tripData.gasPrice = gasPriceLocal;
-	$: tripData.totalMiles = totalMilesLocal;
+	$: tripData.totalMiles = Number(parseFloat(totalMilesLocal) || 0);
 
 	// Keep the form-local value in sync when the app recalculates totals (e.g. route API results)
 	// and when authoritative stores (trips/mileage) change. Do not clobber if the user is actively

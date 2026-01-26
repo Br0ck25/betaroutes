@@ -25,7 +25,8 @@
 	let profile = { name: '', email: '' };
 	$: if ($user || data.remoteSettings?.profile) {
 		const remote = data.remoteSettings?.profile || {};
-		if (!profile.name) profile.name = remote.name || $user?.id || '';
+		// Prefer explicit display name or email. Never use the internal UUID as a fallback.
+		if (!profile.name) profile.name = remote.name || $user?.name || $user?.email || '';
 		if (!profile.email) profile.email = remote.email || $user?.email || '';
 	}
 
