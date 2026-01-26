@@ -181,7 +181,7 @@
 		endTimeLocal = tripData.endTime;
 		mpgLocal = tripData.mpg;
 		gasPriceLocal = tripData.gasPrice;
-		totalMilesLocal = milesValue;
+		totalMilesLocal = String(milesValue);
 		notesLocal = tripData.notes;
 	}
 
@@ -312,7 +312,7 @@
 					const authoritative = Number(mileageRec?.miles ?? updatedTrip?.totalMiles ?? 0);
 					if (Number(tripData.totalMiles || 0) !== authoritative) {
 						tripData.totalMiles = authoritative;
-						totalMilesLocal = authoritative;
+						totalMilesLocal = String(authoritative);
 						manualMilesOverride = false;
 					}
 				}
@@ -322,8 +322,8 @@
 		}
 	}
 
-	$: if (Number(tripData.totalMiles || 0) !== Number(totalMilesLocal || 0))
-		totalMilesLocal = Number(tripData.totalMiles || 0);
+	$: if (Number(tripData.totalMiles || 0) !== Number(parseFloat(totalMilesLocal || '0') || 0))
+		totalMilesLocal = String(Number(tripData.totalMiles || 0));
 	$: tripData.notes = notesLocal;
 
 	let newStop = { address: '', earnings: 0, notes: '' };
@@ -1033,7 +1033,7 @@
 						type="number"
 						bind:value={totalMilesLocal}
 						on:input={(e) => {
-							totalMilesLocal = Number((e.target as HTMLInputElement).value || 0);
+							totalMilesLocal = (e.target as HTMLInputElement).value;
 							manualMilesOverride = true;
 						}}
 						step="0.1"
