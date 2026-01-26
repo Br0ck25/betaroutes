@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { parseCachedPlaceArray } from './+server';
+import { parseCachedPlaceArray } from '$lib/server/placesCache';
 
 describe('parseCachedPlaceArray', () => {
 	it('returns [] for null', () => {
