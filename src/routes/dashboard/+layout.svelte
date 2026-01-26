@@ -7,14 +7,14 @@
 	import { page } from '$app/stores';
 	import { auth, user } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { trips } from '$lib/stores/trips';
+	import { toasts } from '$lib/stores/toast';
 	import { expenses } from '$lib/stores/expenses';
 	import { mileage } from '$lib/stores/mileage';
 	import { sanitizeStaticSvg } from '$lib/utils/sanitize';
 	import { csrfFetch } from '$lib/utils/csrf';
 
-	const resolve = (href: string) => `${base}${href}`;
 	import { trash } from '$lib/stores/trash';
 	import { syncManager } from '$lib/sync/syncManager';
 	import SyncIndicator from '$lib/components/SyncIndicator.svelte';
@@ -35,13 +35,8 @@
 		if (e.key === 'Escape') closeSidebar();
 	}
 
-	// Helper to force client-side navigation using goto
-	function handleNav(e: MouseEvent, href: string) {
-		e.preventDefault();
+	function handleNav(_e: MouseEvent) {
 		closeSidebar();
-
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
-		goto(resolve(href));
 	}
 
 	async function handleLogout() {
@@ -52,7 +47,6 @@
 			expenses.clear();
 			trash.clear();
 
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 			goto(resolve('/login'));
 		}
 	}
@@ -60,7 +54,7 @@
 	// [!code fix] SECURITY (Issue #7, #43): Sanitize static SVG icons in navigation
 	const navItems = [
 		{
-			href: '/dashboard/',
+			href: resolve('/dashboard/'),
 			icon: sanitizeStaticSvg(
 				`<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 9L10 2L17 9V17C17 17.5304 16.7893 18.0391 16.4142 18.4142C16.0391 18.7893 15.5304 18 15 18H5C4.46957 18 3.96086 17.7893 3.58579 17.4142C3.21071 17.0391 3 16.5304 3 16V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
 			),
@@ -68,14 +62,14 @@
 			exact: true
 		},
 		{
-			href: '/dashboard/expenses/',
+			href: resolve('/dashboard/expenses/'),
 			icon: sanitizeStaticSvg(
 				`<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 1V23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M17 5H9.5C8.57174 5 7.6815 5.36875 7.02513 6.02513C6.36875 6.6815 6 7.57174 6 8.5C6 9.42826 6.36875 10.3185 7.02513 10.9749C7.6815 11.6313 8.57174 12 9.5 12H14.5C15.4283 12 16.3185 12.3688 16.9749 13.0251C17.6313 13.6815 18 14.5717 18 15.5C18 16.4283 17.6313 17.3185 16.9749 17.9749C16.3185 18.6313 15.4283 19 14.5 19H6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
 			),
 			label: 'Expenses'
 		},
 		{
-			href: '/dashboard/mileage/',
+			href: resolve('/dashboard/mileage/'),
 			icon: sanitizeStaticSvg(
 				`<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
 					<path d="M3 11h18v3a2 2 0 0 1-2 2h-1.5a2 2 0 0 1-4 0H11.5a2 2 0 0 1-4 0H6a2 2 0 0 1-2-2v-3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -87,7 +81,7 @@
 			label: 'Mileage'
 		},
 		{
-			href: '/dashboard/trips/',
+			href: resolve('/dashboard/trips/'),
 			icon: sanitizeStaticSvg(
 				`<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
 				<path d="M12 2C8.13 2 5 5.13 5 9c0 5 7 11 7 11s7-6 7-11c0-3.87-3.13-7-7-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -96,7 +90,7 @@
 			</svg>`
 			),
 			label: 'Trips',
-			exclude: ['/dashboard/trips/new']
+			exclude: [resolve('/dashboard/trips/new')]
 		}
 	];
 
@@ -147,17 +141,13 @@
 	}
 
 	onMount(async () => {
-		console.log('[DASHBOARD LAYOUT] Initializing...');
-
 		const apiKey = data.googleMapsApiKey;
 
-		let userId = (data?.user as any)?.id || $user?.id;
+		let userId = data?.user?.id || $user?.id;
 
 		if (!userId) {
-			userId = localStorage.getItem('offline_user_id');
-			if (userId) {
-				console.log('[DASHBOARD LAYOUT] Using Offline ID:', userId);
-			}
+			userId = localStorage.getItem('offline_user_id') ?? undefined;
+			// prefer offline id when present
 		}
 
 		if (userId) {
@@ -166,8 +156,7 @@
 
 			const doInit = async () => {
 				try {
-					console.log('[DASHBOARD LAYOUT] Loading data for:', userId);
-
+					// Initialize sync manager with API key (must use apiKey)
 					await syncManager.initialize(apiKey);
 
 					// Kick off loads without awaiting them so we don't block initial paint
@@ -180,16 +169,18 @@
 					trips.syncFromCloud(userId);
 					expenses.syncFromCloud(userId);
 					mileage.syncFromCloud(userId);
-				} catch (err) {
-					console.error('[DASHBOARD LAYOUT] ❌ Failed to start data load:', err);
+				} catch {
+					toasts.error('Failed to start data load');
 				}
 			};
 
 			// Prefer requestIdleCallback when available to do non-critical work
 			if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-				(requestIdleCallback as any)(() => doInit().catch(console.error));
+				(requestIdleCallback as any)(() =>
+					doInit().catch(() => toasts.error('Background init failed'))
+				);
 			} else {
-				setTimeout(() => doInit().catch(console.error), 0);
+				setTimeout(() => doInit().catch(() => toasts.error('Background init failed')), 0);
 			}
 		} else {
 			await auth.init();
@@ -240,7 +231,7 @@
 					href={resolve('/dashboard/settings/')}
 					class="mobile-user"
 					aria-label="Profile Settings"
-					on:click={(e) => handleNav(e, '/dashboard/settings/')}
+					on:click={handleNav}
 				>
 					<div class="user-avatar small">
 						{getInitial($user.name || $user.email || '')}
@@ -281,14 +272,14 @@
 			<SyncIndicator />
 		</div>
 
-		<!-- eslint-disable svelte/no-navigation-without-resolve -->
+		<!-- eslint-disable svelte/no-navigation-without-resolve -- nav uses pre-resolved hrefs from navItems -->
 		<nav class="nav">
 			{#each navItems as item (item.href)}
 				<a
-					href={resolve(item.href)}
+					href={item.href}
 					class="nav-item"
 					class:active={isActive(item.href, $page.url.pathname, item.exact, item.exclude)}
-					on:click={(e) => handleNav(e, item.href)}
+					on:click={handleNav}
 				>
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 					<!-- Sanitized static SVG inserted via sanitizeStaticSvg -->
@@ -301,10 +292,10 @@
 
 			{#each hamburgerItems as item (item.href)}
 				<a
-					href={resolve(item.href)}
+					href={item.href}
 					class="nav-item"
 					class:active={isActive(item.href, $page.url.pathname)}
-					on:click={(e) => handleNav(e, item.href)}
+					on:click={handleNav}
 				>
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 					<!-- Sanitized static SVG inserted via sanitizeStaticSvg -->
@@ -314,15 +305,10 @@
 			{/each}
 		</nav>
 		<!-- eslint-enable svelte/no-navigation-without-resolve -->
-
 		<div class="sidebar-footer">
 			{#if $user}
 				<!-- eslint-disable svelte/no-navigation-without-resolve -->
-				<a
-					href={resolve('/dashboard/settings/')}
-					class="user-card"
-					on:click={(e) => handleNav(e, '/dashboard/settings/')}
-				>
+				<a href={resolve('/dashboard/settings/')} class="user-card" on:click={handleNav}>
 					<div class="user-avatar">
 						{getInitial($user.name || $user.email || '')}
 					</div>
@@ -367,10 +353,10 @@
 	<nav class="bottom-nav">
 		{#each navItems as item (item.href)}
 			<a
-				href={resolve(item.href)}
+				href={item.href}
 				class="bottom-nav-item"
 				class:active={isActive(item.href, $page.url.pathname, item.exact, item.exclude)}
-				on:click={(e) => handleNav(e, item.href)}
+				on:click={handleNav}
 			>
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 				<!-- Sanitized static SVG inserted via sanitizeStaticSvg -->

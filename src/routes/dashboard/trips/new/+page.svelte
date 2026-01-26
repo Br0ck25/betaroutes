@@ -2,7 +2,7 @@
 	import { trips } from '$lib/stores/trips';
 	import { userSettings } from '$lib/stores/userSettings';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { user } from '$lib/stores/auth';
 	import { page } from '$app/stores';
 	import { autocomplete } from '$lib/utils/autocomplete';
@@ -12,15 +12,11 @@
 	import Button from '$lib/components/ui/Button.svelte';
 	import { PLAN_LIMITS } from '$lib/constants';
 
-	const resolve = (href: string) => `${base}${href}`;
-
 	function handleUpgradeNow() {
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 		goto(resolve('/dashboard/settings'));
 	}
 
 	function goToTrips() {
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 		goto(resolve('/dashboard/trips'));
 	}
 	export let data;
@@ -92,8 +88,10 @@
 		startTime: String('09:00'),
 		endTime: String('17:00'),
 		hoursWorked: 0,
-		startAddress: String(($userSettings as any).defaultStartAddress || ''),
-		endAddress: String(($userSettings as any).defaultEndAddress || ''),
+		startAddress: String(
+			($userSettings as { defaultStartAddress?: string }).defaultStartAddress || ''
+		),
+		endAddress: String(($userSettings as { defaultEndAddress?: string }).defaultEndAddress || ''),
 		stops: [] as LocalStop[],
 		totalMiles: 0,
 		estimatedTime: 0,

@@ -2,8 +2,7 @@
 	import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
 	import { auth, user } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
-	const resolve = (href: string) => `${base}${href}`;
+	import { resolve } from '$app/paths';
 	import { toasts } from '$lib/stores/toast';
 	import { startRegistration } from '@simplewebauthn/browser';
 	import { onMount, createEventDispatcher } from 'svelte';
@@ -97,7 +96,6 @@
 		try {
 			const result = await auth.deleteAccount($user?.id || '', deletePassword);
 			if (result.success) {
-				// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 				goto(resolve('/'));
 			} else {
 				deleteError = result.error || 'Failed to delete account';
@@ -113,7 +111,6 @@
 		if (confirm('Are you sure you want to logout?')) {
 			await csrfFetch('/api/logout', { method: 'POST' });
 			auth.logout();
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 			goto(resolve('/login'));
 		}
 	}

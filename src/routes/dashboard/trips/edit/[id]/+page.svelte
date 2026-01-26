@@ -2,9 +2,8 @@
 	import { trips } from '$lib/stores/trips';
 	import { userSettings } from '$lib/stores/userSettings';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 
-	const resolve = (href: string) => `${base}${href}`;
 	import { user } from '$lib/stores/auth';
 	import { mileage } from '$lib/stores/mileage';
 	import { page } from '$app/stores';
@@ -113,7 +112,6 @@
 		const found = $trips.find((t) => t.id === tripId);
 		if (!found) {
 			toasts.error('Trip not found');
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 			goto(resolve('/dashboard/trips'));
 			return;
 		}
@@ -791,7 +789,6 @@
 			const uid = String(userId);
 			await trips.updateTrip(String(tripId), tripToSave, uid);
 			toasts.success('Trip updated successfully!');
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 			goto(resolve('/dashboard/trips'));
 		} catch (_err: any) {
 			console.error('Update failed:', _err);

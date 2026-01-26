@@ -12,8 +12,7 @@
 	import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
 	import { csrfFetch } from '$lib/utils/csrf';
 	import { SvelteDate } from '$lib/utils/svelte-reactivity';
-	import { base } from '$app/paths';
-	const resolve = (href: string) => `${base}${href}`;
+	import { resolve } from '$app/paths';
 
 	export let data: any;
 

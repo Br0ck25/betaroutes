@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { base } from '$app/paths';
-	const resolve = (href: string) => `${base}${href}`;
+	import { resolve } from '$app/paths';
 
 	const { class: className = '' } = $props();
 </script>
@@ -14,12 +13,10 @@
 	>
 		<p>© {new Date().getFullYear()} Go Route Yourself</p>
 
-		<!-- eslint-disable svelte/no-navigation-without-resolve -- nav uses local resolve() helper for base-aware links -->
 		<nav class="flex gap-6">
 			<a href={resolve('/privacy')} class="hover:text-primary-green">Privacy</a>
 			<a href={resolve('/terms')} class="hover:text-primary-green">Terms</a>
 			<a href={resolve('/support')} class="hover:text-primary-green">Support</a>
 		</nav>
-		<!-- eslint-enable svelte/no-navigation-without-resolve -->
 	</div>
 </footer>

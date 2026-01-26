@@ -1,8 +1,7 @@
 <script lang="ts">
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
-	import { base } from '$app/paths';
-	const resolve = (href: string) => `${base}${href}`;
+	import { resolve } from '$app/paths';
 
 	export let open = false;
 </script>
@@ -38,10 +37,9 @@
 			</div>
 		</div>
 
-		<!-- eslint-disable svelte/no-navigation-without-resolve -->
 		<div class="flex gap-3 justify-center pt-2">
 			<Button variant="outline" on:click={() => (open = false)}>Maybe Later</Button>
-			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+
 			<a
 				href={resolve('/dashboard/settings')}
 				class="inline-flex items-center justify-center rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600 transition-all"
@@ -49,6 +47,5 @@
 				Upgrade Now
 			</a>
 		</div>
-		<!-- eslint-enable svelte/no-navigation-without-resolve -->
 	</div>
 </Modal>

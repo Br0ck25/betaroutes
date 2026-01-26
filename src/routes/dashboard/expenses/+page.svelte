@@ -7,8 +7,7 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import { goto, invalidateAll } from '$app/navigation';
-	import { base } from '$app/paths';
-	const resolve = (href: string) => `${base}${href}`;
+	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import { onDestroy } from 'svelte';
 	import { SvelteSet } from '$lib/utils/svelte-reactivity';
@@ -224,23 +223,22 @@
 
 	// --- ACTIONS ---
 	function goToAdd() {
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
 		goto(resolve('/dashboard/expenses/new'));
 	}
 
 	function editExpense(expense: any) {
 		if ((expense as any).source === 'trip') {
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
-			goto(resolve(`/dashboard/trips?id=${expense.tripId}`));
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
+			goto(resolve('/dashboard/trips') + '?id=' + encodeURIComponent(String(expense.tripId)));
 		} else {
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
-			goto(resolve(`/dashboard/expenses/edit/${expense.id}`));
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
+			goto(resolve('/dashboard/expenses/edit/') + encodeURIComponent(String(expense.id)));
 		}
 	}
 
 	function viewTrash() {
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
-		goto(resolve('/dashboard/trash?type=expenses'));
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + query param
+		goto(resolve('/dashboard/trash') + '?type=expenses');
 	}
 
 	async function deleteExpense(id: string, e?: MouseEvent) {
