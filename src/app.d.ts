@@ -13,7 +13,7 @@ declare global {
 				resetDate: string;
 				name?: string;
 				email?: string;
-				stripeCustomerId?: string; // [!code ++] Add this line
+				stripeCustomerId?: string;
 			} | null;
 		}
 
