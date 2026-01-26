@@ -48,6 +48,36 @@
 		return isoStr.split('T')[0] ?? '';
 	}
 
+	// Helper: ensure Total Miles input behaves as a freeform decimal text input
+	function setupTotalMilesInput(): void {
+		if (typeof document === 'undefined') return;
+		const el = document.getElementById('total-miles') as HTMLInputElement | null;
+		if (!el) return;
+		try {
+			el.type = 'text';
+			el.setAttribute('inputmode', 'decimal');
+			const onBlur = () => {
+				const n = Number(parseFloat(totalMilesLocal) || 0);
+				totalMilesLocal = n.toFixed(1);
+				manualMilesOverride = true;
+			};
+			el.addEventListener('blur', onBlur);
+			// Remove listener when component is destroyed
+			onDestroy(() => el.removeEventListener('blur', onBlur));
+		} catch {
+			/* ignore */
+		}
+	}
+
+	// Ensure event listeners are cleaned up on component destroy
+	onDestroy(() => {
+		const el = document.getElementById('total-miles');
+		if (el && el.parentNode) {
+			const clone = el.cloneNode(true) as HTMLElement;
+			el.parentNode.replaceChild(clone, el);
+		}
+	});
+
 	/**
 	 * Normalize any date format to YYYY-MM-DD for HTML date inputs.
 	 * Handles: YYYY-MM-DD, MM/DD/YYYY, ISO timestamp strings
@@ -93,10 +123,12 @@
 		return `${m} min`;
 	}
 
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 
 	onMount(() => {
 		loadTripData();
+		// Defer to next tick so DOM elements have rendered
+		setTimeout(setupTotalMilesInput, 0);
 	});
 
 	async function loadTripData() {
@@ -1031,7 +1063,8 @@
 			</div>
 			<div class="form-row">
 				<div class="form-group">
-					<label for="total-miles">Total Miles</label><input
+					<label for="total-miles">Total Miles</label>
+					<input
 						id="total-miles"
 						type="number"
 						bind:value={totalMilesLocal}
@@ -1068,7 +1101,6 @@
 					<div class="input-money-wrapper">
 						<span class="symbol">$</span><input
 							id="gas-price"
-							type="number"
 							bind:value={gasPriceLocal}
 							step="0.01"
 						/>

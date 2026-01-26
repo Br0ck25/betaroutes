@@ -5,6 +5,7 @@
 	import { resolve } from '$app/paths';
 	import { user } from '$lib/stores/auth';
 	import { page } from '$app/stores';
+	import { onMount, onDestroy } from 'svelte';
 	import { autocomplete } from '$lib/utils/autocomplete';
 	import { optimizeRoute } from '$lib/services/maps';
 	import Modal from '$lib/components/ui/Modal.svelte';
@@ -49,6 +50,39 @@
 		const now = new Date();
 		return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
 	}
+
+	// Helper: ensure Total Miles input behaves as a freeform decimal text input
+	function setupTotalMilesInputNew(): void {
+		if (typeof document === 'undefined') return;
+		const el = document.getElementById('total-miles') as HTMLInputElement | null;
+		if (!el) return;
+		try {
+			el.type = 'text';
+			el.setAttribute('inputmode', 'decimal');
+			const onBlur = () => {
+				const val = el.value || '';
+				const n = Number(parseFloat(val) || 0);
+				totalMilesLocal = Number(n.toFixed(1));
+			};
+			el.addEventListener('blur', onBlur);
+		} catch {
+			/* ignore */
+		}
+	}
+
+	onMount(() => {
+		// Defer until DOM render
+		setTimeout(setupTotalMilesInputNew, 0);
+	});
+
+	// Ensure event listeners are cleaned up on component destroy
+	onDestroy(() => {
+		const el = document.getElementById('total-miles');
+		if (el && el.parentNode) {
+			const clone = el.cloneNode(true) as HTMLElement;
+			el.parentNode.replaceChild(clone, el);
+		}
+	});
 
 	// Local narrowed types for component-internal safety (ensure required fields for bindings)
 	type LocalStop = {
@@ -883,12 +917,8 @@
 			</div>
 			<div class="form-row">
 				<div class="form-group">
-					<label for="total-miles">Total Miles</label><input
-						id="total-miles"
-						type="number"
-						bind:value={totalMilesLocal}
-						step="0.1"
-					/>
+					<label for="total-miles">Total Miles</label>
+					<input id="total-miles" type="number" bind:value={totalMilesLocal} step="0.1" />
 				</div>
 				<div class="form-group">
 					<label for="drive-time">Drive Time <span class="hint">(Est)</span></label>
@@ -916,7 +946,6 @@
 					<div class="input-money-wrapper">
 						<span class="symbol">$</span><input
 							id="gas-price"
-							type="number"
 							bind:value={gasPriceLocal}
 							step="0.01"
 						/>
