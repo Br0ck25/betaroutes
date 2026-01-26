@@ -101,6 +101,17 @@
 		isMounted = false;
 	});
 
+	// Navigation helpers
+	function goToTrash() {
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
+		goto(resolve('/dashboard/trash'));
+	}
+
+	function handleEditTrip(tripId: string) {
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
+		goto(resolve(`/dashboard/trips/edit/${tripId}`));
+	}
+
 	// --- Filtering Logic ---
 	$: allFilteredTrips = $trips
 		.filter((trip: Trip) => {
@@ -314,11 +325,8 @@
 			</div>
 
 			<div class="header-actions">
-				<button
-					class="btn-secondary"
-					on:click={() => goto(resolve('/dashboard/trash'))}
-					aria-label="View Trash"
-				>
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation -->
+				<button class="btn-secondary" on:click={goToTrash} aria-label="View Trash">
 					<svg
 						width="20"
 						height="20"
@@ -352,6 +360,7 @@
 						></path><circle cx="12" cy="12" r="3"></circle></svg
 					>
 				</button>
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 				<a href={resolve('/dashboard/trips/new')} class="btn-primary" aria-label="Create New Trip">
 					<svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"
 						><path
@@ -396,7 +405,7 @@
 						isSelected={selectedTrips.has(trip.id)}
 						on:toggleExpand={() => toggleExpand(trip.id)}
 						on:toggleSelection={() => toggleSelection(trip.id)}
-						on:edit={() => goto(resolve(`/dashboard/trips/edit/${trip.id}`))}
+						on:edit={() => handleEditTrip(trip.id)}
 						on:delete={() => deleteTrip(trip.id)}
 					/>
 				{/each}
@@ -497,7 +506,9 @@
 					{#if error.message.includes('fetch') || error.message.includes('Failed to fetch')}
 						Unable to connect to the server. Please check your internet connection and try again.
 					{:else if error.message.includes('401') || error.message.includes('Unauthorized')}
-						Your session has expired. Please <a href={resolve('/login')}>log in again</a>.
+						Your session has expired. Please <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) --><a
+							href={resolve('/login')}>log in again</a
+						>.
 					{:else if error.message.includes('403') || error.message.includes('Forbidden')}
 						You don't have permission to view trips. Please contact support if this persists.
 					{:else if error.message.includes('500')}
@@ -506,6 +517,7 @@
 						{error.message}
 					{/if}
 				</p>
+				<!-- eslint-disable svelte/no-navigation-without-resolve -->
 				<div class="error-actions">
 					<button on:click={retry} class="btn-primary"
 						><svg
@@ -522,6 +534,7 @@
 					>
 					<a href={resolve('/dashboard')} class="btn-secondary">Go to Dashboard</a>
 				</div>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 				<details class="error-details">
 					<summary>Technical Details</summary>
 					<pre><code

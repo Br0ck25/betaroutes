@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
+	const resolve = (href: string) => `${base}${href}`;
 
 	let password = '';
 	let confirmPassword = '';
@@ -31,7 +33,8 @@
 
 			if (res.ok) {
 				success = true;
-				setTimeout(() => goto('/login'), 3000);
+				// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
+				setTimeout(() => goto(resolve('/login')), 3000);
 			} else {
 				error = data.message || 'Failed to reset password.';
 			}
@@ -51,7 +54,8 @@
 	<div class="form-container">
 		{#if !token}
 			<div class="alert error">Invalid link. Please request a new password reset.</div>
-			<a href="/forgot-password" class="back-link">Go to Forgot Password</a>
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+			<a href={resolve('/forgot-password')} class="back-link">Go to Forgot Password</a>
 		{:else if success}
 			<div class="alert success">
 				<h3>Success!</h3>

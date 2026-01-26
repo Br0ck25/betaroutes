@@ -40,7 +40,8 @@
 	<header class="header">
 		<div class="container">
 			<div class="header-content">
-				<a href="/" class="logo-link">
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+				<a href={resolve('/')} class="logo-link">
 					<picture>
 						<source type="image/avif" srcset="/180x75.avif 48w, /180x75.avif 120w" sizes="48px" />
 						<source type="image/webp" srcset="/180x75.avif 48w, /180x75.avif 120w" sizes="48px" />
@@ -48,6 +49,7 @@
 					</picture>
 				</a>
 
+				<!-- eslint-disable svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 				<nav class="nav desktop-nav">
 					<a href={resolve('/#features')}>Features</a>
 					<a href={resolve('/#pricing')}>Pricing</a>
@@ -56,10 +58,11 @@
 					<a href={resolve('/login')} class="btn-login">Sign In</a>
 					<a href={resolve('/register')} class="btn-primary">Get Started Free</a>
 				</nav>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 
 				<div class="mobile-nav-controls">
-					<a href={resolve('/login')} class="mobile-signin">Sign In</a>
-
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+					<a href={resolve('/login')} class="btn-login">Sign In</a>
 					<button class="hamburger-btn" on:click={toggleMenu} aria-label="Toggle menu">
 						<svg
 							width="24"
@@ -83,6 +86,7 @@
 		</div>
 
 		{#if isMobileMenuOpen}
+			<!-- eslint-disable svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 			<div class="mobile-menu">
 				<a href={resolve('/#features')}>Features</a>
 				<a href={resolve('/#pricing')}>Pricing</a>
@@ -90,6 +94,7 @@
 				<div class="divider"></div>
 				<a href={resolve('/register')} class="btn-primary mobile-btn">Get Started Free</a>
 			</div>
+			<!-- eslint-enable svelte/no-navigation-without-resolve -->
 		{/if}
 	</header>
 
@@ -279,7 +284,7 @@
 		align-items: center;
 		gap: 16px;
 	}
-	.mobile-signin {
+	.mobile-nav-controls .btn-login {
 		text-decoration: none;
 		color: var(--navy);
 		font-weight: 600;

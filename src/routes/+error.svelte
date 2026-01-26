@@ -111,6 +111,7 @@
 		{/if}
 
 		<div class="error-actions">
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 			<a href={resolve('/dashboard')} class="btn-primary">
 				<svg
 					width="20"

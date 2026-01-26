@@ -39,6 +39,8 @@
 	function handleNav(e: MouseEvent, href: string) {
 		e.preventDefault();
 		closeSidebar();
+
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 		goto(resolve(href));
 	}
 
@@ -49,7 +51,9 @@
 			trips.clear();
 			expenses.clear();
 			trash.clear();
-			goto('/login');
+
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
+			goto(resolve('/login'));
 		}
 	}
 
@@ -231,6 +235,7 @@
 		<div class="mobile-actions">
 			<SyncIndicator />
 			{#if $user}
+				<!-- eslint-disable svelte/no-navigation-without-resolve -->
 				<a
 					href={resolve('/dashboard/settings/')}
 					class="mobile-user"
@@ -241,6 +246,7 @@
 						{getInitial($user.name || $user.email || '')}
 					</div>
 				</a>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 			{/if}
 		</div>
 	</header>
@@ -275,10 +281,11 @@
 			<SyncIndicator />
 		</div>
 
+		<!-- eslint-disable svelte/no-navigation-without-resolve -->
 		<nav class="nav">
 			{#each navItems as item (item.href)}
 				<a
-					href={item.href}
+					href={resolve(item.href)}
 					class="nav-item"
 					class:active={isActive(item.href, $page.url.pathname, item.exact, item.exclude)}
 					on:click={(e) => handleNav(e, item.href)}
@@ -294,7 +301,7 @@
 
 			{#each hamburgerItems as item (item.href)}
 				<a
-					href={item.href}
+					href={resolve(item.href)}
 					class="nav-item"
 					class:active={isActive(item.href, $page.url.pathname)}
 					on:click={(e) => handleNav(e, item.href)}
@@ -306,9 +313,11 @@
 				</a>
 			{/each}
 		</nav>
+		<!-- eslint-enable svelte/no-navigation-without-resolve -->
 
 		<div class="sidebar-footer">
 			{#if $user}
+				<!-- eslint-disable svelte/no-navigation-without-resolve -->
 				<a
 					href={resolve('/dashboard/settings/')}
 					class="user-card"
@@ -322,6 +331,7 @@
 						<div class="user-plan">{$user.plan || 'Free'} Plan</div>
 					</div>
 				</a>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 
 				<button class="logout-btn" on:click={handleLogout}>
 					<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -353,6 +363,7 @@
 		<slot />
 	</main>
 
+	<!-- eslint-disable svelte/no-navigation-without-resolve -->
 	<nav class="bottom-nav">
 		{#each navItems as item (item.href)}
 			<a

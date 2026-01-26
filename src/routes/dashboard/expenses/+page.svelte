@@ -7,6 +7,8 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import { goto, invalidateAll } from '$app/navigation';
+	import { base } from '$app/paths';
+	const resolve = (href: string) => `${base}${href}`;
 	import { page } from '$app/stores';
 	import { onDestroy } from 'svelte';
 	import { SvelteSet } from '$lib/utils/svelte-reactivity';
@@ -222,15 +224,23 @@
 
 	// --- ACTIONS ---
 	function goToAdd() {
-		goto('/dashboard/expenses/new');
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
+		goto(resolve('/dashboard/expenses/new'));
 	}
 
 	function editExpense(expense: any) {
 		if ((expense as any).source === 'trip') {
-			goto(`/dashboard/trips?id=${expense.tripId}`);
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
+			goto(resolve(`/dashboard/trips?id=${expense.tripId}`));
 		} else {
-			goto(`/dashboard/expenses/edit/${expense.id}`);
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
+			goto(resolve(`/dashboard/expenses/edit/${expense.id}`));
 		}
+	}
+
+	function viewTrash() {
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
+		goto(resolve('/dashboard/trash?type=expenses'));
 	}
 
 	async function deleteExpense(id: string, e?: MouseEvent) {
@@ -530,11 +540,7 @@
 		</div>
 
 		<div class="header-actions">
-			<button
-				class="btn-secondary"
-				on:click={() => goto('/dashboard/trash?type=expenses')}
-				aria-label="View Trash"
-			>
+			<button class="btn-secondary" on:click={viewTrash} aria-label="View Trash">
 				<svg
 					width="20"
 					height="20"

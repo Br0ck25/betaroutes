@@ -102,6 +102,7 @@
 				<option value="prev-1y">Previous Year</option>
 			</select>
 
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 			<a href={resolve('/dashboard/trips/new')} class="btn-primary">
 				<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
 					<path
@@ -124,8 +125,10 @@
 		>
 			Note: Your recorded last service odometer ({$userSettings.lastServiceOdometer.toLocaleString()})
 			is higher than the current estimated odometer ({Math.round(currentOdometer).toLocaleString()} mi).
-			If this isn't expected, set <a href="/dashboard/settings">Vehicle odometer start</a> in Settings
-			or update your last service reading.
+			If this isn't expected, set
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+			<a href={resolve('/dashboard/settings')}>Vehicle odometer start</a> in Settings or update your last
+			service reading.
 		</div>
 	{/if}
 
@@ -404,7 +407,8 @@
 				<h2 class="section-title">Recent Trips</h2>
 				<p class="section-subtitle">Latest from selected period</p>
 			</div>
-			<a href="/dashboard/trips" class="btn-secondary">
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+			<a href={resolve('/dashboard/trips')} class="btn-secondary">
 				View All
 				<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
 					<path
@@ -429,7 +433,8 @@
 						(Number(trip.suppliesCost) || 0)}
 					{@const profit = earnings - costs}
 
-					<a href="/dashboard/trips?id={trip.id}" class="trip-item">
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+					<a href={resolve(`/dashboard/trips?id=${trip.id}`)} class="trip-item">
 						<div class="trip-icon">
 							<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
 								<path
@@ -497,7 +502,8 @@
 				</svg>
 				<h3>No trips found</h3>
 				<p>No trips found in this date range.</p>
-				<a href="/dashboard/trips/new" class="btn-primary">
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+				<a href={resolve('/dashboard/trips/new')} class="btn-primary">
 					<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
 						<path
 							d="M10 4V16M4 10H16"

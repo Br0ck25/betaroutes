@@ -63,6 +63,7 @@
 			};
 		} else if ($mileage && $mileage.length > 0 && !rec) {
 			toasts.error('Mileage log not found.');
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 			goto(resolve('/dashboard/mileage'));
 		}
 	}
@@ -119,6 +120,7 @@
 
 			await mileage.updateMileage(String(expenseId), payload as any, String(userId));
 			toasts.success('Mileage log updated');
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 			goto(resolve('/dashboard/mileage'));
 		} catch (err) {
 			console.error(err);
@@ -133,6 +135,7 @@
 			<h1 class="page-title">Edit Mileage Log</h1>
 			<p class="page-subtitle">Update odometer readings and miles</p>
 		</div>
+		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 		<a href={resolve('/dashboard/mileage')} class="btn-back">
 			<svg width="24" height="24" viewBox="0 0 20 20" fill="none"
 				><path
@@ -239,7 +242,8 @@
 			</div>
 
 			<div class="form-actions">
-				<a href="/dashboard/mileage" class="btn-secondary">Cancel</a>
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+				<a href={resolve('/dashboard/mileage')} class="btn-secondary">Cancel</a>
 				<button class="btn-primary" on:click={saveExpense}>Save Log</button>
 			</div>
 		</div>

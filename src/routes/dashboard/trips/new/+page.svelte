@@ -19,6 +19,10 @@
 		goto(resolve('/dashboard/settings'));
 	}
 
+	function goToTrips() {
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
+		goto(resolve('/dashboard/trips'));
+	}
 	export let data;
 	$: API_KEY = String(data.googleMapsApiKey ?? '');
 	let dragItemIndex: number | null = null;
@@ -678,8 +682,7 @@
 
 		try {
 			await trips.create(tripToSave, userId);
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
-			goto(resolve('/dashboard/trips'));
+			goToTrips();
 		} catch (_err: any) {
 			console.error('Save failed:', _err);
 			const message = _err?.message || 'Failed to create trip.';

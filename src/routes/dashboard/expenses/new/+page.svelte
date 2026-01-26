@@ -4,6 +4,8 @@
 	import { user } from '$lib/stores/auth';
 	import { toasts } from '$lib/stores/toast';
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
+	const resolve = (href: string) => `${base}${href}`;
 	import { page } from '$app/stores';
 
 	// --- HELPER: Get Local Date (YYYY-MM-DD) ---
@@ -136,7 +138,8 @@
 
 			await expenses.create(payload, userId);
 			toasts.success('Expense created');
-			goto('/dashboard/expenses');
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
+			goto(resolve('/dashboard/expenses'));
 		} catch (err) {
 			console.error(err);
 			toasts.error('Failed to save expense');
@@ -150,7 +153,8 @@
 			<h1 class="page-title">New Expense</h1>
 			<p class="page-subtitle">Log a new cost</p>
 		</div>
-		<a href="/dashboard/expenses" class="btn-back">
+		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+		<a href={resolve('/dashboard/expenses')} class="btn-back">
 			<svg width="24" height="24" viewBox="0 0 20 20" fill="none"
 				><path
 					d="M12 4L6 10L12 16"
@@ -391,7 +395,8 @@
 		<SettingsModal bind:open={isManageCategoriesOpen} bind:activeCategoryType />
 
 		<div class="form-actions">
-			<a href="/dashboard/expenses" class="btn-secondary">Cancel</a>
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+			<a href={resolve('/dashboard/expenses')} class="btn-secondary">Cancel</a>
 			<button class="btn-primary" on:click={saveExpense}>Save Expense</button>
 		</div>
 	</div>
