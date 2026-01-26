@@ -190,12 +190,26 @@ function createTripsStore() {
 				try {
 					if (Object.prototype.hasOwnProperty.call(changes, 'totalMiles')) {
 						const { mileage } = await import('$lib/stores/mileage');
-						const existingMileage = await mileage.get(id, userId);
-
+						// Try to find an existing mileage record by the trip id or by a mileage record that references this trip
+						let existingMileage = await mileage.get(id, userId);
+						if (!existingMileage) {
+							// Some mileage records (created server-side) may have a different record id but reference the trip via tripId
+							if (typeof mileage.findByTripId === 'function') {
+								existingMileage = await mileage.findByTripId(id, userId);
+							} else {
+								// Fallback: scan user's mileage records for a matching tripId
+								const db = await getDB();
+								const tx = db.transaction('mileage', 'readonly');
+								const index = tx.objectStore('mileage').index('userId');
+								const all = (await index.getAll(userId)) as MileageRecord[];
+								existingMileage =
+									(all.find((m) => m.tripId === id) as MileageRecord | null) ?? null;
+							}
+						}
 						if (existingMileage) {
-							// Update existing mileage record
+							// Update existing mileage record using its actual id (may not equal trip id)
 							await mileage.updateMileage(
-								id,
+								String(existingMileage.id),
 								{ miles: Number((changes as Partial<TripRecord>).totalMiles ?? 0) },
 								userId
 							);

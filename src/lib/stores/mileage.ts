@@ -469,6 +469,19 @@ function createMileageStore() {
 				return null;
 			}
 		},
+		// Find a mileage record that references a trip via tripId (server-created records may use a different id)
+		async findByTripId(tripId: string, userId: string): Promise<MileageRecord | null> {
+			try {
+				const db = await getDB();
+				const tx = db.transaction('mileage', 'readonly');
+				const index = tx.objectStore('mileage').index('userId');
+				const all = (await index.getAll(userId)) as MileageRecord[];
+				const found = all.find((m) => m.tripId === tripId) ?? null;
+				return found as MileageRecord | null;
+			} catch {
+				return null;
+			}
+		},
 		clear() {
 			set([]);
 		},
