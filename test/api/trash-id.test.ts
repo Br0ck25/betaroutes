@@ -1,7 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { POST } from '../../src/routes/api/trash/[id]/+server';
 
-function makeKV(initial: Record<string, string | undefined> = {}) {
+type MockKV = {
+	_store: Record<string, string>;
+	get: (k: string) => Promise<string | null>;
+	put: (k: string, v: string) => Promise<void>;
+	list: (opts: {
+		prefix?: string;
+	}) => Promise<{ keys: { name: string }[]; list_complete: boolean; cursor: undefined }>;
+};
+
+function makeKV(initial: Record<string, string | undefined> = {}): MockKV {
 	const store: Record<string, string> = { ...initial };
 	return {
 		_store: store,
@@ -26,6 +35,31 @@ function makeDO() {
 	};
 }
 
+interface TestEvent {
+	locals: { user: { id: string } };
+	params: { id: string };
+	platform?: { env?: Record<string, unknown> };
+	url: URL;
+}
+
+interface ErrorBody {
+	error?: string;
+}
+interface Trip {
+	id: string;
+	deleted?: boolean;
+	userId?: string;
+	createdAt?: string;
+	backup?: { id: string; userId?: string };
+	totalMiles?: number;
+}
+interface Expense {
+	id: string;
+	deleted?: boolean;
+	backup?: { id: string; userId: string; amount: number; category: string; createdAt: string };
+	amount?: number;
+}
+
 describe('API /api/trash/[id] POST restore (safety & mileage)', () => {
 	it('returns 409 if parent trip is deleted', async () => {
 		const mileageKV = makeKV({
@@ -44,7 +78,7 @@ describe('API /api/trash/[id] POST restore (safety & mileage)', () => {
 			})
 		});
 
-		const event: any = {
+		const event: TestEvent = {
 			locals: { user: { id: 'u1' } },
 			params: { id: 'm1' },
 			platform: {
@@ -55,7 +89,7 @@ describe('API /api/trash/[id] POST restore (safety & mileage)', () => {
 
 		const res = await POST(event);
 		expect(res.status).toBe(409);
-		const body = JSON.parse(await res.text());
+		const body = JSON.parse(await res.text()) as ErrorBody;
 		expect(String(body.error)).toContain('Cannot restore mileage: parent trip is deleted');
 	});
 
@@ -77,7 +111,7 @@ describe('API /api/trash/[id] POST restore (safety & mileage)', () => {
 			})
 		});
 
-		const event: any = {
+		const event: TestEvent = {
 			locals: { user: { id: 'u1' } },
 			params: { id: 'm1' },
 			platform: {
@@ -88,7 +122,7 @@ describe('API /api/trash/[id] POST restore (safety & mileage)', () => {
 
 		const res = await POST(event);
 		expect(res.status).toBe(409);
-		const body = JSON.parse(await res.text());
+		const body = JSON.parse(await res.text()) as ErrorBody;
 		expect(String(body.error)).toContain('another active mileage log exists');
 	});
 
@@ -109,7 +143,7 @@ describe('API /api/trash/[id] POST restore (safety & mileage)', () => {
 			})
 		});
 
-		const event: any = {
+		const event: TestEvent = {
 			locals: { user: { id: 'u1' } },
 			params: { id: 'm1' },
 			platform: {
@@ -121,8 +155,40 @@ describe('API /api/trash/[id] POST restore (safety & mileage)', () => {
 		const res = await POST(event);
 		expect(res.status).toBe(200);
 		// Inspect that trip value in logsKV was updated with totalMiles
-		const updated = JSON.parse((logsKV as any)._store['trip:u1:t1']);
+		const updated = JSON.parse(logsKV._store['trip:u1:t1']) as Trip;
 		expect(updated.totalMiles).toBe(42);
+	});
+
+	it('restores mileage when trip exists and is active (id collision)', async () => {
+		const mileageKV = makeKV({
+			'mileage:u1:m1': JSON.stringify({
+				id: 'm1',
+				deleted: true,
+				backup: { id: 'm1', tripId: 'm1', miles: 10 }
+			})
+		});
+		const logsKV = makeKV({
+			'trip:u1:m1': JSON.stringify({
+				id: 'm1',
+				deleted: false,
+				userId: 'u1',
+				createdAt: '2020-01-01'
+			})
+		});
+
+		const event: TestEvent = {
+			locals: { user: { id: 'u1' } },
+			params: { id: 'm1' },
+			platform: {
+				env: { BETA_MILEAGE_KV: mileageKV, BETA_LOGS_KV: logsKV, TRIP_INDEX_DO: makeDO() }
+			},
+			url: new URL('http://localhost')
+		};
+
+		const res = await POST(event);
+		expect(res.status).toBe(200);
+		const updated = JSON.parse(logsKV._store['trip:u1:m1']) as Trip;
+		expect(updated.totalMiles).toBe(10);
 	});
 
 	it('returns 403 if restored trip userId does not match requester', async () => {
@@ -131,7 +197,7 @@ describe('API /api/trash/[id] POST restore (safety & mileage)', () => {
 			'trip:u1:t1': JSON.stringify({ id: 't1', deleted: true, backup: { id: 't1', userId: 'u2' } })
 		});
 
-		const event: any = {
+		const event: TestEvent = {
 			locals: { user: { id: 'u1' } },
 			params: { id: 't1' },
 			platform: { env: { BETA_LOGS_KV: logsKV, TRIP_INDEX_DO: makeDO() } },
@@ -140,12 +206,12 @@ describe('API /api/trash/[id] POST restore (safety & mileage)', () => {
 
 		const res = await POST(event);
 		expect(res.status).toBe(403);
-		const body = JSON.parse(await res.text());
+		const body = JSON.parse(await res.text()) as ErrorBody;
 		expect(String(body.error)).toContain('Forbidden');
 	});
 
 	it('returns 404 when item is not found in any trash KVs', async () => {
-		const event: any = {
+		const event: TestEvent = {
 			locals: { user: { id: 'u1' } },
 			params: { id: 'missing' },
 			platform: { env: { TRIP_INDEX_DO: makeDO() } },
@@ -154,7 +220,7 @@ describe('API /api/trash/[id] POST restore (safety & mileage)', () => {
 
 		const res = await POST(event);
 		expect(res.status).toBe(404);
-		const body = JSON.parse(await res.text());
+		const body = JSON.parse(await res.text()) as ErrorBody;
 		expect(String(body.error)).toContain('Item not found');
 	});
 
@@ -163,7 +229,7 @@ describe('API /api/trash/[id] POST restore (safety & mileage)', () => {
 			'trip:u1:t1': JSON.stringify({ id: 't1', deleted: false, userId: 'u1' })
 		});
 
-		const event: any = {
+		const event: TestEvent = {
 			locals: { user: { id: 'u1' } },
 			params: { id: 't1' },
 			platform: { env: { BETA_LOGS_KV: logsKV, TRIP_INDEX_DO: makeDO() } },
@@ -172,13 +238,13 @@ describe('API /api/trash/[id] POST restore (safety & mileage)', () => {
 
 		const res = await POST(event);
 		expect(res.status).toBe(409);
-		const body = JSON.parse(await res.text());
+		const body = JSON.parse(await res.text()) as ErrorBody;
 		expect(String(body.error)).toContain('not deleted');
 	});
 
 	it('returns 409 when expense tombstone lacks backup data', async () => {
 		const expenseKV = makeKV({ 'expense:u1:e2': JSON.stringify({ id: 'e2', deleted: true }) });
-		const event: any = {
+		const event: TestEvent = {
 			locals: { user: { id: 'u1' } },
 			params: { id: 'e2' },
 			platform: { env: { BETA_EXPENSES_KV: expenseKV, TRIP_INDEX_DO: makeDO() } },
@@ -187,7 +253,7 @@ describe('API /api/trash/[id] POST restore (safety & mileage)', () => {
 
 		const res = await POST(event);
 		expect(res.status).toBe(409);
-		const body = JSON.parse(await res.text());
+		const body = JSON.parse(await res.text()) as ErrorBody;
 		expect(String(body.error)).toContain('Backup data not found');
 	});
 
@@ -199,7 +265,7 @@ describe('API /api/trash/[id] POST restore (safety & mileage)', () => {
 				backup: { id: 'e1', userId: 'u1', amount: 10, category: 'fuel', createdAt: '2020-01-01' }
 			})
 		});
-		const event: any = {
+		const event: TestEvent = {
 			locals: { user: { id: 'u1' } },
 			params: { id: 'e1' },
 			platform: { env: { BETA_EXPENSES_KV: expenseKV, TRIP_INDEX_DO: makeDO() } },
@@ -208,7 +274,7 @@ describe('API /api/trash/[id] POST restore (safety & mileage)', () => {
 
 		const res = await POST(event);
 		expect(res.status).toBe(200);
-		const restored = JSON.parse((expenseKV as any)._store['expense:u1:e1']);
+		const restored = JSON.parse(expenseKV._store['expense:u1:e1']) as Expense;
 		expect(restored.deleted).toBeUndefined();
 		expect(restored.amount).toBe(10);
 	});
