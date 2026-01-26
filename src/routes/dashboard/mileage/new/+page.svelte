@@ -105,6 +105,7 @@
 			await mileage.create(payload as any, userId);
 			toasts.success('Mileage log created');
 			await invalidateAll();
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 			goto(resolve('/dashboard/mileage'));
 		} catch (err) {
 			console.error(err);
@@ -119,6 +120,7 @@
 			<h1 class="page-title">New Mileage Log</h1>
 			<p class="page-subtitle">Record start/end odometer and miles</p>
 		</div>
+		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 		<a href={resolve('/dashboard/mileage')} class="btn-back">
 			<svg width="24" height="24" viewBox="0 0 20 20" fill="none"
 				><path
@@ -227,6 +229,7 @@
 			</div>
 
 			<div class="form-actions">
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 				<a href={resolve('/dashboard/mileage')} class="btn-secondary">Cancel</a>
 				<button class="btn-primary" on:click={saveExpense}>Save Log</button>
 			</div>

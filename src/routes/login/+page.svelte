@@ -439,6 +439,7 @@
 <div class="auth-page">
 	<div class="auth-brand">
 		<div class="brand-content">
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 			<a href={resolve('/')} class="brand-logo">
 				<picture>
 					<source type="image/avif" srcset="/180x75.avif 48w" sizes="48px" />
@@ -781,6 +782,7 @@
 									<input type="checkbox" name="remember" />
 									<span>Remember me</span>
 								</label>
+								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 								<a href={resolve('/forgot-password')} class="forgot-link">Forgot password?</a>
 							</div>
 						{/if}
@@ -825,7 +827,10 @@
 
 				<div class="form-footer">
 					<p>
-						By continuing, you agree to our <a href={resolve('/terms')}>Terms of Service</a> and
+						By continuing, you agree to our
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+						<a href={resolve('/terms')}>Terms of Service</a> and
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 						<a href={resolve('/privacy')}>Privacy Policy</a>
 					</p>
 				</div>

@@ -12,6 +12,8 @@
 	import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
 	import { csrfFetch } from '$lib/utils/csrf';
 	import { SvelteDate } from '$lib/utils/svelte-reactivity';
+	import { base } from '$app/paths';
+	const resolve = (href: string) => `${base}${href}`;
 
 	export let data: any;
 
@@ -197,9 +199,11 @@
 					</div>
 				</div>
 
+				<!-- eslint-disable svelte/no-navigation-without-resolve -->
 				<div class="data-actions">
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 					<a
-						href="/dashboard/hughesnet"
+						href={resolve('/dashboard/hughesnet')}
 						class="action-btn"
 						style="text-decoration: none; color: inherit; display:flex; align-items:center; gap:16px; padding:16px; background:#F9FAFB; border:2px solid #E5E7EB; border-radius:12px;"
 					>
@@ -244,6 +248,7 @@
 						</div>
 					</a>
 				</div>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
 			</CollapsibleCard>
 		</section>
 

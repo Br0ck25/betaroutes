@@ -113,6 +113,7 @@
 		const found = $trips.find((t) => t.id === tripId);
 		if (!found) {
 			toasts.error('Trip not found');
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 			goto(resolve('/dashboard/trips'));
 			return;
 		}
@@ -790,6 +791,7 @@
 			const uid = String(userId);
 			await trips.updateTrip(String(tripId), tripToSave, uid);
 			toasts.success('Trip updated successfully!');
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 			goto(resolve('/dashboard/trips'));
 		} catch (_err: any) {
 			console.error('Update failed:', _err);
@@ -825,6 +827,7 @@
 			<h1 class="page-title">Edit Trip</h1>
 			<p class="page-subtitle">Update route and expenses</p>
 		</div>
+		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 		<a href={resolve('/dashboard/trips')} class="btn-back"
 			><svg width="24" height="24" viewBox="0 0 20 20" fill="none"
 				><path
@@ -1344,6 +1347,7 @@
 			</div>
 		</div>
 
+		<!-- eslint-disable svelte/no-navigation-without-resolve -->
 		<div class="flex gap-3 justify-center pt-2">
 			<Button variant="outline" on:click={() => (showUpgradeModal = false)}>Maybe Later</Button>
 			<a
@@ -1353,6 +1357,7 @@
 				Upgrade Now
 			</a>
 		</div>
+		<!-- eslint-enable svelte/no-navigation-without-resolve -->
 	</div>
 </Modal>
 

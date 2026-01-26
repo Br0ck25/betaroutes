@@ -273,6 +273,22 @@
 		});
 	}
 
+	// Navigation helpers
+	function goToExpenses() {
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
+		goto(resolve('/dashboard/expenses'));
+	}
+
+	function goToMileage() {
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
+		goto(resolve('/dashboard/mileage'));
+	}
+
+	function goToTrips() {
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
+		goto(resolve('/dashboard/trips'));
+	}
+
 	function getDaysUntilExpiration(expiresAt: string | undefined): number {
 		if (!expiresAt) return 0;
 		const nowMs = SvelteDate.now().getTime();
@@ -300,17 +316,11 @@
 			{/if}
 
 			{#if currentTypeParam === 'expenses'}
-				<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/expenses'))}>
-					Back to Expenses
-				</button>
+				<button class="btn-secondary" on:click={goToExpenses}> Back to Expenses </button>
 			{:else if currentTypeParam === 'mileage'}
-				<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/mileage'))}>
-					Back to Mileage
-				</button>
+				<button class="btn-secondary" on:click={goToMileage}> Back to Mileage </button>
 			{:else}
-				<button class="btn-secondary" on:click={() => goto(resolve('/dashboard/trips'))}>
-					Back to Trips
-				</button>
+				<button class="btn-secondary" on:click={goToTrips}> Back to Trips </button>
 			{/if}
 		</div>
 	</div>

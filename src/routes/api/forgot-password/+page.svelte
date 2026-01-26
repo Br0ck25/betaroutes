@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { base } from '$app/paths';
+	const resolve = (href: string) => `${base}${href}`;
 	let email = '';
 	let loading = false;
 	let message = '';
@@ -39,7 +41,8 @@
 <div class="auth-page">
 	<div class="form-container">
 		<div class="form-header">
-			<a href="/login" class="back-link">← Back to Login</a>
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+			<a href={resolve('/login')} class="back-link">← Back to Login</a>
 			<h1>Reset Password</h1>
 			<p>Enter your email to receive a reset link.</p>
 		</div>

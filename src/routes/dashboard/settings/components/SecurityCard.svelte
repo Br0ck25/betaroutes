@@ -97,6 +97,7 @@
 		try {
 			const result = await auth.deleteAccount($user?.id || '', deletePassword);
 			if (result.success) {
+				// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 				goto(resolve('/'));
 			} else {
 				deleteError = result.error || 'Failed to delete account';
@@ -112,6 +113,7 @@
 		if (confirm('Are you sure you want to logout?')) {
 			await csrfFetch('/api/logout', { method: 'POST' });
 			auth.logout();
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 			goto(resolve('/login'));
 		}
 	}
@@ -439,7 +441,8 @@
 							class="linkish"
 							on:click={() => location.reload()}>Reload</button
 						>
-						or <a href="/logout">sign in</a> again to manage passkeys.
+						or <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+						<a href={resolve('/logout')}>sign in</a> again to manage passkeys.
 					</div>
 				{/if}
 			</div>

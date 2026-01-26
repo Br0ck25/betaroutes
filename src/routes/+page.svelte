@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { base } from '$app/paths';
+	const resolve = (href: string) => `${base}${href}`;
 	let isMobileMenuOpen = false;
 
 	function scrollToSection(id: string) {
@@ -107,12 +109,15 @@
 					<button on:click={() => scrollToSection('how-it-works')}>How It Works</button>
 					<button on:click={() => scrollToSection('pricing')}>Pricing</button>
 
-					<a href="/login" class="btn-login">Sign In</a>
-					<a href="/register" class="btn-primary">Get Started Free</a>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- public link to login -->
+					<a href={resolve('/login')} class="btn-login">Sign In</a>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- public link to register -->
+					<a href={resolve('/register')} class="btn-primary">Get Started Free</a>
 				</nav>
 
 				<div class="mobile-nav-controls">
-					<a href="/login" class="mobile-signin">Sign In</a>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- public link to login -->
+					<a href={resolve('/login')} class="mobile-signin">Sign In</a>
 
 					<button class="hamburger-btn" on:click={toggleMenu} aria-label="Toggle menu">
 						<svg
@@ -142,7 +147,8 @@
 				<button on:click={() => scrollToSection('pricing')}>Pricing</button>
 				<button on:click={() => scrollToSection('how-it-works')}>How It Works</button>
 				<div class="divider"></div>
-				<a href="/register" class="btn-primary mobile-btn">Get Started Free</a>
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- public link to register -->
+				<a href={resolve('/register')} class="btn-primary mobile-btn">Get Started Free</a>
 			</div>
 		{/if}
 	</header>
@@ -157,7 +163,8 @@
 				</p>
 
 				<div class="hero-buttons">
-					<a href="/register" class="btn-hero-primary">Start Free Trial</a>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- public link to register -->
+					<a href={resolve('/register')} class="btn-hero-primary">Start Free Trial</a>
 					<button on:click={() => scrollToSection('how-it-works')} class="btn-hero-secondary">
 						Learn More
 					</button>
@@ -316,7 +323,8 @@
 						<li>✓ Cloud sync</li>
 					</ul>
 
-					<a href="/register" class="btn-plan">Get Started</a>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- public link to register -->
+					<a href={resolve('/register')} class="btn-plan">Get Started</a>
 				</div>
 
 				<div class="pricing-card featured">
@@ -340,7 +348,8 @@
 						<li>✓ Cloud sync</li>
 					</ul>
 
-					<a href="/register" class="btn-plan featured">Start Free Trial</a>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- public link to register -->
+					<a href={resolve('/register')} class="btn-plan featured">Start Free Trial</a>
 				</div>
 			</div>
 		</div>
@@ -355,7 +364,8 @@
 					earnings.
 				</p>
 				<div class="cta-buttons">
-					<a href="/register" class="btn-cta-primary">Start Free Trial</a>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- public link to register -->
+					<a href={resolve('/register')} class="btn-cta-primary">Start Free Trial</a>
 					<span class="cta-note">No credit card required</span>
 				</div>
 			</div>
@@ -389,15 +399,20 @@
 
 				<div class="footer-section">
 					<h3>Company</h3>
-					<a href="/about">About</a>
-					<a href="/contact">Contact</a>
-					<a href="/blog">Blog</a>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- public link -->
+					<a href={resolve('/about')}>About</a>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- public link -->
+					<a href={resolve('/contact')}>Contact</a>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- public link -->
+					<a href={resolve('/blog')}>Blog</a>
 				</div>
 
 				<div class="footer-section">
 					<h3>Legal</h3>
-					<a href="/privacy">Privacy Policy</a>
-					<a href="/terms">Terms of Service</a>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- public/legal link -->
+					<a href={resolve('/privacy')}>Privacy Policy</a>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- public/legal link -->
+					<a href={resolve('/terms')}>Terms of Service</a>
 				</div>
 			</div>
 
