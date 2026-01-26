@@ -340,8 +340,28 @@
 		}
 	}
 
-	$: if (Number(tripData.totalMiles || 0) !== Number(parseFloat(totalMilesLocal || '0') || 0))
-		totalMilesLocal = String(Number(tripData.totalMiles || 0));
+	$: {
+		try {
+			if (typeof document !== 'undefined') {
+				const isFocused = (document.activeElement as HTMLElement | null)?.id === 'total-miles';
+				if (!isFocused && !manualMilesOverride) {
+					if (
+						Number(tripData.totalMiles || 0) !== Number(parseFloat(totalMilesLocal || '0') || 0)
+					) {
+						totalMilesLocal = String(Number(tripData.totalMiles || 0));
+					}
+				}
+			} else {
+				// SSR: keep local in sync when not in browser
+				if (Number(tripData.totalMiles || 0) !== Number(parseFloat(totalMilesLocal || '0') || 0)) {
+					totalMilesLocal = String(Number(tripData.totalMiles || 0));
+				}
+			}
+		} catch {
+			// Intentionally ignore sync errors (no action required)
+			void 0;
+		}
+	}
 	$: tripData.notes = notesLocal;
 
 	let newStop = { address: '', earnings: 0, notes: '' };

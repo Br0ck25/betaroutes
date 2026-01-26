@@ -1,61 +1,77 @@
-test-results
-node_modules
+# ---------------------------------
+# Dependencies & Build Artifacts
+# ---------------------------------
+node_modules/
+.svelte-kit/
+/build/
+/dist/
 
-# Output
-.output
-.vercel
-.netlify
+# Cloudflare / Wrangler
+# .wrangler is where local D1/KV state lives. Never commit this.
 .wrangler/
-.wrangler
-/.svelte-kit
-/build
-/dist
+.dev.vars
+.kv-mock.json
 
-# Test artifacts
-coverage/
+# Vercel / Netlify (Just in case of future migration/tests)
+.vercel
+.output
+.netlify
+
+# ---------------------------------
+# Testing & Diagnostics
+# ---------------------------------
+test-results/
 playwright-report/
 blob-report/
+coverage/
 
-# Logs
-*.log
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Env
+# ---------------------------------
+# Environment & Secrets
+# ---------------------------------
 .env
 .env.*
 !.env.example
 !.env.test
-.dev.vars
-.kv-mock.json
 
-# Backup files
+# ---------------------------------
+# TypeScript & IDE
+# ---------------------------------
+# Strict TS uses this for incremental builds. Don't commit it.
+*.tsbuildinfo
+
+# Editor Configs
+.idea/
+.DS_Store
+*.swp
+*.swo
+Thumbs.db
+# Note: We purposely DO NOT ignore .vscode/ because your
+# strict settings.json and extensions.json must be shared.
+
+# ---------------------------------
+# Logs & Temp Files
+# ---------------------------------
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+*.tmp
+*~
 *.bak
 *.backup
 *.orig
 
-# Temp files
-*.tmp
-temp.*
-tmp-*
-*~
-
-# Windows temp files
+# Windows specific junk
 *.txt~
 New Text Document*.txt
 
-# Trace files
+# Performance Traces
 *.trace
 *.stacks
 *.network
 
-# Vite
+# Vite Internal timestamps
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
-
-# IDE
-.idea/
-*.swp
-*.swo
