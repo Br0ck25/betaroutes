@@ -1,15 +1,15 @@
 // src/lib/stores/trips.ts
-import { writable, get } from 'svelte/store';
+import { PLAN_LIMITS } from '$lib/constants';
 import { getDB, getMileageStoreName } from '$lib/db/indexedDB';
-import { syncManager } from '$lib/sync/syncManager';
-import type { TripRecord, TrashRecord, MileageRecord } from '$lib/db/types';
-import { storage } from '$lib/utils/storage';
+import type { MileageRecord, TrashRecord, TripRecord } from '$lib/db/types';
 import { user as authUser } from '$lib/stores/auth';
 import { userSettings } from '$lib/stores/userSettings';
+import { syncManager } from '$lib/sync/syncManager';
 import type { User } from '$lib/types';
-import { PLAN_LIMITS } from '$lib/constants';
 import { csrfFetch } from '$lib/utils/csrf';
+import { storage } from '$lib/utils/storage';
 import { SvelteDate } from '$lib/utils/svelte-reactivity';
+import { get, writable } from 'svelte/store';
 
 export const isLoading = writable(false);
 

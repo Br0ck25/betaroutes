@@ -1,18 +1,18 @@
 <script lang="ts">
-	import { trips } from '$lib/stores/trips';
-	import { userSettings } from '$lib/stores/userSettings';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { trips } from '$lib/stores/trips';
+	import { userSettings } from '$lib/stores/userSettings';
 
+	import { page } from '$app/stores';
+	import Button from '$lib/components/ui/Button.svelte';
+	import Modal from '$lib/components/ui/Modal.svelte';
+	import { PLAN_LIMITS } from '$lib/constants';
+	import { optimizeRoute } from '$lib/services/maps';
 	import { user } from '$lib/stores/auth';
 	import { mileage } from '$lib/stores/mileage';
-	import { page } from '$app/stores';
-	import { autocomplete } from '$lib/utils/autocomplete';
-	import { optimizeRoute } from '$lib/services/maps';
-	import Modal from '$lib/components/ui/Modal.svelte';
 	import { toasts } from '$lib/stores/toast';
-	import Button from '$lib/components/ui/Button.svelte';
-	import { PLAN_LIMITS } from '$lib/constants';
+	import { autocomplete } from '$lib/utils/autocomplete';
 
 	export let data;
 	$: API_KEY = String(data.googleMapsApiKey ?? '');
@@ -48,25 +48,10 @@
 		return isoStr.split('T')[0] ?? '';
 	}
 
-	// Helper: ensure Total Miles input behaves as a freeform decimal text input
-	function setupTotalMilesInput(): void {
-		if (typeof document === 'undefined') return;
-		const el = document.getElementById('total-miles') as HTMLInputElement | null;
-		if (!el) return;
-		try {
-			el.type = 'text';
-			el.setAttribute('inputmode', 'decimal');
-			const onBlur = () => {
-				const n = Number(parseFloat(totalMilesLocal) || 0);
-				totalMilesLocal = n.toFixed(1);
-				manualMilesOverride = true;
-			};
-			el.addEventListener('blur', onBlur);
-			// Remove listener when component is destroyed
-			onDestroy(() => el.removeEventListener('blur', onBlur));
-		} catch {
-			/* ignore */
-		}
+	function onTotalMilesBlur(): void {
+		const n = Number(parseFloat(totalMilesLocal) || 0);
+		totalMilesLocal = n.toFixed(1);
+		manualMilesOverride = true;
 	}
 
 	// Ensure event listeners are cleaned up on component destroy
@@ -123,12 +108,10 @@
 		return `${m} min`;
 	}
 
-	import { onMount, onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 
 	onMount(() => {
 		loadTripData();
-		// Defer to next tick so DOM elements have rendered
-		setTimeout(setupTotalMilesInput, 0);
 	});
 
 	async function loadTripData() {
@@ -1066,13 +1049,14 @@
 					<label for="total-miles">Total Miles</label>
 					<input
 						id="total-miles"
-						type="number"
+						type="text"
+						inputmode="decimal"
 						bind:value={totalMilesLocal}
 						on:input={(e) => {
 							totalMilesLocal = (e.target as HTMLInputElement).value;
 							manualMilesOverride = true;
 						}}
-						step="0.1"
+						on:blur={onTotalMilesBlur}
 					/>
 				</div>
 				<div class="form-group">
