@@ -1,10 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve, base } from '$app/paths';
 	import { getUserState } from '$lib/stores/user.svelte';
 	import SyncIndicator from '$lib/components/SyncIndicator.svelte';
-
-	const resolve = (href: string) => `${base}${href}`;
 
 	// Get reactive state
 	const userState = getUserState();
@@ -18,7 +16,6 @@
 	async function logout() {
 		await fetch('/api/logout', { method: 'POST' });
 		userState.logout();
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
 		goto(resolve('/'));
 	}
 	// Links for the public site (Logged Out)
@@ -40,7 +37,6 @@
 <header class="header">
 	<div class="container">
 		<div class="header-content">
-			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 			<a href={resolve('/')} class="logo-link">
 				<picture>
 					<source type="image/avif" srcset="/180x75.avif 180w" sizes="64px" />
@@ -57,11 +53,11 @@
 				</picture>
 			</a>
 
-			<!-- eslint-disable svelte/no-navigation-without-resolve -- nav uses local resolve() helper for base-aware links -->
 			<nav class="nav desktop-nav">
 				{#if userState.value}
 					{#each appLinks as link (link.href)}
-						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using base+link.href for dynamic hrefs -->
+						<a href={base + link.href} class="nav-link">{link.name}</a>
 					{/each}
 
 					<div class="separator"></div>
@@ -70,22 +66,17 @@
 					<button onclick={logout} class="btn-login">Logout</button>
 				{:else}
 					{#each publicLinks as link (link.href)}
-						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using base+link.href for dynamic hrefs -->
+						<a href={base + link.href} class="nav-link">{link.name}</a>
 					{/each}
-
-					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 					<a href={resolve('/login')} class="btn-login">Sign In</a>
-					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
-					<a href={resolve('/register')} class="btn-primary">Get Started Free</a>
-					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+
 					<a href={resolve('/register')} class="btn-primary">Get Started Free</a>
 				{/if}
 			</nav>
-			<!-- eslint-enable svelte/no-navigation-without-resolve -->
 
 			<div class="mobile-nav-controls">
 				{#if !userState.value}
-					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 					<a href={resolve('/login')} class="mobile-signin">Sign In</a>
 				{/if}
 
@@ -115,8 +106,8 @@
 		<div class="mobile-menu">
 			{#if userState.value}
 				{#each appLinks as link (link.href)}
-					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
-					<a href={resolve(link.href)} class="mobile-link" onclick={toggleMenu}>{link.name}</a>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using base+link.href for dynamic hrefs -->
+					<a href={base + link.href} class="mobile-link" onclick={toggleMenu}>{link.name}</a>
 				{/each}
 				<div class="divider"></div>
 				<button
@@ -128,11 +119,11 @@
 				>
 			{:else}
 				{#each publicLinks as link (link.href)}
-					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
-					<a href={resolve(link.href)} class="mobile-link" onclick={toggleMenu}>{link.name}</a>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using base+link.href for dynamic hrefs -->
+					<a href={base + link.href} class="mobile-link" onclick={toggleMenu}>{link.name}</a>
 				{/each}
 				<div class="divider"></div>
-				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+
 				<a href={resolve('/register')} class="btn-primary mobile-btn" onclick={toggleMenu}
 					>Get Started Free</a
 				>

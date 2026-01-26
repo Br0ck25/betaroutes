@@ -3,7 +3,7 @@
 	import { page } from '$app/stores';
 	import { trash } from '$lib/stores/trash';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { user } from '$lib/stores/auth';
 	import { getDB } from '$lib/db/indexedDB';
 	import type { TrashRecord } from '$lib/db/types';
@@ -11,8 +11,6 @@
 	import { userSettings } from '$lib/stores/userSettings';
 	import { getVehicleDisplayName } from '$lib/utils/vehicle';
 	import { SvelteSet, SvelteDate } from '$lib/utils/svelte-reactivity';
-
-	const resolve = (href: string) => `${base}${href}`;
 
 	// Known user-friendly error messages that are safe to display
 	const KNOWN_RESTORE_ERROR_MESSAGES = [
@@ -275,17 +273,14 @@
 
 	// Navigation helpers
 	function goToExpenses() {
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 		goto(resolve('/dashboard/expenses'));
 	}
 
 	function goToMileage() {
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 		goto(resolve('/dashboard/mileage'));
 	}
 
 	function goToTrips() {
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 		goto(resolve('/dashboard/trips'));
 	}
 

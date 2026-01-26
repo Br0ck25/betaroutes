@@ -4,8 +4,7 @@
 	import { user } from '$lib/stores/auth';
 	import { toasts } from '$lib/stores/toast';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
-	const resolve = (href: string) => `${base}${href}`;
+	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 
@@ -102,7 +101,6 @@
 			};
 		} else {
 			toasts.error('Expense not found.');
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
 			goto(resolve('/dashboard/expenses'));
 		}
 	});
@@ -128,7 +126,6 @@
 
 			await expenses.updateExpense(String(expenseId), payload, String(userId));
 			toasts.success('Expense updated');
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
 			goto(resolve('/dashboard/expenses'));
 		} catch (err) {
 			console.error(err);

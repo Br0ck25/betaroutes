@@ -5,8 +5,7 @@
 	import { userSettings } from '$lib/stores/userSettings';
 	import { toasts } from '$lib/stores/toast';
 	import { goto, invalidateAll } from '$app/navigation';
-	import { base } from '$app/paths';
-	const resolve = (href: string) => `${base}${href}`;
+	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import SelectMobile from '$lib/components/ui/SelectMobile.svelte';
 
@@ -105,7 +104,7 @@
 			await mileage.create(payload as any, userId);
 			toasts.success('Mileage log created');
 			await invalidateAll();
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
+
 			goto(resolve('/dashboard/mileage'));
 		} catch (err) {
 			console.error(err);

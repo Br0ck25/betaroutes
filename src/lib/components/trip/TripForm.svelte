@@ -18,8 +18,7 @@
 	import Button from '$lib/components/ui/Button.svelte';
 	import { getUserState } from '$lib/stores/user.svelte';
 	import { PLAN_LIMITS } from '$lib/constants';
-	import { base } from '$app/paths';
-	const resolve = (href: string) => `${base}${href}`;
+	import { resolve } from '$app/paths';
 
 	// Svelte 5 Props using Runes
 	const { googleApiKey = '', loading = false, trip = null } = $props();
@@ -763,14 +762,13 @@
 
 		<div class="flex gap-3 justify-center pt-2">
 			<Button variant="outline" on:click={() => (showUpgradeModal = false)}>Maybe Later</Button>
-			<!-- eslint-disable svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+
 			<a
 				href={resolve('/dashboard/settings')}
 				class="inline-flex items-center justify-center rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600 transition-all"
 			>
 				Upgrade to Pro →
 			</a>
-			<!-- eslint-enable svelte/no-navigation-without-resolve -->
 		</div>
 	</div>
 </Modal>

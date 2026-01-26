@@ -4,8 +4,7 @@
 	import { userSettings } from '$lib/stores/userSettings';
 	import { toasts } from '$lib/stores/toast';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
-	const resolve = (href: string) => `${base}${href}`;
+	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import SelectMobile from '$lib/components/ui/SelectMobile.svelte';
 	const expenseId = $page.params.id;
@@ -63,7 +62,6 @@
 			};
 		} else if ($mileage && $mileage.length > 0 && !rec) {
 			toasts.error('Mileage log not found.');
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 			goto(resolve('/dashboard/mileage'));
 		}
 	}
@@ -120,7 +118,6 @@
 
 			await mileage.updateMileage(String(expenseId), payload as any, String(userId));
 			toasts.success('Mileage log updated');
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 			goto(resolve('/dashboard/mileage'));
 		} catch (err) {
 			console.error(err);
@@ -135,7 +132,6 @@
 			<h1 class="page-title">Edit Mileage Log</h1>
 			<p class="page-subtitle">Update odometer readings and miles</p>
 		</div>
-		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 		<a href={resolve('/dashboard/mileage')} class="btn-back">
 			<svg width="24" height="24" viewBox="0 0 20 20" fill="none"
 				><path

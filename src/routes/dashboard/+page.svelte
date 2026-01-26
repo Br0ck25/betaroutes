@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { trips } from '$lib/stores/trips';
-	import { base } from '$app/paths';
-	const resolve = (href: string) => `${base}${href}`;
+	import { resolve } from '$app/paths';
+	const tripsHref = resolve('/dashboard/trips');
+	const settingsHref = resolve('/dashboard/settings');
+	const newTripHref = resolve('/dashboard/trips/new');
 	import { expenses } from '$lib/stores/expenses'; // [!code ++]
 	import { userSettings } from '$lib/stores/userSettings';
 	import { toasts } from '$lib/stores/toast';
@@ -102,8 +104,7 @@
 				<option value="prev-1y">Previous Year</option>
 			</select>
 
-			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
-			<a href={resolve('/dashboard/trips/new')} class="btn-primary">
+			<a href={newTripHref} class="btn-primary">
 				<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
 					<path
 						d="M10 4V16M4 10H16"
@@ -126,9 +127,7 @@
 			Note: Your recorded last service odometer ({$userSettings.lastServiceOdometer.toLocaleString()})
 			is higher than the current estimated odometer ({Math.round(currentOdometer).toLocaleString()} mi).
 			If this isn't expected, set
-			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
-			<a href={resolve('/dashboard/settings')}>Vehicle odometer start</a> in Settings or update your last
-			service reading.
+			<a href={settingsHref}>Vehicle odometer start</a> in Settings or update your last service reading.
 		</div>
 	{/if}
 
@@ -407,8 +406,7 @@
 				<h2 class="section-title">Recent Trips</h2>
 				<p class="section-subtitle">Latest from selected period</p>
 			</div>
-			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
-			<a href={resolve('/dashboard/trips')} class="btn-secondary">
+			<a href={tripsHref} class="btn-secondary">
 				View All
 				<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
 					<path
@@ -426,15 +424,15 @@
 			<div class="trips-list">
 				{#each stats.recentTrips as trip (trip.id)}
 					{@const earnings =
-						trip.stops?.reduce((s: number, stop: any) => s + (Number(stop.earnings) || 0), 0) || 0}
+						trip.stops?.reduce((s: number, stop: Stop) => s + (Number(stop.earnings) || 0), 0) || 0}
 					{@const costs =
 						(Number(trip.fuelCost) || 0) +
 						(Number(trip.maintenanceCost) || 0) +
 						(Number(trip.suppliesCost) || 0)}
 					{@const profit = earnings - costs}
-
-					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
-					<a href={resolve(`/dashboard/trips?id=${trip.id}`)} class="trip-item">
+					{@const tripHref = tripsHref + '?id=' + encodeURIComponent(String(trip.id))}
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using pre-resolved tripsHref + encoded id for type-safety -->
+					<a href={tripHref} class="trip-item">
 						<div class="trip-icon">
 							<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
 								<path
@@ -502,8 +500,7 @@
 				</svg>
 				<h3>No trips found</h3>
 				<p>No trips found in this date range.</p>
-				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
-				<a href={resolve('/dashboard/trips/new')} class="btn-primary">
+				<a href={newTripHref} class="btn-primary">
 					<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
 						<path
 							d="M10 4V16M4 10H16"

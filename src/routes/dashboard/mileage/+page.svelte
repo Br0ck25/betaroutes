@@ -8,8 +8,7 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import { goto, invalidateAll } from '$app/navigation';
-	import { base } from '$app/paths';
-	const resolve = (href: string) => `${base}${href}`;
+	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import { onDestroy } from 'svelte';
 	import { SvelteSet, SvelteDate } from '$lib/utils/svelte-reactivity';
@@ -197,22 +196,21 @@
 	$: allSelected = filteredExpenses.length > 0 && selectedExpenses.size === filteredExpenses.length;
 
 	function goToAdd() {
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
 		goto(resolve('/dashboard/mileage/new'));
 	}
 
 	function viewTrash() {
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
-		goto(resolve('/dashboard/trash?type=mileage'));
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + query param
+		goto(resolve('/dashboard/trash') + '?type=mileage');
 	}
 
 	function editExpense(expense: any) {
 		if ((expense as any).source === 'trip') {
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
-			goto(resolve(`/dashboard/trips?id=${expense.tripId}`));
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
+			goto(resolve('/dashboard/trips') + '?id=' + encodeURIComponent(String(expense.tripId)));
 		} else {
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
-			goto(resolve(`/dashboard/mileage/edit/${expense.id}`));
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
+			goto(resolve('/dashboard/mileage/edit/') + encodeURIComponent(String(expense.id)));
 		}
 	}
 

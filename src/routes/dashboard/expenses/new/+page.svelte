@@ -4,8 +4,7 @@
 	import { user } from '$lib/stores/auth';
 	import { toasts } from '$lib/stores/toast';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
-	const resolve = (href: string) => `${base}${href}`;
+	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 
 	// --- HELPER: Get Local Date (YYYY-MM-DD) ---
@@ -138,7 +137,7 @@
 
 			await expenses.create(payload, userId);
 			toasts.success('Expense created');
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
+
 			goto(resolve('/dashboard/expenses'));
 		} catch (err) {
 			console.error(err);
