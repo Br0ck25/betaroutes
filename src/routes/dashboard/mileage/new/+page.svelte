@@ -227,7 +227,7 @@
 			</div>
 
 			<div class="form-actions">
-				<a href="/dashboard/mileage" class="btn-secondary">Cancel</a>
+				<a href={resolve('/dashboard/mileage')} class="btn-secondary">Cancel</a>
 				<button class="btn-primary" on:click={saveExpense}>Save Log</button>
 			</div>
 		</div>

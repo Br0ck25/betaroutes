@@ -197,13 +197,21 @@
 	$: allSelected = filteredExpenses.length > 0 && selectedExpenses.size === filteredExpenses.length;
 
 	function goToAdd() {
-		goto('/dashboard/mileage/new');
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
+		goto(resolve('/dashboard/mileage/new'));
+	}
+
+	function viewTrash() {
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
+		goto(resolve('/dashboard/trash?type=mileage'));
 	}
 
 	function editExpense(expense: any) {
 		if ((expense as any).source === 'trip') {
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
 			goto(resolve(`/dashboard/trips?id=${expense.tripId}`));
 		} else {
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
 			goto(resolve(`/dashboard/mileage/edit/${expense.id}`));
 		}
 	}
@@ -454,11 +462,8 @@
 		</div>
 
 		<div class="header-actions">
-			<button
-				class="btn-secondary"
-				on:click={() => goto('/dashboard/trash?type=mileage')}
-				aria-label="View Trash"
-			>
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+			<button class="btn-secondary" on:click={viewTrash} aria-label="View Trash">
 				<svg
 					width="20"
 					height="20"

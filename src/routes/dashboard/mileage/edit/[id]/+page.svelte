@@ -63,7 +63,7 @@
 			};
 		} else if ($mileage && $mileage.length > 0 && !rec) {
 			toasts.error('Mileage log not found.');
-			goto('/dashboard/mileage');
+			goto(resolve('/dashboard/mileage'));
 		}
 	}
 
