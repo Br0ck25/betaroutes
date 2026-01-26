@@ -1,21 +1,22 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { Snippet } from 'svelte';
-	let {
+	const {
 		title = '',
 		subtitle = '',
-		open = $bindable(true),
 		storageKey = null,
 		icon,
-		children
+		children,
+		open: _open = $bindable(true)
 	}: {
 		title?: string;
 		subtitle?: string;
-		open?: boolean;
 		storageKey?: string | null;
 		icon?: Snippet;
 		children?: Snippet;
+		open?: boolean;
 	} = $props();
+	let open = $state(_open);
 
 	const contentId = `collapsible-${Math.random().toString(36).slice(2, 9)}`;
 

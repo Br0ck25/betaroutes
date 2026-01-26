@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 
-	let {
+	const {
 		id = undefined,
 		options = [],
-		value = $bindable(null),
 		placeholder = '',
 		className = '',
-		onchange
+		onchange,
+		value: _value = $bindable(null)
 	}: {
 		id?: string | undefined;
 		options?: { value: string; label: string }[];
@@ -16,6 +16,7 @@
 		className?: string;
 		onchange?: (detail: { value: string }) => void;
 	} = $props();
+	let value = $state(_value);
 
 	let open = $state(false);
 	let focusedIndex = $state(-1);
@@ -38,7 +39,7 @@
 		// Call the onchange callback if provided
 		onchange?.({ value: opt.value });
 		close();
-		setTimeout(() => (buttonEl as any)?.focus(), 0);
+		setTimeout(() => buttonEl?.focus(), 0);
 	}
 
 	function onKeydown(e: KeyboardEvent) {
@@ -77,7 +78,8 @@
 	function docClick(e: MouseEvent) {
 		if (!open) return;
 		if (!buttonEl) return;
-		const path = (e.composedPath && e.composedPath()) || (e as any).path || [];
+		const cp = (e as MouseEvent & { composedPath?: () => EventTarget[] }).composedPath?.() ?? [];
+		const path: EventTarget[] = cp;
 		if (path.includes(buttonEl) || (listEl && path.includes(listEl))) return;
 		close();
 	}
@@ -125,9 +127,9 @@
 			tabindex="0"
 			aria-activedescendant={focusedIndex >= 0 ? `option-${focusedIndex}` : undefined}
 		>
-			{#each options as opt, i}
+			{#each options as opt, idx (opt.value)}
 				<li
-					id={`option-${i}`}
+					id={`option-${idx}`}
 					role="option"
 					class:selected={opt.value === value}
 					aria-selected={opt.value === value}
@@ -139,7 +141,7 @@
 							selectOption(opt);
 						}
 					}}
-					onmouseenter={() => (focusedIndex = i)}
+					onmouseenter={() => (focusedIndex = idx)}
 					title={opt.label}
 				>
 					{opt.label}

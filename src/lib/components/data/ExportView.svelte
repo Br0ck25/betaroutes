@@ -5,21 +5,24 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 
+	import { SvelteSet, SvelteDate } from '$lib/utils/svelte-reactivity';
+
 	let exportFormat = 'csv';
 	let exportDataType = 'trips'; // 'trips' | 'expenses' | 'tax_bundle'
 	let dateFrom = '';
 	let dateTo = '';
-	let selectedTrips = new Set<string>();
-	let selectedExpenses = new Set<string>();
+	let selectedTrips = new SvelteSet<string>();
+	let selectedExpenses = new SvelteSet<string>();
 	let selectAll = false;
 	let isUpgradeModalOpen = false;
 
 	// Reactive filter logic for Trips
 	$: filteredTrips = $trips.filter((trip) => {
 		if (!trip.date) return false;
-		const tripDate = new Date(trip.date);
-		if (dateFrom && tripDate < new Date(dateFrom)) return false;
-		if (dateTo && tripDate > new Date(dateTo)) return false;
+		const tripDate = SvelteDate.from(trip.date).startOfDay();
+		if (dateFrom && tripDate.getTime() < SvelteDate.from(dateFrom).startOfDay().getTime())
+			return false;
+		if (dateTo && tripDate.getTime() > SvelteDate.from(dateTo).startOfDay().getTime()) return false;
 		return true;
 	});
 
@@ -27,18 +30,20 @@
 	$: filteredExpenses = $expenses.filter((expense) => {
 		const dStr = expense.date || expense.createdAt;
 		if (!dStr) return false;
-		const expenseDate = new Date(dStr);
-		if (dateFrom && expenseDate < new Date(dateFrom)) return false;
-		if (dateTo && expenseDate > new Date(dateTo)) return false;
+		const expenseDate = SvelteDate.from(dStr).startOfDay();
+		if (dateFrom && expenseDate.getTime() < SvelteDate.from(dateFrom).startOfDay().getTime())
+			return false;
+		if (dateTo && expenseDate.getTime() > SvelteDate.from(dateTo).startOfDay().getTime())
+			return false;
 		return true;
 	});
 
 	// Reactive selection logic
 	$: if (selectAll) {
 		if (exportDataType === 'trips') {
-			selectedTrips = new Set(filteredTrips.map((t) => t.id));
+			selectedTrips = new SvelteSet(filteredTrips.map((t) => t.id));
 		} else if (exportDataType === 'expenses') {
-			selectedExpenses = new Set(filteredExpenses.map((e) => e.id));
+			selectedExpenses = new SvelteSet(filteredExpenses.map((e) => e.id));
 		}
 	} else {
 		// Auto-check selectAll status based on individual selections
@@ -53,8 +58,8 @@
 	// Auto-select everything for Tax Bundle
 	$: if (exportDataType === 'tax_bundle') {
 		selectAll = true;
-		selectedTrips = new Set(filteredTrips.map((t) => t.id));
-		selectedExpenses = new Set(filteredExpenses.map((e) => e.id));
+		selectedTrips = new SvelteSet(filteredTrips.map((t) => t.id));
+		selectedExpenses = new SvelteSet(filteredExpenses.map((e) => e.id));
 	}
 
 	// Check Pro Status
@@ -64,31 +69,29 @@
 
 	function toggleSelectAll() {
 		if (selectAll) {
-			selectedTrips = new Set();
-			selectedExpenses = new Set();
+			selectedTrips = new SvelteSet();
+			selectedExpenses = new SvelteSet();
 		} else {
-			selectedTrips = new Set(filteredTrips.map((t) => t.id));
-			selectedExpenses = new Set(filteredExpenses.map((e) => e.id));
+			selectedTrips = new SvelteSet(filteredTrips.map((t) => t.id));
+			selectedExpenses = new SvelteSet(filteredExpenses.map((e) => e.id));
 		}
 		selectAll = !selectAll;
 	}
 
 	function toggleTrip(id: string) {
-		if (selectedTrips.has(id)) selectedTrips.delete(id);
-		else selectedTrips.add(id);
-		selectedTrips = selectedTrips;
+		selectedTrips = selectedTrips.has(id) ? selectedTrips.delete(id) : selectedTrips.add(id);
 		selectAll = selectedTrips.size === filteredTrips.length;
 	}
 
 	function toggleExpense(id: string) {
-		if (selectedExpenses.has(id)) selectedExpenses.delete(id);
-		else selectedExpenses.add(id);
-		selectedExpenses = selectedExpenses;
+		selectedExpenses = selectedExpenses.has(id)
+			? selectedExpenses.delete(id)
+			: selectedExpenses.add(id);
 		selectAll = selectedExpenses.size === filteredExpenses.length;
 	}
 
 	function formatDate(dateString: string): string {
-		return new Date(dateString).toLocaleDateString();
+		return SvelteDate.from(dateString).toLocaleDateString();
 	}
 
 	// --- EXPORT LOGIC ---
@@ -139,7 +142,7 @@
 			'Notes'
 		];
 		const rows = data.map((trip) => {
-			const date = trip.date ? new Date(trip.date).toLocaleDateString() : '';
+			const date = trip.date ? SvelteDate.from(trip.date).toLocaleDateString() : '';
 			const miles = trip.totalMiles || 0;
 			const start = `"${(trip.startAddress || '').replace(/"/g, '""')}"`;
 			const last = trip.stops?.[trip.stops.length - 1];
@@ -162,7 +165,7 @@
 	function generateExpenseCSV(data: any[], filenamePrefix = 'expenses_export') {
 		const headers = ['Date', 'Category', 'Amount', 'Description'];
 		const rows = data.map((e) => {
-			const date = e.date ? new Date(e.date).toLocaleDateString() : '';
+			const date = e.date ? SvelteDate.from(e.date).toLocaleDateString() : '';
 			const category = `"${(e.category || 'General').replace(/"/g, '""')}"`;
 			const amount = e.amount || 0;
 			const desc = `"${(e.description || '').replace(/"/g, '""')}"`;
@@ -187,7 +190,7 @@
 		});
 
 		let summary = `TAX SUMMARY REPORT\n`;
-		summary += `Generated: ${new Date().toLocaleDateString()}\n`;
+		summary += `Generated: ${SvelteDate.now().toLocaleDateString()}\n`;
 		summary += `Period: ${dateFrom || 'Start'} to ${dateTo || 'Present'}\n\n`;
 
 		summary += `----------------------------------------\n`;
@@ -204,7 +207,7 @@
 			summary += `  - ${cat}: $${amt.toFixed(2)}\n`;
 		});
 
-		downloadFile(summary, `Tax_Summary_${new Date().getFullYear()}.txt`, 'text/plain');
+		downloadFile(summary, `Tax_Summary_${SvelteDate.now().getFullYear()}.txt`, 'text/plain');
 	}
 
 	function downloadFile(content: string, fileName: string, mimeType: string) {

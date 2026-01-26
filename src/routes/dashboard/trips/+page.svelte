@@ -19,6 +19,7 @@
 	import ActionBar from './components/ActionBar.svelte';
 	import SettingsModal from './components/SettingsModal.svelte';
 	import UpgradeModal from './components/UpgradeModal.svelte';
+	import { SvelteSet, SvelteDate } from '$lib/utils/svelte-reactivity';
 
 	let tripsBoundary: {
 		setSuccess?: () => void;
@@ -35,20 +36,19 @@
 	let sortOrder: 'asc' | 'desc' = 'desc';
 	let filterProfit: 'all' | 'positive' | 'negative' = 'all';
 	// Default to current month (first day to last day)
-	const _now = new Date();
-	function _fmtInput(d: Date) {
-		return d.toISOString().slice(0, 10);
+	const _now = SvelteDate.now();
+	function _fmtInput(d: SvelteDate) {
+		return d.toInput();
 	}
-	let startDate = _fmtInput(new Date(_now.getFullYear(), _now.getMonth(), 1));
-	let endDate = _fmtInput(new Date(_now.getFullYear(), _now.getMonth() + 1, 0));
+	let startDate = _fmtInput(SvelteDate.from(new Date(_now.getFullYear(), _now.getMonth(), 1)));
+	let endDate = _fmtInput(SvelteDate.from(new Date(_now.getFullYear(), _now.getMonth() + 1, 0)));
 
 	// Pagination
 	let currentPage = 1;
 	const itemsPerPage = 20;
 
 	// Selection
-	// eslint-disable-next-line svelte/prefer-svelte-reactivity
-	let selectedTrips = new Set<string>();
+	let selectedTrips = new SvelteSet<string>();
 
 	// Modals
 	let isSettingsOpen = false;
@@ -139,20 +139,14 @@
 			}
 
 			if (trip.date) {
-				// eslint-disable-next-line svelte/prefer-svelte-reactivity
-				const tripDate = new Date(trip.date);
-				tripDate.setHours(0, 0, 0, 0);
+				const tripDate = SvelteDate.from(trip.date).startOfDay();
 				if (startDate) {
-					// eslint-disable-next-line svelte/prefer-svelte-reactivity
-					const start = new Date(startDate);
-					start.setHours(0, 0, 0, 0);
-					if (tripDate < start) return false;
+					const start = SvelteDate.from(startDate).startOfDay();
+					if (tripDate.getTime() < start.getTime()) return false;
 				}
 				if (endDate) {
-					// eslint-disable-next-line svelte/prefer-svelte-reactivity
-					const end = new Date(endDate);
-					end.setHours(0, 0, 0, 0);
-					if (tripDate > end) return false;
+					const end = SvelteDate.from(endDate).startOfDay();
+					if (tripDate.getTime() > end.getTime()) return false;
 				}
 			}
 			return true;
@@ -161,8 +155,8 @@
 			let aVal, bVal;
 			switch (sortBy) {
 				case 'date':
-					aVal = new Date(a.date || 0).getTime();
-					bVal = new Date(b.date || 0).getTime();
+					aVal = SvelteDate.from(a.date || 0).getTime();
+					bVal = SvelteDate.from(b.date || 0).getTime();
 					break;
 				case 'profit':
 					aVal = calculateNetProfit(a);
@@ -186,14 +180,12 @@
 	$: allSelected = allFilteredTrips.length > 0 && selectedTrips.size === allFilteredTrips.length;
 
 	function toggleSelection(id: string) {
-		if (selectedTrips.has(id)) selectedTrips.delete(id);
-		else selectedTrips.add(id);
-		selectedTrips = selectedTrips;
+		selectedTrips = selectedTrips.has(id) ? selectedTrips.delete(id) : selectedTrips.add(id);
 	}
 
 	function toggleSelectAll() {
-		if (allSelected) selectedTrips = new Set();
-		else selectedTrips = new Set(allFilteredTrips.map((t) => t.id));
+		if (allSelected) selectedTrips = new SvelteSet();
+		else selectedTrips = new SvelteSet(allFilteredTrips.map((t) => t.id));
 	}
 
 	function changePage(newPage: number) {
@@ -241,7 +233,7 @@
 			}
 		}
 		toasts.success(`Moved ${successCount} trips to trash.`);
-		selectedTrips = new Set();
+		selectedTrips = new SvelteSet();
 	}
 
 	function exportSelected() {
@@ -265,10 +257,10 @@
 		const url = window.URL.createObjectURL(blob);
 		const a = document.createElement('a');
 		a.href = url;
-		a.download = `trips_export_${new Date().toISOString().split('T')[0]}.csv`;
+		a.download = `trips_export_${SvelteDate.now().toInput()}.csv`;
 		a.click();
 		toasts.success(`Exported ${selectedData.length} trips.`);
-		selectedTrips = new Set();
+		selectedTrips = new SvelteSet();
 	}
 
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity
@@ -436,7 +428,7 @@
 		<ActionBar
 			selectedCount={selectedTrips.size}
 			{isPro}
-			on:cancel={() => (selectedTrips = new Set())}
+			on:cancel={() => (selectedTrips = new SvelteSet())}
 			on:export={exportSelected}
 			on:delete={deleteSelected}
 		/>
@@ -536,7 +528,7 @@
 							>{JSON.stringify(
 								{
 									message: error.message,
-									time: new Date().toISOString(),
+									time: SvelteDate.now().toISOString(),
 									path: $page.url.pathname,
 									userAgent: navigator.userAgent
 								},

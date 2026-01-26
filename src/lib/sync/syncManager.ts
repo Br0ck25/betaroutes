@@ -3,10 +3,11 @@ import { getDB } from '$lib/db/indexedDB';
 import { syncStatus } from '$lib/stores/sync';
 import type { SyncQueueItem, TripRecord } from '$lib/db/types';
 import { loadGoogleMaps } from '$lib/utils/autocomplete';
+import type { StopRecord } from '$lib/db/types';
 import { csrfFetch } from '$lib/utils/csrf';
 
 interface StoreHandler {
-	updateLocal: (data: any) => void;
+	updateLocal: (data: unknown) => void;
 	syncDown: () => Promise<void>;
 }
 
@@ -180,9 +181,14 @@ class SyncManager {
 		}
 	}
 
-	private async enrichTripData(trip: any) {
-		if (trip.totalMiles === 0 && trip.startAddress) {
-			console.log(`🧮 Calculating offline route for trip ${trip.id}...`);
+	private async enrichTripData(trip: unknown) {
+		const t = trip as Partial<TripRecord>;
+		if (
+			typeof t.totalMiles === 'number' &&
+			t.totalMiles === 0 &&
+			typeof t.startAddress === 'string'
+		) {
+			console.log(`🧮 Calculating offline route for trip ${String(t.id)}...`);
 
 			try {
 				// [!code fix] Explicitly catch Map loading errors
@@ -204,54 +210,72 @@ class SyncManager {
 				}
 
 				const directionsService = new google.maps.DirectionsService();
-				const waypoints = (trip.stops || []).map((s: any) => ({
-					location: s.address,
+				const stopsArr = Array.isArray(t.stops) ? (t.stops as StopRecord[]) : [];
+				const waypoints = stopsArr.map((s) => ({
+					location: String(s.address ?? ''),
 					stopover: true
 				}));
-				const destination = trip.endAddress || trip.startAddress;
-
+				const destination = String(t.endAddress ?? t.startAddress ?? '');
 				const result = await directionsService.route({
-					origin: trip.startAddress,
+					origin: String(t.startAddress ?? ''),
 					destination: destination,
 					waypoints: waypoints,
 					travelMode: google.maps.TravelMode.DRIVING
 				});
 
-				if (result && result.routes[0]) {
-					const leg = result.routes[0].legs.reduce(
-						(acc: any, curr: any) => ({
-							dist: acc.dist + curr.distance.value,
-							dur: acc.dur + curr.duration.value
-						}),
-						{ dist: 0, dur: 0 }
-					);
-
-					trip.totalMiles = Math.round((leg.dist / 1609.34) * 10) / 10;
-					trip.estimatedTime = Math.round(leg.dur / 60);
-
-					if (trip.mpg && trip.gasPrice) {
-						const gallons = trip.totalMiles / trip.mpg;
-						trip.fuelCost = Math.round(gallons * trip.gasPrice * 100) / 100;
+				if (result && result.routes && result.routes[0]) {
+					let dist = 0;
+					let dur = 0;
+					for (const leg of result.routes[0].legs || []) {
+						dist += leg.distance && typeof leg.distance.value === 'number' ? leg.distance.value : 0;
+						dur += leg.duration && typeof leg.duration.value === 'number' ? leg.duration.value : 0;
 					}
 
-					const earnings = (trip.stops || []).reduce(
-						(s: number, stop: any) => s + (Number(stop.earnings) || 0),
-						0
-					);
+					const totalMiles = Math.round((dist / 1609.34) * 10) / 10;
+					const estimatedTime = Math.round(dur / 60);
+
+					const patchedTrip: Partial<TripRecord> = {
+						...(t as Partial<TripRecord>),
+						totalMiles,
+						estimatedTime
+					};
+
+					if (
+						typeof patchedTrip.totalMiles === 'number' &&
+						typeof patchedTrip.mpg === 'number' &&
+						typeof patchedTrip.gasPrice === 'number'
+					) {
+						const gallons = patchedTrip.totalMiles / (patchedTrip.mpg || 25);
+						patchedTrip.fuelCost = Math.round(gallons * (patchedTrip.gasPrice || 3.5) * 100) / 100;
+					}
+
+					// Compute earnings with an explicit numeric-safe loop
+					let earnings = 0;
+					for (const stop of stopsArr) {
+						const val = Number((stop as StopRecord).earnings ?? 0);
+						if (!Number.isNaN(val)) earnings += val;
+					}
+
+					// Small helper to safely read numeric properties from a Partial<TripRecord>
+					const getNum = (obj: Partial<TripRecord>, k: keyof TripRecord) =>
+						typeof obj[k] === 'number' ? (obj[k] as number) : 0;
+
 					const costs =
-						(trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);
-					trip.netProfit = earnings - costs;
+						getNum(patchedTrip, 'fuelCost') +
+						getNum(patchedTrip, 'maintenanceCost') +
+						getNum(patchedTrip, 'suppliesCost');
+					(patchedTrip as Record<string, unknown>)['netProfit'] = earnings - costs;
 
 					const db = await getDB();
 					const tx = db.transaction('trips', 'readwrite');
-					await tx.objectStore('trips').put(trip);
+					await tx.objectStore('trips').put(patchedTrip);
 					await tx.done;
 
 					const tripsStore = this.registeredStores.get('trips');
 					if (this.storeUpdater) {
-						this.storeUpdater(trip as TripRecord);
+						this.storeUpdater(patchedTrip as TripRecord);
 					} else if (tripsStore) {
-						tripsStore.updateLocal(trip);
+						tripsStore.updateLocal(patchedTrip as TripRecord);
 					}
 				}
 			} catch (e) {
@@ -263,7 +287,7 @@ class SyncManager {
 	private async processSyncItem(item: SyncQueueItem) {
 		const { action, tripId, data } = item;
 
-		const storeName = ((data as any)?.store as string) || 'trips';
+		const storeName = ((data as unknown as Record<string, unknown>)['store'] as string) || 'trips';
 		const baseUrl =
 			storeName === 'expenses'
 				? '/api/expenses'
@@ -291,7 +315,9 @@ class SyncManager {
 			await this.apiCall(`/api/trash/${tripId}`, 'POST', null, 'trips', tripId);
 		else if (action === 'permanentDelete') {
 			// Include record type as query param so server knows which service to delete from
-			const recordType = (data as any)?.recordType;
+			const recordType = (data as unknown as Record<string, unknown>)['recordType'] as
+				| string
+				| undefined;
 			const deleteUrl = recordType
 				? `/api/trash/${tripId}?type=${encodeURIComponent(recordType)}`
 				: `/api/trash/${tripId}`;
@@ -302,7 +328,7 @@ class SyncManager {
 	private async apiCall(
 		url: string,
 		method: string,
-		body: any,
+		body: unknown,
 		updateStore: 'trips' | 'expenses' | 'mileage' | 'trash' | null,
 		id: string
 	) {
@@ -345,13 +371,14 @@ class SyncManager {
 		await tx.done;
 	}
 
-	private async handleSyncError(item: SyncQueueItem, error: any) {
+	private async handleSyncError(item: SyncQueueItem, error: unknown) {
 		const db = await getDB();
 		const tx = db.transaction('syncQueue', 'readwrite');
 		const store = tx.objectStore('syncQueue');
 
-		const isAuthRequired = error.message?.includes('AUTH_REQUIRED');
-		const isFatal = error.message?.includes('ABORT_RETRY');
+		const msg = error instanceof Error ? error.message : String(error);
+		const isAuthRequired = msg.includes('AUTH_REQUIRED');
+		const isFatal = msg.includes('ABORT_RETRY');
 
 		if (isAuthRequired) {
 			console.warn(`Sync paused due to authentication required for item ${item.id}`);
@@ -365,10 +392,10 @@ class SyncManager {
 				`🛑 Sync failed permanently for item ${item.id} (Trip ${item.tripId}). Removing from queue.`
 			);
 			await store.delete(item.id!);
-			syncStatus.setError(`Sync rejected: ${error.message.replace('ABORT_RETRY: ', '')}`);
+			syncStatus.setError(`Sync rejected: ${msg.replace('ABORT_RETRY: ', '')}`);
 		} else {
 			item.retries = (item.retries || 0) + 1;
-			item.lastError = error.message || String(error);
+			item.lastError = msg;
 
 			if (item.retries > 5) await store.delete(item.id!);
 			else await store.put(item);

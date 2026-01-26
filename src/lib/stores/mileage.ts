@@ -2,7 +2,7 @@
 import { writable, get } from 'svelte/store';
 import { getDB, getMileageStoreName } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
-import type { MileageRecord } from '$lib/db/types';
+import type { MileageRecord, TrashRecord, TripRecord } from '$lib/db/types';
 import type { User } from '$lib/types';
 import { auth } from '$lib/stores/auth';
 import { calculateFuelCost } from '$lib/utils/calculations';
@@ -20,7 +20,7 @@ interface TrashItemLike {
 function createMileageStore() {
 	const { subscribe, set, update } = writable<MileageRecord[]>([]);
 	let _hydrationPromise: Promise<void> | null = null;
-	let _resolveHydration: any = null;
+	let _resolveHydration: (() => void) | null = null;
 
 	return {
 		subscribe,
@@ -34,7 +34,7 @@ function createMileageStore() {
 			const normalizedData = data
 				.map((item) => ({
 					...item,
-					syncStatus: (item as any).syncStatus ?? 'synced'
+					syncStatus: (item as MileageRecord).syncStatus ?? 'synced'
 				}))
 				.sort((a, b) => {
 					const dateA = new Date(a.date || a.createdAt).getTime();
@@ -193,7 +193,8 @@ function createMileageStore() {
 				if (rate == null) {
 					try {
 						const { userSettings } = await import('$lib/stores/userSettings');
-						rate = (userSettings && (userSettings as any).mileageRate) || undefined;
+						const settings = get(userSettings);
+						rate = typeof settings?.mileageRate === 'number' ? settings.mileageRate : undefined;
 					} catch {
 						/* ignore */
 					}
@@ -274,7 +275,8 @@ function createMileageStore() {
 					if (rate == null) {
 						try {
 							const { userSettings } = await import('$lib/stores/userSettings');
-							rate = (userSettings && (userSettings as any).mileageRate) || undefined;
+							const settings = get(userSettings);
+							rate = typeof settings?.mileageRate === 'number' ? settings.mileageRate : undefined;
 						} catch {
 							/* ignore */
 						}
@@ -288,7 +290,7 @@ function createMileageStore() {
 				try {
 					const tripsTx = db.transaction('trips', 'readwrite');
 					const tripStore = tripsTx.objectStore('trips');
-					const trip = await tripStore.get(id as any);
+					const trip = await tripStore.get(id);
 					if (trip && trip.userId === userId) {
 						const nowIso = new Date().toISOString();
 						// Recalculate fuelCost based on new miles
@@ -296,13 +298,13 @@ function createMileageStore() {
 						const mpg = trip.mpg || 25;
 						const gasPrice = trip.gasPrice || 3.5;
 						const newFuelCost = calculateFuelCost(newMiles, mpg, gasPrice);
-						const patched = {
-							...trip,
+						const patched: TripRecord = {
+							...(trip as TripRecord),
 							totalMiles: newMiles,
 							fuelCost: newFuelCost,
 							updatedAt: nowIso,
 							syncStatus: 'pending'
-						} as any;
+						};
 						await tripStore.put(patched);
 						try {
 							const { trips } = await import('$lib/stores/trips');
@@ -311,7 +313,7 @@ function createMileageStore() {
 								totalMiles: newMiles,
 								fuelCost: newFuelCost,
 								updatedAt: nowIso
-							} as any);
+							} as TripRecord);
 						} catch {
 							/* ignore */
 						}
@@ -382,6 +384,7 @@ function createMileageStore() {
 					deletedAt: now.toISOString(),
 					deletedBy: userId,
 					expiresAt: expiresAt.toISOString(),
+					userId: userId,
 					originalKey: `mileage:${userId}:${id}`,
 					syncStatus: 'pending',
 					miles: rec.miles,
@@ -390,14 +393,14 @@ function createMileageStore() {
 					backups: { mileage: { ...rec } }
 				};
 
-				await trashStore.put(trashItem as any);
+				await trashStore.put(trashItem as TrashRecord);
 				await mileageStore.delete(id);
 
 				// Update trip to 0 miles and 0 fuelCost
 				try {
 					const tripsTx = db.transaction('trips', 'readwrite');
 					const tripStore = tripsTx.objectStore('trips');
-					const trip = await tripStore.get(id as any);
+					const trip = await tripStore.get(id);
 					if (trip && trip.userId === userId) {
 						const nowIso = new Date().toISOString();
 						const patched = {
@@ -406,11 +409,16 @@ function createMileageStore() {
 							fuelCost: 0,
 							updatedAt: nowIso,
 							syncStatus: 'pending'
-						} as any;
+						} as TripRecord;
 						await tripStore.put(patched);
 						try {
 							const { trips } = await import('$lib/stores/trips');
-							trips.updateLocal({ id, totalMiles: 0, fuelCost: 0, updatedAt: nowIso } as any);
+							trips.updateLocal({
+								id,
+								totalMiles: 0,
+								fuelCost: 0,
+								updatedAt: nowIso
+							} as TripRecord);
 						} catch {
 							/* ignore */
 						}
@@ -466,7 +474,8 @@ function createMileageStore() {
 					: '/api/mileage';
 				const response = await fetch(url, { credentials: 'include' });
 				if (!response.ok) throw new Error('Failed to fetch mileage');
-				const cloud: any = await response.json();
+				const cloudRaw = await response.json().catch(() => []);
+				const cloud = Array.isArray(cloudRaw) ? (cloudRaw as Array<Record<string, unknown>>) : [];
 				if (cloud.length > 0) {
 					const db = await getDB();
 					const tx = db.transaction(['mileage', 'trash'], 'readwrite');
@@ -474,24 +483,33 @@ function createMileageStore() {
 					const trashStore = tx.objectStore('trash');
 					const trashItems = await trashStore.getAll();
 					const trashIds = new Set(trashItems.map((t: TrashItemLike) => t.id || `mileage:${t.id}`));
-					for (const rec of cloud) {
-						if (rec.deleted) {
-							const local = await store.get(rec.id);
-							if (local) await store.delete(rec.id);
+					for (const recRaw of cloud) {
+						const rec = recRaw as Record<string, unknown>;
+						const deleted =
+							typeof rec['deleted'] === 'boolean' ? (rec['deleted'] as boolean) : false;
+						const recId = typeof rec['id'] === 'string' ? (rec['id'] as string) : undefined;
+						if (deleted) {
+							if (recId) {
+								const local = await store.get(recId);
+								if (local) await store.delete(recId);
+							}
 							continue;
 						}
 						// Check if this record is in trash (simple ID check)
-						if (trashIds.has(rec.id) || trashIds.has(`mileage:${rec.id}`)) {
+						if (!recId) continue;
+						if (trashIds.has(recId) || trashIds.has(`mileage:${recId}`)) {
 							continue; // Skip - this is deleted
 						}
 
-						const local = await store.get(rec.id);
-						if (!local || new Date(rec.updatedAt) > new Date(local.updatedAt)) {
+						const local = await store.get(recId);
+						const recUpdatedAt =
+							typeof rec['updatedAt'] === 'string' ? (rec['updatedAt'] as string) : undefined;
+						if (!local || (recUpdatedAt && new Date(recUpdatedAt) > new Date(local.updatedAt))) {
 							await store.put({
 								...rec,
 								syncStatus: 'synced',
 								lastSyncedAt: new Date().toISOString()
-							});
+							} as Record<string, unknown>);
 						}
 					}
 					await tx.done;
@@ -535,7 +553,7 @@ export const mileage = createMileageStore();
 
 syncManager.registerStore('mileage', {
 	updateLocal: (item) => {
-		if (item && typeof (item as any).miles === 'number') {
+		if (item && typeof (item as Record<string, unknown>)['miles'] === 'number') {
 			mileage.updateLocal(item as MileageRecord);
 		}
 	},
@@ -559,7 +577,7 @@ function createDraftStore() {
 	const { subscribe, set } = writable(getDraft());
 	return {
 		subscribe,
-		save: (data: any) => {
+		save: (data: unknown) => {
 			localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 			set(data);
 		},

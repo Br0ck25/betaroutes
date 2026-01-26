@@ -7,6 +7,7 @@
 	import { csrfFetch } from '$lib/utils/csrf';
 
 	import { createEventDispatcher } from 'svelte';
+	import { SvelteDate } from '$lib/utils/svelte-reactivity';
 
 	export let showAdvancedExport = false;
 
@@ -19,16 +20,29 @@
 
 	$: filteredTrips = $trips.filter((trip: any) => {
 		if (!trip.date) return false;
-		const tripDate = new Date(trip.date);
-		if (exportDateFrom && tripDate < new Date(exportDateFrom)) return false;
-		if (exportDateTo && tripDate > new Date(exportDateTo)) return false;
+		const tripDate = SvelteDate.from(trip.date).startOfDay();
+		if (
+			exportDateFrom &&
+			tripDate.getTime() < SvelteDate.from(exportDateFrom).startOfDay().getTime()
+		)
+			return false;
+		if (exportDateTo && tripDate.getTime() > SvelteDate.from(exportDateTo).startOfDay().getTime())
+			return false;
 		return true;
 	});
 	$: filteredExpenses = $expenses.filter((expense: any) => {
 		if (!expense.date) return false;
-		const expenseDate = new Date(expense.date);
-		if (exportDateFrom && expenseDate < new Date(exportDateFrom)) return false;
-		if (exportDateTo && expenseDate > new Date(exportDateTo)) return false;
+		const expenseDate = SvelteDate.from(expense.date).startOfDay();
+		if (
+			exportDateFrom &&
+			expenseDate.getTime() < SvelteDate.from(exportDateFrom).startOfDay().getTime()
+		)
+			return false;
+		if (
+			exportDateTo &&
+			expenseDate.getTime() > SvelteDate.from(exportDateTo).startOfDay().getTime()
+		)
+			return false;
 		return true;
 	});
 
@@ -137,7 +151,7 @@
 	}
 
 	function formatDate(d: string) {
-		return new Date(d).toLocaleDateString();
+		return SvelteDate.from(d).toLocaleDateString();
 	}
 </script>
 

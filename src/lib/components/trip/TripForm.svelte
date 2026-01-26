@@ -236,9 +236,9 @@
 			if (!silent) toasts.success('Route calculated successfully!');
 
 			return routeData;
-		} catch (err: any) {
-			console.error('Calculation Error:', err);
-			const msg = (err.message || '').toLowerCase();
+		} catch (_err) {
+			console.error('Calculation Error:', _err);
+			const msg = (_err instanceof Error ? _err.message : String(_err || '')).toLowerCase();
 
 			// Plan limit detection
 			if (msg.includes('plan limit') || msg.includes('pro feature') || msg.includes('trip limit')) {
@@ -248,8 +248,8 @@
 			}
 
 			if (!silent || !msg.includes('zero_results')) {
-				calculationError = err.message;
-				if (!silent) toasts.error(err.message);
+				calculationError = _err instanceof Error ? _err.message : String(_err || '');
+				if (!silent) toasts.error(calculationError);
 			}
 			return null;
 		} finally {
@@ -567,7 +567,7 @@
 								class="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100">+ Add</button
 							>
 						</div>
-						{#each supplies as item, i}
+						{#each supplies as item, i (i)}
 							<div class="flex gap-2 mb-2 items-center">
 								<input
 									type="text"
@@ -605,7 +605,7 @@
 								class="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100">+ Add</button
 							>
 						</div>
-						{#each maintenance as item, i}
+						{#each maintenance as item, i (i)}
 							<div class="flex gap-2 mb-2 items-center">
 								<input
 									type="text"

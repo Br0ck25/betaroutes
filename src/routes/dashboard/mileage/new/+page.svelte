@@ -5,6 +5,8 @@
 	import { userSettings } from '$lib/stores/userSettings';
 	import { toasts } from '$lib/stores/toast';
 	import { goto, invalidateAll } from '$app/navigation';
+	import { base } from '$app/paths';
+	const resolve = (href: string) => `${base}${href}`;
 	import { page } from '$app/stores';
 	import SelectMobile from '$lib/components/ui/SelectMobile.svelte';
 
@@ -103,7 +105,7 @@
 			await mileage.create(payload as any, userId);
 			toasts.success('Mileage log created');
 			await invalidateAll();
-			goto('/dashboard/mileage');
+			goto(resolve('/dashboard/mileage'));
 		} catch (err) {
 			console.error(err);
 			toasts.error('Failed to save mileage log');
@@ -117,7 +119,7 @@
 			<h1 class="page-title">New Mileage Log</h1>
 			<p class="page-subtitle">Record start/end odometer and miles</p>
 		</div>
-		<a href="/dashboard/mileage" class="btn-back">
+		<a href={resolve('/dashboard/mileage')} class="btn-back">
 			<svg width="24" height="24" viewBox="0 0 20 20" fill="none"
 				><path
 					d="M12 4L6 10L12 16"

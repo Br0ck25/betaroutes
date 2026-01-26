@@ -12,8 +12,11 @@ export const load = async ({ locals, platform }) => {
 	if (!clientApiKey) {
 		const { getEnv } = await import('$lib/server/env');
 		const env = getEnv(platform);
+		const envRec = env as Record<string, unknown> | undefined;
 		const privateKey =
-			(env as any)['PRIVATE_GOOGLE_MAPS_API_KEY'] || privateEnv['PRIVATE_GOOGLE_MAPS_API_KEY'];
+			(typeof envRec?.['PRIVATE_GOOGLE_MAPS_API_KEY'] === 'string'
+				? String(envRec['PRIVATE_GOOGLE_MAPS_API_KEY'])
+				: undefined) ?? privateEnv['PRIVATE_GOOGLE_MAPS_API_KEY'];
 		if (privateKey) {
 			log.warn('Using PRIVATE key for frontend on tools/assign-stops (fallback)');
 			clientApiKey = privateKey;

@@ -7,7 +7,7 @@ powered by [`sv`](https://github.com/sveltejs/cli).
 
 ## ⚠️ Project Conventions (Important for GitHub Copilot)
 
-This repository enforces **strict frontend standards**.  
+This repository enforces **strict frontend standards**.
 GitHub Copilot (and all AI tools) **must follow these rules** when adding or modifying code.
 
 Violations will fail **linting, pre-commit hooks, and CI**.

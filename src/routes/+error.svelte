@@ -1,4 +1,6 @@
 <script lang="ts">
+	/* eslint-disable svelte/no-at-html-tags */
+	// Sanitized static SVG icons (created using sanitizeStaticSvg). See SECURITY.md for rationale.
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
@@ -95,10 +97,10 @@
 <div class="error-container">
 	<div class="error-content">
 		<div class="error-icon" class:not-found={errorDetails.status === 404}>
+			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+			<!-- Sanitized static SVG (sanitizeStaticSvg) - safe to render with {@html} -->
 			{@html errorIcon}
 		</div>
-
-		<h1 class="error-status">{errorDetails.status}</h1>
 		<h2 class="error-title">{errorTitle}</h2>
 		<p class="error-description">{errorDescription}</p>
 
@@ -229,17 +231,6 @@
 		50% {
 			transform: scale(1.05);
 		}
-	}
-
-	.error-status {
-		font-size: 4rem;
-		font-weight: 800;
-		margin: 0;
-		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-		-webkit-background-clip: text;
-		-webkit-text-fill-color: transparent;
-		background-clip: text;
-		line-height: 1;
 	}
 
 	.error-title {
@@ -384,10 +375,6 @@
 	@media (max-width: 639px) {
 		.error-content {
 			padding: 2rem 1.5rem;
-		}
-
-		.error-status {
-			font-size: 3rem;
 		}
 
 		.error-title {

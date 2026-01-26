@@ -57,6 +57,7 @@
 						Go Route Yourself helps drivers plan efficient routes and track their net profit in
 						real-time. To begin, create an account and set your default values (MPG, Gas Price) in
 						the
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 						<a href={resolve('/dashboard/settings')}>Settings</a> menu.
 					</p>
 				</section>

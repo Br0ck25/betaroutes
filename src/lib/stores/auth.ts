@@ -271,13 +271,14 @@ function createAuthStore() {
 				await trips.syncFromCloud(user.id || username);
 
 				return { success: true, resetKey: response.resetKey };
-			} catch (error: any) {
+			} catch (error: unknown) {
+				const message = error instanceof Error ? error.message : String(error);
 				update((state) => ({
 					...state,
 					isLoading: false,
-					error: error.message || 'Signup failed'
+					error: message || 'Signup failed'
 				}));
-				return { success: false, error: error.message };
+				return { success: false, error: message };
 			}
 		},
 
@@ -339,13 +340,14 @@ function createAuthStore() {
 				await trips.syncFromCloud(user.id || username);
 
 				return { success: true };
-			} catch (error: any) {
+			} catch (error: unknown) {
+				const message = error instanceof Error ? error.message : String(error);
 				update((state) => ({
 					...state,
 					isLoading: false,
-					error: error.message || 'Login failed'
+					error: message || 'Login failed'
 				}));
-				return { success: false, error: error.message };
+				return { success: false, error: message };
 			}
 		},
 
@@ -381,13 +383,14 @@ function createAuthStore() {
 				await api.changePassword(username, currentPassword, newPassword);
 				update((state) => ({ ...state, isLoading: false, error: null }));
 				return { success: true };
-			} catch (error: any) {
+			} catch (error: unknown) {
+				const message = error instanceof Error ? error.message : String(error);
 				update((state) => ({
 					...state,
 					isLoading: false,
-					error: error.message || 'Password change failed'
+					error: message || 'Password change failed'
 				}));
-				return { success: false, error: error.message };
+				return { success: false, error: message };
 			}
 		},
 
@@ -397,13 +400,14 @@ function createAuthStore() {
 				await api.resetPassword(username, resetKey, newPassword);
 				update((state) => ({ ...state, isLoading: false, error: null }));
 				return { success: true };
-			} catch (error: any) {
+			} catch (error: unknown) {
+				const message = error instanceof Error ? error.message : String(error);
 				update((state) => ({
 					...state,
 					isLoading: false,
-					error: error.message || 'Password reset failed'
+					error: message || 'Password reset failed'
 				}));
-				return { success: false, error: error.message };
+				return { success: false, error: message };
 			}
 		},
 
@@ -422,8 +426,13 @@ function createAuthStore() {
 				});
 
 				if (!response.ok) {
-					const data: any = await response.json().catch(() => ({}));
-					throw new Error(data.error || 'Account deletion failed');
+					const dataRaw = await response.json().catch(() => ({}) as Record<string, unknown>);
+					const data = dataRaw as Record<string, unknown>;
+					const errMsg =
+						typeof data['error'] === 'string'
+							? (data['error'] as string)
+							: 'Account deletion failed';
+					throw new Error(errMsg);
 				}
 
 				storage.clearAll();
@@ -442,13 +451,14 @@ function createAuthStore() {
 				});
 
 				return { success: true };
-			} catch (error: any) {
+			} catch (error: unknown) {
+				const message = error instanceof Error ? error.message : String(error);
 				update((state) => ({
 					...state,
 					isLoading: false,
-					error: error.message || 'Account deletion failed'
+					error: message || 'Account deletion failed'
 				}));
-				return { success: false, error: error.message };
+				return { success: false, error: message };
 			}
 		},
 

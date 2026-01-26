@@ -27,7 +27,7 @@
 				body: JSON.stringify({ token, password })
 			});
 
-			const data: any = await res.json();
+			const data = (await res.json()) as { message?: string };
 
 			if (res.ok) {
 				success = true;
@@ -35,7 +35,7 @@
 			} else {
 				error = data.message || 'Failed to reset password.';
 			}
-		} catch (e) {
+		} catch {
 			error = 'Network error occurred.';
 		} finally {
 			loading = false;

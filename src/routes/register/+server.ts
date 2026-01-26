@@ -172,6 +172,24 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
 		]);
 		log.info('[Register] KV writes complete');
 
+		// --- DEV: no email provider locally? print verification link instead ---
+		const resendApiKey = env['RESEND_API_KEY'] as string | undefined;
+		// keep your host-header protection: use server-configured BASE_URL
+		const baseUrl = (env['BASE_URL'] as string) || PRODUCTION_BASE_URL;
+
+		if (!resendApiKey && !isProduction) {
+			const devVerifyUrl = `${baseUrl}/api/verify?token=${verificationToken}`;
+
+			// Avoid logging secrets in production; this runs only in local/dev
+			log.info('[Register] DEV verify link', { devVerifyUrl });
+
+			return json({
+				success: true,
+				message: 'DEV: Email provider not configured. Open devVerifyUrl to verify.',
+				devVerifyUrl
+			});
+		}
+
 		// 10. Send Email - THIS IS THE CRITICAL FIX
 		log.info('[Register] Sending verification email');
 		let emailSent = false;
@@ -181,10 +199,6 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
 				throw new Error('sendVerificationEmail is not a function - import failed');
 			}
 
-			// CRITICAL: Pass the API key from env helper
-			const resendApiKey = env['RESEND_API_KEY'] as string | undefined;
-			// [!code fix] Use server-configured BASE_URL to prevent Host Header Injection
-			const baseUrl = (env['BASE_URL'] as string) || PRODUCTION_BASE_URL;
 			emailSent = await sendVerificationEmail(normEmail, verificationToken, baseUrl, resendApiKey);
 			log.info('[Register] ✅ Email sent successfully');
 		} catch (emailErr: unknown) {

@@ -21,7 +21,7 @@ describe('/api/cron/trash-purge', () => {
 			platform: { env: { CRON_ADMIN_SECRET: 's3cr3t' } }
 		} as unknown as Parameters<typeof POST>[0];
 
-		const res = await POST(event as any);
+		const res = await POST(event);
 		expect(res.status).toBe(401);
 		const body = (await res.json()) as { error?: string };
 		expect(body.error).toBe('Unauthorized');
@@ -29,7 +29,7 @@ describe('/api/cron/trash-purge', () => {
 
 	it('calls purgeExpiredTrash when authorized (POST)', async () => {
 		const mockSummary = { checked: 3, deleted: 2, errors: 0 };
-		(purgeMod as any).purgeExpiredTrash = vi.fn().mockResolvedValue(mockSummary);
+		(purgeMod.purgeExpiredTrash as Mock) = vi.fn().mockResolvedValue(mockSummary);
 
 		const event = {
 			request: new Request('http://localhost/api/cron/trash-purge', {
@@ -39,7 +39,7 @@ describe('/api/cron/trash-purge', () => {
 			platform: { env: { CRON_ADMIN_SECRET: 's3cr3t' } }
 		} as unknown as Parameters<typeof POST>[0];
 
-		const res = await POST(event as any);
+		const res = await POST(event);
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as {
 			success?: boolean;
@@ -47,12 +47,12 @@ describe('/api/cron/trash-purge', () => {
 		};
 		expect(body.success).toBe(true);
 		expect(body.summary).toEqual(mockSummary);
-		expect((purgeMod as any).purgeExpiredTrash).toHaveBeenCalled();
+		expect(purgeMod.purgeExpiredTrash as Mock).toHaveBeenCalled();
 	});
 
 	it('calls purgeExpiredTrash when authorized (GET)', async () => {
 		const mockSummary = { checked: 1, deleted: 0, errors: 0 };
-		((purgeMod as any).purgeExpiredTrash as Mock).mockResolvedValue(mockSummary);
+		(purgeMod.purgeExpiredTrash as Mock).mockResolvedValue(mockSummary);
 
 		const event = {
 			request: new Request('http://localhost/api/cron/trash-purge', {
@@ -62,7 +62,7 @@ describe('/api/cron/trash-purge', () => {
 			platform: { env: { CRON_ADMIN_SECRET: 's3cr3t' } }
 		} as unknown as Parameters<typeof GET>[0];
 
-		const res = await GET(event as any);
+		const res = await GET(event);
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as {
 			success?: boolean;
@@ -74,7 +74,7 @@ describe('/api/cron/trash-purge', () => {
 
 	it('logs summary info on success', async () => {
 		const mockSummary = { checked: 1, deleted: 1, errors: 0 };
-		((purgeMod as any).purgeExpiredTrash as Mock).mockResolvedValue(mockSummary);
+		(purgeMod.purgeExpiredTrash as Mock).mockResolvedValue(mockSummary);
 		const spy = vi.spyOn(log, 'info');
 
 		const event = {
@@ -85,7 +85,7 @@ describe('/api/cron/trash-purge', () => {
 			platform: { env: { CRON_ADMIN_SECRET: 's3cr3t' } }
 		} as unknown as Parameters<typeof POST>[0];
 
-		const res = await POST(event as any);
+		const res = await POST(event);
 		expect(res.status).toBe(200);
 		expect(spy).toHaveBeenCalledWith('Cron: purgeExpiredTrash completed', { summary: mockSummary });
 	});

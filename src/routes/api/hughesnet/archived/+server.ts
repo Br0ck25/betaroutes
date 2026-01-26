@@ -30,19 +30,21 @@ export const GET: RequestHandler = async ({ platform, locals, url }) => {
 			// First, check the Orders KV for an archived record
 			const raw = await kv.get(`hns:order:${id}`);
 			if (raw) {
-				let parsed;
+				let parsedRaw: unknown;
 				try {
-					parsed = JSON.parse(raw);
+					parsedRaw = JSON.parse(raw);
 				} catch (err: unknown) {
 					log.warn('Corrupt archived record', { id, message: createSafeErrorMessage(err) });
 					return json({ success: false, error: 'Corrupt record' }, { status: 500 });
 				}
-				if (parsed.ownerId !== userId)
-					return json({ success: false, error: 'Not found' }, { status: 404 });
-				return json({ success: true, order: parsed.order });
-			}
-
-			// If not found in Orders KV, check the per-user HNS DB as a fallback
+				if (parsedRaw && typeof parsedRaw === 'object' && !Array.isArray(parsedRaw)) {
+					const parsed = parsedRaw as Record<string, unknown>;
+					if (typeof parsed['ownerId'] !== 'string' || parsed['ownerId'] !== userId)
+						return json({ success: false, error: 'Not found' }, { status: 404 });
+					return json({ success: true, order: parsed['order'] });
+				}
+				return json({ success: false, error: 'Not found' }, { status: 404 });
+			} // If not found in Orders KV, check the per-user HNS DB as a fallback
 			const hnsKV = safeKV(env, 'BETA_HUGHESNET_KV');
 			if (hnsKV) {
 				try {
@@ -72,13 +74,20 @@ export const GET: RequestHandler = async ({ platform, locals, url }) => {
 			const raw = await kv.get(k.name);
 			if (!raw) continue;
 			try {
-				const p = JSON.parse(raw);
-				if (p && p.ownerId === userId && p.order) {
-					results.push({
-						id: k.name.replace(/^hns:order:/, ''),
-						storedAt: p.storedAt,
-						order: p.order
-					});
+				const pRaw: unknown = JSON.parse(raw);
+				if (pRaw && typeof pRaw === 'object' && !Array.isArray(pRaw)) {
+					const p = pRaw as Record<string, unknown>;
+					if (
+						typeof p['ownerId'] === 'string' &&
+						p['ownerId'] === userId &&
+						p['order'] !== undefined
+					) {
+						results.push({
+							id: k.name.replace(/^hns:order:/, ''),
+							storedAt: typeof p['storedAt'] === 'number' ? (p['storedAt'] as number) : undefined,
+							order: p['order']
+						});
+					}
 				}
 			} catch (err: unknown) {
 				log.warn('Skipping corrupt archived record', {
@@ -94,10 +103,13 @@ export const GET: RequestHandler = async ({ platform, locals, url }) => {
 			if (hnsKV) {
 				const dbRaw = await hnsKV.get(`hns:db:${userId}`);
 				if (dbRaw) {
-					const db = JSON.parse(dbRaw) as Record<string, any>;
-					for (const [oid, order] of Object.entries(db)) {
-						if (!results.some((r) => r.id === oid)) {
-							results.push({ id: oid, storedAt: undefined, order });
+					const dbParsed: unknown = JSON.parse(dbRaw);
+					if (dbParsed && typeof dbParsed === 'object' && !Array.isArray(dbParsed)) {
+						const db = dbParsed as Record<string, unknown>;
+						for (const [oid, order] of Object.entries(db)) {
+							if (!results.some((r) => r.id === oid) && typeof oid === 'string') {
+								results.push({ id: oid, storedAt: undefined, order });
+							}
 						}
 					}
 				}

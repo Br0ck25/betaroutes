@@ -81,7 +81,7 @@
 <div class="destinations-container">
 	<h3 class="block font-semibold mb-4 text-sm text-gray-700">Destinations</h3>
 
-	{#each destinations as dest, i}
+	{#each destinations as dest, i (dest.address || i)}
 		<div class="dest-row flex gap-2 mb-3">
 			<input
 				type="text"

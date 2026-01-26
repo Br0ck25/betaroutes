@@ -1,5 +1,16 @@
 <script lang="ts">
-	export let orders: any[] = [];
+	type Order = {
+		id: string | number;
+		type?: string;
+		hasPoleMount?: boolean;
+		address?: string;
+		city?: string;
+		state?: string;
+		confirmScheduleDate?: string;
+		beginTime?: string;
+	};
+
+	export let orders: Order[] = [];
 </script>
 
 <div class="settings-card full-width">
@@ -26,7 +37,7 @@
 	</div>
 
 	<div class="orders-list">
-		{#each orders as order}
+		{#each orders as order (order.id)}
 			<div class="order-item">
 				<div class="order-main">
 					<span class="order-id">#{order.id}</span>

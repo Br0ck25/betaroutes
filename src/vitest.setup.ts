@@ -1,42 +1,53 @@
+import 'fake-indexeddb/auto';
+
 // Minimal indexedDB shim for Vitest (prevents ReferenceError during background hydration)
 // This file exists solely for unit tests where persistent storage is irrelevant — it provides
 // minimal, no-op implementations of IndexedDB types so the `idb` wrapper does not throw during
 // background hydration. See `AI_AGENTS.md` and `SECURITY.md`: tests must not access real storage.
 // Keep intentionally tiny and test-only; do NOT use in production or as a model for real DB access.
 
-if (typeof global !== 'undefined' && !(global as any).indexedDB) {
-	// @ts-ignore - intentional global shim for tests
-	(global as any).indexedDB = {
+// Use a single, narrow global accessor for test-only shims
+const G = (typeof globalThis !== 'undefined'
+	? globalThis
+	: typeof global !== 'undefined'
+		? global
+		: undefined) as unknown as Record<string, unknown> | undefined;
+
+if (G && !('indexedDB' in G)) {
+	G['indexedDB'] = {
 		open: () => {
 			// Return an actual IDBOpenDBRequest instance if available so idb recognizes it.
-			const Ctor = (global as any).IDBOpenDBRequest || (global as any).IDBRequest || class {};
-			const req: any = new Ctor();
-			req.onupgradeneeded = null;
-			req.onsuccess = null;
-			req.onerror = null;
-			req.addEventListener = () => {};
-			req.removeEventListener = () => {};
+			const Ctor =
+				(G['IDBOpenDBRequest'] as unknown as new () => unknown) ||
+				(G['IDBRequest'] as unknown as new () => unknown) ||
+				(class {} as unknown as new () => unknown);
+			const req: unknown = new Ctor();
+			if (typeof req === 'object' && req !== null) {
+				const r = req as Record<string, unknown>;
+				r['onupgradeneeded'] = null;
+				r['onsuccess'] = null;
+				r['onerror'] = null;
+				r['addEventListener'] = () => {};
+				r['removeEventListener'] = () => {};
+			}
 			return req;
 		}
 	};
 }
 
 // Provide minimal IDB request constructor used by the idb wrapper
-if (typeof global !== 'undefined' && !(global as any).IDBRequest) {
-	// @ts-ignore - intentional global shim for tests
-	(global as any).IDBRequest = class IDBRequest {};
+if (G && !('IDBRequest' in G)) {
+	G['IDBRequest'] = class IDBRequest {};
 }
 
 // Minimal IDBTransaction stub used by idb's transformation logic
-if (typeof global !== 'undefined' && !(global as any).IDBTransaction) {
-	// @ts-ignore - intentional global shim for tests
-	(global as any).IDBTransaction = class IDBTransaction {};
+if (G && !('IDBTransaction' in G)) {
+	G['IDBTransaction'] = class IDBTransaction {};
 }
 
 // Minimal IDBDatabase stub used to avoid runtime checks in idb
-if (typeof global !== 'undefined' && !(global as any).IDBDatabase) {
-	// @ts-ignore - intentional global shim for tests
-	(global as any).IDBDatabase = class IDBDatabase {};
+if (G && !('IDBDatabase' in G)) {
+	G['IDBDatabase'] = class IDBDatabase {};
 }
 
 // Provide minimal stubs for common IDB types to silence idb runtime checks
@@ -52,50 +63,50 @@ const _idbTypes = [
 ];
 
 for (const t of _idbTypes) {
-	if (typeof global !== 'undefined' && !(global as any)[t]) {
-		// @ts-ignore - intentional global shim for tests
-		(global as any)[t] = class {};
+	if (G && !(t in G)) {
+		G[t] = class {};
 	}
-	if (typeof globalThis !== 'undefined' && !(globalThis as any)[t]) {
-		// @ts-ignore
-		(globalThis as any)[t] = (global as any)[t];
+	if (typeof globalThis !== 'undefined') {
+		const GT = globalThis as unknown as Record<string, unknown>;
+		if (!(t in GT)) {
+			GT[t] = (G as Record<string, unknown>)[t];
+		}
 	}
 }
 
-// Ensure IDBOpenDBRequest inherits from IDBRequest so `instanceof IDBRequest` checks work
-if (typeof global !== 'undefined') {
-	const g: any = global as any;
+// Ensure IDBOpenDBRequest exists and provides addEventListener
+if (G && 'IDBRequest' in G) {
+	let openCtor = G['IDBOpenDBRequest'] as unknown;
 	if (
-		g.IDBRequest &&
-		(!g.IDBOpenDBRequest || !(g.IDBOpenDBRequest.prototype instanceof g.IDBRequest))
+		!openCtor ||
+		(openCtor as unknown) === undefined ||
+		!('prototype' in (openCtor as unknown as Record<string, unknown>))
 	) {
-		// @ts-ignore - create proper subclass for tests
-		g.IDBOpenDBRequest = class IDBOpenDBRequest extends g.IDBRequest {};
-		if (!g.IDBOpenDBRequest.prototype.addEventListener) {
-			// @ts-ignore
-			g.IDBOpenDBRequest.prototype.addEventListener = function () {};
-		}
+		// create a minimal constructor for tests (avoid extending unknown base)
+		const newCtor = class IDBOpenDBRequest {};
+		G['IDBOpenDBRequest'] = newCtor;
+		openCtor = newCtor;
+	}
+	const openProtoCandidate = openCtor as unknown as Record<string, unknown>;
+	const openProto = openProtoCandidate['prototype'] as unknown as
+		| Record<string, unknown>
+		| undefined;
+	if (openProto && !('addEventListener' in openProto)) {
+		openProto['addEventListener'] = function () {};
 	}
 }
 if (typeof globalThis !== 'undefined') {
-	const gt: any = globalThis as any;
-	if (
-		gt.IDBRequest &&
-		(!gt.IDBOpenDBRequest || !(gt.IDBOpenDBRequest.prototype instanceof gt.IDBRequest))
-	) {
-		// @ts-ignore
-		gt.IDBOpenDBRequest = class IDBOpenDBRequest extends gt.IDBRequest {};
-		if (!gt.IDBOpenDBRequest.prototype.addEventListener) {
-			// @ts-ignore
-			gt.IDBOpenDBRequest.prototype.addEventListener = function () {};
-		}
+	const GT = globalThis as unknown as Record<string, unknown>;
+	let gtOpenCtor = GT['IDBOpenDBRequest'] as unknown;
+	if (!gtOpenCtor || !('prototype' in (gtOpenCtor as unknown as Record<string, unknown>))) {
+		gtOpenCtor = G ? (G['IDBOpenDBRequest'] as unknown) : class IDBOpenDBRequest {};
+		GT['IDBOpenDBRequest'] = gtOpenCtor as unknown;
 	}
-}
-
-// Also guard globalThis for environments that reference it directly
-if (typeof globalThis !== 'undefined' && !(globalThis as any).indexedDB) {
-	// @ts-ignore
-	(globalThis as any).indexedDB = (global as any).indexedDB;
-	// @ts-ignore
-	(globalThis as any).IDBRequest = (global as any).IDBRequest;
+	const gtOpenProtoCandidate = gtOpenCtor as unknown as Record<string, unknown>;
+	const gtOpenProto = gtOpenProtoCandidate['prototype'] as unknown as
+		| Record<string, unknown>
+		| undefined;
+	if (gtOpenProto && !('addEventListener' in gtOpenProto)) {
+		gtOpenProto['addEventListener'] = function () {};
+	}
 }

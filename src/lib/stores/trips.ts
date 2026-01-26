@@ -2,13 +2,14 @@
 import { writable, get } from 'svelte/store';
 import { getDB, getMileageStoreName } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
-import type { TripRecord } from '$lib/db/types';
+import type { TripRecord, TrashRecord, MileageRecord } from '$lib/db/types';
 import { storage } from '$lib/utils/storage';
 import { user as authUser } from '$lib/stores/auth';
 import { userSettings } from '$lib/stores/userSettings';
 import type { User } from '$lib/types';
 import { PLAN_LIMITS } from '$lib/constants';
 import { csrfFetch } from '$lib/utils/csrf';
+import { SvelteDate } from '$lib/utils/svelte-reactivity';
 
 export const isLoading = writable(false);
 
@@ -52,11 +53,11 @@ function createTripsStore() {
 				const dbRW = db.transaction('trips', 'readwrite');
 				const storeRW = dbRW.objectStore('trips');
 				for (const t of trips) {
-					if ((t as any).totalMiles == null && (t as any).totalMileage != null) {
-						(t as any).totalMiles = Number((t as any).totalMileage) || 0;
-						(t as any).syncStatus = 'pending';
-						(t as any).updatedAt = new Date().toISOString();
-						(t as any).lastModified = new Date().toISOString();
+					if (t.totalMiles == null && (t as TripRecord)['totalMileage'] != null) {
+						(t as TripRecord).totalMiles = Number((t as TripRecord)['totalMileage']) || 0;
+						(t as TripRecord).syncStatus = 'pending';
+						(t as TripRecord).updatedAt = SvelteDate.now().toISOString();
+						(t as TripRecord)['lastModified'] = SvelteDate.now().toISOString();
 						await storeRW.put(t);
 					}
 				}
@@ -83,10 +84,10 @@ function createTripsStore() {
 					const allUserTrips = await index.getAll(userId);
 					const windowDays = PLAN_LIMITS.FREE.WINDOW_DAYS || 30;
 					const windowMs = windowDays * 24 * 60 * 60 * 1000;
-					const cutoff = new Date(Date.now() - windowMs);
+					const cutoffMs = SvelteDate.now().getTime() - windowMs;
 					const recentCount = allUserTrips.filter((t) => {
-						const d = new Date(t.date || t.createdAt);
-						return d >= cutoff;
+						const dMs = SvelteDate.from(t.date || t.createdAt).getTime();
+						return dMs >= cutoffMs;
 					}).length;
 					const allowed =
 						PLAN_LIMITS.FREE.MAX_TRIPS_PER_MONTH || PLAN_LIMITS.FREE.MAX_TRIPS_IN_WINDOW || 10;
@@ -94,16 +95,19 @@ function createTripsStore() {
 						throw new Error(`Free tier limit reached (${allowed} trips per ${windowDays} days).`);
 					}
 				}
-				const now = new Date().toISOString();
-				const normalizedStops = (tripData.stops || []).map((s: any, i) => ({
-					id: String(s.id || crypto.randomUUID()),
-					address: String(s.address || ''),
-					earnings: Number(s.earnings) || 0,
-					notes: s.notes || '',
-					order: typeof s.order === 'number' ? s.order : i,
-					distanceFromPrev: Number(s.distanceFromPrev) || 0,
-					timeFromPrev: Number(s.timeFromPrev) || 0
-				}));
+				const now = SvelteDate.now().toISOString();
+				const normalizedStops = (tripData.stops || []).map((s: unknown, i) => {
+					const st = s as Record<string, unknown>;
+					return {
+						id: String(st['id'] ?? crypto.randomUUID()),
+						address: String(st['address'] ?? ''),
+						earnings: Number(st['earnings'] ?? 0) || 0,
+						notes: (st['notes'] as string) || '',
+						order: typeof st['order'] === 'number' ? (st['order'] as number) : i,
+						distanceFromPrev: Number(st['distanceFromPrev'] ?? 0) || 0,
+						timeFromPrev: Number(st['timeFromPrev'] ?? 0) || 0
+					};
+				});
 				const trip: TripRecord = {
 					...tripData,
 					stops: normalizedStops,
@@ -150,17 +154,20 @@ function createTripsStore() {
 				const existing = await store.get(id);
 				if (!existing) throw new Error('Trip not found');
 				if (existing.userId !== userId) throw new Error('Unauthorized');
-				const now = new Date().toISOString();
+				const now = SvelteDate.now().toISOString();
 				const normalizedStops = (changes.stops || existing.stops || []).map(
-					(s: any, i: number) => ({
-						id: String(s.id || crypto.randomUUID()),
-						address: String(s.address || ''),
-						earnings: Number(s.earnings) || 0,
-						notes: s.notes || '',
-						order: typeof s.order === 'number' ? s.order : i,
-						distanceFromPrev: Number(s.distanceFromPrev) || 0,
-						timeFromPrev: Number(s.timeFromPrev) || 0
-					})
+					(s: unknown, i: number) => {
+						const st = s as Record<string, unknown>;
+						return {
+							id: String(st['id'] ?? crypto.randomUUID()),
+							address: String(st['address'] ?? ''),
+							earnings: Number(st['earnings'] ?? 0) || 0,
+							notes: (st['notes'] as string) || '',
+							order: typeof st['order'] === 'number' ? (st['order'] as number) : i,
+							distanceFromPrev: Number(st['distanceFromPrev'] ?? 0) || 0,
+							timeFromPrev: Number(st['timeFromPrev'] ?? 0) || 0
+						};
+					}
 				);
 				const updated: TripRecord = {
 					...existing,
@@ -189,21 +196,31 @@ function createTripsStore() {
 							// Update existing mileage record
 							await mileage.updateMileage(
 								id,
-								{ miles: Number((changes as any).totalMiles) },
+								{ miles: Number((changes as Partial<TripRecord>).totalMiles ?? 0) },
 								userId
 							);
-						} else if (Number((changes as any).totalMiles) > 0) {
+						} else if (Number((changes as Partial<TripRecord>).totalMiles ?? 0) > 0) {
 							// Create new mileage record if none exists and miles > 0
 							await mileage.create(
 								{
 									id,
 									tripId: id,
-									miles: Number((changes as any).totalMiles),
+									miles: Number((changes as Partial<TripRecord>).totalMiles ?? 0),
 									date: updated.date,
-									mileageRate: (get(userSettings) as any)?.mileageRate ?? undefined,
+									mileageRate:
+										(get(userSettings) as unknown as { mileageRate?: number })?.mileageRate ??
+										undefined,
 									vehicle:
-										(get(userSettings) as any)?.vehicles?.[0]?.id ??
-										(get(userSettings) as any)?.vehicles?.[0]?.name ??
+										(
+											get(userSettings) as unknown as {
+												vehicles?: Array<{ id?: string; name?: string }>;
+											}
+										)?.vehicles?.[0]?.id ??
+										(
+											get(userSettings) as unknown as {
+												vehicles?: Array<{ id?: string; name?: string }>;
+											}
+										)?.vehicles?.[0]?.name ??
 										undefined,
 									createdAt: updated.createdAt,
 									updatedAt: updated.updatedAt
@@ -237,13 +254,13 @@ function createTripsStore() {
 				if (!trip) throw new Error('Trip not found');
 				if (trip.userId !== userId) throw new Error('Unauthorized');
 
-				const now = new Date();
+				const now = SvelteDate.now().toDate();
 				const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
 				// Prepare trip trash item
 				// We use "trip:" prefix to ensure it never collides with mileage logs
-				const trashItem: any = {
-					...trip,
+				const trashItem: TrashRecord = {
+					...(trip as Partial<TripRecord>),
 					id: `trip:${id}`,
 					originalId: id,
 					userId: trip.userId,
@@ -260,17 +277,20 @@ function createTripsStore() {
 				const mileageStoreName = getMileageStoreName(db);
 				const mileageTx = db.transaction(mileageStoreName, 'readwrite');
 				const activeMileage = await mileageTx.objectStore(mileageStoreName).get(id);
-				let mileageTrashItem: any = null;
+				let mileageTrashItem: TrashRecord | null = null;
 				if (activeMileage) {
 					// Store mileage backup in trip item for reference
-					trashItem.backups.mileage = { ...activeMileage };
+					(trashItem as Record<string, unknown>)['backups'] = {
+						...((trashItem as Record<string, unknown>)['backups'] || {}),
+						mileage: { ...activeMileage }
+					};
 					// Also store top-level props for easy UI display
-					trashItem.miles = activeMileage.miles;
-					trashItem.vehicle = activeMileage.vehicle;
+					(trashItem as Record<string, unknown>)['miles'] = activeMileage.miles;
+					(trashItem as Record<string, unknown>)['vehicle'] = activeMileage.vehicle;
 
 					// Create SEPARATE trash item for mileage so user can restore it independently
 					mileageTrashItem = {
-						...activeMileage,
+						...(activeMileage as Partial<MileageRecord>),
 						id: `mileage:${id}`,
 						originalId: id,
 						userId: activeMileage.userId,
@@ -283,7 +303,6 @@ function createTripsStore() {
 						tripId: id,
 						backups: { mileage: { ...activeMileage } }
 					};
-
 					// Delete from active store
 					await mileageTx.objectStore(mileageStoreName).delete(id);
 				}
@@ -470,7 +489,7 @@ function createTripsStore() {
 export const trips = createTripsStore();
 
 syncManager.registerStore('trips', {
-	updateLocal: (trip) => trips.updateLocal(trip),
+	updateLocal: (trip: unknown) => trips.updateLocal(trip as TripRecord),
 	syncDown: async () => {
 		const user = get(authUser) as User | null;
 		if (user?.id) await trips.syncFromCloud(user.id);
@@ -478,10 +497,12 @@ syncManager.registerStore('trips', {
 });
 
 function createDraftStore() {
-	const { subscribe, set } = writable(storage.getDraftTrip());
+	const { subscribe, set } = writable<Partial<import('$lib/types').Trip> | null>(
+		storage.getDraftTrip()
+	);
 	return {
 		subscribe,
-		save: (data: any) => {
+		save: (data: Partial<import('$lib/types').Trip>) => {
 			storage.saveDraftTrip(data);
 			set(data);
 		},

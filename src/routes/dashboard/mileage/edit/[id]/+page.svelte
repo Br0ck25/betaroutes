@@ -4,6 +4,8 @@
 	import { userSettings } from '$lib/stores/userSettings';
 	import { toasts } from '$lib/stores/toast';
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
+	const resolve = (href: string) => `${base}${href}`;
 	import { page } from '$app/stores';
 	import SelectMobile from '$lib/components/ui/SelectMobile.svelte';
 	const expenseId = $page.params.id;
@@ -117,7 +119,7 @@
 
 			await mileage.updateMileage(String(expenseId), payload as any, String(userId));
 			toasts.success('Mileage log updated');
-			goto('/dashboard/mileage');
+			goto(resolve('/dashboard/mileage'));
 		} catch (err) {
 			console.error(err);
 			toasts.error('Failed to update mileage log');
@@ -131,7 +133,7 @@
 			<h1 class="page-title">Edit Mileage Log</h1>
 			<p class="page-subtitle">Update odometer readings and miles</p>
 		</div>
-		<a href="/dashboard/mileage" class="btn-back">
+		<a href={resolve('/dashboard/mileage')} class="btn-back">
 			<svg width="24" height="24" viewBox="0 0 20 20" fill="none"
 				><path
 					d="M12 4L6 10L12 16"

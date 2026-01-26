@@ -1,6 +1,5 @@
 import { safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
-import type { KVNamespace } from '@cloudflare/workers-types';
 import { makeTripService } from './tripService';
 import { makeExpenseService } from './expenseService';
 import { makeMileageService } from './mileageService';
@@ -59,25 +58,27 @@ export async function purgeExpiredTrash(
 			opts?.services?.tripSvc ??
 			(tripKV
 				? makeTripService(
-						tripKV as any,
+						tripKV,
 						undefined,
-						safeKV(platformEnv, 'BETA_PLACES_KV') as any,
-						tripIndexDO as any,
-						placesIndexDO as any
+						safeKV(platformEnv, 'BETA_PLACES_KV') as KVNamespace | undefined,
+						tripIndexDO as DurableObjectNamespace,
+						placesIndexDO as DurableObjectNamespace
 					)
 				: undefined);
 		const mileageSvc =
 			opts?.services?.mileageSvc ??
 			(mileageKV
 				? makeMileageService(
-						mileageKV as any,
-						tripIndexDO as any,
-						safeKV(platformEnv, 'BETA_LOGS_KV') as any
+						mileageKV,
+						tripIndexDO as DurableObjectNamespace,
+						safeKV(platformEnv, 'BETA_LOGS_KV') as KVNamespace | undefined
 					)
 				: undefined);
 		const expenseSvc =
 			opts?.services?.expenseSvc ??
-			(expenseKV ? makeExpenseService(expenseKV as any, tripIndexDO as any) : undefined);
+			(expenseKV
+				? makeExpenseService(expenseKV, tripIndexDO as DurableObjectNamespace)
+				: undefined);
 
 		// Helper to process a KV namespace
 		async function processKV(
@@ -86,7 +87,7 @@ export async function purgeExpiredTrash(
 		) {
 			if (!kv) return;
 
-			let list = await (kv as any).list({ prefix: `${recordType}:` });
+			let list = await kv.list({ prefix: `${recordType}:` });
 			let keys: Array<{ name: string }> = (list.keys ?? []) as Array<{ name: string }>;
 			// Iterate through pages
 			while (keys.length > 0) {
@@ -94,7 +95,7 @@ export async function purgeExpiredTrash(
 					const batch: Array<{ name: string }> = keys.slice(i, i + batchSize) as Array<{
 						name: string;
 					}>;
-					const raws = await Promise.all(batch.map((k) => (kv as any).get(k.name)));
+					const raws = await Promise.all(batch.map((k) => kv.get(k.name)));
 					for (let j = 0; j < batch.length; j++) {
 						if (deleted >= maxDeletes) break;
 						const b = batch[j]!; // non-null by loop guard
@@ -130,28 +131,29 @@ export async function purgeExpiredTrash(
 						const { userId, id } = parsedKey;
 						try {
 							if (recordType === 'trip' && tripSvc) {
-								await (tripSvc as any).permanentDelete(userId, id);
+								await tripSvc.permanentDelete(userId, id);
 								deleted++;
 							} else if (recordType === 'mileage' && mileageSvc) {
-								await (mileageSvc as any).permanentDelete(userId, id);
+								await mileageSvc.permanentDelete(userId, id);
 								deleted++;
 							} else if (recordType === 'expense' && expenseSvc) {
-								await (expenseSvc as any).permanentDelete(userId, id);
+								await expenseSvc.permanentDelete(userId, id);
 								deleted++;
 							}
-						} catch (e) {
+						} catch (e: unknown) {
 							errors++;
 							log.warn('Failed to permanently delete expired trash item', {
 								recordType,
 								userId,
-								id
+								id,
+								message: String(e)
 							});
 						}
 					}
 				}
 
 				if (!list.list_complete && list.cursor) {
-					list = await (kv as any).list({ prefix: `${recordType}:`, cursor: list.cursor });
+					list = await kv.list({ prefix: `${recordType}:`, cursor: list.cursor });
 					keys = list.keys as Array<{ name: string }>;
 				} else {
 					keys = [];
@@ -160,9 +162,9 @@ export async function purgeExpiredTrash(
 		}
 
 		// Process each KV namespace in sequence
-		await processKV(tripKV as any, 'trip');
-		if (deleted < maxDeletes) await processKV(mileageKV as any, 'mileage');
-		if (deleted < maxDeletes) await processKV(expenseKV as any, 'expense');
+		await processKV(tripKV, 'trip');
+		if (deleted < maxDeletes) await processKV(mileageKV, 'mileage');
+		if (deleted < maxDeletes) await processKV(expenseKV, 'expense');
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		log.error('purgeExpiredTrash failed', { message });

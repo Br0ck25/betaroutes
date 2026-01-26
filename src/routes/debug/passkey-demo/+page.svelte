@@ -82,7 +82,7 @@
 				let verifyJson: any = {};
 				try {
 					verifyJson = await verifyRes.json();
-				} catch (e) {
+				} catch (_e) {
 					/* ignore parse errors */
 				}
 

@@ -11,6 +11,7 @@
 	import SettingsLayout from './SettingsLayout.svelte';
 	import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
 	import { csrfFetch } from '$lib/utils/csrf';
+	import { SvelteDate } from '$lib/utils/svelte-reactivity';
 
 	export let data: any;
 
@@ -29,8 +30,8 @@
 
 	$: monthlyUsage = $trips.filter((t) => {
 		if (!t.date) return false;
-		const tripDate = new Date(t.date);
-		const now = new Date();
+		const tripDate = SvelteDate.from(t.date).toDate();
+		const now = SvelteDate.now().toDate();
 		return tripDate.getMonth() === now.getMonth() && tripDate.getFullYear() === now.getFullYear();
 	}).length;
 

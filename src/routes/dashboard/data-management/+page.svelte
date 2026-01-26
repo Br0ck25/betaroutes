@@ -14,15 +14,18 @@
 		exportTaxBundlePDF
 	} from './lib/pdf-export';
 	import { getVehicleDisplayName } from '$lib/utils/vehicle';
+	import { SvelteSet } from '$lib/utils/svelte-reactivity';
 
 	let exportFormat: 'csv' | 'pdf' = 'csv';
 	let dataType: 'trips' | 'expenses' | 'mileage' | 'tax-bundle' = 'trips';
 	let dateFrom = '';
 	let dateTo = '';
-	let taxYear = new Date().getFullYear(); // Default to current year
-	let selectedTrips = new Set<string>();
-	let selectedExpenses = new Set<string>();
-	let selectedMileage = new Set<string>();
+	import { SvelteDate } from '$lib/utils/svelte-reactivity';
+
+	let taxYear = SvelteDate.now().getFullYear(); // Default to current year
+	let selectedTrips = new SvelteSet<string>();
+	let selectedExpenses = new SvelteSet<string>();
+	let selectedMileage = new SvelteSet<string>();
 	let selectAll = false;
 	const includeSummary = true;
 
@@ -157,41 +160,41 @@
 
 	// Update selection when dataType changes
 	$: if (dataType === 'tax-bundle') {
-		selectedTrips = new Set(filteredTrips.map((t) => t.id));
-		selectedExpenses = new Set(filteredExpenses.map((e) => e.id));
-		selectedMileage = new Set(filteredMileage.map((m) => m.id));
+		selectedTrips = new SvelteSet(filteredTrips.map((t) => t.id));
+		selectedExpenses = new SvelteSet(filteredExpenses.map((e) => e.id));
+		selectedMileage = new SvelteSet(filteredMileage.map((m) => m.id));
 		selectAll = true;
 	}
 
 	// Handle select all for current data type
 	$: if (selectAll && dataType !== 'tax-bundle') {
 		if (dataType === 'trips') {
-			selectedTrips = new Set(filteredTrips.map((t) => t.id));
+			selectedTrips = new SvelteSet(filteredTrips.map((t) => t.id));
 		} else if (dataType === 'expenses') {
-			selectedExpenses = new Set(filteredExpenses.map((e) => e.id));
+			selectedExpenses = new SvelteSet(filteredExpenses.map((e) => e.id));
 		} else if (dataType === 'mileage') {
-			selectedMileage = new Set(filteredMileage.map((m) => m.id));
+			selectedMileage = new SvelteSet(filteredMileage.map((m) => m.id));
 		}
 	}
 
 	function toggleSelectAll() {
 		if (dataType === 'trips') {
 			if (selectAll) {
-				selectedTrips = new Set();
+				selectedTrips = new SvelteSet();
 			} else {
-				selectedTrips = new Set(filteredTrips.map((t) => t.id));
+				selectedTrips = new SvelteSet(filteredTrips.map((t) => t.id));
 			}
 		} else if (dataType === 'expenses') {
 			if (selectAll) {
-				selectedExpenses = new Set();
+				selectedExpenses = new SvelteSet();
 			} else {
-				selectedExpenses = new Set(filteredExpenses.map((e) => e.id));
+				selectedExpenses = new SvelteSet(filteredExpenses.map((e) => e.id));
 			}
 		} else if (dataType === 'mileage') {
 			if (selectAll) {
-				selectedMileage = new Set();
+				selectedMileage = new SvelteSet();
 			} else {
-				selectedMileage = new Set(filteredMileage.map((m) => m.id));
+				selectedMileage = new SvelteSet(filteredMileage.map((m) => m.id));
 			}
 		}
 		selectAll = !selectAll;
@@ -447,7 +450,7 @@
 			if (exportFormat === 'csv') {
 				const csv = exportMileageCSV(
 					mileageToExport,
-					selectedMileage,
+					new Set(selectedMileage),
 					includeSummary,
 					formatDate,
 					formatCurrency
@@ -610,7 +613,7 @@
 
 		const backup = {
 			metadata: {
-				exportDate: new Date().toISOString(),
+				exportDate: SvelteDate.now().toISOString(),
 				appVersion: '1.0.0',
 				schemaVersion: '1.0'
 			},
@@ -897,7 +900,7 @@
 				<div class="year-selector">
 					<label for="tax-year" class="year-label">Tax Year</label>
 					<select id="tax-year" bind:value={taxYear} class="year-select">
-						{#each Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i) as year}
+						{#each Array.from({ length: 10 }, (_, i) => SvelteDate.now().getFullYear() - i) as year (year)}
 							<option value={year}>{year}</option>
 						{/each}
 					</select>
@@ -1024,7 +1027,7 @@
 				{#if dataType === 'trips'}
 					{#if filteredTrips.length > 0}
 						<div class="trips-list">
-							{#each displayedTrips as trip}
+							{#each displayedTrips as trip (trip.id)}
 								{@const tripAny = trip as any}
 
 								{@const earnings =
@@ -1104,7 +1107,7 @@
 				{:else if dataType === 'expenses'}
 					{#if filteredExpenses.length > 0}
 						<div class="trips-list">
-							{#each displayedExpenses as expense}
+							{#each displayedExpenses as expense (expense.id)}
 								<label class="trip-checkbox">
 									<input
 										type="checkbox"
@@ -1154,7 +1157,7 @@
 				{:else if dataType === 'mileage'}
 					{#if filteredMileage.length > 0}
 						<div class="trips-list">
-							{#each displayedMileage as mileageLog}
+							{#each displayedMileage as mileageLog (mileageLog.id)}
 								<label class="trip-checkbox">
 									<input
 										type="checkbox"
@@ -1251,7 +1254,7 @@
 				<div class="import-preview">
 					<p class="preview-label">Preview (first 10 rows):</p>
 					<div class="preview-table">
-						{#each importPreview as row}
+						{#each importPreview as row, i (i)}
 							<div class="preview-row">
 								{JSON.stringify(row)}
 							</div>

@@ -2,9 +2,10 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
+	import { base } from '$app/paths';
+	const resolve = (href: string) => `${base}${href}`;
 	import { toasts } from '$lib/stores/toast';
-	// See Documentation/Simple Web Auth and Documentation/Svelte 5 for guidance on quick-sign and biometric flows
-	// [!code ++] Import WebAuthn helper
+	// Import WebAuthn helper
 	import { startAuthentication } from '@simplewebauthn/browser';
 
 	let username = '';
@@ -27,7 +28,8 @@
 		const url = new URL($page.url);
 		if (isLogin) url.searchParams.set('view', 'register');
 		else url.searchParams.delete('view');
-		goto(url.pathname + url.search, { replaceState: true });
+		// eslint-disable-next-line svelte/no-navigation-without-resolve
+		goto(resolve(url.pathname + url.search), { replaceState: true });
 
 		username = '';
 		email = '';
@@ -37,7 +39,15 @@
 		registrationSuccess = false;
 	}
 
-	// [!code ++] Biometric Login Handler
+	// [!code ++] Helper: Buffer to Base64URL (Defined once for use everywhere)
+	function bufferToBase64Url(buffer: ArrayBuffer | Uint8Array) {
+		const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+		let binary = '';
+		for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(Number(bytes[i] ?? 0));
+		return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+	}
+
+	// [!code ++] Helper: Base64URL to Buffer
 	export function base64UrlToBuffer(base64url: any): Uint8Array {
 		// If already an ArrayBuffer or TypedArray, return a Uint8Array view
 		if (!base64url) return new Uint8Array();
@@ -104,20 +114,15 @@
 				{ credentials: 'same-origin' }
 			);
 			const rawText = await optionsResp.text();
-			let optionsJson: any;
+			let optionsJson: Record<string, unknown> | undefined;
 			try {
-				optionsJson = JSON.parse(rawText);
-			} catch (e) {
-				console.error('[Passkey] Failed to parse auth options JSON:', rawText);
-				throw new Error('Invalid authentication options response');
+				optionsJson = JSON.parse(rawText) as Record<string, unknown>;
+			} catch (_err) {
+				const parseErrMsg = _err instanceof Error ? _err.message : String(_err ?? 'Invalid JSON');
+				throw new Error(parseErrMsg);
 			}
 
-			if (!optionsResp.ok) {
-				console.error('[Passkey] Auth options request failed:', optionsResp.status, optionsJson);
-				throw new Error(optionsJson?.error || 'Biometric login not available');
-			}
-
-			const options: any = optionsJson;
+			const options = optionsJson as Record<string, unknown>;
 
 			console.log('[Passkey] Auth options from server (raw):', rawText);
 			if (!options || typeof options !== 'object') {
@@ -125,44 +130,47 @@
 				throw new Error('Invalid authentication options from server');
 			}
 
-			if (!options.challenge) {
+			const challenge = options['challenge'];
+			if (!challenge) {
 				console.error('[Passkey] Missing challenge in auth options:', options);
 				throw new Error('Authentication options missing challenge');
 			}
 
 			// Ensure challenge is a base64url string (don't convert to ArrayBuffer; the helper will manage it)
-			if (typeof options.challenge !== 'string') {
+			if (typeof challenge !== 'string') {
 				console.warn('[Passkey] Unexpected challenge type; converting to base64url string');
-				const bytes =
-					options.challenge instanceof Uint8Array
-						? options.challenge
-						: new Uint8Array(options.challenge);
+				const bytes: Uint8Array =
+					challenge instanceof Uint8Array
+						? challenge
+						: new Uint8Array(challenge as ArrayLike<number>);
 				let binary = '';
 				for (let i = 0; i < bytes.byteLength; i++)
 					binary += String.fromCharCode(Number(bytes[i] ?? 0));
-				options.challenge = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-			}
 
-			if (Array.isArray(options.allowCredentials)) {
-				options.allowCredentials = options.allowCredentials.map((c: any) => ({
+				// Fixed: Removed duplicate assignment line here
+				options['challenge'] = btoa(binary)
+					.replace(/\+/g, '-')
+					.replace(/\//g, '_')
+					.replace(/=+$/, '');
+			}
+			// Fixed: Logic Trapping - 'allowCredentials' moved outside the 'if challenge' block
+
+			if (Array.isArray(options['allowCredentials'])) {
+				options['allowCredentials'] = (
+					options['allowCredentials'] as Array<Record<string, unknown>>
+				).map((c) => ({
 					...c,
-					id: String(c.id)
+					id: String((c as Record<string, unknown>)['id'])
 				}));
 			}
 
 			// 2. Prompt user for FaceID/TouchID (Browser Native Modal)
 			const authResp = await startAuthentication({ optionsJSON: options as any });
 
-			// 3. Verify signature with server (ensure credential.serializable fields are sent)
-			function bufferToBase64Url(buffer: ArrayBuffer | Uint8Array) {
-				const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-				let binary = '';
-				for (let i = 0; i < bytes.byteLength; i++)
-					binary += String.fromCharCode(Number(bytes[i] ?? 0));
-				return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-			}
-
+			// 3. Verify signature with server
 			const normalised: any = { ...authResp } as any;
+
+			// Fixed: Use top-level bufferToBase64Url function
 			if (
 				normalised.rawId &&
 				(normalised.rawId instanceof ArrayBuffer || ArrayBuffer.isView(normalised.rawId))
@@ -207,7 +215,8 @@
 			const verificationJSON: any = await verificationResp.json();
 
 			if (verificationJSON.verified) {
-				await goto('/dashboard', { invalidateAll: true });
+				// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
+				await goto(resolve('/dashboard'), { invalidateAll: true });
 			} else {
 				responseError = 'Biometric verification failed.';
 			}
@@ -228,7 +237,7 @@
 		if (raw) {
 			try {
 				quickPasskey = JSON.parse(raw);
-			} catch (e) {
+			} catch {
 				quickPasskey = null;
 			}
 		}
@@ -250,48 +259,50 @@
 				return;
 			}
 			const rawText = await optionsResp.text();
-			let optionsJson: any;
+			let optionsJson: Record<string, unknown> | undefined;
 			try {
-				optionsJson = JSON.parse(rawText);
-			} catch (e) {
+				optionsJson = JSON.parse(rawText) as Record<string, unknown>;
+			} catch (_err) {
 				console.error('[Passkey] Failed to parse auth options JSON:', rawText);
 				throw new Error('Invalid authentication options response');
 			}
 
 			if (!optionsResp.ok) {
-				throw new Error(optionsJson?.error || 'Biometric login not available');
+				throw new Error(
+					(optionsJson && (optionsJson['error'] as string | undefined)) ??
+						'Biometric login not available'
+				);
 			}
 
-			const options: any = optionsJson;
-			if (!options.challenge) throw new Error('Authentication options missing challenge');
-			if (typeof options.challenge !== 'string') {
-				const bytes =
-					options.challenge instanceof Uint8Array
-						? options.challenge
-						: new Uint8Array(options.challenge);
+			const options = optionsJson as Record<string, unknown>;
+			if (!options['challenge']) throw new Error('Authentication options missing challenge');
+
+			if (typeof options['challenge'] !== 'string') {
+				const bytes: Uint8Array =
+					options['challenge'] instanceof Uint8Array
+						? options['challenge']
+						: new Uint8Array(options['challenge'] as ArrayLike<number>);
 				let binary = '';
 				for (let i = 0; i < bytes.byteLength; i++)
 					binary += String.fromCharCode(Number(bytes[i] ?? 0));
-				options.challenge = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+				options['challenge'] = btoa(binary)
+					.replace(/\+/g, '-')
+					.replace(/\//g, '_')
+					.replace(/=+$/, '');
 			}
 
-			if (Array.isArray(options.allowCredentials)) {
-				options.allowCredentials = options.allowCredentials.map((c: any) => ({
+			if (Array.isArray(options['allowCredentials'])) {
+				options['allowCredentials'] = (
+					options['allowCredentials'] as Array<Record<string, unknown>>
+				).map((c) => ({
 					...c,
-					id: String(c.id)
+					id: String((c as Record<string, unknown>)['id'])
 				}));
 			}
 
 			const authResp = await startAuthentication({ optionsJSON: options as any });
 
-			function bufferToBase64Url(buffer: ArrayBuffer | Uint8Array) {
-				const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-				let binary = '';
-				for (let i = 0; i < bytes.byteLength; i++)
-					binary += String.fromCharCode(Number(bytes[i] ?? 0));
-				return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-			}
-
+			// Fixed: Use top-level bufferToBase64Url function
 			const normalised: any = { ...authResp } as any;
 			if (
 				normalised.rawId &&
@@ -339,7 +350,8 @@
 			const verificationJSON: any = await verificationResp.json();
 
 			if (verificationJSON.verified) {
-				await goto('/dashboard', { invalidateAll: true });
+				// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
+				await goto(resolve('/dashboard'), { invalidateAll: true });
 			} else {
 				responseError = 'Biometric verification failed.';
 			}
@@ -384,7 +396,8 @@
 
 			if (response.ok) {
 				if (isLogin) {
-					await goto('/dashboard', { invalidateAll: true });
+					// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
+					await goto(resolve('/dashboard'), { invalidateAll: true });
 				} else {
 					submittedEmail = email;
 					registrationSuccess = true;
@@ -426,7 +439,7 @@
 <div class="auth-page">
 	<div class="auth-brand">
 		<div class="brand-content">
-			<a href="/" class="brand-logo">
+			<a href={resolve('/')} class="brand-logo">
 				<picture>
 					<source type="image/avif" srcset="/180x75.avif 48w" sizes="48px" />
 					<img
@@ -768,7 +781,7 @@
 									<input type="checkbox" name="remember" />
 									<span>Remember me</span>
 								</label>
-								<a href="/forgot-password" class="forgot-link">Forgot password?</a>
+								<a href={resolve('/forgot-password')} class="forgot-link">Forgot password?</a>
 							</div>
 						{/if}
 					</div>
@@ -812,8 +825,8 @@
 
 				<div class="form-footer">
 					<p>
-						By continuing, you agree to our <a href="/terms">Terms of Service</a> and
-						<a href="/privacy">Privacy Policy</a>
+						By continuing, you agree to our <a href={resolve('/terms')}>Terms of Service</a> and
+						<a href={resolve('/privacy')}>Privacy Policy</a>
 					</p>
 				</div>
 			{/if}

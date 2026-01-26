@@ -3,12 +3,14 @@
 	import { userSettings } from '$lib/stores/userSettings';
 	import { toasts } from '$lib/stores/toast';
 	import { createEventDispatcher } from 'svelte';
+	import { get } from 'svelte/store';
 	import { saveSettings } from '../../settings/lib/save-settings';
+	import type { UserSettings } from '$lib/types';
 
 	export let open = false;
 	const dispatch = createEventDispatcher();
 
-	let settings: any = { ...$userSettings };
+	let settings: Partial<UserSettings> = { ...$userSettings };
 	let settingsTab: 'defaults' | 'vehicles' = 'defaults';
 	let newVehicleName = '';
 
@@ -20,14 +22,13 @@
 		try {
 			const rate = Number(settings.mileageRate || 0);
 			settings.mileageRate = Number(isNaN(rate) ? 0 : Number(rate.toFixed(3)));
-			userSettings.set(settings);
+			userSettings.set({ ...get(userSettings), ...settings });
 			const result = await saveSettings({ mileageRate: settings.mileageRate });
 			if (!result.ok) throw new Error(result.error);
 			toasts.success('Mileage defaults saved');
 			dispatch('success');
 			open = false;
-		} catch (e) {
-			console.error('Failed to save mileage defaults', e);
+		} catch (_e) {
 			toasts.error('Saved locally, but cloud sync failed');
 		}
 	}
@@ -119,7 +120,7 @@
 				</div>
 
 				<ul class="space-y-2 mt-4">
-					{#each settings.vehicles || [] as v}
+					{#each settings.vehicles || [] as v (v.id)}
 						<li class="flex justify-between items-center p-2 border rounded-lg">
 							<div>{v.name}</div>
 							<button class="btn-small neutral" on:click={() => removeVehicle(v.id)}>Remove</button>

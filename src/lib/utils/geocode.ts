@@ -1,12 +1,17 @@
-export function isAcceptableGeocode(result: any, input: string): boolean {
-	if (!result) return false;
+export function isAcceptableGeocode(result: unknown, input: string): boolean {
+	if (!result || typeof result !== 'object') return false;
+	const r = result as Record<string, unknown>;
 
 	// Always trust Google results
-	if (result.source === 'google' || result.source === 'google_proxy' || result.source === 'google')
+	if (
+		typeof r['source'] === 'string' &&
+		(r['source'] === 'google' || r['source'] === 'google_proxy' || r['source'] === 'google')
+	) {
 		return true;
+	}
 
 	// Reject numeric-only labels ("407")
-	if (result.name && String(result.name).trim().match(/^\d+$/)) return false;
+	if (r['name'] && String(r['name']).trim().match(/^\d+$/)) return false;
 
 	// Reject broad OSM types
 	const broadTypes = [
@@ -19,31 +24,37 @@ export function isAcceptableGeocode(result: any, input: string): boolean {
 		'administrative'
 	];
 	if (
-		(result.osm_value && broadTypes.includes(String(result.osm_value))) ||
-		(result.osm_key && broadTypes.includes(String(result.osm_key)))
+		(typeof r['osm_value'] === 'string' && broadTypes.includes(String(r['osm_value']))) ||
+		(typeof r['osm_key'] === 'string' && broadTypes.includes(String(r['osm_key'])))
 	) {
 		return false;
 	}
 
 	// Normalize address access from different providers
-	const addr = result.address || {};
+	const addr = (r['address'] as Record<string, unknown> | undefined) ?? {};
+	const properties = (r['properties'] as Record<string, unknown> | undefined) ?? {};
 	const hn =
-		result.house_number ||
-		(result.properties && result.properties.housenumber) ||
-		addr.house_number ||
-		null;
+		typeof r['house_number'] === 'string'
+			? r['house_number']
+			: typeof properties['housenumber'] === 'string'
+				? properties['housenumber']
+				: typeof addr['house_number'] === 'string'
+					? addr['house_number']
+					: null;
 	const road =
-		result.street ||
-		(result.properties && result.properties.street) ||
-		addr.road ||
-		addr.road ||
-		null;
+		typeof r['street'] === 'string'
+			? r['street']
+			: typeof properties['street'] === 'string'
+				? properties['street']
+				: typeof addr['road'] === 'string'
+					? addr['road']
+					: null;
 	const text = (
-		(result.name || '') +
+		(String(r['name'] ?? '') || '') +
 		' ' +
-		(result.formatted_address || '') +
+		(String(r['formatted_address'] ?? '') || '') +
 		' ' +
-		(road || '')
+		(String(road ?? '') || '')
 	).toLowerCase();
 
 	// If input looks like a house-level address, require house number and road and token match
@@ -71,7 +82,11 @@ export function isAcceptableGeocode(result: any, input: string): boolean {
 	}
 
 	// For non-address inputs, prefer to accept if it has a name and geometry
-	if (result.geometry && result.geometry.location && (result.name || result.formatted_address))
+	if (
+		r['geometry'] &&
+		(r['geometry'] as Record<string, unknown>)['location'] &&
+		(r['name'] || r['formatted_address'])
+	)
 		return true;
 
 	return false;

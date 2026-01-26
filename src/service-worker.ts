@@ -136,8 +136,8 @@ self.addEventListener('fetch', (event) => {
 });
 
 // Background sync for failed requests (future enhancement)
-// Note: 'sync' event type needs explicit 'any' cast or interface augmentation in some TS setups
-self.addEventListener('sync', (event: any) => {
+// Use the standard SyncEvent type instead of `any` to satisfy strict typing
+self.addEventListener('sync', (event: SyncEvent) => {
 	if (event.tag === 'sync-logs') {
 		event.waitUntil(syncPendingLogs());
 	}

@@ -10,9 +10,12 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		return json({ error: 'Not found' }, { status: 404 });
 	}
 
-	const body: any = await request.json().catch(() => ({}));
-	const { userId, tripId } = body;
-	if (!userId || !tripId) {
+	const body: unknown = await request.json().catch(() => ({}));
+	if (typeof body !== 'object' || body === null) {
+		return json({ error: 'userId and tripId required' }, { status: 400 });
+	}
+	const { userId, tripId } = body as { userId?: unknown; tripId?: unknown };
+	if (typeof userId !== 'string' || typeof tripId !== 'string') {
 		return json({ error: 'userId and tripId required' }, { status: 400 });
 	}
 
@@ -29,7 +32,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		});
 
 		const text = await res.text().catch(() => null);
-		let parsed: any = null;
+		let parsed: unknown = null;
 		try {
 			parsed = text ? JSON.parse(text) : null;
 		} catch {
@@ -44,7 +47,8 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 			},
 			{ status: 200 }
 		);
-	} catch (e: any) {
-		return json({ error: 'Compute failed', message: e.message }, { status: 500 });
+	} catch (e: unknown) {
+		const message = e instanceof Error ? e.message : String(e);
+		return json({ error: 'Compute failed', message }, { status: 500 });
 	}
 };

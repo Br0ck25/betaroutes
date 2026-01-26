@@ -2,8 +2,9 @@
 import { writable, get } from 'svelte/store';
 import { getDB } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
-import type { ExpenseRecord } from '$lib/db/types';
+import type { ExpenseRecord, TrashRecord } from '$lib/db/types';
 import type { User } from '$lib/types';
+import { SvelteDate } from '$lib/utils/svelte-reactivity';
 
 import { auth } from '$lib/stores/auth';
 import { PLAN_LIMITS } from '$lib/constants';
@@ -13,7 +14,7 @@ export const isLoading = writable(false);
 function createExpensesStore() {
 	const { subscribe, set, update } = writable<ExpenseRecord[]>([]);
 	let _hydrationPromise: Promise<void> | null = null;
-	const _resolveHydration: any = null;
+	let _resolveHydration: (() => void) | null = null;
 
 	return {
 		subscribe,
@@ -23,13 +24,14 @@ function createExpensesStore() {
 		async hydrate(data: ExpenseRecord[], _userId?: string) {
 			// parameter intentionally unused in this implementation — keep for API parity
 			void _userId;
+			_hydrationPromise = new Promise((res) => (_resolveHydration = res));
 			try {
 				const db = await getDB();
 
 				// 1. Check Trash to prevent resurrection of locally deleted items
 				const trashTx = db.transaction('trash', 'readonly');
 				const trashItems = await trashTx.objectStore('trash').getAll();
-				const trashIds = new Set(trashItems.map((t: any) => t.id));
+				const trashIds = new Set(trashItems.map((t: TrashRecord) => t.id));
 				await trashTx.done;
 
 				// 2. Prepare Valid Data (Server data minus local trash)
@@ -86,7 +88,8 @@ function createExpensesStore() {
 				} else {
 					return [expense, ...items].sort(
 						(a, b) =>
-							new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime()
+							SvelteDate.from(b.date || b.createdAt).getTime() -
+							SvelteDate.from(a.date || a.createdAt).getTime()
 					);
 				}
 			});
@@ -110,15 +113,14 @@ function createExpensesStore() {
 				}
 
 				const trashItems = await trashStore.getAll();
-				const trashIds = new Set(trashItems.map((t: any) => t.id));
-
+				const trashIds = new Set((trashItems as TrashRecord[]).map((t) => t.id));
 				const activeItems = expenses.filter((e) => !trashIds.has(e.id));
 
-				activeItems.sort((a, b) => {
-					const dateA = new Date(a.date || a.createdAt).getTime();
-					const dateB = new Date(b.date || b.createdAt).getTime();
-					return dateB - dateA;
-				});
+				activeItems.sort(
+					(a, b) =>
+						SvelteDate.from(b.date || b.createdAt).getTime() -
+						SvelteDate.from(a.date || a.createdAt).getTime()
+				);
 
 				set(activeItems);
 				return activeItems;
@@ -143,10 +145,10 @@ function createExpensesStore() {
 
 					const windowDays = PLAN_LIMITS.FREE.WINDOW_DAYS || 30;
 					const windowMs = windowDays * 24 * 60 * 60 * 1000;
-					const cutoff = new Date(Date.now() - windowMs);
+					const cutoffMs = SvelteDate.now().getTime() - windowMs;
 
 					const recentCount = allExpenses.filter(
-						(e) => new Date(e.date || e.createdAt) >= cutoff
+						(e) => SvelteDate.from(e.date || e.createdAt).getTime() >= cutoffMs
 					).length;
 					const allowed =
 						PLAN_LIMITS.FREE.MAX_EXPENSES_PER_MONTH ||
@@ -163,12 +165,10 @@ function createExpensesStore() {
 					...expenseData,
 					id: expenseData.id || crypto.randomUUID(),
 					userId,
-					createdAt: expenseData.createdAt || new Date().toISOString(),
-					updatedAt: expenseData.updatedAt || new Date().toISOString(),
+					createdAt: expenseData.createdAt || SvelteDate.now().toISOString(),
+					updatedAt: expenseData.updatedAt || SvelteDate.now().toISOString(),
 					syncStatus: 'pending'
 				} as ExpenseRecord;
-
-				update((items) => [expense, ...items]);
 
 				const db = await getDB();
 				const tx = db.transaction('expenses', 'readwrite');
@@ -193,7 +193,7 @@ function createExpensesStore() {
 		async updateExpense(id: string, changes: Partial<ExpenseRecord>, userId: string) {
 			update((items) =>
 				items.map((e) =>
-					e.id === id ? { ...e, ...changes, updatedAt: new Date().toISOString() } : e
+					e.id === id ? { ...e, ...changes, updatedAt: SvelteDate.now().toISOString() } : e
 				)
 			);
 
@@ -211,7 +211,7 @@ function createExpensesStore() {
 					...changes,
 					id,
 					userId,
-					updatedAt: new Date().toISOString(),
+					updatedAt: SvelteDate.now().toISOString(),
 					syncStatus: 'pending'
 				};
 
@@ -341,9 +341,9 @@ function createExpensesStore() {
 				const response = await fetch(url, { credentials: 'include' });
 				if (!response.ok) throw new Error('Failed to fetch expenses');
 
-				const cloudExpenses: any = await response.json();
+				const cloudExpenses = (await response.json()) as ExpenseRecord[];
 
-				if (cloudExpenses.length > 0) {
+				if (Array.isArray(cloudExpenses) && cloudExpenses.length > 0) {
 					const db = await getDB();
 					const tx = db.transaction(['expenses', 'trash'], 'readwrite');
 					const store = tx.objectStore('expenses');
@@ -353,8 +353,11 @@ function createExpensesStore() {
 					const trashIds = new Set(trashKeys.map(String));
 
 					for (const cloudExpense of cloudExpenses) {
+						// normalize potential server flags
+						const maybeDeleted = (cloudExpense as ExpenseRecord & { deleted?: boolean }).deleted;
+
 						// 1. Handle Server Deletes
-						if (cloudExpense.deleted) {
+						if (maybeDeleted) {
 							const local = await store.get(cloudExpense.id);
 							if (local) await store.delete(cloudExpense.id);
 							continue;
@@ -414,9 +417,15 @@ function createExpensesStore() {
 export const expenses = createExpensesStore();
 
 syncManager.registerStore('expenses', {
-	updateLocal: (item) => {
-		if (item && item.amount !== undefined && item.category !== undefined) {
-			expenses.updateLocal(item);
+	updateLocal: (item: unknown) => {
+		const maybe = item as Partial<import('$lib/db/types').ExpenseRecord>;
+		if (
+			maybe &&
+			typeof maybe.id === 'string' &&
+			typeof maybe.amount === 'number' &&
+			typeof maybe.category === 'string'
+		) {
+			expenses.updateLocal(maybe as import('$lib/db/types').ExpenseRecord);
 		}
 	},
 	syncDown: async () => {
@@ -437,11 +446,11 @@ function createDraftStore() {
 		}
 	};
 
-	const { subscribe, set } = writable(getDraft());
+	const { subscribe, set } = writable<unknown>(getDraft());
 
 	return {
 		subscribe,
-		save: (data: any) => {
+		save: (data: unknown) => {
 			localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 			set(data);
 		},

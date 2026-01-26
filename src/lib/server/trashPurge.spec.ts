@@ -1,14 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
 import { purgeExpiredTrash } from './trashPurge';
 
-function makeMockKV(items: Record<string, any>) {
+function makeMockKV(items: Record<string, unknown>) {
 	return {
 		_asyncKeys(): Array<{ name: string }> {
 			return Object.keys(items).map((k) => ({ name: k }));
 		},
-		list: async ({ prefix }: any) => {
+		list: async ({ prefix }: { prefix?: string }) => {
 			const all = Object.keys(items)
-				.filter((k) => k.startsWith(prefix))
+				.filter((k) => k.startsWith(prefix || ''))
 				.map((n) => ({ name: n }));
 			return { keys: all, list_complete: true };
 		},
@@ -27,7 +27,7 @@ describe('purgeExpiredTrash', () => {
 		const past = new Date(now - 1000 * 60 * 60 * 24).toISOString();
 		const future = new Date(now + 1000 * 60 * 60 * 24).toISOString();
 
-		const items: Record<string, any> = {
+		const items: Record<string, unknown> = {
 			'trip:u1:t1': { id: 't1', userId: 'u1', deleted: true, metadata: { expiresAt: past } },
 			'trip:u1:t2': { id: 't2', userId: 'u1', deleted: true, metadata: { expiresAt: future } },
 			'mileage:u2:m1': { id: 'm1', userId: 'u2', deleted: true, metadata: { expiresAt: past } }
@@ -35,8 +35,12 @@ describe('purgeExpiredTrash', () => {
 
 		const kvMock = makeMockKV(items);
 
-		const mockTripSvc = { permanentDelete: vi.fn(async (_u: string, _id: string) => {}) };
-		const mockMileageSvc = { permanentDelete: vi.fn(async (_u: string, _id: string) => {}) };
+		const mockTripSvc: { permanentDelete: (userId: string, id: string) => Promise<void> } = {
+			permanentDelete: vi.fn(async (_u: string, _id: string) => {})
+		};
+		const mockMileageSvc: { permanentDelete: (userId: string, id: string) => Promise<void> } = {
+			permanentDelete: vi.fn(async (_u: string, _id: string) => {})
+		};
 		const env: Record<string, unknown> = {
 			BETA_LOGS_KV: kvMock,
 			BETA_MILEAGE_KV: kvMock
@@ -44,7 +48,7 @@ describe('purgeExpiredTrash', () => {
 
 		const res = await purgeExpiredTrash(env, {
 			batchSize: 2,
-			services: { tripSvc: mockTripSvc as any, mileageSvc: mockMileageSvc as any }
+			services: { tripSvc: mockTripSvc, mileageSvc: mockMileageSvc }
 		});
 
 		expect(res.deleted).toBe(2);
@@ -56,7 +60,7 @@ describe('purgeExpiredTrash', () => {
 	it('respects maxDeletes cap', async () => {
 		const now = Date.now();
 		const past = new Date(now - 1000 * 60 * 60 * 24).toISOString();
-		const items: Record<string, any> = {};
+		const items: Record<string, unknown> = {};
 		for (let i = 0; i < 5; i++) {
 			items[`trip:uX:t${i}`] = {
 				id: `t${i}`,
@@ -67,12 +71,14 @@ describe('purgeExpiredTrash', () => {
 		}
 
 		const kvMock = makeMockKV(items);
-		const mockTripSvc = { permanentDelete: vi.fn(async () => {}) };
+		const mockTripSvc: { permanentDelete: (userId: string, id: string) => Promise<void> } = {
+			permanentDelete: vi.fn(async () => {})
+		};
 		const env: Record<string, unknown> = { BETA_LOGS_KV: kvMock };
 
 		const res = await purgeExpiredTrash(env, {
 			maxDeletes: 2,
-			services: { tripSvc: mockTripSvc as any }
+			services: { tripSvc: mockTripSvc }
 		});
 		expect(res.deleted).toBe(2);
 		expect(mockTripSvc.permanentDelete).toHaveBeenCalledTimes(2);

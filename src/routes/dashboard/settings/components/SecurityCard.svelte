@@ -2,6 +2,8 @@
 	import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
 	import { auth, user } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
+	const resolve = (href: string) => `${base}${href}`;
 	import { toasts } from '$lib/stores/toast';
 	import { startRegistration } from '@simplewebauthn/browser';
 	import { onMount, createEventDispatcher } from 'svelte';
@@ -58,7 +60,7 @@
 			let result: any = {};
 			try {
 				result = await response.json();
-			} catch (e) {
+			} catch (_e) {
 				result = {};
 			}
 
@@ -71,8 +73,8 @@
 			showPasswordChange = false;
 			passwordData = { current: '', new: '', confirm: '' };
 			dispatch('success', 'Password changed successfully');
-		} catch (e) {
-			console.error(e);
+		} catch (_e) {
+			console.error(_e);
 			passwordError = 'An unexpected network error occurred.';
 		}
 	}
@@ -95,12 +97,12 @@
 		try {
 			const result = await auth.deleteAccount($user?.id || '', deletePassword);
 			if (result.success) {
-				goto('/');
+				goto(resolve('/'));
 			} else {
 				deleteError = result.error || 'Failed to delete account';
 				isDeleting = false;
 			}
-		} catch (err) {
+		} catch (_err) {
 			deleteError = 'An unexpected error occurred';
 			isDeleting = false;
 		}
@@ -110,7 +112,7 @@
 		if (confirm('Are you sure you want to logout?')) {
 			await csrfFetch('/api/logout', { method: 'POST' });
 			auth.logout();
-			goto('/login');
+			goto(resolve('/login'));
 		}
 	}
 
@@ -152,7 +154,7 @@
 							rememberThisDevice = raw
 								? JSON.parse(raw).credentialID === deviceCredentialID
 								: false;
-						} catch (e) {
+						} catch {
 							rememberThisDevice = false;
 						}
 					} else {
@@ -168,8 +170,9 @@
 					try {
 						const s = await fetch('/api/auth/session', { credentials: 'same-origin' });
 						if (s.ok) console.debug('[Passkey] Session endpoint OK; will retry list fetch');
-					} catch (e) {}
-
+					} catch {
+						// ignore
+					}
 					if (attempt < maxAttempts) {
 						await new Promise((r) => setTimeout(r, 200 * attempt));
 						return attemptFetch();
@@ -182,7 +185,7 @@
 					return false;
 				}
 				return false;
-			} catch (e) {
+			} catch {
 				if (attempt < maxAttempts) {
 					await new Promise((r) => setTimeout(r, 200 * attempt));
 					return attemptFetch();
@@ -257,7 +260,9 @@
 					rememberThisDevice = false;
 					toasts.info('Quick sign-in preference removed for this device');
 				}
-			} catch (e) {}
+			} catch (_e) {
+				void _e; // ignore localStorage errors
+			}
 
 			deviceRegistered = false;
 			deviceCredentialID = null;
@@ -295,7 +300,7 @@
 			let optionsJson: any;
 			try {
 				optionsJson = JSON.parse(rawText);
-			} catch (e) {
+			} catch (_e) {
 				throw new Error('Invalid registration options response');
 			}
 			if (!optionsRes.ok)
@@ -354,7 +359,8 @@
 			const s = await fetch('/api/auth/session', { credentials: 'same-origin' });
 			if (s.ok) await loadAuthenticators();
 			else sessionExpired = true;
-		} catch (e) {
+		} catch {
+			// Network error during session check — mark session expired so UI can prompt re-auth
 			sessionExpired = true;
 		}
 	});

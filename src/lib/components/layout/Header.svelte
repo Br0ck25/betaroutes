@@ -58,7 +58,7 @@
 
 			<nav class="nav desktop-nav">
 				{#if userState.value}
-					{#each appLinks as link}
+					{#each appLinks as link (link.href)}
 						<a href={resolve(link.href)} class="nav-link">{link.name}</a>
 					{/each}
 
@@ -67,7 +67,7 @@
 					<SyncIndicator />
 					<button onclick={logout} class="btn-login">Logout</button>
 				{:else}
-					{#each publicLinks as link}
+					{#each publicLinks as link (link.href)}
 						<a href={resolve(link.href)} class="nav-link">{link.name}</a>
 					{/each}
 
@@ -106,7 +106,7 @@
 	{#if isMobileMenuOpen}
 		<div class="mobile-menu">
 			{#if userState.value}
-				{#each appLinks as link}
+				{#each appLinks as link (link.href)}
 					<a href={resolve(link.href)} class="mobile-link" onclick={toggleMenu}>{link.name}</a>
 				{/each}
 				<div class="divider"></div>
@@ -118,7 +118,7 @@
 					class="mobile-link text-red">Logout</button
 				>
 			{:else}
-				{#each publicLinks as link}
+				{#each publicLinks as link (link.href)}
 					<a href={resolve(link.href)} class="mobile-link" onclick={toggleMenu}>{link.name}</a>
 				{/each}
 				<div class="divider"></div>

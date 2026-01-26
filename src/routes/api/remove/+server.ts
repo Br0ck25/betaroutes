@@ -12,17 +12,27 @@ export const POST: RequestHandler = async ({ request, fetch, cookies, locals }) 
 			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
-		const body = (await request.json()) as any;
 		const token = request.headers.get('Authorization');
 
-		// 1. Forward the request to the real backend
+		// Parse and validate body to avoid mass-assignment (SECURITY)
+		const rawBody: unknown = await request.json().catch(() => null);
+		if (!rawBody || typeof rawBody !== 'object') {
+			return json({ error: 'Invalid request' }, { status: 400 });
+		}
+		const body = rawBody as Record<string, unknown>;
+		// Require explicit confirmation flag for account deletion
+		if (body['confirm'] !== true) {
+			return json({ error: 'Missing confirmation' }, { status: 400 });
+		}
+
+		// 1. Forward the request to the real backend (only safe fields)
 		const response = await fetch('https://logs.gorouteyourself.com/api/delete-account', {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
 				...(token ? { Authorization: token } : {})
 			},
-			body: JSON.stringify(body)
+			body: JSON.stringify({ confirm: true })
 		});
 
 		// 2. If successful, clear the cookie immediately so the user is logged out

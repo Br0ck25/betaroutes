@@ -1,0 +1,110 @@
+
+	async function computeEstimate(a: { tech: Tech; stops: Stop[] }, apiKey?: string, kv?: unknown): Promise<Estimate> {
+		const seq: Stop[] = [];
+		const remaining = a.stops.slice();
+		let cursor = a.tech.startLoc;
+		while (remaining.length > 0) {
+			let bestI = 0;
+			let bestD = Infinity;
+			for (let i = 0; i < remaining.length; i++) {
+				const rem = remaining[i]!;
+				const d = haversineMiles(cursor, rem.loc);
+				if (d < bestD) {
+					bestD = d;
+					bestI = i;
+				}
+			}
+			const picked = remaining.splice(bestI, 1)[0];
+			if (!picked) break;
+			seq.push(picked);
+			cursor = picked.loc;
+		}
+
+		let m = 0;
+		let minutes = 0;
+
+		const routePoints = [a.tech.startLoc, ...seq.map((s) => s.loc), a.tech.endLoc];
+		const canonical = routePoints.map((p) => `${Number(p.lat).toFixed(5)},${Number(p.lon).toFixed(5)}`).join(':');
+		const cacheKey = `route:${canonical}`;
+
+		// KV read
+		try {
+			if (isKV(kv)) {
+				const cachedRaw = await kv.get(cacheKey);
+				if (cachedRaw) {
+					let cached: unknown = null;
+					try {
+						cached = JSON.parse(String(cachedRaw)) as unknown;
+					} catch (e) {
+						log.warn('[ROUTE CACHE] Invalid JSON in cache', { key: cacheKey, err: (e as Error).message });
+						cached = null;
+					}
+					if (cached && typeof cached === 'object') {
+						const c = cached as Record<string, unknown>;
+						m = Number(c['miles']) || 0;
+						minutes = Number(c['minutes']) || 0;
+					}
+				}
+			}
+		} catch (e) {
+			log.warn('[ROUTE CACHE] read failed', { key: cacheKey, err: (e as Error).message });
+		}
+
+		// Directions API
+		if (routePoints.length >= 2 && (!m || !minutes) && apiKey) {
+			try {
+				const origin = `${routePoints[0]!.lat},${routePoints[0]!.lon}`;
+				const destination = `${routePoints[routePoints.length - 1]!.lat},${routePoints[routePoints.length - 1]!.lon}`;
+				const waypoints = routePoints.slice(1, -1).map((p) => `${p.lat},${p.lon}`).join('|');
+				const wayParam = waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : '';
+				const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${destination}${wayParam}&key=${apiKey}&mode=driving&units=imperial`;
+				const dres = await fetch(url);
+				const ddata: unknown = await dres.json();
+				if (ddata && typeof ddata === 'object' && (ddata as Record<string, unknown>)['status'] === 'OK' && (ddata as Record<string, unknown>)['routes']) {
+					const routes = (ddata as Record<string, unknown>)['routes'] as unknown[];
+					const legs = ((routes[0] as Record<string, unknown>)['legs'] as unknown[]) || [];
+					let totalMeters = 0;
+					let totalSeconds = 0;
+					for (const leg of legs) {
+						totalMeters += (((leg as Record<string, unknown>)['distance'] as Record<string, unknown>)?.['value'] as number) || 0;
+						totalSeconds += (((leg as Record<string, unknown>)['duration'] as Record<string, unknown>)?.['value'] as number) || 0;
+					}
+					m = totalMeters / 1609.344;
+					minutes = totalSeconds / 60;
+
+					try {
+						if (isKV(kv) && typeof kv.put === 'function') {
+							await kv.put(
+								cacheKey,
+								JSON.stringify({ miles: m, minutes, cachedAt: new Date().toISOString(), source: 'directions' })
+							);
+						}
+					} catch (e) {
+						log.warn('[ROUTE CACHE] write failed', { key: cacheKey, err: (e as Error).message });
+					}
+				}
+			} catch (e) {
+				log.warn('[DIRECTIONS] failed', { err: (e as Error).message });
+			}
+		}
+
+		// Fallback
+		if (!m || !minutes) {
+			let prev = a.tech.startLoc;
+			for (const s of seq) {
+				const leg = haversineMiles(prev, s.loc) * ROAD_FACTOR;
+				m += leg;
+				minutes += (leg / EST_SPEED_MPH) * 60;
+				prev = s.loc;
+			}
+			m += haversineMiles(prev, a.tech.endLoc) * ROAD_FACTOR;
+			minutes += ((haversineMiles(prev, a.tech.endLoc) * ROAD_FACTOR) / EST_SPEED_MPH) * 60;
+		}
+
+		return {
+			tech: { name: a.tech.name, startLoc: a.tech.startLoc, endLoc: a.tech.endLoc },
+			stops: seq.map((s) => ({ address: s.address, rank: s.rank, loc: s.loc })),
+			miles: m,
+			minutes: minutes
+		};
+	}

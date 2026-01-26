@@ -28,6 +28,7 @@
 	};
 </script>
 
+<!-- eslint-disable svelte/no-at-html-tags -->
 <div
 	class="fixed right-4 z-50 flex flex-col gap-2 pointer-events-none"
 	style="bottom: calc(1rem + env(safe-area-inset-bottom, 0px));"
@@ -43,6 +44,8 @@
 			role="alert"
 		>
 			<div class="inline-flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-full">
+				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+				<!-- Sanitized static SVG inserted intentionally (see SECURITY.md sanitizeStaticSvg) -->
 				{@html icons[toast.type]}
 			</div>
 			<div class="ml-3 text-sm font-normal">{toast.message}</div>
@@ -63,4 +66,4 @@
 		</div>
 	{/each}
 </div>
-}
+<!-- eslint-enable svelte/no-at-html-tags -->

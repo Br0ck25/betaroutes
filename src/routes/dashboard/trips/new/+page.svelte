@@ -14,6 +14,11 @@
 
 	const resolve = (href: string) => `${base}${href}`;
 
+	function handleUpgradeNow() {
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
+		goto(resolve('/dashboard/settings'));
+	}
+
 	export let data;
 	$: API_KEY = String(data.googleMapsApiKey ?? '');
 	let dragItemIndex: number | null = null;
@@ -193,8 +198,8 @@
 			} else {
 				console.info('[route] server miss or error', localKey);
 			}
-		} catch (err) {
-			console.info('[route] server fetch failed, falling back to local cache', localKey, err);
+		} catch (_err) {
+			console.info('[route] server fetch failed, falling back to local cache', localKey, _err);
 		}
 
 		// Fallback to local cache
@@ -495,9 +500,9 @@
 				...s,
 				order: i
 			})) as LocalStop[];
-		} catch (err: any) {
-			console.error('addStop failed', err);
-			toasts.error(err?.message ? String(err.message) : 'Error calculating route.');
+		} catch (_err: any) {
+			console.error('addStop failed', _err);
+			toasts.error(_err?.message ? String(_err.message) : 'Error calculating route.');
 		} finally {
 			isCalculating = false;
 		}
@@ -673,10 +678,11 @@
 
 		try {
 			await trips.create(tripToSave, userId);
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
 			goto(resolve('/dashboard/trips'));
-		} catch (err: any) {
-			console.error('Save failed:', err);
-			const message = err?.message || 'Failed to create trip.';
+		} catch (_err: any) {
+			console.error('Save failed:', _err);
+			const message = _err?.message || 'Failed to create trip.';
 			toasts.error(message);
 		}
 	}
@@ -696,6 +702,7 @@
 			<h1 class="page-title">New Trip</h1>
 			<p class="page-subtitle">Plan details & earnings</p>
 		</div>
+		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 		<a href={resolve('/dashboard/trips')} class="btn-back">
 			<svg width="24" height="24" viewBox="0 0 20 20" fill="none"
 				><path
@@ -956,7 +963,7 @@
 						aria-label="Maintenance type"
 					>
 						<option value="" disabled selected>Select Item...</option>
-						{#each maintenanceOptions as option}
+						{#each maintenanceOptions as option (option)}
 							<option value={option}>{option}</option>
 						{/each}
 					</select>
@@ -967,7 +974,7 @@
 					>
 				</div>
 
-				{#each tripData.maintenanceItems as item}
+				{#each tripData.maintenanceItems as item, i (item.id ?? i)}
 					<div class="expense-row">
 						<span class="name">{item.type}</span>
 						<div class="input-money-wrapper small">
@@ -1022,7 +1029,7 @@
 				<div class="add-row">
 					<select bind:value={selectedSupply} class="select-input" aria-label="Supply type">
 						<option value="" disabled selected>Select Item...</option>
-						{#each suppliesOptions as option}
+						{#each suppliesOptions as option (option)}
 							<option value={option}>{option}</option>
 						{/each}
 					</select>
@@ -1031,7 +1038,7 @@
 					>
 				</div>
 
-				{#each tripData.suppliesItems as item}
+				{#each tripData.suppliesItems as item, i (item.id ?? i)}
 					<div class="expense-row">
 						<span class="name">{item.type}</span>
 						<div class="input-money-wrapper small">
@@ -1117,9 +1124,13 @@
 				<div class="row subheader"><span>Expenses Breakdown</span></div>
 				{#if tripData.fuelCost > 0}<div class="row detail">
 						<span>Fuel</span> <span class="val">{formatCurrency(tripData.fuelCost)}</span>
-					</div>{/if}{#each tripData.maintenanceItems as item}<div class="row detail">
+					</div>{/if}{#each tripData.maintenanceItems as item, i (item.id ?? i)}<div
+						class="row detail"
+					>
 						<span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span>
-					</div>{/each}{#each tripData.suppliesItems as item}<div class="row detail">
+					</div>{/each}{#each tripData.suppliesItems as item, i (item.id ?? i)}<div
+						class="row detail"
+					>
 						<span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span>
 					</div>{/each}
 				<div class="row total-expenses">
@@ -1155,7 +1166,7 @@
 			>
 		</div>
 		<div class="cat-list">
-			{#each activeCategories as cat}
+			{#each activeCategories as cat (cat)}
 				<div class="cat-item">
 					<span class="cat-badge">{cat}</span>
 					<button
@@ -1232,12 +1243,13 @@
 
 		<div class="flex gap-3 justify-center pt-2">
 			<Button variant="outline" on:click={() => (showUpgradeModal = false)}>Maybe Later</Button>
-			<a
-				href="/dashboard/settings"
+			<button
+				type="button"
+				on:click={handleUpgradeNow}
 				class="inline-flex items-center justify-center rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
 			>
 				Upgrade Now
-			</a>
+			</button>
 		</div>
 	</div>
 </Modal>

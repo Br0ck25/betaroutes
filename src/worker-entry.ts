@@ -1,5 +1,7 @@
 // src/worker-entry.ts
 
+import { log } from '$lib/server/log';
+
 // [!code fix] Export the correct class names defined in wrangler.toml
 export { TripIndexSQL, PlacesIndexSQL } from './do-worker';
 
@@ -145,7 +147,7 @@ export default {
 
 			return withCors(new Response('Not found', { status: 404 }), request);
 		} catch (err) {
-			console.error('worker error', err);
+			log.error('[WORKER] error', { err: (err as Error)?.message ?? String(err) });
 			return withCors(Response.json({ error: 'Server Error' }, { status: 500 }), request);
 		}
 	}

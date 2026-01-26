@@ -78,9 +78,9 @@ describe('Stripe webhook handler', () => {
 			}) as unknown as Stripe.Event;
 
 		const req = makeReq(JSON.stringify({}));
-		const res = await POST({ request: req, platform } as any);
-		const body = (await res.json()) as any;
-		expect(body.received).toBe(true);
+		const res = await POST({ request: req, platform } as unknown as Parameters<typeof POST>[0]);
+		const body = (await res.json()) as Record<string, unknown>;
+		expect(body['received']).toBe(true);
 
 		expect(spy).toHaveBeenCalledWith(usersKV, 'user_del', 'free');
 
@@ -100,9 +100,9 @@ describe('Stripe webhook handler', () => {
 			}) as unknown as Stripe.Event;
 
 		const req = makeReq(JSON.stringify({}));
-		const res = await POST({ request: req, platform } as any);
-		const body = (await res.json()) as any;
-		expect(body.received).toBe(true);
+		const res = await POST({ request: req, platform } as unknown as Parameters<typeof POST>[0]);
+		const body = (await res.json()) as Record<string, unknown>;
+		expect(body['received']).toBe(true);
 
 		expect(spy).toHaveBeenCalledWith(usersKV, 'user_upd', 'free');
 

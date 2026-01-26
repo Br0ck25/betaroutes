@@ -1,6 +1,21 @@
 // src/lib/utils/dashboardLogic.ts
+import { SvelteDate } from '$lib/utils/svelte-reactivity';
+import type { Stop, Trip } from '$lib/types';
+import type { ExpenseRecord } from '$lib/db/types';
 
 export type TimeRange = '7d' | '30d' | '60d' | '90d' | '1y' | 'prev-1y' | 'all';
+
+export interface DashboardStats {
+	recentTrips: Trip[];
+	totalTrips: number;
+	totalProfit: number;
+	totalMiles: number;
+	avgProfitPerTrip: number;
+	chartData: { date: string; profit: number }[];
+	costBreakdown: { category: string; amount: number; percentage: number; color: string }[];
+	totalCost: number;
+	periodComparison: { current: number; last: number; change: number; isPositive: boolean };
+}
 
 export function formatCurrency(amount: number): string {
 	return new Intl.NumberFormat('en-US', {
@@ -16,11 +31,11 @@ export function formatDate(dateString: string): string {
 		const parts = dateString.split('-');
 		const y = Number(parts[0] || '0');
 		const m = Number(parts[1] || '1');
-		const date = new Date(y, (m || 1) - 1, 1);
-		return new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' }).format(date);
+		const date = new SvelteDate(new Date(y, (m || 1) - 1, 1));
+		return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 	}
-	const date = new Date(dateString.includes('T') ? dateString : dateString + 'T00:00:00');
-	return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date);
+	const ds = dateString.includes('T') ? dateString : dateString + 'T00:00:00';
+	return SvelteDate.from(ds).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 // Helper to assign consistent colors to categories
@@ -46,11 +61,11 @@ function getCategoryColor(category: string): string {
 }
 
 export function calculateDashboardStats(
-	allTrips: any[],
-	allExpenses: any[] = [],
+	allTrips: Trip[],
+	allExpenses: ExpenseRecord[] = [],
 	range: TimeRange = '30d'
-) {
-	const now = new Date();
+): DashboardStats {
+	const now = new Date(SvelteDate.now().getTime());
 	now.setHours(23, 59, 59, 999);
 	const currentYear = now.getFullYear();
 
@@ -128,7 +143,7 @@ export function calculateDashboardStats(
 		}
 	}
 
-	const currentTrips: any[] = [];
+	const currentTrips: Trip[] = [];
 	let totalProfit = 0;
 	let prevTotalProfit = 0;
 	let totalMiles = 0;
@@ -143,11 +158,13 @@ export function calculateDashboardStats(
 	// 2. Process Trips
 	for (const trip of allTrips) {
 		if (!trip.date) continue;
-		const d = new Date(trip.date.includes('T') ? trip.date : trip.date + 'T00:00:00');
+		const d = SvelteDate.from(
+			trip.date.includes('T') ? trip.date : trip.date + 'T00:00:00'
+		).toDate();
 		const tTime = d.getTime();
 
 		const earnings =
-			trip.stops?.reduce((s: number, stop: any) => s + (Number(stop.earnings) || 0), 0) || 0;
+			trip.stops?.reduce((s: number, stop: Stop) => s + (Number(stop.earnings) || 0), 0) || 0;
 		const fuelCost = Number(trip.fuelCost) || 0;
 		const maintCost = Number(trip.maintenanceCost) || 0;
 		const supplyCost = Number(trip.suppliesCost) || 0;
@@ -185,7 +202,7 @@ export function calculateDashboardStats(
 	// 3. Process General Expenses
 	for (const exp of allExpenses) {
 		if (!exp.date) continue;
-		const d = new Date(exp.date.includes('T') ? exp.date : exp.date + 'T00:00:00');
+		const d = SvelteDate.from(exp.date.includes('T') ? exp.date : exp.date + 'T00:00:00').toDate();
 		const tTime = d.getTime();
 		const amount = Number(exp.amount) || 0;
 		const category = (exp.category || 'other').toLowerCase();
@@ -252,7 +269,7 @@ export function calculateDashboardStats(
 	};
 
 	const sortedCurrentTrips = [...currentTrips].sort(
-		(a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+		(a, b) => SvelteDate.from(b.date).getTime() - SvelteDate.from(a.date).getTime()
 	);
 
 	return {

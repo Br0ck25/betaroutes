@@ -28,6 +28,7 @@
 - Your change touches auth/session, KV keys, or API ownership checks.
 - Your changes introduce new `npm run check` / lint / TypeScript errors or Svelte diagnostics.
 - Any architectural or PWA-affecting change (service worker, manifest, routing).
+- You are about to partially migrate a file to Svelte 5 (runes mode requires ALL patterns migrated).
 
 ---
 
@@ -44,12 +45,24 @@
 
 ## Svelte migration & syntax rules
 
-- New code MUST be Svelte 5. Existing Svelte 4 files must remain unchanged unless migration is requested.
+- **New code MUST be Svelte 5.** Existing Svelte 4 files remain unchanged unless migration is explicitly requested.
+- **Migration is all-or-nothing per file.** Once ANY rune is used, ALL legacy patterns must be migrated.
 - Detect versions:
-  - Svelte 5 indicators: `$props()`, `$state()`, `$derived()`.
-  - Svelte 4 indicators: `export let`, `$:`, `<slot>`.
+  - Svelte 5 indicators: `$props()`, `$state()`, `$derived()`, snippets
+  - Svelte 4 indicators: `export let`, `$:`, `<slot>`, `createEventDispatcher`
+- **Cannot mix versions in same file:**
+  - ❌ Cannot use `export let` with `$state()` in same file
+  - ❌ Cannot use `$:` with `$derived()` in same file
+  - ❌ Cannot use `createEventDispatcher` with `$props()` in same file
+  - ❌ Cannot use `<slot>` in a file with runes (must use snippets)
+- **Cross-file mixing is fine:** Svelte 4 and 5 files can coexist in different files during migration.
 - If adding TypeScript to a `.svelte` file, ensure `<script lang="ts">` is present.
-- Do NOT mix Svelte 4 and Svelte 5 syntax in the same file.
+- When migrating a file, migrate ALL patterns at once:
+  - `export let` → `$props()`
+  - `$:` → `$derived()` / `$effect()`
+  - `createEventDispatcher` → callback props
+  - `<slot>` → snippets
+  - `beforeUpdate/afterUpdate` → `$effect.pre()` / `$effect()`
 
 ---
 

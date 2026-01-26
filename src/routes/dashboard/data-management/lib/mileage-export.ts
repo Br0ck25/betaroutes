@@ -1,13 +1,29 @@
 // Mileage export utility functions for data-management page
 
+import type { MileageRecord } from '$lib/db/types';
+
+/** Row produced by CSV import - partial MileageRecord with required id */
+export interface ImportMileageRow {
+	id: string;
+	date: string;
+	vehicle?: string;
+	startOdometer?: number;
+	endOdometer?: number;
+	miles: number;
+	purpose?: string;
+	notes?: string;
+}
+
 export function exportMileageCSV(
-	mileageRecords: any[],
+	mileageRecords: MileageRecord[],
 	selectedIds: Set<string>,
 	includeSummary: boolean,
 	formatDate: (date: string) => string,
 	formatCurrency: (amount: number) => string
 ): string {
-	const mileageToExport = mileageRecords.filter((m) => selectedIds.has(m.id));
+	const mileageToExport = mileageRecords.filter(
+		(m) => typeof m.id === 'string' && selectedIds.has(m.id)
+	);
 
 	if (mileageToExport.length === 0) {
 		throw new Error('Please select at least one mileage log to export');
@@ -24,11 +40,11 @@ export function exportMileageCSV(
 		const row = [
 			formatDate(m.date || ''),
 			`"${m.vehicle || 'Default'}"`,
-			m.startOdometer || '',
-			m.endOdometer || '',
+			String(m.startOdometer ?? ''),
+			String(m.endOdometer ?? ''),
 			miles.toFixed(2),
-			`"${m.purpose || 'Business'}"`,
-			`"${m.notes || ''}"`
+			`"${(m['purpose'] as string) || 'Business'}"`,
+			`"${(m['notes'] as string) || ''}"`
 		];
 
 		csv += row.join(',') + '\n';
@@ -46,24 +62,33 @@ export function exportMileageCSV(
 	return csv;
 }
 
-export function parseMileageCSV(csvText: string): any[] {
+export function parseMileageCSV(csvText: string): ImportMileageRow[] {
 	const lines = csvText.split('\n').filter((line) => line.trim());
 
 	if (lines.length < 2) {
 		throw new Error('CSV file must have header and at least one data row');
 	}
 
-	const mileageLogs = lines.slice(1).map((line, idx) => {
+	// Enforce a max row cap to avoid huge imports
+	const MAX_ROWS = 5000;
+	const dataLines = lines.slice(1, 1 + MAX_ROWS);
+	if (lines.length > MAX_ROWS + 1) {
+		throw new Error(`CSV file too large. Limit is ${MAX_ROWS} rows`);
+	}
+
+	const now = Date.now();
+	const mileageLogs: ImportMileageRow[] = dataLines.map((line, idx) => {
 		const [date, vehicle, startOdometer, endOdometer, miles, purpose, notes] = line.split(',');
+
 		return {
-			id: `import-${Date.now()}-${idx}`,
-			date: date?.trim() || new Date().toISOString().split('T')[0],
-			vehicle: vehicle?.replace(/"/g, '').trim() || 'Default',
+			id: `import-${now}-${idx}`,
+			date: String(date?.trim() || new Date().toISOString().split('T')[0]),
+			vehicle: String(vehicle?.replace(/"/g, '').trim() || 'Default'),
 			startOdometer: Number(startOdometer?.trim()) || 0,
 			endOdometer: Number(endOdometer?.trim()) || 0,
 			miles: Number(miles?.trim()) || 0,
-			purpose: purpose?.replace(/"/g, '').trim() || 'Business',
-			notes: notes?.replace(/"/g, '').trim() || ''
+			purpose: String(purpose?.replace(/"/g, '').trim() || 'Business'),
+			notes: String(notes?.replace(/"/g, '').trim() || '')
 		};
 	});
 

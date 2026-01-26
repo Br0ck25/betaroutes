@@ -56,7 +56,7 @@ export async function loadGoogleMaps(apiKey: string): Promise<void> {
 }
 
 // Lightweight validator for Rendering Phase
-export function isRenderableCandidate(result: any, input: string) {
+export function isRenderableCandidate(result: unknown, input: string) {
 	return isAcceptableGeocode(result, input);
 }
 
@@ -160,21 +160,29 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 			try {
 				const kvUrl = `/api/autocomplete?q=${encodeURIComponent(value)}`;
 				const kvRes = await fetch(kvUrl);
-				const data = await kvRes.json();
+				const data = await kvRes.json().catch(() => []);
 
-				const validData = Array.isArray(data) ? data : [];
+				const validData = Array.isArray(data) ? (data as Array<Record<string, unknown>>) : [];
 				let source: 'kv' | 'google' = 'kv';
 
 				if (validData.length > 0) {
-					if (validData[0].source === 'google_proxy') source = 'google';
+					const first = validData[0];
+					if (first && typeof first['source'] === 'string' && first['source'] === 'google_proxy')
+						source = 'google';
 				}
 
 				// Mandatory: Strict Filter BEFORE rendering
 				const suggestionsToShow = validData.slice(0, 5);
 				const acceptableSet = new Set(
 					suggestionsToShow
-						.filter((item: any) => isAcceptableGeocode(item, value))
-						.map((it: any) => it.place_id || it.formatted_address || JSON.stringify(it))
+						.filter((item: Record<string, unknown>) => isAcceptableGeocode(item, value))
+						.map((it: Record<string, unknown>) =>
+							typeof it['place_id'] === 'string'
+								? (it['place_id'] as string)
+								: typeof it['formatted_address'] === 'string'
+									? (it['formatted_address'] as string)
+									: JSON.stringify(it)
+						)
 				);
 				let filtered = suggestionsToShow; // Keep the top suggestions visible regardless of acceptability (we'll validate on blur/selection)
 				filtered = suggestionsToShow;
@@ -232,19 +240,28 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 
 		items.forEach((item) => {
 			const row = document.createElement('div');
-			const it: any = item;
+			const it = item as Record<string, unknown>;
 
-			const mainText =
-				it.name ||
-				(typeof it.formatted_address === 'string' ? it.formatted_address.split(',')[0] : '');
+			const mainText: string =
+				typeof it['name'] === 'string'
+					? String(it['name'])
+					: typeof it['formatted_address'] === 'string'
+						? String((it['formatted_address'] as string).split(',')[0])
+						: '';
 			const secondaryText =
-				it.secondary_text ||
-				(typeof it.formatted_address === 'string' && it.formatted_address.includes(',')
-					? it.formatted_address.split(',').slice(1).join(',').trim()
+				(typeof it['secondary_text'] === 'string' ? (it['secondary_text'] as string) : '') ||
+				(typeof it['formatted_address'] === 'string' &&
+				(it['formatted_address'] as string).includes(',')
+					? (it['formatted_address'] as string).split(',').slice(1).join(',').trim()
 					: '');
 
 			// Determine if this suggestion is address-grade (acceptable) — google is always acceptable
-			const key = it.place_id || it.formatted_address || JSON.stringify(it);
+			const key =
+				typeof it['place_id'] === 'string'
+					? (it['place_id'] as string)
+					: typeof it['formatted_address'] === 'string'
+						? (it['formatted_address'] as string)
+						: JSON.stringify(it);
 			const isAcceptable = source === 'google' || (acceptableSet && acceptableSet.has(key));
 
 			// [SECURITY FIX #12] Create SVG using createElementNS instead of innerHTML
@@ -361,18 +378,39 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 	}
 
 	async function selectItem(item: Record<string, unknown>, source: 'kv' | 'google') {
-		const it: any = item;
+		const it = item as Record<string, unknown>;
+		const properties = (it['properties'] as Record<string, unknown> | undefined) ?? undefined;
 		if (dropdown) dropdown.style.display = 'none';
 		isSelecting = true;
 
 		// Normalize once at top of selectItem
 		const normalized = {
 			...it,
-			house_number: it.house_number || (it.properties && it.properties.housenumber),
-			street: it.street || (it.properties && it.properties.street),
-			name: it.name,
-			nosm_value: it.osm_value || (it.properties && it.properties.osm_value) || null,
-			nosm_key: it.osm_key || (it.properties && it.properties.osm_key) || null
+			house_number:
+				typeof it['house_number'] === 'string'
+					? it['house_number']
+					: typeof properties?.['housenumber'] === 'string'
+						? properties!['housenumber']
+						: undefined,
+			street:
+				typeof it['street'] === 'string'
+					? it['street']
+					: typeof properties?.['street'] === 'string'
+						? properties!['street']
+						: undefined,
+			name: typeof it['name'] === 'string' ? it['name'] : undefined,
+			nosm_value:
+				typeof it['osm_value'] === 'string'
+					? it['osm_value']
+					: typeof properties?.['osm_value'] === 'string'
+						? properties!['osm_value']
+						: null,
+			nosm_key:
+				typeof it['osm_key'] === 'string'
+					? it['osm_key']
+					: typeof properties?.['osm_key'] === 'string'
+						? properties!['osm_key']
+						: null
 		};
 
 		// Use the canonical validator imported at top of the module (isAcceptableGeocode)
@@ -380,25 +418,45 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 
 		// Use normalized object for validation
 		if (source === 'kv') {
-			const candidate = { ...normalized, geometry: it.geometry };
+			const candidate = { ...normalized, geometry: it['geometry'] };
 			if (!isAcceptableGeocode(candidate, node.value)) {
 				// Try a fallback search to Google if validation failed on selection (double safety)
 				try {
 					const res = await fetch(
 						`/api/autocomplete?q=${encodeURIComponent(node.value)}&forceGoogle=true`
 					);
-					const data = await res.json();
+					const data = await res.json().catch(() => []);
 					if (Array.isArray(data) && data.length > 0) {
-						const googleHit = data.find((d: any) => d.source === 'google_proxy');
+						const googleHit = (data as Array<unknown>).find(
+							(d): d is Record<string, unknown> =>
+								typeof d === 'object' &&
+								d !== null &&
+								typeof (d as Record<string, unknown>)['source'] === 'string' &&
+								(d as Record<string, unknown>)['source'] === 'google_proxy'
+						);
 						if (googleHit) {
 							commitSelection(googleHit);
 							return;
 						}
-						const acceptable = data.find((d: any) => {
+						const acceptable = (data as Array<unknown>).find((d): d is Record<string, unknown> => {
+							if (!d || typeof d !== 'object') return false;
+							const dd = d as Record<string, unknown>;
 							const normD = {
-								...d,
-								house_number: d.house_number || (d.properties && d.properties.housenumber),
-								street: d.street || d.name || (d.properties && d.properties.street)
+								...dd,
+								house_number:
+									typeof dd['house_number'] === 'string'
+										? dd['house_number']
+										: typeof dd['properties'] === 'object' && dd['properties']
+											? (dd['properties'] as Record<string, unknown>)['housenumber']
+											: undefined,
+								street:
+									typeof dd['street'] === 'string'
+										? dd['street']
+										: typeof dd['name'] === 'string'
+											? dd['name']
+											: typeof dd['properties'] === 'object' && dd['properties']
+												? (dd['properties'] as Record<string, unknown>)['street']
+												: undefined
 							};
 							return isAcceptableGeocode(normD, node.value);
 						});
@@ -418,18 +476,28 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 			}
 		}
 
-		if (!it.geometry || !it.geometry.location) {
-			if (it.place_id && source === 'google') {
+		const geom = (it['geometry'] as Record<string, unknown> | undefined) ?? undefined;
+		if (!geom || !geom['location']) {
+			if (typeof it['place_id'] === 'string' && source === 'google') {
 				try {
-					const res = await fetch(`/api/autocomplete?placeid=${it.place_id}`);
-					const details: any = await res.json();
+					const res = await fetch(
+						`/api/autocomplete?placeid=${encodeURIComponent(String(it['place_id'] || ''))}`
+					);
+					const detailsRaw = await res.json().catch(() => null);
+					const details =
+						typeof detailsRaw === 'object' && detailsRaw
+							? (detailsRaw as Record<string, unknown>)
+							: null;
 
-					if (details && details.geometry) {
+					if (details && details['geometry']) {
 						const fullItem = {
 							...item,
-							formatted_address: details.formatted_address || it.formatted_address,
-							name: details.name || it.name,
-							geometry: details.geometry
+							formatted_address:
+								typeof details['formatted_address'] === 'string'
+									? (details['formatted_address'] as string)
+									: it['formatted_address'],
+							name: typeof details['name'] === 'string' ? (details['name'] as string) : it['name'],
+							geometry: details['geometry']
 						};
 						savePlaceToKV(fullItem);
 						commitSelection(fullItem);
@@ -467,10 +535,10 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 		const dlg = node.closest && node.closest('dialog');
 		if (dlg) {
 			try {
-				(dlg as any).__suppressClose = true;
+				(dlg as unknown as { __suppressClose?: boolean }).__suppressClose = true;
 				setTimeout(() => {
 					try {
-						(dlg as any).__suppressClose = false;
+						(dlg as unknown as { __suppressClose?: boolean }).__suppressClose = false;
 					} catch (_e: unknown) {
 						void _e;
 					}
@@ -517,14 +585,23 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 				const res = await fetch(
 					`/api/autocomplete?q=${encodeURIComponent(value)}&forceGoogle=true`
 				);
-				const data = await res.json();
+				const data = await res.json().catch(() => []);
 				if (Array.isArray(data) && data.length > 0) {
-					const googleHit = data.find((d: any) => d.source === 'google_proxy');
+					const googleHit = (data as Array<unknown>).find(
+						(d): d is Record<string, unknown> =>
+							typeof d === 'object' &&
+							d !== null &&
+							typeof (d as Record<string, unknown>)['source'] === 'string' &&
+							(d as Record<string, unknown>)['source'] === 'google_proxy'
+					);
 					if (googleHit) {
 						commitSelection(googleHit);
 						return;
 					}
-					const acceptable = data.find((d: any) => isAcceptableGeocode(d, value));
+					const acceptable = (data as Array<unknown>).find(
+						(d): d is Record<string, unknown> =>
+							typeof d === 'object' && d !== null && isAcceptableGeocode(d, value)
+					);
 					if (acceptable) {
 						commitSelection(acceptable);
 						return;
@@ -538,13 +615,13 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
 
 	const _removeDropdownHandlers = () => {
 		if (!dropdown) return;
-		dropdown.removeEventListener('pointerdown', stopAndPrevent as any);
-		dropdown.removeEventListener('pointerup', stop as any);
-		dropdown.removeEventListener('mousedown', stopAndPrevent as any);
-		dropdown.removeEventListener('mouseup', stop as any);
-		dropdown.removeEventListener('touchstart', stopAndPrevent as any);
-		dropdown.removeEventListener('touchend', stop as any);
-		dropdown.removeEventListener('click', stop as any);
+		dropdown.removeEventListener('pointerdown', stopAndPrevent);
+		dropdown.removeEventListener('pointerup', stop);
+		dropdown.removeEventListener('mousedown', stopAndPrevent);
+		dropdown.removeEventListener('mouseup', stop);
+		dropdown.removeEventListener('touchstart', stopAndPrevent);
+		dropdown.removeEventListener('touchend', stop);
+		dropdown.removeEventListener('click', stop);
 	};
 
 	window.addEventListener('scroll', updatePosition);

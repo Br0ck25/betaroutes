@@ -1,0 +1,2 @@
+
+	async function computeEstimate(a: { tech: Tech; stops: Stop[] }

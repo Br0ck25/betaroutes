@@ -2,9 +2,9 @@ import { get } from 'svelte/store';
 import { userSettings } from '$lib/stores/userSettings';
 import { csrfFetch } from '$lib/utils/csrf';
 
-export type SaveResult = { ok: true; data: any } | { ok: false; error: string };
+export type SaveResult = { ok: true; data: unknown } | { ok: false; error: string };
 
-export async function saveSettings(payload: Partial<Record<string, any>>): Promise<SaveResult> {
+export async function saveSettings(payload: Partial<Record<string, unknown>>): Promise<SaveResult> {
 	// Optimistically update local store
 	userSettings.update((s) => ({ ...s, ...payload }));
 
@@ -28,8 +28,9 @@ export async function saveSettings(payload: Partial<Record<string, any>>): Promi
 		userSettings.set({ ...current, ...safeJson });
 
 		return { ok: true, data: json };
-	} catch (err: any) {
+	} catch (err: unknown) {
 		// Revert not implemented (optimistic), but propagate error to caller
-		return { ok: false, error: err?.message || String(err) };
+		const message = err instanceof Error ? err.message : String(err);
+		return { ok: false, error: message };
 	}
 }

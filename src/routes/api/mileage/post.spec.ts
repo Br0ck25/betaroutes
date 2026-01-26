@@ -1,14 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-let mockSvc: any;
-let mockEnv: any;
+let mockSvc!: {
+	put: ReturnType<typeof vi.fn>;
+	list: ReturnType<typeof vi.fn>;
+	get?: ReturnType<typeof vi.fn>;
+};
+let mockEnv: Record<string, unknown> | undefined;
 vi.mock('$lib/server/mileageService', () => ({
 	makeMileageService: () => mockSvc
 }));
 vi.mock('$lib/server/env', () => ({
 	getEnv: () => mockEnv,
-	safeKV: (env: any, name: string) => {
-		if (env && typeof env[name] !== 'undefined') return env[name];
+	safeKV: (env: unknown, name: string) => {
+		if (env && typeof (env as Record<string, unknown>)[name] !== 'undefined')
+			return (env as Record<string, unknown>)[name];
 		return {};
 	},
 	safeDO: () => ({})
@@ -37,14 +42,14 @@ describe('POST /api/mileage handler', () => {
 
 	it('accepts miles + rate and computes reimbursement', async () => {
 		const body = { miles: 50, mileageRate: 0.725 };
-		const event: any = {
+		const event = {
 			request: { json: async () => body },
 			locals: { user: { id: 'u1' } },
 			platform: { env: mockEnv, context: { waitUntil: vi.fn() } }
 		};
 
 		const { POST } = await import('./+server');
-		const res = await POST(event as any);
+		const res = await POST(event as unknown as Parameters<typeof POST>[0]);
 		expect(res.status).toBe(201);
 		const json = JSON.parse(await res.text());
 		expect(json.miles).toBeCloseTo(50, 6);

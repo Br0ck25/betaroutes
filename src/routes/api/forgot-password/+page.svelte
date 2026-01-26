@@ -16,7 +16,7 @@
 				body: JSON.stringify({ email })
 			});
 
-			const data: any = await res.json();
+			const data = (await res.json()) as { message?: string };
 
 			if (res.ok) {
 				message = 'If an account exists with that email, we have sent a reset link.';
@@ -24,7 +24,7 @@
 			} else {
 				error = data.message || 'An error occurred.';
 			}
-		} catch (err) {
+		} catch {
 			error = 'Network error. Please try again.';
 		} finally {
 			loading = false;
