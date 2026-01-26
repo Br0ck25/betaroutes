@@ -1,14 +1,14 @@
 // src/lib/stores/mileage.ts
-import { writable, get } from 'svelte/store';
-import { getDB, getMileageStoreName } from '$lib/db/indexedDB';
-import type { IDBPDatabase } from 'idb';
-import type { AppDB } from '$lib/db/indexedDB';
-import { syncManager } from '$lib/sync/syncManager';
-import type { MileageRecord, TrashRecord, TripRecord } from '$lib/db/types';
-import type { User } from '$lib/types';
-import { auth } from '$lib/stores/auth';
-import { calculateFuelCost } from '$lib/utils/calculations';
 import { PLAN_LIMITS } from '$lib/constants';
+import type { AppDB } from '$lib/db/indexedDB';
+import { getDB, getMileageStoreName } from '$lib/db/indexedDB';
+import type { MileageRecord, TrashRecord, TripRecord } from '$lib/db/types';
+import { auth } from '$lib/stores/auth';
+import { syncManager } from '$lib/sync/syncManager';
+import type { User } from '$lib/types';
+import { calculateFuelCost } from '$lib/utils/calculations';
+import type { IDBPDatabase } from 'idb';
+import { get, writable } from 'svelte/store';
 
 export const isLoading = writable(false);
 

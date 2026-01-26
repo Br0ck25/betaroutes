@@ -4,6 +4,14 @@
 		"dbaeumer.vscode-eslint",
 		"esbenp.prettier-vscode",
 		"bradlc.vscode-tailwindcss",
-		"mkaufman.htmlhint"
-	]
+
+		// ADD: Shows the error text INLINE.
+		// Essential for spotting AI mistakes instantly without hovering.
+		"usernamehw.errorlens",
+
+		// ADD: Makes complex "Strict" TypeScript errors readable.
+		// Helps you understand *why* the AI code is failing.
+		"yoavbls.pretty-ts-errors"
+	],
+	"unwantedRecommendations": ["mkaufman.htmlhint"]
 }
