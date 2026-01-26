@@ -186,7 +186,9 @@ export function makeMileageService(
 			// If the deleted mileage was linked to a trip, set that trip's totalMiles and fuelCost to 0
 			if (tripKV) {
 				try {
-					const tripIdToUpdate = typeof item.tripId === 'string' ? item.tripId : undefined;
+					// Legacy support: use item.tripId when present, otherwise fallback to the mileage id
+					const tripIdToUpdate =
+						typeof item.tripId === 'string' && item.tripId ? item.tripId : item.id;
 					if (tripIdToUpdate) {
 						const tripKey = `trip:${userId}:${tripIdToUpdate}`;
 						const tripRaw = await tripKV.get(tripKey);
