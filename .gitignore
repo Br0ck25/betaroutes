@@ -5,10 +5,19 @@ node_modules
 .output
 .vercel
 .netlify
+.wrangler/
 .wrangler
 /.svelte-kit
 /build
 /dist
+
+# Test artifacts
+coverage/
+playwright-report/
+blob-report/
+
+# Logs
+*.log
 
 # OS
 .DS_Store

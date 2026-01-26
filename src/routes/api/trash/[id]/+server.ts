@@ -102,94 +102,138 @@ export const POST: RequestHandler = async (event) => {
 		const storageId = currentUser?.id || '';
 
 		if (storageId) {
+			// Read tombstones first so we only attempt restore on the service that actually
+			// has a deleted tombstone for this ID. This prevents tripService from aborting
+			// when a mileage tombstone exists with the same ID (auto-created mileage by trip).
+			const tripKV = safeKV(platformEnv, 'BETA_LOGS_KV');
+			const expenseKV = safeKV(platformEnv, 'BETA_EXPENSES_KV');
+			const mileageKV = safeKV(platformEnv, 'BETA_MILEAGE_KV');
+
+			const tripRaw = tripKV ? await (tripKV as KVNamespace).get(`trip:${storageId}:${id}`) : null;
+			const expenseRaw = expenseKV
+				? await (expenseKV as KVNamespace).get(`expense:${storageId}:${id}`)
+				: null;
+			const mileageRaw = mileageKV
+				? await (mileageKV as KVNamespace).get(`mileage:${storageId}:${id}`)
+				: null;
+
+			const tripT = parseTombstone(tripRaw as string | null);
+			const expenseT = parseTombstone(expenseRaw as string | null);
+			const mileageT = parseTombstone(mileageRaw as string | null);
+
 			let restored: unknown | null = null;
 			let lastError: string | null = null;
 
-			// Strategy: Try sequentially until one succeeds
-			try {
-				restored = await tripSvc.restore(storageId, id);
-			} catch (err) {
-				const mapped = mapRestoreError(err);
-				if (mapped.status !== 404) {
-					// Return immediately for known errors (e.g., 409)
+			// If a tombstone exists, prefer restoring that type
+			if (tripT?.deleted) {
+				try {
+					restored = await tripSvc.restore(storageId, id);
+				} catch (err) {
+					const mapped = mapRestoreError(err);
 					return new Response(JSON.stringify({ error: mapped.message }), { status: mapped.status });
 				}
-				// otherwise record lastError and continue to next service
-				lastError = mapped.message;
+			} else if (mileageT?.deleted) {
+				// Validate parent trip + conflicts before attempting mileage restore
+				try {
+					const mileageData = (mileageT?.backup ?? mileageT?.data ?? null) as Record<
+						string,
+						unknown
+					> | null;
+					if (mileageData && typeof mileageData['tripId'] === 'string') {
+						const tripId = String(mileageData['tripId']);
+						const trip = await tripSvc.get(storageId, tripId);
+						if (!trip || trip.deleted) {
+							return new Response(
+								JSON.stringify({ error: 'Cannot restore mileage: parent trip is deleted' }),
+								{ status: 409 }
+							);
+						}
+
+						const activeMileage = await mileageSvc.list(storageId);
+						const conflictingMileage = activeMileage.find(
+							(m: MileageRecord) => m.tripId === tripId && m.id !== id
+						);
+						if (conflictingMileage) {
+							return new Response(
+								JSON.stringify({
+									error: 'Cannot restore mileage: another active mileage log exists for this trip'
+								}),
+								{ status: 409 }
+							);
+						}
+					}
+
+					restored = await mileageSvc.restore(storageId, id);
+					// Sync restored miles back to trip if present
+					const restoredMileage = restored as MileageRecord | undefined;
+					if (
+						restoredMileage &&
+						restoredMileage.tripId &&
+						typeof restoredMileage.miles === 'number'
+					) {
+						try {
+							const trip = await tripSvc.get(storageId, restoredMileage.tripId);
+							if (trip && !trip.deleted) {
+								trip.totalMiles = restoredMileage.miles;
+								trip.updatedAt = new Date().toISOString();
+								await tripSvc.put(trip);
+								log.info('Synced restored mileage to trip', {
+									tripId: restoredMileage.tripId,
+									miles: restoredMileage.miles
+								});
+							}
+						} catch (e) {
+							log.warn('Failed to sync restored mileage to trip', { message: String(e) });
+						}
+					}
+				} catch (err) {
+					const errMsg = err instanceof Error ? err.message : String(err);
+					// Validation errors for mileage should be surfaced as 409
+					if (errMsg.includes('Cannot restore mileage')) {
+						return new Response(JSON.stringify({ error: errMsg }), { status: 409 });
+					}
+					lastError = errMsg;
+				}
+			} else if (expenseT?.deleted) {
 				try {
 					restored = await expenseSvc.restore(storageId, id);
-				} catch (err2) {
-					const mapped2 = mapRestoreError(err2);
-					if (mapped2.status !== 404) {
-						return new Response(JSON.stringify({ error: mapped2.message }), {
-							status: mapped2.status
+				} catch (err) {
+					const mapped = mapRestoreError(err);
+					return new Response(JSON.stringify({ error: mapped.message }), { status: mapped.status });
+				}
+			} else {
+				// No tombstone found - fall back to trial on all services (preserves existing behavior)
+				try {
+					restored = await tripSvc.restore(storageId, id);
+				} catch (err) {
+					const mapped = mapRestoreError(err);
+					if (mapped.status !== 404) {
+						return new Response(JSON.stringify({ error: mapped.message }), {
+							status: mapped.status
 						});
 					}
-					lastError = mapped2.message;
+					lastError = mapped.message;
 					try {
-						// Get the mileage item from trash to check its tripId
-						const mileageKV = safeKV(platformEnv, 'BETA_MILEAGE_KV');
-						if (mileageKV) {
-							const raw = await (mileageKV as KVNamespace).get(`mileage:${storageId}:${id}`);
-							const tombstone = parseTombstone(raw as string | null);
-							const mileageData = (tombstone?.backup ?? tombstone?.data ?? null) as Record<
-								string,
-								unknown
-							> | null;
-
-							// Check if mileage has a linked trip
-							if (mileageData && typeof mileageData['tripId'] === 'string') {
-								const tripId = String(mileageData['tripId']);
-								// Check if parent trip is deleted
-								const trip = await tripSvc.get(storageId, tripId);
-								if (!trip || trip.deleted) {
-									throw new Error('Cannot restore mileage: parent trip is deleted');
-								}
-
-								// Check if another active mileage log exists for this trip
-								const activeMileage = await mileageSvc.list(storageId);
-								const conflictingMileage = activeMileage.find(
-									(m: MileageRecord) => m.tripId === tripId && m.id !== id
-								);
-								if (conflictingMileage) {
-									throw new Error(
-										'Cannot restore mileage: another active mileage log exists for this trip'
-									);
-								}
-							}
-						}
-
-						restored = await mileageSvc.restore(storageId, id);
-						// If restored mileage has a tripId, sync the miles back to the trip
-						const restoredMileage = restored as MileageRecord | undefined;
-						if (
-							restoredMileage &&
-							restoredMileage.tripId &&
-							typeof restoredMileage.miles === 'number'
-						) {
-							try {
-								const trip = await tripSvc.get(storageId, restoredMileage.tripId);
-								if (trip && !trip.deleted) {
-									trip.totalMiles = restoredMileage.miles;
-									trip.updatedAt = new Date().toISOString();
-									await tripSvc.put(trip);
-									log.info('Synced restored mileage to trip', {
-										tripId: restoredMileage.tripId,
-										miles: restoredMileage.miles
-									});
-								}
-							} catch (e) {
-								log.warn('Failed to sync restored mileage to trip', { message: String(e) });
-							}
-						}
-					} catch (err3) {
-						const mapped3 = mapRestoreError(err3);
-						if (mapped3.status !== 404) {
-							return new Response(JSON.stringify({ error: mapped3.message }), {
-								status: mapped3.status
+						restored = await expenseSvc.restore(storageId, id);
+					} catch (err2) {
+						const mapped2 = mapRestoreError(err2);
+						if (mapped2.status !== 404) {
+							return new Response(JSON.stringify({ error: mapped2.message }), {
+								status: mapped2.status
 							});
 						}
-						lastError = mapped3.message;
+						lastError = mapped2.message;
+						try {
+							restored = await mileageSvc.restore(storageId, id);
+						} catch (err3) {
+							const mapped3 = mapRestoreError(err3);
+							if (mapped3.status !== 404) {
+								return new Response(JSON.stringify({ error: mapped3.message }), {
+									status: mapped3.status
+								});
+							}
+							lastError = mapped3.message;
+						}
 					}
 				}
 			}
