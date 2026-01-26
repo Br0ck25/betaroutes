@@ -396,38 +396,42 @@ function createMileageStore() {
 				await trashStore.put(trashItem as TrashRecord);
 				await mileageStore.delete(id);
 
-				// Update trip to 0 miles and 0 fuelCost
+				// Update linked trip (if any) to 0 miles and 0 fuelCost
 				try {
 					const tripsTx = db.transaction('trips', 'readwrite');
 					const tripStore = tripsTx.objectStore('trips');
-					const trip = await tripStore.get(id);
-					if (trip && trip.userId === userId) {
-						const nowIso = new Date().toISOString();
-						const patched = {
-							...trip,
-							totalMiles: 0,
-							fuelCost: 0,
-							updatedAt: nowIso,
-							syncStatus: 'pending'
-						} as TripRecord;
-						await tripStore.put(patched);
-						try {
-							const { trips } = await import('$lib/stores/trips');
-							trips.updateLocal({
-								id,
+					const tripIdToUpdate =
+						typeof rec.tripId === 'string' ? (rec.tripId as string) : undefined;
+					if (tripIdToUpdate) {
+						const trip = await tripStore.get(tripIdToUpdate);
+						if (trip && trip.userId === userId) {
+							const nowIso = new Date().toISOString();
+							const patched = {
+								...trip,
 								totalMiles: 0,
 								fuelCost: 0,
-								updatedAt: nowIso
-							} as TripRecord);
-						} catch {
-							/* ignore */
-						}
+								updatedAt: nowIso,
+								syncStatus: 'pending'
+							} as TripRecord;
+							await tripStore.put(patched);
+							try {
+								const { trips } = await import('$lib/stores/trips');
+								trips.updateLocal({
+									id: tripIdToUpdate,
+									totalMiles: 0,
+									fuelCost: 0,
+									updatedAt: nowIso
+								} as TripRecord);
+							} catch {
+								/* ignore */
+							}
 
-						await syncManager.addToQueue({
-							action: 'update',
-							tripId: id,
-							data: { ...patched, store: 'trips', skipEnrichment: true }
-						});
+							await syncManager.addToQueue({
+								action: 'update',
+								tripId: tripIdToUpdate,
+								data: { ...patched, store: 'trips', skipEnrichment: true }
+							});
+						}
 					}
 					await tripsTx.done;
 				} catch {
