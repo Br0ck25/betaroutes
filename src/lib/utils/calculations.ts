@@ -124,7 +124,7 @@ export function calculateTripTotals(
 		netProfit,
 		profitPerHour,
 		hoursWorked
-	} as any;
+	};
 }
 
 export function milesToKm(miles: number): number {

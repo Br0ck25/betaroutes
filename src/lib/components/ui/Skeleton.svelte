@@ -1,5 +1,5 @@
 <script lang="ts">
-	let {
+	const {
 		width = '100%',
 		height = 'auto',
 		className = '',

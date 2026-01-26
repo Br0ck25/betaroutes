@@ -18,9 +18,9 @@
 	async function logout() {
 		await fetch('/api/logout', { method: 'POST' });
 		userState.logout();
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
 		goto(resolve('/'));
 	}
-
 	// Links for the public site (Logged Out)
 	const publicLinks = [
 		{ name: 'Features', href: '/#features' },
@@ -40,6 +40,7 @@
 <header class="header">
 	<div class="container">
 		<div class="header-content">
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 			<a href={resolve('/')} class="logo-link">
 				<picture>
 					<source type="image/avif" srcset="/180x75.avif 180w" sizes="64px" />
@@ -56,10 +57,11 @@
 				</picture>
 			</a>
 
+			<!-- eslint-disable svelte/no-navigation-without-resolve -- nav uses local resolve() helper for base-aware links -->
 			<nav class="nav desktop-nav">
 				{#if userState.value}
-					{#each appLinks as link}
-						<a href={resolve(link.href)} class="nav-link">{link.name}</a>
+					{#each appLinks as link (link.href)}
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 					{/each}
 
 					<div class="separator"></div>
@@ -67,17 +69,23 @@
 					<SyncIndicator />
 					<button onclick={logout} class="btn-login">Logout</button>
 				{:else}
-					{#each publicLinks as link}
-						<a href={resolve(link.href)} class="nav-link">{link.name}</a>
+					{#each publicLinks as link (link.href)}
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 					{/each}
 
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 					<a href={resolve('/login')} class="btn-login">Sign In</a>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+					<a href={resolve('/register')} class="btn-primary">Get Started Free</a>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 					<a href={resolve('/register')} class="btn-primary">Get Started Free</a>
 				{/if}
 			</nav>
+			<!-- eslint-enable svelte/no-navigation-without-resolve -->
 
 			<div class="mobile-nav-controls">
 				{#if !userState.value}
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 					<a href={resolve('/login')} class="mobile-signin">Sign In</a>
 				{/if}
 
@@ -106,7 +114,8 @@
 	{#if isMobileMenuOpen}
 		<div class="mobile-menu">
 			{#if userState.value}
-				{#each appLinks as link}
+				{#each appLinks as link (link.href)}
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 					<a href={resolve(link.href)} class="mobile-link" onclick={toggleMenu}>{link.name}</a>
 				{/each}
 				<div class="divider"></div>
@@ -118,10 +127,12 @@
 					class="mobile-link text-red">Logout</button
 				>
 			{:else}
-				{#each publicLinks as link}
+				{#each publicLinks as link (link.href)}
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 					<a href={resolve(link.href)} class="mobile-link" onclick={toggleMenu}>{link.name}</a>
 				{/each}
 				<div class="divider"></div>
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
 				<a href={resolve('/register')} class="btn-primary mobile-btn" onclick={toggleMenu}
 					>Get Started Free</a
 				>
@@ -182,7 +193,9 @@
 		gap: 24px;
 	}
 
-	.nav-link {
+	/* Apply same base styles to desktop and mobile nav links */
+	.desktop-nav a,
+	.mobile-link {
 		background: none;
 		border: none;
 		color: var(--gray-600);
@@ -193,7 +206,8 @@
 		font-weight: 500;
 	}
 
-	.nav-link:hover {
+	.desktop-nav a:hover,
+	.mobile-link:hover {
 		color: var(--orange);
 	}
 

@@ -1,7 +1,6 @@
 // src/routes/api/autocomplete/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import type { KVNamespace } from '@cloudflare/workers-types';
 import { generatePlaceKey } from '$lib/utils/keys';
 import {
 	checkRateLimitEnhanced,
@@ -12,6 +11,35 @@ import {
 } from '$lib/server/rateLimit';
 import { sanitizeQueryParam, sanitizeString } from '$lib/server/sanitize';
 import { log } from '$lib/server/log';
+
+function isRecord(obj: unknown): obj is Record<string, unknown> {
+	return typeof obj === 'object' && obj !== null;
+}
+
+function hasGet(v: unknown): v is { get: (k: string, type?: 'json' | 'text') => Promise<unknown> } {
+	return isRecord(v) && typeof (v as Record<string, unknown>)['get'] === 'function';
+}
+
+function isCachedPlace(
+	obj: unknown
+): obj is { formatted_address?: string; name?: string; place_id?: string; osm_value?: string } {
+	if (!isRecord(obj)) return false;
+	const fa = obj['formatted_address'];
+	const name = obj['name'];
+	return (typeof fa === 'string' && fa.length > 0) || (typeof name === 'string' && name.length > 0);
+}
+
+function isPlaceDetails(obj: unknown): obj is {
+	geometry?: { location?: { lat?: unknown; lng?: unknown } };
+	formatted_address?: string;
+	name?: string;
+} {
+	if (!isRecord(obj)) return false;
+	if (!isRecord(obj['geometry'])) return false;
+	if (!isRecord((obj['geometry'] as Record<string, unknown>)['location'])) return false;
+	const loc = (obj['geometry'] as Record<string, unknown>)['location'] as Record<string, unknown>;
+	return typeof loc['lat'] === 'number' && typeof loc['lng'] === 'number';
+}
 
 /**
  * GET Handler
@@ -63,15 +91,31 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 		try {
 			const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=geometry,name,formatted_address&key=${apiKey}`;
 			const res = await fetch(detailsUrl);
-			const data: any = await res.json();
-			if (data.status === 'OK' && data.result) {
+			const data = (await res.json()) as unknown;
+			if (
+				isRecord(data) &&
+				data['status'] === 'OK' &&
+				isRecord(data['result']) &&
+				isPlaceDetails(data['result'])
+			) {
+				const result = data['result'] as Record<string, unknown>;
 				// Background: cache geocode directly to BETA_PLACES_KV for reuse (bypass PlacesIndexDO)
 				try {
 					const { getEnv, safeKV } = await import('$lib/server/env');
 					const env = getEnv(platform);
 					const placesKV = safeKV(env, 'BETA_PLACES_KV') as KVNamespace | undefined;
-					if (placesKV && data.result && data.result.geometry && data.result.geometry.location) {
-						const addr = data.result.formatted_address || data.result.name;
+					if (
+						placesKV &&
+						result &&
+						isRecord(result['geometry']) &&
+						isRecord((result['geometry'] as Record<string, unknown>)['location'])
+					) {
+						const addr =
+							typeof result['formatted_address'] === 'string'
+								? result['formatted_address']
+								: typeof result['name'] === 'string'
+									? result['name']
+									: undefined;
 						if (addr) {
 							const geoKey = `geo:${addr
 								.toLowerCase()
@@ -82,12 +126,18 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 								try {
 									const existing = await placesKV.get(geoKey);
 									if (!existing) {
+										const loc = (result['geometry'] as Record<string, unknown>)[
+											'location'
+										] as Record<string, unknown>;
 										await placesKV.put(
 											geoKey,
 											JSON.stringify({
-												lat: Number(data.result.geometry.location.lat),
-												lon: Number(data.result.geometry.location.lng),
-												formattedAddress: data.result.formatted_address || addr,
+												lat: Number(loc['lat']),
+												lon: Number(loc['lng']),
+												formattedAddress:
+													typeof result['formatted_address'] === 'string'
+														? result['formatted_address']
+														: addr,
 												source: 'autocomplete_place_details'
 											})
 										);
@@ -102,9 +152,15 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 					// ignore
 				}
 
-				return json(data.result);
+				return json(result);
 			}
-			return json({ error: data.status }, { status: 400 });
+			return json(
+				{
+					error:
+						isRecord(data) && typeof data['status'] === 'string' ? data['status'] : 'Bad response'
+				},
+				{ status: 400 }
+			);
 		} catch (err: unknown) {
 			void err;
 			return json({ error: 'Failed to fetch details' }, { status: 500 });
@@ -120,78 +176,94 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 
 	// SECURITY (Issue #8): Use user-scoped bucket key if authenticated
 
-	const userId = locals.user ? (locals.user as any).id : null;
+	const userId =
+		isRecord(locals.user) && typeof locals.user['id'] === 'string' ? locals.user['id'] : null;
 	const bucketKey = userId ? `user:${userId}:prefix:${searchPrefix}` : null;
 
 	try {
 		// 1. Try KV Cache First (Skip if forceGoogle is true)
 		// Only check cache if user is authenticated (prevents poisoned global data exposure)
-		if (kv && !forceGoogle && bucketKey) {
+		if (kv && !forceGoogle && bucketKey && hasGet(kv)) {
 			const bucketRaw = await kv.get(bucketKey);
-			if (bucketRaw) {
-				const bucket = JSON.parse(bucketRaw);
+			if (typeof bucketRaw === 'string') {
+				let parsed: unknown;
+				try {
+					parsed = JSON.parse(bucketRaw);
+				} catch {
+					parsed = undefined;
+				}
 
-				const matches = bucket.filter((item: any) => {
-					const str = (item.formatted_address || item.name || '').toLowerCase();
-					return str.includes(query.toLowerCase());
-				});
-				if (matches.length > 0) {
-					// STRICT CACHE VALIDATION
-					// Ensure we don't return cached garbage (e.g. "Louisville" for "407 Mastin")
-					const trimmedQuery = query.trim();
-					const addressMatch = trimmedQuery.match(/^(\d+)\s+([a-zA-Z0-9]+)/);
-					const looksLikeSpecificAddress = !!addressMatch;
-					const streetToken =
-						addressMatch && addressMatch[2] ? addressMatch[2].toLowerCase() : null;
-					const broadTypes = [
-						'city',
-						'state',
-						'country',
-						'county',
-						'state_district',
-						'place',
-						'administrative'
-					];
+				if (Array.isArray(parsed)) {
+					const bucket = parsed as unknown[];
 
-					const filteredMatches = matches.filter((it: any) => {
-						const text = (it.formatted_address || it.name || '').toLowerCase();
-						if ((it.name || '').trim().match(/^\d+\s*$/)) return false;
-						if (it.osm_value && broadTypes.includes(it.osm_value)) return false;
+					const matches = bucket
+						.filter((item) => isCachedPlace(item))
+						.filter((item) => {
+							const str = (item.formatted_address || item.name || '').toLowerCase();
+							return str.includes(query.toLowerCase());
+						});
+					if (matches.length > 0) {
+						// STRICT CACHE VALIDATION
+						const trimmedQuery = query.trim();
+						const addressMatch = trimmedQuery.match(/^(\d+)\s+([a-zA-Z0-9]+)/);
+						const looksLikeSpecificAddress = !!addressMatch;
+						const streetToken =
+							addressMatch && addressMatch[2] ? addressMatch[2].toLowerCase() : undefined;
+						const broadTypes = [
+							'city',
+							'state',
+							'country',
+							'county',
+							'state_district',
+							'place',
+							'administrative'
+						];
 
-						if (looksLikeSpecificAddress) {
-							if (!text.includes(addressMatch![1])) return false;
-							// If input is "407 Mastin", result MUST contain "mastin"
-							if (streetToken && !text.includes(streetToken)) return false;
-						}
-						return true;
-					});
+						const filteredMatches = matches.filter((it) => {
+							const text = (it.formatted_address || it.name || '').toLowerCase();
+							if ((it.name || '').trim().match(/^\d+\s*$/)) return false;
+							if (it.osm_value && broadTypes.includes(it.osm_value)) return false;
 
-					if (filteredMatches.length > 0) return json(filteredMatches);
+							if (looksLikeSpecificAddress) {
+								const addrNum = addressMatch && addressMatch[1] ? addressMatch[1] : undefined;
+								if (!addrNum || !text.includes(addrNum)) return false;
+								const token = streetToken;
+								if (token && !text.includes(token)) return false;
+							}
+							return true;
+						});
+
+						if (filteredMatches.length > 0) return json(filteredMatches);
+					}
 				}
 			}
 		}
-
-		// 2. KV missed -> Direct Google fallback (Photon removed). If KV misses, query Google for autocomplete.
-		// This keeps costs predictable while still benefiting from KV caching.
-
-		// 3. Google Fallback (Cost: $) - Executed if:
-		//    a) KV missed
-		//    b) OR forceGoogle=true
-		if (!apiKey) return json([]);
-
 		const googleUrl = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${apiKey}&types=geocode&components=country:us`;
 		const response = await fetch(googleUrl);
-		const data: any = await response.json();
+		const data = (await response.json()) as unknown;
 
-		if (data.status === 'OK' && data.predictions) {
-			const results = data.predictions.map((p: any) => ({
-				formatted_address: p.description,
-				name: p.structured_formatting?.main_text || p.description,
-				secondary_text: p.structured_formatting?.secondary_text,
-				place_id: p.place_id,
-				source: 'google_proxy'
-			}));
-
+		if (isRecord(data) && data['status'] === 'OK' && Array.isArray(data['predictions'])) {
+			const results = (data['predictions'] as unknown[]).map((p) => {
+				const pred = isRecord(p) ? (p as Record<string, unknown>) : {};
+				const structured = isRecord(pred['structured_formatting'])
+					? (pred['structured_formatting'] as Record<string, unknown>)
+					: {};
+				return {
+					formatted_address: typeof pred['description'] === 'string' ? pred['description'] : '',
+					name:
+						typeof structured['main_text'] === 'string'
+							? structured['main_text']
+							: typeof pred['description'] === 'string'
+								? pred['description']
+								: '',
+					secondary_text:
+						typeof structured['secondary_text'] === 'string'
+							? structured['secondary_text']
+							: undefined,
+					place_id: typeof pred['place_id'] === 'string' ? pred['place_id'] : undefined,
+					source: 'google_proxy'
+				};
+			});
 			// Save Google results to KV with Fan-Out (Background)
 			// SECURITY (Issue #8): Only cache if user is authenticated (user-scoped)
 			if (kv && results.length > 0 && userId) {
@@ -224,10 +296,14 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
  * SECURITY (Issue #8): Now requires userId for per-user cache isolation
  */
 
-async function fanOutCache(kv: any, results: any[], userId: string) {
+async function fanOutCache(
+	kv: KVNamespace,
+	results: Array<{ formatted_address?: string; name?: string; place_id?: string }>,
+	userId: string
+) {
 	// 1. Group new items by their potential prefixes
 
-	const prefixMap = new Map<string, any[]>();
+	const prefixMap = new Map<string, unknown[]>();
 
 	for (const result of results) {
 		const address = result.formatted_address || result.name || '';
@@ -252,10 +328,12 @@ async function fanOutCache(kv: any, results: any[], userId: string) {
 		let bucket = existingRaw ? JSON.parse(existingRaw) : [];
 
 		for (const item of newItems) {
+			if (!isCachedPlace(item)) continue;
 			const exists = bucket.some(
-				(b: any) =>
-					b.formatted_address === item.formatted_address ||
-					(b.place_id && b.place_id === item.place_id)
+				(b: unknown) =>
+					isCachedPlace(b) &&
+					(b.formatted_address === item.formatted_address ||
+						(b.place_id && b.place_id === item.place_id))
 			);
 			if (!exists) bucket.push(item);
 		}
@@ -293,30 +371,44 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	}
 
 	try {
-		const rawPlace: any = await request.json();
-		const placesKV = safeKV(env, 'BETA_PLACES_KV') as KVNamespace;
+		const rawPlace: unknown = await request.json();
+		const placesKV = safeKV(env, 'BETA_PLACES_KV');
 
-		if (!placesKV || !rawPlace) return json({ success: false });
+		if (!placesKV || !isRecord(rawPlace)) return json({ success: false });
 
 		const place = {
-			formatted_address: sanitizeString(rawPlace.formatted_address, 500),
-			name: sanitizeString(rawPlace.name, 200),
-			secondary_text: sanitizeString(rawPlace.secondary_text, 300),
-			place_id: sanitizeString(rawPlace.place_id, 200),
-			geometry: rawPlace.geometry,
-			source: sanitizeString(rawPlace.source, 50)
+			formatted_address: sanitizeString(
+				typeof rawPlace['formatted_address'] === 'string' ? rawPlace['formatted_address'] : '',
+				500
+			),
+			name: sanitizeString(typeof rawPlace['name'] === 'string' ? rawPlace['name'] : '', 200),
+			secondary_text: sanitizeString(
+				typeof rawPlace['secondary_text'] === 'string' ? rawPlace['secondary_text'] : '',
+				300
+			),
+			place_id: sanitizeString(
+				typeof rawPlace['place_id'] === 'string' ? rawPlace['place_id'] : '',
+				200
+			),
+			geometry: isRecord(rawPlace['geometry']) ? rawPlace['geometry'] : undefined,
+			source: sanitizeString(typeof rawPlace['source'] === 'string' ? rawPlace['source'] : '', 50)
 		};
 
 		const keyText = place.formatted_address || place.name;
+		if (!keyText) return json({ success: false });
 		const key = await generatePlaceKey(keyText);
 
-		await placesKV.put(
+		const userId =
+			isRecord(locals.user) && typeof locals.user['id'] === 'string'
+				? locals.user['id']
+				: undefined;
+		await (placesKV as KVNamespace).put(
 			key,
 			JSON.stringify({
 				...place,
 				cachedAt: new Date().toISOString(),
 				source: 'autocomplete_selection',
-				contributedBy: (locals.user as any).id
+				contributedBy: userId
 			})
 		);
 		// Log the place key for debugging/verification
@@ -324,28 +416,32 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 
 		// Also record this selection in PLACES KV (bypass PlacesIndexDO) — keep a per-user recent list (non-blocking)
 		try {
-			const userId = (locals.user as any).id;
-			const recentKey = `recent:${userId}`;
-			void (async () => {
-				try {
-					const existingRaw = await placesKV.get(recentKey);
-					let list: string[] = existingRaw ? JSON.parse(existingRaw) : [];
-					// Ensure uniqueness and push most recent to the end
-					list = list.filter((a) => a !== keyText);
-					list.push(keyText);
-					if (list.length > 50) list = list.slice(-50);
-					await placesKV.put(recentKey, JSON.stringify(list));
-				} catch (err) {
-					log.warn('[Autocomplete] recent list KV write failed', err);
-				}
-			})();
+			const contributorId =
+				isRecord(locals.user) && typeof locals.user['id'] === 'string'
+					? locals.user['id']
+					: undefined;
+			if (contributorId) {
+				const recentKey = `recent:${contributorId}`;
+				void (async () => {
+					try {
+						const existingRaw = await placesKV.get(recentKey);
+						let list: string[] = existingRaw ? JSON.parse(existingRaw) : [];
+						// Ensure uniqueness and push most recent to the end
+						list = list.filter((a) => a !== keyText);
+						list.push(keyText);
+						if (list.length > 50) list = list.slice(-50);
+						await placesKV.put(recentKey, JSON.stringify(list));
+					} catch (err) {
+						log.warn('[Autocomplete] recent list KV write failed', err);
+					}
+				})();
+			}
 		} catch (e) {
 			// Don't block on failures
 			log.warn('[Autocomplete] Failed to update recent list (KV)', {
 				message: (e as Error).message
 			});
 		}
-
 		return json({ success: true });
 	} catch (e) {
 		return json({ success: false, error: String(e) }, { status: 500 });

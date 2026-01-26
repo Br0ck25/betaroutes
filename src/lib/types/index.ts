@@ -12,6 +12,16 @@ export interface User {
 	email?: string;
 }
 
+/** Lightweight public user object exposed to client (no token or sensitive fields) */
+export interface PublicUser {
+	id?: string;
+	name?: string;
+	plan: 'free' | 'pro' | 'business' | 'premium';
+	tripsThisMonth?: number;
+	maxTrips?: number;
+	resetDate?: string;
+}
+
 /** Geo helpers */
 export interface LatLng {
 	lat: number;
@@ -26,7 +36,7 @@ export interface GeocodeResult {
 	lat?: number;
 	lng?: number;
 	address?: string;
-	raw?: any;
+	raw?: unknown;
 }
 
 export interface Location extends LatLng {
@@ -134,7 +144,7 @@ export interface AuthResponse {
 export interface ApiError {
 	error: string;
 	code?: string;
-	details?: any;
+	details?: unknown;
 }
 
 export interface TripFilters {
@@ -173,6 +183,18 @@ export interface Settings {
 	recentDestinations: string[];
 	maintenanceCategories: string[];
 	supplyCategories: string[];
+}
+
+/** Full user settings shape used by the client-side store */
+export interface UserSettings extends Settings {
+	mileageRate?: number;
+	vehicles?: Array<{ id: string; name: string }>;
+	serviceIntervalMiles?: number;
+	lastServiceOdometer?: number;
+	lastServiceDate?: string;
+	reminderThresholdMiles?: number;
+	// allow additional optional fields for future-proofing
+	[extra: string]: unknown;
 }
 
 /** Unsanitized input shapes (used by sanitize utilities) */

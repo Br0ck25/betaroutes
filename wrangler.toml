@@ -118,3 +118,9 @@ id = "5392d9ff847542a29abf58c5f0624011"
 [[env.preview.kv_namespaces]]
 binding = "BETA_SESSIONS_KV"
 id = "d395b64dcd0641f5a44d94c5ef5628eb"
+
+# Optional scheduled triggers (uncomment to enable scheduling of background jobs)
+# See: https://developers.cloudflare.com/pages/platform/functions/date-scheduling
+# [triggers]
+# crons = ["0 0 * * *"] # daily at midnight UTC
+# NOTE: Ensure `CRON_ADMIN_SECRET` is set in the target environment before enabling triggers

@@ -1,6 +1,7 @@
 // Analytics calculation functions for trip and expense data
 
-import type { Trip } from '$lib/types';
+import { SvelteDate } from '$lib/utils/svelte-reactivity';
+import type { Trip, Stop } from '$lib/types';
 
 export interface TripAnalytics {
 	// Revenue metrics
@@ -176,21 +177,21 @@ export function calculateTripAnalytics(trips: Trip[]): TripAnalytics {
  * Compare current month to previous month
  */
 export function calculateMonthlyComparison(allTrips: Trip[]): MonthlyComparison {
-	const now = new Date();
+	const now = SvelteDate.now().toDate();
 	const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 	const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 	const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
 
 	const currentMonthTrips = allTrips.filter((trip) => {
 		if (!trip.date) return false;
-		const tripDate = new Date(trip.date);
+		const tripDate = SvelteDate.from(trip.date).toDate();
 		if (isNaN(tripDate.getTime())) return false;
 		return tripDate >= currentMonthStart;
 	});
 
 	const previousMonthTrips = allTrips.filter((trip) => {
 		if (!trip.date) return false;
-		const tripDate = new Date(trip.date);
+		const tripDate = SvelteDate.from(trip.date).toDate();
 		if (isNaN(tripDate.getTime())) return false;
 		return tripDate >= previousMonthStart && tripDate <= previousMonthEnd;
 	});
@@ -247,11 +248,11 @@ export function calculatePeriodBreakdown(trips: Trip[]): PeriodBreakdown {
 
 	trips.forEach((trip) => {
 		if (!trip.date) return;
-		const tripDate = new Date(trip.date);
+		const tripDate = SvelteDate.from(trip.date).toDate();
 		if (isNaN(tripDate.getTime())) return;
 
 		const revenue =
-			trip.stops?.reduce((sum: number, stop: any) => sum + (stop.earnings || 0), 0) || 0;
+			trip.stops?.reduce((sum: number, stop: Stop) => sum + (stop.earnings || 0), 0) || 0;
 		const expenses = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);
 		const profit = revenue - expenses;
 
@@ -264,7 +265,7 @@ export function calculatePeriodBreakdown(trips: Trip[]): PeriodBreakdown {
 			(weeklyData[weekKey] = {
 				week: weekKey,
 				month: weekKey.slice(0, 7),
-				quarter: `${weekKey.slice(0, 4)}-Q${Math.floor(new Date(weekKey).getMonth() / 3) + 1}`,
+				quarter: `${weekKey.slice(0, 4)}-Q${Math.floor(SvelteDate.from(weekKey).getMonth() / 3) + 1}`,
 				revenue: 0,
 				expenses: 0,
 				profit: 0,
@@ -282,7 +283,7 @@ export function calculatePeriodBreakdown(trips: Trip[]): PeriodBreakdown {
 			(monthlyData[monthKey] = {
 				month: monthKey,
 				week: `${monthKey}-W01`,
-				quarter: `${monthKey.slice(0, 4)}-Q${Math.floor(new Date(monthKey + '-01').getMonth() / 3) + 1}`,
+				quarter: `${monthKey.slice(0, 4)}-Q${Math.floor(SvelteDate.from(monthKey + '-01').getMonth() / 3) + 1}`,
 				revenue: 0,
 				expenses: 0,
 				profit: 0,

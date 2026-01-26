@@ -1,6 +1,8 @@
 <script lang="ts">
+	// Use $bindable for two-way binding on 'open'. Keep other props as const when not reassigned.
 	// Use $bindable for two-way binding on 'open'
-	let { open = $bindable(false), title, children } = $props();
+	const { title, children, open: _open = $bindable(false) } = $props();
+	let open = _open;
 	let dialog: HTMLDialogElement;
 
 	// Sync Svelte state with the Native DOM API
@@ -20,13 +22,15 @@
 	function handleBackdropClick(e: MouseEvent) {
 		// Debug: log composedPath in browsers where issues appear
 		try {
-			const path: any[] = (e as any).composedPath ? (e as any).composedPath() : [e.target];
-			const hasPac = path.some(
-				(el) =>
-					el && el.classList && el.classList.contains && el.classList.contains('pac-container')
-			);
-			if (console && console.debug)
-				console.debug('[modal] backdrop click', { target: e.target, hasPac, path });
+			const path: unknown[] = (e as MouseEvent & { composedPath?: () => EventTarget[] })
+				.composedPath
+				? (e as MouseEvent & { composedPath?: () => EventTarget[] }).composedPath!()
+				: [e.target];
+			const hasPac = path.some((el) => {
+				if (!el || typeof el !== 'object') return false;
+				const candidate = el as { classList?: DOMTokenList };
+				return !!(candidate.classList && candidate.classList.contains('pac-container'));
+			});
 
 			// If the click originated inside the autocomplete dropdown, ignore it so
 			// selecting suggestions doesn't close the dialog.
@@ -46,9 +50,9 @@
 		// If we have a temporary suppression flag set (by the autocomplete selection),
 		// reopen and clear it rather than letting the modal stay closed.
 		try {
-			if ((dialog as any).__suppressClose) {
-				(dialog as any).__suppressClose = false;
-				if (console && console.debug) console.debug('[modal] suppressed close - reopening');
+			const meta = dialog as unknown as { __suppressClose?: boolean };
+			if (meta.__suppressClose) {
+				meta.__suppressClose = false;
 				try {
 					dialog.showModal();
 				} catch (_e: unknown) {

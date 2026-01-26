@@ -12,10 +12,23 @@ export const POST: RequestHandler = async ({ request, fetch, cookies, locals }) 
 			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
-		// Use standard Promise methods for the body
+		// Parse client body as unknown and only forward vetted fields
+		const bodyJson: unknown = await request.json();
+		const clientBody =
+			bodyJson && typeof bodyJson === 'object' ? (bodyJson as Record<string, unknown>) : {};
+		const confirm = clientBody['confirm'] === true;
+		const reason = typeof clientBody['reason'] === 'string' ? clientBody['reason'] : undefined;
+		const token =
+			typeof request.headers.get('Authorization') === 'string'
+				? (request.headers.get('Authorization') as string)
+				: undefined;
 
-		const body = (await request.json()) as any;
-		const token = request.headers.get('Authorization');
+		// Build a safe payload - do NOT forward arbitrary client fields
+		const payload: Record<string, unknown> = {
+			userId: locals.user?.id,
+			confirm
+		};
+		if (reason) payload['reason'] = reason;
 
 		// 1. Forward the request to the real backend
 		const externalResponse = await fetch('https://logs.gorouteyourself.com/api/delete-account', {
@@ -24,7 +37,7 @@ export const POST: RequestHandler = async ({ request, fetch, cookies, locals }) 
 				'Content-Type': 'application/json',
 				...(token ? { Authorization: token } : {})
 			},
-			body: JSON.stringify(body)
+			body: JSON.stringify(payload)
 		});
 
 		// 2. If successful, clear the authentication cookies immediately

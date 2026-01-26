@@ -1,9 +1,12 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import type { KVNamespace } from '@cloudflare/workers-types';
+
 import { generatePlaceKey } from '$lib/utils/keys';
 import { sanitizeString } from '$lib/server/sanitize';
 import { log } from '$lib/server/log';
+import { safeKV } from '$lib/server/env';
+import type { CachedPlace } from '$lib/server/placesCache';
+import { parseCachedPlaceArray } from '$lib/server/placesCache';
 
 export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	// 1. Security: Block unauthenticated writes
@@ -13,37 +16,54 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 
 	// SECURITY (Issue #8): Get user ID for per-user cache isolation
 
-	const userId = (locals.user as any).id;
-	if (!userId) {
+	const user = locals.user as unknown;
+	if (!user || typeof (user as { id?: unknown }).id !== 'string') {
 		return json({ error: 'Invalid session' }, { status: 401 });
 	}
+	const userId = (user as { id: string }).id;
 
 	try {
-		const rawPlace: any = await request.json();
-		const placesKV = platform?.env?.BETA_PLACES_KV as KVNamespace;
+		const rawPlace: unknown = await request.json().catch(() => null);
+		if (!rawPlace || typeof rawPlace !== 'object') {
+			return json({ success: false, error: 'Invalid data' });
+		}
+		const rp = rawPlace as Record<string, unknown>;
+		const placesKV = safeKV(platform?.env, 'BETA_PLACES_KV');
 
 		if (!placesKV) {
 			log.warn('BETA_PLACES_KV not found for caching');
 			return json({ success: false });
 		}
 
-		if (!rawPlace || (!rawPlace.formatted_address && !rawPlace.name)) {
+		const hasFormatted =
+			typeof rp['formatted_address'] === 'string' &&
+			(rp['formatted_address'] as string).trim() !== '';
+		const hasName = typeof rp['name'] === 'string' && (rp['name'] as string).trim() !== '';
+		if (!hasFormatted && !hasName) {
 			return json({ success: false, error: 'Invalid data' });
 		}
 
 		// Sanitize data
-		const place = {
-			formatted_address: sanitizeString(rawPlace.formatted_address, 500),
-			name: sanitizeString(rawPlace.name, 200),
-			secondary_text: sanitizeString(rawPlace.secondary_text, 300),
-			place_id: sanitizeString(rawPlace.place_id, 200),
-			geometry: rawPlace.geometry,
+		const formatted_address = hasFormatted
+			? sanitizeString(rp['formatted_address'] as string, 500)
+			: '';
+		const name = hasName ? sanitizeString(rp['name'] as string, 200) : '';
+		const place: CachedPlace = {
+			formatted_address,
+			name,
+			secondary_text:
+				typeof rp['secondary_text'] === 'string'
+					? sanitizeString(rp['secondary_text'] as string, 300)
+					: '',
+			place_id:
+				typeof rp['place_id'] === 'string' ? sanitizeString(rp['place_id'] as string, 200) : '',
+			geometry: rp['geometry'],
 			source: 'autocomplete_selection', // Force source to ensure it looks 'local'
 			cachedAt: new Date().toISOString(),
 			contributedBy: userId
 		};
 
-		const keyText = place.formatted_address || place.name;
+		const keyText = place.formatted_address || place.name || '';
 
 		// 1. Save "Detail" Record (place:<userId>:<hash>)
 		// SECURITY: Scope to user to prevent cache poisoning
@@ -57,7 +77,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 
 		// We update specific prefixes to ensure it appears as the user types
 		// Limiting concurrency to avoid overwhelming the worker
-		const prefixesToUpdate = [];
+		const prefixesToUpdate: string[] = [];
 		for (let len = 2; len <= Math.min(10, normalized.length); len++) {
 			prefixesToUpdate.push(normalized.substring(0, len));
 		}
@@ -68,22 +88,17 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 				// SECURITY: Prefix with userId to isolate user's autocomplete data
 				const bucketKey = `user:${userId}:prefix:${prefix}`;
 				const existingRaw = await placesKV.get(bucketKey);
-				let bucket = existingRaw ? JSON.parse(existingRaw) : [];
+				const bucket = existingRaw ? parseCachedPlaceArray(existingRaw) : [];
 
 				// Remove if exists (to update it), then add to top
-
-				bucket = bucket.filter(
-					(b: any) =>
-						b.formatted_address !== place.formatted_address && b.place_id !== place.place_id
+				const filtered = bucket.filter(
+					(b) => b.formatted_address !== place.formatted_address && b.place_id !== place.place_id
 				);
 
-				bucket.unshift(place); // Add to TOP of list since it was just selected
-
-				// Cap bucket size
-				if (bucket.length > 20) bucket = bucket.slice(0, 20);
+				const newBucket = [place, ...filtered].slice(0, 20);
 
 				// Save prefix bucket (user-scoped)
-				await placesKV.put(bucketKey, JSON.stringify(bucket));
+				await placesKV.put(bucketKey, JSON.stringify(newBucket));
 			})
 		);
 

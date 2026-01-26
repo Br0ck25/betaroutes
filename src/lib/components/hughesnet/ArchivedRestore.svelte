@@ -125,7 +125,7 @@
 			</div>
 
 			<ul class="list">
-				{#each orders as o}
+				{#each orders as o (o.id)}
 					<li class="item">
 						<input
 							type="checkbox"

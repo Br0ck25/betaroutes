@@ -1,9 +1,14 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
-	export let selectedCount = 0;
-	export let isPro = false;
 
-	const dispatch = createEventDispatcher();
+	export let selectedCount: number = 0;
+	export let isPro: boolean = false;
+
+	const dispatch = createEventDispatcher<{
+		cancel: void;
+		export: void;
+		delete: void;
+	}>();
 </script>
 
 <div class="action-bar-container">
@@ -27,7 +32,7 @@
 		</div>
 
 		<div class="action-bar-right">
-			<button class="action-pill secondary" onclick={() => dispatch('cancel')}>
+			<button class="action-pill secondary" on:click={() => dispatch('cancel')}>
 				<svg
 					width="16"
 					height="16"
@@ -42,7 +47,7 @@
 				<span class="action-text">Cancel</span>
 			</button>
 
-			<button class="action-pill export" onclick={() => dispatch('export')}>
+			<button class="action-pill export" on:click={() => dispatch('export')}>
 				{#if !isPro}
 					<svg
 						width="16"
@@ -72,7 +77,7 @@
 				<span class="action-text">Export</span>
 			</button>
 
-			<button class="action-pill danger" onclick={() => dispatch('delete')}>
+			<button class="action-pill danger" on:click={() => dispatch('delete')}>
 				<svg
 					width="16"
 					height="16"

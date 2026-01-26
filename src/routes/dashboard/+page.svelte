@@ -12,6 +12,8 @@
 		computeMaintenance,
 		type TimeRange
 	} from '$lib/utils/dashboardLogic';
+	import { SvelteDate } from '$lib/utils/svelte-reactivity';
+	import type { Stop } from '$lib/types';
 
 	let selectedRange: TimeRange = '30d';
 
@@ -34,7 +36,10 @@
 
 	async function markServicedNow() {
 		const newOdo = Math.round(currentOdometer || 0);
-		const payload = { lastServiceOdometer: newOdo, lastServiceDate: new Date().toISOString() };
+		const payload = {
+			lastServiceOdometer: newOdo,
+			lastServiceDate: SvelteDate.now().toISOString()
+		};
 		try {
 			userSettings.update((s) => ({ ...s, ...payload }));
 			const result = await saveSettings(payload);
@@ -49,13 +54,23 @@
 	const rangeLabels = {
 		// ... existing labels
 		'7d': 'Last 7 days',
-		'30d': 'Last 30 days',
-		'60d': 'Last 60 days',
-		'90d': 'Last 90 days',
+		'30d': 'Last 30 Days',
+		'60d': 'Last 60 Days',
+		'90d': 'Last 90 Days',
 		'1y': 'Current Year',
 		'prev-1y': 'Previous Year',
 		all: 'All Time'
 	};
+
+	function getDestinationFromStops(stops?: Stop[] | undefined): string {
+		if (!stops || stops.length === 0) return 'No stops';
+		const last = stops[stops.length - 1];
+		if (last && typeof last.address === 'string') {
+			const first = (last.address as string).split(',')[0];
+			return first || 'Multiple stops';
+		}
+		return 'Multiple stops';
+	}
 </script>
 
 <svelte:head>
@@ -283,7 +298,7 @@
 				{#if stats.chartData.some((d) => d.profit !== 0)}
 					{@const maxProfit = Math.max(...stats.chartData.map((d) => Math.abs(d.profit)), 1)}
 					<div class="bar-chart">
-						{#each stats.chartData as day}
+						{#each stats.chartData as day (day.date)}
 							{@const height = (Math.abs(day.profit) / maxProfit) * 100}
 							<div class="bar-wrapper">
 								<div
@@ -328,7 +343,7 @@
 
 						<div class="donut-chart">
 							<svg viewBox="0 0 200 200">
-								{#each stats.costBreakdown as item, i}
+								{#each stats.costBreakdown as item, i (item.category)}
 									{@const prevItems = stats.costBreakdown.slice(0, i)}
 									{@const offset = prevItems.reduce(
 										(acc, curr) => acc + (curr.percentage / 100) * circumference,
@@ -351,7 +366,7 @@
 							</svg>
 
 							<div class="donut-legend">
-								{#each stats.costBreakdown as item}
+								{#each stats.costBreakdown as item (item.category)}
 									<div class="legend-item">
 										<div class="legend-dot" style="background: {item.color}"></div>
 										<div class="legend-text">
@@ -405,7 +420,7 @@
 
 		{#if stats.recentTrips.length > 0}
 			<div class="trips-list">
-				{#each stats.recentTrips as trip}
+				{#each stats.recentTrips as trip (trip.id)}
 					{@const earnings =
 						trip.stops?.reduce((s: number, stop: any) => s + (Number(stop.earnings) || 0), 0) || 0}
 					{@const costs =
@@ -443,13 +458,7 @@
 										stroke-linejoin="round"
 									/>
 								</svg>
-								<span class="trip-destination">
-									{trip.stops && trip.stops.length > 0
-										? typeof trip.stops[trip.stops.length - 1]?.address === 'string'
-											? trip.stops[trip.stops.length - 1].address.split(',')[0]
-											: 'Multiple stops'
-										: 'No stops'}
-								</span>
+								<span class="trip-destination">{getDestinationFromStops(trip.stops)}</span>
 							</div>
 							<div class="trip-meta">
 								<span>{formatDate(trip.date || '')}</span>

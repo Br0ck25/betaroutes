@@ -36,21 +36,22 @@ export const GET: RequestHandler = async (event) => {
 
 		// Initialize Services
 		const tripSvc = makeTripService(
-			kv as any,
+			kv as KVNamespace,
 			undefined,
-			placesKV as any,
-			tripIndexDO as any,
-			placesIndexDO as any
+			placesKV as KVNamespace | undefined,
+			tripIndexDO as DurableObjectNamespace,
+			placesIndexDO as DurableObjectNamespace
 		);
 
 		const expenseSvc = makeExpenseService(
-			safeKV(platformEnv, 'BETA_EXPENSES_KV') as any,
-			tripIndexDO as any
+			safeKV(platformEnv, 'BETA_EXPENSES_KV') as KVNamespace,
+			tripIndexDO as DurableObjectNamespace
 		);
 
 		const mileageSvc = makeMileageService(
-			safeKV(platformEnv, 'BETA_MILEAGE_KV') as any,
-			tripIndexDO as any
+			safeKV(platformEnv, 'BETA_MILEAGE_KV') as KVNamespace,
+			tripIndexDO as DurableObjectNamespace,
+			safeKV(platformEnv, 'BETA_LOGS_KV') as KVNamespace | undefined
 		);
 
 		const currentUser = user as { id?: string; name?: string; token?: string };
@@ -82,8 +83,9 @@ export const GET: RequestHandler = async (event) => {
 					mileageSvc.listTrash(storageId)
 				]);
 
-				cloudTrash = [...trips, ...expenses, ...mileage].sort((a: any, b: any) =>
-					(b.metadata?.deletedAt || '').localeCompare(a.metadata?.deletedAt || '')
+				cloudTrash = [...trips, ...expenses, ...mileage].sort(
+					(a: { metadata?: { deletedAt?: string } }, b: { metadata?: { deletedAt?: string } }) =>
+						(b.metadata?.deletedAt || '').localeCompare(a.metadata?.deletedAt || '')
 				);
 			}
 		} catch (err) {

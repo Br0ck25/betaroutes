@@ -2,9 +2,22 @@
 	import { trips } from '$lib/stores/trips';
 	import { user } from '$lib/stores/auth';
 	import { localDateISO } from '$lib/utils/dates';
+	type PreviewTrip = {
+		date: string;
+		totalMiles: number;
+		startAddress: string;
+		endAddress: string;
+		notes: string;
+		startTime: string;
+		endTime: string;
+		mpg: number;
+		gasPrice: number;
+		stops: unknown[];
+	};
+
 	let importFormat = 'csv';
 	let isProcessing = false;
-	let previewTrips: any[] = [];
+	let previewTrips: PreviewTrip[] = [];
 
 	// [SECURITY] Validate file content matches expected format (not just extension)
 	const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -79,8 +92,7 @@
 				alert('PDF import is not fully supported yet. Please use CSV for best results.');
 				previewTrips = [];
 			}
-		} catch (err) {
-			console.error('Parse error:', err);
+		} catch {
 			alert('Failed to parse file.');
 		} finally {
 			isProcessing = false;
@@ -125,16 +137,40 @@
 	async function saveTrips() {
 		if (previewTrips.length === 0) return;
 
-		const maybeUserId = $user?.name ?? $user?.token ?? localStorage.getItem('offline_user_id');
-		const userId: string = maybeUserId ?? 'offline';
+		// [!code fix] Strictly use authenticated user id only per SECURITY.md
+		const userId = $user?.id;
+
+		if (!userId) {
+			alert('You must be logged in to import trips.');
+			return;
+		}
 
 		try {
 			for (const trip of previewTrips) {
-				await trips.create(trip, userId);
+				// Map preview shape to TripRecord-compatible partial
+				const record: Partial<import('$lib/db/types').TripRecord> = {
+					id: crypto.randomUUID(),
+					userId,
+					date: trip.date,
+					totalMiles: trip.totalMiles,
+					startAddress: trip.startAddress,
+					endAddress: trip.endAddress,
+					notes: trip.notes,
+					startTime: trip.startTime,
+					endTime: trip.endTime,
+					mpg: trip.mpg,
+					gasPrice: trip.gasPrice,
+					stops: [],
+					createdAt: new Date().toISOString(),
+					updatedAt: new Date().toISOString(),
+					syncStatus: 'pending'
+				};
+
+				await trips.create(record, userId);
 			}
 			alert(`Successfully imported ${previewTrips.length} trips!`);
 			previewTrips = [];
-		} catch (e) {
+		} catch {
 			alert('Error saving trips.');
 		}
 	}
@@ -194,7 +230,7 @@
 
 		{#if previewTrips.length > 0}
 			<div class="trips-list">
-				{#each previewTrips as trip}
+				{#each previewTrips as trip, i (i)}
 					<div class="trip-item">
 						<div class="trip-content">
 							<div class="trip-top">

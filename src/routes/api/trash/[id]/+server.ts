@@ -9,6 +9,59 @@ import { dev } from '$app/environment';
 
 // [!code fix] SECURITY: Removed dangerous fakeDO fallback that caused silent data loss in production.
 
+// Helpers (top-level per governance rules)
+type Tombstone = {
+	deleted?: boolean;
+	backup?: unknown;
+	data?: unknown;
+	deletedAt?: string;
+	[id: string]: unknown;
+};
+
+function parseTombstone(raw?: string | null): Tombstone | null {
+	if (!raw) return null;
+	try {
+		const t = JSON.parse(raw);
+		if (t && typeof t === 'object') return t as Tombstone;
+	} catch {
+		// invalid tombstone JSON - treat as missing
+	}
+	return null;
+}
+
+function isTrip(obj: unknown): obj is { stops?: unknown[]; startAddress?: string } {
+	if (!obj || typeof obj !== 'object') return false;
+	const o = obj as Record<string, unknown>;
+	if (Array.isArray(o['stops'])) return true;
+	if (
+		typeof o['startAddress'] === 'string' &&
+		o['startAddress'] &&
+		String(o['startAddress']).length > 0
+	)
+		return true;
+	return false;
+}
+
+// Extract userId from restored object for ownership checks
+function getRestoredUserId(obj: unknown): string | undefined {
+	if (!obj || typeof obj !== 'object') return undefined;
+	const o = obj as Record<string, unknown>;
+	return typeof o['userId'] === 'string' ? String(o['userId']) : undefined;
+}
+
+// Map common restore errors to HTTP status codes and messages
+function mapRestoreError(err: unknown): { status: number; message: string } {
+	const msg = err instanceof Error ? err.message : String(err);
+	const lower = msg.toLowerCase();
+	if (lower.includes('not found')) return { status: 404, message: 'Item not found in trash' };
+	if (lower.includes('not deleted') || lower.includes('backup data not found'))
+		return { status: 409, message: msg };
+	if (lower.includes('cannot restore mileage') || lower.includes('parent trip'))
+		return { status: 409, message: msg };
+	if (lower.includes('restore failed')) return { status: 500, message: 'Restore failed' };
+	return { status: 500, message: 'Internal Server Error' };
+}
+
 export const POST: RequestHandler = async (event) => {
 	try {
 		const user = event.locals.user;
@@ -26,22 +79,22 @@ export const POST: RequestHandler = async (event) => {
 		const placesIndexDO = safeDO(platformEnv, 'PLACES_INDEX_DO') ?? tripIndexDO;
 
 		const tripSvc = makeTripService(
-			safeKV(platformEnv, 'BETA_LOGS_KV') as any,
+			safeKV(platformEnv, 'BETA_LOGS_KV') as KVNamespace,
 			undefined,
-			safeKV(platformEnv, 'BETA_PLACES_KV') as any,
-			tripIndexDO as any,
-			placesIndexDO as any
+			safeKV(platformEnv, 'BETA_PLACES_KV') as KVNamespace | undefined,
+			tripIndexDO as DurableObjectNamespace,
+			placesIndexDO as DurableObjectNamespace
 		);
 
 		const expenseSvc = makeExpenseService(
-			safeKV(platformEnv, 'BETA_EXPENSES_KV') as any,
-			tripIndexDO as any
+			safeKV(platformEnv, 'BETA_EXPENSES_KV') as KVNamespace,
+			tripIndexDO as DurableObjectNamespace
 		);
 
 		const mileageSvc = makeMileageService(
-			safeKV(platformEnv, 'BETA_MILEAGE_KV') as any,
-			tripIndexDO as any,
-			safeKV(platformEnv, 'BETA_LOGS_KV') as any
+			safeKV(platformEnv, 'BETA_MILEAGE_KV') as KVNamespace,
+			tripIndexDO as DurableObjectNamespace,
+			safeKV(platformEnv, 'BETA_LOGS_KV') as KVNamespace | undefined
 		);
 
 		const currentUser = user as { id?: string; name?: string; token?: string };
@@ -55,37 +108,53 @@ export const POST: RequestHandler = async (event) => {
 			// Strategy: Try sequentially until one succeeds
 			try {
 				restored = await tripSvc.restore(storageId, id);
-			} catch {
+			} catch (err) {
+				const mapped = mapRestoreError(err);
+				if (mapped.status !== 404) {
+					// Return immediately for known errors (e.g., 409)
+					return new Response(JSON.stringify({ error: mapped.message }), { status: mapped.status });
+				}
+				// otherwise record lastError and continue to next service
+				lastError = mapped.message;
 				try {
 					restored = await expenseSvc.restore(storageId, id);
-				} catch {
+				} catch (err2) {
+					const mapped2 = mapRestoreError(err2);
+					if (mapped2.status !== 404) {
+						return new Response(JSON.stringify({ error: mapped2.message }), {
+							status: mapped2.status
+						});
+					}
+					lastError = mapped2.message;
 					try {
 						// Get the mileage item from trash to check its tripId
 						const mileageKV = safeKV(platformEnv, 'BETA_MILEAGE_KV');
 						if (mileageKV) {
-							const raw = await (mileageKV as any).get(`mileage:${storageId}:${id}`);
-							if (raw) {
-								const tombstone = JSON.parse(raw);
-								const mileageData = tombstone.backup || tombstone.data || tombstone;
+							const raw = await (mileageKV as KVNamespace).get(`mileage:${storageId}:${id}`);
+							const tombstone = parseTombstone(raw as string | null);
+							const mileageData = (tombstone?.backup ?? tombstone?.data ?? null) as Record<
+								string,
+								unknown
+							> | null;
 
-								// Check if mileage has a linked trip
-								if (mileageData.tripId) {
-									// Check if parent trip is deleted
-									const trip = await tripSvc.get(storageId, mileageData.tripId);
-									if (!trip || trip.deleted) {
-										throw new Error('Cannot restore mileage: parent trip is deleted');
-									}
+							// Check if mileage has a linked trip
+							if (mileageData && typeof mileageData['tripId'] === 'string') {
+								const tripId = String(mileageData['tripId']);
+								// Check if parent trip is deleted
+								const trip = await tripSvc.get(storageId, tripId);
+								if (!trip || trip.deleted) {
+									throw new Error('Cannot restore mileage: parent trip is deleted');
+								}
 
-									// Check if another active mileage log exists for this trip
-									const activeMileage = await mileageSvc.list(storageId);
-									const conflictingMileage = activeMileage.find(
-										(m: MileageRecord) => m.tripId === mileageData.tripId && m.id !== id
+								// Check if another active mileage log exists for this trip
+								const activeMileage = await mileageSvc.list(storageId);
+								const conflictingMileage = activeMileage.find(
+									(m: MileageRecord) => m.tripId === tripId && m.id !== id
+								);
+								if (conflictingMileage) {
+									throw new Error(
+										'Cannot restore mileage: another active mileage log exists for this trip'
 									);
-									if (conflictingMileage) {
-										throw new Error(
-											'Cannot restore mileage: another active mileage log exists for this trip'
-										);
-									}
 								}
 							}
 						}
@@ -113,37 +182,50 @@ export const POST: RequestHandler = async (event) => {
 								log.warn('Failed to sync restored mileage to trip', { message: String(e) });
 							}
 						}
-					} catch (err) {
-						// Check if this is a validation error that we should surface
-						const errMsg = err instanceof Error ? err.message : String(err);
-						if (errMsg.includes('Cannot restore mileage')) {
-							return new Response(JSON.stringify({ error: errMsg }), { status: 409 });
+					} catch (err3) {
+						const mapped3 = mapRestoreError(err3);
+						if (mapped3.status !== 404) {
+							return new Response(JSON.stringify({ error: mapped3.message }), {
+								status: mapped3.status
+							});
 						}
-						// Store the error for later use if no restore succeeded
-						lastError = errMsg;
+						lastError = mapped3.message;
 					}
 				}
 			}
 
+			// If a restore succeeded, enforce ownership and return success
 			if (restored) {
+				const restoredUser = getRestoredUserId(restored);
+				if (restoredUser && restoredUser !== storageId) {
+					return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
+				}
+
 				// Only trips need counter incrementing
+				type TripCounter = {
+					incrementUserCounter?: (userId: string, n: number) => Promise<number>;
+				};
+				const tripCounter = tripSvc as TripCounter;
 				try {
-					if ((restored as any).stops || (restored as any).startAddress) {
-						await (tripSvc as any).incrementUserCounter?.(storageId, 1);
+					if (isTrip(restored) && typeof tripCounter.incrementUserCounter === 'function') {
+						await tripCounter.incrementUserCounter(storageId, 1);
 					}
 				} catch {
-					void 0;
+					// intentionally swallow counter errors
 				}
 
 				return new Response(JSON.stringify({ success: true }), { status: 200 });
 			}
 
-			// If all restore attempts failed with a validation error, surface it
+			// If all restore attempts returned 404 / not found, surface a consistent 404
 			if (lastError) {
-				return new Response(JSON.stringify({ error: lastError }), { status: 409 });
+				return new Response(JSON.stringify({ error: lastError }), { status: 404 });
 			}
+
+			return new Response(JSON.stringify({ error: 'Item not found in trash' }), { status: 404 });
 		}
 
+		// If we fall through because storageId is falsy or outer logic didn't return, surface 404
 		return new Response(JSON.stringify({ error: 'Item not found in trash' }), { status: 404 });
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
@@ -172,21 +254,21 @@ export const DELETE: RequestHandler = async (event) => {
 
 		// Initialize all services
 		const tripSvc = makeTripService(
-			safeKV(platformEnv, 'BETA_LOGS_KV') as any,
+			safeKV(platformEnv, 'BETA_LOGS_KV') as KVNamespace,
 			undefined,
-			safeKV(platformEnv, 'BETA_PLACES_KV') as any,
-			tripIndexDO as any,
-			placesIndexDO as any
+			safeKV(platformEnv, 'BETA_PLACES_KV') as KVNamespace | undefined,
+			tripIndexDO as DurableObjectNamespace,
+			placesIndexDO as DurableObjectNamespace
 		);
 
 		const expenseSvc = makeExpenseService(
-			safeKV(platformEnv, 'BETA_EXPENSES_KV') as any,
-			tripIndexDO as any
+			safeKV(platformEnv, 'BETA_EXPENSES_KV') as KVNamespace,
+			tripIndexDO as DurableObjectNamespace
 		);
 
 		const mileageSvc = makeMileageService(
-			safeKV(platformEnv, 'BETA_MILEAGE_KV') as any,
-			tripIndexDO as any
+			safeKV(platformEnv, 'BETA_MILEAGE_KV') as KVNamespace,
+			tripIndexDO as DurableObjectNamespace
 		);
 
 		const currentUser = user as { id?: string; name?: string; token?: string };
@@ -211,27 +293,21 @@ export const DELETE: RequestHandler = async (event) => {
 				let foundType: string | null = null;
 
 				if (tripKV) {
-					const tripRaw = await (tripKV as any).get(`trip:${storageId}:${id}`);
-					if (tripRaw) {
-						const parsed = JSON.parse(tripRaw);
-						if (parsed.deleted) foundType = 'trip';
-					}
+					const tripRaw = await (tripKV as KVNamespace).get(`trip:${storageId}:${id}`);
+					const parsedTrip = parseTombstone(tripRaw as string | null);
+					if (parsedTrip?.deleted) foundType = 'trip';
 				}
 
 				if (!foundType && mileageKV) {
-					const mileageRaw = await (mileageKV as any).get(`mileage:${storageId}:${id}`);
-					if (mileageRaw) {
-						const parsed = JSON.parse(mileageRaw);
-						if (parsed.deleted) foundType = 'mileage';
-					}
+					const mileageRaw = await (mileageKV as KVNamespace).get(`mileage:${storageId}:${id}`);
+					const parsedMileage = parseTombstone(mileageRaw as string | null);
+					if (parsedMileage?.deleted) foundType = 'mileage';
 				}
 
 				if (!foundType && expenseKV) {
-					const expenseRaw = await (expenseKV as any).get(`expense:${storageId}:${id}`);
-					if (expenseRaw) {
-						const parsed = JSON.parse(expenseRaw);
-						if (parsed.deleted) foundType = 'expense';
-					}
+					const expenseRaw = await (expenseKV as KVNamespace).get(`expense:${storageId}:${id}`);
+					const parsedExpense = parseTombstone(expenseRaw as string | null);
+					if (parsedExpense?.deleted) foundType = 'expense';
 				}
 
 				// Only delete from the service that has the tombstone

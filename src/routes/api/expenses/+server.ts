@@ -24,7 +24,7 @@ const expenseSchema = z.object({
 // Use normalized environment accessor
 // (getEnv returns a permissive 'any' and safeKV/safeDO return bindings safely)
 
-type SessionUser = { id?: string; name?: string; token?: string; plan?: string };
+type SessionUser = { id?: string; plan?: string };
 
 export const GET: RequestHandler = async (event) => {
 	try {
@@ -33,6 +33,7 @@ export const GET: RequestHandler = async (event) => {
 
 		const env = getEnv(event.platform);
 		const storageId = getStorageId(user);
+		if (!storageId) return new Response('Unauthorized', { status: 401 });
 		let since = event.url.searchParams.get('since') || undefined;
 
 		// Add buffer and clamp future times (5 minutes) to compensate for client clock skew
@@ -81,6 +82,7 @@ export const POST: RequestHandler = async (event) => {
 		const user = event.locals.user as SessionUser | undefined;
 		if (!user) return new Response('Unauthorized', { status: 401 });
 		const storageId = getStorageId(user);
+		if (!storageId) return new Response('Unauthorized', { status: 401 });
 		const env = getEnv(event.platform);
 
 		// [!code fix] SECURITY (Issue #8): Rate limiting for expense creation
@@ -114,13 +116,22 @@ export const POST: RequestHandler = async (event) => {
 		// Inject DO Binding
 		const svc = makeExpenseService(safeKV(env, 'BETA_EXPENSES_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 
-		const expense = {
-			...parseResult.data,
-			id: parseResult.data.id || crypto.randomUUID(),
+		// Build explicit expense object (NO mass-assignment)
+		const data = parseResult.data;
+		const expense: ExpenseRecord & Record<string, unknown> = {
+			id: data.id || crypto.randomUUID(),
 			userId: storageId,
-			createdAt: parseResult.data.createdAt || new Date().toISOString(),
+			date: data.date,
+			category: data.category,
+			amount: Number(data.amount),
+			description: typeof data.description === 'string' ? data.description : undefined,
+			createdAt: data.createdAt || new Date().toISOString(),
 			updatedAt: new Date().toISOString()
 		};
+
+		// Optional: include taxDeductible if provided (allowed field)
+		if (typeof data.taxDeductible === 'boolean')
+			(expense as Record<string, unknown>)['taxDeductible'] = data.taxDeductible;
 
 		// --- FREE TIER EXPENSE QUOTA (atomic via Durable Object to prevent race conditions) ---
 		let currentPlan: string = String(user.plan || '');
@@ -130,7 +141,7 @@ export const POST: RequestHandler = async (event) => {
 			const usersKV = safeKV(env, 'BETA_USERS_KV');
 			if (usersKV) {
 				try {
-					const fresh = await findUserById(usersKV, user.id || user.token || '');
+					const fresh = await findUserById(usersKV, user.id || '');
 					if (fresh && fresh.plan) currentPlan = fresh.plan;
 				} catch (err: unknown) {
 					log.warn('Failed to fetch fresh user plan', { message: createSafeErrorMessage(err) });
@@ -160,14 +171,14 @@ export const POST: RequestHandler = async (event) => {
 			// Note: Counter was already incremented atomically by checkMonthlyQuota
 		}
 
-		const savedExpense = { ...expense } as Record<string, unknown>;
-		// Remove any UI-only fields (like `store`) before persisting
-		delete (savedExpense as Record<string, unknown>)['store'];
+		// Persist the canonical expense record (explicit fields only)
+		await svc.put(expense as ExpenseRecord);
+		log.info('Saved expense', { id: expense.id });
 
-		await svc.put(savedExpense as ExpenseRecord);
-		log.info('Saved expense', { id: (savedExpense as ExpenseRecord).id });
-
-		return new Response(JSON.stringify(savedExpense), { status: 201 });
+		return new Response(JSON.stringify(expense), {
+			headers: { 'Content-Type': 'application/json' },
+			status: 201
+		});
 	} catch (err: unknown) {
 		log.error('POST Expense Error', { message: createSafeErrorMessage(err) });
 		return new Response(JSON.stringify({ error: 'Internal Error' }), { status: 500 });

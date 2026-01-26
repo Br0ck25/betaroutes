@@ -4,8 +4,8 @@ import type { RequestHandler } from './$types';
 import { authenticateUser } from '$lib/server/auth';
 import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { createSession } from '$lib/server/sessionService';
+import { migrateUserStorageKeys } from '$lib/server/migration/storage-key-migration';
 import { findUserById } from '$lib/server/userService';
-import { makeTripService } from '$lib/server/tripService';
 import { checkRateLimit } from '$lib/server/rateLimit';
 import { dev } from '$app/environment';
 import { log } from '$lib/server/log';
@@ -19,12 +19,12 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 		// 1. Check Bindings
 		if (!kv || !sessionKv) {
 			log.error('KV binding missing');
-			if (!dev) return json({ error: 'Service Unavailable' }, { status: 503 });
+			return json({ error: 'Service Unavailable' }, { status: 503 });
 		}
 
 		// 2. Rate Limiting (Prevent Credential Stuffing)
 		// [!code fix] Issue #50: Use higher limit in dev instead of completely disabling
-		if (kv) {
+		{
 			const clientIp = request.headers.get('CF-Connecting-IP') || getClientAddress();
 
 			// Dev mode: 50 attempts per 60s (more lenient but still protected)
@@ -42,31 +42,35 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 			}
 		}
 
-		// 3. Parse Body
-		const body = (await request.json()) as { email?: string; password?: string };
-		const { email, password } = body;
+		// 3. Parse Body (strict validation)
+		const rawBody = await request.json().catch(() => null);
+		if (!rawBody || typeof rawBody !== 'object') {
+			return json({ error: 'Invalid request' }, { status: 400 });
+		}
+		const parsed = rawBody as Record<string, unknown>;
+		const email = typeof parsed['email'] === 'string' ? parsed['email'].trim() : '';
+		const password = typeof parsed['password'] === 'string' ? parsed['password'] : '';
+		if (!email || !password) {
+			return json({ error: 'Email and password are required' }, { status: 400 });
+		}
 
-		// 4. Authenticate
-		// @ts-expect-error - authenticateUser has broader types; casting result safely below
-		const authResult = await authenticateUser(kv, email, password);
+		// 4. Authenticate (pass ExecutionContext for optional background tasks)
+		const execContext = platform?.context as unknown as ExecutionContext | undefined;
+		const authResult = await authenticateUser(kv, email, password, execContext);
 
 		if (!authResult) {
 			return json({ error: 'Invalid credentials' }, { status: 401 });
 		}
 
 		// 5. Fetch Full User details
-		const fullUser = await findUserById(
-			kv as unknown as import('@cloudflare/workers-types').KVNamespace,
-			authResult.id
-		);
+		const fullUser = await findUserById(kv as unknown as KVNamespace, authResult.id);
 		const now = new Date().toISOString();
 
-		// 6. Prepare Session Data
+		// 6. Prepare Session Data (Do NOT rely on authResult for sensitive fields)
 		const sessionData = {
 			id: authResult.id,
-			// [!code fix] Use the display name (e.g. "James") if available, otherwise fallback to username
-			name: fullUser?.name || authResult.username,
-			email: authResult.email,
+			name: fullUser?.name ?? fullUser?.username ?? '',
+			email: fullUser?.email ?? '',
 			plan: fullUser?.plan || 'free',
 			tripsThisMonth: fullUser?.tripsThisMonth || 0,
 			maxTrips: fullUser?.maxTrips || 10,
@@ -78,7 +82,6 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 		};
 
 		// 7. Create Session in SESSIONS_KV
-		// @ts-expect-error - createSession signature is broad in some environments
 		const sessionId = await createSession(sessionKv, sessionData);
 
 		// 8. Set Cookie (Issue #5: Changed sameSite from 'none' to 'lax' for better security)
@@ -90,39 +93,30 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 			maxAge: 60 * 60 * 24 * 7
 		});
 
-		// 9. AUTO-MIGRATION
-		// Move legacy data (username key) to new storage (UUID key) in background
-		if (
-			platform?.context &&
-			safeKV(env, 'BETA_LOGS_KV') &&
-			(safeDO(env, 'TRIP_INDEX_DO') || (env as unknown as Record<string, unknown>)['TRIP_INDEX_DO'])
-		) {
-			const userId = authResult.id;
-			const username = authResult.username;
-
-			platform.context.waitUntil(
-				(async () => {
-					try {
-						const tripIndexDO =
-							safeDO(env, 'TRIP_INDEX_DO') ||
-							(env as unknown as Record<string, unknown>)['TRIP_INDEX_DO'];
-						const placesIndexDO = safeDO(env, 'PLACES_INDEX_DO') || tripIndexDO;
-						const svc = makeTripService(
-							safeKV(env, 'BETA_LOGS_KV') as any,
-							undefined,
-							safeKV(env, 'BETA_PLACES_KV') as any,
-							tripIndexDO as any,
-							placesIndexDO as any
-						);
-
-						// Trigger the move. If keys exist under 'username', they move to 'userId'.
-						await (svc as any).migrateUser?.(username, userId);
-					} catch (e: unknown) {
-						const msg = e instanceof Error ? e.message : String(e);
-						log.error('[Auto-Migration] Failed', { username, message: msg });
-					}
-				})()
-			);
+		// 9. AUTO-MIGRATION - run in background (typed, uses migration util)
+		if (platform?.context) {
+			const logsKV = safeKV(env, 'BETA_LOGS_KV');
+			const tripIndexDO = safeDO(env, 'TRIP_INDEX_DO');
+			if (logsKV && tripIndexDO) {
+				const userId = authResult.id;
+				const username = fullUser?.username ?? '';
+				if (username) {
+					const migrationEnv = {
+						BETA_LOGS_KV: logsKV,
+						BETA_EXPENSES_KV: safeKV(env, 'BETA_EXPENSES_KV'),
+						BETA_MILEAGE_KV: safeKV(env, 'BETA_MILEAGE_KV'),
+						BETA_TRASH_KV: safeKV(env, 'BETA_TRASH_KV'),
+						BETA_HUGHESNET_KV: safeKV(env, 'BETA_HUGHESNET_KV'),
+						BETA_HUGHESNET_ORDERS_KV: safeKV(env, 'BETA_HUGHESNET_ORDERS_KV')
+					};
+					platform.context.waitUntil(
+						migrateUserStorageKeys(migrationEnv, userId, username).catch((e: unknown) => {
+							const msg = e instanceof Error ? e.message : String(e);
+							log.error('[Auto-Migration] Failed', { username, message: msg });
+						})
+					);
+				}
+			}
 		}
 
 		return json({ user: sessionData });

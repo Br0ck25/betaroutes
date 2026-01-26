@@ -1,5 +1,5 @@
 // src/lib/server/tripService.ts
-import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
+
 import { generatePrefixKey, generatePlaceKey } from '$lib/utils/keys';
 import { DO_ORIGIN, RETENTION } from '$lib/constants';
 import { log } from '$lib/server/log';

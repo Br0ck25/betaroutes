@@ -1,5 +1,5 @@
 // src/lib/server/sessionService.ts
-import type { KVNamespace } from '@cloudflare/workers-types';
+
 import { randomUUID } from 'node:crypto';
 
 // SECURITY (Issue #12): Interface for session data with required userId

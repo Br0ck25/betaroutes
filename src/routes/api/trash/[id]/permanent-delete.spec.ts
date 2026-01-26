@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Mock } from 'vitest';
 
-let mockTripSvc: any;
-let mockExpenseSvc: any;
-let mockMileageSvc: any;
-let mockTripKV: any;
-let mockExpenseKV: any;
-let mockMileageKV: any;
+let mockTripSvc: { permanentDelete: Mock };
+let mockExpenseSvc: { permanentDelete: Mock };
+let mockMileageSvc: { permanentDelete: Mock };
+let mockTripKV: { get: Mock };
+let mockExpenseKV: { get: Mock };
+let mockMileageKV: { get: Mock };
 
 vi.mock('$lib/server/tripService', () => ({
 	makeTripService: () => mockTripSvc
@@ -31,7 +32,7 @@ vi.mock('$lib/server/env', () => ({
 }));
 
 vi.mock('$lib/server/user', () => ({
-	getStorageId: (u: { id?: string; name?: string }) => u.id || u.name || 'mock-storage-id'
+	getStorageId: (u: { id?: string }) => u.id || 'mock-storage-id'
 }));
 
 vi.mock('$lib/server/log', () => ({
@@ -54,13 +55,13 @@ describe('DELETE /api/trash/[id] handler', () => {
 	});
 
 	it('deletes only from mileage service when type=mileage is specified', async () => {
-		const event: any = {
+		const event = {
 			request: {},
 			locals: { user: { id: 'u1', name: 'testuser' } },
 			platform: { env: {} },
 			params: { id: 'test-id-123' },
 			url: new URL('http://localhost/api/trash/test-id-123?type=mileage')
-		};
+		} as unknown as Parameters<typeof import('./+server').DELETE>[0];
 
 		const { DELETE } = await import('./+server');
 		const res = await DELETE(event);
@@ -72,13 +73,13 @@ describe('DELETE /api/trash/[id] handler', () => {
 	});
 
 	it('deletes only from trip service when type=trip is specified', async () => {
-		const event: any = {
+		const event = {
 			request: {},
 			locals: { user: { id: 'u2', name: 'testuser2' } },
 			platform: { env: {} },
 			params: { id: 'trip-id-456' },
 			url: new URL('http://localhost/api/trash/trip-id-456?type=trip')
-		};
+		} as unknown as Parameters<typeof import('./+server').DELETE>[0];
 
 		const { DELETE } = await import('./+server');
 		const res = await DELETE(event);
@@ -90,13 +91,13 @@ describe('DELETE /api/trash/[id] handler', () => {
 	});
 
 	it('deletes only from expense service when type=expense is specified', async () => {
-		const event: any = {
+		const event = {
 			request: {},
 			locals: { user: { id: 'u3', name: 'testuser3' } },
 			platform: { env: {} },
 			params: { id: 'expense-id-789' },
 			url: new URL('http://localhost/api/trash/expense-id-789?type=expense')
-		};
+		} as unknown as Parameters<typeof import('./+server').DELETE>[0];
 
 		const { DELETE } = await import('./+server');
 		const res = await DELETE(event);
@@ -120,13 +121,13 @@ describe('DELETE /api/trash/[id] handler', () => {
 			})
 		);
 
-		const event: any = {
+		const event = {
 			request: {},
 			locals: { user: { id: 'u4', name: 'testuser4' } },
 			platform: { env: {} },
 			params: { id: 'mileage-id' },
 			url: new URL('http://localhost/api/trash/mileage-id')
-		};
+		} as unknown as Parameters<typeof import('./+server').DELETE>[0];
 
 		const { DELETE } = await import('./+server');
 		const res = await DELETE(event);
@@ -150,13 +151,13 @@ describe('DELETE /api/trash/[id] handler', () => {
 		mockExpenseKV.get = vi.fn().mockResolvedValue(null);
 		mockMileageKV.get = vi.fn().mockResolvedValue(null);
 
-		const event: any = {
+		const event = {
 			request: {},
 			locals: { user: { id: 'u5', name: 'testuser5' } },
 			platform: { env: {} },
 			params: { id: 'trip-id' },
 			url: new URL('http://localhost/api/trash/trip-id')
-		};
+		} as unknown as Parameters<typeof DELETE>[0];
 
 		const { DELETE } = await import('./+server');
 		const res = await DELETE(event);
@@ -173,13 +174,13 @@ describe('DELETE /api/trash/[id] handler', () => {
 		mockExpenseKV.get = vi.fn().mockResolvedValue(null);
 		mockMileageKV.get = vi.fn().mockResolvedValue(null);
 
-		const event: any = {
+		const event = {
 			request: {},
 			locals: { user: { id: 'u6', name: 'testuser6' } },
 			platform: { env: {} },
 			params: { id: 'nonexistent-id' },
 			url: new URL('http://localhost/api/trash/nonexistent-id')
-		};
+		} as unknown as Parameters<typeof import('./+server').DELETE>[0];
 
 		const { DELETE } = await import('./+server');
 		const res = await DELETE(event);

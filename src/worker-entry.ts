@@ -1,7 +1,8 @@
 // src/worker-entry.ts
 
+import { log } from '$lib/server/log';
+
 // [!code fix] Export the correct class names defined in wrangler.toml
-import type { KVNamespace } from '@cloudflare/workers-types';
 export { TripIndexSQL, PlacesIndexSQL } from './do-worker';
 
 /**
@@ -106,7 +107,8 @@ export default {
 					})
 				);
 
-				return withCors(Response.json({ token }), request);
+				// Do NOT return session tokens from legacy login/signup endpoints
+				return withCors(Response.json({ success: true }), request);
 			}
 
 			if (pathname === '/api/login' && request.method === 'POST') {
@@ -137,14 +139,15 @@ export default {
 				}
 
 				if (!matches) return withCors(new Response('Invalid', { status: 403 }), request);
-				return withCors(Response.json({ token: user.token }), request);
+				// Do NOT expose session token from legacy login endpoint
+				return withCors(Response.json({ success: true }), request);
 			}
 
 			// ... (Rest of your endpoint logic using same verification patterns)
 
 			return withCors(new Response('Not found', { status: 404 }), request);
 		} catch (err) {
-			console.error('worker error', err);
+			log.error('[WORKER] error', { err: (err as Error)?.message ?? String(err) });
 			return withCors(Response.json({ error: 'Server Error' }, { status: 500 }), request);
 		}
 	}

@@ -29,20 +29,21 @@
 				body: JSON.stringify({ token, password })
 			});
 
-			let data: any = {};
+			let data: { message?: string } | undefined;
 			try {
-				data = (await res.json()) as any;
-			} catch (e) {
+				data = (await res.json()) as { message?: string };
+			} catch {
 				// ignore parse errors
 			}
 
 			if (res.ok) {
 				success = true;
+				// eslint-disable-next-line svelte/no-navigation-without-resolve
 				setTimeout(() => goto(resolve('/login')), 3000);
 			} else {
 				error = (data && data.message) || 'Failed to reset password.';
 			}
-		} catch (e) {
+		} catch {
 			error = 'Network error occurred.';
 		} finally {
 			loading = false;
@@ -58,6 +59,7 @@
 	<div class="form-container">
 		{#if !token}
 			<div class="alert error">Invalid link. Please request a new password reset.</div>
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 			<a href={resolve('/forgot-password')} class="back-link">Go to Forgot Password</a>
 		{:else if success}
 			<div class="alert success">

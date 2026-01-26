@@ -111,11 +111,7 @@
 		}
 
 		const currentUser = ($page.data as any)['user'] || $user;
-		const userId =
-			(currentUser as any)?.name ||
-			(currentUser as any)?.token ||
-			localStorage.getItem('offline_user_id');
-
+		const userId = (currentUser as any)?.id || localStorage.getItem('offline_user_id');
 		if (!userId) {
 			toasts.error('User not identified. Cannot save.');
 			return;
@@ -203,7 +199,7 @@
 							disabled={!!formData.category && !maintenanceOptions.includes(formData.category)}
 						>
 							<option value="" disabled selected>Select Item...</option>
-							{#each maintenanceOptions as option}
+							{#each maintenanceOptions as option (option)}
 								<option value={option}>{option}</option>
 							{/each}
 						</select>
@@ -260,7 +256,7 @@
 							disabled={!!formData.category && !suppliesOptions.includes(formData.category)}
 						>
 							<option value="" disabled selected>Select Item...</option>
-							{#each suppliesOptions as option}
+							{#each suppliesOptions as option (option)}
 								<option value={option}>{option}</option>
 							{/each}
 						</select>
@@ -317,7 +313,7 @@
 							disabled={!!formData.category && !expenseOptions.includes(formData.category)}
 						>
 							<option value="" disabled selected>Select Item...</option>
-							{#each expenseOptions as option}
+							{#each expenseOptions as option (option)}
 								<option value={option}>{option}</option>
 							{/each}
 						</select>

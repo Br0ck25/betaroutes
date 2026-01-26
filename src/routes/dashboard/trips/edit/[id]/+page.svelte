@@ -102,7 +102,7 @@
 
 	async function loadTripData() {
 		const currentUser = $page.data['user'] || $user;
-		let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
+		const userId = currentUser?.id || localStorage.getItem('offline_user_id');
 		if (!$trips || $trips.length === 0) {
 			if (userId) await trips.load(userId);
 		}
@@ -361,8 +361,8 @@
 			} else {
 				console.info('[route] server miss or error', localKey);
 			}
-		} catch (err) {
-			console.info('[route] server fetch failed, falling back to local cache', localKey, err);
+		} catch (_err) {
+			console.info('[route] server fetch failed, falling back to local cache', localKey, _err);
 		}
 
 		// Fallback to local cache
@@ -752,7 +752,7 @@
 
 	async function saveTrip() {
 		const currentUser = $page.data['user'] || $user;
-		let userId = currentUser?.name || currentUser?.token || localStorage.getItem('offline_user_id');
+		const userId = currentUser?.id || localStorage.getItem('offline_user_id');
 		if (!userId) {
 			toasts.error('Authentication error. Please login.');
 			return;
@@ -791,9 +791,9 @@
 			await trips.updateTrip(String(tripId), tripToSave, uid);
 			toasts.success('Trip updated successfully!');
 			goto(resolve('/dashboard/trips'));
-		} catch (err: any) {
-			console.error('Update failed:', err);
-			const message = err?.message || 'Failed to update trip.';
+		} catch (_err: any) {
+			console.error('Update failed:', _err);
+			const message = _err?.message || 'Failed to update trip.';
 			toasts.error(message);
 		}
 	}
@@ -1080,7 +1080,7 @@
 						class="select-input"
 						aria-label="Maintenance type"
 						><option value="" disabled selected>Select Item...</option
-						>{#each maintenanceOptions as option}<option value={option}>{option}</option
+						>{#each maintenanceOptions as option (option)}<option value={option}>{option}</option
 							>{/each}</select
 					><button
 						class="btn-small primary"
@@ -1088,7 +1088,7 @@
 						disabled={!selectedMaintenance}>Add</button
 					>
 				</div>
-				{#each tripData.maintenanceItems as item}<div class="expense-row">
+				{#each tripData.maintenanceItems as item, i (item.id ?? i)}<div class="expense-row">
 						<span class="name">{item.type}</span>
 						<div class="input-money-wrapper small">
 							<span class="symbol">$</span><input
@@ -1141,13 +1141,13 @@
 				<div class="add-row">
 					<select bind:value={selectedSupply} class="select-input" aria-label="Supply type"
 						><option value="" disabled selected>Select Item...</option
-						>{#each suppliesOptions as option}<option value={option}>{option}</option
+						>{#each suppliesOptions as option (option)}<option value={option}>{option}</option
 							>{/each}</select
 					><button class="btn-small primary" on:click={addSupplyItem} disabled={!selectedSupply}
 						>Add</button
 					>
 				</div>
-				{#each tripData.suppliesItems as item}<div class="expense-row">
+				{#each tripData.suppliesItems as item, i (item.id ?? i)}<div class="expense-row">
 						<span class="name">{item.type}</span>
 						<div class="input-money-wrapper small">
 							<span class="symbol">$</span><input
@@ -1227,9 +1227,13 @@
 				<div class="row subheader"><span>Expenses Breakdown</span></div>
 				{#if tripData.fuelCost > 0}<div class="row detail">
 						<span>Fuel</span> <span class="val">{formatCurrency(tripData.fuelCost)}</span>
-					</div>{/if}{#each tripData.maintenanceItems as item}<div class="row detail">
+					</div>{/if}{#each tripData.maintenanceItems as item, i (item.id ?? i)}<div
+						class="row detail"
+					>
 						<span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span>
-					</div>{/each}{#each tripData.suppliesItems as item}<div class="row detail">
+					</div>{/each}{#each tripData.suppliesItems as item, i (item.id ?? i)}<div
+						class="row detail"
+					>
 						<span>{item.type}</span> <span class="val">{formatCurrency(item.cost)}</span>
 					</div>{/each}
 				<div class="row total-expenses">
@@ -1265,7 +1269,7 @@
 			>
 		</div>
 		<div class="cat-list">
-			{#each activeCategories as cat}
+			{#each activeCategories as cat (cat)}
 				<div class="cat-item">
 					<span class="cat-badge">{cat}</span>
 					<button

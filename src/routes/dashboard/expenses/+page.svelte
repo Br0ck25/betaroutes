@@ -9,6 +9,7 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onDestroy } from 'svelte';
+	import { SvelteSet } from '$lib/utils/svelte-reactivity';
 	import type { PageData } from './$types';
 
 	export let data: PageData;
@@ -33,12 +34,13 @@
 	let sortOrder = 'desc';
 	let filterCategory = 'all';
 
-	const _now = new Date();
-	function _fmtInput(d: Date) {
-		return d.toISOString().slice(0, 10);
+	import { SvelteDate } from '$lib/utils/svelte-reactivity';
+	const _now = SvelteDate.now();
+	function _fmtInput(d: SvelteDate) {
+		return d.toInput();
 	}
-	let startDate = _fmtInput(new Date(_now.getFullYear(), _now.getMonth(), 1));
-	let endDate = _fmtInput(new Date(_now.getFullYear(), _now.getMonth() + 1, 0));
+	let startDate = _fmtInput(SvelteDate.from(new Date(_now.getFullYear(), _now.getMonth(), 1)));
+	let endDate = _fmtInput(SvelteDate.from(new Date(_now.getFullYear(), _now.getMonth() + 1, 0)));
 
 	let lastHadSelections = false;
 
@@ -47,7 +49,7 @@
 	const itemsPerPage = 20;
 
 	// Selection State
-	let selectedExpenses = new Set<string>();
+	let selectedExpenses = new SvelteSet<string>();
 
 	// Pagination state
 	let visibleExpenses: any[] = [];
@@ -159,7 +161,7 @@
 
 	// Reset selection when filters change
 	$: if (searchQuery || sortBy || sortOrder || filterCategory || startDate || endDate) {
-		selectedExpenses = new Set();
+		selectedExpenses = new SvelteSet();
 		currentPage = 1;
 	}
 
@@ -188,18 +190,15 @@
 
 			// Date Range
 			if (item.date) {
-				const itemDate = new Date(item.date);
-				itemDate.setHours(0, 0, 0, 0);
+				const itemDate = SvelteDate.from(item.date).startOfDay();
 
 				if (startDate) {
-					const start = new Date(startDate);
-					start.setHours(0, 0, 0, 0);
-					if (itemDate < start) return false;
+					const start = SvelteDate.from(startDate).startOfDay();
+					if (itemDate.getTime() < start.getTime()) return false;
 				}
 				if (endDate) {
-					const end = new Date(endDate);
-					end.setHours(0, 0, 0, 0);
-					if (itemDate > end) return false;
+					const end = SvelteDate.from(endDate).startOfDay();
+					if (itemDate.getTime() > end.getTime()) return false;
 				}
 			}
 
@@ -208,8 +207,8 @@
 		.sort((a, b) => {
 			let aVal, bVal;
 			if (sortBy === 'date') {
-				aVal = new Date(a.date || 0).getTime();
-				bVal = new Date(b.date || 0).getTime();
+				aVal = SvelteDate.from(a.date || 0).getTime();
+				bVal = SvelteDate.from(b.date || 0).getTime();
 			} else {
 				aVal = a.amount;
 				bVal = b.amount;
@@ -253,8 +252,7 @@
 				await expenses.deleteExpense(id, userId);
 				toasts.success('Expense moved to trash');
 				if (selectedExpenses.has(id)) {
-					selectedExpenses.delete(id);
-					selectedExpenses = selectedExpenses;
+					selectedExpenses = selectedExpenses.delete(id);
 				}
 				// [!code fix] Refresh page data to ensure server sync
 				await invalidateAll();
@@ -267,14 +265,14 @@
 
 	// --- SELECTION LOGIC ---
 	function toggleSelection(id: string) {
-		if (selectedExpenses.has(id)) selectedExpenses.delete(id);
-		else selectedExpenses.add(id);
-		selectedExpenses = selectedExpenses;
+		selectedExpenses = selectedExpenses.has(id)
+			? selectedExpenses.delete(id)
+			: selectedExpenses.add(id);
 	}
 
 	function toggleSelectAll() {
-		if (allSelected) selectedExpenses = new Set();
-		else selectedExpenses = new Set(filteredExpenses.map((e) => e.id));
+		if (allSelected) selectedExpenses = new SvelteSet();
+		else selectedExpenses = new SvelteSet(filteredExpenses.map((e) => e.id));
 	}
 
 	function changePage(newPage: number) {
@@ -317,7 +315,7 @@
 		}
 
 		toasts.success(`Moved ${successCount} expenses to trash.`);
-		selectedExpenses = new Set();
+		selectedExpenses = new SvelteSet();
 		// [!code fix] Refresh page data to ensure server sync
 		await invalidateAll();
 	}
@@ -350,7 +348,7 @@
 		a.click();
 
 		toasts.success(`Exported ${selectedData.length} items.`);
-		selectedExpenses = new Set();
+		selectedExpenses = new SvelteSet();
 	}
 
 	// --- CATEGORY MANAGEMENT ---
@@ -678,7 +676,7 @@
 				aria-label="Filter by category"
 			>
 				<option value="all">All Categories</option>
-				{#each categories as cat}
+				{#each categories as cat (cat)}
 					<option value={cat}>{getCategoryLabel(cat)}</option>
 				{/each}
 				<option value="fuel">Fuel (Trips)</option>
@@ -739,7 +737,7 @@
 
 	{#if loading}
 		<div class="expense-list-cards">
-			{#each Array(3) as _}
+			{#each Array(3) as _, i (i)}
 				<div class="expense-card">
 					<div class="card-top">
 						<div style="flex: 1">
@@ -890,7 +888,7 @@
 			</div>
 
 			<div class="action-bar-right">
-				<button class="action-pill secondary" on:click={() => (selectedExpenses = new Set())}>
+				<button class="action-pill secondary" on:click={() => (selectedExpenses = new SvelteSet())}>
 					<svg
 						width="16"
 						height="16"
@@ -966,7 +964,7 @@
 		</p>
 
 		<div class="cat-list">
-			{#each activeCategories as cat}
+			{#each activeCategories as cat (cat)}
 				<div class="cat-item">
 					<span class={`cat-badge ${getCategoryColor(cat)}`}>{getCategoryLabel(cat)}</span>
 					<button

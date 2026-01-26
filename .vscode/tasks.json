@@ -1,0 +1,63 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Check (SvelteKit/TS)",
+			"type": "shell",
+			"command": "npm run check",
+			"problemMatcher": ["$tsc"],
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated"
+			}
+		},
+		{
+			"label": "Lint",
+			"type": "shell",
+			"command": "npm run lint",
+			"problemMatcher": ["$eslint-compact"],
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated"
+			}
+		},
+		{
+			"label": "Test (Run Once)",
+			"type": "shell",
+			"command": "npm run test:run",
+			"problemMatcher": [],
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated"
+			}
+		},
+		{
+			"label": "Test (Watch)",
+			"type": "shell",
+			"command": "npm run test:watch",
+			"problemMatcher": [],
+			"group": "test",
+			"isBackground": true,
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated"
+			}
+		},
+		{
+			"label": "GATE: Check + Lint + Test",
+			"dependsOrder": "sequence",
+			"dependsOn": ["Check (SvelteKit/TS)", "Lint", "Test (Run Once)"],
+			"problemMatcher": [],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		}
+	]
+}

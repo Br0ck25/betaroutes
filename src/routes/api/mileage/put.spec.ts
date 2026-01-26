@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Module-level mocks are declared here so vitest's hoisting behaves predictably.
-let mockSvc: any;
-let mockTripSvc: any;
+let mockSvc!: { get: ReturnType<typeof vi.fn>; put: ReturnType<typeof vi.fn> };
+let mockTripSvc: { get?: ReturnType<typeof vi.fn>; put?: ReturnType<typeof vi.fn> } | undefined;
 vi.mock('$lib/server/mileageService', () => ({
 	makeMileageService: () => mockSvc
 }));
@@ -30,7 +30,7 @@ describe('PUT /api/mileage/[id] handler', () => {
 
 		const body = { startOdometer: 0, endOdometer: 0, miles: 50 };
 
-		const event: any = {
+		const event = {
 			params: { id: 'r1' },
 			locals: { user: { id: 'u1' } },
 			request: { json: async () => body },
@@ -39,12 +39,15 @@ describe('PUT /api/mileage/[id] handler', () => {
 
 		// import handler after mocks are in place
 		const { PUT } = await import('./[id]/+server');
-		const res = await PUT(event as any);
+		const res = await PUT(event as unknown as Parameters<typeof PUT>[0]);
 		expect(res.status).toBe(200);
 		const json = JSON.parse(await res.text());
 		expect(json.miles).toBeCloseTo(50, 6);
-		expect(mockSvc.put).toHaveBeenCalled();
-		expect(mockSvc.put.mock.calls[0][0].miles).toBeCloseTo(50, 6);
+		const put = mockSvc.put! as ReturnType<typeof vi.fn>;
+		expect(put).toHaveBeenCalled();
+		const first = put.mock?.calls?.[0]?.[0] as { miles?: number } | undefined;
+		expect(first).toBeTruthy();
+		expect(first!.miles).toBeCloseTo(50, 6);
 	});
 
 	it('recomputes miles from odometers when miles is not provided', async () => {
@@ -53,7 +56,7 @@ describe('PUT /api/mileage/[id] handler', () => {
 
 		const body = { startOdometer: 100, endOdometer: 160 };
 
-		const event: any = {
+		const event = {
 			params: { id: 'r2' },
 			locals: { user: { id: 'u1' } },
 			request: { json: async () => body },
@@ -62,12 +65,15 @@ describe('PUT /api/mileage/[id] handler', () => {
 
 		// import handler after mocks are in place
 		const { PUT } = await import('./[id]/+server');
-		const res = await PUT(event as any);
+		const res = await PUT(event as unknown as Parameters<typeof PUT>[0]);
 		expect(res.status).toBe(200);
 		const json = JSON.parse(await res.text());
 		expect(json.miles).toBeCloseTo(60, 6);
-		expect(mockSvc.put).toHaveBeenCalled();
-		expect(mockSvc.put.mock.calls[0][0].miles).toBeCloseTo(60, 6);
+		const put2 = mockSvc.put! as ReturnType<typeof vi.fn>;
+		expect(put2).toHaveBeenCalled();
+		const first2 = put2.mock?.calls?.[0]?.[0] as { miles?: number } | undefined;
+		expect(first2).toBeTruthy();
+		expect(first2!.miles).toBeCloseTo(60, 6);
 	});
 
 	it('also mirrors miles into the BETA_LOGS_KV trip record when present (best-effort)', async () => {
@@ -81,7 +87,7 @@ describe('PUT /api/mileage/[id] handler', () => {
 		};
 
 		const body = { miles: 77 };
-		const event: any = {
+		const event = {
 			params: { id: 'rt1' },
 			locals: { user: { id: 'u1' } },
 			request: { json: async () => body },
@@ -89,16 +95,21 @@ describe('PUT /api/mileage/[id] handler', () => {
 		};
 
 		const { PUT } = await import('./[id]/+server');
-		const res = await PUT(event as any);
+		const res = await PUT(event as unknown as Parameters<typeof PUT>[0]);
 		expect(res.status).toBe(200);
 		const json = JSON.parse(await res.text());
 		expect(json.miles).toBeCloseTo(77, 6);
 		expect(mockSvc.put).toHaveBeenCalled();
 		expect(mockTripSvc.get).toHaveBeenCalled();
-		expect(mockTripSvc.put).toHaveBeenCalled();
-		expect(mockTripSvc.put.mock.calls[0][0].totalMiles).toBeCloseTo(77, 6);
+		const tripPut = mockTripSvc!.put! as ReturnType<typeof vi.fn>;
+		expect(tripPut).toHaveBeenCalled();
+		const tfirst = tripPut.mock?.calls?.[0]?.[0] as { totalMiles?: number } | undefined;
+		expect(tfirst).toBeTruthy();
+		expect(tfirst!.totalMiles).toBeCloseTo(77, 6);
 		// Verify fuelCost is also calculated (77 miles / 25 mpg * 3.5 gasPrice = 10.78)
-		expect(mockTripSvc.put.mock.calls[0][0].fuelCost).toBeCloseTo(10.78, 2);
+		const tfc = tripPut.mock?.calls?.[0]?.[0] as { fuelCost?: number } | undefined;
+		expect(tfc).toBeTruthy();
+		expect(tfc!.fuelCost).toBeCloseTo(10.78, 2);
 	});
 
 	it('computes reimbursement when miles + rate are provided on PUT', async () => {
@@ -106,7 +117,7 @@ describe('PUT /api/mileage/[id] handler', () => {
 		mockSvc.get.mockResolvedValue(existing);
 
 		const body = { miles: 10, mileageRate: 0.725 };
-		const event: any = {
+		const event = {
 			params: { id: 'r3' },
 			locals: { user: { id: 'u1' } },
 			request: { json: async () => body },
@@ -114,12 +125,15 @@ describe('PUT /api/mileage/[id] handler', () => {
 		};
 
 		const { PUT } = await import('./[id]/+server');
-		const res = await PUT(event as any);
+		const res = await PUT(event as unknown as Parameters<typeof PUT>[0]);
 		expect(res.status).toBe(200);
 		const json = JSON.parse(await res.text());
 		expect(json.miles).toBeCloseTo(10, 6);
 		expect(json.reimbursement).toBeCloseTo(7.25, 2);
-		expect(mockSvc.put).toHaveBeenCalled();
-		expect(mockSvc.put.mock.calls[0][0].reimbursement).toBeCloseTo(7.25, 2);
+		const put3 = mockSvc.put! as ReturnType<typeof vi.fn>;
+		expect(put3).toHaveBeenCalled();
+		const f3 = put3.mock?.calls?.[0]?.[0] as { reimbursement?: number } | undefined;
+		expect(f3).toBeTruthy();
+		expect(f3!.reimbursement).toBeCloseTo(7.25, 2);
 	});
 });

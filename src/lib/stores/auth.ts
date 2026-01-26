@@ -20,6 +20,12 @@ const getOfflineId = () => {
 
 // [SECURITY FIX #54] Cache user data in sessionStorage instead of localStorage
 // sessionStorage clears on tab close, reducing XSS exposure window
+
+const normalizePlan = (p: unknown): User['plan'] => {
+	if (p === 'free' || p === 'pro' || p === 'business' || p === 'premium') return p;
+	return 'free';
+};
+
 const saveUserCache = (user: User) => {
 	if (typeof window !== 'undefined') {
 		// Only cache non-sensitive display data
@@ -144,9 +150,8 @@ function createAuthStore() {
 						error: null
 					});
 
-					// Prefer ID for sync, fallback to name for legacy support
-					const syncId = user.id || user.name || 'user';
-					if (syncId) await trips.syncFromCloud(syncId);
+					// Prefer ID for sync; do not fallback to name
+					if (user.id) await trips.syncFromCloud(user.id);
 				} else {
 					// Not authenticated - check offline cache
 					const cachedUser = getUserCache();
@@ -181,7 +186,7 @@ function createAuthStore() {
 						isLoading: false,
 						error: null
 					});
-					await trips.load(cachedUser.id || cachedUser.name || 'user');
+					if (cachedUser.id) await trips.load(cachedUser.id);
 				} else {
 					set({
 						user: null,
@@ -234,11 +239,17 @@ function createAuthStore() {
 					console.warn('Failed to create server session after signup:', e);
 				}
 
-				const subscription = await api.getSubscription(response.token || '');
+				let subscription = { plan: 'free', tripsThisMonth: 0, maxTrips: 10, resetDate: '' };
+				try {
+					subscription = await api.getSubscription();
+				} catch (e) {
+					// If subscription fetch fails (legacy endpoints), default to free
+					console.warn('Subscription lookup failed during signup', e);
+				}
 				const user: User = {
 					id: response.id, // [!code fix] Capture UUID from signup response
-					token: response.token || '',
-					plan: subscription.plan,
+					token: '',
+					plan: normalizePlan(subscription.plan),
 					tripsThisMonth: subscription.tripsThisMonth,
 					maxTrips: subscription.maxTrips,
 					resetDate: subscription.resetDate,
@@ -260,13 +271,14 @@ function createAuthStore() {
 				await trips.syncFromCloud(user.id || username);
 
 				return { success: true, resetKey: response.resetKey };
-			} catch (error: any) {
+			} catch (error: unknown) {
+				const message = error instanceof Error ? error.message : String(error);
 				update((state) => ({
 					...state,
 					isLoading: false,
-					error: error.message || 'Signup failed'
+					error: message || 'Signup failed'
 				}));
-				return { success: false, error: error.message };
+				return { success: false, error: message };
 			}
 		},
 
@@ -294,12 +306,17 @@ function createAuthStore() {
 				// [SECURITY FIX #54] Email now in sessionStorage, not localStorage
 				const savedEmail =
 					typeof window !== 'undefined' ? sessionStorage.getItem('user_email') || '' : '';
-				const subscription = await api.getSubscription(response.token || '');
+				let subscription = { plan: 'free', tripsThisMonth: 0, maxTrips: 10, resetDate: '' };
+				try {
+					subscription = await api.getSubscription();
+				} catch (e) {
+					console.warn('Subscription lookup failed during login', e);
+				}
 
 				const user: User = {
 					id: response.id, // [!code fix] Capture UUID from login response
-					token: response.token || '',
-					plan: subscription.plan,
+					token: '',
+					plan: normalizePlan(subscription.plan),
 					tripsThisMonth: subscription.tripsThisMonth,
 					maxTrips: subscription.maxTrips,
 					resetDate: subscription.resetDate,
@@ -323,13 +340,14 @@ function createAuthStore() {
 				await trips.syncFromCloud(user.id || username);
 
 				return { success: true };
-			} catch (error: any) {
+			} catch (error: unknown) {
+				const message = error instanceof Error ? error.message : String(error);
 				update((state) => ({
 					...state,
 					isLoading: false,
-					error: error.message || 'Login failed'
+					error: message || 'Login failed'
 				}));
-				return { success: false, error: error.message };
+				return { success: false, error: message };
 			}
 		},
 
@@ -365,13 +383,14 @@ function createAuthStore() {
 				await api.changePassword(username, currentPassword, newPassword);
 				update((state) => ({ ...state, isLoading: false, error: null }));
 				return { success: true };
-			} catch (error: any) {
+			} catch (error: unknown) {
+				const message = error instanceof Error ? error.message : String(error);
 				update((state) => ({
 					...state,
 					isLoading: false,
-					error: error.message || 'Password change failed'
+					error: message || 'Password change failed'
 				}));
-				return { success: false, error: error.message };
+				return { success: false, error: message };
 			}
 		},
 
@@ -381,13 +400,14 @@ function createAuthStore() {
 				await api.resetPassword(username, resetKey, newPassword);
 				update((state) => ({ ...state, isLoading: false, error: null }));
 				return { success: true };
-			} catch (error: any) {
+			} catch (error: unknown) {
+				const message = error instanceof Error ? error.message : String(error);
 				update((state) => ({
 					...state,
 					isLoading: false,
-					error: error.message || 'Password reset failed'
+					error: message || 'Password reset failed'
 				}));
-				return { success: false, error: error.message };
+				return { success: false, error: message };
 			}
 		},
 
@@ -406,8 +426,13 @@ function createAuthStore() {
 				});
 
 				if (!response.ok) {
-					const data: any = await response.json().catch(() => ({}));
-					throw new Error(data.error || 'Account deletion failed');
+					const dataRaw = await response.json().catch(() => ({}) as Record<string, unknown>);
+					const data = dataRaw as Record<string, unknown>;
+					const errMsg =
+						typeof data['error'] === 'string'
+							? (data['error'] as string)
+							: 'Account deletion failed';
+					throw new Error(errMsg);
 				}
 
 				storage.clearAll();
@@ -426,13 +451,14 @@ function createAuthStore() {
 				});
 
 				return { success: true };
-			} catch (error: any) {
+			} catch (error: unknown) {
+				const message = error instanceof Error ? error.message : String(error);
 				update((state) => ({
 					...state,
 					isLoading: false,
-					error: error.message || 'Account deletion failed'
+					error: message || 'Account deletion failed'
 				}));
-				return { success: false, error: error.message };
+				return { success: false, error: message };
 			}
 		},
 

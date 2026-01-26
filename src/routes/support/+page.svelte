@@ -1,5 +1,7 @@
 <script lang="ts">
 	import Header from '$lib/components/layout/Header.svelte';
+	import { base } from '$app/paths';
+	const resolve = (href: string) => `${base}${href}`;
 </script>
 
 <svelte:head>
@@ -25,6 +27,7 @@
 				<div class="contact-box">
 					<strong>Email Support</strong><br />
 					For general inquiries and technical support:<br />
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 					<a href="mailto:support@gorouteyourself.com">support@gorouteyourself.com</a>
 				</div>
 			</section>
@@ -35,9 +38,9 @@
 				<div class="faq-item">
 					<h3>How do I reset my password?</h3>
 					<p>
-						If you've forgotten your password, you can request a reset link by visiting the <a
-							href="/forgot-password">Forgot Password</a
-						> page.
+						If you've forgotten your password, you can request a reset link by visiting the
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+						<a href={resolve('/forgot-password')}>Forgot Password</a> page.
 					</p>
 				</div>
 
@@ -61,10 +64,11 @@
 				<div class="faq-item">
 					<h3>How do I report a bug?</h3>
 					<p>
-						Please email us at <a href="mailto:support@gorouteyourself.com"
-							>support@gorouteyourself.com</a
-						> with a description of the issue. Including screenshots and details about your device helps
-						us resolve issues faster.
+						Please email us at
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+						<a href="mailto:support@gorouteyourself.com">support@gorouteyourself.com</a> with a description
+						of the issue. Including screenshots and details about your device helps us resolve issues
+						faster.
 					</p>
 				</div>
 			</section>

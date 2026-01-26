@@ -173,7 +173,8 @@ export async function getDB(): Promise<IDBPDatabase<AppDB>> {
 				console.log('🔁 Migrating legacy "millage" store to "mileage"...');
 				// Read all entries from legacy store
 				const readTx = db.transaction('millage', 'readonly');
-				const oldItems = await readTx.objectStore('millage').getAll();
+				// Old store may have untyped entries; cast to the known shape to avoid `any`
+				const oldItems = (await readTx.objectStore('millage').getAll()) as MileageRecord[];
 				await readTx.done;
 
 				// Close current connection and bump DB version to perform structural upgrades
@@ -201,7 +202,8 @@ export async function getDB(): Promise<IDBPDatabase<AppDB>> {
 					const writeTx = migratedDB.transaction('mileage', 'readwrite');
 					const outStore = writeTx.objectStore('mileage');
 					for (const itm of oldItems) {
-						await outStore.put(itm as any);
+						// itm is a MileageRecord as cast above
+						await outStore.put(itm);
 					}
 					await writeTx.done;
 					console.log(`✅ Migrated ${oldItems.length} mileage records`);
@@ -213,9 +215,10 @@ export async function getDB(): Promise<IDBPDatabase<AppDB>> {
 		} catch (migErr) {
 			console.warn('⚠️ Mileage migration failed or not necessary:', migErr);
 		}
-	} catch (err: any) {
+	} catch (err: unknown) {
+		const maybeName = (err as { name?: string })?.name;
 		if (
-			err?.name === 'VersionError' ||
+			maybeName === 'VersionError' ||
 			(typeof DOMException !== 'undefined' &&
 				err instanceof DOMException &&
 				err.name === 'VersionError')
@@ -347,7 +350,8 @@ export async function importData(data: {
 	if (data.mileage) {
 		const mileageStore = tx.objectStore('mileage');
 		for (const m of data.mileage) {
-			await mileageStore.put(m as any);
+			// m is a MileageRecord per the importData signature
+			await mileageStore.put(m);
 		}
 	}
 

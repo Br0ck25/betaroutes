@@ -10,6 +10,7 @@
 	import { get } from 'svelte/store';
 	import { userSettings } from '$lib/stores/userSettings';
 	import { getVehicleDisplayName } from '$lib/utils/vehicle';
+	import { SvelteSet, SvelteDate } from '$lib/utils/svelte-reactivity';
 
 	const resolve = (href: string) => `${base}${href}`;
 
@@ -23,8 +24,8 @@
 
 	let trashedTrips: TrashRecord[] = [];
 	let loading = true;
-	let restoring = new Set<string>();
-	let deleting = new Set<string>();
+	let restoring = new SvelteSet<string>();
+	let deleting = new SvelteSet<string>();
 	let currentTypeParam: string | null = null;
 	let _pageUnsub: (() => void) | null = null;
 
@@ -83,13 +84,13 @@
 	async function loadTrash(type?: string) {
 		loading = true;
 		try {
-			const potentialIds = new Set<string>();
+			let potentialIds = new SvelteSet<string>();
 			// [!code fix] Strictly use ID.
-			if ($user?.id) potentialIds.add($user.id);
+			if ($user?.id) potentialIds = potentialIds.add($user.id);
 
 			const offlineId =
 				typeof localStorage !== 'undefined' ? localStorage.getItem('offline_user_id') : null;
-			if (offlineId) potentialIds.add(offlineId);
+			if (offlineId) potentialIds = potentialIds.add(offlineId);
 
 			const db = await getDB();
 			const tx = db.transaction('trash', 'readonly');
@@ -151,10 +152,13 @@
 				const inferred = hasMileageShape ? 'mileage' : inferredFromKey;
 				return inferred === effectiveType;
 			});
-			filtered.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
+			filtered.sort(
+				(a, b) =>
+					SvelteDate.from(b.deletedAt || 0).getTime() - SvelteDate.from(a.deletedAt || 0).getTime()
+			);
 			trashedTrips = filtered;
-		} catch (err) {
-			console.error('Error loading trash:', err);
+		} catch (_err) {
+			console.error('Error loading trash:', _err);
 		} finally {
 			loading = false;
 		}
@@ -165,8 +169,7 @@
 		const item = trashedTrips.find((t) => t.id === id);
 		if (!item) return;
 
-		restoring.add(id);
-		restoring = restoring;
+		restoring = restoring.add(id);
 
 		try {
 			// Prefer current view when restoring ambiguous/merged tombstones
@@ -195,8 +198,7 @@
 				: 'Failed to restore item.';
 			alert(message);
 		} finally {
-			restoring.delete(id);
-			restoring = restoring;
+			restoring = restoring.delete(id);
 		}
 	}
 
@@ -237,17 +239,15 @@
 		if (!confirm('Permanently delete this item? Cannot be undone.')) return;
 
 		if (deleting.has(id)) return;
-		deleting.add(id);
-		deleting = deleting;
+		deleting = deleting.add(id);
 
 		try {
 			await trash.permanentDelete(id);
 			await loadTrash();
-		} catch (err) {
+		} catch {
 			alert('Failed to delete item.');
 		} finally {
-			deleting.delete(id);
-			deleting = deleting;
+			deleting = deleting.delete(id);
 		}
 	}
 
@@ -259,26 +259,25 @@
 				await trash.emptyTrash(uid);
 			}
 			await loadTrash();
-		} catch (err) {
+		} catch {
 			alert('Failed to empty trash.');
 		}
 	}
 
 	function formatDate(dateString: string | undefined): string {
 		if (!dateString) return 'Unknown';
-		const date = new Date(dateString);
-		return new Intl.DateTimeFormat('en-US', {
+		return SvelteDate.from(dateString).toLocaleDateString('en-US', {
 			month: 'short',
 			day: 'numeric',
 			year: 'numeric'
-		}).format(date);
+		});
 	}
 
 	function getDaysUntilExpiration(expiresAt: string | undefined): number {
 		if (!expiresAt) return 0;
-		const now = new Date();
-		const expires = new Date(expiresAt);
-		const diff = expires.getTime() - now.getTime();
+		const nowMs = SvelteDate.now().getTime();
+		const expiresMs = SvelteDate.from(expiresAt).getTime();
+		const diff = expiresMs - nowMs;
 		return Math.ceil(diff / (1000 * 60 * 60 * 24));
 	}
 </script>

@@ -20,10 +20,10 @@
 	import { PLAN_LIMITS } from '$lib/constants';
 
 	// Svelte 5 Props using Runes
-	let { googleApiKey = '', loading = false, trip = null } = $props();
+	const { googleApiKey = '', loading = false, trip = null } = $props();
 
 	const settings = get(userSettings);
-	let API_KEY = $derived(() => googleApiKey || 'dummy_key');
+	const API_KEY = $derived(() => googleApiKey || 'dummy_key');
 
 	const userState = getUserState();
 
@@ -46,7 +46,7 @@
 	let mpg = $state(settings.defaultMPG ?? storage.getSetting('defaultMPG') ?? 25);
 	let gasPrice = $state(settings.defaultGasPrice ?? storage.getSetting('defaultGasPrice') ?? 3.5);
 
-	let distanceUnit = $state(settings.distanceUnit || 'mi');
+	const distanceUnit = $state(settings.distanceUnit || 'mi');
 
 	// Destinations State
 	let destinations = $state<Destination[]>([{ address: '', earnings: 0 }]);
@@ -67,8 +67,8 @@
 	let fuelCost = $state(0);
 
 	// Computed Costs
-	let suppliesCost = $derived(supplies.reduce((sum, item) => sum + (Number(item.cost) || 0), 0));
-	let maintenanceCost = $derived(
+	const suppliesCost = $derived(supplies.reduce((sum, item) => sum + (Number(item.cost) || 0), 0));
+	const maintenanceCost = $derived(
 		maintenance.reduce((sum, item) => sum + (Number(item.cost) || 0), 0)
 	);
 
@@ -79,7 +79,7 @@
 	let upgradeReason = $state<'stops' | 'optimize' | 'trips' | 'general'>('general');
 
 	// Computed upgrade message based on reason
-	let upgradeMessage = $derived(() => {
+	const upgradeMessage = $derived(() => {
 		switch (upgradeReason) {
 			case 'stops':
 				return `You've hit the ${PLAN_LIMITS.FREE.MAX_STOPS || 5}-stop limit for Free plans. Upgrade to Pro for unlimited stops per trip!`;
@@ -236,9 +236,9 @@
 			if (!silent) toasts.success('Route calculated successfully!');
 
 			return routeData;
-		} catch (err: any) {
-			console.error('Calculation Error:', err);
-			const msg = (err.message || '').toLowerCase();
+		} catch (_err) {
+			console.error('Calculation Error:', _err);
+			const msg = (_err instanceof Error ? _err.message : String(_err || '')).toLowerCase();
 
 			// Plan limit detection
 			if (msg.includes('plan limit') || msg.includes('pro feature') || msg.includes('trip limit')) {
@@ -248,8 +248,8 @@
 			}
 
 			if (!silent || !msg.includes('zero_results')) {
-				calculationError = err.message;
-				if (!silent) toasts.error(err.message);
+				calculationError = _err instanceof Error ? _err.message : String(_err || '');
+				if (!silent) toasts.error(calculationError);
 			}
 			return null;
 		} finally {
@@ -567,7 +567,7 @@
 								class="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100">+ Add</button
 							>
 						</div>
-						{#each supplies as item, i}
+						{#each supplies as item, i (i)}
 							<div class="flex gap-2 mb-2 items-center">
 								<input
 									type="text"
@@ -605,7 +605,7 @@
 								class="text-xs bg-white border px-2 py-1 rounded hover:bg-gray-100">+ Add</button
 							>
 						</div>
-						{#each maintenance as item, i}
+						{#each maintenance as item, i (i)}
 							<div class="flex gap-2 mb-2 items-center">
 								<input
 									type="text"

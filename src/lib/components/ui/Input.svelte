@@ -1,10 +1,10 @@
 <script lang="ts">
-	let {
+	const {
 		label = '',
 		type = 'text',
-		value = $bindable(''),
 		placeholder = '',
-		id = ''
+		id = '',
+		value: _value = $bindable('')
 	}: {
 		label?: string;
 		type?: string;
@@ -12,6 +12,7 @@
 		placeholder?: string;
 		id?: string;
 	} = $props();
+	let value = $state(_value);
 </script>
 
 <label class="block w-full">

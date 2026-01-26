@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { base } from '$app/paths';
+	const resolve = (href: string) => `${base}${href}`;
 	let email = '';
 	let loading = false;
 	let message = '';
@@ -16,10 +18,10 @@
 				body: JSON.stringify({ email })
 			});
 
-			let data: any = {};
+			let data: { message?: string } | undefined;
 			try {
-				data = await res.json();
-			} catch (e) {
+				data = (await res.json()) as { message?: string };
+			} catch {
 				/* ignore parse errors */
 			}
 
@@ -29,7 +31,7 @@
 			} else {
 				error = (data && data.message) || 'An error occurred.';
 			}
-		} catch (err) {
+		} catch {
 			error = 'Network error. Please try again.';
 		} finally {
 			loading = false;
@@ -44,7 +46,8 @@
 <div class="auth-page">
 	<div class="form-container">
 		<div class="form-header">
-			<a href="/login" class="back-link">← Back to Login</a>
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+			<a href={resolve('/login')} class="back-link">← Back to Login</a>
 			<h1>Reset Password</h1>
 			<p>Enter your email to receive a reset link.</p>
 		</div>

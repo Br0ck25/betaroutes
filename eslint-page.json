@@ -1,0 +1,158 @@
+[
+	{
+		"filePath": "C:\\Users\\James\\Desktop\\Beta Go Route Yourself\\SvelteKit Rebuild\\Go Route Yourslef Svelte 5\\src\\routes\\+page.svelte",
+		"messages": [
+			{
+				"ruleId": "svelte/no-navigation-without-resolve",
+				"severity": 1,
+				"message": "Unexpected href link without resolve().",
+				"line": 110,
+				"column": 15,
+				"nodeType": null,
+				"messageId": "linkWithoutResolve",
+				"endLine": 110,
+				"endColumn": 21
+			},
+			{
+				"ruleId": "svelte/no-navigation-without-resolve",
+				"severity": 1,
+				"message": "Unexpected href link without resolve().",
+				"line": 111,
+				"column": 15,
+				"nodeType": null,
+				"messageId": "linkWithoutResolve",
+				"endLine": 111,
+				"endColumn": 24
+			},
+			{
+				"ruleId": "svelte/no-navigation-without-resolve",
+				"severity": 1,
+				"message": "Unexpected href link without resolve().",
+				"line": 115,
+				"column": 15,
+				"nodeType": null,
+				"messageId": "linkWithoutResolve",
+				"endLine": 115,
+				"endColumn": 21
+			},
+			{
+				"ruleId": "svelte/no-navigation-without-resolve",
+				"severity": 1,
+				"message": "Unexpected href link without resolve().",
+				"line": 145,
+				"column": 14,
+				"nodeType": null,
+				"messageId": "linkWithoutResolve",
+				"endLine": 145,
+				"endColumn": 23
+			},
+			{
+				"ruleId": "svelte/no-navigation-without-resolve",
+				"severity": 1,
+				"message": "Unexpected href link without resolve().",
+				"line": 160,
+				"column": 15,
+				"nodeType": null,
+				"messageId": "linkWithoutResolve",
+				"endLine": 160,
+				"endColumn": 24
+			},
+			{
+				"ruleId": "svelte/no-navigation-without-resolve",
+				"severity": 1,
+				"message": "Unexpected href link without resolve().",
+				"line": 319,
+				"column": 15,
+				"nodeType": null,
+				"messageId": "linkWithoutResolve",
+				"endLine": 319,
+				"endColumn": 24
+			},
+			{
+				"ruleId": "svelte/no-navigation-without-resolve",
+				"severity": 1,
+				"message": "Unexpected href link without resolve().",
+				"line": 343,
+				"column": 15,
+				"nodeType": null,
+				"messageId": "linkWithoutResolve",
+				"endLine": 343,
+				"endColumn": 24
+			},
+			{
+				"ruleId": "svelte/no-navigation-without-resolve",
+				"severity": 1,
+				"message": "Unexpected href link without resolve().",
+				"line": 358,
+				"column": 15,
+				"nodeType": null,
+				"messageId": "linkWithoutResolve",
+				"endLine": 358,
+				"endColumn": 24
+			},
+			{
+				"ruleId": "svelte/no-navigation-without-resolve",
+				"severity": 1,
+				"message": "Unexpected href link without resolve().",
+				"line": 392,
+				"column": 15,
+				"nodeType": null,
+				"messageId": "linkWithoutResolve",
+				"endLine": 392,
+				"endColumn": 21
+			},
+			{
+				"ruleId": "svelte/no-navigation-without-resolve",
+				"severity": 1,
+				"message": "Unexpected href link without resolve().",
+				"line": 393,
+				"column": 15,
+				"nodeType": null,
+				"messageId": "linkWithoutResolve",
+				"endLine": 393,
+				"endColumn": 23
+			},
+			{
+				"ruleId": "svelte/no-navigation-without-resolve",
+				"severity": 1,
+				"message": "Unexpected href link without resolve().",
+				"line": 394,
+				"column": 15,
+				"nodeType": null,
+				"messageId": "linkWithoutResolve",
+				"endLine": 394,
+				"endColumn": 20
+			},
+			{
+				"ruleId": "svelte/no-navigation-without-resolve",
+				"severity": 1,
+				"message": "Unexpected href link without resolve().",
+				"line": 399,
+				"column": 15,
+				"nodeType": null,
+				"messageId": "linkWithoutResolve",
+				"endLine": 399,
+				"endColumn": 23
+			},
+			{
+				"ruleId": "svelte/no-navigation-without-resolve",
+				"severity": 1,
+				"message": "Unexpected href link without resolve().",
+				"line": 400,
+				"column": 15,
+				"nodeType": null,
+				"messageId": "linkWithoutResolve",
+				"endLine": 400,
+				"endColumn": 21
+			}
+		],
+		"suppressedMessages": [],
+		"errorCount": 0,
+		"fatalErrorCount": 0,
+		"warningCount": 13,
+		"fixableErrorCount": 0,
+		"fixableWarningCount": 0,
+		"source": "<script lang=\"ts\">\n\tlet isMobileMenuOpen = false;\n\n\tfunction scrollToSection(id: string) {\n\t\tconst element = document.getElementById(id);\n\t\tif (element) {\n\t\t\telement.scrollIntoView({ behavior: 'smooth' });\n\t\t\tisMobileMenuOpen = false;\n\t\t}\n\t}\n\n\tfunction toggleMenu() {\n\t\tisMobileMenuOpen = !isMobileMenuOpen;\n\t}\n</script>\n\n<svelte:head>\n\t<title>Go Route Yourself - Route Planning & Profit Tracking for Drivers</title>\n\t<meta\n\t\tname=\"description\"\n\t\tcontent=\"The easiest way to plan routes, track costs, and maximize profits for delivery drivers and field workers. Free route optimizer and expense tracker.\"\n\t/>\n\t<meta\n\t\tname=\"keywords\"\n\t\tcontent=\"route planner, delivery driver app, profit tracker, mileage tracker, route optimization, field service software\"\n\t/>\n\n\t<link rel=\"canonical\" href=\"https://gorouteyourself.com/\" />\n\n\t<meta property=\"og:type\" content=\"website\" />\n\t<meta property=\"og:url\" content=\"https://gorouteyourself.com/\" />\n\t<meta property=\"og:title\" content=\"Go Route Yourself - Maximize Your Driving Profits\" />\n\t<meta\n\t\tproperty=\"og:description\"\n\t\tcontent=\"Plan optimal routes, track fuel and expenses, and see your true profit per hour. The all-in-one tool for drivers.\"\n\t/>\n\t<meta\n\t\tproperty=\"og:image\"\n\t\tcontent=\"https://gorouteyourself.com/optimized/og-source-1200x630.png\"\n\t/>\n\n\t<meta property=\"twitter:card\" content=\"summary_large_image\" />\n\t<meta property=\"twitter:url\" content=\"https://gorouteyourself.com/\" />\n\t<meta property=\"twitter:title\" content=\"Go Route Yourself - Route Planning & Profit Tracking\" />\n\t<meta\n\t\tproperty=\"twitter:description\"\n\t\tcontent=\"Stop guessing your profits. Track every mile, expense, and earning with Go Route Yourself.\"\n\t/>\n\t<meta\n\t\tproperty=\"twitter:image\"\n\t\tcontent=\"https://gorouteyourself.com/optimized/og-source-1200x630.png\"\n\t/>\n\t<link rel=\"icon\" href=\"/180x75.avif\" sizes=\"180x75\" type=\"image/avif\" />\n\t<link rel=\"apple-touch-icon\" href=\"/180x75.avif\" sizes=\"180x75\" />\n\t<link\n\t\trel=\"preload\"\n\t\thref=\"/180x75.avif\"\n\t\tas=\"image\"\n\t\timagesrcset=\"/180x75.avif 1x, /180x75.avif 2x\"\n\t\timagesizes=\"180px\"\n\t/>\n\n\t<script type=\"application/ld+json\">\n\t\t{\n\t\t\t\"@context\": \"https://schema.org\",\n\t\t\t\"@type\": \"SoftwareApplication\",\n\t\t\t\"name\": \"Go Route Yourself\",\n\t\t\t\"headline\": \"Route Planning & Profit Tracking for Drivers\",\n\t\t\t\"image\": \"https://gorouteyourself.com/180x75.avif\",\n\t\t\t\"applicationCategory\": \"BusinessApplication\",\n\t\t\t\"operatingSystem\": \"Web, Android, iOS\",\n\t\t\t\"offers\": {\n\t\t\t\t\"@type\": \"AggregateOffer\",\n\t\t\t\t\"priceCurrency\": \"USD\",\n\t\t\t\t\"lowPrice\": \"0\",\n\t\t\t\t\"offerCount\": \"2\"\n\t\t\t},\n\t\t\t\"aggregateRating\": {\n\t\t\t\t\"@type\": \"AggregateRating\",\n\t\t\t\t\"ratingValue\": \"4.8\",\n\t\t\t\t\"ratingCount\": \"500\"\n\t\t\t},\n\t\t\t\"featureList\": \"Route Optimization, Profit Tracking, Mileage Tracking, Expense Management, Analytics Dashboard, Tax Reports\"\n\t\t}\n\t</script>\n</svelte:head>\n\n<div class=\"landing\">\n\t<header class=\"header\">\n\t\t<div class=\"container\">\n\t\t\t<div class=\"header-content\">\n\t\t\t\t<picture>\n\t\t\t\t\t<source type=\"image/avif\" srcset=\"/180x75.avif 180w\" sizes=\"64px\" />\n\t\t\t\t\t<source type=\"image/webp\" srcset=\"/180x75.avif 180w\" sizes=\"64px\" />\n\t\t\t\t\t<img\n\t\t\t\t\t\tsrc=\"/180x75.avif\"\n\t\t\t\t\t\talt=\"Go Route Yourself\"\n\t\t\t\t\t\tclass=\"logo logo-full\"\n\t\t\t\t\t\twidth=\"64\"\n\t\t\t\t\t\theight=\"27\"\n\t\t\t\t\t\tsrcset=\"/180x75.avif 1x, /180x75.avif 2x\"\n\t\t\t\t\t\tdecoding=\"async\"\n\t\t\t\t\t/>\n\t\t\t\t</picture>\n\t\t\t\t<nav class=\"nav desktop-nav\">\n\t\t\t\t\t<button on:click={() => scrollToSection('features')}>Features</button>\n\t\t\t\t\t<button on:click={() => scrollToSection('how-it-works')}>How It Works</button>\n\t\t\t\t\t<button on:click={() => scrollToSection('pricing')}>Pricing</button>\n\n\t\t\t\t\t<a href=\"/login\" class=\"btn-login\">Sign In</a>\n\t\t\t\t\t<a href=\"/register\" class=\"btn-primary\">Get Started Free</a>\n\t\t\t\t</nav>\n\n\t\t\t\t<div class=\"mobile-nav-controls\">\n\t\t\t\t\t<a href=\"/login\" class=\"mobile-signin\">Sign In</a>\n\n\t\t\t\t\t<button class=\"hamburger-btn\" on:click={toggleMenu} aria-label=\"Toggle menu\">\n\t\t\t\t\t\t<svg\n\t\t\t\t\t\t\twidth=\"24\"\n\t\t\t\t\t\t\theight=\"24\"\n\t\t\t\t\t\t\tviewBox=\"0 0 24 24\"\n\t\t\t\t\t\t\tfill=\"none\"\n\t\t\t\t\t\t\tstroke=\"currentColor\"\n\t\t\t\t\t\t\tstroke-width=\"2\"\n\t\t\t\t\t\t\tstroke-linecap=\"round\"\n\t\t\t\t\t\t\tstroke-linejoin=\"round\"\n\t\t\t\t\t\t>\n\t\t\t\t\t\t\t{#if isMobileMenuOpen}\n\t\t\t\t\t\t\t\t<path d=\"M18 6L6 18M6 6L18 18\"></path>\n\t\t\t\t\t\t\t{:else}\n\t\t\t\t\t\t\t\t<path d=\"M3 12h18M3 6h18M3 18h18\"></path>\n\t\t\t\t\t\t\t{/if}\n\t\t\t\t\t\t</svg>\n\t\t\t\t\t</button>\n\t\t\t\t</div>\n\t\t\t</div>\n\t\t</div>\n\n\t\t{#if isMobileMenuOpen}\n\t\t\t<div class=\"mobile-menu\">\n\t\t\t\t<button on:click={() => scrollToSection('features')}>Features</button>\n\t\t\t\t<button on:click={() => scrollToSection('pricing')}>Pricing</button>\n\t\t\t\t<button on:click={() => scrollToSection('how-it-works')}>How It Works</button>\n\t\t\t\t<div class=\"divider\"></div>\n\t\t\t\t<a href=\"/register\" class=\"btn-primary mobile-btn\">Get Started Free</a>\n\t\t\t</div>\n\t\t{/if}\n\t</header>\n\n\t<section class=\"hero\">\n\t\t<div class=\"container\">\n\t\t\t<div class=\"hero-content\">\n\t\t\t\t<h1>Plan Routes. Track Costs. <span class=\"highlight\">Maximize Profits.</span></h1>\n\t\t\t\t<p class=\"hero-subtitle\">\n\t\t\t\t\tThe complete route planning and profit tracking solution for delivery drivers, field\n\t\t\t\t\tworkers, and anyone who gets paid by the route.\n\t\t\t\t</p>\n\n\t\t\t\t<div class=\"hero-buttons\">\n\t\t\t\t\t<a href=\"/register\" class=\"btn-hero-primary\">Start Free Trial</a>\n\t\t\t\t\t<button on:click={() => scrollToSection('how-it-works')} class=\"btn-hero-secondary\">\n\t\t\t\t\t\tLearn More\n\t\t\t\t\t</button>\n\t\t\t\t</div>\n\n\t\t\t\t<div class=\"hero-stats\">\n\t\t\t\t\t<div class=\"stat\">\n\t\t\t\t\t\t<div class=\"stat-number\">10K+</div>\n\t\t\t\t\t\t<div class=\"stat-label\">Routes Planned</div>\n\t\t\t\t\t</div>\n\t\t\t\t\t<div class=\"stat\">\n\t\t\t\t\t\t<div class=\"stat-number\">$2M+</div>\n\t\t\t\t\t\t<div class=\"stat-label\">Profit Tracked</div>\n\t\t\t\t\t</div>\n\t\t\t\t\t<div class=\"stat\">\n\t\t\t\t\t\t<div class=\"stat-number\">500+</div>\n\t\t\t\t\t\t<div class=\"stat-label\">Active Drivers</div>\n\t\t\t\t\t</div>\n\t\t\t\t</div>\n\t\t\t</div>\n\t\t</div>\n\t</section>\n\n\t<section id=\"features\" class=\"features\">\n\t\t<div class=\"container\">\n\t\t\t<h2 class=\"section-title\">Everything You Need to Succeed</h2>\n\t\t\t<p class=\"section-subtitle\">Powerful features designed specifically for drivers</p>\n\n\t\t\t<div class=\"features-grid\">\n\t\t\t\t<div class=\"feature-card orange\">\n\t\t\t\t\t<div class=\"feature-icon\">🗺️</div>\n\t\t\t\t\t<h3>Google Maps Integration</h3>\n\t\t\t\t\t<p>\n\t\t\t\t\t\tPlan optimal routes with real-time traffic data, turn-by-turn directions, and automatic\n\t\t\t\t\t\tmileage calculation.\n\t\t\t\t\t</p>\n\t\t\t\t</div>\n\n\t\t\t\t<div class=\"feature-card blue\">\n\t\t\t\t\t<div class=\"feature-icon\">💰</div>\n\t\t\t\t\t<h3>Profit Tracking</h3>\n\t\t\t\t\t<p>\n\t\t\t\t\t\tTrack earnings, fuel costs, maintenance, and supplies. See your actual profit per trip\n\t\t\t\t\t\tand per hour worked.\n\t\t\t\t\t</p>\n\t\t\t\t</div>\n\n\t\t\t\t<div class=\"feature-card green\">\n\t\t\t\t\t<div class=\"feature-icon\">�</div>\n\t\t\t\t\t<h3>Mileage Tracking</h3>\n\t\t\t\t\t<p>\n\t\t\t\t\t\tAutomatically log every mile driven with GPS precision. IRS-compliant mileage logs for\n\t\t\t\t\t\ttax deductions and reimbursements.\n\t\t\t\t\t</p>\n\t\t\t\t</div>\n\n\t\t\t\t<div class=\"feature-card navy\">\n\t\t\t\t\t<div class=\"feature-icon\">📊</div>\n\t\t\t\t\t<h3>Analytics Dashboard</h3>\n\t\t\t\t\t<p>\n\t\t\t\t\t\tBeautiful charts and stats showing trends, costs breakdown, and performance over time.\n\t\t\t\t\t</p>\n\t\t\t\t</div>\n\n\t\t\t\t<div class=\"feature-card purple\">\n\t\t\t\t\t<div class=\"feature-icon\">📱</div>\n\t\t\t\t\t<h3>Mobile Friendly</h3>\n\t\t\t\t\t<p>\n\t\t\t\t\t\tWorks perfectly on your phone, tablet, or computer. Access your routes anywhere,\n\t\t\t\t\t\tanytime.\n\t\t\t\t\t</p>\n\t\t\t\t</div>\n\n\t\t\t\t<div class=\"feature-card orange\">\n\t\t\t\t\t<div class=\"feature-icon\">📤</div>\n\t\t\t\t\t<h3>Export Reports</h3>\n\t\t\t\t\t<p>\n\t\t\t\t\t\tGenerate CSV and PDF reports for taxes, record-keeping, or sharing with your accountant.\n\t\t\t\t\t</p>\n\t\t\t\t</div>\n\n\t\t\t\t<div class=\"feature-card blue\">\n\t\t\t\t\t<div class=\"feature-icon\">💾</div>\n\t\t\t\t\t<h3>Cloud Sync</h3>\n\t\t\t\t\t<p>Your data syncs automatically across all devices. Never lose a trip log again.</p>\n\t\t\t\t</div>\n\t\t\t</div>\n\t\t</div>\n\t</section>\n\n\t<section id=\"how-it-works\" class=\"how-it-works\">\n\t\t<div class=\"container\">\n\t\t\t<h2 class=\"section-title\">How It Works</h2>\n\t\t\t<p class=\"section-subtitle\">Start tracking profits in 3 simple steps</p>\n\n\t\t\t<div class=\"steps\">\n\t\t\t\t<div class=\"step\">\n\t\t\t\t\t<div class=\"step-number orange\">1</div>\n\t\t\t\t\t<div class=\"step-content\">\n\t\t\t\t\t\t<h3>Plan Your Route</h3>\n\t\t\t\t\t\t<p>\n\t\t\t\t\t\t\tEnter your starting point and destinations. We'll calculate the optimal route and\n\t\t\t\t\t\t\testimate drive time using Google Maps.\n\t\t\t\t\t\t</p>\n\t\t\t\t\t</div>\n\t\t\t\t</div>\n\n\t\t\t\t<div class=\"step\">\n\t\t\t\t\t<div class=\"step-number blue\">2</div>\n\t\t\t\t\t<div class=\"step-content\">\n\t\t\t\t\t\t<h3>Track Your Costs</h3>\n\t\t\t\t\t\t<p>\n\t\t\t\t\t\t\tAdd earnings per stop, fuel costs, maintenance, and supplies. We automatically\n\t\t\t\t\t\t\tcalculate your profit.\n\t\t\t\t\t\t</p>\n\t\t\t\t\t</div>\n\t\t\t\t</div>\n\n\t\t\t\t<div class=\"step\">\n\t\t\t\t\t<div class=\"step-number green\">3</div>\n\t\t\t\t\t<div class=\"step-content\">\n\t\t\t\t\t\t<h3>View Your Analytics</h3>\n\t\t\t\t\t\t<p>\n\t\t\t\t\t\t\tSee your profit trends, cost breakdowns, and performance metrics. Export reports for\n\t\t\t\t\t\t\ttaxes.\n\t\t\t\t\t\t</p>\n\t\t\t\t\t</div>\n\t\t\t\t</div>\n\t\t\t</div>\n\t\t</div>\n\t</section>\n\n\t<section id=\"pricing\" class=\"pricing\">\n\t\t<div class=\"container\">\n\t\t\t<h2 class=\"section-title\">Simple, Transparent Pricing</h2>\n\t\t\t<p class=\"section-subtitle\">Choose the plan that works for you</p>\n\n\t\t\t<div class=\"pricing-grid\">\n\t\t\t\t<div class=\"pricing-card\">\n\t\t\t\t\t<div class=\"plan-header\">\n\t\t\t\t\t\t<h3>Free</h3>\n\t\t\t\t\t\t<div class=\"price\">\n\t\t\t\t\t\t\t<span class=\"currency\">$</span>\n\t\t\t\t\t\t\t<span class=\"amount\">0</span>\n\t\t\t\t\t\t\t<span class=\"period\">/month</span>\n\t\t\t\t\t\t</div>\n\t\t\t\t\t</div>\n\n\t\t\t\t\t<ul class=\"features-list\">\n\t\t\t\t\t\t<li>✓ 10 trips per month</li>\n\t\t\t\t\t\t<li>✓ Up to 5 stops per trip</li>\n\t\t\t\t\t\t<li>✓ Google Maps routing</li>\n\t\t\t\t\t\t<li>✓ Profit tracking</li>\n\t\t\t\t\t\t<li>✓ Analytics dashboard</li>\n\t\t\t\t\t\t<li>✓ Export CSV & PDF reports</li>\n\t\t\t\t\t\t<li>✓ Cloud sync</li>\n\t\t\t\t\t</ul>\n\n\t\t\t\t\t<a href=\"/register\" class=\"btn-plan\">Get Started</a>\n\t\t\t\t</div>\n\n\t\t\t\t<div class=\"pricing-card featured\">\n\t\t\t\t\t<div class=\"badge\">Most Popular</div>\n\t\t\t\t\t<div class=\"plan-header\">\n\t\t\t\t\t\t<h3>Pro</h3>\n\t\t\t\t\t\t<div class=\"price\">\n\t\t\t\t\t\t\t<span class=\"currency\">$</span>\n\t\t\t\t\t\t\t<span class=\"amount\">2.99</span>\n\t\t\t\t\t\t\t<span class=\"period\">/month</span>\n\t\t\t\t\t\t</div>\n\t\t\t\t\t</div>\n\n\t\t\t\t\t<ul class=\"features-list\">\n\t\t\t\t\t\t<li>✓ Unlimited trips</li>\n\t\t\t\t\t\t<li>✓ Unlimited stops per trip</li>\n\t\t\t\t\t\t<li>✓ Google Maps routing</li>\n\t\t\t\t\t\t<li>✓ Profit tracking</li>\n\t\t\t\t\t\t<li>✓ Analytics dashboard</li>\n\t\t\t\t\t\t<li>✓ Export CSV & PDF reports</li>\n\t\t\t\t\t\t<li>✓ Cloud sync</li>\n\t\t\t\t\t</ul>\n\n\t\t\t\t\t<a href=\"/register\" class=\"btn-plan featured\">Start Free Trial</a>\n\t\t\t\t</div>\n\t\t\t</div>\n\t\t</div>\n\t</section>\n\n\t<section class=\"cta\">\n\t\t<div class=\"container\">\n\t\t\t<div class=\"cta-content\">\n\t\t\t\t<h2>Ready to Maximize Your Profits?</h2>\n\t\t\t\t<p>\n\t\t\t\t\tJoin hundreds of drivers who are already tracking their routes and increasing their\n\t\t\t\t\tearnings.\n\t\t\t\t</p>\n\t\t\t\t<div class=\"cta-buttons\">\n\t\t\t\t\t<a href=\"/register\" class=\"btn-cta-primary\">Start Free Trial</a>\n\t\t\t\t\t<span class=\"cta-note\">No credit card required</span>\n\t\t\t\t</div>\n\t\t\t</div>\n\t\t</div>\n\t</section>\n\n\t<footer class=\"footer\">\n\t\t<div class=\"container\">\n\t\t\t<div class=\"footer-content\">\n\t\t\t\t<div class=\"footer-section\">\n\t\t\t\t\t<picture>\n\t\t\t\t\t\t<source type=\"image/avif\" srcset=\"/96x40.avif 96w\" sizes=\"40px\" />\n\t\t\t\t\t\t<source type=\"image/webp\" srcset=\"/96x40.avif 96w\" sizes=\"40px\" />\n\t\t\t\t\t\t<img\n\t\t\t\t\t\t\tsrc=\"/96x40.avif\"\n\t\t\t\t\t\t\talt=\"Go Route Yourself\"\n\t\t\t\t\t\t\tclass=\"footer-logo\"\n\t\t\t\t\t\t\twidth=\"96\"\n\t\t\t\t\t\t\theight=\"40\"\n\t\t\t\t\t\t/>\n\t\t\t\t\t</picture>\n\t\t\t\t\t<p>Route planning and profit tracking for drivers.</p>\n\t\t\t\t</div>\n\n\t\t\t\t<div class=\"footer-section\">\n\t\t\t\t\t<h3>Product</h3>\n\t\t\t\t\t<a href=\"#features\">Features</a>\n\t\t\t\t\t<a href=\"#pricing\">Pricing</a>\n\t\t\t\t\t<a href=\"#how-it-works\">How It Works</a>\n\t\t\t\t</div>\n\n\t\t\t\t<div class=\"footer-section\">\n\t\t\t\t\t<h3>Company</h3>\n\t\t\t\t\t<a href=\"/about\">About</a>\n\t\t\t\t\t<a href=\"/contact\">Contact</a>\n\t\t\t\t\t<a href=\"/blog\">Blog</a>\n\t\t\t\t</div>\n\n\t\t\t\t<div class=\"footer-section\">\n\t\t\t\t\t<h3>Legal</h3>\n\t\t\t\t\t<a href=\"/privacy\">Privacy Policy</a>\n\t\t\t\t\t<a href=\"/terms\">Terms of Service</a>\n\t\t\t\t</div>\n\t\t\t</div>\n\n\t\t\t<div class=\"footer-bottom\">\n\t\t\t\t<p>&copy; {new Date().getFullYear()} Go Route Yourself. All rights reserved.</p>\n\t\t\t</div>\n\t\t</div>\n\t</footer>\n</div>\n\n<style>\n\t/* Brand Colors */\n\t:root {\n\t\t--orange: #ff7f50;\n\t\t--blue: #29abe2;\n\t\t--navy: #2c4a6e;\n\t\t--green: #8dc63f;\n\t\t--purple: #8b5a9e;\n\t\t--gray-50: #f9fafb;\n\t\t--gray-100: #f3f4f6;\n\t\t--gray-200: #e5e7eb;\n\t\t--gray-500: #6b7280;\n\t\t--gray-600: #4b5563;\n\t\t--gray-900: #111827;\n\t}\n\n\t* {\n\t\tmargin: 0;\n\t\tpadding: 0;\n\t\tbox-sizing: border-box;\n\t}\n\n\t.landing {\n\t\tfont-family:\n\t\t\t-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;\n\t\tline-height: 1.6;\n\t\tcolor: var(--gray-900);\n\t}\n\n\t.container {\n\t\tmax-width: 1200px;\n\t\tmargin: 0 auto;\n\t\tpadding: 0 20px;\n\t}\n\n\t/* Header & Navigation */\n\t.header {\n\t\tposition: fixed;\n\t\ttop: 0;\n\t\tleft: 0;\n\t\tright: 0;\n\t\tbackground: white;\n\t\tborder-bottom: 1px solid var(--gray-100);\n\t\tz-index: 1000;\n\t\tpadding: 16px 0;\n\t}\n\n\t.header-content {\n\t\tdisplay: flex;\n\t\tjustify-content: space-between;\n\t\talign-items: center;\n\t}\n\n\t.logo {\n\t\theight: 100%;\n\t\twidth: 100%;\n\t\tobject-fit: contain;\n\t}\n\n\t.logo-full {\n\t\theight: 100%;\n\t\twidth: 100%;\n\t\tobject-fit: contain;\n\t}\n\n\t/* Desktop Navigation */\n\t.desktop-nav {\n\t\tdisplay: none; /* Changed from flex to none */\n\t\talign-items: center;\n\t\tgap: 24px;\n\t}\n\n\t.desktop-nav button {\n\t\tbackground: none;\n\t\tborder: none;\n\t\tcolor: var(--gray-600);\n\t\tfont-size: 16px;\n\t\tcursor: pointer;\n\t\ttransition: color 0.2s;\n\t}\n\n\t.desktop-nav button:hover {\n\t\tcolor: var(--orange);\n\t}\n\n\t.btn-login {\n\t\tcolor: var(--gray-600);\n\t\ttext-decoration: none;\n\t\tfont-weight: 500;\n\t\tdisplay: inline-flex;\n\t\talign-items: center;\n\t\theight: 44px;\n\t\tpadding: 0 8px;\n\t}\n\n\t.btn-primary {\n\t\tbackground: var(--orange);\n\t\tcolor: white;\n\t\tpadding: 10px 24px;\n\t\tborder-radius: 8px;\n\t\ttext-decoration: none;\n\t\tfont-weight: 600;\n\t\ttransition: transform 0.2s;\n\t}\n\n\t.btn-primary:hover {\n\t\ttransform: translateY(-2px);\n\t}\n\n\t/* Mobile Controls Container (Hidden on Desktop) */\n\t.mobile-nav-controls {\n\t\tdisplay: flex; /* Changed from none to flex */\n\t\talign-items: center;\n\t\tgap: 16px;\n\t}\n\n\t.mobile-signin {\n\t\ttext-decoration: none;\n\t\tcolor: var(--navy);\n\t\tfont-weight: 600;\n\t\tfont-size: 15px;\n\t\tdisplay: inline-flex;\n\t\talign-items: center;\n\t\theight: 44px;\n\t\tpadding: 0 8px;\n\t}\n\n\t.hamburger-btn {\n\t\tbackground: none;\n\t\tborder: none;\n\t\tcursor: pointer;\n\t\tcolor: var(--gray-600);\n\t\tdisplay: flex;\n\t\talign-items: center;\n\t\tpadding: 4px;\n\t}\n\n\t/* Mobile Dropdown Menu */\n\t.mobile-menu {\n\t\tposition: absolute;\n\t\ttop: 100%;\n\t\tleft: 0;\n\t\twidth: 100%;\n\t\tbackground: white;\n\t\tborder-bottom: 1px solid var(--gray-100);\n\t\tpadding: 16px;\n\t\tdisplay: flex;\n\t\tflex-direction: column;\n\t\tgap: 16px;\n\t\tbox-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);\n\t}\n\n\t.mobile-menu button {\n\t\tbackground: none;\n\t\tborder: none;\n\t\ttext-align: left;\n\t\tfont-size: 16px;\n\t\tcolor: var(--gray-600);\n\t\tpadding: 8px 0;\n\t\tcursor: pointer;\n\t\ttext-decoration: none;\n\t}\n\n\t.divider {\n\t\theight: 1px;\n\t\tbackground: var(--gray-100);\n\t\tmargin: 4px 0;\n\t}\n\t.mobile-btn {\n\t\ttext-align: center;\n\t\tdisplay: block;\n\t}\n\n\t/* Hero Section */\n\t.hero {\n\t\t/* Mobile-first padding (reduced top) */\n\t\tpadding: 100px 0 60px;\n\t\tbackground: linear-gradient(135deg, var(--navy) 0%, var(--blue) 100%);\n\t\tcolor: white;\n\t\ttext-align: center;\n\t}\n\n\t.hero h1 {\n\t\t/* Mobile-first font size */\n\t\tfont-size: 36px;\n\t\tfont-weight: 800;\n\t\tmargin-bottom: 24px;\n\t\tline-height: 1.2;\n\t}\n\n\t.highlight {\n\t\tcolor: var(--orange);\n\t}\n\n\t.hero-subtitle {\n\t\tfont-size: 18px;\n\t\t/* Slightly smaller for mobile */\n\t\tmax-width: 700px;\n\t\tmargin: 0 auto 40px;\n\t\topacity: 0.95;\n\t}\n\n\t.hero-buttons {\n\t\tdisplay: flex;\n\t\tflex-direction: column;\n\t\t/* Stack buttons on mobile */\n\t\tgap: 16px;\n\t\tjustify-content: center;\n\t\tmargin-bottom: 60px;\n\t}\n\n\t.btn-hero-primary {\n\t\tbackground: var(--orange);\n\t\tcolor: white;\n\t\tpadding: 16px 40px;\n\t\tborder-radius: 12px;\n\t\tfont-size: 18px;\n\t\tfont-weight: 700;\n\t\ttext-decoration: none;\n\t\ttransition: all 0.2s;\n\t}\n\n\t.btn-hero-primary:hover {\n\t\ttransform: translateY(-2px);\n\t\tbox-shadow: 0 8px 24px rgba(255, 127, 80, 0.4);\n\t}\n\n\t.btn-hero-secondary {\n\t\tbackground: transparent;\n\t\tcolor: white;\n\t\tborder: 2px solid white;\n\t\tpadding: 14px 38px;\n\t\tborder-radius: 12px;\n\t\tfont-size: 18px;\n\t\tfont-weight: 700;\n\t\tcursor: pointer;\n\t\ttransition: all 0.2s;\n\t}\n\n\t.btn-hero-secondary:hover {\n\t\tbackground: white;\n\t\tcolor: var(--navy);\n\t}\n\n\t.hero-stats {\n\t\tdisplay: flex;\n\t\tflex-direction: column;\n\t\t/* Stack stats on mobile */\n\t\tjustify-content: center;\n\t\tgap: 32px;\n\t}\n\n\t.stat {\n\t\ttext-align: center;\n\t}\n\n\t.stat-number {\n\t\tfont-size: 36px;\n\t\tfont-weight: 800;\n\t\tmargin-bottom: 8px;\n\t\tmin-height: 48px; /* reserve space to avoid layout shifts */\n\t}\n\n\t.stat-label {\n\t\tfont-size: 14px;\n\t\topacity: 0.9;\n\t}\n\n\t/* Features Section */\n\t.features {\n\t\tpadding: 60px 0;\n\t\tbackground: white;\n\t}\n\n\t.section-title {\n\t\tfont-size: 32px;\n\t\t/* Smaller mobile title */\n\t\tfont-weight: 800;\n\t\ttext-align: center;\n\t\tmargin-bottom: 16px;\n\t\tcolor: var(--navy);\n\t}\n\n\t.section-subtitle {\n\t\tfont-size: 18px;\n\t\tcolor: var(--gray-600);\n\t\ttext-align: center;\n\t\tmargin-bottom: 40px;\n\t}\n\n\t.features-grid {\n\t\tdisplay: grid;\n\t\tgrid-template-columns: 1fr;\n\t\t/* 1 column on mobile */\n\t\tgap: 32px;\n\t}\n\n\t.feature-card {\n\t\tpadding: 32px;\n\t\tbackground: white;\n\t\tborder-radius: 16px;\n\t\tborder: 2px solid var(--gray-100);\n\t\ttransition: all 0.3s;\n\t}\n\n\t.feature-card:hover {\n\t\ttransform: translateY(-8px);\n\t\tbox-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);\n\t}\n\n\t.feature-card.orange:hover {\n\t\tborder-color: var(--orange);\n\t}\n\t.feature-card.blue:hover {\n\t\tborder-color: var(--blue);\n\t}\n\t.feature-card.green:hover {\n\t\tborder-color: var(--green);\n\t}\n\t.feature-card.navy:hover {\n\t\tborder-color: var(--navy);\n\t}\n\t.feature-card.purple:hover {\n\t\tborder-color: var(--purple);\n\t}\n\n\t.feature-icon {\n\t\tfont-size: 48px;\n\t\tmargin-bottom: 20px;\n\t}\n\n\t.feature-card h3 {\n\t\tfont-size: 24px;\n\t\tmargin-bottom: 12px;\n\t\tcolor: var(--navy);\n\t}\n\n\t.feature-card p {\n\t\tcolor: var(--gray-600);\n\t\tline-height: 1.7;\n\t}\n\n\t/* How It Works */\n\t.how-it-works {\n\t\tpadding: 60px 0;\n\t\tbackground: var(--gray-50);\n\t}\n\n\t.steps {\n\t\tmax-width: 800px;\n\t\tmargin: 0 auto;\n\t}\n\n\t.step {\n\t\tdisplay: flex;\n\t\tflex-direction: column;\n\t\t/* Stack vertical on mobile */\n\t\tgap: 24px;\n\t\tmargin-bottom: 60px;\n\t\talign-items: center;\n\t\t/* Center align items */\n\t\ttext-align: center;\n\t}\n\n\t.step-number {\n\t\twidth: 60px;\n\t\theight: 60px;\n\t\tcolor: white;\n\t\tborder-radius: 50%;\n\t\tdisplay: flex;\n\t\talign-items: center;\n\t\tjustify-content: center;\n\t\tfont-size: 28px;\n\t\tfont-weight: 800;\n\t\tflex-shrink: 0;\n\t}\n\n\t.step-number.orange {\n\t\tbackground: var(--orange);\n\t}\n\t.step-number.blue {\n\t\tbackground: var(--blue);\n\t}\n\t.step-number.green {\n\t\tbackground: var(--green);\n\t}\n\n\t.step-content h3 {\n\t\tfont-size: 24px;\n\t\tmargin-bottom: 12px;\n\t\tcolor: var(--navy);\n\t}\n\n\t.step-content p {\n\t\tcolor: var(--gray-600);\n\t\tfont-size: 16px;\n\t\tline-height: 1.7;\n\t}\n\n\t/* Pricing Section */\n\t.pricing {\n\t\tpadding: 60px 0;\n\t\tbackground: white;\n\t}\n\n\t.pricing-grid {\n\t\tdisplay: grid;\n\t\tgrid-template-columns: 1fr;\n\t\tgap: 32px;\n\t\tmax-width: 1000px;\n\t\tmargin: 0 auto;\n\t}\n\n\t.pricing-card {\n\t\tbackground: white;\n\t\tborder: 2px solid var(--gray-100);\n\t\tborder-radius: 16px;\n\t\tpadding: 40px;\n\t\tposition: relative;\n\t\ttransition: all 0.3s;\n\t}\n\n\t.pricing-card:hover {\n\t\ttransform: translateY(-8px);\n\t\tbox-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);\n\t}\n\n\t.pricing-card.featured {\n\t\tborder-color: var(--orange);\n\t\tbox-shadow: 0 8px 32px rgba(255, 127, 80, 0.2);\n\t}\n\n\t.badge {\n\t\tposition: absolute;\n\t\ttop: -12px;\n\t\tright: 20px;\n\t\tbackground: var(--orange);\n\t\tcolor: white;\n\t\tpadding: 6px 16px;\n\t\tborder-radius: 20px;\n\t\tfont-size: 12px;\n\t\tfont-weight: 700;\n\t}\n\n\t.plan-header {\n\t\ttext-align: center;\n\t\tmargin-bottom: 32px;\n\t}\n\n\t.plan-header h3 {\n\t\tfont-size: 24px;\n\t\tmargin-bottom: 16px;\n\t\tcolor: var(--navy);\n\t}\n\n\t.price {\n\t\tdisplay: flex;\n\t\talign-items: flex-start;\n\t\tjustify-content: center;\n\t}\n\n\t.currency {\n\t\tfont-size: 24px;\n\t\tfont-weight: 700;\n\t\tcolor: var(--navy);\n\t}\n\n\t.amount {\n\t\tfont-size: 56px;\n\t\tfont-weight: 800;\n\t\tline-height: 1;\n\t\tcolor: var(--navy);\n\t}\n\n\t.period {\n\t\tfont-size: 18px;\n\t\tcolor: var(--gray-600);\n\t\tmargin-left: 4px;\n\t\talign-self: flex-end;\n\t\tmargin-bottom: 8px;\n\t}\n\n\t.features-list {\n\t\tlist-style: none;\n\t\tmargin-bottom: 32px;\n\t}\n\n\t.features-list li {\n\t\tpadding: 12px 0;\n\t\tborder-bottom: 1px solid var(--gray-100);\n\t\tcolor: var(--gray-900);\n\t}\n\n\t.btn-plan {\n\t\tdisplay: block;\n\t\twidth: 100%;\n\t\ttext-align: center;\n\t\tpadding: 14px;\n\t\tbackground: var(--gray-100);\n\t\tcolor: var(--navy);\n\t\tborder-radius: 8px;\n\t\ttext-decoration: none;\n\t\tfont-weight: 600;\n\t\ttransition: all 0.2s;\n\t}\n\n\t.btn-plan:hover {\n\t\tbackground: var(--gray-100);\n\t}\n\n\t.btn-plan.featured {\n\t\tbackground: var(--orange);\n\t\tcolor: white;\n\t}\n\n\t.btn-plan.featured:hover {\n\t\ttransform: translateY(-2px);\n\t}\n\n\t/* CTA Section */\n\t.cta {\n\t\tpadding: 80px 0;\n\t\tbackground: linear-gradient(135deg, var(--orange) 0%, var(--green) 100%);\n\t\tcolor: white;\n\t\ttext-align: center;\n\t}\n\n\t.cta h2 {\n\t\tfont-size: 32px;\n\t\tfont-weight: 800;\n\t\tmargin-bottom: 16px;\n\t}\n\n\t.cta p {\n\t\tfont-size: 18px;\n\t\tmargin-bottom: 40px;\n\t\topacity: 0.95;\n\t}\n\n\t.cta-buttons {\n\t\tdisplay: flex;\n\t\tflex-direction: column;\n\t\talign-items: center;\n\t\tgap: 12px;\n\t}\n\n\t.btn-cta-primary {\n\t\tbackground: white;\n\t\tcolor: var(--orange);\n\t\tpadding: 16px 48px;\n\t\tborder-radius: 12px;\n\t\tfont-size: 18px;\n\t\tfont-weight: 700;\n\t\ttext-decoration: none;\n\t\ttransition: all 0.2s;\n\t}\n\n\t.btn-cta-primary:hover {\n\t\ttransform: translateY(-2px);\n\t\tbox-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);\n\t}\n\n\t.cta-note {\n\t\tfont-size: 14px;\n\t\topacity: 0.9;\n\t}\n\n\t/* Footer */\n\t.footer {\n\t\tbackground: var(--gray-50);\n\t\tcolor: var(--gray-900);\n\t\tpadding: 60px 0 20px;\n\t\tborder-top: 1px solid var(--gray-200);\n\t}\n\n\t.footer-content {\n\t\tdisplay: grid;\n\t\tgrid-template-columns: 1fr;\n\t\tgap: 40px;\n\t\tmargin-bottom: 40px;\n\t}\n\n\t.footer-logo {\n\t\theight: 40px;\n\t\tmargin-bottom: 16px;\n\t}\n\n\t.footer-section h3 {\n\t\tmargin-bottom: 16px;\n\t\tfont-size: 16px;\n\t\tcolor: var(--navy);\n\t\tfont-weight: 700;\n\t}\n\n\t.footer-section a {\n\t\tdisplay: block;\n\t\tcolor: var(--gray-600);\n\t\ttext-decoration: none;\n\t\tmargin-bottom: 12px;\n\t\ttransition: color 0.2s;\n\t}\n\n\t.footer-section a:hover {\n\t\tcolor: var(--orange);\n\t}\n\n\t.footer-section p {\n\t\tcolor: var(--gray-600);\n\t}\n\n\t.footer-bottom {\n\t\ttext-align: center;\n\t\tpadding-top: 20px;\n\t\tborder-top: 1px solid var(--gray-200);\n\t\tcolor: var(--gray-500);\n\t}\n\n\t/* --- Desktop Responsive --- */\n\t@media (min-width: 768px) {\n\t\t.desktop-nav {\n\t\t\tdisplay: flex;\n\t\t}\n\n\t\t.mobile-nav-controls {\n\t\t\tdisplay: none;\n\t\t}\n\n\t\t.hero {\n\t\t\tpadding: 140px 0 80px;\n\t\t}\n\n\t\t.hero h1 {\n\t\t\tfont-size: 56px;\n\t\t}\n\n\t\t.hero-subtitle {\n\t\t\tfont-size: 20px;\n\t\t}\n\n\t\t.hero-buttons {\n\t\t\tflex-direction: row;\n\t\t}\n\n\t\t.hero-stats {\n\t\t\tflex-direction: row;\n\t\t\tgap: 80px;\n\t\t}\n\n\t\t.features {\n\t\t\tpadding: 100px 0;\n\t\t}\n\n\t\t.features-grid {\n\t\t\tgrid-template-columns: repeat(auto-fit, minmax(300px, 1fr));\n\t\t}\n\n\t\t.section-title {\n\t\t\tfont-size: 42px;\n\t\t}\n\n\t\t.section-subtitle {\n\t\t\tfont-size: 20px;\n\t\t}\n\n\t\t.how-it-works {\n\t\t\tpadding: 100px 0;\n\t\t}\n\n\t\t.step {\n\t\t\tflex-direction: row;\n\t\t\ttext-align: left;\n\t\t\talign-items: flex-start;\n\t\t}\n\n\t\t.step-content h3 {\n\t\t\tfont-size: 28px;\n\t\t}\n\n\t\t.step-content p {\n\t\t\tfont-size: 18px;\n\t\t}\n\n\t\t.pricing {\n\t\t\tpadding: 100px 0;\n\t\t}\n\n\t\t.pricing-grid {\n\t\t\tgrid-template-columns: repeat(auto-fit, minmax(300px, 1fr));\n\t\t}\n\n\t\t.footer-content {\n\t\t\tgrid-template-columns: 2fr 1fr 1fr 1fr;\n\t\t}\n\t}\n</style>\n",
+		"usedDeprecatedRules": []
+	}
+]

@@ -19,6 +19,10 @@ function sanitizeCSVField(value: string | number | null | undefined): string {
 	return str;
 }
 
+import { SvelteDate } from '$lib/utils/svelte-reactivity';
+import type { Trip, Stop, MaintenanceCost, SupplyCost } from '$lib/types';
+import type { ExpenseRecord } from '$lib/db/types';
+
 // Helper functions
 export function formatCurrency(amount: number): string {
 	return `$${amount.toFixed(2)}`;
@@ -34,8 +38,7 @@ export function formatDuration(minutes: number): string {
 
 export function formatDate(dateStr: string): string {
 	if (!dateStr) return '';
-	const date = new Date(dateStr);
-	return date.toLocaleDateString();
+	return SvelteDate.from(dateStr).toLocaleDateString();
 }
 
 export async function getLogoDataUrl(): Promise<string | null> {
@@ -55,7 +58,7 @@ export async function getLogoDataUrl(): Promise<string | null> {
 }
 
 // Export Functions
-export function generateTripsCSV(trips: any[], includeSummary: boolean = true): string | null {
+export function generateTripsCSV(trips: Trip[], includeSummary: boolean = true): string | null {
 	if (trips.length === 0) return null;
 
 	const headers = [
@@ -78,23 +81,22 @@ export function generateTripsCSV(trips: any[], includeSummary: boolean = true): 
 		'Notes'
 	];
 
-	const rows = trips.map((trip) => {
-		const date = trip.date ? new Date(trip.date).toLocaleDateString() : '';
+	const rows = trips.map((trip: Trip) => {
+		const date = trip.date ? SvelteDate.from(trip.date).toLocaleDateString() : '';
 		// SECURITY: Sanitize user addresses to prevent formula injection
 		const start = `"${sanitizeCSVField(trip.startAddress || '').replace(/"/g, '""')}"`;
 
 		const intermediateStops =
 			trip.stops && trip.stops.length > 0
 				? trip.stops
-						.map((s: any) => `${sanitizeCSVField(s.address)} ($${(s.earnings || 0).toFixed(2)})`)
+						.map((s: Stop) => `${sanitizeCSVField(s.address)} ($${(s.earnings || 0).toFixed(2)})`)
 						.join(' | ')
 				: '';
 		const stopsStr = `"${intermediateStops.replace(/"/g, '""')}"`;
 
-		const rawEnd =
-			trip.endAddress ||
-			(trip.stops && trip.stops.length > 0 ? trip.stops[trip.stops.length - 1].address : '') ||
-			trip.startAddress;
+		const lastStop =
+			trip.stops && trip.stops.length > 0 ? trip.stops[trip.stops.length - 1] : undefined;
+		const rawEnd = trip.endAddress || (lastStop?.address ?? '') || trip.startAddress;
 		const end = `"${sanitizeCSVField(rawEnd || '').replace(/"/g, '""')}"`;
 
 		const miles = (trip.totalMiles || 0).toFixed(1);
@@ -102,23 +104,24 @@ export function generateTripsCSV(trips: any[], includeSummary: boolean = true): 
 		const hoursWorked = (trip.hoursWorked || 0).toFixed(1);
 
 		const revenue =
-			trip.stops?.reduce((sum: number, stop: any) => sum + (stop.earnings || 0), 0) || 0;
+			trip.stops?.reduce((sum: number, stop: Stop) => sum + (stop.earnings || 0), 0) || 0;
 		const fuel = trip.fuelCost || 0;
 
 		const maint = trip.maintenanceCost || 0;
 		const maintItemsStr = trip.maintenanceItems
-			? `"${trip.maintenanceItems.map((i: any) => `${sanitizeCSVField(i.type)}:${i.cost}`).join(' | ')}"`
+			? `"${trip.maintenanceItems.map((i: MaintenanceCost) => `${sanitizeCSVField(i.type)}:${i.cost}`).join(' | ')}"`
 			: '""';
 
 		const supplies = trip.suppliesCost || 0;
 		const sItems = trip.suppliesItems || trip.supplyItems;
 		const supplyItemsStr = sItems
-			? `"${sItems.map((i: any) => `${sanitizeCSVField(i.type)}:${i.cost}`).join(' | ')}"`
+			? `"${sItems.map((i: SupplyCost) => `${sanitizeCSVField(i.type)}:${i.cost}`).join(' | ')}"`
 			: '""';
 
 		const totalExpenses = fuel + maint + supplies;
 		const netProfit = revenue - totalExpenses;
-		const hourlyPay = trip.hoursWorked > 0 ? netProfit / trip.hoursWorked : 0;
+		const hoursWorkedNum = trip.hoursWorked ?? 0;
+		const hourlyPay = hoursWorkedNum > 0 ? netProfit / hoursWorkedNum : 0;
 		// SECURITY: Sanitize notes field
 		const notes = `"${sanitizeCSVField(trip.notes || '').replace(/"/g, '""')}"`;
 
@@ -144,14 +147,15 @@ export function generateTripsCSV(trips: any[], includeSummary: boolean = true): 
 	});
 
 	if (includeSummary) {
-		const totalMiles = trips.reduce((sum, t) => sum + (t.totalMiles || 0), 0);
+		const totalMiles = trips.reduce((sum: number, t: Trip) => sum + (t.totalMiles || 0), 0);
 		const totalRevenue = trips.reduce(
-			(sum, t) =>
-				sum + (t.stops?.reduce((s: number, stop: any) => s + (stop.earnings || 0), 0) || 0),
+			(sum: number, t: Trip) =>
+				sum + (t.stops?.reduce((s: number, stop: Stop) => s + (stop.earnings || 0), 0) || 0),
 			0
 		);
 		const totalExpenses = trips.reduce(
-			(sum, t) => sum + (t.fuelCost || 0) + (t.maintenanceCost || 0) + (t.suppliesCost || 0),
+			(sum: number, t: Trip) =>
+				sum + (t.fuelCost || 0) + (t.maintenanceCost || 0) + (t.suppliesCost || 0),
 			0
 		);
 		const netProfit = totalRevenue - totalExpenses;
@@ -184,8 +188,8 @@ export function generateTripsCSV(trips: any[], includeSummary: boolean = true): 
 }
 
 export function generateExpensesCSV(
-	expenses: any[],
-	trips: any[],
+	expenses: ExpenseRecord[],
+	trips: Trip[],
 	includeSummary: boolean = true
 ): string | null {
 	const allExpenses: Array<{
@@ -196,7 +200,7 @@ export function generateExpensesCSV(
 	}> = [];
 
 	// 1. Add expenses from expense store
-	expenses.forEach((expense) => {
+	expenses.forEach((expense: ExpenseRecord) => {
 		allExpenses.push({
 			date: expense.date,
 			category: sanitizeCSVField(expense.category),
@@ -207,17 +211,20 @@ export function generateExpensesCSV(
 
 	// 2. Add trip-level expenses
 	trips.forEach((trip) => {
-		if (trip.fuelCost && trip.fuelCost > 0) {
+		const fuel = trip.fuelCost ?? 0;
+		if (fuel > 0) {
 			allExpenses.push({
 				date: trip.date || '',
 				category: 'Fuel',
-				amount: trip.fuelCost,
+				amount: fuel,
 				description: 'From trip'
 			});
 		}
+
 		// Maintenance
-		if (trip.maintenanceItems?.length > 0) {
-			trip.maintenanceItems.forEach((item: any) => {
+		const mItems = trip.maintenanceItems;
+		if (mItems && mItems.length > 0) {
+			mItems.forEach((item: MaintenanceCost) => {
 				allExpenses.push({
 					date: trip.date || '',
 					category: 'Maintenance',
@@ -225,18 +232,22 @@ export function generateExpensesCSV(
 					description: sanitizeCSVField(item.type)
 				});
 			});
-		} else if (trip.maintenanceCost > 0) {
-			allExpenses.push({
-				date: trip.date || '',
-				category: 'Maintenance',
-				amount: trip.maintenanceCost,
-				description: 'From trip'
-			});
+		} else {
+			const mCost = trip.maintenanceCost ?? 0;
+			if (mCost > 0) {
+				allExpenses.push({
+					date: trip.date || '',
+					category: 'Maintenance',
+					amount: mCost,
+					description: 'From trip'
+				});
+			}
 		}
+
 		// Supplies
 		const sItems = trip.suppliesItems || trip.supplyItems;
-		if (sItems?.length > 0) {
-			sItems.forEach((item: any) => {
+		if (sItems && sItems.length > 0) {
+			sItems.forEach((item: SupplyCost) => {
 				allExpenses.push({
 					date: trip.date || '',
 					category: 'Supplies',
@@ -244,19 +255,24 @@ export function generateExpensesCSV(
 					description: sanitizeCSVField(item.type)
 				});
 			});
-		} else if (trip.suppliesCost > 0) {
-			allExpenses.push({
-				date: trip.date || '',
-				category: 'Supplies',
-				amount: trip.suppliesCost,
-				description: 'From trip'
-			});
+		} else {
+			const sCost = trip.suppliesCost ?? 0;
+			if (sCost > 0) {
+				allExpenses.push({
+					date: trip.date || '',
+					category: 'Supplies',
+					amount: sCost,
+					description: 'From trip'
+				});
+			}
 		}
 	});
 
 	if (allExpenses.length === 0) return null;
 
-	allExpenses.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+	allExpenses.sort(
+		(a, b) => SvelteDate.from(a.date || 0).getTime() - SvelteDate.from(b.date || 0).getTime()
+	);
 
 	const expensesByDate: Record<string, Record<string, number>> = {};
 	const categories = new Set<string>();
@@ -303,33 +319,48 @@ export function generateExpensesCSV(
 	return csv;
 }
 
-export function generateTaxBundleCSV(trips: any[], expenses: any[], dateRangeStr: string): string {
+export function generateTaxBundleCSV(
+	trips: Trip[],
+	expenses: ExpenseRecord[],
+	dateRangeStr: string
+): string {
 	// 1. Calculate Summary Data
-	const totalMiles = trips.reduce((sum, t) => sum + (t.totalMiles || 0), 0);
+	const totalMiles = trips.reduce((sum: number, t: Trip) => sum + (t.totalMiles || 0), 0);
 	const mileageDeduction = totalMiles * 0.67; // 2024 Standard Mileage Rate
 
-	const allExpenses: any[] = [];
+	const allExpenses: Array<{ category: string; amount: number; source: string }> = [];
 	expenses.forEach((e) => allExpenses.push({ ...e, source: 'Expense Log' }));
 	trips.forEach((t) => {
-		if (t.fuelCost) allExpenses.push({ category: 'Fuel', amount: t.fuelCost, source: 'Trip' });
-		if (t.maintenanceCost)
-			allExpenses.push({ category: 'Maintenance', amount: t.maintenanceCost, source: 'Trip' });
-		if (t.maintenanceItems)
-			t.maintenanceItems.forEach((i: any) =>
+		const fuel = t.fuelCost ?? 0;
+		if (fuel > 0) allExpenses.push({ category: 'Fuel', amount: fuel, source: 'Trip' });
+
+		if (t.maintenanceItems && t.maintenanceItems.length > 0) {
+			t.maintenanceItems.forEach((i: MaintenanceCost) =>
 				allExpenses.push({ category: 'Maintenance', amount: i.cost, source: 'Trip' })
 			);
-		if (t.suppliesCost)
-			allExpenses.push({ category: 'Supplies', amount: t.suppliesCost, source: 'Trip' });
-		if (t.suppliesItems || t.supplyItems)
-			(t.suppliesItems || t.supplyItems).forEach((i: any) =>
+		} else {
+			const mCost = t.maintenanceCost ?? 0;
+			if (mCost > 0) allExpenses.push({ category: 'Maintenance', amount: mCost, source: 'Trip' });
+		}
+
+		const s = t.suppliesItems || t.supplyItems;
+		if (s && s.length > 0) {
+			s.forEach((i: SupplyCost) =>
 				allExpenses.push({ category: 'Supplies', amount: i.cost, source: 'Trip' })
 			);
+		} else {
+			const sCost = t.suppliesCost ?? 0;
+			if (sCost > 0) allExpenses.push({ category: 'Supplies', amount: sCost, source: 'Trip' });
+		}
 	});
-	const totalExpenses = allExpenses.reduce((sum, e) => sum + e.amount, 0);
+	const totalExpenses = allExpenses.reduce(
+		(sum: number, e: { category: string; amount: number; source: string }) => sum + e.amount,
+		0
+	);
 
 	// 2. Build CSV
 	let csv = `TAX BUNDLE EXPORT - ${dateRangeStr}\n`;
-	csv += `Generated: ${new Date().toLocaleString()}\n\n`;
+	csv += `Generated: ${SvelteDate.now().toLocaleString()}\n\n`;
 
 	csv += `SUMMARY COMPARISON\n`;
 	csv += `Method,Details,Deduction Value\n`;
@@ -359,15 +390,25 @@ export function generateTripsPDF(): never {
 	);
 }
 
-export async function generateExpensesPDF(expenses: any[], trips: any[], dateRangeStr: string) {
+export async function generateExpensesPDF(
+	expenses: ExpenseRecord[],
+	trips: Trip[],
+	dateRangeStr: string
+) {
 	const { jsPDF } = await import('jspdf');
+	const allExpenses: Array<{
+		date?: string;
+		category: string;
+		amount: number;
+		description?: string;
+		source: string;
+	}> = []; // typed accumulator
 	const autoTable = (await import('jspdf-autotable')).default;
 	const doc = new jsPDF();
 	const logoData = await getLogoDataUrl();
 	const pageWidth = doc.internal.pageSize.getWidth();
 
-	const allExpenses: Array<any> = [];
-	expenses.forEach((exp) =>
+	expenses.forEach((exp: ExpenseRecord) =>
 		allExpenses.push({
 			date: exp.date,
 			category: exp.category,
@@ -378,16 +419,19 @@ export async function generateExpensesPDF(expenses: any[], trips: any[], dateRan
 	);
 
 	trips.forEach((trip) => {
-		if (trip.fuelCost > 0)
+		const fuel = trip.fuelCost ?? 0;
+		if (fuel > 0)
 			allExpenses.push({
 				date: trip.date,
 				category: 'Fuel',
-				amount: trip.fuelCost,
+				amount: fuel,
 				description: 'From trip',
 				source: 'Trip'
 			});
-		if (trip.maintenanceItems?.length > 0) {
-			trip.maintenanceItems.forEach((item: any) =>
+
+		const mItems = trip.maintenanceItems;
+		if (mItems && mItems.length > 0) {
+			mItems.forEach((item: MaintenanceCost) =>
 				allExpenses.push({
 					date: trip.date,
 					category: 'Maintenance',
@@ -396,18 +440,21 @@ export async function generateExpensesPDF(expenses: any[], trips: any[], dateRan
 					source: 'Trip'
 				})
 			);
-		} else if (trip.maintenanceCost > 0) {
-			allExpenses.push({
-				date: trip.date,
-				category: 'Maintenance',
-				amount: trip.maintenanceCost,
-				description: 'From trip',
-				source: 'Trip'
-			});
+		} else {
+			const mCost = trip.maintenanceCost ?? 0;
+			if (mCost > 0)
+				allExpenses.push({
+					date: trip.date,
+					category: 'Maintenance',
+					amount: mCost,
+					description: 'From trip',
+					source: 'Trip'
+				});
 		}
+
 		const sItems = trip.suppliesItems || trip.supplyItems;
-		if (sItems?.length > 0) {
-			sItems.forEach((item: any) =>
+		if (sItems && sItems.length > 0) {
+			sItems.forEach((item: SupplyCost) =>
 				allExpenses.push({
 					date: trip.date,
 					category: 'Supplies',
@@ -416,18 +463,22 @@ export async function generateExpensesPDF(expenses: any[], trips: any[], dateRan
 					source: 'Trip'
 				})
 			);
-		} else if (trip.suppliesCost > 0) {
-			allExpenses.push({
-				date: trip.date,
-				category: 'Supplies',
-				amount: trip.suppliesCost,
-				description: 'From trip',
-				source: 'Trip'
-			});
+		} else {
+			const sCost = trip.suppliesCost ?? 0;
+			if (sCost > 0)
+				allExpenses.push({
+					date: trip.date,
+					category: 'Supplies',
+					amount: sCost,
+					description: 'From trip',
+					source: 'Trip'
+				});
 		}
 	});
 
-	allExpenses.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+	allExpenses.sort(
+		(a, b) => SvelteDate.from(a.date || 0).getTime() - SvelteDate.from(b.date || 0).getTime()
+	);
 
 	doc.setFillColor(255, 127, 80);
 	doc.rect(0, 0, pageWidth, 35, 'F');
@@ -446,14 +497,14 @@ export async function generateExpensesPDF(expenses: any[], trips: any[], dateRan
 	doc.setTextColor(0, 0, 0);
 	doc.setFontSize(9);
 	doc.text(`Period: ${dateRangeStr}`, 14, 42);
-	doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 47);
+	doc.text(`Generated: ${SvelteDate.now().toLocaleString()}`, 14, 47);
 	doc.text(`Total Expenses: ${allExpenses.length}`, pageWidth - 14, 42, { align: 'right' });
 
 	const categoryTotals: Record<string, number> = {};
 	let grandTotal = 0;
 	allExpenses.forEach((exp) => {
-		if (!categoryTotals[exp.category]) categoryTotals[exp.category] = 0;
-		categoryTotals[exp.category] += exp.amount;
+		const cat = exp.category;
+		categoryTotals[cat] = (categoryTotals[cat] || 0) + exp.amount;
 		grandTotal += exp.amount;
 	});
 
@@ -486,7 +537,7 @@ export async function generateExpensesPDF(expenses: any[], trips: any[], dateRan
 	doc.setTextColor(0, 0, 0);
 
 	const tableData = allExpenses.map((exp) => [
-		formatDate(exp.date),
+		formatDate(exp.date || ''),
 		exp.description ? `${exp.category} - ${exp.description}` : exp.category,
 		formatCurrency(exp.amount),
 		exp.source
@@ -519,7 +570,7 @@ export async function generateExpensesPDF(expenses: any[], trips: any[], dateRan
 		},
 		alternateRowStyles: { fillColor: [249, 250, 251] },
 		margin: { left: 14, right: 14 },
-		didDrawPage: function (data: any) {
+		didDrawPage: function (data: { pageNumber: number }) {
 			const pageCount = doc.internal.pages.length - 1;
 			doc.setFontSize(8);
 			doc.setTextColor(128, 128, 128);
@@ -535,7 +586,11 @@ export async function generateExpensesPDF(expenses: any[], trips: any[], dateRan
 	return doc;
 }
 
-export async function generateTaxBundlePDF(trips: any[], expenses: any[], dateRangeStr: string) {
+export async function generateTaxBundlePDF(
+	trips: Trip[],
+	expenses: ExpenseRecord[],
+	dateRangeStr: string
+) {
 	const { jsPDF } = await import('jspdf');
 	const autoTable = (await import('jspdf-autotable')).default;
 	const doc = new jsPDF();
@@ -561,29 +616,36 @@ export async function generateTaxBundlePDF(trips: any[], expenses: any[], dateRa
 	doc.setTextColor(0, 0, 0);
 	doc.setFontSize(10);
 	doc.text(`Period: ${dateRangeStr}`, 14, 45);
-	doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 50);
+	doc.text(`Generated: ${SvelteDate.now().toLocaleString()}`, 14, 50);
 
 	// --- CALCULATIONS ---
 	const totalMiles = trips.reduce((sum, t) => sum + (t.totalMiles || 0), 0);
 	const mileageDeduction = totalMiles * 0.67;
 
-	// Collate all expenses
-	const allExpenses: any[] = [];
-	expenses.forEach((e) => allExpenses.push({ ...e, source: 'Expense Log' }));
+	// Collate all expenses into a unified shape for easy totals
+	type UnifiedExpense = {
+		category?: string;
+		amount: number;
+		source: string;
+		date?: string;
+		description?: string;
+	};
+	const allExpenses: UnifiedExpense[] = [];
+	expenses.forEach((e) => allExpenses.push({ ...e, source: 'Expense Log' } as UnifiedExpense));
 	trips.forEach((t) => {
 		if (t.fuelCost) allExpenses.push({ category: 'Fuel', amount: t.fuelCost, source: 'Trip' });
 		if (t.maintenanceCost)
 			allExpenses.push({ category: 'Maintenance', amount: t.maintenanceCost, source: 'Trip' });
 		if (t.maintenanceItems)
-			t.maintenanceItems.forEach((i: any) =>
-				allExpenses.push({ category: 'Maintenance', amount: i.cost, source: 'Trip' })
+			t.maintenanceItems.forEach((i: MaintenanceCost) =>
+				allExpenses.push({ category: 'Maintenance', amount: Number(i.cost ?? 0), source: 'Trip' })
 			);
 		if (t.suppliesCost)
 			allExpenses.push({ category: 'Supplies', amount: t.suppliesCost, source: 'Trip' });
-		if (t.suppliesItems || t.supplyItems)
-			(t.suppliesItems || t.supplyItems).forEach((i: any) =>
-				allExpenses.push({ category: 'Supplies', amount: i.cost, source: 'Trip' })
-			);
+		const supplies = (t.suppliesItems || t.supplyItems) ?? [];
+		supplies.forEach((i: SupplyCost) =>
+			allExpenses.push({ category: 'Supplies', amount: Number(i.cost ?? 0), source: 'Trip' })
+		);
 	});
 
 	const totalExpenses = allExpenses.reduce((sum, e) => sum + e.amount, 0);
@@ -642,11 +704,9 @@ export async function generateTaxBundlePDF(trips: any[], expenses: any[], dateRa
 	doc.text('Mileage Log', 14, 20);
 
 	const tripTableData = trips.map((trip) => {
-		const endAddr =
-			trip.endAddress ||
-			(trip.stops && trip.stops.length > 0 ? trip.stops[trip.stops.length - 1].address : '') ||
-			trip.startAddress ||
-			'';
+		const lastStop =
+			trip.stops && trip.stops.length > 0 ? trip.stops[trip.stops.length - 1] : undefined;
+		const endAddr = trip.endAddress || (lastStop && lastStop.address) || trip.startAddress || '';
 		return [
 			formatDate(trip.date || ''),
 			trip.startAddress || '',
@@ -675,8 +735,8 @@ export async function generateTaxBundlePDF(trips: any[], expenses: any[], dateRa
 	doc.text('Expense Log', 14, 20);
 
 	const expenseTableData = allExpenses.map((exp) => [
-		formatDate(exp.date),
-		exp.description ? `${exp.category} - ${exp.description}` : exp.category,
+		formatDate(exp.date || ''),
+		exp.description ? `${exp.category ?? ''} - ${exp.description}` : (exp.category ?? ''),
 		formatCurrency(exp.amount),
 		exp.source
 	]);

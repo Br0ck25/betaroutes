@@ -1,5 +1,5 @@
 // src/lib/server/TripIndexDO.ts
-import type { DurableObjectState, KVNamespace } from '@cloudflare/workers-types';
+
 import { log } from '$lib/server/log';
 
 interface TripSummary {

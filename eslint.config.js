@@ -22,29 +22,79 @@ export default defineConfig(
 			globals: { ...globals.browser, ...globals.node }
 		},
 		rules: {
-			// typescript-eslint strongly recommend that you do not use the no-undef lint rule on TypeScript projects.
-			// see: https://typescript-eslint.io/troubleshooting/faqs/eslint/#i-get-errors-from-the-no-undef-rule-about-global-variables-not-being-defined-even-though-there-are-no-typescript-errors
-			'no-undef': 'off'
+			// 🔧 TS: Handled by compiler, disable to reduce noise
+			'no-undef': 'off',
+
+			// 🛡️ PATTERN #18: Cloudflare Type Conflicts
+			// Prevents "Type 'KVNamespace' is not assignable to..."
+			'no-restricted-imports': [
+				'error',
+				{
+					paths: [
+						{
+							name: '@cloudflare/workers-types',
+							message:
+								'Do not import from @cloudflare/workers-types. Use global ambient types (e.g. KVNamespace) instead. See AI_AGENTS.md Pattern #18.'
+						}
+					]
+				}
+			],
+
+			// 🧹 PATTERN #6 & #32: Clean Code Hygiene
+			// Allows _vars but errors on unused vars without underscore
+			'@typescript-eslint/no-unused-vars': [
+				'error',
+				{
+					argsIgnorePattern: '^_',
+					varsIgnorePattern: '^_',
+					caughtErrorsIgnorePattern: '^_'
+				}
+			],
+
+			// 🧹 PATTERN #28: Prefer Const
+			// Stops lazy "let" usage
+			'prefer-const': 'error',
+
+			// 🛡️ SECURITY: XSS Prevention
+			'no-eval': 'error',
+			'no-implied-eval': 'error'
 		}
 	},
-	// Server-only overrides: disallow raw console.* usage in server code (enforce using sanitized logger)
+	// 🔒 SERVER-SIDE SAFEGUARDS (Strict Security)
 	{
 		files: ['**/+server.*', '**/+page.server.*', '**/+layout.server.*', 'src/lib/server/**'],
 		rules: {
-			'no-console': 'error'
+			// 🛡️ PATTERN #34: No Console Logs in Production Code
+			'no-console': 'error',
+
+			// 🛡️ PATTERN #10 & #16: Identity Fallback Prevention
+			// Mechanically prevents using .name, .email, or .token for auth checks
+			'no-restricted-syntax': [
+				'error',
+				{
+					selector: "MemberExpression[property.name=/^(name|email|token)$/][object.name='user']",
+					message:
+						"SECURITY: Do not use user.name/email/token for ownership checks. Use 'user.id' only. (See SECURITY.md)"
+				},
+				{
+					selector:
+						"MemberExpression[property.name=/^(name|email|token)$/][object.type='MemberExpression'][object.property.name='user']",
+					message:
+						"SECURITY: Do not use locals.user.name/email/token for ownership checks. Use 'locals.user.id' only. (See SECURITY.md)"
+				},
+				// 🛡️ PATTERN #11: Mass Assignment Warning
+				// Warns if you try to spread a variable named 'body' into an object
+				{
+					selector: "ObjectExpression > SpreadElement[argument.name='body']",
+					message:
+						"SECURITY WARNING: Potential Mass Assignment. Do not spread 'body' directly into objects. Destructure specific fields instead. (See SECURITY.md)"
+				}
+			]
 		}
 	},
+	// ⚡ SVELTE SPECIFIC
 	{
 		files: ['**/*.svelte', '**/*.svelte.ts', '**/*.svelte.js'],
-		rules: {
-			'@typescript-eslint/no-explicit-any': 'off',
-			'@typescript-eslint/no-unused-vars': 'off',
-			'no-empty': 'off',
-			'svelte/require-each-key': 'off',
-			'svelte/no-navigation-without-resolve': 'off',
-			'svelte/no-at-html-tags': 'off',
-			'svelte/prefer-svelte-reactivity': 'off'
-		},
 		languageOptions: {
 			parserOptions: {
 				projectService: true,
@@ -52,17 +102,18 @@ export default defineConfig(
 				parser: ts.parser,
 				svelteConfig
 			}
-		}
-	},
-	{
-		files: ['src/routes/**/*.ts'],
+		},
 		rules: {
-			'@typescript-eslint/no-explicit-any': 'off'
-		}
-	},
-	{
-		files: ['src/lib/**/!(server)/**/*.ts', 'src/lib/**/!(server)/*.ts'],
-		rules: {
+			// Performance: Required for Svelte 5 list optimization
+			'svelte/require-each-key': 'error',
+
+			// Security: Prevent {@html} usage (Pattern #23 / XSS)
+			'svelte/no-at-html-tags': 'error',
+			// Allow standard root deployments; warn instead of error to reduce noise
+			'svelte/no-navigation-without-resolve': 'warn',
+
+			// Migration: Turn off strict typing for UI files to allow rapid dev
+			// (Server files remain strict)
 			'@typescript-eslint/no-explicit-any': 'off'
 		}
 	}

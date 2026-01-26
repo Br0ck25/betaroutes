@@ -1,9 +1,11 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { setupMockKV } from '$lib/server/dev-mock-db';
 
+import type Stripe from 'stripe';
+
 // Mock hook for stripe.getStripe
-let constructEventStub: (body: string, sig: string, secret: string) => any = () => ({});
+let constructEventStub: (body: string, sig: string, secret: string) => Stripe.Event = () =>
+	({ type: '', data: { object: {} } }) as unknown as Stripe.Event;
 vi.mock('$lib/server/stripe', () => ({
 	getStripe: () => ({
 		webhooks: {
@@ -18,21 +20,22 @@ import * as userService from '$lib/server/userService';
 import { safeKV } from '$lib/server/env';
 
 function makeReq(body: string, sig = 'sig') {
-	return {
+	const req = {
 		headers: { get: (_k: string) => sig },
 		text: async () => body
-	} as any;
+	};
+	return req as unknown as Request;
 }
 
 describe('Stripe webhook handler', () => {
-	let platform: any;
+	let platform: { env: Record<string, unknown> };
 
 	beforeEach(async () => {
-		const event: any = { platform: { env: {} } };
+		const event = { platform: { env: {} as Record<string, unknown> } };
 		await setupMockKV(event);
 		platform = event.platform;
 		// Set webhook secret
-		platform.env.STRIPE_WEBHOOK_SECRET = 'whsec_test';
+		(platform.env as Record<string, unknown>)['STRIPE_WEBHOOK_SECRET'] = 'whsec_test';
 	});
 
 	it('handles checkout.session.completed and persists mapping + upgrades user', async () => {
@@ -41,15 +44,16 @@ describe('Stripe webhook handler', () => {
 		// Spy on updateUserPlan
 		const spy = vi.spyOn(userService, 'updateUserPlan').mockResolvedValue(undefined);
 
-		constructEventStub = () => ({
-			type: 'checkout.session.completed',
-			data: { object: { metadata: { userId: 'u1' }, customer: 'cus_123' } }
-		});
+		constructEventStub = () =>
+			({
+				type: 'checkout.session.completed',
+				data: { object: { metadata: { userId: 'u1' }, customer: 'cus_123' } }
+			}) as unknown as Stripe.Event;
 
 		const req = makeReq(JSON.stringify({}));
-		const res = await POST({ request: req, platform } as any);
-		const body = (await res.json()) as any;
-		expect(body.received).toBe(true);
+		const res = await POST({ request: req, platform } as unknown as Parameters<typeof POST>[0]);
+		const body = (await res.json()) as Record<string, unknown>;
+		expect(body['received']).toBe(true);
 
 		expect(spy).toHaveBeenCalledWith(usersKV, 'u1', 'pro', 'cus_123');
 
@@ -67,15 +71,16 @@ describe('Stripe webhook handler', () => {
 
 		const spy = vi.spyOn(userService, 'updateUserPlan').mockResolvedValue(undefined);
 
-		constructEventStub = () => ({
-			type: 'customer.subscription.deleted',
-			data: { object: { customer: 'cus_del' } }
-		});
+		constructEventStub = () =>
+			({
+				type: 'customer.subscription.deleted',
+				data: { object: { customer: 'cus_del' } }
+			}) as unknown as Stripe.Event;
 
 		const req = makeReq(JSON.stringify({}));
-		const res = await POST({ request: req, platform } as any);
-		const body = (await res.json()) as any;
-		expect(body.received).toBe(true);
+		const res = await POST({ request: req, platform } as unknown as Parameters<typeof POST>[0]);
+		const body = (await res.json()) as Record<string, unknown>;
+		expect(body['received']).toBe(true);
 
 		expect(spy).toHaveBeenCalledWith(usersKV, 'user_del', 'free');
 
@@ -88,15 +93,16 @@ describe('Stripe webhook handler', () => {
 
 		const spy = vi.spyOn(userService, 'updateUserPlan').mockResolvedValue(undefined);
 
-		constructEventStub = () => ({
-			type: 'customer.subscription.updated',
-			data: { object: { customer: 'cus_upd', status: 'canceled' } }
-		});
+		constructEventStub = () =>
+			({
+				type: 'customer.subscription.updated',
+				data: { object: { customer: 'cus_upd', status: 'canceled' } }
+			}) as unknown as Stripe.Event;
 
 		const req = makeReq(JSON.stringify({}));
-		const res = await POST({ request: req, platform } as any);
-		const body = (await res.json()) as any;
-		expect(body.received).toBe(true);
+		const res = await POST({ request: req, platform } as unknown as Parameters<typeof POST>[0]);
+		const body = (await res.json()) as Record<string, unknown>;
+		expect(body['received']).toBe(true);
 
 		expect(spy).toHaveBeenCalledWith(usersKV, 'user_upd', 'free');
 

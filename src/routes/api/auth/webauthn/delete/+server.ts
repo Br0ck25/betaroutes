@@ -6,6 +6,7 @@ import { safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 import { sendSecurityAlertEmail } from '$lib/server/email';
+import { getUserEmail } from '$lib/utils/user-display';
 
 export const POST: RequestHandler = async ({ request, platform, locals, cookies }) => {
 	try {
@@ -72,8 +73,9 @@ export const POST: RequestHandler = async ({ request, platform, locals, cookies 
 		}
 
 		// [SECURITY] Send security alert email (best-effort, don't block on failure)
-		if (user.email) {
-			sendSecurityAlertEmail(user.email, 'passkey_removed').catch((err) => {
+		const email = getUserEmail(user);
+		if (email) {
+			sendSecurityAlertEmail(email, 'passkey_removed').catch((err) => {
 				log.error('[WebAuthn Delete] Security alert email failed', { error: String(err) });
 			});
 		}

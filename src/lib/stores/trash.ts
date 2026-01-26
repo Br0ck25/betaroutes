@@ -2,7 +2,7 @@
 import { writable, get } from 'svelte/store';
 import { getDB, getMileageStoreName } from '$lib/db/indexedDB';
 import { syncManager } from '$lib/sync/syncManager';
-import type { TrashRecord } from '$lib/db/types';
+import type { TrashRecord, TripRecord } from '$lib/db/types';
 import { user as authUser } from '$lib/stores/auth';
 import type { User } from '$lib/types';
 
@@ -147,8 +147,10 @@ function createTrashStore() {
 				}
 
 				// 3. Prepare Data
-				const backups: Record<string, any> =
-					stored.backups || (stored.data && (stored.data.__backups as any)) || {};
+				const backups: Record<string, unknown> =
+					(stored.backups as Record<string, unknown> | undefined) ??
+					(stored.data && (stored.data.__backups as Record<string, unknown> | undefined)) ??
+					{};
 
 				// Handle "backup" vs "backups" inconsistency from server vs local
 				const backupFor = (t: string) =>
@@ -230,7 +232,7 @@ function createTrashStore() {
 								totalMiles: newMiles,
 								fuelCost: newFuelCost,
 								updatedAt: nowIso
-							} as any);
+							} as TripRecord);
 							// Queue sync for trip update
 							await syncManager.addToQueue({
 								action: 'update',
@@ -311,7 +313,12 @@ function createTrashStore() {
 
 			for (const item of userItems) {
 				const realId = getRealId(item.id);
-				const recordType = getRecordType(item.id) || item.recordType || (item as any).type;
+				const recordType =
+					getRecordType(item.id) ||
+					item.recordType ||
+					(typeof (item as Record<string, unknown>)['type'] === 'string'
+						? (item as Record<string, unknown>)['type']
+						: undefined);
 				await syncManager.addToQueue({
 					action: 'permanentDelete',
 					tripId: realId,
@@ -329,7 +336,10 @@ function createTrashStore() {
 				const response = await fetch(url);
 				if (!response.ok) return;
 
-				const cloudTrash: any = await response.json();
+				const cloudRaw = await response.json().catch(() => []);
+				const cloudTrash = Array.isArray(cloudRaw)
+					? (cloudRaw as Array<Record<string, unknown>>)
+					: [];
 				const cloudIds = new Set<string>();
 
 				const db = await getDB();
@@ -337,49 +347,77 @@ function createTrashStore() {
 				const store = tx.objectStore('trash');
 
 				for (const rawItem of cloudTrash) {
-					let flatItem: any = { ...rawItem };
+					let flatItem: Record<string, unknown> = { ...(rawItem as Record<string, unknown>) };
 
-					if (flatItem.data) {
-						flatItem = { ...flatItem.data, ...flatItem };
-						delete flatItem.data;
+					const data = flatItem['data'];
+					if (data && typeof data === 'object') {
+						flatItem = { ...(data as Record<string, unknown>), ...flatItem };
+						delete flatItem['data'];
 					}
-					if (flatItem.trip) flatItem = { ...flatItem.trip, ...flatItem };
-					delete flatItem.trip;
 
-					if (flatItem.metadata) {
-						flatItem.deletedAt = flatItem.metadata.deletedAt || flatItem.deletedAt;
-						flatItem.expiresAt = flatItem.metadata.expiresAt || flatItem.expiresAt;
-						flatItem.originalKey = flatItem.metadata.originalKey || flatItem.originalKey;
+					const tripObj = flatItem['trip'];
+					if (tripObj && typeof tripObj === 'object') {
+						flatItem = { ...(tripObj as Record<string, unknown>), ...flatItem };
+						delete flatItem['trip'];
+					}
 
-						if (!flatItem.userId && typeof flatItem.metadata.originalKey === 'string') {
-							const parts = flatItem.metadata.originalKey.split(':');
-							flatItem.userId = String(parts[1] || '');
+					const metadata = flatItem['metadata'];
+					if (metadata && typeof metadata === 'object') {
+						const meta = metadata as Record<string, unknown>;
+						const metaDeletedAt =
+							typeof meta['deletedAt'] === 'string' ? (meta['deletedAt'] as string) : undefined;
+						const metaExpires =
+							typeof meta['expiresAt'] === 'string' ? (meta['expiresAt'] as string) : undefined;
+						const metaOriginalKey =
+							typeof meta['originalKey'] === 'string' ? (meta['originalKey'] as string) : undefined;
+
+						if (metaDeletedAt) flatItem['deletedAt'] = metaDeletedAt;
+						if (metaExpires) flatItem['expiresAt'] = metaExpires;
+						if (metaOriginalKey) flatItem['originalKey'] = metaOriginalKey;
+
+						if (!flatItem['userId'] && metaOriginalKey) {
+							const parts = metaOriginalKey.split(':');
+							flatItem['userId'] = String(parts[1] || '');
 						}
-						delete flatItem.metadata;
+						delete flatItem['metadata'];
 					}
 
-					if (!flatItem.id) continue;
+					const rawId = flatItem['id'];
+					if (!rawId || typeof rawId !== 'string') continue;
 
-					if (!flatItem.recordType && !flatItem.type) {
-						if (flatItem.originalKey?.startsWith('expense:')) flatItem.recordType = 'expense';
-						else if (flatItem.originalKey?.startsWith('mileage:')) flatItem.recordType = 'mileage';
-						else if (flatItem.originalKey?.startsWith('trip:')) flatItem.recordType = 'trip';
-						else if (typeof flatItem.miles === 'number' && !flatItem.stops)
-							flatItem.recordType = 'mileage';
-						else flatItem.recordType = 'trip';
-					} else if (flatItem.type && !flatItem.recordType) {
-						flatItem.recordType = flatItem.type;
+					if (!flatItem['recordType'] && !flatItem['type']) {
+						const origKey =
+							typeof flatItem['originalKey'] === 'string' ? flatItem['originalKey'] : undefined;
+						if (origKey?.startsWith('expense:')) flatItem['recordType'] = 'expense';
+						else if (origKey?.startsWith('mileage:')) flatItem['recordType'] = 'mileage';
+						else if (origKey?.startsWith('trip:')) flatItem['recordType'] = 'trip';
+						else if (typeof flatItem['miles'] === 'number' && !flatItem['stops'])
+							flatItem['recordType'] = 'mileage';
+						else flatItem['recordType'] = 'trip';
+					} else if (typeof flatItem['type'] === 'string' && !flatItem['recordType']) {
+						flatItem['recordType'] = flatItem['type'] as string;
 					}
-					flatItem.type = flatItem.recordType;
+					flatItem['type'] = flatItem['recordType'];
 
 					// [!code fix] Ensure Trash ID is unique on download
-					const uniqueId = getUniqueTrashId(flatItem);
-					flatItem.id = uniqueId;
+					const uniqueId = getUniqueTrashId({
+						id: String(flatItem['id']),
+						recordType:
+							typeof flatItem['recordType'] === 'string'
+								? String(flatItem['recordType'])
+								: undefined,
+						type: typeof flatItem['type'] === 'string' ? String(flatItem['type']) : undefined
+					});
+					flatItem['id'] = uniqueId;
 
 					cloudIds.add(uniqueId);
 
 					const local = await store.get(uniqueId);
-					if (!local || new Date(flatItem.deletedAt) > new Date(local.deletedAt)) {
+					const flatDeleted =
+						typeof flatItem['deletedAt'] === 'string' ? new Date(flatItem['deletedAt']) : undefined;
+					const localDeleted =
+						local && (typeof local.deletedAt === 'string' ? new Date(local.deletedAt) : undefined);
+					if (!local || (flatDeleted && (!localDeleted || flatDeleted > localDeleted))) {
 						await store.put({
 							...flatItem,
 							syncStatus: 'synced',

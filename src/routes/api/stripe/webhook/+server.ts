@@ -6,7 +6,7 @@ import { updateUserPlan } from '$lib/server/userService';
 import { safeKV } from '$lib/server/env';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 import { log } from '$lib/server/log';
-import type { KVNamespace } from '@cloudflare/workers-types';
+
 import type Stripe from 'stripe';
 
 export const POST: RequestHandler = async ({ request, platform }) => {

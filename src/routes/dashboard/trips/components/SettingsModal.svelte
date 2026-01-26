@@ -5,6 +5,8 @@
 	import { autocomplete } from '$lib/utils/autocomplete';
 	import { saveSettings } from '../../settings/lib/save-settings';
 	import { createEventDispatcher } from 'svelte';
+	import { get } from 'svelte/store';
+	import type { UserSettings } from '$lib/types';
 
 	const dispatch = createEventDispatcher();
 
@@ -14,12 +16,12 @@
 	export let activeCategoryType: 'maintenance' | 'supplies' | 'expenses' = 'maintenance';
 	let settingsTab: 'defaults' | 'categories' = 'defaults';
 	let newCategoryName = '';
-	let settings = { ...$userSettings };
+	let settings: Partial<UserSettings> = { ...$userSettings };
 
 	// Local primitives for form fields — binding directly to nested object props caused
 	// inputs to appear uneditable in some browsers. Keep separate staged vars and commit
 	// them to `settings` on Save.
-	let defaultMPGLocal: number | string = settings.defaultMPG;
+	let defaultMPGLocal: number | string = settings.defaultMPG ?? '';
 	let defaultStartLocal: string = settings.defaultStartAddress || '';
 	let defaultEndLocal: string = settings.defaultEndAddress || '';
 
@@ -70,7 +72,6 @@
 
 	async function saveDefaultSettings() {
 		if (isSaving) return;
-		if (console && console.debug) console.debug('[settings] saveDefaultSettings', settings);
 		isSaving = true;
 
 		// Commit staged addresses into settings and parse MPG from the staged local
@@ -92,8 +93,8 @@
 			// ignore parsing errors — defaults will be enforced server-side
 		}
 
-		// Persist to the userSettings store and backend
-		userSettings.set(settings);
+		// Persist to the userSettings store and backend (merge to preserve full shape)
+		userSettings.set({ ...get(userSettings), ...settings });
 		try {
 			const result = await saveSettings(settings);
 			if (!result.ok) throw new Error(result.error);
@@ -102,8 +103,7 @@
 			// Close modal on success
 			didSave = true;
 			open = false;
-		} catch (e) {
-			console.error('Sync error:', e);
+		} catch (_e) {
 			toasts.error('Saved locally, but cloud sync failed');
 		} finally {
 			isSaving = false;
@@ -111,7 +111,7 @@
 	}
 
 	async function updateCategories(newCategories: string[]) {
-		const updateData: any = {};
+		const updateData: Partial<UserSettings> = {};
 		if (activeCategoryType === 'maintenance') {
 			userSettings.update((s) => ({ ...s, maintenanceCategories: newCategories }));
 			updateData.maintenanceCategories = newCategories;
@@ -120,14 +120,13 @@
 			updateData.supplyCategories = newCategories;
 		} else {
 			userSettings.update((s) => ({ ...s, expenseCategories: newCategories }));
-			updateData.expenseCategories = newCategories;
+			updateData['expenseCategories'] = newCategories;
 		}
 
 		try {
 			const result = await saveSettings(updateData);
 			if (!result.ok) throw new Error(result.error);
-		} catch (e) {
-			console.error('Failed to sync settings', e);
+		} catch (_e) {
 			toasts.error('Saved locally, but sync failed');
 		}
 	}
@@ -308,7 +307,7 @@
 				</p>
 
 				<div class="cat-list">
-					{#each activeCategories as cat}
+					{#each activeCategories as cat (cat)}
 						<div class="cat-item">
 							<span class="cat-badge">{cat}</span>
 							<button

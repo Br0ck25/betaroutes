@@ -24,10 +24,10 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
 			return json({ message: 'Service Unavailable' }, { status: 503 });
 		}
 
-		const body: any = await request.json();
+		const rawBody = await request.json().catch(() => null);
 
-		// 1. Validate Input
-		const result = resetSchema.safeParse(body);
+		// 1. Validate Input (zod on unknown)
+		const result = resetSchema.safeParse(rawBody);
 		if (!result.success) {
 			return json(
 				{
@@ -57,7 +57,10 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
 
 		// 3. Fetch User Record
 		// Must use service to ensure we get the full record (Core + Stats)
-		const user = await findUserById(kv as any, userId);
+		if (typeof userId !== 'string') {
+			return json({ message: 'Invalid or expired reset token.' }, { status: 400 });
+		}
+		const user = await findUserById(kv, userId);
 		if (!user) {
 			return json({ message: 'User not found.' }, { status: 404 });
 		}
@@ -76,11 +79,16 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
 		// Optional: Invalidate all existing sessions for this user to force re-login
 		// (Highly recommended after a password reset)
 		if (sessionsKV) {
-			const activeSessionKey = `active_session:${userId}`;
-			const activeSessionId = await sessionsKV.get(activeSessionKey);
-			if (activeSessionId) {
-				await sessionsKV.delete(activeSessionId);
-				await sessionsKV.delete(activeSessionKey);
+			const activeSessionsKey = `active_sessions:${userId}`;
+			const activeRaw = await sessionsKV.get(activeSessionsKey);
+			if (activeRaw) {
+				try {
+					const sessions = JSON.parse(activeRaw) as string[];
+					await Promise.all(sessions.map((s) => sessionsKV.delete(s)));
+				} catch {
+					// Non-critical - fall back to removing the index
+				}
+				await sessionsKV.delete(activeSessionsKey);
 			}
 		}
 
@@ -89,8 +97,9 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
 		cookies.delete('__Host-session_id', { path: '/' });
 
 		return json({ success: true, message: 'Password reset successfully. Please log in.' });
-	} catch (err) {
-		log.error('Reset password error', { message: (err as any)?.message });
+	} catch (err: unknown) {
+		const msg = err instanceof Error ? err.message : String(err);
+		log.error('Reset password error', { message: msg });
 		return json({ message: 'Internal Server Error' }, { status: 500 });
 	}
 };

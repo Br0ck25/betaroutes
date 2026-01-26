@@ -8,8 +8,11 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import { goto, invalidateAll } from '$app/navigation';
+	import { base } from '$app/paths';
+	const resolve = (href: string) => `${base}${href}`;
 	import { page } from '$app/stores';
 	import { onDestroy } from 'svelte';
+	import { SvelteSet, SvelteDate } from '$lib/utils/svelte-reactivity';
 	import { browser } from '$app/environment'; // [!code fix] Import browser check
 
 	import type { PageData } from './$types';
@@ -47,14 +50,15 @@
 	let filterCategory = 'all';
 	let allExpenses: any[] = [];
 	let filteredExpenses: any[] = [];
-	const _now = new Date();
-	function _fmtInput(d: Date) {
-		return d.toISOString().slice(0, 10);
+	const _now = SvelteDate.now();
+	function _fmtInput(d: SvelteDate) {
+		return d.toInput();
 	}
-	let startDate = _fmtInput(new Date(_now.getFullYear(), _now.getMonth(), 1));
-	let endDate = _fmtInput(new Date(_now.getFullYear(), _now.getMonth() + 1, 0));
+	let startDate = _fmtInput(SvelteDate.from(new Date(_now.getFullYear(), _now.getMonth(), 1)));
+	let endDate = _fmtInput(SvelteDate.from(new Date(_now.getFullYear(), _now.getMonth() + 1, 0)));
+
 	let lastHadSelections = false;
-	let selectedExpenses = new Set<string>();
+	let selectedExpenses = new SvelteSet<string>();
 
 	// Pagination
 	let currentPage = 1;
@@ -85,7 +89,7 @@
 		}
 	});
 
-	let categories: string[] = [];
+	const categories: string[] = [];
 	let isManageCategoriesOpen = false;
 	let newCategoryName = '';
 
@@ -101,7 +105,7 @@
 					typeof r.endOdometer === 'number'
 			)
 			.map((r: any) => {
-				const dateVal = new Date(r.date || 0).getTime();
+				const dateVal = SvelteDate.from(r.date || 0).getTime();
 				const amtVal = Number(r.amount || 0);
 				// Pre-compute reimbursement if not stored
 				const reimbursement =
@@ -153,13 +157,11 @@
 				const itemDateValue = (item as any)._dateVal;
 
 				if (startDate) {
-					const start = new Date(startDate);
-					start.setHours(0, 0, 0, 0);
+					const start = SvelteDate.from(startDate).startOfDay();
 					if (itemDateValue < start.getTime()) return false;
 				}
 				if (endDate) {
-					const end = new Date(endDate);
-					end.setHours(0, 0, 0, 0);
+					const end = SvelteDate.from(endDate).startOfDay();
 					if (itemDateValue > end.getTime()) return false;
 				}
 			}
@@ -188,21 +190,29 @@
 
 	// Reset selection and pagination when filters change
 	$: if (searchQuery || sortBy || sortOrder || filterCategory || startDate || endDate) {
-		selectedExpenses = new Set();
+		selectedExpenses = new SvelteSet();
 		currentPage = 1;
 	}
 
 	$: allSelected = filteredExpenses.length > 0 && selectedExpenses.size === filteredExpenses.length;
 
 	function goToAdd() {
-		goto('/dashboard/mileage/new');
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
+		goto(resolve('/dashboard/mileage/new'));
+	}
+
+	function viewTrash() {
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
+		goto(resolve('/dashboard/trash?type=mileage'));
 	}
 
 	function editExpense(expense: any) {
 		if ((expense as any).source === 'trip') {
-			goto(`/dashboard/trips?id=${expense.tripId}`);
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
+			goto(resolve(`/dashboard/trips?id=${expense.tripId}`));
 		} else {
-			goto(`/dashboard/mileage/edit/${expense.id}`);
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware)
+			goto(resolve(`/dashboard/mileage/edit/${expense.id}`));
 		}
 	}
 
@@ -235,14 +245,14 @@
 	}
 
 	function toggleSelection(id: string) {
-		if (selectedExpenses.has(id)) selectedExpenses.delete(id);
-		else selectedExpenses.add(id);
-		selectedExpenses = selectedExpenses;
+		selectedExpenses = selectedExpenses.has(id)
+			? selectedExpenses.delete(id)
+			: selectedExpenses.add(id);
 	}
 
 	function toggleSelectAll() {
-		if (allSelected) selectedExpenses = new Set();
-		else selectedExpenses = new Set(filteredExpenses.map((e) => e.id));
+		if (allSelected) selectedExpenses = new SvelteSet();
+		else selectedExpenses = new SvelteSet(filteredExpenses.map((e) => e.id));
 	}
 
 	function changePage(newPage: number) {
@@ -283,7 +293,7 @@
 		}
 
 		toasts.success(`Moved ${successCount} logs to trash.`);
-		selectedExpenses = new Set();
+		selectedExpenses = new SvelteSet();
 		await invalidateAll();
 	}
 
@@ -314,7 +324,7 @@
 		a.click();
 
 		toasts.success(`Exported ${selectedData.length} items.`);
-		selectedExpenses = new Set();
+		selectedExpenses = new SvelteSet();
 	}
 
 	async function updateCategories(newCategories: string[]) {
@@ -452,11 +462,8 @@
 		</div>
 
 		<div class="header-actions">
-			<button
-				class="btn-secondary"
-				on:click={() => goto('/dashboard/trash?type=mileage')}
-				aria-label="View Trash"
-			>
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+			<button class="btn-secondary" on:click={viewTrash} aria-label="View Trash">
 				<svg
 					width="20"
 					height="20"
@@ -608,7 +615,7 @@
 				aria-label="Filter by category"
 			>
 				<option value="all">All Categories</option>
-				{#each categories as cat}
+				{#each categories as cat (cat)}
 					<option value={cat}>{getCategoryLabel(cat)}</option>
 				{/each}
 				<option value="manual">Manual Trips</option>
@@ -670,7 +677,7 @@
 
 	{#if loading}
 		<div class="expense-list-cards">
-			{#each Array(3) as _}
+			{#each Array(3) as _, i (i)}
 				<div class="expense-card">
 					<div class="card-top">
 						<div style="flex: 1">
@@ -838,7 +845,7 @@
 			</div>
 
 			<div class="action-bar-right">
-				<button class="action-pill secondary" on:click={() => (selectedExpenses = new Set())}>
+				<button class="action-pill secondary" on:click={() => (selectedExpenses = new SvelteSet())}>
 					<svg
 						width="16"
 						height="16"
@@ -896,7 +903,7 @@
 		</p>
 
 		<div class="cat-list">
-			{#each categories as cat}
+			{#each categories as cat (cat)}
 				<div class="cat-item">
 					<span class={`cat-badge ${getCategoryColor(cat)}`}>{getCategoryLabel(cat)}</span>
 					<button

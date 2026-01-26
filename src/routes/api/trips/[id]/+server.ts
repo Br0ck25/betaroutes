@@ -6,8 +6,20 @@ import type { TripRecord } from '$lib/server/tripService';
 import { log } from '$lib/server/log';
 import { safeDO, safeKV } from '$lib/server/env';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
-import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
 import { dev } from '$app/environment';
+
+// Helper: Schedule work via platform.context.waitUntil when available
+function safeWaitUntil(event: Parameters<RequestHandler>[0], p: Promise<unknown>) {
+	try {
+		if (event.platform?.context?.waitUntil) {
+			event.platform.context.waitUntil(p);
+			return;
+		}
+	} catch {
+		// ignore
+	}
+	void p;
+}
 
 // [!code fix] SECURITY: Removed dangerous fakeDO fallback that caused silent data loss.
 // In production, missing DO bindings now properly error. Dev mode uses a noop stub for testing only.
@@ -64,8 +76,8 @@ function calculateNetProfit(trip: Record<string, unknown>): number {
  */
 export const GET: RequestHandler = async (event) => {
 	try {
-		const user = event.locals.user;
-		if (!user) return new Response('Unauthorized', { status: 401 });
+		const user = event.locals.user as { id?: string } | undefined;
+		if (!user || !user.id) return new Response('Unauthorized', { status: 401 });
 
 		const { id } = event.params;
 
@@ -104,7 +116,7 @@ export const GET: RequestHandler = async (event) => {
 			const mileageKV = safeKV(event.platform?.env, 'BETA_MILEAGE_KV');
 			if (mileageKV) {
 				const mileageSvc = makeMileageService(
-					mileageKV as any,
+					mileageKV,
 					safeDO(event.platform?.env, 'TRIP_INDEX_DO')!
 				);
 				const m = await mileageSvc.get(storageId, id);
@@ -132,11 +144,18 @@ export const GET: RequestHandler = async (event) => {
  */
 export const PUT: RequestHandler = async (event) => {
 	try {
-		const user = event.locals.user;
-		if (!user) return new Response('Unauthorized', { status: 401 });
+		const user = event.locals.user as { id?: string } | undefined;
+		if (!user || !user.id) return new Response('Unauthorized', { status: 401 });
 
 		const { id } = event.params;
-		const body = (await event.request.json()) as Record<string, unknown>;
+		const bodyUnknown: unknown = await event.request.json();
+		if (typeof bodyUnknown !== 'object' || bodyUnknown === null) {
+			return new Response(JSON.stringify({ error: 'Invalid request body' }), {
+				status: 400,
+				headers: { 'Content-Type': 'application/json' }
+			});
+		}
+		const body = bodyUnknown as Record<string, unknown>;
 
 		const kv = safeKV(event.platform?.env, 'BETA_LOGS_KV');
 		const placesKV = safeKV(event.platform?.env, 'BETA_PLACES_KV');
@@ -192,28 +211,27 @@ export const PUT: RequestHandler = async (event) => {
 				const mileageKV = safeKV(event.platform?.env, 'BETA_MILEAGE_KV');
 				if (mileageKV) {
 					const mileageSvc = makeMileageService(
-						mileageKV as any,
+						mileageKV,
 						safeDO(event.platform?.env, 'TRIP_INDEX_DO')!
 					);
-					const mileageRec = {
+					const mileageRec: MileageRecord = {
 						id,
 						userId: storageId,
-						date: (body['date'] as string) || (existing as any).date || new Date().toISOString(),
+						tripId: id,
+						date:
+							typeof body['date'] === 'string'
+								? (body['date'] as string)
+								: ((existing as TripRecord).date ?? new Date().toISOString()),
 						startOdometer: 0,
 						endOdometer: 0,
-						miles: Number((body as any).totalMiles) || 0,
-						createdAt: (existing as any).createdAt || new Date().toISOString(),
+						miles: Number(body['totalMiles']) || 0,
+						createdAt: (existing as TripRecord).createdAt ?? new Date().toISOString(),
 						updatedAt: new Date().toISOString()
 					};
 					const p = mileageSvc
-						.put(mileageRec as any)
+						.put(mileageRec)
 						.catch((err) => log.warn('mileage.put failed for trip update', { tripId: id, err }));
-					try {
-						if (event.platform?.context?.waitUntil) event.platform.context.waitUntil(p as any);
-						else if ((event as any)?.context?.waitUntil) (event as any).context.waitUntil(p);
-					} catch {
-						void p;
-					}
+					safeWaitUntil(event, p);
 				}
 			}
 		} catch (err) {
@@ -241,8 +259,8 @@ export const PUT: RequestHandler = async (event) => {
  */
 export const DELETE: RequestHandler = async (event) => {
 	try {
-		const user = event.locals.user;
-		if (!user) return new Response('Unauthorized', { status: 401 });
+		const user = event.locals.user as { id?: string } | undefined;
+		if (!user || !user.id) return new Response('Unauthorized', { status: 401 });
 
 		const { id } = event.params;
 

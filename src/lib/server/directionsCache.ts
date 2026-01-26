@@ -1,4 +1,3 @@
-import type { KVNamespace } from '@cloudflare/workers-types';
 import { log } from '$lib/server/log';
 import { safeKV } from '$lib/server/env';
 

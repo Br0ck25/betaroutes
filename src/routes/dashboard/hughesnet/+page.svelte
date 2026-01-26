@@ -7,6 +7,7 @@
 	import { page } from '$app/stores';
 	import { csrfFetch } from '$lib/utils/csrf';
 	import SettingsModal from '../trips/components/SettingsModal.svelte';
+	import { SvelteSet, SvelteDate } from '$lib/utils/svelte-reactivity';
 	let showTripSettings = false;
 	// Access via bracket notation because `page.data` exposes properties through an index signature
 	$: API_KEY = $page.data?.['googleMapsApiKey'];
@@ -54,7 +55,7 @@
 
 	// Conflict Management State
 	let conflictTrips: any[] = [];
-	let selectedConflicts: Set<string> = new Set(); // Track which trips to overwrite
+	let selectedConflicts = new SvelteSet<string>(); // Track which trips to overwrite
 	let showConflictModal = false;
 	let conflictTimer = 60;
 	let conflictInterval: any;
@@ -66,7 +67,7 @@
 	}
 
 	function addLog(msg: string) {
-		logs = [`[${new Date().toLocaleTimeString()}] ${msg}`, ...logs];
+		logs = [`[${SvelteDate.now().toLocaleTimeString()}] ${msg}`, ...logs];
 	}
 
 	function processServerLogs(serverLogs?: string[]) {
@@ -271,7 +272,7 @@
 
 			// CRITICAL: Sync local changes to cloud BEFORE HughesNet sync
 			// This ensures any manual edits are uploaded so conflict detection works
-			const userId = $user?.name || $user?.token;
+			const userId = $user?.id;
 			if (userId) {
 				addLog('⬆️ Uploading local changes first...');
 				try {
@@ -361,7 +362,7 @@
 				statusMessage = 'Sync Complete';
 				currentBatch = 0;
 
-				const userId = $user?.name || $user?.token;
+				const userId = $user?.id;
 				if (userId) {
 					addLog('⬇️ Downloading generated trips...');
 					await trips.syncFromCloud(userId);
@@ -414,7 +415,7 @@
 			addLog(`✅ Cleared ${data.count} trips.`);
 			showSuccessMsg(`Cleared ${data.count} trips.`);
 
-			const userId = $user?.name || $user?.token;
+			const userId = $user?.id;
 			if (userId) {
 				addLog('🔄 Syncing removal with local database...');
 				await trash.syncFromCloud(userId);
@@ -434,7 +435,7 @@
 	function startConflictTimer() {
 		showConflictModal = true;
 		conflictTimer = 60;
-		selectedConflicts = new Set(); // Reset selection
+		selectedConflicts = new SvelteSet(); // Reset selection
 		if (conflictInterval) clearInterval(conflictInterval);
 
 		conflictInterval = setInterval(() => {
@@ -447,20 +448,17 @@
 	}
 
 	function toggleConflict(date: string) {
-		if (selectedConflicts.has(date)) {
-			selectedConflicts.delete(date);
-		} else {
-			selectedConflicts.add(date);
-		}
-		selectedConflicts = selectedConflicts; // Trigger reactivity
+		selectedConflicts = selectedConflicts.has(date)
+			? selectedConflicts.delete(date)
+			: selectedConflicts.add(date);
 	}
 
 	function selectAll() {
-		selectedConflicts = new Set(conflictTrips.map((c) => c.date));
+		selectedConflicts = new SvelteSet(conflictTrips.map((c) => c.date));
 	}
 
 	function selectNone() {
-		selectedConflicts = new Set();
+		selectedConflicts = new SvelteSet();
 	}
 
 	function confirmOverride() {
@@ -488,7 +486,7 @@
 		stopConflictTimer();
 		addLog(`✅ Preserved ${conflictTrips.length} user-modified trip(s) (skipped HNS updates)`);
 		conflictTrips = [];
-		selectedConflicts = new Set();
+		selectedConflicts = new SvelteSet();
 		loading = false;
 		statusMessage = 'Sync Complete';
 	}
@@ -794,7 +792,7 @@
 						/>
 					</div>
 
-					{#if $user?.name?.toLowerCase() === 'james'}
+					{#if $user?.id?.toLowerCase() === 'james'}
 						<div class="form-group">
 							<label for="drive-time-bonus">Drive Time Bonus ($)</label>
 							<input
@@ -916,7 +914,7 @@
 				</div>
 
 				<div class="orders-list">
-					{#each orders as order}
+					{#each orders as order (order.id)}
 						<div class="order-item">
 							<div class="order-main">
 								<span class="order-id">#{order.id}</span>
@@ -970,10 +968,10 @@
 
 			{#if showConsole}
 				<div class="console-body" transition:slide>
-					{#each logs as log}
+					{#each logs as log, i (i)}
 						<div class="log-line">
 							<span class="log-time"
-								>{log.includes('[') ? '' : '[' + new Date().toLocaleTimeString() + ']'}</span
+								>{log.includes('[') ? '' : '[' + SvelteDate.now().toLocaleTimeString() + ']'}</span
 							>
 							<span class="log-msg" class:server={log.includes('[Server]')}>{log}</span>
 						</div>
@@ -1008,7 +1006,7 @@
 				</div>
 
 				<div class="conflicts-list">
-					{#each conflictTrips as conflict}
+					{#each conflictTrips as conflict (conflict.date)}
 						<div class="conflict-card" class:selected={selectedConflicts.has(conflict.date)}>
 							<label class="conflict-checkbox-label">
 								<input
@@ -1020,7 +1018,7 @@
 									<div class="conflict-header">
 										<span class="conflict-date">{conflict.date}</span>
 										<span class="conflict-modified"
-											>Edited: {new Date(conflict.lastModified).toLocaleString()}</span
+											>Edited: {SvelteDate.from(conflict.lastModified).toLocaleString()}</span
 										>
 									</div>
 

@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { formatCurrency, calculateNetProfit, calculateHourlyPay } from '$lib/utils/trip-helpers';
 	import { mileage } from '$lib/stores/mileage';
+	import type { Trip } from '$lib/types';
 
-	export let trips: any[] = [];
+	export let trips: Trip[] = [];
 </script>
 
 <div class="stats-summary">
@@ -15,9 +16,9 @@
 		<div class="summary-label">Total Miles</div>
 		<div class="summary-value">
 			{trips
-				.reduce((sum, trip) => {
+				.reduce((sum: number, trip: Trip) => {
 					const m = $mileage.find((x) => x.id === trip.id);
-					return sum + (m?.miles ?? trip.totalMiles ?? 0);
+					return sum + Number(m?.miles ?? trip.totalMiles ?? 0);
 				}, 0)
 				.toFixed(2)}
 		</div>
@@ -32,7 +33,7 @@
 		<div class="summary-label">Avg $/Hour</div>
 		<div class="summary-value">
 			{(() => {
-				const tripsWithHours = trips.filter((t) => t.hoursWorked > 0);
+				const tripsWithHours = trips.filter((t: Trip) => (t.hoursWorked ?? 0) > 0);
 				if (tripsWithHours.length === 0) return 'N/A';
 				const totalHourlyPay = tripsWithHours.reduce(
 					(sum, trip) => sum + calculateHourlyPay(trip),

@@ -23,11 +23,14 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
 		return json({ message: 'Too many requests. Please wait.' }, { status: 429 });
 	}
 
-	const body: any = await request.json();
-	const { email } = body;
+	const rawBody: unknown = await request.json().catch(() => null);
+	if (!rawBody || typeof rawBody !== 'object')
+		return json({ message: 'Email required' }, { status: 400 });
+	const body = rawBody as Record<string, unknown>;
+	const email = typeof body['email'] === 'string' ? (body['email'] as string).trim() : '';
 	if (!email) return json({ message: 'Email required' }, { status: 400 });
 
-	const normEmail = email.toLowerCase().trim();
+	const normEmail = email.toLowerCase();
 
 	// 2. Find the Pending Token via Lookup Index
 	const token = await usersKV.get(`lookup:pending:${normEmail}`);

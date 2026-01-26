@@ -8,7 +8,12 @@
 	<div
 		class="console-header"
 		on:click={() => (showConsole = !showConsole)}
-		on:keydown={() => {}}
+		on:keydown={(e: KeyboardEvent) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				showConsole = !showConsole;
+			}
+		}}
 		role="button"
 		tabindex="0"
 	>
@@ -21,7 +26,7 @@
 
 	{#if showConsole}
 		<div class="console-body" transition:slide>
-			{#each logs as log}
+			{#each logs as log, i (i)}
 				<div class="log-line">
 					<span class="log-time"
 						>{log.includes('[') ? '' : '[' + new Date().toLocaleTimeString() + ']'}</span

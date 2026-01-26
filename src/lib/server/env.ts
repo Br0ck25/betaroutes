@@ -1,5 +1,3 @@
-import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
-
 export function getEnv(platform: unknown): Record<string, unknown> {
 	// Return platform.env if present
 	const p = platform as { env?: Record<string, unknown> } | undefined;

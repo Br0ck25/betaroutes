@@ -1,7 +1,7 @@
 // src/routes/api/directions/cache/+server.ts
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import type { KVNamespace } from '@cloudflare/workers-types';
+
 import { log } from '$lib/server/log';
 import {
 	checkRateLimitEnhanced,
@@ -49,13 +49,15 @@ export const GET: RequestHandler = async ({ url, platform, locals, request }) =>
 		return json({ error: 'Missing start or end address' }, { status: 400 });
 	}
 
-	const apiKey = (platform?.env as any)?.PRIVATE_GOOGLE_MAPS_API_KEY;
+	const apiKey = (platform?.env as Record<string, unknown> | undefined)?.[
+		'PRIVATE_GOOGLE_MAPS_API_KEY'
+	] as string | undefined;
 
 	// 2a. Handle identical origin and destination: return zero route and cache it
 	const normalize = (s?: string) => (s || '').toLowerCase().trim();
 	if (normalize(start) === normalize(end)) {
 		try {
-			const directionsKV = (platform?.env as any)?.BETA_DIRECTIONS_KV as KVNamespace | undefined;
+			const directionsKV = safeKV(platform?.env, 'BETA_DIRECTIONS_KV');
 			const TTL = 30 * 24 * 60 * 60;
 			if (directionsKV) {
 				let key = `dir:${normalize(start)}_to_${normalize(end)}`;
@@ -66,8 +68,8 @@ export const GET: RequestHandler = async ({ url, platform, locals, request }) =>
 				});
 				log.info(`[DirectionsCache] Cached same-origin: ${key}`);
 			}
-		} catch (e) {
-			log.warn('[DirectionsCache] Failed caching same-origin', e);
+		} catch (e: unknown) {
+			log.warn('[DirectionsCache] Failed caching same-origin', { message: String(e) });
 		}
 		log.info('DirectionsCache: same-origin request', { start, end });
 		return json({ source: 'same', data: { distance: 0, duration: 0 } });
@@ -86,7 +88,7 @@ export const GET: RequestHandler = async ({ url, platform, locals, request }) =>
 
 	// 3a. Check KV cache first (prefer server KV over client/local cache)
 	try {
-		const directionsKV = (platform?.env as any)?.BETA_DIRECTIONS_KV as KVNamespace | undefined;
+		const directionsKV = safeKV(platform?.env, 'BETA_DIRECTIONS_KV');
 		if (directionsKV) {
 			let cacheKey = `dir:${start?.toLowerCase().trim()}_to_${end?.toLowerCase().trim()}`;
 			cacheKey = cacheKey.replace(/[^a-z0-9_:-]/g, '');
@@ -107,8 +109,8 @@ export const GET: RequestHandler = async ({ url, platform, locals, request }) =>
 				}
 			}
 		}
-	} catch (e) {
-		log.warn('[DirectionsCache] KV check failed', e);
+	} catch (e: unknown) {
+		log.warn('[DirectionsCache] KV check failed', { message: String(e) });
 	}
 
 	try {
@@ -116,18 +118,45 @@ export const GET: RequestHandler = async ({ url, platform, locals, request }) =>
 		const googleUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(start)}&destination=${encodeURIComponent(end)}&key=${apiKey}`;
 
 		const response = await fetch(googleUrl);
-		const data: any = await response.json();
+		const dataRaw: unknown = await response.json();
+		const data =
+			typeof dataRaw === 'object' && dataRaw !== null ? (dataRaw as Record<string, unknown>) : null;
 
-		if (data && data.status === 'OK' && data.routes?.[0]?.legs?.[0]) {
-			const leg = data.routes[0].legs[0];
+		const routes = Array.isArray(data?.['routes']) ? (data!['routes'] as unknown[]) : undefined;
+		const firstLegRaw =
+			routes && routes[0] && Array.isArray((routes[0] as Record<string, unknown>)['legs'])
+				? ((routes[0] as Record<string, unknown>)['legs'] as unknown[])[0]
+				: undefined;
+		const firstLeg =
+			firstLegRaw && typeof firstLegRaw === 'object'
+				? (firstLegRaw as Record<string, unknown>)
+				: null;
+
+		if (data && data['status'] === 'OK' && firstLeg) {
+			const leg = firstLeg as {
+				distance?: { value?: number };
+				duration?: { value?: number };
+				start_address?: string;
+				start_location?: { lat?: number; lng?: number };
+				end_address?: string;
+				end_location?: { lat?: number; lng?: number };
+			};
 
 			const result = {
-				distance: leg.distance.value,
-				duration: leg.duration.value
+				distance:
+					typeof leg['distance'] === 'object' &&
+					typeof (leg['distance'] as Record<string, unknown>)['value'] === 'number'
+						? (leg['distance'] as { value: number }).value
+						: 0,
+				duration:
+					typeof leg['duration'] === 'object' &&
+					typeof (leg['duration'] as Record<string, unknown>)['value'] === 'number'
+						? (leg['duration'] as { value: number }).value
+						: 0
 			};
 
 			// Non-blocking: cache leg result and geocodes into BETA_DIRECTIONS_KV with 30-day TTL
-			const directionsKV = (platform?.env as any)?.BETA_DIRECTIONS_KV as KVNamespace | undefined;
+			const directionsKV = safeKV(platform?.env, 'BETA_DIRECTIONS_KV');
 			const TTL = 30 * 24 * 60 * 60; // 30 days
 			if (directionsKV) {
 				const doCache = async () => {
@@ -173,8 +202,16 @@ export const GET: RequestHandler = async ({ url, platform, locals, request }) =>
 							}
 						};
 
-						await writeIfMissing(leg.start_address, leg.start_location as any, leg.start_address);
-						await writeIfMissing(leg.end_address, leg.end_location as any, leg.end_address);
+						await writeIfMissing(
+							leg['start_address'] as string | undefined,
+							leg['start_location'] as { lat?: number; lng?: number } | undefined,
+							leg.start_address
+						);
+						await writeIfMissing(
+							leg['end_address'] as string | undefined,
+							leg['end_location'] as { lat?: number; lng?: number } | undefined,
+							leg.end_address
+						);
 					} catch (e) {
 						log.warn('[DirectionsCache] Auto geocode write failed', e);
 					}
@@ -183,7 +220,7 @@ export const GET: RequestHandler = async ({ url, platform, locals, request }) =>
 				const cachePromise = doCache();
 				try {
 					if (platform?.context?.waitUntil) {
-						platform.context.waitUntil(cachePromise as any);
+						platform.context.waitUntil(cachePromise);
 					} else {
 						void cachePromise;
 					}
@@ -197,10 +234,11 @@ export const GET: RequestHandler = async ({ url, platform, locals, request }) =>
 
 		// If Google returns an unexpected status, log and fall back to a deterministic route for
 		// local/dev/test environments to avoid breaking client flows.
-		log.warn('Google Directions returned unexpected status', { status: data?.status });
+		log.warn('Google Directions returned unexpected status', { status: data?.['status'] });
 		return json({ source: 'fallback', data: { distance: 16093, duration: 900 } });
-	} catch (e) {
-		log.error('Directions proxy error', { message: (e as any)?.message });
+	} catch (e: unknown) {
+		const message = e instanceof Error ? e.message : String(e);
+		log.error('Directions proxy error', { message });
 		return json({ error: 'Failed to calculate route' }, { status: 500 });
 	}
 };

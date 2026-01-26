@@ -63,7 +63,7 @@ self.addEventListener('fetch', (event) => {
 
 	const url = new URL(event.request.url);
 
-	// [!code fix] SECURITY: Never cache API responses (may contain user data)
+	// SECURITY: Never cache API responses (may contain user data)
 	// Also exclude auth-related routes and external URLs
 	if (
 		url.pathname.startsWith('/api/') ||
@@ -134,3 +134,17 @@ self.addEventListener('fetch', (event) => {
 
 	event.respondWith(respond());
 });
+
+// Background sync for failed requests (future enhancement)
+// Use the standard SyncEvent type instead of `any` to satisfy strict typing
+self.addEventListener('sync', (event: SyncEvent) => {
+	if (event.tag === 'sync-logs') {
+		event.waitUntil(syncPendingLogs());
+	}
+});
+
+async function syncPendingLogs() {
+	// This will be called when the device comes back online
+	console.log('⚡ Background sync triggered: syncing pending logs');
+	// Logic to replay failed requests would go here (e.g. reading from IndexedDB)
+}

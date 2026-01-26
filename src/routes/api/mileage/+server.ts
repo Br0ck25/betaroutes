@@ -1,13 +1,24 @@
 // src/routes/api/mileage/+server.ts
 import type { RequestHandler } from './$types';
 import { z } from 'zod';
-import { makeMileageService } from '$lib/server/mileageService';
+import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
 import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
 import { PLAN_LIMITS } from '$lib/constants';
 import { findUserById } from '$lib/server/userService';
+import { getStorageId } from '$lib/server/user';
 import { checkRateLimitEnhanced } from '$lib/server/rateLimit';
+
+function hasGet(v: unknown): v is { get: (k: string) => Promise<string | null> } {
+	return (
+		typeof v === 'object' &&
+		v !== null &&
+		typeof (v as Record<string, unknown>)['get'] === 'function'
+	);
+}
+
+const MAX_RECENT_MILEAGE = 1000;
 
 const mileageSchema = z.object({
 	// Allow any string ID to support HughesNet sync trip IDs (e.g., hns_James_2025-09-22)
@@ -25,12 +36,12 @@ const mileageSchema = z.object({
 
 export const GET: RequestHandler = async (event) => {
 	try {
-		const user = event.locals.user as { id?: string; name?: string; token?: string } | undefined;
-		if (!user) return new Response('Unauthorized', { status: 401 });
+		const user = event.locals.user as { id?: string } | undefined;
+		if (!user || !user.id) return new Response('Unauthorized', { status: 401 });
 
-		let env: any;
+		let env: App.Env;
 		try {
-			env = getEnv(event.platform as any);
+			env = getEnv(event.platform) as App.Env;
 		} catch {
 			return new Response('Service Unavailable', { status: 503 });
 		}
@@ -40,9 +51,10 @@ export const GET: RequestHandler = async (event) => {
 
 		const svc = makeMileageService(safeKV(env, 'BETA_MILEAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 
-		// Use service list logic which handles KV/DO fallback and syncing logic
-		const userId = user?.id || user?.name || user?.token || '';
-		const items = await svc.list(userId, since);
+		// Use canonical storage id only
+		const storageId = getStorageId(user);
+		if (!storageId) return new Response('Unauthorized', { status: 401 });
+		const items = await svc.list(storageId, since);
 
 		return new Response(JSON.stringify(items), { headers: { 'Content-Type': 'application/json' } });
 	} catch (err) {
@@ -53,14 +65,12 @@ export const GET: RequestHandler = async (event) => {
 
 export const POST: RequestHandler = async (event) => {
 	try {
-		const sessionUser = event.locals.user as
-			| { id?: string; name?: string; token?: string }
-			| undefined;
-		if (!sessionUser) return new Response('Unauthorized', { status: 401 });
+		const sessionUser = event.locals.user as { id?: string; plan?: string } | undefined;
+		if (!sessionUser || !sessionUser.id) return new Response('Unauthorized', { status: 401 });
 
-		let env: any;
+		let env: App.Env;
 		try {
-			env = getEnv(event.platform as any);
+			env = getEnv(event.platform) as App.Env;
 		} catch {
 			return new Response('Service Unavailable', { status: 503 });
 		}
@@ -101,8 +111,7 @@ export const POST: RequestHandler = async (event) => {
 		const userId = sessionUser.id || '';
 
 		// --- ENFORCE MILEAGE LIMIT FOR FREE USERS ---
-		let currentPlan: 'free' | 'premium' | 'pro' | 'business' | undefined = (sessionUser as any)
-			?.plan;
+		let currentPlan: 'free' | 'premium' | 'pro' | 'business' | undefined = undefined;
 		const usersKV = safeKV(env, 'BETA_USERS_KV');
 		if (usersKV) {
 			try {
@@ -120,7 +129,9 @@ export const POST: RequestHandler = async (event) => {
 				safeKV(env, 'BETA_MILEAGE_KV')!,
 				safeDO(env, 'TRIP_INDEX_DO')!
 			);
-			const recentMileage = await svc.list(userId, since);
+			let recentMileage = await svc.list(userId, since);
+			if (recentMileage.length > MAX_RECENT_MILEAGE)
+				recentMileage = recentMileage.slice(-MAX_RECENT_MILEAGE);
 			const allowed =
 				PLAN_LIMITS.FREE.MAX_MILEAGE_PER_MONTH || PLAN_LIMITS.FREE.MAX_MILEAGE_IN_WINDOW || 10;
 
@@ -139,7 +150,7 @@ export const POST: RequestHandler = async (event) => {
 		const tripKV = safeKV(env, 'BETA_LOGS_KV');
 		const tripIdToCheck = payload.tripId || undefined;
 		// Only validate if tripKV has a proper get method and a tripId was provided (skip validation in test mocks)
-		if (tripKV && typeof (tripKV as any).get === 'function' && tripIdToCheck) {
+		if (tripKV && hasGet(tripKV) && tripIdToCheck) {
 			const tripKey = `trip:${userId}:${tripIdToCheck}`;
 			const tripRaw = await tripKV.get(tripKey);
 
@@ -190,26 +201,34 @@ export const POST: RequestHandler = async (event) => {
 			}
 			if (typeof rate === 'number') reimbursement = Number((miles * rate).toFixed(2));
 		}
-		// Build authoritative mileage record
-		const record: any = {
+		// Build authoritative mileage record (typed)
+		const record: MileageRecord = {
 			id,
 			userId,
 			tripId: payload.tripId || undefined,
-			date: payload.date || new Date().toISOString(),
+			date: typeof payload.date === 'string' ? payload.date : new Date().toISOString(),
 			startOdometer: typeof payload.startOdometer === 'number' ? payload.startOdometer : undefined,
 			endOdometer: typeof payload.endOdometer === 'number' ? payload.endOdometer : undefined,
-			miles: typeof miles === 'number' ? Number(miles) : undefined,
+			miles: Number(miles),
 			mileageRate:
 				typeof payload.mileageRate === 'number' ? Number(payload.mileageRate) : undefined,
-			vehicle: payload.vehicle === '' ? undefined : payload.vehicle,
+			vehicle:
+				typeof payload.vehicle === 'string' && payload.vehicle !== '' ? payload.vehicle : undefined,
 			reimbursement: typeof reimbursement === 'number' ? Number(reimbursement) : undefined,
-			notes: payload.notes || '',
+			notes: (typeof payload.notes === 'string' ? payload.notes : '') || '',
 			createdAt: new Date().toISOString(),
 			updatedAt: new Date().toISOString()
 		};
 
 		const svc = makeMileageService(safeKV(env, 'BETA_MILEAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
-		await svc.put(record);
+		const p = svc.put(record).catch((err) => log.warn('mileage.put failed', { err, id }));
+		// Use waitUntil when possible to schedule the async persistence
+		try {
+			if (event.platform?.context?.waitUntil) event.platform.context.waitUntil(p);
+		} catch {
+			// fallback fire-and-forget
+			void p;
+		}
 
 		return new Response(JSON.stringify(record), {
 			headers: { 'Content-Type': 'application/json' },

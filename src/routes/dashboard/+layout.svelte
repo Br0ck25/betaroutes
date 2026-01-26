@@ -1,4 +1,8 @@
+<!-- eslint-disable svelte/no-at-html-tags -->
+<!-- Sanitized static SVG icons (created using sanitizeStaticSvg). See SECURITY.md for rationale. -->
 <script lang="ts">
+	/* eslint-disable svelte/no-at-html-tags */
+	// Sanitized static SVG icons (created using sanitizeStaticSvg). See SECURITY.md for rationale.
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { auth, user } from '$lib/stores/auth';
@@ -143,8 +147,7 @@
 
 		const apiKey = data.googleMapsApiKey;
 
-		let userId =
-			(data?.user as any)?.name || $user?.name || (data?.user as any)?.token || $user?.token;
+		let userId = (data?.user as any)?.id || $user?.id;
 
 		if (!userId) {
 			userId = localStorage.getItem('offline_user_id');
@@ -273,13 +276,15 @@
 		</div>
 
 		<nav class="nav">
-			{#each navItems as item}
+			{#each navItems as item (item.href)}
 				<a
 					href={item.href}
 					class="nav-item"
 					class:active={isActive(item.href, $page.url.pathname, item.exact, item.exclude)}
 					on:click={(e) => handleNav(e, item.href)}
 				>
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+					<!-- Sanitized static SVG inserted via sanitizeStaticSvg -->
 					<span class="nav-icon">{@html item.icon}</span>
 					<span class="nav-label">{item.label}</span>
 				</a>
@@ -287,13 +292,15 @@
 
 			<div class="nav-divider"></div>
 
-			{#each hamburgerItems as item}
+			{#each hamburgerItems as item (item.href)}
 				<a
 					href={item.href}
 					class="nav-item"
 					class:active={isActive(item.href, $page.url.pathname)}
 					on:click={(e) => handleNav(e, item.href)}
 				>
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+					<!-- Sanitized static SVG inserted via sanitizeStaticSvg -->
 					<span class="nav-icon">{@html item.icon}</span>
 					<span class="nav-label">{item.label}</span>
 				</a>
@@ -347,13 +354,15 @@
 	</main>
 
 	<nav class="bottom-nav">
-		{#each navItems as item}
+		{#each navItems as item (item.href)}
 			<a
 				href={resolve(item.href)}
 				class="bottom-nav-item"
 				class:active={isActive(item.href, $page.url.pathname, item.exact, item.exclude)}
 				on:click={(e) => handleNav(e, item.href)}
 			>
+				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+				<!-- Sanitized static SVG inserted via sanitizeStaticSvg -->
 				<span class="bottom-nav-icon">{@html item.icon}</span>
 				<span class="bottom-nav-label">{item.label}</span>
 			</a>

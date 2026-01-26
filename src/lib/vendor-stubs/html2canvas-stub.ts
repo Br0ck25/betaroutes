@@ -1,6 +1,9 @@
 // Minimal browser stub for html2canvas used to avoid bundling heavy library in client builds.
 // The real library is imported on the server when generating PDFs.
-export default async function html2canvas(_: Element, __?: any): Promise<any> {
+export default async function html2canvas(
+	_: Element,
+	__?: Record<string, unknown>
+): Promise<never> {
 	// Refer to the parameters so linters don't mark them as unused in the browser stub.
 	void _;
 	void __;

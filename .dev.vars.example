@@ -1,0 +1,12 @@
+# Development environment variables template for Cloudflare Pages (wrangler dev)
+# Copy this file to `.dev.vars` for local development and DO NOT commit real secrets to git.
+# For production, use: `npx wrangler pages secret put <KEY_NAME>` or set variables in the Cloudflare Pages dashboard.
+
+# --- CRON & AUTOMATION ---
+# Secret used to authorize the `/api/cron/trash-purge` endpoint
+CRON_ADMIN_SECRET=HTSYC/W8cvqomtO/fcSCM4oJ+sQg48VyAgP3NjPoP88=
+
+# Example: other local development secrets
+# HNS_ENCRYPTION_KEY=your-secure-key-here
+# PRIVATE_GOOGLE_MAPS_API_KEY=your-server-key-here
+# STRIPE_SECRET_KEY=your-stripe-secret-here

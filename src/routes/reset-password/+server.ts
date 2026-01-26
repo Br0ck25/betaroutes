@@ -27,10 +27,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 	const resetData = JSON.parse(resetDataRaw);
 
 	// 2. Fetch User to ensure they still exist
-	const user = await findUserById(
-		usersKV as unknown as import('@cloudflare/workers-types').KVNamespace,
-		resetData.userId
-	);
+	const user = await findUserById(usersKV as unknown as KVNamespace, resetData.userId);
 	if (!user) {
 		return json({ message: 'User not found' }, { status: 404 });
 	}

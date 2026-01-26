@@ -28,9 +28,14 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
 		return json({ message: 'Too many attempts. Please try again later.' }, { status: 429 });
 	}
 
-	const body: any = await request.json();
-	const { email } = body;
-	if (!email || typeof email !== 'string') {
+	// Parse and validate request body without using `any`
+	const bodyUnknown: unknown = await request.json();
+	let email: string | undefined;
+	if (typeof bodyUnknown === 'object' && bodyUnknown !== null && 'email' in bodyUnknown) {
+		const candidate = (bodyUnknown as { email: unknown }).email;
+		email = typeof candidate === 'string' ? candidate.trim() : undefined;
+	}
+	if (!email) {
 		return json({ message: 'Email is required' }, { status: 400 });
 	}
 
@@ -43,7 +48,7 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
 	}
 
 	// 3. Logic
-	const user = await findUserByEmail(usersKV as any, email);
+	const user = await findUserByEmail(usersKV, email);
 
 	if (user) {
 		const token = randomUUID();
@@ -61,9 +66,10 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
 			platform.context.waitUntil(emailJob);
 		} else {
 			// Fallback for dev environments
-			emailJob.catch((e) =>
-				log.error('Email background send failed', { message: (e as any)?.message })
-			);
+			emailJob.catch((e: unknown) => {
+				const message = e instanceof Error ? e.message : String(e);
+				log.error('Email background send failed', { message });
+			});
 		}
 	}
 

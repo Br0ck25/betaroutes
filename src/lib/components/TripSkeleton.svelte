@@ -1,5 +1,5 @@
 <div class="animate-pulse space-y-4">
-	{#each Array(3) as _}
+	{#each Array(3) as _, i (i)}
 		<div
 			class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700"
 		>

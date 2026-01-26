@@ -1,5 +1,4 @@
 // src/app.d.ts
-import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
 
 declare global {
 	namespace App {

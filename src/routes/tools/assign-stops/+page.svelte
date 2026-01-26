@@ -3,8 +3,8 @@
 	import { autocomplete, loadGoogleMaps } from '$lib/utils/autocomplete';
 	import { csrfFetch } from '$lib/utils/csrf';
 
-	let { data } = $props();
-	let API_KEY = $derived(() => String((data as any)?.googleMapsApiKey ?? ''));
+	const { data } = $props<{ googleMapsApiKey?: string }>();
+	const API_KEY = $derived(() => String(data?.googleMapsApiKey ?? ''));
 
 	type Place = {
 		geometry?: { location: { lat: number; lng: number } };
@@ -213,7 +213,7 @@
 			}
 			result = await res.json();
 			message = '';
-		} catch (e) {
+		} catch (_e) {
 			message = 'Network error';
 		} finally {
 			loading = false;
@@ -338,7 +338,7 @@
 
 		{#if techs.length > 0}
 			<ul class="list tech-list">
-				{#each techs as t}
+				{#each techs as t (t.id)}
 					<li class="tech-row">
 						<div class="tech-head">
 							<strong class="tech-name">{t.name}</strong>
@@ -379,7 +379,7 @@
 					<tr><th>Address</th><th>Rank</th><th></th></tr>
 				</thead>
 				<tbody>
-					{#each stops as s}
+					{#each stops as s (s.id)}
 						<tr>
 							<td>{s.address}</td>
 							<td>{s.rank ?? '-'}</td>
@@ -403,7 +403,7 @@
 	{#if result}
 		<hr />
 		<h2>Assignment Result</h2>
-		{#each result.assignments as a}
+		{#each result.assignments as a (a.tech.name)}
 			<div class="card small-card">
 				<div class="card-head">
 					<h3>{a.tech.name}</h3>
@@ -426,14 +426,15 @@
 				<p><strong>Mileage:</strong> {a.miles.toFixed(1)} mi</p>
 				<p><strong>Drive time:</strong> {formatMinutes(a.minutes)}</p>
 				<ul>
-					{#each a.stops as s}
+					{#each a.stops as s ((s.address ?? '') + '-' + String(s.rank))}
 						<li>{s.address} {s.rank ? ` (rank ${s.rank})` : ''}</li>
 					{/each}
 				</ul>
 				{#if API_KEY() && (a.tech.startLoc || a.tech.endLoc || a.stops.some((s) => s.loc))}
 					<div class="map-preview interactive-map" use:initMap={{ assignment: a }}></div>
 					<p class="map-link">
-						<a href={buildGoogleMapsDirectionsUrl(a)} target="_blank" rel="noopener"
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+						<a href={buildGoogleMapsDirectionsUrl(a)} target="_blank" rel="noopener noreferrer"
 							>Open in Google Maps</a
 						>
 					</p>

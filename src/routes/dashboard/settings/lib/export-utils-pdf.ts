@@ -1,12 +1,33 @@
 import { getLogoDataUrl, formatCurrency, formatDuration, formatDate } from './export-utils';
+import { SvelteDate } from '$lib/utils/svelte-reactivity';
+import type { Trip, Stop } from '$lib/types';
 
-// export a lightweight type for jsPDF so callers can use it without extra types here
-export type PdfDocument = any;
+// Lightweight PDF document interface limited to the methods/properties we use here
+export interface PdfDocument {
+	internal: { pageSize: { getWidth(): number; getHeight(): number }; pages: unknown[] };
+	setFillColor(r: number, g: number, b: number): void;
+	rect(x: number, y: number, w: number, h: number, style?: string): void;
+	addImage(dataUrl: string, format: string, x: number, y: number, w: number, h: number): void;
+	setTextColor(r: number, g: number, b: number): void;
+	setFontSize(size: number): void;
+	setFont(family: string, style?: string): void;
+	text(text: string, x: number, y: number, options?: { align?: string }): void;
+	roundedRect(
+		x: number,
+		y: number,
+		w: number,
+		h: number,
+		rx: number,
+		ry: number,
+		style?: string
+	): void;
+	save(filename?: string): void;
+}
 
 // Re-export other PDF helpers for convenience so the ExportModal can import them from one place
 export { generateExpensesPDF, generateTaxBundlePDF } from './export-utils';
 
-export async function generateTripsPDF(trips: any[], dateRangeStr: string): Promise<PdfDocument> {
+export async function generateTripsPDF(trips: Trip[], dateRangeStr: string): Promise<PdfDocument> {
 	const { jsPDF } = await import('jspdf');
 	const autoTable = (await import('jspdf-autotable')).default;
 	const doc = new jsPDF();
@@ -36,18 +57,18 @@ export async function generateTripsPDF(trips: any[], dateRangeStr: string): Prom
 	doc.setTextColor(0, 0, 0);
 	doc.setFontSize(9);
 	doc.text(`Period: ${dateRangeStr}`, 14, 42);
-	doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 47);
+	doc.text(`Generated: ${SvelteDate.now().toLocaleString()}`, 14, 47);
 	doc.text(`Total Trips: ${trips.length}`, pageWidth - 14, 42, { align: 'right' });
 
 	// Summary statistics
-	const totalMiles = trips.reduce((sum: number, t: any) => sum + (t.totalMiles || 0), 0);
+	const totalMiles = trips.reduce((sum: number, t: Trip) => sum + (t.totalMiles || 0), 0);
 	const totalRevenue = trips.reduce(
-		(sum: number, t: any) =>
-			sum + (t.stops?.reduce((s: number, stop: any) => s + (stop.earnings || 0), 0) || 0),
+		(sum: number, t: Trip) =>
+			sum + (t.stops?.reduce((s: number, stop: Stop) => s + (stop.earnings || 0), 0) || 0),
 		0
 	);
 	const totalExpenses = trips.reduce(
-		(sum: number, t: any) =>
+		(sum: number, t: Trip) =>
 			sum + (t.fuelCost || 0) + (t.maintenanceCost || 0) + (t.suppliesCost || 0),
 		0
 	);
@@ -78,20 +99,18 @@ export async function generateTripsPDF(trips: any[], dateRangeStr: string): Prom
 
 	doc.setTextColor(0, 0, 0);
 
-	const tableData = trips.map((trip: any) => {
+	const tableData = trips.map((trip: Trip) => {
 		const intermediateStops =
 			trip.stops && trip.stops.length > 0
-				? trip.stops.map((s: any) => s.address).join('\n')
+				? trip.stops.map((s: Stop) => s.address).join('\n')
 				: 'None';
 
-		const endAddr =
-			trip.endAddress ||
-			(trip.stops && trip.stops.length > 0 ? trip.stops[trip.stops.length - 1].address : '') ||
-			trip.startAddress ||
-			'';
+		const lastStop =
+			trip.stops && trip.stops.length > 0 ? trip.stops[trip.stops.length - 1] : undefined;
+		const endAddr = trip.endAddress || (lastStop && lastStop.address) || trip.startAddress || '';
 
 		const revenue =
-			trip.stops?.reduce((sum: number, stop: any) => sum + (stop.earnings || 0), 0) || 0;
+			trip.stops?.reduce((sum: number, stop: Stop) => sum + (stop.earnings || 0), 0) || 0;
 		const expenses = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);
 		const profit = revenue - expenses;
 
@@ -155,7 +174,7 @@ export async function generateTripsPDF(trips: any[], dateRangeStr: string): Prom
 		},
 		alternateRowStyles: { fillColor: [249, 250, 251] },
 		margin: { left: 14, right: 14 },
-		didDrawPage: function (data: any) {
+		didDrawPage: function (data: { pageNumber: number }) {
 			const pageCount = doc.internal.pages.length - 1;
 			doc.setFontSize(8);
 			doc.setTextColor(128, 128, 128);

@@ -2,6 +2,20 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { log } from '$lib/server/log';
+import { sanitizeString } from '$lib/server/sanitize';
+
+function isRecord(obj: unknown): obj is Record<string, unknown> {
+	return typeof obj === 'object' && obj !== null;
+}
+
+function isCachedPlace(
+	obj: unknown
+): obj is { formatted_address?: string; name?: string; place_id?: string; osm_value?: string } {
+	if (!isRecord(obj)) return false;
+	const fa = obj['formatted_address'];
+	const name = obj['name'];
+	return (typeof fa === 'string' && fa.length > 0) || (typeof name === 'string' && name.length > 0);
+}
 
 export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	// SECURITY (Issue #8): Require authentication to prevent anonymous cache poisoning
@@ -9,16 +23,21 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}
 
-	const userId = (locals.user as any).id;
+	const userId =
+		isRecord(locals.user) && typeof locals.user['id'] === 'string' ? locals.user['id'] : undefined;
 	if (!userId) {
 		return json({ error: 'Invalid session' }, { status: 401 });
 	}
 
 	try {
-		const body: any = await request.json();
-		const { query, results } = body;
+		const body: unknown = await request.json();
+		if (!isRecord(body)) return json({ error: 'Invalid request' }, { status: 400 });
+		const rawQuery = typeof body['query'] === 'string' ? body['query'] : '';
+		const resultsRaw = Array.isArray(body['results']) ? body['results'] : [];
+		const query = sanitizeString(rawQuery, 200);
+		const results = resultsRaw.slice(0, 50); // cap to 50 items to avoid abuse
 
-		if (!query || !results || !Array.isArray(results)) {
+		if (!query || results.length === 0) {
 			return json({ error: 'Invalid request' }, { status: 400 });
 		}
 
@@ -32,13 +51,19 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		// 1. Group new items by their potential prefixes
 		// Map<Prefix, Place[]>
 
-		const prefixMap = new Map<string, any[]>();
+		const prefixMap = new Map<string, unknown[]>();
 
 		for (const result of results) {
-			const address = result.formatted_address || result.name || '';
+			if (!isCachedPlace(result)) continue;
+			const address = sanitizeString(
+				typeof (result as Record<string, unknown>)['formatted_address'] === 'string'
+					? (result as Record<string, unknown>)['formatted_address']
+					: typeof (result as Record<string, unknown>)['name'] === 'string'
+						? (result as Record<string, unknown>)['name']
+						: '',
+				500
+			);
 			const normalized = address.toLowerCase().replace(/\s+/g, '');
-
-			// Generate prefixes for this result (lengths 2 to 10)
 			for (let len = 2; len <= Math.min(10, normalized.length); len++) {
 				const prefix = normalized.substring(0, len);
 				// SECURITY: Use user-scoped key to prevent cache poisoning
@@ -55,24 +80,28 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		const updatePromises = Array.from(prefixMap.entries()).map(async ([key, newItems]) => {
 			// A. Read existing bucket
 			const existingRaw = await kv.get(key);
-			let bucket = existingRaw ? JSON.parse(existingRaw) : [];
-
-			// B. Merge & Deduplicate
-			// Add new items only if they aren't already in the bucket
-			for (const item of newItems) {
-				const exists = bucket.some(
-					(b: any) =>
-						b.formatted_address === item.formatted_address ||
-						(b.place_id && b.place_id === item.place_id)
-				);
-
-				if (!exists) {
-					bucket.push(item);
+			let bucket: unknown[] = [];
+			if (typeof existingRaw === 'string') {
+				try {
+					const parsed = JSON.parse(existingRaw);
+					if (Array.isArray(parsed)) bucket = parsed;
+				} catch {
+					// ignore corrupt
 				}
 			}
 
-			// C. Cap bucket size (e.g., keep top 20 to ensure fast reads)
-			if (bucket.length > 20) {
+			// B. Merge & Deduplicate
+			for (const item of newItems) {
+				if (!isCachedPlace(item)) continue;
+				const exists = bucket.some(
+					(b) =>
+						isCachedPlace(b) &&
+						(b.formatted_address === item.formatted_address ||
+							(b.place_id && item.place_id && b.place_id === item.place_id))
+				);
+				if (!exists) {
+					bucket.push(item);
+				}
 				bucket = bucket.slice(0, 20);
 			}
 

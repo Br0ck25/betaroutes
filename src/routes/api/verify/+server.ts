@@ -46,10 +46,9 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
 		const sessionId = randomUUID();
 		const sessionTTL = 60 * 60 * 24 * 30; // 30 Days
 
+		// Session payload: include authoritative id only for ownership; avoid storing email/name used for auth checks
 		const sessionData = {
 			id: user.id,
-			name: user.username,
-			email: user.email,
 			plan: user.plan,
 			tripsThisMonth: user.tripsThisMonth,
 			maxTrips: user.maxTrips,
@@ -81,9 +80,10 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
 		]);
 
 		throw redirect(303, '/dashboard?welcome=true');
-	} catch (e) {
+	} catch (e: unknown) {
 		if (e instanceof Response) throw e; // Allow redirects to pass
-		log.error('[Verify] Error', { message: (e as any)?.message });
+		const msg = e instanceof Error ? e.message : String(e);
+		log.error('[Verify] Error', { message: msg });
 		throw redirect(303, '/login?error=creation_failed');
 	}
 };

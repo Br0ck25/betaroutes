@@ -4,7 +4,6 @@ import { findUserByEmail } from '$lib/server/userService';
 import { sendPasswordResetEmail } from '$lib/server/email';
 import { checkRateLimit } from '$lib/server/rateLimit';
 import { randomUUID } from 'node:crypto';
-import type { KVNamespace } from '@cloudflare/workers-types';
 import { getEnv } from '$lib/server/env';
 
 // [!code fix] Hardcode production URL to prevent Host Header Injection
@@ -31,18 +30,20 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
 		return json({ message: 'Too many attempts. Please try again later.' }, { status: 429 });
 	}
 
-	const body: any = await request.json();
-	const { email } = body;
+	// Parse and validate request body safely (no `any`)
+	const bodyUnknown: unknown = await request.json();
+	let email: string | undefined;
+	if (typeof bodyUnknown === 'object' && bodyUnknown !== null && 'email' in bodyUnknown) {
+		const candidate = (bodyUnknown as { email: unknown }).email;
+		email = typeof candidate === 'string' ? candidate.trim() : undefined;
+	}
 
 	if (!email) {
 		return json({ message: 'Email is required' }, { status: 400 });
 	}
 
 	// 1. Find User
-	const user = await findUserByEmail(
-		usersKV as unknown as import('@cloudflare/workers-types').KVNamespace,
-		email
-	);
+	const user = await findUserByEmail(usersKV as unknown as KVNamespace, email);
 	// Security: Always return success even if user doesn't exist to prevent email enumeration
 	if (!user) {
 		// [!code fix] SECURITY: Response padding to mask timing

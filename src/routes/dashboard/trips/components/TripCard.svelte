@@ -11,31 +11,40 @@
 	import { swipeable } from '$lib/actions/swipe';
 	import { createEventDispatcher } from 'svelte';
 	import { mileage } from '$lib/stores/mileage';
+	import type { Trip, Stop, SupplyCost } from '$lib/types';
 
-	export let trip: any;
-	export let isExpanded = false;
-	export let isSelected = false;
+	export let trip: Trip;
+	export let isExpanded: boolean = false;
+	export let isSelected: boolean = false;
 
-	const dispatch = createEventDispatcher();
+	const dispatch = createEventDispatcher<{
+		edit: string;
+		delete: string;
+		toggleExpand: string;
+		toggleSelection: string;
+	}>();
 
 	// Prefer authoritative mileage when available; fall back to trip.totalMiles
-	let displayMiles = 0;
-	$: displayMiles = $mileage.find((m: any) => m.id === trip.id)?.miles ?? trip.totalMiles ?? 0;
+	let displayMiles: number = 0;
+	$: displayMiles = Number($mileage.find((m) => m.id === trip.id)?.miles ?? trip.totalMiles ?? 0);
 
 	$: profit = calculateNetProfit(trip);
 	$: hourlyPay = calculateHourlyPay(trip);
 	$: totalCosts = (trip.fuelCost || 0) + (trip.maintenanceCost || 0) + (trip.suppliesCost || 0);
-	$: supplies = trip.supplyItems || trip.suppliesItems || [];
+	$: supplies = (trip.supplyItems ?? trip.suppliesItems ?? []) as SupplyCost[];
+	// Last stop address (safe accessor)
+	$: lastStopAddress =
+		trip.stops && trip.stops.length > 0 ? trip.stops[trip.stops.length - 1]?.address : undefined;
 
-	function openGoogleMaps(e: MouseEvent, trip: any) {
+	function openGoogleMaps(e: MouseEvent, t: Trip) {
 		e.stopPropagation();
-		const origin = encodeURIComponent(trip.startAddress || '');
-		const destination = encodeURIComponent(trip.endAddress || trip.startAddress || '');
+		const origin = encodeURIComponent(t.startAddress || '');
+		const destination = encodeURIComponent(t.endAddress || t.startAddress || '');
 
 		let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}`;
-		if (trip.stops && trip.stops.length > 0) {
-			const waypoints = trip.stops
-				.map((s: any) => encodeURIComponent(s.address || ''))
+		if (t.stops && t.stops.length > 0) {
+			const waypoints = t.stops
+				.map((s: Stop) => encodeURIComponent(s.address || ''))
 				.filter((a: string) => a.length > 0)
 				.join('|');
 			if (waypoints) {
@@ -45,10 +54,10 @@
 		window.open(url, '_blank');
 	}
 
-	async function openMapToStop(e: MouseEvent, trip: any, stopIndex: number) {
+	async function openMapToStop(e: MouseEvent, t: Trip, stopIndex: number) {
 		e.stopPropagation();
-		const targetStop = trip.stops[stopIndex];
-		const destination = targetStop.address || '';
+		const targetStop = t.stops?.[stopIndex] as Stop | undefined;
+		const destination = targetStop?.address || '';
 
 		// Try to get the user's current location (with a timeout). If unavailable, omit origin so Google uses current location.
 		let originParam = '';
@@ -85,6 +94,7 @@
 			originParam = '';
 		}
 
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const params = new URLSearchParams({ api: '1', destination });
 		if (originParam) params.set('origin', originParam);
 		// Note: do not include earlier stops as waypoints — map should go from current location to the selected stop only.
@@ -94,18 +104,21 @@
 	}
 
 	function handleEdit() {
+		if (!trip.id) return;
 		dispatch('edit', trip.id);
 	}
 	function handleDelete() {
+		if (!trip.id) return;
 		dispatch('delete', trip.id);
 	}
 	function handleExpand() {
+		if (!trip.id) return;
 		dispatch('toggleExpand', trip.id);
 	}
 	function handleSelection() {
+		if (!trip.id) return;
 		dispatch('toggleSelection', trip.id);
 	}
-
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Enter' || e.key === ' ') {
 			e.preventDefault();
@@ -161,9 +174,7 @@
 					<h3 class="trip-route-title" id={'trip-' + trip.id + '-title'}>
 						{typeof trip.startAddress === 'string' ? trip.startAddress.split(',')[0] : 'Unknown'}
 						{#if trip.stops && trip.stops.length > 0}
-							→ {typeof trip.stops[trip.stops.length - 1]?.address === 'string'
-								? trip.stops[trip.stops.length - 1].address.split(',')[0]
-								: 'Stop'}
+							→ {typeof lastStopAddress === 'string' ? lastStopAddress.split(',')[0] : 'Stop'}
 						{/if}
 					</h3>
 
@@ -224,17 +235,17 @@
 			</div>
 			<div class="stat-item">
 				<span class="stat-label">Hours</span>
-				<span class="stat-value">{formatHours(trip.hoursWorked)}</span>
+				<span class="stat-value">{formatHours(trip.hoursWorked ?? 0)}</span>
 			</div>
 			<div class="stat-item">
 				<span class="stat-label">Drive</span>
-				<span class="stat-value">{formatDuration(trip.estimatedTime)}</span>
+				<span class="stat-value">{formatDuration(trip.estimatedTime ?? 0)}</span>
 			</div>
 
 			<div class="stat-item">
 				<span class="stat-label">$/Hr</span>
 				<span class="stat-value hourly-pay"
-					>{trip.hoursWorked > 0 ? formatCurrency(hourlyPay) : '-'}</span
+					>{(trip.hoursWorked ?? 0) > 0 ? formatCurrency(hourlyPay) : '-'}</span
 				>
 			</div>
 		</div>
@@ -248,17 +259,17 @@
 							<span class="address-text"><strong>Start:</strong> {trip.startAddress}</span>
 						</div>
 						{#if trip.stops}
-							{#each trip.stops as stop, i}
+							{#each trip.stops as stop, i (stop.id ?? i)}
 								<div class="address-row">
 									<span class="address-text"><strong>Stop {i + 1}:</strong> {stop.address}</span>
-									{#if Number(stop.earnings) > 0}
+									{#if Number(stop.earnings ?? 0) > 0}
 										<span
 											class="stop-amount"
-											title={formatCurrency(Number(stop.earnings))}
-											aria-label={`Stop amount ${formatCurrency(Number(stop.earnings))}`}
+											title={formatCurrency(Number(stop.earnings ?? 0))}
+											aria-label={`Stop amount ${formatCurrency(Number(stop.earnings ?? 0))}`}
 											data-testid={`stop-amount-${i}`}
 										>
-											{formatCurrency(Number(stop.earnings))}
+											{formatCurrency(Number(stop.earnings ?? 0))}
 										</span>
 									{/if}
 									<button
@@ -313,15 +324,15 @@
 					<div class="detail-section">
 						<h4 class="section-heading">Expenses & Costs</h4>
 						<div class="expense-list">
-							{#if trip.fuelCost > 0}
+							{#if (trip.fuelCost ?? 0) > 0}
 								<div class="expense-row">
 									<span>Fuel</span>
-									<span>{formatCurrency(trip.fuelCost)}</span>
+									<span>{formatCurrency(trip.fuelCost ?? 0)}</span>
 								</div>
 							{/if}
 
 							{#if trip.maintenanceItems}
-								{#each trip.maintenanceItems as item}
+								{#each trip.maintenanceItems as item, idx (item.id ?? idx)}
 									<div class="expense-row">
 										<span>{item.type}</span>
 										<span>{formatCurrency(item.cost)}</span>
@@ -329,7 +340,7 @@
 								{/each}
 							{/if}
 							{#if supplies.length > 0}
-								{#each supplies as item}
+								{#each supplies as item, idx (item.id ?? idx)}
 									<div class="expense-row">
 										<span>{item.type}</span>
 										<span>{formatCurrency(item.cost)}</span>

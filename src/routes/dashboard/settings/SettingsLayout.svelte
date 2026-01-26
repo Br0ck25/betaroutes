@@ -42,7 +42,7 @@
 <div class="settings-wrap">
 	<nav class="side-nav" aria-label="Settings navigation">
 		<ul>
-			{#each sections as s}
+			{#each sections as s (s)}
 				<li class:active={active === s}>
 					<button
 						type="button"

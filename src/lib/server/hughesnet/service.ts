@@ -1,5 +1,5 @@
 // src/lib/server/hughesnet/service.ts
-import type { KVNamespace, DurableObjectNamespace } from '@cloudflare/workers-types';
+
 import { makeTripService } from '../tripService';
 import { makeMileageService } from '../mileageService';
 import { HughesNetFetcher } from './fetcher';

@@ -20,6 +20,7 @@ import { findUserById } from '$lib/server/userService';
 import { dev } from '$app/environment';
 import { log } from '$lib/server/log';
 import { sendSecurityAlertEmail } from '$lib/server/email';
+import { getUserDisplayName, getUserEmail } from '$lib/utils/user-display';
 
 function getRpID(context: { url: URL }): string {
 	const hostname = context.url.hostname;
@@ -139,7 +140,8 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
 
 		if (type === 'register') {
 			const user = locals.user as { id?: string; email?: string; name?: string } | undefined;
-			if (!user || !user.email) {
+			// Require a canonical user.id for ownership checks — do not rely on email/name
+			if (!user || !user.id) {
 				return json({ error: 'Not authenticated' }, { status: 401 });
 			}
 
@@ -158,8 +160,8 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
 				rpName: 'Go Route Yourself',
 				rpID,
 				userID: new TextEncoder().encode(user.id), // CRITICAL: Must be Uint8Array
-				userName: user.email,
-				userDisplayName: user.name || user.email,
+				userName: getUserEmail(user) ?? '',
+				userDisplayName: getUserDisplayName(user),
 				attestationType: 'none',
 				excludeCredentials: authenticators.map((auth) => ({
 					id: auth.credentialID, // Keep as string - library handles conversion
@@ -308,7 +310,8 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
 
 		if (type === 'register') {
 			const user = locals.user as { id?: string; email?: string; name?: string } | undefined;
-			if (!user || !user.email) {
+			// Require canonical id for ownership checks
+			if (!user || !user.id) {
 				return json({ error: 'Not authenticated' }, { status: 401 });
 			}
 
@@ -474,8 +477,9 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
 			});
 
 			// [SECURITY] Send security alert email (best-effort, don't block on failure)
-			if (user.email) {
-				sendSecurityAlertEmail(user.email, 'passkey_added').catch((err) => {
+			const email = getUserEmail(user);
+			if (email) {
+				sendSecurityAlertEmail(email, 'passkey_added').catch((err) => {
 					log.error('[WebAuthn] Security alert email failed', { error: String(err) });
 				});
 			}

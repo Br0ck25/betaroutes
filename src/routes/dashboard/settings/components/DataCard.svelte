@@ -8,6 +8,7 @@
 	import { toasts } from '$lib/stores/toast';
 	import { createEventDispatcher } from 'svelte';
 	import { localDateISO } from '$lib/utils/dates';
+	import { SvelteDate } from '$lib/utils/svelte-reactivity';
 
 	const dispatch = createEventDispatcher();
 
@@ -81,7 +82,7 @@
 			trips: $trips,
 			expenses: $expenses,
 			mileage: $mileage,
-			exportDate: new Date().toISOString()
+			exportDate: SvelteDate.now().toISOString()
 		};
 		const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
 		const url = URL.createObjectURL(blob);
@@ -106,7 +107,7 @@
 			reader.onload = async (e: any) => {
 				try {
 					const data = JSON.parse(e.target.result);
-					let importMessages: string[] = [];
+					const importMessages: string[] = [];
 
 					if (data.settings) {
 						userSettings.set(data.settings);
@@ -119,9 +120,7 @@
 						}
 					}
 
-					let userId =
-						$user?.name || $user?.token || localStorage.getItem('offline_user_id') || 'offline';
-
+					const userId = $user?.id || localStorage.getItem('offline_user_id') || 'offline';
 					if (data.trips && Array.isArray(data.trips)) {
 						if (confirm(`Found ${data.trips.length} trips in backup. Import them now?`)) {
 							for (const trip of data.trips) {
@@ -257,7 +256,7 @@
 					const maintenanceCost = parseFloat(String(cleanRow[11] ?? '0')) || 0;
 					const suppliesCost = parseFloat(String(cleanRow[13] ?? '0')) || 0;
 
-					let maintenanceItems = parseItemString(cleanRow[12]);
+					const maintenanceItems = parseItemString(cleanRow[12]);
 					if (maintenanceItems.length === 0 && maintenanceCost > 0) {
 						maintenanceItems.push({
 							id: crypto.randomUUID(),
@@ -266,7 +265,7 @@
 						});
 					}
 
-					let suppliesItems = parseItemString(cleanRow[14]);
+					const suppliesItems = parseItemString(cleanRow[14]);
 					if (suppliesItems.length === 0 && suppliesCost > 0) {
 						suppliesItems.push({ id: crypto.randomUUID(), type: 'Supplies', cost: suppliesCost });
 					}
@@ -297,8 +296,7 @@
 
 				if (parsed.length > 0) {
 					if (confirm(`Found ${parsed.length} trips. Import them now?`)) {
-						let userId =
-							$user?.name || $user?.token || localStorage.getItem('offline_user_id') || 'offline';
+						const userId = $user?.id || localStorage.getItem('offline_user_id') || 'offline';
 						for (const trip of parsed) {
 							await trips.create(trip, userId);
 						}
