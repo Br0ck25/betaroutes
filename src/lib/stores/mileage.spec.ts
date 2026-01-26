@@ -24,6 +24,24 @@ const mockTrip = {
 	updatedAt: new Date().toISOString()
 };
 
+const mockMileageRecLegacy = {
+	id: 'trip-legacy',
+	userId: 'u1',
+	miles: 99,
+	vehicle: 'truck',
+	date: '2026-01-02T00:00:00.000Z',
+	createdAt: new Date().toISOString(),
+	updatedAt: new Date().toISOString()
+};
+
+const mockTripLegacy = {
+	id: 'trip-legacy',
+	userId: 'u1',
+	totalMiles: 100,
+	fuelCost: 25,
+	updatedAt: new Date().toISOString()
+};
+
 const tripStorePut = vi.fn();
 
 vi.mock('$lib/db/indexedDB', () => ({
@@ -34,7 +52,8 @@ vi.mock('$lib/db/indexedDB', () => ({
 					objectStore: (name: string) => {
 						if (name === 'mileage') {
 							return {
-								get: async (id: string) => (id === 'm1' ? mockMileageRec : null),
+								get: async (id: string) =>
+									id === 'm1' ? mockMileageRec : id === 'trip-legacy' ? mockMileageRecLegacy : null,
 								delete: async (_id: string) => {},
 								put: async (_: Record<string, unknown>) => {}
 							};
@@ -46,7 +65,8 @@ vi.mock('$lib/db/indexedDB', () => ({
 						}
 						if (name === 'trips') {
 							return {
-								get: async (id: string) => (id === 'trip-123' ? mockTrip : null),
+								get: async (id: string) =>
+									id === 'trip-123' ? mockTrip : id === 'trip-legacy' ? mockTripLegacy : null,
 								put: tripStorePut
 							};
 						}
@@ -82,6 +102,20 @@ describe('mileage store - deleteMileage', () => {
 		// sync queue should include an update for the trip
 		expect(syncManager.addToQueue).toHaveBeenCalledWith(
 			expect.objectContaining({ action: 'update', tripId: 'trip-123', data: expect.any(Object) })
+		);
+	});
+
+	it('zeros trip when mileage id matches trip id (legacy)', async () => {
+		await mileage.deleteMileage('trip-legacy', 'u1');
+
+		expect(tripStorePut).toHaveBeenCalled();
+		const patched = tripStorePut.mock.calls[0]![0] as TripRecord;
+		expect(patched.id).toBe('trip-legacy');
+		expect(patched.totalMiles).toBe(0);
+		expect(patched.fuelCost).toBe(0);
+
+		expect(syncManager.addToQueue).toHaveBeenCalledWith(
+			expect.objectContaining({ action: 'update', tripId: 'trip-legacy', data: expect.any(Object) })
 		);
 	});
 });

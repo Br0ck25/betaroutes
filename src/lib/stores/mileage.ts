@@ -401,7 +401,7 @@ function createMileageStore() {
 					const tripsTx = db.transaction('trips', 'readwrite');
 					const tripStore = tripsTx.objectStore('trips');
 					const tripIdToUpdate =
-						typeof rec.tripId === 'string' ? (rec.tripId as string) : undefined;
+						typeof rec.tripId === 'string' && rec.tripId ? (rec.tripId as string) : id;
 					if (tripIdToUpdate) {
 						const trip = await tripStore.get(tripIdToUpdate);
 						if (trip && trip.userId === userId) {

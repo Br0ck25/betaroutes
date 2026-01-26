@@ -47,7 +47,7 @@ export const DELETE: RequestHandler = async (event) => {
 		await svc.delete(userId, id);
 
 		// --- Set linked trip's totalMiles to 0 and recalculate fuelCost ---
-		if (existing && existing.tripId) {
+		if (existing) {
 			try {
 				const tripIndexDO = safeDO(env, 'TRIP_INDEX_DO')!;
 				const placesIndexDO = safeDO(env, 'PLACES_INDEX_DO') || tripIndexDO;
@@ -58,21 +58,26 @@ export const DELETE: RequestHandler = async (event) => {
 					tripIndexDO,
 					placesIndexDO
 				);
-				const trip = await tripSvc.get(userId, existing.tripId);
-				if (trip && !trip.deleted) {
-					const tripRecord = trip as TripRecord & Record<string, unknown>;
-					tripRecord.totalMiles = 0;
-					// Also reset fuelCost since there are no miles
-					tripRecord.fuelCost = 0;
-					tripRecord.updatedAt = new Date().toISOString();
-					await tripSvc.put(tripRecord as TripRecord);
-					log.info('Set trip totalMiles and fuelCost to 0 after mileage delete', {
-						tripId: existing.tripId
-					});
+				// Legacy support: use existing.tripId when present, otherwise the mileage id may equal the trip id
+				const tripIdToUpdate =
+					typeof existing.tripId === 'string' && existing.tripId ? existing.tripId : id;
+				if (tripIdToUpdate) {
+					const trip = await tripSvc.get(userId, tripIdToUpdate);
+					if (trip && !trip.deleted) {
+						const tripRecord = trip as TripRecord & Record<string, unknown>;
+						tripRecord.totalMiles = 0;
+						// Also reset fuelCost since there are no miles
+						tripRecord.fuelCost = 0;
+						tripRecord.updatedAt = new Date().toISOString();
+						await tripSvc.put(tripRecord as TripRecord);
+						log.info('Set trip totalMiles and fuelCost to 0 after mileage delete', {
+							tripId: tripIdToUpdate
+						});
+					}
 				}
 			} catch (e) {
 				log.warn('Failed to update trip after mileage delete', {
-					tripId: existing.tripId,
+					tripId: existing.tripId || id,
 					message: createSafeErrorMessage(e)
 				});
 			}

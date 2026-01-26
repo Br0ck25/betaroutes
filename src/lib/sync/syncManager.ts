@@ -287,7 +287,8 @@ class SyncManager {
 	private async processSyncItem(item: SyncQueueItem) {
 		const { action, tripId, data } = item;
 
-		const storeName = ((data as unknown as Record<string, unknown>)['store'] as string) || 'trips';
+		// Support missing/undefined data for delete/permanentDelete actions
+		const storeName = ((data as Record<string, unknown>)?.['store'] as string) || 'trips';
 		const baseUrl =
 			storeName === 'expenses'
 				? '/api/expenses'
