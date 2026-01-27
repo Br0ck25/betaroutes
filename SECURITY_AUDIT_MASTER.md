@@ -183,7 +183,7 @@ Issues that lead to data loss, 500 errors, denial of service, or billing spikes.
 - [x] **[User UX] Lack of Security Notifications:** Users are not emailed when their password or security keys change.
   - **Status:** ✅ COMPLETED - Created sendSecurityAlertEmail() in email.ts supporting 4 alert types (password_changed, passkey_added, passkey_removed, email_changed). Added calls to change-password, webauthn register, and webauthn/delete endpoints.
 - [x] **[Logic] Incomplete Account Deletion:** `delete-account` removes the user but leaves trips/logs in KV.
-  - **Status:** ✅ COMPLETED - Extended deleteUser() to accept expensesKV, mileageKV, trashKV resources. Now wipes all user data: trips, expenses, mileage, trash, settings, auth indexes, WebAuthn credentials, and DO SQLite data.
+  - **Status:** ✅ COMPLETED - Extended deleteUser() to accept expensesKV and mileageKV resources. Now wipes all user data: trips, expenses, mileage, settings, auth indexes, WebAuthn credentials, and DO SQLite data.
 
 ## 🟢 Priority 3: Hardening & Best Practices
 

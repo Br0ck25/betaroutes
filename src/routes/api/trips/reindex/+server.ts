@@ -1,7 +1,10 @@
 // src/routes/api/trips/reindex/+server.ts
-import type { RequestHandler } from './$types';
+import { safeDO, safeKV } from '$lib/server/env';
+import { log } from '$lib/server/log';
+import { createSafeErrorMessage } from '$lib/server/sanitize';
+import type { TripRecord } from '$lib/server/tripService';
 import { makeTripService } from '$lib/server/tripService';
-import { safeKV, safeDO } from '$lib/server/env';
+import type { RequestHandler } from './$types';
 
 // Helper guards to avoid 'any' and to validate KV shape
 function hasList(v: unknown): v is {
@@ -25,9 +28,6 @@ function hasGet(v: unknown): v is {
 		typeof (v as Record<string, unknown>)['get'] === 'function'
 	);
 }
-import type { TripRecord } from '$lib/server/tripService';
-import { log } from '$lib/server/log';
-import { createSafeErrorMessage } from '$lib/server/sanitize';
 
 /**
  * POST /api/trips/reindex - Clear DO index and force rebuild from KV
@@ -51,7 +51,6 @@ export const POST: RequestHandler = async (event) => {
 
 		const svc = makeTripService(
 			kv as unknown as KVNamespace,
-			undefined,
 			placesKV as unknown as KVNamespace | undefined,
 			tripIndexDO as unknown as DurableObjectNamespace,
 			placesIndexDO as unknown as DurableObjectNamespace

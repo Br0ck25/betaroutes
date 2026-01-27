@@ -1,10 +1,8 @@
 // src/routes/api/trips/+server.ts
-import type { RequestHandler } from './$types';
-import { makeTripService } from '$lib/server/tripService';
-import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
-import { findUserById } from '$lib/server/userService';
-import { z } from 'zod';
 import { PLAN_LIMITS } from '$lib/constants';
+import { computeAndCacheDirections } from '$lib/server/directionsCache';
+import { log } from '$lib/server/log';
+import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
 import {
 	checkRateLimitEnhanced,
 	createRateLimitHeaders,
@@ -13,15 +11,17 @@ import {
 	RATE_LIMITS
 } from '$lib/server/rateLimit';
 import {
-	validateAndSanitizeRequest,
+	createSafeErrorMessage,
 	sanitizeQueryParam,
-	createSafeErrorMessage
+	validateAndSanitizeRequest
 } from '$lib/server/sanitize';
-import { log } from '$lib/server/log';
 import type { TripRecord } from '$lib/server/tripService';
-import { computeAndCacheDirections } from '$lib/server/directionsCache';
+import { makeTripService } from '$lib/server/tripService';
+import { findUserById } from '$lib/server/userService';
+import { z } from 'zod';
+import type { RequestHandler } from './$types';
 
-import { safeKV, safeDO } from '$lib/server/env';
+import { safeDO, safeKV } from '$lib/server/env';
 
 // Type guard for location objects returned from clients/places
 function isLatLng(obj: unknown): obj is { lat: number; lng: number } {
@@ -382,7 +382,6 @@ export const GET: RequestHandler = async (event) => {
 
 		const svc = makeTripService(
 			safeKV(env, 'BETA_LOGS_KV')!,
-			undefined,
 			safeKV(env, 'BETA_PLACES_KV'),
 			safeDO(env, 'TRIP_INDEX_DO')!,
 			safeDO(env, 'PLACES_INDEX_DO')!
@@ -509,7 +508,6 @@ export const POST: RequestHandler = async (event) => {
 
 		const svc = makeTripService(
 			safeKV(env, 'BETA_LOGS_KV')!,
-			undefined,
 			safeKV(env, 'BETA_PLACES_KV'),
 			safeDO(env, 'TRIP_INDEX_DO')!,
 			safeDO(env, 'PLACES_INDEX_DO')!
@@ -798,7 +796,6 @@ export const PUT: RequestHandler = async (event) => {
 
 		const svc = makeTripService(
 			safeKV(env, 'BETA_LOGS_KV')!,
-			undefined,
 			safeKV(env, 'BETA_PLACES_KV'),
 			safeDO(env, 'TRIP_INDEX_DO')!,
 			safeDO(env, 'PLACES_INDEX_DO')!

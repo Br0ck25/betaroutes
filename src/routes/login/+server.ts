@@ -1,14 +1,14 @@
 // src/routes/login/+server.ts
+import { dev } from '$app/environment';
+import { authenticateUser } from '$lib/server/auth';
+import { getEnv, safeDO, safeKV } from '$lib/server/env';
+import { log } from '$lib/server/log';
+import { migrateUserStorageKeys } from '$lib/server/migration/storage-key-migration';
+import { checkRateLimit } from '$lib/server/rateLimit';
+import { createSession } from '$lib/server/sessionService';
+import { findUserById } from '$lib/server/userService';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { authenticateUser } from '$lib/server/auth';
-import { getEnv, safeKV, safeDO } from '$lib/server/env';
-import { createSession } from '$lib/server/sessionService';
-import { migrateUserStorageKeys } from '$lib/server/migration/storage-key-migration';
-import { findUserById } from '$lib/server/userService';
-import { checkRateLimit } from '$lib/server/rateLimit';
-import { dev } from '$app/environment';
-import { log } from '$lib/server/log';
 
 export const POST: RequestHandler = async ({ request, platform, cookies, getClientAddress }) => {
 	try {
@@ -105,7 +105,6 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 						BETA_LOGS_KV?: KVNamespace;
 						BETA_EXPENSES_KV?: KVNamespace;
 						BETA_MILEAGE_KV?: KVNamespace;
-						BETA_TRASH_KV?: KVNamespace;
 						BETA_HUGHESNET_KV?: KVNamespace;
 						BETA_HUGHESNET_ORDERS_KV?: KVNamespace;
 					} = {};
@@ -114,8 +113,6 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 					if (expensesKV) migrationEnv.BETA_EXPENSES_KV = expensesKV;
 					const mileageKV = safeKV(env, 'BETA_MILEAGE_KV');
 					if (mileageKV) migrationEnv.BETA_MILEAGE_KV = mileageKV;
-					const trashKV = safeKV(env, 'BETA_TRASH_KV');
-					if (trashKV) migrationEnv.BETA_TRASH_KV = trashKV;
 					const hnsKV = safeKV(env, 'BETA_HUGHESNET_KV');
 					if (hnsKV) migrationEnv.BETA_HUGHESNET_KV = hnsKV;
 					const hnsOrdersKV = safeKV(env, 'BETA_HUGHESNET_ORDERS_KV');

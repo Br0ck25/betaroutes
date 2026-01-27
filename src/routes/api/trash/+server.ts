@@ -1,12 +1,12 @@
 // src/routes/api/trash/+server.ts
-import type { RequestHandler } from './$types';
-import { makeTripService } from '$lib/server/tripService';
-import { makeExpenseService } from '$lib/server/expenseService';
-import { makeMileageService } from '$lib/server/mileageService';
-import { safeKV, safeDO } from '$lib/server/env';
-import { log } from '$lib/server/log';
-import { getStorageId } from '$lib/server/user';
 import { dev } from '$app/environment';
+import { safeDO, safeKV } from '$lib/server/env';
+import { makeExpenseService } from '$lib/server/expenseService';
+import { log } from '$lib/server/log';
+import { makeMileageService } from '$lib/server/mileageService';
+import { makeTripService } from '$lib/server/tripService';
+import { getStorageId } from '$lib/server/user';
+import type { RequestHandler } from './$types';
 
 // [!code fix] SECURITY: Removed fakeKV and fakeDO fallbacks that caused silent data loss in production.
 // Dev mode gracefully handles missing bindings; production fails safely.
@@ -37,7 +37,6 @@ export const GET: RequestHandler = async (event) => {
 		// Initialize Services
 		const tripSvc = makeTripService(
 			kv as KVNamespace,
-			undefined,
 			placesKV as KVNamespace | undefined,
 			tripIndexDO as DurableObjectNamespace,
 			placesIndexDO as DurableObjectNamespace

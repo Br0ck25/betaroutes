@@ -1,11 +1,11 @@
 // src/routes/api/mileage/[id]/+server.ts
-import type { RequestHandler } from './$types';
-import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
-import { makeTripService, type TripRecord } from '$lib/server/tripService';
-import { getEnv, safeKV, safeDO } from '$lib/server/env';
+import { getEnv, safeDO, safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
+import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
+import { makeTripService, type TripRecord } from '$lib/server/tripService';
 import { calculateFuelCost } from '$lib/utils/calculations';
+import type { RequestHandler } from './$types';
 
 export const DELETE: RequestHandler = async (event) => {
 	try {
@@ -53,7 +53,6 @@ export const DELETE: RequestHandler = async (event) => {
 				const placesIndexDO = safeDO(env, 'PLACES_INDEX_DO') || tripIndexDO;
 				const tripSvc = makeTripService(
 					safeKV(env, 'BETA_LOGS_KV')!,
-					undefined,
 					safeKV(env, 'BETA_PLACES_KV'),
 					tripIndexDO,
 					placesIndexDO
@@ -297,7 +296,6 @@ export const PUT: RequestHandler = async (event) => {
 				const placesIndexDO = safeDO(env, 'PLACES_INDEX_DO') || tripIndexDO;
 				const tripSvc = makeTripService(
 					safeKV(env, 'BETA_LOGS_KV')!,
-					undefined,
 					safeKV(env, 'BETA_PLACES_KV'),
 					tripIndexDO,
 					placesIndexDO

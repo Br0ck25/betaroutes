@@ -146,7 +146,6 @@ export const DELETE: RequestHandler = async ({ locals, platform, cookies }) => {
 		const logsKV = safeKV(env ?? {}, 'BETA_LOGS_KV')!;
 		const expensesKV = safeKV(env ?? {}, 'BETA_EXPENSES_KV');
 		const mileageKV = safeKV(env ?? {}, 'BETA_MILEAGE_KV');
-		const trashKV = safeKV(env ?? {}, 'BETA_TRASH_KV');
 		const settingsKV = safeKV(env ?? {}, 'BETA_USER_SETTINGS_KV');
 		const tripIndex = safeDO(env ?? {}, 'TRIP_INDEX_DO')!;
 
@@ -157,7 +156,6 @@ export const DELETE: RequestHandler = async ({ locals, platform, cookies }) => {
 		};
 		if (expensesKV) opts.expensesKV = expensesKV;
 		if (mileageKV) opts.mileageKV = mileageKV;
-		if (trashKV) opts.trashKV = trashKV;
 		if (settingsKV) opts.settingsKV = settingsKV;
 
 		await deleteUser(usersKV, user.id, opts);

@@ -1,37 +1,37 @@
 // src/lib/server/hughesnet/service.ts
 
-import { makeTripService } from '../tripService';
-import { makeMileageService } from '../mileageService';
-import { HughesNetFetcher } from './fetcher';
-import { HughesNetAuth } from './auth';
-import { HughesNetRouter } from './router';
-import * as parser from './parser';
-import type { OrderData, SyncResult, DistributedLock, ConflictInfo, SyncConfig } from './types';
 import { log } from '$lib/server/log';
+import { makeMileageService } from '../mileageService';
+import { makeTripService } from '../tripService';
+import { HughesNetAuth } from './auth';
+import { HughesNetFetcher } from './fetcher';
+import * as parser from './parser';
+import { HughesNetRouter } from './router';
+import type { ConflictInfo, DistributedLock, OrderData, SyncConfig, SyncResult } from './types';
 
 import {
-	DISCOVERY_GAP_MAX_SIZE,
-	DISCOVERY_MAX_FAILURES,
-	DISCOVERY_MAX_CHECKS,
-	DELAY_BETWEEN_SCANS_MS,
-	DELAY_BETWEEN_GAP_FILLS_MS,
 	DELAY_BETWEEN_BACKWARD_SCANS_MS,
 	DELAY_BETWEEN_DOWNLOADS_MS,
-	LOCK_TTL_MS,
-	LOCK_RETRY_DELAY_MS,
+	DELAY_BETWEEN_GAP_FILLS_MS,
+	DELAY_BETWEEN_SCANS_MS,
+	DISCOVERY_GAP_MAX_SIZE,
+	DISCOVERY_MAX_CHECKS,
+	DISCOVERY_MAX_FAILURES,
 	LOCK_MAX_RETRIES,
+	LOCK_RETRY_DELAY_MS,
+	LOCK_TTL_MS,
 	MAX_ROLLBACK_SIZE_BYTES
 } from './constants';
 
 import {
-	parseDateOnly,
-	toIsoDate,
+	checkIncompleteToComplete,
+	determineOrderSyncStatus,
 	extractDateFromTs,
 	formatTimestamp,
-	validateSyncConfig,
 	isValidAddress,
-	determineOrderSyncStatus,
-	checkIncompleteToComplete
+	parseDateOnly,
+	toIsoDate,
+	validateSyncConfig
 } from './utils';
 
 import { createTripForDate } from './tripBuilder';
@@ -50,7 +50,6 @@ export class HughesNetService {
 		private kv: KVNamespace,
 		encryptionKey: string,
 		private _logsKV: KVNamespace,
-		private trashKV: KVNamespace | undefined,
 		private settingsKV: KVNamespace,
 		googleApiKey: string | undefined,
 		directionsKV: KVNamespace | undefined,
@@ -215,13 +214,7 @@ export class HughesNetService {
 	}
 
 	async clearAllTrips(userId: string) {
-		const tripService = makeTripService(
-			this.tripKV,
-			this.trashKV,
-			undefined,
-			this.tripIndexDO,
-			this.tripIndexDO
-		);
+		const tripService = makeTripService(this.tripKV, undefined, this.tripIndexDO, this.tripIndexDO);
 		const allTrips = await tripService.list(userId);
 		let count = 0;
 		for (const trip of allTrips) {
@@ -757,7 +750,6 @@ export class HughesNetService {
 
 			const tripService = makeTripService(
 				this.tripKV,
-				this.trashKV,
 				undefined,
 				this.tripIndexDO,
 				this.tripIndexDO

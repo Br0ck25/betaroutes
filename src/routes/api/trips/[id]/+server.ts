@@ -1,12 +1,12 @@
 // src/routes/api/trips/[id]/+server.ts
-import type { RequestHandler } from './$types';
-import { makeTripService } from '$lib/server/tripService';
-import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
-import type { TripRecord } from '$lib/server/tripService';
-import { log } from '$lib/server/log';
-import { safeDO, safeKV } from '$lib/server/env';
-import { createSafeErrorMessage } from '$lib/server/sanitize';
 import { dev } from '$app/environment';
+import { safeDO, safeKV } from '$lib/server/env';
+import { log } from '$lib/server/log';
+import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
+import { createSafeErrorMessage } from '$lib/server/sanitize';
+import type { TripRecord } from '$lib/server/tripService';
+import { makeTripService } from '$lib/server/tripService';
+import type { RequestHandler } from './$types';
 
 // Helper: Schedule work via platform.context.waitUntil when available
 function safeWaitUntil(event: Parameters<RequestHandler>[0], p: Promise<unknown>) {
@@ -95,7 +95,6 @@ export const GET: RequestHandler = async (event) => {
 		// [!code fix] Pass DO to service (add placesIndexDO)
 		const svc = makeTripService(
 			kv as unknown as KVNamespace,
-			undefined,
 			placesKV as unknown as KVNamespace | undefined,
 			tripIndexDO as unknown as DurableObjectNamespace,
 			placesIndexDO as unknown as DurableObjectNamespace
@@ -170,7 +169,6 @@ export const PUT: RequestHandler = async (event) => {
 		// [!code fix] Pass DO to service (add placesIndexDO)
 		const svc = makeTripService(
 			kv as unknown as KVNamespace,
-			undefined,
 			placesKV as unknown as KVNamespace | undefined,
 			tripIndexDO as unknown as DurableObjectNamespace,
 			placesIndexDO as unknown as DurableObjectNamespace
@@ -277,7 +275,6 @@ export const DELETE: RequestHandler = async (event) => {
 		// [!code fix] Pass DO to service
 		const svc = makeTripService(
 			kv as unknown as KVNamespace,
-			undefined,
 			placesKV as unknown as KVNamespace | undefined,
 			tripIndexDO as unknown as DurableObjectNamespace,
 			placesIndexDO as unknown as DurableObjectNamespace

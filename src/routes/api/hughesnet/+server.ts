@@ -1,9 +1,9 @@
 // src/routes/api/hughesnet/+server.ts
-import { json } from '@sveltejs/kit';
+import { getEnv, safeDO, safeKV } from '$lib/server/env';
 import { HughesNetService } from '$lib/server/hughesnet/service';
-import { getEnv, safeKV, safeDO } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
+import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
 type SessionUser = { id?: string; name?: string; token?: string };
@@ -40,7 +40,6 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 			safeKV(env, 'BETA_HUGHESNET_KV')!,
 			HNS_ENCRYPTION_KEY,
 			safeKV(env, 'BETA_LOGS_KV')!,
-			undefined,
 			safeKV(env, 'BETA_USER_SETTINGS_KV')!,
 			PRIVATE_GOOGLE_MAPS_API_KEY,
 			safeKV(env, 'BETA_DIRECTIONS_KV')!,
@@ -151,7 +150,6 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
 			safeKV(env, 'BETA_HUGHESNET_KV')!,
 			HNS_ENCRYPTION_KEY ?? '',
 			safeKV(env, 'BETA_LOGS_KV')!,
-			undefined,
 			safeKV(env, 'BETA_USER_SETTINGS_KV')!,
 			PRIVATE_GOOGLE_MAPS_API_KEY ?? '',
 			safeKV(env, 'BETA_DIRECTIONS_KV')!,

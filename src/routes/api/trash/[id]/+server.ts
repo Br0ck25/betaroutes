@@ -1,11 +1,11 @@
 // src/routes/api/trash/[id]/+server.ts
-import type { RequestHandler } from './$types';
-import { makeTripService } from '$lib/server/tripService';
-import { makeExpenseService } from '$lib/server/expenseService';
-import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
-import { safeKV, safeDO } from '$lib/server/env';
-import { log } from '$lib/server/log';
 import { dev } from '$app/environment';
+import { safeDO, safeKV } from '$lib/server/env';
+import { makeExpenseService } from '$lib/server/expenseService';
+import { log } from '$lib/server/log';
+import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
+import { makeTripService } from '$lib/server/tripService';
+import type { RequestHandler } from './$types';
 
 // [!code fix] SECURITY: Removed dangerous fakeDO fallback that caused silent data loss in production.
 
@@ -80,7 +80,6 @@ export const POST: RequestHandler = async (event) => {
 
 		const tripSvc = makeTripService(
 			safeKV(platformEnv, 'BETA_LOGS_KV') as KVNamespace,
-			undefined,
 			safeKV(platformEnv, 'BETA_PLACES_KV') as KVNamespace | undefined,
 			tripIndexDO as DurableObjectNamespace,
 			placesIndexDO as DurableObjectNamespace
@@ -299,7 +298,6 @@ export const DELETE: RequestHandler = async (event) => {
 		// Initialize all services
 		const tripSvc = makeTripService(
 			safeKV(platformEnv, 'BETA_LOGS_KV') as KVNamespace,
-			undefined,
 			safeKV(platformEnv, 'BETA_PLACES_KV') as KVNamespace | undefined,
 			tripIndexDO as DurableObjectNamespace,
 			placesIndexDO as DurableObjectNamespace

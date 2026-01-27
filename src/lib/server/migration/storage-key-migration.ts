@@ -19,18 +19,6 @@ interface MigrationResult {
 	errors: string[];
 }
 
-interface TrashItem {
-	id: string;
-	userId: string;
-	deleted: boolean;
-	deletedAt: string;
-	metadata?: {
-		originalKey?: string;
-		[key: string]: unknown;
-	};
-	[key: string]: unknown;
-}
-
 interface HughesNetOrderWrapper {
 	ownerId: string;
 	[key: string]: unknown;
@@ -48,7 +36,6 @@ export async function migrateUserStorageKeys(
 		BETA_LOGS_KV?: KVNamespace;
 		BETA_EXPENSES_KV?: KVNamespace;
 		BETA_MILEAGE_KV?: KVNamespace;
-		BETA_TRASH_KV?: KVNamespace;
 		BETA_HUGHESNET_KV?: KVNamespace;
 		BETA_HUGHESNET_ORDERS_KV?: KVNamespace;
 	},
@@ -83,13 +70,6 @@ export async function migrateUserStorageKeys(
 			const mileageCount = await migrateKeyspace(env.BETA_MILEAGE_KV, 'mileage', userId, userName);
 			results.migrated += mileageCount;
 			log.info('[MIGRATION] Mileage records migrated', { userId, count: mileageCount });
-		}
-
-		// Migrate trash (special handling - contains references to original keys)
-		if (env.BETA_TRASH_KV) {
-			const trashCount = await migrateTrash(env.BETA_TRASH_KV, userId, userName);
-			results.migrated += trashCount;
-			log.info('[MIGRATION] Trash items migrated', { userId, count: trashCount });
 		}
 
 		// Migrate HughesNet data (special handling for multiple key patterns)
@@ -206,78 +186,6 @@ async function migrateKeyspace(
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			log.error('[MIGRATION] Failed to migrate key', {
 				oldKey,
-				error: errorMsg
-			});
-		}
-	}
-
-	return migrated;
-}
-
-/**
- * Migrates trash items and updates internal references
- * Trash items contain metadata.originalKey that needs updating
- * @param trashKV - Trash KV namespace
- * @param userId - User's UUID
- * @param userName - User's username
- * @returns Count of migrated trash items
- */
-async function migrateTrash(
-	trashKV: KVNamespace,
-	userId: string,
-	userName: string
-): Promise<number> {
-	let migrated = 0;
-
-	// List all trash items (trash keys are not user-prefixed, so we need to check each one)
-	let list = await trashKV.list({ prefix: 'trash:' });
-	let keys = list.keys;
-
-	// Handle pagination
-	while (!list.list_complete && list.cursor) {
-		list = await trashKV.list({ prefix: 'trash:', cursor: list.cursor });
-		keys = keys.concat(list.keys);
-	}
-
-	for (const { name: trashKey } of keys) {
-		try {
-			const raw = await trashKV.get(trashKey);
-			if (!raw) continue;
-
-			const item = JSON.parse(raw) as TrashItem;
-
-			// Check if this trash item belongs to this user
-			if (item.userId !== userName && item.userId !== userId) {
-				continue; // Not this user's trash
-			}
-
-			let modified = false;
-
-			// Update userId from username to user ID
-			if (item.userId === userName) {
-				item.userId = userId;
-				modified = true;
-			}
-
-			// Update originalKey references in metadata
-			if (item.metadata?.originalKey) {
-				const originalKey = item.metadata.originalKey;
-				if (originalKey.includes(`:${userName}:`)) {
-					item.metadata.originalKey = originalKey.replace(`:${userName}:`, `:${userId}:`);
-					modified = true;
-				}
-			}
-
-			// Write updated trash item if modified
-			if (modified) {
-				await trashKV.put(trashKey, JSON.stringify(item));
-				migrated++;
-				log.info('[MIGRATION] Updated trash item', { trashKey, userId });
-			}
-		} catch (error) {
-			const errorMsg = error instanceof Error ? error.message : String(error);
-			log.error('[MIGRATION] Failed to migrate trash item', {
-				trashKey,
 				error: errorMsg
 			});
 		}
