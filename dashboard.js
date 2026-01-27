@@ -4,7 +4,7 @@
 
 let allTrips = [];
 let currentPeriod = 7; // default to 7 days
-let charts = {}; // store chart instances
+const charts = {}; // store chart instances
 
 // Initialize on page load
 window.toggleViewAll = function () {

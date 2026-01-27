@@ -93,7 +93,7 @@ function renderTopRoutes() {
 		if (start && end && start.includes(':') && end.includes(':')) {
 			const [sh, sm] = start.split(':').map(Number);
 			const [eh, em] = end.split(':').map(Number);
-			let startMin = sh * 60 + sm;
+			const startMin = sh * 60 + sm;
 			let endMin = eh * 60 + em;
 			if (endMin < startMin) endMin += 24 * 60;
 			routeGroups[routeKey].totalHours += (endMin - startMin) / 60;

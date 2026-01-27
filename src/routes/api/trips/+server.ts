@@ -38,6 +38,7 @@ const latLngSchema = z
 		lat: z.number(),
 		lng: z.number()
 	})
+	.nullable()
 	.optional();
 
 const destinationSchema = z.object({

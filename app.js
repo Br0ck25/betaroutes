@@ -1541,9 +1541,8 @@ async function calculateRouteData() {
 		const [startHours, startMinutes] = startTimeInput.split(':').map(Number);
 		const [endHours, endMinutes] = endTimeInput.split(':').map(Number);
 
-		let startTotalMinutes = startHours * 60 + startMinutes;
-		let endTotalMinutes = endHours * 60 + endMinutes;
-		if (endTotalMinutes < startTotalMinutes) endTotalMinutes += 24 * 60;
+		const startTotalMinutes = startHours * 60 + startMinutes;
+		const endTotalMinutes = endHours * 60 + endMinutes;
 
 		const totalWorkedMinutes = endTotalMinutes - startTotalMinutes;
 		hoursWorked = totalWorkedMinutes / 60;
@@ -1649,7 +1648,7 @@ function updateUI(data) {
 		if (start && end && start.includes(':') && end.includes(':')) {
 			const [sh, sm] = start.split(':').map(Number);
 			const [eh, em] = end.split(':').map(Number);
-			let startMin = sh * 60 + sm;
+			const startMin = sh * 60 + sm;
 			let endMin = eh * 60 + em;
 			if (endMin < startMin) endMin += 24 * 60;
 			totalMinutes = endMin - startMin;
@@ -1688,7 +1687,7 @@ function updateUI(data) {
 			if (!start || !end) return 0;
 			const [sh, sm] = start.split(':').map(Number);
 			const [eh, em] = end.split(':').map(Number);
-			let startMin = sh * 60 + sm;
+			const startMin = sh * 60 + sm;
 			let endMin = eh * 60 + em;
 			if (endMin < startMin) endMin += 24 * 60;
 			return endMin - startMin;
@@ -1706,7 +1705,7 @@ function updateUI(data) {
 			if (start && end && start.includes(':') && end.includes(':')) {
 				const [sh, sm] = start.split(':').map(Number);
 				const [eh, em] = end.split(':').map(Number);
-				let startMin = sh * 60 + sm;
+				const startMin = sh * 60 + sm;
 				let endMin = eh * 60 + em;
 				if (endMin < startMin) endMin += 24 * 60;
 				totalMinutes = endMin - startMin;
@@ -1852,7 +1851,7 @@ async function optimizeRoute() {
 			if (startClock && endClock && startClock.includes(':') && endClock.includes(':')) {
 				const [sh, sm] = startClock.split(':').map(Number);
 				const [eh, em] = endClock.split(':').map(Number);
-				let startMin = sh * 60 + sm;
+				const startMin = sh * 60 + sm;
 				let endMin = eh * 60 + em;
 				if (endMin < startMin) endMin += 1440;
 
@@ -2003,7 +2002,7 @@ function logEntry(data) {
 	if (start && end) {
 		const [sh, sm] = start.split(':').map(Number);
 		const [eh, em] = end.split(':').map(Number);
-		let startMin = sh * 60 + sm;
+		const startMin = sh * 60 + sm;
 		let endMin = eh * 60 + em;
 		if (endMin < startMin) endMin += 24 * 60; // handle overnight
 		totalHours = (endMin - startMin) / 60;
@@ -2079,7 +2078,7 @@ function displayLog(filterFn = () => true) {
     <button onclick="openLogEntryInGoogleMaps(${realIndex})">Map</button>
 
     <button onclick="deleteLogEntry(${realIndex})">Delete</button>
-    
+
   </div>
 `;
 
@@ -2111,7 +2110,7 @@ function renderPaginationButtons(totalPages) {
       <button onclick="nextPage()" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>
     </div>
     <div style="margin-top: 10px;">
-      Go to Page: 
+      Go to Page:
       <input type="number" id="page-input" min="1" max="${totalPages}" value="${currentPage}" style="width: 60px; text-align: center;">
       <button onclick="goToPage(${totalPages})">Go</button>
     </div>
@@ -2667,7 +2666,7 @@ async function saveEditedLogEntry() {
 	if (start && end && start.includes(':') && end.includes(':')) {
 		const [sh, sm] = start.split(':').map(Number);
 		const [eh, em] = end.split(':').map(Number);
-		let startMin = sh * 60 + sm;
+		const startMin = sh * 60 + sm;
 		let endMin = eh * 60 + em;
 		if (endMin < startMin) endMin += 1440;
 		sessionMinutes = endMin - startMin;
@@ -3246,7 +3245,7 @@ function handleTimeChange() {
 		const [startHours, startMinutes] = startTimeInput.split(':').map(Number);
 		const [endHours, endMinutes] = endTimeInput.split(':').map(Number);
 
-		let startTotalMinutes = startHours * 60 + startMinutes;
+		const startTotalMinutes = startHours * 60 + startMinutes;
 		let endTotalMinutes = endHours * 60 + endMinutes;
 
 		if (endTotalMinutes < startTotalMinutes) {
@@ -3294,7 +3293,7 @@ function updateLogSummary(filterFn) {
 		if (start && end && start.includes(':') && end.includes(':')) {
 			const [sh, sm] = start.split(':').map(Number);
 			const [eh, em] = end.split(':').map(Number);
-			let startMin = sh * 60 + sm;
+			const startMin = sh * 60 + sm;
 			let endMin = eh * 60 + em;
 			if (endMin < startMin) endMin += 24 * 60;
 
@@ -3342,7 +3341,7 @@ function recalculateEditHoursWorked() {
 	const [startHours, startMinutes] = startTime.split(':').map(Number);
 	const [endHours, endMinutes] = endTime.split(':').map(Number);
 
-	let start = startHours * 60 + startMinutes;
+	const start = startHours * 60 + startMinutes;
 	let end = endHours * 60 + endMinutes;
 
 	if (end < start) end += 24 * 60; // handle overnight
@@ -3385,7 +3384,7 @@ function toggleLogEntryDetails(index) {
 
 			const [sh, sm] = start.split(':').map(Number);
 			const [eh, em] = end.split(':').map(Number);
-			let startMin = sh * 60 + sm;
+			const startMin = sh * 60 + sm;
 			let endMin = eh * 60 + em;
 			if (endMin < startMin) endMin += 24 * 60;
 
@@ -3400,7 +3399,7 @@ function toggleLogEntryDetails(index) {
   <div><strong>Start Time:</strong> ${formatTimeToAmPm(entry.startClock)}</div>
   <div><strong>End Time:</strong> ${formatTimeToAmPm(entry.endClock)}</div>
   <div><strong>Start Address:</strong> ${entry.startTime}</div>
-  
+
   <div><strong>Destinations:</strong></div> <!-- first separate div -->
   <div style="margin-left: 15px;">${destinations}</div> <!-- second div for addresses -->
 
@@ -3441,7 +3440,7 @@ function calculateTotalHours(entry) {
 
 	const [sh, sm] = start.split(':').map(Number);
 	const [eh, em] = end.split(':').map(Number);
-	let startMin = sh * 60 + sm;
+	const startMin = sh * 60 + sm;
 	let endMin = eh * 60 + em;
 	if (endMin < startMin) endMin += 24 * 60;
 
@@ -3566,7 +3565,7 @@ function exportToCSVWithTotals() {
 		if (start && end && start.includes(':') && end.includes(':')) {
 			const [sh, sm] = start.split(':').map(Number);
 			const [eh, em] = end.split(':').map(Number);
-			let startMin = sh * 60 + sm;
+			const startMin = sh * 60 + sm;
 			let endMin = eh * 60 + em;
 			if (endMin < startMin) endMin += 24 * 60;
 
@@ -3623,7 +3622,7 @@ function exportToCSVWithTotals() {
 		if (start && end && start.includes(':') && end.includes(':')) {
 			const [sh, sm] = start.split(':').map(Number);
 			const [eh, em] = end.split(':').map(Number);
-			let startMin = sh * 60 + sm;
+			const startMin = sh * 60 + sm;
 			let endMin = eh * 60 + em;
 			if (endMin < startMin) endMin += 24 * 60;
 			totalSessionMinutes += endMin - startMin;
@@ -3716,7 +3715,7 @@ function exportToPDFWithTotals() {
 		if (start && end && start.includes(':') && end.includes(':')) {
 			const [sh, sm] = start.split(':').map(Number);
 			const [eh, em] = end.split(':').map(Number);
-			let startMin = sh * 60 + sm;
+			const startMin = sh * 60 + sm;
 			let endMin = eh * 60 + em;
 			if (endMin < startMin) endMin += 24 * 60;
 
@@ -3769,7 +3768,7 @@ function exportToPDFWithTotals() {
 		if (start && end && start.includes(':') && end.includes(':')) {
 			const [sh, sm] = start.split(':').map(Number);
 			const [eh, em] = end.split(':').map(Number);
-			let startMin = sh * 60 + sm;
+			const startMin = sh * 60 + sm;
 			let endMin = eh * 60 + em;
 			if (endMin < startMin) endMin += 24 * 60;
 			totalSessionMinutes += endMin - startMin;
@@ -4138,11 +4137,11 @@ function showUpgradeModal() {
       <h3>📊 You've reached your limit!</h3>
       <p style="margin: 20px 0;">You've used all 10 trips this month on the Free plan.</p>
       <p style="margin-bottom: 30px;">Upgrade to <strong>Pro</strong> for unlimited trips, cloud sync, and more!</p>
-      
-      <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                  color: white; 
-                  padding: 20px; 
-                  border-radius: 12px; 
+
+      <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                  color: white;
+                  padding: 20px;
+                  border-radius: 12px;
                   margin: 20px 0;">
         <div style="font-size: 14px; opacity: 0.9;">Pro Plan</div>
         <div style="font-size: 36px; font-weight: bold; margin: 10px 0;">$9.99</div>
@@ -4155,7 +4154,7 @@ function showUpgradeModal() {
           <li>✅ Analytics dashboard</li>
         </ul>
       </div>
-      
+
       <button onclick="upgradeToPro()" style="
         background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
         color: white;
@@ -4167,7 +4166,7 @@ function showUpgradeModal() {
         cursor: pointer;
         margin-top: 10px;
       ">Upgrade to Pro</button>
-      
+
       <p style="margin-top: 20px; font-size: 14px; color: #666;">
         Or <a href="#" onclick="closeUniversalModal()" style="color: #4caf50;">continue with Free plan next month</a>
       </p>
