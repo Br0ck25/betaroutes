@@ -1,6 +1,7 @@
 // src/routes/api/trips/[id]/+server.ts
 import { dev } from '$app/environment';
 import { safeDO, safeKV } from '$lib/server/env';
+import { makeExpenseService } from '$lib/server/expenseService';
 import { log } from '$lib/server/log';
 import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
@@ -202,6 +203,114 @@ export const PUT: RequestHandler = async (event) => {
 		};
 
 		await svc.put(updated as unknown as TripRecord);
+
+		// Mirror certain trip updates to expense records (fuel, maintenanceItems, suppliesItems)
+		try {
+			const expensesKV = safeKV(event.platform?.env, 'BETA_EXPENSES_KV');
+			if (expensesKV) {
+				const expenseSvc = makeExpenseService(
+					expensesKV,
+					safeDO(event.platform?.env, 'TRIP_INDEX_DO')!
+				);
+
+				// Fuel
+				if (Object.prototype.hasOwnProperty.call(body, 'fuelCost')) {
+					const fid = `trip-fuel-${id}`;
+					const fuelExpense = {
+						id: fid,
+						userId: storageId,
+						date: ((updated as Record<string, unknown>).date as string) || new Date().toISOString(),
+						category: 'fuel',
+						amount: Number((updated as Record<string, unknown>).fuelCost) || 0,
+						description: 'Fuel (mirrored from trip)',
+						createdAt: new Date().toISOString(),
+						updatedAt: new Date().toISOString()
+					};
+					const p = expenseSvc.put(fuelExpense).catch((err: unknown) =>
+						log.warn('expense.put failed mirroring fuel', {
+							tripId: id,
+							err: createSafeErrorMessage(err)
+						})
+					);
+					safeWaitUntil(event, p);
+				}
+
+				// Maintenance items
+				if (Object.prototype.hasOwnProperty.call(body, 'maintenanceItems')) {
+					const items =
+						((updated as unknown as Record<string, unknown>).maintenanceItems as {
+							cost?: number;
+							type?: string;
+						}[]) ?? [];
+					for (let i = 0; i < items.length; i++) {
+						const item = items[i] as { cost?: number; type?: string } | undefined;
+						if (!item) continue;
+						const idm = `trip-maint-${id}-${i}`;
+						const exp = {
+							id: idm,
+							userId: storageId,
+							date:
+								((updated as Record<string, unknown>).date as string) || new Date().toISOString(),
+							category: 'maintenance',
+							amount: Number(item.cost) || 0,
+							description: String(item.type || ''),
+							createdAt: new Date().toISOString(),
+							updatedAt: new Date().toISOString()
+						};
+						const p = expenseSvc.put(exp).catch((err: unknown) =>
+							log.warn('expense.put failed mirroring maintenance', {
+								tripId: id,
+								err: createSafeErrorMessage(err)
+							})
+						);
+						safeWaitUntil(event, p);
+					}
+				}
+				// Supplies items
+				if (
+					Object.prototype.hasOwnProperty.call(body, 'supplyItems') ||
+					Object.prototype.hasOwnProperty.call(body, 'suppliesItems')
+				) {
+					const items =
+						((updated as unknown as Record<string, unknown>).supplyItems as
+							| { cost?: number; type?: string }[]
+							| undefined) ??
+						((updated as unknown as Record<string, unknown>).suppliesItems as {
+							cost?: number;
+							type?: string;
+						}[]) ??
+						[];
+					for (let i = 0; i < items.length; i++) {
+						const item = items[i] as { cost?: number; type?: string } | undefined;
+						if (!item) continue;
+						const ids = `trip-supply-${id}-${i}`;
+						const exp = {
+							id: ids,
+							userId: storageId,
+							date:
+								((updated as Record<string, unknown>).date as string) || new Date().toISOString(),
+							category: 'supplies',
+							amount: Number(item.cost) || 0,
+							description: String(item.type || ''),
+							createdAt: new Date().toISOString(),
+							updatedAt: new Date().toISOString()
+						};
+						const p = expenseSvc.put(exp).catch((err: unknown) =>
+							log.warn('expense.put failed mirroring supplies', {
+								tripId: id,
+								err: createSafeErrorMessage(err)
+							})
+						);
+						safeWaitUntil(event, p);
+					}
+				}
+			}
+		} catch (err) {
+			log.warn('Failed to mirror trip updates to expenses', {
+				tripId: id,
+				message: createSafeErrorMessage(err)
+			});
+		}
 
 		// If client edited totalMiles, persist authoritative mileage to its own KV so updates propagate to other clients
 		try {

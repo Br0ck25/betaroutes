@@ -1,16 +1,16 @@
 <script lang="ts">
-	import { expenses, isLoading as expensesLoading } from '$lib/stores/expenses';
-	import { trips, isLoading as tripsLoading } from '$lib/stores/trips';
-	import { userSettings } from '$lib/stores/userSettings';
-	import { user } from '$lib/stores/auth';
-	import { toasts } from '$lib/stores/toast';
-	import Modal from '$lib/components/ui/Modal.svelte';
-	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
-	import { onDestroy } from 'svelte';
+	import Modal from '$lib/components/ui/Modal.svelte';
+	import Skeleton from '$lib/components/ui/Skeleton.svelte';
+	import { user } from '$lib/stores/auth';
+	import { expenses, isLoading as expensesLoading } from '$lib/stores/expenses';
+	import { toasts } from '$lib/stores/toast';
+	import { trips, isLoading as tripsLoading } from '$lib/stores/trips';
+	import { userSettings } from '$lib/stores/userSettings';
 	import { SvelteSet } from '$lib/utils/svelte-reactivity';
+	import { onDestroy } from 'svelte';
 	import type { PageData } from './$types';
 
 	export let data: PageData;
@@ -122,32 +122,44 @@
 
 		// 1. Fuel
 		if (trip.fuelCost && trip.fuelCost > 0) {
-			items.push({
-				id: `trip-fuel-${trip.id}`,
-				date: date,
-				category: 'fuel',
-				amount: trip.fuelCost,
-				description: 'Fuel',
-				taxDeductible: !!(trip as any).fuelTaxDeductible,
-				source: 'trip',
-				tripId: trip.id
-			});
+			const fid = `trip-fuel-${trip.id}`;
+			const existingFuel = $expenses.find((e: any) => e.id === fid);
+			if (existingFuel) {
+				items.push({ ...existingFuel, source: 'expense' });
+			} else {
+				items.push({
+					id: fid,
+					date: date,
+					category: 'fuel',
+					amount: trip.fuelCost,
+					description: 'Fuel',
+					taxDeductible: !!(trip as any).fuelTaxDeductible,
+					source: 'trip',
+					tripId: trip.id
+				});
+			}
 		}
 
 		// 2. Maintenance Items
 		const maint = (trip as any).maintenanceItems || [];
 		if (maint.length) {
 			maint.forEach((item: any, i: number) => {
-				items.push({
-					id: `trip-maint-${trip.id}-${i}`,
-					date: date,
-					category: 'maintenance',
-					amount: item.cost,
-					description: `${item.type}`,
-					taxDeductible: !!item.taxDeductible,
-					source: 'trip',
-					tripId: trip.id
-				});
+				const mid = `trip-maint-${trip.id}-${i}`;
+				const existing = $expenses.find((e: any) => e.id === mid);
+				if (existing) {
+					items.push({ ...existing, source: 'expense' });
+				} else {
+					items.push({
+						id: mid,
+						date: date,
+						category: 'maintenance',
+						amount: item.cost,
+						description: `${item.type}`,
+						taxDeductible: !!item.taxDeductible,
+						source: 'trip',
+						tripId: trip.id
+					});
+				}
 			});
 		}
 
@@ -155,16 +167,22 @@
 		const supplies = (trip as any).supplyItems || (trip as any).suppliesItems || [];
 		if (supplies.length) {
 			supplies.forEach((item: any, i: number) => {
-				items.push({
-					id: `trip-supply-${trip.id}-${i}`,
-					date: date,
-					category: 'supplies',
-					amount: item.cost,
-					description: `${item.type}`,
-					taxDeductible: !!item.taxDeductible,
-					source: 'trip',
-					tripId: trip.id
-				});
+				const sid = `trip-supply-${trip.id}-${i}`;
+				const existing = $expenses.find((e: any) => e.id === sid);
+				if (existing) {
+					items.push({ ...existing, source: 'expense' });
+				} else {
+					items.push({
+						id: sid,
+						date: date,
+						category: 'supplies',
+						amount: item.cost,
+						description: `${item.type}`,
+						taxDeductible: !!item.taxDeductible,
+						source: 'trip',
+						tripId: trip.id
+					});
+				}
 			});
 		}
 

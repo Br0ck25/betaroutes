@@ -1,13 +1,13 @@
 // src/lib/stores/expenses.ts
-import { writable, get } from 'svelte/store';
 import { getDB } from '$lib/db/indexedDB';
-import { syncManager } from '$lib/sync/syncManager';
 import type { ExpenseRecord, TrashRecord } from '$lib/db/types';
+import { syncManager } from '$lib/sync/syncManager';
 import type { User } from '$lib/types';
 import { SvelteDate } from '$lib/utils/svelte-reactivity';
+import { get, writable } from 'svelte/store';
 
-import { auth } from '$lib/stores/auth';
 import { PLAN_LIMITS } from '$lib/constants';
+import { auth } from '$lib/stores/auth';
 
 export const isLoading = writable(false);
 
@@ -223,7 +223,49 @@ function createExpensesStore() {
 					tripId: id,
 					data: { ...updated, store: 'expenses' }
 				});
-
+				// If this is a trip-linked expense, update the trips store locally to reflect aggregated costs
+				try {
+					if (String(id).startsWith('trip-')) {
+						const m = String(id).match(/^trip-(?:fuel|maint|supply)-([^-]+)/);
+						const tripId = m ? m[1] : null;
+						if (tripId) {
+							const db2 = await getDB();
+							const tx2 = db2.transaction('expenses', 'readonly');
+							const allExpenses = (await tx2.objectStore('expenses').getAll()) as ExpenseRecord[];
+							let fuel = 0;
+							let maintenance = 0;
+							let supplies = 0;
+							for (const e of allExpenses) {
+								if (!e.id || !e.id.startsWith('trip-')) continue;
+								const ematches = String(e.id).match(/^trip-(fuel|maint|supply)-([^-]+)/);
+								if (!ematches) continue;
+								const kind = ematches[1];
+								const tid = ematches[2];
+								if (tid !== tripId) continue;
+								if (kind === 'fuel') fuel = e.amount || 0;
+								else if (kind === 'maint') maintenance += e.amount || 0;
+								else if (kind === 'supply') supplies += e.amount || 0;
+							}
+							try {
+								const { trips } = await import('$lib/stores/trips');
+								trips.updateLocal({
+									userId,
+									id: tripId,
+									fuelCost: fuel,
+									maintenanceCost: maintenance,
+									suppliesCost: supplies,
+									createdAt: new Date().toISOString(),
+									updatedAt: new Date().toISOString(),
+									syncStatus: 'pending'
+								});
+							} catch {
+								/* ignore */
+							}
+						}
+					}
+				} catch (_e) {
+					/* ignore */
+				}
 				return updated;
 			} catch (err) {
 				console.error('❌ Failed to update expense:', err);
