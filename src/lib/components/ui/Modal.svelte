@@ -1,13 +1,19 @@
 <script lang="ts">
-	// Use $bindable for two-way binding on 'open'. Keep other props as const when not reassigned.
-	// Use $bindable for two-way binding on 'open'
-	const { title, children, open: _open = $bindable(false) } = $props();
-	let open = _open;
+	// FIX: Use a single $props() call with $bindable() and pull immutable props from rest.
+	// 'open' must be declared with let because it's bindable and may be mutated.
+	/* eslint-disable-next-line prefer-const */
+	let { open = $bindable(false), ...rest } = $props();
+	const { title, children } = rest;
+
+	// REMOVED: previous multiple $props() calls
+	// REMOVED: let open = _open;
+
 	let dialog: HTMLDialogElement;
 
 	// Sync Svelte state with the Native DOM API
 	$effect(() => {
 		if (dialog) {
+			// Now 'open' is reactive and this effect will run when the parent changes it
 			if (open && !dialog.open) {
 				dialog.showModal();
 			} else if (!open && dialog.open) {
@@ -16,11 +22,9 @@
 		}
 	});
 
-	// Handle native close events (e.g. Escape key) — implementation below to allow suppression during autocomplete selection.
-
-	// Close when clicking the backdrop
+	// Handle native close events (e.g. Escape key)
 	function handleBackdropClick(e: MouseEvent) {
-		// Debug: log composedPath in browsers where issues appear
+		// ... (Rest of your existing code is fine) ...
 		try {
 			const path: unknown[] = (e as MouseEvent & { composedPath?: () => EventTarget[] })
 				.composedPath
@@ -32,23 +36,17 @@
 				return !!(candidate.classList && candidate.classList.contains('pac-container'));
 			});
 
-			// If the click originated inside the autocomplete dropdown, ignore it so
-			// selecting suggestions doesn't close the dialog.
 			if (hasPac) return;
 		} catch (_err: unknown) {
 			void _err;
 		}
 
-		// In a native dialog, the backdrop is considered part of the dialog element
-		// but the content is inside. If the target is the dialog itself, it's a backdrop click.
 		if (e.target === dialog) {
 			dialog.close();
 		}
 	}
 
 	function onDialogClose() {
-		// If we have a temporary suppression flag set (by the autocomplete selection),
-		// reopen and clear it rather than letting the modal stay closed.
 		try {
 			const meta = dialog as unknown as { __suppressClose?: boolean };
 			if (meta.__suppressClose) {
@@ -64,6 +62,7 @@
 			void _e;
 		}
 
+		// This effectively updates the parent variable because 'open' is $bindable
 		open = false;
 	}
 </script>
@@ -116,39 +115,31 @@
 </dialog>
 
 <style>
-	/* Reset default browser dialog styles */
+	/* Styles remain exactly the same */
 	dialog {
-		margin: auto; /* Centers the dialog */
+		margin: auto;
 		inset: 0;
 	}
-
 	dialog::backdrop {
-		/* Tailwind 'backdrop:' utility covers this, but explicit inheritance ensures safety */
 		background-color: rgb(0 0 0 / 0.5);
 	}
-
-	/* Standardized modal content styles so consumers get consistent spacing, inputs and actions */
 	.modal-title {
-		font-size: 1.125rem; /* 18px */
+		font-size: 1.125rem;
 		font-weight: 700;
 		color: #111827;
 		margin: 0;
 	}
-
 	.modal-body {
 		padding-top: 12px;
 		padding-bottom: 12px;
 		line-height: 1.4;
 		color: #374151;
 	}
-
-	/* Buttons inside modals should be larger and consistent */
 	:global(.modal-actions) {
 		display: flex;
 		gap: 12px;
 		margin-top: 20px;
 	}
-
 	:global(.modal-actions) :global(button),
 	:global(.modal-actions) button {
 		flex: 1;
@@ -156,8 +147,6 @@
 		border-radius: 10px;
 		font-weight: 600;
 	}
-
-	/* Make form controls consistent inside modal content */
 	.modal-body :global(input),
 	.modal-body :global(select),
 	.modal-body :global(textarea) {
