@@ -29,7 +29,7 @@ export async function geocode(
 				return {
 					lat: Number(loc.lat),
 					lon: Number(loc.lng),
-					formattedAddress: first.formatted_address || undefined
+					formattedAddress: first.formatted_address ?? ''
 				};
 			}
 		}

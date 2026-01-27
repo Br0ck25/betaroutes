@@ -124,16 +124,12 @@ export const POST: RequestHandler = async (event) => {
 			date: data.date,
 			category: data.category,
 			amount: Number(data.amount),
-			description: typeof data.description === 'string' ? data.description : undefined,
 			createdAt: data.createdAt || new Date().toISOString(),
 			updatedAt: new Date().toISOString()
 		};
 
-		// Optional: include taxDeductible if provided (allowed field)
-		if (typeof data.taxDeductible === 'boolean')
-			(expense as Record<string, unknown>)['taxDeductible'] = data.taxDeductible;
-
-		// --- FREE TIER EXPENSE QUOTA (atomic via Durable Object to prevent race conditions) ---
+		if (typeof data.description === 'string')
+			(expense as Record<string, unknown>)['description'] = data.description;
 		let currentPlan: string = String(user.plan || '');
 		try {
 			// Attempt to fetch fresh user plan if available

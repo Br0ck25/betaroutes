@@ -41,7 +41,8 @@ export async function logAuditEvent(
 		timestamp: new Date().toISOString(),
 		action,
 		actor,
-		ip,
+		// Normalize ip to empty string when undefined to satisfy strict typing
+		ip: ip ?? '',
 		details,
 		success
 	};

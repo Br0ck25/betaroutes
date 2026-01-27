@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { expenses } from '$lib/stores/expenses';
-	import { userSettings } from '$lib/stores/userSettings';
-	import { user } from '$lib/stores/auth';
-	import { toasts } from '$lib/stores/toast';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
+	import { user } from '$lib/stores/auth';
+	import { expenses } from '$lib/stores/expenses';
+	import { toasts } from '$lib/stores/toast';
+	import { userSettings } from '$lib/stores/userSettings';
 
 	// --- HELPER: Get Local Date (YYYY-MM-DD) ---
 	function getLocalDate() {
@@ -130,10 +130,14 @@
 		}
 
 		try {
-			const payload = {
-				...formData,
-				amount: parseFloat(formData.amount)
+			const payload: Partial<import('$lib/db/types').ExpenseRecord> = {
+				amount: parseFloat(formData.amount),
+				category: formData.category
 			};
+			if (formData.date) payload.date = formData.date;
+			if (formData.description) payload.description = formData.description;
+			if (typeof formData.taxDeductible === 'boolean')
+				payload.taxDeductible = formData.taxDeductible;
 
 			await expenses.create(payload, userId);
 			toasts.success('Expense created');

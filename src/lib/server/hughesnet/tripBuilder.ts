@@ -407,20 +407,21 @@ export async function createTripForDate(
 				typeof mileageRate === 'number' ? Number((miles * mileageRate).toFixed(2)) : undefined;
 
 			const now = new Date().toISOString();
-			const mileageRecord: MileageRecord = {
+			const base: Partial<MileageRecord> = {
 				id: trip.id, // Use trip ID for 1:1 linking
 				userId,
 				tripId: trip.id,
 				date: trip.date,
 				miles,
-				mileageRate,
-				vehicle,
-				reimbursement,
 				notes: 'Auto-created from HughesNet trip',
 				createdAt: now,
 				updatedAt: now,
 				syncStatus: 'synced'
 			};
+			if (typeof mileageRate === 'number') base.mileageRate = mileageRate;
+			if (typeof vehicle === 'string') base.vehicle = vehicle;
+			if (typeof reimbursement === 'number') base.reimbursement = reimbursement;
+			const mileageRecord: MileageRecord = base as MileageRecord;
 			await mileageService.put(mileageRecord);
 			logger(`  ${date}: Created mileage log (${miles} mi)`);
 		} catch (err) {

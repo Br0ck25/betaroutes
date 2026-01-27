@@ -239,8 +239,7 @@
 
 				if (path.length === 0) return;
 				map = new google.maps.Map(node, {
-					center: path[0],
-					zoom: 12,
+					center: path[0] ?? null,
 					gestureHandling: 'none',
 					disableDefaultUI: true
 				});

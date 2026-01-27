@@ -1,24 +1,24 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
+	import Button from '$lib/components/ui/Button.svelte';
+	import Modal from '$lib/components/ui/Modal.svelte';
+	import Skeleton from '$lib/components/ui/Skeleton.svelte';
+	import { PLAN_LIMITS } from '$lib/constants';
+	import { calculateRoute as getRouteData, optimizeRoute } from '$lib/services/maps';
+	import { toasts } from '$lib/stores/toast';
+	import { draftTrip } from '$lib/stores/trips';
+	import { getUserState } from '$lib/stores/user.svelte';
 	import { userSettings } from '$lib/stores/userSettings';
-	import { get } from 'svelte/store';
-	import { onMount } from 'svelte';
-	import { slide } from 'svelte/transition';
-	import type { Destination, Trip, LatLng } from '$lib/types';
+	import type { Destination, LatLng, Trip } from '$lib/types';
+	import { autocomplete } from '$lib/utils/autocomplete';
 	import { calculateTripTotals } from '$lib/utils/calculations';
 	import { storage } from '$lib/utils/storage';
-	import { draftTrip } from '$lib/stores/trips';
-	import { autocomplete } from '$lib/utils/autocomplete';
-	import { calculateRoute as getRouteData, optimizeRoute } from '$lib/services/maps';
+	import { onMount } from 'svelte';
+	import { get } from 'svelte/store';
+	import { slide } from 'svelte/transition';
 	import DestinationList from './DestinationList.svelte';
-	import TripSummary from './TripSummary.svelte';
 	import TripDebug from './TripDebug.svelte';
-	import { toasts } from '$lib/stores/toast';
-	import Skeleton from '$lib/components/ui/Skeleton.svelte';
-	import Modal from '$lib/components/ui/Modal.svelte';
-	import Button from '$lib/components/ui/Button.svelte';
-	import { getUserState } from '$lib/stores/user.svelte';
-	import { PLAN_LIMITS } from '$lib/constants';
-	import { resolve } from '$app/paths';
+	import TripSummary from './TripSummary.svelte';
 
 	// Svelte 5 Props using Runes
 	const { googleApiKey = '', loading = false, trip = null } = $props();
@@ -374,13 +374,10 @@
 
 	function saveDraft() {
 		const draftData: Partial<Trip> = {
-			date,
 			startTime,
 			endTime,
 			startAddress,
 			endAddress,
-			startLocation,
-			endLocation,
 			destinations,
 			mpg,
 			gasPrice,
@@ -388,6 +385,9 @@
 			suppliesItems: supplies,
 			maintenanceItems: maintenance
 		};
+		if (typeof date === 'string') draftData.date = date;
+		if (startLocation !== undefined) draftData.startLocation = startLocation;
+		if (endLocation !== undefined) draftData.endLocation = endLocation;
 		draftTrip.save(draftData);
 	}
 

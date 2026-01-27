@@ -280,26 +280,29 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 						(parsed['expense'] as Record<string, unknown>) ||
 						(parsed as Record<string, unknown>) ||
 						{};
-				const rec: Partial<TrashRecord> = {
-					id,
-					userId: uid,
-					metadata: metadata as TrashRecord['metadata'],
-					recordType: 'expense'
-				};
+					const rec: Partial<TrashRecord> = {
+						id,
+						userId: uid,
+						metadata: metadata as TrashRecord['metadata'],
+						recordType: 'expense'
+					};
 
-				const cat = (backup['category'] as string) || undefined;
-				if (cat) rec.category = cat;
+					const cat = (backup['category'] as string) || undefined;
+					if (cat) rec.category = cat;
 
-				const amt = typeof (backup['amount'] as unknown) === 'number' ? (backup['amount'] as number) : undefined;
-				if (amt !== undefined) rec.amount = amt;
+					const amt =
+						typeof (backup['amount'] as unknown) === 'number'
+							? (backup['amount'] as number)
+							: undefined;
+					if (amt !== undefined) rec.amount = amt;
 
-				const desc = (backup['description'] as string) || undefined;
-				if (desc) rec.description = desc;
+					const desc = (backup['description'] as string) || undefined;
+					if (desc) rec.description = desc;
 
-				const d = (backup['date'] as string) || undefined;
-				if (d) rec.date = d;
+					const d = (backup['date'] as string) || undefined;
+					if (d) rec.date = d;
 
-				out.push(rec as TrashRecord);
+					out.push(rec as TrashRecord);
 				}
 			}
 

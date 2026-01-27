@@ -202,23 +202,23 @@ export const POST: RequestHandler = async (event) => {
 			if (typeof rate === 'number') reimbursement = Number((miles * rate).toFixed(2));
 		}
 		// Build authoritative mileage record (typed)
-		const record: MileageRecord = {
+		const base: Partial<MileageRecord> = {
 			id,
 			userId,
-			tripId: payload.tripId || undefined,
 			date: typeof payload.date === 'string' ? payload.date : new Date().toISOString(),
-			startOdometer: typeof payload.startOdometer === 'number' ? payload.startOdometer : undefined,
-			endOdometer: typeof payload.endOdometer === 'number' ? payload.endOdometer : undefined,
 			miles: Number(miles),
-			mileageRate:
-				typeof payload.mileageRate === 'number' ? Number(payload.mileageRate) : undefined,
-			vehicle:
-				typeof payload.vehicle === 'string' && payload.vehicle !== '' ? payload.vehicle : undefined,
-			reimbursement: typeof reimbursement === 'number' ? Number(reimbursement) : undefined,
 			notes: (typeof payload.notes === 'string' ? payload.notes : '') || '',
 			createdAt: new Date().toISOString(),
 			updatedAt: new Date().toISOString()
 		};
+		if (typeof payload.tripId === 'string') base.tripId = payload.tripId;
+		if (typeof payload.startOdometer === 'number') base.startOdometer = payload.startOdometer;
+		if (typeof payload.endOdometer === 'number') base.endOdometer = payload.endOdometer;
+		if (typeof payload.mileageRate === 'number') base.mileageRate = Number(payload.mileageRate);
+		if (typeof payload.vehicle === 'string' && payload.vehicle !== '')
+			base.vehicle = payload.vehicle;
+		if (typeof reimbursement === 'number') base.reimbursement = Number(reimbursement);
+		const record: MileageRecord = base as MileageRecord;
 
 		const svc = makeMileageService(safeKV(env, 'BETA_MILEAGE_KV')!, safeDO(env, 'TRIP_INDEX_DO')!);
 		const p = svc.put(record).catch((err) => log.warn('mileage.put failed', { err, id }));

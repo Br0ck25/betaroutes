@@ -1,26 +1,26 @@
-import { json } from '@sveltejs/kit';
-import type { RequestHandler } from './$types';
+import { dev } from '$app/environment';
 import {
+	addAuthenticator,
+	getUserAuthenticators,
+	getUserIdByCredentialID,
+	updateAuthenticatorCounter
+} from '$lib/server/authenticatorService';
+import { sendSecurityAlertEmail } from '$lib/server/email';
+import { getEnv, safeKV } from '$lib/server/env';
+import { log } from '$lib/server/log';
+import { createSession } from '$lib/server/sessionService';
+import { findUserById } from '$lib/server/userService';
+import { verifyAuthenticationResponseForUser } from '$lib/server/webauthn';
+import { getUserDisplayName, getUserEmail } from '$lib/utils/user-display';
+import {
+	generateAuthenticationOptions,
 	generateRegistrationOptions,
 	verifyRegistrationResponse,
-	generateAuthenticationOptions,
 	type GenerateAuthenticationOptionsOpts,
 	type VerifyRegistrationResponseOpts
 } from '@simplewebauthn/server';
-import { verifyAuthenticationResponseForUser } from '$lib/server/webauthn';
-import {
-	getUserAuthenticators,
-	addAuthenticator,
-	updateAuthenticatorCounter,
-	getUserIdByCredentialID
-} from '$lib/server/authenticatorService';
-import { getEnv, safeKV } from '$lib/server/env';
-import { createSession } from '$lib/server/sessionService';
-import { findUserById } from '$lib/server/userService';
-import { dev } from '$app/environment';
-import { log } from '$lib/server/log';
-import { sendSecurityAlertEmail } from '$lib/server/email';
-import { getUserDisplayName, getUserEmail } from '$lib/utils/user-display';
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 
 function getRpID(context: { url: URL }): string {
 	const hostname = context.url.hostname;
@@ -236,20 +236,26 @@ export const GET: RequestHandler = async ({ url, locals, cookies, platform }) =>
 
 			// For passwordless authentication, we can either allow discoverable credentials (no allowCredentials)
 			// or restrict to a single credential by including it in allowCredentials
-			const opts: GenerateAuthenticationOptionsOpts = {
+			const opts: Partial<GenerateAuthenticationOptionsOpts> = {
 				rpID,
 				userVerification: 'preferred',
 				timeout: 60000
 			};
 
+			let options;
 			if (requestedCredential) {
 				// Restrict to a specific credential id (string form is acceptable for the library)
 				const allow = [{ id: requestedCredential, type: 'public-key' as const }];
-				opts.allowCredentials =
-					allow as unknown as GenerateAuthenticationOptionsOpts['allowCredentials'];
+				// Build final options object with allowCredentials included
+				options = await generateAuthenticationOptions({
+					...opts,
+					allowCredentials: allow as unknown as NonNullable<
+						GenerateAuthenticationOptionsOpts['allowCredentials']
+					>
+				} as GenerateAuthenticationOptionsOpts);
+			} else {
+				options = await generateAuthenticationOptions(opts as GenerateAuthenticationOptionsOpts);
 			}
-
-			const options = await generateAuthenticationOptions(opts);
 
 			if (!options || !options.challenge) {
 				return json({ error: 'Failed to generate options' }, { status: 500 });

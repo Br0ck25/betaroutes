@@ -120,10 +120,10 @@ export class HughesNetRouter {
 				const point: GeocodedPoint = {
 					lat: pt.lat,
 					lon: pt.lon,
-					formattedAddress: pt.formattedAddress
+					...(typeof pt.formattedAddress === 'string'
+						? { formattedAddress: pt.formattedAddress }
+						: {})
 				};
-
-				// Save to KV (Permanent Cache)
 				if (this.kv) {
 					try {
 						// Store under primary normalized key

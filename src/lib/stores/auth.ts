@@ -130,23 +130,23 @@ function createAuthStore() {
 					const responseData = (await response.json()) as { user?: Partial<User> };
 					const data = responseData.user || {};
 
-				// SECURITY: require UUID from server session; do not accept incomplete user objects
-				if (!data || !data.id) {
-					console.warn('Session response missing user id; treating as unauthenticated');
-					set({ user: null, isAuthenticated: false, isLoading: false, error: null });
-					return;
-				}
+					// SECURITY: require UUID from server session; do not accept incomplete user objects
+					if (!data || !data.id) {
+						console.warn('Session response missing user id; treating as unauthenticated');
+						set({ user: null, isAuthenticated: false, isLoading: false, error: null });
+						return;
+					}
 
-				const user: User = {
-					id: String(data.id), // [!code fix] Critical: Capture UUID from server session
-					token: '',
-					plan: data.plan || 'free',
-					tripsThisMonth: data.tripsThisMonth ?? 0,
-					maxTrips: data.maxTrips ?? 10,
-					resetDate: data.resetDate || '',
-					name: data.name || username || '',
-					email: data.email || email || ''
-				};
+					const user: User = {
+						id: String(data.id), // [!code fix] Critical: Capture UUID from server session
+						token: '',
+						plan: data.plan || 'free',
+						tripsThisMonth: data.tripsThisMonth ?? 0,
+						maxTrips: data.maxTrips ?? 10,
+						resetDate: data.resetDate || '',
+						name: data.name || username || '',
+						email: data.email || email || ''
+					};
 
 					// Success: Update offline cache
 					saveUserCache(user);
@@ -488,7 +488,7 @@ function createAuthStore() {
 					if (!state.user) return state;
 					const updated: User = {
 						...state.user,
-						id: data.user?.id || state.user.id, // [!code fix] Ensure ID is preserved/updated
+						id: typeof data.user?.id === 'string' ? String(data.user.id) : (state.user.id ?? ''), // [!code fix] Ensure ID is preserved/updated
 						plan: data.user?.plan || state.user.plan,
 						tripsThisMonth: data.user?.tripsThisMonth ?? state.user.tripsThisMonth,
 						maxTrips: data.user?.maxTrips ?? state.user.maxTrips,

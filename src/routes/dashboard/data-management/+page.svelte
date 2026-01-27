@@ -1,26 +1,20 @@
 <!-- src/routes/dashboard/data-management/+page.svelte -->
 <script lang="ts">
-	import { trips } from '$lib/stores/trips';
+	import { browser } from '$app/environment';
+	import { user } from '$lib/stores/auth';
 	import { expenses } from '$lib/stores/expenses';
 	import { mileage } from '$lib/stores/mileage';
+	import { trips } from '$lib/stores/trips';
 	import { userSettings } from '$lib/stores/userSettings';
-	import { user } from '$lib/stores/auth';
-	import { browser } from '$app/environment';
+	import { SvelteDate, SvelteSet } from '$lib/utils/svelte-reactivity';
+	import { getVehicleDisplayName } from '$lib/utils/vehicle';
 	import { exportMileageCSV, parseMileageCSV } from './lib/mileage-export';
 	import {
-		exportTripsPDF,
 		exportExpensesPDF,
 		exportMileagePDF,
-		exportTaxBundlePDF
+		exportTaxBundlePDF,
+		exportTripsPDF
 	} from './lib/pdf-export';
-	import { getVehicleDisplayName } from '$lib/utils/vehicle';
-	import { SvelteSet } from '$lib/utils/svelte-reactivity';
-
-	let exportFormat: 'csv' | 'pdf' = 'csv';
-	let dataType: 'trips' | 'expenses' | 'mileage' | 'tax-bundle' = 'trips';
-	let dateFrom = '';
-	let dateTo = '';
-	import { SvelteDate } from '$lib/utils/svelte-reactivity';
 
 	let taxYear = SvelteDate.now().getFullYear(); // Default to current year
 	let selectedTrips = new SvelteSet<string>();
@@ -31,6 +25,13 @@
 
 	// Search state
 	let searchQuery = '';
+	// Which data type is currently selected for export / selection
+	let dataType: 'trips' | 'expenses' | 'mileage' | 'tax-bundle' = 'trips';
+	// Date filters (YYYY-MM-DD)
+	let dateFrom: string | undefined;
+	let dateTo: string | undefined;
+	// Export format
+	let exportFormat: 'csv' | 'pdf' = 'csv';
 
 	// Update date range when tax year changes
 	$: if (dataType === 'tax-bundle' && taxYear) {
@@ -534,12 +535,18 @@
 					await mileage.create(
 						{
 							date: mileageLog.date,
-							vehicle: mileageLog.vehicle,
-							startOdometer: mileageLog.startOdometer,
-							endOdometer: mileageLog.endOdometer,
+							...(typeof mileageLog.vehicle === 'string' ? { vehicle: mileageLog.vehicle } : {}),
+							...(typeof mileageLog.startOdometer === 'number'
+								? { startOdometer: mileageLog.startOdometer }
+								: {}),
+							...(typeof mileageLog.endOdometer === 'number'
+								? { endOdometer: mileageLog.endOdometer }
+								: {}),
 							miles: mileageLog.miles,
-							purpose: mileageLog['purpose'],
-							notes: mileageLog.notes
+							...(typeof mileageLog['purpose'] === 'string'
+								? { purpose: mileageLog['purpose'] }
+								: {}),
+							...(typeof mileageLog.notes === 'string' ? { notes: mileageLog.notes } : {})
 						},
 						userId
 					);

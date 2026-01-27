@@ -135,54 +135,73 @@ function buildTripForSave(
 	existing?: Partial<TripRecord>
 ): TripRecord {
 	const now = new Date().toISOString();
-	return {
-		id,
-		userId: storageId,
-		date: validData.date,
-		payDate: validData.payDate,
-		startTime: validData.startTime,
-		endTime: validData.endTime,
-		hoursWorked: validData.hoursWorked,
-		startAddress: validData.startAddress,
-		startLocation: isLatLng(validData.startLocation) ? validData.startLocation : undefined,
-		endAddress: validData.endAddress,
-		endLocation: isLatLng(validData.endLocation) ? validData.endLocation : undefined,
-		totalMiles: validData.totalMiles,
-		estimatedTime: validData.estimatedTime,
-		totalTime: validData.totalTime,
-		fuelCost: validData.fuelCost,
-		maintenanceCost: validData.maintenanceCost,
-		suppliesCost: validData.suppliesCost,
-		totalEarnings: validData.totalEarnings,
-		stops: Array.isArray(validData.stops)
-			? (validData.stops as StopInput[]).map((s) => ({
-					id: s.id ?? crypto.randomUUID(),
-					address: s.address ?? '',
-					earnings: s.earnings,
-					notes: s.notes,
-					order: s.order ?? 0,
-					location: s.location as { lat: number; lng: number } | undefined
-				}))
-			: undefined,
-		destinations: Array.isArray(validData.destinations)
-			? (
-					validData.destinations as { address: string; location?: { lat: number; lng: number } }[]
-				).map((d) => ({
-					address: d.address,
-					location: isLatLng(d.location) ? d.location : undefined
-				}))
-			: undefined,
-		maintenanceItems: Array.isArray(validData.maintenanceItems)
-			? (validData.maintenanceItems as CostItemInput[])
-			: undefined,
-		suppliesItems: Array.isArray(validData.suppliesItems)
-			? (validData.suppliesItems as CostItemInput[])
-			: undefined,
-		createdAt: existing?.createdAt ?? now,
-		updatedAt: now,
-		lastModified: now,
-		netProfit: calculateNetProfit(validData as Record<string, unknown>)
-	};
+	const outBase: Partial<TripRecord> = { id, userId: storageId };
+	// Attach only defined fields to satisfy exactOptionalPropertyTypes
+	if (typeof validData.date === 'string') outBase.date = validData.date;
+	if (typeof validData.payDate === 'string') outBase.payDate = validData.payDate;
+	if (typeof validData.startTime === 'string') outBase.startTime = validData.startTime;
+	if (typeof validData.endTime === 'string') outBase.endTime = validData.endTime;
+	if (typeof validData.hoursWorked === 'number') outBase.hoursWorked = validData.hoursWorked;
+	if (typeof validData.startAddress === 'string') outBase.startAddress = validData.startAddress;
+	if (isLatLng(validData.startLocation)) outBase.startLocation = validData.startLocation;
+	if (typeof validData.endAddress === 'string') outBase.endAddress = validData.endAddress;
+	if (isLatLng(validData.endLocation)) outBase.endLocation = validData.endLocation;
+	if (typeof validData.totalMiles === 'number') outBase.totalMiles = validData.totalMiles;
+	if (typeof validData.estimatedTime === 'number') outBase.estimatedTime = validData.estimatedTime;
+	if (typeof validData.totalTime === 'string') outBase.totalTime = validData.totalTime;
+	if (typeof validData.fuelCost === 'number') outBase.fuelCost = validData.fuelCost;
+	if (typeof validData.maintenanceCost === 'number')
+		outBase.maintenanceCost = validData.maintenanceCost;
+	if (typeof validData.suppliesCost === 'number') outBase.suppliesCost = validData.suppliesCost;
+	if (typeof validData.totalEarnings === 'number') outBase.totalEarnings = validData.totalEarnings;
+	// stops are added conditionally below to avoid setting undefined on the object literal
+	/* stops will be attached below if provided */
+	if (Array.isArray(validData.destinations)) {
+		outBase.destinations = (
+			validData.destinations as { address: string; location?: { lat: number; lng: number } }[]
+		).map((d) => {
+			const rec: { address: string; location?: { lat: number; lng: number } } = {
+				address: d.address
+			};
+			if (isLatLng(d.location)) rec.location = d.location;
+			return rec;
+		});
+	}
+	if (Array.isArray(validData.maintenanceItems))
+		outBase.maintenanceItems = validData.maintenanceItems as CostItemInput[];
+	if (Array.isArray(validData.suppliesItems))
+		outBase.suppliesItems = validData.suppliesItems as CostItemInput[];
+	outBase.createdAt = existing?.createdAt ?? now;
+	outBase.updatedAt = now;
+	outBase.lastModified = now;
+	outBase.netProfit = calculateNetProfit(validData as Record<string, unknown>);
+
+	// Attach stops conditionally to avoid setting undefined on the literal
+	if (Array.isArray(validData.stops)) {
+		const mappedStops = (validData.stops as StopInput[]).map((s) => {
+			const rec: {
+				id: string;
+				address: string;
+				earnings?: number;
+				notes?: string;
+				order: number;
+				location?: { lat: number; lng: number };
+			} = {
+				id: s.id ?? crypto.randomUUID(),
+				address: s.address ?? '',
+				order: s.order ?? 0
+			};
+			if (s.earnings !== undefined) rec.earnings = s.earnings;
+			if (s.notes) rec.notes = s.notes;
+			if (isLatLng(s.location)) rec.location = s.location;
+			return rec;
+		});
+		// Attach mapped stops
+		outBase.stops = mappedStops;
+	}
+
+	const out: TripRecord = outBase as TripRecord;
+	return out;
 }
 
 // Merge and update trip from incoming validated data (prevent mass-assignment)
@@ -194,43 +213,66 @@ function mergeTripForUpdate(
 	const now = new Date().toISOString();
 	return {
 		...existing,
-		date: validData.date ?? existing.date,
-		payDate: validData.payDate ?? existing.payDate,
-		startTime: validData.startTime ?? existing.startTime,
-		endTime: validData.endTime ?? existing.endTime,
-		hoursWorked: validData.hoursWorked ?? existing.hoursWorked,
-		startAddress: validData.startAddress ?? existing.startAddress,
-		startLocation: isLatLng(validData.startLocation)
-			? validData.startLocation
-			: existing.startLocation,
-		endAddress: validData.endAddress ?? existing.endAddress,
-		endLocation: isLatLng(validData.endLocation) ? validData.endLocation : existing.endLocation,
-		totalMiles: validData.totalMiles ?? existing.totalMiles,
-		estimatedTime: validData.estimatedTime ?? existing.estimatedTime,
-		totalTime: validData.totalTime ?? existing.totalTime,
-		fuelCost: validData.fuelCost ?? existing.fuelCost,
-		maintenanceCost: validData.maintenanceCost ?? existing.maintenanceCost,
-		suppliesCost: validData.suppliesCost ?? existing.suppliesCost,
-		totalEarnings: validData.totalEarnings ?? existing.totalEarnings,
-		stops: Array.isArray(validData.stops)
-			? (validData.stops as StopInput[]).map((s) => ({
-					id: s.id ?? crypto.randomUUID(),
-					address: s.address ?? '',
-					earnings: s.earnings,
-					notes: s.notes,
-					order: s.order ?? 0,
-					location: isLatLng(s.location) ? (s.location as { lat: number; lng: number }) : undefined
-				}))
-			: existing.stops,
-		destinations: Array.isArray(validData.destinations)
-			? (validData.destinations as { address: string; location?: { lat: number; lng: number } }[])
-			: existing.destinations,
-		maintenanceItems: Array.isArray(validData.maintenanceItems)
-			? (validData.maintenanceItems as CostItemInput[])
-			: existing.maintenanceItems,
-		suppliesItems: Array.isArray(validData.suppliesItems)
-			? (validData.suppliesItems as CostItemInput[])
-			: existing.suppliesItems,
+		...(typeof validData.date === 'string' ? { date: validData.date } : {}),
+		...(typeof validData.payDate === 'string' ? { payDate: validData.payDate } : {}),
+		...(typeof validData.startTime === 'string' ? { startTime: validData.startTime } : {}),
+		...(typeof validData.endTime === 'string' ? { endTime: validData.endTime } : {}),
+		...(typeof validData.hoursWorked === 'number' ? { hoursWorked: validData.hoursWorked } : {}),
+		...(typeof validData.startAddress === 'string' ? { startAddress: validData.startAddress } : {}),
+		...(isLatLng(validData.startLocation) ? { startLocation: validData.startLocation } : {}),
+		...(typeof validData.endAddress === 'string' ? { endAddress: validData.endAddress } : {}),
+		...(isLatLng(validData.endLocation) ? { endLocation: validData.endLocation } : {}),
+		...(typeof validData.totalMiles === 'number' ? { totalMiles: validData.totalMiles } : {}),
+		...(typeof validData.estimatedTime === 'number'
+			? { estimatedTime: validData.estimatedTime }
+			: {}),
+		...(typeof validData.totalTime === 'string' ? { totalTime: validData.totalTime } : {}),
+		...(typeof validData.fuelCost === 'number' ? { fuelCost: validData.fuelCost } : {}),
+		...(typeof validData.maintenanceCost === 'number'
+			? { maintenanceCost: validData.maintenanceCost }
+			: {}),
+		...(typeof validData.suppliesCost === 'number' ? { suppliesCost: validData.suppliesCost } : {}),
+		...(typeof validData.totalEarnings === 'number'
+			? { totalEarnings: validData.totalEarnings }
+			: {}),
+		...(Array.isArray(validData.stops)
+			? {
+					stops: (validData.stops as StopInput[]).map((s) => {
+						const rec: {
+							id: string;
+							address: string;
+							earnings?: number;
+							notes?: string;
+							order: number;
+							location?: { lat: number; lng: number };
+						} = {
+							id: s.id ?? crypto.randomUUID(),
+							address: s.address ?? '',
+							order: s.order ?? 0
+						};
+						if (typeof s.earnings === 'number') rec.earnings = s.earnings;
+						if (typeof s.notes === 'string') rec.notes = s.notes;
+						if (isLatLng(s.location)) rec.location = s.location as { lat: number; lng: number };
+						return rec;
+					})
+				}
+			: {}),
+		...(Array.isArray(validData.destinations)
+			? {
+					destinations: (
+						validData.destinations as { address: string; location?: { lat: number; lng: number } }[]
+					).map((d) => ({
+						address: d.address,
+						...(isLatLng(d.location) ? { location: d.location } : {})
+					}))
+				}
+			: {}),
+		...(Array.isArray(validData.maintenanceItems)
+			? { maintenanceItems: validData.maintenanceItems as CostItemInput[] }
+			: {}),
+		...(Array.isArray(validData.suppliesItems)
+			? { suppliesItems: validData.suppliesItems as CostItemInput[] }
+			: {}),
 		userId: storageId,
 		updatedAt: now,
 		lastModified: now,
@@ -346,7 +388,11 @@ export const GET: RequestHandler = async (event) => {
 			safeDO(env, 'PLACES_INDEX_DO')!
 		);
 
-		const allTrips = await svc.list(storageId, { since: sinceParam, limit, offset });
+		const opts: { since?: string; limit?: number; offset?: number } = {};
+		if (sinceParam) opts.since = sinceParam;
+		if (typeof limit === 'number') opts.limit = limit;
+		if (typeof offset === 'number') opts.offset = offset;
+		const allTrips = await svc.list(storageId, opts);
 
 		// If mileage KV is available, treat mileage as the source-of-truth and merge
 		try {
@@ -589,20 +635,22 @@ export const POST: RequestHandler = async (event) => {
 							? Number((validData.totalMiles * mileageRate).toFixed(2))
 							: undefined;
 
-					const mileageRecord = {
+					const base: Partial<import('$lib/server/mileageService').MileageRecord> = {
 						id: trip.id, // Use trip ID for 1:1 linking
 						tripId: trip.id,
 						userId: storageId,
 						date: trip.date || now,
 						miles: validData.totalMiles,
-						mileageRate,
-						vehicle,
-						reimbursement,
 						notes: 'Auto-created from trip',
 						createdAt: now,
 						updatedAt: now,
 						syncStatus: 'synced' as const
 					};
+					if (typeof mileageRate === 'number') base.mileageRate = mileageRate;
+					if (typeof vehicle === 'string') base.vehicle = vehicle;
+					if (typeof reimbursement === 'number') base.reimbursement = reimbursement;
+					const mileageRecord = base as import('$lib/server/mileageService').MileageRecord;
+
 					await mileageSvc.put(mileageRecord);
 					log.info('Auto-created mileage log for trip', {
 						tripId: trip.id,

@@ -39,9 +39,7 @@ describe('TripCard component', () => {
 		const trip: Partial<Trip> = {
 			id: 't2',
 			// intentionally missing stops, notes, and hoursWorked
-			startAddress: 'No Stops St',
-			endAddress: undefined,
-			date: undefined
+			startAddress: 'No Stops St'
 		};
 
 		expect(

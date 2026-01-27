@@ -35,7 +35,10 @@
 				const name = typeof userObj['name'] === 'string' ? (userObj['name'] as string) : undefined;
 				const email =
 					typeof userObj['email'] === 'string' ? (userObj['email'] as string) : undefined;
-				auth.updateProfile({ name, email });
+				const updates: { name?: string; email?: string } = {};
+				if (typeof name === 'string') updates.name = name;
+				if (typeof email === 'string') updates.email = email;
+				if (Object.keys(updates).length > 0) auth.updateProfile(updates);
 				dispatch('success', 'Profile updated successfully!');
 				buttonHighlight = true;
 				setTimeout(() => (buttonHighlight = false), 3000);

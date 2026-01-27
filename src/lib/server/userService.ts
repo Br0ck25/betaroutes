@@ -306,7 +306,8 @@ export async function updatePasswordHash(kv: KVNamespace, user: User, newHash: s
 		plan,
 		name,
 		createdAt,
-		stripeCustomerId,
+		// Only include stripeCustomerId when present (avoid assigning undefined to a required property)
+		...(stripeCustomerId ? { stripeCustomerId } : {}),
 		authenticators: authenticators || [] // Preserve authenticators
 	};
 
@@ -385,7 +386,7 @@ export async function deleteUser(
 		do {
 			const list: KVListResult = (await ns.list({
 				prefix,
-				cursor,
+				cursor: cursor ?? null,
 				limit: 1000
 			})) as unknown as KVListResult;
 			if (list.keys.length > 0) {

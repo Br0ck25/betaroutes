@@ -215,32 +215,23 @@ function createTripsStore() {
 							);
 						} else if (Number((changes as Partial<TripRecord>).totalMiles ?? 0) > 0) {
 							// Create new mileage record if none exists and miles > 0
-							await mileage.create(
-								{
-									id,
-									tripId: id,
-									miles: Number((changes as Partial<TripRecord>).totalMiles ?? 0),
-									date: updated.date,
-									mileageRate:
-										(get(userSettings) as unknown as { mileageRate?: number })?.mileageRate ??
-										undefined,
-									vehicle:
-										(
-											get(userSettings) as unknown as {
-												vehicles?: Array<{ id?: string; name?: string }>;
-											}
-										)?.vehicles?.[0]?.id ??
-										(
-											get(userSettings) as unknown as {
-												vehicles?: Array<{ id?: string; name?: string }>;
-											}
-										)?.vehicles?.[0]?.name ??
-										undefined,
-									createdAt: updated.createdAt,
-									updatedAt: updated.updatedAt
-								},
-								userId
-							);
+							const mileagePayload: Partial<import('$lib/db/types').MileageRecord> = {
+								id,
+								tripId: id,
+								miles: Number((changes as Partial<TripRecord>).totalMiles ?? 0),
+								createdAt: updated.createdAt,
+								updatedAt: updated.updatedAt
+							};
+
+							const mRate = (get(userSettings) as unknown as { mileageRate?: number })?.mileageRate;
+							if (typeof mRate === 'number') mileagePayload.mileageRate = mRate;
+							const veh = (
+								get(userSettings) as unknown as { vehicles?: Array<{ id?: string; name?: string }> }
+							)?.vehicles?.[0];
+							if (veh?.id) mileagePayload.vehicle = veh.id;
+							else if (veh?.name) mileagePayload.vehicle = veh.name;
+							// cleaned up: using mileagePayload object
+							await mileage.create(mileagePayload, userId);
 						}
 					}
 				} catch (err) {
