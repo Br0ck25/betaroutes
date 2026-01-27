@@ -336,8 +336,75 @@ function createExpensesStore() {
 				await store.delete(id);
 				await tx.done;
 
-				// [!code fix] Force reload to ensure disk sync matches UI
-				await this.load(userId);
+				// Update linked trip aggregates (if this was a trip-linked expense)
+				try {
+					const tripCandidate = (rec as unknown as Record<string, unknown>)['tripId'] as
+						| string
+						| undefined;
+					const maybeTripId =
+						tripCandidate ?? (String(rec.id).match(/^trip-(?:fuel|maint|supply)-([^-]+)/) || [])[1];
+					if (maybeTripId) {
+						// Recompute and patch local trip & update UI
+						const db2 = await getDB();
+						const tx2 = db2.transaction(['expenses', 'trips'], 'readwrite');
+						const allExpenses = (await tx2.objectStore('expenses').getAll()) as ExpenseRecord[];
+						let fuel = 0;
+						let maintenance = 0;
+						let supplies = 0;
+						for (const e of allExpenses) {
+							const eTrip = (e as unknown as Record<string, unknown>)['tripId'] as
+								| string
+								| undefined;
+							const eTripId =
+								eTrip ?? (String(e.id).match(/^trip-(?:fuel|maint|supply)-([^-]+)/) || [])[1];
+							if (!eTripId || eTripId !== maybeTripId) continue;
+							if (String(e.id).startsWith('trip-fuel-')) fuel = e.amount || 0;
+							else if (String(e.id).startsWith('trip-maint-')) maintenance += e.amount || 0;
+							else if (String(e.id).startsWith('trip-supply-')) supplies += e.amount || 0;
+						}
+						try {
+							const tripStore = tx2.objectStore('trips');
+							const tripRec = await tripStore.get(maybeTripId);
+							if (tripRec && tripRec.userId === userId) {
+								const nowIso = new Date().toISOString();
+								const patched = {
+									...tripRec,
+									fuelCost: fuel,
+									maintenanceCost: maintenance,
+									suppliesCost: supplies,
+									updatedAt: nowIso,
+									syncStatus: 'pending'
+								};
+								await tripStore.put(patched);
+								try {
+									const { trips } = await import('$lib/stores/trips');
+									trips.updateLocal({
+										id: maybeTripId,
+										fuelCost: fuel,
+										maintenanceCost: maintenance,
+										suppliesCost: supplies,
+										updatedAt: nowIso
+									});
+								} catch {
+									/* ignore */
+								}
+								// Queue trip update for sync
+								setTimeout(() => {
+									syncManager.addToQueue({
+										action: 'update',
+										tripId: maybeTripId,
+										data: { ...patched, store: 'trips', skipEnrichment: true }
+									});
+								}, 0);
+							}
+						} catch {
+							/* ignore */
+						}
+						await tx2.done;
+					}
+				} catch (_err) {
+					/* ignore */
+				}
 
 				await syncManager.addToQueue({
 					action: 'delete',
@@ -425,6 +492,81 @@ function createExpensesStore() {
 						}
 					}
 					await tx.done;
+				}
+				// Recompute any affected trips from cloud changes
+				try {
+					const tripIds = new Set<string>();
+					for (const recRaw of cloudExpenses) {
+						const rec = recRaw as unknown as Record<string, unknown>;
+						if (typeof rec['tripId'] === 'string') tripIds.add(rec['tripId'] as string);
+						else if (typeof rec['id'] === 'string') {
+							const m = String(rec['id']).match(/^trip-(?:fuel|maint|supply)-([^-]+)/);
+							if (m?.[1]) tripIds.add(m[1]);
+						}
+					}
+					for (const tid of Array.from(tripIds)) {
+						try {
+							const db2 = await getDB();
+							const tx2 = db2.transaction(['expenses', 'trips'], 'readwrite');
+							const allExpenses = (await tx2.objectStore('expenses').getAll()) as ExpenseRecord[];
+							let fuel = 0;
+							let maintenance = 0;
+							let supplies = 0;
+							for (const e of allExpenses) {
+								const eTrip = (e as unknown as Record<string, unknown>)['tripId'] as
+									| string
+									| undefined;
+								const eTripId =
+									eTrip ?? (String(e.id).match(/^trip-(?:fuel|maint|supply)-([^-]+)/) || [])[1];
+								if (!eTripId || eTripId !== tid) continue;
+								if (String(e.id).startsWith('trip-fuel-')) fuel = e.amount || 0;
+								else if (String(e.id).startsWith('trip-maint-')) maintenance += e.amount || 0;
+								else if (String(e.id).startsWith('trip-supply-')) supplies += e.amount || 0;
+							}
+							try {
+								const tripStore = tx2.objectStore('trips');
+								const tripRec = await tripStore.get(tid);
+								if (tripRec && tripRec.userId === userId) {
+									const nowIso = new Date().toISOString();
+									const patched = {
+										...tripRec,
+										fuelCost: fuel,
+										maintenanceCost: maintenance,
+										suppliesCost: supplies,
+										updatedAt: nowIso,
+										syncStatus: 'pending'
+									};
+									await tripStore.put(patched);
+									try {
+										const { trips } = await import('$lib/stores/trips');
+										trips.updateLocal({
+											id: tid,
+											fuelCost: fuel,
+											maintenanceCost: maintenance,
+											suppliesCost: supplies,
+											updatedAt: nowIso
+										});
+									} catch {
+										/* ignore */
+									}
+									setTimeout(() => {
+										syncManager.addToQueue({
+											action: 'update',
+											tripId: tid,
+											data: { ...patched, store: 'trips', skipEnrichment: true }
+										});
+									}, 0);
+								}
+							} catch {
+								/* ignore */
+							}
+							await tx2.done;
+						} catch {
+							/* ignore */
+						}
+					}
+				} catch {
+					/* ignore */
 				}
 				localStorage.setItem('last_sync_expenses', new Date().toISOString());
 			} catch (err) {
