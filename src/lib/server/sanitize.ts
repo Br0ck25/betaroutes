@@ -132,13 +132,14 @@ export function sanitizeStop(stop: unknown): Stop | null {
 					? (sRecord['name'] as string)
 					: '';
 
+	// Ensure a stable ID for later server-side processing (generate if missing)
 	return {
-		id: s.id ? sanitizeUUID(s.id) : undefined,
+		id: sanitizeUUID(s.id) ?? crypto.randomUUID(),
 		address: sanitizeString(rawAddress, 500),
 		earnings: sanitizeNumber(s.earnings, 0),
 		notes: sanitizeString(s.notes, 1000),
 		order: sanitizeNumber(s.order, 0),
-		location: sanitizeLocation(s.location)
+		location: sanitizeLocation(s.location) ?? null
 	};
 }
 
@@ -149,11 +150,14 @@ export function sanitizeDestination(destination: unknown): Destination | null {
 	const address = sanitizeString(d.address, 500);
 	if (!address) return null;
 
-	return {
+	const out: Destination = {
 		address,
 		earnings: sanitizeNumber(d.earnings, 0),
-		location: sanitizeLocation(d.location)
+		// Normalize to `null` when not present to satisfy server-side types that expect null
+		location: sanitizeLocation(d.location) ?? null
 	};
+
+	return out;
 }
 
 export function sanitizeCostItem(item: unknown): CostItem | null {
@@ -181,16 +185,15 @@ export function sanitizeTrip(trip: unknown): Partial<Trip> {
 
 	const t = trip as UnsanitizedTrip;
 
-	return {
-		id: t.id ? sanitizeUUID(t.id) : undefined,
+	const out: Partial<Trip> = {
 		date: sanitizeString(t.date, 50),
 		startTime: sanitizeString(t.startTime, 50),
 		endTime: sanitizeString(t.endTime, 50),
 		hoursWorked: sanitizeNumber(t.hoursWorked),
 		startAddress: sanitizeString(t.startAddress, 500),
-		startLocation: sanitizeLocation(t.startLocation),
+		startLocation: sanitizeLocation(t.startLocation) ?? null,
 		endAddress: sanitizeString(t.endAddress, 500),
-		endLocation: sanitizeLocation(t.endLocation),
+		endLocation: sanitizeLocation(t.endLocation) ?? null,
 		totalMiles: sanitizeNumber(t.totalMiles),
 		estimatedTime: sanitizeNumber(t.estimatedTime),
 		totalTime: sanitizeString(t.totalTime, 50),
@@ -205,9 +208,18 @@ export function sanitizeTrip(trip: unknown): Partial<Trip> {
 		stops: sanitizeArray(t.stops, sanitizeStop, 50),
 		destinations: sanitizeArray(t.destinations, sanitizeDestination, 50),
 		maintenanceItems: sanitizeArray(t.maintenanceItems, sanitizeCostItem, 20),
-		suppliesItems: sanitizeArray(t.suppliesItems, sanitizeCostItem, 20),
-		lastModified: t.lastModified ? sanitizeDateTime(t.lastModified) : undefined
+		suppliesItems: sanitizeArray(t.suppliesItems, sanitizeCostItem, 20)
 	};
+
+	// Only attach lastModified when it produces a real string
+	const lm = t.lastModified ? sanitizeDateTime(t.lastModified) : undefined;
+	if (lm) out.lastModified = lm;
+
+	// Only include ID when it validates as a UUID (prevents `id: undefined` in result object)
+	const sid = sanitizeUUID(t.id);
+	if (sid) out.id = sid;
+
+	return out;
 }
 
 /**

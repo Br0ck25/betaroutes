@@ -97,7 +97,8 @@ export async function findUserById(kv: KVNamespace, userId: string): Promise<Use
 		plan: core.plan,
 		name: core.name,
 		createdAt: core.createdAt,
-		stripeCustomerId: core.stripeCustomerId,
+		// Provide empty string when absent to satisfy strict optional typing in server types
+		stripeCustomerId: core.stripeCustomerId ?? '',
 		authenticators: core.authenticators || [], // [!code ++] Return empty array if undefined
 		...stats
 	};
