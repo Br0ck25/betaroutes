@@ -786,10 +786,15 @@
 		if (fuelCostLocal !== '') {
 			const n = Number(fuelCostLocal);
 			tripData.fuelCost = Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
-		} else if (totalMiles && mpg && gasPrice) {
-			tripData.fuelCost = Math.round(gallons * gasPrice * 100) / 100;
 		} else {
-			tripData.fuelCost = 0;
+			// Only auto-calc when there is no authoritative fuelCost present
+			if (!tripData.fuelCost || Number(tripData.fuelCost) === 0) {
+				if (totalMiles && mpg && gasPrice) {
+					tripData.fuelCost = Math.round(gallons * gasPrice * 100) / 100;
+				} else {
+					tripData.fuelCost = 0;
+				}
+			}
 		}
 	}
 	let totalEarnings = 0;
@@ -829,6 +834,10 @@
 			return;
 		}
 
+		// Respect manual override when present; otherwise persist current tripData.fuelCost
+		const fuelCostToSave =
+			fuelCostLocal !== '' ? Number(fuelCostLocal) : Number(tripData.fuelCost || 0);
+
 		const tripToSave = {
 			...tripData,
 			id: String(tripId),
@@ -838,7 +847,7 @@
 			// Ensure `totalMiles` is always present for analytics
 			totalMiles: tripData.totalMiles,
 			totalMileage: tripData.totalMiles,
-			fuelCost: tripData.fuelCost,
+			fuelCost: fuelCostToSave,
 			roundTripMiles: tripData.roundTripMiles,
 			roundTripTime: tripData.roundTripTime,
 			stops: tripData.stops.map((stop, index) => ({
