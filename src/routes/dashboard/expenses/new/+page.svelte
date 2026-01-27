@@ -35,6 +35,10 @@
 
 	let isManageCategoriesOpen = false;
 	let activeCategoryType: 'maintenance' | 'supplies' | 'expenses' = 'maintenance';
+	let settingsInitialTab: 'defaults' | 'categories' = 'defaults';
+
+	// Reset the initial tab when modal closes
+	$: if (!isManageCategoriesOpen) settingsInitialTab = 'defaults';
 
 	// Keep the selectedX in sync with formData.category
 	$: if (formData.category) {
@@ -59,6 +63,8 @@
 
 	function openSettings(type: 'maintenance' | 'supplies' | 'expenses') {
 		activeCategoryType = type;
+		// Ask the modal to open on the 'categories' tab
+		settingsInitialTab = 'categories';
 		isManageCategoriesOpen = true;
 	}
 
@@ -186,8 +192,10 @@
 					<div class="section-top">
 						<h3>Maintenance</h3>
 						<button
+							type="button"
 							class="btn-icon gear"
 							on:click={() => openSettings('maintenance')}
+							aria-expanded={isManageCategoriesOpen}
 							title="Manage Options"
 						>
 							<svg
@@ -243,8 +251,10 @@
 					<div class="section-top">
 						<h3>Supplies</h3>
 						<button
+							type="button"
 							class="btn-icon gear"
 							on:click={() => openSettings('supplies')}
+							aria-expanded={isManageCategoriesOpen}
 							title="Manage Options"
 						>
 							<svg
@@ -300,8 +310,10 @@
 					<div class="section-top">
 						<h3>Expenses</h3>
 						<button
+							type="button"
 							class="btn-icon gear"
 							on:click={() => openSettings('expenses')}
+							aria-expanded={isManageCategoriesOpen}
 							title="Manage Options"
 						>
 							<svg
@@ -395,7 +407,11 @@
 		</div>
 
 		<!-- Settings modal (manage maintenance/supplies/expenses categories) -->
-		<SettingsModal bind:open={isManageCategoriesOpen} bind:activeCategoryType />
+		<SettingsModal
+			bind:open={isManageCategoriesOpen}
+			bind:activeCategoryType
+			initialTab={settingsInitialTab}
+		/>
 
 		<div class="form-actions">
 			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
