@@ -6,6 +6,7 @@ export default class Button extends SvelteComponentTyped<
 		disabled?: boolean;
 		type?: 'button' | 'submit' | 'reset';
 		className?: string;
+		onclick?: (event: MouseEvent) => void;
 	},
 	{ click: MouseEvent },
 	{ default: Record<string, unknown> }

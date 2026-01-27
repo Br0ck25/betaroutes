@@ -45,7 +45,11 @@
 	let endLocation = $state<LatLng | undefined>(undefined);
 
 	let mpg = $state(settings.defaultMPG ?? storage.getSetting('defaultMPG') ?? 25);
+	// Label shown in the UI is 'Fuel Price', field remains 'gasPrice' in data for backwards compat
 	let gasPrice = $state(settings.defaultGasPrice ?? storage.getSetting('defaultGasPrice') ?? 3.5);
+
+	// Whether fuelCost is auto-calculated from MPG+Fuel Price or manually provided
+	let autoFuelCost = $state(true);
 
 	const distanceUnit = $state(settings.distanceUnit || 'mi');
 
@@ -216,7 +220,11 @@
 
 			totalTime = totals.totalTime || '';
 
-			if (trip && trip.fuelCost && !startLocation) {
+			// Respect manual override if user edited Estimated Fuel Cost (autoFuelCost=false)
+			if (!autoFuelCost) {
+				// keep existing fuelCost (user-specified)
+				fuelCost = Number(fuelCost) || 0;
+			} else if (trip && trip.fuelCost && !startLocation) {
 				fuelCost = trip.fuelCost;
 			} else {
 				fuelCost = totals.fuelCost || 0;
@@ -396,7 +404,13 @@
 		if (trip) {
 			loadDraft(trip);
 			if (trip.totalMiles) totalMileage = trip.totalMiles;
-			if (trip.fuelCost) fuelCost = trip.fuelCost;
+			if (trip.fuelCost) {
+				fuelCost = trip.fuelCost;
+				// If trip has an explicit fuelCost, treat it as manual override
+				autoFuelCost = false;
+			} else {
+				autoFuelCost = true;
+			}
 		} else {
 			const rawDraft = draftTrip.load();
 			if (rawDraft && confirm('Resume your last unsaved trip?')) {
@@ -497,14 +511,14 @@
 				{/if}
 			</div>
 			<div>
-				<label for="gas-price" class="block font-semibold mb-2 text-sm text-gray-700"
-					>Gas Price ($)</label
+				<label for="fuel-price" class="block font-semibold mb-2 text-sm text-gray-700"
+					>Fuel Price ($)</label
 				>
 				{#if loading}
 					<Skeleton height="48px" className="rounded-lg" />
 				{:else}
 					<input
-						id="gas-price"
+						id="fuel-price"
 						type="number"
 						bind:value={gasPrice}
 						step="0.01"
@@ -512,6 +526,37 @@
 					/>
 				{/if}
 			</div>
+			<div>
+				<label for="estimated-fuel-cost" class="block font-semibold mb-2 text-sm text-gray-700"
+					>Estimated Fuel Cost ($)</label
+				>
+				{#if loading}
+					<Skeleton height="48px" className="rounded-lg" />
+				{:else}
+					<input
+						id="estimated-fuel-cost"
+						type="number"
+						bind:value={fuelCost}
+						step="0.01"
+						oninput={() => (autoFuelCost = false)}
+						class="w-full p-3 text-base border-gray-300 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
+					/>
+					<div class="mt-2 flex gap-2">
+						<button
+							class="btn-small"
+							type="button"
+							onclick={() => {
+								autoFuelCost = true;
+								handleCalculate(true);
+							}}
+						>
+							Use MPG calc
+						</button>
+						<span class="text-sm text-gray-500">Or set the estimated cost manually</span>
+					</div>
+				{/if}
+			</div>
+
 			<div>
 				<label for="start-time" class="block font-semibold mb-2 text-sm text-gray-700"
 					>Start Time</label
@@ -761,7 +806,7 @@
 		</div>
 
 		<div class="flex gap-3 justify-center pt-2">
-			<Button variant="outline" on:click={() => (showUpgradeModal = false)}>Maybe Later</Button>
+			<Button variant="outline" onclick={() => (showUpgradeModal = false)}>Maybe Later</Button>
 
 			<a
 				href={resolve('/dashboard/settings')}
