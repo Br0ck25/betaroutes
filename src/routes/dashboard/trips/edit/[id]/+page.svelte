@@ -342,6 +342,27 @@
 		}
 	}
 
+	// Sync authoritative fuelCost from trips store when available, unless the user has entered
+	// a manual override (fuelCostLocal). This ensures expense edits that update the trips
+	// store are reflected in the open Trip edit UI.
+	$: {
+		try {
+			if (typeof document !== 'undefined') {
+				if (fuelCostLocal === '') {
+					const updatedTrip = $trips.find((t) => t.id === tripId);
+					if (updatedTrip) {
+						const authoritativeFuel = Number(updatedTrip.fuelCost || 0);
+						if (Number(tripData.fuelCost || 0) !== authoritativeFuel) {
+							tripData.fuelCost = authoritativeFuel;
+						}
+					}
+				}
+			}
+		} catch {
+			/* ignore */
+		}
+	}
+
 	$: {
 		try {
 			if (typeof document !== 'undefined') {
