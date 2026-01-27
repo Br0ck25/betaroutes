@@ -13,7 +13,7 @@
 		"moduleResolution": "bundler",
 
 		/* Cloudflare & Svelte Types */
-		"types": ["google.maps","svelte", "@cloudflare/workers-types"],
+		"types": ["google.maps", "svelte", "@cloudflare/workers-types"],
 
 		/* STRICTNESS: These rules specifically target
            common AI/Copilot "lazy" coding habits.

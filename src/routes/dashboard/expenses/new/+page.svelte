@@ -192,10 +192,8 @@
 					<div class="section-top">
 						<h3>Maintenance</h3>
 						<button
-							type="button"
 							class="btn-icon gear"
 							on:click={() => openSettings('maintenance')}
-							aria-expanded={isManageCategoriesOpen}
 							title="Manage Options"
 						>
 							<svg
@@ -251,10 +249,8 @@
 					<div class="section-top">
 						<h3>Supplies</h3>
 						<button
-							type="button"
 							class="btn-icon gear"
 							on:click={() => openSettings('supplies')}
-							aria-expanded={isManageCategoriesOpen}
 							title="Manage Options"
 						>
 							<svg
@@ -310,10 +306,8 @@
 					<div class="section-top">
 						<h3>Expenses</h3>
 						<button
-							type="button"
 							class="btn-icon gear"
 							on:click={() => openSettings('expenses')}
-							aria-expanded={isManageCategoriesOpen}
 							title="Manage Options"
 						>
 							<svg
