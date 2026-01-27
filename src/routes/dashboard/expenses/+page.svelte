@@ -275,9 +275,15 @@
 		if (!confirm('Move this expense to trash? You can restore it later.')) return;
 
 		// Check if it's a trip log
-		if (id.startsWith('trip-')) {
-			toasts.error('Cannot delete Trips here. Delete the Trip instead.');
-			return;
+		// Allow deleting trip-derived expenses as well, but warn the user
+		const isTripDerived = id.startsWith('trip-');
+		if (isTripDerived) {
+			if (
+				!confirm(
+					'This item is derived from a Trip. Deleting it will change the Trip costs. Continue?'
+				)
+			)
+				return;
 		}
 
 		const currentUser = $page.data['user'] || $user;
@@ -320,17 +326,12 @@
 
 	async function deleteSelected() {
 		const ids = Array.from(selectedExpenses);
-		const manualExpenses = ids.filter((id) => !id.startsWith('trip-'));
-		const tripLogs = ids.length - manualExpenses.length;
-
-		if (manualExpenses.length === 0 && tripLogs > 0) {
-			toasts.error(`Cannot delete ${tripLogs} Trip Logs. Edit them in Trips.`);
-			return;
-		}
+		// Allow deletion of both manual and trip-derived expenses; warn about trip-derived items
+		const tripLogs = ids.filter((id) => id.startsWith('trip-'));
 
 		if (
 			!confirm(
-				`Move ${manualExpenses.length} expenses to trash? ${tripLogs > 0 ? `(${tripLogs} trips will be skipped)` : ''}`
+				`Move ${ids.length} expenses to trash?${tripLogs.length ? ` (${tripLogs.length} are trip-derived and will affect Trips)` : ''}`
 			)
 		)
 			return;
@@ -342,7 +343,7 @@
 		if (!userId) return;
 
 		let successCount = 0;
-		for (const id of manualExpenses) {
+		for (const id of ids) {
 			try {
 				await expenses.deleteExpense(id, userId);
 				successCount++;
