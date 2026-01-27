@@ -1,9 +1,10 @@
 // src/routes/api/expenses/[id]/+server.ts
-import type { RequestHandler } from './$types';
+import { getEnv, safeDO, safeKV } from '$lib/server/env';
 import { makeExpenseService, type ExpenseRecord } from '$lib/server/expenseService';
-import { getEnv, safeKV, safeDO } from '$lib/server/env';
-import { createSafeErrorMessage } from '$lib/server/sanitize';
 import { log } from '$lib/server/log';
+import { createSafeErrorMessage } from '$lib/server/sanitize';
+import { makeTripService, type TripRecord } from '$lib/server/tripService';
+import type { RequestHandler } from './$types';
 
 export const DELETE: RequestHandler = async (event) => {
 	try {
@@ -92,6 +93,75 @@ export const PUT: RequestHandler = async (event) => {
 			(expense as Record<string, unknown>)['store'] = body['store'] as string;
 
 		await svc.put(expense);
+
+		// If this expense is a trip-linked expense, mirror changes back to the parent Trip
+		try {
+			if (expense.id && expense.id.startsWith('trip-')) {
+				// Extract tripId from patterns like:
+				// trip-fuel-<tripId>
+				// trip-maint-<tripId>-<i>
+				// trip-supply-<tripId>-<i>
+				const m = String(expense.id).match(/^trip-(?:fuel|maint|supply)-([^-]+)/);
+				const tripId = m ? m[1] : null;
+				if (tripId) {
+					// Recompute aggregated costs for this trip from expense index
+					const env = getEnv(event.platform);
+					const expenseSvc = makeExpenseService(
+						safeKV(env, 'BETA_EXPENSES_KV')!,
+						safeDO(env, 'TRIP_INDEX_DO')!
+					);
+					const all = await expenseSvc.list(storageId);
+					let fuel = 0;
+					let maintenance = 0;
+					let supplies = 0;
+					for (const e of all) {
+						if (!e.id || !e.id.startsWith(`trip-`)) continue;
+						const em = String(e.id).match(/^trip-(fuel|maint|supply)-([^-]+)/);
+						if (!em) continue;
+						const kind = em[1];
+						const tid = em[2];
+						if (tid !== tripId) continue;
+						if (kind === 'fuel') fuel = (e.amount as number) || 0;
+						else if (kind === 'maint') maintenance += (e.amount as number) || 0;
+						else if (kind === 'supply') supplies += (e.amount as number) || 0;
+					}
+
+					// Update trip record with new aggregated costs
+					try {
+						const kv = safeKV(env, 'BETA_LOGS_KV');
+						const tripSvc = makeTripService(
+							kv as unknown as KVNamespace,
+							safeKV(env, 'BETA_PLACES_KV') as unknown as KVNamespace | undefined,
+							safeDO(env, 'TRIP_INDEX_DO')!,
+							safeDO(env, 'PLACES_INDEX_DO') ?? safeDO(env, 'TRIP_INDEX_DO')!
+						);
+						const t = await tripSvc.get(storageId, tripId);
+						if (t) {
+							const patched = {
+								...t,
+								fuelCost: fuel,
+								maintenanceCost: maintenance,
+								suppliesCost: supplies,
+								updatedAt: new Date().toISOString(),
+								syncStatus: 'pending'
+							};
+							await tripSvc.put(patched as unknown as TripRecord);
+							log.info('Mirrored expense update to trip', { tripId, expenseId: expense.id });
+						}
+					} catch (e) {
+						log.warn('Failed to mirror expense update to trip', {
+							id: expense.id,
+							err: createSafeErrorMessage(e)
+						});
+					}
+				}
+			}
+		} catch (e) {
+			log.warn('Failed to handle trip-linked expense mirror', {
+				id: expense.id,
+				err: createSafeErrorMessage(e)
+			});
+		}
 
 		return new Response(JSON.stringify(expense));
 	} catch (err: unknown) {

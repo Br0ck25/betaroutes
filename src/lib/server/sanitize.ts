@@ -1,15 +1,15 @@
 // src/lib/server/sanitize.ts
 
 import type {
+	CostItem,
+	Destination,
 	Location,
 	Stop,
-	Destination,
-	CostItem,
 	Trip,
+	UnsanitizedCostItem,
+	UnsanitizedDestination,
 	UnsanitizedLocation,
 	UnsanitizedStop,
-	UnsanitizedDestination,
-	UnsanitizedCostItem,
 	UnsanitizedTrip
 } from '$lib/types';
 
@@ -197,8 +197,10 @@ export function sanitizeTrip(trip: unknown): Partial<Trip> {
 		totalMiles: sanitizeNumber(t.totalMiles),
 		estimatedTime: sanitizeNumber(t.estimatedTime),
 		totalTime: sanitizeString(t.totalTime, 50),
-		mpg: sanitizeNumber(t.mpg),
 		gasPrice: sanitizeNumber(t.gasPrice),
+		// Attach mpg only when explicitly provided to avoid assigning `undefined` to a required
+		// Trip.mpg property (exactOptionalPropertyTypes enforces this).
+		// We'll set it below conditionally when present.
 		fuelCost: sanitizeNumber(t.fuelCost),
 		maintenanceCost: sanitizeNumber(t.maintenanceCost),
 		suppliesCost: sanitizeNumber(t.suppliesCost),
@@ -211,9 +213,16 @@ export function sanitizeTrip(trip: unknown): Partial<Trip> {
 		suppliesItems: sanitizeArray(t.suppliesItems, sanitizeCostItem, 20)
 	};
 
-	// Only attach lastModified when it produces a real string
-	const lm = t.lastModified ? sanitizeDateTime(t.lastModified) : undefined;
+	const lm = sanitizeString((t as Record<string, unknown>).lastModified, 50);
+
 	if (lm) out.lastModified = lm;
+
+	// Conditionally attach optional numeric `mpg` only when provided
+	const _mpg =
+		t.mpg === undefined || t.mpg === null || String(t.mpg).trim() === ''
+			? undefined
+			: sanitizeNumber(t.mpg);
+	if (_mpg !== undefined) (out as Partial<Trip> & { mpg?: number }).mpg = _mpg;
 
 	// Only include ID when it validates as a UUID (prevents `id: undefined` in result object)
 	const sid = sanitizeUUID(t.id);
