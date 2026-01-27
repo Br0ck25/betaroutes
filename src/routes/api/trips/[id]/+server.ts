@@ -439,6 +439,34 @@ export const DELETE: RequestHandler = async (event) => {
 			});
 		}
 
+		// --- Cascade delete: Delete linked expense records (fuel / maintenance / supplies)
+		try {
+			const expensesKV = safeKV(event.platform?.env, 'BETA_EXPENSES_KV');
+			if (expensesKV) {
+				const expenseSvc = makeExpenseService(
+					expensesKV,
+					tripIndexDO as unknown as DurableObjectNamespace
+				);
+				const allExpenses = await expenseSvc.list(storageId);
+				const linkedExpenses = allExpenses.filter((e) => {
+					const eTrip = (e as Record<string, unknown>)['tripId'] as string | undefined;
+					if (eTrip && eTrip === id) return true;
+					if (!e.id || !String(e.id).startsWith('trip-')) return false;
+					const em = String(e.id).match(/^trip-(?:fuel|maint|supply)-([^-]+)/);
+					return (em?.[1] ?? null) === id;
+				});
+				for (const ex of linkedExpenses) {
+					await expenseSvc.delete(storageId, ex.id);
+					log.info('Cascade deleted expense for trip', { tripId: id, expenseId: ex.id });
+				}
+			}
+		} catch (e) {
+			log.warn('Failed to cascade delete expenses', {
+				tripId: id,
+				message: createSafeErrorMessage(e)
+			});
+		}
+
 		await svc.incrementUserCounter(storageId, -1);
 
 		return new Response(JSON.stringify({ success: true }), {

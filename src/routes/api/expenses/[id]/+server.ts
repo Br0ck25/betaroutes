@@ -29,6 +29,84 @@ export const DELETE: RequestHandler = async (event) => {
 
 		await svc.delete(storageId, expenseId);
 
+		// If this expense was linked to a trip, recompute aggregated costs and mirror back to Trip
+		try {
+			let tripId: string | null = null;
+			if (existing.id && existing.id.startsWith('trip-')) {
+				const m = String(existing.id).match(/^trip-(?:fuel|maint|supply)-([^-]+)/);
+				tripId = m?.[1] ?? null;
+			} else if (
+				(existing as Record<string, unknown>)['tripId'] &&
+				typeof (existing as Record<string, unknown>)['tripId'] === 'string'
+			) {
+				tripId = (existing as Record<string, unknown>)['tripId'] as string;
+			}
+			if (tripId) {
+				const env = getEnv(event.platform);
+				const expenseSvc = makeExpenseService(
+					safeKV(env, 'BETA_EXPENSES_KV')!,
+					safeDO(env, 'TRIP_INDEX_DO')!
+				);
+				const all = await expenseSvc.list(storageId);
+				let fuel = 0;
+				let maintenance = 0;
+				let supplies = 0;
+				for (const e of all) {
+					const eTrip = (e as Record<string, unknown>)['tripId'] as string | undefined;
+					if (eTrip && eTrip === tripId) {
+						if (String(e.id).startsWith('trip-fuel-')) fuel = (e.amount as number) || 0;
+						else if (String(e.id).startsWith('trip-maint-'))
+							maintenance += (e.amount as number) || 0;
+						else if (String(e.id).startsWith('trip-supply-')) supplies += (e.amount as number) || 0;
+						continue;
+					}
+					if (!e.id || !e.id.startsWith(`trip-`)) continue;
+					const em = String(e.id).match(/^trip-(fuel|maint|supply)-([^-]+)/);
+					if (!em) continue;
+					const kind = em[1];
+					const tid = em[2];
+					if (tid !== tripId) continue;
+					if (kind === 'fuel') fuel = (e.amount as number) || 0;
+					else if (kind === 'maint') maintenance += (e.amount as number) || 0;
+					else if (kind === 'supply') supplies += (e.amount as number) || 0;
+				}
+
+				// Update trip
+				try {
+					const kv = safeKV(env, 'BETA_LOGS_KV');
+					const tripSvc = makeTripService(
+						kv as unknown as KVNamespace,
+						safeKV(env, 'BETA_PLACES_KV') as unknown as KVNamespace | undefined,
+						safeDO(env, 'TRIP_INDEX_DO')!,
+						safeDO(env, 'PLACES_INDEX_DO') ?? safeDO(env, 'TRIP_INDEX_DO')!
+					);
+					const t = await tripSvc.get(storageId, tripId);
+					if (t) {
+						const patched = {
+							...t,
+							fuelCost: fuel,
+							maintenanceCost: maintenance,
+							suppliesCost: supplies,
+							updatedAt: new Date().toISOString(),
+							syncStatus: 'pending'
+						};
+						await tripSvc.put(patched as unknown as TripRecord);
+						log.info('Mirrored expense deletion to trip', { tripId, expenseId: existing.id });
+					}
+				} catch (e) {
+					log.warn('Failed to mirror expense deletion to trip', {
+						id: existing.id,
+						err: createSafeErrorMessage(e)
+					});
+				}
+			}
+		} catch (e) {
+			log.warn('Failed to handle trip-linked expense mirror on delete', {
+				id: existing.id,
+				err: createSafeErrorMessage(e)
+			});
+		}
+
 		return new Response(JSON.stringify({ success: true }));
 	} catch (err: unknown) {
 		log.error('DELETE Expense Error', { message: createSafeErrorMessage(err) });
