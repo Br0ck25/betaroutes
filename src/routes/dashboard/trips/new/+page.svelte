@@ -150,6 +150,8 @@
 	let gasPriceLocal: number = Number(tripData.gasPrice ?? 3.5);
 	let totalMilesLocal: number = Number(tripData.totalMiles ?? 0);
 	let notesLocal: string = tripData.notes ?? '';
+	// Allow manual override of estimated fuel cost; empty string => auto-calc
+	let fuelCostLocal: string = '';
 	$: tripData.startAddress = startAddressLocal;
 	$: tripData.endAddress = endAddressLocal;
 	$: tripData.date = dateLocal;
@@ -643,8 +645,12 @@
 		const totalMiles = Number(tripData.totalMiles || 0);
 		const mpg = Number(tripData.mpg || 0);
 		const gasPrice = Number(tripData.gasPrice || 0);
-		if (totalMiles && mpg && gasPrice) {
-			const gallons = totalMiles / mpg;
+		const gallons = totalMiles && mpg ? totalMiles / mpg : 0;
+		if (fuelCostLocal !== '') {
+			// User override wins
+			const n = Number(fuelCostLocal);
+			tripData.fuelCost = Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+		} else if (totalMiles && mpg && gasPrice) {
 			tripData.fuelCost = Math.round(gallons * gasPrice * 100) / 100;
 		} else {
 			tripData.fuelCost = 0;
@@ -953,7 +959,22 @@
 				</div>
 			</div>
 			<div class="summary-box" style="margin: 40px 0;">
-				<span>Estimated Fuel Cost</span><strong>{formatCurrency(tripData.fuelCost)}</strong>
+				<label for="fuel-cost">Estimated Fuel Cost</label>
+				<div class="input-money-wrapper">
+					<span class="symbol">$</span>
+					<input id="fuel-cost" bind:value={fuelCostLocal} step="0.01" inputmode="decimal" />
+					<button
+						type="button"
+						class="btn-link"
+						on:click={() => (fuelCostLocal = '')}
+						title="Use auto calculation">Auto</button
+					>
+				</div>
+				<div class="note">
+					{fuelCostLocal !== ''
+						? formatCurrency(Number(fuelCostLocal || 0))
+						: formatCurrency(tripData.fuelCost)}
+				</div>
 			</div>
 
 			<div class="info-note">
