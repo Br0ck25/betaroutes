@@ -124,9 +124,8 @@
 		if (trip.fuelCost && trip.fuelCost > 0) {
 			const fid = `trip-fuel-${trip.id}`;
 			const existingFuel = $expenses.find((e: any) => e.id === fid);
-			if (existingFuel) {
-				items.push({ ...existingFuel, source: 'expense' });
-			} else {
+			// If an authoritative expense already exists, prefer it (it will be included via $expenses).
+			if (!existingFuel) {
 				items.push({
 					id: fid,
 					date: date,
@@ -146,9 +145,8 @@
 			maint.forEach((item: any, i: number) => {
 				const mid = `trip-maint-${trip.id}-${i}`;
 				const existing = $expenses.find((e: any) => e.id === mid);
-				if (existing) {
-					items.push({ ...existing, source: 'expense' });
-				} else {
+				// Only add a trip-derived item when there is no authoritative expense record
+				if (!existing) {
 					items.push({
 						id: mid,
 						date: date,
@@ -169,9 +167,8 @@
 			supplies.forEach((item: any, i: number) => {
 				const sid = `trip-supply-${trip.id}-${i}`;
 				const existing = $expenses.find((e: any) => e.id === sid);
-				if (existing) {
-					items.push({ ...existing, source: 'expense' });
-				} else {
+				// Only include trip-derived supply items if no authoritative expense exists
+				if (!existing) {
 					items.push({
 						id: sid,
 						date: date,
