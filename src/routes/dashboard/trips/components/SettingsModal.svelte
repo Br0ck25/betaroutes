@@ -1,12 +1,12 @@
 <script lang="ts">
 	import Modal from '$lib/components/ui/Modal.svelte';
-	import { userSettings } from '$lib/stores/userSettings';
 	import { toasts } from '$lib/stores/toast';
+	import { userSettings } from '$lib/stores/userSettings';
+	import type { UserSettings } from '$lib/types';
 	import { autocomplete } from '$lib/utils/autocomplete';
-	import { saveSettings } from '../../settings/lib/save-settings';
 	import { createEventDispatcher } from 'svelte';
 	import { get } from 'svelte/store';
-	import type { UserSettings } from '$lib/types';
+	import { saveSettings } from '../../settings/lib/save-settings';
 
 	const dispatch = createEventDispatcher();
 
@@ -14,6 +14,8 @@
 	export let API_KEY: string = '';
 
 	export let activeCategoryType: 'maintenance' | 'supplies' | 'expenses' = 'maintenance';
+	// Parent can request the modal to open on the categories tab using `initialTab`.
+	export let initialTab: 'defaults' | 'categories' = 'defaults';
 	let settingsTab: 'defaults' | 'categories' = 'defaults';
 	let newCategoryName = '';
 	let settings: Partial<UserSettings> = { ...$userSettings };
@@ -54,6 +56,8 @@
 		defaultEndLocal = settings?.defaultEndAddress || '';
 		gasDisplay =
 			settings?.defaultGasPrice != null ? Number(settings.defaultGasPrice).toFixed(2) : '';
+		// Respect `initialTab` when opened by a parent wanting the categories view
+		settingsTab = initialTab || settingsTab;
 	}
 	$: if (!open) {
 		// If the modal is being closed without saving, reset staged changes
