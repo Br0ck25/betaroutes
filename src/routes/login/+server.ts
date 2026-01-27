@@ -101,14 +101,25 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
 				const userId = authResult.id;
 				const username = fullUser?.username ?? '';
 				if (username) {
-					const migrationEnv = {
-						BETA_LOGS_KV: logsKV,
-						BETA_EXPENSES_KV: safeKV(env, 'BETA_EXPENSES_KV'),
-						BETA_MILEAGE_KV: safeKV(env, 'BETA_MILEAGE_KV'),
-						BETA_TRASH_KV: safeKV(env, 'BETA_TRASH_KV'),
-						BETA_HUGHESNET_KV: safeKV(env, 'BETA_HUGHESNET_KV'),
-						BETA_HUGHESNET_ORDERS_KV: safeKV(env, 'BETA_HUGHESNET_ORDERS_KV')
-					};
+					const migrationEnv: {
+						BETA_LOGS_KV?: KVNamespace;
+						BETA_EXPENSES_KV?: KVNamespace;
+						BETA_MILEAGE_KV?: KVNamespace;
+						BETA_TRASH_KV?: KVNamespace;
+						BETA_HUGHESNET_KV?: KVNamespace;
+						BETA_HUGHESNET_ORDERS_KV?: KVNamespace;
+					} = {};
+					if (logsKV) migrationEnv.BETA_LOGS_KV = logsKV;
+					const expensesKV = safeKV(env, 'BETA_EXPENSES_KV');
+					if (expensesKV) migrationEnv.BETA_EXPENSES_KV = expensesKV;
+					const mileageKV = safeKV(env, 'BETA_MILEAGE_KV');
+					if (mileageKV) migrationEnv.BETA_MILEAGE_KV = mileageKV;
+					const trashKV = safeKV(env, 'BETA_TRASH_KV');
+					if (trashKV) migrationEnv.BETA_TRASH_KV = trashKV;
+					const hnsKV = safeKV(env, 'BETA_HUGHESNET_KV');
+					if (hnsKV) migrationEnv.BETA_HUGHESNET_KV = hnsKV;
+					const hnsOrdersKV = safeKV(env, 'BETA_HUGHESNET_ORDERS_KV');
+					if (hnsOrdersKV) migrationEnv.BETA_HUGHESNET_ORDERS_KV = hnsOrdersKV;
 					platform.context.waitUntil(
 						migrateUserStorageKeys(migrationEnv, userId, username).catch((e: unknown) => {
 							const msg = e instanceof Error ? e.message : String(e);

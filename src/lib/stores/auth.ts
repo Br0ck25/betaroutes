@@ -129,9 +129,17 @@ function createAuthStore() {
 				if (response.ok) {
 					const responseData = (await response.json()) as { user?: Partial<User> };
 					const data = responseData.user || {};
+
+					// SECURITY: require UUID from server session; do not accept incomplete user objects
+					if (!data || !data.id) {
+						console.warn('Session response missing user id; treating as unauthenticated');
+						set({ user: null, isAuthenticated: false, isLoading: false, error: null });
+						return;
+					}
+
 					const user: User = {
-						id: data.id, // [!code fix] Critical: Capture UUID from server session
-						token: '', // No longer stored client-side
+						id: String(data.id), // [!code fix] Critical: Capture UUID from server session
+						token: '',
 						plan: data.plan || 'free',
 						tripsThisMonth: data.tripsThisMonth ?? 0,
 						maxTrips: data.maxTrips ?? 10,
@@ -245,8 +253,14 @@ function createAuthStore() {
 					// If subscription fetch fails (legacy endpoints), default to free
 					console.warn('Subscription lookup failed during signup', e);
 				}
+				if (!response || !response.id) {
+					console.warn('Signup response missing user id; signup incomplete');
+					set({ user: null, isAuthenticated: false, isLoading: false, error: 'Signup failed' });
+					return;
+				}
+
 				const user: User = {
-					id: response.id, // [!code fix] Capture UUID from signup response
+					id: String(response.id), // [!code fix] Capture UUID from signup response
 					token: '',
 					plan: normalizePlan(subscription.plan),
 					tripsThisMonth: subscription.tripsThisMonth,
@@ -255,12 +269,7 @@ function createAuthStore() {
 					name: username,
 					email: ''
 				};
-				set({
-					user,
-					isAuthenticated: true,
-					isLoading: false,
-					error: null
-				});
+				set({ user, isAuthenticated: true, isLoading: false, error: null });
 
 				if (offlineId) {
 					await trips.migrateOfflineTrips(offlineId, user.id || username);
@@ -312,8 +321,14 @@ function createAuthStore() {
 					console.warn('Subscription lookup failed during login', e);
 				}
 
+				if (!response || !response.id) {
+					console.warn('Login response missing user id; login incomplete');
+					set({ user: null, isAuthenticated: false, isLoading: false, error: 'Login failed' });
+					return;
+				}
+
 				const user: User = {
-					id: response.id, // [!code fix] Capture UUID from login response
+					id: String(response.id), // [!code fix] Capture UUID from login response
 					token: '',
 					plan: normalizePlan(subscription.plan),
 					tripsThisMonth: subscription.tripsThisMonth,
@@ -324,12 +339,7 @@ function createAuthStore() {
 				};
 				saveUserCache(user);
 
-				set({
-					user,
-					isAuthenticated: true,
-					isLoading: false,
-					error: null
-				});
+				set({ user, isAuthenticated: true, isLoading: false, error: null });
 
 				if (offlineId) {
 					await trips.migrateOfflineTrips(offlineId, user.id || username);
@@ -478,7 +488,7 @@ function createAuthStore() {
 					if (!state.user) return state;
 					const updated: User = {
 						...state.user,
-						id: data.user?.id || state.user.id, // [!code fix] Ensure ID is preserved/updated
+						id: typeof data.user?.id === 'string' ? String(data.user.id) : (state.user.id ?? ''), // [!code fix] Ensure ID is preserved/updated
 						plan: data.user?.plan || state.user.plan,
 						tripsThisMonth: data.user?.tripsThisMonth ?? state.user.tripsThisMonth,
 						maxTrips: data.user?.maxTrips ?? state.user.maxTrips,

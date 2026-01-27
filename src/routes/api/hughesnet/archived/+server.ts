@@ -69,7 +69,7 @@ export const GET: RequestHandler = async ({ platform, locals, url }) => {
 		// list all keys and return those owned by the current user
 		const listRes = await kv.list({ prefix: 'hns:order:' });
 		const keys = listRes.keys || [];
-		const results: Array<{ id: string; storedAt?: number; order: unknown }> = [];
+		const results: Array<{ id: string; storedAt?: number | undefined; order: unknown }> = [];
 		for (const k of keys) {
 			const raw = await kv.get(k.name);
 			if (!raw) continue;

@@ -420,59 +420,97 @@ export async function generateExpensesPDF(
 
 	trips.forEach((trip) => {
 		const fuel = trip.fuelCost ?? 0;
-		if (fuel > 0)
-			allExpenses.push({
-				date: trip.date,
+		if (fuel > 0) {
+			const rec: {
+				date?: string;
+				category: string;
+				amount: number;
+				description: string;
+				source: string;
+			} = {
 				category: 'Fuel',
 				amount: fuel,
 				description: 'From trip',
 				source: 'Trip'
-			});
+			};
+			if (trip.date) rec.date = trip.date;
+			allExpenses.push(rec);
+		}
 
 		const mItems = trip.maintenanceItems;
 		if (mItems && mItems.length > 0) {
-			mItems.forEach((item: MaintenanceCost) =>
-				allExpenses.push({
-					date: trip.date,
+			mItems.forEach((item: MaintenanceCost) => {
+				const rec: {
+					date?: string;
+					category: string;
+					amount: number;
+					description: string;
+					source: string;
+				} = {
 					category: 'Maintenance',
 					amount: item.cost,
 					description: item.type,
 					source: 'Trip'
-				})
-			);
+				};
+				if (trip.date) rec.date = trip.date;
+				allExpenses.push(rec);
+			});
 		} else {
 			const mCost = trip.maintenanceCost ?? 0;
-			if (mCost > 0)
-				allExpenses.push({
-					date: trip.date,
+			if (mCost > 0) {
+				const rec: {
+					date?: string;
+					category: string;
+					amount: number;
+					description: string;
+					source: string;
+				} = {
 					category: 'Maintenance',
 					amount: mCost,
 					description: 'From trip',
 					source: 'Trip'
-				});
+				};
+				if (trip.date) rec.date = trip.date;
+				allExpenses.push(rec);
+			}
 		}
 
 		const sItems = trip.suppliesItems || trip.supplyItems;
 		if (sItems && sItems.length > 0) {
-			sItems.forEach((item: SupplyCost) =>
-				allExpenses.push({
-					date: trip.date,
+			sItems.forEach((item: SupplyCost) => {
+				const rec: {
+					date?: string;
+					category: string;
+					amount: number;
+					description: string;
+					source: string;
+				} = {
 					category: 'Supplies',
 					amount: item.cost,
 					description: item.type,
 					source: 'Trip'
-				})
-			);
+				};
+				if (trip.date) rec.date = trip.date;
+				allExpenses.push(rec);
+			});
 		} else {
 			const sCost = trip.suppliesCost ?? 0;
-			if (sCost > 0)
-				allExpenses.push({
-					date: trip.date,
+			if (sCost > 0) {
+				const rec: {
+					date?: string;
+					category: string;
+					amount: number;
+					description: string;
+					source: string;
+				} = {
 					category: 'Supplies',
 					amount: sCost,
 					description: 'From trip',
 					source: 'Trip'
-				});
+				};
+				if (trip.date) rec.date = trip.date;
+				allExpenses.push(rec);
+			}
 		}
 	});
 

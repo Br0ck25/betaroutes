@@ -1,11 +1,11 @@
 // src/hooks.server.ts
 import { dev } from '$app/environment';
-import type { Handle } from '@sveltejs/kit';
 import { log } from '$lib/server/log';
+import type { Handle } from '@sveltejs/kit';
 // [!code ++] Import the user finder to check real-time status
 import { findUserById, findUserByUsername } from '$lib/server/userService';
 // [!code ++] SECURITY (Issue #4): CSRF protection
-import { generateCsrfToken, csrfProtection } from '$lib/server/csrf';
+import { csrfProtection, generateCsrfToken } from '$lib/server/csrf';
 
 // [!code ++] SECURITY: JSON payload size limit (1MB default, prevents DoS)
 const MAX_JSON_PAYLOAD_SIZE = 1 * 1024 * 1024; // 1MB
@@ -115,7 +115,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// Also enable when tests manually start a preview server (PW_MANUAL_SERVER)
 	if (dev || process.env['NODE_ENV'] !== 'production' || process.env['PW_MANUAL_SERVER'] === '1') {
 		const { setupMockKV } = await import('$lib/server/dev-mock-db');
-		await setupMockKV(event);
+		// Pass only the minimal platform shape expected by the mock helper
+		const platformEnv = (event.platform as { env?: Record<string, string> } | undefined)?.env ?? {};
+		await setupMockKV({ platform: { env: platformEnv } });
 	}
 
 	// 2. User auth logic: Check for 'session_id' cookie

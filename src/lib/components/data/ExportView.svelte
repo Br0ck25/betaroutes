@@ -1,13 +1,15 @@
 <script lang="ts">
-	import { trips } from '$lib/stores/trips';
-	import { expenses } from '$lib/stores/expenses';
-	import { currentUser } from '$lib/stores/currentUser';
-	import Modal from '$lib/components/ui/Modal.svelte';
-	import Button from '$lib/components/ui/Button.svelte';
 	import { base } from '$app/paths';
+	import Button from '$lib/components/ui/Button.svelte';
+	import Modal from '$lib/components/ui/Modal.svelte';
+	import { currentUser } from '$lib/stores/currentUser';
+	import { expenses } from '$lib/stores/expenses';
+	import { trips } from '$lib/stores/trips';
 	const resolve = (href: string) => `${base}${href}`;
 
-	import { SvelteSet, SvelteDate } from '$lib/utils/svelte-reactivity';
+	import type { ExpenseRecord } from '$lib/db/types';
+	import type { Trip } from '$lib/types';
+	import { SvelteDate, SvelteSet } from '$lib/utils/svelte-reactivity';
 
 	let exportFormat = 'csv';
 	let exportDataType = 'trips'; // 'trips' | 'expenses' | 'tax_bundle'
@@ -19,7 +21,7 @@
 	let isUpgradeModalOpen = false;
 
 	// Reactive filter logic for Trips
-	$: filteredTrips = $trips.filter((trip) => {
+	$: filteredTrips = $trips.filter((trip: Trip) => {
 		if (!trip.date) return false;
 		const tripDate = SvelteDate.from(trip.date).startOfDay();
 		if (dateFrom && tripDate.getTime() < SvelteDate.from(dateFrom).startOfDay().getTime())
@@ -29,7 +31,7 @@
 	});
 
 	// Reactive filter logic for Expenses
-	$: filteredExpenses = $expenses.filter((expense) => {
+	$: filteredExpenses = $expenses.filter((expense: ExpenseRecord) => {
 		const dStr = expense.date || expense.createdAt;
 		if (!dStr) return false;
 		const expenseDate = SvelteDate.from(dStr).startOfDay();

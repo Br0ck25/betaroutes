@@ -64,7 +64,7 @@ function createSyncStore() {
 				status: 'synced',
 				lastSyncAt: new Date().toISOString(),
 				pendingCount: 0,
-				errorMessage: undefined
+				errorMessage: ''
 			}));
 		},
 

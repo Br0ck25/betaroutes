@@ -333,12 +333,14 @@ class SyncManager {
 		updateStore: 'trips' | 'expenses' | 'mileage' | 'trash' | null,
 		id: string
 	) {
+		const headers: HeadersInit = body ? { 'Content-Type': 'application/json' } : {};
 		const res = await csrfFetch(url, {
 			method,
 			keepalive: true,
 			credentials: 'include',
-			headers: body ? { 'Content-Type': 'application/json' } : undefined,
-			body: body ? JSON.stringify(body) : undefined
+			headers: headers,
+			// RequestInit.body expects BodyInit | null — use null when empty
+			body: body ? JSON.stringify(body) : null
 		});
 
 		if (!res.ok) {

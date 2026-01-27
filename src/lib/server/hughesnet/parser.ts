@@ -290,20 +290,28 @@ export function parseOrderPage(html: string, id: string): OrderData {
 
 	// 3. Select Best Timestamps based on Reference Date
 	// Departure Complete: Use the LATEST one on the reference date
-	out.departureCompleteTimestamp =
-		completeTimestamps.filter(isSameDate).sort((a, b) => b - a)[0] || undefined;
+	{
+		const val = completeTimestamps.filter(isSameDate).sort((a, b) => b - a)[0];
+		if (typeof val === 'number') out.departureCompleteTimestamp = val;
+	}
 
 	// Departure Incomplete: Use the LATEST one on the reference date
-	out.departureIncompleteTimestamp =
-		incompleteTimestamps.filter(isSameDate).sort((a, b) => b - a)[0] || undefined;
+	{
+		const val = incompleteTimestamps.filter(isSameDate).sort((a, b) => b - a)[0];
+		if (typeof val === 'number') out.departureIncompleteTimestamp = val;
+	}
 
 	// Arrival: Use the EARLIEST one on the reference date
 	// [!code note] This fixes the sorting issue. We ignore the late arrival (after incomplete).
-	out.arrivalTimestamp = arrivalTimestamps.filter(isSameDate).sort((a, b) => a - b)[0] || undefined;
+	{
+		const val = arrivalTimestamps.filter(isSameDate).sort((a, b) => a - b)[0];
+		if (typeof val === 'number') out.arrivalTimestamp = val;
+	}
 
 	// Fallback if no specific date matched
 	if (!out.arrivalTimestamp && arrivalTimestamps.length > 0) {
-		out.arrivalTimestamp = arrivalTimestamps[0];
+		const fallback = arrivalTimestamps[0];
+		if (typeof fallback === 'number') out.arrivalTimestamp = fallback;
 	}
 
 	// 4. Calculate Duration

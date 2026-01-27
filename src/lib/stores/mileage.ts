@@ -175,8 +175,7 @@ function createMileageStore() {
 			}
 
 			// ... copy from previous ...
-			const record: MileageRecord = {
-				...data,
+			const base: Partial<MileageRecord> = {
 				id: data.id || crypto.randomUUID(),
 				userId,
 				date: data.date || new Date().toISOString(),
@@ -186,14 +185,17 @@ function createMileageStore() {
 					typeof data.miles === 'number'
 						? data.miles
 						: Math.max(0, Number(data.endOdometer) - Number(data.startOdometer)),
-				mileageRate: typeof data.mileageRate === 'number' ? data.mileageRate : undefined,
-				vehicle: data.vehicle || undefined,
-				reimbursement: typeof data.reimbursement === 'number' ? data.reimbursement : undefined,
 				notes: data.notes || '',
 				createdAt: data.createdAt || new Date().toISOString(),
 				updatedAt: data.updatedAt || new Date().toISOString(),
 				syncStatus: 'pending'
 			};
+
+			if (typeof data.mileageRate === 'number') base.mileageRate = data.mileageRate;
+			if (typeof data.reimbursement === 'number') base.reimbursement = data.reimbursement;
+			if (data.vehicle) base.vehicle = data.vehicle;
+
+			const record: MileageRecord = base as MileageRecord;
 			if (typeof record.reimbursement !== 'number') {
 				let rate: number | undefined = record.mileageRate;
 				if (rate == null) {

@@ -823,7 +823,7 @@
 
 		const tripToSave = {
 			...tripData,
-			id: tripId,
+			id: String(tripId),
 			maintenanceCost: totalMaintenanceCost,
 			suppliesCost: totalSuppliesCost,
 			netProfit: totalProfit,

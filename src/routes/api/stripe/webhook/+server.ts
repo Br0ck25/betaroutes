@@ -169,7 +169,10 @@ async function downgradeUserByCustomerId(kv: KVNamespace, stripeCustomerId: stri
 				list_complete?: boolean;
 				cursor?: string;
 			};
-			const list: KVListResult = (await kv.list({ prefix, cursor })) as unknown as KVListResult;
+			const list: KVListResult = (await kv.list({
+				prefix,
+				cursor: cursor ?? null
+			})) as unknown as KVListResult;
 
 			for (const key of list.keys) {
 				const raw = await kv.get(key.name);

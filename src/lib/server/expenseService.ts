@@ -280,19 +280,29 @@ export function makeExpenseService(kv: KVNamespace, tripIndexDO: DurableObjectNa
 						(parsed['expense'] as Record<string, unknown>) ||
 						(parsed as Record<string, unknown>) ||
 						{};
-					out.push({
+					const rec: Partial<TrashRecord> = {
 						id,
 						userId: uid,
 						metadata: metadata as TrashRecord['metadata'],
-						recordType: 'expense',
-						category: (backup['category'] as string) || undefined,
-						amount:
-							typeof (backup['amount'] as unknown) === 'number'
-								? (backup['amount'] as number)
-								: undefined,
-						description: (backup['description'] as string) || undefined,
-						date: (backup['date'] as string) || undefined
-					});
+						recordType: 'expense'
+					};
+
+					const cat = (backup['category'] as string) || undefined;
+					if (cat) rec.category = cat;
+
+					const amt =
+						typeof (backup['amount'] as unknown) === 'number'
+							? (backup['amount'] as number)
+							: undefined;
+					if (amt !== undefined) rec.amount = amt;
+
+					const desc = (backup['description'] as string) || undefined;
+					if (desc) rec.description = desc;
+
+					const d = (backup['date'] as string) || undefined;
+					if (d) rec.date = d;
+
+					out.push(rec as TrashRecord);
 				}
 			}
 

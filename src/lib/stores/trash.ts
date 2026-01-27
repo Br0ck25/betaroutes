@@ -402,11 +402,10 @@ function createTrashStore() {
 					// [!code fix] Ensure Trash ID is unique on download
 					const uniqueId = getUniqueTrashId({
 						id: String(flatItem['id']),
-						recordType:
-							typeof flatItem['recordType'] === 'string'
-								? String(flatItem['recordType'])
-								: undefined,
-						type: typeof flatItem['type'] === 'string' ? String(flatItem['type']) : undefined
+						...(typeof flatItem['recordType'] === 'string'
+							? { recordType: String(flatItem['recordType']) }
+							: {}),
+						...(typeof flatItem['type'] === 'string' ? { type: String(flatItem['type']) } : {})
 					});
 					flatItem['id'] = uniqueId;
 

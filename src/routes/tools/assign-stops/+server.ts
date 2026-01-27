@@ -1,6 +1,6 @@
-import type { RequestHandler } from './$types';
 import { geocode } from '$lib/server/geocode';
 import { log } from '$lib/server/log';
+import type { RequestHandler } from './$types';
 
 type Point = { lat: number; lon: number; address?: string };
 
@@ -101,7 +101,7 @@ function parsePoint(input: unknown): Point | null {
 			? sanitizeForDisplay(addressRaw.slice(0, MAX_ADDRESS_LEN))
 			: undefined;
 
-	return { lat, lon, address };
+	return { lat, lon, ...(typeof address === 'string' ? { address } : {}) };
 }
 
 function requireUserId(user: unknown): string {
@@ -415,10 +415,10 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 
 				return {
 					name,
-					start,
-					end,
-					startLoc: startLoc ?? undefined,
-					endLoc: endLoc ?? undefined
+					...(typeof start === 'string' ? { start } : {}),
+					...(typeof end === 'string' ? { end } : {}),
+					...(startLoc ? { startLoc } : {}),
+					...(endLoc ? { endLoc } : {})
 				};
 			}),
 			stops: stopsRaw.map((s): StopInput => {
@@ -435,7 +435,13 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 							? Math.trunc(rankRaw)
 							: null;
 
-				return { address, loc: loc ?? undefined, rank };
+				const sObj: { rank: number | null; loc: Point; address?: string } = {
+					loc: loc as Point,
+					rank
+				};
+				if (typeof address === 'string')
+					sObj.address = sanitizeForDisplay(address.slice(0, MAX_ADDRESS_LEN));
+				return sObj;
 			})
 		};
 
@@ -482,11 +488,13 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 			}
 
 			const rank = s.rank == null ? null : Math.trunc(s.rank);
-			stops.push({
-				address: s.address ? sanitizeForDisplay(s.address.slice(0, MAX_ADDRESS_LEN)) : loc.address,
-				rank: rank != null && Number.isFinite(rank) ? rank : null,
-				loc
-			});
+			const pushObj: { loc: Point; rank: number | null; address?: string } = {
+				loc,
+				rank: rank != null && Number.isFinite(rank) ? rank : null
+			};
+			if (typeof s.address === 'string')
+				pushObj.address = sanitizeForDisplay(s.address.slice(0, MAX_ADDRESS_LEN));
+			stops.push(pushObj);
 		}
 
 		const T = techs.length;

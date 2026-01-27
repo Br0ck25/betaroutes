@@ -490,12 +490,20 @@ export function makeTripService(
 							userId: uid,
 							metadata,
 							recordType: 'trip',
-							title: (backup.title as string) || (backup.startAddress as string) || undefined,
-							date: (backup.date as string) || undefined,
-							createdAt: (backup.createdAt as string) || undefined,
-							stops: (backup.stops as unknown[]) || undefined,
-							totalMiles: typeof backup.totalMiles === 'number' ? backup.totalMiles : undefined,
-							startAddress: (backup.startAddress as string) || undefined
+
+							// Only include fields when defined (avoid assigning undefined to required types)
+							...(typeof backup.title === 'string' && backup.title.trim()
+								? { title: String(backup.title) }
+								: {}),
+							...(typeof backup.date === 'string' ? { date: String(backup.date) } : {}),
+							...(typeof backup.createdAt === 'string'
+								? { createdAt: String(backup.createdAt) }
+								: {}),
+							...(Array.isArray(backup.stops) ? { stops: backup.stops as unknown[] } : {}),
+							...(typeof backup.totalMiles === 'number' ? { totalMiles: backup.totalMiles } : {}),
+							...(typeof backup.startAddress === 'string'
+								? { startAddress: String(backup.startAddress) }
+								: {})
 						});
 					}
 				}

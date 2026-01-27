@@ -256,11 +256,10 @@ export const GET: RequestHandler = async ({ url, platform, request, locals }) =>
 							: typeof pred['description'] === 'string'
 								? pred['description']
 								: '',
-					secondary_text:
-						typeof structured['secondary_text'] === 'string'
-							? structured['secondary_text']
-							: undefined,
-					place_id: typeof pred['place_id'] === 'string' ? pred['place_id'] : undefined,
+					...(typeof structured['secondary_text'] === 'string'
+						? { secondary_text: String(structured['secondary_text']) }
+						: {}),
+					...(typeof pred['place_id'] === 'string' ? { place_id: String(pred['place_id']) } : {}),
 					source: 'google_proxy'
 				};
 			});

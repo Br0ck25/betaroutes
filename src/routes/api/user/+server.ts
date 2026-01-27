@@ -1,11 +1,11 @@
 // src/routes/api/user/+server.ts
+import { verifyPasswordForUser } from '$lib/server/auth';
+import { safeDO, safeKV } from '$lib/server/env';
+import { log } from '$lib/server/log';
+import { checkRateLimit } from '$lib/server/rateLimit';
+import { deleteUser, findUserById, updateUser, type UserCore } from '$lib/server/userService';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { deleteUser, updateUser, findUserById } from '$lib/server/userService';
-import { verifyPasswordForUser } from '$lib/server/auth';
-import { log } from '$lib/server/log';
-import { safeKV, safeDO } from '$lib/server/env';
-import { checkRateLimit } from '$lib/server/rateLimit';
 
 interface SessionUser {
 	id: string;
@@ -87,11 +87,12 @@ export const PUT: RequestHandler = async ({ request, locals, platform }) => {
 		}
 
 		// Update the core user record in KV
-
-		await updateUser(usersKV, user.id, {
-			name: body.name,
-			email: body.email
-		});
+		const updates: Partial<Pick<UserCore, 'name' | 'email'>> = {};
+		if (typeof body.name === 'string') updates.name = body.name;
+		if (typeof body.email === 'string') updates.email = body.email;
+		if (Object.keys(updates).length > 0) {
+			await updateUser(usersKV, user.id, updates);
+		}
 
 		// Fetch authoritative fresh record to return to client (avoid using locals.user for sensitive fields)
 		let latestUser = null;
@@ -138,19 +139,28 @@ export const DELETE: RequestHandler = async ({ locals, platform, cookies }) => {
 			return json({ error: 'Service Unavailable' }, { status: 503 });
 		}
 
-		await deleteUser(usersKV, user.id, {
-			tripsKV: safeKV(env ?? {}, 'BETA_LOGS_KV')!,
-			expensesKV: safeKV(env ?? {}, 'BETA_EXPENSES_KV'),
-			mileageKV: safeKV(env ?? {}, 'BETA_MILEAGE_KV'),
-			trashKV: safeKV(env ?? {}, 'BETA_TRASH_KV'),
-			settingsKV: safeKV(env ?? {}, 'BETA_USER_SETTINGS_KV'),
-			tripIndexDO: safeDO(env ?? {}, 'TRIP_INDEX_DO')!,
-			env: {
-				DO_INTERNAL_SECRET: (env as Record<string, unknown>)['DO_INTERNAL_SECRET'] as
-					| string
-					| undefined
-			}
-		});
+		const callEnv: { DO_INTERNAL_SECRET?: string } = {};
+		const _secret = (env as Record<string, unknown>)['DO_INTERNAL_SECRET'];
+		if (typeof _secret === 'string') callEnv.DO_INTERNAL_SECRET = _secret;
+
+		const logsKV = safeKV(env ?? {}, 'BETA_LOGS_KV')!;
+		const expensesKV = safeKV(env ?? {}, 'BETA_EXPENSES_KV');
+		const mileageKV = safeKV(env ?? {}, 'BETA_MILEAGE_KV');
+		const trashKV = safeKV(env ?? {}, 'BETA_TRASH_KV');
+		const settingsKV = safeKV(env ?? {}, 'BETA_USER_SETTINGS_KV');
+		const tripIndex = safeDO(env ?? {}, 'TRIP_INDEX_DO')!;
+
+		const opts: Parameters<typeof deleteUser>[2] = {
+			tripsKV: logsKV,
+			tripIndexDO: tripIndex,
+			env: callEnv
+		};
+		if (expensesKV) opts.expensesKV = expensesKV;
+		if (mileageKV) opts.mileageKV = mileageKV;
+		if (trashKV) opts.trashKV = trashKV;
+		if (settingsKV) opts.settingsKV = settingsKV;
+
+		await deleteUser(usersKV, user.id, opts);
 
 		// Cleanup Cookies
 		cookies.delete('session_id', { path: '/' });

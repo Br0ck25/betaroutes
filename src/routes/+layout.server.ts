@@ -4,15 +4,15 @@ import type { PublicUser } from '$lib/types';
 import { getUserDisplayName } from '$lib/utils/user-display';
 
 export const load: LayoutServerLoad = async ({ locals, url }) => {
-	const publicUser: PublicUser | null = locals.user
-		? {
-				id: locals.user.id, // [!code fix] Explicitly expose ID to frontend
-				name: getUserDisplayName(locals.user),
-				plan: locals.user.plan,
-				tripsThisMonth: locals.user.tripsThisMonth
-			}
-		: null;
-
+	const publicUser: PublicUser | null =
+		locals.user && typeof locals.user.id === 'string'
+			? {
+					id: locals.user.id, // [!code fix] Explicitly expose ID to frontend
+					name: getUserDisplayName(locals.user),
+					plan: locals.user.plan,
+					tripsThisMonth: locals.user.tripsThisMonth
+				}
+			: null;
 	return {
 		user: publicUser,
 		path: url.pathname,

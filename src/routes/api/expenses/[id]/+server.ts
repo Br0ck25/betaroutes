@@ -66,7 +66,6 @@ export const PUT: RequestHandler = async (event) => {
 			date: existing.date,
 			category: existing.category,
 			amount: existing.amount,
-			description: existing['description'] as string | undefined,
 			createdAt: existing.createdAt,
 			updatedAt: new Date().toISOString(),
 			// optional fields accessed via index signature
@@ -75,6 +74,9 @@ export const PUT: RequestHandler = async (event) => {
 				: {}),
 			...(existing['store'] !== undefined ? { store: existing['store'] as string } : {})
 		};
+
+		if (typeof existing['description'] === 'string')
+			(expense as Record<string, unknown>)['description'] = existing['description'] as string;
 
 		if (typeof body['date'] === 'string') expense.date = body['date'] as string;
 		if (typeof body['category'] === 'string') expense.category = body['category'] as string;
