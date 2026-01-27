@@ -1,29 +1,30 @@
 <script lang="ts">
-	import { trips } from '$lib/stores/trips';
-	import { userSettings } from '$lib/stores/userSettings';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { user } from '$lib/stores/auth';
 	import { page } from '$app/stores';
-	import { onMount, onDestroy } from 'svelte';
-	import { autocomplete } from '$lib/utils/autocomplete';
-	import { optimizeRoute } from '$lib/services/maps';
-	import Modal from '$lib/components/ui/Modal.svelte';
-	import { toasts } from '$lib/stores/toast';
 	import Button from '$lib/components/ui/Button.svelte';
+	import Modal from '$lib/components/ui/Modal.svelte';
 	import { PLAN_LIMITS } from '$lib/constants';
+	import { optimizeRoute } from '$lib/services/maps';
+	import { user } from '$lib/stores/auth';
+	import { toasts } from '$lib/stores/toast';
+	import { trips } from '$lib/stores/trips';
+	import { userSettings } from '$lib/stores/userSettings';
+	import { autocomplete } from '$lib/utils/autocomplete';
+	import { onDestroy, onMount } from 'svelte';
+
+	// route data (injected by server load)
+	export let data: any;
+
+	// API key for autocomplete
+	$: API_KEY = String(data?.googleMapsApiKey ?? '');
+
+	// drag state for stops
+	let dragItemIndex: number | null = null;
 
 	function handleUpgradeNow() {
 		goto(resolve('/dashboard/settings'));
 	}
-
-	function goToTrips() {
-		goto(resolve('/dashboard/trips'));
-	}
-	export let data;
-	$: API_KEY = String(data.googleMapsApiKey ?? '');
-	let dragItemIndex: number | null = null;
-
 	$: maintenanceOptions =
 		$userSettings.maintenanceCategories?.length > 0
 			? $userSettings.maintenanceCategories
@@ -692,6 +693,10 @@
 			return;
 		}
 
+		// Respect manual override when present; otherwise persist current tripData.fuelCost
+		const fuelCostToSave =
+			fuelCostLocal !== '' ? Number(fuelCostLocal) : Number(tripData.fuelCost || 0);
+
 		const tripToSave = {
 			...tripData,
 			maintenanceCost: totalMaintenanceCost,
@@ -700,7 +705,7 @@
 			// Include both keys for compatibility but ensure `totalMiles` is present
 			totalMiles: Number(tripData.totalMiles || 0),
 			totalMileage: Number(tripData.totalMiles || 0),
-			fuelCost: Number(tripData.fuelCost || 0),
+			fuelCost: Number(fuelCostToSave || 0),
 			roundTripMiles: Number(tripData.roundTripMiles || 0),
 			roundTripTime: Number(tripData.roundTripTime || 0),
 			stops: tripData.stops.map((stop, index) => ({
@@ -720,7 +725,8 @@
 
 		try {
 			await trips.create(tripToSave, userId);
-			goToTrips();
+			// navigate back to trips list
+			goto(resolve('/dashboard/trips'));
 		} catch (_err: any) {
 			console.error('Save failed:', _err);
 			const message = _err?.message || 'Failed to create trip.';
