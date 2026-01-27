@@ -1,7 +1,7 @@
 // src/lib/server/userService.ts
 
-import { randomUUID } from 'node:crypto';
 import { log } from '$lib/server/log';
+import { randomUUID } from 'node:crypto';
 
 // 1. Define Split Types
 
@@ -324,7 +324,6 @@ export async function deleteUser(
 		tripsKV?: KVNamespace;
 		expensesKV?: KVNamespace;
 		mileageKV?: KVNamespace;
-		trashKV?: KVNamespace;
 		settingsKV?: KVNamespace;
 		tripIndexDO?: DurableObjectNamespace;
 		env?: { DO_INTERNAL_SECRET?: string };
@@ -415,13 +414,6 @@ export async function deleteUser(
 		cleanupTasks.push(wipeNamespace(resources.mileageKV, `mileage:${user.username}:`));
 		cleanupTasks.push(wipeNamespace(resources.mileageKV, `mileage:${userId}:`));
 		log.debug(`[UserService] Queued mileage cleanup for ${userId}`);
-	}
-
-	// [SECURITY] Delete all trash for this user
-	if (resources?.trashKV) {
-		cleanupTasks.push(wipeNamespace(resources.trashKV, `trash:${user.username}:`));
-		cleanupTasks.push(wipeNamespace(resources.trashKV, `trash:${userId}:`));
-		log.debug(`[UserService] Queued trash cleanup for ${userId}`);
 	}
 
 	await Promise.all(authPromises);

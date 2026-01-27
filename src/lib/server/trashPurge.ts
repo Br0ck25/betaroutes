@@ -1,8 +1,8 @@
-import { safeKV, safeDO } from '$lib/server/env';
+import { safeDO, safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
-import { makeTripService } from './tripService';
 import { makeExpenseService } from './expenseService';
 import { makeMileageService } from './mileageService';
+import { makeTripService } from './tripService';
 
 export interface PurgeOptions {
 	batchSize?: number; // keys fetched per kv.list batch
@@ -59,7 +59,7 @@ export async function purgeExpiredTrash(
 			(tripKV
 				? makeTripService(
 						tripKV,
-						undefined,
+
 						safeKV(platformEnv, 'BETA_PLACES_KV') as KVNamespace | undefined,
 						tripIndexDO as DurableObjectNamespace,
 						placesIndexDO as DurableObjectNamespace

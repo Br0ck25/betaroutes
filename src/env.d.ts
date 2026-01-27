@@ -23,7 +23,6 @@ declare namespace App {
 			BETA_USERS_KV: KVNamespace;
 			BETA_EXPENSES_KV?: KVNamespace;
 			BETA_MILEAGE_KV?: KVNamespace;
-			BETA_TRASH_KV?: KVNamespace;
 			BETA_PLACES_KV?: KVNamespace;
 		};
 		context: {

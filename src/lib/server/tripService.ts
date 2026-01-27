@@ -1,8 +1,8 @@
 // src/lib/server/tripService.ts
 
-import { generatePrefixKey, generatePlaceKey } from '$lib/utils/keys';
 import { DO_ORIGIN, RETENTION } from '$lib/constants';
 import { log } from '$lib/server/log';
+import { generatePlaceKey, generatePrefixKey } from '$lib/utils/keys';
 
 export type Stop = {
 	id: string;
@@ -77,7 +77,6 @@ function prefixForUser(userId: string) {
 
 export function makeTripService(
 	kv: KVNamespace,
-	_trashKV: KVNamespace | undefined,
 	placesKV: KVNamespace | undefined,
 	tripIndexDO: DurableObjectNamespace,
 	placesIndexDO: DurableObjectNamespace
