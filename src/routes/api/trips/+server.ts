@@ -152,6 +152,9 @@ function buildTripForSave(
 	if (typeof validData.endAddress === 'string') outBase.endAddress = validData.endAddress;
 	if (isLatLng(validData.endLocation)) outBase.endLocation = validData.endLocation;
 	if (typeof validData.totalMiles === 'number') outBase.totalMiles = validData.totalMiles;
+	// Persist user-provided MPG / gas price so subsequent reads do not fall back to defaults
+	if (typeof validData.mpg === 'number') outBase.mpg = validData.mpg;
+	if (typeof validData.gasPrice === 'number') outBase.gasPrice = validData.gasPrice;
 	if (typeof validData.estimatedTime === 'number') outBase.estimatedTime = validData.estimatedTime;
 	if (typeof validData.totalTime === 'string') outBase.totalTime = validData.totalTime;
 	if (typeof validData.fuelCost === 'number') outBase.fuelCost = validData.fuelCost;
@@ -1047,7 +1050,16 @@ export const PUT: RequestHandler = async (event) => {
 								const mpg = typeof tripAny['mpg'] === 'number' ? (tripAny['mpg'] as number) : 25;
 								const gasPrice =
 									typeof tripAny['gasPrice'] === 'number' ? (tripAny['gasPrice'] as number) : 3.5;
-								trip.fuelCost = Number(calculateFuelCost(linkedMileage.miles || 0, mpg, gasPrice));
+								if (
+									!(
+										typeof existingTrip.fuelCost === 'number' && Number(existingTrip.fuelCost) > 0
+									) &&
+									!(typeof validData.fuelCost === 'number' && Number(validData.fuelCost) > 0)
+								) {
+									trip.fuelCost = Number(
+										calculateFuelCost(linkedMileage.miles || 0, mpg, gasPrice)
+									);
+								}
 								await svc.put(trip);
 							}
 						} catch {
@@ -1102,7 +1114,14 @@ export const PUT: RequestHandler = async (event) => {
 								const mpg = typeof tripAny['mpg'] === 'number' ? (tripAny['mpg'] as number) : 25;
 								const gasPrice =
 									typeof tripAny['gasPrice'] === 'number' ? (tripAny['gasPrice'] as number) : 3.5;
-								trip.fuelCost = Number(calculateFuelCost(newMileage.miles || 0, mpg, gasPrice));
+								if (
+									!(
+										typeof existingTrip.fuelCost === 'number' && Number(existingTrip.fuelCost) > 0
+									) &&
+									!(typeof validData.fuelCost === 'number' && Number(validData.fuelCost) > 0)
+								) {
+									trip.fuelCost = Number(calculateFuelCost(newMileage.miles || 0, mpg, gasPrice));
+								}
 								await svc.put(trip);
 							}
 						} catch {
