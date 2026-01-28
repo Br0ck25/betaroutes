@@ -19,6 +19,8 @@
 		"test": "vitest run --watch=false",
 		"test:watch": "vitest",
 		"test:run": "npm test",
+		"pretest:e2e": "npm run build && nohup npm run preview >/dev/null 2>&1 & sleep 2",
+		"test:e2e": "npx playwright test",
 		"gate": "npm run check && npm run lint && npm test"
 	},
 	"lint-staged": {
@@ -65,7 +67,9 @@
 		"typescript": "^5.9.3",
 		"typescript-eslint": "^8.54.0",
 		"vite": "^7.2.2",
-		"vitest": "^4.0.17"
+		"vitest": "^4.0.17",
+		"@playwright/test": "^1.58.0",
+		"playwright": "^1.58.0"
 	},
 	"dependencies": {
 		"@googlemaps/js-api-loader": "^2.0.2",
