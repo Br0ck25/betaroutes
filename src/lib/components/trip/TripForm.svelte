@@ -19,44 +19,35 @@
 	import DestinationList from './DestinationList.svelte';
 	import TripDebug from './TripDebug.svelte';
 	import TripSummary from './TripSummary.svelte';
-
 	// Svelte 5 Props using Runes
 	const { googleApiKey = '', loading = false, trip = null } = $props();
-
 	const settings = get(userSettings);
 	const API_KEY = $derived(() => googleApiKey || 'dummy_key');
 
 	const userState = getUserState();
-
 	// --- Form State (Runes) ---
 	let date = $state(new Date().toISOString().split('T')[0]);
 	let startTime = $state('');
 	let endTime = $state('');
-
 	let startAddress = $state<string>(
 		String(settings.startLocation || storage.getSetting('defaultStartAddress') || '')
 	);
 	let endAddress = $state<string>(
 		String(settings.endLocation || storage.getSetting('defaultEndAddress') || '')
 	);
-
 	// Coordinates State
 	let startLocation = $state<LatLng | undefined>(undefined);
 	let endLocation = $state<LatLng | undefined>(undefined);
-
 	let mpg = $state(settings.defaultMPG ?? storage.getSetting('defaultMPG') ?? 25);
 	// Label shown in the UI is 'Fuel Price', field remains 'gasPrice' in data for backwards compat
 	let gasPrice = $state(settings.defaultGasPrice ?? storage.getSetting('defaultGasPrice') ?? 3.5);
-
 	// Whether fuelCost is auto-calculated from MPG+Fuel Price or manually provided
 	let autoFuelCost = $state(true);
 
 	const distanceUnit = $state(settings.distanceUnit || 'mi');
-
 	// Destinations State
 	let destinations = $state<Destination[]>([{ address: '', earnings: 0 }]);
 	let notes = $state('');
-
 	// Financials State (Runes)
 	let supplies = $state<{ id: string; type: string; cost: number }[]>([]);
 	let maintenance = $state<{ id: string; type: string; cost: number }[]>([]);
@@ -70,7 +61,6 @@
 	let totalMileage = $state(0);
 	let totalTime = $state('');
 	let fuelCost = $state(0);
-
 	// Computed Costs
 	const suppliesCost = $derived(supplies.reduce((sum, item) => sum + (Number(item.cost) || 0), 0));
 	const maintenanceCost = $derived(
@@ -78,7 +68,6 @@
 	);
 
 	let netProfit = $state(0);
-
 	// Upgrade Modal State with specific reason tracking
 	let showUpgradeModal = $state(false);
 	let upgradeReason = $state<'stops' | 'optimize' | 'trips' | 'general'>('general');
@@ -96,7 +85,6 @@
 				return 'Upgrade to Pro to unlock additional conveniences and higher quotas.';
 		}
 	});
-
 	// --- Auto-Calculation Effect ---
 	$effect(() => {
 		const _deps = { startAddress, endAddress, destinations, mpg, gasPrice };
@@ -115,7 +103,6 @@
 
 		return; // ensure consistent return type for the effect
 	});
-
 	// --- Handlers ---
 	function handleAddressSelect(field: 'start' | 'end', e: CustomEvent) {
 		const place = e.detail;
@@ -199,11 +186,9 @@
 				destsCopy,
 				distanceUnit as 'mi' | 'km'
 			);
-
-			// [!code fix] Capture 'miles' first, then 'totalMiles'
+			// Capture 'miles' first, then 'totalMiles'
 			const rawDist = (routeData as any).miles ?? routeData.totalMiles ?? 0;
 			totalMileage = Number(rawDist);
-
 			const duration = routeData.totalMinutes ?? (routeData as any).minutes ?? 0;
 
 			const totals = calculateTripTotals(
@@ -219,12 +204,12 @@
 			);
 
 			totalTime = totals.totalTime || '';
-
 			// Respect manual override if user edited Estimated Fuel Cost (autoFuelCost=false)
 			if (!autoFuelCost) {
 				// keep existing fuelCost (user-specified)
 				fuelCost = Number(fuelCost) || 0;
-			} else if (trip && trip.fuelCost && !startLocation) {
+			} else if (trip && trip.fuelCost !== undefined && trip.fuelCost !== null && !startLocation) {
+				// [!code change] Allow 0 as a valid persisted fuel cost
 				fuelCost = trip.fuelCost;
 			} else {
 				fuelCost = totals.fuelCost || 0;
@@ -241,14 +226,12 @@
 				miles: totalMileage,
 				minutes: duration
 			});
-
 			if (!silent) toasts.success('Route calculated successfully!');
 
 			return routeData;
 		} catch (_err) {
 			console.error('Calculation Error:', _err);
 			const msg = (_err instanceof Error ? _err.message : String(_err || '')).toLowerCase();
-
 			// Plan limit detection
 			if (msg.includes('plan limit') || msg.includes('pro feature') || msg.includes('trip limit')) {
 				upgradeReason = 'general';
@@ -279,10 +262,8 @@
 		}
 
 		calculating = true;
-
 		try {
 			const result: any = await optimizeRoute(startAddress, endAddress || '', validDests);
-
 			if (result && (result as any).optimizedOrder && (result as any).optimizedOrder.length > 0) {
 				const currentDestinations = $state.snapshot(destinations) as Destination[];
 				const validDestinations = currentDestinations.filter(
@@ -291,7 +272,6 @@
 				const emptyDestinations = currentDestinations.filter(
 					(d) => !d.address || d.address.trim() === ''
 				);
-
 				let waypointsToReorder: Destination[] = [];
 				let fixedEnd: Destination | null = null;
 
@@ -322,14 +302,12 @@
 			}
 		} catch (e: any) {
 			const msg = (e.message || '').toLowerCase();
-
 			// Catch ALL potential plan limit indicators
 			const isPlanLimit =
 				e.code === 'PLAN_LIMIT' ||
 				msg.includes('plan limit') ||
 				msg.includes('pro feature') ||
 				msg.includes('upgrade');
-
 			if (isPlanLimit) {
 				upgradeReason = 'optimize';
 				showUpgradeModal = true;
@@ -352,8 +330,9 @@
 		if (draft.endAddress) endAddress = draft.endAddress;
 		if (draft.startLocation) startLocation = draft.startLocation;
 		if (draft.endLocation) endLocation = draft.endLocation;
-		if (draft.mpg) mpg = draft.mpg;
-		if (draft.gasPrice) gasPrice = draft.gasPrice;
+		// [!code change] Allow 0 as valid MPG/Gas Price (don't fallback to defaults)
+		if (draft.mpg !== undefined && draft.mpg !== null) mpg = draft.mpg;
+		if (draft.gasPrice !== undefined && draft.gasPrice !== null) gasPrice = draft.gasPrice;
 		if (draft.destinations && Array.isArray(draft.destinations)) destinations = draft.destinations;
 		if (draft.notes) notes = draft.notes;
 		// Load Supplies from Draft/Trip, normalize and ensure ids
@@ -404,7 +383,8 @@
 		if (trip) {
 			loadDraft(trip);
 			if (trip.totalMiles) totalMileage = trip.totalMiles;
-			if (trip.fuelCost) {
+			// [!code change] Strictly check for undefined/null to allow 0 value
+			if (trip.fuelCost !== undefined && trip.fuelCost !== null) {
 				fuelCost = trip.fuelCost;
 				// If trip has an explicit fuelCost, treat it as manual override
 				autoFuelCost = false;
