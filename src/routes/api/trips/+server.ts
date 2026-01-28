@@ -231,6 +231,9 @@ function mergeTripForUpdate(
 		...(typeof validData.endAddress === 'string' ? { endAddress: validData.endAddress } : {}),
 		...(isLatLng(validData.endLocation) ? { endLocation: validData.endLocation } : {}),
 		...(typeof validData.totalMiles === 'number' ? { totalMiles: validData.totalMiles } : {}),
+		// [!code ++] Persist MPG and Gas Price so they don't reset to defaults on edit
+		...(typeof validData.mpg === 'number' ? { mpg: validData.mpg } : {}),
+		...(typeof validData.gasPrice === 'number' ? { gasPrice: validData.gasPrice } : {}),
 		...(typeof validData.estimatedTime === 'number'
 			? { estimatedTime: validData.estimatedTime }
 			: {}),

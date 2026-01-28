@@ -44,7 +44,10 @@ const ALLOWED_UPDATE_FIELDS = new Set([
 	'totalMiles',
 	'hoursWorked',
 	'estimatedTime',
-	'totalTime'
+	'totalTime',
+	// [!code ++] Allow these fields so updates don't strip them out
+	'mpg',
+	'gasPrice'
 	// NOTE: netProfit is calculated server-side, not accepted from client
 ]);
 
