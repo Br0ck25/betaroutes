@@ -32,7 +32,7 @@ vi.mock('$lib/server/env', () => ({
 	safeDO: () => ({})
 }));
 
-describe('POST /api/trips (expense auto-create)', () => {
+describe('POST /api/trips (auto-create expenses)', () => {
 	beforeEach(() => {
 		mockExpenseSvc = {
 			put: vi.fn().mockResolvedValue(undefined),
@@ -73,15 +73,15 @@ describe('POST /api/trips (expense auto-create)', () => {
 		const json = JSON.parse(await res.text());
 		expect(typeof json.id).toBe('string');
 
-		// Verify expense creation calls
-		expect(mockExpenseSvc.put).toHaveBeenCalled();
-		const calls = (mockExpenseSvc.put as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
-		const ids = calls.map((c) => c.id).sort();
-		const expectedFuelId = `trip-fuel-${json.id}`;
-		const expectedMaintId = `trip-maint-${json.id}-0`;
-		const expectedSupplyId = `trip-supply-${json.id}-0`;
-		expect(ids).toEqual(
-			expect.arrayContaining([expectedFuelId, expectedMaintId, expectedSupplyId])
+		// Expect fuel + maintenance item + supplies item to be created
+		expect(mockExpenseSvc.put).toHaveBeenCalledTimes(3);
+
+		const calls = mockExpenseSvc.put.mock.calls.map(
+			(c: unknown[]) => c[0] as Record<string, unknown>
 		);
+		const categories = calls.map((c) => String(c['category'])).sort();
+		expect(categories).toEqual(['Fuel', 'Maintenance', 'Supplies']);
+		const amounts = calls.map((c) => Number(c['amount'])).sort((a: number, b: number) => a - b);
+		expect(amounts).toEqual([3, 5.5, 12]);
 	});
 });

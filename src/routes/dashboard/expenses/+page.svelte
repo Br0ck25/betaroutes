@@ -7,7 +7,7 @@
 	import { user } from '$lib/stores/auth';
 	import { expenses, isLoading as expensesLoading } from '$lib/stores/expenses';
 	import { toasts } from '$lib/stores/toast';
-	import { trips, isLoading as tripsLoading } from '$lib/stores/trips';
+	import { isLoading as tripsLoading } from '$lib/stores/trips';
 	import { userSettings } from '$lib/stores/userSettings';
 	import { SvelteSet } from '$lib/utils/svelte-reactivity';
 	import { onDestroy } from 'svelte';
@@ -114,80 +114,9 @@
 	}
 	let newCategoryName = '';
 
-	// --- DERIVE TRIP EXPENSES ---
-	$: tripExpenses = $trips.flatMap((trip) => {
-		const items = [];
-		const date =
-			trip.date || (typeof trip.createdAt === 'string' ? trip.createdAt.split('T')[0] : '');
-
-		// 1. Fuel
-		if (trip.fuelCost && trip.fuelCost > 0) {
-			const fid = `trip-fuel-${trip.id}`;
-			const existingFuel = $expenses.find((e: any) => e.id === fid);
-			// If an authoritative expense already exists, prefer it (it will be included via $expenses).
-			if (!existingFuel) {
-				items.push({
-					id: fid,
-					date: date,
-					category: 'fuel',
-					amount: trip.fuelCost,
-					description: 'Fuel',
-					taxDeductible: !!(trip as any).fuelTaxDeductible,
-					source: 'trip',
-					tripId: trip.id
-				});
-			}
-		}
-
-		// 2. Maintenance Items
-		const maint = (trip as any).maintenanceItems || [];
-		if (maint.length) {
-			maint.forEach((item: any, i: number) => {
-				const mid = `trip-maint-${trip.id}-${i}`;
-				const existing = $expenses.find((e: any) => e.id === mid);
-				// Only add a trip-derived item when there is no authoritative expense record
-				if (!existing) {
-					items.push({
-						id: mid,
-						date: date,
-						category: 'maintenance',
-						amount: item.cost,
-						description: `${item.type}`,
-						taxDeductible: !!item.taxDeductible,
-						source: 'trip',
-						tripId: trip.id
-					});
-				}
-			});
-		}
-
-		// 3. Supply Items
-		const supplies = (trip as any).supplyItems || (trip as any).suppliesItems || [];
-		if (supplies.length) {
-			supplies.forEach((item: any, i: number) => {
-				const sid = `trip-supply-${trip.id}-${i}`;
-				const existing = $expenses.find((e: any) => e.id === sid);
-				// Only include trip-derived supply items if no authoritative expense exists
-				if (!existing) {
-					items.push({
-						id: sid,
-						date: date,
-						category: 'supplies',
-						amount: item.cost,
-						description: `${item.type}`,
-						taxDeductible: !!item.taxDeductible,
-						source: 'trip',
-						tripId: trip.id
-					});
-				}
-			});
-		}
-
-		return items;
-	});
-
 	// --- COMBINE & FILTER ---
-	$: allExpenses = [...$expenses, ...tripExpenses];
+	// Only authoritative expenses are shown now; trip-derived UI placeholders removed.
+	$: allExpenses = [...$expenses];
 
 	// Reset selection when filters change
 	$: if (searchQuery || sortBy || sortOrder || filterCategory || startDate || endDate) {
@@ -256,13 +185,9 @@
 	}
 
 	function editExpense(expense: any) {
-		if ((expense as any).source === 'trip') {
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
-			goto(resolve('/dashboard/trips') + '?id=' + encodeURIComponent(String(expense.tripId)));
-		} else {
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
-			goto(resolve('/dashboard/expenses/edit/') + encodeURIComponent(String(expense.id)));
-		}
+		// Navigate to expense editor for authoritative expenses
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
+		goto(resolve('/dashboard/expenses/edit/') + encodeURIComponent(String(expense.id)));
 	}
 
 	function viewTrash() {
@@ -273,18 +198,6 @@
 	async function deleteExpense(id: string, e?: MouseEvent) {
 		if (e) e.stopPropagation();
 		if (!confirm('Move this expense to trash? You can restore it later.')) return;
-
-		// Check if it's a trip log
-		// Allow deleting trip-derived expenses as well, but warn the user
-		const isTripDerived = id.startsWith('trip-');
-		if (isTripDerived) {
-			if (
-				!confirm(
-					'This item is derived from a Trip. Deleting it will change the Trip costs. Continue?'
-				)
-			)
-				return;
-		}
 
 		const currentUser = $page.data['user'] || $user;
 		// [!code fix] Strictly use ID.
@@ -326,15 +239,7 @@
 
 	async function deleteSelected() {
 		const ids = Array.from(selectedExpenses);
-		// Allow deletion of both manual and trip-derived expenses; warn about trip-derived items
-		const tripLogs = ids.filter((id) => id.startsWith('trip-'));
-
-		if (
-			!confirm(
-				`Move ${ids.length} expenses to trash?${tripLogs.length ? ` (${tripLogs.length} are trip-derived and will affect Trips)` : ''}`
-			)
-		)
-			return;
+		if (!confirm(`Move ${ids.length} expenses to trash?`)) return;
 
 		const currentUser = $page.data['user'] || $user;
 		// [!code fix] Strictly use ID.
@@ -358,8 +263,9 @@
 		await invalidateAll();
 	}
 
-	function isTripSource(item: any): boolean {
-		return (item as any)?.source === 'trip';
+	// Trip-derived UI placeholders removed; all items are authoritative expenses
+	function isTripSource(_item: any): boolean {
+		return false;
 	}
 
 	function exportSelected() {
