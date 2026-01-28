@@ -619,7 +619,12 @@ export const POST: RequestHandler = async (event) => {
 		const trip = buildTripForSave(validData, id, storageId, existingTrip ?? undefined);
 
 		// --- If trip has totalMiles compute server-side fuelCost (so UI shows estimated fuel immediately) ---
-		if (typeof validData.totalMiles === 'number' && validData.totalMiles > 0) {
+		// Only compute when the client did not provide an explicit fuelCost (preserve user overrides).
+		if (
+			typeof validData.totalMiles === 'number' &&
+			validData.totalMiles > 0 &&
+			!(typeof validData.fuelCost === 'number' && Number(validData.fuelCost) > 0)
+		) {
 			// Prefer explicit trip mpg/gasPrice from payload, fall back to sensible defaults
 			const tripAny = trip as unknown as Record<string, unknown>;
 			const mpg =
@@ -1033,14 +1038,18 @@ export const PUT: RequestHandler = async (event) => {
 							miles: validData.totalMiles
 						});
 
-						// Recompute trip fuelCost and persist if possible
+						// Recompute trip fuelCost and persist if possible, but DO NOT overwrite a
+						// client-provided fuelCost. Only recompute when the update payload did not
+						// include a positive fuelCost value.
 						try {
-							const tripAny = trip as unknown as Record<string, unknown>;
-							const mpg = typeof tripAny['mpg'] === 'number' ? (tripAny['mpg'] as number) : 25;
-							const gasPrice =
-								typeof tripAny['gasPrice'] === 'number' ? (tripAny['gasPrice'] as number) : 3.5;
-							trip.fuelCost = Number(calculateFuelCost(linkedMileage.miles || 0, mpg, gasPrice));
-							await svc.put(trip);
+							if (!(typeof validData.fuelCost === 'number' && Number(validData.fuelCost) > 0)) {
+								const tripAny = trip as unknown as Record<string, unknown>;
+								const mpg = typeof tripAny['mpg'] === 'number' ? (tripAny['mpg'] as number) : 25;
+								const gasPrice =
+									typeof tripAny['gasPrice'] === 'number' ? (tripAny['gasPrice'] as number) : 3.5;
+								trip.fuelCost = Number(calculateFuelCost(linkedMileage.miles || 0, mpg, gasPrice));
+								await svc.put(trip);
+							}
 						} catch {
 							/* ignore */
 						}
@@ -1085,14 +1094,17 @@ export const PUT: RequestHandler = async (event) => {
 							miles: validData.totalMiles
 						});
 
-						// Recompute and persist trip fuelCost if possible
+						// Recompute and persist trip fuelCost if possible, but do not overwrite a
+						// client-provided fuelCost.
 						try {
-							const tripAny = trip as unknown as Record<string, unknown>;
-							const mpg = typeof tripAny['mpg'] === 'number' ? (tripAny['mpg'] as number) : 25;
-							const gasPrice =
-								typeof tripAny['gasPrice'] === 'number' ? (tripAny['gasPrice'] as number) : 3.5;
-							trip.fuelCost = Number(calculateFuelCost(newMileage.miles || 0, mpg, gasPrice));
-							await svc.put(trip);
+							if (!(typeof validData.fuelCost === 'number' && Number(validData.fuelCost) > 0)) {
+								const tripAny = trip as unknown as Record<string, unknown>;
+								const mpg = typeof tripAny['mpg'] === 'number' ? (tripAny['mpg'] as number) : 25;
+								const gasPrice =
+									typeof tripAny['gasPrice'] === 'number' ? (tripAny['gasPrice'] as number) : 3.5;
+								trip.fuelCost = Number(calculateFuelCost(newMileage.miles || 0, mpg, gasPrice));
+								await svc.put(trip);
+							}
 						} catch {
 							/* ignore */
 						}
