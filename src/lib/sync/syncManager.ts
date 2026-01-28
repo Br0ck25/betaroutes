@@ -1,9 +1,8 @@
 // src/lib/sync/syncManager.ts
 import { getDB } from '$lib/db/indexedDB';
+import type { StopRecord, SyncQueueItem, TripRecord } from '$lib/db/types';
 import { syncStatus } from '$lib/stores/sync';
-import type { SyncQueueItem, TripRecord } from '$lib/db/types';
 import { loadGoogleMaps } from '$lib/utils/autocomplete';
-import type { StopRecord } from '$lib/db/types';
 import { csrfFetch } from '$lib/utils/csrf';
 
 interface StoreHandler {

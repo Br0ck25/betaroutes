@@ -693,18 +693,22 @@
 	}
 
 	$: {
-		const totalMiles = Number(tripData.totalMiles || 0);
-		const mpg = Number(tripData.mpg || 0);
-		const gasPrice = Number(tripData.gasPrice || 0);
+		const totalMiles = Number(tripData.totalMiles ?? 0);
+		const mpg = Number(tripData.mpg ?? 0);
+		const gasPrice = Number(tripData.gasPrice ?? 0);
 		const gallons = totalMiles && mpg ? totalMiles / mpg : 0;
 		if (fuelCostLocal !== '') {
 			// User override wins; sanitize input to handle $/commas
 			const cleaned = String(fuelCostLocal).replace(/[^0-9.-]/g, '');
 			const n = parseFloat(cleaned);
 			tripData.fuelCost = Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
-		} else if (totalMiles && mpg && gasPrice) {
+		} else if (typeof tripData.fuelCost === 'number' && Number(tripData.fuelCost) > 0) {
+			// Preserve an existing positive fuelCost (server or prior user value)
+			// No-op -- keep existing tripData.fuelCost
+		} else if (totalMiles && mpg && Number.isFinite(gasPrice)) {
 			tripData.fuelCost = Math.round(gallons * gasPrice * 100) / 100;
 		} else {
+			// Only set to 0 when no other source available
 			tripData.fuelCost = 0;
 		}
 	}

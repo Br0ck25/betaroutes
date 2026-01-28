@@ -376,8 +376,14 @@
 					const updatedTrip = $trips.find((t) => t.id === tripId);
 					const activeId = (document.activeElement as HTMLElement | null)?.id;
 					// If the trip already has a saved non-zero fuelCost, treat it as a user-provided value and preserve it.
-					if (updatedTrip && Number(updatedTrip.fuelCost || 0) > 0) {
-						const stored = Number(updatedTrip.fuelCost || 0);
+					if (
+						(typeof tripData.fuelCost === 'number' && Number(tripData.fuelCost) > 0) ||
+						(updatedTrip && Number(updatedTrip.fuelCost || 0) > 0)
+					) {
+						const stored =
+							typeof tripData.fuelCost === 'number' && Number(tripData.fuelCost) > 0
+								? Number(tripData.fuelCost)
+								: Number(updatedTrip?.fuelCost || 0);
 						if (Number(tripData.fuelCost || 0) !== stored) tripData.fuelCost = stored;
 						if (activeId !== 'fuel-cost') fuelCostLocal = stored.toFixed(2);
 					} else {
