@@ -240,6 +240,20 @@ function createMileageStore() {
 					r.id === id ? { ...r, ...changes, updatedAt: new Date().toISOString() } : r
 				)
 			);
+			// Prefetch user settings OUTSIDE of the IDB transaction to avoid TransactionInactiveError
+			let preFetchedSettings: {
+				mileageRate?: number;
+				vehicles?: Array<{ id?: string; name?: string }>;
+			} | null = null;
+			try {
+				const mod = await import('$lib/stores/userSettings');
+				preFetchedSettings = get(mod.userSettings) as unknown as {
+					mileageRate?: number;
+					vehicles?: Array<{ id?: string; name?: string }>;
+				};
+			} catch {
+				/* ignore */
+			}
 			try {
 				const db = await getDB();
 				const mileageStoreName = resolveMileageStoreName(db);
@@ -282,8 +296,7 @@ function createMileageStore() {
 					let rate = typeof updated.mileageRate === 'number' ? updated.mileageRate : undefined;
 					if (rate == null) {
 						try {
-							const { userSettings } = await import('$lib/stores/userSettings');
-							const settings = get(userSettings);
+							const settings = preFetchedSettings;
 							rate = typeof settings?.mileageRate === 'number' ? settings.mileageRate : undefined;
 						} catch {
 							/* ignore */

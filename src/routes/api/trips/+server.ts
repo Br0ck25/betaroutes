@@ -20,6 +20,7 @@ import {
 import type { TripRecord } from '$lib/server/tripService';
 import { makeTripService } from '$lib/server/tripService';
 import { findUserById } from '$lib/server/userService';
+import { calculateFuelCost } from '$lib/utils/calculations';
 import { z } from 'zod';
 import type { RequestHandler } from './$types';
 
@@ -599,6 +600,29 @@ export const POST: RequestHandler = async (event) => {
 		// Build explicit TripRecord (prevent mass-assignment)
 		const trip = buildTripForSave(validData, id, storageId, existingTrip ?? undefined);
 
+		// --- If trip has totalMiles compute server-side fuelCost (so UI shows estimated fuel immediately) ---
+		if (typeof validData.totalMiles === 'number' && validData.totalMiles > 0) {
+			// Prefer explicit trip mpg/gasPrice from payload, fall back to sensible defaults
+			const tripAny = trip as unknown as Record<string, unknown>;
+			const mpg =
+				typeof tripAny['mpg'] === 'number'
+					? (tripAny['mpg'] as number)
+					: typeof validData.mpg === 'number'
+						? validData.mpg
+						: 25;
+			const gasPrice =
+				typeof tripAny['gasPrice'] === 'number'
+					? (tripAny['gasPrice'] as number)
+					: typeof validData.gasPrice === 'number'
+						? validData.gasPrice
+						: 3.5;
+			try {
+				trip.fuelCost = Number(calculateFuelCost(validData.totalMiles, mpg, gasPrice));
+			} catch {
+				/* ignore */
+			}
+		}
+
 		// Persist trip
 		await svc.put(trip);
 
@@ -962,6 +986,27 @@ export const PUT: RequestHandler = async (event) => {
 					if (linkedMileage) {
 						// Update existing mileage log
 						linkedMileage.miles = validData.totalMiles;
+						// Try to attach mileageRate/reimbursement from user settings if available
+						try {
+							const userSettingsKV = safeKV(env, 'BETA_USER_SETTINGS_KV');
+							if (userSettingsKV && sessionUserSafe?.id) {
+								const settingsRaw = await userSettingsKV.get(`settings:${sessionUserSafe.id}`);
+								if (settingsRaw) {
+									const settings = JSON.parse(settingsRaw);
+									if (typeof settings.mileageRate === 'number') {
+										linkedMileage.mileageRate = settings.mileageRate;
+										linkedMileage.reimbursement = Number(
+											(Number(linkedMileage.miles) * settings.mileageRate).toFixed(2)
+										);
+									}
+									const firstVehicle = settings.vehicles?.[0];
+									if (firstVehicle?.id) linkedMileage.vehicle = firstVehicle.id;
+									else if (firstVehicle?.name) linkedMileage.vehicle = firstVehicle.name;
+								}
+							}
+						} catch {
+							/* ignore */
+						}
 
 						linkedMileage.updatedAt = now;
 						await mileageSvc.put(linkedMileage);
@@ -969,25 +1014,70 @@ export const PUT: RequestHandler = async (event) => {
 							tripId: trip.id,
 							miles: validData.totalMiles
 						});
+
+						// Recompute trip fuelCost and persist if possible
+						try {
+							const tripAny = trip as unknown as Record<string, unknown>;
+							const mpg = typeof tripAny['mpg'] === 'number' ? (tripAny['mpg'] as number) : 25;
+							const gasPrice =
+								typeof tripAny['gasPrice'] === 'number' ? (tripAny['gasPrice'] as number) : 3.5;
+							trip.fuelCost = Number(calculateFuelCost(linkedMileage.miles || 0, mpg, gasPrice));
+							await svc.put(trip);
+						} catch {
+							/* ignore */
+						}
 					} else if (validData.totalMiles > 0) {
 						// Create new mileage log if none exists and miles > 0
-						const newMileage = {
+						const newMileage: Partial<import('$lib/server/mileageService').MileageRecord> = {
 							id: crypto.randomUUID(),
 							tripId: trip.id,
 							userId: storageId,
 							date: trip.date || now,
-
 							miles: validData.totalMiles,
 							notes: 'Auto-created from trip edit',
 							createdAt: now,
 							updatedAt: now,
 							syncStatus: 'synced' as const
 						};
-						await mileageSvc.put(newMileage);
+						// Attach mileageRate/vehicle/reimbursement from user settings if available
+						try {
+							const userSettingsKV = safeKV(env, 'BETA_USER_SETTINGS_KV');
+							if (userSettingsKV && sessionUserSafe?.id) {
+								const settingsRaw = await userSettingsKV.get(`settings:${sessionUserSafe.id}`);
+								if (settingsRaw) {
+									const settings = JSON.parse(settingsRaw);
+									if (typeof settings.mileageRate === 'number') {
+										newMileage.mileageRate = settings.mileageRate;
+										newMileage.reimbursement = Number(
+											(Number(newMileage.miles) * settings.mileageRate).toFixed(2)
+										);
+									}
+									const firstVehicle = settings.vehicles?.[0];
+									if (firstVehicle?.id) newMileage.vehicle = firstVehicle.id;
+									else if (firstVehicle?.name) newMileage.vehicle = firstVehicle.name;
+								}
+							}
+						} catch {
+							/* ignore */
+						}
+
+						await mileageSvc.put(newMileage as import('$lib/server/mileageService').MileageRecord);
 						log.info('Created mileage log from trip edit', {
 							tripId: trip.id,
 							miles: validData.totalMiles
 						});
+
+						// Recompute and persist trip fuelCost if possible
+						try {
+							const tripAny = trip as unknown as Record<string, unknown>;
+							const mpg = typeof tripAny['mpg'] === 'number' ? (tripAny['mpg'] as number) : 25;
+							const gasPrice =
+								typeof tripAny['gasPrice'] === 'number' ? (tripAny['gasPrice'] as number) : 3.5;
+							trip.fuelCost = Number(calculateFuelCost(newMileage.miles || 0, mpg, gasPrice));
+							await svc.put(trip);
+						} catch {
+							/* ignore */
+						}
 					}
 				}
 			} catch (e) {
