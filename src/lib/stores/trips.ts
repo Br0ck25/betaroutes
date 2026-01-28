@@ -18,27 +18,18 @@ function createTripsStore() {
 
 	return {
 		subscribe,
-		updateLocal(trip: Partial<TripRecord>) {
+		updateLocal(trip: TripRecord) {
 			update((items) => {
 				const index = items.findIndex((t) => t.id === trip.id);
 				if (index !== -1) {
 					const newItems = [...items];
-					newItems[index] = { ...newItems[index], ...(trip as Partial<TripRecord>) } as TripRecord;
+					newItems[index] = { ...newItems[index], ...trip };
 					return newItems;
 				}
-				// If trip doesn't exist in the store, add it (for restore from trash) - fill required fields minimally
-				const minimal = {
-					id: trip.id ?? crypto.randomUUID(),
-					userId: (trip as Partial<TripRecord>).userId ?? 'unknown',
-					createdAt: new Date().toISOString(),
-					updatedAt: new Date().toISOString(),
-					syncStatus: 'pending' as const,
-					...trip
-				} as TripRecord;
-				return [minimal, ...items];
+				// If trip doesn't exist in the store, add it (for restore from trash)
+				return [trip, ...items];
 			});
 		},
-
 		// ... (keep load, create, updateTrip exactly as they are) ...
 		async load(userId?: string) {
 			// ... copy existing load code ...
@@ -503,7 +494,7 @@ function createTripsStore() {
 export const trips = createTripsStore();
 
 syncManager.registerStore('trips', {
-	updateLocal: (trip: unknown) => trips.updateLocal(trip as Partial<TripRecord>),
+	updateLocal: (trip: unknown) => trips.updateLocal(trip as TripRecord),
 	syncDown: async () => {
 		const user = get(authUser) as User | null;
 		if (user?.id) await trips.syncFromCloud(user.id);

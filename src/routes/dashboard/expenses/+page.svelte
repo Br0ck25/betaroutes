@@ -1,16 +1,16 @@
 <script lang="ts">
+	import { expenses, isLoading as expensesLoading } from '$lib/stores/expenses';
+	import { trips, isLoading as tripsLoading } from '$lib/stores/trips';
+	import { userSettings } from '$lib/stores/userSettings';
+	import { user } from '$lib/stores/auth';
+	import { toasts } from '$lib/stores/toast';
+	import Modal from '$lib/components/ui/Modal.svelte';
+	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
-	import Modal from '$lib/components/ui/Modal.svelte';
-	import Skeleton from '$lib/components/ui/Skeleton.svelte';
-	import { user } from '$lib/stores/auth';
-	import { expenses, isLoading as expensesLoading } from '$lib/stores/expenses';
-	import { toasts } from '$lib/stores/toast';
-	import { isLoading as tripsLoading } from '$lib/stores/trips';
-	import { userSettings } from '$lib/stores/userSettings';
-	import { SvelteSet } from '$lib/utils/svelte-reactivity';
 	import { onDestroy } from 'svelte';
+	import { SvelteSet } from '$lib/utils/svelte-reactivity';
 	import type { PageData } from './$types';
 
 	export let data: PageData;
@@ -114,9 +114,65 @@
 	}
 	let newCategoryName = '';
 
+	// --- DERIVE TRIP EXPENSES ---
+	$: tripExpenses = $trips.flatMap((trip) => {
+		const items = [];
+		const date =
+			trip.date || (typeof trip.createdAt === 'string' ? trip.createdAt.split('T')[0] : '');
+
+		// 1. Fuel
+		if (trip.fuelCost && trip.fuelCost > 0) {
+			items.push({
+				id: `trip-fuel-${trip.id}`,
+				date: date,
+				category: 'fuel',
+				amount: trip.fuelCost,
+				description: 'Fuel',
+				taxDeductible: !!(trip as any).fuelTaxDeductible,
+				source: 'trip',
+				tripId: trip.id
+			});
+		}
+
+		// 2. Maintenance Items
+		const maint = (trip as any).maintenanceItems || [];
+		if (maint.length) {
+			maint.forEach((item: any, i: number) => {
+				items.push({
+					id: `trip-maint-${trip.id}-${i}`,
+					date: date,
+					category: 'maintenance',
+					amount: item.cost,
+					description: `${item.type}`,
+					taxDeductible: !!item.taxDeductible,
+					source: 'trip',
+					tripId: trip.id
+				});
+			});
+		}
+
+		// 3. Supply Items
+		const supplies = (trip as any).supplyItems || (trip as any).suppliesItems || [];
+		if (supplies.length) {
+			supplies.forEach((item: any, i: number) => {
+				items.push({
+					id: `trip-supply-${trip.id}-${i}`,
+					date: date,
+					category: 'supplies',
+					amount: item.cost,
+					description: `${item.type}`,
+					taxDeductible: !!item.taxDeductible,
+					source: 'trip',
+					tripId: trip.id
+				});
+			});
+		}
+
+		return items;
+	});
+
 	// --- COMBINE & FILTER ---
-	// Only authoritative expenses are shown now; trip-derived UI placeholders removed.
-	$: allExpenses = [...$expenses];
+	$: allExpenses = [...$expenses, ...tripExpenses];
 
 	// Reset selection when filters change
 	$: if (searchQuery || sortBy || sortOrder || filterCategory || startDate || endDate) {
@@ -185,9 +241,13 @@
 	}
 
 	function editExpense(expense: any) {
-		// Navigate to expense editor for authoritative expenses
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
-		goto(resolve('/dashboard/expenses/edit/') + encodeURIComponent(String(expense.id)));
+		if ((expense as any).source === 'trip') {
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
+			goto(resolve('/dashboard/trips') + '?id=' + encodeURIComponent(String(expense.tripId)));
+		} else {
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
+			goto(resolve('/dashboard/expenses/edit/') + encodeURIComponent(String(expense.id)));
+		}
 	}
 
 	function viewTrash() {
@@ -198,6 +258,12 @@
 	async function deleteExpense(id: string, e?: MouseEvent) {
 		if (e) e.stopPropagation();
 		if (!confirm('Move this expense to trash? You can restore it later.')) return;
+
+		// Check if it's a trip log
+		if (id.startsWith('trip-')) {
+			toasts.error('Cannot delete Trips here. Delete the Trip instead.');
+			return;
+		}
 
 		const currentUser = $page.data['user'] || $user;
 		// [!code fix] Strictly use ID.
@@ -239,7 +305,20 @@
 
 	async function deleteSelected() {
 		const ids = Array.from(selectedExpenses);
-		if (!confirm(`Move ${ids.length} expenses to trash?`)) return;
+		const manualExpenses = ids.filter((id) => !id.startsWith('trip-'));
+		const tripLogs = ids.length - manualExpenses.length;
+
+		if (manualExpenses.length === 0 && tripLogs > 0) {
+			toasts.error(`Cannot delete ${tripLogs} Trip Logs. Edit them in Trips.`);
+			return;
+		}
+
+		if (
+			!confirm(
+				`Move ${manualExpenses.length} expenses to trash? ${tripLogs > 0 ? `(${tripLogs} trips will be skipped)` : ''}`
+			)
+		)
+			return;
 
 		const currentUser = $page.data['user'] || $user;
 		// [!code fix] Strictly use ID.
@@ -248,7 +327,7 @@
 		if (!userId) return;
 
 		let successCount = 0;
-		for (const id of ids) {
+		for (const id of manualExpenses) {
 			try {
 				await expenses.deleteExpense(id, userId);
 				successCount++;
@@ -263,9 +342,8 @@
 		await invalidateAll();
 	}
 
-	// Trip-derived UI placeholders removed; all items are authoritative expenses
-	function isTripSource(_item: any): boolean {
-		return false;
+	function isTripSource(item: any): boolean {
+		return (item as any)?.source === 'trip';
 	}
 
 	function exportSelected() {

@@ -21,6 +21,9 @@ function safeWaitUntil(event: Parameters<RequestHandler>[0], p: Promise<unknown>
 	void p;
 }
 
+// [!code fix] SECURITY: Removed dangerous fakeDO fallback that caused silent data loss.
+// In production, missing DO bindings now properly error. Dev mode uses a noop stub for testing only.
+
 // SECURITY: Allowed fields for trip updates (prevents mass assignment)
 const ALLOWED_UPDATE_FIELDS = new Set([
 	'title',
@@ -44,10 +47,7 @@ const ALLOWED_UPDATE_FIELDS = new Set([
 	'totalMiles',
 	'hoursWorked',
 	'estimatedTime',
-	'totalTime',
-	// [!code ++] Allow these fields so updates don't strip them out
-	'mpg',
-	'gasPrice'
+	'totalTime'
 	// NOTE: netProfit is calculated server-side, not accepted from client
 ]);
 
@@ -101,6 +101,7 @@ export const GET: RequestHandler = async (event) => {
 		);
 
 		const userSafe = user as { id?: string; name?: string; token?: string } | undefined;
+		// [!code fix] Strictly use ID. Prevents username spoofing.
 		const storageId = userSafe?.id || '';
 
 		const trip = await svc.get(storageId, id);
@@ -174,6 +175,7 @@ export const PUT: RequestHandler = async (event) => {
 		);
 
 		const userSafe = user as { id?: string; name?: string; token?: string } | undefined;
+		// [!code fix] Strictly use ID. Prevents username spoofing.
 		const storageId = userSafe?.id || '';
 
 		// Verify existing ownership
@@ -279,6 +281,7 @@ export const DELETE: RequestHandler = async (event) => {
 		);
 
 		const userSafe = user as { id?: string; name?: string; token?: string } | undefined;
+		// [!code fix] Strictly use ID. Prevents username spoofing.
 		const storageId = userSafe?.id || '';
 
 		// Check if trip exists
@@ -310,6 +313,7 @@ export const DELETE: RequestHandler = async (event) => {
 					tripIndexDO as unknown as DurableObjectNamespace
 				);
 				// Find mileage logs linked to this trip
+				// Mileage logs can be linked by tripId OR by having the same id as the trip
 				const allMileage = await mileageSvc.list(storageId);
 				const linkedMileage = allMileage.filter(
 					(m: MileageRecord) => m.tripId === id || m.id === id

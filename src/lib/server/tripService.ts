@@ -35,9 +35,7 @@ export type TripRecord = {
 	maintenanceItems?: unknown[];
 	supplyItems?: unknown[];
 	suppliesItems?: unknown[];
-	totalMiles?: number; /** Optional fuel calculation inputs persisted from client */
-	mpg?: number;
-	gasPrice?: number;
+	totalMiles?: number;
 	hoursWorked?: number;
 	estimatedTime?: number;
 	totalTime?: string;
@@ -110,9 +108,6 @@ export function makeTripService(
 		hoursWorked: trip.hoursWorked,
 		estimatedTime: trip.estimatedTime,
 		totalTime: trip.totalTime,
-		// Persist custom MPG/Gas Price so list view calcs don't drift
-		mpg: trip.mpg,
-		gasPrice: trip.gasPrice,
 		stopsCount: trip.stops?.length || 0,
 		stops: trip.stops,
 		createdAt: trip.createdAt,
@@ -179,8 +174,8 @@ export function makeTripService(
 		}
 	}
 
-	// Helper to fetch directly from KV (Source of Truth)
-	// SECURITY: Use batched fetch to avoid Cloudflare subrequest limits (1000 per request)
+	// [!code change] Helper to fetch directly from KV (Source of Truth)
+	// [!code fix] SECURITY: Use batched fetch to avoid Cloudflare subrequest limits (1000 per request)
 	async function listFromKV(userId: string): Promise<TripRecord[]> {
 		const prefix = prefixForUser(userId);
 		const out: TripRecord[] = [];
@@ -201,7 +196,7 @@ export function makeTripService(
 				if (!raw) continue;
 				try {
 					const t = JSON.parse(raw);
-					// CRITICAL FIX: Do NOT filter out deleted items here.
+					// [!code change] CRITICAL FIX: Do NOT filter out deleted items here.
 					// We must return them so the sync logic knows to tell the client to delete them.
 					out.push(t);
 				} catch {
@@ -460,7 +455,7 @@ export function makeTripService(
 
 			const out: TrashItem[] = [];
 
-			// SECURITY: Use batched fetch to avoid Cloudflare subrequest limits (1000 per request)
+			// [!code fix] SECURITY: Use batched fetch to avoid Cloudflare subrequest limits (1000 per request)
 			const BATCH_SIZE = 50;
 			for (let i = 0; i < keys.length; i += BATCH_SIZE) {
 				const batch = keys.slice(i, i + BATCH_SIZE);
