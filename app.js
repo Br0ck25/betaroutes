@@ -847,8 +847,8 @@ function resumeDraftTrip() {
 	document.getElementById('log-date').value = data.date || '';
 	document.getElementById('start-address').value = data.start || '';
 	document.getElementById('end-address').value = data.end || '';
-	document.getElementById('mpg').value = data.mpg || '';
-	document.getElementById('gas-price').value = data.gas || '';
+	document.getElementById('mpg').value = data.mpg ?? '';
+	document.getElementById('gas-price').value = data.gas ?? '';
 	document.getElementById('start-time').value = data.startTime || '';
 	document.getElementById('end-time').value = data.endTime || '';
 	document.getElementById('total-hours').value = formatHoursAndMinutes(data.hoursWorked || 0);

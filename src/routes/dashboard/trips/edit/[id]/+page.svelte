@@ -383,8 +383,8 @@
 					} else {
 						// Otherwise compute using authoritative client-side settings (mpgLocal / gasPriceLocal)
 						const miles = Number(tripData.totalMiles || 0);
-						const mpg = Number((mpgLocal || $userSettings.defaultMPG) ?? 25);
-						const gas = Number((gasPriceLocal || $userSettings.defaultGasPrice) ?? 3.5);
+						const mpg = Number(mpgLocal ?? $userSettings.defaultMPG ?? 25);
+						const gas = Number(gasPriceLocal ?? $userSettings.defaultGasPrice ?? 3.5);
 						const gallons = miles && mpg ? miles / mpg : 0;
 						const computed = Math.round(gallons * gas * 100) / 100;
 						if (Number(tripData.fuelCost || 0) !== computed) tripData.fuelCost = computed;
