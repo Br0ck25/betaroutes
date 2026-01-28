@@ -32,7 +32,7 @@ vi.mock('$lib/server/env', () => ({
 	safeDO: () => ({})
 }));
 
-describe('POST /api/trips (no expense auto-create)', () => {
+describe('POST /api/trips (auto-create expenses)', () => {
 	beforeEach(() => {
 		mockExpenseSvc = {
 			put: vi.fn().mockResolvedValue(undefined),
@@ -73,7 +73,15 @@ describe('POST /api/trips (no expense auto-create)', () => {
 		const json = JSON.parse(await res.text());
 		expect(typeof json.id).toBe('string');
 
-		// No expense records should be auto-created
-		expect(mockExpenseSvc.put).not.toHaveBeenCalled();
+		// Expect fuel + maintenance item + supplies item to be created
+		expect(mockExpenseSvc.put).toHaveBeenCalledTimes(3);
+
+		const calls = mockExpenseSvc.put.mock.calls.map(
+			(c: unknown[]) => c[0] as Record<string, unknown>
+		);
+		const categories = calls.map((c) => String(c['category'])).sort();
+		expect(categories).toEqual(['Fuel', 'Maintenance', 'Supplies']);
+		const amounts = calls.map((c) => Number(c['amount'])).sort((a: number, b: number) => a - b);
+		expect(amounts).toEqual([3, 5.5, 12]);
 	});
 });
