@@ -110,7 +110,7 @@ export function makeTripService(
 		hoursWorked: trip.hoursWorked,
 		estimatedTime: trip.estimatedTime,
 		totalTime: trip.totalTime,
-		// [!code ++] Persist custom MPG/Gas Price so list view calcs don't drift
+		// Persist custom MPG/Gas Price so list view calcs don't drift
 		mpg: trip.mpg,
 		gasPrice: trip.gasPrice,
 		stopsCount: trip.stops?.length || 0,

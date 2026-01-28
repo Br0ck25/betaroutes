@@ -204,13 +204,12 @@
 			);
 
 			totalTime = totals.totalTime || '';
-			// Respect manual override if user edited Estimated Fuel Cost (autoFuelCost=false)
+
+			// [!code change] CRITICAL FIX: Respect manual override unconditionally if set.
+			// Removed the `!startLocation` check which was causing the 3.72 revert on load.
 			if (!autoFuelCost) {
 				// keep existing fuelCost (user-specified)
 				fuelCost = Number(fuelCost) || 0;
-			} else if (trip && trip.fuelCost !== undefined && trip.fuelCost !== null && !startLocation) {
-				// [!code change] Allow 0 as a valid persisted fuel cost
-				fuelCost = trip.fuelCost;
 			} else {
 				fuelCost = totals.fuelCost || 0;
 			}
@@ -330,7 +329,7 @@
 		if (draft.endAddress) endAddress = draft.endAddress;
 		if (draft.startLocation) startLocation = draft.startLocation;
 		if (draft.endLocation) endLocation = draft.endLocation;
-		// [!code change] Allow 0 as valid MPG/Gas Price (don't fallback to defaults)
+		// Allow 0 as valid MPG/Gas Price (don't fallback to defaults)
 		if (draft.mpg !== undefined && draft.mpg !== null) mpg = draft.mpg;
 		if (draft.gasPrice !== undefined && draft.gasPrice !== null) gasPrice = draft.gasPrice;
 		if (draft.destinations && Array.isArray(draft.destinations)) destinations = draft.destinations;
@@ -383,7 +382,7 @@
 		if (trip) {
 			loadDraft(trip);
 			if (trip.totalMiles) totalMileage = trip.totalMiles;
-			// [!code change] Strictly check for undefined/null to allow 0 value
+			// Strictly check for undefined/null to allow 0 value
 			if (trip.fuelCost !== undefined && trip.fuelCost !== null) {
 				fuelCost = trip.fuelCost;
 				// If trip has an explicit fuelCost, treat it as manual override
