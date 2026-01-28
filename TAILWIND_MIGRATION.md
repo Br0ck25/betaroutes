@@ -8,16 +8,16 @@ This guide helps you migrate from the old color palette to the DESIGN_SYSTEM.md 
 
 ### Old → New Mapping
 
-| Old Class             | New Class             | Hex     | Usage             |
-| --------------------- | --------------------- | ------- | ----------------- |
-| `primary-green`       | `brand-orange`        | #F68A2E | Primary CTAs      |
-| `primary-green-dark`  | `brand-orange`        | #F68A2E | Same as above     |
-| `primary-purple`      | `brand-accent-purple` | #8F3D91 | Secondary actions |
-| `primary-purple-dark` | `brand-accent-purple` | #8F3D91 | Same as above     |
-| `semantic-success`    | `semantic-success`    | #8BC12D | ✅ No change      |
-| `semantic-error`      | `semantic-error`      | #F68A2E | ✅ No change      |
-| `semantic-warning`    | `semantic-warning`    | #F68A2E | ✅ No change      |
-| `semantic-info`       | `semantic-info`       | #1FA8DB | ✅ No change      |
+| Old Class | New Class | Hex | Usage |
+|-----------|-----------|-----|-------|
+| `primary-green` | `brand-orange` | #F68A2E | Primary CTAs |
+| `primary-green-dark` | `brand-orange` | #F68A2E | Same as above |
+| `primary-purple` | `brand-accent-purple` | #8F3D91 | Secondary actions |
+| `primary-purple-dark` | `brand-accent-purple` | #8F3D91 | Same as above |
+| `semantic-success` | `semantic-success` | #8BC12D | ✅ No change |
+| `semantic-error` | `semantic-error` | #F68A2E | ✅ No change |
+| `semantic-warning` | `semantic-warning` | #F68A2E | ✅ No change |
+| `semantic-info` | `semantic-info` | #1FA8DB | ✅ No change |
 
 ---
 
@@ -82,7 +82,6 @@ Some color choices may need human judgment:
 ### Consider These Alternatives
 
 **If the old color was used for:**
-
 - ✅ Success states → Use `semantic-success` (green)
 - ⚠️ Primary CTAs → Use `brand-orange`
 - 🔵 Links/Info → Use `brand-accent-blue`
@@ -92,13 +91,19 @@ Some color choices may need human judgment:
 
 ```svelte
 <!-- BEFORE -->
-<button class="bg-primary-green text-white hover:bg-primary-green-dark"> Save </button>
+<button class="bg-primary-green text-white hover:bg-primary-green-dark">
+  Save
+</button>
 
 <!-- AFTER (Primary CTA) -->
-<button class="bg-brand-orange text-neutral-white hover:opacity-90"> Save </button>
+<button class="bg-brand-orange text-neutral-white hover:opacity-90">
+  Save
+</button>
 
 <!-- AFTER (Success action) -->
-<button class="bg-semantic-success text-neutral-white hover:opacity-90"> Save </button>
+<button class="bg-semantic-success text-neutral-white hover:opacity-90">
+  Save
+</button>
 ```
 
 ---
@@ -193,7 +198,6 @@ npm run gate
 ## New Color Palette Reference
 
 ### Brand Colors
-
 - `brand-orange` - #F68A2E (Primary CTA)
 - `brand-blue` - #2C507B (Headers)
 - `brand-accent-blue` - #1FA8DB (Links)
@@ -201,7 +205,6 @@ npm run gate
 - `brand-accent-purple` - #8F3D91 (Highlights)
 
 ### Neutral Colors
-
 - `neutral-white` - #FFFFFF
 - `neutral-black` - #000000
 - `neutral-gray-light` - #F5F5F5
@@ -209,7 +212,6 @@ npm run gate
 - `neutral-gray-dark` - #333333
 
 ### Semantic Colors
-
 - `semantic-success` - #8BC12D
 - `semantic-error` - #F68A2E
 - `semantic-warning` - #F68A2E
