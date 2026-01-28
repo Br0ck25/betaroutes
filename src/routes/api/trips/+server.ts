@@ -1,8 +1,6 @@
 // src/routes/api/trips/+server.ts
 import { PLAN_LIMITS } from '$lib/constants';
 import { computeAndCacheDirections } from '$lib/server/directionsCache';
-// expenseService removed: auto-created trip expenses were removed per feature change
-import { makeExpenseService, type ExpenseRecord } from '$lib/server/expenseService';
 import { log } from '$lib/server/log';
 import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
 import {
@@ -20,12 +18,10 @@ import {
 import type { TripRecord } from '$lib/server/tripService';
 import { makeTripService } from '$lib/server/tripService';
 import { findUserById } from '$lib/server/userService';
-import { calculateFuelCost } from '$lib/utils/calculations';
 import { z } from 'zod';
 import type { RequestHandler } from './$types';
 
 import { safeDO, safeKV } from '$lib/server/env';
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 // Type guard for location objects returned from clients/places
 function isLatLng(obj: unknown): obj is { lat: number; lng: number } {
@@ -152,9 +148,6 @@ function buildTripForSave(
 	if (typeof validData.endAddress === 'string') outBase.endAddress = validData.endAddress;
 	if (isLatLng(validData.endLocation)) outBase.endLocation = validData.endLocation;
 	if (typeof validData.totalMiles === 'number') outBase.totalMiles = validData.totalMiles;
-	// Persist user-provided MPG / gas price so subsequent reads do not fall back to defaults
-	if (typeof validData.mpg === 'number') outBase.mpg = validData.mpg;
-	if (typeof validData.gasPrice === 'number') outBase.gasPrice = validData.gasPrice;
 	if (typeof validData.estimatedTime === 'number') outBase.estimatedTime = validData.estimatedTime;
 	if (typeof validData.totalTime === 'string') outBase.totalTime = validData.totalTime;
 	if (typeof validData.fuelCost === 'number') outBase.fuelCost = validData.fuelCost;
@@ -231,9 +224,6 @@ function mergeTripForUpdate(
 		...(typeof validData.endAddress === 'string' ? { endAddress: validData.endAddress } : {}),
 		...(isLatLng(validData.endLocation) ? { endLocation: validData.endLocation } : {}),
 		...(typeof validData.totalMiles === 'number' ? { totalMiles: validData.totalMiles } : {}),
-		// [!code ++] Persist MPG and Gas Price so they don't reset to defaults on edit
-		...(typeof validData.mpg === 'number' ? { mpg: validData.mpg } : {}),
-		...(typeof validData.gasPrice === 'number' ? { gasPrice: validData.gasPrice } : {}),
 		...(typeof validData.estimatedTime === 'number'
 			? { estimatedTime: validData.estimatedTime }
 			: {}),
@@ -348,6 +338,7 @@ export const GET: RequestHandler = async (event) => {
 			}
 		}
 
+		// [!code fix] Strictly use ID. Prevents username spoofing.
 		const storageId = user?.id || '';
 		let sinceParam = sanitizeQueryParam(event.url.searchParams.get('since'), 50);
 
@@ -412,25 +403,7 @@ export const GET: RequestHandler = async (event) => {
 				const mById = new Map(ms.map((m: MileageRecord) => [m.id, m]));
 				for (const t of allTrips) {
 					const m = mById.get(t.id);
-					if (m && typeof m.miles === 'number') {
-						t.totalMiles = m.miles;
-						// Only compute/attach fuelCost from mileage when the trip DOES NOT already
-						// have an explicit non-zero fuelCost (prefer user-provided value).
-						// [!code change] Allow 0 to count as an explicit override (e.g. electric vehicle free charging)
-						const hasExplicitFuel = typeof (t as Record<string, unknown>)['fuelCost'] === 'number';
-
-						if (!hasExplicitFuel) {
-							try {
-								const tripAny = t as unknown as Record<string, unknown>;
-								const mpg = typeof tripAny['mpg'] === 'number' ? (tripAny['mpg'] as number) : 25;
-								const gasPrice =
-									typeof tripAny['gasPrice'] === 'number' ? (tripAny['gasPrice'] as number) : 3.5;
-								(t as any).fuelCost = Number(calculateFuelCost(m.miles, mpg, gasPrice));
-							} catch {
-								/* ignore */
-							}
-						}
-					}
+					if (m && typeof m.miles === 'number') t.totalMiles = m.miles;
 				}
 			}
 		} catch (err) {
@@ -505,6 +478,7 @@ export const POST: RequestHandler = async (event) => {
 			}
 		}
 
+		// [!code fix] Strictly use ID. Prevents username spoofing.
 		const storageId = sessionUserSafe?.id || '';
 		const rawBody = (await event.request.json()) as unknown;
 
@@ -622,35 +596,6 @@ export const POST: RequestHandler = async (event) => {
 		// Build explicit TripRecord (prevent mass-assignment)
 		const trip = buildTripForSave(validData, id, storageId, existingTrip ?? undefined);
 
-		// --- If trip has totalMiles compute server-side fuelCost (so UI shows estimated fuel immediately) ---
-		// Only compute when the client did not provide an explicit fuelCost (preserve user overrides).
-		// [!code change] Allow 0 as explicit value (checking if typeof is number, not just > 0)
-		if (
-			typeof validData.totalMiles === 'number' &&
-			validData.totalMiles > 0 &&
-			!(typeof validData.fuelCost === 'number')
-		) {
-			// Prefer explicit trip mpg/gasPrice from payload, fall back to sensible defaults
-			const tripAny = trip as unknown as Record<string, unknown>;
-			const mpg =
-				typeof tripAny['mpg'] === 'number'
-					? (tripAny['mpg'] as number)
-					: typeof validData.mpg === 'number'
-						? validData.mpg
-						: 25;
-			const gasPrice =
-				typeof tripAny['gasPrice'] === 'number'
-					? (tripAny['gasPrice'] as number)
-					: typeof validData.gasPrice === 'number'
-						? validData.gasPrice
-						: 3.5;
-			try {
-				trip.fuelCost = Number(calculateFuelCost(validData.totalMiles, mpg, gasPrice));
-			} catch {
-				/* ignore */
-			}
-		}
-
 		// Persist trip
 		await svc.put(trip);
 
@@ -717,115 +662,6 @@ export const POST: RequestHandler = async (event) => {
 					message: createSafeErrorMessage(e)
 				});
 			}
-
-			// --- Auto-create expense records from trip
-			try {
-				const expenseKV = safeKV(env, 'BETA_EXPENSES_KV');
-				if (expenseKV) {
-					const expenseSvc = makeExpenseService(expenseKV, safeDO(env, 'TRIP_INDEX_DO')!);
-
-					// Fuel
-					if (typeof validData.fuelCost === 'number' && validData.fuelCost > 0) {
-						const fuelExpense = {
-							id: crypto.randomUUID(),
-							userId: storageId,
-							date: trip.date || now,
-							category: 'Fuel',
-							amount: Number(validData.fuelCost),
-							description: 'Estimated Fuel Cost (auto-created from trip)',
-							createdAt: now,
-							updatedAt: now,
-							tripId: trip.id,
-							autoCreated: true
-						};
-						await expenseSvc.put(fuelExpense as ExpenseRecord);
-						log.info('Auto-created fuel expense from trip', {
-							tripId: trip.id,
-							amount: fuelExpense.amount
-						});
-					}
-
-					// Maintenance items (per-item) or aggregate
-					if (Array.isArray(validData.maintenanceItems) && validData.maintenanceItems.length > 0) {
-						for (const it of validData.maintenanceItems as CostItemInput[]) {
-							const amt = Number(it.cost) || 0;
-							if (amt <= 0) continue;
-							const rec = {
-								id: crypto.randomUUID(),
-								userId: storageId,
-								date: trip.date || now,
-								category: 'Maintenance',
-								amount: amt,
-								description: it.type || it.item || 'Maintenance (auto-created from trip)',
-								createdAt: now,
-								updatedAt: now,
-								tripId: trip.id,
-								autoCreated: true
-							};
-							await expenseSvc.put(rec as any);
-						}
-					} else if (
-						typeof validData.maintenanceCost === 'number' &&
-						validData.maintenanceCost > 0
-					) {
-						const mrec = {
-							id: crypto.randomUUID(),
-							userId: storageId,
-							date: trip.date || now,
-							category: 'Maintenance',
-							amount: Number(validData.maintenanceCost),
-							description: 'Estimated Maintenance (auto-created from trip)',
-							createdAt: now,
-							updatedAt: now,
-							tripId: trip.id,
-							autoCreated: true
-						};
-						await expenseSvc.put(mrec as any);
-					}
-
-					// Supplies items (per-item) or aggregate
-					if (Array.isArray(validData.suppliesItems) && validData.suppliesItems.length > 0) {
-						for (const it of validData.suppliesItems as CostItemInput[]) {
-							const amt = Number(it.cost) || 0;
-							if (amt <= 0) continue;
-							const rec = {
-								id: crypto.randomUUID(),
-								userId: storageId,
-								date: trip.date || now,
-								category: 'Supplies',
-								amount: amt,
-								description: it.type || it.item || 'Supplies (auto-created from trip)',
-								createdAt: now,
-								updatedAt: now,
-								tripId: trip.id,
-								autoCreated: true
-							};
-							await expenseSvc.put(rec as any);
-						}
-					} else if (typeof validData.suppliesCost === 'number' && validData.suppliesCost > 0) {
-						const srec = {
-							id: crypto.randomUUID(),
-							userId: storageId,
-							date: trip.date || now,
-							category: 'Supplies',
-							amount: Number(validData.suppliesCost),
-							description: 'Estimated Supplies (auto-created from trip)',
-							createdAt: now,
-							updatedAt: now,
-							tripId: trip.id,
-							autoCreated: true
-						};
-						await expenseSvc.put(srec as any);
-					}
-				}
-			} catch (e) {
-				log.warn('Failed to auto-create expense(s) from trip', {
-					tripId: trip.id,
-					message: createSafeErrorMessage(e)
-				});
-			}
-
-			// Auto-creation of expenses from trips has been removed.
 		}
 
 		// --- Direct compute & KV writes (bypass TripIndexDO)
@@ -933,6 +769,7 @@ export const PUT: RequestHandler = async (event) => {
 			}
 		}
 
+		// [!code fix] Strictly use ID. Prevents username spoofing.
 		const storageId = sessionUserSafe?.id || '';
 		const rawBody = (await event.request.json()) as unknown;
 
@@ -1013,27 +850,6 @@ export const PUT: RequestHandler = async (event) => {
 					if (linkedMileage) {
 						// Update existing mileage log
 						linkedMileage.miles = validData.totalMiles;
-						// Try to attach mileageRate/reimbursement from user settings if available
-						try {
-							const userSettingsKV = safeKV(env, 'BETA_USER_SETTINGS_KV');
-							if (userSettingsKV && sessionUserSafe?.id) {
-								const settingsRaw = await userSettingsKV.get(`settings:${sessionUserSafe.id}`);
-								if (settingsRaw) {
-									const settings = JSON.parse(settingsRaw);
-									if (typeof settings.mileageRate === 'number') {
-										linkedMileage.mileageRate = settings.mileageRate;
-										linkedMileage.reimbursement = Number(
-											(Number(linkedMileage.miles) * settings.mileageRate).toFixed(2)
-										);
-									}
-									const firstVehicle = settings.vehicles?.[0];
-									if (firstVehicle?.id) linkedMileage.vehicle = firstVehicle.id;
-									else if (firstVehicle?.name) linkedMileage.vehicle = firstVehicle.name;
-								}
-							}
-						} catch {
-							/* ignore */
-						}
 
 						linkedMileage.updatedAt = now;
 						await mileageSvc.put(linkedMileage);
@@ -1041,95 +857,25 @@ export const PUT: RequestHandler = async (event) => {
 							tripId: trip.id,
 							miles: validData.totalMiles
 						});
-
-						// Recompute trip fuelCost and persist if possible, but DO NOT overwrite a
-						// client-provided fuelCost. Only recompute when the update payload did not
-						// include a positive fuelCost value.
-						try {
-							// [!code change] Check for strictly undefined rather than > 0 to allow 0 override
-							const payloadHasFuel = typeof validData.fuelCost === 'number';
-
-							if (!payloadHasFuel) {
-								const tripAny = trip as unknown as Record<string, unknown>;
-								const mpg = typeof tripAny['mpg'] === 'number' ? (tripAny['mpg'] as number) : 25;
-								const gasPrice =
-									typeof tripAny['gasPrice'] === 'number' ? (tripAny['gasPrice'] as number) : 3.5;
-
-								// [!code change] Allow existing 0 cost to prevent overwrite
-								const existingHasFuel = typeof existingTrip.fuelCost === 'number';
-
-								if (!existingHasFuel && !payloadHasFuel) {
-									trip.fuelCost = Number(
-										calculateFuelCost(linkedMileage.miles || 0, mpg, gasPrice)
-									);
-								}
-								await svc.put(trip);
-							}
-						} catch {
-							/* ignore */
-						}
 					} else if (validData.totalMiles > 0) {
 						// Create new mileage log if none exists and miles > 0
-						const newMileage: Partial<import('$lib/server/mileageService').MileageRecord> = {
+						const newMileage = {
 							id: crypto.randomUUID(),
 							tripId: trip.id,
 							userId: storageId,
 							date: trip.date || now,
+
 							miles: validData.totalMiles,
 							notes: 'Auto-created from trip edit',
 							createdAt: now,
 							updatedAt: now,
 							syncStatus: 'synced' as const
 						};
-						// Attach mileageRate/vehicle/reimbursement from user settings if available
-						try {
-							const userSettingsKV = safeKV(env, 'BETA_USER_SETTINGS_KV');
-							if (userSettingsKV && sessionUserSafe?.id) {
-								const settingsRaw = await userSettingsKV.get(`settings:${sessionUserSafe.id}`);
-								if (settingsRaw) {
-									const settings = JSON.parse(settingsRaw);
-									if (typeof settings.mileageRate === 'number') {
-										newMileage.mileageRate = settings.mileageRate;
-										newMileage.reimbursement = Number(
-											(Number(newMileage.miles) * settings.mileageRate).toFixed(2)
-										);
-									}
-									const firstVehicle = settings.vehicles?.[0];
-									if (firstVehicle?.id) newMileage.vehicle = firstVehicle.id;
-									else if (firstVehicle?.name) newMileage.vehicle = firstVehicle.name;
-								}
-							}
-						} catch {
-							/* ignore */
-						}
-
-						await mileageSvc.put(newMileage as import('$lib/server/mileageService').MileageRecord);
+						await mileageSvc.put(newMileage);
 						log.info('Created mileage log from trip edit', {
 							tripId: trip.id,
 							miles: validData.totalMiles
 						});
-
-						// Recompute and persist trip fuelCost if possible, but do not overwrite a
-						// client-provided fuelCost.
-						try {
-							// [!code change] Allow 0 as explicit value
-							if (!(typeof validData.fuelCost === 'number')) {
-								const tripAny = trip as unknown as Record<string, unknown>;
-								const mpg = typeof tripAny['mpg'] === 'number' ? (tripAny['mpg'] as number) : 25;
-								const gasPrice =
-									typeof tripAny['gasPrice'] === 'number' ? (tripAny['gasPrice'] as number) : 3.5;
-								// [!code change] Allow existing 0
-								if (
-									!(typeof existingTrip.fuelCost === 'number') &&
-									!(typeof validData.fuelCost === 'number')
-								) {
-									trip.fuelCost = Number(calculateFuelCost(newMileage.miles || 0, mpg, gasPrice));
-								}
-								await svc.put(trip);
-							}
-						} catch {
-							/* ignore */
-						}
 					}
 				}
 			} catch (e) {
@@ -1138,193 +884,6 @@ export const PUT: RequestHandler = async (event) => {
 					message: createSafeErrorMessage(e)
 				});
 			}
-		}
-
-		// --- Bidirectional sync: Update/create linked expense records if cost fields changed ---
-		try {
-			const expenseKV = safeKV(env, 'BETA_EXPENSES_KV');
-			if (expenseKV) {
-				const expenseSvc = makeExpenseService(expenseKV, safeDO(env, 'TRIP_INDEX_DO')!);
-				const allExpenses = await expenseSvc.list(storageId);
-
-				// Fuel
-				if (
-					typeof validData.fuelCost === 'number' &&
-					existingTrip.fuelCost !== validData.fuelCost
-				) {
-					const linked = allExpenses.find(
-						(e: ExpenseRecord & { autoCreated?: boolean }) =>
-							e.tripId === trip.id && e.category === 'Fuel' && e.autoCreated
-					);
-					if (linked) {
-						linked.amount = Number(validData.fuelCost);
-						linked.updatedAt = now;
-						await expenseSvc.put(linked);
-						log.info('Updated fuel expense from trip edit', {
-							tripId: trip.id,
-							amount: linked.amount
-						});
-					} else if (validData.fuelCost > 0) {
-						const rec = {
-							id: crypto.randomUUID(),
-							userId: storageId,
-							date: trip.date || now,
-							category: 'Fuel',
-							amount: Number(validData.fuelCost),
-							description: 'Estimated Fuel Cost (auto-created from trip edit)',
-							createdAt: now,
-							updatedAt: now,
-							tripId: trip.id,
-							autoCreated: true
-						};
-						await expenseSvc.put(rec as any);
-					}
-				}
-
-				// Maintenance: prefer per-item if present, else aggregate
-				if (
-					Array.isArray(validData.maintenanceItems) &&
-					Array.isArray(existingTrip.maintenanceItems ? existingTrip.maintenanceItems : [])
-				) {
-					// Upsert per-item maintenance expenses
-					for (const it of validData.maintenanceItems as CostItemInput[]) {
-						const desc = it.type || it.item || 'Maintenance (auto-created from trip edit)';
-						const amt = Number(it.cost) || 0;
-						if (amt <= 0) continue;
-						const linked = allExpenses.find(
-							(e: ExpenseRecord & { autoCreated?: boolean }) =>
-								e.tripId === trip.id &&
-								e.category === 'Maintenance' &&
-								e.autoCreated &&
-								e.description === desc
-						);
-						if (linked) {
-							linked.amount = amt;
-							linked.updatedAt = now;
-							await expenseSvc.put(linked);
-						} else {
-							const rec = {
-								id: crypto.randomUUID(),
-								userId: storageId,
-								date: trip.date || now,
-								category: 'Maintenance',
-								amount: amt,
-								description: desc,
-								createdAt: now,
-								updatedAt: now,
-								tripId: trip.id,
-								autoCreated: true
-							};
-							await expenseSvc.put(rec as any);
-						}
-					}
-				} else if (
-					typeof validData.maintenanceCost === 'number' &&
-					existingTrip.maintenanceCost !== validData.maintenanceCost
-				) {
-					const linked = allExpenses.find(
-						(e: ExpenseRecord & { autoCreated?: boolean }) =>
-							e.tripId === trip.id && e.category === 'Maintenance' && e.autoCreated
-					);
-					if (linked) {
-						linked.amount = Number(validData.maintenanceCost);
-						linked.updatedAt = now;
-						await expenseSvc.put(linked);
-						log.info('Updated maintenance expense from trip edit', {
-							tripId: trip.id,
-							amount: linked.amount
-						});
-					} else if (validData.maintenanceCost > 0) {
-						const rec = {
-							id: crypto.randomUUID(),
-							userId: storageId,
-							date: trip.date || now,
-							category: 'Maintenance',
-							amount: Number(validData.maintenanceCost),
-							description: 'Estimated Maintenance (auto-created from trip edit)',
-							createdAt: now,
-							updatedAt: now,
-							tripId: trip.id,
-							autoCreated: true
-						};
-						await expenseSvc.put(rec as any);
-					}
-				}
-
-				// Supplies: per-item or aggregate (same pattern)
-				if (
-					Array.isArray(validData.suppliesItems) &&
-					Array.isArray(existingTrip.suppliesItems ? existingTrip.suppliesItems : [])
-				) {
-					for (const it of validData.suppliesItems as CostItemInput[]) {
-						const desc = it.type || it.item || 'Supplies (auto-created from trip edit)';
-						const amt = Number(it.cost) || 0;
-						if (amt <= 0) continue;
-						const linked = allExpenses.find(
-							(e: any) =>
-								e.tripId === trip.id &&
-								e.category === 'Supplies' &&
-								e.autoCreated &&
-								e.description === desc
-						);
-						if (linked) {
-							linked.amount = amt;
-							linked.updatedAt = now;
-							await expenseSvc.put(linked);
-						} else {
-							const rec = {
-								id: crypto.randomUUID(),
-								userId: storageId,
-								date: trip.date || now,
-								category: 'Supplies',
-								amount: amt,
-								description: desc,
-								createdAt: now,
-								updatedAt: now,
-								tripId: trip.id,
-								autoCreated: true
-							};
-							await expenseSvc.put(rec as any);
-						}
-					}
-				} else if (
-					typeof validData.suppliesCost === 'number' &&
-					existingTrip.suppliesCost !== validData.suppliesCost
-				) {
-					const linked = allExpenses.find(
-						(e: ExpenseRecord & { autoCreated?: boolean }) =>
-							e.tripId === trip.id && e.category === 'Supplies' && e.autoCreated
-					);
-					if (linked) {
-						linked.amount = Number(validData.suppliesCost);
-						linked.updatedAt = now;
-						await expenseSvc.put(linked);
-						log.info('Updated supplies expense from trip edit', {
-							tripId: trip.id,
-							amount: linked.amount
-						});
-					} else if (validData.suppliesCost > 0) {
-						const rec = {
-							id: crypto.randomUUID(),
-							userId: storageId,
-							date: trip.date || now,
-							category: 'Supplies',
-							amount: Number(validData.suppliesCost),
-							description: 'Estimated Supplies (auto-created from trip edit)',
-							createdAt: now,
-							updatedAt: now,
-							tripId: trip.id,
-							autoCreated: true
-						};
-						await expenseSvc.put(rec as any);
-					}
-				}
-			}
-		} catch (e) {
-			log.warn('Failed to sync trip expenses to expenses service', {
-				tripId: trip.id,
-				message: createSafeErrorMessage(e)
-			});
 		}
 
 		// --- Enqueue route computation in TripIndexDO (non-blocking)
@@ -1347,7 +906,7 @@ export const PUT: RequestHandler = async (event) => {
 			headers: { 'Content-Type': 'application/json' }
 		});
 	} catch (err) {
-		log.error('PUT /api/trips/[id] error', { message: createSafeErrorMessage(err) });
+		log.error('PUT /api/trips error', { message: createSafeErrorMessage(err) });
 		return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
 			status: 500,
 			headers: { 'Content-Type': 'application/json' }

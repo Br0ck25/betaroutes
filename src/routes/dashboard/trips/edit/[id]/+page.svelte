@@ -112,8 +112,6 @@
 
 	onMount(() => {
 		loadTripData();
-		// Defer formatting setup for fuel cost input until after render
-		setTimeout(setupFuelCostInputEdit, 0);
 	});
 
 	async function loadTripData() {
@@ -303,30 +301,6 @@
 	let totalMilesLocal: string = String(tripData.totalMiles ?? 0);
 	let notesLocal: string = tripData.notes ?? '';
 	let manualMilesOverride = false; // true when user manually edits miles to prevent auto-overwrite
-	// Allow manual override of estimated fuel cost; empty string => auto-calc
-	let fuelCostLocal: string = '';
-
-	// Helper: ensure Fuel Cost input behaves like a freeform decimal text input
-	function setupFuelCostInputEdit(): void {
-		if (typeof document === 'undefined') return;
-		const el = document.getElementById('fuel-cost') as HTMLInputElement | null;
-		if (!el) return;
-		try {
-			el.type = 'text';
-			el.setAttribute('inputmode', 'decimal');
-			const onBlur = () => {
-				const val = el.value || '';
-				const cleaned = String(val).replace(/[^0-9.-]/g, '');
-				const n = parseFloat(cleaned) || 0;
-				el.value = n.toFixed(2);
-				// keep fuelCostLocal in sync with formatted value
-				fuelCostLocal = el.value;
-			};
-			el.addEventListener('blur', onBlur);
-		} catch {
-			/* ignore */
-		}
-	}
 	$: tripData.startAddress = startAddressLocal;
 	$: tripData.endAddress = endAddressLocal;
 	$: tripData.date = dateLocal;
@@ -358,43 +332,6 @@
 						tripData.totalMiles = authoritative;
 						totalMilesLocal = String(authoritative);
 						manualMilesOverride = false;
-					}
-				}
-			}
-		} catch {
-			/* ignore */
-		}
-	}
-
-	// Sync authoritative fuelCost from trips store when available, unless the user has entered
-	// a manual override (fuelCostLocal). This ensures expense edits that update the trips
-	// store are reflected in the open Trip edit UI.
-	$: {
-		try {
-			if (typeof document !== 'undefined') {
-				if (fuelCostLocal === '') {
-					const updatedTrip = $trips.find((t) => t.id === tripId);
-					const activeId = (document.activeElement as HTMLElement | null)?.id;
-					// If the trip already has a saved non-zero fuelCost, treat it as a user-provided value and preserve it.
-					if (
-						(typeof tripData.fuelCost === 'number' && Number(tripData.fuelCost) > 0) ||
-						(updatedTrip && Number(updatedTrip.fuelCost || 0) > 0)
-					) {
-						const stored =
-							typeof tripData.fuelCost === 'number' && Number(tripData.fuelCost) > 0
-								? Number(tripData.fuelCost)
-								: Number(updatedTrip?.fuelCost || 0);
-						if (Number(tripData.fuelCost || 0) !== stored) tripData.fuelCost = stored;
-						if (activeId !== 'fuel-cost') fuelCostLocal = stored.toFixed(2);
-					} else {
-						// Otherwise compute using authoritative client-side settings (mpgLocal / gasPriceLocal)
-						const miles = Number(tripData.totalMiles || 0);
-						const mpg = Number(mpgLocal ?? $userSettings.defaultMPG ?? 25);
-						const gas = Number(gasPriceLocal ?? $userSettings.defaultGasPrice ?? 3.5);
-						const gallons = miles && mpg ? miles / mpg : 0;
-						const computed = Math.round(gallons * gas * 100) / 100;
-						if (Number(tripData.fuelCost || 0) !== computed) tripData.fuelCost = computed;
-						if (computed > 0 && activeId !== 'fuel-cost') fuelCostLocal = computed.toFixed(2);
 					}
 				}
 			}
@@ -840,24 +777,11 @@
 	}
 
 	$: {
-		const totalMiles = Number(tripData.totalMiles || 0);
-		const mpg = Number(tripData.mpg || 0);
-		const gasPrice = Number(tripData.gasPrice || 0);
-		const gallons = totalMiles && mpg ? totalMiles / mpg : 0;
-		if (fuelCostLocal !== '') {
-			// sanitize user input (strip currency symbols, commas)
-			const cleaned = String(fuelCostLocal).replace(/[^0-9.-]/g, '');
-			const n = parseFloat(cleaned);
-			tripData.fuelCost = Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+		if (tripData.totalMiles && tripData.mpg && tripData.gasPrice) {
+			const gallons = tripData.totalMiles / tripData.mpg;
+			tripData.fuelCost = Math.round(gallons * tripData.gasPrice * 100) / 100;
 		} else {
-			// Only auto-calc when there is no authoritative fuelCost present
-			if (!tripData.fuelCost || Number(tripData.fuelCost) === 0) {
-				if (totalMiles && mpg && gasPrice) {
-					tripData.fuelCost = Math.round(gallons * gasPrice * 100) / 100;
-				} else {
-					tripData.fuelCost = 0;
-				}
-			}
+			tripData.fuelCost = 0;
 		}
 	}
 	let totalEarnings = 0;
@@ -897,16 +821,6 @@
 			return;
 		}
 
-		// Respect manual override when present; otherwise persist current tripData.fuelCost
-		let fuelCostToSave: number;
-		if (fuelCostLocal !== '') {
-			const cleaned = String(fuelCostLocal).replace(/[^0-9.-]/g, '');
-			const n = parseFloat(cleaned);
-			fuelCostToSave = Number.isFinite(n) ? n : Number(tripData.fuelCost || 0);
-		} else {
-			fuelCostToSave = Number(tripData.fuelCost || 0);
-		}
-
 		const tripToSave = {
 			...tripData,
 			id: String(tripId),
@@ -916,7 +830,7 @@
 			// Ensure `totalMiles` is always present for analytics
 			totalMiles: tripData.totalMiles,
 			totalMileage: tripData.totalMiles,
-			fuelCost: fuelCostToSave,
+			fuelCost: tripData.fuelCost,
 			roundTripMiles: tripData.roundTripMiles,
 			roundTripTime: tripData.roundTripTime,
 			stops: tripData.stops.map((stop, index) => ({
@@ -1198,11 +1112,7 @@
 				</div>
 			</div>
 			<div class="summary-box" style="margin: 40px 0;">
-				<label for="fuel-cost">Estimated Fuel Cost</label>
-				<div class="input-money-wrapper">
-					<span class="symbol">$</span>
-					<input id="fuel-cost" bind:value={fuelCostLocal} />
-				</div>
+				<span>Estimated Fuel Cost</span><strong>{formatCurrency(tripData.fuelCost)}</strong>
 			</div>
 
 			<div class="info-note">

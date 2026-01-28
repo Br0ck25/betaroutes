@@ -1,10 +1,10 @@
 // src/lib/stores/trash.ts
+import { writable, get } from 'svelte/store';
 import { getDB, getMileageStoreName } from '$lib/db/indexedDB';
+import { syncManager } from '$lib/sync/syncManager';
 import type { TrashRecord, TripRecord } from '$lib/db/types';
 import { user as authUser } from '$lib/stores/auth';
-import { syncManager } from '$lib/sync/syncManager';
 import type { User } from '$lib/types';
-import { get, writable } from 'svelte/store';
 
 function createTrashStore() {
 	const { subscribe, set, update } = writable<TrashRecord[]>([]);
@@ -212,8 +212,8 @@ function createTrashStore() {
 						if (trip && trip.userId === userId) {
 							const { calculateFuelCost } = await import('$lib/utils/calculations');
 							const newMiles = restored.miles || 0;
-							const mpg = trip.mpg ?? 25;
-							const gasPrice = trip.gasPrice ?? 3.5;
+							const mpg = trip.mpg || 25;
+							const gasPrice = trip.gasPrice || 3.5;
 							const newFuelCost = calculateFuelCost(newMiles, mpg, gasPrice);
 							const nowIso = new Date().toISOString();
 							const patchedTrip = {

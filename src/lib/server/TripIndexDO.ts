@@ -77,7 +77,7 @@ export class TripIndexDO {
 					createdAt TEXT,
 					data TEXT
 				);
-
+				
 				CREATE TABLE IF NOT EXISTS expenses (
 					id TEXT PRIMARY KEY,
 					userId TEXT,
@@ -284,7 +284,9 @@ export class TripIndexDO {
 					if (trip['startAddress']) points.push(String(trip['startAddress']));
 					if (Array.isArray(trip['stops'])) {
 						const stops = (trip['stops'] as unknown as Array<{ address?: string }>) || [];
-						for (const s of stops) if (s && s.address) points.push(String(s.address));
+						for (const s of stops) {
+							if (s && s.address) points.push(String(s.address));
+						}
 					}
 					if (trip['endAddress']) points.push(String(trip['endAddress']));
 
@@ -308,11 +310,18 @@ export class TripIndexDO {
 
 						let key = `dir:${origin.toLowerCase().trim()}_to_${destination.toLowerCase().trim()}`;
 						key = key.replace(/[^a-z0-9_:-]/g, '');
-						if (key.length > 512) key = key.substring(0, 512);
+
+						if (key.length > 512) {
+							key = key.substring(0, 512);
+						}
 
 						try {
+							// 1) Check KV cache
 							let cached: string | null = null;
-							if (directionsKV) cached = await directionsKV.get(key);
+							if (directionsKV) {
+								cached = await directionsKV.get(key);
+							}
+
 							if (cached) {
 								try {
 									const parsed = JSON.parse(cached);
@@ -326,12 +335,14 @@ export class TripIndexDO {
 								}
 							}
 
+							// 2) Google Fallback
 							if (!googleKey) {
 								log.warn('[ComputeRoutes] GOOGLE API KEY missing');
 								continue;
 							}
-
-							const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&key=${googleKey}`;
+							const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(
+								origin
+							)}&destination=${encodeURIComponent(destination)}&key=${googleKey}`;
 							const res = await fetch(url);
 							type DirectionsResponse = {
 								status?: string;
@@ -358,8 +369,11 @@ export class TripIndexDO {
 								const leg = data.routes[0].legs[0];
 								const distance = leg.distance?.value ?? null;
 								const duration = leg.duration?.value ?? null;
+
 								if (distance && isFinite(distance)) totalMeters += distance;
 								if (duration && isFinite(duration)) totalSeconds += duration;
+
+								// Save to KV
 								if (directionsKV && distance !== null && duration !== null) {
 									await directionsKV.put(
 										key,
@@ -407,50 +421,36 @@ export class TripIndexDO {
 							}
 						} catch (err) {
 							log.warn(`[ComputeRoutes] Failed leg: ${err}`);
-							continue;
 						}
 					}
 
 					try {
 						const miles = Number((totalMeters * 0.000621371).toFixed(1));
 						const minutes = Math.round(totalSeconds / 60);
-						const updated: Record<string, unknown> = {
+						const updated = {
 							...trip,
 							totalMiles: miles,
 							estimatedTime: minutes,
 							updatedAt: new Date().toISOString()
 						};
 
+						this.state.storage.sql.exec(
+							'UPDATE trips SET data = ? WHERE id = ?',
+							JSON.stringify(updated),
+							tripId
+						);
+
 						if (tripsKV) {
 							const tripKey = `trip:${trip.userId}:${trip.id}`;
-							try {
-								const existingRaw = await tripsKV.get(tripKey);
-								if (existingRaw) {
-									const existing = JSON.parse(existingRaw);
-									if (typeof existing.fuelCost === 'number') updated.fuelCost = existing.fuelCost;
-									if (typeof existing.mpg === 'number') updated.mpg = existing.mpg;
-									if (typeof existing.gasPrice === 'number') updated.gasPrice = existing.gasPrice;
-								}
-							} catch {
-								/* ignore KV merge errors */
-							}
 							await tripsKV.put(tripKey, JSON.stringify({ ...updated }));
-						} else {
-							this.state.storage.sql.exec(
-								'UPDATE trips SET data = ? WHERE id = ?',
-								JSON.stringify(updated),
-								tripId
-							);
 						}
-
-						return new Response('OK');
-					} catch (e: unknown) {
-						const msg = e instanceof Error ? e.message : String(e);
-						log.error('[TripIndexDO] compute-routes failed', { message: msg });
-						return new Response(JSON.stringify({ error: msg }), { status: 500 });
+					} catch (e) {
+						log.warn(`[ComputeRoutes] Save failed: ${e}`);
 					}
-				} catch (err: unknown) {
-					const msg = err instanceof Error ? err.message : String(err);
+
+					return new Response('OK');
+				} catch (e: unknown) {
+					const msg = e instanceof Error ? e.message : String(e);
 					log.error('[TripIndexDO] compute-routes failed', { message: msg });
 					return new Response(JSON.stringify({ error: msg }), { status: 500 });
 				}

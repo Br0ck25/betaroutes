@@ -1,57 +1,29 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
-	import { page } from '$app/stores';
-	import Button from '$lib/components/ui/Button.svelte';
-	import Modal from '$lib/components/ui/Modal.svelte';
-	import { PLAN_LIMITS } from '$lib/constants';
-	import { optimizeRoute } from '$lib/services/maps';
-	import { user } from '$lib/stores/auth';
-	import { toasts } from '$lib/stores/toast';
 	import { trips } from '$lib/stores/trips';
 	import { userSettings } from '$lib/stores/userSettings';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { user } from '$lib/stores/auth';
+	import { page } from '$app/stores';
+	import { onMount, onDestroy } from 'svelte';
 	import { autocomplete } from '$lib/utils/autocomplete';
-	import { onDestroy, onMount } from 'svelte';
-
-	// route data (injected by server load)
-	export let data: any;
-
-	// API key for autocomplete
-	$: API_KEY = String(data?.googleMapsApiKey ?? '');
-
-	// drag state for stops
-	let dragItemIndex: number | null = null;
+	import { optimizeRoute } from '$lib/services/maps';
+	import Modal from '$lib/components/ui/Modal.svelte';
+	import { toasts } from '$lib/stores/toast';
+	import Button from '$lib/components/ui/Button.svelte';
+	import { PLAN_LIMITS } from '$lib/constants';
 
 	function handleUpgradeNow() {
 		goto(resolve('/dashboard/settings'));
 	}
-	// Prefill the fuel cost input with the computed value for better UX when
-	// there is no manual override. Do not clobber if the user is focused on the input.
-	$: {
-		try {
-			if (typeof document !== 'undefined') {
-				if (fuelCostLocal === '') {
-					const activeId = (document.activeElement as HTMLElement | null)?.id;
-					// If there's a saved fuelCost on the trip, preserve it as a user value
-					const existing = Number(tripData.fuelCost || 0);
-					if (existing > 0) {
-						if (activeId !== 'fuel-cost') fuelCostLocal = existing.toFixed(2);
-					} else {
-						// Compute from client-side settings (mpgLocal / gasPriceLocal)
-						const totalMiles = Number(tripData.totalMiles || 0);
-						const mpg = Number(mpgLocal ?? $userSettings.defaultMPG ?? 25);
-						const gas = Number(gasPriceLocal ?? $userSettings.defaultGasPrice ?? 3.5);
-						const gallons = totalMiles && mpg ? totalMiles / mpg : 0;
-						const computed = Math.round(gallons * gas * 100) / 100;
-						if (computed > 0 && activeId !== 'fuel-cost') fuelCostLocal = computed.toFixed(2);
-						if (Number(tripData.fuelCost || 0) !== computed) tripData.fuelCost = computed;
-					}
-				}
-			}
-		} catch {
-			/* ignore */
-		}
+
+	function goToTrips() {
+		goto(resolve('/dashboard/trips'));
 	}
+	export let data;
+	$: API_KEY = String(data.googleMapsApiKey ?? '');
+	let dragItemIndex: number | null = null;
+
 	$: maintenanceOptions =
 		$userSettings.maintenanceCategories?.length > 0
 			? $userSettings.maintenanceCategories
@@ -101,8 +73,6 @@
 	onMount(() => {
 		// Defer until DOM render
 		setTimeout(setupTotalMilesInputNew, 0);
-		// Defer formatting setup for fuel cost input until after render
-		setTimeout(setupFuelCostInputNew, 0);
 	});
 
 	// Ensure event listeners are cleaned up on component destroy
@@ -180,29 +150,6 @@
 	let gasPriceLocal: number = Number(tripData.gasPrice ?? 3.5);
 	let totalMilesLocal: number = Number(tripData.totalMiles ?? 0);
 	let notesLocal: string = tripData.notes ?? '';
-	// Allow manual override of estimated fuel cost; empty string => auto-calc
-	let fuelCostLocal: string = '';
-
-	// Helper: ensure Fuel Cost input behaves like a freeform decimal text input
-	function setupFuelCostInputNew(): void {
-		if (typeof document === 'undefined') return;
-		const el = document.getElementById('fuel-cost') as HTMLInputElement | null;
-		if (!el) return;
-		try {
-			el.type = 'text';
-			el.setAttribute('inputmode', 'decimal');
-			const onBlur = () => {
-				const val = el.value || '';
-				const cleaned = String(val).replace(/[^0-9.-]/g, '');
-				const n = parseFloat(cleaned) || 0;
-				el.value = n.toFixed(2);
-				fuelCostLocal = el.value;
-			};
-			el.addEventListener('blur', onBlur);
-		} catch {
-			/* ignore */
-		}
-	}
 	$: tripData.startAddress = startAddressLocal;
 	$: tripData.endAddress = endAddressLocal;
 	$: tripData.date = dateLocal;
@@ -693,22 +640,13 @@
 	}
 
 	$: {
-		const totalMiles = Number(tripData.totalMiles ?? 0);
-		const mpg = Number(tripData.mpg ?? 0);
-		const gasPrice = Number(tripData.gasPrice ?? 0);
-		const gallons = totalMiles && mpg ? totalMiles / mpg : 0;
-		if (fuelCostLocal !== '') {
-			// User override wins; sanitize input to handle $/commas
-			const cleaned = String(fuelCostLocal).replace(/[^0-9.-]/g, '');
-			const n = parseFloat(cleaned);
-			tripData.fuelCost = Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
-		} else if (typeof tripData.fuelCost === 'number' && Number(tripData.fuelCost) > 0) {
-			// Preserve an existing positive fuelCost (server or prior user value)
-			// No-op -- keep existing tripData.fuelCost
-		} else if (totalMiles && mpg && Number.isFinite(gasPrice)) {
+		const totalMiles = Number(tripData.totalMiles || 0);
+		const mpg = Number(tripData.mpg || 0);
+		const gasPrice = Number(tripData.gasPrice || 0);
+		if (totalMiles && mpg && gasPrice) {
+			const gallons = totalMiles / mpg;
 			tripData.fuelCost = Math.round(gallons * gasPrice * 100) / 100;
 		} else {
-			// Only set to 0 when no other source available
 			tripData.fuelCost = 0;
 		}
 	}
@@ -748,16 +686,6 @@
 			return;
 		}
 
-		// Respect manual override when present; otherwise persist current tripData.fuelCost
-		let fuelCostToSave: number;
-		if (fuelCostLocal !== '') {
-			const cleaned = String(fuelCostLocal).replace(/[^0-9.-]/g, '');
-			const n = parseFloat(cleaned);
-			fuelCostToSave = Number.isFinite(n) ? n : Number(tripData.fuelCost || 0);
-		} else {
-			fuelCostToSave = Number(tripData.fuelCost || 0);
-		}
-
 		const tripToSave = {
 			...tripData,
 			maintenanceCost: totalMaintenanceCost,
@@ -766,7 +694,7 @@
 			// Include both keys for compatibility but ensure `totalMiles` is present
 			totalMiles: Number(tripData.totalMiles || 0),
 			totalMileage: Number(tripData.totalMiles || 0),
-			fuelCost: Number(fuelCostToSave || 0),
+			fuelCost: Number(tripData.fuelCost || 0),
 			roundTripMiles: Number(tripData.roundTripMiles || 0),
 			roundTripTime: Number(tripData.roundTripTime || 0),
 			stops: tripData.stops.map((stop, index) => ({
@@ -786,8 +714,7 @@
 
 		try {
 			await trips.create(tripToSave, userId);
-			// navigate back to trips list
-			goto(resolve('/dashboard/trips'));
+			goToTrips();
 		} catch (_err: any) {
 			console.error('Save failed:', _err);
 			const message = _err?.message || 'Failed to create trip.';
@@ -1026,11 +953,7 @@
 				</div>
 			</div>
 			<div class="summary-box" style="margin: 40px 0;">
-				<label for="fuel-cost">Estimated Fuel Cost</label>
-				<div class="input-money-wrapper">
-					<span class="symbol">$</span>
-					<input id="fuel-cost" bind:value={fuelCostLocal} />
-				</div>
+				<span>Estimated Fuel Cost</span><strong>{formatCurrency(tripData.fuelCost)}</strong>
 			</div>
 
 			<div class="info-note">
