@@ -805,7 +805,9 @@
 		const gasPrice = Number(tripData.gasPrice || 0);
 		const gallons = totalMiles && mpg ? totalMiles / mpg : 0;
 		if (fuelCostLocal !== '') {
-			const n = Number(fuelCostLocal);
+			// sanitize user input (strip currency symbols, commas)
+			const cleaned = String(fuelCostLocal).replace(/[^0-9.-]/g, '');
+			const n = parseFloat(cleaned);
 			tripData.fuelCost = Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
 		} else {
 			// Only auto-calc when there is no authoritative fuelCost present
@@ -856,8 +858,14 @@
 		}
 
 		// Respect manual override when present; otherwise persist current tripData.fuelCost
-		const fuelCostToSave =
-			fuelCostLocal !== '' ? Number(fuelCostLocal) : Number(tripData.fuelCost || 0);
+		let fuelCostToSave: number;
+		if (fuelCostLocal !== '') {
+			const cleaned = String(fuelCostLocal).replace(/[^0-9.-]/g, '');
+			const n = parseFloat(cleaned);
+			fuelCostToSave = Number.isFinite(n) ? n : Number(tripData.fuelCost || 0);
+		} else {
+			fuelCostToSave = Number(tripData.fuelCost || 0);
+		}
 
 		const tripToSave = {
 			...tripData,
