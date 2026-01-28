@@ -25,6 +25,22 @@
 	function handleUpgradeNow() {
 		goto(resolve('/dashboard/settings'));
 	}
+	// Prefill the fuel cost input with the computed value for better UX when
+	// there is no manual override. Do not clobber if the user is focused on the input.
+	$: {
+		try {
+			if (typeof document !== 'undefined') {
+				if (fuelCostLocal === '' && Number(tripData.fuelCost || 0) > 0) {
+					const activeId = (document.activeElement as HTMLElement | null)?.id;
+					if (activeId !== 'fuel-cost') {
+						fuelCostLocal = Number(tripData.fuelCost).toFixed(2);
+					}
+				}
+			}
+		} catch {
+			/* ignore */
+		}
+	}
 	$: maintenanceOptions =
 		$userSettings.maintenanceCategories?.length > 0
 			? $userSettings.maintenanceCategories

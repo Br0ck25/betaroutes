@@ -355,6 +355,12 @@
 						if (Number(tripData.fuelCost || 0) !== authoritativeFuel) {
 							tripData.fuelCost = authoritativeFuel;
 						}
+						// Prefill the input with the computed value for better UX, but do not clobber
+						// when the user is actively focused on the fuel-cost input.
+						const activeId = (document.activeElement as HTMLElement | null)?.id;
+						if (authoritativeFuel > 0 && activeId !== 'fuel-cost') {
+							fuelCostLocal = authoritativeFuel.toFixed(2);
+						}
 					}
 				}
 			}
