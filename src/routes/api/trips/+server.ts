@@ -1,7 +1,7 @@
 // src/routes/api/trips/+server.ts
 import { PLAN_LIMITS } from '$lib/constants';
 import { computeAndCacheDirections } from '$lib/server/directionsCache';
-import { makeExpenseService } from '$lib/server/expenseService';
+// expenseService removed: auto-created trip expenses were removed per feature change
 import { log } from '$lib/server/log';
 import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
 import {
@@ -664,85 +664,7 @@ export const POST: RequestHandler = async (event) => {
 				});
 			}
 
-			// --- Auto-create expense records (fuel / maintenance / supplies)
-			try {
-				const expensesKV = safeKV(env, 'BETA_EXPENSES_KV');
-				if (expensesKV) {
-					const expenseSvc = makeExpenseService(expensesKV, safeDO(env, 'TRIP_INDEX_DO')!);
-
-					// 1) Fuel
-					if (typeof trip.fuelCost === 'number' && trip.fuelCost > 0) {
-						const id = `trip-fuel-${trip.id}`;
-						const existing = await expenseSvc.get(storageId, id);
-						const expense = {
-							id,
-							userId: storageId,
-							date: trip.date || now,
-							category: 'fuel',
-							amount: Number(trip.fuelCost),
-							description: 'Fuel (auto-created from trip)',
-							createdAt: existing?.createdAt || now,
-							updatedAt: new Date().toISOString()
-						};
-						await expenseSvc.put(expense);
-						log.info('Auto-created/updated expense for fuel', { id, tripId: trip.id });
-					}
-
-					// 2) Maintenance items
-					const maint = trip.maintenanceItems ?? [];
-					if (Array.isArray(maint) && maint.length > 0) {
-						for (let i = 0; i < maint.length; i++) {
-							const item = maint[i] as CostItemInput | undefined;
-							if (!item) continue;
-							const id = `trip-maint-${trip.id}-${i}`;
-							const expense = {
-								id,
-								userId: storageId,
-								date: trip.date || now,
-								category: 'maintenance',
-								amount: Number(item.cost) || 0,
-								description: String(item.type || ''),
-								createdAt: now,
-								updatedAt: new Date().toISOString()
-							};
-							await expenseSvc.put(expense);
-							log.info('Auto-created/updated expense for maintenance', { id, tripId: trip.id });
-						}
-					}
-
-					// 3) Supplies items
-					const supplies =
-						((trip as unknown as Record<string, unknown>).supplyItems as
-							| CostItemInput[]
-							| undefined) ??
-						trip.suppliesItems ??
-						[];
-					if (Array.isArray(supplies) && supplies.length > 0) {
-						for (let i = 0; i < supplies.length; i++) {
-							const item = supplies[i] as CostItemInput | undefined;
-							if (!item) continue;
-							const id = `trip-supply-${trip.id}-${i}`;
-							const expense = {
-								id,
-								userId: storageId,
-								date: trip.date || now,
-								category: 'supplies',
-								amount: Number(item.cost) || 0,
-								description: String(item.type || ''),
-								createdAt: now,
-								updatedAt: new Date().toISOString()
-							};
-							await expenseSvc.put(expense);
-							log.info('Auto-created/updated expense for supplies', { id, tripId: trip.id });
-						}
-					}
-				}
-			} catch (e) {
-				log.warn('Failed to auto-create expenses for trip', {
-					tripId: trip.id,
-					message: createSafeErrorMessage(e)
-				});
-			}
+			// Auto-creation of expenses from trips has been removed.
 		}
 
 		// --- Direct compute & KV writes (bypass TripIndexDO)

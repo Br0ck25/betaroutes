@@ -32,7 +32,7 @@ vi.mock('$lib/server/env', () => ({
 	safeDO: () => ({})
 }));
 
-describe('POST /api/trips (expense auto-create)', () => {
+describe('POST /api/trips (no expense auto-create)', () => {
 	beforeEach(() => {
 		mockExpenseSvc = {
 			put: vi.fn().mockResolvedValue(undefined),
@@ -73,15 +73,7 @@ describe('POST /api/trips (expense auto-create)', () => {
 		const json = JSON.parse(await res.text());
 		expect(typeof json.id).toBe('string');
 
-		// Verify expense creation calls
-		expect(mockExpenseSvc.put).toHaveBeenCalled();
-		const calls = (mockExpenseSvc.put as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
-		const ids = calls.map((c) => c.id).sort();
-		const expectedFuelId = `trip-fuel-${json.id}`;
-		const expectedMaintId = `trip-maint-${json.id}-0`;
-		const expectedSupplyId = `trip-supply-${json.id}-0`;
-		expect(ids).toEqual(
-			expect.arrayContaining([expectedFuelId, expectedMaintId, expectedSupplyId])
-		);
+		// No expense records should be auto-created
+		expect(mockExpenseSvc.put).not.toHaveBeenCalled();
 	});
 });
