@@ -112,6 +112,8 @@
 
 	onMount(() => {
 		loadTripData();
+		// Defer formatting setup for fuel cost input until after render
+		setTimeout(setupFuelCostInputEdit, 0);
 	});
 
 	async function loadTripData() {
@@ -303,6 +305,28 @@
 	let manualMilesOverride = false; // true when user manually edits miles to prevent auto-overwrite
 	// Allow manual override of estimated fuel cost; empty string => auto-calc
 	let fuelCostLocal: string = '';
+
+	// Helper: ensure Fuel Cost input behaves like a freeform decimal text input
+	function setupFuelCostInputEdit(): void {
+		if (typeof document === 'undefined') return;
+		const el = document.getElementById('fuel-cost') as HTMLInputElement | null;
+		if (!el) return;
+		try {
+			el.type = 'text';
+			el.setAttribute('inputmode', 'decimal');
+			const onBlur = () => {
+				const val = el.value || '';
+				const cleaned = String(val).replace(/[^0-9.-]/g, '');
+				const n = parseFloat(cleaned) || 0;
+				el.value = n.toFixed(2);
+				// keep fuelCostLocal in sync with formatted value
+				fuelCostLocal = el.value;
+			};
+			el.addEventListener('blur', onBlur);
+		} catch {
+			/* ignore */
+		}
+	}
 	$: tripData.startAddress = startAddressLocal;
 	$: tripData.endAddress = endAddressLocal;
 	$: tripData.date = dateLocal;
@@ -1167,18 +1191,7 @@
 				<label for="fuel-cost">Estimated Fuel Cost</label>
 				<div class="input-money-wrapper">
 					<span class="symbol">$</span>
-					<input id="fuel-cost" bind:value={fuelCostLocal} step="0.01" inputmode="decimal" />
-					<button
-						type="button"
-						class="btn-link"
-						on:click={() => (fuelCostLocal = '')}
-						title="Use auto calculation">Auto</button
-					>
-				</div>
-				<div class="note">
-					{fuelCostLocal !== ''
-						? formatCurrency(Number(fuelCostLocal || 0))
-						: formatCurrency(tripData.fuelCost)}
+					<input id="fuel-cost" bind:value={fuelCostLocal} />
 				</div>
 			</div>
 
