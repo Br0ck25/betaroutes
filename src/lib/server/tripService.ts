@@ -35,7 +35,9 @@ export type TripRecord = {
 	maintenanceItems?: unknown[];
 	supplyItems?: unknown[];
 	suppliesItems?: unknown[];
-	totalMiles?: number;
+	totalMiles?: number; /** Optional fuel calculation inputs persisted from client */
+	mpg?: number;
+	gasPrice?: number;
 	hoursWorked?: number;
 	estimatedTime?: number;
 	totalTime?: string;

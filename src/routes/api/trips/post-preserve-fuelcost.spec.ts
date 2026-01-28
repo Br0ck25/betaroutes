@@ -81,5 +81,8 @@ describe('POST /api/trips preserves client fuelCost', () => {
 		const stored = (firstCall && firstCall[0]) as Record<string, unknown> | undefined;
 		expect(stored).toBeDefined();
 		expect(Number(stored!.fuelCost)).toBe(15);
+		// MPG and gasPrice provided by client should also be persisted so later reads use them (avoid defaulting to 25/3.5)
+		expect(Number(stored!.mpg)).toBe(20);
+		expect(Number(stored!.gasPrice)).toBe(0);
 	});
 });
