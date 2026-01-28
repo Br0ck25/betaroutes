@@ -374,17 +374,21 @@
 			if (typeof document !== 'undefined') {
 				if (fuelCostLocal === '') {
 					const updatedTrip = $trips.find((t) => t.id === tripId);
-					if (updatedTrip) {
-						const authoritativeFuel = Number(updatedTrip.fuelCost || 0);
-						if (Number(tripData.fuelCost || 0) !== authoritativeFuel) {
-							tripData.fuelCost = authoritativeFuel;
-						}
-						// Prefill the input with the computed value for better UX, but do not clobber
-						// when the user is actively focused on the fuel-cost input.
-						const activeId = (document.activeElement as HTMLElement | null)?.id;
-						if (authoritativeFuel > 0 && activeId !== 'fuel-cost') {
-							fuelCostLocal = authoritativeFuel.toFixed(2);
-						}
+					const activeId = (document.activeElement as HTMLElement | null)?.id;
+					// If the trip already has a saved non-zero fuelCost, treat it as a user-provided value and preserve it.
+					if (updatedTrip && Number(updatedTrip.fuelCost || 0) > 0) {
+						const stored = Number(updatedTrip.fuelCost || 0);
+						if (Number(tripData.fuelCost || 0) !== stored) tripData.fuelCost = stored;
+						if (activeId !== 'fuel-cost') fuelCostLocal = stored.toFixed(2);
+					} else {
+						// Otherwise compute using authoritative client-side settings (mpgLocal / gasPriceLocal)
+						const miles = Number(tripData.totalMiles || 0);
+						const mpg = Number((mpgLocal || $userSettings.defaultMPG) ?? 25);
+						const gas = Number((gasPriceLocal || $userSettings.defaultGasPrice) ?? 3.5);
+						const gallons = miles && mpg ? miles / mpg : 0;
+						const computed = Math.round(gallons * gas * 100) / 100;
+						if (Number(tripData.fuelCost || 0) !== computed) tripData.fuelCost = computed;
+						if (computed > 0 && activeId !== 'fuel-cost') fuelCostLocal = computed.toFixed(2);
 					}
 				}
 			}

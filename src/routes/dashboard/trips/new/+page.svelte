@@ -30,10 +30,21 @@
 	$: {
 		try {
 			if (typeof document !== 'undefined') {
-				if (fuelCostLocal === '' && Number(tripData.fuelCost || 0) > 0) {
+				if (fuelCostLocal === '') {
 					const activeId = (document.activeElement as HTMLElement | null)?.id;
-					if (activeId !== 'fuel-cost') {
-						fuelCostLocal = Number(tripData.fuelCost).toFixed(2);
+					// If there's a saved fuelCost on the trip, preserve it as a user value
+					const existing = Number(tripData.fuelCost || 0);
+					if (existing > 0) {
+						if (activeId !== 'fuel-cost') fuelCostLocal = existing.toFixed(2);
+					} else {
+						// Compute from client-side settings (mpgLocal / gasPriceLocal)
+						const totalMiles = Number(tripData.totalMiles || 0);
+						const mpg = Number((mpgLocal || $userSettings.defaultMPG) ?? 25);
+						const gas = Number((gasPriceLocal || $userSettings.defaultGasPrice) ?? 3.5);
+						const gallons = totalMiles && mpg ? totalMiles / mpg : 0;
+						const computed = Math.round(gallons * gas * 100) / 100;
+						if (computed > 0 && activeId !== 'fuel-cost') fuelCostLocal = computed.toFixed(2);
+						if (Number(tripData.fuelCost || 0) !== computed) tripData.fuelCost = computed;
 					}
 				}
 			}
