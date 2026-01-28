@@ -212,8 +212,8 @@ function createTrashStore() {
 						if (trip && trip.userId === userId) {
 							const { calculateFuelCost } = await import('$lib/utils/calculations');
 							const newMiles = restored.miles || 0;
-							const mpg = trip.mpg || 25;
-							const gasPrice = trip.gasPrice || 3.5;
+							const mpg = trip.mpg ?? 25;
+							const gasPrice = trip.gasPrice ?? 3.5;
 							const newFuelCost = calculateFuelCost(newMiles, mpg, gasPrice);
 							const nowIso = new Date().toISOString();
 							const patchedTrip = {

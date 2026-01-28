@@ -245,8 +245,8 @@ class SyncManager {
 						typeof patchedTrip.mpg === 'number' &&
 						typeof patchedTrip.gasPrice === 'number'
 					) {
-						const gallons = patchedTrip.totalMiles / (patchedTrip.mpg || 25);
-						patchedTrip.fuelCost = Math.round(gallons * (patchedTrip.gasPrice || 3.5) * 100) / 100;
+						const gallons = patchedTrip.totalMiles / (patchedTrip.mpg ?? 25);
+						patchedTrip.fuelCost = Math.round(gallons * (patchedTrip.gasPrice ?? 3.5) * 100) / 100;
 					}
 
 					// Compute earnings with an explicit numeric-safe loop
