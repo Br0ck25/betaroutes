@@ -1,21 +1,19 @@
 <script lang="ts">
-	import { trips } from '$lib/stores/trips';
 	import { resolve } from '$app/paths';
-	const tripsHref = resolve('/dashboard/trips');
-	const settingsHref = resolve('/dashboard/settings');
-	const newTripHref = resolve('/dashboard/trips/new');
-	import { expenses } from '$lib/stores/expenses'; // [!code ++]
-	import { userSettings } from '$lib/stores/userSettings';
+	import { expenses } from '$lib/stores/expenses';
+	import { trips } from '$lib/stores/trips';
+	// [!code ++]
 	import { toasts } from '$lib/stores/toast';
+	import { userSettings } from '$lib/stores/userSettings';
+	import type { Stop } from '$lib/types';
 	import {
 		calculateDashboardStats,
+		computeMaintenance,
 		formatCurrency,
 		formatDate,
-		computeMaintenance,
 		type TimeRange
 	} from '$lib/utils/dashboardLogic';
 	import { SvelteDate } from '$lib/utils/svelte-reactivity';
-	import type { Stop } from '$lib/types';
 
 	let selectedRange: TimeRange = '30d';
 
@@ -63,6 +61,11 @@
 		'prev-1y': 'Previous Year',
 		all: 'All Time'
 	};
+
+	// Pre-resolved href constants to satisfy svelte navigation lint rule
+	const tripsHref = resolve('/dashboard/trips');
+	const settingsHref = resolve('/dashboard/settings');
+	const newTripHref = resolve('/dashboard/trips/new');
 
 	function getDestinationFromStops(stops?: Stop[] | undefined): string {
 		if (!stops || stops.length === 0) return 'No stops';
@@ -826,12 +829,18 @@
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
+		/* Prevent the legend from expanding the card when many items exist */
+		max-height: 100%;
+		overflow-y: auto;
+		padding-right: 6px; /* avoid overlap with vertical scrollbar */
+		min-width: 0;
 	}
 	.donut-legend .legend-item {
 		display: flex;
 		align-items: center;
 		gap: 12px;
 		width: 100%;
+		min-width: 0;
 	}
 	.donut-legend .legend-dot {
 		width: 16px;
@@ -844,15 +853,22 @@
 		align-items: center;
 		justify-content: space-between;
 		width: 100%;
+		min-width: 0;
 	}
 	.legend-label {
 		font-size: 14px;
 		color: #6b7280;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 70%;
 	}
 	.legend-value {
 		font-size: 16px;
 		font-weight: 700;
 		color: #111827;
+		flex-shrink: 0;
+		margin-left: 8px;
 	}
 	.section-card {
 		background: white;
