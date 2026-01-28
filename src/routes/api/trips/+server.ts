@@ -409,15 +409,21 @@ export const GET: RequestHandler = async (event) => {
 					const m = mById.get(t.id);
 					if (m && typeof m.miles === 'number') {
 						t.totalMiles = m.miles;
-						// Recompute fuelCost from authoritative mileage store so clients see the estimate after refresh
-						try {
-							const tripAny = t as unknown as Record<string, unknown>;
-							const mpg = typeof tripAny['mpg'] === 'number' ? (tripAny['mpg'] as number) : 25;
-							const gasPrice =
-								typeof tripAny['gasPrice'] === 'number' ? (tripAny['gasPrice'] as number) : 3.5;
-							(t as any).fuelCost = Number(calculateFuelCost(m.miles, mpg, gasPrice));
-						} catch {
-							/* ignore */
+						// Only compute/attach fuelCost from mileage when the trip DOES NOT already
+						// have an explicit non-zero fuelCost (prefer user-provided value).
+						const hasExplicitFuel =
+							typeof (t as Record<string, unknown>)['fuelCost'] === 'number' &&
+							Number((t as Record<string, unknown>)['fuelCost']) > 0;
+						if (!hasExplicitFuel) {
+							try {
+								const tripAny = t as unknown as Record<string, unknown>;
+								const mpg = typeof tripAny['mpg'] === 'number' ? (tripAny['mpg'] as number) : 25;
+								const gasPrice =
+									typeof tripAny['gasPrice'] === 'number' ? (tripAny['gasPrice'] as number) : 3.5;
+								(t as any).fuelCost = Number(calculateFuelCost(m.miles, mpg, gasPrice));
+							} catch {
+								/* ignore */
+							}
 						}
 					}
 				}
