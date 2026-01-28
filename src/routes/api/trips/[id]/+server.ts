@@ -21,9 +21,6 @@ function safeWaitUntil(event: Parameters<RequestHandler>[0], p: Promise<unknown>
 	void p;
 }
 
-// [!code fix] SECURITY: Removed dangerous fakeDO fallback that caused silent data loss.
-// In production, missing DO bindings now properly error. Dev mode uses a noop stub for testing only.
-
 // SECURITY: Allowed fields for trip updates (prevents mass assignment)
 const ALLOWED_UPDATE_FIELDS = new Set([
 	'title',
@@ -101,7 +98,6 @@ export const GET: RequestHandler = async (event) => {
 		);
 
 		const userSafe = user as { id?: string; name?: string; token?: string } | undefined;
-		// [!code fix] Strictly use ID. Prevents username spoofing.
 		const storageId = userSafe?.id || '';
 
 		const trip = await svc.get(storageId, id);
@@ -175,7 +171,6 @@ export const PUT: RequestHandler = async (event) => {
 		);
 
 		const userSafe = user as { id?: string; name?: string; token?: string } | undefined;
-		// [!code fix] Strictly use ID. Prevents username spoofing.
 		const storageId = userSafe?.id || '';
 
 		// Verify existing ownership
@@ -202,10 +197,6 @@ export const PUT: RequestHandler = async (event) => {
 		};
 
 		await svc.put(updated as unknown as TripRecord);
-
-		// Mirroring trip fields to Expense records has been removed.
-		// Previously the server auto-created/updated expense records (fuel/maintenance/supplies)
-		// when trips were updated; that behavior was removed per feature change.
 
 		// If client edited totalMiles, persist authoritative mileage to its own KV so updates propagate to other clients
 		try {
@@ -285,7 +276,6 @@ export const DELETE: RequestHandler = async (event) => {
 		);
 
 		const userSafe = user as { id?: string; name?: string; token?: string } | undefined;
-		// [!code fix] Strictly use ID. Prevents username spoofing.
 		const storageId = userSafe?.id || '';
 
 		// Check if trip exists
@@ -317,7 +307,6 @@ export const DELETE: RequestHandler = async (event) => {
 					tripIndexDO as unknown as DurableObjectNamespace
 				);
 				// Find mileage logs linked to this trip
-				// Mileage logs can be linked by tripId OR by having the same id as the trip
 				const allMileage = await mileageSvc.list(storageId);
 				const linkedMileage = allMileage.filter(
 					(m: MileageRecord) => m.tripId === id || m.id === id
@@ -333,8 +322,6 @@ export const DELETE: RequestHandler = async (event) => {
 				message: createSafeErrorMessage(e)
 			});
 		}
-
-		// Cascade deletion of linked expense records was removed.
 
 		await svc.incrementUserCounter(storageId, -1);
 

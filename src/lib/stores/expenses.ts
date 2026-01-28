@@ -174,61 +174,7 @@ function createExpensesStore() {
 				const tx = db.transaction('expenses', 'readwrite');
 				await tx.objectStore('expenses').put(expense);
 				await tx.done;
-				// Immediately reconcile trip aggregates if this expense is linked to a trip
-				try {
-					const maybeTripId = (expense as ExpenseRecord & { tripId?: string }).tripId;
-					if (maybeTripId && typeof maybeTripId === 'string') {
-						const db2 = await getDB();
-						const tx2 = db2.transaction(['expenses', 'trips'], 'readonly');
-						const allExpenses = (await tx2.objectStore('expenses').getAll()) as ExpenseRecord[];
-						let fuel = 0;
-						let maintenance = 0;
-						let supplies = 0;
-						for (const e of allExpenses) {
-							const eTrip = (e as unknown as Record<string, unknown>)['tripId'] as
-								| string
-								| undefined;
-							const eTripId =
-								eTrip ?? (String(e.id).match(/^trip-(?:fuel|maint|supply)-([^-]+)/) || [])[1];
-							if (!eTripId || eTripId !== maybeTripId) continue;
-							if (String(e.id).startsWith('trip-fuel-')) fuel = e.amount || 0;
-							else if (String(e.id).startsWith('trip-maint-')) maintenance += e.amount || 0;
-							else if (String(e.id).startsWith('trip-supply-')) supplies += e.amount || 0;
-						}
-						try {
-							const nowIso = new Date().toISOString();
-							const { trips } = await import('$lib/stores/trips');
-							trips.updateLocal({
-								id: maybeTripId,
-								fuelCost: fuel,
-								maintenanceCost: maintenance,
-								suppliesCost: supplies,
-								updatedAt: nowIso,
-								syncStatus: 'pending'
-							});
-							// Enqueue a trip update so the server eventually persists aggregated costs
-							setTimeout(() => {
-								syncManager.addToQueue({
-									action: 'update',
-									tripId: maybeTripId,
-									data: {
-										id: maybeTripId,
-										fuelCost: fuel,
-										maintenanceCost: maintenance,
-										suppliesCost: supplies,
-										store: 'trips',
-										skipEnrichment: true
-									}
-								});
-							}, 0);
-						} catch {
-							/* ignore local reconcile errors */
-						}
-						await tx2.done;
-					}
-				} catch {
-					/* ignore reconciliation failures */
-				}
+
 				await syncManager.addToQueue({
 					action: 'create',
 					tripId: expense.id,

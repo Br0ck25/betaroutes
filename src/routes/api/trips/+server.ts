@@ -345,7 +345,6 @@ export const GET: RequestHandler = async (event) => {
 			}
 		}
 
-		// [!code fix] Strictly use ID. Prevents username spoofing.
 		const storageId = user?.id || '';
 		let sinceParam = sanitizeQueryParam(event.url.searchParams.get('since'), 50);
 
@@ -414,9 +413,9 @@ export const GET: RequestHandler = async (event) => {
 						t.totalMiles = m.miles;
 						// Only compute/attach fuelCost from mileage when the trip DOES NOT already
 						// have an explicit non-zero fuelCost (prefer user-provided value).
-						const hasExplicitFuel =
-							typeof (t as Record<string, unknown>)['fuelCost'] === 'number' &&
-							Number((t as Record<string, unknown>)['fuelCost']) > 0;
+						// [!code change] Allow 0 to count as an explicit override (e.g. electric vehicle free charging)
+						const hasExplicitFuel = typeof (t as Record<string, unknown>)['fuelCost'] === 'number';
+
 						if (!hasExplicitFuel) {
 							try {
 								const tripAny = t as unknown as Record<string, unknown>;
@@ -503,7 +502,6 @@ export const POST: RequestHandler = async (event) => {
 			}
 		}
 
-		// [!code fix] Strictly use ID. Prevents username spoofing.
 		const storageId = sessionUserSafe?.id || '';
 		const rawBody = (await event.request.json()) as unknown;
 
@@ -623,10 +621,11 @@ export const POST: RequestHandler = async (event) => {
 
 		// --- If trip has totalMiles compute server-side fuelCost (so UI shows estimated fuel immediately) ---
 		// Only compute when the client did not provide an explicit fuelCost (preserve user overrides).
+		// [!code change] Allow 0 as explicit value (checking if typeof is number, not just > 0)
 		if (
 			typeof validData.totalMiles === 'number' &&
 			validData.totalMiles > 0 &&
-			!(typeof validData.fuelCost === 'number' && Number(validData.fuelCost) > 0)
+			!(typeof validData.fuelCost === 'number')
 		) {
 			// Prefer explicit trip mpg/gasPrice from payload, fall back to sensible defaults
 			const tripAny = trip as unknown as Record<string, unknown>;
@@ -931,7 +930,6 @@ export const PUT: RequestHandler = async (event) => {
 			}
 		}
 
-		// [!code fix] Strictly use ID. Prevents username spoofing.
 		const storageId = sessionUserSafe?.id || '';
 		const rawBody = (await event.request.json()) as unknown;
 
@@ -1045,17 +1043,19 @@ export const PUT: RequestHandler = async (event) => {
 						// client-provided fuelCost. Only recompute when the update payload did not
 						// include a positive fuelCost value.
 						try {
-							if (!(typeof validData.fuelCost === 'number' && Number(validData.fuelCost) > 0)) {
+							// [!code change] Check for strictly undefined rather than > 0 to allow 0 override
+							const payloadHasFuel = typeof validData.fuelCost === 'number';
+
+							if (!payloadHasFuel) {
 								const tripAny = trip as unknown as Record<string, unknown>;
 								const mpg = typeof tripAny['mpg'] === 'number' ? (tripAny['mpg'] as number) : 25;
 								const gasPrice =
 									typeof tripAny['gasPrice'] === 'number' ? (tripAny['gasPrice'] as number) : 3.5;
-								if (
-									!(
-										typeof existingTrip.fuelCost === 'number' && Number(existingTrip.fuelCost) > 0
-									) &&
-									!(typeof validData.fuelCost === 'number' && Number(validData.fuelCost) > 0)
-								) {
+
+								// [!code change] Allow existing 0 cost to prevent overwrite
+								const existingHasFuel = typeof existingTrip.fuelCost === 'number';
+
+								if (!existingHasFuel && !payloadHasFuel) {
 									trip.fuelCost = Number(
 										calculateFuelCost(linkedMileage.miles || 0, mpg, gasPrice)
 									);
@@ -1109,16 +1109,16 @@ export const PUT: RequestHandler = async (event) => {
 						// Recompute and persist trip fuelCost if possible, but do not overwrite a
 						// client-provided fuelCost.
 						try {
-							if (!(typeof validData.fuelCost === 'number' && Number(validData.fuelCost) > 0)) {
+							// [!code change] Allow 0 as explicit value
+							if (!(typeof validData.fuelCost === 'number')) {
 								const tripAny = trip as unknown as Record<string, unknown>;
 								const mpg = typeof tripAny['mpg'] === 'number' ? (tripAny['mpg'] as number) : 25;
 								const gasPrice =
 									typeof tripAny['gasPrice'] === 'number' ? (tripAny['gasPrice'] as number) : 3.5;
+								// [!code change] Allow existing 0
 								if (
-									!(
-										typeof existingTrip.fuelCost === 'number' && Number(existingTrip.fuelCost) > 0
-									) &&
-									!(typeof validData.fuelCost === 'number' && Number(validData.fuelCost) > 0)
+									!(typeof existingTrip.fuelCost === 'number') &&
+									!(typeof validData.fuelCost === 'number')
 								) {
 									trip.fuelCost = Number(calculateFuelCost(newMileage.miles || 0, mpg, gasPrice));
 								}
@@ -1344,7 +1344,7 @@ export const PUT: RequestHandler = async (event) => {
 			headers: { 'Content-Type': 'application/json' }
 		});
 	} catch (err) {
-		log.error('PUT /api/trips error', { message: createSafeErrorMessage(err) });
+		log.error('PUT /api/trips/[id] error', { message: createSafeErrorMessage(err) });
 		return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
 			status: 500,
 			headers: { 'Content-Type': 'application/json' }
