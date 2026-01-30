@@ -25,6 +25,10 @@ playwright-report/
 blob-report/
 coverage/
 
+# Playwright browsers cache
+.cache/
+playwright/.cache/
+
 # ---------------------------------
 # Environment & Secrets
 # ---------------------------------
@@ -75,3 +79,17 @@ New Text Document*.txt
 # Vite Internal timestamps
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# ---------------------------------
+# IndexedDB & Database Exports
+# ---------------------------------
+*.idb-export.json
+*.db-backup.json
+
+# npm cache (if using CI cache)
+.npm/
+
+# ---------------------------------
+# External Docs
+# ---------------------------------
+docs/external/

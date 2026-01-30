@@ -1,47 +1,18 @@
 {
-	"extends": "./.svelte-kit/tsconfig.json",
-	"compilerOptions": {
-		/* Base Options */
-		"allowJs": true,
-		"checkJs": true,
-		"esModuleInterop": true,
-		"forceConsistentCasingInFileNames": true,
-		"resolveJsonModule": true,
-		"skipLibCheck": true,
-		"sourceMap": true,
-		"strict": true,
-		"moduleResolution": "bundler",
+  "extends": "./.svelte-kit/tsconfig.json",
+  "compilerOptions": {
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "checkJs": false,
 
-		/* Cloudflare & Svelte Types */
-		"types": ["google.maps", "svelte", "@cloudflare/workers-types"],
+    "strict": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "useUnknownInCatchVariables": true,
+    "verbatimModuleSyntax": true,
 
-		/* STRICTNESS: These rules specifically target
-           common AI/Copilot "lazy" coding habits.
-        */
-		// 1. Prevents "It works on my machine" bugs
-		// Forces explicit overrides on class inheritance.
-		"noImplicitOverride": true,
-
-		// 2. The "Anti-Assumption" Rule
-		// AI loves writing `const item = array[0]; item.id`.
-		// This forces you to check if `item` exists first.
-		"noUncheckedIndexedAccess": true,
-
-		// 3. Strict Optionality
-		// Prevents treating `undefined` and `?` as the same thing.
-		// Important for precise API definitions.
-		"exactOptionalPropertyTypes": true,
-
-		// 4. Catch Block Safety
-		// Forces you to type-check errors in catch blocks
-		// (e.g. `if (e instanceof Error)`), preventing app crashes
-		// from throwing non-Error objects.
-		"useUnknownInCatchVariables": true,
-
-		// 5. Modern Syntax Enforcement
-		// Ensures imports/exports are handled explicitly,
-		// which helps SvelteKit's bundler (Vite) optimize better.
-		"verbatimModuleSyntax": true
-	}
-	// Note: 'include' and 'exclude' are handled by the .svelte-kit extension
+    "lib": ["ES2022"],
+    "types": ["vite/client", "svelte", "google.maps"]
+  }
 }

@@ -7,18 +7,18 @@ import { log } from '$lib/server/log';
 let stripeInstance: Stripe | null = null;
 
 export const getStripe = () => {
-	if (!stripeInstance) {
-		const key = env['STRIPE_SECRET_KEY'];
-		if (!key) {
-			log.warn('⚠️ STRIPE_SECRET_KEY is missing. Payments will fail.');
-			// Return a dummy instance or throw, depending on preference.
-			// For now, we allow it to be created but it will fail calls.
-		}
+  if (!stripeInstance) {
+    const key = env['STRIPE_SECRET_KEY'];
+    if (!key) {
+      log.warn('⚠️ STRIPE_SECRET_KEY is missing. Payments will fail.');
+      // Return a dummy instance or throw, depending on preference.
+      // For now, we allow it to be created but it will fail calls.
+    }
 
-		stripeInstance = new Stripe(key || 'dummy_key', {
-			apiVersion: '2023-10-16', // Use latest API version available
-			typescript: true
-		});
-	}
-	return stripeInstance;
+    stripeInstance = new Stripe(key || 'dummy_key', {
+      apiVersion: '2023-10-16', // Use latest API version available
+      typescript: true
+    });
+  }
+  return stripeInstance;
 };

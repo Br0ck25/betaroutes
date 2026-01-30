@@ -3,85 +3,85 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 let mockExpenseSvc!: { put: ReturnType<typeof vi.fn>; get?: ReturnType<typeof vi.fn> };
 let mockEnv: Record<string, unknown> | undefined;
 let mockTripSvc!: {
-	put: ReturnType<typeof vi.fn>;
-	get: ReturnType<typeof vi.fn>;
-	list: ReturnType<typeof vi.fn>;
-	checkMonthlyQuota: ReturnType<typeof vi.fn>;
-	incrementUserCounter: ReturnType<typeof vi.fn>;
+  put: ReturnType<typeof vi.fn>;
+  get: ReturnType<typeof vi.fn>;
+  list: ReturnType<typeof vi.fn>;
+  checkMonthlyQuota: ReturnType<typeof vi.fn>;
+  incrementUserCounter: ReturnType<typeof vi.fn>;
 };
 
 vi.mock('$lib/server/expenseService', () => ({
-	makeExpenseService: () => mockExpenseSvc
+  makeExpenseService: () => mockExpenseSvc
 }));
 vi.mock('$lib/server/mileageService', () => ({
-	makeMileageService: () => ({ put: vi.fn().mockResolvedValue(undefined) })
+  makeMileageService: () => ({ put: vi.fn().mockResolvedValue(undefined) })
 }));
 vi.mock('$lib/server/tripService', () => ({
-	makeTripService: () => mockTripSvc
+  makeTripService: () => mockTripSvc
 }));
 vi.mock('$lib/server/userService', () => ({
-	findUserById: () => Promise.resolve({ id: 'u1', plan: 'free' })
+  findUserById: () => Promise.resolve({ id: 'u1', plan: 'free' })
 }));
 vi.mock('$lib/server/env', () => ({
-	getEnv: () => mockEnv,
-	safeKV: (env: unknown, name: string) => {
-		if (env && typeof (env as Record<string, unknown>)[name] !== 'undefined')
-			return (env as Record<string, unknown>)[name];
-		return {};
-	},
-	safeDO: () => ({})
+  getEnv: () => mockEnv,
+  safeKV: (env: unknown, name: string) => {
+    if (env && typeof (env as Record<string, unknown>)[name] !== 'undefined')
+      return (env as Record<string, unknown>)[name];
+    return {};
+  },
+  safeDO: () => ({})
 }));
 
 describe('POST /api/trips (auto-create expenses)', () => {
-	beforeEach(() => {
-		mockExpenseSvc = {
-			put: vi.fn().mockResolvedValue(undefined),
-			get: vi.fn().mockResolvedValue(null)
-		};
-		mockTripSvc = {
-			put: vi.fn().mockResolvedValue(undefined),
-			get: vi.fn().mockResolvedValue(null),
-			list: vi.fn().mockResolvedValue([]),
-			checkMonthlyQuota: vi.fn().mockResolvedValue({ allowed: true, count: 0 }),
-			incrementUserCounter: vi.fn().mockResolvedValue(undefined)
-		};
-		mockEnv = {
-			BETA_EXPENSES_KV: {},
-			BETA_MILEAGE_KV: {},
-			BETA_USER_SETTINGS_KV: { get: vi.fn().mockResolvedValue(null) }
-		};
-	});
+  beforeEach(() => {
+    mockExpenseSvc = {
+      put: vi.fn().mockResolvedValue(undefined),
+      get: vi.fn().mockResolvedValue(null)
+    };
+    mockTripSvc = {
+      put: vi.fn().mockResolvedValue(undefined),
+      get: vi.fn().mockResolvedValue(null),
+      list: vi.fn().mockResolvedValue([]),
+      checkMonthlyQuota: vi.fn().mockResolvedValue({ allowed: true, count: 0 }),
+      incrementUserCounter: vi.fn().mockResolvedValue(undefined)
+    };
+    mockEnv = {
+      BETA_EXPENSES_KV: {},
+      BETA_MILEAGE_KV: {},
+      BETA_USER_SETTINGS_KV: { get: vi.fn().mockResolvedValue(null) }
+    };
+  });
 
-	it('creates fuel, maintenance, and supply expenses when provided', async () => {
-		const body = {
-			date: '2025-01-01',
-			totalMiles: 10,
-			fuelCost: 5.5,
-			maintenanceItems: [{ type: 'Oil Change', cost: 12 }],
-			suppliesItems: [{ type: 'Wire', cost: 3 }]
-		};
+  it('creates fuel, maintenance, and supply expenses when provided', async () => {
+    const body = {
+      date: '2025-01-01',
+      totalMiles: 10,
+      fuelCost: 5.5,
+      maintenanceItems: [{ type: 'Oil Change', cost: 12 }],
+      suppliesItems: [{ type: 'Wire', cost: 3 }]
+    };
 
-		const event = {
-			request: { json: async () => body },
-			locals: { user: { id: 'u1' } },
-			platform: { env: mockEnv, context: { waitUntil: vi.fn() } }
-		};
+    const event = {
+      request: { json: async () => body },
+      locals: { user: { id: 'u1' } },
+      platform: { env: mockEnv, context: { waitUntil: vi.fn() } }
+    };
 
-		const { POST } = await import('./+server');
-		const res = await POST(event as unknown as Parameters<typeof POST>[0]);
-		expect(res.status).toBe(201);
-		const json = JSON.parse(await res.text());
-		expect(typeof json.id).toBe('string');
+    const { POST } = await import('./+server');
+    const res = await POST(event as unknown as Parameters<typeof POST>[0]);
+    expect(res.status).toBe(201);
+    const json = JSON.parse(await res.text());
+    expect(typeof json.id).toBe('string');
 
-		// Expect fuel + maintenance item + supplies item to be created
-		expect(mockExpenseSvc.put).toHaveBeenCalledTimes(3);
+    // Expect fuel + maintenance item + supplies item to be created
+    expect(mockExpenseSvc.put).toHaveBeenCalledTimes(3);
 
-		const calls = mockExpenseSvc.put.mock.calls.map(
-			(c: unknown[]) => c[0] as Record<string, unknown>
-		);
-		const categories = calls.map((c) => String(c['category'])).sort();
-		expect(categories).toEqual(['Fuel', 'Maintenance', 'Supplies']);
-		const amounts = calls.map((c) => Number(c['amount'])).sort((a: number, b: number) => a - b);
-		expect(amounts).toEqual([3, 5.5, 12]);
-	});
+    const calls = mockExpenseSvc.put.mock.calls.map(
+      (c: unknown[]) => c[0] as Record<string, unknown>
+    );
+    const categories = calls.map((c) => String(c['category'])).sort();
+    expect(categories).toEqual(['Fuel', 'Maintenance', 'Supplies']);
+    const amounts = calls.map((c) => Number(c['amount'])).sort((a: number, b: number) => a - b);
+    expect(amounts).toEqual([3, 5.5, 12]);
+  });
 });

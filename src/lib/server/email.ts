@@ -11,13 +11,13 @@ import { createSafeErrorMessage } from '$lib/server/sanitize';
  * SECURITY: Always use this when interpolating user input into HTML
  */
 function escapeHtml(unsafe: string | undefined | null): string {
-	if (!unsafe) return '';
-	return String(unsafe)
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;')
-		.replace(/"/g, '&quot;')
-		.replace(/'/g, '&#039;');
+  if (!unsafe) return '';
+  return String(unsafe)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 // --- Email Template Helpers ---
@@ -27,7 +27,7 @@ function escapeHtml(unsafe: string | undefined | null): string {
  * DELIVERABILITY: Helps avoid spam filters that flag HTML-only emails
  */
 function getVerificationPlaintext(verifyUrl: string): string {
-	return `Verify your email address
+  return `Verify your email address
 
 Thanks for starting your registration with Go Route Yourself! We just need to verify that this email address belongs to you to activate your account.
 
@@ -41,10 +41,10 @@ If you didn't create an account, you can safely ignore this email.
 }
 
 function getVerificationHtml(verifyUrl: string, logoUrl: string) {
-	const brandColor = '#FF7F50';
-	const accentColor = '#FF6A3D';
+  const brandColor = '#FF7F50';
+  const accentColor = '#FF6A3D';
 
-	return `
+  return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -110,7 +110,7 @@ function getVerificationHtml(verifyUrl: string, logoUrl: string) {
  * DELIVERABILITY: Helps avoid spam filters that flag HTML-only emails
  */
 function getPasswordResetPlaintext(resetUrl: string): string {
-	return `Reset your password
+  return `Reset your password
 
 You requested to reset your password for Go Route Yourself. Click the link below to set a new one:
 
@@ -125,10 +125,10 @@ If you didn't request a password reset, you can safely ignore this email.
 }
 
 function getPasswordResetHtml(resetUrl: string, logoUrl: string) {
-	const brandColor = '#FF7F50';
-	const accentColor = '#FF6A3D';
+  const brandColor = '#FF7F50';
+  const accentColor = '#FF6A3D';
 
-	return `
+  return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -194,12 +194,12 @@ function getPasswordResetHtml(resetUrl: string, logoUrl: string) {
  * DELIVERABILITY: Helps avoid spam filters that flag HTML-only emails
  */
 function getContactInquiryPlaintext(data: {
-	name: string;
-	email: string;
-	company?: string;
-	message: string;
+  name: string;
+  email: string;
+  company?: string;
+  message: string;
 }): string {
-	return `New Sales Inquiry
+  return `New Sales Inquiry
 
 Name: ${data.name}
 Email: ${data.email}
@@ -214,20 +214,20 @@ This inquiry was submitted via the Go Route Yourself contact form.
 }
 
 function getContactInquiryHtml(data: {
-	name: string;
-	email: string;
-	company?: string;
-	message: string;
+  name: string;
+  email: string;
+  company?: string;
+  message: string;
 }) {
-	const brandColor = '#FF7F50';
+  const brandColor = '#FF7F50';
 
-	// SECURITY: Escape all user-provided data to prevent XSS
-	const safeName = escapeHtml(data.name);
-	const safeEmail = escapeHtml(data.email);
-	const safeCompany = escapeHtml(data.company);
-	const safeMessage = escapeHtml(data.message);
+  // SECURITY: Escape all user-provided data to prevent XSS
+  const safeName = escapeHtml(data.name);
+  const safeEmail = escapeHtml(data.email);
+  const safeCompany = escapeHtml(data.company);
+  const safeMessage = escapeHtml(data.message);
 
-	return `
+  return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -257,58 +257,58 @@ function getContactInquiryHtml(data: {
  * @param apiKey - Resend API key (REQUIRED in Cloudflare Workers - pass from platform.env)
  */
 export async function sendVerificationEmail(
-	email: string,
-	token: string,
-	baseUrl: string,
-	apiKey?: string
+  email: string,
+  token: string,
+  baseUrl: string,
+  apiKey?: string
 ) {
-	const verifyUrl = `${baseUrl}/api/verify?token=${token}`;
-	const logoUrl = `${baseUrl}/180x75.avif`;
+  const verifyUrl = `${baseUrl}/api/verify?token=${token}`;
+  const logoUrl = `${baseUrl}/180x75.avif`;
 
-	// 1. Dev Mode: Skip actual sending to save API credits and ease debugging
-	if (dev) {
-		log.debug('\n================ [DEV EMAIL] ================');
-		log.debug('dev-email:verify', { email, verifyUrl, logoUrl });
-		log.debug('=============================================');
-		return true;
-	}
+  // 1. Dev Mode: Skip actual sending to save API credits and ease debugging
+  if (dev) {
+    log.debug('\n================ [DEV EMAIL] ================');
+    log.debug('dev-email:verify', { email, verifyUrl, logoUrl });
+    log.debug('=============================================');
+    return true;
+  }
 
-	// 2. Check for API key (from parameter in production, or env in traditional deployments)
-	const resolvedApiKey = apiKey || env['RESEND_API_KEY'];
+  // 2. Check for API key (from parameter in production, or env in traditional deployments)
+  const resolvedApiKey = apiKey || env['RESEND_API_KEY'];
 
-	if (!resolvedApiKey) {
-		log.error('Missing RESEND_API_KEY - email service not configured');
-		throw new Error('Email service not configured - RESEND_API_KEY missing');
-	}
+  if (!resolvedApiKey) {
+    log.error('Missing RESEND_API_KEY - email service not configured');
+    throw new Error('Email service not configured - RESEND_API_KEY missing');
+  }
 
-	try {
-		const res = await fetch('https://api.resend.com/emails', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: `Bearer ${resolvedApiKey}`
-			},
-			body: JSON.stringify({
-				from: 'Go Route Yourself <noreply@gorouteyourself.com>',
-				to: email,
-				subject: 'Verify your account',
-				html: getVerificationHtml(verifyUrl, logoUrl),
-				text: getVerificationPlaintext(verifyUrl) // DELIVERABILITY: Plaintext alternative
-			})
-		});
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${resolvedApiKey}`
+      },
+      body: JSON.stringify({
+        from: 'Go Route Yourself <noreply@gorouteyourself.com>',
+        to: email,
+        subject: 'Verify your account',
+        html: getVerificationHtml(verifyUrl, logoUrl),
+        text: getVerificationPlaintext(verifyUrl) // DELIVERABILITY: Plaintext alternative
+      })
+    });
 
-		if (!res.ok) {
-			const errorText = await res.text();
-			log.error('❌ Resend API Error', { status: res.status, errorText });
-			throw new Error(`Resend API error: ${res.status} - ${errorText}`);
-		}
+    if (!res.ok) {
+      const errorText = await res.text();
+      log.error('❌ Resend API Error', { status: res.status, errorText });
+      throw new Error(`Resend API error: ${res.status} - ${errorText}`);
+    }
 
-		log.debug('✅ Verification email sent successfully to', email);
-		return true;
-	} catch (e: unknown) {
-		log.error('❌ Email send failed', { message: createSafeErrorMessage(e) });
-		throw e; // Re-throw so caller can handle
-	}
+    log.debug('✅ Verification email sent successfully to', email);
+    return true;
+  } catch (e: unknown) {
+    log.error('❌ Email send failed', { message: createSafeErrorMessage(e) });
+    throw e; // Re-throw so caller can handle
+  }
 }
 
 /**
@@ -319,58 +319,58 @@ export async function sendVerificationEmail(
  * @param apiKey - Resend API key (REQUIRED in Cloudflare Workers - pass from platform.env)
  */
 export async function sendPasswordResetEmail(
-	email: string,
-	token: string,
-	baseUrl: string,
-	apiKey?: string
+  email: string,
+  token: string,
+  baseUrl: string,
+  apiKey?: string
 ) {
-	const resetUrl = `${baseUrl}/reset-password?token=${token}`;
-	const logoUrl = `${baseUrl}/180x75.avif`;
+  const resetUrl = `${baseUrl}/reset-password?token=${token}`;
+  const logoUrl = `${baseUrl}/180x75.avif`;
 
-	// 1. Dev Mode: Skip actual sending
-	if (dev) {
-		log.debug('\n================ [DEV EMAIL] ================');
-		log.debug('dev-email:reset', { email, resetUrl, logoUrl });
-		log.debug('=============================================\n');
-		return true;
-	}
+  // 1. Dev Mode: Skip actual sending
+  if (dev) {
+    log.debug('\n================ [DEV EMAIL] ================');
+    log.debug('dev-email:reset', { email, resetUrl, logoUrl });
+    log.debug('=============================================\n');
+    return true;
+  }
 
-	// 2. Check for API key
-	const resolvedApiKey = apiKey || env['RESEND_API_KEY'];
+  // 2. Check for API key
+  const resolvedApiKey = apiKey || env['RESEND_API_KEY'];
 
-	if (!resolvedApiKey) {
-		log.error('❌ Missing RESEND_API_KEY - must be passed as parameter or in env');
-		throw new Error('Email service not configured - RESEND_API_KEY missing');
-	}
+  if (!resolvedApiKey) {
+    log.error('❌ Missing RESEND_API_KEY - must be passed as parameter or in env');
+    throw new Error('Email service not configured - RESEND_API_KEY missing');
+  }
 
-	try {
-		const res = await fetch('https://api.resend.com/emails', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: `Bearer ${resolvedApiKey}`
-			},
-			body: JSON.stringify({
-				from: 'Go Route Yourself <noreply@gorouteyourself.com>',
-				to: email,
-				subject: 'Reset your password',
-				html: getPasswordResetHtml(resetUrl, logoUrl),
-				text: getPasswordResetPlaintext(resetUrl) // DELIVERABILITY: Plaintext alternative
-			})
-		});
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${resolvedApiKey}`
+      },
+      body: JSON.stringify({
+        from: 'Go Route Yourself <noreply@gorouteyourself.com>',
+        to: email,
+        subject: 'Reset your password',
+        html: getPasswordResetHtml(resetUrl, logoUrl),
+        text: getPasswordResetPlaintext(resetUrl) // DELIVERABILITY: Plaintext alternative
+      })
+    });
 
-		if (!res.ok) {
-			const errorText = await res.text();
-			log.error('Resend API error', { status: res.status, errorText });
-			throw new Error(`Resend API error: ${res.status} - ${errorText}`);
-		}
+    if (!res.ok) {
+      const errorText = await res.text();
+      log.error('Resend API error', { status: res.status, errorText });
+      throw new Error(`Resend API error: ${res.status} - ${errorText}`);
+    }
 
-		log.info('Password reset email sent', { email });
-		return true;
-	} catch (e: unknown) {
-		log.error('❌ Email send failed', { message: createSafeErrorMessage(e) });
-		throw e; // Re-throw so caller can handle
-	}
+    log.info('Password reset email sent', { email });
+    return true;
+  } catch (e: unknown) {
+    log.error('❌ Email send failed', { message: createSafeErrorMessage(e) });
+    throw e; // Re-throw so caller can handle
+  }
 }
 
 /**
@@ -379,58 +379,58 @@ export async function sendPasswordResetEmail(
  * @param apiKey - Resend API key
  */
 export async function sendContactInquiryEmail(
-	data: { name: string; email: string; company?: string; message: string },
-	apiKey?: string
+  data: { name: string; email: string; company?: string; message: string },
+  apiKey?: string
 ) {
-	// 1. Dev Mode
-	if (dev) {
-		log.debug('\n================ [DEV EMAIL] ================');
-		log.debug('dev-email:contact', {
-			to: 'sales@gorouteyourself.com',
-			replyTo: data.email,
-			subject: `New Inquiry: ${data.company || data.name}`,
-			message: data.message
-		});
-		log.debug('=============================================\n');
-		return true;
-	}
+  // 1. Dev Mode
+  if (dev) {
+    log.debug('\n================ [DEV EMAIL] ================');
+    log.debug('dev-email:contact', {
+      to: 'sales@gorouteyourself.com',
+      replyTo: data.email,
+      subject: `New Inquiry: ${data.company || data.name}`,
+      message: data.message
+    });
+    log.debug('=============================================\n');
+    return true;
+  }
 
-	// 2. Check for API key
-	const resolvedApiKey = apiKey || env['RESEND_API_KEY'];
+  // 2. Check for API key
+  const resolvedApiKey = apiKey || env['RESEND_API_KEY'];
 
-	if (!resolvedApiKey) {
-		log.error('Missing RESEND_API_KEY - email service not configured');
-		throw new Error('Email service not configured');
-	}
+  if (!resolvedApiKey) {
+    log.error('Missing RESEND_API_KEY - email service not configured');
+    throw new Error('Email service not configured');
+  }
 
-	try {
-		const res = await fetch('https://api.resend.com/emails', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: `Bearer ${resolvedApiKey}`
-			},
-			body: JSON.stringify({
-				from: 'Go Route Yourself Contact <noreply@gorouteyourself.com>',
-				to: 'sales@gorouteyourself.com',
-				reply_to: data.email,
-				subject: `Inquiry from ${data.name} ${data.company ? `(${data.company})` : ''}`,
-				html: getContactInquiryHtml(data),
-				text: getContactInquiryPlaintext(data) // DELIVERABILITY: Plaintext alternative
-			})
-		});
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${resolvedApiKey}`
+      },
+      body: JSON.stringify({
+        from: 'Go Route Yourself Contact <noreply@gorouteyourself.com>',
+        to: 'sales@gorouteyourself.com',
+        reply_to: data.email,
+        subject: `Inquiry from ${data.name} ${data.company ? `(${data.company})` : ''}`,
+        html: getContactInquiryHtml(data),
+        text: getContactInquiryPlaintext(data) // DELIVERABILITY: Plaintext alternative
+      })
+    });
 
-		if (!res.ok) {
-			const errorText = await res.text();
-			log.error('❌ Resend API Error:', res.status, errorText);
-			throw new Error(`Resend API error: ${res.status} - ${errorText}`);
-		}
+    if (!res.ok) {
+      const errorText = await res.text();
+      log.error('❌ Resend API Error:', res.status, errorText);
+      throw new Error(`Resend API error: ${res.status} - ${errorText}`);
+    }
 
-		return true;
-	} catch (e) {
-		log.error('❌ Contact email send failed:', e);
-		throw e;
-	}
+    return true;
+  } catch (e) {
+    log.error('❌ Contact email send failed:', e);
+    throw e;
+  }
 }
 
 // --- Security Alert Email ---
@@ -438,36 +438,36 @@ export async function sendContactInquiryEmail(
 type SecurityAlertType = 'password_changed' | 'passkey_added' | 'passkey_removed' | 'email_changed';
 
 function getSecurityAlertSubject(alertType: SecurityAlertType): string {
-	switch (alertType) {
-		case 'password_changed':
-			return 'Your password was changed';
-		case 'passkey_added':
-			return 'A new passkey was added to your account';
-		case 'passkey_removed':
-			return 'A passkey was removed from your account';
-		case 'email_changed':
-			return 'Your email address was changed';
-	}
+  switch (alertType) {
+    case 'password_changed':
+      return 'Your password was changed';
+    case 'passkey_added':
+      return 'A new passkey was added to your account';
+    case 'passkey_removed':
+      return 'A passkey was removed from your account';
+    case 'email_changed':
+      return 'Your email address was changed';
+  }
 }
 
 function getSecurityAlertMessage(alertType: SecurityAlertType): string {
-	switch (alertType) {
-		case 'password_changed':
-			return 'Your password was successfully changed.';
-		case 'passkey_added':
-			return 'A new passkey was added to your account.';
-		case 'passkey_removed':
-			return 'A passkey was removed from your account.';
-		case 'email_changed':
-			return 'Your email address was changed.';
-	}
+  switch (alertType) {
+    case 'password_changed':
+      return 'Your password was successfully changed.';
+    case 'passkey_added':
+      return 'A new passkey was added to your account.';
+    case 'passkey_removed':
+      return 'A passkey was removed from your account.';
+    case 'email_changed':
+      return 'Your email address was changed.';
+  }
 }
 
 function getSecurityAlertPlaintext(alertType: SecurityAlertType, timestamp: string): string {
-	const subject = getSecurityAlertSubject(alertType);
-	const message = getSecurityAlertMessage(alertType);
+  const subject = getSecurityAlertSubject(alertType);
+  const message = getSecurityAlertMessage(alertType);
 
-	return `Security Alert: ${subject}
+  return `Security Alert: ${subject}
 
 ${message}
 
@@ -485,11 +485,11 @@ If you made this change, you can ignore this email.
 }
 
 function getSecurityAlertHtml(alertType: SecurityAlertType, timestamp: string, logoUrl: string) {
-	const subject = getSecurityAlertSubject(alertType);
-	const message = getSecurityAlertMessage(alertType);
-	const warningColor = '#dc2626';
+  const subject = getSecurityAlertSubject(alertType);
+  const message = getSecurityAlertMessage(alertType);
+  const warningColor = '#dc2626';
 
-	return `
+  return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -564,73 +564,73 @@ function getSecurityAlertHtml(alertType: SecurityAlertType, timestamp: string, l
  * @returns boolean indicating success
  */
 export async function sendSecurityAlertEmail(
-	email: string,
-	alertType: SecurityAlertType,
-	apiKey?: string
+  email: string,
+  alertType: SecurityAlertType,
+  apiKey?: string
 ): Promise<boolean> {
-	const timestamp = new Date().toLocaleString('en-US', {
-		weekday: 'long',
-		year: 'numeric',
-		month: 'long',
-		day: 'numeric',
-		hour: '2-digit',
-		minute: '2-digit',
-		timeZoneName: 'short'
-	});
+  const timestamp = new Date().toLocaleString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short'
+  });
 
-	const logoUrl = 'https://gorouteyourself.com/optimized/logo-192.avif';
-	const subject = `Security Alert: ${getSecurityAlertSubject(alertType)}`;
+  const logoUrl = 'https://gorouteyourself.com/optimized/logo-192.avif';
+  const subject = `Security Alert: ${getSecurityAlertSubject(alertType)}`;
 
-	// 1. Dev Mode
-	if (dev) {
-		log.debug('\n================ [DEV EMAIL] ================');
-		log.debug('dev-email:security-alert', {
-			to: email,
-			subject,
-			alertType,
-			timestamp
-		});
-		log.debug('=============================================\n');
-		return true;
-	}
+  // 1. Dev Mode
+  if (dev) {
+    log.debug('\n================ [DEV EMAIL] ================');
+    log.debug('dev-email:security-alert', {
+      to: email,
+      subject,
+      alertType,
+      timestamp
+    });
+    log.debug('=============================================\n');
+    return true;
+  }
 
-	// 2. Check for API key
-	const resolvedApiKey = apiKey || env['RESEND_API_KEY'];
+  // 2. Check for API key
+  const resolvedApiKey = apiKey || env['RESEND_API_KEY'];
 
-	if (!resolvedApiKey) {
-		log.error('Missing RESEND_API_KEY - email service not configured');
-		// Don't throw - security alerts are best-effort, shouldn't block the action
-		return false;
-	}
+  if (!resolvedApiKey) {
+    log.error('Missing RESEND_API_KEY - email service not configured');
+    // Don't throw - security alerts are best-effort, shouldn't block the action
+    return false;
+  }
 
-	try {
-		const res = await fetch('https://api.resend.com/emails', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: `Bearer ${resolvedApiKey}`
-			},
-			body: JSON.stringify({
-				from: 'Go Route Yourself Security <noreply@gorouteyourself.com>',
-				to: email,
-				subject,
-				html: getSecurityAlertHtml(alertType, timestamp, logoUrl),
-				text: getSecurityAlertPlaintext(alertType, timestamp)
-			})
-		});
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${resolvedApiKey}`
+      },
+      body: JSON.stringify({
+        from: 'Go Route Yourself Security <noreply@gorouteyourself.com>',
+        to: email,
+        subject,
+        html: getSecurityAlertHtml(alertType, timestamp, logoUrl),
+        text: getSecurityAlertPlaintext(alertType, timestamp)
+      })
+    });
 
-		if (!res.ok) {
-			const errorText = await res.text();
-			log.error('❌ Security alert email failed:', res.status, errorText);
-			// Don't throw - security alerts are best-effort
-			return false;
-		}
+    if (!res.ok) {
+      const errorText = await res.text();
+      log.error('❌ Security alert email failed:', res.status, errorText);
+      // Don't throw - security alerts are best-effort
+      return false;
+    }
 
-		log.info('[SecurityAlert] Email sent', { alertType, email: email.slice(0, 3) + '***' });
-		return true;
-	} catch (e) {
-		log.error('❌ Security alert email send failed:', e);
-		// Don't throw - security alerts are best-effort
-		return false;
-	}
+    log.info('[SecurityAlert] Email sent', { alertType, email: email.slice(0, 3) + '***' });
+    return true;
+  } catch (e) {
+    log.error('❌ Security alert email send failed:', e);
+    // Don't throw - security alerts are best-effort
+    return false;
+  }
 }

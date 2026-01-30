@@ -5,62 +5,62 @@ import { browser } from '$app/environment';
 
 // Align defaults with API schema
 const defaultSettings = {
-	startLocation: '',
-	endLocation: '',
-	defaultStartAddress: '',
-	defaultEndAddress: '',
-	defaultMPG: 25,
-	defaultGasPrice: 3.5,
-	distanceUnit: 'mi',
-	timeFormat: '12h',
-	expenseCategories: ['maintenance', 'insurance', 'supplies', 'other'],
-	maintenanceCategories: ['Oil Change', 'Tire Rotation', 'Repair', 'Inspection', 'Wash'],
-	supplyCategories: ['Water', 'Snacks', 'Cleaning', 'Office', 'Equipment'],
+  startLocation: '',
+  endLocation: '',
+  defaultStartAddress: '',
+  defaultEndAddress: '',
+  defaultMPG: 25,
+  defaultGasPrice: 3.5,
+  distanceUnit: 'mi',
+  timeFormat: '12h',
+  expenseCategories: ['maintenance', 'insurance', 'supplies', 'other'],
+  maintenanceCategories: ['Oil Change', 'Tire Rotation', 'Repair', 'Inspection', 'Wash'],
+  supplyCategories: ['Water', 'Snacks', 'Cleaning', 'Office', 'Equipment'],
 
-	// Business Information
-	companyName: '',
-	companyAddress: '',
-	companyPhone: '',
-	companyEmail: '',
-	companyLogo: '', // base64 image data
+  // Business Information
+  companyName: '',
+  companyAddress: '',
+  companyPhone: '',
+  companyEmail: '',
+  companyLogo: '', // base64 image data
 
-	// Vehicle Information (for tax purposes)
-	vehicleMake: '',
-	vehicleModel: '',
-	vehicleYear: '',
-	vehicleOdometerStart: 0,
-	businessUsePercentage: 100,
+  // Vehicle Information (for tax purposes)
+  vehicleMake: '',
+  vehicleModel: '',
+  vehicleYear: '',
+  vehicleOdometerStart: 0,
+  businessUsePercentage: 100,
 
-	// Maintenance / Service Settings
-	// `serviceIntervalMiles`: how many miles between services (user-editable)
-	// `lastServiceOdometer`: odometer reading at last service
-	// `lastServiceDate`: ISO date when last service was performed (optional)
-	// `reminderThresholdMiles`: how close to the due mileage to notify (e.g., 500 miles)
-	serviceIntervalMiles: 5000,
-	lastServiceOdometer: 0,
-	lastServiceDate: '',
-	reminderThresholdMiles: 500,
+  // Maintenance / Service Settings
+  // `serviceIntervalMiles`: how many miles between services (user-editable)
+  // `lastServiceOdometer`: odometer reading at last service
+  // `lastServiceDate`: ISO date when last service was performed (optional)
+  // `reminderThresholdMiles`: how close to the due mileage to notify (e.g., 500 miles)
+  serviceIntervalMiles: 5000,
+  lastServiceOdometer: 0,
+  lastServiceDate: '',
+  reminderThresholdMiles: 500,
 
-	// Service Types (for revenue tracking)
-	serviceTypes: ['HughesNet', 'Starlink', 'Dish', 'Security Camera', 'Other'],
+  // Service Types (for revenue tracking)
+  serviceTypes: ['HughesNet', 'Starlink', 'Dish', 'Security Camera', 'Other'],
 
-	// Export Customization
-	pdfPrimaryColor: '#FF7F50', // Orange
-	pdfSecondaryColor: '#34C759', // Green
-	includeCharts: true,
-	includeAnalytics: true,
+  // Export Customization
+  pdfPrimaryColor: '#FF7F50', // Orange
+  pdfSecondaryColor: '#34C759', // Green
+  includeCharts: true,
+  includeAnalytics: true,
 
-	// Mileage rate (per mile). Editable in Mileage tracker.
-	mileageRate: 0.655,
+  // Mileage rate (per mile). Editable in Mileage tracker.
+  mileageRate: 0.655,
 
-	// Vehicles available for mileage logs
-	vehicles: [] as Array<{ id: string; name: string }>,
+  // Vehicles available for mileage logs
+  vehicles: [] as Array<{ id: string; name: string }>,
 
-	// Automation Settings
-	autoExportEnabled: false,
-	autoExportFrequency: 'monthly', // 'weekly', 'monthly', 'quarterly'
-	autoExportEmail: '',
-	autoExportTypes: ['tax-bundle'] // which exports to auto-generate
+  // Automation Settings
+  autoExportEnabled: false,
+  autoExportFrequency: 'monthly', // 'weekly', 'monthly', 'quarterly'
+  autoExportEmail: '',
+  autoExportTypes: ['tax-bundle'] // which exports to auto-generate
 };
 
 // 1. Start with defaults (Server matches Client initially)
@@ -68,39 +68,39 @@ export const userSettings = writable(defaultSettings);
 
 // 2. Hydrate from Storage ONLY in the browser
 if (browser) {
-	try {
-		const saved = storage.getSettings();
-		// Merge defaults with saved to ensure integrity
-		userSettings.set({ ...defaultSettings, ...saved });
+  try {
+    const saved = storage.getSettings();
+    // Merge defaults with saved to ensure integrity
+    userSettings.set({ ...defaultSettings, ...saved });
 
-		// 3. Auto-save changes to local storage
-		userSettings.subscribe((value) => {
-			storage.saveSettings(value);
-		});
+    // 3. Auto-save changes to local storage
+    userSettings.subscribe((value) => {
+      storage.saveSettings(value);
+    });
 
-		// 4. Load settings from server to sync across devices
-		loadSettingsFromServer();
-	} catch (e) {
-		console.error('Failed to hydrate settings', e);
-	}
+    // 4. Load settings from server to sync across devices
+    loadSettingsFromServer();
+  } catch (e) {
+    console.error('Failed to hydrate settings', e);
+  }
 }
 
 // Load settings from server API
 async function loadSettingsFromServer() {
-	try {
-		const response = await fetch('/api/settings');
-		if (response.ok) {
-			const serverSettings = await response.json();
-			// Merge server settings with current settings (server takes precedence)
-			if (typeof serverSettings === 'object' && serverSettings !== null) {
-				userSettings.update((current) => ({ ...current, ...serverSettings }));
-			}
-		} else if (response.status === 401) {
-			// User not authenticated - this is expected, silently continue with local settings
-			return;
-		}
-	} catch (e) {
-		console.error('Failed to load settings from server', e);
-		// Continue with local settings if server load fails
-	}
+  try {
+    const response = await fetch('/api/settings');
+    if (response.ok) {
+      const serverSettings = await response.json();
+      // Merge server settings with current settings (server takes precedence)
+      if (typeof serverSettings === 'object' && serverSettings !== null) {
+        userSettings.update((current) => ({ ...current, ...serverSettings }));
+      }
+    } else if (response.status === 401) {
+      // User not authenticated - this is expected, silently continue with local settings
+      return;
+    }
+  } catch (e) {
+    console.error('Failed to load settings from server', e);
+    // Continue with local settings if server load fails
+  }
 }

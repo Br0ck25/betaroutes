@@ -1,0 +1,88 @@
+name: CI Quality Gate
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  quality-gate:
+    name: Quality Gate (Check + Lint + Test)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run quality gate
+        run: npm run gate
+
+      - name: Check for Svelte 4 syntax (export let)
+        run: |
+          if find src -name "*.svelte" -type f -exec grep -l "export let" {} \; 2>/dev/null | grep -q .; then
+            echo "❌ ERROR: Found 'export let' (Svelte 4 syntax)"
+            find src -name "*.svelte" -type f -exec grep -l "export let" {} \;
+            exit 1
+          fi
+          echo "✅ No 'export let' found"
+
+      - name: Check for Svelte 4 reactive statements ($:)
+        run: |
+          if find src -name "*.svelte" -type f -exec grep -l '^\s*\$:' {} \; 2>/dev/null | grep -q .; then
+            echo "❌ ERROR: Found '\$:' reactive statements (Svelte 4 syntax)"
+            find src -name "*.svelte" -type f -exec grep -l '^\s*\$:' {} \;
+            exit 1
+          fi
+          echo "✅ No '\$:' reactive statements found"
+
+      - name: Check for direct IndexedDB access
+        run: |
+          if find src -type f \( -name "*.ts" -o -name "*.svelte" \) ! -path "*/db/indexedDB.ts" ! -path "*/db/queries.ts" -exec grep -l "\.getAll(['\"]trips['\"])" {} \; 2>/dev/null | grep -q .; then
+            echo "❌ ERROR: Found direct IndexedDB access"
+            find src -type f \( -name "*.ts" -o -name "*.svelte" \) ! -path "*/db/indexedDB.ts" ! -path "*/db/queries.ts" -exec grep -l "\.getAll(['\"]trips['\"])" {} \;
+            exit 1
+          fi
+          echo "✅ No direct IndexedDB access found"
+
+      - name: Check for process.env usage
+        run: |
+          if find src -type f \( -name "*.ts" -o -name "*.js" \) -exec grep -l "process\.env" {} \; 2>/dev/null | grep -q .; then
+            echo "❌ ERROR: Found 'process.env' usage (use platform.env instead)"
+            find src -type f \( -name "*.ts" -o -name "*.js" \) -exec grep -l "process\.env" {} \;
+            exit 1
+          fi
+          echo "✅ No process.env usage found"
+
+      - name: Check for 'any' types
+        run: |
+          if find src -type f -name "*.ts" ! -name "*.d.ts" -exec grep -l ": any" {} \; 2>/dev/null | grep -q .; then
+            echo "⚠️  WARNING: Found ': any' type annotations"
+            find src -type f -name "*.ts" ! -name "*.d.ts" -exec grep -l ": any" {} \;
+            echo "Note: ESLint will catch this, but consider fixing before merge"
+          fi
+          echo "✅ Type check complete"
+
+      - name: Security scan summary
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ ALL QUALITY GATE CHECKS PASSED"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "✅ TypeScript check passed"
+          echo "✅ ESLint passed"
+          echo "✅ Tests passed"
+          echo "✅ No Svelte 4 syntax"
+          echo "✅ No direct IndexedDB access"
+          echo "✅ No process.env usage"
+          echo ""
+          echo "Code is ready for merge! 🚀"

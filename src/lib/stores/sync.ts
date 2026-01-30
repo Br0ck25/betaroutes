@@ -10,97 +10,97 @@ export type SyncStatusType = 'synced' | 'syncing' | 'offline' | 'pending' | 'err
  * Sync state interface
  */
 export interface SyncState {
-	status: SyncStatusType;
-	online: boolean;
-	lastSyncAt?: string;
-	pendingCount: number;
-	errorMessage?: string;
+  status: SyncStatusType;
+  online: boolean;
+  lastSyncAt?: string;
+  pendingCount: number;
+  errorMessage?: string;
 }
 
 /**
  * Create sync status store
  */
 function createSyncStore() {
-	// [!code fix] Safe check for navigator (SSR compatibility)
-	const isBrowser = typeof navigator !== 'undefined';
-	const initialOnline = isBrowser ? navigator.onLine : true;
+  // [!code fix] Safe check for navigator (SSR compatibility)
+  const isBrowser = typeof navigator !== 'undefined';
+  const initialOnline = isBrowser ? navigator.onLine : true;
 
-	const { subscribe, update } = writable<SyncState>({
-		status: 'synced',
-		online: initialOnline,
-		pendingCount: 0
-	});
+  const { subscribe, update } = writable<SyncState>({
+    status: 'synced',
+    online: initialOnline,
+    pendingCount: 0
+  });
 
-	return {
-		subscribe,
+  return {
+    subscribe,
 
-		/**
-		 * Set online status
-		 */
-		setOnline(online: boolean) {
-			update((state) => ({
-				...state,
-				online,
-				status: online ? 'synced' : 'offline'
-			}));
-		},
+    /**
+     * Set online status
+     */
+    setOnline(online: boolean) {
+      update((state) => ({
+        ...state,
+        online,
+        status: online ? 'synced' : 'offline'
+      }));
+    },
 
-		/**
-		 * Set syncing status
-		 */
-		setSyncing() {
-			update((state) => ({
-				...state,
-				status: 'syncing'
-			}));
-		},
+    /**
+     * Set syncing status
+     */
+    setSyncing() {
+      update((state) => ({
+        ...state,
+        status: 'syncing'
+      }));
+    },
 
-		/**
-		 * Set synced status
-		 */
-		setSynced() {
-			update((state) => ({
-				...state,
-				status: 'synced',
-				lastSyncAt: new Date().toISOString(),
-				pendingCount: 0,
-				errorMessage: ''
-			}));
-		},
+    /**
+     * Set synced status
+     */
+    setSynced() {
+      update((state) => ({
+        ...state,
+        status: 'synced',
+        lastSyncAt: new Date().toISOString(),
+        pendingCount: 0,
+        errorMessage: ''
+      }));
+    },
 
-		/**
-		 * Set pending status
-		 */
-		setPending(count: number) {
-			update((state) => ({
-				...state,
-				status: state.online ? 'pending' : 'offline',
-				pendingCount: count
-			}));
-		},
+    /**
+     * Set pending status
+     */
+    setPending(count: number) {
+      update((state) => ({
+        ...state,
+        status: state.online ? 'pending' : 'offline',
+        pendingCount: count
+      }));
+    },
 
-		/**
-		 * Set error status
-		 */
-		setError(message: string) {
-			update((state) => ({
-				...state,
-				status: 'error',
-				errorMessage: message
-			}));
-		},
+    /**
+     * Set error status
+     */
+    setError(message: string) {
+      update((state) => ({
+        ...state,
+        status: 'error',
+        errorMessage: message
+      }));
+    },
 
-		/**
-		 * Update pending count
-		 */
-		updatePendingCount(count: number) {
-			update((state) => ({
-				...state,
-				pendingCount: count,
-				status: count > 0 ? 'pending' : 'synced'
-			}));
-		}
-	};
+    /**
+     * Update pending count
+     */
+    updatePendingCount(count: number) {
+      update((state) => ({
+        ...state,
+        pendingCount: count,
+        status: count > 0 ? 'pending' : 'synced'
+      }));
+    }
+  };
 }
 
 export const syncStatus = createSyncStore();
@@ -109,58 +109,58 @@ export const syncStatus = createSyncStore();
  * Derived store for sync icon
  */
 export const syncIcon = derived(syncStatus, ($syncStatus) => {
-	switch ($syncStatus.status) {
-		case 'synced':
-			return '✓';
-		case 'syncing':
-			return '↻';
-		case 'offline':
-			return '📴';
-		case 'pending':
-			return '⏳';
-		case 'error':
-			return '⚠';
-		default:
-			return '?';
-	}
+  switch ($syncStatus.status) {
+    case 'synced':
+      return '✓';
+    case 'syncing':
+      return '↻';
+    case 'offline':
+      return '📴';
+    case 'pending':
+      return '⏳';
+    case 'error':
+      return '⚠';
+    default:
+      return '?';
+  }
 });
 
 /**
  * Derived store for sync label
  */
 export const syncLabel = derived(syncStatus, ($syncStatus) => {
-	switch ($syncStatus.status) {
-		case 'synced':
-			return 'All changes saved';
-		case 'syncing':
-			return 'Syncing...';
-		case 'offline':
-			return 'Offline - will sync when online';
-		case 'pending':
-			return `${$syncStatus.pendingCount} change${$syncStatus.pendingCount !== 1 ? 's' : ''} pending`;
-		case 'error':
-			return $syncStatus.errorMessage || 'Sync error';
-		default:
-			return 'Unknown status';
-	}
+  switch ($syncStatus.status) {
+    case 'synced':
+      return 'All changes saved';
+    case 'syncing':
+      return 'Syncing...';
+    case 'offline':
+      return 'Offline - will sync when online';
+    case 'pending':
+      return `${$syncStatus.pendingCount} change${$syncStatus.pendingCount !== 1 ? 's' : ''} pending`;
+    case 'error':
+      return $syncStatus.errorMessage || 'Sync error';
+    default:
+      return 'Unknown status';
+  }
 });
 
 /**
  * Derived store for sync color
  */
 export const syncColor = derived(syncStatus, ($syncStatus) => {
-	switch ($syncStatus.status) {
-		case 'synced':
-			return 'green';
-		case 'syncing':
-			return 'blue';
-		case 'offline':
-			return 'orange';
-		case 'pending':
-			return 'yellow';
-		case 'error':
-			return 'red';
-		default:
-			return 'gray';
-	}
+  switch ($syncStatus.status) {
+    case 'synced':
+      return 'green';
+    case 'syncing':
+      return 'blue';
+    case 'offline':
+      return 'orange';
+    case 'pending':
+      return 'yellow';
+    case 'error':
+      return 'red';
+    default:
+      return 'gray';
+  }
 });

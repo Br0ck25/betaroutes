@@ -1,12 +1,14 @@
 {
+  "id": "/",
   "name": "Go Route Yourself",
   "short_name": "GoRoute",
-  "start_url": "/dashboard",
+  "start_url": "/?source=pwa",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff",
-  "description": "Offline-first mileage tracking and route management",
+  "background_color": "#FFFFFF",
+  "theme_color": "#F68A2E",
+  "description": "Offline-first mileage tracking and route management for delivery drivers and field workers",
   "scope": "/",
+  "categories": ["productivity", "business", "finance", "utilities"],
 
   "shortcuts": [
     {
@@ -36,8 +38,12 @@
     { "src": "/optimized/logo-120.avif", "sizes": "120x120", "type": "image/avif" },
     { "src": "/optimized/logo-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/optimized/logo-192.avif", "sizes": "192x192", "type": "image/avif" },
-    { "src": "/optimized/logo-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "/optimized/logo-512.avif", "sizes": "512x512", "type": "image/avif" },
-    { "src": "/optimized/logo-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { 
+      "src": "/optimized/logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    { "src": "/optimized/logo-512.avif", "sizes": "512x512", "type": "image/avif" }
   ]
 }

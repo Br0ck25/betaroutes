@@ -1,410 +1,418 @@
 <script lang="ts">
-	import { mileage } from '$lib/stores/mileage';
-	import { user } from '$lib/stores/auth';
-	import { userSettings } from '$lib/stores/userSettings';
-	import { toasts } from '$lib/stores/toast';
-	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
-	import { page } from '$app/stores';
-	import SelectMobile from '$lib/components/ui/SelectMobile.svelte';
-	const expenseId = $page.params.id;
+  import { run } from 'svelte/legacy';
 
-	// Settings modal removed for Mileage edit page
+  import { mileage } from '$lib/stores/mileage';
+  import { user } from '$lib/stores/auth';
+  import { userSettings } from '$lib/stores/userSettings';
+  import { toasts } from '$lib/stores/toast';
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
+  import { page } from '$app/stores';
+  import SelectMobile from '$lib/components/ui/SelectMobile.svelte';
+  const expenseId = $page.params.id;
 
-	// Category options are not applicable for Mileage edit
+  // Settings modal removed for Mileage edit page
 
-	// Category selection state removed for Mileage edit
+  // Category options are not applicable for Mileage edit
 
-	// Category sync removed for Mileage edit
+  // Category selection state removed for Mileage edit
 
-	// Category helper functions removed for Mileage edit
+  // Category sync removed for Mileage edit
 
-	let formData = {
-		date: '',
-		startOdometer: '',
-		endOdometer: '',
-		miles: '',
-		vehicle: '',
-		mileageRate: '',
-		notes: '',
-		category: ''
-	};
+  // Category helper functions removed for Mileage edit
 
-	// Whether the user manually edited the miles input; when true we stop auto-updating miles from odometers
-	let milesManual = false;
+  let formData = $state({
+    date: '',
+    startOdometer: '',
+    endOdometer: '',
+    miles: '',
+    vehicle: '',
+    mileageRate: '',
+    notes: '',
+    category: ''
+  });
 
-	// default mileageRate from settings if editing and none present
-	$: if ($userSettings && formData.mileageRate === '' && $userSettings.mileageRate != null) {
-		formData.mileageRate = String($userSettings.mileageRate);
-	}
+  // Whether the user manually edited the miles input; when true we stop auto-updating miles from odometers
+  let milesManual = $state(false);
 
-	// Default vehicle selection if available and none selected
-	$: if ($userSettings?.vehicles?.length > 0 && !formData.vehicle) {
-		const v0 = $userSettings.vehicles[0];
-		formData.vehicle = v0?.id ?? v0?.name ?? '';
-	}
+  // default mileageRate from settings if editing and none present
+  run(() => {
+    if ($userSettings && formData.mileageRate === '' && $userSettings.mileageRate != null) {
+      formData.mileageRate = String($userSettings.mileageRate);
+    }
+  });
 
-	// Find and prefill mileage record when store or page params load
-	$: {
-		const id = $page.params.id;
-		const rec = $mileage.find((e) => e.id === id);
-		if (rec && !formData.date) {
-			const r: any = rec as any;
-			formData = {
-				date: r.date || '',
-				startOdometer: String(r.startOdometer || ''),
-				endOdometer: String(r.endOdometer || ''),
-				miles: typeof r.miles === 'number' ? String(r.miles) : '',
-				vehicle: r.vehicle || '',
-				mileageRate: typeof r.mileageRate === 'number' ? String(r.mileageRate) : '',
-				notes: r.notes || '',
-				category: r.category || ''
-			};
-		} else if ($mileage && $mileage.length > 0 && !rec) {
-			toasts.error('Mileage log not found.');
-			goto(resolve('/dashboard/mileage'));
-		}
-	}
+  // Default vehicle selection if available and none selected
+  run(() => {
+    if ($userSettings?.vehicles?.length > 0 && !formData.vehicle) {
+      const v0 = $userSettings.vehicles[0];
+      formData.vehicle = v0?.id ?? v0?.name ?? '';
+    }
+  });
 
-	// Auto-calc miles from odometer readings unless the user has manually edited miles
-	$: if (!milesManual) {
-		if (formData.startOdometer !== '' && formData.endOdometer !== '') {
-			const s = Number(formData.startOdometer) || 0;
-			const e = Number(formData.endOdometer) || 0;
-			formData.miles = Number(Math.max(0, e - s).toFixed(2)).toString();
-		}
-	}
+  // Find and prefill mileage record when store or page params load
+  run(() => {
+    const id = $page.params.id;
+    const rec = $mileage.find((e) => e.id === id);
+    if (rec && !formData.date) {
+      const r: any = rec as any;
+      formData = {
+        date: r.date || '',
+        startOdometer: String(r.startOdometer || ''),
+        endOdometer: String(r.endOdometer || ''),
+        miles: typeof r.miles === 'number' ? String(r.miles) : '',
+        vehicle: r.vehicle || '',
+        mileageRate: typeof r.mileageRate === 'number' ? String(r.mileageRate) : '',
+        notes: r.notes || '',
+        category: r.category || ''
+      };
+    } else if ($mileage && $mileage.length > 0 && !rec) {
+      toasts.error('Mileage log not found.');
+      goto(resolve('/dashboard/mileage'));
+    }
+  });
 
-	async function saveExpense() {
-		if (
-			formData.startOdometer === '' || formData.endOdometer === ''
-				? formData.miles !== ''
-				: !formData.date
-		) {
-			// Ensure either start & end are present or miles is provided
-			if (
-				!formData.date ||
-				((formData.startOdometer === '' || formData.endOdometer === '') && formData.miles === '')
-			) {
-				toasts.error('Please fill in required fields (either start & end odometer or miles).');
-				return;
-			}
-		}
+  // Auto-calc miles from odometer readings unless the user has manually edited miles
+  run(() => {
+    if (!milesManual) {
+      if (formData.startOdometer !== '' && formData.endOdometer !== '') {
+        const s = Number(formData.startOdometer) || 0;
+        const e = Number(formData.endOdometer) || 0;
+        formData.miles = Number(Math.max(0, e - s).toFixed(2)).toString();
+      }
+    }
+  });
 
-		const currentUser = ($page.data as any)['user'] || $user;
-		const userId = (currentUser as any)?.id || localStorage.getItem('offline_user_id');
-		if (!userId) {
-			toasts.error('User not identified. Cannot save.');
-			return;
-		}
+  async function saveExpense() {
+    if (
+      formData.startOdometer === '' || formData.endOdometer === ''
+        ? formData.miles !== ''
+        : !formData.date
+    ) {
+      // Ensure either start & end are present or miles is provided
+      if (
+        !formData.date ||
+        ((formData.startOdometer === '' || formData.endOdometer === '') && formData.miles === '')
+      ) {
+        toasts.error('Please fill in required fields (either start & end odometer or miles).');
+        return;
+      }
+    }
 
-		try {
-			const start = Number(formData.startOdometer) || 0;
-			const end = Number(formData.endOdometer) || 0;
-			let miles =
-				formData.miles !== '' && !isNaN(Number(formData.miles))
-					? Number(formData.miles)
-					: Math.max(0, end - start);
-			miles = Number(miles.toFixed(2));
+    const currentUser = ($page.data as any)['user'] || $user;
+    const userId = (currentUser as any)?.id || localStorage.getItem('offline_user_id');
+    if (!userId) {
+      toasts.error('User not identified. Cannot save.');
+      return;
+    }
 
-			const payload = {
-				...formData,
-				startOdometer: start,
-				endOdometer: end,
-				miles,
-				mileageRate: formData.mileageRate !== '' ? Number(formData.mileageRate) : undefined,
-				vehicle: formData.vehicle || undefined
-			};
+    try {
+      const start = Number(formData.startOdometer) || 0;
+      const end = Number(formData.endOdometer) || 0;
+      let miles =
+        formData.miles !== '' && !isNaN(Number(formData.miles))
+          ? Number(formData.miles)
+          : Math.max(0, end - start);
+      miles = Number(miles.toFixed(2));
 
-			await mileage.updateMileage(String(expenseId), payload as any, String(userId));
-			toasts.success('Mileage log updated');
-			goto(resolve('/dashboard/mileage'));
-		} catch (err) {
-			console.error(err);
-			toasts.error('Failed to update mileage log');
-		}
-	}
+      const payload = {
+        ...formData,
+        startOdometer: start,
+        endOdometer: end,
+        miles,
+        mileageRate: formData.mileageRate !== '' ? Number(formData.mileageRate) : undefined,
+        vehicle: formData.vehicle || undefined
+      };
+
+      await mileage.updateMileage(String(expenseId), payload as any, String(userId));
+      toasts.success('Mileage log updated');
+      goto(resolve('/dashboard/mileage'));
+    } catch (err) {
+      console.error(err);
+      toasts.error('Failed to update mileage log');
+    }
+  }
 </script>
 
 <div class="expense-form-page">
-	<div class="page-header">
-		<div>
-			<h1 class="page-title">Edit Mileage Log</h1>
-			<p class="page-subtitle">Update odometer readings and miles</p>
-		</div>
-		<a href={resolve('/dashboard/mileage')} class="btn-back">
-			<svg width="24" height="24" viewBox="0 0 20 20" fill="none"
-				><path
-					d="M12 4L6 10L12 16"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				/></svg
-			> Back
-		</a>
-	</div>
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Edit Mileage Log</h1>
+      <p class="page-subtitle">Update odometer readings and miles</p>
+    </div>
+    <a href={resolve('/dashboard/mileage')} class="btn-back">
+      <svg width="24" height="24" viewBox="0 0 20 20" fill="none"
+        ><path
+          d="M12 4L6 10L12 16"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        /></svg
+      > Back
+    </a>
+  </div>
 
-	<div class="form-card">
-		<div class="card-header">
-			<h2 class="card-title">Mileage Details</h2>
-		</div>
+  <div class="form-card">
+    <div class="card-header">
+      <h2 class="card-title">Mileage Details</h2>
+    </div>
 
-		<div class="form-grid">
-			<div class="form-group">
-				<label for="mileage-date">Date</label>
-				<input id="mileage-date" type="date" bind:value={formData.date} required />
-			</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="mileage-date">Date</label>
+        <input id="mileage-date" type="date" bind:value={formData.date} required />
+      </div>
 
-			<div class="form-row">
-				<!-- Maintenance, Supplies, and Expenses options removed for Mileage logs -->
-				<div class="form-group grid-3">
-					<div>
-						<label for="start-odo">Start Odometer</label>
-						<input
-							id="start-odo"
-							type="number"
-							inputmode="decimal"
-							bind:value={formData.startOdometer}
-							placeholder="0"
-						/>
-					</div>
-					<div>
-						<label for="end-odo">End Odometer</label>
-						<input
-							id="end-odo"
-							type="number"
-							inputmode="decimal"
-							bind:value={formData.endOdometer}
-							placeholder="0"
-						/>
-					</div>
-					<div>
-						<label for="miles">Miles</label>
-						<input
-							id="miles"
-							type="number"
-							step="0.01"
-							inputmode="decimal"
-							bind:value={formData.miles}
-							placeholder="0.0"
-							on:input={(e) => (milesManual = (e.target as HTMLInputElement).value !== '')}
-						/>
-					</div>
-				</div>
-			</div>
+      <div class="form-row">
+        <!-- Maintenance, Supplies, and Expenses options removed for Mileage logs -->
+        <div class="form-group grid-3">
+          <div>
+            <label for="start-odo">Start Odometer</label>
+            <input
+              id="start-odo"
+              type="number"
+              inputmode="decimal"
+              bind:value={formData.startOdometer}
+              placeholder="0"
+            />
+          </div>
+          <div>
+            <label for="end-odo">End Odometer</label>
+            <input
+              id="end-odo"
+              type="number"
+              inputmode="decimal"
+              bind:value={formData.endOdometer}
+              placeholder="0"
+            />
+          </div>
+          <div>
+            <label for="miles">Miles</label>
+            <input
+              id="miles"
+              type="number"
+              step="0.01"
+              inputmode="decimal"
+              bind:value={formData.miles}
+              placeholder="0.0"
+              oninput={(e) => (milesManual = (e.target as HTMLInputElement).value !== '')}
+            />
+          </div>
+        </div>
+      </div>
 
-			<div class="form-group">
-				<label for="notes">Notes</label>
-				<textarea
-					id="notes"
-					name="notes"
-					bind:value={formData.notes}
-					rows="3"
-					placeholder="e.g., Trip to client site"
-				></textarea>
+      <div class="form-group">
+        <label for="notes">Notes</label>
+        <textarea
+          id="notes"
+          name="notes"
+          bind:value={formData.notes}
+          rows="3"
+          placeholder="e.g., Trip to client site"
+        ></textarea>
 
-				<!-- tax deductible removed -->
-			</div>
+        <!-- tax deductible removed -->
+      </div>
 
-			<!-- Settings modal removed for Mileage edit -->
+      <!-- Settings modal removed for Mileage edit -->
 
-			<div class="form-row vehicle-rate-row">
-				<div class="form-group">
-					<label for="vehicle-mobile">Vehicle</label>
-					<SelectMobile
-						className="mobile-select"
-						id="vehicle-mobile"
-						placeholder={$userSettings.vehicles && $userSettings.vehicles.length > 0
-							? 'Select vehicle'
-							: 'No vehicles (open Mileage Settings)'}
-						options={$userSettings.vehicles
-							? $userSettings.vehicles.map((v) => ({ value: v.id || v.name, label: v.name }))
-							: [{ value: '', label: 'No vehicles (open Mileage Settings)' }]}
-						bind:value={formData.vehicle}
-						onchange={(e) => (formData.vehicle = e.value)}
-					/>
-				</div>
-				<div class="form-group">
-					<label for="mileage-rate">Mileage Rate (per mile)</label>
-					<input
-						id="mileage-rate"
-						type="number"
-						step="0.001"
-						bind:value={formData.mileageRate}
-						placeholder="0.655"
-					/>
-				</div>
-			</div>
+      <div class="form-row vehicle-rate-row">
+        <div class="form-group">
+          <label for="vehicle-mobile">Vehicle</label>
+          <SelectMobile
+            className="mobile-select"
+            id="vehicle-mobile"
+            placeholder={$userSettings.vehicles && $userSettings.vehicles.length > 0
+              ? 'Select vehicle'
+              : 'No vehicles (open Mileage Settings)'}
+            options={$userSettings.vehicles
+              ? $userSettings.vehicles.map((v) => ({ value: v.id || v.name, label: v.name }))
+              : [{ value: '', label: 'No vehicles (open Mileage Settings)' }]}
+            bind:value={formData.vehicle}
+            onchange={(e) => (formData.vehicle = e.value)}
+          />
+        </div>
+        <div class="form-group">
+          <label for="mileage-rate">Mileage Rate (per mile)</label>
+          <input
+            id="mileage-rate"
+            type="number"
+            step="0.001"
+            bind:value={formData.mileageRate}
+            placeholder="0.655"
+          />
+        </div>
+      </div>
 
-			<div class="form-actions">
-				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
-				<a href={resolve('/dashboard/mileage')} class="btn-secondary">Cancel</a>
-				<button class="btn-primary" on:click={saveExpense}>Save Log</button>
-			</div>
-		</div>
-	</div>
+      <div class="form-actions">
+        <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using local resolve() helper (base-aware) -->
+        <a href={resolve('/dashboard/mileage')} class="btn-secondary">Cancel</a>
+        <button class="btn-primary" onclick={saveExpense}>Save Log</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <style>
-	/* MATCHING STYLES FROM TRIPS/NEW */
-	.expense-form-page {
-		max-width: 800px;
-		margin: 0 auto;
-		padding: 4px;
-		padding-bottom: 90px;
-	}
+  /* MATCHING STYLES FROM TRIPS/NEW */
+  .expense-form-page {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 4px;
+    padding-bottom: 90px;
+  }
 
-	@media (max-width: 640px) {
-		.expense-form-page {
-			padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1px);
-		}
-	}
+  @media (max-width: 640px) {
+    .expense-form-page {
+      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1px);
+    }
+  }
 
-	.page-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 26px;
-		padding: 0 8px;
-	}
-	.page-title {
-		font-size: 28px;
-		font-weight: 800;
-		color: #111827;
-		margin: 0;
-	}
-	.page-subtitle {
-		font-size: 14px;
-		color: #6b7280;
-		display: none;
-		margin: 0;
-	}
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 26px;
+    padding: 0 8px;
+  }
+  .page-title {
+    font-size: 28px;
+    font-weight: 800;
+    color: #111827;
+    margin: 0;
+  }
+  .page-subtitle {
+    font-size: 14px;
+    color: #6b7280;
+    display: none;
+    margin: 0;
+  }
 
-	.btn-back {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		font-weight: 600;
-		color: #6b7280;
-		text-decoration: none;
-		font-size: 14px;
-	}
+  .btn-back {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: #6b7280;
+    text-decoration: none;
+    font-size: 14px;
+  }
 
-	.form-card {
-		background: white;
-		border: 1px solid #e5e7eb;
-		border-radius: 18px;
-		padding: 16px;
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-	}
-	.card-header {
-		margin-bottom: 26px;
-	}
-	.card-title {
-		font-size: 22px;
-		font-weight: 700;
-		color: #111827;
-		margin: 0;
-	}
+  .form-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 18px;
+    padding: 16px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+  .card-header {
+    margin-bottom: 26px;
+  }
+  .card-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: #111827;
+    margin: 0;
+  }
 
-	.form-grid {
-		display: flex;
-		flex-direction: column;
-		gap: 24px;
-	}
-	.form-row {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 20px;
-	}
-	/* Make the start/end/miles group span the full width (match Date input) */
-	.form-row .grid-3 {
-		grid-column: 1 / -1;
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: 16px;
-	}
-	@media (max-width: 767px) {
-		.form-row .grid-3 {
-			grid-template-columns: 1fr;
-		}
-	}
-	.form-group {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-	}
+  .form-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  /* Make the start/end/miles group span the full width (match Date input) */
+  .form-row .grid-3 {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  @media (max-width: 767px) {
+    .form-row .grid-3 {
+      grid-template-columns: 1fr;
+    }
+  }
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
 
-	label {
-		font-size: 16px;
-		font-weight: 600;
-		color: #374151;
-	}
+  label {
+    font-size: 16px;
+    font-weight: 600;
+    color: #374151;
+  }
 
-	input,
-	textarea {
-		width: 100%;
-		padding: 16px;
-		border: 1px solid #e5e7eb;
-		border-radius: 12px;
-		font-size: 18px;
-		background: white;
-		box-sizing: border-box;
-	}
-	input:focus,
-	textarea:focus {
-		outline: none;
-		border-color: #ff7f50;
-	}
+  input,
+  textarea {
+    width: 100%;
+    padding: 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    font-size: 18px;
+    background: white;
+    box-sizing: border-box;
+  }
+  input:focus,
+  textarea:focus {
+    outline: none;
+    border-color: #ff7f50;
+  }
 
-	.form-actions {
-		display: flex;
-		gap: 18px;
-		margin-top: 36px;
-		padding-top: 26px;
-		border-top: 1px solid #e5e7eb;
-	}
-	.btn-primary,
-	.btn-secondary {
-		flex: 1;
-		padding: 18px;
-		border-radius: 12px;
-		font-weight: 600;
-		font-size: 18px;
-		cursor: pointer;
-		border: none;
-		text-align: center;
-		text-decoration: none;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-	.btn-primary {
-		background: linear-gradient(135deg, #ff7f50 0%, #ff6a3d 100%);
-		color: white;
-	}
-	.btn-secondary {
-		background: white;
-		border: 1px solid #e5e7eb;
-		color: #374151;
-	}
+  .form-actions {
+    display: flex;
+    gap: 18px;
+    margin-top: 36px;
+    padding-top: 26px;
+    border-top: 1px solid #e5e7eb;
+  }
+  .btn-primary,
+  .btn-secondary {
+    flex: 1;
+    padding: 18px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 18px;
+    cursor: pointer;
+    border: none;
+    text-align: center;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, #ff7f50 0%, #ff6a3d 100%);
+    color: white;
+  }
+  .btn-secondary {
+    background: white;
+    border: 1px solid #e5e7eb;
+    color: #374151;
+  }
 
-	@media (min-width: 768px) {
-		.page-subtitle {
-			display: block;
-		}
-		.form-card {
-			padding: 48px;
-		}
-		.form-actions {
-			justify-content: flex-end;
-		}
-		.btn-primary,
-		.btn-secondary {
-			flex: 0 0 auto;
-			width: auto;
-			min-width: 160px;
-		}
-	}
+  @media (min-width: 768px) {
+    .page-subtitle {
+      display: block;
+    }
+    .form-card {
+      padding: 48px;
+    }
+    .form-actions {
+      justify-content: flex-end;
+    }
+    .btn-primary,
+    .btn-secondary {
+      flex: 0 0 auto;
+      width: auto;
+      min-width: 160px;
+    }
+  }
 </style>

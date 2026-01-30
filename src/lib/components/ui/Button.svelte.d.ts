@@ -1,12 +1,15 @@
 import type { SvelteComponentTyped } from 'svelte';
 
 export default class Button extends SvelteComponentTyped<
-	{
-		variant?: 'primary' | 'secondary' | 'outline' | 'danger';
-		disabled?: boolean;
-		type?: 'button' | 'submit' | 'reset';
-		className?: string;
-	},
-	{ click: MouseEvent },
-	{ default: Record<string, unknown> }
+  {
+    variant?: 'primary' | 'secondary' | 'outline' | 'danger';
+    disabled?: boolean;
+    type?: 'button' | 'submit' | 'reset';
+    className?: string;
+    action?: (event: MouseEvent) => void;
+    onClick?: (event: MouseEvent) => void;
+    onclick?: (event: MouseEvent) => void;
+  },
+  { click: MouseEvent },
+  { default: Record<string, unknown> }
 > {}

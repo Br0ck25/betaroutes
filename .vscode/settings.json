@@ -1,33 +1,114 @@
 {
-	"editor.formatOnSave": true,
-	"editor.defaultFormatter": "esbenp.prettier-vscode",
-	"editor.codeActionsOnSave": {
-		"source.fixAll.eslint": "explicit",
-		"source.organizeImports": "explicit"
-	},
+  // -------------------------------------------------------------------------
+  // Formatting + Linting (strict, predictable)
+  // -------------------------------------------------------------------------
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    // Run ESLint fixes only on explicit saves (good for control)
+    "source.fixAll.eslint": "explicit",
+    // Optional (keep explicit): organize imports only when you explicitly save
+    "source.organizeImports": "explicit"
+  },
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
 
-	// FORCE VS Code to use your project's strict TypeScript version
-	"typescript.tsdk": "node_modules/typescript/lib",
-	"typescript.enablePromptUseWorkspaceTsdk": true,
+  // Prettier should only run if the repo defines rules (prevents “mystery formatting”)
+  "prettier.requireConfig": true,
+  "prettier.useEditorConfig": true,
 
-	"svelte.enable-ts-plugin": true,
-	// "svelte.plugin.svelte.note-new-code": true, // Recommended: Remove this (it is not a standard Svelte setting and may cause noise)
+  // ESLint (flat config projects use eslint.config.js)
+  "eslint.useFlatConfig": true,
+  "eslint.validate": ["javascript", "javascriptreact", "typescript", "typescriptreact", "svelte"],
+  "eslint.format.enable": false,
 
-	"files.associations": {
-		"*.css": "tailwindcss",
-		"*.svelte": "svelte"
-	},
+  // -------------------------------------------------------------------------
+  // File associations
+  // -------------------------------------------------------------------------
+  "files.associations": {
+    "*.css": "tailwindcss",
+    "*.md": "markdown"
+  },
 
-	"html.validate.scripts": false,
-	"html.validate.styles": false,
-	"html.format.enable": false,
-	"[html]": {
-		"editor.defaultFormatter": "esbenp.prettier-vscode"
-	},
+  // -------------------------------------------------------------------------
+  // Svelte 5 formatting + TS plugin (IMPORTANT)
+  // -------------------------------------------------------------------------
+  // Use the Svelte extension as the formatter for .svelte files.
+  // (Svelte 5 prefers standard HTML event attributes like `onclick` over `on:click`.) :contentReference[oaicite:4]{index=4}
+  "[svelte]": {
+    "editor.defaultFormatter": "svelte.svelte-vscode"
+  },
 
-	"eslint.validate": ["svelte", "javascript", "typescript"],
+  // Make sure the Svelte extension formatting is ON (your current file had it OFF)
+  "svelte.plugin.svelte.format.enable": true,
+  "svelte.enable-ts-plugin": true,
 
-	"files.trimTrailingWhitespace": true,
-	"files.insertFinalNewline": true,
-	"files.eol": "\n"
+  // Prefer workspace TypeScript version (keeps TS behavior stable)
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+
+  // -------------------------------------------------------------------------
+  // SvelteKit & File Management
+  // -------------------------------------------------------------------------
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.expand": false,
+  "explorer.fileNesting.patterns": {
+    "+*.svelte": "+${capture}.server.ts, +${capture}.ts, +${capture}.js, +${capture}.css",
+    "+layout.svelte": "+layout.ts, +layout.server.ts, +layout.js, +layout.server.js, +layout.css",
+    "package.json": "package-lock.json, .npmrc, .nvmrc, .env*, .gitignore, tsconfig.json, svelte.config.js, vite.config.ts, tailwind.config.js, postcss.config.js, eslint.config.js, playwright.config.ts, .prettierrc*"
+  },
+
+  // -------------------------------------------------------------------------
+  // Strict Tailwind CSS
+  // -------------------------------------------------------------------------
+  "tailwindCSS.validate": true,
+  "tailwindCSS.lint.invalidApply": "error",
+  "tailwindCSS.lint.invalidScreen": "error",
+  "tailwindCSS.lint.invalidVariant": "error",
+  "tailwindCSS.lint.invalidConfigPath": "error",
+  "tailwindCSS.lint.invalidTailwindDirective": "error",
+
+  // -------------------------------------------------------------------------
+  // TypeScript “show me what you inferred”
+  // -------------------------------------------------------------------------
+  "typescript.inlayHints.parameterNames.enabled": "all",
+  "typescript.inlayHints.variableTypes.enabled": true,
+  "typescript.inlayHints.propertyDeclarationTypes.enabled": true,
+
+  // -------------------------------------------------------------------------
+  // Copilot: keep it strict + instruction-driven
+  // -------------------------------------------------------------------------
+  // Enables `.github/copilot-instructions.md` usage :contentReference[oaicite:5]{index=5}
+  "github.copilot.chat.codeGeneration.useInstructionFiles": true,
+
+  // Enable AGENTS.md support (root file) :contentReference[oaicite:6]{index=6}
+  "chat.useAgentsMdFile": true,
+
+  // Security: do NOT auto-load nested AGENTS.md files unless you want that complexity
+  // (Nested is experimental and increases “instruction hijack” risk.)
+  "chat.useNestedAgentsMdFiles": false,
+
+  // Where VS Code looks for `*.instructions.md` :contentReference[oaicite:7]{index=7}
+  "chat.instructionsFilesLocations": {
+    ".github/instructions": true
+  },
+
+  // Where VS Code looks for `*.prompt.md` :contentReference[oaicite:8]{index=8}
+  "chat.promptFilesLocations": {
+    ".github/prompts": true
+  },
+
+  // Show a summary of file changes at the end of each chat request (helps you audit)
+  "chat.checkpoints.showFileChanges": true,
+
+  // Copilot inline suggestions language enablement (your current preference kept)
+  "github.copilot.enable": {
+    "*": true,
+    "json": false,
+    "plaintext": false,
+    "markdown": true
+  }
+
+  // -------------------------------------------------------------------------
+  // OPTIONAL “Ultra-Strict” mode (manual Copilot only)
+  // -------------------------------------------------------------------------
+  // If you want Copilot to stop “ghost-text driving,” uncomment:
+  // "editor.inlineSuggest.enabled": false
 }

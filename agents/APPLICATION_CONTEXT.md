@@ -72,22 +72,26 @@ This is a **governed codebase** with strict, non-negotiable rules. Before making
 
 ```typescript
 export const POST: RequestHandler = async ({ request, locals }) => {
-	// 1. Auth check with early return
-	if (!locals.user) {
-		return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-	}
+  // 1. Auth check with early return
+  if (!locals.user) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401
+    });
+  }
 
-	// 2. Input validation with early return
-	const body = await request.json();
-	if (!body || !body.requiredField) {
-		return new Response(JSON.stringify({ error: 'Bad request' }), { status: 400 });
-	}
+  // 2. Input validation with early return
+  const body = await request.json();
+  if (!body || !body.requiredField) {
+    return new Response(JSON.stringify({ error: 'Bad request' }), {
+      status: 400
+    });
+  }
 
-	// 3. Main logic
-	const result = await doSomething(body);
+  // 3. Main logic
+  const result = await doSomething(body);
 
-	// 4. Final return (REQUIRED)
-	return new Response(JSON.stringify({ success: true, data: result }));
+  // 4. Final return (REQUIRED)
+  return new Response(JSON.stringify({ success: true, data: result }));
 };
 ```
 
@@ -186,7 +190,7 @@ Go Route Yourself is a trip tracking and route planning application for delivery
 
 ### Tech Stack
 
-- **Frontend:** SvelteKit (Svelte 5 migration in progress)
+- **Frontend:** SvelteKit (Svelte 5 ONLY - strict runes mode)
 - **Backend:** Cloudflare Workers
 - **Storage:** Cloudflare KV
 - **Auth:** Session-based with Passkey/WebAuthn support
@@ -262,7 +266,7 @@ const trip = await env.LOGS.get(key, { type: 'json' });
 
 // Verify ownership before returning
 if (trip.userId !== user.id) {
-	return new Response('Forbidden', { status: 403 });
+  return new Response('Forbidden', { status: 403 });
 }
 ```
 
@@ -298,14 +302,14 @@ ALL new files MUST use Svelte 5:
 
 ```svelte
 <script lang="ts">
-	// ✅ Svelte 5 runes with TypeScript
-	let { title, onClick } = $props<{ title: string; onClick?: () => void }>();
-	let count = $state(0);
-	let doubled = $derived(count * 2);
+  // ✅ Svelte 5 runes with TypeScript
+  let { title, onClick } = $props<{ title: string; onClick?: () => void }>();
+  let count = $state(0);
+  let doubled = $derived(count * 2);
 
-	$effect(() => {
-		console.log('Count changed:', count);
-	});
+  $effect(() => {
+    console.log('Count changed:', count);
+  });
 </script>
 ```
 
@@ -315,12 +319,12 @@ ALL new files MUST use Svelte 5:
 
 ```svelte
 <script>
-	// Svelte 4 syntax - keep when editing existing files
-	export let title;
-	export let onClick;
+  // Svelte 4 syntax - keep when editing existing files
+  export let title;
+  export let onClick;
 
-	let count = 0;
-	$: doubled = count * 2;
+  let count = 0;
+  $: doubled = count * 2;
 </script>
 ```
 
@@ -355,19 +359,19 @@ When migrating a file to runes mode, lifecycle hooks must be replaced:
 ```typescript
 // Svelte 4
 onMount(() => {
-	setup();
-	return cleanup;
+  setup();
+  return cleanup;
 });
 
 // Svelte 5 - Keep onMount OR use $effect
 onMount(() => {
-	setup();
-	return cleanup;
+  setup();
+  return cleanup;
 });
 // OR
 $effect(() => {
-	setup();
-	return cleanup;
+  setup();
+  return cleanup;
 });
 ```
 
@@ -376,12 +380,12 @@ $effect(() => {
 ```typescript
 // Svelte 4
 beforeUpdate(() => {
-	doBeforeUpdate();
+  doBeforeUpdate();
 });
 
 // Svelte 5 - MUST use $effect.pre()
 $effect.pre(() => {
-	doBeforeUpdate();
+  doBeforeUpdate();
 });
 ```
 
@@ -390,12 +394,12 @@ $effect.pre(() => {
 ```typescript
 // Svelte 4
 afterUpdate(() => {
-	doAfterUpdate();
+  doAfterUpdate();
 });
 
 // Svelte 5 - MUST use $effect()
 $effect(() => {
-	doAfterUpdate();
+  doAfterUpdate();
 });
 ```
 
@@ -404,12 +408,12 @@ $effect(() => {
 ```typescript
 // Svelte 4
 onDestroy(() => {
-	cleanup();
+  cleanup();
 });
 
 // Svelte 5 - Return cleanup from $effect()
 $effect(() => {
-	return () => cleanup();
+  return () => cleanup();
 });
 ```
 
@@ -575,15 +579,15 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9
 
 // Populate event.locals.user with fresh data from KV
 event.locals.user = {
-	id: session.id,
-	token: sessionId,
-	plan: freshPlan,
-	tripsThisMonth: session.tripsThisMonth,
-	maxTrips: freshMaxTrips,
-	resetDate: session.resetDate,
-	name: session.name,
-	email: session.email,
-	stripeCustomerId: freshStripeId
+  id: session.id,
+  token: sessionId,
+  plan: freshPlan,
+  tripsThisMonth: session.tripsThisMonth,
+  maxTrips: freshMaxTrips,
+  resetDate: session.resetDate,
+  name: session.name,
+  email: session.email,
+  stripeCustomerId: freshStripeId
 };
 ```
 
@@ -605,11 +609,11 @@ Protected routes check authentication in `+page.server.ts`:
 ```typescript
 // src/routes/dashboard/+page.server.ts pattern
 export const load: PageServerLoad = async ({ locals, url }) => {
-	// Redirect unauthenticated users
-	if (!locals.user) {
-		throw redirect(303, `/login?redirect=${encodeURIComponent(url.pathname)}`);
-	}
-	return { user: locals.user };
+  // Redirect unauthenticated users
+  if (!locals.user) {
+    throw redirect(303, `/login?redirect=${encodeURIComponent(url.pathname)}`);
+  }
+  return { user: locals.user };
 };
 ```
 
@@ -633,11 +637,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
 ```typescript
 interface User {
-	plan: 'free' | 'premium';
-	stripeCustomerId?: string; // For Stripe portal
-	tripsThisMonth: number;
-	maxTrips: number;
-	resetDate: string;
+  plan: 'free' | 'premium';
+  stripeCustomerId?: string; // For Stripe portal
+  tripsThisMonth: number;
+  maxTrips: number;
+  resetDate: string;
 }
 ```
 
@@ -652,8 +656,8 @@ In development, file-based KV mock is used:
 ```typescript
 // Automatically set up in hooks.server.ts when:
 if (dev || process.env['NODE_ENV'] !== 'production' || process.env['PW_MANUAL_SERVER'] === '1') {
-	const { setupMockKV } = await import('$lib/server/dev-mock-db');
-	setupMockKV(event);
+  const { setupMockKV } = await import('$lib/server/dev-mock-db');
+  setupMockKV(event);
 }
 ```
 
@@ -687,19 +691,19 @@ return json({ error: 'Forbidden' }, { status: 403 });
 
 ```typescript
 export const POST: RequestHandler = async ({ request, locals, platform }) => {
-	// 1. Check authentication
-	if (!locals.user) {
-		return json({ error: 'Unauthorized' }, { status: 401 });
-	}
+  // 1. Check authentication
+  if (!locals.user) {
+    return json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
-	// 2. Get user ID from locals (NEVER from request body)
-	const userId = locals.user.id;
+  // 2. Get user ID from locals (NEVER from request body)
+  const userId = locals.user.id;
 
-	// 3. Perform operation with verified userId
-	const key = `trip:${userId}:${tripId}`;
+  // 3. Perform operation with verified userId
+  const key = `trip:${userId}:${tripId}`;
 
-	// 4. Return response
-	return json({ success: true });
+  // 4. Return response
+  return json({ success: true });
 };
 ```
 
@@ -782,18 +786,18 @@ To avoid floating-point errors, all money calculations use integer cents:
 ```typescript
 // src/lib/utils/calculations.ts
 export function toCents(dollars: number): number {
-	return Math.round(dollars * 100);
+  return Math.round(dollars * 100);
 }
 
 export function toDollars(cents: number): number {
-	return cents / 100;
+  return cents / 100;
 }
 
 export function calculateFuelCost(miles: number, mpg: number, gasPrice: number): number {
-	const milesCents = toCents(miles);
-	const gasCents = toCents(gasPrice);
-	const fuelCostCents = Math.round((milesCents / (mpg * 100)) * gasCents);
-	return toDollars(fuelCostCents);
+  const milesCents = toCents(miles);
+  const gasCents = toCents(gasPrice);
+  const fuelCostCents = Math.round((milesCents / (mpg * 100)) * gasCents);
+  return toDollars(fuelCostCents);
 }
 ```
 
@@ -819,16 +823,16 @@ The application exports tax documents in three formats:
 ```typescript
 // src/routes/dashboard/settings/lib/export-utils.ts
 export function generateTaxBundleCSV(trips: Trip[], expenses: Expense[]): Blob {
-	// Generates CSV with standard mileage rate deduction
+  // Generates CSV with standard mileage rate deduction
 }
 
 export function generateExpensesPDF(expenses: Expense[]): Blob {
-	// Uses jsPDF with jspdf-autotable
-	// Orange #FF7F50 header styling
+  // Uses jsPDF with jspdf-autotable
+  // Orange #FF7F50 header styling
 }
 
 export function generateTaxBundlePDF(trips: Trip[], expenses: Expense[]): Blob {
-	// 3-page PDF: summary, mileage log, expense log
+  // 3-page PDF: summary, mileage log, expense log
 }
 ```
 
@@ -840,13 +844,13 @@ import autoTable from 'jspdf-autotable';
 
 const pdf = new jsPDF({ orientation: 'landscape' });
 pdf.autoTable({
-	head: [columns],
-	body: data,
-	headStyles: {
-		fillColor: [246, 138, 46], // #F68A2E (approved primary orange)
-		textColor: 255
-	},
-	theme: 'striped'
+  head: [columns],
+  body: data,
+  headStyles: {
+    fillColor: [246, 138, 46], // #F68A2E (approved primary orange)
+    textColor: 255
+  },
+  theme: 'striped'
 });
 ```
 
@@ -860,18 +864,18 @@ Expense forms support URL query parameters for prefilled values:
 
 ```svelte
 <script>
-	import { page } from '$app/stores';
+  import { page } from '$app/stores';
 
-	// Check for URL prefill
-	const prefillCategory = $page.url.searchParams.get('category');
+  // Check for URL prefill
+  const prefillCategory = $page.url.searchParams.get('category');
 
-	onMount(() => {
-		if (prefillCategory) {
-			selectedCategory = prefillCategory;
-			// Auto-focus amount input for quick entry
-			amountInput?.focus();
-		}
-	});
+  onMount(() => {
+    if (prefillCategory) {
+      selectedCategory = prefillCategory;
+      // Auto-focus amount input for quick entry
+      amountInput?.focus();
+    }
+  });
 </script>
 ```
 
@@ -882,13 +886,13 @@ Expense categories (maintenance, supplies, etc.) are managed via a settings moda
 ```svelte
 <!-- Gear icon opens settings modal for category management -->
 <button onclick={() => openSettingsModal('maintenance')}>
-	<GearIcon />
+  <GearIcon />
 </button>
 
 <SettingsModal
-	bind:open={showSettingsModal}
-	category={settingsCategory}
-	on:save={handleCategorySave}
+  bind:open={showSettingsModal}
+  category={settingsCategory}
+  on:save={handleCategorySave}
 />
 ```
 
@@ -907,8 +911,8 @@ localStorage.setItem('lastActivityTime', Date.now().toString());
 // Check on page load
 const lastActivity = localStorage.getItem('lastActivityTime');
 if (Date.now() - Number(lastActivity) > SESSION_TIMEOUT_MS) {
-	// Force re-authentication
-	goto('/login');
+  // Force re-authentication
+  goto('/login');
 }
 ```
 
@@ -922,18 +926,18 @@ When syncing with HughesNet, conflicts are detected by comparing work order IDs:
 
 ```svelte
 <script>
-	let conflictTrips = $state<Trip[]>([]);
-	let selectedConflicts = $state<Set<string>>(new Set());
-	let conflictTimer = $state(60); // 60-second countdown
+  let conflictTrips = $state<Trip[]>([]);
+  let selectedConflicts = $state<Set<string>>(new Set());
+  let conflictTimer = $state(60); // 60-second countdown
 
-	// User selects which version to keep (local or remote)
-	function resolveConflict(tripId: string, keepLocal: boolean) {
-		if (keepLocal) {
-			selectedConflicts.add(tripId);
-		} else {
-			selectedConflicts.delete(tripId);
-		}
-	}
+  // User selects which version to keep (local or remote)
+  function resolveConflict(tripId: string, keepLocal: boolean) {
+    if (keepLocal) {
+      selectedConflicts.add(tripId);
+    } else {
+      selectedConflicts.delete(tripId);
+    }
+  }
 </script>
 ```
 
@@ -941,13 +945,13 @@ When syncing with HughesNet, conflicts are detected by comparing work order IDs:
 
 ```svelte
 {#if conflictTrips.length > 0}
-	<Modal title="Sync Conflicts Detected">
-		<p>The following trips differ from HughesNet. Select which to keep:</p>
-		{#each conflictTrips as trip}
-			<ConflictRow {trip} on:select={handleConflictSelection} />
-		{/each}
-		<p>Auto-resolving in {conflictTimer} seconds...</p>
-	</Modal>
+  <Modal title="Sync Conflicts Detected">
+    <p>The following trips differ from HughesNet. Select which to keep:</p>
+    {#each conflictTrips as trip}
+      <ConflictRow {trip} on:select={handleConflictSelection} />
+    {/each}
+    <p>Auto-resolving in {conflictTimer} seconds...</p>
+  </Modal>
 {/if}
 ```
 
@@ -960,27 +964,27 @@ When syncing with HughesNet, conflicts are detected by comparing work order IDs:
 ```typescript
 // src/routes/dashboard/settings/lib/save-settings.ts
 export async function saveSettings(
-	key: string,
-	value: any
+  key: string,
+  value: any
 ): Promise<{ ok: boolean; error?: string }> {
-	// 1. Optimistic update - update UI immediately
-	userSettings.update((s) => ({ ...s, [key]: value }));
+  // 1. Optimistic update - update UI immediately
+  userSettings.update((s) => ({ ...s, [key]: value }));
 
-	try {
-		// 2. Persist to server
-		const res = await fetch('/api/settings', {
-			method: 'POST',
-			body: JSON.stringify({ [key]: value })
-		});
+  try {
+    // 2. Persist to server
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      body: JSON.stringify({ [key]: value })
+    });
 
-		if (!res.ok) throw new Error('Save failed');
+    if (!res.ok) throw new Error('Save failed');
 
-		return { ok: true };
-	} catch (error) {
-		// 3. Rollback on failure
-		userSettings.update((s) => ({ ...s, [key]: previousValue }));
-		return { ok: false, error: error.message };
-	}
+    return { ok: true };
+  } catch (error) {
+    // 3. Rollback on failure
+    userSettings.update((s) => ({ ...s, [key]: previousValue }));
+    return { ok: false, error: error.message };
+  }
 }
 ```
 
@@ -994,34 +998,34 @@ Settings pages use scroll-based navigation highlighting:
 
 ```svelte
 <script>
-	import { onMount } from 'svelte';
+  import { onMount } from 'svelte';
 
-	let activeSection = $state('general');
+  let activeSection = $state('general');
 
-	onMount(() => {
-		const observer = new IntersectionObserver(
-			(entries) => {
-				entries.forEach((entry) => {
-					if (entry.isIntersecting) {
-						activeSection = entry.target.id;
-					}
-				});
-			},
-			{ rootMargin: '-50% 0px -50% 0px' }
-		);
+  onMount(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            activeSection = entry.target.id;
+          }
+        });
+      },
+      { rootMargin: '-50% 0px -50% 0px' }
+    );
 
-		document.querySelectorAll('[data-section]').forEach((el) => {
-			observer.observe(el);
-		});
+    document.querySelectorAll('[data-section]').forEach((el) => {
+      observer.observe(el);
+    });
 
-		return () => observer.disconnect();
-	});
+    return () => observer.disconnect();
+  });
 </script>
 
 <nav class="sticky-nav">
-	<a href="#general" class:active={activeSection === 'general'}>General</a>
-	<a href="#vehicles" class:active={activeSection === 'vehicles'}>Vehicles</a>
-	<a href="#categories" class:active={activeSection === 'categories'}>Categories</a>
+  <a href="#general" class:active={activeSection === 'general'}>General</a>
+  <a href="#vehicles" class:active={activeSection === 'vehicles'}>Vehicles</a>
+  <a href="#categories" class:active={activeSection === 'categories'}>Categories</a>
 </nav>
 ```
 
@@ -1035,23 +1039,23 @@ The trash page handles multiple record types:
 
 ```svelte
 <script>
-	let recordTypes = $state(['trip', 'expense', 'mileage']);
+  let recordTypes = $state(['trip', 'expense', 'mileage']);
 
-	async function restoreItem(item: TrashedItem) {
-		const endpoint = `/api/${item.type}/restore`;
-		await fetch(endpoint, {
-			method: 'POST',
-			body: JSON.stringify({ id: item.id })
-		});
-	}
+  async function restoreItem(item: TrashedItem) {
+    const endpoint = `/api/${item.type}/restore`;
+    await fetch(endpoint, {
+      method: 'POST',
+      body: JSON.stringify({ id: item.id })
+    });
+  }
 </script>
 
 {#each trashedItems as item}
-	<TrashRow
-		{item}
-		vehicleName={getVehicleDisplayName(item.vehicleId, vehicles)}
-		on:restore={() => restoreItem(item)}
-	/>
+  <TrashRow
+    {item}
+    vehicleName={getVehicleDisplayName(item.vehicleId, vehicles)}
+    on:restore={() => restoreItem(item)}
+  />
 {/each}
 ```
 
@@ -1060,25 +1064,25 @@ The trash page handles multiple record types:
 ```typescript
 // src/lib/utils/vehicle.ts
 export function getVehicleDisplayName(
-	raw: string | undefined,
-	vehicles?: Array<{ id?: string; name?: string }>
+  raw: string | undefined,
+  vehicles?: Array<{ id?: string; name?: string }>
 ): string {
-	if (!raw) return '-';
+  if (!raw) return '-';
 
-	// Try to match by ID
-	const byId = vehicles?.find((v) => v.id === raw);
-	if (byId?.name) return byId.name;
+  // Try to match by ID
+  const byId = vehicles?.find((v) => v.id === raw);
+  if (byId?.name) return byId.name;
 
-	// Try to match by name
-	const byName = vehicles?.find((v) => v.name === raw);
-	if (byName?.name) return byName.name;
+  // Try to match by name
+  const byName = vehicles?.find((v) => v.name === raw);
+  if (byName?.name) return byName.name;
 
-	// Hide raw UUIDs from users
-	if (/^[0-9a-f]{8}-[0-9a-f]{4}-/.test(raw)) {
-		return 'Unknown vehicle';
-	}
+  // Hide raw UUIDs from users
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-/.test(raw)) {
+    return 'Unknown vehicle';
+  }
 
-	return raw;
+  return raw;
 }
 ```
 
@@ -1096,17 +1100,17 @@ const CACHE_NAME = `cache-${version}`;
 // Cache-first for static assets
 
 self.addEventListener('fetch', (event) => {
-	if (event.request.mode === 'navigate') {
-		// Network-first: try network, fall back to cache, then offline.html
-		event.respondWith(
-			fetch(event.request)
-				.catch(() => caches.match(event.request))
-				.catch(() => caches.match('/offline.html'))
-		);
-	} else {
-		// Cache-first for assets
-		event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request)));
-	}
+  if (event.request.mode === 'navigate') {
+    // Network-first: try network, fall back to cache, then offline.html
+    event.respondWith(
+      fetch(event.request)
+        .catch(() => caches.match(event.request))
+        .catch(() => caches.match('/offline.html'))
+    );
+  } else {
+    // Cache-first for assets
+    event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request)));
+  }
 });
 ```
 
@@ -1142,38 +1146,38 @@ const HASH_ALGORITHM = 'SHA-256';
 const SALT_LENGTH = 16; // bytes
 
 export async function hashPassword(password: string): Promise<string> {
-	const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
-	const encoder = new TextEncoder();
-	const keyMaterial = await crypto.subtle.importKey(
-		'raw',
-		encoder.encode(password),
-		'PBKDF2',
-		false,
-		['deriveBits']
-	);
+  const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(password),
+    'PBKDF2',
+    false,
+    ['deriveBits']
+  );
 
-	const hash = await crypto.subtle.deriveBits(
-		{
-			name: 'PBKDF2',
-			salt,
-			iterations: PBKDF2_ITERATIONS,
-			hash: HASH_ALGORITHM
-		},
-		keyMaterial,
-		256
-	);
+  const hash = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt,
+      iterations: PBKDF2_ITERATIONS,
+      hash: HASH_ALGORITHM
+    },
+    keyMaterial,
+    256
+  );
 
-	return `${toBase64(salt)}:${toBase64(new Uint8Array(hash))}`;
+  return `${toBase64(salt)}:${toBase64(new Uint8Array(hash))}`;
 }
 
 export function safeCompare(a: string, b: string): boolean {
-	// Timing-safe comparison to prevent timing attacks
-	if (a.length !== b.length) return false;
-	let result = 0;
-	for (let i = 0; i < a.length; i++) {
-		result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-	}
-	return result === 0;
+  // Timing-safe comparison to prevent timing attacks
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
 }
 ```
 
@@ -1188,21 +1192,21 @@ When users login, legacy data is automatically migrated:
 ```typescript
 // src/routes/login/+server.ts
 export const POST: RequestHandler = async ({ request, platform, cookies }) => {
-	// ... authentication logic ...
+  // ... authentication logic ...
 
-	// Trigger migration in background
-	if (platform?.context?.waitUntil) {
-		platform.context.waitUntil(migrateUserData(userId, platform.env));
-	}
+  // Trigger migration in background
+  if (platform?.context?.waitUntil) {
+    platform.context.waitUntil(migrateUserData(userId, platform.env));
+  }
 
-	return json({ success: true });
+  return json({ success: true });
 };
 
 async function migrateUserData(userId: string, env: Env) {
-	// Migrate from old username-based keys to UUID-based keys
-	const oldKey = `trip:${username}:*`;
-	const newKey = `trip:${userId}:*`;
-	// ... migration logic ...
+  // Migrate from old username-based keys to UUID-based keys
+  const oldKey = `trip:${username}:*`;
+  const newKey = `trip:${userId}:*`;
+  // ... migration logic ...
 }
 ```
 
@@ -1215,15 +1219,15 @@ async function migrateUserData(userId: string, env: Env) {
 ```typescript
 // 5 attempts per 60 seconds
 const result = await checkRateLimit(
-	kv,
-	clientIp,
-	'login_attempt',
-	5, // limit
-	60 // window in seconds
+  kv,
+  clientIp,
+  'login_attempt',
+  5, // limit
+  60 // window in seconds
 );
 
 if (!result.allowed) {
-	return json({ error: 'Too many attempts. Please try again later.' }, { status: 429 });
+  return json({ error: 'Too many attempts. Please try again later.' }, { status: 429 });
 }
 ```
 
@@ -1236,10 +1240,10 @@ if (!result.allowed) {
 ```typescript
 // src/lib/utils/dates.ts
 export function localDateISO(value?: string | Date): string {
-	const d = parseToDate(value);
-	// Compensate timezone offset for consistent local date
-	const tzAdjusted = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-	return tzAdjusted.toISOString().split('T')[0];
+  const d = parseToDate(value);
+  // Compensate timezone offset for consistent local date
+  const tzAdjusted = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return tzAdjusted.toISOString().split('T')[0];
 }
 
 export const getLocalDate = () => localDateISO();
@@ -1254,20 +1258,20 @@ export const getLocalDate = () => localDateISO();
 ```typescript
 // src/lib/utils/geocode.ts
 export function isAcceptableGeocode(result: any, input: string): boolean {
-	// Reject numeric-only labels ("407")
-	if (result.name?.trim().match(/^\d+$/)) return false;
+  // Reject numeric-only labels ("407")
+  if (result.name?.trim().match(/^\d+$/)) return false;
 
-	// Reject broad geographic types
-	const broadTypes = ['city', 'state', 'country', 'county'];
-	if (broadTypes.includes(result.osm_value)) return false;
+  // Reject broad geographic types
+  const broadTypes = ['city', 'state', 'country', 'county'];
+  if (broadTypes.includes(result.osm_value)) return false;
 
-	// For address inputs (starting with number + street), require house number
-	const inputIsAddress = /^\d+\s+\w+/i.test(input);
-	if (inputIsAddress) {
-		if (!result.house_number || !result.road) return false;
-	}
+  // For address inputs (starting with number + street), require house number
+  const inputIsAddress = /^\d+\s+\w+/i.test(input);
+  if (inputIsAddress) {
+    if (!result.house_number || !result.road) return false;
+  }
 
-	return true;
+  return true;
 }
 ```
 
@@ -1280,29 +1284,29 @@ export function isAcceptableGeocode(result: any, input: string): boolean {
 ```typescript
 // src/lib/utils/storage.ts
 class LocalStorage {
-	// Delta sync timestamp
-	getLastSync(): string | null {
-		return localStorage.getItem('last_sync_time');
-	}
+  // Delta sync timestamp
+  getLastSync(): string | null {
+    return localStorage.getItem('last_sync_time');
+  }
 
-	setLastSync(isoString: string): void {
-		localStorage.setItem('last_sync_time', isoString);
-	}
+  setLastSync(isoString: string): void {
+    localStorage.setItem('last_sync_time', isoString);
+  }
 
-	// Draft trip auto-save
-	getDraftTrip(): Partial<Trip> | null {
-		return this.get<Partial<Trip>>('draftTrip');
-	}
+  // Draft trip auto-save
+  getDraftTrip(): Partial<Trip> | null {
+    return this.get<Partial<Trip>>('draftTrip');
+  }
 
-	saveDraftTrip(draft: Partial<Trip>): void {
-		this.set('draftTrip', draft);
-	}
+  saveDraftTrip(draft: Partial<Trip>): void {
+    this.set('draftTrip', draft);
+  }
 
-	// Settings with partial updates
-	saveSettings(settings: Partial<Settings>): void {
-		const current = this.getSettings();
-		this.set('settings', { ...current, ...settings });
-	}
+  // Settings with partial updates
+  saveSettings(settings: Partial<Settings>): void {
+    const current = this.getSettings();
+    this.set('settings', { ...current, ...settings });
+  }
 }
 ```
 

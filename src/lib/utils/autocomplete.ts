@@ -9,633 +9,633 @@ let googleMapsError = false;
 
 // Exported Singleton Loader
 export async function loadGoogleMaps(apiKey: string): Promise<void> {
-	if (typeof google !== 'undefined' && google.maps) return Promise.resolve();
-	if (googleMapsError) return Promise.reject(new Error('Google Maps previously failed'));
-	if (loadingPromise) return loadingPromise;
+  if (typeof google !== 'undefined' && google.maps) return Promise.resolve();
+  if (googleMapsError) return Promise.reject(new Error('Google Maps previously failed'));
+  if (loadingPromise) return loadingPromise;
 
-	if (!apiKey || apiKey === 'undefined') {
-		googleMapsError = true;
-		return Promise.reject(new Error('No API key'));
-	}
+  if (!apiKey || apiKey === 'undefined') {
+    googleMapsError = true;
+    return Promise.reject(new Error('No API key'));
+  }
 
-	if (typeof document === 'undefined') {
-		googleMapsError = true;
-		return Promise.reject(new Error('Document not available')); // Server-side: cannot load maps
-	}
+  if (typeof document === 'undefined') {
+    googleMapsError = true;
+    return Promise.reject(new Error('Document not available')); // Server-side: cannot load maps
+  }
 
-	const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
-	if (existingScript) {
-		loadingPromise = new Promise((resolve) => {
-			const check = setInterval(() => {
-				if (typeof google !== 'undefined' && google.maps) {
-					clearInterval(check);
-					resolve();
-				}
-			}, 100);
-		});
-		return loadingPromise;
-	}
+  const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
+  if (existingScript) {
+    loadingPromise = new Promise((resolve) => {
+      const check = setInterval(() => {
+        if (typeof google !== 'undefined' && google.maps) {
+          clearInterval(check);
+          resolve();
+        }
+      }, 100);
+    });
+    return loadingPromise;
+  }
 
-	loadingPromise = new Promise((resolve, reject) => {
-		const script = document.createElement('script');
-		script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&loading=async`;
-		script.async = true;
-		script.defer = true;
+  loadingPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&loading=async`;
+    script.async = true;
+    script.defer = true;
 
-		script.onload = () => resolve();
-		script.onerror = () => {
-			googleMapsError = true;
-			loadingPromise = null;
-			reject(new Error('Failed to load Google Maps'));
-		};
+    script.onload = () => resolve();
+    script.onerror = () => {
+      googleMapsError = true;
+      loadingPromise = null;
+      reject(new Error('Failed to load Google Maps'));
+    };
 
-		document.head.appendChild(script);
-	});
+    document.head.appendChild(script);
+  });
 
-	return loadingPromise;
+  return loadingPromise;
 }
 
 // Lightweight validator for Rendering Phase
 export function isRenderableCandidate(result: unknown, input: string) {
-	return isAcceptableGeocode(result, input);
+  return isAcceptableGeocode(result, input);
 }
 
 export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node, params) => {
-	let dropdown: HTMLDivElement | null = null;
-	let debounceTimer: number | undefined;
-	let isSelecting = false;
-	let stop: (e: Event) => void;
-	let stopAndPrevent: (e: Event) => void;
+  let dropdown: HTMLDivElement | null = null;
+  let debounceTimer: number | undefined;
+  let isSelecting = false;
+  let stop: (e: Event) => void;
+  let stopAndPrevent: (e: Event) => void;
 
-	if (params.apiKey && params.apiKey !== 'undefined') {
-		loadGoogleMaps(params.apiKey).catch(console.error);
-	}
+  if (params.apiKey && params.apiKey !== 'undefined') {
+    loadGoogleMaps(params.apiKey).catch(console.error);
+  }
 
-	function initUI() {
-		dropdown = document.createElement('div');
-		dropdown.className = 'pac-container';
+  function initUI() {
+    dropdown = document.createElement('div');
+    dropdown.className = 'pac-container';
 
-		Object.assign(dropdown.style, {
-			position: 'absolute',
-			zIndex: '2147483647',
-			backgroundColor: '#fff',
-			borderTop: '1px solid #e6e6e6',
-			fontFamily: '"Roboto", "Arial", sans-serif',
-			boxShadow: '0 4px 6px rgba(32, 33, 36, 0.28)',
-			boxSizing: 'border-box',
-			overflow: 'hidden',
-			display: 'none',
-			borderRadius: '0 0 8px 8px',
-			marginTop: '-2px',
-			paddingBottom: '8px',
-			pointerEvents: 'auto'
-		});
+    Object.assign(dropdown.style, {
+      position: 'absolute',
+      zIndex: '2147483647',
+      backgroundColor: '#fff',
+      borderTop: '1px solid #e6e6e6',
+      fontFamily: '"Roboto", "Arial", sans-serif',
+      boxShadow: '0 4px 6px rgba(32, 33, 36, 0.28)',
+      boxSizing: 'border-box',
+      overflow: 'hidden',
+      display: 'none',
+      borderRadius: '0 0 8px 8px',
+      marginTop: '-2px',
+      paddingBottom: '8px',
+      pointerEvents: 'auto'
+    });
 
-		const dialogAncestor = node.closest && node.closest('dialog');
-		if (dialogAncestor) {
-			(dropdown as HTMLElement & { __autocompleteContainer?: Element }).__autocompleteContainer =
-				dialogAncestor;
-			dialogAncestor.appendChild(dropdown);
-			dropdown.style.position = 'absolute';
-		} else {
-			document.body.appendChild(dropdown);
-			dropdown.style.position = 'fixed';
-		}
+    const dialogAncestor = node.closest && node.closest('dialog');
+    if (dialogAncestor) {
+      (dropdown as HTMLElement & { __autocompleteContainer?: Element }).__autocompleteContainer =
+        dialogAncestor;
+      dialogAncestor.appendChild(dropdown);
+      dropdown.style.position = 'absolute';
+    } else {
+      document.body.appendChild(dropdown);
+      dropdown.style.position = 'fixed';
+    }
 
-		stop = (e: Event) => {
-			e.stopPropagation();
-		};
-		stopAndPrevent = (e: Event) => {
-			e.preventDefault();
-			e.stopPropagation();
-		};
+    stop = (e: Event) => {
+      e.stopPropagation();
+    };
+    stopAndPrevent = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
 
-		dropdown.addEventListener('pointerdown', stopAndPrevent);
-		dropdown.addEventListener('pointerup', stop);
-		dropdown.addEventListener('mousedown', stopAndPrevent);
-		dropdown.addEventListener('mouseup', stop);
-		dropdown.addEventListener('touchstart', stopAndPrevent);
-		dropdown.addEventListener('touchend', stop);
-		dropdown.addEventListener('click', stop);
-	}
+    dropdown.addEventListener('pointerdown', stopAndPrevent);
+    dropdown.addEventListener('pointerup', stop);
+    dropdown.addEventListener('mousedown', stopAndPrevent);
+    dropdown.addEventListener('mouseup', stop);
+    dropdown.addEventListener('touchstart', stopAndPrevent);
+    dropdown.addEventListener('touchend', stop);
+    dropdown.addEventListener('click', stop);
+  }
 
-	function updatePosition() {
-		if (!dropdown) return;
-		const rect = node.getBoundingClientRect();
+  function updatePosition() {
+    if (!dropdown) return;
+    const rect = node.getBoundingClientRect();
 
-		const container = (dropdown as HTMLElement & { __autocompleteContainer?: Element })
-			.__autocompleteContainer;
-		if (container && container instanceof Element) {
-			const parentRect = container.getBoundingClientRect();
-			Object.assign(dropdown.style, {
-				top: `${rect.bottom - parentRect.top}px`,
-				left: `${rect.left - parentRect.left}px`,
-				width: `${rect.width}px`
-			});
-		} else {
-			Object.assign(dropdown.style, {
-				top: `${rect.bottom}px`,
-				left: `${rect.left}px`,
-				width: `${rect.width}px`
-			});
-		}
-	}
+    const container = (dropdown as HTMLElement & { __autocompleteContainer?: Element })
+      .__autocompleteContainer;
+    if (container && container instanceof Element) {
+      const parentRect = container.getBoundingClientRect();
+      Object.assign(dropdown.style, {
+        top: `${rect.bottom - parentRect.top}px`,
+        left: `${rect.left - parentRect.left}px`,
+        width: `${rect.width}px`
+      });
+    } else {
+      Object.assign(dropdown.style, {
+        top: `${rect.bottom}px`,
+        left: `${rect.left}px`,
+        width: `${rect.width}px`
+      });
+    }
+  }
 
-	async function handleInput(e: Event) {
-		if (isSelecting) {
-			isSelecting = false;
-			return;
-		}
+  async function handleInput(e: Event) {
+    if (isSelecting) {
+      isSelecting = false;
+      return;
+    }
 
-		const value = (e.target as HTMLInputElement).value;
-		updatePosition();
+    const value = (e.target as HTMLInputElement).value;
+    updatePosition();
 
-		if (!value || value.length < 2) {
-			if (dropdown) dropdown.style.display = 'none';
-			return;
-		}
+    if (!value || value.length < 2) {
+      if (dropdown) dropdown.style.display = 'none';
+      return;
+    }
 
-		if (debounceTimer) clearTimeout(debounceTimer);
-		debounceTimer = window.setTimeout(async () => {
-			try {
-				const kvUrl = `/api/autocomplete?q=${encodeURIComponent(value)}`;
-				const kvRes = await fetch(kvUrl);
-				const data = await kvRes.json().catch(() => []);
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = window.setTimeout(async () => {
+      try {
+        const kvUrl = `/api/autocomplete?q=${encodeURIComponent(value)}`;
+        const kvRes = await fetch(kvUrl);
+        const data = await kvRes.json().catch(() => []);
 
-				const validData = Array.isArray(data) ? (data as Array<Record<string, unknown>>) : [];
-				let source: 'kv' | 'google' = 'kv';
+        const validData = Array.isArray(data) ? (data as Array<Record<string, unknown>>) : [];
+        let source: 'kv' | 'google' = 'kv';
 
-				if (validData.length > 0) {
-					const first = validData[0];
-					if (first && typeof first['source'] === 'string' && first['source'] === 'google_proxy')
-						source = 'google';
-				}
+        if (validData.length > 0) {
+          const first = validData[0];
+          if (first && typeof first['source'] === 'string' && first['source'] === 'google_proxy')
+            source = 'google';
+        }
 
-				// Mandatory: Strict Filter BEFORE rendering
-				const suggestionsToShow = validData.slice(0, 5);
-				const acceptableSet = new Set(
-					suggestionsToShow
-						.filter((item: Record<string, unknown>) => isAcceptableGeocode(item, value))
-						.map((it: Record<string, unknown>) =>
-							typeof it['place_id'] === 'string'
-								? (it['place_id'] as string)
-								: typeof it['formatted_address'] === 'string'
-									? (it['formatted_address'] as string)
-									: JSON.stringify(it)
-						)
-				);
-				let filtered = suggestionsToShow; // Keep the top suggestions visible regardless of acceptability (we'll validate on blur/selection)
-				filtered = suggestionsToShow;
-				if (filtered.length > 0) {
-					// [!code --] Removed client-side caching call (moved to server)
-					renderResults(filtered.slice(0, 5), source, acceptableSet);
-				} else {
-					renderEmpty();
-				}
-			} catch (err: unknown) {
-				console.error('[autocomplete] search failed', err);
-				renderError();
-			}
-		}, 300);
-	}
+        // Mandatory: Strict Filter BEFORE rendering
+        const suggestionsToShow = validData.slice(0, 5);
+        const acceptableSet = new Set(
+          suggestionsToShow
+            .filter((item: Record<string, unknown>) => isAcceptableGeocode(item, value))
+            .map((it: Record<string, unknown>) =>
+              typeof it['place_id'] === 'string'
+                ? (it['place_id'] as string)
+                : typeof it['formatted_address'] === 'string'
+                  ? (it['formatted_address'] as string)
+                  : JSON.stringify(it)
+            )
+        );
+        let filtered = suggestionsToShow; // Keep the top suggestions visible regardless of acceptability (we'll validate on blur/selection)
+        filtered = suggestionsToShow;
+        if (filtered.length > 0) {
+          // [!code --] Removed client-side caching call (moved to server)
+          renderResults(filtered.slice(0, 5), source, acceptableSet);
+        } else {
+          renderEmpty();
+        }
+      } catch (err: unknown) {
+        console.error('[autocomplete] search failed', err);
+        renderError();
+      }
+    }, 300);
+  }
 
-	// [!code --] Removed redundant cacheToKV function
+  // [!code --] Removed redundant cacheToKV function
 
-	async function savePlaceToKV(place: Record<string, unknown>) {
-		try {
-			// POST to the authenticated autocomplete endpoint which records user selections in KV
-			// Use the CSRF wrapper so the double-submit token is included and cookies are sent.
-			// Also avoid mass-assignment by whitelisting fields.
-			const payload = {
-				formatted_address:
-					(place as Record<string, unknown>)['formatted_address'] ||
-					(place as Record<string, unknown>)['name'] ||
-					undefined,
-				name: (place as Record<string, unknown>)['name'] || undefined,
-				secondary_text: (place as Record<string, unknown>)['secondary_text'] || undefined,
-				place_id: (place as Record<string, unknown>)['place_id'] || undefined,
-				geometry: (place as Record<string, unknown>)['geometry'] || undefined,
-				source: (place as Record<string, unknown>)['source'] || undefined
-			};
+  async function savePlaceToKV(place: Record<string, unknown>) {
+    try {
+      // POST to the authenticated autocomplete endpoint which records user selections in KV
+      // Use the CSRF wrapper so the double-submit token is included and cookies are sent.
+      // Also avoid mass-assignment by whitelisting fields.
+      const payload = {
+        formatted_address:
+          (place as Record<string, unknown>)['formatted_address'] ||
+          (place as Record<string, unknown>)['name'] ||
+          undefined,
+        name: (place as Record<string, unknown>)['name'] || undefined,
+        secondary_text: (place as Record<string, unknown>)['secondary_text'] || undefined,
+        place_id: (place as Record<string, unknown>)['place_id'] || undefined,
+        geometry: (place as Record<string, unknown>)['geometry'] || undefined,
+        source: (place as Record<string, unknown>)['source'] || undefined
+      };
 
-			void csrfFetch('/api/autocomplete', jsonFetchOptions('POST', payload)).catch(
-				(err: unknown) => {
-					console.error('[autocomplete] savePlaceToKV failed', err);
-				}
-			);
-		} catch (_e: unknown) {
-			void _e;
-			console.error('[autocomplete] Failed to save place details');
-		}
-	}
+      void csrfFetch('/api/autocomplete', jsonFetchOptions('POST', payload)).catch(
+        (err: unknown) => {
+          console.error('[autocomplete] savePlaceToKV failed', err);
+        }
+      );
+    } catch (_e: unknown) {
+      void _e;
+      console.error('[autocomplete] Failed to save place details');
+    }
+  }
 
-	function renderResults(
-		items: Array<Record<string, unknown>>,
-		source: 'kv' | 'google' = 'kv',
-		/* timing removed */
-		/* acceptableSet */ acceptableSet?: Set<string>
-	) {
-		if (!dropdown) return;
-		while (dropdown.firstChild) dropdown.removeChild(dropdown.firstChild);
+  function renderResults(
+    items: Array<Record<string, unknown>>,
+    source: 'kv' | 'google' = 'kv',
+    /* timing removed */
+    /* acceptableSet */ acceptableSet?: Set<string>
+  ) {
+    if (!dropdown) return;
+    while (dropdown.firstChild) dropdown.removeChild(dropdown.firstChild);
 
-		items.forEach((item) => {
-			const row = document.createElement('div');
-			const it = item as Record<string, unknown>;
+    items.forEach((item) => {
+      const row = document.createElement('div');
+      const it = item as Record<string, unknown>;
 
-			const mainText: string =
-				typeof it['name'] === 'string'
-					? String(it['name'])
-					: typeof it['formatted_address'] === 'string'
-						? String((it['formatted_address'] as string).split(',')[0])
-						: '';
-			const secondaryText =
-				(typeof it['secondary_text'] === 'string' ? (it['secondary_text'] as string) : '') ||
-				(typeof it['formatted_address'] === 'string' &&
-				(it['formatted_address'] as string).includes(',')
-					? (it['formatted_address'] as string).split(',').slice(1).join(',').trim()
-					: '');
+      const mainText: string =
+        typeof it['name'] === 'string'
+          ? String(it['name'])
+          : typeof it['formatted_address'] === 'string'
+            ? String((it['formatted_address'] as string).split(',')[0])
+            : '';
+      const secondaryText =
+        (typeof it['secondary_text'] === 'string' ? (it['secondary_text'] as string) : '') ||
+        (typeof it['formatted_address'] === 'string' &&
+        (it['formatted_address'] as string).includes(',')
+          ? (it['formatted_address'] as string).split(',').slice(1).join(',').trim()
+          : '');
 
-			// Determine if this suggestion is address-grade (acceptable) — google is always acceptable
-			const key =
-				typeof it['place_id'] === 'string'
-					? (it['place_id'] as string)
-					: typeof it['formatted_address'] === 'string'
-						? (it['formatted_address'] as string)
-						: JSON.stringify(it);
-			const isAcceptable = source === 'google' || (acceptableSet && acceptableSet.has(key));
+      // Determine if this suggestion is address-grade (acceptable) — google is always acceptable
+      const key =
+        typeof it['place_id'] === 'string'
+          ? (it['place_id'] as string)
+          : typeof it['formatted_address'] === 'string'
+            ? (it['formatted_address'] as string)
+            : JSON.stringify(it);
+      const isAcceptable = source === 'google' || (acceptableSet && acceptableSet.has(key));
 
-			// [SECURITY FIX #12] Create SVG using createElementNS instead of innerHTML
-			// This prevents XSS risks from dynamic content injection patterns
-			const createPinIcon = (): SVGSVGElement => {
-				const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-				svg.setAttribute('focusable', 'false');
-				svg.setAttribute('viewBox', '0 0 24 24');
-				svg.setAttribute('fill', '#9AA0A6');
-				svg.setAttribute('width', '20px');
-				svg.setAttribute('height', '20px');
-				const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-				path.setAttribute(
-					'd',
-					'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z'
-				);
-				svg.appendChild(path);
-				return svg;
-			};
+      // [SECURITY FIX #12] Create SVG using createElementNS instead of innerHTML
+      // This prevents XSS risks from dynamic content injection patterns
+      const createPinIcon = (): SVGSVGElement => {
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('focusable', 'false');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', '#9AA0A6');
+        svg.setAttribute('width', '20px');
+        svg.setAttribute('height', '20px');
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute(
+          'd',
+          'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z'
+        );
+        svg.appendChild(path);
+        return svg;
+      };
 
-			Object.assign(row.style, {
-				display: 'flex',
-				alignItems: 'center',
-				padding: '10px 16px',
-				cursor: 'pointer',
-				borderBottom: '1px solid #fff'
-			});
+      Object.assign(row.style, {
+        display: 'flex',
+        alignItems: 'center',
+        padding: '10px 16px',
+        cursor: 'pointer',
+        borderBottom: '1px solid #fff'
+      });
 
-			const iconWrap = document.createElement('div');
-			Object.assign(iconWrap.style, {
-				minWidth: '24px',
-				marginRight: '12px',
-				display: 'flex',
-				alignItems: 'center'
-			});
-			iconWrap.appendChild(createPinIcon());
+      const iconWrap = document.createElement('div');
+      Object.assign(iconWrap.style, {
+        minWidth: '24px',
+        marginRight: '12px',
+        display: 'flex',
+        alignItems: 'center'
+      });
+      iconWrap.appendChild(createPinIcon());
 
-			const content = document.createElement('div');
-			Object.assign(content.style, { flex: '1', overflow: 'hidden' });
+      const content = document.createElement('div');
+      Object.assign(content.style, { flex: '1', overflow: 'hidden' });
 
-			const mainDiv = document.createElement('div');
-			Object.assign(mainDiv.style, {
-				fontSize: '14px',
-				color: '#202124',
-				fontWeight: '500',
-				overflow: 'hidden',
-				textOverflow: 'ellipsis',
-				whiteSpace: 'nowrap'
-			});
-			mainDiv.textContent = mainText;
+      const mainDiv = document.createElement('div');
+      Object.assign(mainDiv.style, {
+        fontSize: '14px',
+        color: '#202124',
+        fontWeight: '500',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap'
+      });
+      mainDiv.textContent = mainText;
 
-			const secondaryDiv = document.createElement('div');
-			Object.assign(secondaryDiv.style, {
-				fontSize: '12px',
-				color: '#70757A',
-				overflow: 'hidden',
-				textOverflow: 'ellipsis',
-				whiteSpace: 'nowrap',
-				marginTop: '2px'
-			});
-			secondaryDiv.textContent = secondaryText;
+      const secondaryDiv = document.createElement('div');
+      Object.assign(secondaryDiv.style, {
+        fontSize: '12px',
+        color: '#70757A',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        marginTop: '2px'
+      });
+      secondaryDiv.textContent = secondaryText;
 
-			content.appendChild(mainDiv);
-			// If the suggestion is not address-grade, mark it as unverified (google is considered acceptable already)
-			if (!isAcceptable) {
-				secondaryDiv.textContent = secondaryDiv.textContent
-					? secondaryDiv.textContent + ' • Unverified address'
-					: 'Unverified address';
-				row.style.opacity = '0.85';
-				row.setAttribute('data-unverified', 'true');
-			}
+      content.appendChild(mainDiv);
+      // If the suggestion is not address-grade, mark it as unverified (google is considered acceptable already)
+      if (!isAcceptable) {
+        secondaryDiv.textContent = secondaryDiv.textContent
+          ? secondaryDiv.textContent + ' • Unverified address'
+          : 'Unverified address';
+        row.style.opacity = '0.85';
+        row.setAttribute('data-unverified', 'true');
+      }
 
-			content.appendChild(secondaryDiv);
+      content.appendChild(secondaryDiv);
 
-			row.appendChild(iconWrap);
-			row.appendChild(content);
+      row.appendChild(iconWrap);
+      row.appendChild(content);
 
-			row.addEventListener('mouseenter', () => {
-				row.style.backgroundColor = '#e8f0fe';
-			});
-			row.addEventListener('mouseleave', () => {
-				row.style.backgroundColor = '#fff';
-			});
-			row.addEventListener('pointerdown', (e) => {
-				e.preventDefault();
-				e.stopPropagation();
-				selectItem(item, source);
-			});
+      row.addEventListener('mouseenter', () => {
+        row.style.backgroundColor = '#e8f0fe';
+      });
+      row.addEventListener('mouseleave', () => {
+        row.style.backgroundColor = '#fff';
+      });
+      row.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        selectItem(item, source);
+      });
 
-			dropdown!.appendChild(row);
-		});
+      dropdown!.appendChild(row);
+    });
 
-		dropdown.style.display = 'block';
-		updatePosition();
-	}
+    dropdown.style.display = 'block';
+    updatePosition();
+  }
 
-	function renderEmpty() {
-		if (!dropdown) return;
-		const emptyDiv = document.createElement('div');
-		Object.assign(emptyDiv.style, {
-			padding: '16px',
-			color: '#70757A',
-			fontSize: '13px',
-			textAlign: 'center'
-		});
-		emptyDiv.textContent = 'No results found';
-		dropdown.appendChild(emptyDiv);
-		dropdown.style.display = 'block';
-		updatePosition();
-	}
+  function renderEmpty() {
+    if (!dropdown) return;
+    const emptyDiv = document.createElement('div');
+    Object.assign(emptyDiv.style, {
+      padding: '16px',
+      color: '#70757A',
+      fontSize: '13px',
+      textAlign: 'center'
+    });
+    emptyDiv.textContent = 'No results found';
+    dropdown.appendChild(emptyDiv);
+    dropdown.style.display = 'block';
+    updatePosition();
+  }
 
-	function renderError() {
-		/* ... */
-	}
+  function renderError() {
+    /* ... */
+  }
 
-	async function selectItem(item: Record<string, unknown>, source: 'kv' | 'google') {
-		const it = item as Record<string, unknown>;
-		const properties = (it['properties'] as Record<string, unknown> | undefined) ?? undefined;
-		if (dropdown) dropdown.style.display = 'none';
-		isSelecting = true;
+  async function selectItem(item: Record<string, unknown>, source: 'kv' | 'google') {
+    const it = item as Record<string, unknown>;
+    const properties = (it['properties'] as Record<string, unknown> | undefined) ?? undefined;
+    if (dropdown) dropdown.style.display = 'none';
+    isSelecting = true;
 
-		// Normalize once at top of selectItem
-		const normalized = {
-			...it,
-			house_number:
-				typeof it['house_number'] === 'string'
-					? it['house_number']
-					: typeof properties?.['housenumber'] === 'string'
-						? properties!['housenumber']
-						: undefined,
-			street:
-				typeof it['street'] === 'string'
-					? it['street']
-					: typeof properties?.['street'] === 'string'
-						? properties!['street']
-						: undefined,
-			name: typeof it['name'] === 'string' ? it['name'] : undefined,
-			nosm_value:
-				typeof it['osm_value'] === 'string'
-					? it['osm_value']
-					: typeof properties?.['osm_value'] === 'string'
-						? properties!['osm_value']
-						: null,
-			nosm_key:
-				typeof it['osm_key'] === 'string'
-					? it['osm_key']
-					: typeof properties?.['osm_key'] === 'string'
-						? properties!['osm_key']
-						: null
-		};
+    // Normalize once at top of selectItem
+    const normalized = {
+      ...it,
+      house_number:
+        typeof it['house_number'] === 'string'
+          ? it['house_number']
+          : typeof properties?.['housenumber'] === 'string'
+            ? properties!['housenumber']
+            : undefined,
+      street:
+        typeof it['street'] === 'string'
+          ? it['street']
+          : typeof properties?.['street'] === 'string'
+            ? properties!['street']
+            : undefined,
+      name: typeof it['name'] === 'string' ? it['name'] : undefined,
+      nosm_value:
+        typeof it['osm_value'] === 'string'
+          ? it['osm_value']
+          : typeof properties?.['osm_value'] === 'string'
+            ? properties!['osm_value']
+            : null,
+      nosm_key:
+        typeof it['osm_key'] === 'string'
+          ? it['osm_key']
+          : typeof properties?.['osm_key'] === 'string'
+            ? properties!['osm_key']
+            : null
+    };
 
-		// Use the canonical validator imported at top of the module (isAcceptableGeocode)
-		// This keeps selection-time logic consistent with client-side rendering rules.
+    // Use the canonical validator imported at top of the module (isAcceptableGeocode)
+    // This keeps selection-time logic consistent with client-side rendering rules.
 
-		// Use normalized object for validation
-		if (source === 'kv') {
-			const candidate = { ...normalized, geometry: it['geometry'] };
-			if (!isAcceptableGeocode(candidate, node.value)) {
-				// Try a fallback search to Google if validation failed on selection (double safety)
-				try {
-					const res = await fetch(
-						`/api/autocomplete?q=${encodeURIComponent(node.value)}&forceGoogle=true`
-					);
-					const data = await res.json().catch(() => []);
-					if (Array.isArray(data) && data.length > 0) {
-						const googleHit = (data as Array<unknown>).find(
-							(d): d is Record<string, unknown> =>
-								typeof d === 'object' &&
-								d !== null &&
-								typeof (d as Record<string, unknown>)['source'] === 'string' &&
-								(d as Record<string, unknown>)['source'] === 'google_proxy'
-						);
-						if (googleHit) {
-							commitSelection(googleHit);
-							return;
-						}
-						const acceptable = (data as Array<unknown>).find((d): d is Record<string, unknown> => {
-							if (!d || typeof d !== 'object') return false;
-							const dd = d as Record<string, unknown>;
-							const normD = {
-								...dd,
-								house_number:
-									typeof dd['house_number'] === 'string'
-										? dd['house_number']
-										: typeof dd['properties'] === 'object' && dd['properties']
-											? (dd['properties'] as Record<string, unknown>)['housenumber']
-											: undefined,
-								street:
-									typeof dd['street'] === 'string'
-										? dd['street']
-										: typeof dd['name'] === 'string'
-											? dd['name']
-											: typeof dd['properties'] === 'object' && dd['properties']
-												? (dd['properties'] as Record<string, unknown>)['street']
-												: undefined
-							};
-							return isAcceptableGeocode(normD, node.value);
-						});
-						if (acceptable) {
-							commitSelection(acceptable);
-							return;
-						}
-					}
-				} catch (err: unknown) {
-					console.error('[autocomplete] fallback search failed', err);
-				}
+    // Use normalized object for validation
+    if (source === 'kv') {
+      const candidate = { ...normalized, geometry: it['geometry'] };
+      if (!isAcceptableGeocode(candidate, node.value)) {
+        // Try a fallback search to Google if validation failed on selection (double safety)
+        try {
+          const res = await fetch(
+            `/api/autocomplete?q=${encodeURIComponent(node.value)}&forceGoogle=true`
+          );
+          const data = await res.json().catch(() => []);
+          if (Array.isArray(data) && data.length > 0) {
+            const googleHit = (data as Array<unknown>).find(
+              (d): d is Record<string, unknown> =>
+                typeof d === 'object' &&
+                d !== null &&
+                typeof (d as Record<string, unknown>)['source'] === 'string' &&
+                (d as Record<string, unknown>)['source'] === 'google_proxy'
+            );
+            if (googleHit) {
+              commitSelection(googleHit);
+              return;
+            }
+            const acceptable = (data as Array<unknown>).find((d): d is Record<string, unknown> => {
+              if (!d || typeof d !== 'object') return false;
+              const dd = d as Record<string, unknown>;
+              const normD = {
+                ...dd,
+                house_number:
+                  typeof dd['house_number'] === 'string'
+                    ? dd['house_number']
+                    : typeof dd['properties'] === 'object' && dd['properties']
+                      ? (dd['properties'] as Record<string, unknown>)['housenumber']
+                      : undefined,
+                street:
+                  typeof dd['street'] === 'string'
+                    ? dd['street']
+                    : typeof dd['name'] === 'string'
+                      ? dd['name']
+                      : typeof dd['properties'] === 'object' && dd['properties']
+                        ? (dd['properties'] as Record<string, unknown>)['street']
+                        : undefined
+              };
+              return isAcceptableGeocode(normD, node.value);
+            });
+            if (acceptable) {
+              commitSelection(acceptable);
+              return;
+            }
+          }
+        } catch (err: unknown) {
+          console.error('[autocomplete] fallback search failed', err);
+        }
 
-				node.dispatchEvent(
-					new CustomEvent('place-invalid', { detail: { candidate: item, input: node.value } })
-				);
-				return;
-			}
-		}
+        node.dispatchEvent(
+          new CustomEvent('place-invalid', { detail: { candidate: item, input: node.value } })
+        );
+        return;
+      }
+    }
 
-		const geom = (it['geometry'] as Record<string, unknown> | undefined) ?? undefined;
-		if (!geom || !geom['location']) {
-			if (typeof it['place_id'] === 'string' && source === 'google') {
-				try {
-					const res = await fetch(
-						`/api/autocomplete?placeid=${encodeURIComponent(String(it['place_id'] || ''))}`
-					);
-					const detailsRaw = await res.json().catch(() => null);
-					const details =
-						typeof detailsRaw === 'object' && detailsRaw
-							? (detailsRaw as Record<string, unknown>)
-							: null;
+    const geom = (it['geometry'] as Record<string, unknown> | undefined) ?? undefined;
+    if (!geom || !geom['location']) {
+      if (typeof it['place_id'] === 'string' && source === 'google') {
+        try {
+          const res = await fetch(
+            `/api/autocomplete?placeid=${encodeURIComponent(String(it['place_id'] || ''))}`
+          );
+          const detailsRaw = await res.json().catch(() => null);
+          const details =
+            typeof detailsRaw === 'object' && detailsRaw
+              ? (detailsRaw as Record<string, unknown>)
+              : null;
 
-					if (details && details['geometry']) {
-						const fullItem = {
-							...item,
-							formatted_address:
-								typeof details['formatted_address'] === 'string'
-									? (details['formatted_address'] as string)
-									: it['formatted_address'],
-							name: typeof details['name'] === 'string' ? (details['name'] as string) : it['name'],
-							geometry: details['geometry']
-						};
-						savePlaceToKV(fullItem);
-						commitSelection(fullItem);
-						return;
-					}
-				} catch (err: unknown) {
-					console.error('Details fetch failed', err);
-				}
-			}
-			commitSelection(item);
-		} else {
-			commitSelection(item);
-		}
-	}
+          if (details && details['geometry']) {
+            const fullItem = {
+              ...item,
+              formatted_address:
+                typeof details['formatted_address'] === 'string'
+                  ? (details['formatted_address'] as string)
+                  : it['formatted_address'],
+              name: typeof details['name'] === 'string' ? (details['name'] as string) : it['name'],
+              geometry: details['geometry']
+            };
+            savePlaceToKV(fullItem);
+            commitSelection(fullItem);
+            return;
+          }
+        } catch (err: unknown) {
+          console.error('Details fetch failed', err);
+        }
+      }
+      commitSelection(item);
+    } else {
+      commitSelection(item);
+    }
+  }
 
-	function commitSelection(data: Record<string, unknown>) {
-		node.value = (data['formatted_address'] as string) || (data['name'] as string);
-		node.dispatchEvent(new Event('input', { bubbles: true }));
-		node.dispatchEvent(new CustomEvent('place-selected', { detail: data }));
+  function commitSelection(data: Record<string, unknown>) {
+    node.value = (data['formatted_address'] as string) || (data['name'] as string);
+    node.dispatchEvent(new Event('input', { bubbles: true }));
+    node.dispatchEvent(new CustomEvent('place-selected', { detail: data }));
 
-		// Only restore focus when the selection was explicit (isSelecting)
-		// or when the input is already the active element. This prevents
-		// blur-triggered validation from stealing focus when the user
-		// is trying to focus another field (causing a bounce).
-		setTimeout(() => {
-			try {
-				if (isSelecting || document.activeElement === node) {
-					node.focus();
-				}
-			} catch (_e: unknown) {
-				void _e;
-			}
-		}, 0);
+    // Only restore focus when the selection was explicit (isSelecting)
+    // or when the input is already the active element. This prevents
+    // blur-triggered validation from stealing focus when the user
+    // is trying to focus another field (causing a bounce).
+    setTimeout(() => {
+      try {
+        if (isSelecting || document.activeElement === node) {
+          node.focus();
+        }
+      } catch (_e: unknown) {
+        void _e;
+      }
+    }, 0);
 
-		const dlg = node.closest && node.closest('dialog');
-		if (dlg) {
-			try {
-				(dlg as unknown as { __suppressClose?: boolean }).__suppressClose = true;
-				setTimeout(() => {
-					try {
-						(dlg as unknown as { __suppressClose?: boolean }).__suppressClose = false;
-					} catch (_e: unknown) {
-						void _e;
-					}
-				}, 500);
-			} catch (_e: unknown) {
-				void _e;
-			}
-		}
+    const dlg = node.closest && node.closest('dialog');
+    if (dlg) {
+      try {
+        (dlg as unknown as { __suppressClose?: boolean }).__suppressClose = true;
+        setTimeout(() => {
+          try {
+            (dlg as unknown as { __suppressClose?: boolean }).__suppressClose = false;
+          } catch (_e: unknown) {
+            void _e;
+          }
+        }, 500);
+      } catch (_e: unknown) {
+        void _e;
+      }
+    }
 
-		if (dlg && !(dlg as HTMLDialogElement).open) {
-			try {
-				(dlg as HTMLDialogElement).showModal();
-			} catch (_e: unknown) {
-				void _e;
-			}
-			setTimeout(() => {
-				try {
-					node.focus();
-				} catch (_e: unknown) {
-					void _e;
-				}
-			}, 60);
-		}
-	}
+    if (dlg && !(dlg as HTMLDialogElement).open) {
+      try {
+        (dlg as HTMLDialogElement).showModal();
+      } catch (_e: unknown) {
+        void _e;
+      }
+      setTimeout(() => {
+        try {
+          node.focus();
+        } catch (_e: unknown) {
+          void _e;
+        }
+      }, 60);
+    }
+  }
 
-	initUI();
+  initUI();
 
-	node.addEventListener('input', handleInput);
-	node.addEventListener('focus', () => {
-		if (node.value.length > 1) {
-			const inputEvent = new Event('input', { bubbles: true });
-			Object.defineProperty(inputEvent, 'target', { value: node, enumerable: true });
-			handleInput(inputEvent);
-		}
-	});
-	node.addEventListener('blur', () =>
-		setTimeout(async () => {
-			if (dropdown) dropdown.style.display = 'none';
+  node.addEventListener('input', handleInput);
+  node.addEventListener('focus', () => {
+    if (node.value.length > 1) {
+      const inputEvent = new Event('input', { bubbles: true });
+      Object.defineProperty(inputEvent, 'target', { value: node, enumerable: true });
+      handleInput(inputEvent);
+    }
+  });
+  node.addEventListener('blur', () =>
+    setTimeout(async () => {
+      if (dropdown) dropdown.style.display = 'none';
 
-			// On blur, revalidate the raw input and silently escalate to Google if needed
-			const value = node.value;
-			if (!value || value.length < 2) return;
-			try {
-				const res = await fetch(
-					`/api/autocomplete?q=${encodeURIComponent(value)}&forceGoogle=true`
-				);
-				const data = await res.json().catch(() => []);
-				if (Array.isArray(data) && data.length > 0) {
-					const googleHit = (data as Array<unknown>).find(
-						(d): d is Record<string, unknown> =>
-							typeof d === 'object' &&
-							d !== null &&
-							typeof (d as Record<string, unknown>)['source'] === 'string' &&
-							(d as Record<string, unknown>)['source'] === 'google_proxy'
-					);
-					if (googleHit) {
-						commitSelection(googleHit);
-						return;
-					}
-					const acceptable = (data as Array<unknown>).find(
-						(d): d is Record<string, unknown> =>
-							typeof d === 'object' && d !== null && isAcceptableGeocode(d, value)
-					);
-					if (acceptable) {
-						commitSelection(acceptable);
-						return;
-					}
-				}
-			} catch (err: unknown) {
-				console.error('[autocomplete] blur validation failed', err);
-			}
-		}, 200)
-	);
+      // On blur, revalidate the raw input and silently escalate to Google if needed
+      const value = node.value;
+      if (!value || value.length < 2) return;
+      try {
+        const res = await fetch(
+          `/api/autocomplete?q=${encodeURIComponent(value)}&forceGoogle=true`
+        );
+        const data = await res.json().catch(() => []);
+        if (Array.isArray(data) && data.length > 0) {
+          const googleHit = (data as Array<unknown>).find(
+            (d): d is Record<string, unknown> =>
+              typeof d === 'object' &&
+              d !== null &&
+              typeof (d as Record<string, unknown>)['source'] === 'string' &&
+              (d as Record<string, unknown>)['source'] === 'google_proxy'
+          );
+          if (googleHit) {
+            commitSelection(googleHit);
+            return;
+          }
+          const acceptable = (data as Array<unknown>).find(
+            (d): d is Record<string, unknown> =>
+              typeof d === 'object' && d !== null && isAcceptableGeocode(d, value)
+          );
+          if (acceptable) {
+            commitSelection(acceptable);
+            return;
+          }
+        }
+      } catch (err: unknown) {
+        console.error('[autocomplete] blur validation failed', err);
+      }
+    }, 200)
+  );
 
-	const _removeDropdownHandlers = () => {
-		if (!dropdown) return;
-		dropdown.removeEventListener('pointerdown', stopAndPrevent);
-		dropdown.removeEventListener('pointerup', stop);
-		dropdown.removeEventListener('mousedown', stopAndPrevent);
-		dropdown.removeEventListener('mouseup', stop);
-		dropdown.removeEventListener('touchstart', stopAndPrevent);
-		dropdown.removeEventListener('touchend', stop);
-		dropdown.removeEventListener('click', stop);
-	};
+  const _removeDropdownHandlers = () => {
+    if (!dropdown) return;
+    dropdown.removeEventListener('pointerdown', stopAndPrevent);
+    dropdown.removeEventListener('pointerup', stop);
+    dropdown.removeEventListener('mousedown', stopAndPrevent);
+    dropdown.removeEventListener('mouseup', stop);
+    dropdown.removeEventListener('touchstart', stopAndPrevent);
+    dropdown.removeEventListener('touchend', stop);
+    dropdown.removeEventListener('click', stop);
+  };
 
-	window.addEventListener('scroll', updatePosition);
-	window.addEventListener('resize', updatePosition);
+  window.addEventListener('scroll', updatePosition);
+  window.addEventListener('resize', updatePosition);
 
-	return {
-		destroy() {
-			if (dropdown) {
-				_removeDropdownHandlers();
-				dropdown.remove();
-			}
-			node.removeEventListener('input', handleInput);
-			window.removeEventListener('scroll', updatePosition);
-			window.removeEventListener('resize', updatePosition);
-		}
-	};
+  return {
+    destroy() {
+      if (dropdown) {
+        _removeDropdownHandlers();
+        dropdown.remove();
+      }
+      node.removeEventListener('input', handleInput);
+      window.removeEventListener('scroll', updatePosition);
+      window.removeEventListener('resize', updatePosition);
+    }
+  };
 };

@@ -2,152 +2,123 @@
 
 This project follows the **HTML Living Standard (WHATWG)** exclusively.
 
-These rules are enforced by linting, CI, and governance documents.
+These rules are enforced by linting, pre-commit hooks, and CI. **Violations fail the build.**
 
 ---
 
-## General Rules
+## General rules
 
-- Use lowercase tag and attribute names
-- Use semantic HTML (`main`, `section`, `nav`, `article`, etc.)
-- No XHTML or XML-style syntax
-- No deprecated elements or attributes
-- No self-closing non-void elements
+- Use **lowercase** tag names and attribute names.
+- Prefer **semantic HTML** (`main`, `section`, `nav`, `article`, `header`, `footer`, etc.).
+- Write **valid HTML**: proper nesting, no missing end tags, no duplicate `id`s.
+- **No deprecated HTML**: do not use `<center>`, `<font>`, or the `align` attribute.
 
 ---
 
-## Void Elements (Self-Closing Allowed)
+## Non-void elements must not self-close (Svelte 5 critical)
 
-The following elements may be self-closing:
+**No XHTML:** self-closing syntax on **non-void** elements is **FORBIDDEN**.
 
-- `area`
-- `base`
-- `br`
-- `col`
-- `embed`
-- `hr`
-- `img`
-- `input`
-- `link`
-- `meta`
-- `param`
-- `source`
-- `track`
-- `wbr`
-
-Example:
+✅ Correct:
 
 ```html
-<img src="/logo.png" alt="Logo" /> <input disabled />
+<div></div>
+<span></span>
+<script></script>
+```
+
+❌ Incorrect:
+
+```html
+<div />
+<span />
+<script />
+```
+
+**Why this matters:** Svelte 5’s parser is strictly HTML-compliant. `<div />` is treated as an **opening `<div>`** that can accidentally swallow the rest of the page.
+
+---
+
+## Void elements
+
+Void elements do **not** have closing tags.
+
+Void elements are:
+
+- `area`, `base`, `br`, `col`, `embed`, `hr`, `img`, `input`
+- `link`, `meta`, `param`, `source`, `track`, `wbr`
+
+**Project style:** do not use a trailing slash. (A trailing slash is technically tolerated by HTML for void elements, but we standardize on the HTML-style form.)
+
+✅ Correct:
+
+```html
+<img src="/logo.png" alt="Logo" />
+<input disabled />
+<br />
 ```
 
 ---
 
-## Boolean Attributes
+## Boolean attributes
 
-Boolean attributes:
+In HTML, boolean attributes are **presence-only**:
 
-- MUST NOT have values
-- MUST NOT use `="true"` or `="false"`
+- Present = `true`
+- Absent = `false`
+- They MUST NOT have values (`="true"` / `="false"` is forbidden)
 
-Correct:
+✅ Correct:
 
 ```html
 <input disabled /> <button autofocus></button>
 ```
 
-Incorrect:
+❌ Incorrect:
 
 ```html
-<input disabled="disabled" /> <input disabled="true" />
+<input disabled="true" /> <input disabled="false" />
 ```
 
 ---
 
-## Svelte-Specific Rules
+## Svelte rules for boolean attributes (strict)
 
-Svelte components must output valid HTML Living Standard markup.
+Svelte handles boolean attributes correctly **only if you use expression syntax**.
 
-### Syntax Rules
-
-- Do NOT use XHTML syntax in `.svelte` files
-- Non-void elements must NOT be self-closing
-
-Correct:
+✅ Correct:
 
 ```svelte
-<div class="container"></div><p>Text</p>
-```
-
-Incorrect:
-
-```svelte
-<div class="container" /> <!-- Invalid! --><p /> <!-- Invalid! -->
-```
-
-### Boolean Attributes in Svelte
-
-Svelte has its own syntax for boolean attributes that compiles to valid HTML:
-
-Correct:
-
-```svelte
+<button disabled={isSubmitting}>Submit</button>
 <input disabled={isDisabled} />
-<!-- Compiles correctly -->
-<input disabled={true} />
-<!-- Compiles correctly -->
 <input disabled />
-<!-- Static true -->
+<!-- always disabled -->
 ```
 
-Incorrect:
+❌ Incorrect (string values / “always present” bugs):
 
 ```svelte
-<input disabled="true" />
-<!-- String, not boolean! -->
-<input disabled={false} />
-<!-- Use conditional rendering instead -->
+<button disabled={isSubmitting}>Submit</button>
+<button disabled={isSubmitting ? 'true' : 'false'}>Submit</button>
+<input disabled="false" />
 ```
-
-### Conditional Boolean Attributes
-
-For conditional boolean attributes, use Svelte's reactive syntax:
-
-```svelte
-<button disabled={!isValid}>Submit</button>
-<input required={fieldIsRequired} />
-```
-
-Do NOT use string values for boolean attributes.
 
 ---
 
-## Accessibility
+## Security & injection rules
 
-- Use proper labels for form controls
-- Use `alt` text for images
-- Prefer native elements over ARIA where possible
-- Ensure keyboard navigation works correctly
+- `{@html ...}` is **restricted** by `SECURITY.md`. If raw HTML is ever required, it MUST be **sanitized server-side** before it reaches the client.
+- Never place user-controlled input directly into `href` / `src` without validation (block `javascript:` and other unsafe schemes).
+- If you use `target="_blank"`, you MUST also set `rel="noopener noreferrer"`.
 
 ---
 
 ## Enforcement
 
-Violations will fail:
+Violations will fail via:
 
-- Linting
-- Pre-commit hooks
-- CI
+- `eslint-plugin-svelte` (strict parsing)
+- pre-commit hooks
+- CI checks
 
-These rules are **non-negotiable**.
-
----
-
-## Migration Note
-
-When migrating Svelte 4 → Svelte 5:
-
-- Verify all HTML output remains valid
-- Check that boolean attributes compile correctly
-- Ensure no XHTML syntax was introduced
-- Test accessibility features after migration
+These rules are non-negotiable.

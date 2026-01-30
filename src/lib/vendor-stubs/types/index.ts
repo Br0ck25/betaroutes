@@ -5,24 +5,24 @@
 // ============================================================================
 
 export interface LatLng {
-	lat: number;
-	lng: number;
+  lat: number;
+  lng: number;
 }
 
 export interface Location {
-	lat: number;
-	lng: number;
+  lat: number;
+  lng: number;
 }
 
 export interface GeocodeResult {
-	formatted_address?: string;
-	name?: string;
-	secondary_text?: string;
-	place_id?: string;
-	geometry?: {
-		location: Location;
-	};
-	source?: string;
+  formatted_address?: string;
+  name?: string;
+  secondary_text?: string;
+  place_id?: string;
+  geometry?: {
+    location: Location;
+  };
+  source?: string;
 }
 
 // ============================================================================
@@ -30,24 +30,24 @@ export interface GeocodeResult {
 // ============================================================================
 
 export interface User {
-	id?: string;
-	token: string;
-	plan: 'free' | 'pro' | 'business' | 'premium' | 'enterprise';
-	tripsThisMonth: number;
-	maxTrips: number;
-	resetDate: string;
-	name?: string;
-	email?: string;
+  id?: string;
+  token: string;
+  plan: 'free' | 'pro' | 'business' | 'premium' | 'enterprise';
+  tripsThisMonth: number;
+  maxTrips: number;
+  resetDate: string;
+  name?: string;
+  email?: string;
 }
 
 export interface SessionData {
-	id: string;
-	name?: string;
-	email?: string;
-	plan?: string;
-	tripsThisMonth?: number;
-	maxTrips?: number;
-	resetDate?: string;
+  id: string;
+  name?: string;
+  email?: string;
+  plan?: string;
+  tripsThisMonth?: number;
+  maxTrips?: number;
+  resetDate?: string;
 }
 
 // ============================================================================
@@ -55,34 +55,34 @@ export interface SessionData {
 // ============================================================================
 
 export interface Stop {
-	id?: string;
-	address?: string;
-	earnings?: number;
-	notes?: string;
-	order?: number;
-	location?: LatLng;
+  id?: string;
+  address?: string;
+  earnings?: number;
+  notes?: string;
+  order?: number;
+  location?: LatLng;
 }
 
 export interface Destination {
-	address: string;
-	earnings: number;
-	location?: LatLng;
+  address: string;
+  earnings: number;
+  location?: LatLng;
 }
 
 export interface MaintenanceCost {
-	type: string;
-	cost: number;
+  type: string;
+  cost: number;
 }
 
 export interface SupplyCost {
-	type: string;
-	cost: number;
+  type: string;
+  cost: number;
 }
 
 export interface CostItem {
-	type: string;
-	cost: number;
-	taxDeductible?: boolean;
+  type: string;
+  cost: number;
+  taxDeductible?: boolean;
 }
 
 // ============================================================================
@@ -90,40 +90,40 @@ export interface CostItem {
 // ============================================================================
 
 export interface Trip {
-	id?: string;
-	date: string; // YYYY-MM-DD
-	startTime?: string; // HH:MM
-	endTime?: string; // HH:MM
-	estimatedTime?: number; // Minutes
-	totalTime?: string; // "1h 30m"
-	startAddress: string;
-	startLocation?: LatLng;
-	endAddress: string;
-	endLocation?: LatLng;
-	destinations: Destination[];
-	stops?: Stop[];
-	totalMiles: number;
-	totalEarnings: number;
-	fuelCost: number;
-	maintenanceCost: number;
-	maintenanceItems?: MaintenanceCost[];
-	suppliesCost: number;
-	supplyItems?: SupplyCost[];
-	suppliesItems?: SupplyCost[];
-	hoursWorked?: number;
-	netProfit: number;
-	profitPerHour?: number;
-	mpg: number;
-	gasPrice: number;
-	notes?: string;
-	lastModified: string; // ISO 8601 timestamp
-	isOptimized?: boolean;
-	originalOrder?: Destination[];
-	userId?: string;
-	createdAt?: string;
-	updatedAt?: string;
-	// Optional service type for analytics
-	serviceType?: string;
+  id?: string;
+  date: string; // YYYY-MM-DD
+  startTime?: string; // HH:MM
+  endTime?: string; // HH:MM
+  estimatedTime?: number; // Minutes
+  totalTime?: string; // "1h 30m"
+  startAddress: string;
+  startLocation?: LatLng;
+  endAddress: string;
+  endLocation?: LatLng;
+  destinations: Destination[];
+  stops?: Stop[];
+  totalMiles: number;
+  totalEarnings: number;
+  fuelCost: number;
+  maintenanceCost: number;
+  maintenanceItems?: MaintenanceCost[];
+  suppliesCost: number;
+  supplyItems?: SupplyCost[];
+  suppliesItems?: SupplyCost[];
+  hoursWorked?: number;
+  netProfit: number;
+  profitPerHour?: number;
+  mpg: number;
+  gasPrice: number;
+  notes?: string;
+  lastModified: string; // ISO 8601 timestamp
+  isOptimized?: boolean;
+  originalOrder?: Destination[];
+  userId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  // Optional service type for analytics
+  serviceType?: string;
 }
 
 // ============================================================================
@@ -133,56 +133,56 @@ export interface Trip {
 export type UnknownRecord = Record<string, unknown>;
 
 export interface UnsanitizedLocation {
-	lat?: unknown;
-	lng?: unknown;
+  lat?: unknown;
+  lng?: unknown;
 }
 
 export interface UnsanitizedStop {
-	id?: unknown;
-	address?: unknown;
-	earnings?: unknown;
-	notes?: unknown;
-	order?: unknown;
-	location?: unknown;
+  id?: unknown;
+  address?: unknown;
+  earnings?: unknown;
+  notes?: unknown;
+  order?: unknown;
+  location?: unknown;
 }
 
 export interface UnsanitizedDestination {
-	address?: unknown;
-	earnings?: unknown;
-	location?: unknown;
+  address?: unknown;
+  earnings?: unknown;
+  location?: unknown;
 }
 
 export interface UnsanitizedCostItem {
-	type?: unknown;
-	cost?: unknown;
+  type?: unknown;
+  cost?: unknown;
 }
 
 export interface UnsanitizedTrip extends UnknownRecord {
-	id?: unknown;
-	date?: unknown;
-	startTime?: unknown;
-	endTime?: unknown;
-	hoursWorked?: unknown;
-	startAddress?: unknown;
-	startLocation?: unknown;
-	endAddress?: unknown;
-	endLocation?: unknown;
-	totalMiles?: unknown;
-	estimatedTime?: unknown;
-	totalTime?: unknown;
-	mpg?: unknown;
-	gasPrice?: unknown;
-	fuelCost?: unknown;
-	maintenanceCost?: unknown;
-	suppliesCost?: unknown;
-	totalEarnings?: unknown;
-	netProfit?: unknown;
-	notes?: unknown;
-	stops?: unknown;
-	destinations?: unknown;
-	maintenanceItems?: unknown;
-	suppliesItems?: unknown;
-	lastModified?: unknown;
+  id?: unknown;
+  date?: unknown;
+  startTime?: unknown;
+  endTime?: unknown;
+  hoursWorked?: unknown;
+  startAddress?: unknown;
+  startLocation?: unknown;
+  endAddress?: unknown;
+  endLocation?: unknown;
+  totalMiles?: unknown;
+  estimatedTime?: unknown;
+  totalTime?: unknown;
+  mpg?: unknown;
+  gasPrice?: unknown;
+  fuelCost?: unknown;
+  maintenanceCost?: unknown;
+  suppliesCost?: unknown;
+  totalEarnings?: unknown;
+  netProfit?: unknown;
+  notes?: unknown;
+  stops?: unknown;
+  destinations?: unknown;
+  maintenanceItems?: unknown;
+  suppliesItems?: unknown;
+  lastModified?: unknown;
 }
 
 // ============================================================================
@@ -190,12 +190,12 @@ export interface UnsanitizedTrip extends UnknownRecord {
 // ============================================================================
 
 export interface RouteResult {
-	distance: number; // in miles
-	duration: number; // in seconds
-	totalMiles?: number;
-	totalMinutes?: number;
-	route: google.maps.DirectionsResult;
-	optimizedOrder?: number[];
+  distance: number; // in miles
+  duration: number; // in seconds
+  totalMiles?: number;
+  totalMinutes?: number;
+  route: google.maps.DirectionsResult;
+  optimizedOrder?: number[];
 }
 
 // ============================================================================
@@ -203,11 +203,11 @@ export interface RouteResult {
 // ============================================================================
 
 export interface Subscription {
-	plan: 'free' | 'pro' | 'business';
-	tripsThisMonth: number;
-	maxTrips: number;
-	features: string[];
-	resetDate: string;
+  plan: 'free' | 'pro' | 'business';
+  tripsThisMonth: number;
+  maxTrips: number;
+  features: string[];
+  resetDate: string;
 }
 
 // ============================================================================
@@ -215,20 +215,20 @@ export interface Subscription {
 // ============================================================================
 
 export interface AuthResponse {
-	token: string;
-	resetKey?: string;
+  token: string;
+  resetKey?: string;
 }
 
 export interface ApiError {
-	error: string;
-	code?: string;
-	message?: string;
-	details?: unknown;
+  error: string;
+  code?: string;
+  message?: string;
+  details?: unknown;
 }
 
 export interface ApiSuccess<T = unknown> {
-	success: boolean;
-	data?: T;
+  success: boolean;
+  data?: T;
 }
 
 // ============================================================================
@@ -236,21 +236,21 @@ export interface ApiSuccess<T = unknown> {
 // ============================================================================
 
 export interface TripFilters {
-	startDate?: string;
-	endDate?: string;
-	searchQuery?: string;
-	minProfit?: number;
-	maxProfit?: number;
+  startDate?: string;
+  endDate?: string;
+  searchQuery?: string;
+  minProfit?: number;
+  maxProfit?: number;
 }
 
 export interface TripStats {
-	totalProfit: number;
-	totalTrips: number;
-	avgProfitPerHour: number;
-	totalMiles: number;
-	totalFuelCost: number;
-	totalMaintenanceCost: number;
-	totalSuppliesCost: number;
+  totalProfit: number;
+  totalTrips: number;
+  avgProfitPerHour: number;
+  totalMiles: number;
+  totalFuelCost: number;
+  totalMaintenanceCost: number;
+  totalSuppliesCost: number;
 }
 
 // ============================================================================
@@ -258,13 +258,13 @@ export interface TripStats {
 // ============================================================================
 
 export interface ChartData {
-	labels: string[];
-	datasets: {
-		label: string;
-		data: number[];
-		backgroundColor?: string | string[];
-		borderColor?: string;
-	}[];
+  labels: string[];
+  datasets: {
+    label: string;
+    data: number[];
+    backgroundColor?: string | string[];
+    borderColor?: string;
+  }[];
 }
 
 // ============================================================================
@@ -272,13 +272,13 @@ export interface ChartData {
 // ============================================================================
 
 export interface Settings {
-	defaultStartAddress: string;
-	defaultEndAddress: string;
-	defaultMPG: number;
-	defaultGasPrice: number;
-	recentDestinations: string[];
-	maintenanceCategories: string[];
-	supplyCategories: string[];
+  defaultStartAddress: string;
+  defaultEndAddress: string;
+  defaultMPG: number;
+  defaultGasPrice: number;
+  recentDestinations: string[];
+  maintenanceCategories: string[];
+  supplyCategories: string[];
 }
 
 // ============================================================================
@@ -286,20 +286,20 @@ export interface Settings {
 // ============================================================================
 
 export interface RateLimitResult {
-	allowed: boolean;
-	remaining: number;
-	resetAt?: Date;
-	limit?: number;
+  allowed: boolean;
+  remaining: number;
+  resetAt?: Date;
+  limit?: number;
 }
 
 export interface RateLimitConfig {
-	limit: number;
-	windowMs: number;
+  limit: number;
+  windowMs: number;
 }
 
 export interface RateLimitData {
-	count: number;
-	windowStart: number;
+  count: number;
+  windowStart: number;
 }
 
 // ============================================================================

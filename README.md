@@ -1,164 +1,154 @@
-# sv — SvelteKit App
+# Go Route Yourself - SvelteKit + Cloudflare
 
-Everything you need to build and maintain this **SvelteKit + Svelte 5** project,
-powered by [`sv`](https://github.com/sveltejs/cli).
+A **strict SvelteKit 2 + Svelte 5 (Runes)** app deployed on **Cloudflare Pages/Workers** with an **offline-first PWA**.
 
----
-
-## ⚠️ Project Conventions (Important for GitHub Copilot)
-
-This repository enforces **strict frontend standards**.
-GitHub Copilot (and all AI tools) **must follow these rules** when adding or modifying code.
-
-Violations will fail **linting, pre-commit hooks, and CI**.
-
-> **Note**
-> During the Svelte 4 → Svelte 5 migration, AI tools must also follow:
->
-> - `svelte-4-to-5-migration-agent-spec.v2.7.3.md` (authoritative migration rules)
-> - `MIGRATION.md` (operational guidance)
-> - `AI_GUARD.md` (AI behavior enforcement)
+This repo enforces strict type safety, security, and architectural boundaries.
+**If a change conflicts with the governance docs, the docs win.**
 
 ---
 
-## Migration Status
+## AI & Copilot rules (strict)
 
-This project is currently undergoing a **controlled Svelte 4 → Svelte 5 migration**.
+This repository enforces **zero tolerance** for legacy patterns. GitHub Copilot (and all AI tools) MUST follow:
 
-- Migration is **file-by-file**
-- File order is defined in `MIGRATION_ORDER.md`
-- Only **one file may be migrated at a time**
-- All rules are enforced by CI
+1. **Svelte 5 only:** Runes (`$state`, `$derived`, `$props`) are mandatory. Svelte 4 syntax (`export let`, `$:`) is banned.
+2. **Cloudflare-native runtime:** Use `platform.env` bindings (KV / D1 / Durable Objects). Node.js built-ins (`fs`, `process`) are forbidden.
+3. **Strict types:** No `any`. No `// @ts-ignore` (use `// @ts-expect-error` only when truly necessary). Handle `undefined` explicitly.
 
-👉 See **`MIGRATION.md`** before making _any_ Svelte changes.
+Canonical AI router + forbidden patterns live in:
 
----
+- `AGENTS.md`
 
-## HTML
+Copilot-specific guidance (when editing with Copilot) lives in:
 
-- Follow the **HTML Living Standard (WHATWG)** only
-- ❌ No XHTML or XML-style syntax
-- ❌ No deprecated elements or attributes
-- ❌ No self-closing non-void elements
-- Use lowercase tag and attribute names
-- Prefer semantic HTML (`main`, `section`, `nav`, `article`, etc.)
-
-See: **`HTML_LIVING_STANDARD.md`**
+- `.github/copilot-instructions.md`
 
 ---
 
-## Svelte
+## Tech stack
 
-- **Svelte 5 only** for new files and migrated files
-- Use **runes-based reactivity exclusively**:
-  - `$state`
-  - `$derived`
-  - `$effect`
+- **Framework:** SvelteKit 2 + Svelte 5 (Runes)
+- **Runtime:** Cloudflare Workers (Edge) / Cloudflare Pages
+- **Storage:** Cloudflare KV (primary) + other Cloudflare bindings as configured in `wrangler.*` and Pages environment
+- **Styling:** Tailwind CSS (strict config)
+- **Offline:** PWA + IndexedDB (no sensitive data in browser storage)
 
-### Legacy Exception (Temporary)
+---
 
-Files marked with:
+## Quick start
+
+### 1) Install
+
+```bash
+npm install
+```
+
+### 2) Local secrets
+
+Copy `.dev.vars.example` -> `.dev.vars`. **Do not commit** `.dev.vars` or `.env`.
+
+```bash
+cp .dev.vars.example .dev.vars
+```
+
+### 3) Run locally
+
+Run the local dev server with Cloudflare emulation.
+
+```bash
+npm run dev
+```
+
+### 4) Run the strict gate
+
+Run this frequently to catch type/lint issues early.
+
+```bash
+npm run gate
+```
+
+---
+
+## Architecture & standards (read these first)
+
+**Start here:**
+
+- `REPOSITORY_GOVERNANCE.md` - repo-wide rules & enforcement
+- `AGENTS.md` - canonical AI router + forbidden patterns
+
+**Core constraints:**
+
+- `ARCHITECTURE.md` - data models, key patterns, boundaries
+- `SECURITY.md` - zero-trust rules, forbidden patterns, auth + data isolation
+- `PWA.md` - offline-first rules, service worker policy, cache rules
+- `SVELTE5_STANDARDS.md` - runes-only Svelte 5 patterns (props/state/effects/snippets)
+- `HTML_LIVING_STANDARD.md` - strict HTML parsing rules (Svelte 5 compatible)
+- `DESIGN_SYSTEM.md` - Tailwind palette + UI constraints
+
+**Supplemental (recommended):**
+
+- `ERROR_PATTERNS_AND_STOP_CONDITIONS.md` - recurring AI/human mistakes + "stop" rules
+
+---
+
+## Key patterns
+
+### Data access (KV composite keys)
+
+We use **composite keys** to enforce ownership.
+
+```ts
+// CORRECT
+const key = `trip:${locals.user.id}:${tripId}`;
+const data = await platform.env.KV.get(key);
+
+// FORBIDDEN (no client trust)
+const key = `trip:${params.userId}:${tripId}`;
+```
+
+### Reactivity (Svelte 5 runes)
+
+Use runes exclusively.
 
 ```svelte
-<!-- MIGRATION: SVELTE4-LEGACY -->
+<script lang="ts">
+  let { count }: { count: number } = $props();
+  let double = $derived(count * 2);
+</script>
 ```
 
-are allowed to use Svelte 4 syntax **only until migrated**.
+Forbidden legacy syntax:
 
-These files may temporarily contain patterns that are otherwise forbidden (stores, lifecycle hooks, dispatchers) until pre-migration cleanup is performed.
-
-See `MIGRATION.md` for complete rules.
-
----
-
-### Forbidden in Svelte 5 Files
-
-See `AI_GUARD.md` for the complete authoritative list:
-
-- ❌ `svelte/store`
-- ❌ `$:` reactive labels
-- ❌ `onMount`, `beforeUpdate`, `afterUpdate`
-- ❌ `createEventDispatcher`
-- ❌ Legacy component instantiation (`new Component()`)
-
----
-
-### Required Patterns
-
-- Props via `$props()`
-- DOM events via standard attributes (`onclick`, not `on:click`)
-- Component communication via callback props
-- Slots replaced with **snippets** and `{@render}`
-
-See `EXAMPLES.md` for canonical code patterns.
-
-These rules are **non-negotiable**.
-
----
-
-## Tooling Expectations
-
-Before committing:
-
-```sh
-npm run check
-npm run lint
-npx eslint
-```
-
-Optional but recommended:
-
-```sh
-npm test
-```
-
-CI must pass with **zero warnings**.
-
----
-
-## Local secrets & Cloudflare Pages
-
-- Local development: copy `.dev.vars.example` to `.dev.vars` and set local secrets (this file is ignored by git). Do **not** commit `.dev.vars`.
-- Production: use `npx wrangler pages secret put <KEY_NAME>` or configure secrets via the Cloudflare Pages dashboard. Do **not** put secrets in `wrangler.toml`.
-- Deprecated: `.env.example` has been removed in favor of `.dev.vars.example` to match Cloudflare Pages local dev conventions.
-
----
-
-## Creating a Project
-
-This project was scaffolded using `sv`:
-
-```sh
-# create a new project in the current directory
-npx sv create
-
-# create a new project in a new folder
-npx sv create my-app
+```svelte
+<script lang="ts">
+  export let count; // legacy
+  $: double = count * 2; // legacy
+</script>
 ```
 
 ---
 
-## Related Documentation
+## Deployment
 
-### Core Governance
+Cloudflare Pages handles deployment.
 
-- `REPOSITORY_GOVERNANCE.md` — Repository-wide rules
-- `AI_GUARD.md` — AI behavior and enforcement
-- `CONTRIBUTING.md` — Contributor guidelines
+```bash
+npm run build
+```
 
-### Standards
+Secrets are managed via the Cloudflare dashboard (Pages env vars / Workers secrets), not committed config files.
 
-- `HTML_LIVING_STANDARD.md` — HTML rules
-- `ARCHITECTURE.md` — App structure and boundaries
-- `EXAMPLES.md` — Canonical code patterns
-- `DESIGN_SYSTEM.md` — Design guidelines and color palette
+---
 
-### Migration
+## Contributing
 
-- `svelte-4-to-5-migration-agent-spec.v2.7.3.md` — Authoritative migration rules
-- `MIGRATION.md` — Operational migration guidance
-- `MIGRATION_ORDER.md` — Approved migration order (generated)
+Before opening a PR:
 
-### PWA
+1. Read `REPOSITORY_GOVERNANCE.md` + `AGENTS.md`
+2. Run:
 
-- `PWA.md` — PWA requirements and rules
+```bash
+npm run gate
+```
+
+If you're unsure whether a change violates a governance doc, **stop and fix the doc conflict first**.

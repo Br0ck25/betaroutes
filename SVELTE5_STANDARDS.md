@@ -1,533 +1,267 @@
-# SVELTE5_STANDARDS.md
+# Svelte 5 Standards (Runes + TypeScript)
 
 **Single source of truth** for Svelte 5 + TypeScript standards in this repo.
 
-- **Mode:** Svelte 5 **runes mode**
-- **Applies to:** All **NEW** files and files **being migrated**
-- **Scope:** Standards reference (not migration instructions - see `SVELTE5_MIGRATION.md` for that)
+- **Mode:** Svelte 5 **Runes Mode** (Strict)
+- **Applies to:** ALL `.svelte` and TypeScript files
+- **Scope:** Implementation patterns and â€œhow we write codeâ€
 
 ---
 
-## 🎯 When to Use This Document
+## TypeScript requirements (critical)
 
-**Use this document when:**
+### Always use `lang="ts"`
 
-- ✅ Creating a **new** .svelte file (always use Svelte 5)
-- ✅ Creating a **new** component (always use Svelte 5)
-- ✅ Migrating an existing file (refer to patterns here)
-- ✅ Checking syntax for Svelte 5 features
-- ✅ Resolving TypeScript errors in Svelte 5 files
+If you use **any** TypeScript syntax, you MUST use `lang="ts"`.
 
-**Do NOT use this document for:**
-
-- ❌ Editing existing Svelte 4 files (keep them in Svelte 4)
-- ❌ Migration decision-making (see `SVELTE5_MIGRATION.md`)
-- ❌ Determining IF something should be migrated
-
----
-
-## ⚠️ CRITICAL: TypeScript + Svelte 5 Requirements
-
-### Always Add `lang="ts"` When Using TypeScript
-
-If you use ANY TypeScript syntax, you MUST add `lang="ts"` to the `<script>` tag:
-
-❌ **WRONG - Creates 50+ parse errors:**
-
-```svelte
-<script>
-	let items = $state<Item[]>([]); // TypeScript syntax without lang="ts"
-	function doThing(id: string) {} // Type annotations won't work
-</script>
-```
-
-✅ **CORRECT:**
+âœ… Correct:
 
 ```svelte
 <script lang="ts">
-	let items = $state<Item[]>([]);
-	function doThing(id: string) {}
+  type Item = { id: string };
+  let items = $state<Item[]>([]);
 </script>
 ```
 
-**TypeScript syntax includes:**
+### No `any` / no `@ts-ignore`
 
-- Type parameters: `<Type>`, `<T>`
-- Type annotations: `: Type`, `: string`
-- Type keywords: `interface`, `type`, `enum`
-- Generic constraints: `<T extends Base>`
+- âŒ `any` is forbidden (use `unknown` + narrowing).
+- âŒ `// @ts-ignore` is forbidden (use `// @ts-expect-error` with a justification only when necessary).
+- âœ… Never initialize empty state without a type (avoid `never[]`).
 
-**Rule: If you add any TypeScript syntax, add `lang="ts"` to the `<script>` tag.**
+âœ… Correct:
 
----
-
-## Non‑negotiables (RUNES ONLY)
-
-### Props
-
-- ✅ Use `$props()` only.
-- ❌ Never use `export let` in Svelte 5.
-
-✅ **Correct Pattern:**
-
-```svelte
-<script lang="ts">
-	type Props = {
-		title: string;
-		subtitle?: string;
-	};
-
-	let { title, subtitle }: Props = $props();
-</script>
+```ts
+let rows = $state<Row[]>([]);
 ```
 
 ---
 
-### State
+## Non-negotiables (Runes only)
 
-- ✅ Use `$state(...)` for reactive state.
-- ✅ Add type parameters when appropriate.
+### 1) Props (`$props()`)
 
-✅ **Correct Pattern:**
+âŒ Legacy:
 
 ```svelte
 <script lang="ts">
-	type Item = { id: string; name: string };
+  export let title: string;
+</script>
+```
 
-	let items = $state<Item[]>([]);
-	let selectedId = $state<string | null>(null);
+âœ… Strict:
+
+```svelte
+<script lang="ts">
+  type Props = { title: string; subtitle?: string };
+  let { title, subtitle }: Props = $props();
+</script>
+```
+
+**Also forbidden:** `$$props` and `$$restProps` (use `$props()` destructuring instead).
+
+---
+
+### 2) State (`$state()`)
+
+âŒ Legacy (non-reactive in runes mode):
+
+```svelte
+<script lang="ts">
+  let count = 0;
+</script>
+```
+
+âœ… Strict:
+
+```svelte
+<script lang="ts">
+  let count = $state(0);
+  let items = $state<string[]>([]);
 </script>
 ```
 
 ---
 
-### Derived values (computed)
+### 3) Derived values (`$derived()`)
 
-- ✅ Use `$derived(...)` for computed values.
-- ❌ Do not use `$:` reactive statements in Svelte 5.
-
-✅ **Correct Pattern:**
+âŒ Legacy:
 
 ```svelte
 <script lang="ts">
-	let a = $state(0);
-	let b = $state(0);
+  $: total = a + b;
+</script>
+```
 
-	let total = $derived(a + b);
+âœ… Strict:
+
+```svelte
+<script lang="ts">
+  let total = $derived(a + b);
 </script>
 ```
 
 ---
 
-### Effects (side effects)
+### 4) Side effects (`$effect()`)
 
-- ✅ Use `$effect(() => { ... })` for side effects.
-- Keep effects small and deterministic.
+âŒ Legacy:
 
-✅ **Correct Pattern:**
+- `onMount`
+- `beforeUpdate` / `afterUpdate`
+
+âœ… Strict:
 
 ```svelte
 <script lang="ts">
-	let ready = $state(false);
+  $effect(() => {
+    // Runs after mount + after reactive updates
+    console.log('total', total);
 
-	$effect(() => {
-		if (!ready) return;
-
-		// side effect here (subscribe, fetch, write to storage, etc.)
-		// return a cleanup function if needed
-		return () => {
-			// cleanup
-		};
-	});
+    return () => {
+      // Cleanup
+    };
+  });
 </script>
 ```
 
+> If the effect must run _before_ paint, use `$effect.pre(...)`.
+
 ---
 
-## Rendering (Snippets only)
+## Rendering and composition (Snippets)
 
-- ✅ Use snippet props + `{@render ...}`.
-- ❌ Do not use `<slot />` in Svelte 5.
+âŒ Legacy:
 
-✅ **Default slot pattern:**
+- `<slot />`
+- `<slot name="header" />`
+
+âœ… Strict: snippets + `{@render ...}`
+
+### Default children
 
 ```svelte
 <script lang="ts">
-	let { children } = $props<{ children?: () => any }>();
+  import type { Snippet } from 'svelte';
+  let { children } = $props<{ children?: Snippet }>();
 </script>
 
 {@render children?.()}
 ```
 
-✅ **Named slots pattern:**
+### Named snippets
 
 ```svelte
 <script lang="ts">
-	let { header, footer } = $props<{
-		header?: () => any;
-		footer?: () => any;
-	}>();
+  import type { Snippet } from 'svelte';
+  let { header } = $props<{ header?: Snippet }>();
 </script>
 
-<header>{@render header?.()}</header><footer>{@render footer?.()}</footer>
+<header>{@render header?.()}</header>
 ```
+
+> If you need snippet arguments, type them as `Snippet<[Arg1, Arg2]>`.
 
 ---
 
-## Event Handling (Svelte 5)
+## Events
 
-### DOM events (preferred)
+### DOM events
 
-- ✅ Use DOM event properties: `onclick`, `oninput`, `onchange`, etc.
-- ❌ Do not use `on:click`, `on:input`, etc. in Svelte 5.
-
-✅ **Correct Pattern:**
+âœ… Prefer attribute events:
 
 ```svelte
 <button onclick={save}>Save</button>
 <input oninput={handleInput} />
 ```
 
----
-
-### Custom DOM events (web components / custom elements)
-
-**Preferred standard:**
-
-- ✅ Use the event property form (remove the colon):
-  - `onplace-selected={handler}` for a `place-selected` event
-
-✅ **Correct Pattern:**
+âŒ Avoid:
 
 ```svelte
-<MyElement onplace-selected={handlePlaceSelected} />
+<button on:click={save}>Save</button>
 ```
 
-**Type the handler:**
+### Component communication
+
+âŒ Legacy:
+
+- `createEventDispatcher`
+
+âœ… Strict: callback props
+
+**Parent**
+
+```svelte
+<Child onSave={(id) => save(id)} />
+```
+
+**Child**
 
 ```svelte
 <script lang="ts">
-	function handlePlaceSelected(e: CustomEvent<{ placeId: string }>) {
-		// ...
-	}
-</script>
-```
-
-**Allowed temporary exception (only when unavoidable):**
-
-- If TypeScript cannot be satisfied promptly (missing/3rd‑party typings), you may use `on:place-selected={...}` **only as a temporary bridge** and must add a `TODO` to replace it with proper typings + event property form.
-- This exception is **only** for custom DOM events (not for standard DOM events).
-
----
-
-### Component "events" (Svelte components)
-
-- ✅ Prefer **callback props**.
-- ❌ Do not introduce `createEventDispatcher` in Svelte 5.
-
-✅ **Parent:**
-
-```svelte
-<script lang="ts">
-	import Child from './Child.svelte';
-
-	function onSave(id: string) {
-		// ...
-	}
+  let { onSave } = $props<{ onSave: (id: string) => void }>();
 </script>
 
-<Child {onSave} />
-```
-
-✅ **Child:**
-
-```svelte
-<script lang="ts">
-	let { onSave } = $props<{ onSave?: (id: string) => void }>();
-</script>
-
-<button onclick={() => onSave?.('123')}>Save</button>
+<button onclick={() => onSave('123')}>Save</button>
 ```
 
 ---
 
-## TypeScript typing for Svelte 5 runes (STRICT)
+## Server routes (`+server.ts`)
 
-- `$state`, `$derived`, and `$props` are the reactive primitives; TypeScript types may be applied to them.
-- Prefer **explicit, specific types** (or rely on inference) instead of `any`.
-- ❌ Avoid: `let data = $state<any>(null);`
-- ✅ Prefer: `let data = $state<MyType | null>(null);` or initialize with a typed value so TS infers.
-- If the shape is unknown (e.g., untrusted JSON), use `unknown` and narrow/validate before use.
-- `any` is allowed ONLY as a temporary bridge for a 3rd-party library or legacy boundary, and MUST be narrowed to a real type as soon as possible with a comment explaining why.
+Requirements:
 
-### `unknown` for untrusted data
+- Always return a `Response` (or use `json(...)`).
+- Use `RequestHandler` types.
+- Cloudflare bindings must be accessed via `platform.env` (never `process.env`).
 
-✅ **Correct Pattern:**
+âœ… Correct pattern:
 
 ```ts
-let raw: unknown;
+import type { RequestHandler } from './$types';
+import { json, error } from '@sveltejs/kit';
 
-function isApiResponse(x: unknown): x is { ok: boolean } {
-	return typeof x === 'object' && x !== null && 'ok' in x;
-}
-```
+export const POST: RequestHandler = async ({ request, locals, platform }) => {
+  if (!locals.user) throw error(401, 'Unauthorized');
 
----
+  const KV = platform?.env.KV;
+  if (!KV) throw error(500, 'Storage unavailable');
 
-## Common TypeScript pitfalls (Fix patterns)
+  const key = `trip:${locals.user.id}:123`;
+  const data = await KV.get(key);
 
-### SvelteKit server routes (+server.ts) requirements
-
-#### RequestHandler must always return a Response
-
-In `src/routes/**/+server.ts` handlers (`GET`, `POST`, etc.):
-
-- **All code paths MUST return a `Response`.** Never return `undefined`.
-- Use early returns for errors/auth failures:
-  - `return new Response(JSON.stringify({ error: '...' }), { status: 401 })`
-- Avoid bare `return;` inside a handler.
-
-✅ **Correct Pattern:**
-
-```typescript
-export const POST: RequestHandler = async ({ request, locals }) => {
-	// Early return for auth
-	if (!locals.user) {
-		return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-	}
-
-	// Early return for validation
-	const body = await request.json();
-	if (!body || !body.requiredField) {
-		return new Response(JSON.stringify({ error: 'Bad request' }), { status: 400 });
-	}
-
-	// Main logic
-	const result = await doSomething(body);
-
-	// Final return (REQUIRED)
-	return new Response(JSON.stringify({ success: true, data: result }));
+  return json({ data });
 };
 ```
 
-**This prevents:**
-
-- `Promise<Response | undefined> is not assignable to RequestHandler`
-- `Not all code paths return a value`
-
 ---
 
-#### Guard optional / possibly‑undefined values before calling helpers
+## Definition of Done
 
-If TypeScript says a value is `T | undefined`:
-
-- **Do not** pass it into helpers expecting `T`.
-- Fix with:
-  - Early guard: `if (!value) return new Response(..., { status: 400 })`
-  - Type guard + filtering when building arrays: `arr.filter(isDefined)`
-  - Safe indexing checks before using `arr[i]`
-
-✅ **Correct Pattern:**
-
-```typescript
-const items = [a, b, c];
-const index = items.indexOf(target);
-
-// Guard before using
-if (index === -1) {
-	return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
-}
-
-const item = items[index]!; // Safe after guard
-doSomething(item);
-```
-
-**Avoid `as T` casts that merely silence TypeScript.**
-
----
-
-### Function vs value
-
-**Error:** `Type '() => string' is not assignable to type 'string'.`
-
-**Cause:** you passed a function where a string value is expected.
-
-**Fix options:**
-
-- Call it: `label={getLabel()}`
-- Or change the receiving type: `string | (() => string)`
-- Or compute via `$derived` if it depends on state.
-
-✅ **Correct Pattern:**
-
-```svelte
-<script lang="ts">
-	function getLabel() {
-		return 'Hello';
-	}
-
-	let label = $derived(getLabel());
-</script>
-
-<MyComponent {label} />
-```
-
----
-
-### Unknown prop / wrong attribute name
-
-**Error:** `Object literal may only specify known properties ... 'onplace-selected' does not exist in type ...`
-
-**Fix checklist:**
-
-1. Confirm you're binding the **right thing** (prop vs event).
-2. For custom DOM events: use `onplace-selected={...}` and type the handler.
-3. If TS still complains, add typings for the custom element/event (preferred), or use the temporary `on:place-selected` exception with a TODO.
-
----
-
-### Unreachable code after return
-
-**Error:** `Unreachable code detected`
-
-**Cause:** Code placed after a `return` statement.
-
-❌ **WRONG:**
-
-```typescript
-if (error) {
-	return new Response(JSON.stringify({ error: 'Failed' }), { status: 500 });
-	assignments[idx].stops.push(stop); // UNREACHABLE!
-}
-```
-
-✅ **CORRECT:**
-
-```typescript
-if (error) {
-	console.error('Failed:', error);
-	return new Response(JSON.stringify({ error: 'Failed' }), { status: 500 });
-}
-
-// Code is reachable here
-assignments[idx].stops.push(stop);
-```
-
----
-
-## Markup & HTML rules (Quick)
-
-- Prefer semantic HTML.
-- Avoid invalid nesting (e.g., button inside button, link inside link).
-- Keep ARIA accurate and minimal; do not add ARIA unless needed.
-- Follow `HTML_LIVING_STANDARD.md` when in doubt.
-
----
-
-## Promise / async safety (TypeScript)
-
-- Do not use `await` inside `Array.prototype.map`. Use `Promise.all`.
-- Do not mix `await` with `forEach`. Use `for...of` or `Promise.all`.
-
-✅ **Correct Patterns:**
-
-```ts
-const results = await Promise.all(items.map(async (item) => compute(item)));
-```
-
-```ts
-for (const item of items) {
-	await compute(item);
-}
-```
-
----
-
-## File Template: New Svelte 5 Component
-
-Use this as a starting template for all new .svelte files:
-
-```svelte
-<script lang="ts">
-	// Type definitions
-	type Props = {
-		// Define your props here
-	};
-
-	// Props
-	let {} /* destructure props */ : Props = $props();
-
-	// State
-	let someState = $state<Type>(initialValue);
-
-	// Derived values
-	let computed = $derived(someState * 2);
-
-	// Effects (if needed)
-	$effect(() => {
-		// Side effects here
-		return () => {
-			// Cleanup
-		};
-	});
-
-	// Event handlers
-	function handleClick() {
-		// Handler logic
-	}
-</script>
-
-<!-- Markup -->
-<div>
-	<button onclick={handleClick}>Click me</button>
-</div>
-
-<style>
-	/* Component styles */
-</style>
-```
-
----
-
-## Definition of Done (Required)
-
-Before committing changes that touch Svelte/TS:
+Before committing, run:
 
 ```bash
-npm run check   # Must pass with 0 errors
-npm run lint    # Must pass
-npx eslint .    # Must pass
+npm run gate
 ```
 
-**If you see TypeScript errors:**
+This runs:
 
-1. Review your changes
-2. Check for missing `lang="ts"`
-3. Check for missing `return` statements
-4. Check for unguarded optional values
-5. Do NOT create more changes to "fix" errors - fix the root cause
+- `svelte-check` (type safety)
+- `eslint` (strict rules)
+- `vitest` (tests)
 
----
-
-## Quick Reference
-
-| Svelte 4 Syntax   | Svelte 5 Equivalent           |
-| ----------------- | ----------------------------- |
-| `export let x`    | `let { x } = $props()`        |
-| `let x = value`   | `let x = $state(value)`       |
-| `$: y = x * 2`    | `let y = $derived(x * 2)`     |
-| `$: { doSide() }` | `$effect(() => { doSide() })` |
-| `<slot />`        | `{@render children?.()}`      |
-| `on:click`        | `onclick`                     |
-| `on:input`        | `oninput`                     |
+If any step fails, do not commit.
 
 ---
 
-## Canonical error fixes (Quick reference)
+## Quick reference
 
-- **Parse errors with TypeScript syntax** → Add `lang="ts"` to `<script>` tag
-- **Not all code paths return a value** → Add return statements on all branches in RequestHandler
-- **Object is possibly undefined** → Add guards before array indexing or optional chaining
-- **Unreachable code detected** → Remove code after return statements
-- **`() => string` not assignable to `string`** → Call it, widen the type, or compute via `$derived`
-- **Unknown `on...` property / event typing** → Use correct event property form + add typings
+| Feature          | Legacy (BANNED) âŒ      | Strict (REQUIRED) âœ…     |
+| ---------------- | ----------------------- | ------------------------- |
+| Props            | `export let x`          | `let { x } = $props()`    |
+| State            | `let x = 0`             | `let x = $state(0)`       |
+| Computed         | `$: y = x * 2`          | `let y = $derived(x * 2)` |
+| Side effects     | `onMount`, `$:` blocks  | `$effect(() => ...)`      |
+| Slots            | `<slot />`              | `{@render children?.()}`  |
+| DOM events       | `on:click`              | `onclick`                 |
+| Component events | `createEventDispatcher` | `onSave` callback prop    |

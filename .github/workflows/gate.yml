@@ -1,0 +1,270 @@
+name: Quality Gate
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+# Cancel in-progress runs when a new workflow is triggered
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Job 1: Governance Checks (Fast - runs first)
+  governance:
+    name: Governance Enforcement
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for banned Svelte 4 syntax
+        run: |
+          echo "🔍 Checking for legacy Svelte 4 patterns..."
+
+          # Check for reactive labels ($:)
+          if grep -rn '\$:' src/ --include="*.svelte" --include="*.svelte.ts"; then
+            echo "❌ VIOLATION: Found reactive labels (\$:) - Use \$derived() or \$effect() instead"
+            echo "See: SVELTE5_STANDARDS.md"
+            exit 1
+          fi
+
+          # Check for onMount
+          if grep -rn 'onMount' src/ --include="*.svelte" --include="*.ts"; then
+            echo "❌ VIOLATION: Found onMount - Use \$effect() instead"
+            echo "See: SVELTE5_STANDARDS.md"
+            exit 1
+          fi
+
+          # Check for export let (props)
+          if grep -rn 'export let' src/ --include="*.svelte"; then
+            echo "❌ VIOLATION: Found 'export let' - Use \$props() instead"
+            echo "See: SVELTE5_STANDARDS.md"
+            exit 1
+          fi
+
+          # Check for createEventDispatcher
+          if grep -rn 'createEventDispatcher' src/ --include="*.svelte" --include="*.ts"; then
+            echo "❌ VIOLATION: Found createEventDispatcher - Use callback props instead"
+            echo "See: SVELTE5_STANDARDS.md"
+            exit 1
+          fi
+
+          # Check for $$props and $$restProps
+          if grep -rn '\$\$props\|\$\$restProps' src/ --include="*.svelte"; then
+            echo "❌ VIOLATION: Found \$\$props or \$\$restProps - Use \$props() destructuring instead"
+            echo "See: SVELTE5_STANDARDS.md"
+            exit 1
+          fi
+
+          # Check for <slot> (should use snippets)
+          if grep -rn '<slot' src/ --include="*.svelte"; then
+            echo "❌ VIOLATION: Found <slot> - Use {#snippet} and {@render} instead"
+            echo "See: SVELTE5_STANDARDS.md"
+            exit 1
+          fi
+
+          echo "✅ No legacy Svelte 4 patterns found"
+
+      - name: Check for self-closing non-void elements
+        run: |
+          echo "🔍 Checking for invalid self-closing HTML tags..."
+
+          # List of void elements that CAN self-close
+          # area, base, br, col, embed, hr, img, input, link, meta, param, source, track, wbr
+
+          # Check for invalid self-closing (excluding void elements and comments)
+          # This regex looks for: <tagname /> where tagname is NOT a void element
+          if grep -rn '<\(div\|span\|script\|style\|p\|h[1-6]\|section\|article\|header\|footer\|main\|nav\|aside\|button\|form\|label\|select\|textarea\|table\|tr\|td\|th\|ul\|ol\|li\|a\) */>' src/ --include="*.svelte" --include="*.html"; then
+            echo "❌ VIOLATION: Found self-closing non-void HTML element"
+            echo "See: HTML_LIVING_STANDARD.md"
+            echo "Example: <div /> should be <div></div>"
+            exit 1
+          fi
+
+          echo "✅ No invalid self-closing tags found"
+
+      - name: Check for TypeScript violations
+        run: |
+          echo "🔍 Checking for TypeScript violations..."
+
+          # Check for 'any' type (case-sensitive, whole word)
+          if grep -rn '\bany\b' src/ --include="*.ts" --include="*.svelte" | grep -v "// @ts-expect-error"; then
+            echo "❌ VIOLATION: Found 'any' type - Use 'unknown' with type narrowing instead"
+            echo "See: SVELTE5_STANDARDS.md"
+            exit 1
+          fi
+
+          # Check for @ts-ignore (only @ts-expect-error allowed)
+          if grep -rn '@ts-ignore' src/ --include="*.ts" --include="*.svelte"; then
+            echo "❌ VIOLATION: Found @ts-ignore - Use @ts-expect-error with justification instead"
+            echo "See: SVELTE5_STANDARDS.md"
+            exit 1
+          fi
+
+          echo "✅ No TypeScript violations found"
+
+      - name: Check for Node.js imports in client/edge code
+        run: |
+          echo "🔍 Checking for Node.js imports..."
+
+          # Check for Node built-ins (except in server files)
+          if grep -rn "from ['\"]fs['\"]\\|from ['\"]path['\"]\\|from ['\"]process['\"]" src/ --include="*.ts" --include="*.svelte" | grep -v "src/lib/server" | grep -v ".server."; then
+            echo "❌ VIOLATION: Found Node.js imports in non-server code"
+            echo "See: ARCHITECTURE.md - Edge-safe only"
+            exit 1
+          fi
+
+          echo "✅ No Node.js imports in client code"
+
+  # Job 2: Type Checking (Parallel with lint)
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    needs: governance # Only run after governance passes
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run type check
+        run: npm run check
+
+  # Job 3: Linting (Parallel with typecheck)
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    needs: governance
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+  # Job 4: Unit Tests (Parallel with typecheck/lint)
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: governance
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Upload test coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-coverage
+          path: coverage/
+          if-no-files-found: ignore
+
+  # Job 5: Build (Only runs after all checks pass)
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [typecheck, lint, test]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: .svelte-kit/cloudflare/
+          retention-days: 7
+
+  # Job 6: Summary (Always runs)
+  summary:
+    name: Quality Gate Summary
+    runs-on: ubuntu-latest
+    needs: [governance, typecheck, lint, test, build]
+    if: always()
+    steps:
+      - name: Check all jobs
+        run: |
+          echo "## Quality Gate Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.governance.result }}" = "success" ]; then
+            echo "✅ Governance checks passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Governance checks failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.typecheck.result }}" = "success" ]; then
+            echo "✅ Type checking passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Type checking failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.lint.result }}" = "success" ]; then
+            echo "✅ Linting passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Linting failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.test.result }}" = "success" ]; then
+            echo "✅ Tests passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Tests failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.build.result }}" = "success" ]; then
+            echo "✅ Build succeeded" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Build failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Fail if any job failed
+        if: |
+          needs.governance.result != 'success' ||
+          needs.typecheck.result != 'success' ||
+          needs.lint.result != 'success' ||
+          needs.test.result != 'success' ||
+          needs.build.result != 'success'
+        run: exit 1

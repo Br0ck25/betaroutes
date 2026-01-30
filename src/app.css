@@ -5,73 +5,73 @@
 
 /* UPDATED: Disable grey tap highlight on mobile */
 html {
-	-webkit-tap-highlight-color: transparent;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Safe area insets for devices with notches (iOS) */
 body {
-	/* older syntax + modern */
-	padding-top: constant(safe-area-inset-top);
-	padding-top: env(safe-area-inset-top);
-	padding-bottom: constant(safe-area-inset-bottom);
-	padding-bottom: env(safe-area-inset-bottom);
+  /* older syntax + modern */
+  padding-top: constant(safe-area-inset-top);
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: constant(safe-area-inset-bottom);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* Logo & image sizing to reduce CLS */
 img {
-	display: block;
-	max-width: 100%;
-	height: auto;
+  display: block;
+  max-width: 100%;
+  height: auto;
 }
 .logo {
-	width: 64px;
-	height: 64px;
+  width: 64px;
+  height: 64px;
 }
 .mobile-logo {
-	width: auto;
-	height: 48px;
+  width: auto;
+  height: 48px;
 }
 .sidebar-logo {
-	width: auto;
-	height: 64px;
+  width: auto;
+  height: 64px;
 }
 .footer-logo {
-	width: 96px;
-	height: 40px;
-	object-fit: contain;
+  width: 96px;
+  height: 40px;
+  object-fit: contain;
 }
 a,
 .btn {
-	min-height: 44px;
-	min-width: 44px;
-	touch-action: manipulation;
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
 }
 
 /* Ensure fast taps on mobile for common interactive elements */
 input,
 textarea,
 select {
-	-webkit-tap-highlight-color: transparent;
+  -webkit-tap-highlight-color: transparent;
 }
 /* Ensure selects never expand past their container and truncate long labels */
 select {
-	min-width: 0;
-	max-width: 100%;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 input:focus,
 textarea:focus,
 select:focus {
-	outline: none;
-	border-color: #ff7f50;
+  outline: none;
+  border-color: #ff7f50;
 }
 
 /* Mobile: avoid forcing full viewport height so short content doesn't leave large gaps above bottom nav */
 @media (max-width: 640px) {
-	.min-h-dvh {
-		min-height: auto !important;
-	}
+  .min-h-dvh {
+    min-height: auto !important;
+  }
 }

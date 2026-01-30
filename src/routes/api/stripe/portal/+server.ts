@@ -6,39 +6,39 @@ import { getEnv, safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
 
 export async function POST({ locals, url, platform }) {
-	const currentUser = locals.user as Record<string, unknown> | undefined;
-	const userId =
-		typeof currentUser?.['id'] === 'string' ? (currentUser['id'] as string) : undefined;
+  const currentUser = locals.user as Record<string, unknown> | undefined;
+  const userId =
+    typeof currentUser?.['id'] === 'string' ? (currentUser['id'] as string) : undefined;
 
-	if (!userId) {
-		throw error(401, 'Unauthorized');
-	}
+  if (!userId) {
+    throw error(401, 'Unauthorized');
+  }
 
-	const env = getEnv(platform);
-	const usersKV = safeKV(env, 'BETA_USERS_KV');
-	if (!usersKV) {
-		throw error(500, 'Service unavailable');
-	}
+  const env = getEnv(platform);
+  const usersKV = safeKV(env, 'BETA_USERS_KV');
+  if (!usersKV) {
+    throw error(500, 'Service unavailable');
+  }
 
-	try {
-		// Fetch full user record to get Stripe Customer ID
-		const user = await findUserById(usersKV, userId);
+  try {
+    // Fetch full user record to get Stripe Customer ID
+    const user = await findUserById(usersKV, userId);
 
-		if (!user?.stripeCustomerId) {
-			throw error(400, 'No billing account found. Please upgrade first.');
-		}
+    if (!user?.stripeCustomerId) {
+      throw error(400, 'No billing account found. Please upgrade first.');
+    }
 
-		const stripe = getStripe();
-		const session = await stripe.billingPortal.sessions.create({
-			customer: user.stripeCustomerId,
-			return_url: `${url.origin}/dashboard/settings?portal=success`
-		});
+    const stripe = getStripe();
+    const session = await stripe.billingPortal.sessions.create({
+      customer: user.stripeCustomerId,
+      return_url: `${url.origin}/dashboard/settings?portal=success`
+    });
 
-		return json({ url: session.url });
-	} catch (err: unknown) {
-		const message = err instanceof Error ? err.message : String(err);
-		log.error('Stripe Portal Error', { message });
-		if (typeof (err as { status?: unknown })?.status === 'number') throw err; // Re-throw SvelteKit errors
-		throw error(500, 'Failed to create portal session');
-	}
+    return json({ url: session.url });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.error('Stripe Portal Error', { message });
+    if (typeof (err as { status?: unknown })?.status === 'number') throw err; // Re-throw SvelteKit errors
+    throw error(500, 'Failed to create portal session');
+  }
 }

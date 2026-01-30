@@ -1,1871 +1,1891 @@
 <script lang="ts">
-	import { expenses, isLoading as expensesLoading } from '$lib/stores/expenses';
-	import { trips, isLoading as tripsLoading } from '$lib/stores/trips';
-	import { userSettings } from '$lib/stores/userSettings';
-	import { user } from '$lib/stores/auth';
-	import { toasts } from '$lib/stores/toast';
-	import Modal from '$lib/components/ui/Modal.svelte';
-	import Skeleton from '$lib/components/ui/Skeleton.svelte';
-	import { goto, invalidateAll } from '$app/navigation';
-	import { resolve } from '$app/paths';
-	import { page } from '$app/stores';
-	import { onDestroy } from 'svelte';
-	import { SvelteSet } from '$lib/utils/svelte-reactivity';
-	import type { PageData } from './$types';
-
-	export let data: PageData;
-
-	// [!code fix] HYDRATION
-	$: if (data.expenses) {
-		const normalize = (records: any[]) =>
-			records.map((r) => ({ ...r, syncStatus: (r as any).syncStatus ?? 'synced' }));
-		const normalized = normalize(data.expenses);
-
-		// eslint-disable-next-line svelte/require-store-reactive-access
-		if ($user?.id && 'hydrate' in expenses) {
-			expenses.hydrate(normalized, $user.id);
-		} else {
-			expenses.set(normalized);
-		}
-	}
-
-	// --- STATE ---
-	let searchQuery = '';
-	let sortBy = 'date';
-	let sortOrder = 'desc';
-	let filterCategory = 'all';
-
-	import { SvelteDate } from '$lib/utils/svelte-reactivity';
-	const _now = SvelteDate.now();
-	function _fmtInput(d: SvelteDate) {
-		return d.toInput();
-	}
-	let startDate = _fmtInput(SvelteDate.from(new Date(_now.getFullYear(), _now.getMonth(), 1)));
-	let endDate = _fmtInput(SvelteDate.from(new Date(_now.getFullYear(), _now.getMonth() + 1, 0)));
-
-	let lastHadSelections = false;
-
-	// Pagination
-	let currentPage = 1;
-	const itemsPerPage = 20;
-
-	// Selection State
-	let selectedExpenses = new SvelteSet<string>();
-
-	// Pagination state
-	let visibleExpenses: any[] = [];
-	$: totalPages = Math.ceil(filteredExpenses.length / itemsPerPage);
-	$: visibleExpenses = filteredExpenses.slice(
-		(currentPage - 1) * itemsPerPage,
-		currentPage * itemsPerPage
-	);
-
-	$: if (typeof document !== 'undefined') {
-		const hasSelections = selectedExpenses.size > 0;
-		if (hasSelections !== lastHadSelections) {
-			if (hasSelections) {
-				document.body.classList.add('has-selections');
-			} else {
-				document.body.classList.remove('has-selections');
-			}
-			lastHadSelections = hasSelections;
-		}
-	}
-
-	// Clean up body class when component is destroyed
-	onDestroy(() => {
-		if (typeof document !== 'undefined') {
-			document.body.classList.remove('has-selections');
-		}
-	});
-
-	// Use categories from settings, default to basic if empty
-	$: categories =
-		$userSettings.expenseCategories?.length > 0
-			? $userSettings.expenseCategories
-			: ['maintenance', 'insurance', 'supplies', 'other'];
-
-	// Which sub-category tab is active in the modal
-	let activeCategoryType: 'maintenance' | 'supplies' | 'expenses' = 'expenses';
-
-	// Derive the active list depending on the selected tab
-	$: activeCategories =
-		activeCategoryType === 'maintenance'
-			? $userSettings.maintenanceCategories || ['oil change', 'repair']
-			: activeCategoryType === 'supplies'
-				? $userSettings.supplyCategories || ['water', 'snacks']
-				: $userSettings.expenseCategories || ['maintenance', 'insurance', 'supplies', 'other'];
-
-	// --- MODAL STATE (Only for Categories now) ---
-	let isManageCategoriesOpen = false;
-
-	function openManageCategories(): void {
-		isManageCategoriesOpen = true;
-		requestAnimationFrame(() => {
-			try {
-				const dlg = document.querySelector('dialog');
-				if (dlg && 'showModal' in dlg && !(dlg as HTMLDialogElement).open) {
-					(dlg as HTMLDialogElement).showModal();
-				}
-			} catch {
-				/* ignore */
-			}
-		});
-	}
-	let newCategoryName = '';
-
-	// --- DERIVE TRIP EXPENSES ---
-	$: tripExpenses = $trips.flatMap((trip) => {
-		const items = [];
-		const date =
-			trip.date || (typeof trip.createdAt === 'string' ? trip.createdAt.split('T')[0] : '');
-
-		// 1. Fuel
-		if (trip.fuelCost && trip.fuelCost > 0) {
-			items.push({
-				id: `trip-fuel-${trip.id}`,
-				date: date,
-				category: 'fuel',
-				amount: trip.fuelCost,
-				description: 'Fuel',
-				taxDeductible: !!(trip as any).fuelTaxDeductible,
-				source: 'trip',
-				tripId: trip.id
-			});
-		}
-
-		// 2. Maintenance Items
-		const maint = (trip as any).maintenanceItems || [];
-		if (maint.length) {
-			maint.forEach((item: any, i: number) => {
-				items.push({
-					id: `trip-maint-${trip.id}-${i}`,
-					date: date,
-					category: 'maintenance',
-					amount: item.cost,
-					description: `${item.type}`,
-					taxDeductible: !!item.taxDeductible,
-					source: 'trip',
-					tripId: trip.id
-				});
-			});
-		}
-
-		// 3. Supply Items
-		const supplies = (trip as any).supplyItems || (trip as any).suppliesItems || [];
-		if (supplies.length) {
-			supplies.forEach((item: any, i: number) => {
-				items.push({
-					id: `trip-supply-${trip.id}-${i}`,
-					date: date,
-					category: 'supplies',
-					amount: item.cost,
-					description: `${item.type}`,
-					taxDeductible: !!item.taxDeductible,
-					source: 'trip',
-					tripId: trip.id
-				});
-			});
-		}
-
-		return items;
-	});
-
-	// --- COMBINE & FILTER ---
-	$: allExpenses = [...$expenses, ...tripExpenses];
-
-	// Reset selection when filters change
-	$: if (searchQuery || sortBy || sortOrder || filterCategory || startDate || endDate) {
-		selectedExpenses = new SvelteSet();
-		currentPage = 1;
-	}
-
-	$: filteredExpenses = allExpenses
-		.filter((item) => {
-			// Search
-			const query = searchQuery.toLowerCase();
-			const matchesSearch =
-				!query ||
-				(item.description && item.description.toLowerCase().includes(query)) ||
-				item.amount.toString().includes(query) ||
-				((item as any).source === 'trip' && 'trip'.includes(query)) ||
-				(item.category && item.category.toLowerCase().includes(query)) ||
-				((item as any).tags &&
-					Array.isArray((item as any).tags) &&
-					(item as any).tags.some((tag: string) => tag.toLowerCase().includes(query))) ||
-				((item as any).taxDeductible &&
-					('tax deductible'.includes(query) ||
-						'deductible'.includes(query) ||
-						'tax'.includes(query)));
-
-			if (!matchesSearch) return false;
-
-			// Category
-			if (filterCategory !== 'all' && item.category !== filterCategory) return false;
-
-			// Date Range
-			if (item.date) {
-				const itemDate = SvelteDate.from(item.date).startOfDay();
-
-				if (startDate) {
-					const start = SvelteDate.from(startDate).startOfDay();
-					if (itemDate.getTime() < start.getTime()) return false;
-				}
-				if (endDate) {
-					const end = SvelteDate.from(endDate).startOfDay();
-					if (itemDate.getTime() > end.getTime()) return false;
-				}
-			}
-
-			return true;
-		})
-		.sort((a, b) => {
-			let aVal, bVal;
-			if (sortBy === 'date') {
-				aVal = SvelteDate.from(a.date || 0).getTime();
-				bVal = SvelteDate.from(b.date || 0).getTime();
-			} else {
-				aVal = a.amount;
-				bVal = b.amount;
-			}
-			return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
-		});
-
-	$: totalAmount = filteredExpenses.reduce((sum, item) => sum + (item.amount || 0), 0);
-	$: loading = $expensesLoading || $tripsLoading;
-	$: allSelected = filteredExpenses.length > 0 && selectedExpenses.size === filteredExpenses.length;
-
-	// --- ACTIONS ---
-	function goToAdd() {
-		goto(resolve('/dashboard/expenses/new'));
-	}
-
-	function editExpense(expense: any) {
-		if ((expense as any).source === 'trip') {
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
-			goto(resolve('/dashboard/trips') + '?id=' + encodeURIComponent(String(expense.tripId)));
-		} else {
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
-			goto(resolve('/dashboard/expenses/edit/') + encodeURIComponent(String(expense.id)));
-		}
-	}
-
-	function viewTrash() {
-		// eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + query param
-		goto(resolve('/dashboard/trash') + '?type=expenses');
-	}
-
-	async function deleteExpense(id: string, e?: MouseEvent) {
-		if (e) e.stopPropagation();
-		if (!confirm('Move this expense to trash? You can restore it later.')) return;
-
-		// Check if it's a trip log
-		if (id.startsWith('trip-')) {
-			toasts.error('Cannot delete Trips here. Delete the Trip instead.');
-			return;
-		}
-
-		const currentUser = $page.data['user'] || $user;
-		// [!code fix] Strictly use ID.
-		const userId = currentUser?.id || localStorage.getItem('offline_user_id');
-
-		if (userId) {
-			try {
-				await expenses.deleteExpense(id, userId);
-				toasts.success('Expense moved to trash');
-				if (selectedExpenses.has(id)) {
-					selectedExpenses = selectedExpenses.delete(id);
-				}
-				// [!code fix] Refresh page data to ensure server sync
-				await invalidateAll();
-			} catch (err) {
-				console.error(err);
-				toasts.error('Failed to move to trash');
-			}
-		}
-	}
-
-	// --- SELECTION LOGIC ---
-	function toggleSelection(id: string) {
-		selectedExpenses = selectedExpenses.has(id)
-			? selectedExpenses.delete(id)
-			: selectedExpenses.add(id);
-	}
-
-	function toggleSelectAll() {
-		if (allSelected) selectedExpenses = new SvelteSet();
-		else selectedExpenses = new SvelteSet(filteredExpenses.map((e) => e.id));
-	}
-
-	function changePage(newPage: number) {
-		if (newPage >= 1 && newPage <= totalPages) {
-			currentPage = newPage;
-		}
-	}
-
-	async function deleteSelected() {
-		const ids = Array.from(selectedExpenses);
-		const manualExpenses = ids.filter((id) => !id.startsWith('trip-'));
-		const tripLogs = ids.length - manualExpenses.length;
-
-		if (manualExpenses.length === 0 && tripLogs > 0) {
-			toasts.error(`Cannot delete ${tripLogs} Trip Logs. Edit them in Trips.`);
-			return;
-		}
-
-		if (
-			!confirm(
-				`Move ${manualExpenses.length} expenses to trash? ${tripLogs > 0 ? `(${tripLogs} trips will be skipped)` : ''}`
-			)
-		)
-			return;
-
-		const currentUser = $page.data['user'] || $user;
-		// [!code fix] Strictly use ID.
-		const userId = currentUser?.id || localStorage.getItem('offline_user_id');
-
-		if (!userId) return;
-
-		let successCount = 0;
-		for (const id of manualExpenses) {
-			try {
-				await expenses.deleteExpense(id, userId);
-				successCount++;
-			} catch (err) {
-				console.error(`Failed to delete ${id}`, err);
-			}
-		}
-
-		toasts.success(`Moved ${successCount} expenses to trash.`);
-		selectedExpenses = new SvelteSet();
-		// [!code fix] Refresh page data to ensure server sync
-		await invalidateAll();
-	}
-
-	function isTripSource(item: any): boolean {
-		return (item as any)?.source === 'trip';
-	}
-
-	function exportSelected() {
-		const selectedData = filteredExpenses.filter((e) => selectedExpenses.has(e.id));
-		if (selectedData.length === 0) return;
-
-		const headers = ['Date', 'Category', 'Amount', 'Description', 'Source'];
-		const rows = selectedData.map((e) =>
-			[
-				e.date,
-				e.category,
-				e.amount,
-				`"${(e.description || '').replace(/"/g, '""')}"`,
-				isTripSource(e) ? 'Trip' : 'Manual'
-			].join(',')
-		);
-
-		const csvContent = [headers.join(','), ...rows].join('\n');
-		const blob = new Blob([csvContent], { type: 'text/csv' });
-		const url = window.URL.createObjectURL(blob);
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = `expenses_export_${new Date().toISOString().split('T')[0]}.csv`;
-		a.click();
-
-		toasts.success(`Exported ${selectedData.length} items.`);
-		selectedExpenses = new SvelteSet();
-	}
-
-	// --- CATEGORY MANAGEMENT ---
-	async function updateCategories(newCategories: string[]) {
-		const updateData: any = {};
-		if (activeCategoryType === 'maintenance') {
-			userSettings.update((s) => ({ ...s, maintenanceCategories: newCategories }));
-			updateData.maintenanceCategories = newCategories;
-		} else if (activeCategoryType === 'supplies') {
-			userSettings.update((s) => ({ ...s, supplyCategories: newCategories }));
-			updateData.supplyCategories = newCategories;
-		} else {
-			userSettings.update((s) => ({ ...s, expenseCategories: newCategories }));
-			updateData.expenseCategories = newCategories;
-		}
-
-		try {
-			const { saveSettings } = await import('../settings/lib/save-settings');
-			const result = await saveSettings(updateData);
-			if (!result.ok) throw new Error(result.error);
-		} catch (e) {
-			console.error('Failed to sync settings', e);
-			toasts.error('Saved locally, but sync failed');
-		}
-	}
-
-	async function addCategory() {
-		if (!newCategoryName.trim()) return;
-		const val = newCategoryName.trim().toLowerCase();
-		if (activeCategories.includes(val)) {
-			toasts.error('Category already exists');
-			return;
-		}
-		const updated = [...activeCategories, val];
-		await updateCategories(updated);
-		newCategoryName = '';
-		toasts.success('Category added');
-	}
-
-	async function removeCategory(cat: string) {
-		if (!confirm(`Delete "${cat}" category? Existing expenses will keep this category.`)) return;
-		const updated = activeCategories.filter((c) => c !== cat);
-		await updateCategories(updated);
-		toasts.success('Category removed');
-	}
-
-	// --- HELPERS ---
-	function formatCurrency(amount: number) {
-		return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
-	}
-
-	function formatDate(dateStr: string) {
-		if (!dateStr) return '';
-		return new Date(dateStr).toLocaleDateString('en-US', {
-			month: 'short',
-			day: 'numeric',
-			year: 'numeric',
-			timeZone: 'UTC'
-		});
-	}
-
-	function getCategoryLabel(cat: string) {
-		return cat.charAt(0).toUpperCase() + cat.slice(1);
-	}
-
-	function getCategoryColor(cat: string) {
-		if (cat === 'fuel') return 'text-red-600 bg-red-50 border-red-200';
-		const colors = [
-			'text-blue-600 bg-blue-50 border-blue-200',
-			'text-purple-600 bg-purple-50 border-purple-200',
-			'text-orange-600 bg-orange-50 border-orange-200',
-			'text-green-600 bg-green-50 border-green-200',
-			'text-pink-600 bg-pink-50 border-pink-200',
-			'text-indigo-600 bg-indigo-50 border-indigo-200'
-		];
-		if (cat === 'maintenance') return colors[0];
-		if (cat === 'insurance') return colors[1];
-		if (cat === 'supplies') return colors[2];
-		const sum = cat.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-		return colors[sum % colors.length];
-	}
-
-	// When an expense description is empty, show a parent category label (Maintenance/Supplies/etc.)
-	function getFallbackLabel(expense: any) {
-		const cat = (expense.category || '').toString().toLowerCase();
-		// maintenance categories from settings or defaults
-		const maintenance = (
-			$userSettings.maintenanceCategories || [
-				'oil change',
-				'tire rotation',
-				'brake service',
-				'filter replacement'
-			]
-		).map((s) => s.toLowerCase());
-		if (maintenance.includes(cat)) return 'Maintenance';
-
-		const supplies = (
-			$userSettings.supplyCategories || ['concrete', 'poles', 'wire', 'tools', 'equipment rental']
-		).map((s) => s.toLowerCase());
-		if (supplies.includes(cat)) return 'Supplies';
-
-		if (cat === 'fuel') return 'Fuel';
-
-		// If the category is one of the top-level expense categories, show it capitalized
-		const expCats = (
-			$userSettings.expenseCategories || ['maintenance', 'insurance', 'supplies', 'other']
-		).map((s) => s.toLowerCase());
-		if (expCats.includes(cat)) return getCategoryLabel(cat);
-
-		// default fallback: capitalized category (or 'Expenses')
-		return getCategoryLabel(expense.category || 'expenses');
-	}
-
-	// Swipe Action
-	function swipeable(
-		node: HTMLElement,
-		{
-			onEdit,
-			onDelete,
-			isReadOnly
-		}: { onEdit: () => void; onDelete: (e: any) => void; isReadOnly: boolean }
-	) {
-		if (isReadOnly) return;
-		let startX = 0;
-		let x = 0;
-		let swiping = false;
-
-		function handleTouchStart(e: TouchEvent) {
-			const touch = e.touches?.[0];
-			if (!touch) return;
-			startX = touch.clientX;
-			x = 0;
-			node.style.transition = 'none';
-		}
-
-		function handleTouchMove(e: TouchEvent) {
-			const touch = e.touches?.[0];
-			if (!touch) return;
-			const dx = touch.clientX - startX;
-			swiping = true;
-			if (dx < -120) x = -120;
-			else if (dx > 120) x = 120;
-			else x = dx;
-			node.style.transform = `translateX(${x}px)`;
-			if (Math.abs(x) > 10) e.preventDefault();
-		}
-
-		function handleTouchEnd() {
-			if (!swiping) return;
-			swiping = false;
-			node.style.transition = 'transform 0.2s ease-out';
-			if (x < -80) onDelete({ stopPropagation: () => {} });
-			else if (x > 80) onEdit();
-			node.style.transform = 'translateX(0)';
-		}
-
-		node.addEventListener('touchstart', handleTouchStart, { passive: false });
-		node.addEventListener('touchmove', handleTouchMove, { passive: false });
-		node.addEventListener('touchend', handleTouchEnd);
-		return {
-			destroy() {
-				node.removeEventListener('touchstart', handleTouchStart);
-				node.removeEventListener('touchmove', handleTouchMove);
-				node.removeEventListener('touchend', handleTouchEnd);
-			}
-		};
-	}
+  import { goto, invalidateAll } from '$app/navigation';
+  import { resolve } from '$app/paths';
+  import { page } from '$app/stores';
+  import Modal from '$lib/components/ui/Modal.svelte';
+  import Skeleton from '$lib/components/ui/Skeleton.svelte';
+  import { user } from '$lib/stores/auth';
+  import { expenses, isLoading as expensesLoading } from '$lib/stores/expenses';
+  import { toasts } from '$lib/stores/toast';
+  import { trips, isLoading as tripsLoading } from '$lib/stores/trips';
+  import { userSettings } from '$lib/stores/userSettings';
+  import { SvelteSet } from '$lib/utils/svelte-reactivity';
+  import { onDestroy } from 'svelte';
+  import { createBubbler, run, stopPropagation } from 'svelte/legacy';
+  import type { PageData } from './$types';
+
+  // Event bubbler for nested clicks
+  const bubble = createBubbler();
+
+  // --- STATE ---
+  let searchQuery = $state('');
+  let sortBy = $state('date');
+  let sortOrder = $state('desc');
+  let filterCategory = $state('all');
+
+  import { SvelteDate } from '$lib/utils/svelte-reactivity';
+  interface Props {
+    data: PageData;
+  }
+
+  let { data }: Props = $props();
+  const _now = SvelteDate.now();
+  function _fmtInput(d: SvelteDate) {
+    return d.toInput();
+  }
+  let startDate = $state(
+    _fmtInput(SvelteDate.from(new Date(_now.getFullYear(), _now.getMonth(), 1)))
+  );
+  let endDate = $state(
+    _fmtInput(SvelteDate.from(new Date(_now.getFullYear(), _now.getMonth() + 1, 0)))
+  );
+
+  let lastHadSelections = $state(false);
+
+  // Pagination
+  let currentPage = $state(1);
+  const itemsPerPage = 20;
+
+  // Selection State
+  let selectedExpenses = $state(new SvelteSet<string>());
+
+  // Pagination state
+  let visibleExpenses: any[] = $state([]);
+
+  // Clean up body class when component is destroyed
+  onDestroy(() => {
+    if (typeof document !== 'undefined') {
+      document.body.classList.remove('has-selections');
+    }
+  });
+
+  // Which sub-category tab is active in the modal
+  let activeCategoryType: 'maintenance' | 'supplies' | 'expenses' = $state('expenses');
+
+  // --- MODAL STATE (Only for Categories now) ---
+  let isManageCategoriesOpen = $state(false);
+
+  function openManageCategories(): void {
+    isManageCategoriesOpen = true;
+    requestAnimationFrame(() => {
+      try {
+        const dlg = document.querySelector('dialog');
+        if (dlg && 'showModal' in dlg && !(dlg as HTMLDialogElement).open) {
+          (dlg as HTMLDialogElement).showModal();
+        }
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+  let newCategoryName = $state('');
+
+  // --- ACTIONS ---
+  function goToAdd() {
+    goto(resolve('/dashboard/expenses/new'));
+  }
+
+  function editExpense(expense: any) {
+    if ((expense as any).source === 'trip') {
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
+      goto(resolve('/dashboard/trips') + '?id=' + encodeURIComponent(String(expense.tripId)));
+    } else {
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
+      goto(resolve('/dashboard/expenses/edit/') + encodeURIComponent(String(expense.id)));
+    }
+  }
+
+  function viewTrash() {
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + query param
+    goto(resolve('/dashboard/trash') + '?type=expenses');
+  }
+
+  async function deleteExpense(id: string, e?: MouseEvent) {
+    if (e) e.stopPropagation();
+    if (!confirm('Move this expense to trash? You can restore it later.')) return;
+
+    // Check if it's a trip log
+    if (id.startsWith('trip-')) {
+      toasts.error('Cannot delete Trips here. Delete the Trip instead.');
+      return;
+    }
+
+    const currentUser = $page.data['user'] || $user;
+    // [!code fix] Strictly use ID.
+    const userId = currentUser?.id || localStorage.getItem('offline_user_id');
+
+    if (userId) {
+      try {
+        await expenses.deleteExpense(id, userId);
+        toasts.success('Expense moved to trash');
+        if (selectedExpenses.has(id)) {
+          selectedExpenses = selectedExpenses.delete(id);
+        }
+        // [!code fix] Refresh page data to ensure server sync
+        await invalidateAll();
+      } catch (err) {
+        console.error(err);
+        toasts.error('Failed to move to trash');
+      }
+    }
+  }
+
+  // --- SELECTION LOGIC ---
+  function toggleSelection(id: string) {
+    selectedExpenses = selectedExpenses.has(id)
+      ? selectedExpenses.delete(id)
+      : selectedExpenses.add(id);
+  }
+
+  function toggleSelectAll() {
+    if (allSelected) selectedExpenses = new SvelteSet();
+    else selectedExpenses = new SvelteSet(filteredExpenses.map((e) => e.id));
+  }
+
+  function changePage(newPage: number) {
+    if (newPage >= 1 && newPage <= totalPages) {
+      currentPage = newPage;
+    }
+  }
+
+  async function deleteSelected() {
+    const ids = Array.from(selectedExpenses);
+    const manualExpenses = ids.filter((id) => !id.startsWith('trip-'));
+    const tripLogs = ids.length - manualExpenses.length;
+
+    if (manualExpenses.length === 0 && tripLogs > 0) {
+      toasts.error(`Cannot delete ${tripLogs} Trip Logs. Edit them in Trips.`);
+      return;
+    }
+
+    if (
+      !confirm(
+        `Move ${manualExpenses.length} expenses to trash? ${tripLogs > 0 ? `(${tripLogs} trips will be skipped)` : ''}`
+      )
+    )
+      return;
+
+    const currentUser = $page.data['user'] || $user;
+    // [!code fix] Strictly use ID.
+    const userId = currentUser?.id || localStorage.getItem('offline_user_id');
+
+    if (!userId) return;
+
+    let successCount = 0;
+    for (const id of manualExpenses) {
+      try {
+        await expenses.deleteExpense(id, userId);
+        successCount++;
+      } catch (err) {
+        console.error(`Failed to delete ${id}`, err);
+      }
+    }
+
+    toasts.success(`Moved ${successCount} expenses to trash.`);
+    selectedExpenses = new SvelteSet();
+    // [!code fix] Refresh page data to ensure server sync
+    await invalidateAll();
+  }
+
+  function isTripSource(item: any): boolean {
+    return (item as any)?.source === 'trip';
+  }
+
+  function exportSelected() {
+    const selectedData = filteredExpenses.filter((e) => selectedExpenses.has(e.id));
+    if (selectedData.length === 0) return;
+
+    const headers = ['Date', 'Category', 'Amount', 'Description', 'Source'];
+    const rows = selectedData.map((e) =>
+      [
+        e.date,
+        e.category,
+        e.amount,
+        `"${(e.description || '').replace(/"/g, '""')}"`,
+        isTripSource(e) ? 'Trip' : 'Manual'
+      ].join(',')
+    );
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `expenses_export_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+
+    toasts.success(`Exported ${selectedData.length} items.`);
+    selectedExpenses = new SvelteSet();
+  }
+
+  // --- CATEGORY MANAGEMENT ---
+  async function updateCategories(newCategories: string[]) {
+    const updateData: any = {};
+    if (activeCategoryType === 'maintenance') {
+      userSettings.update((s) => ({ ...s, maintenanceCategories: newCategories }));
+      updateData.maintenanceCategories = newCategories;
+    } else if (activeCategoryType === 'supplies') {
+      userSettings.update((s) => ({ ...s, supplyCategories: newCategories }));
+      updateData.supplyCategories = newCategories;
+    } else {
+      userSettings.update((s) => ({ ...s, expenseCategories: newCategories }));
+      updateData.expenseCategories = newCategories;
+    }
+
+    try {
+      const { saveSettings } = await import('../settings/lib/save-settings');
+      const result = await saveSettings(updateData);
+      if (!result.ok) throw new Error(result.error);
+    } catch (e) {
+      console.error('Failed to sync settings', e);
+      toasts.error('Saved locally, but sync failed');
+    }
+  }
+
+  async function addCategory() {
+    if (!newCategoryName.trim()) return;
+    const val = newCategoryName.trim().toLowerCase();
+    if (activeCategories().includes(val)) {
+      toasts.error('Category already exists');
+      return;
+    }
+    const updated = [...activeCategories(), val];
+    await updateCategories(updated);
+    newCategoryName = '';
+    toasts.success('Category added');
+  }
+
+  async function removeCategory(cat: string) {
+    if (!confirm(`Delete "${cat}" category? Existing expenses will keep this category.`)) return;
+    const updated = activeCategories().filter((c: string) => c !== cat);
+    await updateCategories(updated);
+    toasts.success('Category removed');
+  }
+
+  // --- HELPERS ---
+  function formatCurrency(amount: number) {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+  }
+
+  function formatDate(dateStr: string) {
+    if (!dateStr) return '';
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC'
+    });
+  }
+
+  function getCategoryLabel(cat: string) {
+    return cat.charAt(0).toUpperCase() + cat.slice(1);
+  }
+
+  function getCategoryColor(cat: string) {
+    if (cat === 'fuel') return 'text-red-600 bg-red-50 border-red-200';
+    const colors = [
+      'text-blue-600 bg-blue-50 border-blue-200',
+      'text-purple-600 bg-purple-50 border-purple-200',
+      'text-orange-600 bg-orange-50 border-orange-200',
+      'text-green-600 bg-green-50 border-green-200',
+      'text-pink-600 bg-pink-50 border-pink-200',
+      'text-indigo-600 bg-indigo-50 border-indigo-200'
+    ];
+    if (cat === 'maintenance') return colors[0];
+    if (cat === 'insurance') return colors[1];
+    if (cat === 'supplies') return colors[2];
+    const sum = cat.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return colors[sum % colors.length];
+  }
+
+  // When an expense description is empty, show a parent category label (Maintenance/Supplies/etc.)
+  function getFallbackLabel(expense: any) {
+    const cat = (expense.category || '').toString().toLowerCase();
+    // maintenance categories from settings or defaults
+    const maintenance = (
+      $userSettings.maintenanceCategories || [
+        'oil change',
+        'tire rotation',
+        'brake service',
+        'filter replacement'
+      ]
+    ).map((s) => s.toLowerCase());
+    if (maintenance.includes(cat)) return 'Maintenance';
+
+    const supplies = (
+      $userSettings.supplyCategories || ['concrete', 'poles', 'wire', 'tools', 'equipment rental']
+    ).map((s) => s.toLowerCase());
+    if (supplies.includes(cat)) return 'Supplies';
+
+    if (cat === 'fuel') return 'Fuel';
+
+    // If the category is one of the top-level expense categories, show it capitalized
+    const expCats = (
+      $userSettings.expenseCategories || ['maintenance', 'insurance', 'supplies', 'other']
+    ).map((s) => s.toLowerCase());
+    if (expCats.includes(cat)) return getCategoryLabel(cat);
+
+    // default fallback: capitalized category (or 'Expenses')
+    return getCategoryLabel(expense.category || 'expenses');
+  }
+
+  // Swipe Action
+  function swipeable(
+    node: HTMLElement,
+    {
+      onEdit,
+      onDelete,
+      isReadOnly
+    }: { onEdit: () => void; onDelete: (e: any) => void; isReadOnly: boolean }
+  ) {
+    if (isReadOnly) return;
+    let startX = 0;
+    let x = 0;
+    let swiping = false;
+
+    function handleTouchStart(e: TouchEvent) {
+      const touch = e.touches?.[0];
+      if (!touch) return;
+      startX = touch.clientX;
+      x = 0;
+      node.style.transition = 'none';
+    }
+
+    function handleTouchMove(e: TouchEvent) {
+      const touch = e.touches?.[0];
+      if (!touch) return;
+      const dx = touch.clientX - startX;
+      swiping = true;
+      if (dx < -120) x = -120;
+      else if (dx > 120) x = 120;
+      else x = dx;
+      node.style.transform = `translateX(${x}px)`;
+      if (Math.abs(x) > 10) e.preventDefault();
+    }
+
+    function handleTouchEnd() {
+      if (!swiping) return;
+      swiping = false;
+      node.style.transition = 'transform 0.2s ease-out';
+      if (x < -80) onDelete({ stopPropagation: () => {} });
+      else if (x > 80) onEdit();
+      node.style.transform = 'translateX(0)';
+    }
+
+    node.addEventListener('touchstart', handleTouchStart, { passive: false });
+    node.addEventListener('touchmove', handleTouchMove, { passive: false });
+    node.addEventListener('touchend', handleTouchEnd);
+    return {
+      destroy() {
+        node.removeEventListener('touchstart', handleTouchStart);
+        node.removeEventListener('touchmove', handleTouchMove);
+        node.removeEventListener('touchend', handleTouchEnd);
+      }
+    };
+  }
+  // [!code fix] HYDRATION
+  run(() => {
+    if (data.expenses) {
+      const normalize = (records: any[]) =>
+        records.map((r) => ({ ...r, syncStatus: (r as any).syncStatus ?? 'synced' }));
+      const normalized = normalize(data.expenses);
+
+      // eslint-disable-next-line svelte/require-store-reactive-access
+      if ($user?.id && 'hydrate' in expenses) {
+        expenses.hydrate(normalized, $user.id);
+      } else {
+        expenses.set(normalized);
+      }
+    }
+  });
+  // --- DERIVE TRIP EXPENSES ---
+  let tripExpenses = $derived(
+    $trips.flatMap((trip) => {
+      const items = [];
+      const date =
+        trip.date || (typeof trip.createdAt === 'string' ? trip.createdAt.split('T')[0] : '');
+
+      // 1. Fuel
+      if (trip.fuelCost && trip.fuelCost > 0) {
+        items.push({
+          id: `trip-fuel-${trip.id}`,
+          date: date,
+          category: 'fuel',
+          amount: trip.fuelCost,
+          description: 'Fuel',
+          taxDeductible: !!(trip as any).fuelTaxDeductible,
+          source: 'trip',
+          tripId: trip.id
+        });
+      }
+
+      // 2. Maintenance Items
+      const maint = (trip as any).maintenanceItems || [];
+      if (maint.length) {
+        maint.forEach((item: any, i: number) => {
+          items.push({
+            id: `trip-maint-${trip.id}-${i}`,
+            date: date,
+            category: 'maintenance',
+            amount: item.cost,
+            description: `${item.type}`,
+            taxDeductible: !!item.taxDeductible,
+            source: 'trip',
+            tripId: trip.id
+          });
+        });
+      }
+
+      // 3. Supply Items
+      const supplies = (trip as any).supplyItems || (trip as any).suppliesItems || [];
+      if (supplies.length) {
+        supplies.forEach((item: any, i: number) => {
+          items.push({
+            id: `trip-supply-${trip.id}-${i}`,
+            date: date,
+            category: 'supplies',
+            amount: item.cost,
+            description: `${item.type}`,
+            taxDeductible: !!item.taxDeductible,
+            source: 'trip',
+            tripId: trip.id
+          });
+        });
+      }
+
+      return items;
+    })
+  );
+  // --- COMBINE & FILTER ---
+  let allExpenses = $derived([...$expenses, ...tripExpenses]);
+  let filteredExpenses = $derived(
+    allExpenses
+      .filter((item) => {
+        // Search
+        const query = searchQuery.toLowerCase();
+        const matchesSearch =
+          !query ||
+          (item.description && item.description.toLowerCase().includes(query)) ||
+          item.amount.toString().includes(query) ||
+          ((item as any).source === 'trip' && 'trip'.includes(query)) ||
+          (item.category && item.category.toLowerCase().includes(query)) ||
+          ((item as any).tags &&
+            Array.isArray((item as any).tags) &&
+            (item as any).tags.some((tag: string) => tag.toLowerCase().includes(query))) ||
+          ((item as any).taxDeductible &&
+            ('tax deductible'.includes(query) ||
+              'deductible'.includes(query) ||
+              'tax'.includes(query)));
+
+        if (!matchesSearch) return false;
+
+        // Category
+        if (filterCategory !== 'all' && item.category !== filterCategory) return false;
+
+        // Date Range
+        if (item.date) {
+          const itemDate = SvelteDate.from(item.date).startOfDay();
+
+          if (startDate) {
+            const start = SvelteDate.from(startDate).startOfDay();
+            if (itemDate.getTime() < start.getTime()) return false;
+          }
+          if (endDate) {
+            const end = SvelteDate.from(endDate).startOfDay();
+            if (itemDate.getTime() > end.getTime()) return false;
+          }
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        let aVal, bVal;
+        if (sortBy === 'date') {
+          aVal = SvelteDate.from(a.date || 0).getTime();
+          bVal = SvelteDate.from(b.date || 0).getTime();
+        } else {
+          aVal = a.amount;
+          bVal = b.amount;
+        }
+        return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
+      })
+  );
+  let totalPages = $derived(Math.ceil(filteredExpenses.length / itemsPerPage));
+  // Reset selection when filters change
+  run(() => {
+    if (searchQuery || sortBy || sortOrder || filterCategory || startDate || endDate) {
+      selectedExpenses = new SvelteSet();
+      currentPage = 1;
+    }
+  });
+  run(() => {
+    visibleExpenses = filteredExpenses.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+    );
+  });
+  run(() => {
+    if (typeof document !== 'undefined') {
+      const hasSelections = selectedExpenses.size > 0;
+      if (hasSelections !== lastHadSelections) {
+        if (hasSelections) {
+          document.body.classList.add('has-selections');
+        } else {
+          document.body.classList.remove('has-selections');
+        }
+        lastHadSelections = hasSelections;
+      }
+    }
+  });
+  // Use categories from settings, default to basic if empty
+  let categories: () => string[] = $derived(() =>
+    $userSettings.expenseCategories?.length > 0
+      ? $userSettings.expenseCategories
+      : ['maintenance', 'insurance', 'supplies', 'other']
+  );
+  // Derive the active list depending on the selected tab
+  let activeCategories: () => string[] = $derived(() =>
+    activeCategoryType === 'maintenance'
+      ? $userSettings.maintenanceCategories || ['oil change', 'repair']
+      : activeCategoryType === 'supplies'
+        ? $userSettings.supplyCategories || ['water', 'snacks']
+        : $userSettings.expenseCategories || ['maintenance', 'insurance', 'supplies', 'other']
+  );
+  let totalAmount = $derived(filteredExpenses.reduce((sum, item) => sum + (item.amount || 0), 0));
+  let loading = $derived($expensesLoading || $tripsLoading);
+  let allSelected = $derived(
+    filteredExpenses.length > 0 && selectedExpenses.size === filteredExpenses.length
+  );
 </script>
 
 <svelte:head>
-	<title>Expenses - Go Route Yourself</title>
+  <title>Expenses - Go Route Yourself</title>
 </svelte:head>
 
 <div class="page-container">
-	<div class="page-header">
-		<div class="header-text">
-			<h1 class="page-title">Expenses</h1>
-			<p class="page-subtitle">Track maintenance, supplies, and other costs</p>
-		</div>
+  <div class="page-header">
+    <div class="header-text">
+      <h1 class="page-title">Expenses</h1>
+      <p class="page-subtitle">Track maintenance, supplies, and other costs</p>
+    </div>
 
-		<div class="header-actions">
-			<button class="btn-secondary" on:click={viewTrash} aria-label="View Trash">
-				<svg
-					width="20"
-					height="20"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				>
-					<polyline points="3 6 5 6 21 6"></polyline>
-					<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
-					></path>
-				</svg>
-			</button>
+    <div class="header-actions">
+      <button class="btn-secondary" onclick={viewTrash} aria-label="View Trash">
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+          ></path>
+        </svg>
+      </button>
 
-			<button class="btn-secondary" on:click={openManageCategories} aria-label="Expense Settings">
-				<svg
-					width="20"
-					height="20"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					><path
-						d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.39a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
-					/><circle cx="12" cy="12" r="3" /></svg
-				>
-			</button>
+      <button class="btn-secondary" onclick={openManageCategories} aria-label="Expense Settings">
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          ><path
+            d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.39a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
+          /><circle cx="12" cy="12" r="3" /></svg
+        >
+      </button>
 
-			<button class="btn-primary" on:click={goToAdd}>
-				<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-					<path
-						d="M10 4V16M4 10H16"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					/>
-				</svg>
-				New Expense
-			</button>
-		</div>
-	</div>
+      <button class="btn-primary" onclick={goToAdd}>
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path
+            d="M10 4V16M4 10H16"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        New Expense
+      </button>
+    </div>
+  </div>
 
-	<div class="stats-summary">
-		<div class="summary-card">
-			<div class="summary-label">Total Expenses</div>
-			<div class="summary-value">{filteredExpenses.length}</div>
-		</div>
+  <div class="stats-summary">
+    <div class="summary-card">
+      <div class="summary-label">Total Expenses</div>
+      <div class="summary-value">{filteredExpenses.length}</div>
+    </div>
 
-		<div class="summary-card">
-			<div class="summary-label">Total Cost</div>
-			<div class="summary-value">
-				{formatCurrency(totalAmount)}
-			</div>
-		</div>
+    <div class="summary-card">
+      <div class="summary-label">Total Cost</div>
+      <div class="summary-value">
+        {formatCurrency(totalAmount)}
+      </div>
+    </div>
 
-		<div class="summary-card">
-			<div class="summary-label">Tax Deductions</div>
-			<div class="summary-value">
-				{formatCurrency(
-					filteredExpenses.filter((e) => e.taxDeductible === true).reduce((s, e) => s + e.amount, 0)
-				)}
-			</div>
-		</div>
+    <div class="summary-card">
+      <div class="summary-label">Tax Deductions</div>
+      <div class="summary-value">
+        {formatCurrency(
+          filteredExpenses.filter((e) => e.taxDeductible === true).reduce((s, e) => s + e.amount, 0)
+        )}
+      </div>
+    </div>
 
-		<div class="summary-card">
-			<div class="summary-label">Non Tax Deductions</div>
-			<div class="summary-value">
-				{formatCurrency(
-					filteredExpenses
-						.filter((e) => !(e.taxDeductible === true))
-						.reduce((s, e) => s + e.amount, 0)
-				)}
-			</div>
-		</div>
-	</div>
+    <div class="summary-card">
+      <div class="summary-label">Non Tax Deductions</div>
+      <div class="summary-value">
+        {formatCurrency(
+          filteredExpenses
+            .filter((e) => !(e.taxDeductible === true))
+            .reduce((s, e) => s + e.amount, 0)
+        )}
+      </div>
+    </div>
+  </div>
 
-	<div class="filters-bar">
-		<div class="search-box">
-			<svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
-				<path
-					d="M9 17C13.4183 17 17 13.4183 17 9C17 4.58172 13.4183 1 9 1C4.58172 1 1 4.58172 1 9C1 13.4183 4.58172 17 9 17Z"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				/>
-				<path
-					d="M19 19L14.65 14.65"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				/>
-			</svg>
-			<input
-				id="search-expenses"
-				name="searchQuery"
-				type="text"
-				placeholder="Search expenses..."
-				bind:value={searchQuery}
-			/>
-		</div>
+  <div class="filters-bar">
+    <div class="search-box">
+      <svg class="search-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <path
+          d="M9 17C13.4183 17 17 13.4183 17 9C17 4.58172 13.4183 1 9 1C4.58172 1 1 4.58172 1 9C1 13.4183 4.58172 17 9 17Z"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+        <path
+          d="M19 19L14.65 14.65"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+      <input
+        id="search-expenses"
+        name="searchQuery"
+        type="text"
+        placeholder="Search expenses..."
+        bind:value={searchQuery}
+      />
+    </div>
 
-		<div class="filter-group date-group">
-			<input
-				id="start-date"
-				name="startDate"
-				type="date"
-				bind:value={startDate}
-				class="date-input"
-				aria-label="Start Date"
-			/>
-			<span class="date-sep">-</span>
-			<input
-				id="end-date"
-				name="endDate"
-				type="date"
-				bind:value={endDate}
-				class="date-input"
-				aria-label="End Date"
-			/>
-		</div>
+    <div class="filter-group date-group">
+      <input
+        id="start-date"
+        name="startDate"
+        type="date"
+        bind:value={startDate}
+        class="date-input"
+        aria-label="Start Date"
+      />
+      <span class="date-sep">-</span>
+      <input
+        id="end-date"
+        name="endDate"
+        type="date"
+        bind:value={endDate}
+        class="date-input"
+        aria-label="End Date"
+      />
+    </div>
 
-		<div class="filter-group">
-			<select
-				id="filter-category"
-				name="filterCategory"
-				bind:value={filterCategory}
-				class="filter-select"
-				aria-label="Filter by category"
-			>
-				<option value="all">All Categories</option>
-				{#each categories as cat (cat)}
-					<option value={cat}>{getCategoryLabel(cat)}</option>
-				{/each}
-				<option value="fuel">Fuel (Trips)</option>
-			</select>
+    <div class="filter-group">
+      <select
+        id="filter-category"
+        name="filterCategory"
+        bind:value={filterCategory}
+        class="filter-select"
+        aria-label="Filter by category"
+      >
+        <option value="all">All Categories</option>
+        {#each categories() as cat (cat)}
+          <option value={cat}>{getCategoryLabel(String(cat))}</option>
+        {/each}
+        <option value="fuel">Fuel (Trips)</option>
+      </select>
 
-			<select
-				id="sort-by"
-				name="sortBy"
-				bind:value={sortBy}
-				class="filter-select"
-				aria-label="Sort results"
-			>
-				<option value="date">By Date</option>
-				<option value="amount">By Cost</option>
-			</select>
+      <select
+        id="sort-by"
+        name="sortBy"
+        bind:value={sortBy}
+        class="filter-select"
+        aria-label="Sort results"
+      >
+        <option value="date">By Date</option>
+        <option value="amount">By Cost</option>
+      </select>
 
-			<button
-				class="sort-btn"
-				aria-label="Toggle sort order"
-				on:click={() => (sortOrder = sortOrder === 'asc' ? 'desc' : 'asc')}
-			>
-				<svg
-					width="20"
-					height="20"
-					viewBox="0 0 20 20"
-					fill="none"
-					style="transform: rotate({sortOrder === 'asc' ? '180deg' : '0deg'})"
-				>
-					<path
-						d="M10 3V17M10 17L4 11M10 17L16 11"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					/>
-				</svg>
-			</button>
-		</div>
-	</div>
+      <button
+        class="sort-btn"
+        aria-label="Toggle sort order"
+        onclick={() => (sortOrder = sortOrder === 'asc' ? 'desc' : 'asc')}
+      >
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 20 20"
+          fill="none"
+          style="transform: rotate({sortOrder === 'asc' ? '180deg' : '0deg'})"
+        >
+          <path
+            d="M10 3V17M10 17L4 11M10 17L16 11"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </button>
+    </div>
+  </div>
 
-	{#if filteredExpenses.length > 0}
-		<div class="batch-header" class:visible={filteredExpenses.length > 0}>
-			<label class="checkbox-container">
-				<input
-					id="select-all"
-					name="selectAll"
-					type="checkbox"
-					checked={allSelected}
-					on:change={toggleSelectAll}
-				/>
-				<span class="checkmark"></span>
-				Select All ({filteredExpenses.length})
-			</label>
+  {#if filteredExpenses.length > 0}
+    <div class="batch-header" class:visible={filteredExpenses.length > 0}>
+      <label class="checkbox-container">
+        <input
+          id="select-all"
+          name="selectAll"
+          type="checkbox"
+          checked={allSelected}
+          onchange={toggleSelectAll}
+        />
+        <span class="checkmark"></span>
+        Select All ({filteredExpenses.length})
+      </label>
 
-			<span class="page-info">Showing {visibleExpenses.length} of {filteredExpenses.length}</span>
-		</div>
-	{/if}
+      <span class="page-info">Showing {visibleExpenses.length} of {filteredExpenses.length}</span>
+    </div>
+  {/if}
 
-	{#if loading}
-		<div class="expense-list-cards">
-			{#each Array(3) as _, i (i)}
-				<div class="expense-card">
-					<div class="card-top">
-						<div style="flex: 1">
-							<Skeleton height="16px" width="30%" className="mb-2" />
-							<Skeleton height="20px" width="60%" />
-						</div>
-						<Skeleton height="24px" width="60px" />
-					</div>
-				</div>
-			{/each}
-		</div>
-	{:else if filteredExpenses.length > 0}
-		<div class="expense-list-cards">
-			{#each visibleExpenses as expense (expense.id)}
-				{@const isSelected = selectedExpenses.has(expense.id)}
-				<div class="card-wrapper">
-					{#if !isTripSource(expense)}
-						<div class="swipe-bg">
-							<div class="swipe-action edit"><span>Edit</span></div>
-							<div class="swipe-action delete"><span>Trash</span></div>
-						</div>
-					{/if}
+  {#if loading}
+    <div class="expense-list-cards">
+      {#each Array(3) as _, i (i)}
+        <div class="expense-card">
+          <div class="card-top">
+            <div style="flex: 1">
+              <Skeleton height="16px" width="30%" className="mb-2" />
+              <Skeleton height="20px" width="60%" />
+            </div>
+            <Skeleton height="24px" width="60px" />
+          </div>
+        </div>
+      {/each}
+    </div>
+  {:else if filteredExpenses.length > 0}
+    <div class="expense-list-cards">
+      {#each visibleExpenses as expense (expense.id)}
+        {@const isSelected = selectedExpenses.has(expense.id)}
+        <div class="card-wrapper">
+          {#if !isTripSource(expense)}
+            <div class="swipe-bg">
+              <div class="swipe-action edit"><span>Edit</span></div>
+              <div class="swipe-action delete"><span>Trash</span></div>
+            </div>
+          {/if}
 
-					<div
-						class="expense-card"
-						class:read-only={isTripSource(expense)}
-						class:selected={isSelected}
-						on:click={() => editExpense(expense)}
-						role="button"
-						tabindex="0"
-						on:keypress={(e) => e.key === 'Enter' && editExpense(expense)}
-						use:swipeable={{
-							onEdit: () => editExpense(expense),
-							onDelete: (e) => deleteExpense(expense.id, e),
-							isReadOnly: isTripSource(expense)
-						}}
-					>
-						<div class="card-top">
-							<div
-								class="selection-box"
-								on:click|stopPropagation
-								on:keydown|stopPropagation
-								role="none"
-							>
-								<label class="checkbox-container">
-									<input
-										type="checkbox"
-										id={'expense-' + expense.id + '-checkbox'}
-										name="selectedExpense"
-										value={expense.id}
-										aria-labelledby={'expense-' + expense.id + '-title'}
-										checked={isSelected}
-										on:change={() => toggleSelection(expense.id)}
-									/>
-									<span class="checkmark"></span>
-								</label>
-							</div>
+          <div
+            class="expense-card"
+            class:read-only={isTripSource(expense)}
+            class:selected={isSelected}
+            onclick={() => editExpense(expense)}
+            role="button"
+            tabindex="0"
+            onkeypress={(e) => e.key === 'Enter' && editExpense(expense)}
+            use:swipeable={{
+              onEdit: () => editExpense(expense),
+              onDelete: (e) => deleteExpense(expense.id, e),
+              isReadOnly: isTripSource(expense)
+            }}
+          >
+            <div class="card-top">
+              <div
+                class="selection-box"
+                onclick={stopPropagation(bubble('click'))}
+                onkeydown={stopPropagation(bubble('keydown'))}
+                role="none"
+              >
+                <label class="checkbox-container">
+                  <input
+                    type="checkbox"
+                    id={'expense-' + expense.id + '-checkbox'}
+                    name="selectedExpense"
+                    value={expense.id}
+                    aria-labelledby={'expense-' + expense.id + '-title'}
+                    checked={isSelected}
+                    onchange={() => toggleSelection(expense.id)}
+                  />
+                  <span class="checkmark"></span>
+                </label>
+              </div>
 
-							<div class="expense-main-info">
-								<span class="expense-date-display">
-									{formatDate(expense.date || '')}
-								</span>
+              <div class="expense-main-info">
+                <span class="expense-date-display">
+                  {formatDate(expense.date || '')}
+                </span>
 
-								<h2 class="expense-desc-title" id={'expense-' + expense.id + '-title'}>
-									{expense.description || getFallbackLabel(expense)}
-								</h2>
-							</div>
+                <h2 class="expense-desc-title" id={'expense-' + expense.id + '-title'}>
+                  {expense.description || getFallbackLabel(expense)}
+                </h2>
+              </div>
 
-							<span
-								class="expense-amount-display"
-								aria-label={`Amount: ${formatCurrency(expense.amount || 0)}`}
-							>
-								{formatCurrency(expense.amount || 0)}
-							</span>
-							<svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
-								<path
-									d="M9 18L15 12L9 6"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								/>
-							</svg>
-						</div>
+              <span
+                class="expense-amount-display"
+                aria-label={`Amount: ${formatCurrency(expense.amount || 0)}`}
+              >
+                {formatCurrency(expense.amount || 0)}
+              </span>
+              <svg class="nav-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path
+                  d="M9 18L15 12L9 6"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </div>
 
-						<div class="card-stats">
-							<div class="stat-badge-container">
-								<span class={`category-badge ${getCategoryColor(expense.category)}`}>
-									{getCategoryLabel(expense.category)}
-								</span>
-								{#if isTripSource(expense)}
-									<span class="source-badge">Trip</span>
-								{/if}
-								{#if expense.taxDeductible}
-									<span class="category-badge tax-pill" title="Tax deductible">Tax Deductible</span>
-								{/if}
-							</div>
-						</div>
-					</div>
-				</div>
-			{/each}
-		</div>
+            <div class="card-stats">
+              <div class="stat-badge-container">
+                <span class={`category-badge ${getCategoryColor(expense.category)}`}>
+                  {getCategoryLabel(expense.category)}
+                </span>
+                {#if isTripSource(expense)}
+                  <span class="source-badge">Trip</span>
+                {/if}
+                {#if expense.taxDeductible}
+                  <span class="category-badge tax-pill" title="Tax deductible">Tax Deductible</span>
+                {/if}
+              </div>
+            </div>
+          </div>
+        </div>
+      {/each}
+    </div>
 
-		{#if totalPages > 1}
-			<div class="pagination-container">
-				<div class="pagination">
-					<button
-						class="pagination-btn"
-						disabled={currentPage === 1}
-						on:click={() => changePage(currentPage - 1)}>← Prev</button
-					>
-					<span class="page-status">Page {currentPage} of {totalPages}</span>
-					<button
-						class="pagination-btn"
-						disabled={currentPage === totalPages}
-						on:click={() => changePage(currentPage + 1)}>Next →</button
-					>
-				</div>
-			</div>
-		{/if}
-	{:else}
-		<div class="empty-state">
-			<p>No expenses found matching your filters.</p>
-		</div>
-	{/if}
+    {#if totalPages > 1}
+      <div class="pagination-container">
+        <div class="pagination">
+          <button
+            class="pagination-btn"
+            disabled={currentPage === 1}
+            onclick={() => changePage(currentPage - 1)}>← Prev</button
+          >
+          <span class="page-status">Page {currentPage} of {totalPages}</span>
+          <button
+            class="pagination-btn"
+            disabled={currentPage === totalPages}
+            onclick={() => changePage(currentPage + 1)}>Next →</button
+          >
+        </div>
+      </div>
+    {/if}
+  {:else}
+    <div class="empty-state">
+      <p>No expenses found matching your filters.</p>
+    </div>
+  {/if}
 </div>
 
 {#if selectedExpenses.size > 0}
-	<div class="action-bar-container" data-has-selections="true">
-		<div class="action-bar">
-			<div class="action-bar-left">
-				<div class="selection-indicator">
-					<svg
-						width="20"
-						height="20"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						<polyline points="20 6 9 17 4 12"></polyline>
-					</svg>
-					<span class="selected-count"
-						>{selectedExpenses.size}
-						{selectedExpenses.size === 1 ? 'expense' : 'expenses'} selected</span
-					>
-				</div>
-			</div>
+  <div class="action-bar-container" data-has-selections="true">
+    <div class="action-bar">
+      <div class="action-bar-left">
+        <div class="selection-indicator">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          <span class="selected-count"
+            >{selectedExpenses.size}
+            {selectedExpenses.size === 1 ? 'expense' : 'expenses'} selected</span
+          >
+        </div>
+      </div>
 
-			<div class="action-bar-right">
-				<button class="action-pill secondary" on:click={() => (selectedExpenses = new SvelteSet())}>
-					<svg
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						<line x1="18" y1="6" x2="6" y2="18"></line>
-						<line x1="6" y1="6" x2="18" y2="18"></line>
-					</svg>
-					<span class="action-text">Cancel</span>
-				</button>
+      <div class="action-bar-right">
+        <button class="action-pill secondary" onclick={() => (selectedExpenses = new SvelteSet())}>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+          <span class="action-text">Cancel</span>
+        </button>
 
-				<button class="action-pill export" on:click={exportSelected}>
-					<svg
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-						<polyline points="7 10 12 15 17 10"></polyline>
-						<line x1="12" y1="15" x2="12" y2="3"></line>
-					</svg>
-					<span class="action-text">Export</span>
-				</button>
+        <button class="action-pill export" onclick={exportSelected}>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span class="action-text">Export</span>
+        </button>
 
-				<button class="action-pill danger" on:click={deleteSelected}>
-					<svg
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						<polyline points="3 6 5 6 21 6"></polyline>
-						<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
-						></path>
-					</svg>
-					<span class="action-text">Delete</span>
-				</button>
-			</div>
-		</div>
-	</div>
+        <button class="action-pill danger" onclick={deleteSelected}>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+            ></path>
+          </svg>
+          <span class="action-text">Delete</span>
+        </button>
+      </div>
+    </div>
+  </div>
 {/if}
 
 <Modal bind:open={isManageCategoriesOpen} title="Expense Settings">
-	<div class="categories-manager">
-		<div class="tabs sub-tabs">
-			<button
-				class="tab-btn"
-				class:active={activeCategoryType === 'maintenance'}
-				on:click={() => (activeCategoryType = 'maintenance')}>Maintenance</button
-			>
-			<button
-				class="tab-btn"
-				class:active={activeCategoryType === 'supplies'}
-				on:click={() => (activeCategoryType = 'supplies')}>Supplies</button
-			>
-			<button
-				class="tab-btn"
-				class:active={activeCategoryType === 'expenses'}
-				on:click={() => (activeCategoryType = 'expenses')}>Expenses</button
-			>
-		</div>
+  <div class="categories-manager">
+    <div class="tabs sub-tabs">
+      <button
+        class="tab-btn"
+        class:active={activeCategoryType === 'maintenance'}
+        onclick={() => (activeCategoryType = 'maintenance')}>Maintenance</button
+      >
+      <button
+        class="tab-btn"
+        class:active={activeCategoryType === 'supplies'}
+        onclick={() => (activeCategoryType = 'supplies')}>Supplies</button
+      >
+      <button
+        class="tab-btn"
+        class:active={activeCategoryType === 'expenses'}
+        onclick={() => (activeCategoryType = 'expenses')}>Expenses</button
+      >
+    </div>
 
-		<p class="text-sm text-gray-500 mb-4">
-			Manage {activeCategoryType} options.
-		</p>
+    <p class="text-sm text-gray-500 mb-4">
+      Manage {activeCategoryType} options.
+    </p>
 
-		<div class="cat-list">
-			{#each activeCategories as cat (cat)}
-				<div class="cat-item">
-					<span class={`cat-badge ${getCategoryColor(cat)}`}>{getCategoryLabel(cat)}</span>
-					<button
-						class="cat-delete"
-						on:click={() => removeCategory(cat)}
-						aria-label="Delete Category"
-					>
-						<svg
-							width="16"
-							height="16"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"
-							></line></svg
-						>
-					</button>
-				</div>
-			{:else}
-				<div class="text-sm text-gray-400 italic text-center py-4">No categories defined.</div>
-			{/each}
-		</div>
+    <div class="cat-list">
+      {#each activeCategories() as cat (cat)}
+        <div class="cat-item">
+          <span class={`cat-badge ${getCategoryColor(String(cat))}`}
+            >{getCategoryLabel(String(cat))}</span
+          >
+          <button
+            class="cat-delete"
+            onclick={() => removeCategory(cat)}
+            aria-label="Delete Category"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              ><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"
+              ></line></svg
+            >
+          </button>
+        </div>
+      {:else}
+        <div class="text-sm text-gray-400 italic text-center py-4">No categories defined.</div>
+      {/each}
+    </div>
 
-		<div class="add-cat-form">
-			<input
-				type="text"
-				bind:value={newCategoryName}
-				placeholder="New category..."
-				class="input-field"
-				on:keydown={(e) => e.key === 'Enter' && addCategory()}
-			/>
-			<button class="btn-secondary" on:click={addCategory}>Add</button>
-		</div>
+    <div class="add-cat-form">
+      <input
+        type="text"
+        bind:value={newCategoryName}
+        placeholder="New category..."
+        class="input-field"
+        onkeydown={(e) => e.key === 'Enter' && addCategory()}
+      />
+      <button class="btn-secondary" onclick={addCategory}>Add</button>
+    </div>
 
-		<div class="modal-actions mt-6">
-			<button class="btn-cancel w-full" on:click={() => (isManageCategoriesOpen = false)}
-				>Done</button
-			>
-		</div>
-	</div>
+    <div class="modal-actions mt-6">
+      <button class="btn-cancel w-full" onclick={() => (isManageCategoriesOpen = false)}
+        >Done</button
+      >
+    </div>
+  </div>
 </Modal>
 
 <style>
-	* {
-		box-sizing: border-box;
-	}
-
-	:global(body) {
-		overflow-x: hidden;
-	}
-
-	.page-container {
-		max-width: 1400px;
-		margin: 0 auto;
-		padding: 16px;
-		padding-bottom: 80px;
-		overflow-x: hidden;
-	}
-
-	/* Page Headers & Actions */
-	.page-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 24px;
-	}
-	.page-title {
-		font-size: 24px;
-		font-weight: 800;
-		color: #111827;
-		margin: 0;
-	}
-	.page-subtitle {
-		font-size: 14px;
-		color: #6b7280;
-		margin: 0;
-	}
-	.header-actions {
-		display: flex;
-		gap: 8px;
-		align-items: center;
-	}
-
-	.btn-primary {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 10px 16px;
-		background: linear-gradient(135deg, #ff7f50 0%, #ff6a3d 100%);
-		color: white;
-		border: none;
-		border-radius: 8px;
-		font-weight: 600;
-		font-size: 14px;
-		cursor: pointer;
-		box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3);
-		transition: transform 0.1s;
-		text-decoration: none;
-	}
-	.btn-primary:active {
-		transform: translateY(1px);
-	}
-
-	.btn-secondary {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		padding: 10px;
-		background: white;
-		border: 1px solid #e5e7eb;
-		color: #374151;
-		border-radius: 8px;
-		font-weight: 600;
-		font-size: 14px;
-		cursor: pointer;
-		transition: background 0.2s;
-	}
-
-	@media (hover: hover) {
-		.btn-secondary:hover {
-			background: #f9fafb;
-		}
-		.cat-delete:hover {
-			background: #ef4444;
-			color: white;
-		}
-	}
-
-	/* Stats Summary */
-	.stats-summary {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: 12px;
-		margin-bottom: 24px;
-	}
-	.summary-card {
-		background: white;
-		border: 1px solid #e5e7eb;
-		border-radius: 12px;
-		padding: 16px;
-		text-align: center;
-	}
-	.summary-label {
-		font-size: 12px;
-		color: #6b7280;
-		text-transform: uppercase;
-		letter-spacing: 0.5px;
-		margin-bottom: 4px;
-	}
-	.summary-value {
-		font-size: 20px;
-		font-weight: 800;
-		color: #111827;
-	}
-
-	/* Filter Bar */
-	.filters-bar {
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-		margin-bottom: 20px;
-	}
-
-	.search-box {
-		position: relative;
-		width: 100%;
-	}
-	.search-icon {
-		position: absolute;
-		left: 14px;
-		top: 50%;
-		transform: translateY(-50%);
-		color: #9ca3af;
-		pointer-events: none;
-	}
-	.search-box input {
-		width: 100%;
-		padding: 12px 16px 12px 42px;
-		border: 1px solid #e5e7eb;
-		border-radius: 10px;
-		font-size: 15px;
-		background: white;
-		box-sizing: border-box;
-	}
-	.date-group {
-		display: flex;
-		gap: 8px;
-		align-items: center;
-	}
-	.date-input {
-		flex: 1;
-		padding: 12px;
-		border: 1px solid #e5e7eb;
-		border-radius: 10px;
-		font-size: 14px;
-		background: white;
-		min-width: 0;
-	}
-	.date-sep {
-		color: #9ca3af;
-		font-weight: bold;
-	}
-	.filter-group {
-		display: flex;
-		flex-direction: row;
-		gap: 8px;
-		width: 100%;
-	}
-	.filter-select {
-		flex: 1;
-		min-width: 0;
-		padding: 12px;
-		border: 1px solid #e5e7eb;
-		border-radius: 10px;
-		font-size: 14px;
-		background: white;
-		color: #374151;
-	}
-	.sort-btn {
-		flex: 0 0 48px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border: 1px solid #e5e7eb;
-		border-radius: 10px;
-		background: white;
-		color: #6b7280;
-		cursor: pointer;
-	}
-
-	/* Batch Header */
-	.batch-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 12px;
-		padding: 0 4px;
-		color: #6b7280;
-		font-size: 13px;
-		font-weight: 500;
-	}
-	.page-info {
-		font-size: 13px;
-	}
-
-	/* CHECKBOX STYLES */
-	.checkbox-container {
-		display: inline-flex;
-		align-items: center;
-		gap: 8px;
-		cursor: pointer;
-		font-size: 14px;
-		font-weight: 600;
-		color: #4b5563;
-		position: relative;
-		padding-left: 28px;
-		user-select: none;
-	}
-	.checkbox-container input {
-		position: absolute;
-		opacity: 0;
-		cursor: pointer;
-		height: 0;
-		width: 0;
-	}
-	.checkmark {
-		position: absolute;
-		top: 0;
-		left: 0;
-		height: 20px;
-		width: 20px;
-		background-color: white;
-		border: 2px solid #d1d5db;
-		border-radius: 6px;
-		transition: all 0.2s;
-	}
-
-	@media (hover: hover) {
-		.checkbox-container:hover input ~ .checkmark {
-			border-color: #9ca3af;
-		}
-	}
-
-	.checkbox-container input:checked ~ .checkmark {
-		background-color: #ff7f50;
-		border-color: #ff7f50;
-	}
-	.checkmark:after {
-		content: '';
-		position: absolute;
-		display: none;
-	}
-	.checkbox-container input:checked ~ .checkmark:after {
-		display: block;
-	}
-	.checkbox-container .checkmark:after {
-		left: 6px;
-		top: 2px;
-		width: 5px;
-		height: 10px;
-		border: solid white;
-		border-width: 0 2px 2px 0;
-		transform: rotate(45deg);
-	}
-
-	/* Expense List & Cards (Styled like Trips) */
-	.expense-list-cards {
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-		max-width: 100%;
-	}
-	.card-wrapper {
-		position: relative;
-		overflow: hidden;
-		border-radius: 12px;
-		background: #f3f4f6;
-		max-width: 100%;
-	}
-
-	.swipe-bg {
-		position: absolute;
-		inset: 0;
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 0 20px;
-		z-index: 0;
-	}
-	.swipe-action {
-		font-weight: 700;
-		font-size: 14px;
-		text-transform: uppercase;
-		letter-spacing: 1px;
-	}
-	.swipe-action.edit {
-		color: #2563eb;
-	}
-	.swipe-action.delete {
-		color: #dc2626;
-	}
-
-	.expense-card {
-		background: white;
-		border: 1px solid #e5e7eb;
-		border-radius: 12px;
-		padding: 16px;
-		position: relative;
-		z-index: 1;
-		cursor: pointer;
-		transition: all 0.2s;
-		max-width: 100%;
-	}
-	.expense-card:active {
-		background-color: #f9fafb;
-	}
-	.expense-card.read-only {
-		border-left: 4px solid #3b82f6;
-		background: #fafafa;
-	}
-	.expense-card.selected {
-		background-color: #fff7ed;
-		border-color: #ff7f50;
-	}
-
-	.card-top {
-		display: grid;
-		grid-template-columns: auto 1fr auto auto;
-		align-items: center;
-		gap: 12px;
-		padding-bottom: 12px;
-		margin-bottom: 12px;
-		border-bottom: 1px solid #f3f4f6;
-		max-width: 100%;
-	}
-
-	.selection-box {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding-right: 4px;
-	}
-
-	.expense-main-info {
-		overflow: hidden;
-		min-width: 0;
-	}
-	.expense-date-display {
-		display: block;
-		font-size: 12px;
-		font-weight: 600;
-		color: #6b7280;
-		margin-bottom: 4px;
-	}
-	.expense-desc-title {
-		font-size: 16px;
-		font-weight: 700;
-		color: #111827;
-		margin: 0;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.expense-amount-display {
-		font-size: 18px;
-		font-weight: 800;
-		color: #111827;
-		white-space: nowrap;
-		text-align: right;
-		min-width: 72px;
-	}
-
-	.nav-icon {
-		color: #9ca3af;
-		flex-shrink: 0;
-	}
-
-	.card-stats {
-		display: flex;
-		align-items: center;
-		max-width: 100%;
-		overflow-x: auto;
-	}
-	.stat-badge-container {
-		display: flex;
-		gap: 8px;
-		flex-wrap: wrap;
-	}
-
-	.category-badge {
-		font-size: 12px;
-		font-weight: 600;
-		padding: 4px 10px;
-		border-radius: 100px;
-		text-transform: capitalize;
-		border: 1px solid;
-		display: inline-flex;
-		align-items: center;
-		white-space: nowrap;
-	}
-
-	.source-badge {
-		font-size: 11px;
-		font-weight: 700;
-		color: #3b82f6;
-		background: #eff6ff;
-		padding: 4px 8px;
-		border-radius: 6px;
-		text-transform: uppercase;
-		letter-spacing: 0.5px;
-		white-space: nowrap;
-	}
-
-	/* Tax pill that visually matches category badges */
-	.tax-pill {
-		font-size: 12px;
-		font-weight: 600;
-		color: #166534;
-		background: #ecfdf5;
-		padding: 4px 10px;
-		border-radius: 100px;
-		border: 1px solid #bbf7d0;
-		text-transform: capitalize;
-		white-space: nowrap;
-	}
-
-	.empty-state {
-		text-align: center;
-		padding: 40px;
-		color: #6b7280;
-		font-size: 15px;
-	}
-
-	/* Hide footer when selections are active - using body class */
-	:global(body.has-selections .mobile-footer),
-	:global(body.has-selections footer),
-	:global(body.has-selections nav[class*='mobile']),
-	:global(body.has-selections .bottom-nav) {
-		display: none !important;
-	}
-
-	/* ACTION BAR STYLES - REPLACES FOOTER ON MOBILE */
-	.action-bar-container {
-		position: fixed;
-		bottom: 0;
-		left: 0;
-		right: 0;
-		display: flex;
-		justify-content: center;
-		z-index: 1000;
-		padding: 0;
-		animation: slideUpFade 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-		pointer-events: none;
-	}
-
-	.action-bar {
-		background: white;
-		padding: 12px 16px;
-		border-radius: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-		box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
-		max-width: 100%;
-		width: 100%;
-		pointer-events: auto;
-		border-top: 1px solid #e5e7eb;
-	}
-
-	.action-bar-left {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.selection-indicator {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		color: #ff7f50;
-		font-weight: 700;
-		font-size: 13px;
-		padding: 6px 12px;
-		background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
-		border-radius: 10px;
-		border: 1px solid #fed7aa;
-	}
-
-	.selection-indicator svg {
-		flex-shrink: 0;
-		width: 16px;
-		height: 16px;
-	}
-
-	.selected-count {
-		color: #c2410c;
-		white-space: nowrap;
-	}
-
-	.action-bar-right {
-		display: flex;
-		gap: 6px;
-		justify-content: center;
-	}
-
-	.action-pill {
-		border: 2px solid transparent;
-		padding: 10px 12px;
-		border-radius: 10px;
-		font-size: 13px;
-		font-weight: 700;
-		cursor: pointer;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 6px;
-		transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-		font-family: inherit;
-		white-space: nowrap;
-		flex: 1;
-		min-width: 0;
-		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-	}
-
-	.action-pill svg {
-		flex-shrink: 0;
-		width: 16px;
-		height: 16px;
-	}
-
-	/* Hide text on very small screens */
-	.action-text {
-		display: none;
-	}
-
-	.action-pill.secondary {
-		background: white;
-		color: #6b7280;
-		border-color: #e5e7eb;
-	}
-
-	.action-pill.export {
-		background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
-		color: #c2410c;
-		border-color: #fed7aa;
-	}
-
-	.action-pill.danger {
-		background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
-		color: #dc2626;
-		border-color: #fca5a5;
-	}
-
-	.action-pill:active {
-		transform: scale(0.95);
-	}
-
-	@media (hover: hover) {
-		.action-pill.secondary:hover {
-			background: #f9fafb;
-			border-color: #d1d5db;
-			box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-		}
-
-		.action-pill.export:hover {
-			background: linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%);
-			border-color: #fdba74;
-			box-shadow: 0 2px 4px rgba(251, 146, 60, 0.15);
-		}
-
-		.action-pill.danger:hover {
-			background: linear-gradient(135deg, #fecaca 0%, #fca5a5 100%);
-			border-color: #f87171;
-			box-shadow: 0 2px 4px rgba(220, 38, 38, 0.15);
-		}
-	}
-
-	@keyframes slideUpFade {
-		from {
-			transform: translateY(100%);
-			opacity: 0;
-		}
-		to {
-			transform: translateY(0);
-			opacity: 1;
-		}
-	}
-
-	/* Show text on slightly larger mobile screens */
-	@media (min-width: 380px) {
-		.action-text {
-			display: inline;
-		}
-
-		.action-pill {
-			padding: 10px 14px;
-		}
-	}
-
-	@media (min-width: 640px) {
-		.action-bar-container {
-			bottom: 30px;
-			padding: 0 16px;
-		}
-
-		.action-bar {
-			flex-direction: row;
-			align-items: center;
-			justify-content: space-between;
-			padding: 14px 20px;
-			max-width: 700px;
-			width: auto; /* CHANGED: from inheriting 100% to auto */
-			gap: 16px;
-			border-radius: 16px;
-			border: 1px solid #e5e7eb;
-			box-shadow:
-				0 0 0 1px rgba(0, 0, 0, 0.05),
-				0 10px 25px -5px rgba(0, 0, 0, 0.1),
-				0 8px 10px -6px rgba(0, 0, 0, 0.1);
-		}
-
-		.action-bar-left {
-			justify-content: flex-start;
-		}
-
-		.selection-indicator {
-			font-size: 14px;
-			padding: 8px 14px;
-		}
-
-		.action-bar-right {
-			gap: 8px;
-		}
-
-		.action-pill {
-			flex: 0 0 auto;
-			min-width: auto;
-			padding: 10px 18px;
-			font-size: 14px;
-		}
-
-		.action-text {
-			display: inline;
-		}
-	}
-
-	/* Desktop */
-	@media (min-width: 1024px) {
-		.action-bar {
-			max-width: 800px;
-			padding: 16px 24px;
-		}
-
-		.selection-indicator {
-			font-size: 15px;
-			padding: 8px 16px;
-		}
-
-		.action-pill {
-			padding: 12px 24px;
-			font-size: 15px;
-		}
-	}
-
-	/* Categories Manager Modal Styles */
-	.categories-manager {
-		padding: 4px;
-	}
-	.sub-tabs {
-		display: flex;
-		gap: 8px;
-		margin-bottom: 16px;
-		border-bottom: 1px solid #e5e7eb;
-	}
-	.tab-btn {
-		padding: 8px 16px;
-		background: none;
-		border: none;
-		border-bottom: 2px solid transparent;
-		font-weight: 600;
-		color: #6b7280;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.tab-btn.active {
-		color: #ff7f50;
-		border-bottom-color: #ff7f50;
-	}
-	.cat-list {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-		margin-bottom: 20px;
-		max-height: 200px;
-		overflow-y: auto;
-	}
-	.cat-item {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		background: #f3f4f6;
-		padding: 4px 4px 4px 10px;
-		border-radius: 20px;
-		border: 1px solid #e5e7eb;
-	}
-	.cat-badge {
-		font-size: 13px;
-		font-weight: 500;
-		text-transform: capitalize;
-		padding: 0 4px;
-		border: none;
-		background: transparent;
-	}
-	.cat-delete {
-		border: none;
-		background: #e5e7eb;
-		color: #6b7280;
-		border-radius: 50%;
-		width: 24px;
-		height: 24px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-
-	.add-cat-form {
-		display: flex;
-		gap: 8px;
-	}
-	.add-cat-form .input-field {
-		flex: 1;
-		padding: 10px;
-		border: 1px solid #e5e7eb;
-		border-radius: 8px;
-	}
-	.add-cat-form .btn-secondary {
-		padding: 10px 16px;
-	}
-	.modal-actions .btn-cancel {
-		background: white;
-		border: 1px solid #e5e7eb;
-		color: #374151;
-		padding: 12px;
-		border-radius: 8px;
-		font-weight: 600;
-		cursor: pointer;
-		width: 100%;
-	}
-
-	@media (min-width: 640px) {
-		.filters-bar {
-			flex-direction: row;
-			justify-content: space-between;
-			align-items: center;
-		}
-		.search-box {
-			max-width: 300px;
-		}
-		.date-group {
-			width: auto;
-		}
-		.filter-group {
-			width: auto;
-			flex-wrap: nowrap;
-		}
-		.filter-select {
-			width: 140px;
-			flex: none;
-		}
-		.stats-summary {
-			grid-template-columns: repeat(4, 1fr);
-		}
-		.hidden-mobile {
-			display: block;
-		}
-	}
-
-	@media (max-width: 640px) {
-		.page-container {
-			padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1px);
-		}
-
-		.expense-list-cards {
-			gap: 8px;
-		}
-
-		/* Reduce extra space above pagination on mobile */
-		.pagination-controls {
-			margin-top: 16px;
-		}
-
-		/* Compact empty-state padding on mobile */
-		.empty-state {
-			padding: 24px 12px;
-		}
-
-		.hidden-mobile {
-			display: none;
-		}
-	}
-
-	/* Pagination Controls */
-	.pagination-container {
-		margin-top: 32px;
-		display: flex;
-		justify-content: center;
-	}
-
-	.pagination {
-		display: flex;
-		justify-content: center;
-		align-items: center;
-		gap: 16px;
-	}
-
-	.pagination-btn {
-		padding: 8px 16px;
-		background: white;
-		border: 1px solid #e5e7eb;
-		border-radius: 8px;
-		font-weight: 600;
-		font-size: 14px;
-		color: #374151;
-		cursor: pointer;
-		transition: all 0.2s;
-		font-family: inherit;
-	}
-
-	.pagination-btn:hover:not(:disabled) {
-		border-color: var(--orange);
-		color: var(--orange);
-	}
-
-	.pagination-btn:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.page-status {
-		font-size: 14px;
-		color: #4b5563;
-		font-weight: 500;
-	}
+  * {
+    box-sizing: border-box;
+  }
+
+  :global(body) {
+    overflow-x: hidden;
+  }
+
+  .page-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 16px;
+    padding-bottom: 80px;
+    overflow-x: hidden;
+  }
+
+  /* Page Headers & Actions */
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+  }
+  .page-title {
+    font-size: 24px;
+    font-weight: 800;
+    color: #111827;
+    margin: 0;
+  }
+  .page-subtitle {
+    font-size: 14px;
+    color: #6b7280;
+    margin: 0;
+  }
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    background: linear-gradient(135deg, #ff7f50 0%, #ff6a3d 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(255, 127, 80, 0.3);
+    transition: transform 0.1s;
+    text-decoration: none;
+  }
+  .btn-primary:active {
+    transform: translateY(1px);
+  }
+
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    background: white;
+    border: 1px solid #e5e7eb;
+    color: #374151;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  @media (hover: hover) {
+    .btn-secondary:hover {
+      background: #f9fafb;
+    }
+    .cat-delete:hover {
+      background: #ef4444;
+      color: white;
+    }
+  }
+
+  /* Stats Summary */
+  .stats-summary {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .summary-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+  }
+  .summary-label {
+    font-size: 12px;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  .summary-value {
+    font-size: 20px;
+    font-weight: 800;
+    color: #111827;
+  }
+
+  /* Filter Bar */
+  .filters-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .search-box {
+    position: relative;
+    width: 100%;
+  }
+  .search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9ca3af;
+    pointer-events: none;
+  }
+  .search-box input {
+    width: 100%;
+    padding: 12px 16px 12px 42px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    font-size: 15px;
+    background: white;
+    box-sizing: border-box;
+  }
+  .date-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .date-input {
+    flex: 1;
+    padding: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    font-size: 14px;
+    background: white;
+    min-width: 0;
+  }
+  .date-sep {
+    color: #9ca3af;
+    font-weight: bold;
+  }
+  .filter-group {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    width: 100%;
+  }
+  .filter-select {
+    flex: 1;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    font-size: 14px;
+    background: white;
+    color: #374151;
+  }
+  .sort-btn {
+    flex: 0 0 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: white;
+    color: #6b7280;
+    cursor: pointer;
+  }
+
+  /* Batch Header */
+  .batch-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding: 0 4px;
+    color: #6b7280;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .page-info {
+    font-size: 13px;
+  }
+
+  /* CHECKBOX STYLES */
+  .checkbox-container {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    color: #4b5563;
+    position: relative;
+    padding-left: 28px;
+    user-select: none;
+  }
+  .checkbox-container input {
+    position: absolute;
+    opacity: 0;
+    cursor: pointer;
+    height: 0;
+    width: 0;
+  }
+  .checkmark {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 20px;
+    width: 20px;
+    background-color: white;
+    border: 2px solid #d1d5db;
+    border-radius: 6px;
+    transition: all 0.2s;
+  }
+
+  @media (hover: hover) {
+    .checkbox-container:hover input ~ .checkmark {
+      border-color: #9ca3af;
+    }
+  }
+
+  .checkbox-container input:checked ~ .checkmark {
+    background-color: #ff7f50;
+    border-color: #ff7f50;
+  }
+  .checkmark:after {
+    content: '';
+    position: absolute;
+    display: none;
+  }
+  .checkbox-container input:checked ~ .checkmark:after {
+    display: block;
+  }
+  .checkbox-container .checkmark:after {
+    left: 6px;
+    top: 2px;
+    width: 5px;
+    height: 10px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+
+  /* Expense List & Cards (Styled like Trips) */
+  .expense-list-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 100%;
+  }
+  .card-wrapper {
+    position: relative;
+    overflow: hidden;
+    border-radius: 12px;
+    background: #f3f4f6;
+    max-width: 100%;
+  }
+
+  .swipe-bg {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+    z-index: 0;
+  }
+  .swipe-action {
+    font-weight: 700;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .swipe-action.edit {
+    color: #2563eb;
+  }
+  .swipe-action.delete {
+    color: #dc2626;
+  }
+
+  .expense-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 16px;
+    position: relative;
+    z-index: 1;
+    cursor: pointer;
+    transition: all 0.2s;
+    max-width: 100%;
+  }
+  .expense-card:active {
+    background-color: #f9fafb;
+  }
+  .expense-card.read-only {
+    border-left: 4px solid #3b82f6;
+    background: #fafafa;
+  }
+  .expense-card.selected {
+    background-color: #fff7ed;
+    border-color: #ff7f50;
+  }
+
+  .card-top {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 12px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid #f3f4f6;
+    max-width: 100%;
+  }
+
+  .selection-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-right: 4px;
+  }
+
+  .expense-main-info {
+    overflow: hidden;
+    min-width: 0;
+  }
+  .expense-date-display {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #6b7280;
+    margin-bottom: 4px;
+  }
+  .expense-desc-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #111827;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .expense-amount-display {
+    font-size: 18px;
+    font-weight: 800;
+    color: #111827;
+    white-space: nowrap;
+    text-align: right;
+    min-width: 72px;
+  }
+
+  .nav-icon {
+    color: #9ca3af;
+    flex-shrink: 0;
+  }
+
+  .card-stats {
+    display: flex;
+    align-items: center;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .stat-badge-container {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .category-badge {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 100px;
+    text-transform: capitalize;
+    border: 1px solid;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+  }
+
+  .source-badge {
+    font-size: 11px;
+    font-weight: 700;
+    color: #3b82f6;
+    background: #eff6ff;
+    padding: 4px 8px;
+    border-radius: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+
+  /* Tax pill that visually matches category badges */
+  .tax-pill {
+    font-size: 12px;
+    font-weight: 600;
+    color: #166534;
+    background: #ecfdf5;
+    padding: 4px 10px;
+    border-radius: 100px;
+    border: 1px solid #bbf7d0;
+    text-transform: capitalize;
+    white-space: nowrap;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px;
+    color: #6b7280;
+    font-size: 15px;
+  }
+
+  /* Hide footer when selections are active - using body class */
+  :global(body.has-selections .mobile-footer),
+  :global(body.has-selections footer),
+  :global(body.has-selections nav[class*='mobile']),
+  :global(body.has-selections .bottom-nav) {
+    display: none !important;
+  }
+
+  /* ACTION BAR STYLES - REPLACES FOOTER ON MOBILE */
+  .action-bar-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    z-index: 1000;
+    padding: 0;
+    animation: slideUpFade 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+  }
+
+  .action-bar {
+    background: white;
+    padding: 12px 16px;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+    max-width: 100%;
+    width: 100%;
+    pointer-events: auto;
+    border-top: 1px solid #e5e7eb;
+  }
+
+  .action-bar-left {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .selection-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #ff7f50;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 6px 12px;
+    background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+    border-radius: 10px;
+    border: 1px solid #fed7aa;
+  }
+
+  .selection-indicator svg {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+  }
+
+  .selected-count {
+    color: #c2410c;
+    white-space: nowrap;
+  }
+
+  .action-bar-right {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+  }
+
+  .action-pill {
+    border: 2px solid transparent;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: inherit;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+
+  .action-pill svg {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+  }
+
+  /* Hide text on very small screens */
+  .action-text {
+    display: none;
+  }
+
+  .action-pill.secondary {
+    background: white;
+    color: #6b7280;
+    border-color: #e5e7eb;
+  }
+
+  .action-pill.export {
+    background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+    color: #c2410c;
+    border-color: #fed7aa;
+  }
+
+  .action-pill.danger {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    color: #dc2626;
+    border-color: #fca5a5;
+  }
+
+  .action-pill:active {
+    transform: scale(0.95);
+  }
+
+  @media (hover: hover) {
+    .action-pill.secondary:hover {
+      background: #f9fafb;
+      border-color: #d1d5db;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .action-pill.export:hover {
+      background: linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%);
+      border-color: #fdba74;
+      box-shadow: 0 2px 4px rgba(251, 146, 60, 0.15);
+    }
+
+    .action-pill.danger:hover {
+      background: linear-gradient(135deg, #fecaca 0%, #fca5a5 100%);
+      border-color: #f87171;
+      box-shadow: 0 2px 4px rgba(220, 38, 38, 0.15);
+    }
+  }
+
+  @keyframes slideUpFade {
+    from {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  /* Show text on slightly larger mobile screens */
+  @media (min-width: 380px) {
+    .action-text {
+      display: inline;
+    }
+
+    .action-pill {
+      padding: 10px 14px;
+    }
+  }
+
+  @media (min-width: 640px) {
+    .action-bar-container {
+      bottom: 30px;
+      padding: 0 16px;
+    }
+
+    .action-bar {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      max-width: 700px;
+      width: auto; /* CHANGED: from inheriting 100% to auto */
+      gap: 16px;
+      border-radius: 16px;
+      border: 1px solid #e5e7eb;
+      box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.05),
+        0 10px 25px -5px rgba(0, 0, 0, 0.1),
+        0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    }
+
+    .action-bar-left {
+      justify-content: flex-start;
+    }
+
+    .selection-indicator {
+      font-size: 14px;
+      padding: 8px 14px;
+    }
+
+    .action-bar-right {
+      gap: 8px;
+    }
+
+    .action-pill {
+      flex: 0 0 auto;
+      min-width: auto;
+      padding: 10px 18px;
+      font-size: 14px;
+    }
+
+    .action-text {
+      display: inline;
+    }
+  }
+
+  /* Desktop */
+  @media (min-width: 1024px) {
+    .action-bar {
+      max-width: 800px;
+      padding: 16px 24px;
+    }
+
+    .selection-indicator {
+      font-size: 15px;
+      padding: 8px 16px;
+    }
+
+    .action-pill {
+      padding: 12px 24px;
+      font-size: 15px;
+    }
+  }
+
+  /* Categories Manager Modal Styles */
+  .categories-manager {
+    padding: 4px;
+  }
+  .sub-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .tab-btn {
+    padding: 8px 16px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    font-weight: 600;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .tab-btn.active {
+    color: #ff7f50;
+    border-bottom-color: #ff7f50;
+  }
+  .cat-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .cat-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: #f3f4f6;
+    padding: 4px 4px 4px 10px;
+    border-radius: 20px;
+    border: 1px solid #e5e7eb;
+  }
+  .cat-badge {
+    font-size: 13px;
+    font-weight: 500;
+    text-transform: capitalize;
+    padding: 0 4px;
+    border: none;
+    background: transparent;
+  }
+  .cat-delete {
+    border: none;
+    background: #e5e7eb;
+    color: #6b7280;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .add-cat-form {
+    display: flex;
+    gap: 8px;
+  }
+  .add-cat-form .input-field {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+  }
+  .add-cat-form .btn-secondary {
+    padding: 10px 16px;
+  }
+  .modal-actions .btn-cancel {
+    background: white;
+    border: 1px solid #e5e7eb;
+    color: #374151;
+    padding: 12px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  @media (min-width: 640px) {
+    .filters-bar {
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .search-box {
+      max-width: 300px;
+    }
+    .date-group {
+      width: auto;
+    }
+    .filter-group {
+      width: auto;
+      flex-wrap: nowrap;
+    }
+    .filter-select {
+      width: 140px;
+      flex: none;
+    }
+    .stats-summary {
+      grid-template-columns: repeat(4, 1fr);
+    }
+    .hidden-mobile {
+      display: block;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .page-container {
+      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1px);
+    }
+
+    .expense-list-cards {
+      gap: 8px;
+    }
+
+    /* Reduce extra space above pagination on mobile */
+    .pagination-controls {
+      margin-top: 16px;
+    }
+
+    /* Compact empty-state padding on mobile */
+    .empty-state {
+      padding: 24px 12px;
+    }
+
+    .hidden-mobile {
+      display: none;
+    }
+  }
+
+  /* Pagination Controls */
+  .pagination-container {
+    margin-top: 32px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .pagination-btn {
+    padding: 8px 16px;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    color: #374151;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+
+  .pagination-btn:hover:not(:disabled) {
+    border-color: var(--orange);
+    color: var(--orange);
+  }
+
+  .pagination-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .page-status {
+    font-size: 14px;
+    color: #4b5563;
+    font-weight: 500;
+  }
 </style>

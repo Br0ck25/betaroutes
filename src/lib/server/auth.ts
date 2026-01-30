@@ -1,7 +1,12 @@
 // src/lib/server/auth.ts
+import { log } from '$lib/server/log';
 import bcrypt from 'bcryptjs'; // [!code note] Kept for legacy verification
 import { findUserByEmail, findUserByUsername, updatePasswordHash, type User } from './userService';
-import { log } from '$lib/server/log';
+
+// Minimal ExecutionContext type (Cloudflare compatible) used for optional background tasks
+interface ExecutionContext {
+  waitUntil?: (p: Promise<unknown>) => void;
+}
 
 // --- PBKDF2 CONFIGURATION (Web Crypto) ---
 // [!code fix] Increased to 600,000 (OWASP 2025 Recommendation)
@@ -13,18 +18,18 @@ const HASH_ALGO = 'SHA-256';
  * Helper: Convert Buffer to Hex
  */
 function bufferToHex(buffer: ArrayBuffer): string {
-	return [...new Uint8Array(buffer)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return [...new Uint8Array(buffer)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
  * Helper: Convert Hex to Buffer
  */
 function hexToBuffer(hex: string): Uint8Array {
-	const bytes = new Uint8Array(hex.length / 2);
-	for (let i = 0; i < hex.length; i += 2) {
-		bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-	}
-	return bytes;
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
 }
 
 /**
@@ -32,18 +37,18 @@ function hexToBuffer(hex: string): Uint8Array {
  * Returns true if the two arrays are equal, false otherwise.
  */
 function constantTimeEqual(a?: Uint8Array, b?: Uint8Array): boolean {
-	if (!a || !b) return false;
-	if (a.length !== b.length) return false;
-	let c = 0;
-	const la = a! as Uint8Array;
-	const lb = b! as Uint8Array;
-	const len = la.length || 0;
-	for (let i = 0; i < len; i++) {
-		const av = la[i] ?? 0;
-		const bv = lb[i] ?? 0;
-		c |= av ^ bv;
-	}
-	return c === 0;
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  let c = 0;
+  const la = a! as Uint8Array;
+  const lb = b! as Uint8Array;
+  const len = la.length || 0;
+  for (let i = 0; i < len; i++) {
+    const av = la[i] ?? 0;
+    const bv = lb[i] ?? 0;
+    c |= av ^ bv;
+  }
+  return c === 0;
 }
 
 /**
@@ -51,61 +56,61 @@ function constantTimeEqual(a?: Uint8Array, b?: Uint8Array): boolean {
  * This is CPU-efficient on Cloudflare Workers.
  */
 export async function hashPassword(password: string): Promise<string> {
-	const enc = new TextEncoder();
-	const salt = crypto.getRandomValues(new Uint8Array(SALT_SIZE));
+  const enc = new TextEncoder();
+  const salt = crypto.getRandomValues(new Uint8Array(SALT_SIZE));
 
-	const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, [
-		'deriveBits'
-	]);
+  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, [
+    'deriveBits'
+  ]);
 
-	const saltBuf = (salt as Uint8Array).buffer as ArrayBuffer;
-	const derivedBits = await crypto.subtle.deriveBits(
-		{
-			name: 'PBKDF2',
-			salt: saltBuf,
-			iterations: PBKDF2_ITERATIONS,
-			hash: HASH_ALGO
-		},
-		keyMaterial,
-		256
-	);
+  const saltBuf = (salt as Uint8Array).buffer as ArrayBuffer;
+  const derivedBits = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: saltBuf,
+      iterations: PBKDF2_ITERATIONS,
+      hash: HASH_ALGO
+    },
+    keyMaterial,
+    256
+  );
 
-	const saltHex = bufferToHex(salt.buffer);
-	const hashHex = bufferToHex(derivedBits);
+  const saltHex = bufferToHex(salt.buffer);
+  const hashHex = bufferToHex(derivedBits);
 
-	return `v1:${PBKDF2_ITERATIONS}:${saltHex}:${hashHex}`;
+  return `v1:${PBKDF2_ITERATIONS}:${saltHex}:${hashHex}`;
 }
 
 /**
  * Verifies a password against a stored PBKDF2 hash.
  */
 async function verifyPBKDF2(password: string, storedHash: string): Promise<boolean> {
-	const parts = storedHash.split(':');
-	if (parts.length !== 4 || parts[0] !== 'v1') return false;
+  const parts = storedHash.split(':');
+  if (parts.length !== 4 || parts[0] !== 'v1') return false;
 
-	const iterations = parseInt(parts[1]!, 10);
-	const salt = hexToBuffer(parts[2]!);
-	const originalHashBuffer = hexToBuffer(parts[3]!);
+  const iterations = parseInt(parts[1]!, 10);
+  const salt = hexToBuffer(parts[2]!);
+  const originalHashBuffer = hexToBuffer(parts[3]!);
 
-	const enc = new TextEncoder();
-	const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, [
-		'deriveBits'
-	]);
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, [
+    'deriveBits'
+  ]);
 
-	const saltBuf = (salt as Uint8Array).buffer as ArrayBuffer;
-	const derivedBits = await crypto.subtle.deriveBits(
-		{
-			name: 'PBKDF2',
-			salt: saltBuf,
-			iterations: iterations,
-			hash: HASH_ALGO
-		},
-		keyMaterial,
-		256
-	);
+  const saltBuf = (salt as Uint8Array).buffer as ArrayBuffer;
+  const derivedBits = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: saltBuf,
+      iterations: iterations,
+      hash: HASH_ALGO
+    },
+    keyMaterial,
+    256
+  );
 
-	// [!code fix] Use constant-time comparison
-	return constantTimeEqual(new Uint8Array(derivedBits), originalHashBuffer);
+  // [!code fix] Use constant-time comparison
+  return constantTimeEqual(new Uint8Array(derivedBits), originalHashBuffer);
 }
 
 /**
@@ -115,63 +120,63 @@ async function verifyPBKDF2(password: string, storedHash: string): Promise<boole
  * * Note: context is optional but recommended to offload migration logic.
  */
 export async function authenticateUser(
-	kv: KVNamespace,
-	identifier: string,
-	password: string,
-	context?: ExecutionContext
+  kv: KVNamespace,
+  identifier: string,
+  password: string,
+  context?: ExecutionContext
 ) {
-	const isEmail = identifier.includes('@');
+  const isEmail = identifier.includes('@');
 
-	const user = isEmail
-		? await findUserByEmail(kv, identifier)
-		: await findUserByUsername(kv, identifier);
+  const user = isEmail
+    ? await findUserByEmail(kv, identifier)
+    : await findUserByUsername(kv, identifier);
 
-	// [!code fix] PREVENT TIMING ATTACK
-	// If user is not found, verify against a dummy hash to consume the same CPU time.
-	if (!user) {
-		// Use a pre-generated valid hash (PBKDF2 v1 with same iteration count and zeroed salt/hash)
-		const dummyHash = 'v1:100000:00000000000000000000000000000000:00000000000000000000000000000000';
-		await verifyPBKDF2(password, dummyHash);
-		return null;
-	}
+  // [!code fix] PREVENT TIMING ATTACK
+  // If user is not found, verify against a dummy hash to consume the same CPU time.
+  if (!user) {
+    // Use a pre-generated valid hash (PBKDF2 v1 with same iteration count and zeroed salt/hash)
+    const dummyHash = 'v1:100000:00000000000000000000000000000000:00000000000000000000000000000000';
+    await verifyPBKDF2(password, dummyHash);
+    return null;
+  }
 
-	let passwordMatches = false;
-	let needsMigration = false;
+  let passwordMatches = false;
+  let needsMigration = false;
 
-	// --- Path A: PBKDF2 (New Standard) ---
-	if (user.password && user.password.startsWith('v1:')) {
-		passwordMatches = await verifyPBKDF2(password, user.password);
-	}
-	// --- Path B: Bcrypt (Legacy) ---
-	else if (user.password && user.password.startsWith('$2')) {
-		// Warning: This is CPU heavy, but necessary for migration
-		passwordMatches = await bcrypt.compare(password, user.password);
-		if (passwordMatches) needsMigration = true;
-	}
-	// [!code fix] REMOVED Path C: Plaintext (Vulnerability)
-	// Plaintext passwords are no longer supported.
+  // --- Path A: PBKDF2 (New Standard) ---
+  if (user.password && user.password.startsWith('v1:')) {
+    passwordMatches = await verifyPBKDF2(password, user.password);
+  }
+  // --- Path B: Bcrypt (Legacy) ---
+  else if (user.password && user.password.startsWith('$2')) {
+    // Warning: This is CPU heavy, but necessary for migration
+    passwordMatches = await bcrypt.compare(password, user.password);
+    if (passwordMatches) needsMigration = true;
+  }
+  // [!code fix] REMOVED Path C: Plaintext (Vulnerability)
+  // Plaintext passwords are no longer supported.
 
-	if (!passwordMatches) return null;
+  if (!passwordMatches) return null;
 
-	// --- Auto-Migration ---
-	if (needsMigration) {
-		log.debug(`[AUTH] Migrating user ${user.id} to optimized PBKDF2 hash.`);
+  // --- Auto-Migration ---
+  if (needsMigration) {
+    log.debug(`[AUTH] Migrating user ${user.id} to optimized PBKDF2 hash.`);
 
-		const migrationTask = async () => {
-			const newHash = await hashPassword(password);
-			await updatePasswordHash(kv, user as User, newHash);
-		};
+    const migrationTask = async () => {
+      const newHash = await hashPassword(password);
+      await updatePasswordHash(kv, user as User, newHash);
+    };
 
-		// [!code fix] Use waitUntil if available to prevent blocking the login response
-		if (context) {
-			context.waitUntil(migrationTask());
-		} else {
-			// Fallback: Await if no context is provided (preserves consistency at cost of latency)
-			await migrationTask();
-		}
-	}
+    // [!code fix] Use waitUntil if available to prevent blocking the login response
+    if (context) {
+      context.waitUntil?.(migrationTask());
+    } else {
+      // Fallback: Await if no context is provided (preserves consistency at cost of latency)
+      await migrationTask();
+    }
+  }
 
-	return { id: user.id } as { id: string };
+  return { id: user.id } as { id: string };
 }
 
 /**
@@ -183,28 +188,28 @@ export async function authenticateUser(
  * @returns true if password matches, false otherwise
  */
 export async function verifyPasswordForUser(
-	kv: KVNamespace,
-	userId: string,
-	password: string
+  kv: KVNamespace,
+  userId: string,
+  password: string
 ): Promise<boolean> {
-	const { findUserById } = await import('./userService');
-	const user = await findUserById(kv, userId);
+  const { findUserById } = await import('./userService');
+  const user = await findUserById(kv, userId);
 
-	if (!user || !user.password) {
-		// Consume same CPU time to prevent timing attacks
-		const dummyHash = 'v1:100000:00000000000000000000000000000000:00000000000000000000000000000000';
-		await verifyPBKDF2(password, dummyHash);
-		return false;
-	}
+  if (!user || !user.password) {
+    // Consume same CPU time to prevent timing attacks
+    const dummyHash = 'v1:100000:00000000000000000000000000000000:00000000000000000000000000000000';
+    await verifyPBKDF2(password, dummyHash);
+    return false;
+  }
 
-	// --- Path A: PBKDF2 (New Standard) ---
-	if (user.password.startsWith('v1:')) {
-		return await verifyPBKDF2(password, user.password);
-	}
-	// --- Path B: Bcrypt (Legacy) ---
-	else if (user.password.startsWith('$2')) {
-		return await bcrypt.compare(password, user.password);
-	}
+  // --- Path A: PBKDF2 (New Standard) ---
+  if (user.password.startsWith('v1:')) {
+    return await verifyPBKDF2(password, user.password);
+  }
+  // --- Path B: Bcrypt (Legacy) ---
+  else if (user.password.startsWith('$2')) {
+    return await bcrypt.compare(password, user.password);
+  }
 
-	return false;
+  return false;
 }

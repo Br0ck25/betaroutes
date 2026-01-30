@@ -15,7 +15,7 @@ export class TripIndexFresh extends TripIndexDO {}
 export class PlacesIndexSQL extends PlacesIndexDO {}
 
 export default {
-	async fetch() {
-		return new Response('Data Worker (SQL) is Running', { status: 200 });
-	}
+  async fetch() {
+    return new Response('Data Worker (SQL) is Running', { status: 200 });
+  }
 };

@@ -1,9 +1,9 @@
 // src/lib/utils/user-display.ts
 
 export interface DisplayableUser {
-	id?: string;
-	name?: string;
-	email?: string;
+  id?: string;
+  name?: string;
+  email?: string;
 }
 
 /**
@@ -12,12 +12,12 @@ export interface DisplayableUser {
  * in server-only lint rules.
  */
 export function getUserDisplayName(user?: DisplayableUser): string {
-	if (!user) return '';
-	return user.name?.trim() || user.email?.trim() || user.id || '';
+  if (!user) return '';
+  return user.name?.trim() || user.email?.trim() || user.id || '';
 }
 
 export function getUserEmail(user?: DisplayableUser): string | undefined {
-	if (!user) return undefined;
-	const email = user.email?.trim();
-	return email && email.length > 0 ? email : undefined;
+  if (!user) return undefined;
+  const email = user.email?.trim();
+  return email && email.length > 0 ? email : undefined;
 }

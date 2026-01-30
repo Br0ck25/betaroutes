@@ -73,17 +73,17 @@ The following colors are the **only colors allowed** in this project:
 
 ```css
 :root {
-	--color-primary-orange: #f68a2e;
-	--color-primary-blue: #2c507b;
-	--color-accent-blue: #1fa8db;
-	--color-accent-green: #8bc12d;
-	--color-accent-purple: #8f3d91;
+  --color-primary-orange: #f68a2e;
+  --color-primary-blue: #2c507b;
+  --color-accent-blue: #1fa8db;
+  --color-accent-green: #8bc12d;
+  --color-accent-purple: #8f3d91;
 
-	--color-white: #ffffff;
-	--color-black: #000000;
-	--color-gray-light: #f5f5f5;
-	--color-gray-medium: #e0e0e0;
-	--color-gray-dark: #333333;
+  --color-white: #ffffff;
+  --color-black: #000000;
+  --color-gray-light: #f5f5f5;
+  --color-gray-medium: #e0e0e0;
+  --color-gray-dark: #333333;
 }
 ```
 
@@ -91,13 +91,13 @@ The following colors are the **only colors allowed** in this project:
 
 ```svelte
 <style>
-	.button-primary {
-		background-color: #f68a2e; /* primary orange */
-	}
+  .button-primary {
+    background-color: #f68a2e; /* primary orange */
+  }
 
-	.text-body {
-		color: #333333; /* dark gray */
-	}
+  .text-body {
+    color: #333333; /* dark gray */
+  }
 </style>
 ```
 

@@ -1,198 +1,199 @@
 // src/routes/api/stripe/webhook/+server.ts
-import type { RequestHandler } from './$types';
-import { json } from '@sveltejs/kit';
+import { safeKV } from '$lib/server/env';
+import { log } from '$lib/server/log';
+import { createSafeErrorMessage } from '$lib/server/sanitize';
 import { getStripe } from '$lib/server/stripe';
 import { updateUserPlan } from '$lib/server/userService';
-import { safeKV } from '$lib/server/env';
-import { createSafeErrorMessage } from '$lib/server/sanitize';
-import { log } from '$lib/server/log';
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 
 import type Stripe from 'stripe';
 
 export const POST: RequestHandler = async ({ request, platform }) => {
-	log.info('Stripe webhook received');
+  log.info('Stripe webhook received');
 
-	// [!code fix] SECURITY (Issue #13): Validate webhook payload size
-	const contentLength = request.headers.get('content-length');
-	const MAX_WEBHOOK_SIZE = 1024 * 1024; // 1MB limit for webhook payloads
+  // [!code fix] SECURITY (Issue #13): Validate webhook payload size
+  const contentLength = request.headers.get('content-length');
+  const MAX_WEBHOOK_SIZE = 1024 * 1024; // 1MB limit for webhook payloads
 
-	if (contentLength && parseInt(contentLength, 10) > MAX_WEBHOOK_SIZE) {
-		log.error('Stripe webhook payload too large', { size: contentLength });
-		return json({ error: 'Payload too large' }, { status: 413 });
-	}
+  if (contentLength && parseInt(contentLength, 10) > MAX_WEBHOOK_SIZE) {
+    log.error('Stripe webhook payload too large', { size: contentLength });
+    return json({ error: 'Payload too large' }, { status: 413 });
+  }
 
-	const sig = request.headers.get('stripe-signature');
+  const sig = request.headers.get('stripe-signature');
 
-	// [!code fix] SECURITY (Issue #13): Add timeout for webhook body read
-	let body: string;
-	try {
-		const bodyPromise = request.text();
-		const timeoutPromise = new Promise<never>((_, reject) =>
-			setTimeout(() => reject(new Error('Request timeout')), 10000)
-		);
-		body = await Promise.race([bodyPromise, timeoutPromise]);
-	} catch (err) {
-		log.error('Stripe webhook body read timeout', { message: createSafeErrorMessage(err) });
-		return json({ error: 'Request timeout' }, { status: 408 });
-	}
+  // [!code fix] SECURITY (Issue #13): Add timeout for webhook body read
+  let body: string;
+  try {
+    const bodyPromise = request.text();
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Request timeout')), 10000)
+    );
+    body = await Promise.race([bodyPromise, timeoutPromise]);
+  } catch (err) {
+    log.error('Stripe webhook body read timeout', { message: createSafeErrorMessage(err) });
+    return json({ error: 'Request timeout' }, { status: 408 });
+  }
 
-	// [!code fix] SECURITY (Issue #13): Verify body size after read
-	if (body.length > MAX_WEBHOOK_SIZE) {
-		log.error('Stripe webhook body exceeds limit', { size: body.length });
-		return json({ error: 'Payload too large' }, { status: 413 });
-	}
+  // [!code fix] SECURITY (Issue #13): Verify body size after read
+  if (body.length > MAX_WEBHOOK_SIZE) {
+    log.error('Stripe webhook body exceeds limit', { size: body.length });
+    return json({ error: 'Payload too large' }, { status: 413 });
+  }
 
-	const stripe = getStripe();
-	const env = platform?.env as Record<string, unknown> | undefined;
+  const stripe = getStripe();
+  const env = platform?.env as Record<string, unknown> | undefined;
 
-	const webhookSecret = (env as Record<string, unknown>)['STRIPE_WEBHOOK_SECRET'] as
-		| string
-		| undefined;
+  const webhookSecret = (env as Record<string, unknown>)['STRIPE_WEBHOOK_SECRET'] as
+    | string
+    | undefined;
 
-	if (!sig) {
-		log.error('Stripe webhook missing signature header');
-		return json({ error: 'Missing signature' }, { status: 400 });
-	}
+  if (!sig) {
+    log.error('Stripe webhook missing signature header');
+    return json({ error: 'Missing signature' }, { status: 400 });
+  }
 
-	if (!webhookSecret) {
-		log.error('Stripe webhook secret not configured');
-		return json({ error: 'Webhook secret not configured' }, { status: 500 });
-	}
+  if (!webhookSecret) {
+    log.error('Stripe webhook secret not configured');
+    return json({ error: 'Webhook secret not configured' }, { status: 500 });
+  }
 
-	let event: Stripe.Event;
-	try {
-		event = stripe.webhooks.constructEvent(body, sig as string, webhookSecret as string);
-		log.info('✅ Webhook verified', { eventType: event.type });
-	} catch (err: unknown) {
-		log.error('❌ Signature verification failed', { message: createSafeErrorMessage(err) });
-		return json({ error: 'Webhook Error' }, { status: 400 });
-	}
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(body, sig as string, webhookSecret as string);
+    log.info('✅ Webhook verified', { eventType: event.type });
+  } catch (err: unknown) {
+    log.error('❌ Signature verification failed', { message: createSafeErrorMessage(err) });
+    return json({ error: 'Webhook Error' }, { status: 400 });
+  }
 
-	try {
-		switch (event.type) {
-			case 'checkout.session.completed': {
-				const session = event.data.object as unknown as Record<string, unknown> | undefined;
-				const metadata =
-					session && typeof session['metadata'] === 'object'
-						? (session['metadata'] as Record<string, unknown>)
-						: undefined;
-				const userId = typeof metadata?.['userId'] === 'string' ? metadata['userId'] : undefined;
-				const customerId = String(session?.['customer'] ?? '');
+  try {
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object as unknown as Record<string, unknown> | undefined;
+        const metadata =
+          session && typeof session['metadata'] === 'object'
+            ? (session['metadata'] as Record<string, unknown>)
+            : undefined;
+        const userId = typeof metadata?.['userId'] === 'string' ? metadata['userId'] : undefined;
+        const customerId = String(session?.['customer'] ?? '');
 
-				log.info('Payment success', { userId, customerId });
+        log.info('Payment success', { userId, customerId });
 
-				const usersKV = safeKV(env, 'BETA_USERS_KV');
-				if (userId && usersKV) {
-					await updateUserPlan(usersKV, userId, 'pro', customerId);
-					// Persist mapping customerId -> userId to avoid expensive KV scans later
-					try {
-						await usersKV.put(`stripe:customer:${customerId}`, userId);
-					} catch (e: unknown) {
-						log.warn('Failed to persist stripe customer mapping', {
-							message: createSafeErrorMessage(e)
-						});
-					}
-					log.info('User upgraded to Pro', { userId });
-				} else {
-					log.error('Missing userId or KV binding', { hasUserId: !!userId, hasUsersKV: !!usersKV });
-				}
-				break;
-			}
+        const usersKV = safeKV(env, 'BETA_USERS_KV');
+        if (userId && usersKV) {
+          await updateUserPlan(usersKV, userId, 'pro', customerId);
+          // Persist mapping customerId -> userId to avoid expensive KV scans later
+          try {
+            await usersKV.put(`stripe:customer:${customerId}`, userId);
+          } catch (e: unknown) {
+            log.warn('Failed to persist stripe customer mapping', {
+              message: createSafeErrorMessage(e)
+            });
+          }
+          log.info('User upgraded to Pro', { userId });
+        } else {
+          log.error('Missing userId or KV binding', { hasUserId: !!userId, hasUsersKV: !!usersKV });
+        }
+        break;
+      }
 
-			case 'customer.subscription.deleted': {
-				const subscription = event.data.object as unknown as Record<string, unknown> | undefined;
-				const customerId = String(subscription?.['customer'] ?? '');
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object as unknown as Record<string, unknown> | undefined;
+        const customerId = String(subscription?.['customer'] ?? '');
 
-				log.info('Subscription cancelled', { customerId });
+        log.info('Subscription cancelled', { customerId });
 
-				const usersKV = safeKV(env, 'BETA_USERS_KV');
-				if (usersKV) {
-					await downgradeUserByCustomerId(usersKV, customerId);
-				}
-				break;
-			}
+        const usersKV = safeKV(env, 'BETA_USERS_KV');
+        if (usersKV) {
+          await downgradeUserByCustomerId(usersKV, customerId);
+        }
+        break;
+      }
 
-			case 'customer.subscription.updated': {
-				const subscription = event.data.object as unknown as Record<string, unknown> | undefined;
-				const customerId = String(subscription?.['customer'] ?? '');
-				const status = String(subscription?.['status'] ?? '');
+      case 'customer.subscription.updated': {
+        const subscription = event.data.object as unknown as Record<string, unknown> | undefined;
+        const customerId = String(subscription?.['customer'] ?? '');
+        const status = String(subscription?.['status'] ?? '');
 
-				log.info('Subscription updated', { customerId, status });
+        log.info('Subscription updated', { customerId, status });
 
-				// Downgrade if subscription becomes inactive
-				if (['canceled', 'unpaid', 'past_due'].includes(status)) {
-					const usersKV = safeKV(env, 'BETA_USERS_KV');
-					if (usersKV) {
-						await downgradeUserByCustomerId(usersKV, customerId);
-					}
-				}
-				break;
-			}
+        // Downgrade if subscription becomes inactive
+        if (['canceled', 'unpaid', 'past_due'].includes(status)) {
+          const usersKV = safeKV(env, 'BETA_USERS_KV');
+          if (usersKV) {
+            await downgradeUserByCustomerId(usersKV, customerId);
+          }
+        }
+        break;
+      }
 
-			default:
-				log.info('Unhandled event', { type: event.type });
-		}
+      default:
+        log.info('Unhandled event', { type: event.type });
+    }
 
-		return json({ received: true });
-	} catch (err: unknown) {
-		log.error('❌ Webhook processing error', { message: createSafeErrorMessage(err) });
-		return json({ error: 'Processing failed' }, { status: 500 });
-	}
+    return json({ received: true });
+  } catch (err: unknown) {
+    log.error('❌ Webhook processing error', { message: createSafeErrorMessage(err) });
+    return json({ error: 'Processing failed' }, { status: 500 });
+  }
 };
 
 /**
  * Find user by Stripe customer ID and downgrade to free plan
  */
 async function downgradeUserByCustomerId(kv: KVNamespace, stripeCustomerId: string) {
-	try {
-		// First, try the fast lookup mapping -> avoids scanning entire KV
-		try {
-			const mappedUserId = await kv.get(`stripe:customer:${stripeCustomerId}`);
-			if (mappedUserId) {
-				await updateUserPlan(kv, String(mappedUserId), 'free');
-				log.info('Downgraded user via mapping', { userId: String(mappedUserId) });
-				return;
-			}
-		} catch (mapErr: unknown) {
-			log.warn('Failed to read stripe customer mapping, falling back to scan', {
-				message: createSafeErrorMessage(mapErr)
-			});
-		}
+  try {
+    // First, try the fast lookup mapping -> avoids scanning entire KV
+    try {
+      const mappedUserId = await kv.get(`stripe:customer:${stripeCustomerId}`);
+      if (mappedUserId) {
+        await updateUserPlan(kv, String(mappedUserId), 'free');
+        log.info('Downgraded user via mapping', { userId: String(mappedUserId) });
+        return;
+      }
+    } catch (mapErr: unknown) {
+      log.warn('Failed to read stripe customer mapping, falling back to scan', {
+        message: createSafeErrorMessage(mapErr)
+      });
+    }
 
-		// Fallback: Search through user records if mapping not found
-		const prefix = 'user:';
-		let cursor: string | undefined = undefined;
+    // Fallback: Search through user records if mapping not found
+    const prefix = 'user:';
+    let cursor: string | undefined = undefined;
 
-		do {
-			type KVListResult = {
-				keys: Array<{ name: string }>;
-				list_complete?: boolean;
-				cursor?: string;
-			};
-			const list: KVListResult = (await kv.list({
-				prefix,
-				cursor: cursor ?? null
-			})) as unknown as KVListResult;
+    do {
+      type KVListResult = {
+        keys: Array<{ name: string }>;
+        list_complete?: boolean;
+        cursor?: string;
+      };
+      const options: Record<string, unknown> = { prefix };
+      if (typeof cursor === 'string') options.cursor = cursor;
+      const list: KVListResult = (await kv.list(
+        options as unknown as KVListOptions
+      )) as unknown as KVListResult;
 
-			for (const key of list.keys) {
-				const raw = await kv.get(key.name);
-				if (raw) {
-					const user = JSON.parse(raw) as Record<string, unknown>;
-					if (user['stripeCustomerId'] === stripeCustomerId) {
-						// Found the user - downgrade them
-						await updateUserPlan(kv, String(user['id']), 'free');
-						log.info('Downgraded user', { userId: user['id'], email: user['email'] });
-						return;
-					}
-				}
-			}
+      for (const key of list.keys) {
+        const raw = await kv.get(key.name);
+        if (raw) {
+          const user = JSON.parse(raw) as Record<string, unknown>;
+          if (user['stripeCustomerId'] === stripeCustomerId) {
+            // Found the user - downgrade them
+            await updateUserPlan(kv, String(user['id']), 'free');
+            log.info('Downgraded user', { userId: user['id'], email: user['email'] });
+            return;
+          }
+        }
+      }
 
-			cursor = list.list_complete ? undefined : list.cursor;
-		} while (cursor);
+      cursor = list.list_complete ? undefined : list.cursor;
+    } while (cursor);
 
-		log.warn('No user found with stripeCustomerId', { stripeCustomerId });
-	} catch (err: unknown) {
-		log.error('Error downgrading user', { message: createSafeErrorMessage(err) });
-		throw err;
-	}
+    log.warn('No user found with stripeCustomerId', { stripeCustomerId });
+  } catch (err: unknown) {
+    log.error('Error downgrading user', { message: createSafeErrorMessage(err) });
+    throw err;
+  }
 }

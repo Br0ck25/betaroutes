@@ -2,119 +2,93 @@
 
 This document defines **repository-wide governance rules**.
 
-This repository **enforces Svelte 5 runes-based reactivity and the HTML Living Standard**.
-It is a **mixed Svelte 4 / Svelte 5 codebase** with a controlled, file-by-file migration.
+This repository is a **Strict Svelte 5 (Runes) + Cloudflare** application.
+It enforces **zero tolerance** for legacy syntax, insecure patterns, or "temporary exceptions".
 
-Legacy syntax is allowed **only** in files explicitly marked with `<!-- MIGRATION: SVELTE4-LEGACY -->`.
-Mixing legacy and runes syntax in the same file will fail CI.
+**Status:**
 
-This is a **Progressive Web App (PWA)**.
+- Legacy Mode: DISABLED (Svelte 4 syntax is banned)
+- Strict Mode: ENABLED (all files must pass `eslint.config.js`)
 
 ---
 
-## Mandatory Reading (Before Any Changes)
+## Mandatory reading (before any changes)
 
 You MUST read and follow:
 
 - `README.md`
-- `CONTRIBUTING.md`
-- `AI_GUARD.md`
-- `HTML_LIVING_STANDARD.md`
+- `AGENTS.md` (canonical AI router + forbidden patterns)
+- `ARCHITECTURE.md` (data boundaries & key patterns)
+- `SECURITY.md` (zero trust rules)
+- `PWA.md` (offline-first + caching rules)
+- `DESIGN_SYSTEM.md` (UI constraints & theme colors)
+- `HTML_LIVING_STANDARD.md` (strict parsing rules)
 
-If migrating files, also read:
+**Supplemental (recommended):**
 
-- `svelte-4-to-5-migration-agent-spec.v2.7.3.md` (authoritative)
-- `MIGRATION.md` (operational guidance)
+- `ERROR_PATTERNS_AND_STOP_CONDITIONS.md` (recurring mistakes + stop rules)
 
-If there is a conflict, **the migration spec and CI enforcement win**.
-
----
-
-## Svelte Rules (Strict)
-
-**Target:** Svelte 5
-
-**All new code must use runes-based reactivity:**
-
-- `$state`
-- `$derived`
-- `$effect`
-
-**File State Rules:**
-
-- Do not mix legacy and runes syntax in the same file
-- Files must clearly belong to either:
-  - **Svelte 4 (legacy)** with marker, or
-  - **Svelte 5 (migrated)** without marker
-
-### Forbidden in Svelte 5 Files
-
-See `AI_GUARD.md` for the complete authoritative list:
-
-- `svelte/store`
-- `$:` reactive statements
-- `onMount`, `beforeUpdate`, `afterUpdate`
-- `createEventDispatcher`
-- Class-based component instantiation
-
-### Legacy Files (Temporary)
-
-Files marked `<!-- MIGRATION: SVELTE4-LEGACY -->` may temporarily contain forbidden patterns until pre-migration cleanup is performed. See `MIGRATION.md`.
+**Conflict rule:** If there is a conflict, **SECURITY.md always wins.**
 
 ---
 
-## HTML Rules
+## Svelte rules (Runes only)
 
-- Follow the **HTML Living Standard (WHATWG)**
-- No XHTML / XML-style syntax
-- No deprecated elements or attributes
-- Prefer semantic, accessible HTML
+**Target:** Svelte 5 (Runes)
 
-See `HTML_LIVING_STANDARD.md` for complete rules.
+All component state must use runes:
+
+- `$state` / `$state.raw`
+- `$derived` / `$derived.by`
+- `$effect` / `$effect.pre`
+- `$props`
+- `$bindable`
+
+### Strictly forbidden
+
+- `export let` (use `$props()`)
+- `$:` labels (use `$derived` / `$effect`)
+- `createEventDispatcher` (use callback props)
+- `onMount` (use `$effect(() => { ... })` and guard with `browser` when needed)
+- `<slot>` (use snippets: `{#snippet}` / `{@render}`)
+- `$$props` (use `let props = $props()`)
+- `$$restProps` (use `let { ...rest } = $props()`)
+
+**Enforcement:** Any file containing forbidden patterns will fail the build via `eslint-plugin-svelte`.
 
 ---
 
-## PWA Rules (Non-Negotiable)
+## Cloudflare & data rules
 
-Do NOT break or remove:
+**Target:** Cloudflare Workers (edge runtime)
 
-- `manifest.json`
-- Service worker registration
-- Required meta tags
-- Icons
-- Theme colors
+- **No Node.js APIs:** do not use `fs`, `path`, or `process`.
+- **Secrets:** access secrets via `platform.env`, never `process.env`.
+- **Data access:** all KV/D1 usage MUST follow composite key rules defined in `ARCHITECTURE.md` and user scoping in `SECURITY.md`.
 
-Additional rules:
+---
 
-- No changes that reduce PWA functionality
-- Use modern, standards-based PWA patterns only
+## PWA rules (non-negotiable)
+
+- **Offline-first:** critical flows must work offline using IndexedDB (never `localStorage` for queues).
+- **Cache safety:** never cache API responses or user data in the service worker.
+- **Manifest:** `static/manifest.json` must remain valid and must match `DESIGN_SYSTEM.md`.
 
 See `PWA.md` for complete requirements.
 
 ---
 
-## Mandatory Post-Change Verification
+## Mandatory verification
 
 After **any** code change:
 
-1. Run `npm run check`
-2. Fix **all** errors and warnings
-3. Run `npm run lint`
-4. Fix **all** errors and warnings
-5. Run `npx eslint`
-6. Fix **all** eslint errors and warnings
+1. Run `npm run gate` (types + lint + format).
+2. Verify **no red squiggles** in VS Code (strict `tsconfig`).
 
-Optional but recommended: 7. Run `npm test`
+### Zero warnings policy
 
-Never ignore, suppress, downgrade, or bypass errors or warnings.
+Never ignore or suppress errors.
 
-All changes must be **CI-clean by default**.
-
-If checks or lint fail and the fix is unclear:
-**STOP and ask instead of guessing.**
-
----
-
-## Design System
-
-See `DESIGN_SYSTEM.md` for approved color palette and design guidelines.
+- No `// @ts-ignore`
+- No "temporary" eslint disables
+- Fix the root cause (or update the governance doc first, then implement)

@@ -1,43 +1,87 @@
 <!doctype html>
 <html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" href="%sveltekit.assets%/favicon.png" />
-		<link rel="manifest" href="/manifest.json" />
-		<meta name="theme-color" content="#ffffff" />
-		<meta
-			name="viewport"
-			content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover"
-		/>
-		<meta
-			name="description"
-			content="Go Route Yourself — plan routes, track costs, and maximize driving profits."
-		/>
-		<meta name="apple-mobile-web-app-capable" content="yes" />
-		<meta name="mobile-web-app-capable" content="yes" />
-		<meta name="apple-mobile-web-app-title" content="GoRoute" />
-		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-		<link rel="apple-touch-icon" href="/optimized/logo-192.png" />
-		<link rel="apple-touch-icon" sizes="120x120" href="/optimized/logo-120.png" />
-		<link rel="apple-touch-icon" sizes="180x180" href="/optimized/logo-192.png" />
-		<link rel="apple-touch-icon" sizes="512x512" href="/optimized/logo-512.png" />
-		<meta name="color-scheme" content="light dark" />
-		<link rel="preconnect" href="https://fonts.googleapis.com" />
-		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-		<link
-			rel="preload"
-			as="style"
-			href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
-			onload="this.rel = 'stylesheet'"
-		/>
-		<noscript
-			><link
-				rel="stylesheet"
-				href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
-		/></noscript>
-		%sveltekit.head%
-	</head>
-	<body data-sveltekit-preload-data="hover">
-		<div style="display: contents">%sveltekit.body%</div>
-	</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover"
+    />
+
+    <!-- Security: CSP fallback (server headers take precedence) -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'"
+    />
+
+    <!-- PWA: Icons & Manifest -->
+    <link rel="icon" href="%sveltekit.assets%/favicon.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#F68A2E" />
+
+    <!-- iOS PWA Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="GoRoute" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-icon" href="/optimized/logo-192.png" />
+    <link rel="apple-touch-icon" sizes="120x120" href="/optimized/logo-120.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/optimized/logo-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/optimized/logo-512.png" />
+
+    <!-- Color Scheme -->
+    <meta name="color-scheme" content="light dark" />
+
+    <!-- SEO -->
+    <meta
+      name="description"
+      content="Go Route Yourself – plan routes, track costs, and maximize driving profits."
+    />
+
+    <!-- Fonts: Progressive Loading -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      media="print"
+      onload="this.media = 'all'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      />
+    </noscript>
+
+    %sveltekit.head%
+  </head>
+  <body data-sveltekit-preload-data="hover">
+    <div style="display: contents">%sveltekit.body%</div>
+    <noscript>
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 100vh;
+          padding: 2rem;
+          text-align: center;
+          font-family:
+            system-ui,
+            -apple-system,
+            sans-serif;
+        "
+      >
+        <div>
+          <h1 style="font-size: 1.5rem; margin-bottom: 1rem; color: #333333">
+            JavaScript Required
+          </h1>
+          <p style="color: #666666">
+            This application requires JavaScript to function. Please enable JavaScript in your
+            browser settings and reload the page.
+          </p>
+        </div>
+      </div>
+    </noscript>
+  </body>
 </html>

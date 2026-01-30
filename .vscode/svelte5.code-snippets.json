@@ -1,0 +1,266 @@
+{
+  "Svelte 5 Component (Full)": {
+    "prefix": "s5component",
+    "scope": "svelte",
+    "body": [
+      "<script lang=\"ts\">",
+      "\t// Props",
+      "\tlet { ${1:prop} }: { ${1:prop}: ${2:string} } = $props();",
+      "\t",
+      "\t// State",
+      "\tlet ${3:count} = $state(${4:0});",
+      "\t",
+      "\t// Derived",
+      "\tlet ${5:doubled} = $derived(${3:count} * 2);",
+      "\t",
+      "\t// Effects",
+      "\t$effect(() => {",
+      "\t\tconsole.log('${3:count} changed:', ${3:count});",
+      "\t});",
+      "\t$0",
+      "</script>",
+      "",
+      "<div>",
+      "\t<p>{${3:count}}</p>",
+      "\t<p>Doubled: {${5:doubled}}</p>",
+      "\t<button onclick={() => ${3:count}++}>Increment</button>",
+      "</div>"
+    ],
+    "description": "Complete Svelte 5 component with props, state, derived, and effects"
+  },
+
+  "Svelte 5 Reactive State": {
+    "prefix": "state",
+    "scope": "svelte,typescript",
+    "body": "let ${1:name} = $state($2);",
+    "description": "Reactive state using $state() - ALWAYS use for reactive variables"
+  },
+
+  "Svelte 5 Derived Value": {
+    "prefix": "derived",
+    "scope": "svelte,typescript",
+    "body": "let ${1:name} = $derived($2);",
+    "description": "Computed value using $derived() - replaces $: labels"
+  },
+
+  "Svelte 5 Effect": {
+    "prefix": "effect",
+    "scope": "svelte,typescript",
+    "body": [
+      "$effect(() => {",
+      "\t${1:// Side effect code}",
+      "\t$0",
+      "\treturn () => {",
+      "\t\t${2:// Cleanup code}",
+      "\t};",
+      "});"
+    ],
+    "description": "Side effect using $effect() - replaces onMount"
+  },
+
+  "Svelte 5 Props (Typed)": {
+    "prefix": "props",
+    "scope": "svelte,typescript",
+    "body": "let { ${1:prop} }: { ${1:prop}: ${2:type} } = $props();",
+    "description": "Component props using $props() - replaces export let"
+  },
+
+  "Svelte 5 Props (Multiple)": {
+    "prefix": "propsmulti",
+    "scope": "svelte,typescript",
+    "body": [
+      "type Props = {",
+      "\t${1:prop1}: ${2:string};",
+      "\t${3:prop2}: ${4:number};",
+      "\t${5:prop3}?: ${6:boolean};",
+      "};",
+      "",
+      "let { ${1:prop1}, ${3:prop2}, ${5:prop3} }: Props = $props();"
+    ],
+    "description": "Multiple typed props using $props()"
+  },
+
+  "Svelte 5 Snippet (Named)": {
+    "prefix": "snippet",
+    "scope": "svelte",
+    "body": ["{#snippet ${1:name}(${2:param}: ${3:type})}", "\t$0", "{/snippet}"],
+    "description": "Named snippet - replaces <slot name=\"...\">"
+  },
+
+  "Svelte 5 Render Snippet": {
+    "prefix": "render",
+    "scope": "svelte",
+    "body": "{@render ${1:snippetName}($2)}",
+    "description": "Render a snippet - use instead of <slot>"
+  },
+
+  "Secure API Route (GET)": {
+    "prefix": "apiget",
+    "scope": "typescript",
+    "body": [
+      "import type { RequestHandler } from './$types';",
+      "import { json, error } from '@sveltejs/kit';",
+      "import { getEnv } from '$lib/server/env';",
+      "",
+      "export const GET: RequestHandler = async ({ locals, params, platform }) => {",
+      "\t// 1. Authenticate",
+      "\tif (!locals.user) {",
+      "\t\tthrow error(401, 'Unauthorized');",
+      "\t}",
+      "\t",
+      "\t// 2. Get environment",
+      "\tconst env = getEnv(platform);",
+      "\t",
+      "\t// 3. Build user-scoped key",
+      "\tconst key = `${1:resource}:\\${locals.user.id}:\\${params.${2:id}}`;",
+      "\t",
+      "\t// 4. Fetch data",
+      "\tconst data = await env.${3:KV}.get(key, { type: 'json' });",
+      "\t",
+      "\tif (!data) {",
+      "\t\tthrow error(404, 'Not found');",
+      "\t}",
+      "\t",
+      "\t// 5. Return",
+      "\treturn json(data);",
+      "};"
+    ],
+    "description": "Secure GET API route with authentication and user scoping"
+  },
+
+  "Secure API Route (POST)": {
+    "prefix": "apipost",
+    "scope": "typescript",
+    "body": [
+      "import type { RequestHandler } from './$types';",
+      "import { json, error } from '@sveltejs/kit';",
+      "import { getEnv } from '$lib/server/env';",
+      "",
+      "export const POST: RequestHandler = async ({ request, locals, platform }) => {",
+      "\t// 1. Authenticate",
+      "\tif (!locals.user) {",
+      "\t\tthrow error(401, 'Unauthorized');",
+      "\t}",
+      "\t",
+      "\t// 2. Parse and validate input (NEVER spread body directly)",
+      "\tconst body = await request.json();",
+      "\tconst { ${1:field1}, ${2:field2} } = body as { ${1:field1}: ${3:string}; ${2:field2}: ${4:number} };",
+      "\t",
+      "\tif (!${1:field1} || !${2:field2}) {",
+      "\t\tthrow error(400, 'Missing required fields');",
+      "\t}",
+      "\t",
+      "\t// 3. Get environment",
+      "\tconst env = getEnv(platform);",
+      "\t",
+      "\t// 4. Build user-scoped key",
+      "\tconst id = crypto.randomUUID();",
+      "\tconst key = `${5:resource}:\\${locals.user.id}:\\${id}`;",
+      "\t",
+      "\t// 5. Save data",
+      "\tconst data = { id, ${1:field1}, ${2:field2}, userId: locals.user.id };",
+      "\tawait env.${6:KV}.put(key, JSON.stringify(data));",
+      "\t",
+      "\t// 6. Return",
+      "\treturn json(data, { status: 201 });",
+      "};"
+    ],
+    "description": "Secure POST API route with input validation and user scoping"
+  },
+
+  "Use Security Wrapper (Get Trips)": {
+    "prefix": "gettrips",
+    "scope": "typescript",
+    "body": [
+      "import { getUserTrips } from '$lib/db/queries';",
+      "",
+      "const trips = await getUserTrips(${1:userId});"
+    ],
+    "description": "Get user trips using security wrapper - NEVER use db.getAll('trips')"
+  },
+
+  "Use Security Wrapper (Save Trip)": {
+    "prefix": "savetrip",
+    "scope": "typescript",
+    "body": [
+      "import { saveUserTrip } from '$lib/db/queries';",
+      "",
+      "await saveUserTrip(${1:trip}, ${2:userId});"
+    ],
+    "description": "Save user trip using security wrapper - NEVER use tx.objectStore('trips').put()"
+  },
+
+  "Use Security Wrapper (Delete Trip)": {
+    "prefix": "deletetrip",
+    "scope": "typescript",
+    "body": [
+      "import { deleteUserTrip } from '$lib/db/queries';",
+      "",
+      "await deleteUserTrip(${1:tripId}, ${2:userId});"
+    ],
+    "description": "Delete user trip using security wrapper - NEVER use store.delete()"
+  },
+
+  "Sync Queue Item (with userId)": {
+    "prefix": "syncqueue",
+    "scope": "typescript",
+    "body": [
+      "await syncManager.addToQueue({",
+      "\taction: '${1|create,update,delete|}',",
+      "\ttripId: ${2:tripId},",
+      "\tdata: ${3:data},",
+      "\tuserId: ${4:userId} // ⚠️ REQUIRED for user scoping",
+      "});"
+    ],
+    "description": "Add item to sync queue - userId is REQUIRED"
+  },
+
+  "CSRF Fetch": {
+    "prefix": "csrffetch",
+    "scope": "typescript,svelte",
+    "body": [
+      "import { csrfFetch } from '$lib/utils/csrf';",
+      "",
+      "const response = await csrfFetch('${1:/api/endpoint}', {",
+      "\tmethod: '${2|POST,PUT,DELETE|}',",
+      "\theaders: { 'Content-Type': 'application/json' },",
+      "\tbody: JSON.stringify(${3:data})",
+      "});"
+    ],
+    "description": "CSRF-protected fetch - use for all state-changing requests"
+  },
+
+  "Logout with Cleanup": {
+    "prefix": "logout",
+    "scope": "typescript",
+    "body": [
+      "import { clearUserData } from '$lib/db/queries';",
+      "",
+      "async function logout() {",
+      "\tconst userId = ${1:locals.user.id};",
+      "\t",
+      "\t// Clear IndexedDB (REQUIRED per SECURITY.md)",
+      "\tawait clearUserData(userId);",
+      "\t",
+      "\t// Clear session",
+      "\t${2:cookies.delete('session_id')};",
+      "\t",
+      "\t// Redirect",
+      "\t${3:redirect(302, '/')};",
+      "}"
+    ],
+    "description": "Logout with proper IndexedDB cleanup - clearUserData is REQUIRED"
+  },
+
+  "Get Environment (Cloudflare)": {
+    "prefix": "getenv",
+    "scope": "typescript",
+    "body": [
+      "import { getEnv } from '$lib/server/env';",
+      "",
+      "const env = getEnv(platform);",
+      "const ${1:binding} = env.${2:KV};"
+    ],
+    "description": "Get Cloudflare environment - NEVER use process.env"
+  }
+}

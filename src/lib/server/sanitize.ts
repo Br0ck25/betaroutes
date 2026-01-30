@@ -1,16 +1,16 @@
 // src/lib/server/sanitize.ts
 
 import type {
-	Location,
-	Stop,
-	Destination,
-	CostItem,
-	Trip,
-	UnsanitizedLocation,
-	UnsanitizedStop,
-	UnsanitizedDestination,
-	UnsanitizedCostItem,
-	UnsanitizedTrip
+  Location,
+  Stop,
+  Destination,
+  CostItem,
+  Trip,
+  UnsanitizedLocation,
+  UnsanitizedStop,
+  UnsanitizedDestination,
+  UnsanitizedCostItem,
+  UnsanitizedTrip
 } from '$lib/types';
 
 import { log } from '$lib/server/log';
@@ -27,227 +27,227 @@ import { log } from '$lib/server/log';
  * This preserves data fidelity (what the user types is what they get back).
  */
 export function sanitizeString(
-	input: string | null | undefined | unknown,
-	maxLength: number = 1000
+  input: string | null | undefined | unknown,
+  maxLength: number = 1000
 ): string {
-	if (!input) return '';
+  if (!input) return '';
 
-	// Convert to string and trim whitespace
-	let str = String(input).trim();
+  // Convert to string and trim whitespace
+  let str = String(input).trim();
 
-	// Enforce length limit to prevent database bloat
-	if (str.length > maxLength) {
-		str = str.substring(0, maxLength);
-	}
+  // Enforce length limit to prevent database bloat
+  if (str.length > maxLength) {
+    str = str.substring(0, maxLength);
+  }
 
-	// Remove null bytes (a common low-level attack vector)
-	return str.replace(/\0/g, '');
+  // Remove null bytes (a common low-level attack vector)
+  return str.replace(/\0/g, '');
 }
 
 /**
  * Sanitize a number, ensuring it's a valid finite number
  */
 export function sanitizeNumber(input: unknown, defaultValue: number = 0): number {
-	const num = Number(input);
-	// Check if valid number
-	if (isNaN(num) || !isFinite(num)) {
-		return defaultValue;
-	}
-	return num;
+  const num = Number(input);
+  // Check if valid number
+  if (isNaN(num) || !isFinite(num)) {
+    return defaultValue;
+  }
+  return num;
 }
 
 /**
  * Sanitize a location object with lat/lng
  */
 export function sanitizeLocation(location: unknown): Location | undefined {
-	if (!location || typeof location !== 'object') return undefined;
+  if (!location || typeof location !== 'object') return undefined;
 
-	const loc = location as UnsanitizedLocation;
-	const lat = sanitizeNumber(loc.lat, NaN);
-	const lng = sanitizeNumber(loc.lng, NaN);
+  const loc = location as UnsanitizedLocation;
+  const lat = sanitizeNumber(loc.lat, NaN);
+  const lng = sanitizeNumber(loc.lng, NaN);
 
-	// Validate lat/lng ranges
-	if (isNaN(lat) || isNaN(lng)) return undefined;
-	if (lat < -90 || lat > 90) return undefined;
-	if (lng < -180 || lng > 180) return undefined;
+  // Validate lat/lng ranges
+  if (isNaN(lat) || isNaN(lng)) return undefined;
+  if (lat < -90 || lat > 90) return undefined;
+  if (lng < -180 || lng > 180) return undefined;
 
-	return { lat, lng };
+  return { lat, lng };
 }
 
 /**
  * Sanitize a date/time string
  */
 export function sanitizeDateTime(input: unknown): string {
-	if (!input) return '';
-	const str = String(input).trim();
+  if (!input) return '';
+  const str = String(input).trim();
 
-	// Simple check: can Date parse it?
-	const date = new Date(str);
-	if (!isNaN(date.getTime())) {
-		return date.toISOString();
-	}
-	return '';
+  // Simple check: can Date parse it?
+  const date = new Date(str);
+  if (!isNaN(date.getTime())) {
+    return date.toISOString();
+  }
+  return '';
 }
 
 /**
  * Sanitize UUID
  */
 export function sanitizeUUID(input: unknown): string | undefined {
-	if (!input) return undefined;
-	const str = String(input).trim().toLowerCase();
-	// UUID v4 format regex
-	const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-	return uuidRegex.test(str) ? str : undefined;
+  if (!input) return undefined;
+  const str = String(input).trim().toLowerCase();
+  // UUID v4 format regex
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str) ? str : undefined;
 }
 
 /**
  * Sanitize an array of items using a sanitizer function
  */
 export function sanitizeArray<T>(
-	input: unknown,
-	itemSanitizer: (item: unknown) => T | null,
-	maxItems: number = 100
+  input: unknown,
+  itemSanitizer: (item: unknown) => T | null,
+  maxItems: number = 100
 ): T[] {
-	if (!Array.isArray(input)) return [];
-	return input
-		.slice(0, maxItems)
-		.map(itemSanitizer)
-		.filter((item): item is T => item !== null);
+  if (!Array.isArray(input)) return [];
+  return input
+    .slice(0, maxItems)
+    .map(itemSanitizer)
+    .filter((item): item is T => item !== null);
 }
 
 // --- Object Sanitizers ---
 
 export function sanitizeStop(stop: unknown): Stop | null {
-	if (!stop || typeof stop !== 'object') return null;
-	const s = stop as UnsanitizedStop;
+  if (!stop || typeof stop !== 'object') return null;
+  const s = stop as UnsanitizedStop;
 
-	// Accept common address fields to be resilient to differing payload shapes
-	const sRecord = s as Record<string, unknown>;
-	const rawAddress =
-		typeof sRecord['address'] === 'string'
-			? (sRecord['address'] as string)
-			: typeof sRecord['formatted_address'] === 'string'
-				? (sRecord['formatted_address'] as string)
-				: typeof sRecord['name'] === 'string'
-					? (sRecord['name'] as string)
-					: '';
+  // Accept common address fields to be resilient to differing payload shapes
+  const sRecord = s as Record<string, unknown>;
+  const rawAddress =
+    typeof sRecord['address'] === 'string'
+      ? (sRecord['address'] as string)
+      : typeof sRecord['formatted_address'] === 'string'
+        ? (sRecord['formatted_address'] as string)
+        : typeof sRecord['name'] === 'string'
+          ? (sRecord['name'] as string)
+          : '';
 
-	// Ensure a stable ID for later server-side processing (generate if missing)
-	return {
-		id: sanitizeUUID(s.id) ?? crypto.randomUUID(),
-		address: sanitizeString(rawAddress, 500),
-		earnings: sanitizeNumber(s.earnings, 0),
-		notes: sanitizeString(s.notes, 1000),
-		order: sanitizeNumber(s.order, 0),
-		location: sanitizeLocation(s.location) ?? null
-	};
+  // Ensure a stable ID for later server-side processing (generate if missing)
+  return {
+    id: sanitizeUUID(s.id) ?? crypto.randomUUID(),
+    address: sanitizeString(rawAddress, 500),
+    earnings: sanitizeNumber(s.earnings, 0),
+    notes: sanitizeString(s.notes, 1000),
+    order: sanitizeNumber(s.order, 0),
+    location: sanitizeLocation(s.location) ?? null
+  };
 }
 
 export function sanitizeDestination(destination: unknown): Destination | null {
-	if (!destination || typeof destination !== 'object') return null;
-	const d = destination as UnsanitizedDestination;
+  if (!destination || typeof destination !== 'object') return null;
+  const d = destination as UnsanitizedDestination;
 
-	const address = sanitizeString(d.address, 500);
-	if (!address) return null;
+  const address = sanitizeString(d.address, 500);
+  if (!address) return null;
 
-	const out: Destination = {
-		address,
-		earnings: sanitizeNumber(d.earnings, 0),
-		// Normalize to `null` when not present to satisfy server-side types that expect null
-		location: sanitizeLocation(d.location) ?? null
-	};
+  const out: Destination = {
+    address,
+    earnings: sanitizeNumber(d.earnings, 0),
+    // Normalize to `null` when not present to satisfy server-side types that expect null
+    location: sanitizeLocation(d.location) ?? null
+  };
 
-	return out;
+  return out;
 }
 
 export function sanitizeCostItem(item: unknown): CostItem | null {
-	if (!item || typeof item !== 'object') return null;
-	const c = item as UnsanitizedCostItem;
+  if (!item || typeof item !== 'object') return null;
+  const c = item as UnsanitizedCostItem;
 
-	const type = sanitizeString(c.type, 100);
-	if (!type) return null;
+  const type = sanitizeString(c.type, 100);
+  if (!type) return null;
 
-	return {
-		type,
-		cost: sanitizeNumber(c.cost, 0),
-		// Preserve boolean flag when provided
-		taxDeductible: !!(c as { taxDeductible?: unknown }).taxDeductible
-	};
+  return {
+    type,
+    cost: sanitizeNumber(c.cost, 0),
+    // Preserve boolean flag when provided
+    taxDeductible: !!(c as { taxDeductible?: unknown }).taxDeductible
+  };
 }
 
 /**
  * Sanitize a complete trip object
  */
 export function sanitizeTrip(trip: unknown): Partial<Trip> {
-	if (!trip || typeof trip !== 'object') {
-		throw new Error('Invalid trip data');
-	}
+  if (!trip || typeof trip !== 'object') {
+    throw new Error('Invalid trip data');
+  }
 
-	const t = trip as UnsanitizedTrip;
+  const t = trip as UnsanitizedTrip;
 
-	const out: Partial<Trip> = {
-		date: sanitizeString(t.date, 50),
-		startTime: sanitizeString(t.startTime, 50),
-		endTime: sanitizeString(t.endTime, 50),
-		hoursWorked: sanitizeNumber(t.hoursWorked),
-		startAddress: sanitizeString(t.startAddress, 500),
-		startLocation: sanitizeLocation(t.startLocation) ?? null,
-		endAddress: sanitizeString(t.endAddress, 500),
-		endLocation: sanitizeLocation(t.endLocation) ?? null,
-		totalMiles: sanitizeNumber(t.totalMiles),
-		estimatedTime: sanitizeNumber(t.estimatedTime),
-		totalTime: sanitizeString(t.totalTime, 50),
-		mpg: sanitizeNumber(t.mpg),
-		gasPrice: sanitizeNumber(t.gasPrice),
-		fuelCost: sanitizeNumber(t.fuelCost),
-		maintenanceCost: sanitizeNumber(t.maintenanceCost),
-		suppliesCost: sanitizeNumber(t.suppliesCost),
-		totalEarnings: sanitizeNumber(t.totalEarnings),
-		netProfit: sanitizeNumber(t.netProfit),
-		notes: sanitizeString(t.notes, 1000),
-		stops: sanitizeArray(t.stops, sanitizeStop, 50),
-		destinations: sanitizeArray(t.destinations, sanitizeDestination, 50),
-		maintenanceItems: sanitizeArray(t.maintenanceItems, sanitizeCostItem, 20),
-		suppliesItems: sanitizeArray(t.suppliesItems, sanitizeCostItem, 20)
-	};
+  const out: Partial<Trip> = {
+    date: sanitizeString(t.date, 50),
+    startTime: sanitizeString(t.startTime, 50),
+    endTime: sanitizeString(t.endTime, 50),
+    hoursWorked: sanitizeNumber(t.hoursWorked),
+    startAddress: sanitizeString(t.startAddress, 500),
+    startLocation: sanitizeLocation(t.startLocation) ?? null,
+    endAddress: sanitizeString(t.endAddress, 500),
+    endLocation: sanitizeLocation(t.endLocation) ?? null,
+    totalMiles: sanitizeNumber(t.totalMiles),
+    estimatedTime: sanitizeNumber(t.estimatedTime),
+    totalTime: sanitizeString(t.totalTime, 50),
+    mpg: sanitizeNumber(t.mpg),
+    gasPrice: sanitizeNumber(t.gasPrice),
+    fuelCost: sanitizeNumber(t.fuelCost),
+    maintenanceCost: sanitizeNumber(t.maintenanceCost),
+    suppliesCost: sanitizeNumber(t.suppliesCost),
+    totalEarnings: sanitizeNumber(t.totalEarnings),
+    netProfit: sanitizeNumber(t.netProfit),
+    notes: sanitizeString(t.notes, 1000),
+    stops: sanitizeArray(t.stops, sanitizeStop, 50),
+    destinations: sanitizeArray(t.destinations, sanitizeDestination, 50),
+    maintenanceItems: sanitizeArray(t.maintenanceItems, sanitizeCostItem, 20),
+    suppliesItems: sanitizeArray(t.suppliesItems, sanitizeCostItem, 20)
+  };
 
-	// Only attach lastModified when it produces a real string
-	const lm = t.lastModified ? sanitizeDateTime(t.lastModified) : undefined;
-	if (lm) out.lastModified = lm;
+  // Only attach lastModified when it produces a real string
+  const lm = t.lastModified ? sanitizeDateTime(t.lastModified) : undefined;
+  if (lm) out.lastModified = lm;
 
-	// Only include ID when it validates as a UUID (prevents `id: undefined` in result object)
-	const sid = sanitizeUUID(t.id);
-	if (sid) out.id = sid;
+  // Only include ID when it validates as a UUID (prevents `id: undefined` in result object)
+  const sid = sanitizeUUID(t.id);
+  if (sid) out.id = sid;
 
-	return out;
+  return out;
 }
 
 /**
  * Validate and sanitize entire request body
  */
 export function validateAndSanitizeRequest(
-	body: unknown,
-	_logSuspicious: boolean = true
+  body: unknown,
+  _logSuspicious: boolean = true
 ): Partial<Trip> {
-	// Keep `_logSuspicious` referenced so lint doesn't flag it as unused (reserved for future use)
-	void _logSuspicious;
+  // Keep `_logSuspicious` referenced so lint doesn't flag it as unused (reserved for future use)
+  void _logSuspicious;
 
-	// We no longer scan for regex patterns because Svelte renders all input as text.
-	// If a user saves "<script>", it is stored as "<script>" and displayed as "<script>".
-	// It never executes.
-	return sanitizeTrip(body);
+  // We no longer scan for regex patterns because Svelte renders all input as text.
+  // If a user saves "<script>", it is stored as "<script>" and displayed as "<script>".
+  // It never executes.
+  return sanitizeTrip(body);
 }
 
 export function sanitizeQueryParam(param: string | null, maxLength: number = 200): string {
-	return sanitizeString(param, maxLength);
+  return sanitizeString(param, maxLength);
 }
 
 export function createSafeErrorMessage(error: unknown): string {
-	if (error instanceof Error) {
-		log.error('Error details', { message: error.message, stack: error.stack });
-		return 'An error occurred while processing your request';
-	}
-	return 'An unexpected error occurred';
+  if (error instanceof Error) {
+    log.error('Error details', { message: error.message, stack: error.stack });
+    return 'An error occurred while processing your request';
+  }
+  return 'An unexpected error occurred';
 }
 
 /**
@@ -255,30 +255,30 @@ export function createSafeErrorMessage(error: unknown): string {
  * Returns generic error messages to clients while logging details server-side
  */
 export function createSafeApiError(
-	error: unknown,
-	context?: string
+  error: unknown,
+  context?: string
 ): { error: string; status: number } {
-	// Log full details server-side
-	if (error instanceof Error) {
-		log.error(`[API Error] ${context || 'Unknown'}`, {
-			message: error.message,
-			stack: error.stack,
-			name: error.name
-		});
+  // Log full details server-side
+  if (error instanceof Error) {
+    log.error(`[API Error] ${context || 'Unknown'}`, {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
 
-		// Return generic message to client
-		return {
-			error: 'An error occurred while processing your request',
-			status: 500
-		};
-	}
+    // Return generic message to client
+    return {
+      error: 'An error occurred while processing your request',
+      status: 500
+    };
+  }
 
-	// Handle non-Error objects
-	log.error(`[API Error] ${context || 'Unknown'}`, { error });
-	return {
-		error: 'An unexpected error occurred',
-		status: 500
-	};
+  // Handle non-Error objects
+  log.error(`[API Error] ${context || 'Unknown'}`, { error });
+  return {
+    error: 'An unexpected error occurred',
+    status: 500
+  };
 }
 
 /**
@@ -286,31 +286,31 @@ export function createSafeApiError(
  * Checks for dangerous keys that could pollute Object.prototype
  */
 export function hasDangerousKeys(obj: unknown): boolean {
-	if (!obj || typeof obj !== 'object') return false;
+  if (!obj || typeof obj !== 'object') return false;
 
-	const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
+  const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
 
-	// Check current level
-	for (const key of dangerousKeys) {
-		if (key in obj) {
-			log.warn('[SECURITY] Prototype pollution attempt detected', { key });
-			return true;
-		}
-	}
+  // Check current level
+  for (const key of dangerousKeys) {
+    if (key in obj) {
+      log.warn('[SECURITY] Prototype pollution attempt detected', { key });
+      return true;
+    }
+  }
 
-	// Recursively check nested objects
-	for (const key in obj) {
-		if (Object.prototype.hasOwnProperty.call(obj, key)) {
-			const value = (obj as Record<string, unknown>)[key];
-			if (value && typeof value === 'object') {
-				if (hasDangerousKeys(value)) {
-					return true;
-				}
-			}
-		}
-	}
+  // Recursively check nested objects
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      const value = (obj as Record<string, unknown>)[key];
+      if (value && typeof value === 'object') {
+        if (hasDangerousKeys(value)) {
+          return true;
+        }
+      }
+    }
+  }
 
-	return false;
+  return false;
 }
 
 /**
@@ -318,27 +318,27 @@ export function hasDangerousKeys(obj: unknown): boolean {
  * Recursively removes __proto__, constructor, and prototype keys
  */
 export function sanitizeJson<T>(obj: T): T {
-	if (!obj || typeof obj !== 'object') return obj;
+  if (!obj || typeof obj !== 'object') return obj;
 
-	const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
+  const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
 
-	if (Array.isArray(obj)) {
-		return obj.map((item) => sanitizeJson(item)) as T;
-	}
+  if (Array.isArray(obj)) {
+    return obj.map((item) => sanitizeJson(item)) as T;
+  }
 
-	const cleaned: Record<string, unknown> = {};
-	for (const key in obj) {
-		if (Object.prototype.hasOwnProperty.call(obj, key)) {
-			// Skip dangerous keys
-			if (dangerousKeys.includes(key)) {
-				log.warn('[SECURITY] Removed dangerous key from JSON', { key });
-				continue;
-			}
+  const cleaned: Record<string, unknown> = {};
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      // Skip dangerous keys
+      if (dangerousKeys.includes(key)) {
+        log.warn('[SECURITY] Removed dangerous key from JSON', { key });
+        continue;
+      }
 
-			const value = (obj as Record<string, unknown>)[key];
-			cleaned[key] = value && typeof value === 'object' ? sanitizeJson(value) : value;
-		}
-	}
+      const value = (obj as Record<string, unknown>)[key];
+      cleaned[key] = value && typeof value === 'object' ? sanitizeJson(value) : value;
+    }
+  }
 
-	return cleaned as T;
+  return cleaned as T;
 }

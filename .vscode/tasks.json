@@ -1,63 +1,133 @@
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"label": "Check (SvelteKit/TS)",
-			"type": "shell",
-			"command": "npm run check",
-			"problemMatcher": ["$tsc"],
-			"group": "build",
-			"presentation": {
-				"reveal": "always",
-				"panel": "dedicated"
-			}
-		},
-		{
-			"label": "Lint",
-			"type": "shell",
-			"command": "npm run lint",
-			"problemMatcher": ["$eslint-compact"],
-			"group": "build",
-			"presentation": {
-				"reveal": "always",
-				"panel": "dedicated"
-			}
-		},
-		{
-			"label": "Test (Run Once)",
-			"type": "shell",
-			"command": "npm run test:run",
-			"problemMatcher": [],
-			"group": {
-				"kind": "test",
-				"isDefault": true
-			},
-			"presentation": {
-				"reveal": "always",
-				"panel": "dedicated"
-			}
-		},
-		{
-			"label": "Test (Watch)",
-			"type": "shell",
-			"command": "npm run test:watch",
-			"problemMatcher": [],
-			"group": "test",
-			"isBackground": true,
-			"presentation": {
-				"reveal": "always",
-				"panel": "dedicated"
-			}
-		},
-		{
-			"label": "GATE: Check + Lint + Test",
-			"dependsOrder": "sequence",
-			"dependsOn": ["Check (SvelteKit/TS)", "Lint", "Test (Run Once)"],
-			"problemMatcher": [],
-			"group": {
-				"kind": "build",
-				"isDefault": true
-			}
-		}
-	]
+  "version": "2.0.0",
+  "tasks": [
+    // ----------------------------
+    // Check / Lint / Test tasks
+    // ----------------------------
+    {
+      "label": "Check (SvelteKit/TS)",
+      "type": "shell",
+      "command": "npm run check",
+      "problemMatcher": ["$tsc"],
+      "group": "build",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Lint",
+      "type": "shell",
+      "command": "npm run lint",
+      // ESLint has no universally correct built-in matcher for all configs.
+      // Keep this empty to avoid false positives/negatives; rely on exit code.
+      "problemMatcher": [],
+      "group": "build",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Test (Run Once)",
+      "type": "shell",
+      "command": "npm run test:run",
+      "problemMatcher": [],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Test (Watch)",
+      "type": "shell",
+      "command": "npm run test:watch",
+      "problemMatcher": [],
+      "group": "test",
+      "isBackground": true,
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+
+    // ----------------------------
+    // Optional but recommended: build task
+    // ----------------------------
+    {
+      "label": "Build",
+      "type": "shell",
+      "command": "npm run build",
+      "problemMatcher": [],
+      "group": "build",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+
+    // ----------------------------
+    // Gates (fast + full)
+    // ----------------------------
+    {
+      "label": "GATE: Fast (Check + Lint)",
+      "dependsOrder": "sequence",
+      "dependsOn": ["Lint", "Check (SvelteKit/TS)"],
+      "problemMatcher": [],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "GATE: Check + Lint + Test",
+      "dependsOrder": "sequence",
+      "dependsOn": ["Lint", "Check (SvelteKit/TS)", "Test (Run Once)"],
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "GATE: Full (Build + Check + Lint + Test)",
+      "dependsOrder": "sequence",
+      "dependsOn": ["Lint", "Check (SvelteKit/TS)", "Build", "Test (Run Once)"],
+      "problemMatcher": [],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    }
+  ]
 }

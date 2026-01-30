@@ -20,9 +20,9 @@
  * @returns The same SVG string (validated to be static)
  */
 export function sanitizeStaticSvg(svg: string): string {
-	// Pass-through for static content - already safe if hardcoded
-	// This function exists as a marker that the content has been reviewed as static
-	return svg;
+  // Pass-through for static content - already safe if hardcoded
+  // This function exists as a marker that the content has been reviewed as static
+  return svg;
 }
 
 /**
@@ -36,16 +36,16 @@ export function sanitizeStaticSvg(svg: string): string {
  * @returns Sanitized HTML string safe to render
  */
 export function sanitizeHtml(dirty: string): string {
-	// Lazy load DOMPurify only in browser context
-	if (typeof window !== 'undefined') {
-		// Dynamic import only works in browser
-		import('isomorphic-dompurify').then((module) => {
-			return module.default.sanitize(dirty) as string;
-		});
-	}
-	// In SSR/Workers, return empty string (should not be called here)
-	console.warn('[SECURITY] sanitizeHtml called in SSR context - sanitize server-side instead');
-	return '';
+  // Lazy load DOMPurify only in browser context
+  if (typeof window !== 'undefined') {
+    // Dynamic import only works in browser
+    import('isomorphic-dompurify').then((module) => {
+      return module.default.sanitize(dirty) as string;
+    });
+  }
+  // In SSR/Workers, return empty string (should not be called here)
+  console.warn('[SECURITY] sanitizeHtml called in SSR context - sanitize server-side instead');
+  return '';
 }
 
 /**
@@ -58,43 +58,43 @@ export function sanitizeHtml(dirty: string): string {
  * @returns Sanitized SVG string
  */
 export function sanitizeSvg(svg: string): string {
-	// Lazy load DOMPurify only in browser context
-	if (typeof window !== 'undefined') {
-		import('isomorphic-dompurify').then((module) => {
-			return module.default.sanitize(svg, {
-				USE_PROFILES: { svg: true, svgFilters: true },
-				ADD_TAGS: ['use'],
-				ALLOWED_ATTR: [
-					'class',
-					'id',
-					'xmlns',
-					'viewBox',
-					'width',
-					'height',
-					'fill',
-					'stroke',
-					'stroke-width',
-					'stroke-linecap',
-					'stroke-linejoin',
-					'd',
-					'cx',
-					'cy',
-					'r',
-					'x',
-					'y',
-					'x1',
-					'y1',
-					'x2',
-					'y2',
-					'points',
-					'pathLength',
-					'stroke-dasharray',
-					'fill-rule',
-					'clip-rule'
-				]
-			}) as string;
-		});
-	}
-	console.warn('[SECURITY] sanitizeSvg called in SSR context - use sanitizeStaticSvg instead');
-	return svg;
+  // Lazy load DOMPurify only in browser context
+  if (typeof window !== 'undefined') {
+    import('isomorphic-dompurify').then((module) => {
+      return module.default.sanitize(svg, {
+        USE_PROFILES: { svg: true, svgFilters: true },
+        ADD_TAGS: ['use'],
+        ALLOWED_ATTR: [
+          'class',
+          'id',
+          'xmlns',
+          'viewBox',
+          'width',
+          'height',
+          'fill',
+          'stroke',
+          'stroke-width',
+          'stroke-linecap',
+          'stroke-linejoin',
+          'd',
+          'cx',
+          'cy',
+          'r',
+          'x',
+          'y',
+          'x1',
+          'y1',
+          'x2',
+          'y2',
+          'points',
+          'pathLength',
+          'stroke-dasharray',
+          'fill-rule',
+          'clip-rule'
+        ]
+      }) as string;
+    });
+  }
+  console.warn('[SECURITY] sanitizeSvg called in SSR context - use sanitizeStaticSvg instead');
+  return svg;
 }

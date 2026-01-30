@@ -10,12 +10,12 @@ pages_build_output_dir = ".svelte-kit/cloudflare"
 
 [[env.production.durable_objects.bindings]]
 name = "TRIP_INDEX_DO"
-class_name = "TripIndexSQLv2" # UPDATED to v2
+class_name = "TripIndexSQLv2"
 script_name = "trip-index-worker"
 
 [[env.production.durable_objects.bindings]]
 name = "PLACES_INDEX_DO"
-class_name = "PlacesIndexSQLv2" # UPDATED to v2
+class_name = "PlacesIndexSQLv2"
 script_name = "trip-index-worker"
 
 [[env.production.kv_namespaces]]
@@ -70,17 +70,20 @@ id = "d5a88eb9bfd4486fbaa26e033e92104f"
 #   - API restrictions (Maps JavaScript API only)
 #   - Usage quotas and billing alerts
 # For server-only API keys, use: wrangler secret put PRIVATE_GOOGLE_MAPS_API_KEY
+#
+# SECURITY NOTE: Consider moving to environment variables for consistency:
+# wrangler secret put PUBLIC_GOOGLE_MAPS_API_KEY --env preview
 [env.preview.vars]
 PUBLIC_GOOGLE_MAPS_API_KEY = "AIzaSyC_M5PjI9-Dix0dOr_Sg2bKkXhNAIbr2Xs"
 
 [[env.preview.durable_objects.bindings]]
 name = "TRIP_INDEX_DO"
-class_name = "TripIndexSQLv2" # UPDATED to v2
+class_name = "TripIndexSQLv2"
 script_name = "trip-index-worker"
 
 [[env.preview.durable_objects.bindings]]
 name = "PLACES_INDEX_DO"
-class_name = "PlacesIndexSQLv2" # UPDATED to v2
+class_name = "PlacesIndexSQLv2"
 script_name = "trip-index-worker"
 
 [[env.preview.kv_namespaces]]
@@ -118,6 +121,12 @@ id = "5392d9ff847542a29abf58c5f0624011"
 [[env.preview.kv_namespaces]]
 binding = "BETA_SESSIONS_KV"
 id = "d395b64dcd0641f5a44d94c5ef5628eb"
+
+# ADDED: Missing BETA_MILEAGE_KV binding in preview
+# Replace this placeholder ID with your actual preview KV namespace ID
+[[env.preview.kv_namespaces]]
+binding = "BETA_MILEAGE_KV"
+id = "REPLACE_WITH_YOUR_PREVIEW_MILEAGE_KV_ID"
 
 # Optional scheduled triggers (uncomment to enable scheduling of background jobs)
 # See: https://developers.cloudflare.com/pages/platform/functions/date-scheduling

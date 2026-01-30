@@ -5,29 +5,29 @@ import { log } from '$lib/server/log';
  */
 
 export interface StoredAuthenticator {
-	credentialID: string;
-	credentialPublicKey: string;
-	counter: number;
-	transports?: AuthenticatorTransport[];
-	name?: string; // Friendly display name (e.g., "Windows laptop")
-	createdAt?: string;
+  credentialID: string;
+  credentialPublicKey: string;
+  counter: number;
+  transports?: AuthenticatorTransport[];
+  name?: string; // Friendly display name (e.g., "Windows laptop")
+  createdAt?: string;
 }
 
 /**
  * Get all authenticators for a user
  */
 export async function getUserAuthenticators(
-	kv: KVNamespace,
-	userId: string
+  kv: KVNamespace,
+  userId: string
 ): Promise<StoredAuthenticator[]> {
-	const key = `authenticators:${userId}`;
-	const data = await kv.get(key, 'json');
+  const key = `authenticators:${userId}`;
+  const data = await kv.get(key, 'json');
 
-	if (!data || !Array.isArray(data)) {
-		return [];
-	}
+  if (!data || !Array.isArray(data)) {
+    return [];
+  }
 
-	return data as StoredAuthenticator[];
+  return data as StoredAuthenticator[];
 }
 
 /**
@@ -35,69 +35,69 @@ export async function getUserAuthenticators(
  * CRITICAL: Also creates credential index for authentication lookups
  */
 export async function addAuthenticator(
-	kv: KVNamespace,
-	userId: string,
-	authenticator: {
-		credentialID: string;
-		credentialPublicKey: string;
-		counter: number;
-		transports?: AuthenticatorTransport[];
-		name?: string;
-		createdAt?: string;
-	}
+  kv: KVNamespace,
+  userId: string,
+  authenticator: {
+    credentialID: string;
+    credentialPublicKey: string;
+    counter: number;
+    transports?: AuthenticatorTransport[];
+    name?: string;
+    createdAt?: string;
+  }
 ): Promise<void> {
-	// Get existing authenticators
-	const existing = await getUserAuthenticators(kv, userId);
+  // Get existing authenticators
+  const existing = await getUserAuthenticators(kv, userId);
 
-	// Check if credential already exists
-	const duplicate = existing.find((auth) => auth.credentialID === authenticator.credentialID);
+  // Check if credential already exists
+  const duplicate = existing.find((auth) => auth.credentialID === authenticator.credentialID);
 
-	if (duplicate) {
-		// Use centralized logger
-		log.warn('[AuthenticatorService] Duplicate credential, skipping:', {
-			credentialID: authenticator.credentialID
-		});
-		return;
-	}
+  if (duplicate) {
+    // Use centralized logger
+    log.warn('[AuthenticatorService] Duplicate credential, skipping:', {
+      credentialID: authenticator.credentialID
+    });
+    return;
+  }
 
-	// Add new authenticator
-	const updated = [...existing, authenticator];
+  // Add new authenticator
+  const updated = [...existing, authenticator];
 
-	// Save to user's authenticators list
-	await kv.put(`authenticators:${userId}`, JSON.stringify(updated));
+  // Save to user's authenticators list
+  await kv.put(`authenticators:${userId}`, JSON.stringify(updated));
 
-	// ✅ CREATE CREDENTIAL INDEX - Maps credential → user for login lookups
-	// This is CRITICAL for authentication to work!
-	await kv.put(`credential:${authenticator.credentialID}`, userId);
+  // ✅ CREATE CREDENTIAL INDEX - Maps credential → user for login lookups
+  // This is CRITICAL for authentication to work!
+  await kv.put(`credential:${authenticator.credentialID}`, userId);
 
-	log.info('[AuthenticatorService] Added authenticator for user:', { userId });
-	log.info('[AuthenticatorService] Created credential index', {
-		credentialKey: `credential:${authenticator.credentialID}`,
-		userId
-	});
+  log.info('[AuthenticatorService] Added authenticator for user:', { userId });
+  log.info('[AuthenticatorService] Created credential index', {
+    credentialKey: `credential:${authenticator.credentialID}`,
+    userId
+  });
 }
 
 /**
  * Update the counter for an authenticator
  */
 export async function updateAuthenticatorCounter(
-	kv: KVNamespace,
-	userId: string,
-	credentialID: string,
-	newCounter: number
+  kv: KVNamespace,
+  userId: string,
+  credentialID: string,
+  newCounter: number
 ): Promise<void> {
-	const authenticators = await getUserAuthenticators(kv, userId);
+  const authenticators = await getUserAuthenticators(kv, userId);
 
-	const updated = authenticators.map((auth) => {
-		if (auth.credentialID === credentialID) {
-			return { ...auth, counter: newCounter };
-		}
-		return auth;
-	});
+  const updated = authenticators.map((auth) => {
+    if (auth.credentialID === credentialID) {
+      return { ...auth, counter: newCounter };
+    }
+    return auth;
+  });
 
-	await kv.put(`authenticators:${userId}`, JSON.stringify(updated));
+  await kv.put(`authenticators:${userId}`, JSON.stringify(updated));
 
-	log.info('[AuthenticatorService] Updated counter for credential', { credentialID, newCounter });
+  log.info('[AuthenticatorService] Updated counter for credential', { credentialID, newCounter });
 }
 
 /**
@@ -105,54 +105,54 @@ export async function updateAuthenticatorCounter(
  * This uses the credential index created during registration
  */
 export async function getUserIdByCredentialID(
-	kv: KVNamespace,
-	credentialID: string
+  kv: KVNamespace,
+  credentialID: string
 ): Promise<string | null> {
-	const key = `credential:${credentialID}`;
-	const userId = await kv.get(key);
+  const key = `credential:${credentialID}`;
+  const userId = await kv.get(key);
 
-	if (!userId) {
-		log.warn('[AuthenticatorService] No user found for credential', { credentialID });
-		return null;
-	}
+  if (!userId) {
+    log.warn('[AuthenticatorService] No user found for credential', { credentialID });
+    return null;
+  }
 
-	log.info('[AuthenticatorService] Found user for credential', { credentialID, userId });
-	return userId;
+  log.info('[AuthenticatorService] Found user for credential', { credentialID, userId });
+  return userId;
 }
 
 /**
  * Remove an authenticator from a user
  */
 export async function removeAuthenticator(
-	kv: KVNamespace,
-	userId: string,
-	credentialID: string
+  kv: KVNamespace,
+  userId: string,
+  credentialID: string
 ): Promise<void> {
-	const authenticators = await getUserAuthenticators(kv, userId);
+  const authenticators = await getUserAuthenticators(kv, userId);
 
-	const updated = authenticators.filter((auth) => auth.credentialID !== credentialID);
+  const updated = authenticators.filter((auth) => auth.credentialID !== credentialID);
 
-	await kv.put(`authenticators:${userId}`, JSON.stringify(updated));
+  await kv.put(`authenticators:${userId}`, JSON.stringify(updated));
 
-	// Also remove from credential index
-	await kv.delete(`credential:${credentialID}`);
+  // Also remove from credential index
+  await kv.delete(`credential:${credentialID}`);
 
-	log.info('[AuthenticatorService] Removed authenticator', { credentialID });
+  log.info('[AuthenticatorService] Removed authenticator', { credentialID });
 }
 
 /**
  * Remove all authenticators for a user (e.g., on account deletion)
  */
 export async function removeAllAuthenticators(kv: KVNamespace, userId: string): Promise<void> {
-	const authenticators = await getUserAuthenticators(kv, userId);
+  const authenticators = await getUserAuthenticators(kv, userId);
 
-	// Remove credential indexes
-	for (const auth of authenticators) {
-		await kv.delete(`credential:${auth.credentialID}`);
-	}
+  // Remove credential indexes
+  for (const auth of authenticators) {
+    await kv.delete(`credential:${auth.credentialID}`);
+  }
 
-	// Remove authenticators list
-	await kv.delete(`authenticators:${userId}`);
+  // Remove authenticators list
+  await kv.delete(`authenticators:${userId}`);
 
-	log.debug('[AuthenticatorService] Removed all authenticators for user:', userId);
+  log.debug('[AuthenticatorService] Removed all authenticators for user:', userId);
 }

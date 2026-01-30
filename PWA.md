@@ -3,175 +3,164 @@
 This repository is a **PWA-first application**.
 
 All changes must preserve **installability**, **offline behavior**, and **service worker correctness**.
-These rules are enforced by CI and must never be bypassed.
-
-PWAs must also work as **regular web apps in browsers** (not just as installed apps). Changes must be safe across
-different browsers, devices, and input methods.
 
 ---
 
-## Core Principles (Non-Negotiable)
+## Core principles (non-negotiable)
 
-- The app must always be installable as a PWA
-- The app must remain usable in a normal browser tab (non-installed)
-- Offline behavior must continue to function after any change
-- Service worker registration must remain intact
-- Deep links (any route URL) must remain navigable/shareable
-- CI must pass with zero warnings or errors
-
-If a change risks breaking PWA behavior:
-**STOP and ask before proceeding.**
+- **Installable:** The app must meet browser installation criteria.
+- **Offline-first:** Core features (viewing logs, queuing new trips) must work without network.
+- **Zero trust caching:** We strictly separate **Public Assets** (cacheable) from **User Data** (never cacheable).
 
 ---
 
-## Progressive Enhancement & Feature Detection (Required)
+## Progressive enhancement & feature detection
 
-We build with **progressive enhancement**: ship a robust baseline experience first, then layer on capabilities where
-they exist.
+We build with **progressive enhancement**: ship a robust baseline experience first.
 
 Rules:
 
-- Never assume a capability exists just because a browser is “modern”.
-- **Do not use user-agent sniffing** to branch logic.
-- Use **feature detection**:
-  - JavaScript: check for API entry points (e.g., `'serviceWorker' in navigator`, `'caches' in globalThis`).
-  - CSS: prefer `@supports (...) { ... }` for CSS feature gating; use `CSS.supports()` only when you truly need JS.
-- Provide accessible fallbacks where possible.
-- If a feature is required for core UX, implement a **fallback flow** (or an explicit, user-friendly “not supported”
-  state) rather than crashing.
+- **No User-Agent sniffing:** Branching on `navigator.userAgent` is forbidden.
+- **Feature detection only:** Use `'serviceWorker' in navigator`, `'SyncManager' in window`, and `@supports` in CSS.
+- **Graceful fallbacks:** If a feature is missing (e.g., Background Sync), UI must degrade cleanly (e.g., “Syncing…” → “Manual Sync Required”).
 
 ---
 
-## Manifest Requirements
+## Manifest requirements
 
-The following must never be removed or invalidated:
+The manifest is critical.
 
-- `manifest.json`
-- Required fields:
-  - `name`
-  - `short_name`
-  - `start_url`
-  - `display`
-  - `icons`
-  - `theme_color`
-  - `background_color`
-
-Rules:
-
-- Icons must exist at declared paths
-- No invalid MIME types
-- No breaking changes to `start_url`
-- Manifest must be served with correct MIME type (`application/manifest+json`)
-- Changes to `start_url` / `scope` must be coordinated with any subpath hosting (e.g., Cloudflare Pages base paths)
+- **Location:** `static/manifest.json`
+- **Required fields:**
+  - `name`, `short_name`
+  - `start_url` and `scope`
+    - **Must work under a base path** (Cloudflare Pages/Workers subpath deploys).
+    - Prefer **relative** values so the manifest works at `/` or a subpath:
+      - `start_url: "."`
+      - `scope: "."`
+  - `display: "standalone"`
+  - `background_color`, `theme_color` (must match `DESIGN_SYSTEM.md`)
+  - `icons` (must exist in `static/`)
+    - Include at least one **maskable** icon (`"purpose": "any maskable"`)
+  - Strongly recommended:
+    - `id` (stable app identity)
+    - `description`
 
 ---
 
-## Service Worker Rules
+## Service worker rules (strict)
 
-- Service worker registration must remain functional
-- Do not rename, remove, or disable the service worker without explicit approval
-- Updates must not break existing caches
-- Cache versioning must be intentional and explicit
-- The app must remain usable when the service worker is unavailable (first visit, unsupported browser, or SW disabled)
+**Location:** `src/service-worker.ts` (SvelteKit standard)
 
-Forbidden:
+### 1) Caching strategy
 
-- Uncontrolled cache clearing
-- Breaking offline navigation
-- Blocking critical routes when offline
-- Installing a service worker that can “brick” the app on update (always keep a safe offline fallback)
+- ✅ **Precache:** App shell assets (JS/CSS/fonts/icons). SvelteKit’s `$service-worker` module provides `build`, `files`, `version`.
+- ✅ **Navigation:** **Network-first** for HTML navigations (try network, fall back to offline shell/page).
+- ❌ **Forbidden:** Caching authenticated or user-specific responses in Cache Storage.
+- ❌ **Forbidden:** Caching API responses (`/api/**`) in Cache Storage.
+  - **Reason:** Security. Sensitive JSON must not persist in global caches. Use **IndexedDB** for structured offline data instead.
 
----
+**Mandatory bypass rules:**
 
-## Offline Behavior
+- Requests to `/api/**` MUST be treated as **network-only** in the SW.
+- Any response containing `Set-Cookie` MUST NOT be cached.
+- Any request with credentials (cookies) MUST NOT be cached unless it is explicitly a public, non-user-specific asset.
 
-Users expect installed apps to work on slow, unreliable networks — and when fully offline.
+### 2) SvelteKit integration (mandatory)
 
-Minimum requirement:
+- The SW MUST import `{ build, files, version }` from `$service-worker`.
+- It MUST:
+  - handle `install` (precache build artifacts + static `files`)
+  - handle `activate` (delete old caches by `version`)
+  - use `version` as the cache key namespace
 
-- Provide a **custom offline fallback** (not the browser’s generic offline error page) for navigations and critical
-  routes.
+### 3) Updates (safe by default)
 
-Recommended (where applicable):
+Updates must not silently break an active session.
 
-- Keep the app shell loadable offline
-- Allow users to continue core tasks offline (queue actions locally and sync when back online)
-- Ensure previously visited routes remain available offline when feasible
-- Cache static assets (CSS, JS, icons) safely and predictably
-- Persist local state drafts so work is not lost on refresh/offline
+- **Preferred:** show a UI prompt (“Update available → Reload”) and call `skipWaiting()` only after user consent.
+- If you choose immediate updates, you MUST verify it cannot break in-flight work (offline queues, draft forms, etc.).
 
-Offline regressions are considered **breaking changes**.
+### 4) Kill switch (mandatory)
 
----
+If a bad SW is deployed, we must be able to “self-destruct” it quickly.
 
-## Deep Linking & Navigation
+Minimum kill-switch behavior:
 
-- Every meaningful view must have a unique URL (deep link).
-- Do not replace URL-based navigation with state-only navigation.
-- If a user pastes a deep link into a browser, it must load (online) and remain compatible with offline fallbacks.
+- `self.registration.unregister()`
+- delete all caches
+- `clients.claim()` (so the cleanup applies immediately)
 
----
+Example (deploy as an emergency SW):
 
-## Adapt to Devices & Input Methods
+```ts
+self.addEventListener('install', (event) => {
+  // @ts-expect-error - SW global
+  self.skipWaiting();
+});
 
-- UI must remain usable on all viewport sizes (responsive layout).
-- Do not ship “desktop-only” interactions:
-  - keyboard + mouse
-  - touch / stylus
-- Prefer semantic HTML elements for interactive controls (buttons, forms, inputs) instead of div-based controls.
-
----
-
-## Performance & Accessibility (Non-Negotiable)
-
-- Keep startup and navigation fast; avoid blocking the main thread with long synchronous work.
-- Avoid large, unnecessary dependencies; measure impact before adding.
-- Accessibility is required:
-  - keyboard navigation
-  - focus visibility and logical focus order
-  - readable contrast and scalable text
-  - appropriate labels/ARIA only when semantic HTML cannot express the intent
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+      await self.registration.unregister();
+      // @ts-expect-error - SW global
+      self.clients.claim();
+    })()
+  );
+});
+```
 
 ---
 
-## Update Strategy
+## Offline data strategy
 
-- Use safe, forward-compatible cache strategies
-- Avoid aggressive cache invalidation
-- Prefer additive changes over destructive updates
+**Read:** `ARCHITECTURE.md` (ADR-004)
 
-If an update requires cache invalidation:
-
-- Document the reason
-- Verify offline behavior manually
-- Test across multiple devices/browsers
+- **Write path (offline):** User actions (e.g., “Start Trip”) are written to **IndexedDB**.
+- **Sync path (online):** A **Sync Engine** reads IndexedDB and POSTs to the server.
+- **UI state:** The UI MUST show a clear **Pending** state for unsynced items.
+- **Logout/account switch:** IndexedDB offline queues MUST be cleared (or re-keyed) to prevent cross-account leakage.
 
 ---
 
-## Testing Requirements
+## API caching headers (mandatory)
+
+Server routes that return user data MUST include:
+
+- `/api/**`: `Cache-Control: no-store`
+- Authenticated HTML/data routes: `Cache-Control: no-store` and `Vary: Cookie`
+
+---
+
+## Adapt to devices & input methods
+
+- **Responsive:** Must work from 320px mobile to large desktop.
+- **Inputs:** Support touch, mouse, and keyboard.
+- **iOS:** Handle iOS PWA quirks (install flow, storage eviction, feature gaps across versions).
+
+---
+
+## Testing requirements
 
 After any change that could affect PWA behavior:
 
-- Verify the manifest is valid and served correctly
-- Verify service worker registers successfully and updates safely
-- Verify install prompt still appears (where applicable)
-- Verify offline mode works via DevTools and in a real “offline” scenario
-- Verify deep links load directly (fresh tab) and still work with offline fallbacks
-- Ensure Lighthouse PWA score does not regress
-- Test across multiple browsers and at least one mobile device when possible
+1. **Lighthouse:** Run a PWA audit. **PWA category must be 100.**
+2. **Offline reload:** DevTools → Offline. Reload. App must boot and show offline-ready UI.
+3. **Offline queue:** Create an offline action. Confirm it is queued and marked Pending.
+4. **Online sync:** Re-enable network. Confirm the Sync Engine flushes successfully.
+5. **Installability:** Confirm browser indicates installability (or iOS add-to-home-screen flow is documented).
 
 ---
 
-## Forbidden Changes
+## Forbidden changes
 
-❌ Removing PWA metadata  
-❌ Disabling service workers  
-❌ Regressing offline support  
-❌ Breaking deep links / routing  
-❌ Reducing Lighthouse PWA compliance  
-❌ Breaking manifest.json structure  
-❌ Removing or invalidating icons  
-❌ Browser sniffing for feature support
+❌ Removing required `manifest.json` properties.
+❌ Caching `platform.env` or sensitive API data in Cache Storage.
+❌ Caching `/api/**` responses in SW cache.
+❌ Breaking the offline fallback/shell route.
+❌ Using `localStorage` for offline queues (use IndexedDB).
 
 ---
 
@@ -181,28 +170,5 @@ Violations of these rules will:
 
 - Fail CI
 - Be rejected by AI_GUARD rules
-- Block merges
 
-If compliance is unclear:
-**STOP and ask instead of guessing.**
-
----
-
-## SvelteKit Integration
-
-- Service worker must be compatible with SvelteKit's build output
-- Ensure `service-worker.ts` is in the correct static directory (`static/` or `src/service-worker.ts`)
-- Verify manifest is accessible and served correctly
-- Service worker must handle SvelteKit's client-side routing
-- Prerendered pages should be cached appropriately
-
----
-
-## Migration Note
-
-When migrating Svelte 4 → Svelte 5:
-
-- Verify service worker continues to work with new build output
-- Check that routing changes don't break offline navigation
-- Ensure build artifacts are still cacheable
-- Test PWA functionality after migration
+If compliance is unclear: **STOP and ask.**
