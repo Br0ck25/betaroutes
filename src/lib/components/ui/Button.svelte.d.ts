@@ -1,4 +1,4 @@
-import type { SvelteComponentTyped } from 'svelte';
+import type { Snippet, SvelteComponentTyped } from 'svelte';
 
 export default class Button extends SvelteComponentTyped<
   {
@@ -9,7 +9,11 @@ export default class Button extends SvelteComponentTyped<
     action?: (event: MouseEvent) => void;
     onClick?: (event: MouseEvent) => void;
     onclick?: (event: MouseEvent) => void;
+    // children is accepted as a slot/snippet
+    children?: Snippet;
   },
-  { click: MouseEvent },
-  { default: Record<string, unknown> }
+  // No custom component events are emitted; if consumers need DOM events they should
+  // attach handlers to the underlying element via the action prop instead.
+  {},
+  { default: Snippet }
 > {}

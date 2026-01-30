@@ -1,7 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { onMount } from 'svelte';
   import { base } from '$app/paths';
   const resolve = (href: string) => `${base}${href}`;
   import { toasts } from '$lib/stores/toast';
@@ -30,7 +29,7 @@
     if (isLogin()) url.searchParams.set('view', 'register');
     else url.searchParams.delete('view');
     // eslint-disable-next-line svelte/no-navigation-without-resolve
-    goto(resolve(url.pathname + url.search), { replaceState: true });
+    void goto(resolve(url.pathname + url.search), { replaceState: true });
 
     username = '';
     email = '';

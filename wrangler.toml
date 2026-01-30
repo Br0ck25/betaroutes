@@ -126,7 +126,7 @@ id = "d395b64dcd0641f5a44d94c5ef5628eb"
 # Replace this placeholder ID with your actual preview KV namespace ID
 [[env.preview.kv_namespaces]]
 binding = "BETA_MILEAGE_KV"
-id = "REPLACE_WITH_YOUR_PREVIEW_MILEAGE_KV_ID"
+id = "d5a88eb9bfd4486fbaa26e033e92104f"
 
 # Optional scheduled triggers (uncomment to enable scheduling of background jobs)
 # See: https://developers.cloudflare.com/pages/platform/functions/date-scheduling
