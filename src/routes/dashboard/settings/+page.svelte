@@ -3,7 +3,7 @@
   import Button from '$lib/components/ui/Button.svelte';
   import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
   import Modal from '$lib/components/ui/Modal.svelte';
-  import { auth, user } from '$lib/stores/auth';
+  import { user } from '$lib/stores/auth';
   import { trips } from '$lib/stores/trips';
   import { userSettings } from '$lib/stores/userSettings';
   import { csrfFetch } from '$lib/utils/csrf';
@@ -65,9 +65,7 @@
   }
 
   // Upgrade/Pro Logic
-  const _isPro = $derived(
-    ['pro', 'business', 'premium', 'enterprise'].includes($auth.user?.plan || '')
-  );
+  const _isPro = $derived(['pro', 'business', 'premium', 'enterprise'].includes($user?.plan || ''));
   let isUpgradeModalOpen = $state(false);
   let upgradeSource = $state<'generic' | 'export' | 'advanced-export'>('generic');
   let isCheckingOut = $state(false);
@@ -278,7 +276,7 @@
   </SettingsLayout>
 </div>
 
-<!-- @ts-expect-error ExportModal prop types being migrated; using callback prop -->
+<!-- @ts-ignore ExportModal prop types being migrated; using callback prop -->
 <ExportModal bind:showAdvancedExport onSuccess={showSuccessMsg} />
 
 <Modal bind:open={isUpgradeModalOpen} title="Upgrade to Pro">

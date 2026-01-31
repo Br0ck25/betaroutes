@@ -11,20 +11,20 @@
 
 <script lang="ts">
   import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
-  import { auth } from '$lib/stores/auth';
+  import { auth, user } from '$lib/stores/auth';
   import { trips } from '$lib/stores/trips';
   import { csrfFetch } from '$lib/utils/csrf';
   import { SvelteDate } from '$lib/utils/svelte-reactivity';
 
   // Expose component prop types for consumers during migration (instance script required)
-  type $$Props = Props & {
+  type _$$Props = Props & {
     onSuccess?: (msg: string) => void;
     onPortal?: () => void;
     onUpgrade?: (plan?: 'generic' | 'export' | 'advanced-export') => void;
   };
 
   // Single $props() call — declare props and callbacks (other values derived internally)
-  let {
+  const {
     profile = { name: '', email: '' },
     onSuccess,
     onPortal,
@@ -38,7 +38,7 @@
   };
 
   // Local editable copy of the profile to avoid mutating props directly
-  let localProfile = $state<{ name: string; email: string }>({
+  const localProfile = $state<{ name: string; email: string }>({
     name: '',
     email: ''
   });
@@ -61,16 +61,14 @@
     }).length
   );
 
-  const isPro = $derived(
-    ['pro', 'business', 'premium', 'enterprise'].includes($auth.user?.plan || '')
-  );
+  const isPro = $derived(['pro', 'business', 'premium', 'enterprise'].includes($user?.plan || ''));
 
   // Local UI state
   let buttonHighlight = $state(false);
   let isOpeningPortal = $state(false);
   let isCheckingOut = $state(false);
 
-  async function handlePortalLocal() {
+  async function _handlePortalLocal() {
     if (isOpeningPortal) return;
     isOpeningPortal = true;
     try {
@@ -85,7 +83,7 @@
     }
   }
 
-  async function handleUpgradeLocal() {
+  async function _handleUpgradeLocal() {
     if (isCheckingOut) return;
     isCheckingOut = true;
     try {
@@ -200,7 +198,7 @@
       <label for="plan-badge">Current Plan</label>
       <div class="plan-row">
         <div id="plan-badge" class="plan-badge" style="text-transform: capitalize;">
-          {$auth.user?.plan || 'free'} Plan
+          {$user?.plan || 'free'} Plan
         </div>
 
         {#if isPro}
@@ -215,17 +213,17 @@
       </div>
     </div>
 
-    {#if $auth.user?.plan === 'free'}
+    {#if $user?.plan === 'free'}
       <div class="usage-stats">
         <div class="usage-header">
           <span>Monthly Usage</span>
-          <span>{monthlyUsage} / {$auth.user?.maxTrips || 10} trips</span>
+          <span>{monthlyUsage} / {$user?.maxTrips || 10} trips</span>
         </div>
         <div class="progress-bar">
           <div
             class="progress-fill"
-            style="width: {Math.min((monthlyUsage / ($auth.user?.maxTrips || 10)) * 100, 100)}%"
-            class:warning={monthlyUsage >= ($auth.user?.maxTrips || 10)}
+            style="width: {Math.min((monthlyUsage / ($user?.maxTrips || 10)) * 100, 100)}%"
+            class:warning={monthlyUsage >= ($user?.maxTrips || 10)}
           ></div>
         </div>
       </div>
