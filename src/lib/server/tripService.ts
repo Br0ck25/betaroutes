@@ -29,6 +29,9 @@ export type TripRecord = {
   endTime?: string;
   netProfit?: number;
   totalEarnings?: number;
+  // Optional fuel economics
+  mpg?: number;
+  gasPrice?: number;
   fuelCost?: number;
   maintenanceCost?: number;
   suppliesCost?: number;

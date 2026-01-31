@@ -1,8 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import { page } from '$app/state';
-  import { base } from '$app/paths';
-  const resolve = (href: string) => `${base}${href}`;
   import { toasts } from '$lib/stores/toast';
   import { csrfFetch } from '$lib/utils/csrf-client';
   // Import WebAuthn helper
@@ -28,8 +27,8 @@
     const url = new URL(page.url);
     if (isLogin()) url.searchParams.set('view', 'register');
     else url.searchParams.delete('view');
-    // eslint-disable-next-line svelte/no-navigation-without-resolve
-    void goto(resolve(url.pathname + url.search), { replaceState: true });
+
+    location.replace(url.pathname + url.search);
 
     username = '';
     email = '';
@@ -215,7 +214,6 @@
       const verificationJSON: any = await verificationResp.json();
 
       if (verificationJSON.verified) {
-        // eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
         await goto(resolve('/dashboard'), { invalidateAll: true });
       } else {
         responseError = 'Biometric verification failed.';
@@ -243,6 +241,9 @@
       }
     }
   });
+
+  // Event handlers are attached declaratively in markup using Svelte 5 runes (onclick/on:submit)
+  // This avoids manual DOM queries and keeps SSR output clean.
 
   async function quickSignIn() {
     if (!quickPasskey) return;
@@ -351,7 +352,6 @@
       const verificationJSON: any = await verificationResp.json();
 
       if (verificationJSON.verified) {
-        // eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
         await goto(resolve('/dashboard'), { invalidateAll: true });
       } else {
         responseError = 'Biometric verification failed.';
@@ -367,7 +367,10 @@
     }
   }
 
-  async function submitHandler() {
+  async function submitHandler(e?: Event) {
+    // Prevent default when used as form handler
+    e?.preventDefault?.();
+
     responseError = null;
     loading = true;
 
@@ -397,7 +400,6 @@
 
       if (response.ok) {
         if (isLogin()) {
-          // eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() used for base-aware navigation
           await goto(resolve('/dashboard'), { invalidateAll: true });
         } else {
           submittedEmail = email;
@@ -601,24 +603,19 @@
           <h2>{isLogin() ? 'Sign in to your account' : 'Create your account'}</h2>
           <p>
             {isLogin() ? "Don't have an account?" : 'Already have an account?'}
-            <button class="toggle-link" onclick={toggleMode}>
+            <button class="toggle-link" onclick={() => toggleMode()}>
               {isLogin() ? 'Sign up' : 'Sign in'}
             </button>
           </p>
         </div>
 
-        <form
-          onsubmit={(e) => {
-            e.preventDefault();
-            submitHandler();
-          }}
-        >
+        <form onsubmit={submitHandler}>
           {#if isLogin()}
             {#if quickPasskey && (!username || username === quickPasskey.email)}
               <button
                 type="button"
                 class="btn-secondary"
-                onclick={quickSignIn}
+                onclick={() => quickSignIn()}
                 disabled={quickLoading}
                 style="margin-bottom:8px; display:flex; align-items:center; justify-content:center;"
               >
@@ -644,7 +641,7 @@
             <button
               type="button"
               class="btn-biometric"
-              onclick={handleBiometricLogin}
+              onclick={() => handleBiometricLogin()}
               disabled={loading}
             >
               <svg
@@ -699,7 +696,7 @@
               </div>
             </div>
 
-            {#if !isLogin}
+            {#if !isLogin()}
               <div class="field-group">
                 <label for="email">
                   Email Address
@@ -757,7 +754,7 @@
               </div>
             </div>
 
-            {#if !isLogin}
+            {#if !isLogin()}
               <div class="field-group">
                 <label for="confirmPassword">
                   Confirm Password

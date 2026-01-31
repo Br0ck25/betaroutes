@@ -25,7 +25,7 @@
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://gorouteyourself.com/contact" />
 
-  <script type="application/ld+json">
+  <script type="application/ld+json" nonce="%sveltekit.nonce%">
     {
       "@context": "https://schema.org",
       "@type": "ContactPage",

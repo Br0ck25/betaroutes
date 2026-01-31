@@ -7,12 +7,6 @@
       content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover"
     />
 
-    <!-- Security: CSP fallback (server headers take precedence) -->
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'"
-    />
-
     <!-- PWA: Icons & Manifest -->
     <link rel="icon" href="%sveltekit.assets%/favicon.png" />
     <link rel="manifest" href="/manifest.json" />
@@ -43,9 +37,8 @@
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
-      media="print"
-      onload="this.media = 'all'"
     />
+
     <noscript>
       <link
         rel="stylesheet"

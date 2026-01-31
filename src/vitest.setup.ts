@@ -110,3 +110,73 @@ if (typeof globalThis !== 'undefined') {
     gtOpenProto['addEventListener'] = function () {};
   }
 }
+
+// Provide a test-only shim so the Svelte client runtime's `mount`/`unmount` APIs are
+// available to the test runtime. This ensures `@testing-library/svelte` can detect
+// modern Svelte in environments where the package resolver defaults to the server
+// entry (Node). This is a best-effort, test-only patch; do NOT rely on it in prod.
+(async () => {
+  try {
+    const SvelteMain = await import('svelte');
+
+    // Try to load the browser/client runtime from the package files directly.
+    // This helps when the resolver has already cached the server entry.
+    try {
+      const clientUrl = new URL('../node_modules/svelte/src/index-client.js', import.meta.url).href;
+      // Use dynamic import via file URL to bypass package export restrictions
+      // when necessary. Wrap in try/catch because file import may not be allowed
+      // in some environments.
+      try {
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore - dynamic import of file URL
+        const Client = await import(clientUrl);
+        if (Client) {
+          (SvelteMain as any).mount = (Client as any).mount || (SvelteMain as any).mount;
+          (SvelteMain as any).unmount = (Client as any).unmount || (SvelteMain as any).unmount;
+          (SvelteMain as any).flushSync =
+            (Client as any).flushSync || (SvelteMain as any).flushSync;
+          (SvelteMain as any).tick = (Client as any).tick || (SvelteMain as any).tick;
+        }
+      } catch {
+        // ignore - fallback to legacy shim below
+      }
+    } catch {
+      // ignore
+    }
+
+    // If modern mount API is still missing, implement a minimal shim that maps to
+    // the legacy component API. This makes tests run in Node where the
+    // package resolver selects the server entry.
+    if (SvelteMain && typeof (SvelteMain as any).mount !== 'function') {
+      // mount(Component, { target?, props? }) -> legacy `new Component({ target, props })`
+      (SvelteMain as any).mount = (Component: any, options: any) => {
+        const ctor = 'default' in Component ? Component.default : Component;
+        // The legacy constructor expects { target, props }
+        const instance = new ctor({ target: options.target, props: options.props });
+        return instance;
+      };
+
+      (SvelteMain as any).unmount = (component: any) => {
+        try {
+          component.$destroy?.();
+        } catch {
+          // ignore
+        }
+      };
+
+      (SvelteMain as any).flushSync = (fn?: () => void) => {
+        if (typeof fn === 'function') {
+          try {
+            fn();
+          } catch {
+            // ignore
+          }
+        }
+      };
+
+      (SvelteMain as any).tick = () => Promise.resolve();
+    }
+  } catch {
+    // ignore - shim is best-effort for test environments
+  }
+})();

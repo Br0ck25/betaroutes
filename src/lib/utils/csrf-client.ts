@@ -7,16 +7,25 @@
  * Get CSRF token from cookie
  * Server sets this as httpOnly cookie
  */
-function getCsrfToken(): string | null {
+function readCookie(name: string): string | null {
   if (typeof document === 'undefined') return null;
-
-  const cookies = document.cookie.split(';');
-  for (const cookie of cookies) {
-    const [name, value] = cookie.trim().split('=');
-    if (name === '__csrf_token') {
-      return value ?? null;
-    }
+  const prefix = `${name}=`;
+  const parts = document.cookie.split(';').map((s) => s.trim());
+  for (const p of parts) {
+    if (p.startsWith(prefix)) return p.slice(prefix.length) || null;
   }
+  return null;
+}
+
+function getCsrfToken(): string | null {
+  // Preferred: readable mirror cookie set by server
+  const raw = readCookie('csrf_token_readable');
+  if (raw) return decodeURIComponent(raw);
+
+  // Optional fallback: meta tag
+  const meta = document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement | null;
+  if (meta?.content) return meta.content;
+
   return null;
 }
 

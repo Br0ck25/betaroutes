@@ -1,14 +1,15 @@
 <script lang="ts">
-  import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
-  import { auth, user } from '$lib/stores/auth';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
+  import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
+  import { auth, user } from '$lib/stores/auth';
   import { toasts } from '$lib/stores/toast';
-  import { startRegistration } from '@simplewebauthn/browser';
-  import { onMount, createEventDispatcher } from 'svelte';
   import { csrfFetch } from '$lib/utils/csrf';
+  import { startRegistration } from '@simplewebauthn/browser';
 
-  const dispatch = createEventDispatcher();
+  // Callback style pattern is preferred — use toasts for local success messages
+  // and expose callbacks via $props() if consumers need them.
+  const { onSuccess }: { onSuccess?: (msg: string) => void } = $props();
 
   // Password State
   let showPasswordChange = $state(false);
@@ -23,7 +24,7 @@
 
   // WebAuthn State
   let registering = $state(false);
-  let authenticatorsList: Array<any> = [];
+  let authenticatorsList: Array<Record<string, unknown>> = [];
   let deviceRegistered = $state(false);
   let deviceCredentialID: string | null = $state(null);
   let deviceName = $state('');
@@ -56,22 +57,26 @@
           newPassword: passwordData.new
         })
       });
-      let result: any = {};
+      let result: Record<string, unknown> = {};
       try {
-        result = await response.json();
+        result = (await response.json().catch(() => ({}))) as Record<string, unknown>;
       } catch (_e) {
         result = {};
       }
 
       if (!response.ok) {
-        passwordError = result?.message || 'Failed to update password';
+        passwordError =
+          typeof result?.message === 'string'
+            ? (result.message as string)
+            : 'Failed to update password';
         return;
       }
 
       passwordError = '';
       showPasswordChange = false;
       passwordData = { current: '', new: '', confirm: '' };
-      dispatch('success', 'Password changed successfully');
+      toasts.success('Password changed successfully');
+      onSuccess?.('Password changed successfully');
     } catch (_e) {
       console.error(_e);
       passwordError = 'An unexpected network error occurred.';
@@ -96,7 +101,7 @@
     try {
       const result = await auth.deleteAccount($user?.id || '', deletePassword);
       if (result.success) {
-        goto(resolve('/'));
+        await goto(resolve('/'));
       } else {
         deleteError = result.error || 'Failed to delete account';
         isDeleting = false;
@@ -110,18 +115,21 @@
   async function handleLogout() {
     if (confirm('Are you sure you want to logout?')) {
       await csrfFetch('/api/logout', { method: 'POST' });
-      auth.logout();
-      goto(resolve('/login'));
+      await auth.logout();
+      await goto(resolve('/login'));
     }
   }
 
   // --- WebAuthn Logic ---
 
   function getDeviceName() {
-    const uaData = (navigator as any).userAgentData;
+    const uaData = (navigator as unknown as Record<string, unknown>)['userAgentData'] as
+      | Record<string, unknown>
+      | undefined;
     if (uaData && uaData.platform) {
-      const brand = (uaData.brands && uaData.brands[0] && uaData.brands[0].brand) || 'Browser';
-      return `${brand} on ${uaData.platform}`;
+      const brands = uaData['brands'] as Array<Record<string, unknown>> | undefined;
+      const brand = (brands && brands[0] && (brands[0]['brand'] as string)) || 'Browser';
+      return `${brand} on ${String(uaData.platform)}`;
     }
     const ua = navigator.userAgent || '';
     if (/Android/i.test(ua)) return 'Android device';
@@ -141,13 +149,17 @@
       try {
         const res = await fetch('/api/auth/webauthn/list', { credentials: 'same-origin' });
         if (res.ok) {
-          const json: any = await res.json();
-          const auths = json?.authenticators || [];
+          const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+          const auths = (json?.authenticators ?? []) as Record<string, unknown>[];
           authenticatorsList = auths;
-          const match = auths.find((a: any) => a.name === deviceName);
+          const match = auths.find(
+            (a) => String((a as Record<string, unknown>)['name']) === deviceName
+          );
           if (match) {
             deviceRegistered = true;
-            deviceCredentialID = match.credentialID;
+            deviceCredentialID = (match as Record<string, unknown>)['credentialID'] as
+              | string
+              | null;
             try {
               const raw = localStorage.getItem('passkey:preferred');
               rememberThisDevice = raw
@@ -227,7 +239,7 @@
           password: passkeyRemovePassword
         })
       });
-      const json: any = await res.json();
+      const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (!res.ok) {
         if (res.status === 401) {
           if (json?.error === 'Invalid password') {
@@ -242,15 +254,19 @@
           passkeyRemoveError = 'Password is required to remove passkeys.';
           return;
         }
-        throw new Error(json?.error || 'Failed to unregister');
+        const errMsg =
+          typeof (json as Record<string, unknown>)?.error === 'string'
+            ? (json as Record<string, unknown>).error
+            : 'Failed to unregister';
+        throw new Error(String(errMsg));
       }
 
       sessionExpired = false;
       showPasskeyRemoveConfirm = false;
       passkeyRemovePassword = '';
       pendingRemoveCredentialID = null;
-      dispatch('success', 'This device was unregistered');
       toasts.success('This device was unregistered');
+      onSuccess?.('This device was unregistered');
 
       try {
         const raw = localStorage.getItem('passkey:preferred');
@@ -296,22 +312,44 @@
       }
 
       const rawText = await optionsRes.text();
-      let optionsJson: any;
+      let optionsJson: unknown;
       try {
         optionsJson = JSON.parse(rawText);
       } catch (_e) {
         throw new Error('Invalid registration options response');
       }
       if (!optionsRes.ok)
-        throw new Error(optionsJson?.error || 'Failed to get registration options');
+        throw new Error(
+          ((optionsJson as Record<string, unknown>)?.error as string) ||
+            'Failed to get registration options'
+        );
 
-      const options: any = optionsJson;
-      if (options.user && options.user.id && typeof options.user.id !== 'string') {
-        // Convert buffer to base64url if needed (logic simplified for brevity as modern browsers handle this well,
-        // but keeping structure from original)
+      const options = optionsJson as Record<string, unknown>;
+      // Keep compatibility for older platforms that might send buffers
+      if (
+        options.user &&
+        (options.user as Record<string, unknown>).id &&
+        typeof (options.user as Record<string, unknown>).id !== 'string'
+      ) {
+        // Convert buffer to base64url if needed
       }
 
-      const credential = await startRegistration({ optionsJSON: options as any });
+      // Cast to a minimal runtime-compatible shape for startRegistration; validate at runtime where necessary
+      type PKCreOptionsLike = {
+        rp: { name: string } & Record<string, unknown>;
+        user: { id: string | number | unknown; name?: string; displayName?: string } & Record<
+          string,
+          unknown
+        >;
+        challenge: unknown;
+        pubKeyCredParams: unknown[];
+      } & Record<string, unknown>;
+
+      // Use an unknown-typed alias to avoid tight external lib typings until runtime validation is enforced
+      const _startRegistration = startRegistration as unknown as (
+        opts: unknown
+      ) => Promise<unknown>;
+      const credential = await _startRegistration({ optionsJSON: options as unknown });
 
       const verifyRes = await csrfFetch('/api/auth/webauthn?type=register', {
         method: 'POST',
@@ -320,48 +358,58 @@
         body: JSON.stringify({ credential, deviceName })
       });
 
-      const verifyResult: any = await verifyRes.json();
-      if (!verifyRes.ok) throw new Error(verifyResult.error || 'Registration failed');
+      const verifyResult = (await verifyRes.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!verifyRes.ok) throw new Error((verifyResult.error as string) || 'Registration failed');
 
-      dispatch(
-        'success',
+      toasts.success(
         'Passkey registered successfully! You can now sign in with your fingerprint or face.'
       );
-      toasts.success('Passkey registered successfully!');
+      onSuccess?.(
+        'Passkey registered successfully! You can now sign in with your fingerprint or face.'
+      );
 
-      if (verifyResult?.authenticator) {
-        authenticatorsList = [...(authenticatorsList || []), verifyResult.authenticator];
-        if (verifyResult.authenticator.name === deviceName) {
+      if (verifyResult?.authenticator && typeof verifyResult.authenticator === 'object') {
+        const authObj = verifyResult.authenticator as Record<string, unknown>;
+        authenticatorsList = [...(authenticatorsList || []), authObj];
+        if (typeof authObj.name === 'string' && authObj.name === deviceName) {
           deviceRegistered = true;
-          deviceCredentialID = verifyResult.authenticator.credentialID;
+          deviceCredentialID = (authObj.credentialID as string) || null;
         }
       } else {
         await loadAuthenticators();
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[Passkey] Registration error:', error);
       let message = 'Failed to register passkey';
-      if (error.name === 'NotAllowedError') message = 'Registration was cancelled or timed out';
-      else if (error.name === 'NotSupportedError')
-        message = 'Your device does not support passkeys';
-      else if (error.message) message = error.message;
+      if (typeof error === 'object' && error !== null) {
+        const e = error as { name?: unknown; message?: unknown };
+        if (typeof e.name === 'string') {
+          if (e.name === 'NotAllowedError') message = 'Registration was cancelled or timed out';
+          else if (e.name === 'NotSupportedError')
+            message = 'Your device does not support passkeys';
+        }
+        if (typeof e.message === 'string') message = e.message;
+      }
       toasts.error(message);
     } finally {
       registering = false;
     }
   }
 
-  onMount(async () => {
-    deviceName = getDeviceName();
-    // Simple session check before loading
-    try {
-      const s = await fetch('/api/auth/session', { credentials: 'same-origin' });
-      if (s.ok) await loadAuthenticators();
-      else sessionExpired = true;
-    } catch {
-      // Network error during session check — mark session expired so UI can prompt re-auth
-      sessionExpired = true;
-    }
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    void (async () => {
+      deviceName = getDeviceName();
+      // Simple session check before loading
+      try {
+        const s = await fetch('/api/auth/session', { credentials: 'same-origin' });
+        if (s.ok) await loadAuthenticators();
+        else sessionExpired = true;
+      } catch {
+        // Network error during session check — mark session expired so UI can prompt re-auth
+        sessionExpired = true;
+      }
+    })();
   });
 </script>
 

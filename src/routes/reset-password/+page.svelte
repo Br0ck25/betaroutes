@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { base } from '$app/paths';
+  import { page } from '$app/state';
   const resolve = (href: string) => `${base}${href}`;
 
   let password = $state<string>('');
@@ -39,7 +39,9 @@
       if (res.ok) {
         success = true;
         // eslint-disable-next-line svelte/no-navigation-without-resolve
-        setTimeout(() => goto(resolve('/login')), 3000);
+        setTimeout(() => {
+          void goto(resolve('/login'));
+        }, 3000);
       } else {
         error = (data && data.message) || 'Failed to reset password.';
       }
@@ -79,7 +81,7 @@
       <form
         onsubmit={(e) => {
           e.preventDefault();
-          handleReset();
+          void handleReset();
         }}
       >
         <div class="field-group">

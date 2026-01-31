@@ -713,8 +713,8 @@ export const POST: RequestHandler = async ({ request, locals, cookies, platform 
       cookies.set('session_id', sessionId, {
         path: '/',
         httpOnly: true,
-        sameSite: 'none', // Allow cookie on fetches; requires secure in production
-        secure: true,
+        sameSite: dev ? 'lax' : 'none', // Relax sameSite in dev; keep 'none' in prod for cross-site flows
+        secure: !dev,
         maxAge: 60 * 60 * 24 * 7
       });
 

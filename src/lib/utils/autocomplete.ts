@@ -1,7 +1,7 @@
 // src/lib/utils/autocomplete.ts
+import { csrfFetch, jsonFetchOptions } from '$lib/utils/csrf';
 import type { Action } from 'svelte/action';
 import { isAcceptableGeocode } from './geocode';
-import { csrfFetch, jsonFetchOptions } from '$lib/utils/csrf';
 
 // Singleton Promise to prevent race conditions
 let loadingPromise: Promise<void> | null = null;
@@ -114,8 +114,10 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     dropdown.addEventListener('pointerup', stop);
     dropdown.addEventListener('mousedown', stopAndPrevent);
     dropdown.addEventListener('mouseup', stop);
-    dropdown.addEventListener('touchstart', stopAndPrevent);
-    dropdown.addEventListener('touchend', stop);
+    // Explicitly set passive:false because this handler calls preventDefault to stop touch scrolling
+    dropdown.addEventListener('touchstart', stopAndPrevent, { passive: false });
+    // touchend doesn't block scroll; mark passive for better performance
+    dropdown.addEventListener('touchend', stop, { passive: true });
     dropdown.addEventListener('click', stop);
   }
 
@@ -619,12 +621,14 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     dropdown.removeEventListener('pointerup', stop);
     dropdown.removeEventListener('mousedown', stopAndPrevent);
     dropdown.removeEventListener('mouseup', stop);
+    // Note: removal without options is sufficient and avoids TS type issues
     dropdown.removeEventListener('touchstart', stopAndPrevent);
     dropdown.removeEventListener('touchend', stop);
     dropdown.removeEventListener('click', stop);
   };
 
-  window.addEventListener('scroll', updatePosition);
+  // Mark scroll listener as passive for better performance (does not call preventDefault)
+  window.addEventListener('scroll', updatePosition, { passive: true });
   window.addEventListener('resize', updatePosition);
 
   return {

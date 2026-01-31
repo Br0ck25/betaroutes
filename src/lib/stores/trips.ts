@@ -16,9 +16,13 @@ export const isLoading = writable(false);
 function createTripsStore() {
   const { subscribe, set, update } = writable<TripRecord[]>([]);
 
+  // DEV/SAFETY: prevent re-entrant syncFromCloud runs
+  let _isSyncingFromCloud = false;
+
   return {
     subscribe,
     updateLocal(trip: TripRecord) {
+      console.debug('[DEV_DEBUG] trips.updateLocal for', trip.id);
       update((items) => {
         const index = items.findIndex((t) => t.id === trip.id);
         if (index !== -1) {
@@ -63,6 +67,7 @@ function createTripsStore() {
         }
         await dbRW.done;
         set(trips);
+        console.debug('[DEV_DEBUG] trips.load: set store with', trips.length, 'trips');
         return trips;
       } catch (err) {
         console.error('❌ Failed to load trips:', err);
@@ -108,16 +113,59 @@ function createTripsStore() {
             timeFromPrev: Number(st['timeFromPrev'] ?? 0) || 0
           };
         });
+        // Build a sanitized TripRecord explicitly to avoid copying non-cloneable/runtime properties
         const trip: TripRecord = {
-          ...tripData,
-          stops: normalizedStops,
-          id: tripData.id || crypto.randomUUID(),
+          id: String(tripData.id ?? crypto.randomUUID()),
           userId,
-          createdAt: tripData.createdAt || now,
-          updatedAt: tripData.updatedAt || now,
+          date: String((tripData as any).date ?? now),
+          payDate: String((tripData as any).payDate ?? ''),
+          startTime: String((tripData as any).startTime ?? ''),
+          endTime: String((tripData as any).endTime ?? ''),
+          hoursWorked: Number((tripData as any).hoursWorked ?? 0) || 0,
+          startAddress: String((tripData as any).startAddress ?? ''),
+          endAddress: String((tripData as any).endAddress ?? ''),
+          stops: normalizedStops,
+          totalMiles: Number((tripData as any).totalMiles ?? 0) || 0,
+          totalMileage: Number((tripData as any).totalMiles ?? 0) || 0,
+          mpg: Number((tripData as any).mpg ?? 0) || 0,
+          gasPrice: Number((tripData as any).gasPrice ?? 0) || 0,
+          fuelCost: Number((tripData as any).fuelCost ?? 0) || 0,
+          estimatedTime: Number((tripData as any).estimatedTime ?? 0) || 0,
+          roundTripMiles: Number((tripData as any).roundTripMiles ?? 0) || 0,
+          roundTripTime: Number((tripData as any).roundTripTime ?? 0) || 0,
+          maintenanceItems: Array.isArray((tripData as any).maintenanceItems)
+            ? (tripData as any).maintenanceItems.map((it: any) => ({
+                id: String(it?.id ?? crypto.randomUUID()),
+                type: String(it?.type ?? ''),
+                item: String(it?.item ?? ''),
+                cost: Number(it?.cost ?? 0) || 0,
+                taxDeductible: Boolean(it?.taxDeductible ?? false)
+              }))
+            : [],
+          suppliesItems: Array.isArray((tripData as any).suppliesItems)
+            ? (tripData as any).suppliesItems.map((it: any) => ({
+                id: String(it?.id ?? crypto.randomUUID()),
+                type: String(it?.type ?? ''),
+                item: String(it?.item ?? ''),
+                cost: Number(it?.cost ?? 0) || 0,
+                taxDeductible: Boolean(it?.taxDeductible ?? false)
+              }))
+            : [],
+          notes: String((tripData as any).notes ?? ''),
+          taxDeductible: Boolean((tripData as any).taxDeductible ?? false),
+          destinations: Array.isArray((tripData as any).stops)
+            ? (tripData as any).stops.map((s: any) => ({
+                address: String(s?.address ?? ''),
+                earnings: Number(s?.earnings ?? 0) || 0,
+                notes: String(s?.notes ?? '')
+              }))
+            : [],
+          createdAt: String((tripData as any).createdAt ?? now),
+          updatedAt: String((tripData as any).updatedAt ?? now),
           lastModified: now,
           syncStatus: 'pending'
         } as TripRecord;
+
         const db = await getDB();
         const tx = db.transaction('trips', 'readwrite');
         await tx.objectStore('trips').put(trip);
@@ -132,7 +180,8 @@ function createTripsStore() {
           await syncManager.addToQueue({
             action: 'create',
             tripId: trip.id,
-            data: { ...trip, store: 'trips' }
+            data: { ...trip, store: 'trips' },
+            userId
           });
         } catch (err) {
           console.warn('Failed to enqueue trip for sync:', err);
@@ -185,7 +234,8 @@ function createTripsStore() {
         await syncManager.addToQueue({
           action: 'update',
           tripId: id,
-          data: updated
+          data: updated,
+          userId
         });
         try {
           if (Object.prototype.hasOwnProperty.call(changes, 'totalMiles')) {
@@ -328,7 +378,7 @@ function createTripsStore() {
         // Only enqueue server sync if client is authenticated as the same user to avoid 401s
         const currentUser = get(authUser) as User | null;
         if (currentUser && currentUser.id && currentUser.id === trip.userId) {
-          await syncManager.addToQueue({ action: 'delete', tripId: id });
+          await syncManager.addToQueue({ action: 'delete', tripId: id, userId: currentUser.id });
         } else {
           // Skip server sync for unauthenticated/offline users. Sync will occur when a valid session is available.
         }
@@ -357,8 +407,21 @@ function createTripsStore() {
       set([]);
     },
     async syncFromCloud(userId: string) {
-      // ... copy existing syncFromCloud code ...
+      // Prevent overlapping syncs which can cause repeated store updates and reactive loops
+      if (_isSyncingFromCloud) {
+        console.debug('[DEV_DEBUG] syncFromCloud skipped - already running');
+        return;
+      }
+
+      _isSyncingFromCloud = true;
       isLoading.set(true);
+      console.debug(
+        '[DEV_DEBUG] syncFromCloud start for user',
+        userId,
+        'lastSync',
+        storage.getLastSync()
+      );
+
       try {
         if (!navigator.onLine) return;
         const lastSync = storage.getLastSync();
@@ -421,11 +484,15 @@ function createTripsStore() {
         await tx.done;
         storage.setLastSync(new Date().toISOString());
         console.log(`✅ Synced trips. Updated: ${updateCount}, Deleted: ${deleteCount}.`);
+
+        // Load local store AFTER applying changes
         await this.load(userId);
       } catch (err) {
         console.error('❌ Failed to sync trips from cloud:', err);
       } finally {
+        _isSyncingFromCloud = false;
         isLoading.set(false);
+        console.debug('[DEV_DEBUG] syncFromCloud complete for user', userId);
       }
     },
     async syncPendingToCloud(userId: string) {
@@ -483,7 +550,12 @@ function createTripsStore() {
         trip.syncStatus = 'pending';
         trip.updatedAt = new Date().toISOString();
         await store.put(trip);
-        await syncManager.addToQueue({ action: 'create', tripId: trip.id, data: trip });
+        await syncManager.addToQueue({
+          action: 'create',
+          tripId: trip.id,
+          data: trip,
+          userId: realUserId
+        });
       }
       await tx.done;
       await this.load(realUserId);

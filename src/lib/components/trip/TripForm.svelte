@@ -4,6 +4,7 @@
   import Modal from '$lib/components/ui/Modal.svelte';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
   import { PLAN_LIMITS } from '$lib/constants';
+  import type { RouteResult } from '$lib/services/maps';
   import { calculateRoute as getRouteData, optimizeRoute } from '$lib/services/maps';
   import { toasts } from '$lib/stores/toast';
   import { draftTrip } from '$lib/stores/trips';
@@ -13,7 +14,6 @@
   import { autocomplete } from '$lib/utils/autocomplete';
   import { calculateTripTotals } from '$lib/utils/calculations';
   import { storage } from '$lib/utils/storage';
-  import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { slide } from 'svelte/transition';
   import DestinationList from './DestinationList.svelte';
@@ -103,7 +103,7 @@
 
     if (hasStart && hasDest) {
       const timer = setTimeout(() => {
-        handleCalculate(true); // true = silent mode
+        void handleCalculate(true); // true = silent mode
       }, 1500);
 
       return () => clearTimeout(timer);
@@ -164,7 +164,7 @@
     maintenance = maintenance.filter((_, i) => i !== index);
   }
 
-  async function handleCalculate(silent = false): Promise<any | null> {
+  async function handleCalculate(silent = false): Promise<RouteResult | null> {
     if (!startAddress) {
       if (!silent) toasts.error('Please enter a start address.');
       return null;
@@ -196,11 +196,22 @@
         distanceUnit as 'mi' | 'km'
       );
 
-      // [!code fix] Capture 'miles' first, then 'totalMiles'
-      const rawDist = (routeData as any).miles ?? routeData.totalMiles ?? 0;
+      // Prefer canonical RouteResult fields, but tolerate legacy shapes
+      const routeRaw: unknown = routeData as unknown;
+      const rawDist =
+        typeof (routeData as RouteResult).totalMiles === 'number'
+          ? (routeData as RouteResult).totalMiles
+          : typeof routeRaw === 'object' && routeRaw !== null && 'miles' in routeRaw
+            ? Number((routeRaw as Record<string, unknown>)['miles'])
+            : 0;
       totalMileage = Number(rawDist);
 
-      const duration = routeData.totalMinutes ?? (routeData as any).minutes ?? 0;
+      const duration =
+        typeof (routeData as RouteResult).totalMinutes === 'number'
+          ? (routeData as RouteResult).totalMinutes
+          : typeof routeRaw === 'object' && routeRaw !== null && 'minutes' in routeRaw
+            ? Number((routeRaw as Record<string, unknown>)['minutes'])
+            : 0;
 
       const totals = calculateTripTotals(
         totalMileage,
@@ -273,9 +284,14 @@
     calculating = true;
 
     try {
-      const result: any = await optimizeRoute(startAddress, endAddress || '', validDests);
+      const result: unknown = await optimizeRoute(startAddress, endAddress || '', validDests);
 
-      if (result && (result as any).optimizedOrder && (result as any).optimizedOrder.length > 0) {
+      if (
+        result &&
+        typeof result === 'object' &&
+        Array.isArray((result as Record<string, unknown>)['optimizedOrder'])
+      ) {
+        const optimizedOrder = (result as Record<string, unknown>)['optimizedOrder'] as unknown[];
         const currentDestinations = $state.snapshot(destinations) as Destination[];
         const validDestinations = currentDestinations.filter(
           (d) => d.address && d.address.trim() !== ''
@@ -294,7 +310,8 @@
           waypointsToReorder = validDestinations;
         }
 
-        const reorderedWaypoints = (result as any).optimizedOrder
+        const reorderedWaypoints = optimizedOrder
+          .map((idx) => Number(idx) as number)
           .map((index: number) => waypointsToReorder[index])
           .filter(Boolean) as Destination[];
 
@@ -308,16 +325,18 @@
         destinations = newDestinations;
 
         toasts.success('Stops optimized for fastest route!');
-        handleCalculate(true);
+        void handleCalculate(true);
       } else {
         toasts.info('Route is already optimized or could not be improved.');
       }
-    } catch (e: any) {
-      const msg = (e.message || '').toLowerCase();
+    } catch (e: unknown) {
+      const errObj = e && typeof e === 'object' ? (e as Record<string, unknown>) : {};
+      const msg =
+        typeof errObj['message'] === 'string' ? String(errObj['message']).toLowerCase() : '';
+      const code = typeof errObj['code'] === 'string' ? String(errObj['code']) : undefined;
 
-      // Catch ALL potential plan limit indicators
       const isPlanLimit =
-        e.code === 'PLAN_LIMIT' ||
+        code === 'PLAN_LIMIT' ||
         msg.includes('plan limit') ||
         msg.includes('pro feature') ||
         msg.includes('upgrade');
@@ -327,7 +346,7 @@
         showUpgradeModal = true;
       } else {
         console.error('Optimization failed:', e);
-        toasts.error(`Optimization failed: ${e.message}`);
+        toasts.error(`Optimization failed: ${String(errObj['message'] ?? e)}`);
       }
     } finally {
       calculating = false;
@@ -349,26 +368,36 @@
     if (draft.destinations && Array.isArray(draft.destinations)) destinations = draft.destinations;
     if (draft.notes) notes = draft.notes;
     // Load Supplies from Draft/Trip, normalize and ensure ids
-    if (draft.suppliesItems && Array.isArray(draft.suppliesItems)) {
-      supplies = (draft.suppliesItems as any[]).map((s) => ({
-        id: s.id ?? crypto.randomUUID(),
-        type: s.type ?? s.name ?? '',
-        cost: Number(s.cost) || 0
-      }));
-    } else if ((draft as any).supplyItems && Array.isArray((draft as any).supplyItems)) {
-      supplies = ((draft as any).supplyItems as any[]).map((s) => ({
-        id: s.id ?? crypto.randomUUID(),
-        type: s.type ?? s.name ?? '',
-        cost: Number(s.cost) || 0
-      }));
+    if (Array.isArray(draft.suppliesItems)) {
+      supplies = (draft.suppliesItems as unknown[]).map((s) => {
+        const sRec = s as Record<string, unknown>;
+        return {
+          id: typeof sRec['id'] === 'string' ? sRec['id'] : crypto.randomUUID(),
+          type: String(sRec['type'] ?? sRec['name'] ?? ''),
+          cost: Number(sRec['cost'] ?? 0) || 0
+        };
+      });
+    } else if (Array.isArray((draft as Record<string, unknown>)['supplyItems'])) {
+      const arr = (draft as Record<string, unknown>)['supplyItems'] as unknown[];
+      supplies = arr.map((s) => {
+        const sRec = s as Record<string, unknown>;
+        return {
+          id: typeof sRec['id'] === 'string' ? sRec['id'] : crypto.randomUUID(),
+          type: String(sRec['type'] ?? sRec['name'] ?? ''),
+          cost: Number(sRec['cost'] ?? 0) || 0
+        };
+      });
     }
 
-    if (draft.maintenanceItems && Array.isArray(draft.maintenanceItems)) {
-      maintenance = (draft.maintenanceItems as any[]).map((m) => ({
-        id: m.id ?? crypto.randomUUID(),
-        type: m.item ?? m.type ?? '',
-        cost: Number(m.cost) || 0
-      }));
+    if (Array.isArray(draft.maintenanceItems)) {
+      maintenance = (draft.maintenanceItems as unknown[]).map((m) => {
+        const mRec = m as Record<string, unknown>;
+        return {
+          id: typeof mRec['id'] === 'string' ? mRec['id'] : crypto.randomUUID(),
+          type: String(mRec['item'] ?? mRec['type'] ?? ''),
+          cost: Number(mRec['cost'] ?? 0) || 0
+        };
+      });
     }
   }
 
@@ -391,7 +420,7 @@
     draftTrip.save(draftData);
   }
 
-  onMount(() => {
+  $effect(() => {
     // Support loading trip via prop (Edit Mode)
     if (trip) {
       loadDraft(trip);
@@ -404,7 +433,7 @@
       }
     }
 
-    const interval = setInterval(saveDraft, 5000);
+    const interval = setInterval(() => void saveDraft(), 5000);
     return () => clearInterval(interval);
   });
 </script>
@@ -671,7 +700,7 @@
     {:else}
       <button
         class="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-        onclick={() => handleCalculate(false)}
+        onclick={() => void handleCalculate(false)}
         disabled={calculating}
       >
         {calculating ? 'Calculating...' : 'Recalculate Route'}
@@ -679,7 +708,7 @@
 
       <button
         class="w-full sm:w-auto px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-        onclick={handleOptimize}
+        onclick={() => void handleOptimize()}
         disabled={calculating}
         title={userState.value?.plan === 'free'
           ? 'Pro Feature - Upgrade to Unlock'

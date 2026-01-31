@@ -1,6 +1,7 @@
 // src/routes/api/trips/+server.ts
 import { PLAN_LIMITS } from '$lib/constants';
 import { computeAndCacheDirections } from '$lib/server/directionsCache';
+import { makeExpenseService } from '$lib/server/expenseService';
 import { log } from '$lib/server/log';
 import { makeMileageService, type MileageRecord } from '$lib/server/mileageService';
 import {
@@ -151,6 +152,8 @@ function buildTripForSave(
   if (typeof validData.estimatedTime === 'number') outBase.estimatedTime = validData.estimatedTime;
   if (typeof validData.totalTime === 'string') outBase.totalTime = validData.totalTime;
   if (typeof validData.fuelCost === 'number') outBase.fuelCost = validData.fuelCost;
+  if (typeof validData.mpg === 'number') outBase.mpg = validData.mpg;
+  if (typeof validData.gasPrice === 'number') outBase.gasPrice = validData.gasPrice;
   if (typeof validData.maintenanceCost === 'number')
     outBase.maintenanceCost = validData.maintenanceCost;
   if (typeof validData.suppliesCost === 'number') outBase.suppliesCost = validData.suppliesCost;
@@ -177,6 +180,9 @@ function buildTripForSave(
   outBase.lastModified = now;
   outBase.netProfit = calculateNetProfit(validData as Record<string, unknown>);
 
+  if (Array.isArray(validData.maintenanceItems)) {
+    // keep existing behavior
+  }
   // Attach stops conditionally to avoid setting undefined on the literal
   if (Array.isArray(validData.stops)) {
     const mappedStops = (validData.stops as StopInput[]).map((s) => {
@@ -229,6 +235,8 @@ function mergeTripForUpdate(
       : {}),
     ...(typeof validData.totalTime === 'string' ? { totalTime: validData.totalTime } : {}),
     ...(typeof validData.fuelCost === 'number' ? { fuelCost: validData.fuelCost } : {}),
+    ...(typeof validData.mpg === 'number' ? { mpg: validData.mpg } : {}),
+    ...(typeof validData.gasPrice === 'number' ? { gasPrice: validData.gasPrice } : {}),
     ...(typeof validData.maintenanceCost === 'number'
       ? { maintenanceCost: validData.maintenanceCost }
       : {}),
@@ -598,6 +606,74 @@ export const POST: RequestHandler = async (event) => {
 
     // Persist trip
     await svc.put(trip);
+
+    // --- Auto-create related expense records (Fuel, Maintenance, Supplies) if present ---
+    try {
+      const expenseKV = safeKV(env, 'BETA_EXPENSES_KV');
+      if (expenseKV) {
+        const expenseSvc = makeExpenseService(expenseKV, safeDO(env, 'TRIP_INDEX_DO')!);
+        const expensePromises: Promise<unknown>[] = [];
+
+        if (typeof validData.fuelCost === 'number' && validData.fuelCost > 0) {
+          expensePromises.push(
+            expenseSvc.put({
+              id: crypto.randomUUID(),
+              userId: storageId,
+              tripId: trip.id,
+              date: trip.date || now,
+              category: 'Fuel',
+              amount: validData.fuelCost,
+              notes: 'Auto-created from trip',
+              createdAt: now,
+              updatedAt: now
+            } as unknown as import('$lib/server/expenseService').ExpenseRecord)
+          );
+        }
+
+        if (Array.isArray(validData.maintenanceItems)) {
+          for (const it of validData.maintenanceItems) {
+            expensePromises.push(
+              expenseSvc.put({
+                id: crypto.randomUUID(),
+                userId: storageId,
+                tripId: trip.id,
+                date: trip.date || now,
+                category: 'Maintenance',
+                amount: typeof it.cost === 'number' ? it.cost : 0,
+                notes: it.type ?? 'Maintenance',
+                createdAt: now,
+                updatedAt: now
+              } as unknown as import('$lib/server/expenseService').ExpenseRecord)
+            );
+          }
+        }
+
+        if (Array.isArray(validData.suppliesItems)) {
+          for (const it of validData.suppliesItems) {
+            expensePromises.push(
+              expenseSvc.put({
+                id: crypto.randomUUID(),
+                userId: storageId,
+                tripId: trip.id,
+                date: trip.date || now,
+                category: 'Supplies',
+                amount: typeof it.cost === 'number' ? it.cost : 0,
+                notes: it.type ?? 'Supplies',
+                createdAt: now,
+                updatedAt: now
+              } as unknown as import('$lib/server/expenseService').ExpenseRecord)
+            );
+          }
+        }
+
+        if (expensePromises.length > 0) await Promise.all(expensePromises);
+      }
+    } catch (e) {
+      log.warn('Failed to auto-create expenses', {
+        tripId: trip.id,
+        message: createSafeErrorMessage(e)
+      });
+    }
 
     // --- Auto-create mileage log if trip has totalMiles > 0 ---
     // ...continue...

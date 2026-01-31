@@ -1358,7 +1358,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const totalHoursDecimal = totalWorkedMinutes / 60;
 
-    document.getElementById('total-hours').textContent = formatHoursAndMinutes(totalHoursDecimal);
+    document.getElementById('total-hours-result').textContent =
+      formatHoursAndMinutes(totalHoursDecimal);
   });
 
   //  After selecting start time, auto-focus end time after slight delay
@@ -1658,7 +1659,7 @@ function updateUI(data) {
     const totalM = totalMinutes % 60;
     const hourText = `${totalH} hour${totalH !== 1 ? 's' : ''}`;
     const minuteText = totalM > 0 ? ` ${totalM} minute${totalM !== 1 ? 's' : ''}` : '';
-    document.getElementById('total-hours').textContent = `${hourText}${minuteText}`;
+    document.getElementById('total-hours-result').textContent = `${hourText}${minuteText}`;
 
     if (originalMileage === null) {
       originalMileage = data.totalMileage;

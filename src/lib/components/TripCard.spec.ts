@@ -1,9 +1,10 @@
 /** @vitest-environment jsdom */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import TripCard from '../../routes/dashboard/trips/components/TripCard.svelte';
 import { mileage } from '$lib/stores/mileage';
 import type { Trip } from '$lib/types';
-import { mount } from 'svelte';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import TripCard from '../../routes/dashboard/trips/components/TripCard.svelte';
+// @vitest-environment jsdom
+import { render } from '@testing-library/svelte';
 
 describe('TripCard component', () => {
   let container: HTMLDivElement;
@@ -26,7 +27,7 @@ describe('TripCard component', () => {
       stops: [{ id: 's1', address: '456 Other Ave', earnings: 0 }]
     };
 
-    mount(TripCard, { target: container, props: { trip } });
+    render(TripCard, { props: { trip }, target: container });
 
     // Start and End addresses rendered
     expect(container.textContent).toContain('123 Main St');
@@ -44,7 +45,7 @@ describe('TripCard component', () => {
     };
 
     expect(() =>
-      mount(TripCard, { target: container, props: { trip: trip as unknown as Trip } })
+      render(TripCard, { props: { trip: trip as unknown as Trip }, target: container })
     ).not.toThrow();
     // Should render start address and not crash
     expect(container.textContent).toContain('No Stops St');
@@ -63,7 +64,7 @@ describe('TripCard component', () => {
       .spyOn(window, 'open')
       .mockImplementation(() => null as unknown as Window | null);
 
-    mount(TripCard, { target: container, props: { trip } });
+    render(TripCard, { props: { trip }, target: container });
     const mapBtn = container.querySelector('.map-link-btn') as HTMLButtonElement | null;
     expect(mapBtn).toBeTruthy();
     mapBtn!.click();
@@ -89,7 +90,7 @@ describe('TripCard component', () => {
     }
 
     for (const t of trips) {
-      mount(TripCard, { target: container, props: { trip: t } });
+      render(TripCard, { props: { trip: t }, target: container });
     }
 
     const rendered = container.querySelectorAll('.trip-card-wrapper').length;

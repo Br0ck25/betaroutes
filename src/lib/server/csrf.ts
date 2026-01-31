@@ -4,13 +4,14 @@
 // Uses double-submit cookie pattern with cryptographic validation
 // Per SECURITY.md: "CSRF token mechanism (recommended: double-submit cookie + header)"
 
-import type { RequestEvent } from '@sveltejs/kit';
 import { dev } from '$app/environment';
+import type { RequestEvent } from '@sveltejs/kit';
 
 /**
  * CSRF token configuration
  */
 const CSRF_COOKIE_NAME = '__csrf_token';
+const CSRF_READABLE_COOKIE_NAME = 'csrf_token_readable';
 const CSRF_HEADER_NAME = 'x-csrf-token';
 const TOKEN_LENGTH = 32; // bytes (256 bits)
 
@@ -55,13 +56,22 @@ export function generateCsrfToken(event: RequestEvent): string {
   // Generate new token
   const token = generateSecureToken();
 
-  // Set cookie with strict security settings
+  // Set server-truth cookie (HttpOnly) and a readable mirror cookie for client JS to read
   event.cookies.set(CSRF_COOKIE_NAME, token, {
     path: '/',
     httpOnly: true, // JavaScript cannot access
     secure: !dev, // HTTPS only in production
     sameSite: 'strict', // Strongest CSRF protection
     maxAge: 60 * 60 * 24 // 24 hours
+  });
+
+  // Readable mirror cookie (for double-submit header from client)
+  event.cookies.set(CSRF_READABLE_COOKIE_NAME, encodeURIComponent(token), {
+    path: '/',
+    httpOnly: false, // Intentionally readable by JS
+    secure: !dev,
+    sameSite: 'strict',
+    maxAge: 60 * 60 * 24
   });
 
   return token;
@@ -182,4 +192,5 @@ export function getCsrfToken(event: RequestEvent): string | null {
  */
 export function clearCsrfToken(event: RequestEvent): void {
   event.cookies.delete(CSRF_COOKIE_NAME, { path: '/' });
+  event.cookies.delete(CSRF_READABLE_COOKIE_NAME, { path: '/' });
 }

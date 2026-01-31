@@ -18,6 +18,7 @@ class SyncManager {
   private initialized = false;
   private syncInterval: ReturnType<typeof setInterval> | null = null;
   private isSyncing = false;
+  private isSyncDowning = false; // DEV/SAFETY: prevent re-entrant syncDownAll runs
   private apiKey: string = '';
   private syncDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -61,12 +62,25 @@ class SyncManager {
   }
 
   private async syncDownAll() {
+    // Prevent re-entrancy: if a previous syncDownAll is still running, skip this call
+    if (this.isSyncDowning) {
+      console.debug('[DEV_DEBUG] syncDownAll skipped - already running');
+      return;
+    }
+
+    this.isSyncDowning = true;
     console.log('⬇️ Downloading latest data (Refresh)...');
-    await Promise.all(
-      Array.from(this.registeredStores.values()).map((store) =>
-        store.syncDown().catch((e) => console.error('Store sync down failed:', e))
-      )
-    );
+    console.debug('[DEV_DEBUG] syncDownAll start - registeredStores:', this.registeredStores.size);
+    try {
+      await Promise.all(
+        Array.from(this.registeredStores.values()).map((store) =>
+          store.syncDown().catch((e) => console.error('Store sync down failed:', e))
+        )
+      );
+      console.debug('[DEV_DEBUG] syncDownAll complete');
+    } finally {
+      this.isSyncDowning = false;
+    }
   }
 
   private async handleOnline() {
@@ -147,6 +161,7 @@ class SyncManager {
   }
 
   async syncNow() {
+    console.debug('[DEV_DEBUG] syncNow called - isSyncing:', this.isSyncing);
     if (!navigator.onLine || this.isSyncing) return;
 
     this.isSyncing = true;
@@ -195,6 +210,7 @@ class SyncManager {
       syncStatus.setError('Sync failed');
     } finally {
       this.isSyncing = false;
+      console.debug('[DEV_DEBUG] syncNow completed - isSyncing:', this.isSyncing);
     }
   }
 
@@ -354,6 +370,13 @@ class SyncManager {
     });
 
     if (!res.ok) {
+      // Treat 404 on DELETE as idempotent success (resource already gone on server)
+      if (res.status === 404 && method === 'DELETE') {
+        console.warn(`⚠️ Remote resource not found (404) for DELETE ${url}. Treating as synced.`);
+        if (updateStore) await this.markAsSynced(updateStore, id);
+        return;
+      }
+
       if (res.status === 401) {
         throw new Error('AUTH_REQUIRED');
       }

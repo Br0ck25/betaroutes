@@ -1,16 +1,23 @@
 <script lang="ts">
   import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
-  import { userSettings } from '$lib/stores/userSettings';
-  import { trips } from '$lib/stores/trips';
+  import { user } from '$lib/stores/auth';
   import { expenses } from '$lib/stores/expenses';
   import { mileage } from '$lib/stores/mileage';
-  import { user } from '$lib/stores/auth';
   import { toasts } from '$lib/stores/toast';
-  import { createEventDispatcher } from 'svelte';
+  import { trips } from '$lib/stores/trips';
+  import { userSettings } from '$lib/stores/userSettings';
+  import type { CostItem, Stop, Trip } from '$lib/types';
   import { localDateISO } from '$lib/utils/dates';
   import { SvelteDate } from '$lib/utils/svelte-reactivity';
+  import type { Settings } from '$lib/types';
+  import type { TripRecord } from '$lib/db/types';
 
-  const dispatch = createEventDispatcher();
+  type ExpenseInput = Record<string, unknown>;
+  // Callback props (Svelte 5 pattern) ✓
+  const {
+    onSuccess,
+    _onOpenAdvancedExport
+  }: { onSuccess?: (msg: string) => void; _onOpenAdvancedExport?: () => void } = $props();
 
   function parseDuration(durationStr?: string): number {
     const s = (durationStr || '').trim();
@@ -26,7 +33,7 @@
     return minutes;
   }
 
-  function parseItemString(str?: string): any[] {
+  function parseItemString(str?: string): CostItem[] {
     const s = (str || '').trim();
     if (!s) return [];
     return s
@@ -37,9 +44,9 @@
           id: crypto.randomUUID(),
           type: name ? name.trim() : 'Unknown',
           cost: parseFloat(costStr || '0') || 0
-        };
+        } as CostItem;
       })
-      .filter((i: any) => i.type && i.cost >= 0);
+      .filter((i: CostItem) => !!i.type && (i.cost ?? 0) >= 0);
   }
 
   // Parse a single CSV line into columns (handles quoted fields and escaped quotes)
@@ -99,20 +106,28 @@
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'application/json';
-    input.onchange = (e: any) => {
-      const file = e.target.files[0];
+    input.onchange = (e: Event) => {
+      const target = e.target as HTMLInputElement | null;
+      const file = target?.files?.[0];
       if (!file) return;
 
       const reader = new FileReader();
-      reader.onload = async (e: any) => {
+      reader.onload = async () => {
         try {
-          const data = JSON.parse(e.target.result);
+          const resultText = String(reader.result ?? '');
+          const data = JSON.parse(resultText) as Record<string, unknown>;
           const importMessages: string[] = [];
 
           if (data.settings) {
-            userSettings.set(data.settings);
-            // Try to persist to cloud and update canonical state
-            const result = await saveSettings(data.settings);
+            // Merge partial remote settings into local store (avoid forcing full Settings shape)
+            userSettings.update((s) => ({
+              ...s,
+              ...(data.settings as Partial<Record<string, unknown>>)
+            }));
+            // Try to persist to cloud and update canonical state using a partial shape
+            const result = await saveSettings(
+              data.settings as unknown as Partial<Record<string, unknown>>
+            );
             if (!result.ok) {
               toasts.error('Settings imported locally, cloud sync failed');
             } else {
@@ -121,37 +136,37 @@
           }
 
           const userId = $user?.id || localStorage.getItem('offline_user_id') || 'offline';
-          if (data.trips && Array.isArray(data.trips)) {
+          if (Array.isArray(data.trips)) {
             if (confirm(`Found ${data.trips.length} trips in backup. Import them now?`)) {
-              for (const trip of data.trips) {
-                await trips.create(trip, userId);
+              for (const trip of data.trips as unknown as Trip[]) {
+                await trips.create(trip as unknown as Partial<TripRecord>, userId);
               }
-              importMessages.push(`${data.trips.length} trips imported`);
+              importMessages.push(`${(data.trips as unknown[]).length} trips imported`);
             }
           }
 
-          if (data.expenses && Array.isArray(data.expenses)) {
+          if (Array.isArray(data.expenses)) {
             if (confirm(`Found ${data.expenses.length} expenses in backup. Import them now?`)) {
-              for (const expense of data.expenses) {
-                await expenses.create(expense, userId);
+              for (const expense of data.expenses as unknown as ExpenseInput[]) {
+                await expenses.create(expense as unknown as Record<string, unknown>, userId);
               }
-              importMessages.push(`${data.expenses.length} expenses imported`);
+              importMessages.push(`${(data.expenses as unknown[]).length} expenses imported`);
             }
           }
 
-          if (data.mileage && Array.isArray(data.mileage)) {
+          if (Array.isArray(data.mileage)) {
             if (confirm(`Found ${data.mileage.length} mileage logs in backup. Import them now?`)) {
-              for (const log of data.mileage) {
-                await mileage.create(log, userId);
+              for (const log of data.mileage as unknown as Record<string, unknown>[]) {
+                await mileage.create(log as unknown as Record<string, unknown>, userId);
               }
-              importMessages.push(`${data.mileage.length} mileage logs imported`);
+              importMessages.push(`${(data.mileage as unknown[]).length} mileage logs imported`);
             }
           }
 
           if (importMessages.length > 0) {
-            dispatch('success', `Successfully imported: ${importMessages.join(', ')}`);
+            onSuccess?.(`Successfully imported: ${importMessages.join(', ')}`);
           } else {
-            dispatch('success', 'No data found in backup file.');
+            onSuccess?.('No data found in backup file.');
           }
         } catch (err) {
           console.error(err);
@@ -183,8 +198,9 @@
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.csv';
-    input.onchange = async (e: any) => {
-      const file = e.target.files[0];
+    input.onchange = async (e: Event) => {
+      const target = e.target as HTMLInputElement | null;
+      const file = target?.files?.[0];
       if (!file) return;
 
       // Reject overly large files early to avoid DoS / memory issues
@@ -216,26 +232,28 @@
             return;
         }
 
-        const parsed: any[] = [];
+        const parsed: Trip[] = [];
         let processedRows = 0;
 
         for (let i = 1; i < lines.length; i++) {
-          if (!lines[i].trim()) continue;
+          const line = lines[i] ?? '';
+          if (!line.trim()) continue;
 
           // Respect row cap
           if (processedRows >= MAX_IMPORT_ROWS) break;
 
           // Parse line into columns (handles quoted values and escaped quotes)
-          const rowCols = parseCsvLine(lines[i], MAX_COLUMNS);
+          const rowCols = parseCsvLine(line, MAX_COLUMNS);
           if (!rowCols || rowCols.length === 0) continue;
 
           const cleanRow = rowCols.map((c: string) =>
             c.trim().replace(/^"|"$/g, '').replace(/""/g, '"')
           );
           const stopsStr = cleanRow[2];
-          let stops: any[] = [];
+          let stops: Array<Record<string, unknown>> = [];
           if (stopsStr) {
             stops = stopsStr.split('|').map((s: string) => ({
+              id: crypto.randomUUID(),
               address: s.trim(),
               earnings: 0
             }));
@@ -243,7 +261,8 @@
 
           const totalRevenue = parseFloat(String(cleanRow[9] ?? '0')) || 0;
           if (totalRevenue > 0) {
-            if (stops.length > 0) stops[0].earnings = totalRevenue;
+            if (stops.length > 0)
+              (stops[0] as Record<string, unknown>).earnings = totalRevenue as unknown as number;
             else
               stops.push({
                 id: crypto.randomUUID(),
@@ -274,7 +293,7 @@
             date: cleanRow[0] ? localDateISO(cleanRow[0]) : localDateISO(),
             startAddress: cleanRow[1] || 'Unknown Start',
             endAddress: cleanRow[3] || cleanRow[1] || 'Unknown End',
-            stops: stops,
+            stops: stops as unknown as Stop[],
             totalMiles: parseFloat(String(cleanRow[5] ?? '0')) || 0,
             estimatedTime: estimatedTime,
             totalTime: cleanRow[6],
@@ -289,7 +308,7 @@
             endTime: '17:00',
             mpg: 25,
             gasPrice: 3.5
-          });
+          } as Trip);
 
           processedRows++;
         }
@@ -298,9 +317,9 @@
           if (confirm(`Found ${parsed.length} trips. Import them now?`)) {
             const userId = $user?.id || localStorage.getItem('offline_user_id') || 'offline';
             for (const trip of parsed) {
-              await trips.create(trip, userId);
+              await trips.create(trip as unknown as Partial<TripRecord>, userId);
             }
-            dispatch('success', `Successfully imported ${parsed.length} trips from CSV!`);
+            onSuccess?.(`Successfully imported ${parsed.length} trips from CSV!`);
           }
         } else {
           alert('No valid trips found in CSV.');
@@ -316,11 +335,11 @@
   function clearAllData() {
     if (!confirm('Are you sure? This will delete ALL your trip data locally.')) return;
     trips.clear();
-    dispatch('success', 'All trip data cleared.');
+    onSuccess?.('All trip data cleared.');
   }
 
   function openAdvancedExport() {
-    dispatch('openAdvancedExport');
+    _onOpenAdvancedExport?.();
   }
 </script>
 

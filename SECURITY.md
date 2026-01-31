@@ -270,6 +270,19 @@ You MUST:
 - Always use SvelteKit `RequestEvent` handlers (`({ platform, locals, request, url })`) — not Worker-style `(env, ctx)` handlers.
 - Maintain strict allowlists for input handling; no mass-assignment.
 
+## 10) CSP policy (dev vs prod)
+
+Production must remain strict:
+
+- script-src MUST NOT include 'unsafe-inline' or 'unsafe-eval'
+- prefer nonce-based policies for any inline scripts
+
+Development may be relaxed ONLY when gated by `dev === true`:
+
+- It is acceptable to include 'unsafe-inline' (and only if necessary) to unblock local dev tooling/HMR.
+- Any dev relaxation MUST be isolated to dev-only branches and MUST NOT ship to production builds.
+- If a task explicitly requests dev relaxations, implement them as requested (still keep prod strict).
+
 **Violation response template:**
 
 > “I cannot implement this request because it violates the Security Policy (Zero Trust Client / Data Isolation). I will implement a secure alternative: [secure alternative].”

@@ -83,16 +83,17 @@
 
   function viewTrash() {
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + query param
-    goto(resolve('/dashboard/trash') + '?type=mileage');
+    location.href = resolve('/dashboard/trash') + '?type=mileage';
   }
 
   function editExpense(expense: any) {
     if ((expense as any).source === 'trip') {
       // eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
-      goto(resolve('/dashboard/trips') + '?id=' + encodeURIComponent(String(expense.tripId)));
+      location.href =
+        resolve('/dashboard/trips') + '?id=' + encodeURIComponent(String(expense.tripId));
     } else {
       // eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
-      goto(resolve('/dashboard/mileage/edit/') + encodeURIComponent(String(expense.id)));
+      location.href = resolve('/dashboard/mileage/edit/') + encodeURIComponent(String(expense.id));
     }
   }
 

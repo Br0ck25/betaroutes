@@ -305,9 +305,14 @@ export const PUT: RequestHandler = async (event) => {
           const tripRecord = trip as TripRecord & Record<string, unknown>;
           tripRecord.totalMiles = updated.miles;
           // Recalculate fuel cost based on updated miles using shared utility
-          const mpg = Number(tripRecord['mpg'] ?? 0) || 0;
-          const gasPrice = Number(tripRecord['gasPrice'] ?? 0) || 0;
-          tripRecord.fuelCost = calculateFuelCost(updated.miles, mpg, gasPrice);
+          // Preserve an explicitly provided positive fuelCost on the trip record (do not overwrite)
+          if (!(typeof tripRecord.fuelCost === 'number' && tripRecord.fuelCost > 0)) {
+            const mpg = Number(tripRecord['mpg'] ?? 0) || 0;
+            const gasPrice = Number(tripRecord['gasPrice'] ?? 0) || 0;
+            if (mpg > 0 && gasPrice >= 0) {
+              tripRecord.fuelCost = calculateFuelCost(updated.miles, mpg, gasPrice);
+            }
+          }
           tripRecord.updatedAt = new Date().toISOString();
           await tripSvc.put(tripRecord as TripRecord);
           log.info('Updated trip totalMiles and fuelCost from mileage log', {

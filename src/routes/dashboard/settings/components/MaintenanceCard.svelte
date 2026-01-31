@@ -1,14 +1,14 @@
 <script lang="ts">
   import { run } from 'svelte/legacy';
 
-  import { userSettings } from '$lib/stores/userSettings';
-  import { trips } from '$lib/stores/trips';
   import { toasts } from '$lib/stores/toast';
+  import { trips } from '$lib/stores/trips';
+  import { userSettings } from '$lib/stores/userSettings';
   import { calculateDashboardStats } from '$lib/utils/dashboardLogic';
-  import { onMount, createEventDispatcher } from 'svelte';
   import { localDateISO } from '$lib/utils/dates';
 
-  const dispatch = createEventDispatcher();
+  // Callback prop instead of createEventDispatcher
+  const { onSuccess }: { onSuccess?: (msg: string) => void } = $props();
 
   // Editable inputs (local) to avoid overwriting during typing
   let intervalMilesInput: number | undefined = $state();
@@ -20,8 +20,8 @@
   // Visual feedback for the Save button
   let buttonHighlight = $state(false);
 
-  // Initialize inputs from the store on mount
-  onMount(() => {
+  // Initialize inputs from the store (use $effect instead of onMount)
+  $effect(() => {
     intervalMilesInput = Number($userSettings.serviceIntervalMiles || 5000);
     lastServiceOdometerInput = Number($userSettings.lastServiceOdometer || 0);
     lastServiceDateInput = $userSettings.lastServiceDate || '';
@@ -32,7 +32,7 @@
   // Current odometer computed from trips + vehicleOdometerStart (reflects unsaved input while editing)
   let baseOdo = $state(0);
   let currentOdometer = $state(0);
-  let allStats = $derived(calculateDashboardStats($trips, [], 'all'));
+  const allStats = $derived(calculateDashboardStats($trips, [], 'all'));
   run(() => {
     baseOdo = Number(
       vehicleOdometerStartInput != null
@@ -44,12 +44,12 @@
     currentOdometer = baseOdo + (allStats?.totalMiles || 0);
   });
 
-  import { saveSettings } from '../lib/save-settings';
   import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
+  import { saveSettings } from '../lib/save-settings';
 
   async function saveSettingsHandler() {
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         serviceIntervalMiles: Number(intervalMilesInput || 5000),
         lastServiceOdometer: Number(lastServiceOdometerInput || 0),
         lastServiceDate: lastServiceDateInput || '',
@@ -62,10 +62,11 @@
 
       // Visual & event feedback (match ProfileCard behavior)
       toasts.success('Maintenance settings saved');
-      dispatch('success', 'Maintenance settings saved');
+      // Use callback prop instead of dispatch
+      onSuccess?.('Maintenance settings saved');
       buttonHighlight = true;
       setTimeout(() => (buttonHighlight = false), 3000);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
       toasts.error('Could not save maintenance settings');
     }

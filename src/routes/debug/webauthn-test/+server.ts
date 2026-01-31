@@ -1,7 +1,7 @@
-import type { RequestHandler } from './$types';
-import { generateRegistrationOptions } from '$lib/server/webauthn';
 import { dev } from '$app/environment';
+import { generateRegistrationOptions } from '$lib/server/webauthn';
 import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async () => {
   // [SECURITY] Debug endpoints must not be accessible in production

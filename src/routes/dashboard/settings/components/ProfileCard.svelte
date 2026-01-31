@@ -1,28 +1,87 @@
-<script lang="ts">
-  import { auth } from '$lib/stores/auth';
-  import { createEventDispatcher } from 'svelte';
-  import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
-  import { csrfFetch } from '$lib/utils/csrf';
+<script module lang="ts">
+  export interface Props {
+    profile?: { name: string; email: string };
+    // Callback props
+    onSuccess?: (msg: string) => void;
+    onPortal?: () => void;
+    onUpgrade?: (plan?: 'generic' | 'export' | 'advanced-export') => void;
+  }
+</script>
 
-  interface Props {
-    profile: { name: string; email: string };
-    monthlyUsage: number;
-    isPro: boolean;
-    isOpeningPortal?: boolean;
-    isCheckingOut?: boolean;
+<script lang="ts">
+  import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
+  import { auth } from '$lib/stores/auth';
+  import { trips } from '$lib/stores/trips';
+  import { csrfFetch } from '$lib/utils/csrf';
+  import { SvelteDate } from '$lib/utils/svelte-reactivity';
+
+  // Expose component prop types for consumers during migration (instance script required)
+  type $$Props = Props & {
+    onSuccess?: (msg: string) => void;
+    onPortal?: () => void;
+    onUpgrade?: (plan?: 'generic' | 'export' | 'advanced-export') => void;
+  };
+
+  // Single $props() call — declare bindable profile and callbacks (other values derived internally)
+  let {
+    profile = $bindable<{ name: string; email: string }>(),
+    onSuccess,
+    onPortal,
+    onUpgrade
+  } = $props() as Props & {
+    onSuccess?: (msg: string) => void;
+    onPortal?: () => void;
+    onUpgrade?: (plan?: 'generic' | 'export' | 'advanced-export') => void;
+  };
+
+  // Derived state: compute monthly usage and plan locally to avoid prop coupling
+  const monthlyUsage = $derived(
+    $trips.filter((t) => {
+      if (!t.date) return false;
+      const tripDate = SvelteDate.from(t.date).toDate();
+      const now = SvelteDate.now().toDate();
+      return tripDate.getMonth() === now.getMonth() && tripDate.getFullYear() === now.getFullYear();
+    }).length
+  );
+
+  const isPro = $derived(
+    ['pro', 'business', 'premium', 'enterprise'].includes($auth.user?.plan || '')
+  );
+
+  // Local UI state
+  let buttonHighlight = $state(false);
+  let isOpeningPortal = $state(false);
+  let isCheckingOut = $state(false);
+
+  async function handlePortalLocal() {
+    if (isOpeningPortal) return;
+    isOpeningPortal = true;
+    try {
+      const res = await csrfFetch('/api/stripe/portal', { method: 'POST' });
+      const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) throw new Error((json?.message as string) || 'Failed to open portal');
+      if (typeof json?.url === 'string') window.location.href = json.url as string;
+    } catch (e) {
+      console.error(e);
+      alert('Could not open billing portal. If you recently upgraded, try refreshing the page.');
+      isOpeningPortal = false;
+    }
   }
 
-  let {
-    profile = $bindable(),
-    monthlyUsage,
-    isPro,
-    isOpeningPortal = false,
-    isCheckingOut = false
-  }: Props = $props();
-
-  const dispatch = createEventDispatcher();
-  let buttonHighlight = $state(false);
-
+  async function handleUpgradeLocal() {
+    if (isCheckingOut) return;
+    isCheckingOut = true;
+    try {
+      const res = await csrfFetch('/api/stripe/checkout', { method: 'POST' });
+      const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) throw new Error((json?.message as string) || 'Checkout failed');
+      if (typeof json?.url === 'string') window.location.href = json.url as string;
+    } catch (e) {
+      console.error('Checkout error:', e);
+      alert('Failed to start checkout. Please try again.');
+      isCheckingOut = false;
+    }
+  }
   async function saveProfile() {
     // Optimistic local update
     auth.updateProfile({ name: profile.name, email: profile.email });
@@ -49,29 +108,29 @@
         if (typeof name === 'string') updates.name = name;
         if (typeof email === 'string') updates.email = email;
         if (Object.keys(updates).length > 0) auth.updateProfile(updates);
-        dispatch('success', 'Profile updated successfully!');
+        onSuccess?.('Profile updated successfully!');
         buttonHighlight = true;
         setTimeout(() => (buttonHighlight = false), 3000);
       } else {
         console.error('Failed to save profile to server', { status: res.status, body: json });
-        dispatch('success', 'Saved locally (Server error)');
+        onSuccess?.('Saved locally (Server error)');
         buttonHighlight = true;
         setTimeout(() => (buttonHighlight = false), 3000);
       }
     } catch {
       console.error('Save error: Network issue');
-      dispatch('success', 'Saved locally (Network error)');
+      onSuccess?.('Saved locally (Network error)');
       buttonHighlight = true;
       setTimeout(() => (buttonHighlight = false), 3000);
     }
   }
 
   function handlePortal() {
-    dispatch('portal');
+    onPortal?.();
   }
 
   function handleUpgrade() {
-    dispatch('upgrade', 'generic');
+    onUpgrade?.('generic');
   }
 </script>
 

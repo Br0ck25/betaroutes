@@ -76,10 +76,19 @@ function showTripLimitWarning(remaining) {
   `;
 
   banner.innerHTML = `
-    ⚠️ You have ${remaining} trip${remaining !== 1 ? 's' : ''} remaining this month. 
-    <a href="#" onclick="showUpgradeModal(); return false;" style="color: #0d6efd; font-weight: bold; text-decoration: underline;">Upgrade to Pro</a> 
+    ⚠️ You have ${remaining} trip${remaining !== 1 ? 's' : ''} remaining this month.
+    <a href="#" class="upgrade-link" style="color: #0d6efd; font-weight: bold; text-decoration: underline;">Upgrade to Pro</a>
     for unlimited trips!
   `;
+
+  // Attach a click handler to the upgrade link (CSP-friendly)
+  const upgradeLink = banner.querySelector('.upgrade-link');
+  if (upgradeLink) {
+    upgradeLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (typeof window.showUpgradeModal === 'function') window.showUpgradeModal();
+    });
+  }
 
   const container = document.querySelector('.container');
   if (container) {
@@ -151,7 +160,7 @@ function showUpgradeModal() {
       box-shadow: 0 20px 60px rgba(0,0,0,0.3);
     ">
       <div style="text-align: right; margin-bottom: 20px;">
-        <button onclick="closeUpgradeModal()" style="
+        <button class="close-upgrade-modal" style="
           background: none;
           border: none;
           font-size: 28px;
@@ -161,12 +170,12 @@ function showUpgradeModal() {
           line-height: 1;
         ">×</button>
       </div>
-      
+
       <h2 style="text-align: center; margin-bottom: 10px; color: #333;">Upgrade Your Plan</h2>
       <p style="text-align: center; color: #666; margin-bottom: 40px;">Choose the plan that's right for you</p>
-      
+
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 30px;">
-        
+
         <!-- Free Plan (Current) -->
         <div style="
           border: 2px solid #e0e0e0;
@@ -200,7 +209,7 @@ function showUpgradeModal() {
             cursor: not-allowed;
           ">Current Plan</button>
         </div>
-        
+
         <!-- Pro Plan (Recommended) -->
         <div style="
           border: 3px solid #4caf50;
@@ -223,7 +232,7 @@ function showUpgradeModal() {
             font-size: 12px;
             font-weight: 600;
           ">RECOMMENDED</div>
-          
+
           <h3 style="margin: 0 0 10px 0; color: #4caf50;">Pro</h3>
           <div style="font-size: 36px; font-weight: bold; margin: 20px 0; color: #333;">$9.99</div>
           <div style="color: #999; margin-bottom: 20px;">per month</div>
@@ -247,7 +256,7 @@ function showUpgradeModal() {
               <span style="position: absolute; left: 0;">✓</span> Priority support
             </li>
           </ul>
-          <button data-plan="pro" onclick="upgradeToPlan(event,'pro')" style="
+          <button data-plan="pro" class="upgrade-plan-btn" style="
             width: 100%;
             padding: 12px;
             background: linear-gradient(135deg, #4caf50, #45a049);
@@ -262,7 +271,7 @@ function showUpgradeModal() {
             Upgrade to Pro
           </button>
         </div>
-        
+
         <!-- Business Plan -->
         <div style="
           border: 2px solid #2196f3;
@@ -293,7 +302,7 @@ function showUpgradeModal() {
               <span style="position: absolute; left: 0;">✓</span> Dedicated support
             </li>
           </ul>
-          <button data-plan="business" onclick="upgradeToPlan(event,'business')" style="
+          <button data-plan="business" class="upgrade-plan-btn" style="
             width: 100%;
             padding: 12px;
             background: #2196f3;
@@ -304,13 +313,13 @@ function showUpgradeModal() {
             font-weight: 600;
             cursor: pointer;
             transition: background 0.2s;
-          " onmouseover="this.style.background='#1976d2'" onmouseout="this.style.background='#2196f3'">
+          ">
             Upgrade to Business
           </button>
         </div>
-        
+
       </div>
-      
+
       <p style="text-align: center; color: #999; font-size: 14px; margin-top: 30px;">
         💳 Secure payment powered by Stripe • Cancel anytime • No hidden fees
       </p>
@@ -318,6 +327,23 @@ function showUpgradeModal() {
   `;
 
   document.body.appendChild(modal);
+
+  // Attach event handlers to the modal elements (CSP-friendly)
+  const closeBtn = modal.querySelector('.close-upgrade-modal');
+  if (closeBtn)
+    closeBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (typeof window.closeUpgradeModal === 'function') window.closeUpgradeModal();
+    });
+
+  const planBtns = modal.querySelectorAll('.upgrade-plan-btn');
+  planBtns.forEach((btn) => {
+    btn.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      const plan = (btn.getAttribute('data-plan') || '').toString();
+      if (typeof window.upgradeToPlan === 'function') window.upgradeToPlan(ev, plan);
+    });
+  });
 }
 
 // Close upgrade modal

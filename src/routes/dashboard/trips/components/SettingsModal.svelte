@@ -57,30 +57,56 @@
   let didSave = $state(false); // tracks whether user clicked Save Defaults
   // When modal opens/closes, keep a copy of persisted settings and reset staged values when closed without saving
   $effect(() => {
+    // Guard updates to avoid reading+writing the same state repeatedly
     if (open) {
-      didSave = false;
-      settings = { ...$userSettings };
-      // Initialize staged locals from persisted settings
-      defaultMPGLocal = settings?.defaultMPG ?? '';
-      defaultStartLocal = settings?.defaultStartAddress || '';
-      defaultEndLocal = settings?.defaultEndAddress || '';
-      gasDisplay =
-        settings?.defaultGasPrice != null ? Number(settings.defaultGasPrice).toFixed(2) : '';
+      if (didSave !== false) didSave = false;
+
+      const persisted = { ...$userSettings } as Partial<UserSettings>;
+      const persistedJson = JSON.stringify(persisted);
+      const currentJson = JSON.stringify(settings);
+      if (persistedJson !== currentJson) {
+        settings = persisted;
+      }
+
+      // Initialize staged locals from persisted settings only if they differ
+      const mpgVal = persisted?.defaultMPG ?? '';
+      if (String(defaultMPGLocal) !== String(mpgVal)) defaultMPGLocal = mpgVal;
+
+      const startVal = persisted?.defaultStartAddress || '';
+      if (defaultStartLocal !== startVal) defaultStartLocal = startVal;
+
+      const endVal = persisted?.defaultEndAddress || '';
+      if (defaultEndLocal !== endVal) defaultEndLocal = endVal;
+
+      const gasVal =
+        persisted?.defaultGasPrice != null ? Number(persisted.defaultGasPrice).toFixed(2) : '';
+      if (gasDisplay !== gasVal) gasDisplay = gasVal;
+
       // Respect `initialTab` when opened by a parent wanting the categories view
-      settingsTab = initialTab || settingsTab;
+      if (initialTab && settingsTab !== initialTab) settingsTab = initialTab;
     } else {
       // If the modal is being closed without saving, reset staged changes
       if (!didSave) {
-        settings = { ...$userSettings };
-        // Reset staged locals as well
-        defaultMPGLocal = settings?.defaultMPG ?? '';
-        defaultStartLocal = settings?.defaultStartAddress || '';
-        defaultEndLocal = settings?.defaultEndAddress || '';
-        gasDisplay =
-          settings?.defaultGasPrice != null ? Number(settings.defaultGasPrice).toFixed(2) : '';
+        const persisted = { ...$userSettings } as Partial<UserSettings>;
+        const persistedJson = JSON.stringify(persisted);
+        const currentJson = JSON.stringify(settings);
+        if (persistedJson !== currentJson) settings = persisted;
+
+        const mpgVal = persisted?.defaultMPG ?? '';
+        if (String(defaultMPGLocal) !== String(mpgVal)) defaultMPGLocal = mpgVal;
+
+        const startVal = persisted?.defaultStartAddress || '';
+        if (defaultStartLocal !== startVal) defaultStartLocal = startVal;
+
+        const endVal = persisted?.defaultEndAddress || '';
+        if (defaultEndLocal !== endVal) defaultEndLocal = endVal;
+
+        const gasVal =
+          persisted?.defaultGasPrice != null ? Number(persisted.defaultGasPrice).toFixed(2) : '';
+        if (gasDisplay !== gasVal) gasDisplay = gasVal;
       }
       // reset flag for next open
-      didSave = false;
+      if (didSave !== false) didSave = false;
     }
   });
 
@@ -178,8 +204,9 @@
       document.activeElement &&
       (document.activeElement as HTMLElement).id !== 'default-gas'
     ) {
-      gasDisplay =
+      const desired =
         settings.defaultGasPrice != null ? Number(settings.defaultGasPrice).toFixed(2) : '';
+      if (gasDisplay !== desired) gasDisplay = desired;
     }
   });
 

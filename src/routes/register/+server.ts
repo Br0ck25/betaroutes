@@ -1,13 +1,14 @@
 // src/routes/register/+server.ts
-import { json } from '@sveltejs/kit';
-import type { RequestHandler } from './$types';
+import { dev } from '$app/environment';
 import { hashPassword } from '$lib/server/auth';
-import { findUserByEmail, findUserByUsername } from '$lib/server/userService';
 import { sendVerificationEmail } from '$lib/server/email';
-import { checkRateLimit } from '$lib/server/rateLimit';
-import { randomUUID } from 'node:crypto';
 import { log } from '$lib/server/log';
 import { validatePassword } from '$lib/server/passwordValidation';
+import { checkRateLimit } from '$lib/server/rateLimit';
+import { findUserByEmail, findUserByUsername } from '$lib/server/userService';
+import { json } from '@sveltejs/kit';
+import { randomUUID } from 'node:crypto';
+import type { RequestHandler } from './$types';
 
 // [!code fix] Hardcode production URL to prevent Host Header Injection
 const PRODUCTION_BASE_URL = 'https://gorouteyourself.com';
@@ -175,7 +176,8 @@ export const POST: RequestHandler = async ({ request, platform, url, getClientAd
     // --- DEV: no email provider locally? print verification link instead ---
     const resendApiKey = env['RESEND_API_KEY'] as string | undefined;
     // keep your host-header protection: use server-configured BASE_URL
-    const baseUrl = (env['BASE_URL'] as string) || PRODUCTION_BASE_URL;
+    const baseUrl =
+      (env['BASE_URL'] as string) || (dev ? 'http://localhost:5173' : PRODUCTION_BASE_URL);
 
     if (!resendApiKey && !isProduction) {
       const devVerifyUrl = `${baseUrl}/api/verify?token=${verificationToken}`;

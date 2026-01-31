@@ -1,23 +1,27 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
+  // Use $effect for client-only setup/cleanup (replaces onMount/onDestroy)
   interface Props {
     sections?: string[];
     children?: import('svelte').Snippet;
   }
 
-  let { sections = ['profile', 'maintenance', 'integrations', 'security'], children }: Props =
+  const { sections = ['profile', 'maintenance', 'integrations', 'security'], children }: Props =
     $props();
 
-  // Ensure `active` is a string even if sections is empty
-  let active: string = $state('');
-  $effect(() => {
-    active = sections?.[0] ?? '';
-  });
-  let observer: IntersectionObserver | null = null;
+  // Ensure `active` is initialized and reacts to `sections` changes (writable state)
+  let active = $state('');
 
-  onMount(() => {
+  // Keep `active` in sync when the available `sections` changes
+  $effect(() => {
+    active = sections?.[0] ?? active;
+  });
+
+  $effect(() => {
+    // Client-only: IntersectionObserver and DOM lookups must not run on the server
+    if (typeof document === 'undefined') return;
+
     const opts = { root: null, rootMargin: '0px 0px -55%', threshold: 0.1 };
-    observer = new IntersectionObserver((entries) => {
+    const observer = new IntersectionObserver((entries) => {
       // Pick the most visible section
       const visible = entries
         .filter((e) => e.isIntersecting)
@@ -31,12 +35,12 @@
 
     sections.forEach((id) => {
       const el = document.getElementById(id);
-      if (el && observer) observer.observe(el);
+      if (el) observer.observe(el);
     });
-  });
 
-  onDestroy(() => {
-    if (observer) observer.disconnect();
+    return () => {
+      observer.disconnect();
+    };
   });
 
   function scrollTo(id: string) {

@@ -1,16 +1,16 @@
 <script lang="ts">
-  import {
-    formatCurrency,
-    formatDate,
-    formatTime,
-    formatDuration,
-    formatHours,
-    calculateNetProfit,
-    calculateHourlyPay
-  } from '$lib/utils/trip-helpers';
   import { swipeable } from '$lib/actions/swipe';
   import { mileage } from '$lib/stores/mileage';
-  import type { Trip, Stop, SupplyCost } from '$lib/types';
+  import type { Stop, SupplyCost, Trip } from '$lib/types';
+  import {
+    calculateHourlyPay,
+    calculateNetProfit,
+    formatCurrency,
+    formatDate,
+    formatDuration,
+    formatHours,
+    formatTime
+  } from '$lib/utils/trip-helpers';
 
   interface Props {
     trip: Trip;
@@ -22,7 +22,7 @@
     onToggleSelection?: (id: string) => void;
   }
 
-  let {
+  const {
     trip,
     isExpanded = false,
     isSelected = false,
@@ -294,7 +294,7 @@
                     class="mini-map-btn"
                     onclick={(e) => {
                       e.stopPropagation();
-                      openMapToStop(e, trip, i);
+                      void openMapToStop(e, trip, i);
                     }}
                     title="Map route from Start to here"
                   >

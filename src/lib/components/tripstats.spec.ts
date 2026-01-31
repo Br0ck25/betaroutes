@@ -1,9 +1,10 @@
 /** @vitest-environment jsdom */
-import { describe, it, expect, beforeEach } from 'vitest';
-import TripStats from '../../routes/dashboard/trips/components/TripStats.svelte';
-import { mileage } from '$lib/stores/mileage';
 import type { MileageRecord } from '$lib/db/types';
-import { mount } from 'svelte';
+import { mileage } from '$lib/stores/mileage';
+import { beforeEach, describe, expect, it } from 'vitest';
+import TripStats from '../../routes/dashboard/trips/components/TripStats.svelte';
+// @vitest-environment jsdom
+import { render } from '@testing-library/svelte';
 
 describe('TripStats component', () => {
   let container: HTMLDivElement;
@@ -25,7 +26,7 @@ describe('TripStats component', () => {
     // Provide authoritative mileage for t1
     mileage.updateLocal({ id: 't1', miles: 50, userId: 'test' } as MileageRecord);
 
-    mount(TripStats, { target: container, props: { trips } });
+    render(TripStats, { props: { trips }, target: container });
 
     const cards = container.querySelectorAll('.summary-card');
     const totalMilesValue = cards[1]?.querySelector('.summary-value')?.textContent ?? '';
@@ -34,7 +35,7 @@ describe('TripStats component', () => {
 
   it('handles zero hours worked gracefully (no NaN/Infinity)', () => {
     const trips = [{ id: 't3', totalMiles: 5, stops: [], hoursWorked: 0 }];
-    mount(TripStats, { target: container, props: { trips } });
+    render(TripStats, { props: { trips }, target: container });
     const cards = container.querySelectorAll('.summary-card');
     const avgValue = cards[3]?.querySelector('.summary-value')?.textContent ?? '';
     expect(avgValue).toContain('N/A');
@@ -60,7 +61,7 @@ describe('TripStats component', () => {
         hoursWorked: 1
       }
     ];
-    mount(TripStats, { target: container, props: { trips } });
+    render(TripStats, { props: { trips }, target: container });
     const cards = container.querySelectorAll('.summary-card');
     const totalProfit = cards[2]?.querySelector('.summary-value')?.textContent ?? '';
     const avgValue = cards[3]?.querySelector('.summary-value')?.textContent ?? '';

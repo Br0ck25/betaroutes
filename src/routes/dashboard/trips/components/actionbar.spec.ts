@@ -1,7 +1,8 @@
 /** @vitest-environment jsdom */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import ActionBar from './ActionBar.svelte';
-import { mount, unmount } from 'svelte';
+// @vitest-environment jsdom
+import { render } from '@testing-library/svelte';
 
 describe('ActionBar component', () => {
   let container: HTMLDivElement;
@@ -13,14 +14,13 @@ describe('ActionBar component', () => {
   });
 
   it('renders selected count and emits cancel/export/delete', async () => {
-    const comp = mount(ActionBar, { target: container, props: { selectedCount: 2, isPro: false } });
+    const { component, unmount } = render(ActionBar, {
+      props: { selectedCount: 2, isPro: false },
+      target: container
+    });
 
-    // Track via component events (ensure handlers can be attached without throwing)
-    comp.$on('cancel', () => {});
-    comp.$on('export', () => {});
-    comp.$on('delete', () => {});
-
-    // Also attach DOM listeners to ensure adding listeners doesn't throw
+    // Attach DOM listeners to ensure adding listeners doesn't throw and events dispatch
+    // from the component root element (Svelte 5 avoids `component.$on` on instances).
     container.addEventListener('cancel', () => {});
     container.addEventListener('export', () => {});
     container.addEventListener('delete', () => {});
@@ -57,6 +57,6 @@ describe('ActionBar component', () => {
 
     // Sanity: attaching handlers and clicking should not throw; verified above
     expect(true).toBe(true);
-    unmount(comp);
+    unmount();
   });
 });

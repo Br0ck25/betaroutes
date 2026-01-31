@@ -8,7 +8,6 @@
   import { trips } from '$lib/stores/trips';
   import type { MaintenanceCost, Stop, SupplyCost, Trip } from '$lib/types';
   import { calculateNetProfit } from '$lib/utils/trip-helpers';
-  import { onDestroy, onMount } from 'svelte';
   // Import Components
   import { SvelteDate, SvelteSet } from '$lib/utils/svelte-reactivity';
   import ActionBar from './components/ActionBar.svelte';
@@ -57,9 +56,18 @@
   const isPro = $derived(['pro', 'business', 'premium', 'enterprise'].includes($user?.plan || ''));
   const API_KEY = $derived(String($page.data['googleMapsApiKey'] ?? ''));
 
-  // Reset page when filters change
+  // Reset page when filters change (guard against redundant assignments to avoid infinite loops)
+  // DEV DEBUG: count runs to detect runaway effects
+  let _dbg_filter_effect = 0;
   $effect(() => {
-    if (searchQuery || sortBy || sortOrder || filterProfit || startDate || endDate) {
+    _dbg_filter_effect++;
+    console.debug('[DEV_DEBUG] filter-effect run', _dbg_filter_effect);
+
+    // Only reset if the page isn't already 1 — avoids reassigning the same value repeatedly
+    if (
+      (searchQuery || sortBy || sortOrder || filterProfit || startDate || endDate) &&
+      currentPage !== 1
+    ) {
       currentPage = 1;
     }
   });
@@ -83,7 +91,16 @@
   }
 
   // Handle body class for selection bar
+  let _dbg_bodyclass_effect = 0;
   $effect(() => {
+    _dbg_bodyclass_effect++;
+    console.debug(
+      '[DEV_DEBUG] bodyclass-effect run',
+      _dbg_bodyclass_effect,
+      'selected size',
+      selectedTrips.size
+    );
+
     if (typeof document === 'undefined' || !isMounted) return;
     const hasSelections = selectedTrips.size > 0;
     if (hasSelections !== lastHadSelections) {
@@ -93,15 +110,42 @@
     }
   });
 
-  onMount(() => {
-    document.body.classList.remove('has-selections');
-    isMounted = true;
-    loadTrips();
-  });
+  let _dbg_client_setup_effect = 0;
+  $effect(() => {
+    _dbg_client_setup_effect++;
+    // Log detailed context to diagnose re-entrancy
+    console.debug('[DEV_DEBUG] client-setup-effect run', _dbg_client_setup_effect, {
+      isMounted,
+      hasLoadedOnce,
+      tripsCount: $trips.length,
+      appearsOnline: typeof navigator !== 'undefined' ? navigator.onLine : 'unknown'
+    });
 
-  onDestroy(() => {
-    if (typeof document !== 'undefined') document.body.classList.remove('has-selections');
-    isMounted = false;
+    // Client-only setup (replaces onMount)
+    if (typeof document === 'undefined') return;
+
+    // Cleanup debug - we can detect when cleanup runs (effect re-run triggers previous cleanup)
+    const cleanup = () => {
+      // Do NOT change reactive state here to avoid triggering re-runs.
+      console.debug('[DEV_DEBUG] client-setup-effect cleanup - run', _dbg_client_setup_effect);
+      if (typeof document !== 'undefined') document.body.classList.remove('has-selections');
+      // Intentionally DO NOT set `isMounted = false` here to avoid read/write feedback loops.
+    };
+
+    // Mark mounted once (do not flip back to false on effect re-runs)
+    if (!isMounted) {
+      isMounted = true;
+    }
+
+    // Kick off initial load only once when we first become mounted
+    if (!hasLoadedOnce) {
+      // mark it now to avoid races where loadTrips triggers an effect re-run before
+      // hasLoadedOnce can be set inside loadTrips. loadTrips will also set it on success.
+      hasLoadedOnce = true;
+      void loadTrips();
+    }
+
+    return cleanup;
   });
 
   // Navigation helpers
@@ -111,7 +155,7 @@
 
   function handleEditTrip(tripId: string) {
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
-    goto(resolve('/dashboard/trips/edit/') + encodeURIComponent(tripId));
+    location.href = resolve('/dashboard/trips/edit/') + encodeURIComponent(tripId);
   }
 
   // --- Filtering Logic ---
@@ -303,23 +347,37 @@
 
   // Auto-expand a trip when `?id=<tripId>` is present in URL — used when navigating from expenses
   let lastQueryExpandId = '';
+  let _dbg_autoexpand_effect = 0;
   $effect(() => {
+    _dbg_autoexpand_effect++;
+    console.debug('[DEV_DEBUG] autoexpand-effect run', _dbg_autoexpand_effect);
+
     const qId = $page?.url?.searchParams.get('id');
-    if (qId && qId !== lastQueryExpandId && allFilteredTrips?.length > 0) {
-      const idx = allFilteredTrips.findIndex((t) => t.id === qId);
-      if (idx !== -1) {
-        const newPage = Math.floor(idx / itemsPerPage) + 1;
-        if (currentPage !== newPage) currentPage = newPage;
-        expandedTrips = new Set([qId]);
-        if (typeof document !== 'undefined') {
-          setTimeout(() => {
-            const el = document.getElementById('trip-' + qId);
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }, 60);
-        }
-      }
+    if (!qId || qId === lastQueryExpandId || !allFilteredTrips?.length) return;
+
+    const idx = allFilteredTrips.findIndex((t) => t.id === qId);
+    if (idx === -1) {
       lastQueryExpandId = qId;
+      return;
     }
+
+    const newPage = Math.floor(idx / itemsPerPage) + 1;
+
+    // Only update page or expanded set when it actually changes to avoid triggering reactive loops
+    const shouldChangePage = currentPage !== newPage;
+    const shouldChangeExpanded = !(expandedTrips.size === 1 && expandedTrips.has(qId));
+
+    if (shouldChangePage) currentPage = newPage;
+    if (shouldChangeExpanded) expandedTrips = new Set([qId]);
+
+    if (typeof document !== 'undefined' && (shouldChangePage || shouldChangeExpanded)) {
+      setTimeout(() => {
+        const el = document.getElementById('trip-' + qId);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 60);
+    }
+
+    lastQueryExpandId = qId;
   });
 </script>
 

@@ -1,26 +1,26 @@
 <!-- @migration-task Error while migrating Svelte code: Mixing old (oninput) and new syntaxes for event handling is not allowed. Use only the oninput syntax
 https://svelte.dev/e/mixed_event_handler_syntaxes -->
 <script lang="ts">
-  import { trips } from '$lib/stores/trips';
-  import { userSettings } from '$lib/stores/userSettings';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { user } from '$lib/stores/auth';
   import { page } from '$app/stores';
-  import { onMount, onDestroy } from 'svelte';
-  import { autocomplete } from '$lib/utils/autocomplete';
-  import { optimizeRoute } from '$lib/services/maps';
-  import Modal from '$lib/components/ui/Modal.svelte';
-  import { toasts } from '$lib/stores/toast';
   import Button from '$lib/components/ui/Button.svelte';
+  import Modal from '$lib/components/ui/Modal.svelte';
   import { PLAN_LIMITS } from '$lib/constants';
+  import { optimizeRoute } from '$lib/services/maps';
+  import { user } from '$lib/stores/auth';
+  import { toasts } from '$lib/stores/toast';
+  import { trips } from '$lib/stores/trips';
+  import { userSettings } from '$lib/stores/userSettings';
+  import { autocomplete } from '$lib/utils/autocomplete';
+  import { onDestroy, onMount } from 'svelte';
 
   function handleUpgradeNow() {
     goto(resolve('/dashboard/settings'));
   }
 
-  function goToTrips() {
-    goto(resolve('/dashboard/trips'));
+  async function goToTrips() {
+    await goto(resolve('/dashboard/trips'));
   }
   let { data }: { data?: { googleMapsApiKey?: string } } = $props();
   let API_KEY = $derived(String(data?.googleMapsApiKey ?? ''));
@@ -242,16 +242,26 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
       const res = await fetch(
         `/api/directions/cache?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
       );
-      const result: any = await res.json().catch(() => null);
-      if (res.ok && result && result.data) {
+      const result: unknown = await res.json().catch(() => null);
+      if (
+        res.ok &&
+        result &&
+        typeof result === 'object' &&
+        'data' in (result as Record<string, unknown>)
+      ) {
+        const data = ((result as Record<string, unknown>).data ?? {}) as {
+          distance?: number;
+          duration?: number;
+        };
+
         const mappedResult = {
-          distance: result.data.distance * 0.000621371,
-          duration: result.data.duration / 60
+          distance: (data.distance ?? 0) * 0.000621371,
+          duration: (data.duration ?? 0) / 60
         };
 
         // Only cache valid responses (non-zero)
         if ((mappedResult.distance || 0) > 0 && (mappedResult.duration || 0) > 0) {
-          console.info('[route] server hit', localKey, { source: result.source });
+          console.info('[route] server hit', localKey, { source: (result as any).source });
           try {
             localStorage.setItem(
               localKey,
@@ -394,57 +404,75 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
 
     isCalculating = true;
     try {
-      const result: any = await optimizeRoute(
+      const result: unknown = await optimizeRoute(
         tripData.startAddress,
         tripData.endAddress,
         tripData.stops
       );
-      if (result && result.optimizedOrder) {
+      if (result && typeof result === 'object' && Array.isArray((result as any).optimizedOrder)) {
+        const optimized = result as {
+          optimizedOrder: number[];
+          legs?: Array<{ distance?: { value?: number }; duration?: { value?: number } }>;
+        };
         const currentStops = [...tripData.stops];
-        let orderedStops = [];
+        let orderedStops: LocalStop[] = [];
         if (!tripData.endAddress) {
           const movingStops = currentStops.slice(0, -1);
           const fixedLast = currentStops[currentStops.length - 1];
-          orderedStops = result.optimizedOrder.map((i: number) => movingStops[i]);
-          orderedStops.push(fixedLast);
+          orderedStops = optimized.optimizedOrder
+            .map((i) => movingStops[i])
+            .filter((s): s is LocalStop => !!s);
+          if (fixedLast) orderedStops.push(fixedLast as LocalStop);
         } else {
-          orderedStops = result.optimizedOrder.map((i: number) => currentStops[i]);
+          orderedStops = optimized.optimizedOrder
+            .map((i) => currentStops[i])
+            .filter((s): s is LocalStop => !!s);
         }
 
-        tripData.stops = orderedStops.map((s: any, i: number) => ({
-          ...s,
-          order: i
-        })) as LocalStop[];
-        if (result.legs) {
+        tripData.stops = orderedStops.map((s, i) => ({ ...s, order: i }));
+        if (optimized.legs) {
           tripData.stops.forEach((stop, i) => {
-            if (result.legs[i]) {
-              stop.distanceFromPrev = result.legs[i].distance.value * 0.000621371;
-              stop.timeFromPrev = result.legs[i].duration.value / 60;
+            const leg = optimized.legs?.[i];
+            if (leg?.distance?.value != null) {
+              stop.distanceFromPrev = leg.distance.value * 0.000621371;
+            }
+            if (leg?.duration?.value != null) {
+              stop.timeFromPrev = leg.duration.value / 60;
             }
           });
         }
         await recalculateTotals();
         toasts.success('Route optimized!');
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      const msg = (e.message || '').toLowerCase();
-      if (e.code === 'PLAN_LIMIT' || msg.includes('plan limit') || msg.includes('pro feature')) {
-        upgradeMessage = e.message || 'Route Optimization is a Pro feature.';
+      const errMessage = e instanceof Error ? e.message : String(e ?? 'Optimization failed');
+      const code = (e as any)?.code;
+      const msg = (errMessage || '').toLowerCase();
+      if (code === 'PLAN_LIMIT' || msg.includes('plan limit') || msg.includes('pro feature')) {
+        upgradeMessage = errMessage || 'Route Optimization is a Pro feature.';
         showUpgradeModal = true;
       } else {
-        toasts.error('Optimization failed: ' + e.message);
+        toasts.error('Optimization failed: ' + errMessage);
       }
     } finally {
       isCalculating = false;
     }
   }
 
-  async function handleStopChange(index: number, placeOrEvent: any) {
+  async function handleStopChange(index: number, placeOrEvent: unknown) {
     const idx = index;
     const currentStop = tripData.stops[idx];
     if (!currentStop) return;
-    const val = placeOrEvent?.formatted_address || placeOrEvent?.name || currentStop.address;
+    let val: string | undefined;
+    if (typeof placeOrEvent === 'object' && placeOrEvent) {
+      const p = placeOrEvent as Record<string, unknown>;
+      if (typeof p.formatted_address === 'string') val = p.formatted_address;
+      else if (typeof p.name === 'string') val = p.name;
+    } else if (typeof placeOrEvent === 'string') {
+      val = placeOrEvent;
+    }
+    val = val ?? currentStop.address;
     if (!val) return;
     currentStop.address = val;
     isCalculating = true;
@@ -478,11 +506,16 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
     }
   }
 
-  async function handleMainAddressChange(type: 'start' | 'end', placeOrEvent: any) {
-    const val =
-      placeOrEvent?.formatted_address ||
-      placeOrEvent?.name ||
-      (type === 'start' ? tripData.startAddress : tripData.endAddress);
+  async function handleMainAddressChange(type: 'start' | 'end', placeOrEvent: unknown) {
+    let val: string | undefined;
+    if (typeof placeOrEvent === 'object' && placeOrEvent) {
+      const p = placeOrEvent as Record<string, unknown>;
+      if (typeof p.formatted_address === 'string') val = p.formatted_address;
+      else if (typeof p.name === 'string') val = p.name;
+    } else if (typeof placeOrEvent === 'string') {
+      val = placeOrEvent;
+    }
+    val = val ?? (type === 'start' ? tripData.startAddress : tripData.endAddress);
     if (type === 'start') tripData.startAddress = String(val || '');
     else tripData.endAddress = String(val || '');
     isCalculating = true;
@@ -548,7 +581,10 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
 
     isCalculating = true;
     try {
-      const segmentData: any = await fetchRouteSegment(segmentStart, newStop.address);
+      const segmentData: { distance: number; duration: number } | null = await fetchRouteSegment(
+        segmentStart,
+        newStop.address
+      );
       if (!segmentData) throw new Error('Could not calculate route.');
 
       tripData.stops = [
@@ -565,10 +601,10 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
       await recalculateTotals();
       newStop = { id: String(crypto.randomUUID()), address: '', earnings: 0, notes: '' };
       // Ensure `order` is present and typed
-      tripData.stops = tripData.stops.map((s: LocalStop | any, i: number) => ({
+      tripData.stops = tripData.stops.map((s: LocalStop, i: number) => ({
         ...s,
         order: i
-      })) as LocalStop[];
+      }));
     } catch (_err: any) {
       console.error('addStop failed', _err);
       toasts.error(_err?.message ? String(_err.message) : 'Error calculating route.');
@@ -636,7 +672,7 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
     isManageCategoriesOpen = true;
   }
   async function updateCategories(newCategories: string[]) {
-    const updateData: any = {};
+    const updateData: Partial<Record<string, unknown>> = {};
     if (activeCategoryType === 'maintenance') {
       userSettings.update((s) => ({ ...s, maintenanceCategories: newCategories }));
       updateData.maintenanceCategories = newCategories;
@@ -743,10 +779,10 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
 
     try {
       await trips.create(tripToSave, userId);
-      goToTrips();
-    } catch (_err: any) {
-      console.error('Save failed:', _err);
-      const message = _err?.message || 'Failed to create trip.';
+      await goToTrips();
+    } catch (err: unknown) {
+      console.error('Save failed:', err);
+      const message = err instanceof Error ? err.message : String(err ?? 'Failed to create trip.');
       toasts.error(message);
     }
   }

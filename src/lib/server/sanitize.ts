@@ -1,15 +1,15 @@
 // src/lib/server/sanitize.ts
 
 import type {
+  CostItem,
+  Destination,
   Location,
   Stop,
-  Destination,
-  CostItem,
   Trip,
+  UnsanitizedCostItem,
+  UnsanitizedDestination,
   UnsanitizedLocation,
   UnsanitizedStop,
-  UnsanitizedDestination,
-  UnsanitizedCostItem,
   UnsanitizedTrip
 } from '$lib/types';
 
@@ -189,27 +189,29 @@ export function sanitizeTrip(trip: unknown): Partial<Trip> {
     date: sanitizeString(t.date, 50),
     startTime: sanitizeString(t.startTime, 50),
     endTime: sanitizeString(t.endTime, 50),
-    hoursWorked: sanitizeNumber(t.hoursWorked),
     startAddress: sanitizeString(t.startAddress, 500),
     startLocation: sanitizeLocation(t.startLocation) ?? null,
     endAddress: sanitizeString(t.endAddress, 500),
     endLocation: sanitizeLocation(t.endLocation) ?? null,
-    totalMiles: sanitizeNumber(t.totalMiles),
-    estimatedTime: sanitizeNumber(t.estimatedTime),
     totalTime: sanitizeString(t.totalTime, 50),
-    mpg: sanitizeNumber(t.mpg),
-    gasPrice: sanitizeNumber(t.gasPrice),
-    fuelCost: sanitizeNumber(t.fuelCost),
-    maintenanceCost: sanitizeNumber(t.maintenanceCost),
-    suppliesCost: sanitizeNumber(t.suppliesCost),
-    totalEarnings: sanitizeNumber(t.totalEarnings),
-    netProfit: sanitizeNumber(t.netProfit),
     notes: sanitizeString(t.notes, 1000),
     stops: sanitizeArray(t.stops, sanitizeStop, 50),
     destinations: sanitizeArray(t.destinations, sanitizeDestination, 50),
     maintenanceItems: sanitizeArray(t.maintenanceItems, sanitizeCostItem, 20),
     suppliesItems: sanitizeArray(t.suppliesItems, sanitizeCostItem, 20)
   };
+
+  // Conditionally attach numeric fields only when provided to avoid false zeros that
+  // can fail downstream Zod validation (e.g., mpg must be positive if present)
+  if (t.hoursWorked !== undefined) out.hoursWorked = sanitizeNumber(t.hoursWorked);
+  if (t.totalMiles !== undefined) out.totalMiles = sanitizeNumber(t.totalMiles);
+  if (t.estimatedTime !== undefined) out.estimatedTime = sanitizeNumber(t.estimatedTime);
+  if (t.mpg !== undefined) out.mpg = sanitizeNumber(t.mpg);
+  if (t.gasPrice !== undefined) out.gasPrice = sanitizeNumber(t.gasPrice);
+  if (t.fuelCost !== undefined) out.fuelCost = sanitizeNumber(t.fuelCost);
+  if (t.maintenanceCost !== undefined) out.maintenanceCost = sanitizeNumber(t.maintenanceCost);
+  if (t.suppliesCost !== undefined) out.suppliesCost = sanitizeNumber(t.suppliesCost);
+  if (t.totalEarnings !== undefined) out.totalEarnings = sanitizeNumber(t.totalEarnings);
 
   // Only attach lastModified when it produces a real string
   const lm = t.lastModified ? sanitizeDateTime(t.lastModified) : undefined;

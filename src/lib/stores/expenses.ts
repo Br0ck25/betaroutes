@@ -1,13 +1,13 @@
 // src/lib/stores/expenses.ts
-import { writable, get } from 'svelte/store';
 import { getDB } from '$lib/db/indexedDB';
-import { syncManager } from '$lib/sync/syncManager';
 import type { ExpenseRecord, TrashRecord } from '$lib/db/types';
+import { syncManager } from '$lib/sync/syncManager';
 import type { User } from '$lib/types';
 import { SvelteDate } from '$lib/utils/svelte-reactivity';
+import { get, writable } from 'svelte/store';
 
-import { auth } from '$lib/stores/auth';
 import { PLAN_LIMITS } from '$lib/constants';
+import { auth } from '$lib/stores/auth';
 
 export const isLoading = writable(false);
 
@@ -178,6 +178,7 @@ function createExpensesStore() {
         await syncManager.addToQueue({
           action: 'create',
           tripId: expense.id,
+          userId,
           data: { ...expense, store: 'expenses' }
         });
 
@@ -221,6 +222,7 @@ function createExpensesStore() {
         await syncManager.addToQueue({
           action: 'update',
           tripId: id,
+          userId,
           data: { ...updated, store: 'expenses' }
         });
 
@@ -255,6 +257,7 @@ function createExpensesStore() {
           await syncManager.addToQueue({
             action: 'delete',
             tripId: id,
+            userId,
             data: { store: 'expenses' }
           });
           return;
@@ -294,6 +297,7 @@ function createExpensesStore() {
         await syncManager.addToQueue({
           action: 'delete',
           tripId: id,
+          userId,
           data: { store: 'expenses' }
         });
 

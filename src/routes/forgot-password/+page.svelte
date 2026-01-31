@@ -63,7 +63,7 @@
     <form
       onsubmit={(e) => {
         e.preventDefault();
-        handleSubmit();
+        void handleSubmit();
       }}
     >
       <div class="field-group">

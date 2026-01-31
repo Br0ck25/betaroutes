@@ -1,31 +1,36 @@
 <script lang="ts">
-  import Modal from '$lib/components/ui/Modal.svelte';
   import Button from '$lib/components/ui/Button.svelte';
-  import { trips } from '$lib/stores/trips';
+  import Modal from '$lib/components/ui/Modal.svelte';
   import { expenses } from '$lib/stores/expenses';
-  import { generateTripsCSV, generateExpensesCSV, generateTaxBundleCSV } from '../lib/export-utils';
+  import { trips } from '$lib/stores/trips';
   import { csrfFetch } from '$lib/utils/csrf';
+  import { generateExpensesCSV, generateTaxBundleCSV, generateTripsCSV } from '../lib/export-utils';
 
-  import { createEventDispatcher } from 'svelte';
   import { SvelteDate } from '$lib/utils/svelte-reactivity';
+
+  import type { Trip } from '$lib/types';
 
   interface Props {
     showAdvancedExport?: boolean;
   }
 
-  let { showAdvancedExport = $bindable(false) }: Props = $props();
+  let {
+    showAdvancedExport = $bindable(false),
+    onSuccess,
+    onError
+  }: Props & { onSuccess?: (msg: string) => void; onError?: (msg: string) => void } = $props();
 
-  const dispatch = createEventDispatcher();
+  type Expense = { date?: string };
   let exportDataType: 'trips' | 'expenses' | 'tax-bundle' = $state('trips');
   let exportFormat: 'csv' | 'pdf' = $state('csv');
   let exportDateFrom = $state('');
   let exportDateTo = $state('');
   let exportIncludeSummary = $state(true);
 
-  let filteredTrips = $derived(
-    $trips.filter((trip: any) => {
+  const filteredTrips = $derived(
+    $trips.filter((trip: Trip) => {
       if (!trip.date) return false;
-      const tripDate = SvelteDate.from(trip.date).startOfDay();
+      const tripDate = SvelteDate.from(trip.date!).startOfDay();
       if (
         exportDateFrom &&
         tripDate.getTime() < SvelteDate.from(exportDateFrom).startOfDay().getTime()
@@ -36,10 +41,10 @@
       return true;
     })
   );
-  let filteredExpenses = $derived(
-    $expenses.filter((expense: any) => {
+  const filteredExpenses = $derived(
+    $expenses.filter((expense: Expense) => {
       if (!expense.date) return false;
-      const expenseDate = SvelteDate.from(expense.date).startOfDay();
+      const expenseDate = SvelteDate.from(expense.date!).startOfDay();
       if (
         exportDateFrom &&
         expenseDate.getTime() < SvelteDate.from(exportDateFrom).startOfDay().getTime()
@@ -76,21 +81,25 @@
           );
           doc.save(`tax-bundle-report-${Date.now()}.pdf`);
         }
-        dispatch('success', 'PDF exported successfully!');
+        onSuccess?.('PDF exported successfully!');
       } catch (err) {
         // If client-side PDF generation fails (e.g. because we stubbed html2canvas/canvg)
         // fallback to server-side PDF generation.
         console.warn('Client-side PDF failed, falling back to server:', err);
         try {
-          const body: any = { type: exportDataType, dateRangeStr: getDateRangeStr() };
-          if (exportDataType === 'trips') body.trips = filteredTrips;
+          const body: Record<string, unknown> = {
+            type: exportDataType,
+            dateRangeStr: getDateRangeStr()
+          };
+          if (exportDataType === 'trips')
+            (body as Record<string, unknown>)['trips'] = filteredTrips as unknown;
           if (exportDataType === 'expenses') {
-            body.expenses = filteredExpenses;
-            body.trips = filteredTrips;
+            (body as Record<string, unknown>)['expenses'] = filteredExpenses as unknown;
+            (body as Record<string, unknown>)['trips'] = filteredTrips as unknown;
           }
           if (exportDataType === 'tax-bundle') {
-            body.expenses = filteredExpenses;
-            body.trips = filteredTrips;
+            (body as Record<string, unknown>)['expenses'] = filteredExpenses as unknown;
+            (body as Record<string, unknown>)['trips'] = filteredTrips as unknown;
           }
 
           const res = await csrfFetch('/api/generate-pdf', {
@@ -100,8 +109,12 @@
           });
 
           if (!res.ok) {
-            const errBody = await res.json().catch(() => ({}));
-            dispatch('error', (errBody as any)?.error || 'Server PDF generation failed');
+            const errBody = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+            onError?.(
+              typeof errBody?.error === 'string'
+                ? (errBody.error as string)
+                : 'Server PDF generation failed'
+            );
             return;
           }
 
@@ -112,10 +125,10 @@
           a.download = `${exportDataType}-report-${Date.now()}.pdf`;
           a.click();
           URL.revokeObjectURL(url);
-          dispatch('success', 'PDF exported (server) successfully!');
+          onSuccess?.('PDF exported (server) successfully!');
         } catch (e) {
           console.error('Server-side PDF fallback failed:', e);
-          dispatch('error', 'PDF export failed');
+          onError?.('PDF export failed');
         }
       }
     } else {
@@ -123,15 +136,15 @@
       if (exportDataType === 'tax-bundle') {
         const csv = generateTaxBundleCSV(filteredTrips, filteredExpenses, getDateRangeStr());
         downloadCSV(csv, 'tax-bundle-export');
-        dispatch('success', 'Tax Bundle exported successfully!');
+        onSuccess?.('Tax Bundle exported successfully!');
       } else if (exportDataType === 'trips') {
         const csv = generateTripsCSV(filteredTrips, exportIncludeSummary);
         downloadCSV(csv, 'trips-export');
-        dispatch('success', 'Trips exported successfully!');
+        onSuccess?.('Trips exported successfully!');
       } else if (exportDataType === 'expenses') {
         const csv = generateExpensesCSV(filteredExpenses, filteredTrips, exportIncludeSummary);
         downloadCSV(csv, 'expenses-export');
-        dispatch('success', 'Expenses exported successfully!');
+        onSuccess?.('Expenses exported successfully!');
       }
     }
     showAdvancedExport = false;

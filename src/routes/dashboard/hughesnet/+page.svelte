@@ -1,15 +1,14 @@
 <script lang="ts">
   import { run } from 'svelte/legacy';
 
-  import { onMount, onDestroy } from 'svelte';
-  import { slide } from 'svelte/transition';
-  import { trips } from '$lib/stores/trips';
-  import { trash } from '$lib/stores/trash';
-  import { user } from '$lib/stores/auth';
   import { page } from '$app/stores';
+  import { user } from '$lib/stores/auth';
+  import { trash } from '$lib/stores/trash';
+  import { trips } from '$lib/stores/trips';
   import { csrfFetch } from '$lib/utils/csrf';
+  import { SvelteDate, SvelteSet } from '$lib/utils/svelte-reactivity';
+  import { slide } from 'svelte/transition';
   import SettingsModal from '../trips/components/SettingsModal.svelte';
-  import { SvelteSet, SvelteDate } from '$lib/utils/svelte-reactivity';
   let showTripSettings = $state(false);
   // Access via bracket notation because `page.data` exposes properties through an index signature
   let API_KEY = $derived($page.data?.['googleMapsApiKey']);
@@ -520,15 +519,20 @@
     localStorage.setItem(LAST_VISIT_KEY, Date.now().toString());
   }
 
-  onMount(() => {
-    loadSettings();
-    loadOrders();
-    checkSessionTimeout();
-  });
+  $effect(() => {
+    // Client-only initialization (replaces onMount)
+    if (typeof document === 'undefined') return;
 
-  onDestroy(() => {
-    if (saveTimeout) clearTimeout(saveTimeout);
-    if (conflictInterval) clearInterval(conflictInterval);
+    // Start initial loads
+    void loadSettings();
+    void loadOrders();
+    checkSessionTimeout();
+
+    // Return cleanup (replaces onDestroy)
+    return () => {
+      if (saveTimeout) clearTimeout(saveTimeout);
+      if (conflictInterval) clearInterval(conflictInterval);
+    };
   });
 </script>
 

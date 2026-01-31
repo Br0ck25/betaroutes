@@ -1,10 +1,10 @@
 // src/lib/stores/trash.ts
-import { writable, get } from 'svelte/store';
 import { getDB, getMileageStoreName } from '$lib/db/indexedDB';
-import { syncManager } from '$lib/sync/syncManager';
 import type { TrashRecord, TripRecord } from '$lib/db/types';
 import { user as authUser } from '$lib/stores/auth';
+import { syncManager } from '$lib/sync/syncManager';
 import type { User } from '$lib/types';
+import { get, writable } from 'svelte/store';
 
 function createTrashStore() {
   const { subscribe, set, update } = writable<TrashRecord[]>([]);
@@ -233,11 +233,12 @@ function createTrashStore() {
                 fuelCost: newFuelCost,
                 updatedAt: nowIso
               } as TripRecord);
-              // Queue sync for trip update
+              // Queue sync for trip update (include userId)
               await syncManager.addToQueue({
                 action: 'update',
                 tripId: parentId,
-                data: { ...patchedTrip, store: 'trips', skipEnrichment: true }
+                data: { ...patchedTrip, store: 'trips', skipEnrichment: true },
+                userId
               });
             } else {
               await tripTx.done;
@@ -263,7 +264,8 @@ function createTrashStore() {
         await syncManager.addToQueue({
           action: 'restore',
           tripId: restored.id,
-          data: { store: syncTarget, type: restoreType }
+          data: { store: syncTarget, type: restoreType },
+          userId
         });
 
         return restored;
@@ -289,11 +291,21 @@ function createTrashStore() {
       const realId = getRealId(id);
       // Get record type from prefix or from the item's recordType property
       const recordType = getRecordType(id) || item?.recordType || item?.type;
-      await syncManager.addToQueue({
-        action: 'permanentDelete',
-        tripId: realId,
-        data: { recordType }
-      });
+      // Ensure we only enqueue when we have an owning userId
+      const ownerId = item?.userId as string | undefined;
+      if (ownerId) {
+        await syncManager.addToQueue({
+          action: 'permanentDelete',
+          tripId: realId,
+          data: { recordType },
+          userId: ownerId
+        });
+      } else {
+        console.warn(
+          'Skipping sync enqueue for permanentDelete - missing userId on trash item',
+          id
+        );
+      }
     },
 
     async emptyTrash(userId: string) {
@@ -322,7 +334,8 @@ function createTrashStore() {
         await syncManager.addToQueue({
           action: 'permanentDelete',
           tripId: realId,
-          data: { recordType }
+          data: { recordType },
+          userId
         });
       }
       return userItems.length;

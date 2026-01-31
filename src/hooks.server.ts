@@ -58,6 +58,19 @@ function hasPrototypePollution(obj: unknown, depth = 0): boolean {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
+  // DEV: Ensure mock KVs are configured when running locally or in manual server mode
+  if (dev || process.env['NODE_ENV'] !== 'production' || process.env['PW_MANUAL_SERVER'] === '1') {
+    try {
+      const { setupMockKV } = await import('$lib/server/dev-mock-db');
+      await setupMockKV(event as { platform?: { env?: Record<string, unknown> } });
+      log.info('[DEV] Mock KV setup complete');
+    } catch (err: unknown) {
+      log.warn('[DEV] setupMockKV failed', {
+        error: err instanceof Error ? err.message : String(err)
+      });
+    }
+  }
+
   // 1. SECURITY: Request Size Limiting & Prototype Pollution Check
   if (event.request.method === 'POST' || event.request.method === 'PUT') {
     const contentLength = Number(event.request.headers.get('content-length'));
@@ -88,33 +101,59 @@ export const handle: Handle = async ({ event, resolve }) => {
   if (csrfError) return csrfError;
 
   // Generate new token for this request (double-submit cookie pattern)
-  const csrfToken = generateCsrfToken(event);
+  // We intentionally do NOT inject this into page markup (%sveltekit.nonce% is for CSP nonces)
+  // Per SECURITY.md: set an HttpOnly server cookie and a readable mirror cookie for client-side reads
+  generateCsrfToken(event);
 
   // 3. AUTHENTICATION: Zero-Trust Session Validation
   const sessionId = event.cookies.get('session_id');
   event.locals.user = null;
 
-  if (sessionId && event.platform?.env?.BETA_USERS_KV) {
+  if (sessionId && event.platform?.env) {
     try {
-      // In a real app, you would look up the session in KV/Durable Object
-      // For this implementation, we'll verify the user exists
-      if (UUID_V4_REGEX.test(sessionId)) {
-        const user = await findUserById(event.platform.env.BETA_USERS_KV, sessionId);
-        if (user) {
-          // ✅ FIX: Build complete object without using 'any'
-          event.locals.user = {
-            id: user.id,
-            token: sessionId,
-            plan: user.plan === 'premium' ? 'premium' : 'free',
-            tripsThisMonth: 0,
-            maxTrips: user.maxTrips,
-            resetDate: new Date().toISOString(),
-            name: user.username,
-            email: user.email,
-            // Only include optional stripeCustomerId when present (avoid assigning undefined)
-            ...(user.stripeCustomerId ? { stripeCustomerId: user.stripeCustomerId } : {})
-          };
-        }
+      // 1) Validate sessionId format
+      if (!UUID_V4_REGEX.test(sessionId)) {
+        throw new Error('Invalid session id format');
+      }
+
+      // 2) Look up the session record in the SESSIONS KV
+      const sessionsKV = event.platform.env.BETA_SESSIONS_KV as
+        | {
+            get: (k: string) => Promise<string | null>;
+          }
+        | undefined;
+
+      if (!sessionsKV) {
+        // Sessions store not available (dev/test may mock differently)
+        throw new Error('SESSIONS_KV unavailable');
+      }
+
+      const sessionRaw = await sessionsKV.get(sessionId);
+      if (!sessionRaw) {
+        // No session found - treat as unauthenticated
+        throw new Error('Session not found');
+      }
+
+      // 3) Parse session and fetch the authoritative user record
+      const session = JSON.parse(sessionRaw) as { id?: string };
+      const userId = session?.id;
+      if (!userId || !UUID_V4_REGEX.test(userId)) {
+        throw new Error('Invalid user id in session');
+      }
+
+      const user = await findUserById(event.platform.env.BETA_USERS_KV, userId);
+      if (user) {
+        event.locals.user = {
+          id: user.id,
+          token: sessionId,
+          plan: user.plan === 'premium' ? 'premium' : 'free',
+          tripsThisMonth: 0,
+          maxTrips: user.maxTrips,
+          resetDate: new Date().toISOString(),
+          name: user.username,
+          email: user.email,
+          ...(user.stripeCustomerId ? { stripeCustomerId: user.stripeCustomerId } : {})
+        };
       }
     } catch (error) {
       log.error('[AUTH] Session validation failed', { error });
@@ -123,9 +162,8 @@ export const handle: Handle = async ({ event, resolve }) => {
   }
 
   // 4. RESPONSE: Security Headers & CSP
-  const response = await resolve(event, {
-    transformPageChunk: ({ html }) => html.replace('%sveltekit.nonce%', csrfToken)
-  });
+  // Note: We do not inject CSRF tokens into page markup. Cookies are used (double-submit pattern).
+  const response = await resolve(event);
 
   // Apply strict security headers
   response.headers.set('X-Frame-Options', 'DENY');
@@ -144,10 +182,24 @@ export const handle: Handle = async ({ event, resolve }) => {
     );
   }
 
-  // Content Security Policy (CSP) - Strict, no unsafe-inline for scripts
-  if (!dev) {
-    response.headers.set('Content-Security-Policy', CSP_POLICY);
-  }
+  // Content Security Policy (CSP) - Apply dev-relaxed directives when running in dev for local convenience
+  // Note: Per SECURITY.md, production remains strict (no 'unsafe-inline' for scripts)
+  const cspDirectives = [
+    "default-src 'self'",
+    dev
+      ? "script-src 'self' https://fonts.googleapis.com 'unsafe-inline' 'unsafe-hashes'"
+      : "script-src 'self' https://fonts.googleapis.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "img-src 'self' data: https: blob:",
+    "font-src 'self' https://fonts.gstatic.com",
+    "connect-src 'self' https://maps.googleapis.com https://places.googleapis.com https://cloudflareinsights.com",
+    "frame-src 'none'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'"
+  ];
+
+  response.headers.set('Content-Security-Policy', cspDirectives.join('; '));
 
   // Cache-Control headers for static assets
   // - Hashed app assets => 1 year, immutable

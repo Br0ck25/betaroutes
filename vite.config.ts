@@ -14,11 +14,16 @@ export default defineConfig({
       const isSSR = Boolean(process.env['SSR']) || Boolean(process.env['VITE_SSR']);
       if (isSSR) return {};
 
-      return {
+      const aliases: Record<string, string> = {
         canvg: `${__dirname}/src/lib/vendor-stubs/canvg-stub.ts`,
         html2canvas: `${__dirname}/src/lib/vendor-stubs/html2canvas-stub.ts`
       };
-    })()
+
+      return aliases;
+    })(),
+    // When running Vitest, prefer the `browser` condition so Svelte resolves to its
+    // browser/client runtime (important for Svelte 5 component tests).
+    ...(process.env['VITEST'] ? { conditions: ['browser'] } : {})
   },
 
   test: {

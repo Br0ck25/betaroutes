@@ -94,7 +94,7 @@ export const POST: RequestHandler = async ({ request, platform, cookies, getClie
       path: '/',
       httpOnly: true,
       sameSite: 'lax', // [!code fix] Changed from 'none' for CSRF protection
-      secure: true,
+      secure: !dev,
       maxAge: 60 * 60 * 24 * 7
     });
 

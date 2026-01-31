@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { formatCurrency, calculateNetProfit, calculateHourlyPay } from '$lib/utils/trip-helpers';
   import { mileage } from '$lib/stores/mileage';
   import type { Trip } from '$lib/types';
+  import { calculateHourlyPay, calculateNetProfit, formatCurrency } from '$lib/utils/trip-helpers';
 
   interface Props {
     trips?: Trip[];
   }
 
-  let { trips = [] }: Props = $props();
+  const { trips = [] }: Props = $props();
 </script>
 
 <div class="stats-summary">

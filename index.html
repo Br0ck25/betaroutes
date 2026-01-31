@@ -31,19 +31,8 @@
     <meta name="theme-color" content="#ffffff" />
     <link rel="manifest" href="/manifest.json" />
 
-    <!-- Define initMap and toggleMenu early so they're available -->
-    <script>
-      // Stub functions - will be replaced by app.js
-      window.initMap = function () {
-        console.log('initMap stub - waiting for app.js');
-      };
-      window.toggleMenu = function () {
-        console.log('toggleMenu stub - waiting for app.js');
-      };
-      window.closeMenu = function () {
-        console.log('closeMenu stub - waiting for app.js');
-      };
-    </script>
+    <!-- Boot script moved to external file to satisfy CSP (no inline scripts) -->
+    <script src="/js/boot.js" defer></script>
 
     <script
       src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCOdfe7j11yw9ENkX8c7hYsIjwqcQeqJGQ&libraries=places&callback=initMap"
@@ -82,7 +71,6 @@
       <div style="position: absolute; left: 12px; display: flex; align-items: center; height: 100%">
         <button
           id="hamburger-button"
-          onclick="toggleMenu()"
           style="
             background: none;
             border: none;
@@ -109,7 +97,6 @@
         src="/logo.png"
         alt="Logo"
         style="height: 50px; max-height: 70px; cursor: pointer"
-        onclick="scrollToTop()"
       />
 
       <!-- Right: Username -->
@@ -151,15 +138,15 @@
     >
       Your trips are saved locally.
       <a
+        id="show-signup-link"
         href="#"
-        onclick="showSignup()"
         style="color: #0d6efd; font-weight: bold; text-decoration: none"
         >Create an account</a
       >
       or
       <a
+        id="show-login-link"
         href="#"
-        onclick="showLogin()"
         style="color: #0d6efd; font-weight: bold; text-decoration: none"
         >Sign In</a
       >
@@ -193,7 +180,7 @@
         <!--  Close Button -->
         <div style="position: relative; width: 100%; height: 50px">
           <button
-            onclick="closeMenu()"
+            id="logout-close-btn"
             style="
               position: absolute;
               top: 10px;
@@ -207,8 +194,6 @@
               line-height: 1;
               transition: transform 0.2s;
             "
-            onmouseover="this.style.transform = 'scale(1.2)'"
-            onmouseout="this.style.transform = 'scale(1)'"
           ></button>
         </div>
 
@@ -291,7 +276,7 @@
 
         <!-- Dashboard Link -->
         <button
-          onclick="window.location.href = '/dashboard.html'"
+          data-action="go-dashboard"
           style="
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -393,9 +378,9 @@
             padding: 0 10px;
           "
         >
-          <button onclick="triggerImportFile()">Import CSV</button>
-          <button onclick="exportToCSVWithTotals()">Export CSV</button>
-          <button onclick="exportToPDFWithTotals()">Export PDF</button>
+          <button data-action="trigger-import">Import CSV</button>
+          <button data-action="export-csv">Export CSV</button>
+          <button data-action="export-pdf">Export PDF</button>
         </div>
 
         <!--  New Settings Dropdown -->
@@ -424,7 +409,7 @@
             padding: 0 10px;
           "
         >
-          <button onclick="installApp()">Install App</button>
+          <button data-action="install-app">Install App</button>
           <button onclick="window.open('/privacy-policy.html', '_blank')">Privacy Policy</button>
           <button onclick="window.open('/faq.html', '_blank')">FAQ</button>
         </div>
@@ -561,7 +546,7 @@
           <p>Fuel Cost: $<span id="fuel-cost"></span></p>
           <p>Maintenance Cost: $<span id="maintenance-cost-result"></span></p>
           <p>Supplies Cost: $<span id="supplies-cost-result"></span></p>
-          <p>Total Hours: <span id="total-hours"></span></p>
+          <p>Total Hours: <span id="total-hours-result"></span></p>
 
           <p>Net Profit: $<span id="net-profit"></span></p>
           <p>Net Profit per Hour (including drive time): $<span id="profit-per-hour"></span></p>

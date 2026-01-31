@@ -18,7 +18,21 @@ vi.mock('$lib/db/indexedDB', () => ({
                   id === 'trip-123'
                     ? { id: 'trip-123', userId: 'u1', totalMiles: 40, date: '2026-01-01' }
                     : null,
-                put: async (_record: unknown) => {}
+                put: async (_record: unknown) => {},
+                delete: async (_id: string) => {},
+                index: (_: string) => ({
+                  getAll: async (userId: string) =>
+                    userId === 'temp-1'
+                      ? [
+                          {
+                            id: 't-temp-1',
+                            userId: 'temp-1',
+                            totalMiles: 10,
+                            date: '2026-01-01'
+                          }
+                        ]
+                      : []
+                })
               };
             }
             if (name === 'mileage') {
@@ -29,6 +43,13 @@ vi.mock('$lib/db/indexedDB', () => ({
                     { id: 'm1', userId, tripId: 'trip-123', miles: 40 }
                   ]
                 })
+              };
+            }
+            if (name === 'trash') {
+              return {
+                put: async (_item: unknown) => {},
+                getAll: async () => [],
+                index: (_: string) => ({ getAll: async () => [] })
               };
             }
             throw new Error('Unexpected store: ' + name);
@@ -57,6 +78,16 @@ vi.mock('$lib/stores/mileage', () => ({
   }
 }));
 
+// Mock authenticated user store
+vi.mock('$lib/stores/auth', () => ({
+  user: {
+    subscribe: (cb: any) => {
+      cb({ id: 'u1' });
+      return () => {};
+    }
+  }
+}));
+
 import { trips } from './trips';
 
 beforeEach(() => {
@@ -69,5 +100,30 @@ describe('trips store - updateTrip mileage mirroring', () => {
     expect(updateMileageSpy).toHaveBeenCalledWith('m1', { miles: 55 }, 'u1');
     // Should not have created a new mileage record
     expect(createMileageSpy).not.toHaveBeenCalled();
+  });
+
+  it('adds userId when deleting a trip (queue)', async () => {
+    // deleteTrip will remove trip and enqueue delete for same authenticated user
+    try {
+      await trips.deleteTrip('trip-123', 'u1');
+    } catch (err) {
+      // Print error for debugging
+      // eslint-disable-next-line no-console
+      console.error('DELETE_TRIP_ERROR', err);
+      throw err;
+    }
+    const { syncManager } = await import('$lib/sync/syncManager');
+    expect(syncManager.addToQueue).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'delete', tripId: 'trip-123', userId: 'u1' })
+    );
+  });
+
+  it('adds userId when migrating offline trips to real user', async () => {
+    // migrateOfflineTrips should enqueue a create with the real user id
+    await trips.migrateOfflineTrips('temp-1', 'real-1');
+    const { syncManager } = await import('$lib/sync/syncManager');
+    expect(syncManager.addToQueue).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'create', userId: 'real-1' })
+    );
   });
 });

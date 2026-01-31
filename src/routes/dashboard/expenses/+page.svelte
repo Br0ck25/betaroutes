@@ -4,6 +4,7 @@
   import { page } from '$app/stores';
   import Modal from '$lib/components/ui/Modal.svelte';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
+  import type { ExpenseRecord } from '$lib/db/types';
   import { user } from '$lib/stores/auth';
   import { expenses, isLoading as expensesLoading } from '$lib/stores/expenses';
   import { toasts } from '$lib/stores/toast';
@@ -50,7 +51,19 @@
   let selectedExpenses = $state(new SvelteSet<string>());
 
   // Pagination state
-  let visibleExpenses: any[] = $state([]);
+  type DisplayExpense =
+    | ExpenseRecord
+    | {
+        id: string;
+        date?: string;
+        category?: string;
+        amount?: number;
+        description?: string;
+        taxDeductible?: boolean;
+        source?: string;
+        tripId?: string;
+      };
+  let visibleExpenses = $state<DisplayExpense[]>([]);
 
   // Clean up body class when component is destroyed
   onDestroy(() => {
@@ -85,13 +98,17 @@
     goto(resolve('/dashboard/expenses/new'));
   }
 
-  function editExpense(expense: any) {
-    if ((expense as any).source === 'trip') {
+  function editExpense(expense: ExpenseRecord | Record<string, unknown>) {
+    const source = String((expense as Record<string, unknown>)['source'] ?? '');
+    const tripId = String((expense as Record<string, unknown>)['tripId'] ?? '');
+    const id = String((expense as Record<string, unknown>)['id'] ?? '');
+
+    if (source === 'trip') {
       // eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
-      goto(resolve('/dashboard/trips') + '?id=' + encodeURIComponent(String(expense.tripId)));
+      goto(resolve('/dashboard/trips') + '?id=' + encodeURIComponent(tripId));
     } else {
       // eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
-      goto(resolve('/dashboard/expenses/edit/') + encodeURIComponent(String(expense.id)));
+      goto(resolve('/dashboard/expenses/edit/') + encodeURIComponent(id));
     }
   }
 
@@ -187,8 +204,12 @@
     await invalidateAll();
   }
 
-  function isTripSource(item: any): boolean {
-    return (item as any)?.source === 'trip';
+  function isTripSource(item: unknown): boolean {
+    return (
+      typeof item === 'object' &&
+      item !== null &&
+      (item as Record<string, unknown>)['source'] === 'trip'
+    );
   }
 
   function exportSelected() {
@@ -220,7 +241,7 @@
 
   // --- CATEGORY MANAGEMENT ---
   async function updateCategories(newCategories: string[]) {
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     if (activeCategoryType === 'maintenance') {
       userSettings.update((s) => ({ ...s, maintenanceCategories: newCategories }));
       updateData.maintenanceCategories = newCategories;
@@ -299,8 +320,8 @@
   }
 
   // When an expense description is empty, show a parent category label (Maintenance/Supplies/etc.)
-  function getFallbackLabel(expense: any) {
-    const cat = (expense.category || '').toString().toLowerCase();
+  function getFallbackLabel(expense: unknown) {
+    const cat = String((expense as Record<string, unknown>)['category'] ?? '').toLowerCase();
     // maintenance categories from settings or defaults
     const maintenance = (
       $userSettings.maintenanceCategories || [
@@ -326,7 +347,7 @@
     if (expCats.includes(cat)) return getCategoryLabel(cat);
 
     // default fallback: capitalized category (or 'Expenses')
-    return getCategoryLabel(expense.category || 'expenses');
+    return getCategoryLabel(String((expense as Record<string, unknown>)['category'] ?? 'expenses'));
   }
 
   // Swipe Action
@@ -386,8 +407,11 @@
   // [!code fix] HYDRATION
   run(() => {
     if (data.expenses) {
-      const normalize = (records: any[]) =>
-        records.map((r) => ({ ...r, syncStatus: (r as any).syncStatus ?? 'synced' }));
+      const normalize = (records: unknown[]) =>
+        records.map((r) => ({
+          ...(r as Record<string, unknown>),
+          syncStatus: (r as Record<string, unknown>)['syncStatus'] ?? 'synced'
+        })) as ExpenseRecord[];
       const normalized = normalize(data.expenses);
 
       // eslint-disable-next-line svelte/require-store-reactive-access
@@ -413,23 +437,26 @@
           category: 'fuel',
           amount: trip.fuelCost,
           description: 'Fuel',
-          taxDeductible: !!(trip as any).fuelTaxDeductible,
+          taxDeductible: Boolean((trip as Record<string, unknown>)['fuelTaxDeductible']),
           source: 'trip',
           tripId: trip.id
         });
       }
 
       // 2. Maintenance Items
-      const maint = (trip as any).maintenanceItems || [];
+      const maint = Array.isArray((trip as Record<string, unknown>)['maintenanceItems'])
+        ? ((trip as Record<string, unknown>)['maintenanceItems'] as unknown[])
+        : [];
       if (maint.length) {
-        maint.forEach((item: any, i: number) => {
+        maint.forEach((item: unknown, i: number) => {
+          const iRec = item as Record<string, unknown>;
           items.push({
             id: `trip-maint-${trip.id}-${i}`,
             date: date,
             category: 'maintenance',
-            amount: item.cost,
-            description: `${item.type}`,
-            taxDeductible: !!item.taxDeductible,
+            amount: Number(iRec['cost'] ?? 0),
+            description: String(iRec['type'] ?? ''),
+            taxDeductible: Boolean(iRec['taxDeductible']),
             source: 'trip',
             tripId: trip.id
           });
@@ -437,16 +464,21 @@
       }
 
       // 3. Supply Items
-      const supplies = (trip as any).supplyItems || (trip as any).suppliesItems || [];
+      const supplies = Array.isArray((trip as Record<string, unknown>)['supplyItems'])
+        ? ((trip as Record<string, unknown>)['supplyItems'] as unknown[])
+        : Array.isArray((trip as Record<string, unknown>)['suppliesItems'])
+          ? ((trip as Record<string, unknown>)['suppliesItems'] as unknown[])
+          : [];
       if (supplies.length) {
-        supplies.forEach((item: any, i: number) => {
+        supplies.forEach((item: unknown, i: number) => {
+          const iRec = item as Record<string, unknown>;
           items.push({
             id: `trip-supply-${trip.id}-${i}`,
             date: date,
             category: 'supplies',
-            amount: item.cost,
-            description: `${item.type}`,
-            taxDeductible: !!item.taxDeductible,
+            amount: Number(iRec['cost'] ?? 0),
+            description: String(iRec['type'] ?? ''),
+            taxDeductible: Boolean(iRec['taxDeductible']),
             source: 'trip',
             tripId: trip.id
           });
@@ -463,19 +495,31 @@
       .filter((item) => {
         // Search
         const query = searchQuery.toLowerCase();
+        const sourceStr =
+          typeof (item as Record<string, unknown>)['source'] === 'string'
+            ? String((item as Record<string, unknown>)['source']).toLowerCase()
+            : '';
+
+        const tagsOk =
+          Array.isArray((item as Record<string, unknown>)['tags']) &&
+          ((item as Record<string, unknown>)['tags'] as string[]).some((tag: string) =>
+            tag.toLowerCase().includes(query)
+          );
+
+        const taxOk =
+          Boolean((item as Record<string, unknown>)['taxDeductible']) &&
+          ('tax deductible'.includes(query) ||
+            'deductible'.includes(query) ||
+            'tax'.includes(query));
+
         const matchesSearch =
           !query ||
           (item.description && item.description.toLowerCase().includes(query)) ||
           item.amount.toString().includes(query) ||
-          ((item as any).source === 'trip' && 'trip'.includes(query)) ||
+          (sourceStr === 'trip' && 'trip'.includes(query)) ||
           (item.category && item.category.toLowerCase().includes(query)) ||
-          ((item as any).tags &&
-            Array.isArray((item as any).tags) &&
-            (item as any).tags.some((tag: string) => tag.toLowerCase().includes(query))) ||
-          ((item as any).taxDeductible &&
-            ('tax deductible'.includes(query) ||
-              'deductible'.includes(query) ||
-              'tax'.includes(query)));
+          tagsOk ||
+          taxOk;
 
         if (!matchesSearch) return false;
 
@@ -522,7 +566,7 @@
     visibleExpenses = filteredExpenses.slice(
       (currentPage - 1) * itemsPerPage,
       currentPage * itemsPerPage
-    );
+    ) as unknown as DisplayExpense[];
   });
   run(() => {
     if (typeof document !== 'undefined') {
@@ -857,8 +901,10 @@
 
             <div class="card-stats">
               <div class="stat-badge-container">
-                <span class={`category-badge ${getCategoryColor(expense.category)}`}>
-                  {getCategoryLabel(expense.category)}
+                <span
+                  class={`category-badge ${getCategoryColor(String(expense.category ?? 'other'))}`}
+                >
+                  {getCategoryLabel(String(expense.category ?? 'expenses'))}
                 </span>
                 {#if isTripSource(expense)}
                   <span class="source-badge">Trip</span>

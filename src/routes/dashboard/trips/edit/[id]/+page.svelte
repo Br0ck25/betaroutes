@@ -14,6 +14,7 @@
   import { user } from '$lib/stores/auth';
   import { mileage } from '$lib/stores/mileage';
   import { toasts } from '$lib/stores/toast';
+  import type { MaintenanceCost, SupplyCost } from '$lib/types';
   import { autocomplete } from '$lib/utils/autocomplete';
 
   const tripId = $page.params.id;
@@ -120,24 +121,51 @@
       goto(resolve('/dashboard/trips'));
       return;
     }
-    const safeStops = (found.stops || []).map((s: any) => ({
-      ...s,
-      id: s.id || crypto.randomUUID(),
-      address: s.address || '',
-      distanceFromPrev: s.distanceFromPrev || 0,
-      timeFromPrev: s.timeFromPrev || 0
-    }));
-    const safeMaintenance = ((found as any)['maintenanceItems'] || []).map((m: any) => ({
-      ...m,
-      id: m.id || crypto.randomUUID(),
-      taxDeductible: !!m.taxDeductible
-    }));
-    const rawSupplies = (found as any)['supplyItems'] || (found as any)['suppliesItems'] || [];
-    const safeSupplies = (rawSupplies || []).map((s: any) => ({
-      ...s,
-      id: s.id || crypto.randomUUID(),
-      taxDeductible: !!s.taxDeductible
-    }));
+    const toNumber = (v: unknown) =>
+      typeof v === 'number' && Number.isFinite(v) ? v : Number(v ?? 0);
+    const toString = (v: unknown) => (v == null ? '' : String(v));
+
+    const safeStops = (Array.isArray(found.stops) ? found.stops : []).map((s: unknown) => {
+      const item = s as Record<string, unknown>;
+      return {
+        id: String(item.id ?? crypto.randomUUID()),
+        address: toString(item.address),
+        earnings: toNumber(item.earnings),
+        notes: toString(item.notes),
+        distanceFromPrev: toNumber(item.distanceFromPrev),
+        timeFromPrev: toNumber(item.timeFromPrev),
+        order: Number(item.order ?? 0)
+      } as LocalStop;
+    });
+
+    const safeMaintenance = (
+      Array.isArray((found as any).maintenanceItems) ? (found as any).maintenanceItems : []
+    ).map((m: unknown) => {
+      const item = m as Partial<MaintenanceCost>;
+      return {
+        id: String(item.id ?? crypto.randomUUID()),
+        type: toString(item.type ?? (item as any).item ?? ''),
+        cost: toNumber(item.cost),
+        taxDeductible: !!item.taxDeductible
+      };
+    });
+
+    const rawSupplies = Array.isArray((found as any).supplyItems)
+      ? (found as any).supplyItems
+      : Array.isArray((found as any).suppliesItems)
+        ? (found as any).suppliesItems
+        : [];
+
+    const safeSupplies = (rawSupplies || []).map((s: unknown) => {
+      const item = s as Partial<SupplyCost>;
+      return {
+        id: String(item.id ?? crypto.randomUUID()),
+        type: toString(item.type ?? (item as any).name ?? ''),
+        cost: toNumber(item.cost),
+        taxDeductible: !!item.taxDeductible
+      };
+    });
+
     const to24h = (timeStr?: string): string => {
       if (!timeStr) return '';
       // If already in 24h format (no AM/PM), return as-is
@@ -149,33 +177,38 @@
       if (modifier && modifier.toUpperCase() === 'PM') h += 12;
       return `${h.toString().padStart(2, '0')}:${minutes}`;
     };
+
     // Mutating the existing `tripData` preserves the narrow LocalTrip type for the template
-    const src = JSON.parse(JSON.stringify(found)) as any;
-    tripData.id = String(src.id || tripData.id);
-    tripData.date = normalizeDate(src.date);
-    tripData.payDate = src.payDate ? normalizeDate(src.payDate) : '';
-    tripData.startAddress = String(src.startAddress || '');
-    tripData.endAddress = String(src.endAddress || '');
-    tripData.stops = safeStops as any as LocalStop[];
-    tripData.maintenanceItems = safeMaintenance as any;
-    tripData.suppliesItems = safeSupplies as any;
+    const src = JSON.parse(JSON.stringify(found)) as unknown;
+    const srcObj = src as Record<string, unknown>;
+
+    tripData.id = String(srcObj.id ?? tripData.id);
+    tripData.date = normalizeDate(toString(srcObj.date));
+    tripData.payDate = srcObj.payDate ? normalizeDate(toString(srcObj.payDate)) : '';
+    tripData.startAddress = toString(srcObj.startAddress);
+    tripData.endAddress = toString(srcObj.endAddress);
+    tripData.stops = safeStops;
+    tripData.maintenanceItems = safeMaintenance as import('$lib/types').CostItem[];
+    tripData.suppliesItems = safeSupplies as import('$lib/types').CostItem[];
+
     // Use trip's totalMiles as source of truth, mileage store is for display on mileage page
-    const milesFromMileage = $mileage.find((m: any) => m.id === tripId)?.miles;
-    const milesValue = Number(milesFromMileage ?? src.totalMiles) || 0;
+    const milesFromMileage = $mileage.find((m) => m.id === tripId)?.miles;
+    const milesValue = Number(milesFromMileage ?? toNumber(srcObj.totalMiles)) || 0;
     tripData.totalMiles = milesValue;
-    tripData.mpg = Number.isFinite(Number(src.mpg))
-      ? Number(src.mpg)
+
+    tripData.mpg = Number.isFinite(Number(toNumber(srcObj.mpg)))
+      ? Number(toNumber(srcObj.mpg))
       : ($userSettings.defaultMPG ?? 25);
-    tripData.gasPrice = Number.isFinite(Number(src.gasPrice))
-      ? Number(src.gasPrice)
+    tripData.gasPrice = Number.isFinite(Number(toNumber(srcObj.gasPrice)))
+      ? Number(toNumber(srcObj.gasPrice))
       : ($userSettings.defaultGasPrice ?? 3.5);
-    tripData.fuelCost = Number(src.fuelCost) || 0;
-    tripData.taxDeductible = !!src.taxDeductible;
-    tripData.hoursWorked = Number(src.hoursWorked) || 0;
-    tripData.estimatedTime = Number(src.estimatedTime) || 0;
-    tripData.startTime = to24h(src.startTime as string | undefined);
-    tripData.endTime = to24h(src.endTime as string | undefined);
-    tripData.notes = String(src.notes || '');
+    tripData.fuelCost = toNumber(srcObj.fuelCost);
+    tripData.taxDeductible = !!srcObj.taxDeductible;
+    tripData.hoursWorked = toNumber(srcObj.hoursWorked);
+    tripData.estimatedTime = toNumber(srcObj.estimatedTime);
+    tripData.startTime = to24h(srcObj.startTime as unknown as string | undefined);
+    tripData.endTime = to24h(srcObj.endTime as unknown as string | undefined);
+    tripData.notes = toString(srcObj.notes);
 
     // Sync local form-bound variables to prevent reactive statements from overwriting
     startAddressLocal = tripData.startAddress;
@@ -342,16 +375,26 @@
       const res = await fetch(
         `/api/directions/cache?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
       );
-      const result: any = await res.json().catch(() => null);
-      if (res.ok && result && result.data) {
+      const result: unknown = await res.json().catch(() => null);
+      if (
+        res.ok &&
+        result &&
+        typeof result === 'object' &&
+        'data' in (result as Record<string, unknown>)
+      ) {
+        const data = ((result as Record<string, unknown>).data ?? {}) as {
+          distance?: number;
+          duration?: number;
+        };
+
         const mappedResult = {
-          distance: result.data.distance * 0.000621371,
-          duration: result.data.duration / 60
+          distance: (data.distance ?? 0) * 0.000621371,
+          duration: (data.duration ?? 0) / 60
         };
 
         // Only cache valid responses (non-zero)
         if ((mappedResult.distance || 0) > 0 && (mappedResult.duration || 0) > 0) {
-          console.info('[route] server hit', localKey, { source: result.source });
+          console.info('[route] server hit', localKey, { source: (result as any).source });
           try {
             localStorage.setItem(
               localKey,
@@ -452,56 +495,71 @@
     }
     isCalculating = true;
     try {
-      const result: any = await optimizeRoute(
+      const result: unknown = await optimizeRoute(
         tripData.startAddress,
         tripData.endAddress,
         tripData.stops
       );
-      if (result && result.optimizedOrder) {
+      if (result && typeof result === 'object' && Array.isArray((result as any).optimizedOrder)) {
+        const optimized = result as {
+          optimizedOrder: number[];
+          legs?: Array<{ distance?: { value?: number }; duration?: { value?: number } }>;
+        };
         const currentStops = [...tripData.stops];
-        let orderedStops = [];
+        let orderedStops: LocalStop[] = [];
         if (!tripData.endAddress) {
           const movingStops = currentStops.slice(0, -1);
           const fixedLast = currentStops[currentStops.length - 1];
-          orderedStops = result.optimizedOrder.map((i: number) => movingStops[i]);
-          orderedStops.push(fixedLast);
+          orderedStops = optimized.optimizedOrder
+            .map((i) => movingStops[i])
+            .filter((s): s is LocalStop => !!s);
+          if (fixedLast) orderedStops.push(fixedLast as LocalStop);
         } else {
-          orderedStops = result.optimizedOrder.map((i: number) => currentStops[i]);
+          orderedStops = optimized.optimizedOrder
+            .map((i) => currentStops[i])
+            .filter((s): s is LocalStop => !!s);
         }
-        tripData.stops = orderedStops.map((s: any, i: number) => ({
-          ...s,
-          order: i
-        })) as LocalStop[];
-        if (result.legs) {
+        tripData.stops = orderedStops.map((s, i) => ({ ...s, order: i }));
+        if (optimized.legs) {
           tripData.stops.forEach((stop, i) => {
-            if (result.legs[i]) {
-              stop.distanceFromPrev = result.legs[i].distance.value * 0.000621371;
-              stop.timeFromPrev = result.legs[i].duration.value / 60;
-            }
+            const leg = optimized.legs?.[i];
+            if (leg?.distance?.value != null)
+              stop.distanceFromPrev = leg.distance.value * 0.000621371;
+            if (leg?.duration?.value != null) stop.timeFromPrev = leg.duration.value / 60;
           });
         }
         await recalculateTotals();
         toasts.success('Route optimized!');
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      const msg = (e.message || '').toLowerCase();
-      if (e.code === 'PLAN_LIMIT' || msg.includes('plan limit') || msg.includes('pro feature')) {
-        upgradeMessage = e.message || 'Route Optimization is a Pro feature.';
+      const errMessage = e instanceof Error ? e.message : String(e ?? 'Optimization failed');
+      const code = (e as any)?.code;
+      const msg = (errMessage || '').toLowerCase();
+      if (code === 'PLAN_LIMIT' || msg.includes('plan limit') || msg.includes('pro feature')) {
+        upgradeMessage = errMessage || 'Route Optimization is a Pro feature.';
         showUpgradeModal = true;
       } else {
-        toasts.error('Optimization failed: ' + e.message);
+        toasts.error('Optimization failed: ' + errMessage);
       }
     } finally {
       isCalculating = false;
     }
   }
 
-  async function handleStopChange(index: number, placeOrEvent: any) {
+  async function handleStopChange(index: number, placeOrEvent: unknown) {
     const idx = index;
     const current = tripData.stops[idx];
     if (!current) return;
-    const val = placeOrEvent?.formatted_address || placeOrEvent?.name || current.address;
+    let val: string | undefined;
+    if (typeof placeOrEvent === 'object' && placeOrEvent) {
+      const p = placeOrEvent as Record<string, unknown>;
+      if (typeof p.formatted_address === 'string') val = p.formatted_address;
+      else if (typeof p.name === 'string') val = p.name;
+    } else if (typeof placeOrEvent === 'string') {
+      val = placeOrEvent;
+    }
+    val = val ?? current.address;
     if (!val) return;
     current.address = val;
     console.info('[route] handleStopChange', { index: idx, val });
@@ -545,11 +603,16 @@
       isCalculating = false;
     }
   }
-  async function handleMainAddressChange(type: 'start' | 'end', placeOrEvent: any) {
-    const val =
-      placeOrEvent?.formatted_address ||
-      placeOrEvent?.name ||
-      (type === 'start' ? tripData.startAddress : tripData.endAddress);
+  async function handleMainAddressChange(type: 'start' | 'end', placeOrEvent: unknown) {
+    let val: string | undefined;
+    if (typeof placeOrEvent === 'object' && placeOrEvent) {
+      const p = placeOrEvent as Record<string, unknown>;
+      if (typeof p.formatted_address === 'string') val = p.formatted_address;
+      else if (typeof p.name === 'string') val = p.name;
+    } else if (typeof placeOrEvent === 'string') {
+      val = placeOrEvent;
+    }
+    val = val ?? (type === 'start' ? tripData.startAddress : tripData.endAddress);
     if (type === 'start') tripData.startAddress = val;
     else tripData.endAddress = val;
     isCalculating = true;
@@ -600,7 +663,10 @@
 
     isCalculating = true;
     try {
-      const segmentData: any = await fetchRouteSegment(segmentStart, newStop.address);
+      const segmentData: { distance: number; duration: number } | null = await fetchRouteSegment(
+        segmentStart,
+        newStop.address
+      );
       if (!segmentData) throw new Error('Could not calculate route.');
 
       tripData.stops = [
@@ -617,13 +683,15 @@
       await recalculateTotals();
       newStop = { address: '', earnings: 0, notes: '' };
       // Ensure `order` is present and typed
-      tripData.stops = tripData.stops.map((s: LocalStop | any, i: number) => ({
+      tripData.stops = tripData.stops.map((s: LocalStop, i: number) => ({
         ...s,
         order: i
-      })) as LocalStop[];
-    } catch (err: any) {
+      }));
+    } catch (err: unknown) {
       console.error('addStop failed', err);
-      toasts.error(err?.message ? String(err.message) : 'Error calculating route segment.');
+      const message =
+        err instanceof Error ? err.message : String(err ?? 'Error calculating route segment.');
+      toasts.error(message || 'Error calculating route segment.');
     } finally {
       isCalculating = false;
     }
@@ -683,7 +751,7 @@
     isManageCategoriesOpen = true;
   }
   async function updateCategories(newCategories: string[]) {
-    const updateData: any = {};
+    const updateData: Partial<Record<string, unknown>> = {};
     if (activeCategoryType === 'maintenance') {
       userSettings.update((s) => ({ ...s, maintenanceCategories: newCategories }));
       updateData.maintenanceCategories = newCategories;

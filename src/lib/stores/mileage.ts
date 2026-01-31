@@ -223,7 +223,8 @@ function createMileageStore() {
           syncManager.addToQueue({
             action: 'create',
             tripId: record.id,
-            data: { ...record, store: 'mileage' }
+            data: { ...record, store: 'mileage' },
+            userId
           });
         }, 0);
         return record;
@@ -335,7 +336,8 @@ function createMileageStore() {
           syncManager.addToQueue({
             action: 'update',
             tripId: id,
-            data: { ...updated, store: 'mileage' }
+            data: { ...updated, store: 'mileage' },
+            userId
           });
         }, 0);
         return updated;
@@ -369,7 +371,8 @@ function createMileageStore() {
             syncManager.addToQueue({
               action: 'delete',
               tripId: id,
-              data: { store: 'mileage' }
+              data: { store: 'mileage' },
+              userId
             });
           }, 0);
           return;
@@ -437,7 +440,8 @@ function createMileageStore() {
               await syncManager.addToQueue({
                 action: 'update',
                 tripId: tripIdToUpdate,
-                data: { ...patched, store: 'trips', skipEnrichment: true }
+                data: { ...patched, store: 'trips', skipEnrichment: true },
+                userId
               });
             }
           }
@@ -448,7 +452,12 @@ function createMileageStore() {
 
         // PERFORMANCE: Queue sync in background without blocking UI
         setTimeout(() => {
-          syncManager.addToQueue({ action: 'delete', tripId: id, data: { store: 'mileage' } });
+          syncManager.addToQueue({
+            action: 'delete',
+            tripId: id,
+            data: { store: 'mileage' },
+            userId
+          });
         }, 0);
         return;
       } catch (err) {

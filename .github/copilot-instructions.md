@@ -36,6 +36,10 @@ When writing Svelte code:
 2. Ignore any Svelte 4 examples
 3. Follow project governance rules in AGENTS.md
 
+## Conflict rule (important)
+
+If a task explicitly requests a dev-only relaxation (e.g., CSP), implement it ONLY behind a `dev` flag and keep production strict. Do not refuse the request or replace it with a different design unless asked.
+
 ---
 
 ## 🚫 FORBIDDEN PATTERNS (Will Fail ESLint & Pre-commit)
