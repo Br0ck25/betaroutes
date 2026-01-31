@@ -1,10 +1,35 @@
 // src/lib/services/googleMaps.ts
-import { writable } from 'svelte/store';
+
+interface BooleanStore {
+  subscribe: (run: (v: boolean) => void) => () => void;
+  set: (v: boolean) => void;
+  get: () => boolean;
+}
+
+function createBooleanStore(initial = false): BooleanStore {
+  let value = initial;
+  const subscribers = new Set<(v: boolean) => void>();
+
+  return {
+    subscribe(run: (v: boolean) => void) {
+      run(value);
+      subscribers.add(run);
+      return () => subscribers.delete(run);
+    },
+    set(v: boolean) {
+      value = v;
+      for (const s of subscribers) s(value);
+    },
+    get() {
+      return value;
+    }
+  };
+}
 
 class GoogleMapsLoader {
   private static instance: GoogleMapsLoader;
   private loadPromise: Promise<void> | null = null;
-  public isLoaded = writable(false);
+  public isLoaded = createBooleanStore(false);
 
   private constructor() {}
 

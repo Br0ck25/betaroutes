@@ -1,4 +1,3 @@
-import { get } from 'svelte/store';
 import { userSettings } from '$lib/stores/userSettings';
 import { csrfFetch } from '$lib/utils/csrf';
 
@@ -24,8 +23,8 @@ export async function saveSettings(payload: Partial<Record<string, unknown>>): P
 
     // Ensure we have an object before merging to avoid spread errors
     const safeJson = typeof json === 'object' && json ? json : {};
-    const current = get(userSettings);
-    userSettings.set({ ...current, ...safeJson });
+    // Merge into existing store state without using `get()`
+    userSettings.update((current) => ({ ...current, ...safeJson }));
 
     return { ok: true, data: json };
   } catch (err: unknown) {
