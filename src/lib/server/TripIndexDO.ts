@@ -77,7 +77,7 @@ export class TripIndexDO {
 					createdAt TEXT,
 					data TEXT
 				);
-				
+
 				CREATE TABLE IF NOT EXISTS expenses (
 					id TEXT PRIMARY KEY,
 					userId TEXT,
@@ -105,7 +105,8 @@ export class TripIndexDO {
     }
 
     // Legacy Migration Logic (KV -> SQLite for Trips)
-    this.state.blockConcurrencyWhile(async () => {
+    // Run startup migration asynchronously; intentionally do not await here (constructor cannot be async)
+    void this.state.blockConcurrencyWhile(async () => {
       try {
         const legacyTrips = await this.state.storage.get<TripSummary[]>('trips');
         if (legacyTrips && Array.isArray(legacyTrips) && legacyTrips.length > 0) {

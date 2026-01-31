@@ -104,7 +104,11 @@
     "json": false,
     "plaintext": false,
     "markdown": true
-  }
+  },
+  "github.copilot.chat.codeGeneration.instructionsFiles": [
+    ".github/copilot-instructions/svelte5.instructions.md",
+    ".github/copilot-instructions/svelte5-runes.instructions.md"
+  ]
 
   // -------------------------------------------------------------------------
   // OPTIONAL “Ultra-Strict” mode (manual Copilot only)

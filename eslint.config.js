@@ -203,6 +203,11 @@ export default defineConfig(
       'no-restricted-syntax': [
         'error',
         {
+          selector: 'LabeledStatement[label.name="$"]',
+          message:
+            'Svelte 4 reactive statements ($:) are forbidden. Use $derived or $effect instead.'
+        },
+        {
           // Ban: export let prop
           selector:
             'ExportNamedDeclaration[declaration.type="VariableDeclaration"][declaration.kind="let"]',

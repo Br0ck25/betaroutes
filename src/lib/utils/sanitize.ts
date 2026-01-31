@@ -38,10 +38,20 @@ export function sanitizeStaticSvg(svg: string): string {
 export function sanitizeHtml(dirty: string): string {
   // Lazy load DOMPurify only in browser context
   if (typeof window !== 'undefined') {
-    // Dynamic import only works in browser
-    import('isomorphic-dompurify').then((module) => {
-      return module.default.sanitize(dirty) as string;
-    });
+    // Dynamic import only works in browser - run in background and log failures
+    void import('isomorphic-dompurify')
+      .then((module) => {
+        try {
+          // We can't synchronously return the result here because import() is async.
+          // Callers expecting synchronous behavior should use server-side sanitization.
+          module.default.sanitize(dirty) as string;
+        } catch (err: unknown) {
+          console.error('[sanitizeHtml] sanitization failed', err);
+        }
+      })
+      .catch((err: unknown) => {
+        console.error('[sanitizeHtml] dynamic import failed', err);
+      });
   }
   // In SSR/Workers, return empty string (should not be called here)
   console.warn('[SECURITY] sanitizeHtml called in SSR context - sanitize server-side instead');
@@ -60,40 +70,49 @@ export function sanitizeHtml(dirty: string): string {
 export function sanitizeSvg(svg: string): string {
   // Lazy load DOMPurify only in browser context
   if (typeof window !== 'undefined') {
-    import('isomorphic-dompurify').then((module) => {
-      return module.default.sanitize(svg, {
-        USE_PROFILES: { svg: true, svgFilters: true },
-        ADD_TAGS: ['use'],
-        ALLOWED_ATTR: [
-          'class',
-          'id',
-          'xmlns',
-          'viewBox',
-          'width',
-          'height',
-          'fill',
-          'stroke',
-          'stroke-width',
-          'stroke-linecap',
-          'stroke-linejoin',
-          'd',
-          'cx',
-          'cy',
-          'r',
-          'x',
-          'y',
-          'x1',
-          'y1',
-          'x2',
-          'y2',
-          'points',
-          'pathLength',
-          'stroke-dasharray',
-          'fill-rule',
-          'clip-rule'
-        ]
-      }) as string;
-    });
+    // Run DOMPurify import in background and log any failures; synchronous use in browser is discouraged
+    void import('isomorphic-dompurify')
+      .then((module) => {
+        try {
+          module.default.sanitize(svg, {
+            USE_PROFILES: { svg: true, svgFilters: true },
+            ADD_TAGS: ['use'],
+            ALLOWED_ATTR: [
+              'class',
+              'id',
+              'xmlns',
+              'viewBox',
+              'width',
+              'height',
+              'fill',
+              'stroke',
+              'stroke-width',
+              'stroke-linecap',
+              'stroke-linejoin',
+              'd',
+              'cx',
+              'cy',
+              'r',
+              'x',
+              'y',
+              'x1',
+              'y1',
+              'x2',
+              'y2',
+              'points',
+              'pathLength',
+              'stroke-dasharray',
+              'fill-rule',
+              'clip-rule'
+            ]
+          }) as string;
+        } catch (err: unknown) {
+          console.error('[sanitizeSvg] sanitization failed', err);
+        }
+      })
+      .catch((err: unknown) => {
+        console.error('[sanitizeSvg] dynamic import failed', err);
+      });
   }
   console.warn('[SECURITY] sanitizeSvg called in SSR context - use sanitizeStaticSvg instead');
   return svg;

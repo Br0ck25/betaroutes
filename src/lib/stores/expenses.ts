@@ -185,8 +185,8 @@ function createExpensesStore() {
         return expense;
       } catch (err) {
         console.error('❌ Failed to create expense:', err);
-        // Revert on error
-        this.load(userId);
+        // Revert on error (fire-and-forget)
+        void this.load(userId);
         throw err;
       }
     },
@@ -229,7 +229,8 @@ function createExpensesStore() {
         return updated;
       } catch (err) {
         console.error('❌ Failed to update expense:', err);
-        this.load(userId);
+        // Attempt reload (non-blocking)
+        void this.load(userId);
         throw err;
       }
     },
@@ -265,7 +266,7 @@ function createExpensesStore() {
 
         if (rec.userId !== userId) {
           await tx.done;
-          this.load(userId);
+          void this.load(userId);
           throw new Error('Unauthorized');
         }
 
@@ -305,6 +306,8 @@ function createExpensesStore() {
       } catch (err) {
         console.error('❌ Failed to delete expense:', err);
         set(previousExpenses); // Revert on failure
+        // Attempt reload (non-blocking)
+        void this.load(userId);
         throw err;
       }
     },

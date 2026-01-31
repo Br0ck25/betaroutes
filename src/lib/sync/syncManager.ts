@@ -41,12 +41,12 @@ class SyncManager {
 
     syncStatus.setOnline(navigator.onLine);
 
-    window.addEventListener('online', () => this.handleOnline());
-    window.addEventListener('offline', () => this.handleOffline());
+    window.addEventListener('online', () => void this.handleOnline());
+    window.addEventListener('offline', () => void this.handleOffline());
 
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && navigator.onLine) {
-        this.syncNow();
+        void this.syncNow();
       }
     });
 
@@ -99,7 +99,7 @@ class SyncManager {
   private startAutoSync() {
     if (this.syncInterval) return;
     this.syncInterval = setInterval(() => {
-      if (navigator.onLine) this.syncNow();
+      if (navigator.onLine) void this.syncNow();
     }, 30000);
   }
 
@@ -149,7 +149,7 @@ class SyncManager {
     }
 
     this.syncDebounceTimer = setTimeout(() => {
-      this.syncNow();
+      void this.syncNow();
     }, 500);
   }
 

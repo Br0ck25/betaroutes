@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { run } from 'svelte/legacy';
-
   import { resolve } from '$app/paths';
   import Button from '$lib/components/ui/Button.svelte';
   import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
@@ -23,19 +21,23 @@
     };
   }
 
-  const { data } = $props() as { data?: LoadData };
+  // Props (runes pattern)
+  const { data } = $props<{ data?: LoadData }>();
 
   // --- REMOTE SYNC LOGIC ---
-  run(() => {
+  $effect(() => {
     if (data?.remoteSettings?.settings) {
       const merged = { ...$userSettings, ...data.remoteSettings!.settings };
-      // @ts-expect-error runtime-validated partial settings merge; full shape enforced elsewhere
+      // runtime-validated partial settings merge; full shape enforced elsewhere
+      // @ts-expect-error: merging partial remote settings into typed settings (validated elsewhere)
       userSettings.set(merged as unknown as Settings);
     }
   });
 
-  let profile = $state({ name: '', email: '' });
-  run(() => {
+  const profile = $state<{ name: string; email: string }>({ name: '', email: '' }); // typed state for profile
+
+  // Keep profile in sync with server-side remote settings or auth user when available
+  $effect(() => {
     if ($user || data?.remoteSettings?.profile) {
       const remote = data?.remoteSettings?.profile || {};
       // Prefer explicit display name or email. Never use the internal UUID as a fallback.
@@ -44,7 +46,7 @@
     }
   });
 
-  const monthlyUsage = $derived(
+  const _monthlyUsage = $derived(
     $trips.filter((t) => {
       if (!t.date) return false;
       const tripDate = SvelteDate.from(t.date).toDate();
@@ -63,7 +65,7 @@
   }
 
   // Upgrade/Pro Logic
-  const isPro = $derived(
+  const _isPro = $derived(
     ['pro', 'business', 'premium', 'enterprise'].includes($auth.user?.plan || '')
   );
   let isUpgradeModalOpen = $state(false);
@@ -99,6 +101,12 @@
       alert('Could not open billing portal. If you recently upgraded, try refreshing the page.');
       isOpeningPortal = false;
     }
+  }
+
+  // Called when ProfileCard requests an upgrade flow; opens modal with requested source
+  function handleUpgradeFromCard(source: 'generic' | 'export' | 'advanced-export' = 'generic') {
+    upgradeSource = source;
+    isUpgradeModalOpen = true;
   }
 
   let showAdvancedExport = $state(false);
@@ -148,11 +156,22 @@
   <SettingsLayout>
     <section id="profile" class="settings-section">
       <!-- Use direct component invocation (Svelte 5: components are dynamic by default) -->
-      <ProfileCard />
+      <!-- @ts-expect-error ProfileCard prop types are in migration; passing profile + callbacks explicitly -->
+      <ProfileCard
+        {profile}
+        onProfileChange={(p: { name: string; email: string }) => {
+          profile.name = p.name;
+          profile.email = p.email;
+          showSuccessMsg('Profile saved');
+        }}
+        onSuccess={showSuccessMsg}
+        onPortal={handlePortal}
+        onUpgrade={handleUpgradeFromCard}
+      />
     </section>
 
     <section id="maintenance" class="settings-section">
-      // @ts-expect-error MaintenanceCard prop types are in migration; using callback prop
+      <!-- @ts-expect-error MaintenanceCard prop types are in migration; using callback prop -->
       <MaintenanceCard onSuccess={showSuccessMsg} />
     </section>
 
@@ -253,13 +272,13 @@
     </section>
 
     <section id="security" class="settings-section">
-      // @ts-expect-error SecurityCard prop types being migrated; using callback prop
+      <!-- @ts-expect-error SecurityCard prop types being migrated; using callback prop -->
       <SecurityCard onSuccess={showSuccessMsg} />
     </section>
   </SettingsLayout>
 </div>
 
-// @ts-expect-error ExportModal prop types being migrated; using callback prop
+<!-- @ts-expect-error ExportModal prop types being migrated; using callback prop -->
 <ExportModal bind:showAdvancedExport onSuccess={showSuccessMsg} />
 
 <Modal bind:open={isUpgradeModalOpen} title="Upgrade to Pro">

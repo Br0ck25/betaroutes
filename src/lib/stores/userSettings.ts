@@ -1,7 +1,7 @@
 // src/lib/stores/userSettings.ts
-import { writable } from 'svelte/store';
-import { storage } from '$lib/utils/storage';
 import { browser } from '$app/environment';
+import { storage } from '$lib/utils/storage';
+import { writable } from 'svelte/store';
 
 // Align defaults with API schema
 const defaultSettings = {
@@ -79,7 +79,7 @@ if (browser) {
     });
 
     // 4. Load settings from server to sync across devices
-    loadSettingsFromServer();
+    void loadSettingsFromServer();
   } catch (e) {
     console.error('Failed to hydrate settings', e);
   }

@@ -1,9 +1,9 @@
 // src/routes/api/hughesnet/archived/+server.ts
-import { json } from '@sveltejs/kit';
-import type { RequestHandler } from './$types';
 import { getEnv, safeKV } from '$lib/server/env';
 import { log } from '$lib/server/log';
 import { createSafeErrorMessage } from '$lib/server/sanitize';
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 
 type SessionUser = { id?: string; name?: string; token?: string };
 
@@ -135,9 +135,7 @@ export const POST: RequestHandler = async ({ platform, locals, request }) => {
     return json({ success: false, error: 'Orders KV not configured' }, { status: 500 });
   }
 
-  const allowInsert =
-    env['ALLOW_HNS_ARCHIVE_INSERT'] === 'true' ||
-    process.env['ALLOW_HNS_ARCHIVE_INSERT'] === 'true';
+  const allowInsert = env['ALLOW_HNS_ARCHIVE_INSERT'] === 'true';
   if (!allowInsert) return json({ success: false, error: 'Not allowed' }, { status: 403 });
 
   const user = locals.user as SessionUser | undefined;

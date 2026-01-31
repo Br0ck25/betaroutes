@@ -350,7 +350,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
       row.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        selectItem(item, source);
+        void selectItem(item, source);
       });
 
       dropdown!.appendChild(row);
@@ -501,7 +501,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
               name: typeof details['name'] === 'string' ? (details['name'] as string) : it['name'],
               geometry: details['geometry']
             };
-            savePlaceToKV(fullItem);
+            void savePlaceToKV(fullItem);
             commitSelection(fullItem);
             return;
           }
@@ -577,30 +577,48 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     }
   });
   node.addEventListener('blur', () =>
-    setTimeout(async () => {
-      if (dropdown) dropdown.style.display = 'none';
+    setTimeout(() => {
+      void (async () => {
+        if (dropdown) dropdown.style.display = 'none';
 
-      // On blur, revalidate the raw input and silently escalate to Google if needed
-      const value = node.value;
-      if (!value || value.length < 2) return;
-      try {
-        const res = await fetch(
-          `/api/autocomplete?q=${encodeURIComponent(value)}&forceGoogle=true`
-        );
-        const data = await res.json().catch(() => []);
-        if (Array.isArray(data) && data.length > 0) {
-          const googleHit = (data as Array<unknown>).find(
-            (d): d is Record<string, unknown> =>
-              typeof d === 'object' &&
-              d !== null &&
-              typeof (d as Record<string, unknown>)['source'] === 'string' &&
-              (d as Record<string, unknown>)['source'] === 'google_proxy'
+        // On blur, revalidate the raw input and silently escalate to Google if needed
+        const value = node.value;
+        if (!value || value.length < 2) return;
+        try {
+          const res = await fetch(
+            `/api/autocomplete?q=${encodeURIComponent(value)}&forceGoogle=true`
           );
-          if (googleHit) {
-            commitSelection(googleHit);
-            return;
+          const data = await res.json().catch(() => []);
+          if (Array.isArray(data) && data.length > 0) {
+            const googleHit = (data as Array<unknown>).find(
+              (d): d is Record<string, unknown> =>
+                typeof d === 'object' &&
+                d !== null &&
+                typeof (d as Record<string, unknown>)['source'] === 'string' &&
+                (d as Record<string, unknown>)['source'] === 'google_proxy'
+            );
+            if (googleHit) {
+              commitSelection(googleHit);
+              return;
+            }
+            const acceptable = (data as Array<unknown>).find(
+              (d): d is Record<string, unknown> =>
+                typeof d === 'object' &&
+                d !== null &&
+                typeof (d as Record<string, unknown>)['source'] === 'string' &&
+                (d as Record<string, unknown>)['source'] === 'kv'
+            );
+            if (acceptable) {
+              commitSelection(acceptable);
+              return;
+            }
           }
-          const acceptable = (data as Array<unknown>).find(
+        } catch (_e: unknown) {
+          void _e;
+        }
+      })();
+    }, 0)
+  );
             (d): d is Record<string, unknown> =>
               typeof d === 'object' && d !== null && isAcceptableGeocode(d, value)
           );

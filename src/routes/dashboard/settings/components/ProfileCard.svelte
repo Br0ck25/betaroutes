@@ -1,10 +1,11 @@
 <script module lang="ts">
   export interface Props {
-    profile?: { name: string; email: string };
+    profile?: { name?: string; email?: string };
     // Callback props
     onSuccess?: (msg: string) => void;
     onPortal?: () => void;
     onUpgrade?: (plan?: 'generic' | 'export' | 'advanced-export') => void;
+    onProfileChange?: (profile: { name: string; email: string }) => void;
   }
 </script>
 
@@ -22,17 +23,33 @@
     onUpgrade?: (plan?: 'generic' | 'export' | 'advanced-export') => void;
   };
 
-  // Single $props() call — declare bindable profile and callbacks (other values derived internally)
+  // Single $props() call — declare props and callbacks (other values derived internally)
   let {
-    profile = $bindable<{ name: string; email: string }>(),
+    profile = { name: '', email: '' },
     onSuccess,
     onPortal,
-    onUpgrade
+    onUpgrade,
+    onProfileChange
   } = $props() as Props & {
     onSuccess?: (msg: string) => void;
     onPortal?: () => void;
     onUpgrade?: (plan?: 'generic' | 'export' | 'advanced-export') => void;
+    onProfileChange?: (profile: { name: string; email: string }) => void;
   };
+
+  // Local editable copy of the profile to avoid mutating props directly
+  let localProfile = $state<{ name: string; email: string }>({
+    name: '',
+    email: ''
+  });
+
+  // Keep localProfile in sync when parent passes new profile
+  $effect(() => {
+    if (profile) {
+      localProfile.name = profile.name ?? localProfile.name;
+      localProfile.email = profile.email ?? localProfile.email;
+    }
+  });
 
   // Derived state: compute monthly usage and plan locally to avoid prop coupling
   const monthlyUsage = $derived(
@@ -83,13 +100,13 @@
     }
   }
   async function saveProfile() {
-    // Optimistic local update
-    auth.updateProfile({ name: profile.name, email: profile.email });
+    // Optimistic local update (update app-level auth store)
+    auth.updateProfile({ name: localProfile.name, email: localProfile.email });
     try {
       const res = await csrfFetch('/api/user', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: profile.name, email: profile.email })
+        body: JSON.stringify({ name: localProfile.name, email: localProfile.email })
       });
       const json = await res.json().catch(() => ({}) as Record<string, unknown>);
       if (
@@ -108,18 +125,25 @@
         if (typeof name === 'string') updates.name = name;
         if (typeof email === 'string') updates.email = email;
         if (Object.keys(updates).length > 0) auth.updateProfile(updates);
+
+        // Propagate change to parent via callback
+        onProfileChange?.({ name: name ?? localProfile.name, email: email ?? localProfile.email });
+
         onSuccess?.('Profile updated successfully!');
         buttonHighlight = true;
         setTimeout(() => (buttonHighlight = false), 3000);
       } else {
         console.error('Failed to save profile to server', { status: res.status, body: json });
         onSuccess?.('Saved locally (Server error)');
+        // still notify parent of local save
+        onProfileChange?.({ name: localProfile.name, email: localProfile.email });
         buttonHighlight = true;
         setTimeout(() => (buttonHighlight = false), 3000);
       }
     } catch {
       console.error('Save error: Network issue');
       onSuccess?.('Saved locally (Network error)');
+      onProfileChange?.({ name: localProfile.name, email: localProfile.email });
       buttonHighlight = true;
       setTimeout(() => (buttonHighlight = false), 3000);
     }
@@ -152,7 +176,7 @@
 
   <div class="form-group">
     <label for="profile-name">Name</label>
-    <input id="profile-name" type="text" bind:value={profile.name} placeholder="Your name" />
+    <input id="profile-name" type="text" bind:value={localProfile.name} placeholder="Your name" />
   </div>
 
   <div class="form-group">
@@ -160,7 +184,7 @@
     <input
       id="profile-email"
       type="email"
-      bind:value={profile.email}
+      bind:value={localProfile.email}
       placeholder="your@email.com"
     />
   </div>

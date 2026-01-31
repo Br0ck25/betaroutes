@@ -220,7 +220,7 @@ function createMileageStore() {
         await tx.done;
         // PERFORMANCE: Queue sync in background without blocking
         setTimeout(() => {
-          syncManager.addToQueue({
+          void syncManager.addToQueue({
             action: 'create',
             tripId: record.id,
             data: { ...record, store: 'mileage' },
@@ -230,10 +230,10 @@ function createMileageStore() {
         return record;
       } catch (err) {
         console.error('❌ Failed to create mileage record:', err);
-        this.load(userId);
+        void this.load(userId);
         throw err;
       }
-    },
+    ,
     async updateMileage(id: string, changes: Partial<MileageRecord>, userId: string) {
       // ... copy from previous ...
       update((items) =>
@@ -333,7 +333,7 @@ function createMileageStore() {
         }
         // PERFORMANCE: Queue sync in background without blocking
         setTimeout(() => {
-          syncManager.addToQueue({
+          void syncManager.addToQueue({
             action: 'update',
             tripId: id,
             data: { ...updated, store: 'mileage' },
@@ -343,7 +343,7 @@ function createMileageStore() {
         return updated;
       } catch (err) {
         console.error('❌ Failed to update mileage:', err);
-        this.load(userId);
+        void this.load(userId);
         throw err;
       }
     },
@@ -368,7 +368,7 @@ function createMileageStore() {
           await tx.done;
           // Queue sync in background without blocking
           setTimeout(() => {
-            syncManager.addToQueue({
+            void syncManager.addToQueue({
               action: 'delete',
               tripId: id,
               data: { store: 'mileage' },
@@ -452,7 +452,7 @@ function createMileageStore() {
 
         // PERFORMANCE: Queue sync in background without blocking UI
         setTimeout(() => {
-          syncManager.addToQueue({
+          void syncManager.addToQueue({
             action: 'delete',
             tripId: id,
             data: { store: 'mileage' },

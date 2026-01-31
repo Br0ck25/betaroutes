@@ -20,7 +20,8 @@ export class PlacesIndexDO {
 
     // 2. Migration Logic (Legacy KV List -> SQLite)
     // Ensures we don't lose data during the deployment transition
-    this.state.blockConcurrencyWhile(async () => {
+    // Run legacy cleanup/migration asynchronously on startup (constructor cannot be async)
+    void this.state.blockConcurrencyWhile(async () => {
       const list = await this.state.storage.get<string[]>('list');
       if (list && Array.isArray(list) && list.length > 0) {
         // Insert each item directly (avoid using .prepare which may not exist on SqlStorage)
@@ -54,7 +55,7 @@ export class PlacesIndexDO {
         const toDelete = result.total - 50;
         this.state.storage.sql.exec(
           `
-					DELETE FROM places 
+					DELETE FROM places
 					WHERE address IN (
 						SELECT address FROM places ORDER BY created_at ASC LIMIT ?
 					)
@@ -99,7 +100,7 @@ export class PlacesIndexDO {
             // Delete the oldest records
             this.state.storage.sql.exec(
               `
-							DELETE FROM places 
+							DELETE FROM places
 							WHERE address IN (
 								SELECT address FROM places ORDER BY created_at ASC LIMIT ?
 							)
