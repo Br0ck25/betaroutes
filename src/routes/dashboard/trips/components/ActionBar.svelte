@@ -1,18 +1,13 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
-
   interface Props {
     selectedCount?: number;
     isPro?: boolean;
+    onCancel?: () => void;
+    onExport?: () => void;
+    onDelete?: () => void;
   }
 
-  let { selectedCount = 0, isPro = false }: Props = $props();
-
-  const dispatch = createEventDispatcher<{
-    cancel: void;
-    export: void;
-    delete: void;
-  }>();
+  const { selectedCount = 0, isPro = false, onCancel, onExport, onDelete }: Props = $props();
 </script>
 
 <div class="action-bar-container">
@@ -36,7 +31,7 @@
     </div>
 
     <div class="action-bar-right">
-      <button class="action-pill secondary" onclick={() => dispatch('cancel')}>
+      <button class="action-pill secondary" onclick={() => onCancel?.()}>
         <svg
           width="16"
           height="16"
@@ -51,7 +46,7 @@
         <span class="action-text">Cancel</span>
       </button>
 
-      <button class="action-pill export" onclick={() => dispatch('export')}>
+      <button class="action-pill export" onclick={() => onExport?.()}>
         {#if !isPro}
           <svg
             width="16"
@@ -81,7 +76,7 @@
         <span class="action-text">Export</span>
       </button>
 
-      <button class="action-pill danger" onclick={() => dispatch('delete')}>
+      <button class="action-pill danger" onclick={() => onDelete?.()}>
         <svg
           width="16"
           height="16"

@@ -1,16 +1,19 @@
 <script lang="ts">
   import type { Destination, GeocodeResult } from '$lib/types';
   import { autocomplete } from '$lib/utils/autocomplete';
-  import { createEventDispatcher } from 'svelte';
 
   interface Props {
     destinations?: Destination[];
     apiKey?: string;
+    onUpdate?: (destinations: Destination[]) => void;
   }
 
-  let { destinations = $bindable([{ address: '', earnings: 0 }]), apiKey = '' }: Props = $props();
+  let {
+    destinations = $bindable([{ address: '', earnings: 0 }]),
+    apiKey = '',
+    onUpdate
+  }: Props = $props();
 
-  const dispatch = createEventDispatcher();
   function handlePlaceSelect(index: number, e: CustomEvent) {
     const place = e.detail as GeocodeResult;
     if (!destinations || !destinations[index]) return;
@@ -18,28 +21,34 @@
     dest.address = place.formatted_address || place.name || '';
     // Extract Lat/Lng
     if (place.geometry && place.geometry.location) {
-      const latRaw = (place.geometry.location as any).lat;
-      const lngRaw = (place.geometry.location as any).lng;
+      const loc = place.geometry.location as {
+        lat?: number | (() => number);
+        lng?: number | (() => number);
+      };
+      const latRaw = loc.lat;
+      const lngRaw = loc.lng;
       const lat =
-        typeof latRaw === 'function' ? (latRaw as unknown as () => number)() : (latRaw as number);
+        typeof latRaw === 'function' ? (latRaw as () => number)() : (latRaw as number | undefined);
       const lng =
-        typeof lngRaw === 'function' ? (lngRaw as unknown as () => number)() : (lngRaw as number);
-      dest.location = { lat, lng };
+        typeof lngRaw === 'function' ? (lngRaw as () => number)() : (lngRaw as number | undefined);
+      if (typeof lat === 'number' && typeof lng === 'number') {
+        dest.location = { lat, lng };
+      }
     }
 
     // Trigger reactivity in parent
-    dispatch('update', destinations);
+    onUpdate?.(destinations);
   }
 
   function addDestination() {
     destinations = [...(destinations || []), { address: '', earnings: 0 }];
-    dispatch('update', destinations);
+    onUpdate?.(destinations);
   }
 
   function removeDestination(index: number) {
     if (destinations.length > 1) {
       destinations = destinations.filter((_, i) => i !== index);
-      dispatch('update', destinations);
+      onUpdate?.(destinations);
     }
   }
 
@@ -50,7 +59,7 @@
       destinations[index] = prev;
       destinations[index - 1] = current;
       destinations = [...destinations]; // Trigger reactivity
-      dispatch('update', destinations);
+      onUpdate?.(destinations);
     }
   }
 
@@ -66,7 +75,7 @@
       destinations[index] = next;
       destinations[index + 1] = current;
       destinations = [...destinations];
-      dispatch('update', destinations);
+      onUpdate?.(destinations);
     }
   }
 

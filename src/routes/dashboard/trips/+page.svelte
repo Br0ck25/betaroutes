@@ -154,7 +154,6 @@
   }
 
   function handleEditTrip(tripId: string) {
-    // eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
     location.href = resolve('/dashboard/trips/edit/') + encodeURIComponent(tripId);
   }
 
@@ -509,9 +508,9 @@
     <ActionBar
       selectedCount={selectedTrips.size}
       {isPro}
-      on:cancel={() => (selectedTrips = new SvelteSet())}
-      on:export={exportSelected}
-      on:delete={deleteSelected}
+      onCancel={() => (selectedTrips = new SvelteSet())}
+      onExport={exportSelected}
+      onDelete={deleteSelected}
     />
   {/if}
 

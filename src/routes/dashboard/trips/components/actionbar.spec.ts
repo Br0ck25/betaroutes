@@ -14,7 +14,7 @@ describe('ActionBar component', () => {
   });
 
   it('renders selected count and emits cancel/export/delete', async () => {
-    const { component, unmount } = render(ActionBar, {
+    const { unmount } = render(ActionBar, {
       props: { selectedCount: 2, isPro: false },
       target: container
     });
