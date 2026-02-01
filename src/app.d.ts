@@ -31,7 +31,7 @@ declare global {
     cursor?: string;
   };
 
-  interface KVNamespace<TKey extends string = string> {
+  interface KVNamespace<_TKey extends string = string> {
     get<T = string | null>(
       key: string,
       options?: 'text' | 'arrayBuffer' | 'stream' | 'json' | { type: 'json' }
@@ -79,8 +79,8 @@ declare global {
       delete(key: string): Promise<void>;
       // SQLite-like SQL interface used in DOs
       sql: {
-        exec(query: string, ...params: unknown[]): any;
-        one?(): any;
+        exec(query: string, ...params: unknown[]): unknown;
+        one?(): unknown;
       };
     };
 

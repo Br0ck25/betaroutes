@@ -1,6 +1,5 @@
 // Verifies all $lib/* imports resolve correctly
 import { existsSync } from 'fs';
-import { resolve } from 'path';
 
 const imports = [
   '$lib/db/queries',

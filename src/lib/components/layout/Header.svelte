@@ -1,8 +1,8 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { resolve, base } from '$app/paths';
-  import { getUserState } from '$lib/stores/user.svelte';
+  import { base, resolve } from '$app/paths';
   import SyncIndicator from '$lib/components/SyncIndicator.svelte';
+  import { getUserState } from '$lib/stores/user.svelte';
 
   // Get reactive state
   const userState = getUserState();
@@ -16,7 +16,7 @@
   async function logout() {
     await fetch('/api/logout', { method: 'POST' });
     userState.logout();
-    goto(resolve('/'));
+    await goto(resolve('/'));
   }
   // Links for the public site (Logged Out)
   const publicLinks = [
@@ -63,7 +63,7 @@
           <div class="separator"></div>
 
           <SyncIndicator />
-          <button onclick={logout} class="btn-login">Logout</button>
+          <button onclick={() => void logout()} class="btn-login">Logout</button>
         {:else}
           {#each publicLinks as link (link.href)}
             <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- using base+link.href for dynamic hrefs -->
@@ -112,7 +112,7 @@
         <div class="divider"></div>
         <button
           onclick={() => {
-            logout();
+            void logout();
             toggleMenu();
           }}
           class="mobile-link text-red">Logout</button

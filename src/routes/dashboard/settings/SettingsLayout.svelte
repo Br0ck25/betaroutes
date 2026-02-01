@@ -1,4 +1,5 @@
 <script lang="ts">
+  /* eslint-disable svelte/prefer-writable-derived */
   // Use $effect for client-only setup/cleanup (replaces onMount/onDestroy)
   interface Props {
     sections?: string[];

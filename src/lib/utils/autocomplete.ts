@@ -1,5 +1,6 @@
 // src/lib/utils/autocomplete.ts
 import { csrfFetch, jsonFetchOptions } from '$lib/utils/csrf';
+import { asRecord } from '$lib/utils/errors';
 import type { Action } from 'svelte/action';
 import { isAcceptableGeocode } from './geocode';
 
@@ -158,46 +159,47 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     }
 
     if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = window.setTimeout(async () => {
-      try {
-        const kvUrl = `/api/autocomplete?q=${encodeURIComponent(value)}`;
-        const kvRes = await fetch(kvUrl);
-        const data = await kvRes.json().catch(() => []);
+    debounceTimer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const kvUrl = `/api/autocomplete?q=${encodeURIComponent(value)}`;
+          const kvRes = await fetch(kvUrl);
+          const data = await kvRes.json().catch(() => []);
 
-        const validData = Array.isArray(data) ? (data as Array<Record<string, unknown>>) : [];
-        let source: 'kv' | 'google' = 'kv';
+          const validData = Array.isArray(data) ? (data as Array<Record<string, unknown>>) : [];
+          let source: 'kv' | 'google' = 'kv';
 
-        if (validData.length > 0) {
-          const first = validData[0];
-          if (first && typeof first['source'] === 'string' && first['source'] === 'google_proxy')
-            source = 'google';
+          if (validData.length > 0) {
+            const first = validData[0];
+            if (first && typeof first['source'] === 'string' && first['source'] === 'google_proxy')
+              source = 'google';
+          }
+
+          // Mandatory: Strict Filter BEFORE rendering
+          const suggestionsToShow = validData.slice(0, 5);
+          const acceptableSet = new Set(
+            suggestionsToShow
+              .filter((item: Record<string, unknown>) => isAcceptableGeocode(item, value))
+              .map((it: Record<string, unknown>) =>
+                typeof it['place_id'] === 'string'
+                  ? (it['place_id'] as string)
+                  : typeof it['formatted_address'] === 'string'
+                    ? (it['formatted_address'] as string)
+                    : JSON.stringify(it)
+              )
+          );
+          const filtered = suggestionsToShow; // Keep the top suggestions visible regardless of acceptability (we'll validate on blur/selection)
+          if (filtered.length > 0) {
+            // [!code --] Removed client-side caching call (moved to server)
+            renderResults(filtered.slice(0, 5), source, acceptableSet);
+          } else {
+            renderEmpty();
+          }
+        } catch (err: unknown) {
+          console.error('[autocomplete] search failed', err);
+          renderError();
         }
-
-        // Mandatory: Strict Filter BEFORE rendering
-        const suggestionsToShow = validData.slice(0, 5);
-        const acceptableSet = new Set(
-          suggestionsToShow
-            .filter((item: Record<string, unknown>) => isAcceptableGeocode(item, value))
-            .map((it: Record<string, unknown>) =>
-              typeof it['place_id'] === 'string'
-                ? (it['place_id'] as string)
-                : typeof it['formatted_address'] === 'string'
-                  ? (it['formatted_address'] as string)
-                  : JSON.stringify(it)
-            )
-        );
-        let filtered = suggestionsToShow; // Keep the top suggestions visible regardless of acceptability (we'll validate on blur/selection)
-        filtered = suggestionsToShow;
-        if (filtered.length > 0) {
-          // [!code --] Removed client-side caching call (moved to server)
-          renderResults(filtered.slice(0, 5), source, acceptableSet);
-        } else {
-          renderEmpty();
-        }
-      } catch (err: unknown) {
-        console.error('[autocomplete] search failed', err);
-        renderError();
-      }
+      })().catch(console.error);
     }, 300);
   }
 
@@ -573,7 +575,7 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
     if (node.value.length > 1) {
       const inputEvent = new Event('input', { bubbles: true });
       Object.defineProperty(inputEvent, 'target', { value: node, enumerable: true });
-      handleInput(inputEvent);
+      void handleInput(inputEvent);
     }
   });
   node.addEventListener('blur', () =>
@@ -588,48 +590,28 @@ export const autocomplete: Action<HTMLInputElement, { apiKey: string }> = (node,
           const res = await fetch(
             `/api/autocomplete?q=${encodeURIComponent(value)}&forceGoogle=true`
           );
-          const data = await res.json().catch(() => []);
+          const data = (await res.json()) as unknown[];
           if (Array.isArray(data) && data.length > 0) {
-            const googleHit = (data as Array<unknown>).find(
-              (d): d is Record<string, unknown> =>
-                typeof d === 'object' &&
-                d !== null &&
-                typeof (d as Record<string, unknown>)['source'] === 'string' &&
-                (d as Record<string, unknown>)['source'] === 'google_proxy'
-            );
-            if (googleHit) {
-              commitSelection(googleHit);
-              return;
+            for (const item of data) {
+              const rec = asRecord(item);
+              if (rec.source === 'google_proxy') {
+                commitSelection(rec);
+                return;
+              }
             }
-            const acceptable = (data as Array<unknown>).find(
-              (d): d is Record<string, unknown> =>
-                typeof d === 'object' &&
-                d !== null &&
-                typeof (d as Record<string, unknown>)['source'] === 'string' &&
-                (d as Record<string, unknown>)['source'] === 'kv'
-            );
-            if (acceptable) {
-              commitSelection(acceptable);
-              return;
+
+            for (const item of data) {
+              const rec = asRecord(item);
+              if (isAcceptableGeocode(rec, value)) {
+                commitSelection(rec);
+                return;
+              }
             }
           }
-        } catch (_e: unknown) {
-          void _e;
+        } catch (err: unknown) {
+          console.error('[autocomplete] blur validation failed', err);
         }
-      })();
-    }, 0)
-  );
-            (d): d is Record<string, unknown> =>
-              typeof d === 'object' && d !== null && isAcceptableGeocode(d, value)
-          );
-          if (acceptable) {
-            commitSelection(acceptable);
-            return;
-          }
-        }
-      } catch (err: unknown) {
-        console.error('[autocomplete] blur validation failed', err);
-      }
+      })().catch(console.error);
     }, 200)
   );
 

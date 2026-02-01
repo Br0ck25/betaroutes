@@ -17,14 +17,6 @@ export type PublicUser = {
 };
 
 /**
- * Get user display name
- * Fallback helper if $lib/utils/user-display doesn't exist
- */
-function getUserDisplayName(user: { name?: string; username?: string; email?: string }): string {
-  return user.name || user.username || user.email || 'User';
-}
-
-/**
  * Root layout loader
  * Provides user data and environment to all pages
  */
@@ -32,12 +24,15 @@ export const load: LayoutServerLoad = async ({ locals, url, platform }) => {
   // Get environment bindings safely
   const env = getEnv(platform);
 
-  // Create public user object (strips sensitive data)
+  // SECURITY NOTE:
+  // Keep this public object minimal. Avoid using email/token/etc here (publicly exposed).
+  // Name is a display-only string; if you later want a real display name, add it to locals on the server,
+  // and pass only that sanitized field through here.
   const publicUser: PublicUser | null =
     locals.user && typeof locals.user.id === 'string'
       ? {
           id: locals.user.id,
-          name: getUserDisplayName(locals.user),
+          name: 'User',
           plan: locals.user.plan || 'free',
           tripsThisMonth: locals.user.tripsThisMonth
         }

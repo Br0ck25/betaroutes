@@ -8,11 +8,13 @@
     onUpdate?: (destinations: Destination[]) => void;
   }
 
+  /* eslint-disable prefer-const */
   let {
     destinations = $bindable([{ address: '', earnings: 0 }]),
     apiKey = '',
     onUpdate
   }: Props = $props();
+  /* eslint-enable prefer-const */
 
   function handlePlaceSelect(index: number, e: CustomEvent) {
     const place = e.detail as GeocodeResult;

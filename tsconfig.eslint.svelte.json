@@ -1,0 +1,28 @@
+{
+  "extends": "./tsconfig.eslint.json",
+  "files": [],
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "WebWorker"],
+    "types": ["vite/client", "svelte", "google.maps"]
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.js",
+    "src/**/*.svelte",
+    "src/**/*.d.ts",
+    "tests/**/*.ts",
+    "tests/**/*.svelte",
+    "e2e/**/*.ts",
+    "e2e/**/*.spec.ts",
+    "test/**/*.ts",
+    "tmp/**/*.ts",
+    "tools/**/*.ts",
+    "tools/**/*.js",
+    "playwright.config.ts",
+    "tailwind.config.*",
+    ".svelte-kit/**/*.d.ts",
+    "vite.config.*",
+    "svelte.config.*",
+    "eslint.config.*"
+  ]
+}

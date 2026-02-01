@@ -1,8 +1,7 @@
 <script lang="ts">
   import { toasts } from '$lib/stores/toast';
-  import { flip } from 'svelte/animate';
-  import { fade, fly } from 'svelte/transition';
   import { sanitizeStaticSvg } from '$lib/utils/sanitize';
+  import { flip } from 'svelte/animate';
 
   // [!code fix] SECURITY (Issue #7, #43): Sanitize static SVG icons as defense-in-depth
   const icons = {
@@ -36,8 +35,6 @@
   {#each $toasts as toast (toast.id)}
     <div
       animate:flip
-      in:fly={{ y: 20, duration: 300 }}
-      out:fade={{ duration: 200 }}
       class="pointer-events-auto flex items-center w-full max-w-sm p-4 mb-2 border rounded-lg shadow-lg {colors[
         toast.type
       ]}"

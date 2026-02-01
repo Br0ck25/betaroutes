@@ -6,17 +6,17 @@
   import { trash } from '$lib/stores/trash';
   import { trips } from '$lib/stores/trips';
   import { csrfFetch } from '$lib/utils/csrf';
+  import { asRecord, getErrorMessage } from '$lib/utils/errors';
   import { SvelteDate, SvelteSet } from '$lib/utils/svelte-reactivity';
-  import { slide } from 'svelte/transition';
   import SettingsModal from '../trips/components/SettingsModal.svelte';
   let showTripSettings = $state(false);
   // Access via bracket notation because `page.data` exposes properties through an index signature
-  let API_KEY = $derived($page.data?.['googleMapsApiKey']);
+  const API_KEY = $derived(() => $page.data?.['googleMapsApiKey']);
 
   let username = $state('');
   let password = $state('');
   let loading = $state(false);
-  let orders: any[] = $state([]);
+  let orders = $state<Record<string, unknown>[]>([]);
   let isConnected = $state(false);
   let logs: string[] = $state([]);
 
@@ -51,15 +51,15 @@
 
   // Config Sync State
   let isConfigLoaded = $state(false);
-  let saveTimeout: any = $state();
+  let saveTimeout: number | undefined = $state(undefined);
   let isSaving = $state(false);
 
   // Conflict Management State
-  let conflictTrips: any[] = $state([]);
+  let conflictTrips: Array<Record<string, unknown>> = $state([]);
   let selectedConflicts = $state(new SvelteSet<string>()); // Track which trips to overwrite
   let showConflictModal = $state(false);
   let conflictTimer = $state(60);
-  let conflictInterval: any;
+  let conflictInterval: number | undefined;
 
   function showSuccessMsg(msg: string) {
     successMessage = msg;
@@ -86,21 +86,23 @@
         method: 'POST',
         body: JSON.stringify({ action: 'get_settings' })
       });
-      const data: any = await res.json();
+      const data = await res.json();
+      const rec = asRecord(data);
+      const settings = asRecord(rec.settings);
 
-      if (data.settings) {
-        installPay = data.settings.installPay ?? 0;
-        repairPay = data.settings.repairPay ?? 0;
-        upgradePay = data.settings.upgradePay ?? 0;
-        wifiExtenderPay = data.settings.wifiExtenderPay ?? 0;
-        voipPay = data.settings.voipPay ?? 0;
-        driveTimeBonus = data.settings.driveTimeBonus ?? 0;
-        poleCost = data.settings.poleCost ?? 0;
-        concreteCost = data.settings.concreteCost ?? 0;
-        poleCharge = data.settings.poleCharge ?? 0;
-        installTime = data.settings.installTime ?? 90;
-        repairTime = data.settings.repairTime ?? 60;
-        overrideTimes = data.settings.overrideTimes ?? false;
+      if (Object.keys(settings).length > 0) {
+        installPay = Number(settings.installPay ?? 0);
+        repairPay = Number(settings.repairPay ?? 0);
+        upgradePay = Number(settings.upgradePay ?? 0);
+        wifiExtenderPay = Number(settings.wifiExtenderPay ?? 0);
+        voipPay = Number(settings.voipPay ?? 0);
+        driveTimeBonus = Number(settings.driveTimeBonus ?? 0);
+        poleCost = Number(settings.poleCost ?? 0);
+        concreteCost = Number(settings.concreteCost ?? 0);
+        poleCharge = Number(settings.poleCharge ?? 0);
+        installTime = Number(settings.installTime ?? 90);
+        repairTime = Number(settings.repairTime ?? 60);
+        overrideTimes = Boolean(settings.overrideTimes ?? false);
 
         addLog('Settings loaded from cloud.');
       }
@@ -140,10 +142,10 @@
           settings
         })
       });
-      const data: any = await res.json();
-      if (!data.success) {
-        console.error('Save failed:', data.error);
-        addLog(`Save Error: ${data.error}`);
+      const rec = asRecord(await res.json());
+      if (!rec.success) {
+        console.error('Save failed:', rec.error);
+        addLog(`Save Error: ${String(rec.error ?? 'unknown')}`);
       }
     } catch (e) {
       console.error('Failed to auto-save settings', e);
@@ -171,10 +173,8 @@
         repairTime,
         overrideTimes
       ];
-      if (saveTimeout) clearTimeout(saveTimeout);
-      saveTimeout = setTimeout(() => {
-        saveSettings();
-      }, 1000);
+      if (saveTimeout) window.clearTimeout(saveTimeout);
+      saveTimeout = window.setTimeout(() => void saveSettings(), 1000);
     }
   });
 
@@ -182,9 +182,11 @@
     addLog('Checking cache for existing orders...');
     try {
       const res = await fetch(`/api/hughesnet`);
-      const data: any = await res.json();
-      if (data.orders) {
-        orders = Object.values(data.orders);
+      const data = await res.json();
+      const rec = asRecord(data);
+      const ordersRaw = rec.orders;
+      if (Array.isArray(ordersRaw)) {
+        orders = ordersRaw as Record<string, unknown>[];
         if (orders.length > 0) {
           isConnected = true;
           addLog(`Found ${orders.length} cached orders.`);
@@ -192,8 +194,8 @@
           addLog('No cached orders found.');
         }
       }
-    } catch (e) {
-      addLog('Error checking cache: ' + e);
+    } catch (e: unknown) {
+      addLog('Error checking cache: ' + getErrorMessage(e));
     }
   }
 
@@ -211,19 +213,22 @@
         method: 'POST',
         body: JSON.stringify({ action: 'connect', username, password })
       });
-      const data: any = await res.json();
-      processServerLogs(data.logs);
+      const data = await res.json();
+      const rec = asRecord(data);
+      const logsArr = Array.isArray(rec.logs) ? rec.logs.map(String) : undefined;
+      processServerLogs(logsArr);
 
-      if (data.success) {
+      if (rec.success) {
         isConnected = true;
         addLog('Connected! Ready to sync.');
         showSuccessMsg('Connected successfully!');
       } else {
-        addLog('Login Failed: ' + (data.error || 'Unknown error'));
-        alert('Login Failed: ' + (data.error || 'Check logs'));
+        const errMsg = String(rec.error ?? 'Unknown error');
+        addLog('Login Failed: ' + errMsg);
+        alert('Login Failed: ' + errMsg);
       }
-    } catch (e: any) {
-      addLog('Network Error: ' + e.message);
+    } catch (e: unknown) {
+      addLog('Network Error: ' + getErrorMessage(e));
     } finally {
       loading = false;
       statusMessage = 'Sync Now';
@@ -239,17 +244,17 @@
         method: 'POST',
         body: JSON.stringify({ action: 'disconnect' })
       });
-      const data: any = await res.json();
-      processServerLogs(data.logs);
+      const rec = asRecord(await res.json());
+      processServerLogs(((rec.logs as unknown[] | undefined) ?? []).map(String));
 
-      if (data.success) {
+      if (rec.success) {
         isConnected = false;
         orders = [];
         addLog('Disconnected.');
         showSuccessMsg('Disconnected.');
       }
-    } catch (e: any) {
-      addLog('Error: ' + e.message);
+    } catch (e: unknown) {
+      addLog('Error: ' + getErrorMessage(e));
     } finally {
       loading = false;
     }
@@ -266,7 +271,7 @@
     }
 
     const skipScan = batchCount > 1;
-    let data: any = null;
+    let responseRec: Record<string, unknown> | null = null;
     if (batchCount === 1) {
       addLog(
         recentOnly ? `🚀 Starting Quick Sync (Last 7 Days)...` : `📡 Starting Full History Scan...`
@@ -289,8 +294,8 @@
           if (result.failed > 0) {
             addLog(`⚠️ Warning: ${result.failed} change(s) failed to upload`);
           }
-        } catch (e: any) {
-          addLog('⚠️ Warning: Could not sync local changes - ' + e.message);
+        } catch (e: unknown) {
+          addLog('⚠️ Warning: Could not sync local changes - ' + getErrorMessage(e));
         }
       }
     } else {
@@ -331,22 +336,34 @@
         return;
       }
 
-      data = await res.json();
-      processServerLogs(data.logs);
-      if (data.success) {
-        const newOrders = data.orders || [];
-        orders = newOrders;
+      const rec = asRecord(await res.json());
+      responseRec = rec;
+      processServerLogs(((rec.logs as unknown[] | undefined) ?? []).map(String));
+      if (rec.success) {
+        const newOrders = (rec.orders as unknown[]) ?? [];
+        orders = newOrders as Record<string, unknown>[];
         isConnected = true;
 
         // Collect conflicts
-        if (data.conflicts && Array.isArray(data.conflicts)) {
+        if (Array.isArray(rec.conflicts)) {
           // Merge unique conflicts by date
-          const existingDates = new Set(conflictTrips.map((c: any) => c.date));
-          const newConflicts = data.conflicts.filter((c: any) => !existingDates.has(c.date));
+          const existingDates = new Set(conflictTrips.map((c) => String(c.date ?? '')));
+          const newConflicts = (rec.conflicts as unknown[])
+            .filter((c) => !existingDates.has(String((c as Record<string, unknown>).date ?? '')))
+            .map((c) => {
+              const r = c as Record<string, unknown>;
+              return {
+                ...r,
+                stops: Number(r.stops ?? 0),
+                hnsStops: Number(r.hnsStops ?? 0),
+                earnings: Number(r.earnings ?? 0),
+                hnsEarnings: Number(r.hnsEarnings ?? 0)
+              } as Record<string, unknown>;
+            });
           conflictTrips = [...conflictTrips, ...newConflicts];
         }
 
-        if (data.incomplete) {
+        if (rec.incomplete) {
           addLog(`✓ Batch ${batchCount} complete. Starting next batch...`);
           await new Promise((r) => setTimeout(r, 1500));
           await handleSync(batchCount + 1, recentOnly, forceOverrideDates);
@@ -372,11 +389,9 @@
           addLog('✅ Trips updated locally.');
         }
       } else {
-        addLog('❌ Sync Failed: ' + data.error);
-        if (
-          data.error &&
-          (data.error.includes('login') || data.error.includes('Session expired'))
-        ) {
+        const errStr = String(rec.error ?? '');
+        addLog('❌ Sync Failed: ' + errStr);
+        if (errStr && (errStr.includes('login') || errStr.includes('Session expired'))) {
           addLog('⚠️ Session expired. Please disconnect and reconnect.');
           alert('Your HughesNet session expired. Please disconnect and reconnect.');
         }
@@ -384,9 +399,10 @@
         statusMessage = 'Sync Failed';
         currentBatch = 0;
       }
-    } catch (e: any) {
-      addLog('❌ Sync Error: ' + e.message);
-      if (e.message.includes('JSON')) {
+    } catch (e: unknown) {
+      const errMsg = getErrorMessage(e);
+      addLog('❌ Sync Error: ' + errMsg);
+      if (errMsg.includes('JSON')) {
         addLog('❌ Server returned invalid response. Session may have expired.');
         alert('Session error. Please disconnect and reconnect.');
       }
@@ -394,7 +410,7 @@
       statusMessage = 'Sync Failed';
       currentBatch = 0;
     } finally {
-      if (!data || (!data.incomplete && !showConflictModal)) {
+      if (!responseRec || (!(responseRec.incomplete as boolean) && !showConflictModal)) {
         loading = false;
         statusMessage = 'Sync Now';
       }
@@ -412,11 +428,11 @@
         method: 'POST',
         body: JSON.stringify({ action: 'clear' })
       });
-      const data: any = await res.json();
-      processServerLogs(data.logs);
+      const rec = asRecord(await res.json());
+      processServerLogs(((rec.logs as unknown[] | undefined) ?? []).map(String));
 
-      addLog(`✅ Cleared ${data.count} trips.`);
-      showSuccessMsg(`Cleared ${data.count} trips.`);
+      addLog(`✅ Cleared ${Number(rec.count ?? 0)} trips.`);
+      showSuccessMsg(`Cleared ${Number(rec.count ?? 0)} trips.`);
 
       const userId = $user?.id;
       if (userId) {
@@ -426,8 +442,8 @@
       }
 
       await loadOrders();
-    } catch (e: any) {
-      addLog('❌ Clear Error: ' + e.message);
+    } catch (e: unknown) {
+      addLog('❌ Clear Error: ' + getErrorMessage(e));
     } finally {
       loading = false;
       statusMessage = 'Sync Now';
@@ -439,9 +455,9 @@
     showConflictModal = true;
     conflictTimer = 60;
     selectedConflicts = new SvelteSet(); // Reset selection
-    if (conflictInterval) clearInterval(conflictInterval);
+    if (conflictInterval) window.clearInterval(conflictInterval);
 
-    conflictInterval = setInterval(() => {
+    conflictInterval = window.setInterval(() => {
       conflictTimer--;
       if (conflictTimer <= 0) {
         // Default action is SKIP (preserve all user edits)
@@ -457,7 +473,7 @@
   }
 
   function selectAll() {
-    selectedConflicts = new SvelteSet(conflictTrips.map((c) => c.date));
+    selectedConflicts = new SvelteSet(conflictTrips.map((c) => String(c.date ?? '')));
   }
 
   function selectNone() {
@@ -482,7 +498,7 @@
     addLog(
       `🔄 Overwriting ${selectedConflicts.size} trip(s), keeping ${keepCount} user edit(s)...`
     );
-    handleSync(1, true, forceDates);
+    void handleSync(1, true, forceDates);
   }
 
   function cancelOverride() {
@@ -512,7 +528,7 @@
       if (elapsed > SESSION_TIMEOUT_MS) {
         addLog('⚠️ Session expired (15+ minutes inactive). Please reconnect.');
         alert('Your HughesNet session has expired due to inactivity. Please reconnect.');
-        handleDisconnect();
+        void handleDisconnect();
       }
     }
     // Update last visit time
@@ -560,7 +576,13 @@
   {/if}
 
   <!-- Trip Settings Modal (open from warning link/button) -->
-  <SettingsModal bind:open={showTripSettings} {API_KEY} />
+  <SettingsModal
+    open={showTripSettings}
+    API_KEY={API_KEY()}
+    onClose={() => {
+      showTripSettings = false;
+    }}
+  />
 
   <div class="settings-grid">
     <div class="settings-card">
@@ -639,7 +661,7 @@
           </div>
         {:else}
           <div class="button-group mt-4">
-            <button class="btn-primary" onclick={() => handleSync(1, true)} disabled={loading}>
+            <button class="btn-primary" onclick={() => void handleSync(1, true)} disabled={loading}>
               <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"
                 ><path
                   stroke-linecap="round"
@@ -651,7 +673,11 @@
               Quick Sync (New Only)
             </button>
 
-            <button class="btn-secondary" onclick={() => handleSync(1, false)} disabled={loading}>
+            <button
+              class="btn-secondary"
+              onclick={() => void handleSync(1, false)}
+              disabled={loading}
+            >
               <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"
                 ><path
                   stroke-linecap="round"
@@ -665,13 +691,17 @@
 
             <button
               class="btn-secondary danger-hover"
-              onclick={handleDisconnect}
+              onclick={() => void handleDisconnect()}
               disabled={loading}
             >
               Disconnect
             </button>
 
-            <button class="btn-secondary danger-hover" onclick={handleClear} disabled={loading}>
+            <button
+              class="btn-secondary danger-hover"
+              onclick={() => void handleClear()}
+              disabled={loading}
+            >
               Delete HNS Trips
             </button>
           </div>
@@ -700,15 +730,15 @@
 
       <div style="padding:12px;">
         <ArchivedRestore
-          on:restored={(e: CustomEvent) => {
-            if (e.detail?.imported) {
-              addLog(`Imported ${e.detail.imported.length} archived orders`);
+          onRestored={(payload) => {
+            if (payload?.imported) {
+              addLog(`Imported ${payload.imported.length} archived orders`);
             }
           }}
-          on:restoreAndSync={(e: CustomEvent) => {
-            if (e.detail?.dates) {
-              addLog(`Imported orders for ${e.detail.dates.join(', ')}, syncing...`);
-              handleSync(1, true, e.detail.dates);
+          onRestoreAndSync={(payload) => {
+            if (payload?.dates) {
+              addLog(`Imported orders for ${payload.dates.join(', ')}, syncing...`);
+              void handleSync(1, true, payload.dates);
             }
           }}
         />
@@ -975,7 +1005,7 @@
       </div>
 
       {#if showConsole}
-        <div class="console-body" transition:slide>
+        <div class="console-body">
           {#each logs as log, i (i)}
             <div class="log-line">
               <span class="log-time"
@@ -1014,19 +1044,24 @@
         </div>
 
         <div class="conflicts-list">
-          {#each conflictTrips as conflict (conflict.date)}
-            <div class="conflict-card" class:selected={selectedConflicts.has(conflict.date)}>
+          {#each conflictTrips as conflict (String(conflict.date))}
+            <div
+              class="conflict-card"
+              class:selected={selectedConflicts.has(String(conflict.date))}
+            >
               <label class="conflict-checkbox-label">
                 <input
                   type="checkbox"
-                  checked={selectedConflicts.has(conflict.date)}
-                  onchange={() => toggleConflict(conflict.date)}
+                  checked={selectedConflicts.has(String(conflict.date))}
+                  onchange={() => toggleConflict(String(conflict.date))}
                 />
                 <div class="conflict-content">
                   <div class="conflict-header">
                     <span class="conflict-date">{conflict.date}</span>
                     <span class="conflict-modified"
-                      >Edited: {SvelteDate.from(conflict.lastModified).toLocaleString()}</span
+                      >Edited: {SvelteDate.from(
+                        String(conflict.lastModified)
+                      ).toLocaleString()}</span
                     >
                   </div>
 
@@ -1040,7 +1075,9 @@
                         </div>
                         <div class="detail-row">
                           <span class="detail-label">Earnings:</span>
-                          <span class="detail-value earnings">${conflict.earnings.toFixed(2)}</span>
+                          <span class="detail-value earnings"
+                            >${Number(conflict.earnings).toFixed(2)}</span
+                          >
                         </div>
                         <div class="detail-row address-row">
                           <span class="detail-label">Address:</span>
@@ -1062,9 +1099,9 @@
                           <span class="detail-value">{conflict.hnsStops}</span>
                           {#if conflict.stops !== conflict.hnsStops}
                             <span class="diff-badge"
-                              >{conflict.hnsStops - conflict.stops > 0
+                              >{Number(conflict.hnsStops) - Number(conflict.stops) > 0
                                 ? '+'
-                                : ''}{conflict.hnsStops - conflict.stops}</span
+                                : ''}{Number(conflict.hnsStops) - Number(conflict.stops)}</span
                             >
                           {/if}
                         </div>
@@ -1074,11 +1111,13 @@
                         >
                           <span class="detail-label">Earnings:</span>
                           <span class="detail-value earnings"
-                            >${conflict.hnsEarnings.toFixed(2)}</span
+                            >${Number(conflict.hnsEarnings).toFixed(2)}</span
                           >
                           {#if conflict.earnings !== conflict.hnsEarnings}
                             <span class="diff-badge"
-                              >${(conflict.hnsEarnings - conflict.earnings).toFixed(2)}</span
+                              >${(Number(conflict.hnsEarnings) - Number(conflict.earnings)).toFixed(
+                                2
+                              )}</span
                             >
                           {/if}
                         </div>

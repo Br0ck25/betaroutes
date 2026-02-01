@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { asRecord, getErrorMessage } from '$lib/utils/errors';
   import { startRegistration } from '@simplewebauthn/browser';
   let message = $state('');
   let loading = $state(false);
@@ -9,19 +10,23 @@
     try {
       const res = await fetch('/debug/webauthn-test');
       if (!res.ok) throw new Error('Failed to get options');
-      const data: any = await res.json();
-      const options = data.full;
+      const dataJson = await res.json().catch(() => null);
+      const data = asRecord(dataJson);
+      const options = asRecord(data.full);
 
       // Ensure challenge is string
       if (options.challenge && typeof options.challenge !== 'string') {
-        const bytes = new Uint8Array(options.challenge);
+        const bytes = new Uint8Array(options.challenge as ArrayBuffer);
         let binary = '';
         for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(Number(bytes[i] ?? 0));
         options.challenge = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
       }
 
       // Call startRegistration
-      const cred = await startRegistration({ optionsJSON: options as any });
+      // Cast via unknown -> parameters to avoid `any` while matching runtime shape
+      const cred = await startRegistration(
+        options as unknown as Parameters<typeof startRegistration>[0]
+      );
       console.log('Demo credential:', cred);
 
       // Normalize ArrayBuffer fields to base64url strings
@@ -33,34 +38,49 @@
         return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
       }
 
-      const normalised: any = { ...cred } as any;
+      // Cast via unknown to avoid accidental structural conversion errors
+      const normalised: Record<string, unknown> = {
+        ...(cred as unknown as Record<string, unknown>)
+      };
       if (
         normalised.rawId &&
         (normalised.rawId instanceof ArrayBuffer || ArrayBuffer.isView(normalised.rawId))
       ) {
         normalised.rawId = bufferToBase64Url(normalised.rawId as ArrayBuffer);
       }
-      const resp = normalised.response || {};
+      const resp = (normalised.response as Record<string, unknown>) || {};
       if (
         resp.attestationObject &&
         (resp.attestationObject instanceof ArrayBuffer ||
           ArrayBuffer.isView(resp.attestationObject))
       )
-        resp.attestationObject = bufferToBase64Url(resp.attestationObject);
+        (resp as Record<string, unknown>).attestationObject = bufferToBase64Url(
+          resp.attestationObject as ArrayBuffer
+        );
       if (
         resp.clientDataJSON &&
         (resp.clientDataJSON instanceof ArrayBuffer || ArrayBuffer.isView(resp.clientDataJSON))
       )
-        resp.clientDataJSON = bufferToBase64Url(resp.clientDataJSON);
+        (resp as Record<string, unknown>).clientDataJSON = bufferToBase64Url(
+          resp.clientDataJSON as ArrayBuffer
+        );
 
       // POST to verification endpoint
       try {
         // Compute device name to send to server (prefill using UA info)
         function getDeviceName() {
-          const uaData = (navigator as any).userAgentData;
+          const uaData = (navigator as unknown as { userAgentData?: Record<string, unknown> })
+            .userAgentData;
           if (uaData && uaData.platform) {
+            const brands = uaData.brands as unknown;
+            const brandCandidate =
+              Array.isArray(brands) && brands.length > 0 ? (brands[0] as unknown) : undefined;
             const brand =
-              (uaData.brands && uaData.brands[0] && uaData.brands[0].brand) || 'Browser';
+              brandCandidate &&
+              typeof (brandCandidate as Record<string, unknown>).brand === 'string'
+                ? String((brandCandidate as Record<string, unknown>).brand)
+                : 'Browser';
+
             return `${brand} on ${uaData.platform}`;
           }
           const ua = navigator.userAgent || '';
@@ -79,27 +99,26 @@
           body: JSON.stringify({ credential: normalised, deviceName })
         });
 
-        let verifyJson: any = {};
+        let verifyJson: unknown = {};
         try {
           verifyJson = await verifyRes.json();
         } catch (_e) {
           /* ignore parse errors */
         }
 
-        if (verifyRes.ok && verifyJson.verified) {
+        const verifyRec = asRecord(verifyJson);
+        if (verifyRes.ok && verifyRec.verified) {
           message = 'Registered and verified by server';
         } else {
-          message =
-            'Server verification failed: ' +
-            (verifyJson && (verifyJson.error || JSON.stringify(verifyJson)));
+          message = 'Server verification failed: ' + (verifyRec.error || JSON.stringify(verifyRec));
         }
-      } catch (err: any) {
-        console.error('Verification POST error', err);
-        message = 'Verification POST failed: ' + (err?.message || String(err));
+      } catch (err: unknown) {
+        console.error('Verification POST error', getErrorMessage(err));
+        message = 'Verification POST failed: ' + getErrorMessage(err);
       }
-    } catch (err: any) {
-      console.error('Demo error', err);
-      message = err?.message || String(err);
+    } catch (err: unknown) {
+      console.error('Demo error', getErrorMessage(err));
+      message = getErrorMessage(err);
     } finally {
       loading = false;
     }

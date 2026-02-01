@@ -19,8 +19,8 @@ const ASSETS = [
 
 // Kill switch: immediately unregister and clean up
 if (KILL_SWITCH) {
-  self.addEventListener('install', () => {
-    self.skipWaiting();
+  self.addEventListener('install', (event) => {
+    event.waitUntil(self.skipWaiting());
   });
 
   self.addEventListener('activate', (event) => {
@@ -115,10 +115,10 @@ if (KILL_SWITCH) {
             const networkResponse = await fetch(event.request);
             if (networkResponse && networkResponse.status === 200) {
               const cache = await caches.open(CACHE);
-              cache.put(event.request, networkResponse.clone());
+              await cache.put(event.request, networkResponse.clone());
             }
             return networkResponse;
-          } catch (err) {
+          } catch (_err) {
             const cache = await caches.open(CACHE);
             const cached = (await cache.match('/offline.html')) || (await cache.match('/'));
 
@@ -215,7 +215,7 @@ if (KILL_SWITCH) {
         }
 
         if (response.status === 200) {
-          cache.put(event.request, response.clone());
+          await cache.put(event.request, response.clone());
         }
 
         return response;

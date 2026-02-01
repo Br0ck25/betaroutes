@@ -125,8 +125,11 @@ export const GET: RequestHandler = async ({ url, platform, cookies }) => {
 
     // SvelteKit's `redirect()` may throw an object with `status` + `location` properties
     // Detect and rethrow those to allow framework-level redirects to succeed.
-    if (e && typeof e === 'object' && 'status' in (e as any) && 'location' in (e as any)) {
-      throw e;
+    if (e && typeof e === 'object') {
+      const obj = e as Record<string, unknown>;
+      if (typeof obj.status === 'number' && typeof obj.location === 'string') {
+        throw e;
+      }
     }
 
     const name = e instanceof Error ? e.name : 'Unknown';

@@ -8,6 +8,7 @@
   import { mileage } from '$lib/stores/mileage';
   import { trips } from '$lib/stores/trips';
   import { userSettings } from '$lib/stores/userSettings';
+  import type { Stop, Trip } from '$lib/types';
   import { SvelteDate, SvelteSet } from '$lib/utils/svelte-reactivity';
   import { getVehicleDisplayName } from '$lib/utils/vehicle';
   import { exportMileageCSV, parseMileageCSV } from './lib/mileage-export';
@@ -50,19 +51,19 @@
 
   // Import/Backup/Restore state
   let importFile: FileList | null = $state(null);
-  let importPreview: any[] = $state([]);
+  let importPreview: unknown[] = $state([]);
   let importType: 'trips' | 'expenses' | 'mileage' = $state('trips');
   let showImportPreview = $state(false);
   let restoreFile: FileList | null = $state(null);
   let showClearConfirm = $state(false);
 
   // Search helper function - improved to search through nested objects and arrays
-  function matchesSearch(item: any, query: string): boolean {
+  function matchesSearch(item: unknown, query: string): boolean {
     if (!query.trim()) return true;
     const lowerQuery = query.toLowerCase();
 
     // Helper to recursively extract searchable text from nested objects/arrays
-    function extractText(obj: any, depth: number = 0): string {
+    function extractText(obj: unknown, depth: number = 0): string {
       if (depth > 3) return ''; // Prevent infinite recursion
       if (obj === null || obj === undefined) return '';
       if (typeof obj === 'string' || typeof obj === 'number' || typeof obj === 'boolean') {
@@ -72,7 +73,7 @@
         return obj.map((v) => extractText(v, depth + 1)).join(' ');
       }
       if (typeof obj === 'object') {
-        return Object.values(obj)
+        return Object.values(obj as Record<string, unknown>)
           .map((v) => extractText(v, depth + 1))
           .join(' ');
       }
@@ -81,20 +82,21 @@
 
     const searchableText = extractText(item);
 
-    // Also resolve vehicle names for search
-    if (item.vehicle || item.vehicleId) {
-      const vehicleName = getVehicleDisplayName(
-        item.vehicle || item.vehicleId,
-        $userSettings.vehicles
-      );
-      if (vehicleName.toLowerCase().includes(lowerQuery)) return true;
+    // Also resolve vehicle names for search (safe narrowing)
+    if (typeof item === 'object' && item !== null) {
+      const obj = item as Record<string, unknown>;
+      const vehicle = (obj.vehicle ?? obj.vehicleId) as string | undefined;
+      if (vehicle) {
+        const vehicleName = getVehicleDisplayName(vehicle, $userSettings.vehicles);
+        if (vehicleName.toLowerCase().includes(lowerQuery)) return true;
+      }
     }
 
     return searchableText.includes(lowerQuery);
   }
 
   // Filter trips by date and search
-  let filteredTrips = $derived(
+  const filteredTrips = $derived(
     $trips.filter((trip) => {
       if (!trip.date) return false;
 
@@ -111,7 +113,7 @@
   );
 
   // Filter expenses by date and search
-  let filteredExpenses = $derived(
+  const filteredExpenses = $derived(
     $expenses.filter((expense) => {
       if (!expense.date) return false;
 
@@ -130,7 +132,7 @@
   );
 
   // Filter mileage by date and search
-  let filteredMileage = $derived(
+  const filteredMileage = $derived(
     $mileage.filter((m) => {
       if (!m.date) return false;
 
@@ -147,9 +149,9 @@
   );
 
   // Paginated data for display
-  let displayedTrips = $derived(filteredTrips.slice(0, tripsDisplayCount));
-  let displayedExpenses = $derived(filteredExpenses.slice(0, expensesDisplayCount));
-  let displayedMileage = $derived(filteredMileage.slice(0, mileageDisplayCount));
+  const displayedTrips = $derived(filteredTrips.slice(0, tripsDisplayCount));
+  const displayedExpenses = $derived(filteredExpenses.slice(0, expensesDisplayCount));
+  const displayedMileage = $derived(filteredMileage.slice(0, mileageDisplayCount));
 
   // Reset pagination when filters change
   run(() => {
@@ -279,35 +281,32 @@
     let totalSupplies = 0;
     let totalProfit = 0;
 
-    tripsToExport.forEach((trip) => {
+    tripsToExport.forEach((trip: Trip) => {
       const earnings = trip.stops?.reduce((sum, stop) => sum + (stop.earnings || 0), 0) || 0;
-      const costs =
-        ((trip as any)['fuelCost'] || 0) +
-        ((trip as any)['maintenanceCost'] || 0) +
-        ((trip as any)['suppliesCost'] || 0);
+      const costs = (trip.fuelCost ?? 0) + (trip.maintenanceCost ?? 0) + (trip.suppliesCost ?? 0);
       const profit = earnings - costs;
 
-      totalMiles += (trip as any).totalMiles || 0;
+      totalMiles += trip.totalMiles ?? 0;
       totalEarnings += earnings;
-      totalFuel += (trip as any)['fuelCost'] || 0;
-      totalMaintenance += (trip as any)['maintenanceCost'] || 0;
-      totalSupplies += (trip as any)['suppliesCost'] || 0;
+      totalFuel += trip.fuelCost ?? 0;
+      totalMaintenance += trip.maintenanceCost ?? 0;
+      totalSupplies += trip.suppliesCost ?? 0;
       totalProfit += profit;
 
       const row = [
-        formatDate(trip.date || ''),
+        formatDate(trip.date ?? ''),
         trip.startTime || '',
         trip.endTime || '',
-        `"${trip.startAddress || ''}"`,
-        trip.stops?.length || 0,
-        (Number((trip as any).totalMiles) || 0).toFixed(2),
+        `"${trip.startAddress ?? ''}"`,
+        trip.stops?.length ?? 0,
+        (Number(trip.totalMiles ?? 0) || 0).toFixed(2),
         earnings.toFixed(2),
-        (Number((trip as any)['fuelCost']) || 0).toFixed(2),
-        (Number((trip as any)['maintenanceCost']) || 0).toFixed(2),
-        (Number((trip as any)['suppliesCost']) || 0).toFixed(2),
+        (Number(trip.fuelCost ?? 0) || 0).toFixed(2),
+        (Number(trip.maintenanceCost ?? 0) || 0).toFixed(2),
+        (Number(trip.suppliesCost ?? 0) || 0).toFixed(2),
         (Number(costs) || 0).toFixed(2),
         (Number(profit) || 0).toFixed(2),
-        `"${trip.notes || ''}"`
+        `"${trip.notes ?? ''}"`
       ];
 
       csv += row.join(',') + '\n';
@@ -523,9 +522,10 @@
     const headers = lines[0]?.split(',').map((h) => h.trim().toLowerCase()) ?? [];
     const data = lines.slice(1).map((line) => {
       const values = line.split(',');
-      const obj: any = {};
+      const obj: Record<string, string> = {};
       headers.forEach((h, i) => {
-        obj[h] = values[i]?.replace(/^"|"$/g, '').trim();
+        if (!h) return;
+        obj[h] = (values[i] ?? '').replace(/^"|"$/g, '').trim();
       });
       return obj;
     });
@@ -583,9 +583,10 @@
     const headers = lines[0]?.split(',').map((h) => h.trim().toLowerCase()) ?? [];
     const data = lines.slice(1).map((line) => {
       const values = line.split(',');
-      const obj: any = {};
+      const obj: Record<string, string> = {};
       headers.forEach((h, i) => {
-        obj[h] = values[i]?.replace(/^"|"$/g, '').trim();
+        if (!h) return;
+        obj[h] = (values[i] ?? '').replace(/^"|"$/g, '').trim();
       });
       return obj;
     });
@@ -595,7 +596,7 @@
       for (const row of data) {
         await trips.create(
           {
-            date: row.date || new Date().toISOString().split('T')[0],
+            date: String(row.date ?? new Date().toISOString().split('T')[0]),
             startTime: row['start time'] || row.starttime || '',
             endTime: row['end time'] || row.endtime || '',
             startAddress: row['start address'] || row.startaddress || '',
@@ -611,7 +612,7 @@
       for (const row of data) {
         await expenses.create(
           {
-            date: row.date || new Date().toISOString().split('T')[0],
+            date: String(row.date ?? new Date().toISOString().split('T')[0]),
             category: row.category || 'other',
             amount: parseFloat(row.amount || '0'),
             description: row.description || ''
@@ -1053,26 +1054,26 @@
           {#if filteredTrips.length > 0}
             <div class="trips-list">
               {#each displayedTrips as trip (trip.id)}
-                {@const tripAny = trip as any}
+                {@const tripTyped = trip as Trip}
 
                 {@const earnings =
-                  tripAny.stops?.reduce(
-                    (sum: number, stop: any) => sum + (stop.earnings || 0),
+                  tripTyped.stops?.reduce(
+                    (sum: number, stop: Stop) => sum + (stop.earnings ?? 0),
                     0
                   ) || 0}
                 {@const costs =
-                  (tripAny['fuelCost'] || 0) +
-                  (tripAny['maintenanceCost'] || 0) +
-                  (tripAny['suppliesCost'] || 0)}
+                  (tripTyped.fuelCost ?? 0) +
+                  (tripTyped.maintenanceCost ?? 0) +
+                  (tripTyped.suppliesCost ?? 0)}
                 {@const profit = earnings - costs}
                 {@const lastStop =
-                  trip.stops && trip.stops.length > 0
-                    ? trip.stops[trip.stops.length - 1]
+                  tripTyped.stops && tripTyped.stops.length > 0
+                    ? tripTyped.stops[tripTyped.stops.length - 1]
                     : undefined}
                 {@const destination =
                   typeof lastStop?.address === 'string'
                     ? lastStop.address.split(',')[0]
-                    : trip.endAddress || 'Multiple stops'}
+                    : tripTyped.endAddress || 'Multiple stops'}
                 <label class="trip-checkbox">
                   <input
                     type="checkbox"
@@ -1096,8 +1097,8 @@
                         : 'Unknown'} → {destination}
                     </div>
                     <div class="trip-meta">
-                      {(Number((trip as any).totalMiles) || 0).toFixed(1) || '0.0'} mi • {trip.stops
-                        ?.length || 0} stops
+                      {(Number(tripTyped.totalMiles ?? 0) || 0).toFixed(1) || '0.0'} mi • {tripTyped
+                        .stops?.length || 0} stops
                     </div>
                   </div>
                 </label>

@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { run } from 'svelte/legacy';
-
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { trips } from '$lib/stores/trips';
@@ -14,8 +12,9 @@
   import { user } from '$lib/stores/auth';
   import { mileage } from '$lib/stores/mileage';
   import { toasts } from '$lib/stores/toast';
-  import type { MaintenanceCost, SupplyCost } from '$lib/types';
   import { autocomplete } from '$lib/utils/autocomplete';
+  import { asRecord, getErrorMessage } from '$lib/utils/errors';
+  import { run } from 'svelte/legacy';
 
   const tripId = $page.params.id;
 
@@ -43,15 +42,6 @@
     totalMilesLocal = n.toFixed(1);
     manualMilesOverride = true;
   }
-
-  // Ensure event listeners are cleaned up on component destroy
-  onDestroy(() => {
-    const el = document.getElementById('total-miles');
-    if (el && el.parentNode) {
-      const clone = el.cloneNode(true) as HTMLElement;
-      el.parentNode.replaceChild(clone, el);
-    }
-  });
 
   /**
    * Normalize any date format to YYYY-MM-DD for HTML date inputs.
@@ -98,16 +88,26 @@
     return `${m} min`;
   }
 
-  import { onDestroy, onMount } from 'svelte';
-  let { data } = $props();
+  const { data } = $props();
 
-  onMount(() => {
-    loadTripData();
+  $effect(() => {
+    // Client-only initialization (replaces onMount)
+    if (typeof document === 'undefined') return;
+
+    void loadTripData();
+
+    // Return cleanup to replace onDestroy
+    return () => {
+      const el = document.getElementById('total-miles');
+      if (el && el.parentNode) {
+        const clone = el.cloneNode(true) as HTMLElement;
+        el.parentNode.replaceChild(clone, el);
+      }
+    };
   });
 
   async function loadTripData() {
-    const currentUser = $page.data['user'] || $user;
-    const userId = currentUser?.id || localStorage.getItem('offline_user_id');
+    const userId = $user?.id || localStorage.getItem('offline_user_id');
     if (!$trips || $trips.length === 0) {
       if (userId) await trips.load(userId);
     }
@@ -118,7 +118,7 @@
     const found = $trips.find((t) => t.id === tripId);
     if (!found) {
       toasts.error('Trip not found');
-      goto(resolve('/dashboard/trips'));
+      void goto(resolve('/dashboard/trips'));
       return;
     }
     const toNumber = (v: unknown) =>
@@ -138,32 +138,33 @@
       } as LocalStop;
     });
 
+    const foundRec = asRecord(found);
     const safeMaintenance = (
-      Array.isArray((found as any).maintenanceItems) ? (found as any).maintenanceItems : []
+      Array.isArray(foundRec.maintenanceItems) ? (foundRec.maintenanceItems as unknown[]) : []
     ).map((m: unknown) => {
-      const item = m as Partial<MaintenanceCost>;
+      const itemRec = asRecord(m);
       return {
-        id: String(item.id ?? crypto.randomUUID()),
-        type: toString(item.type ?? (item as any).item ?? ''),
-        cost: toNumber(item.cost),
-        taxDeductible: !!item.taxDeductible
-      };
+        id: String(itemRec.id ?? crypto.randomUUID()),
+        type: String(itemRec.type ?? itemRec.item ?? ''),
+        cost: toNumber(itemRec.cost),
+        taxDeductible: !!itemRec.taxDeductible
+      } as import('$lib/types').CostItem;
     });
 
-    const rawSupplies = Array.isArray((found as any).supplyItems)
-      ? (found as any).supplyItems
-      : Array.isArray((found as any).suppliesItems)
-        ? (found as any).suppliesItems
+    const rawSupplies = Array.isArray(foundRec.supplyItems)
+      ? (foundRec.supplyItems as unknown[])
+      : Array.isArray(foundRec.suppliesItems)
+        ? (foundRec.suppliesItems as unknown[])
         : [];
 
     const safeSupplies = (rawSupplies || []).map((s: unknown) => {
-      const item = s as Partial<SupplyCost>;
+      const itemRec = asRecord(s);
       return {
-        id: String(item.id ?? crypto.randomUUID()),
-        type: toString(item.type ?? (item as any).name ?? ''),
-        cost: toNumber(item.cost),
-        taxDeductible: !!item.taxDeductible
-      };
+        id: String(itemRec.id ?? crypto.randomUUID()),
+        type: String(itemRec.type ?? itemRec.name ?? ''),
+        cost: toNumber(itemRec.cost),
+        taxDeductible: !!itemRec.taxDeductible
+      } as import('$lib/types').CostItem;
     });
 
     const to24h = (timeStr?: string): string => {
@@ -394,7 +395,8 @@
 
         // Only cache valid responses (non-zero)
         if ((mappedResult.distance || 0) > 0 && (mappedResult.duration || 0) > 0) {
-          console.info('[route] server hit', localKey, { source: (result as any).source });
+          const resultRec = asRecord(result);
+          console.info('[route] server hit', localKey, { source: resultRec.source });
           try {
             localStorage.setItem(
               localKey,
@@ -500,8 +502,8 @@
         tripData.endAddress,
         tripData.stops
       );
-      if (result && typeof result === 'object' && Array.isArray((result as any).optimizedOrder)) {
-        const optimized = result as {
+      if (result && typeof result === 'object' && Array.isArray(asRecord(result).optimizedOrder)) {
+        const optimized = asRecord(result) as unknown as {
           optimizedOrder: number[];
           legs?: Array<{ distance?: { value?: number }; duration?: { value?: number } }>;
         };
@@ -532,9 +534,12 @@
         toasts.success('Route optimized!');
       }
     } catch (e: unknown) {
-      console.error(e);
-      const errMessage = e instanceof Error ? e.message : String(e ?? 'Optimization failed');
-      const code = (e as any)?.code;
+      console.error('Optimization error', getErrorMessage(e));
+      const errMessage = getErrorMessage(e);
+      const code = (() => {
+        const r = asRecord(e);
+        return typeof r.code === 'string' ? r.code : undefined;
+      })();
       const msg = (errMessage || '').toLowerCase();
       if (code === 'PLAN_LIMIT' || msg.includes('plan limit') || msg.includes('pro feature')) {
         upgradeMessage = errMessage || 'Route Optimization is a Pro feature.';
@@ -699,7 +704,7 @@
 
   function removeStop(id: string) {
     tripData.stops = tripData.stops.filter((s) => s.id !== id);
-    recalculateAllLegs();
+    void recalculateAllLegs();
   }
   function handleDragStart(event: DragEvent, index: number) {
     dragItemIndex = index;
@@ -794,8 +799,7 @@
   let totalProfit = $state(0);
 
   async function saveTrip() {
-    const currentUser = $page.data['user'] || $user;
-    const userId = currentUser?.id || localStorage.getItem('offline_user_id');
+    const userId = $user?.id || localStorage.getItem('offline_user_id');
     if (!userId) {
       toasts.error('Authentication error. Please login.');
       return;
@@ -833,10 +837,10 @@
       const uid = String(userId);
       await trips.updateTrip(String(tripId), tripToSave, uid);
       toasts.success('Trip updated successfully!');
-      goto(resolve('/dashboard/trips'));
-    } catch (_err: any) {
-      console.error('Update failed:', _err);
-      const message = _err?.message || 'Failed to update trip.';
+      void goto(resolve('/dashboard/trips'));
+    } catch (err: unknown) {
+      console.error('Update failed:', getErrorMessage(err));
+      const message = getErrorMessage(err) || 'Failed to update trip.';
       toasts.error(message);
     }
   }
@@ -860,21 +864,22 @@
       year: 'numeric'
     });
   }
-  let API_KEY = $derived(String(data.googleMapsApiKey ?? ''));
-  let maintenanceOptions = $derived(
+  const API_KEY = $derived(String(data.googleMapsApiKey ?? ''));
+  const maintenanceOptions = $derived(
     $userSettings.maintenanceCategories?.length > 0
       ? $userSettings.maintenanceCategories
       : ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement']
   );
-  let suppliesOptions = $derived(
+  const suppliesOptions = $derived(
     $userSettings.supplyCategories?.length > 0
       ? $userSettings.supplyCategories
       : ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental']
   );
-  let activeCategories = $derived(
+  const activeCategories = $derived(
     activeCategoryType === 'maintenance' ? maintenanceOptions : suppliesOptions
   );
-  run(() => {
+  $effect(() => {
+    // Sync local form edits back into the tripData model
     tripData.startAddress = startAddressLocal;
   });
   run(() => {
@@ -1119,8 +1124,7 @@
                 <div class="stop-inputs">
                   <input
                     type="text"
-                    value={String(stop.address ?? '')}
-                    oninput={(e) => (stop.address = (e.target as HTMLInputElement).value || '')}
+                    bind:value={stop.address}
                     use:autocomplete={{ apiKey: API_KEY }}
                     onplace-selected={(e: CustomEvent) => handleStopChange(i, e.detail)}
                     onblur={() => handleStopChange(i, { formatted_address: stop.address })}
@@ -1131,9 +1135,7 @@
                     <span class="symbol">$</span><input
                       type="number"
                       class="input-money"
-                      value={String(stop.earnings ?? 0)}
-                      oninput={(e) =>
-                        (stop.earnings = Number((e.target as HTMLInputElement).value) || 0)}
+                      bind:value={stop.earnings}
                       step="0.01"
                       placeholder="Earnings"
                     />
@@ -1170,8 +1172,7 @@
         <label for="end-address">End Address (Optional)</label><input
           id="end-address"
           type="text"
-          value={endAddressLocal}
-          oninput={(e) => (endAddressLocal = (e.target as HTMLInputElement).value || '')}
+          bind:value={endAddressLocal}
           use:autocomplete={{ apiKey: API_KEY }}
           onplace-selected={(e: CustomEvent) => handleMainAddressChange('end', e.detail)}
           onblur={() => handleMainAddressChange('end', { formatted_address: endAddressLocal })}

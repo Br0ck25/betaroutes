@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import 'fake-indexeddb/auto';
 
 // Minimal indexedDB shim for Vitest (prevents ReferenceError during background hydration)
@@ -115,7 +116,7 @@ if (typeof globalThis !== 'undefined') {
 // available to the test runtime. This ensures `@testing-library/svelte` can detect
 // modern Svelte in environments where the package resolver defaults to the server
 // entry (Node). This is a best-effort, test-only patch; do NOT rely on it in prod.
-(async () => {
+void (async () => {
   try {
     const SvelteMain = await import('svelte');
 
@@ -179,4 +180,4 @@ if (typeof globalThis !== 'undefined') {
   } catch {
     // ignore - shim is best-effort for test environments
   }
-})();
+})().catch(console.error);

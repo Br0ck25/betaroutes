@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import type { Snippet } from 'svelte';
   const {
     title = '',
@@ -20,11 +19,10 @@
 
   const contentId = `collapsible-${Math.random().toString(36).slice(2, 9)}`;
 
-  onMount(() => {
-    if (storageKey && typeof localStorage !== 'undefined') {
-      const raw = localStorage.getItem(storageKey);
-      if (raw !== null) open = raw === '1';
-    }
+  $effect(() => {
+    if (!storageKey || typeof localStorage === 'undefined') return;
+    const raw = localStorage.getItem(storageKey);
+    if (raw !== null) open = raw === '1';
   });
 
   function toggle() {

@@ -1,8 +1,8 @@
-import type { User, AuthResponse } from '$lib/types';
-import { storage } from '$lib/utils/storage';
+import type { AuthResponse, User } from '$lib/types';
 import { api } from '$lib/utils/api';
-import { trips } from './trips';
 import { csrfFetch } from '$lib/utils/csrf';
+import { storage } from '$lib/utils/storage';
+import { trips } from './trips';
 // Minimal (no-dependency) store adapter for compatibility with legacy consumers
 function createCompatibilityStore<T>(
   getter: () => T,

@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { base } from '$app/paths';
+  import { page } from '$app/stores';
   const resolve = (href: string) => `${base}${href}`;
 
   let password = $state('');
@@ -11,7 +11,7 @@
   let success = $state(false);
 
   // Get token from URL
-  let token = $derived($page.url.searchParams.get('token'));
+  const token = $derived(() => $page.url.searchParams.get('token'));
 
   async function handleReset() {
     if (password !== confirmPassword) {
@@ -74,7 +74,7 @@
       <form
         onsubmit={(e) => {
           e.preventDefault();
-          handleReset();
+          void handleReset();
         }}
       >
         <div class="field-group">

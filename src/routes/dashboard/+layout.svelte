@@ -5,21 +5,20 @@
 
   /* eslint-disable svelte/no-at-html-tags */
   // Sanitized static SVG icons (created using sanitizeStaticSvg). See SECURITY.md for rationale.
-  import { onMount } from 'svelte';
-  import { page } from '$app/stores';
-  import { auth, user } from '$lib/stores/auth';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { trips } from '$lib/stores/trips';
-  import { toasts } from '$lib/stores/toast';
+  import { page } from '$app/stores';
+  import { auth, user } from '$lib/stores/auth';
   import { expenses } from '$lib/stores/expenses';
   import { mileage } from '$lib/stores/mileage';
-  import { sanitizeStaticSvg } from '$lib/utils/sanitize';
+  import { toasts } from '$lib/stores/toast';
+  import { trips } from '$lib/stores/trips';
   import { csrfFetch } from '$lib/utils/csrf';
+  import { sanitizeStaticSvg } from '$lib/utils/sanitize';
 
+  import SyncIndicator from '$lib/components/SyncIndicator.svelte';
   import { trash } from '$lib/stores/trash';
   import { syncManager } from '$lib/sync/syncManager';
-  import SyncIndicator from '$lib/components/SyncIndicator.svelte';
   import type { LayoutData } from './$types';
 
   interface Props {
@@ -27,7 +26,7 @@
     children?: import('svelte').Snippet;
   }
 
-  let { data, children }: Props = $props();
+  const { data, children }: Props = $props();
   run(() => {
     if (data?.user) {
       auth.hydrate(data.user);
@@ -51,12 +50,12 @@
   async function handleLogout() {
     if (confirm('Are you sure you want to logout?')) {
       await csrfFetch('/api/logout', { method: 'POST' });
-      auth.logout();
+      await auth.logout();
       trips.clear();
       expenses.clear();
       trash.clear();
 
-      goto(resolve('/login'));
+      await goto(resolve('/login'));
     }
   }
 
@@ -160,51 +159,56 @@
     return first.toUpperCase() + trimmed.slice(1);
   }
 
-  onMount(async () => {
-    const apiKey = data.googleMapsApiKey;
+  $effect(() => {
+    // Client-only init (replace onMount) per SVELTE5_STANDARDS
+    if (typeof window === 'undefined') return;
 
-    let userId = data?.user?.id || $user?.id;
+    void (async () => {
+      const apiKey = data.googleMapsApiKey;
 
-    if (!userId) {
-      userId = localStorage.getItem('offline_user_id') ?? undefined;
-      // prefer offline id when present
-    }
+      let userId = data?.user?.id || $user?.id;
 
-    if (userId) {
-      // Defer heavy initialization until after first paint so the LCP can render quickly
-      await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
-
-      const doInit = async () => {
-        try {
-          // Initialize sync manager with API key (must use apiKey)
-          await syncManager.initialize(apiKey);
-
-          // Kick off loads without awaiting them so we don't block initial paint
-          trips.load(userId);
-          expenses.load(userId);
-          mileage.load(userId);
-          trash.load(userId);
-
-          // Background syncs
-          trips.syncFromCloud(userId);
-          expenses.syncFromCloud(userId);
-          mileage.syncFromCloud(userId);
-        } catch {
-          toasts.error('Failed to start data load');
-        }
-      };
-
-      // Prefer requestIdleCallback when available to do non-critical work
-      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-        (requestIdleCallback as any)(() =>
-          doInit().catch(() => toasts.error('Background init failed'))
-        );
-      } else {
-        setTimeout(() => doInit().catch(() => toasts.error('Background init failed')), 0);
+      if (!userId) {
+        userId = localStorage.getItem('offline_user_id') ?? undefined;
+        // prefer offline id when present
       }
-    } else {
-      await auth.init();
-    }
+
+      if (userId) {
+        // Defer heavy initialization until after first paint so the LCP can render quickly
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+
+        const doInit = async () => {
+          try {
+            // Initialize sync manager with API key (must use apiKey)
+            await syncManager.initialize(apiKey);
+
+            // Kick off loads without awaiting them so we don't block initial paint
+            void trips.load(userId);
+            void expenses.load(userId);
+            void mileage.load(userId);
+            void trash.load(userId);
+
+            // Background syncs
+            void trips.syncFromCloud(userId);
+            void expenses.syncFromCloud(userId);
+            void mileage.syncFromCloud(userId);
+          } catch {
+            toasts.error('Failed to start data load');
+          }
+        };
+
+        // Prefer requestIdleCallback when available to do non-critical work
+        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+          const ric = (window as unknown as { requestIdleCallback?: (cb: () => void) => number })
+            .requestIdleCallback;
+          if (ric) ric(() => void doInit().catch(() => toasts.error('Background init failed')));
+        } else {
+          setTimeout(() => doInit().catch(() => toasts.error('Background init failed')), 0);
+        }
+      } else {
+        await auth.init();
+      }
+    })().catch(console.error);
   });
 </script>
 

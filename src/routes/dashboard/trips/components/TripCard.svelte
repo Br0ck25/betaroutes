@@ -33,18 +33,18 @@
   }: Props = $props();
 
   // Prefer authoritative mileage when available; fall back to trip.totalMiles
-  let displayMiles = $derived(() =>
+  const displayMiles = $derived(() =>
     Number($mileage.find((m) => m.id === trip?.id)?.miles ?? trip?.totalMiles ?? 0)
   );
 
-  let profit = $derived(() => calculateNetProfit(trip));
-  let hourlyPay = $derived(() => calculateHourlyPay(trip));
-  let totalCosts = $derived(
+  const profit = $derived(() => calculateNetProfit(trip));
+  const hourlyPay = $derived(() => calculateHourlyPay(trip));
+  const totalCosts = $derived(
     () => (trip?.fuelCost || 0) + (trip?.maintenanceCost || 0) + (trip?.suppliesCost || 0)
   );
-  let supplies = $derived(() => (trip?.supplyItems ?? trip?.suppliesItems ?? []) as SupplyCost[]);
+  const supplies = $derived(() => (trip?.supplyItems ?? trip?.suppliesItems ?? []) as SupplyCost[]);
   // Last stop address (safe accessor)
-  let lastStopAddress = $derived(() =>
+  const lastStopAddress = $derived(() =>
     trip?.stops && trip.stops.length > 0 ? trip.stops[trip.stops.length - 1]?.address : undefined
   );
   function openGoogleMaps(e: MouseEvent, t: Trip) {

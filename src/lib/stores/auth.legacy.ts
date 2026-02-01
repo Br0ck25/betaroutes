@@ -2,12 +2,12 @@
 export * from './auth.svelte';
 
 // Legacy implementation preserved for reference during migration (DO NOT import into runtime code)
-import { writable, derived } from 'svelte/store';
-import type { User, AuthResponse } from '$lib/types';
-import { storage } from '$lib/utils/storage';
+import type { AuthResponse, User } from '$lib/types';
 import { api } from '$lib/utils/api';
-import { trips } from './trips';
 import { csrfFetch } from '$lib/utils/csrf';
+import { storage } from '$lib/utils/storage';
+import { derived, writable } from 'svelte/store';
+import { trips } from './trips';
 
 const getOfflineId = () => {
   if (typeof window === 'undefined') return null;

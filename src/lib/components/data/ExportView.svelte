@@ -23,7 +23,7 @@
   let isUpgradeModalOpen = $state(false);
 
   // Reactive filter logic for Trips
-  let filteredTrips = $derived(
+  const filteredTrips = $derived(
     $trips.filter((trip: Trip) => {
       if (!trip.date) return false;
       const tripDate = SvelteDate.from(trip.date).startOfDay();
@@ -36,7 +36,7 @@
   );
 
   // Reactive filter logic for Expenses
-  let filteredExpenses = $derived(
+  const filteredExpenses = $derived(
     $expenses.filter((expense: ExpenseRecord) => {
       const dStr = expense.date || expense.createdAt;
       if (!dStr) return false;
@@ -79,7 +79,7 @@
   });
 
   // Check Pro Status
-  let isPro = $derived(
+  const isPro = $derived(
     ['pro', 'business', 'premium', 'enterprise'].includes(($currentUser?.plan ?? '') as string)
   );
 
@@ -147,7 +147,7 @@
     }
   }
 
-  function generateTripCSV(data: any[], filenamePrefix = 'trips_export') {
+  function generateTripCSV(data: Trip[], filenamePrefix = 'trips_export') {
     const headers = [
       'Date',
       'Miles',
@@ -158,14 +158,15 @@
       'Notes'
     ];
     const rows = data.map((trip) => {
+      const expanded = trip as Trip & Record<string, unknown>;
       const date = trip.date ? SvelteDate.from(trip.date).toLocaleDateString() : '';
       const miles = trip.totalMiles || 0;
       const start = `"${(trip.startAddress || '').replace(/"/g, '""')}"`;
-      const last = trip.stops?.[trip.stops.length - 1];
+      const last = (trip.stops?.[trip.stops.length - 1] ?? null) as { address?: string } | null;
       const end = `"${(last?.address || trip.endAddress || 'End').replace(/"/g, '""')}"`;
 
-      const purpose = `"${(trip.purpose || 'Business').replace(/"/g, '""')}"`;
-      const vehicle = `"${(trip.vehicleId || '').replace(/"/g, '""')}"`;
+      const purpose = `"${String(expanded['purpose'] ?? 'Business').replace(/"/g, '""')}"`;
+      const vehicle = `"${String(expanded['vehicleId'] ?? '').replace(/"/g, '""')}"`;
       const notes = `"${(trip.notes || '').replace(/"/g, '""')}"`;
 
       return [date, miles, start, end, purpose, vehicle, notes].join(',');
@@ -178,7 +179,7 @@
     );
   }
 
-  function generateExpenseCSV(data: any[], filenamePrefix = 'expenses_export') {
+  function generateExpenseCSV(data: ExpenseRecord[], filenamePrefix = 'expenses_export') {
     const headers = ['Date', 'Category', 'Amount', 'Description'];
     const rows = data.map((e) => {
       const date = e.date ? SvelteDate.from(e.date).toLocaleDateString() : '';
@@ -194,7 +195,7 @@
     );
   }
 
-  function generateTaxSummary(tripsData: any[], expensesData: any[]) {
+  function generateTaxSummary(tripsData: Trip[], expensesData: ExpenseRecord[]) {
     const totalMiles = tripsData.reduce((sum, t) => sum + (t.totalMiles || 0), 0);
     const totalExpenses = expensesData.reduce((sum, e) => sum + (e.amount || 0), 0);
 

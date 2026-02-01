@@ -1,3 +1,11 @@
+<script module lang="ts">
+  export interface Props {
+    showAdvancedExport?: boolean;
+    onSuccess?: (msg: string) => void;
+    onError?: (msg: string) => void;
+  }
+</script>
+
 <script lang="ts">
   import Button from '$lib/components/ui/Button.svelte';
   import Modal from '$lib/components/ui/Modal.svelte';
@@ -10,15 +18,13 @@
 
   import type { Trip } from '$lib/types';
 
-  interface Props {
-    showAdvancedExport?: boolean;
-  }
-
+  // Use rest destructuring to extract callbacks as const while keeping bindable `showAdvancedExport` as let
   let {
     showAdvancedExport = $bindable(false),
-    onSuccess,
-    onError
-  }: Props & { onSuccess?: (msg: string) => void; onError?: (msg: string) => void } = $props();
+    // eslint-disable-next-line prefer-const -- `rest` must remain mutable because `$bindable()` must be declared with `let` in same destructure
+    ...rest
+  } = $props();
+  const { onSuccess, onError } = rest as Props;
 
   type Expense = { date?: string };
   let exportDataType: 'trips' | 'expenses' | 'tax-bundle' = $state('trips');

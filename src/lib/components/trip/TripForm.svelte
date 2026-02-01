@@ -10,20 +10,25 @@
   import { draftTrip } from '$lib/stores/trips';
   import { getUserState } from '$lib/stores/user.svelte';
   import { userSettings } from '$lib/stores/userSettings';
-  import type { Destination, LatLng, Trip } from '$lib/types';
+  import type { Destination, LatLng, Trip, UserSettings } from '$lib/types';
   import { autocomplete } from '$lib/utils/autocomplete';
   import { calculateTripTotals } from '$lib/utils/calculations';
   import { storage } from '$lib/utils/storage';
-  import { get } from 'svelte/store';
-  import { slide } from 'svelte/transition';
   import DestinationList from './DestinationList.svelte';
+
+  // Read initial settings snapshot without using legacy `get()` helper
+  const settings: Partial<UserSettings> = (() => {
+    let s = undefined as unknown as Partial<UserSettings>;
+    userSettings.subscribe((v) => (s = v))();
+    return s;
+  })();
+
   import TripDebug from './TripDebug.svelte';
   import TripSummary from './TripSummary.svelte';
 
   // Svelte 5 Props using Runes
   const { googleApiKey = '', loading = false, trip = null } = $props();
 
-  const settings = get(userSettings);
   const API_KEY = $derived(() => googleApiKey || 'dummy_key');
 
   const userState = getUserState();
@@ -47,7 +52,7 @@
   let mpg = $state(settings.defaultMPG ?? storage.getSetting('defaultMPG') ?? 25);
   let gasPrice = $state(settings.defaultGasPrice ?? storage.getSetting('defaultGasPrice') ?? 3.5);
 
-  const distanceUnit = $state(settings.distanceUnit || 'mi');
+  const distanceUnit = $state<string>(String(settings.distanceUnit ?? 'mi'));
 
   // Destinations State
   let destinations = $state<Destination[]>([{ address: '', earnings: 0 }]);
@@ -585,7 +590,7 @@
       </div>
 
       {#if showFinancials}
-        <div transition:slide class="space-y-4 bg-gray-50 p-4 rounded-lg">
+        <div class="space-y-4 bg-gray-50 p-4 rounded-lg">
           <div>
             <div class="flex justify-between items-center mb-2">
               <span class="text-xs font-semibold text-gray-500 uppercase"
@@ -665,7 +670,7 @@
     <div>
       <label for="notes" class="block font-semibold mb-2 text-sm text-gray-700">Notes</label>
       {#if loading}
-        <Skeleton height="100px" className="rounded-lg" />
+        <Skeleton height="100px" class="rounded-lg" />
       {:else}
         <textarea
           id="notes"
@@ -696,7 +701,7 @@
 
   <div class="flex flex-col sm:flex-row gap-3 mt-6">
     {#if loading}
-      <Skeleton height="48px" width="160px" className="rounded-lg" />
+      <Skeleton height="48px" width="160px" class="rounded-lg" />
     {:else}
       <button
         class="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"

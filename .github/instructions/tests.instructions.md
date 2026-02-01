@@ -25,19 +25,18 @@ describe('Feature name', () => {
   it('should handle happy path', () => {
     // Arrange
     const input = 'valid data';
-    
+
     // Act
     const result = functionUnderTest(input);
-    
+
     // Assert
     expect(result).toBe('expected output');
   });
-  
+
   it('should handle error case', () => {
     const invalidInput = null;
-    
-    expect(() => functionUnderTest(invalidInput))
-      .toThrow('expected error message');
+
+    expect(() => functionUnderTest(invalidInput)).toThrow('expected error message');
   });
 });
 ```
@@ -45,18 +44,21 @@ describe('Feature name', () => {
 ## What to test
 
 ### Components (Svelte)
+
 - Rendering with different props
 - User interactions (clicks, inputs)
 - State changes
 - Accessibility (ARIA attributes, keyboard navigation)
 
 ### Server routes
+
 - Authentication/authorization
 - Input validation
 - Error handling
 - Rate limiting (if applicable)
 
 ### Utility functions
+
 - Edge cases (empty arrays, null, undefined)
 - Boundary conditions
 - Error handling
@@ -72,6 +74,7 @@ describe('Feature name', () => {
 ## Security testing
 
 For security-critical code, test:
+
 - Input validation (SQL injection, XSS attempts)
 - Authorization (can user A access user B's data?)
 - Rate limiting

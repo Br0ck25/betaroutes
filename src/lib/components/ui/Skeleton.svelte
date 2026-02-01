@@ -3,17 +3,21 @@
     width = '100%',
     height = 'auto',
     className = '',
+    class: classAttr = '',
     style = ''
   }: {
     width?: string;
     height?: string;
     className?: string;
+    class?: string;
     style?: string;
   } = $props();
+
+  const finalClass = $derived(() => className || classAttr);
 </script>
 
 <div
-  class="skeleton {className}"
+  class="skeleton {finalClass}"
   style="width: {width}; height: {height}; {style}"
   role="status"
   aria-label="Loading..."

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock csrfFetch to simulate server 404 on DELETE
 vi.mock('$lib/utils/csrf', () => ({
-  csrfFetch: vi.fn(async (_url: string, _opts: any) => {
+  csrfFetch: vi.fn(async (_url: string, _opts?: RequestInit) => {
     return {
       ok: false,
       status: 404,
@@ -45,7 +45,7 @@ vi.mock('$lib/db/indexedDB', () => ({
           done: Promise.resolve()
         };
       }
-    } as any;
+    };
   }
 }));
 
@@ -61,10 +61,13 @@ beforeEach(() => {
 describe('syncManager - DELETE 404 handling', () => {
   it.skip('treats 404 from DELETE as success and removes item from queue (FLAKY - SKIPPED)', async () => {
     // Ensure navigator reports online so sync runs
-    // @ts-ignore - test env modification
     globalThis.navigator = globalThis.navigator || ({} as Navigator);
-    // @ts-ignore
-    globalThis.navigator.onLine = true;
+    // Define navigator.onLine as a configurable property for the test environment
+    Object.defineProperty(globalThis.navigator, 'onLine', {
+      value: true,
+      configurable: true,
+      writable: true
+    });
 
     // Ensure we're not throwing when syncNow runs
     await expect(syncManager.syncNow()).resolves.not.toThrow();

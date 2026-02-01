@@ -73,15 +73,17 @@ describe('trash store - sync queue userId enforcement', () => {
     expect(restored).toBeTruthy();
     const { syncManager } = await import('$lib/sync/syncManager');
     expect(syncManager.addToQueue).toHaveBeenCalled();
-    const calls = (syncManager.addToQueue as any).mock.calls as Array<any>;
-    const foundRestore = calls.some(
-      (c) =>
-        c &&
-        c[0] &&
-        c[0].action === 'restore' &&
-        String(c[0].tripId) === '1' &&
-        c[0].userId === 'u1'
-    );
+    const addToQueueMock = syncManager.addToQueue as unknown as { mock?: { calls?: unknown[][] } };
+    const calls = (addToQueueMock.mock?.calls ?? []) as unknown[][];
+    const foundRestore = calls.some((c) => {
+      const arg = c?.[0] as Record<string, unknown> | undefined;
+      return (
+        arg !== undefined &&
+        arg['action'] === 'restore' &&
+        String(arg['tripId'] ?? '') === '1' &&
+        arg['userId'] === 'u1'
+      );
+    });
     expect(foundRestore).toBe(true);
   });
 });

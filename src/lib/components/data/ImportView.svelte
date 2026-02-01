@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { trips } from '$lib/stores/trips';
   import { user } from '$lib/stores/auth';
+  import { trips } from '$lib/stores/trips';
   import { localDateISO } from '$lib/utils/dates';
   type PreviewTrip = {
     date: string;
@@ -103,7 +103,7 @@
     const lines: string[] = content.split(/\r?\n/);
     if (lines.length < 2) return;
 
-    const parsed: any[] = [];
+    const parsed: PreviewTrip[] = [];
 
     const dataLines = lines.slice(1);
     for (const line of dataLines) {
@@ -116,7 +116,7 @@
 
       const dateStr = row[0] ?? '';
       const milesStr = row[1] ?? '0';
-      const trip: any = {
+      const trip: PreviewTrip = {
         date: dateStr ? localDateISO(String(dateStr)) : localDateISO(),
         totalMiles: parseFloat(String(milesStr)) || 0,
         startAddress: row[2] ?? 'Unknown Start',

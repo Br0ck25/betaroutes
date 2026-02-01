@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import ArchivedRestore from './ArchivedRestore.svelte';
 
   interface Props {
@@ -7,25 +6,36 @@
     ordersCount?: number;
     loading?: boolean;
     statusMessage?: string;
+    onConnect?: (payload: { username: string; password: string }) => void;
+    onSync?: () => void;
+    onDisconnect?: () => void;
+    onOpenTripSettings?: () => void;
+    onReloaded?: () => void;
+    onRestoreAndSync?: (payload: { dates: string[] }) => void;
   }
 
-  let {
+  const {
     isConnected = false,
     ordersCount = 0,
     loading = false,
-    statusMessage = 'Sync Now'
+    statusMessage = 'Sync Now',
+    onConnect,
+    onSync,
+    onDisconnect,
+    onOpenTripSettings,
+    onReloaded,
+    onRestoreAndSync
   }: Props = $props();
   export const currentBatch = 0;
 
   let username = $state('');
   let password = $state('');
-  const dispatch = createEventDispatcher();
 
   // Local UI toggle for showing restore panel
   const showRestore = false;
 
   function handleConnect() {
-    dispatch('connect', { username, password });
+    onConnect?.({ username, password });
   }
 </script>
 
@@ -79,23 +89,21 @@
         Gas Price).
       </p>
       <div class="button-group mt-4">
-        <button class="btn-primary" onclick={() => dispatch('sync')} disabled={loading}
+        <button class="btn-primary" onclick={() => onSync?.()} disabled={loading}
           >{statusMessage}</button
         >
-        <button class="btn-secondary" onclick={() => dispatch('disconnect')} disabled={loading}
+        <button class="btn-secondary" onclick={() => onDisconnect?.()} disabled={loading}
           >Disconnect</button
         >
-        <button
-          class="btn-secondary"
-          onclick={() => dispatch('openTripSettings')}
-          disabled={loading}>Trip Settings</button
+        <button class="btn-secondary" onclick={() => onOpenTripSettings?.()} disabled={loading}
+          >Trip Settings</button
         >
       </div>
       {#if showRestore}
         <div class="mt-4">
           <ArchivedRestore
-            on:restored={() => dispatch('reloaded')}
-            on:restoreAndSync={(e: CustomEvent) => dispatch('restoreAndSync', e.detail)}
+            onRestored={() => onReloaded?.()}
+            onRestoreAndSync={(p: { dates: string[] }) => onRestoreAndSync?.({ dates: p.dates })}
           />
         </div>
       {/if}

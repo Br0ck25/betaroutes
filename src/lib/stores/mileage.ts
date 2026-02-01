@@ -233,7 +233,7 @@ function createMileageStore() {
         void this.load(userId);
         throw err;
       }
-    ,
+    },
     async updateMileage(id: string, changes: Partial<MileageRecord>, userId: string) {
       // ... copy from previous ...
       update((items) =>

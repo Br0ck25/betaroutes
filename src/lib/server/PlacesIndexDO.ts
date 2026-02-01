@@ -1,6 +1,7 @@
 // src/lib/server/PlacesIndexDO.ts
 
 import { log } from '$lib/server/log';
+import { cursorToArray, extractCount } from './sql-utils';
 
 export class PlacesIndexDO {
   state: DurableObjectState;
@@ -50,9 +51,9 @@ export class PlacesIndexDO {
         Date.now()
       );
       const countRes = this.state.storage.sql.exec('SELECT COUNT(*) as total FROM places');
-      const result = countRes.one() as { total: number };
-      if (result.total > 50) {
-        const toDelete = result.total - 50;
+      const total = extractCount(countRes);
+      if (total > 50) {
+        const toDelete = total - 50;
         this.state.storage.sql.exec(
           `
 					DELETE FROM places
@@ -78,9 +79,11 @@ export class PlacesIndexDO {
         if (!address) return new Response('Missing address', { status: 400 });
 
         // Check if address already exists (Read optimized)
-        const existing = this.state.storage.sql
-          .exec('SELECT 1 FROM places WHERE address = ?', address)
-          .toArray();
+        const existingCursor = this.state.storage.sql.exec(
+          'SELECT 1 FROM places WHERE address = ?',
+          address
+        );
+        const existing = cursorToArray(existingCursor);
 
         // Only proceed if it's a new address
         if (existing.length === 0) {
@@ -93,10 +96,10 @@ export class PlacesIndexDO {
 
           // 2. Prune if list exceeds 50 items (FIFO)
           const countRes = this.state.storage.sql.exec('SELECT COUNT(*) as total FROM places');
-          const result = countRes.one() as { total: number };
+          const total = extractCount(countRes);
 
-          if (result.total > 50) {
-            const toDelete = result.total - 50;
+          if (total > 50) {
+            const toDelete = total - 50;
             // Delete the oldest records
             this.state.storage.sql.exec(
               `
@@ -114,10 +117,8 @@ export class PlacesIndexDO {
           const cursor = this.state.storage.sql.exec(
             'SELECT address FROM places ORDER BY created_at ASC'
           );
-          const list: string[] = [];
-          for (const row of cursor) {
-            list.push(((row as Record<string, unknown>)['address'] as string) ?? '');
-          }
+          const rows = cursorToArray(cursor);
+          const list: string[] = rows.map((r) => String(r['address'] ?? ''));
 
           const kv = this.env.BETA_PLACES_KV as KVNamespace;
           const key = url.searchParams.get('key');
@@ -216,10 +217,8 @@ export class PlacesIndexDO {
         const cursor = this.state.storage.sql.exec(
           'SELECT address FROM places ORDER BY created_at ASC'
         );
-        const list: string[] = [];
-        for (const row of cursor) {
-          list.push(((row as Record<string, unknown>)['address'] as string) ?? '');
-        }
+        const rows = cursorToArray(cursor);
+        const list: string[] = rows.map((r) => String(r['address'] ?? ''));
         return new Response(JSON.stringify(list), {
           headers: { 'Content-Type': 'application/json' }
         });

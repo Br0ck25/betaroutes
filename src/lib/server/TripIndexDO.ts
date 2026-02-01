@@ -1,6 +1,7 @@
 // src/lib/server/TripIndexDO.ts
 
 import { log } from '$lib/server/log';
+import { cursorToArray, extractCount } from './sql-utils';
 
 interface TripSummary {
   id: string;
@@ -200,12 +201,12 @@ export class TripIndexDO {
 
         const cursor = this.state.storage.sql.exec(query, ...params);
         const countRes = this.state.storage.sql.exec('SELECT COUNT(*) as total FROM trips');
-        const total = (countRes.one() as { total: number }).total;
+        const total = extractCount(countRes);
 
-        const trips = [];
-        for (const row of cursor) {
-          trips.push(JSON.parse((row as Record<string, unknown>)['data'] as string));
-        }
+        const rows = cursorToArray(cursor);
+        const trips = rows.map(
+          (row) => JSON.parse((row as Record<string, unknown>)['data'] as string) as TripSummary
+        );
         return new Response(
           JSON.stringify({
             trips,
@@ -272,7 +273,8 @@ export class TripIndexDO {
 
         try {
           const cursor = this.state.storage.sql.exec('SELECT data FROM trips WHERE id = ?', tripId);
-          const row = cursor.one();
+          const rows = cursorToArray(cursor);
+          const row = rows[0];
           if (!row) {
             log.warn(`[ComputeRoutes] Trip not found: ${tripId}`);
             return new Response('Trip not found', { status: 404 });
@@ -468,10 +470,10 @@ export class TripIndexDO {
         const cursor = this.state.storage.sql.exec(
           `SELECT data FROM expenses ORDER BY date DESC, createdAt DESC`
         );
-        const expenses = [];
-        for (const row of cursor) {
-          expenses.push(JSON.parse((row as Record<string, unknown>)['data'] as string));
-        }
+        const rows = cursorToArray(cursor);
+        const expenses = rows.map((row) =>
+          JSON.parse((row as Record<string, unknown>)['data'] as string)
+        );
         return new Response(JSON.stringify(expenses));
       }
 
@@ -541,7 +543,7 @@ export class TripIndexDO {
       if (path === '/expenses/status') {
         try {
           const countRes = this.state.storage.sql.exec('SELECT COUNT(*) as c FROM expenses');
-          const count = (countRes.one() as { c: number }).c;
+          const count = extractCount(countRes);
           const migrated = await this.state.storage.get('expenses_migrated');
           return new Response(JSON.stringify({ needsMigration: !migrated && count === 0 }));
         } catch {
@@ -554,10 +556,10 @@ export class TripIndexDO {
         const cursor = this.state.storage.sql.exec(
           `SELECT data FROM mileage ORDER BY date DESC, createdAt DESC`
         );
-        const records = [];
-        for (const row of cursor) {
-          records.push(JSON.parse((row as Record<string, unknown>)['data'] as string));
-        }
+        const rows = cursorToArray(cursor);
+        const records = rows.map((row) =>
+          JSON.parse((row as Record<string, unknown>)['data'] as string)
+        );
         return new Response(JSON.stringify(records));
       }
 

@@ -1,9 +1,10 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { page } from '$app/state';
+  import { page } from '$app/stores';
   import { toasts } from '$lib/stores/toast';
   import { csrfFetch } from '$lib/utils/csrf-client';
+  import { asRecord, getErrorMessage } from '$lib/utils/errors';
   // Import WebAuthn helper
   import { startAuthentication } from '@simplewebauthn/browser';
 
@@ -21,10 +22,11 @@
   let quickLoading = $state<boolean>(false);
 
   // Check if we are in register mode based on URL query param
-  const isLogin = $derived(() => page.url.searchParams.get('view') !== 'register');
+  const isLogin = $derived(() => $page.url.searchParams.get('view') !== 'register');
 
   function toggleMode() {
-    const url = new URL(page.url);
+    // Use window.location for client-side navigation to avoid $page typing issues
+    const url = new URL(window.location.href);
     if (isLogin()) url.searchParams.set('view', 'register');
     else url.searchParams.delete('view');
 
@@ -47,21 +49,25 @@
   }
 
   // [!code ++] Helper: Base64URL to Buffer
-  export function base64UrlToBuffer(base64url: any): Uint8Array {
+  export function base64UrlToBuffer(base64url: unknown): Uint8Array {
     // If already an ArrayBuffer or TypedArray, return a Uint8Array view
     if (!base64url) return new Uint8Array();
     if (base64url instanceof ArrayBuffer) return new Uint8Array(base64url);
-    if (ArrayBuffer.isView(base64url))
-      return new Uint8Array(
-        (base64url as any).buffer,
-        (base64url as any).byteOffset || 0,
-        (base64url as any).byteLength || (base64url as any).length
-      );
+    if (ArrayBuffer.isView(base64url)) {
+      const view = base64url as ArrayBufferView & { length?: number };
+      const byteOffset = (view as { byteOffset?: number }).byteOffset ?? 0;
+      const byteLength =
+        (view as { byteLength?: number }).byteLength ??
+        (view as unknown as { length?: number }).length ??
+        0;
+      return new Uint8Array(view.buffer, byteOffset, byteLength);
+    }
 
     // Otherwise assume base64url string and decode
-    if (typeof base64url !== 'string') base64url = String(base64url);
-    const pad = '=='.slice(0, (4 - (base64url.length % 4)) % 4);
-    const b64 = base64url.replace(/-/g, '+').replace(/_/g, '/') + pad;
+    const b64urlStr = typeof base64url === 'string' ? base64url : String(base64url);
+
+    const pad = '=='.slice(0, (4 - (b64urlStr.length % 4)) % 4);
+    const b64 = b64urlStr.replace(/-/g, '+').replace(/_/g, '/') + pad;
     const binary = atob(b64);
     const len = binary.length;
     const bytes = new Uint8Array(len);
@@ -82,28 +88,37 @@
             `/api/auth/webauthn/list-for-email?email=${encodeURIComponent(username)}`
           );
           if (listResp.ok) {
-            const json: any = await listResp.json();
-            const auths = json.authenticators || [];
+            const jsonRaw = await listResp.json().catch(() => null);
+            const json = asRecord(jsonRaw);
+            const auths = Array.isArray(json.authenticators)
+              ? (json.authenticators as unknown[])
+              : [];
             if (auths.length > 1) {
               // Simple selection prompt (can be replaced with nicer UI)
               const choices = auths
-                .map(
-                  (a: any, i: number) =>
-                    `${i + 1}. ${a.name || 'Unnamed'} (${a.transports?.join(', ') || 'device'})`
-                )
+                .map((a, i) => {
+                  const rec = asRecord(a);
+                  const name = (rec.name as string) || 'Unnamed';
+                  const transports = Array.isArray(rec.transports)
+                    ? rec.transports.join(', ')
+                    : 'device';
+                  return `${i + 1}. ${name} (${transports})`;
+                })
                 .join('\n');
               const sel = prompt(`Choose a passkey:\n${choices}\nEnter the number to use:`);
               const idx = parseInt(String(sel || ''), 10);
               if (!isNaN(idx) && idx >= 1 && idx <= auths.length) {
-                requestedCredential = auths[idx - 1].credentialID;
+                const chosen = asRecord(auths[idx - 1]);
+                requestedCredential = (chosen.credentialID as string) || null;
               }
             } else if (auths.length === 1) {
               // If only one passkey exists for this email, pre-select it
-              requestedCredential = auths[0].credentialID;
+              const only = asRecord(auths[0]);
+              requestedCredential = (only.credentialID as string) || null;
             }
           }
         } catch (e) {
-          console.error('Could not fetch passkey list for email', e);
+          console.error('Could not fetch passkey list for email', getErrorMessage(e));
         }
       }
 
@@ -164,10 +179,15 @@
       }
 
       // 2. Prompt user for FaceID/TouchID (Browser Native Modal)
-      const authResp = await startAuthentication({ optionsJSON: options as any });
+      // Cast via unknown -> typed parameters to avoid `any`
+      const authResp = await startAuthentication(
+        options as unknown as Parameters<typeof startAuthentication>[0]
+      );
 
       // 3. Verify signature with server
-      const normalised: any = { ...authResp } as any;
+      const normalised: Record<string, unknown> = {
+        ...(authResp as unknown as Record<string, unknown>)
+      };
 
       // Fixed: Use top-level bufferToBase64Url function
       if (
@@ -176,28 +196,36 @@
       ) {
         normalised.rawId = bufferToBase64Url(normalised.rawId as ArrayBuffer);
       }
-      const resp = normalised.response || {};
+      const resp = (normalised.response as Record<string, unknown>) || {};
       if (
         resp.authenticatorData &&
         (resp.authenticatorData instanceof ArrayBuffer ||
           ArrayBuffer.isView(resp.authenticatorData))
       )
-        resp.authenticatorData = bufferToBase64Url(resp.authenticatorData);
+        (resp as Record<string, unknown>).authenticatorData = bufferToBase64Url(
+          resp.authenticatorData as ArrayBuffer
+        );
       if (
         resp.clientDataJSON &&
         (resp.clientDataJSON instanceof ArrayBuffer || ArrayBuffer.isView(resp.clientDataJSON))
       )
-        resp.clientDataJSON = bufferToBase64Url(resp.clientDataJSON);
+        (resp as Record<string, unknown>).clientDataJSON = bufferToBase64Url(
+          resp.clientDataJSON as ArrayBuffer
+        );
       if (
         resp.signature &&
         (resp.signature instanceof ArrayBuffer || ArrayBuffer.isView(resp.signature))
       )
-        resp.signature = bufferToBase64Url(resp.signature);
+        (resp as Record<string, unknown>).signature = bufferToBase64Url(
+          resp.signature as ArrayBuffer
+        );
       if (
         resp.userHandle &&
         (resp.userHandle instanceof ArrayBuffer || ArrayBuffer.isView(resp.userHandle))
       )
-        resp.userHandle = bufferToBase64Url(resp.userHandle);
+        (resp as Record<string, unknown>).userHandle = bufferToBase64Url(
+          resp.userHandle as ArrayBuffer
+        );
 
       const verificationResp = await csrfFetch('/api/auth/webauthn', {
         method: 'POST',
@@ -207,22 +235,25 @@
       });
 
       if (!verificationResp.ok) {
-        const err: any = await verificationResp.json();
-        throw new Error(err.error || 'Verification failed');
+        const errJson = await verificationResp.json().catch(() => null);
+        const err = asRecord(errJson);
+        throw new Error(typeof err.error === 'string' ? err.error : 'Verification failed');
       }
 
-      const verificationJSON: any = await verificationResp.json();
+      const verificationJSON: unknown = await verificationResp.json();
+      const verificationRec = asRecord(verificationJSON);
 
-      if (verificationJSON.verified) {
+      if (verificationRec.verified) {
         await goto(resolve('/dashboard'), { invalidateAll: true });
       } else {
         responseError = 'Biometric verification failed.';
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Biometric error:', e);
       // Don't show error if user just cancelled the dialog
-      if (e.name !== 'NotAllowedError') {
-        responseError = e.message || 'Biometric login failed.';
+      const errName = e instanceof Error ? e.name : '';
+      if (errName !== 'NotAllowedError') {
+        responseError = getErrorMessage(e) || 'Biometric login failed.';
       }
     } finally {
       loading = false;
@@ -302,38 +333,47 @@
         }));
       }
 
-      const authResp = await startAuthentication({ optionsJSON: options as any });
+      // Pass 'options' directly as 'any' to satisfy the library's typings
+      const authResp = await startAuthentication(
+        options as unknown as Parameters<typeof startAuthentication>[0]
+      );
 
       // Fixed: Use top-level bufferToBase64Url function
-      const normalised: any = { ...authResp } as any;
+      // Cast via unknown to avoid accidental structural conversion errors from
+      // AuthenticationResponseJSON/RegistrationResponseJSON to Record<string, unknown>
+      const normalised: Record<string, unknown> = {
+        ...(authResp as unknown as Record<string, unknown>)
+      };
       if (
         normalised.rawId &&
         (normalised.rawId instanceof ArrayBuffer || ArrayBuffer.isView(normalised.rawId))
       ) {
         normalised.rawId = bufferToBase64Url(normalised.rawId as ArrayBuffer);
       }
-      const resp = normalised.response || {};
+      const resp = (normalised.response ?? {}) as Record<string, unknown>;
       if (
         resp.authenticatorData &&
         (resp.authenticatorData instanceof ArrayBuffer ||
           ArrayBuffer.isView(resp.authenticatorData))
       )
-        resp.authenticatorData = bufferToBase64Url(resp.authenticatorData);
+        resp.authenticatorData = bufferToBase64Url(
+          resp.authenticatorData as ArrayBuffer | Uint8Array
+        );
       if (
         resp.clientDataJSON &&
         (resp.clientDataJSON instanceof ArrayBuffer || ArrayBuffer.isView(resp.clientDataJSON))
       )
-        resp.clientDataJSON = bufferToBase64Url(resp.clientDataJSON);
+        resp.clientDataJSON = bufferToBase64Url(resp.clientDataJSON as ArrayBuffer | Uint8Array);
       if (
         resp.signature &&
         (resp.signature instanceof ArrayBuffer || ArrayBuffer.isView(resp.signature))
       )
-        resp.signature = bufferToBase64Url(resp.signature);
+        resp.signature = bufferToBase64Url(resp.signature as ArrayBuffer | Uint8Array);
       if (
         resp.userHandle &&
         (resp.userHandle instanceof ArrayBuffer || ArrayBuffer.isView(resp.userHandle))
       )
-        resp.userHandle = bufferToBase64Url(resp.userHandle);
+        resp.userHandle = bufferToBase64Url(resp.userHandle as ArrayBuffer | Uint8Array);
 
       const verificationResp = await csrfFetch('/api/auth/webauthn', {
         method: 'POST',
@@ -343,24 +383,27 @@
       });
 
       if (!verificationResp.ok) {
-        const err: any = await verificationResp
+        const errJson = await verificationResp
           .json()
           .catch(() => ({ error: 'Verification failed' }));
-        throw new Error(err.error || 'Verification failed');
+        const err = asRecord(errJson);
+        throw new Error(typeof err.error === 'string' ? err.error : 'Verification failed');
       }
 
-      const verificationJSON: any = await verificationResp.json();
+      const verificationJSON: unknown = await verificationResp.json();
+      const verificationRec = asRecord(verificationJSON);
 
-      if (verificationJSON.verified) {
+      if (verificationRec.verified) {
         await goto(resolve('/dashboard'), { invalidateAll: true });
       } else {
         responseError = 'Biometric verification failed.';
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Quick Biometric error:', e);
-      if (e.name !== 'NotAllowedError') {
-        toasts.error(e.message || 'Biometric login failed.');
-        responseError = e.message || 'Biometric login failed.';
+      if ((e as Error)?.name !== 'NotAllowedError') {
+        const msg = getErrorMessage(e) || 'Biometric login failed.';
+        toasts.error(msg);
+        responseError = msg;
       }
     } finally {
       quickLoading = false;
@@ -396,7 +439,8 @@
         body: JSON.stringify(payload)
       });
 
-      const result: any = await response.json();
+      const resultJson = await response.json().catch(() => null);
+      const result = asRecord(resultJson);
 
       if (response.ok) {
         if (isLogin()) {
@@ -410,11 +454,17 @@
           confirmPassword = '';
         }
       } else {
-        responseError = result.message || result.error || 'An error occurred.';
+        const message =
+          typeof result.message === 'string'
+            ? result.message
+            : typeof result.error === 'string'
+              ? result.error
+              : 'An error occurred.';
+        responseError = message;
       }
-    } catch (e) {
+    } catch (e: unknown) {
       console.error('Fetch error:', e);
-      responseError = 'Network error. Please try again.';
+      responseError = getErrorMessage(e) || 'Network error. Please try again.';
     } finally {
       loading = false;
     }

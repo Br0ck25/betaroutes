@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { run } from 'svelte/legacy';
-
-  import { mileage } from '$lib/stores/mileage';
-  import { user } from '$lib/stores/auth';
-  import { userSettings } from '$lib/stores/userSettings';
-  import { toasts } from '$lib/stores/toast';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { page } from '$app/stores';
   import SelectMobile from '$lib/components/ui/SelectMobile.svelte';
+  import type { MileageRecord } from '$lib/db/types';
+  import { user } from '$lib/stores/auth';
+  import { mileage } from '$lib/stores/mileage';
+  import { toasts } from '$lib/stores/toast';
+  import { userSettings } from '$lib/stores/userSettings';
+  import { asRecord, getErrorMessage } from '$lib/utils/errors';
   const expenseId = $page.params.id;
 
   // Settings modal removed for Mileage edit page
@@ -36,44 +36,50 @@
   let milesManual = $state(false);
 
   // default mileageRate from settings if editing and none present
-  run(() => {
+  $effect(() => {
     if ($userSettings && formData.mileageRate === '' && $userSettings.mileageRate != null) {
       formData.mileageRate = String($userSettings.mileageRate);
     }
   });
 
   // Default vehicle selection if available and none selected
-  run(() => {
+  $effect(() => {
     if ($userSettings?.vehicles?.length > 0 && !formData.vehicle) {
       const v0 = $userSettings.vehicles[0];
-      formData.vehicle = v0?.id ?? v0?.name ?? '';
+      formData.vehicle = String(v0?.id ?? v0?.name ?? '');
     }
   });
 
   // Find and prefill mileage record when store or page params load
-  run(() => {
+  $effect(() => {
     const id = $page.params.id;
     const rec = $mileage.find((e) => e.id === id);
     if (rec && !formData.date) {
-      const r: any = rec as any;
+      const r = asRecord(rec);
       formData = {
-        date: r.date || '',
-        startOdometer: String(r.startOdometer || ''),
-        endOdometer: String(r.endOdometer || ''),
-        miles: typeof r.miles === 'number' ? String(r.miles) : '',
-        vehicle: r.vehicle || '',
-        mileageRate: typeof r.mileageRate === 'number' ? String(r.mileageRate) : '',
-        notes: r.notes || '',
-        category: r.category || ''
+        date: String(r.date ?? ''),
+        startOdometer: String(r.startOdometer ?? ''),
+        endOdometer: String(r.endOdometer ?? ''),
+        miles:
+          typeof r.miles === 'number' ? String(r.miles) : r.miles != null ? String(r.miles) : '',
+        vehicle: String(r.vehicle ?? ''),
+        mileageRate:
+          typeof r.mileageRate === 'number'
+            ? String(r.mileageRate)
+            : r.mileageRate != null
+              ? String(r.mileageRate)
+              : '',
+        notes: String(r.notes ?? ''),
+        category: String(r.category ?? '')
       };
     } else if ($mileage && $mileage.length > 0 && !rec) {
       toasts.error('Mileage log not found.');
-      goto(resolve('/dashboard/mileage'));
+      void goto(resolve('/dashboard/mileage'));
     }
   });
 
   // Auto-calc miles from odometer readings unless the user has manually edited miles
-  run(() => {
+  $effect(() => {
     if (!milesManual) {
       if (formData.startOdometer !== '' && formData.endOdometer !== '') {
         const s = Number(formData.startOdometer) || 0;
@@ -99,8 +105,9 @@
       }
     }
 
-    const currentUser = ($page.data as any)['user'] || $user;
-    const userId = (currentUser as any)?.id || localStorage.getItem('offline_user_id');
+    const currentUser = (asRecord($page.data).user as Record<string, unknown> | undefined) ?? $user;
+    const userId =
+      (asRecord(currentUser).id as string | undefined) || localStorage.getItem('offline_user_id');
     if (!userId) {
       toasts.error('User not identified. Cannot save.');
       return;
@@ -116,19 +123,25 @@
       miles = Number(miles.toFixed(2));
 
       const payload = {
-        ...formData,
+        date: String(formData.date || ''),
         startOdometer: start,
         endOdometer: end,
         miles,
         mileageRate: formData.mileageRate !== '' ? Number(formData.mileageRate) : undefined,
-        vehicle: formData.vehicle || undefined
+        vehicle: formData.vehicle || undefined,
+        notes: String(formData.notes || ''),
+        category: String(formData.category || '')
       };
 
-      await mileage.updateMileage(String(expenseId), payload as any, String(userId));
+      await mileage.updateMileage(
+        String(expenseId),
+        payload as Partial<MileageRecord>,
+        String(userId)
+      );
       toasts.success('Mileage log updated');
-      goto(resolve('/dashboard/mileage'));
-    } catch (err) {
-      console.error(err);
+      void goto(resolve('/dashboard/mileage'));
+    } catch (err: unknown) {
+      console.error('Update mileage failed', getErrorMessage(err));
       toasts.error('Failed to update mileage log');
     }
   }

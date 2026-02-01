@@ -71,8 +71,7 @@
       return;
     }
 
-    const currentUser = $page.data['user'] || $user;
-    const userId = currentUser?.id || localStorage.getItem('offline_user_id');
+    const userId = $user?.id || localStorage.getItem('offline_user_id');
 
     if (!userId) {
       toasts.error('User not identified. Cannot save.');
@@ -92,19 +91,19 @@
       await expenses.create(payload, userId);
       toasts.success('Expense created');
 
-      goto(resolve('/dashboard/expenses'));
+      void goto(resolve('/dashboard/expenses'));
     } catch (err) {
       console.error(err);
       toasts.error('Failed to save expense');
     }
   }
   // Category options derived from user settings (grouped)
-  let maintenanceOptions = $derived(
+  const maintenanceOptions = $derived(
     $userSettings.maintenanceCategories?.length > 0
       ? $userSettings.maintenanceCategories
       : ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement']
   );
-  let suppliesOptions = $derived(
+  const suppliesOptions = $derived(
     $userSettings.supplyCategories?.length > 0
       ? $userSettings.supplyCategories
       : ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental']
@@ -128,7 +127,6 @@
         !suppliesOptions.includes(q) &&
         !expenseOptions.includes(q)
       ) {
-        // eslint-disable-next-line svelte/no-reactive-reassign
         expenseOptions = [q, ...expenseOptions];
       }
       formData.category = q;
@@ -408,9 +406,12 @@
 
     <!-- Settings modal (manage maintenance/supplies/expenses categories) -->
     <SettingsModal
-      bind:open={isManageCategoriesOpen}
-      bind:activeCategoryType
+      open={isManageCategoriesOpen}
+      {activeCategoryType}
       initialTab={settingsInitialTab}
+      onClose={() => {
+        isManageCategoriesOpen = false;
+      }}
     />
 
     <div class="form-actions">

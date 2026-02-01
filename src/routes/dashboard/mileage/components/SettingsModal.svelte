@@ -1,28 +1,41 @@
-<script lang="ts">
-  import { run } from 'svelte/legacy';
-
-  import Modal from '$lib/components/ui/Modal.svelte';
-  import { userSettings } from '$lib/stores/userSettings';
-  import { toasts } from '$lib/stores/toast';
-  import { createEventDispatcher } from 'svelte';
-  import { get } from 'svelte/store';
-  import { saveSettings } from '../../settings/lib/save-settings';
-  import type { UserSettings } from '$lib/types';
-
-  interface Props {
+<script module lang="ts">
+  export type Props = {
     open?: boolean;
-  }
+    activeCategoryType?: 'defaults' | 'vehicles';
+    onClose?: () => void;
+  };
+</script>
 
-  let { open = $bindable(false) }: Props = $props();
-  const dispatch = createEventDispatcher();
+<script lang="ts">
+  import Modal from '$lib/components/ui/Modal.svelte';
+  import { toasts } from '$lib/stores/toast';
+  import { userSettings } from '$lib/stores/userSettings';
+  import type { UserSettings } from '$lib/types';
+  import { getErrorMessage } from '$lib/utils/errors';
+  import { saveSettings } from '../../settings/lib/save-settings';
+
+  // Bindable props: open (modal) and activeCategoryType for parent control
+  // Use rest destructuring so read-only callbacks can be extracted as `const` while bindables remain `let`.
+  let {
+    open = $bindable<boolean>(false),
+    activeCategoryType = $bindable<'defaults' | 'vehicles'>('defaults'),
+    // eslint-disable-next-line prefer-const -- `rest` must remain mutable because `$bindable()` must be declared with `let` in same destructure
+    ...rest
+  } = $props();
+  const { onClose } = rest as Props;
+
+  type Vehicle = { id: string; name: string };
 
   let settings: Partial<UserSettings> = $state({ ...$userSettings });
-  let settingsTab: 'defaults' | 'vehicles' = $state('defaults');
+  // activeCategoryType is bindable; local alias
   let newVehicleName = $state('');
 
-  run(() => {
+  $effect(() => {
     if (open) {
       settings = { ...$userSettings };
+    } else {
+      // notify parent when modal closes
+      onClose?.();
     }
   });
 
@@ -30,43 +43,43 @@
     try {
       const rate = Number(settings.mileageRate || 0);
       settings.mileageRate = Number(isNaN(rate) ? 0 : Number(rate.toFixed(3)));
-      userSettings.set({ ...get(userSettings), ...settings });
+      userSettings.update((s) => ({ ...s, ...settings }));
       const result = await saveSettings({ mileageRate: settings.mileageRate });
       if (!result.ok) throw new Error(result.error);
       toasts.success('Mileage defaults saved');
-      dispatch('success');
       open = false;
-    } catch (_e) {
+    } catch (e: unknown) {
+      console.error('Save defaults failed', getErrorMessage(e));
       toasts.error('Saved locally, but cloud sync failed');
     }
   }
 
-  async function updateVehicles(newVehicles: any[]) {
+  async function updateVehicles(newVehicles: Vehicle[]) {
     userSettings.update((s) => ({ ...s, vehicles: newVehicles }));
     try {
       const result = await saveSettings({ vehicles: newVehicles });
       if (!result.ok) throw new Error(result.error);
       toasts.success('Vehicles saved');
-    } catch (e) {
-      console.error('Failed to sync vehicles', e);
+    } catch (e: unknown) {
+      console.error('Failed to sync vehicles', getErrorMessage(e));
       toasts.error('Saved locally, but cloud sync failed');
     }
   }
 
-  function addVehicle() {
+  async function addVehicle() {
     if (!newVehicleName.trim()) return;
-    const v = { id: crypto.randomUUID(), name: newVehicleName.trim() };
-    const list = settings.vehicles ? [...settings.vehicles, v] : [v];
-    settings.vehicles = list;
-    updateVehicles(list);
+    const v: Vehicle = { id: crypto.randomUUID(), name: newVehicleName.trim() };
+    const list = settings.vehicles ? [...(settings.vehicles as Vehicle[]), v] : [v];
+    settings.vehicles = list as unknown as Vehicle[];
+    await updateVehicles(list as Vehicle[]);
     newVehicleName = '';
   }
 
-  function removeVehicle(id: string) {
+  async function removeVehicle(id: string) {
     if (!confirm('Remove this vehicle?')) return;
-    const list = (settings.vehicles || []).filter((v: any) => v.id !== id);
-    settings.vehicles = list;
-    updateVehicles(list);
+    const list = (settings.vehicles || []).filter((v: Vehicle) => v.id !== id);
+    settings.vehicles = list as unknown as Vehicle[];
+    await updateVehicles(list as Vehicle[]);
   }
 </script>
 
@@ -75,17 +88,17 @@
     <div class="top-tabs">
       <button
         class="top-tab-btn"
-        class:active={settingsTab === 'defaults'}
-        onclick={() => (settingsTab = 'defaults')}>Defaults</button
+        class:active={activeCategoryType === 'defaults'}
+        onclick={() => (activeCategoryType = 'defaults')}>Defaults</button
       >
       <button
         class="top-tab-btn"
-        class:active={settingsTab === 'vehicles'}
-        onclick={() => (settingsTab = 'vehicles')}>Vehicles</button
+        class:active={activeCategoryType === 'vehicles'}
+        onclick={() => (activeCategoryType = 'vehicles')}>Vehicles</button
       >
     </div>
 
-    {#if settingsTab === 'defaults'}
+    {#if activeCategoryType === 'defaults'}
       <div class="settings-form space-y-4">
         <p class="text-sm text-gray-500 mb-2">Pre-fill new mileage logs with these values.</p>
 
@@ -131,10 +144,12 @@
           {#each settings.vehicles || [] as v (v.id)}
             <li class="flex justify-between items-center p-2 border rounded-lg">
               <div>{v.name}</div>
-              <button class="btn-small neutral" onclick={() => removeVehicle(v.id)}>Remove</button>
+              <button class="btn-small neutral" onclick={() => void removeVehicle(v.id)}
+                >Remove</button
+              >
             </li>
           {/each}
-          {#if !(settings.vehicles && settings.vehicles.length)}
+          {#if !(settings.vehicles && (settings.vehicles as Vehicle[]).length)}
             <li class="text-sm text-gray-500">No vehicles added yet.</li>
           {/if}
         </ul>

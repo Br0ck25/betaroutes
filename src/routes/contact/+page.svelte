@@ -1,7 +1,7 @@
 <script lang="ts">
   import { base } from '$app/paths';
   const resolve = (href: string) => `${base}${href}`;
-  let { form } = $props();
+  const { form } = $props();
 
   let isMobileMenuOpen = $state(false);
 

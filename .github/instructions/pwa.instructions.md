@@ -8,43 +8,46 @@ applyTo: 'src/service-worker.ts,**/*.svelte,**/*.ts'
 ## Service Worker Caching (CRITICAL)
 
 ### NEVER cache protected data
+
 - NEVER cache `/api/**` routes
 - NEVER cache responses with `Set-Cookie` header
 - NEVER cache user-specific responses
 - NEVER cache authenticated HTML pages
 
 ### Only cache public assets
+
 - ✅ App shell (HTML, CSS, JS bundles)
 - ✅ Static assets (fonts, icons, images)
 - ✅ Public content (marketing pages, docs)
 
 ### Implementation example
+
 ```typescript
 // src/service-worker.ts
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  
+
   // Never cache API routes
   if (url.pathname.startsWith('/api')) {
     return; // Network only
   }
-  
+
   // Never cache if response has Set-Cookie
   async function respond() {
     const response = await fetch(event.request);
-    
-    const isPrivate = 
+
+    const isPrivate =
       response.headers.has('Set-Cookie') ||
       response.headers.get('Cache-Control')?.includes('no-store');
-    
+
     if (response.status === 200 && !isPrivate) {
       // Safe to cache
       cache.put(event.request, response.clone());
     }
-    
+
     return response;
   }
-  
+
   event.respondWith(respond());
 });
 ```
@@ -52,15 +55,16 @@ self.addEventListener('fetch', (event) => {
 ## Cache-Control Headers (Server-Side)
 
 ### Protected routes
+
 ```typescript
 // API routes - never cache
 export const GET: RequestHandler = async ({ locals }) => {
   if (!locals.user) throw error(401);
-  
+
   return json(data, {
     headers: {
       'Cache-Control': 'no-store',
-      'Vary': 'Cookie'
+      Vary: 'Cookie'
     }
   });
 };
@@ -75,6 +79,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 ```
 
 ### Public routes
+
 ```typescript
 // Public API - short cache
 export const GET: RequestHandler = async () => {
@@ -89,11 +94,13 @@ export const GET: RequestHandler = async () => {
 ## Offline Data (IndexedDB)
 
 ### Use IndexedDB for offline queues
+
 - Store pending mutations (create/update/delete) in IndexedDB
 - NEVER store sensitive data in service worker cache
 - Sync to server when online
 
 ### User isolation
+
 ```typescript
 // Queue must include userId for isolation
 interface QueueItem {
@@ -105,22 +112,26 @@ interface QueueItem {
 }
 
 // Add to queue
-await syncManager.addToQueue({
-  action: 'create',
-  data: trip
-}, userId); // MUST pass userId
+await syncManager.addToQueue(
+  {
+    action: 'create',
+    data: trip
+  },
+  userId
+); // MUST pass userId
 ```
 
 ### Clear on logout
+
 ```typescript
 // Logout handler
 async function logout(userId: string) {
   // Clear sync queue
   await clearUserData(userId);
-  
+
   // Clear session
   await fetch('/api/auth/logout', { method: 'POST' });
-  
+
   // Redirect
   goto('/login');
 }
@@ -129,11 +140,13 @@ async function logout(userId: string) {
 ## Sync Queue Isolation (CRITICAL)
 
 ### Every queue item needs userId
+
 - `syncManager.addToQueue()` MUST receive `userId` parameter
 - Queue items MUST be scoped to user
 - Prevents cross-user data contamination
 
-### Implementation
+### Implementation — Sync Queue
+
 ```typescript
 // ✅ CORRECT
 class SyncManager {
@@ -147,16 +160,13 @@ class SyncManager {
       timestamp: Date.now(),
       userId // Store with item
     };
-    
+
     await db.syncQueue.add(queueItem);
   }
-  
+
   async clearUserQueue(userId: string) {
     // Only clear this user's items
-    await db.syncQueue
-      .where('userId')
-      .equals(userId)
-      .delete();
+    await db.syncQueue.where('userId').equals(userId).delete();
   }
 }
 
@@ -172,6 +182,7 @@ class SyncManager {
 ## Manifest.json
 
 ### Required fields
+
 - `name`, `short_name`
 - `start_url: "."` (base-path aware)
 - `scope: "."` (base-path aware)
@@ -180,6 +191,7 @@ class SyncManager {
 - `icons` (include maskable icon)
 
 ### Security considerations
+
 - Use relative URLs (works with subpath deployments)
 - Include proper `id` for app identity
 - Set appropriate `orientation` if needed
@@ -187,6 +199,7 @@ class SyncManager {
 ## Progressive Enhancement
 
 ### Feature detection
+
 ```typescript
 // Check for service worker support
 if ('serviceWorker' in navigator) {
@@ -206,6 +219,7 @@ if (!('serviceWorker' in navigator)) {
 ```
 
 ### No user-agent sniffing
+
 - Use feature detection, not UA parsing
 - Test for capabilities: `'serviceWorker' in navigator`
 - Provide graceful fallbacks
@@ -213,18 +227,20 @@ if (!('serviceWorker' in navigator)) {
 ## Update Strategy
 
 ### Safe updates
+
 - Show "Update available" prompt
 - Don't force reload during active use
 - Let user choose when to update
 
 ### Implementation
+
 ```typescript
 // In app layout
 let updateAvailable = $state(false);
 
 $effect(() => {
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.ready.then(registration => {
+    navigator.serviceWorker.ready.then((registration) => {
       registration.addEventListener('updatefound', () => {
         updateAvailable = true;
       });
@@ -236,6 +252,7 @@ $effect(() => {
 ## Kill Switch
 
 ### Emergency service worker uninstall
+
 ```typescript
 // Emergency SW - deploy if needed
 self.addEventListener('install', () => {
@@ -246,10 +263,10 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       const keys = await caches.keys();
-      await Promise.all(keys.map(k => caches.delete(k)));
+      await Promise.all(keys.map((k) => caches.delete(k)));
       await self.registration.unregister();
       const clients = await self.clients.matchAll();
-      clients.forEach(client => {
+      clients.forEach((client) => {
         if (client instanceof WindowClient) {
           client.navigate(client.url);
         }
@@ -262,6 +279,7 @@ self.addEventListener('activate', (event) => {
 ## Testing
 
 ### PWA audit checklist
+
 - [ ] Lighthouse PWA score = 100
 - [ ] Works offline (app shell loads)
 - [ ] Installable (A2HS prompt appears)

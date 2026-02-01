@@ -8,7 +8,6 @@
   import { expenses } from '$lib/stores/expenses';
   import { toasts } from '$lib/stores/toast';
   import { userSettings } from '$lib/stores/userSettings';
-  import { onMount } from 'svelte';
 
   const expenseId = $page.params.id;
 
@@ -58,8 +57,8 @@
     taxDeductible: false
   });
 
-  onMount(() => {
-    // Find expense in store
+  $effect(() => {
+    // Find expense in store; only redirect if the store has been loaded
     const expense = $expenses.find((e) => e.id === expenseId);
     if (expense) {
       formData = {
@@ -69,9 +68,10 @@
         description: expense.description || '',
         taxDeductible: !!expense.taxDeductible
       };
-    } else {
+    } else if ($expenses.length > 0) {
+      // If expenses are loaded and we still can't find it, redirect
       toasts.error('Expense not found.');
-      goto(resolve('/dashboard/expenses'));
+      void goto(resolve('/dashboard/expenses'));
     }
   });
 
@@ -81,8 +81,8 @@
       return;
     }
 
-    const currentUser = ($page.data as any)['user'] || $user;
-    const userId = (currentUser as any)?.id || localStorage.getItem('offline_user_id');
+    const currentUser = ($page.data as { user?: { id?: string } } | undefined)?.user ?? $user;
+    const userId = currentUser?.id ?? localStorage.getItem('offline_user_id');
     if (!userId) {
       toasts.error('User not identified. Cannot save.');
       return;
@@ -96,24 +96,24 @@
 
       await expenses.updateExpense(String(expenseId), payload, String(userId));
       toasts.success('Expense updated');
-      goto(resolve('/dashboard/expenses'));
+      void goto(resolve('/dashboard/expenses'));
     } catch (err) {
       console.error(err);
       toasts.error('Failed to update expense');
     }
   }
   // Category options derived from user settings (grouped)
-  let maintenanceOptions = $derived(
+  const maintenanceOptions = $derived(
     $userSettings.maintenanceCategories?.length > 0
       ? $userSettings.maintenanceCategories
       : ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement']
   );
-  let suppliesOptions = $derived(
+  const suppliesOptions = $derived(
     $userSettings.supplyCategories?.length > 0
       ? $userSettings.supplyCategories
       : ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental']
   );
-  let expenseOptions = $derived(
+  const expenseOptions = $derived(
     $userSettings.expenseCategories?.length > 0
       ? $userSettings.expenseCategories
       : ['maintenance', 'insurance', 'supplies', 'other']
@@ -391,9 +391,12 @@
 
     <!-- Settings modal (manage maintenance/supplies/expenses categories) -->
     <SettingsModal
-      bind:open={isManageCategoriesOpen}
-      bind:activeCategoryType
+      open={isManageCategoriesOpen}
+      {activeCategoryType}
       initialTab={settingsInitialTab}
+      onClose={() => {
+        isManageCategoriesOpen = false;
+      }}
     />
 
     <div class="form-actions">

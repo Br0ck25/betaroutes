@@ -18,14 +18,14 @@
   let selectedRange: TimeRange = $state('30d');
 
   // [!code change] Pass $expenses to the calculator
-  let stats = $derived(calculateDashboardStats($trips, $expenses, selectedRange));
+  const stats = $derived(calculateDashboardStats($trips, $expenses, selectedRange));
 
   // --- Maintenance reminder calculations (all-time) ---
-  let allStats = $derived(calculateDashboardStats($trips, $expenses, 'all'));
-  let currentOdometer = $derived(
+  const allStats = $derived(calculateDashboardStats($trips, $expenses, 'all'));
+  const currentOdometer = $derived(
     Number($userSettings.vehicleOdometerStart || 0) + Number(allStats.totalMiles || 0)
   );
-  let maintenance = $derived(
+  const maintenance = $derived(
     computeMaintenance({
       vehicleOdometerStart: $userSettings.vehicleOdometerStart,
       totalMilesAllTime: allStats.totalMiles,

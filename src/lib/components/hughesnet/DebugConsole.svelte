@@ -1,11 +1,15 @@
 <script lang="ts">
-  import { slide } from 'svelte/transition';
   interface Props {
     logs?: string[];
     showConsole?: boolean;
   }
 
-  let { logs = [], showConsole = $bindable(false) }: Props = $props();
+  let {
+    showConsole = $bindable(false),
+    // eslint-disable-next-line prefer-const -- `rest` must remain mutable because `$bindable()` must be declared with `let` in same destructure
+    ...rest
+  } = $props();
+  const { logs = [] } = rest as Props;
 </script>
 
 <div class="settings-card full-width bg-dark">
@@ -29,7 +33,7 @@
   </div>
 
   {#if showConsole}
-    <div class="console-body" transition:slide>
+    <div class="console-body">
       {#each logs as log, i (i)}
         <div class="log-line">
           <span class="log-time"

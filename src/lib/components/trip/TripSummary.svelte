@@ -6,7 +6,13 @@
     totalTime = '',
     fuelCost = 0,
     netProfit = 0
-  } = $props();
+  } = $props<{
+    totalMileage?: number;
+    distanceUnit?: string;
+    totalTime?: string;
+    fuelCost?: number;
+    netProfit?: number;
+  }>();
 </script>
 
 <div

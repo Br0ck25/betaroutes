@@ -14,7 +14,7 @@
     orders?: Order[];
   }
 
-  let { orders = [] }: Props = $props();
+  const { orders = [] }: Props = $props();
 </script>
 
 <div class="settings-card full-width">

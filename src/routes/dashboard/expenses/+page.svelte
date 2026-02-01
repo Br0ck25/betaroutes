@@ -29,7 +29,7 @@
     data: PageData;
   }
 
-  let { data }: Props = $props();
+  const { data }: Props = $props();
   const _now = SvelteDate.now();
   function _fmtInput(d: SvelteDate) {
     return d.toInput();
@@ -95,7 +95,7 @@
 
   // --- ACTIONS ---
   function goToAdd() {
-    goto(resolve('/dashboard/expenses/new'));
+    void goto(resolve('/dashboard/expenses/new'));
   }
 
   function editExpense(expense: ExpenseRecord | Record<string, unknown>) {
@@ -105,20 +105,20 @@
 
     if (source === 'trip') {
       // eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
-      goto(resolve('/dashboard/trips') + '?id=' + encodeURIComponent(tripId));
+      void goto(resolve('/dashboard/trips') + '?id=' + encodeURIComponent(tripId));
     } else {
       // eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
-      goto(resolve('/dashboard/expenses/edit/') + encodeURIComponent(id));
+      void goto(resolve('/dashboard/expenses/edit/') + encodeURIComponent(id));
     }
   }
 
   function viewTrash() {
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + query param
-    goto(resolve('/dashboard/trash') + '?type=expenses');
+    void goto(resolve('/dashboard/trash') + '?type=expenses');
   }
 
-  async function deleteExpense(id: string, e?: MouseEvent) {
-    if (e) e.stopPropagation();
+  async function deleteExpense(id: string, e?: MouseEvent | { stopPropagation?: () => void }) {
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
     if (!confirm('Move this expense to trash? You can restore it later.')) return;
 
     // Check if it's a trip log
@@ -357,7 +357,11 @@
       onEdit,
       onDelete,
       isReadOnly
-    }: { onEdit: () => void; onDelete: (e: any) => void; isReadOnly: boolean }
+    }: {
+      onEdit: () => void;
+      onDelete: (e: { stopPropagation: () => void }) => void;
+      isReadOnly: boolean;
+    }
   ) {
     if (isReadOnly) return;
     let startX = 0;
@@ -414,16 +418,15 @@
         })) as ExpenseRecord[];
       const normalized = normalize(data.expenses);
 
-      // eslint-disable-next-line svelte/require-store-reactive-access
       if ($user?.id && 'hydrate' in expenses) {
-        expenses.hydrate(normalized, $user.id);
+        void expenses.hydrate(normalized, $user.id);
       } else {
         expenses.set(normalized);
       }
     }
   });
   // --- DERIVE TRIP EXPENSES ---
-  let tripExpenses = $derived(
+  const tripExpenses = $derived(
     $trips.flatMap((trip) => {
       const items = [];
       const date =
@@ -489,8 +492,8 @@
     })
   );
   // --- COMBINE & FILTER ---
-  let allExpenses = $derived([...$expenses, ...tripExpenses]);
-  let filteredExpenses = $derived(
+  const allExpenses = $derived([...$expenses, ...tripExpenses]);
+  const filteredExpenses = $derived(
     allExpenses
       .filter((item) => {
         // Search
@@ -554,7 +557,7 @@
         return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
       })
   );
-  let totalPages = $derived(Math.ceil(filteredExpenses.length / itemsPerPage));
+  const totalPages = $derived(Math.ceil(filteredExpenses.length / itemsPerPage));
   // Reset selection when filters change
   run(() => {
     if (searchQuery || sortBy || sortOrder || filterCategory || startDate || endDate) {
@@ -582,22 +585,22 @@
     }
   });
   // Use categories from settings, default to basic if empty
-  let categories: () => string[] = $derived(() =>
+  const categories: () => string[] = $derived(() =>
     $userSettings.expenseCategories?.length > 0
       ? $userSettings.expenseCategories
       : ['maintenance', 'insurance', 'supplies', 'other']
   );
   // Derive the active list depending on the selected tab
-  let activeCategories: () => string[] = $derived(() =>
+  const activeCategories: () => string[] = $derived(() =>
     activeCategoryType === 'maintenance'
       ? $userSettings.maintenanceCategories || ['oil change', 'repair']
       : activeCategoryType === 'supplies'
         ? $userSettings.supplyCategories || ['water', 'snacks']
         : $userSettings.expenseCategories || ['maintenance', 'insurance', 'supplies', 'other']
   );
-  let totalAmount = $derived(filteredExpenses.reduce((sum, item) => sum + (item.amount || 0), 0));
-  let loading = $derived($expensesLoading || $tripsLoading);
-  let allSelected = $derived(
+  const totalAmount = $derived(filteredExpenses.reduce((sum, item) => sum + (item.amount || 0), 0));
+  const loading = $derived($expensesLoading || $tripsLoading);
+  const allSelected = $derived(
     filteredExpenses.length > 0 && selectedExpenses.size === filteredExpenses.length
   );
 </script>

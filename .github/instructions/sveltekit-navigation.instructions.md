@@ -10,12 +10,14 @@ Use SvelteKit's canonical resolver for ALL internal navigation.
 ## Links
 
 ✅ Do:
+
 - `import { resolve } from '$app/paths'`
 - `<a href={resolve('/privacy')}>Privacy</a>`
 - Include query strings INSIDE resolve: `resolve(\`/trips?tag=\${tag}\`)`
 - Include hash fragments INSIDE resolve: `resolve(\`/docs#section\`)`
 
 ❌ Don't:
+
 - Hardcode internal hrefs like `href="/privacy"`
 - Build your own `resolve()` wrapper that the linter won't recognize
 - Concatenate resolved parts like `resolve('/trips') + '?tag=' + tag`
@@ -25,6 +27,7 @@ Use SvelteKit's canonical resolver for ALL internal navigation.
 ## Programmatic navigation
 
 ✅ Do:
+
 ```typescript
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
@@ -40,6 +43,7 @@ goto(resolve('/settings'), { replaceState: true });
 ```
 
 ❌ Don't:
+
 ```typescript
 // Missing resolve
 goto('/dashboard');
@@ -54,10 +58,11 @@ goto(`${base}/trips?filter=${filter}`);
 ## Dynamic routes
 
 ✅ Do:
+
 ```svelte
 <script lang="ts">
   import { resolve } from '$app/paths';
-  
+
   let tripId = $state('123');
 </script>
 
@@ -65,6 +70,7 @@ goto(`${base}/trips?filter=${filter}`);
 ```
 
 ❌ Don't:
+
 ```svelte
 <!-- Missing resolve -->
 <a href="/trips/{tripId}">View Trip</a>
@@ -76,9 +82,7 @@ For external URLs, use them directly (no resolve):
 
 ```svelte
 <!-- External link (no resolve) -->
-<a href="https://example.com" target="_blank" rel="noopener noreferrer">
-  External Site
-</a>
+<a href="https://example.com" target="_blank" rel="noopener noreferrer"> External Site </a>
 
 <!-- Internal link (use resolve) -->
 <a href={resolve('/privacy')}>Privacy Policy</a>

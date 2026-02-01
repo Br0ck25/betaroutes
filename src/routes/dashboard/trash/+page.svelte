@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import { page } from '$app/stores';
-  import { trash } from '$lib/stores/trash';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { user } from '$lib/stores/auth';
-  import { getDB } from '$lib/db/indexedDB';
+  import { page } from '$app/stores';
+  import { getTrashForUser } from '$lib/db/queries';
   import type { TrashRecord } from '$lib/db/types';
-  import { get } from 'svelte/store';
+  import { user } from '$lib/stores/auth';
+  import { trash } from '$lib/stores/trash';
+  import { asRecord } from '$lib/utils/errors';
+
   import { userSettings } from '$lib/stores/userSettings';
+  import { SvelteDate, SvelteSet } from '$lib/utils/svelte-reactivity';
   import { getVehicleDisplayName } from '$lib/utils/vehicle';
-  import { SvelteSet, SvelteDate } from '$lib/utils/svelte-reactivity';
 
   // Known user-friendly error messages that are safe to display
   const KNOWN_RESTORE_ERROR_MESSAGES = [
@@ -25,58 +25,58 @@
   let restoring = $state(new SvelteSet<string>());
   let deleting = $state(new SvelteSet<string>());
   let currentTypeParam: string | null = $state(null);
-  let _pageUnsub: (() => void) | null = null;
 
-  onMount(() => {
+  $effect(() => {
+    // Client-only initialization (replaces onMount)
+    if (typeof document === 'undefined') return;
+
     const params = new URLSearchParams(window.location.search);
     const typeParam = params.get('type');
     const type =
       typeParam === 'expenses' ? 'expense' : typeParam === 'mileage' ? 'mileage' : undefined;
 
     // 1. Load Local
-    loadTrash(type).catch(console.error);
+    void loadTrash(type).catch((err) => console.error('loadTrash failed', err));
 
-    // 2. [!code fix] Force Cloud Sync on Mount
-    const userState = get(user);
-    // [!code fix] Strictly use ID.
+    // 2. Force Cloud Sync on mount using $user (server-controlled identity)
     const userId =
-      userState?.id ||
+      $user?.id ||
       (typeof localStorage !== 'undefined' ? localStorage.getItem('offline_user_id') : null);
-
     if (userId) {
-      trash.syncFromCloud(userId, typeParam || undefined).then(() => loadTrash(type));
+      void trash
+        .syncFromCloud(userId, typeParam || undefined)
+        .then(() => void loadTrash(type))
+        .catch((err) => console.error('trash.syncFromCloud failed', err));
     }
 
-    // Subscribe to page changes
-    _pageUnsub = page.subscribe(async ($p) => {
-      const param = $p.url.searchParams.get('type');
+    // React to page changes using Svelte 5 state API
+    $effect(() => {
+      const param = $page.url.searchParams.get('type');
       if (param !== currentTypeParam) {
         currentTypeParam = param;
         const type = param === 'expenses' ? 'expense' : param === 'mileage' ? 'mileage' : undefined;
-        loading = true;
-        try {
-          await loadTrash(type);
-          const userState = get(user);
-          // [!code fix] Strictly use ID.
-          const userId =
-            userState?.id ||
-            (typeof localStorage !== 'undefined' ? localStorage.getItem('offline_user_id') : null);
-
-          if (userId) {
-            await trash.syncFromCloud(userId, param || undefined);
+        (async () => {
+          loading = true;
+          try {
             await loadTrash(type);
+
+            const userId =
+              $user?.id ||
+              (typeof localStorage !== 'undefined'
+                ? localStorage.getItem('offline_user_id')
+                : null);
+            if (userId) {
+              await trash.syncFromCloud(userId, param || undefined);
+              await loadTrash(type);
+            }
+          } catch (err) {
+            console.error('Failed to refresh trash for type change', err);
+          } finally {
+            loading = false;
           }
-        } catch (err) {
-          console.error('Failed to refresh trash for type change', err);
-        } finally {
-          loading = false;
-        }
+        })().catch((err) => console.error('Failed to refresh trash for type change', err));
       }
     });
-  });
-
-  onDestroy(() => {
-    if (typeof _pageUnsub === 'function') _pageUnsub();
   });
 
   async function loadTrash(type?: string) {
@@ -90,26 +90,26 @@
         typeof localStorage !== 'undefined' ? localStorage.getItem('offline_user_id') : null;
       if (offlineId) potentialIds = potentialIds.add(offlineId);
 
-      const db = await getDB();
-      const tx = db.transaction('trash', 'readonly');
-      const index = tx.objectStore('trash').index('userId');
-
-      let allItems: any[] = [];
+      // Use a security wrapper to fetch trash items for the authorized user
+      let allItems: unknown[] = [];
       for (const id of potentialIds) {
-        const items = await index.getAll(id);
+        const items = await getTrashForUser(id);
         allItems = [...allItems, ...items];
       }
 
-      // Normalize/Flatten
+      // Normalize/Flatten (getTrashForUser already returns normalized shape, but keep fallback)
       const uniqueItems = Array.from(
         new Map(
           allItems.map((item) => {
-            let flat = { ...item };
+            const r = asRecord(item);
+            // Flatten embedded `.data` if present
+            let flat = { ...r } as Record<string, unknown>;
             if (flat.data && typeof flat.data === 'object') {
-              flat = { ...flat.data, ...flat };
+              const inner = asRecord(flat.data);
+              flat = { ...inner, ...flat };
               delete flat.data;
             }
-            return [flat.id, flat];
+            return [String(flat.id), flat];
           })
         ).values()
       );
@@ -122,39 +122,74 @@
             ? 'mileage'
             : undefined);
 
-      const filtered = uniqueItems.filter((it: any) => {
-        const recordTypes = Array.isArray(it.recordTypes)
-          ? it.recordTypes
-          : it.recordType
-            ? [it.recordType]
+      const filtered = uniqueItems.filter((it: unknown) => {
+        const rec = asRecord(it);
+        const recordTypes = Array.isArray(rec.recordTypes)
+          ? (rec.recordTypes as string[])
+          : rec.recordType
+            ? [String(rec.recordType)]
             : [];
 
         if (recordTypes.length > 0) {
           // If viewing 'all', show everything; otherwise include items whose recordTypes include the view
           if (!type && !currentTypeParam) return true;
-          return recordTypes.includes(effectiveType as any);
+          return recordTypes.includes(String(effectiveType));
         }
 
         // Fallback: infer from key or shape
         const inferredFromKey =
-          it.recordType ||
-          it.type ||
-          (it.originalKey &&
-            (it.originalKey.startsWith('expense:')
+          (rec.recordType as string | undefined) ||
+          (rec.type as string | undefined) ||
+          (typeof rec.originalKey === 'string'
+            ? rec.originalKey.startsWith('expense:')
               ? 'expense'
-              : it.originalKey.startsWith('mileage:')
+              : rec.originalKey.startsWith('mileage:')
                 ? 'mileage'
-                : 'trip')) ||
-          'trip';
-        const hasMileageShape = typeof it.miles === 'number' || Boolean(it.vehicle);
+                : 'trip'
+            : 'trip');
+        const hasMileageShape = typeof rec.miles === 'number' || Boolean(rec.vehicle);
         const inferred = hasMileageShape ? 'mileage' : inferredFromKey;
         return inferred === effectiveType;
       });
-      filtered.sort(
+      const toDateArg = (v: unknown) =>
+        typeof v === 'string' || typeof v === 'number' || v instanceof Date ? v : 0;
+      // Normalize records into proper TrashRecord shape
+      const normalize = (flat: Record<string, unknown>): TrashRecord | null => {
+        const r = asRecord(flat);
+        const id = String(r.id ?? r._id ?? r.originalKey ?? r.key ?? '');
+        const userId = String(r.userId ?? r.owner ?? '');
+        if (!id || !userId) return null;
+
+        const deletedAt = String(r.deletedAt ?? r.deleted_at ?? new Date().toISOString());
+        const deletedBy = String(r.deletedBy ?? r.deleted_by ?? r.deletedBy ?? 'system');
+        const expiresAt = String(r.expiresAt ?? r.expires_at ?? '');
+        const originalKey = String(r.originalKey ?? r.key ?? '');
+
+        const recordType = Array.isArray(r.recordTypes)
+          ? (r.recordTypes[0] as 'trip' | 'expense' | 'mileage' | undefined)
+          : (r.recordType as 'trip' | 'expense' | 'mileage' | undefined);
+
+        return {
+          ...r,
+          id,
+          userId,
+          deletedAt,
+          deletedBy,
+          expiresAt,
+          originalKey,
+          recordType
+        } as TrashRecord;
+      };
+
+      const normalized = filtered.map((f) => normalize(f)).filter(Boolean) as TrashRecord[];
+
+      normalized.sort(
         (a, b) =>
-          SvelteDate.from(b.deletedAt || 0).getTime() - SvelteDate.from(a.deletedAt || 0).getTime()
+          SvelteDate.from(toDateArg(b.deletedAt)).getTime() -
+          SvelteDate.from(toDateArg(a.deletedAt)).getTime()
       );
-      trashedTrips = filtered;
+
+      trashedTrips = normalized;
     } catch (_err) {
       console.error('Error loading trash:', _err);
     } finally {
@@ -171,19 +206,23 @@
 
     try {
       // Prefer current view when restoring ambiguous/merged tombstones
+      const r = asRecord(item);
       const displayType =
         currentTypeParam === 'expenses'
           ? 'expense'
           : currentTypeParam === 'mileage'
             ? 'mileage'
-            : Array.isArray((item as any).recordTypes) && (item as any).recordTypes.length
-              ? (item as any).recordTypes[0]
-              : (item as any).recordType ||
-                (item as any).type ||
-                (typeof (item as any).miles === 'number' ? 'mileage' : 'trip');
+            : Array.isArray(r.recordTypes) && r.recordTypes.length
+              ? String((r.recordTypes as string[])[0])
+              : (r.recordType as string | undefined) ||
+                (r.type as string | undefined) ||
+                (typeof r.miles === 'number' ? 'mileage' : 'trip');
+
+      const targetUserId = String(r.userId ?? '');
+      if (!targetUserId) throw new Error('Missing userId');
 
       // Actually restore the item from trash (this calls updateLocal internally)
-      await trash.restore(id, item.userId, displayType);
+      await trash.restore(id, targetUserId, displayType);
 
       // PERFORMANCE: No need to reload stores - updateLocal already updated them optimistically
       // Just reload trash to remove the restored item from trash view
@@ -207,17 +246,20 @@
     loading = true;
     try {
       for (const trip of trashedTrips) {
+        const r = asRecord(trip);
         const displayType =
           currentTypeParam === 'expenses'
             ? 'expense'
             : currentTypeParam === 'mileage'
               ? 'mileage'
-              : Array.isArray((trip as any).recordTypes) && (trip as any).recordTypes.length
-                ? (trip as any).recordTypes[0]
-                : (trip as any).recordType ||
-                  (trip as any).type ||
-                  (typeof (trip as any).miles === 'number' ? 'mileage' : 'trip');
-        await trash.restore(trip.id, trip.userId, displayType);
+              : Array.isArray(r.recordTypes) && r.recordTypes.length
+                ? String((r.recordTypes as string[])[0])
+                : (r.recordType as string | undefined) ||
+                  (r.type as string | undefined) ||
+                  (typeof r.miles === 'number' ? 'mileage' : 'trip');
+        const uid = String(r.userId ?? '');
+        if (!uid) continue;
+        await trash.restore(trip.id, uid, displayType);
       }
       // PERFORMANCE: No need to reload stores - updateLocal already updated them
       await loadTrash();
@@ -273,15 +315,15 @@
 
   // Navigation helpers
   function goToExpenses() {
-    goto(resolve('/dashboard/expenses'));
+    void goto(resolve('/dashboard/expenses'));
   }
 
   function goToMileage() {
-    goto(resolve('/dashboard/mileage'));
+    void goto(resolve('/dashboard/mileage'));
   }
 
   function goToTrips() {
-    goto(resolve('/dashboard/trips'));
+    void goto(resolve('/dashboard/trips'));
   }
 
   function getDaysUntilExpiration(expiresAt: string | undefined): number {
@@ -330,12 +372,11 @@
     <div class="trash-list">
       {#each trashedTrips as trip (trip.id)}
         {@const t = trip as TrashRecord}
+        {@const metadata = typeof t['metadata'] === 'object' ? asRecord(t['metadata']) : undefined}
         {@const expiresAt =
-          (t['expiresAt'] as string | undefined) ||
-          ((t['metadata'] as any)?.expiresAt as string | undefined)}
+          (t['expiresAt'] as string | undefined) ?? (metadata?.expiresAt as string | undefined)}
         {@const deletedAt =
-          (t['deletedAt'] as string | undefined) ||
-          ((t['metadata'] as any)?.deletedAt as string | undefined)}
+          (t['deletedAt'] as string | undefined) ?? (metadata?.deletedAt as string | undefined)}
         {@const daysLeft = getDaysUntilExpiration(expiresAt)}
 
         {@const displayType =

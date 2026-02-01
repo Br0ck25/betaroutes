@@ -1,8 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { base } from '$app/paths';
-  import { page } from '$app/state';
-  const resolve = (href: string) => `${base}${href}`;
+  import { resolve } from '$app/paths';
+  import { page } from '$app/stores';
 
   let password = $state<string>('');
   let confirmPassword = $state<string>('');
@@ -11,7 +10,7 @@
   let success = $state<boolean>(false);
 
   // Get token from URL
-  const token = $derived(() => page.url.searchParams.get('token'));
+  const token = $derived(() => $page.url.searchParams.get('token'));
 
   async function handleReset() {
     if (password !== confirmPassword) {
@@ -38,9 +37,9 @@
 
       if (res.ok) {
         success = true;
-        // eslint-disable-next-line svelte/no-navigation-without-resolve
-        setTimeout(() => {
-          void goto(resolve('/login'));
+
+        setTimeout(async () => {
+          await goto(resolve('/login'));
         }, 3000);
       } else {
         error = (data && data.message) || 'Failed to reset password.';

@@ -8,18 +8,20 @@ applyTo: 'src/**/*.server.ts,src/routes/**/+server.ts,src/hooks.server.ts,src/wo
 ## Environment Bindings (CRITICAL)
 
 ### Use platform.env for all secrets and bindings
+
 - Access via `platform.env` in SvelteKit request handlers
 - NEVER use `process.env` (Node.js only, doesn't work on edge)
 
 ### Example
+
 ```typescript
 // ✅ CORRECT
 export const GET: RequestHandler = async ({ platform }) => {
   const kv = platform?.env?.BETA_LOGS_KV;
   const apiKey = platform?.env?.PRIVATE_GOOGLE_MAPS_API_KEY;
-  
+
   if (!kv) throw error(500, 'KV binding missing');
-  
+
   // Use bindings...
 };
 
@@ -30,6 +32,7 @@ export const GET: RequestHandler = async () => {
 ```
 
 ### Type safety
+
 ```typescript
 // src/app.d.ts
 declare global {
@@ -40,11 +43,11 @@ declare global {
         BETA_LOGS_KV: KVNamespace;
         BETA_USERS_KV: KVNamespace;
         // ... other bindings
-        
+
         // Secrets
         PRIVATE_GOOGLE_MAPS_API_KEY: string;
         HNS_ENCRYPTION_KEY: string;
-        
+
         // Durable Objects
         TRIP_INDEX_DO: DurableObjectNamespace;
       };
@@ -59,6 +62,7 @@ declare global {
 ## Edge Runtime Compatibility
 
 ### No Node.js built-ins
+
 ```typescript
 // ❌ FORBIDDEN
 import fs from 'fs';
@@ -73,6 +77,7 @@ const hash = await crypto.subtle.digest('SHA-256', data);
 ```
 
 ### Available Web APIs
+
 - `fetch` (native, no need to import)
 - `crypto` (Web Crypto API)
 - `URL`, `URLSearchParams`
@@ -81,6 +86,7 @@ const hash = await crypto.subtle.digest('SHA-256', data);
 - `Headers`, `Request`, `Response`
 
 ### No synchronous I/O
+
 ```typescript
 // ❌ WRONG - synchronous
 const data = fs.readFileSync('file.txt');
@@ -92,6 +98,7 @@ const data = await kv.get('key');
 ## KV (Key-Value) Storage
 
 ### Composite key pattern (CRITICAL)
+
 - ALWAYS scope keys to user: `{resource}:${userId}:${id}`
 - NEVER use global prefixes: `trips:${id}` is FORBIDDEN
 
@@ -110,6 +117,7 @@ await kv.list({ prefix: 'trips:' }); // Returns ALL users' trips!
 ```
 
 ### KV operations
+
 ```typescript
 // Get value
 const value = await kv.get(key);
@@ -130,6 +138,7 @@ for (const key of list.keys) {
 ```
 
 ### KV limitations
+
 - Keys: max 512 bytes
 - Values: max 25 MB
 - Eventually consistent (writes take up to 60s to propagate globally)
@@ -138,12 +147,14 @@ for (const key of list.keys) {
 ## Durable Objects
 
 ### When to use
+
 - Need strong consistency
 - Need coordination between requests
 - Need WebSocket connections
 - Need stateful computation
 
 ### Access pattern
+
 ```typescript
 // Get DO binding
 const namespace = platform?.env?.TRIP_INDEX_DO;
@@ -160,25 +171,26 @@ const response = await stub.fetch(request);
 ```
 
 ### DO class structure
+
 ```typescript
 // src/lib/server/TripIndexDO.ts
 export class TripIndexDO {
   state: DurableObjectState;
   env: Record<string, unknown>;
-  
+
   constructor(state: DurableObjectState, env: Record<string, unknown>) {
     this.state = state;
     this.env = env;
   }
-  
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    
+
     if (url.pathname === '/add') {
       // Add to index...
       return new Response('OK');
     }
-    
+
     return new Response('Not found', { status: 404 });
   }
 }
@@ -187,21 +199,21 @@ export class TripIndexDO {
 ## ExecutionContext
 
 ### Background tasks
+
 ```typescript
 export const POST: RequestHandler = async ({ request, platform }) => {
   // Quick response
   const response = json({ success: true });
-  
+
   // Background task (don't await)
-  platform?.context.waitUntil(
-    expensiveOperation().catch(err => console.error(err))
-  );
-  
+  platform?.context.waitUntil(expensiveOperation().catch((err) => console.error(err)));
+
   return response;
 };
 ```
 
 ### Use cases
+
 - Sending emails
 - Logging/analytics
 - Cache warming
@@ -210,6 +222,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 ## Caching
 
 ### Cache API
+
 ```typescript
 const cache = await caches.open('my-cache');
 
@@ -224,6 +237,7 @@ return response;
 ```
 
 ### Cache best practices
+
 - Never cache authenticated responses
 - Never cache `/api/**` routes
 - Set appropriate `Cache-Control` headers
@@ -232,6 +246,7 @@ return response;
 ## Headers
 
 ### Cloudflare-specific headers
+
 ```typescript
 // Get client IP
 const ip = request.headers.get('cf-connecting-ip') || 'unknown';
@@ -244,6 +259,7 @@ const timezone = request.headers.get('cf-timezone') || 'UTC';
 ```
 
 ### Set response headers
+
 ```typescript
 return json(data, {
   headers: {
@@ -257,11 +273,13 @@ return json(data, {
 ## Deployment
 
 ### Environment variables
+
 - Set in Cloudflare Dashboard (Pages/Workers)
 - Never commit secrets to git
 - Use `.dev.vars` for local development (add to `.gitignore`)
 
 ### Bindings
+
 ```toml
 # wrangler.toml
 [[kv_namespaces]]
@@ -277,6 +295,7 @@ script_name = "trip-index-worker"
 ## Error Handling
 
 ### Edge-specific errors
+
 ```typescript
 try {
   await kv.put(key, value);
@@ -288,6 +307,7 @@ try {
 ```
 
 ### Timeouts
+
 - Requests timeout after 30 seconds (Workers)
 - Requests timeout after 100 seconds (Pages Functions)
 - Use `platform.context.waitUntil()` for long tasks
@@ -295,17 +315,20 @@ try {
 ## Limits
 
 ### Workers limits
+
 - CPU time: 10ms (free), 50ms (paid)
 - Memory: 128 MB
 - Request size: 100 MB
 - Response size: 100 MB
 
 ### KV limits
+
 - Reads: unlimited
 - Writes: 1000/second per key
 - List operations: 1000/second
 
 ### Durable Objects limits
+
 - CPU time: 30 seconds per request
 - Memory: 128 MB
 - WebSocket connections: unlimited (within memory)
@@ -313,6 +336,7 @@ try {
 ## Testing
 
 ### Local development
+
 ```bash
 # Install Wrangler CLI
 npm install -D wrangler
@@ -322,6 +346,7 @@ npm run dev
 ```
 
 ### Environment parity
+
 - Use same binding names in dev and prod
 - Test with actual KV/DO, not mocks
 - Use `wrangler tail` to view logs
@@ -329,12 +354,14 @@ npm run dev
 ## Security
 
 ### Secrets management
+
 - Store secrets in Cloudflare Dashboard
 - Access via `platform.env`
 - Never log secrets
 - Rotate secrets regularly
 
 ### Rate limiting
+
 ```typescript
 import { checkRateLimit } from '$lib/server/rateLimit';
 
@@ -349,6 +376,7 @@ if (!allowed) {
 ## Migration from Node.js
 
 ### Common replacements
+
 ```typescript
 // ❌ Node.js
 import path from 'path';
@@ -364,6 +392,6 @@ const hash = crypto.createHash('sha256').update(data).digest('hex');
 // ✅ Web Crypto
 const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(data));
 const hash = Array.from(new Uint8Array(buffer))
-  .map(b => b.toString(16).padStart(2, '0'))
+  .map((b) => b.toString(16).padStart(2, '0'))
   .join('');
 ```

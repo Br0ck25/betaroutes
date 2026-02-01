@@ -1,10 +1,8 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-
   interface Props {
     children: import('svelte').Snippet;
     fallback?: import('svelte').Snippet<[{ error: Error; reset: () => void }]>;
-    onError?: (error: Error, errorInfo?: any) => void;
+    onError?: (error: Error, errorInfo?: unknown) => void;
   }
 
   const { children, fallback, onError }: Props = $props();
@@ -32,11 +30,26 @@
     }
   }
 
-  onMount(() => {
+  $effect(() => {
     // Set up global error handler for this component tree
-    const originalErrorHandler = window.onerror;
+    type OnErrorHandler = (
+      message: unknown,
+      source?: string,
+      lineno?: number,
+      colno?: number,
+      err?: Error
+    ) => unknown;
 
-    window.onerror = (message, source, lineno, colno, err) => {
+    const win = window as Window & { onerror?: OnErrorHandler | null };
+    const originalErrorHandler = win.onerror ?? null;
+
+    win.onerror = (
+      message: unknown,
+      source?: string,
+      lineno?: number,
+      colno?: number,
+      err?: Error
+    ) => {
       if (err) {
         handleError(err);
       }
@@ -48,7 +61,7 @@
     };
 
     return () => {
-      window.onerror = originalErrorHandler;
+      win.onerror = originalErrorHandler;
     };
   });
 </script>

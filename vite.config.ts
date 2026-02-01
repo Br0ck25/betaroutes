@@ -1,6 +1,6 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { fileURLToPath } from 'url';
-import type { ViteDevServer } from 'vite';
+import type { PreviewOptions, ViteDevServer } from 'vite';
 import { defineConfig } from 'vitest/config';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -68,5 +68,5 @@ export default defineConfig({
         // ignore
       }
     }
-  } as any
+  } as PreviewOptions
 });

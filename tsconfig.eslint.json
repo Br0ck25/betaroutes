@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "files": [],
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "WebWorker"],
+    "types": ["vite/client", "svelte", "google.maps"]
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.js",
+    "src/**/*.svelte",
+    "src/**/*.d.ts",
+    "src/service-worker.ts",
+    ".svelte-kit/**/*.d.ts",
+    "vite.config.*",
+    "svelte.config.*",
+    "eslint.config.*"
+  ]
+}

@@ -53,8 +53,10 @@
   let isSettingsOpen = $state(false);
   let isUpgradeModalOpen = $state(false);
 
-  const isPro = $derived(['pro', 'business', 'premium', 'enterprise'].includes($user?.plan || ''));
-  const API_KEY = $derived(String($page.data['googleMapsApiKey'] ?? ''));
+  const isPro = $derived(() =>
+    ['pro', 'business', 'premium', 'enterprise'].includes($user?.plan || '')
+  );
+  const API_KEY = $derived(() => String($page.data['googleMapsApiKey'] ?? ''));
 
   // Reset page when filters change (guard against redundant assignments to avoid infinite loops)
   // DEV DEBUG: count runs to detect runaway effects
@@ -150,7 +152,8 @@
 
   // Navigation helpers
   function goToTrash() {
-    goto(resolve('/dashboard/trash'));
+    // `goto` returns a Promise — mark with `void` to indicate intentional fire-and-forget
+    void goto(resolve('/dashboard/trash'));
   }
 
   function handleEditTrip(tripId: string) {
@@ -257,10 +260,8 @@
   async function deleteTrip(id: string) {
     if (!confirm('Move trip to trash?')) return;
     try {
-      const currentUser = $page.data['user'] || $user;
-
       // [!code fix] Strictly use ID. Removed fallback to name/token and legacy legacy checks.
-      const userId = currentUser?.id || localStorage.getItem('offline_user_id') || '';
+      const userId = $user?.id || localStorage.getItem('offline_user_id') || '';
 
       if (userId) await trips.deleteTrip(id, userId as string);
     } catch (_err) {
@@ -271,10 +272,9 @@
   async function deleteSelected() {
     const count = selectedTrips.size;
     if (!confirm(`Are you sure you want to delete ${count} trip(s)?`)) return;
-    const currentUser = $page.data['user'] || $user;
 
     // [!code fix] Strictly use ID.
-    const userId = currentUser?.id || localStorage.getItem('offline_user_id') || '';
+    const userId = $user?.id || localStorage.getItem('offline_user_id') || '';
 
     if (!userId) {
       toasts.error('User identity missing.');
@@ -337,7 +337,7 @@
     selectedTrips = new SvelteSet();
   }
 
-  let expandedTrips = $state(new Set<string>());
+  let expandedTrips = $state(new SvelteSet<string>());
   function toggleExpand(id: string) {
     if (expandedTrips.has(id)) expandedTrips.delete(id);
     else expandedTrips.add(id);
@@ -367,7 +367,7 @@
     const shouldChangeExpanded = !(expandedTrips.size === 1 && expandedTrips.has(qId));
 
     if (shouldChangePage) currentPage = newPage;
-    if (shouldChangeExpanded) expandedTrips = new Set([qId]);
+    if (shouldChangeExpanded) expandedTrips = new SvelteSet([qId]);
 
     if (typeof document !== 'undefined' && (shouldChangePage || shouldChangeExpanded)) {
       setTimeout(() => {
@@ -507,14 +507,20 @@
   {#if selectedTrips.size > 0}
     <ActionBar
       selectedCount={selectedTrips.size}
-      {isPro}
+      isPro={isPro()}
       onCancel={() => (selectedTrips = new SvelteSet())}
       onExport={exportSelected}
       onDelete={deleteSelected}
     />
   {/if}
 
-  <SettingsModal bind:open={isSettingsOpen} {API_KEY} />
+  <SettingsModal
+    open={isSettingsOpen}
+    API_KEY={API_KEY()}
+    onClose={() => {
+      isSettingsOpen = false;
+    }}
+  />
   <UpgradeModal bind:open={isUpgradeModalOpen} />
 
   {#snippet loading()}

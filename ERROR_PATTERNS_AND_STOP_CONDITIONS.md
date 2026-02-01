@@ -75,7 +75,7 @@ You MUST read and follow:
 
 ### Error Pattern #1: Missing `lang="ts"`
 
-**Symptom:** parse errors like `'<` cannot be applied to types`, `'string' only refers to a type` 
+**Symptom:** parse errors like `'<` cannot be applied to types`,`'string' only refers to a type`
 **Cause:** using TS syntax without`lang="ts"`
 
 ✅ Correct:

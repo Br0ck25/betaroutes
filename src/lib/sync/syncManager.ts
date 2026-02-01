@@ -134,9 +134,11 @@ class SyncManager {
     });
     await tx.done;
     await this.updatePendingCount();
-    console.log(
-      `📋 Added to sync queue: ${item.action} ${(item as any).tripId || (item as any).recordId || 'unknown'}`
-    );
+    const id =
+      (item as Partial<SyncQueueItem>).tripId ??
+      (item as unknown as Record<string, unknown>)['recordId'] ??
+      'unknown';
+    console.log(`📋 Added to sync queue: ${item.action} ${id}`);
 
     if (navigator.onLine && !this.isSyncing) {
       this.debouncedSync();

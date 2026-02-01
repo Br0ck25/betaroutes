@@ -1,9 +1,6 @@
-<!-- @migration-task Error while migrating Svelte code: Mixing old (oninput) and new syntaxes for event handling is not allowed. Use only the oninput syntax
-https://svelte.dev/e/mixed_event_handler_syntaxes -->
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
-  import { page } from '$app/stores';
   import Button from '$lib/components/ui/Button.svelte';
   import Modal from '$lib/components/ui/Modal.svelte';
   import { PLAN_LIMITS } from '$lib/constants';
@@ -13,25 +10,42 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
   import { trips } from '$lib/stores/trips';
   import { userSettings } from '$lib/stores/userSettings';
   import { autocomplete } from '$lib/utils/autocomplete';
-  import { onDestroy, onMount } from 'svelte';
-
+  import { asRecord, getErrorMessage } from '$lib/utils/errors';
   function handleUpgradeNow() {
-    goto(resolve('/dashboard/settings'));
+    // Mark goto as intentionally fire-and-forget; handler shouldn't block UI
+    void goto(resolve('/dashboard/settings'));
   }
 
   async function goToTrips() {
     await goto(resolve('/dashboard/trips'));
   }
-  let { data }: { data?: { googleMapsApiKey?: string } } = $props();
-  let API_KEY = $derived(String(data?.googleMapsApiKey ?? ''));
+
+  $effect(() => {
+    // Client-only initialization (replaces onMount)
+    if (typeof document === 'undefined') return;
+
+    const timer = setTimeout(setupTotalMilesInputNew, 0);
+
+    // Cleanup (replaces onDestroy)
+    return () => {
+      clearTimeout(timer);
+      const el = document.getElementById('total-miles');
+      if (el && el.parentNode) {
+        const clone = el.cloneNode(true) as HTMLElement;
+        el.parentNode.replaceChild(clone, el);
+      }
+    };
+  });
+  const { data }: { data?: { googleMapsApiKey?: string } } = $props();
+  const API_KEY = $derived(String(data?.googleMapsApiKey ?? ''));
   let dragItemIndex: number | null = null;
 
-  let maintenanceOptions: string[] = $derived(
+  const maintenanceOptions: string[] = $derived(
     $userSettings.maintenanceCategories?.length > 0
       ? $userSettings.maintenanceCategories
       : ['Oil Change', 'Tire Rotation', 'Brake Service', 'Filter Replacement']
   );
-  let suppliesOptions: string[] = $derived(
+  const suppliesOptions: string[] = $derived(
     $userSettings.supplyCategories?.length > 0
       ? $userSettings.supplyCategories
       : ['Concrete', 'Poles', 'Wire', 'Tools', 'Equipment Rental']
@@ -43,7 +57,7 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
   let isManageCategoriesOpen = $state(false);
   let activeCategoryType: 'maintenance' | 'supplies' = $state('maintenance');
   let newCategoryName = $state('');
-  let activeCategories: string[] = $derived(
+  const activeCategories: string[] = $derived(
     activeCategoryType === 'maintenance' ? maintenanceOptions : suppliesOptions
   );
 
@@ -75,20 +89,6 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
       /* ignore */
     }
   }
-
-  onMount(() => {
-    // Defer until DOM render
-    setTimeout(setupTotalMilesInputNew, 0);
-  });
-
-  // Ensure event listeners are cleaned up on component destroy
-  onDestroy(() => {
-    const el = document.getElementById('total-miles');
-    if (el && el.parentNode) {
-      const clone = el.cloneNode(true) as HTMLElement;
-      el.parentNode.replaceChild(clone, el);
-    }
-  });
 
   // Local narrowed types for component-internal safety (ensure required fields for bindings)
   type LocalStop = {
@@ -261,7 +261,10 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
 
         // Only cache valid responses (non-zero)
         if ((mappedResult.distance || 0) > 0 && (mappedResult.duration || 0) > 0) {
-          console.info('[route] server hit', localKey, { source: (result as any).source });
+          const resRec = asRecord(result);
+          console.info('[route] server hit', localKey, {
+            source: typeof resRec.source === 'string' ? resRec.source : undefined
+          });
           try {
             localStorage.setItem(
               localKey,
@@ -409,7 +412,7 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
         tripData.endAddress,
         tripData.stops
       );
-      if (result && typeof result === 'object' && Array.isArray((result as any).optimizedOrder)) {
+      if (result && typeof result === 'object' && Array.isArray(asRecord(result).optimizedOrder)) {
         const optimized = result as {
           optimizedOrder: number[];
           legs?: Array<{ distance?: { value?: number }; duration?: { value?: number } }>;
@@ -447,7 +450,10 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
     } catch (e: unknown) {
       console.error(e);
       const errMessage = e instanceof Error ? e.message : String(e ?? 'Optimization failed');
-      const code = (e as any)?.code;
+      const code = (() => {
+        const r = asRecord(e);
+        return typeof r.code === 'string' ? r.code : undefined;
+      })();
       const msg = (errMessage || '').toLowerCase();
       if (code === 'PLAN_LIMIT' || msg.includes('plan limit') || msg.includes('pro feature')) {
         upgradeMessage = errMessage || 'Route Optimization is a Pro feature.';
@@ -605,9 +611,9 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
         ...s,
         order: i
       }));
-    } catch (_err: any) {
-      console.error('addStop failed', _err);
-      toasts.error(_err?.message ? String(_err.message) : 'Error calculating route.');
+    } catch (_err: unknown) {
+      console.error('addStop failed', getErrorMessage(_err));
+      toasts.error(getErrorMessage(_err) || 'Error calculating route.');
     } finally {
       isCalculating = false;
     }
@@ -615,7 +621,7 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
 
   function removeStop(id: string) {
     tripData.stops = tripData.stops.filter((s) => s.id !== id);
-    recalculateAllLegs();
+    void recalculateAllLegs();
   }
 
   function handleDragStart(event: DragEvent, index: number) {
@@ -720,17 +726,17 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
     }
   });
 
-  let totalEarnings = $derived(
+  const totalEarnings = $derived(
     tripData.stops.reduce((sum, stop) => sum + (parseFloat(String(stop.earnings || 0)) || 0), 0)
   );
-  let totalMaintenanceCost = $derived(
+  const totalMaintenanceCost = $derived(
     tripData.maintenanceItems.reduce((sum, item) => sum + (item.cost || 0), 0)
   );
-  let totalSuppliesCost = $derived(
+  const totalSuppliesCost = $derived(
     tripData.suppliesItems.reduce((sum, item) => sum + (item.cost || 0), 0)
   );
-  let totalCosts = $derived((tripData.fuelCost || 0) + totalMaintenanceCost + totalSuppliesCost);
-  let totalProfit = $derived(totalEarnings - totalCosts);
+  const totalCosts = $derived((tripData.fuelCost || 0) + totalMaintenanceCost + totalSuppliesCost);
+  const totalProfit = $derived(totalEarnings - totalCosts);
   $effect(() => {
     const startTime = typeof tripData.startTime === 'string' ? tripData.startTime : '';
     const endTime = typeof tripData.endTime === 'string' ? tripData.endTime : '';
@@ -744,8 +750,7 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
   });
 
   async function saveTrip() {
-    const currentUser = $page.data['user'] || $user;
-    const userId = currentUser?.id || localStorage.getItem('offline_user_id');
+    const userId = $user?.id || localStorage.getItem('offline_user_id');
     if (!userId) {
       toasts.error('Authentication error.');
       return;
@@ -879,8 +884,7 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
         <input
           id="start-address"
           type="text"
-          value={startAddressLocal}
-          oninput={(e) => (startAddressLocal = (e.target as HTMLInputElement).value || '')}
+          bind:value={startAddressLocal}
           use:autocomplete={{ apiKey: API_KEY }}
           onplace-selected={(e: CustomEvent) => handleMainAddressChange('start', e.detail)}
           onblur={() => handleMainAddressChange('start', { formatted_address: startAddressLocal })}
@@ -918,7 +922,7 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
                 <div class="stop-inputs">
                   <input
                     type="text"
-                    value={String(stop.address ?? '')}
+                    bind:value={stop.address}
                     use:autocomplete={{ apiKey: API_KEY }}
                     onplace-selected={(e: CustomEvent) => handleStopChange(i, e.detail)}
                     onblur={() => handleStopChange(i, { formatted_address: stop.address })}
@@ -945,8 +949,7 @@ https://svelte.dev/e/mixed_event_handler_syntaxes -->
           <div class="stop-inputs new">
             <input
               type="text"
-              value={String(newStop.address ?? '')}
-              oninput={(e) => (newStop.address = (e.target as HTMLInputElement).value || '')}
+              bind:value={newStop.address}
               placeholder="New stop address..."
               use:autocomplete={{ apiKey: API_KEY }}
               onplace-selected={handleNewStopSelect}

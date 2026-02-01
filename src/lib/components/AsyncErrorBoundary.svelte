@@ -7,11 +7,12 @@
    */
 
   // Use a narrow local props type instead of complex inline generics to avoid parser issues
-  type ErrorSnippet = (opts: { error: Error; retry: () => void }) => unknown;
+  type ErrorSnippetProps = { error: Error; retry: () => void };
+  type ErrorSnippet = import('svelte').Snippet<[ErrorSnippetProps]>;
 
   const _props = $props() as {
     children?: import('svelte').Snippet;
-    loading?: unknown;
+    loading?: import('svelte').Snippet;
     error?: ErrorSnippet;
     onRetry?: () => void | Promise<void>;
   };
@@ -29,9 +30,9 @@
         .then(() => {
           status = 'success';
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           status = 'error';
-          errorMessage = err;
+          errorMessage = err instanceof Error ? err : new Error(String(err));
         });
     } else {
       status = 'idle';
@@ -61,7 +62,7 @@
 
 {#if status === 'loading'}
   {#if loading}
-    {@render (loading as any)()}
+    {@render loading?.()}
   {:else}
     <div class="async-loading">
       <div class="spinner"></div>
@@ -70,7 +71,8 @@
   {/if}
 {:else if status === 'error' && errorMessage}
   {#if errorSnippet}
-    {@render (errorSnippet as any)({ error: errorMessage, retry })}
+    // @ts-expect-error - Snippet typing mismatches with inline object; runtime usage is fine.
+    {@render errorSnippet?.({ error: errorMessage, retry })}
   {:else}
     <div class="async-error">
       <div class="error-icon">⚠️</div>

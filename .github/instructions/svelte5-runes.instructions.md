@@ -28,13 +28,13 @@ applyTo: '**/*.svelte'
 ```svelte
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  
+
   type Props = {
     title: string;
     count?: number;
     children?: Snippet;
   };
-  
+
   let { title, count = 0, children }: Props = $props();
 </script>
 ```
@@ -45,10 +45,10 @@ applyTo: '**/*.svelte'
 <script lang="ts">
   // Local mutable state
   let count = $state(0);
-  
+
   // Typed arrays
   let items = $state<string[]>([]);
-  
+
   // Objects
   let user = $state<User | null>(null);
 </script>
@@ -59,10 +59,10 @@ applyTo: '**/*.svelte'
 ```svelte
 <script lang="ts">
   let count = $state(0);
-  
+
   // Simple derived
   let doubled = $derived(count * 2);
-  
+
   // Complex derived
   let isValid = $derived.by(() => {
     return count > 0 && count < 100;
@@ -75,15 +75,15 @@ applyTo: '**/*.svelte'
 ```svelte
 <script lang="ts">
   let count = $state(0);
-  
+
   // Side effect with cleanup
   $effect(() => {
     console.log('Count changed:', count);
-    
+
     const timer = setInterval(() => {
       console.log('Current count:', count);
     }, 1000);
-    
+
     return () => clearInterval(timer);
   });
 </script>
@@ -96,12 +96,12 @@ applyTo: '**/*.svelte'
   function handleClick() {
     console.log('Clicked!');
   }
-  
+
   // Callback prop for parent communication
   type Props = {
     onSave: (id: string) => void;
   };
-  
+
   let { onSave }: Props = $props();
 </script>
 
@@ -117,12 +117,12 @@ applyTo: '**/*.svelte'
 ```svelte
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  
+
   type Props = {
     header?: Snippet;
     children?: Snippet;
   };
-  
+
   let { header, children }: Props = $props();
 </script>
 
@@ -130,7 +130,7 @@ applyTo: '**/*.svelte'
   {#if header}
     {@render header()}
   {/if}
-  
+
   <main>
     {#if children}
       {@render children()}

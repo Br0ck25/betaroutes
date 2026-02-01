@@ -2,6 +2,7 @@
   // Svelte 5 runes
   import { autocomplete, loadGoogleMaps } from '$lib/utils/autocomplete';
   import { csrfFetch } from '$lib/utils/csrf';
+  import { asRecord } from '$lib/utils/errors';
 
   const { data } = $props<{ googleMapsApiKey?: string }>();
   const API_KEY = $derived(() => String(data?.googleMapsApiKey ?? ''));
@@ -68,7 +69,6 @@
   let stopPlace: Place | null = $state(null);
   let stops = $state<Stop[]>([]);
 
-  import { onMount } from 'svelte';
   let loading = $state(false);
   let message = $state('');
   let result = $state<Result | null>(null);
@@ -77,7 +77,7 @@
   let techEndInput: HTMLInputElement | null = null;
   let stopInput: HTMLInputElement | null = null;
 
-  onMount(() => {
+  $effect(() => {
     if (techStartInput)
       techStartInput.addEventListener('place-selected', onTechStartSelected as EventListener);
     if (techEndInput)
@@ -206,8 +206,9 @@
         body: JSON.stringify(payload)
       });
       if (!res.ok) {
-        const err = (await res.json().catch(() => null)) as any;
-        message = err?.error || 'Server error';
+        const errJson = await res.json().catch(() => null);
+        const err = asRecord(errJson);
+        message = typeof err.error === 'string' ? err.error : 'Server error';
         loading = false;
         return;
       }

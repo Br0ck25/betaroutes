@@ -189,7 +189,7 @@ let rows = $state<Row[]>([]);
 
 âœ… Strict: callback props
 
-**Parent**
+#### Parent
 
 ```svelte
 <Child onSave={(id) => save(id)} />

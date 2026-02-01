@@ -9,31 +9,42 @@ import type { Handle } from '@sveltejs/kit';
 const MAX_JSON_PAYLOAD_SIZE = 1 * 1024 * 1024; // 1MB
 
 // SECURITY: Prototype pollution dangerous keys
-const DANGEROUS_KEYS = ['__proto__', 'constructor', 'prototype'];
+const DANGEROUS_KEYS = ['__proto__', 'constructor', 'prototype'] as const;
 
 // SECURITY: UUID v4 validation (strict)
 const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-// SECURITY: Content Security Policy (extracted for maintainability)
-const CSP_POLICY = [
-  "default-src 'self'",
-  "script-src 'self' https://fonts.googleapis.com",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "img-src 'self' data: https: blob:",
-  "font-src 'self' https://fonts.gstatic.com",
-  "connect-src 'self' https://maps.googleapis.com https://places.googleapis.com https://cloudflareinsights.com",
-  "frame-src 'none'",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'"
-].join('; ');
+type PlatformEnv = Record<string, unknown>;
+type EventLike = { platform?: { env?: unknown } | undefined };
+
+function getPlatformEnv(event: EventLike): PlatformEnv {
+  const raw = event.platform?.env;
+  if (raw && typeof raw === 'object') return raw as PlatformEnv;
+  return {};
+}
+
+function envFlag(env: PlatformEnv, key: string): boolean {
+  const v = env[key];
+  if (v === true) return true;
+  if (typeof v === 'string') return v.toLowerCase() === 'true' || v === '1';
+  if (typeof v === 'number') return v === 1;
+  return false;
+}
+
+function escapeHtmlAttr(value: string): string {
+  // Minimal attribute-escape (covers &, ", <, >)
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
 
 /**
  * Recursively check for prototype pollution keys in an object.
  * Uses Reflect.ownKeys to catch non-enumerable properties.
  */
 function hasPrototypePollution(obj: unknown, depth = 0): boolean {
-  // Prevent infinite recursion
   if (depth > 20) return false;
   if (obj === null || typeof obj !== 'object') return false;
 
@@ -44,25 +55,40 @@ function hasPrototypePollution(obj: unknown, depth = 0): boolean {
     return false;
   }
 
-  // Use Reflect.ownKeys to catch symbols and non-enumerable properties
   const keys = Reflect.ownKeys(obj);
   for (const key of keys) {
-    if (typeof key === 'string' && DANGEROUS_KEYS.includes(key)) {
-      return true;
-    }
-    // @ts-expect-error - Reflect.ownKeys returns string | symbol, safe to access
+    if (typeof key === 'string' && (DANGEROUS_KEYS as readonly string[]).includes(key)) return true;
+
+    // @ts-expect-error - Reflect.ownKeys returns (string | symbol)[], safe for indexed access at runtime.
     if (hasPrototypePollution(obj[key], depth + 1)) return true;
   }
 
   return false;
 }
 
+function isJsonRequest(contentType: string | null): boolean {
+  if (!contentType) return false;
+  const ct = contentType.toLowerCase();
+  return ct.includes('application/json') || ct.includes('+json');
+}
+
+function isKVWithGet(value: unknown): value is { get: (k: string) => Promise<string | null> } {
+  if (!value || typeof value !== 'object') return false;
+  return 'get' in value && typeof (value as { get?: unknown }).get === 'function';
+}
+
 export const handle: Handle = async ({ event, resolve }) => {
+  // Treat platform env as a generic record for feature flags and dev helpers.
+  const platformEnv = getPlatformEnv(event);
+  const manualServer = platformEnv['PW_MANUAL_SERVER'] === '1';
+
   // DEV: Ensure mock KVs are configured when running locally or in manual server mode
-  if (dev || process.env['NODE_ENV'] !== 'production' || process.env['PW_MANUAL_SERVER'] === '1') {
+  if (dev || manualServer) {
     try {
       const { setupMockKV } = await import('$lib/server/dev-mock-db');
-      await setupMockKV(event as { platform?: { env?: Record<string, unknown> } });
+      await setupMockKV(
+        event as unknown as { platform?: { env?: Record<string, unknown> } | undefined }
+      );
       log.info('[DEV] Mock KV setup complete');
     } catch (err: unknown) {
       log.warn('[DEV] setupMockKV failed', {
@@ -71,77 +97,96 @@ export const handle: Handle = async ({ event, resolve }) => {
     }
   }
 
-  // 1. SECURITY: Request Size Limiting & Prototype Pollution Check
+  // 1) SECURITY: Request Size Limiting & Prototype Pollution Check (JSON bodies)
   if (event.request.method === 'POST' || event.request.method === 'PUT') {
     const contentLength = Number(event.request.headers.get('content-length'));
-    if (contentLength > MAX_JSON_PAYLOAD_SIZE) {
+    if (Number.isFinite(contentLength) && contentLength > MAX_JSON_PAYLOAD_SIZE) {
       return new Response('Payload too large', { status: 413 });
     }
 
-    // Clone request to check body without consuming it
-    try {
-      const clone = event.request.clone();
-      const text = await clone.text();
-      if (text) {
-        const body = JSON.parse(text);
-        if (hasPrototypePollution(body)) {
-          log.warn('[SECURITY] Prototype pollution attempt blocked', {
-            ip: event.getClientAddress()
-          });
-          return new Response('Bad Request', { status: 400 });
+    // Only inspect JSON bodies (avoid reading large form-data / file uploads)
+    if (isJsonRequest(event.request.headers.get('content-type'))) {
+      try {
+        const clone = event.request.clone();
+        const text = await clone.text();
+
+        // Defensive guard if content-length was missing/incorrect
+        if (text.length > MAX_JSON_PAYLOAD_SIZE) {
+          return new Response('Payload too large', { status: 413 });
         }
+
+        if (text) {
+          const body = JSON.parse(text) as unknown;
+          if (hasPrototypePollution(body)) {
+            log.warn('[SECURITY] Prototype pollution attempt blocked', {
+              ip: event.getClientAddress()
+            });
+            return new Response('Bad Request', { status: 400 });
+          }
+        }
+      } catch {
+        // Ignore JSON parse errors here; let SvelteKit handle them
       }
-    } catch {
-      // Ignore JSON parse errors here, let SvelteKit handle them
     }
   }
 
-  // 2. SECURITY: CSRF Protection
+  // 2) SECURITY: CSRF Protection (double-submit cookie pattern)
   const csrfError = await csrfProtection(event);
   if (csrfError) return csrfError;
 
-  // Generate new token for this request (double-submit cookie pattern)
-  // We intentionally do NOT inject this into page markup (%sveltekit.nonce% is for CSP nonces)
-  // Per SECURITY.md: set an HttpOnly server cookie and a readable mirror cookie for client-side reads
-  generateCsrfToken(event);
+  // - generateCsrfToken(event) should set the HttpOnly CSRF cookie (server-side)
+  // - We also ensure a readable mirror cookie + meta tag so client utilities can read it.
+  const generated = generateCsrfToken(event);
+  const csrfToken =
+    typeof generated === 'string' ? generated : (event.cookies.get('csrf_token_readable') ?? '');
 
-  // 3. AUTHENTICATION: Zero-Trust Session Validation
+  if (csrfToken) {
+    try {
+      event.cookies.set('csrf_token_readable', csrfToken, {
+        path: '/',
+        httpOnly: false,
+        sameSite: 'strict',
+        secure: !dev,
+        maxAge: 60 * 60 * 8 // 8 hours
+      });
+    } catch {
+      // Ignore cookie set failures
+    }
+  }
+
+  // 3) AUTH: Zero-Trust Session Validation
   const sessionId = event.cookies.get('session_id');
   event.locals.user = null;
 
-  if (sessionId && event.platform?.env) {
+  // NOTE: `event.platform.env` is the typed Cloudflare Pages/Workers env (via src/app.d.ts).
+  const typedEnv = (event.platform?.env ?? null) as unknown as Record<string, unknown> | null;
+
+  if (sessionId && typedEnv) {
     try {
-      // 1) Validate sessionId format
-      if (!UUID_V4_REGEX.test(sessionId)) {
-        throw new Error('Invalid session id format');
-      }
+      if (!UUID_V4_REGEX.test(sessionId)) throw new Error('Invalid session id format');
 
-      // 2) Look up the session record in the SESSIONS KV
-      const sessionsKV = event.platform.env.BETA_SESSIONS_KV as
-        | {
-            get: (k: string) => Promise<string | null>;
-          }
-        | undefined;
-
-      if (!sessionsKV) {
-        // Sessions store not available (dev/test may mock differently)
-        throw new Error('SESSIONS_KV unavailable');
-      }
+      const sessionsKV = typedEnv['BETA_SESSIONS_KV'];
+      if (!isKVWithGet(sessionsKV)) throw new Error('SESSIONS_KV unavailable');
 
       const sessionRaw = await sessionsKV.get(sessionId);
-      if (!sessionRaw) {
-        // No session found - treat as unauthenticated
-        throw new Error('Session not found');
-      }
+      if (!sessionRaw) throw new Error('Session not found');
 
-      // 3) Parse session and fetch the authoritative user record
-      const session = JSON.parse(sessionRaw) as { id?: string };
-      const userId = session?.id;
-      if (!userId || !UUID_V4_REGEX.test(userId)) {
+      const parsed = JSON.parse(sessionRaw) as unknown;
+      const userId =
+        parsed && typeof parsed === 'object'
+          ? ((parsed as Record<string, unknown>)['id'] as unknown)
+          : undefined;
+
+      if (typeof userId !== 'string' || !UUID_V4_REGEX.test(userId)) {
         throw new Error('Invalid user id in session');
       }
 
-      const user = await findUserById(event.platform.env.BETA_USERS_KV, userId);
+      const usersKV = typedEnv['BETA_USERS_KV'];
+      if (!usersKV) throw new Error('USERS_KV unavailable');
+
+      // `KVNamespace` is provided by @cloudflare/workers-types via your project typings.
+      const user = await findUserById(usersKV as KVNamespace, userId);
+
       if (user) {
         event.locals.user = {
           id: user.id,
@@ -155,17 +200,33 @@ export const handle: Handle = async ({ event, resolve }) => {
           ...(user.stripeCustomerId ? { stripeCustomerId: user.stripeCustomerId } : {})
         };
       }
-    } catch (error) {
-      log.error('[AUTH] Session validation failed', { error });
+    } catch (error: unknown) {
+      log.error('[AUTH] Session validation failed', {
+        error: error instanceof Error ? error.message : String(error)
+      });
       // Fail closed. User remains null.
     }
   }
 
-  // 4. RESPONSE: Security Headers & CSP
-  // Note: We do not inject CSRF tokens into page markup. Cookies are used (double-submit pattern).
-  const response = await resolve(event);
+  // 4) RESPONSE: Security headers + CSP + (optional) CSRF meta tag injection for HTML pages
+  const cspDevRelax = envFlag(platformEnv, 'CSP_DEV_RELAX');
 
-  // Apply strict security headers
+  const response = await resolve(
+    event,
+    csrfToken
+      ? {
+          transformPageChunk: ({ html }) => {
+            const meta = `<meta name="csrf-token" content="${escapeHtmlAttr(csrfToken)}">`;
+            if (html.includes('name="csrf-token"')) return html;
+            const idx = html.indexOf('</head>');
+            if (idx === -1) return html;
+            return `${html.slice(0, idx)}${meta}${html.slice(idx)}`;
+          }
+        }
+      : undefined
+  );
+
+  // Base security headers
   response.headers.set('X-Frame-Options', 'DENY');
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -182,17 +243,37 @@ export const handle: Handle = async ({ event, resolve }) => {
     );
   }
 
-  // Content Security Policy (CSP) - Apply dev-relaxed directives when running in dev for local convenience
-  // Note: Per SECURITY.md, production remains strict (no 'unsafe-inline' for scripts)
+  // Content Security Policy (CSP)
+  // IMPORTANT: Do NOT set CSP via <meta http-equiv="Content-Security-Policy"> in app.html.
+  const scriptSrc = [
+    "'self'",
+    'https://maps.googleapis.com',
+    'https://maps.gstatic.com',
+    'https://static.cloudflareinsights.com'
+  ];
+
+  // In dev, allow inline scripts ONLY if explicitly enabled via CSP_DEV_RELAX=true
+  if (dev && cspDevRelax) scriptSrc.push("'unsafe-inline'", "'unsafe-hashes'");
+
+  const connectSrc = [
+    "'self'",
+    'https://maps.googleapis.com',
+    'https://places.googleapis.com',
+    'https://cloudflareinsights.com'
+  ];
+
+  // Dev tooling often needs websocket + localhost connections
+  if (dev) connectSrc.push('ws:', 'http://localhost:*', 'http://127.0.0.1:*', 'http://[::1]:*');
+
   const cspDirectives = [
     "default-src 'self'",
-    dev
-      ? "script-src 'self' https://fonts.googleapis.com 'unsafe-inline' 'unsafe-hashes'"
-      : "script-src 'self' https://fonts.googleapis.com",
+    `script-src ${scriptSrc.join(' ')}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "img-src 'self' data: https: blob:",
     "font-src 'self' https://fonts.gstatic.com",
-    "connect-src 'self' https://maps.googleapis.com https://places.googleapis.com https://cloudflareinsights.com",
+    `connect-src ${connectSrc.join(' ')}`,
+    "worker-src 'self' blob:",
+    "manifest-src 'self'",
     "frame-src 'none'",
     "object-src 'none'",
     "base-uri 'self'",
@@ -200,6 +281,12 @@ export const handle: Handle = async ({ event, resolve }) => {
   ];
 
   response.headers.set('Content-Security-Policy', cspDirectives.join('; '));
+
+  // API responses should not be cached by the browser
+  if (event.url.pathname.startsWith('/api/')) {
+    response.headers.set('Cache-Control', 'no-store, must-revalidate');
+    response.headers.set('Pragma', 'no-cache');
+  }
 
   // Cache-Control headers for static assets
   // - Hashed app assets => 1 year, immutable
@@ -209,21 +296,16 @@ export const handle: Handle = async ({ event, resolve }) => {
       const existing = response.headers.get('cache-control');
       if (!existing) {
         const urlPath = event.url.pathname.toLowerCase();
-        const oneYear = 'public, max-age=31536000, immutable';
-
-        // We don't cache HTML responses in the browser cache to prevent stale auth states
         const isHtml = urlPath.endsWith('/') || urlPath.endsWith('.html') || urlPath === '/';
 
         if (!isHtml) {
           const isHashedAsset = urlPath.startsWith('/_app/') || /\.[a-f0-9]{8,}\./.test(urlPath);
           if (isHashedAsset) {
-            response.headers.set('Cache-Control', oneYear);
+            response.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
           } else if (/\.(?:png|jpg|jpeg|gif|webp|avif|svg|ico|json|css|js|woff2?)$/.test(urlPath)) {
-            // Public static assets
             response.headers.set('Cache-Control', 'public, max-age=2592000, immutable');
           }
         } else {
-          // HTML / Data: No Store (Prevent back-button sensitive data leak)
           response.headers.set('Cache-Control', 'no-store, must-revalidate');
           response.headers.set('Pragma', 'no-cache');
         }

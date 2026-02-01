@@ -25,12 +25,12 @@ vi.mock('$lib/db/indexedDB', () => ({
             }
             return {
               index: (_: string) => ({ getAll: async (_userId: string) => [] })
-            } as any;
+            };
           },
           done: Promise.resolve()
-        } as any;
+        };
       }
-    } as any;
+    };
   }
 }));
 

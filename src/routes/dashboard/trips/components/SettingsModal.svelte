@@ -1,29 +1,37 @@
-<script lang="ts">
-  import Modal from '$lib/components/ui/Modal.svelte';
-  import { toasts } from '$lib/stores/toast';
-  import { userSettings } from '$lib/stores/userSettings';
-  import type { UserSettings } from '$lib/types';
-  import { autocomplete } from '$lib/utils/autocomplete';
-  import { get } from 'svelte/store';
-  import { saveSettings } from '../../settings/lib/save-settings';
-
-  interface Props {
+<script module lang="ts">
+  export type Props = {
     open?: boolean;
     API_KEY?: string;
     activeCategoryType?: 'maintenance' | 'supplies' | 'expenses';
     initialTab?: 'defaults' | 'categories';
     onSuccess?: (message?: string) => void;
     onClose?: () => void;
-  }
+  };
+</script>
 
+<script lang="ts">
+  import Modal from '$lib/components/ui/Modal.svelte';
+  import { toasts } from '$lib/stores/toast';
+  import { userSettings } from '$lib/stores/userSettings';
+  import type { UserSettings } from '$lib/types';
+  import { autocomplete } from '$lib/utils/autocomplete';
+  import { saveSettings } from '../../settings/lib/save-settings';
+
+  // All props (bindable and read-only) are destructured from `$props()` in a single place.
+  // Bindable props use `$bindable()` which must be declared inside the `$props()` destructure.
+  // Use rest destructuring so read-only props and callbacks can be `const` while keeping bindables `let`.
   let {
-    open = $bindable(false),
-    API_KEY = '',
+    open = $bindable<boolean>(false),
     activeCategoryType = $bindable<'maintenance' | 'supplies' | 'expenses'>('maintenance'),
-    initialTab = 'defaults',
-    onSuccess,
-    onClose
-  }: Props = $props();
+    // eslint-disable-next-line prefer-const -- `rest` must remain mutable because `$bindable()` must be declared with `let` in same destructure
+    ...rest
+  } = $props();
+  const {
+    API_KEY = '',
+    initialTab: _initialTab = 'defaults',
+    onSuccess: _onSuccess,
+    onClose: _onClose
+  } = rest as Props;
   let settingsTab: 'defaults' | 'categories' = $state('defaults');
   let newCategoryName = $state('');
   let settings: Partial<UserSettings> = $state({ ...$userSettings });
@@ -38,7 +46,7 @@
   /* Initialize from store only when modal is opened. We intentionally avoid a global reactive
 	   copy from `$userSettings` here because it would overwrite staged overrides while the user
 	   is typing in the modal and make inputs appear un-editable. */
-  let activeCategories: string[] = $derived(
+  const activeCategories: string[] = $derived(
     activeCategoryType === 'maintenance'
       ? ($userSettings.maintenanceCategories ?? ['oil change', 'repair'])
       : activeCategoryType === 'supplies'
@@ -82,8 +90,8 @@
         persisted?.defaultGasPrice != null ? Number(persisted.defaultGasPrice).toFixed(2) : '';
       if (gasDisplay !== gasVal) gasDisplay = gasVal;
 
-      // Respect `initialTab` when opened by a parent wanting the categories view
-      if (initialTab && settingsTab !== initialTab) settingsTab = initialTab;
+      // Respect `_initialTab` when opened by a parent wanting the categories view
+      if (_initialTab && settingsTab !== _initialTab) settingsTab = _initialTab;
     } else {
       // If the modal is being closed without saving, reset staged changes
       if (!didSave) {
@@ -134,12 +142,12 @@
     }
 
     // Persist to the userSettings store and backend (merge to preserve full shape)
-    userSettings.set({ ...get(userSettings), ...settings });
+    userSettings.update((s) => ({ ...s, ...settings }));
     try {
       const result = await saveSettings(settings);
       if (!result.ok) throw new Error(result.error);
       toasts.success('Default values saved!');
-      onSuccess?.('Default values saved!');
+      _onSuccess?.('Default values saved!');
       // Close modal on success
       didSave = true;
       open = false;
@@ -182,7 +190,7 @@
     await updateCategories(updated);
     newCategoryName = '';
     toasts.success('Category added');
-    onSuccess?.('Category added');
+    _onSuccess?.('Category added');
   }
 
   async function removeCategory(cat: string) {
@@ -190,7 +198,7 @@
     const updated = activeCategories.filter((c) => c !== cat);
     await updateCategories(updated);
     toasts.success('Category removed');
-    onSuccess?.('Category removed');
+    _onSuccess?.('Category removed');
   }
 
   /* Gas price display handling: keep a formatted string for UI and sync to settings */

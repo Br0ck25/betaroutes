@@ -1,10 +1,16 @@
 <script lang="ts">
   import ExportView from '$lib/components/data/ExportView.svelte';
   import ImportView from '$lib/components/data/ImportView.svelte';
-  import { page } from '$app/state';
 
   // Allow deep linking via ?tab=import
-  let activeTab = $state(page.url.searchParams.get('tab') === 'import' ? 'import' : 'export');
+  let activeTab = $state('export');
+
+  $effect(() => {
+    // Client-only: query params not available during SSR
+    if (typeof window === 'undefined') return;
+    const tab = new URL(window.location.href).searchParams.get('tab');
+    activeTab = tab === 'import' ? 'import' : 'export';
+  });
 
   function setTab(tab: string) {
     activeTab = tab;

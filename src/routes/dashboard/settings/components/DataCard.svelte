@@ -1,5 +1,6 @@
 <script lang="ts">
   import CollapsibleCard from '$lib/components/ui/CollapsibleCard.svelte';
+  import type { TripRecord } from '$lib/db/types';
   import { user } from '$lib/stores/auth';
   import { expenses } from '$lib/stores/expenses';
   import { mileage } from '$lib/stores/mileage';
@@ -9,8 +10,6 @@
   import type { CostItem, Stop, Trip } from '$lib/types';
   import { localDateISO } from '$lib/utils/dates';
   import { SvelteDate } from '$lib/utils/svelte-reactivity';
-  import type { Settings } from '$lib/types';
-  import type { TripRecord } from '$lib/db/types';
 
   type ExpenseInput = Record<string, unknown>;
   // Callback props (Svelte 5 pattern) ✓

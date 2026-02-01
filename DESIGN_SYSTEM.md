@@ -46,7 +46,7 @@ The following colors are the **only colors allowed** in this project:
 - Use `#8BC12D` (green) for success states and positive actions
 - Use `#8F3D91` (purple) for special highlights or secondary actions
 
-### Neutral Colors
+### Neutral Color Usage
 
 - Use `#FFFFFF` (white) for backgrounds and light surfaces
 - Use `#000000` (black) for primary text (sparingly, prefer `#333333`)
@@ -58,11 +58,11 @@ The following colors are the **only colors allowed** in this project:
 
 ## Forbidden Patterns
 
-❌ No `currentColor` unless explicitly approved  
-❌ No opacity variations to create "new" colors  
-❌ No filters or blend modes to modify palette colors  
-❌ No arbitrary Tailwind color utilities outside this palette  
-❌ No gradient combinations not explicitly defined  
+❌ No `currentColor` unless explicitly approved
+❌ No opacity variations to create "new" colors
+❌ No filters or blend modes to modify palette colors
+❌ No arbitrary Tailwind color utilities outside this palette
+❌ No gradient combinations not explicitly defined
 ❌ No color picker or dynamic color generation
 
 ---

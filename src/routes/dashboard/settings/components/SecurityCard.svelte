@@ -335,7 +335,7 @@
       }
 
       // Cast to a minimal runtime-compatible shape for startRegistration; validate at runtime where necessary
-      type PKCreOptionsLike = {
+      type _PKCreOptionsLike = {
         rp: { name: string } & Record<string, unknown>;
         user: { id: string | number | unknown; name?: string; displayName?: string } & Record<
           string,
@@ -409,7 +409,7 @@
         // Network error during session check — mark session expired so UI can prompt re-auth
         sessionExpired = true;
       }
-    })();
+    })().catch(console.error);
   });
 </script>
 

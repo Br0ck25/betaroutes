@@ -14,6 +14,6 @@ export default class Button extends SvelteComponentTyped<
   },
   // No custom component events are emitted; if consumers need DOM events they should
   // attach handlers to the underlying element via the action prop instead.
-  {},
+  Record<string, never>,
   { default: Snippet }
 > {}

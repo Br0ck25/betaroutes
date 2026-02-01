@@ -2,23 +2,26 @@
   import Footer from '$lib/components/layout/Footer.svelte';
   import '../app.css';
   // PWAInstall removed per user request
-  import { page } from '$app/state';
+  import { page } from '$app/stores';
   import { env } from '$env/dynamic/public';
-  import { trips } from '$lib/stores/trips';
+  import { auth } from '$lib/stores/auth';
   import { expenses } from '$lib/stores/expenses';
   import { mileage } from '$lib/stores/mileage';
   import { trash } from '$lib/stores/trash';
-  import { auth } from '$lib/stores/auth';
+  import { trips } from '$lib/stores/trips';
   import { setUserContext } from '$lib/stores/user.svelte';
   import { syncManager } from '$lib/sync/syncManager';
-  const { data, children } = $props();
+  import type { User } from '$lib/types';
+  import type { Snippet } from 'svelte';
+  const { data, children }: { data?: { user?: User | null }; children?: Snippet } = $props();
 
   // 1. Initialize Context
   const userState = setUserContext(undefined);
   // Initialize with current value via reactive effect below (keeps capture correct)
   // 2. Keep user state synced
   $effect(() => {
-    userState.setUser(data.user);
+    // Ensure we pass User | null to setUser
+    userState.setUser((data?.user as (User | null) | undefined) ?? null);
   });
 
   // 3. Initialize Sync & Wire to UI Store (client-only $effect replacement for onMount)
@@ -27,7 +30,7 @@
     let appinstalledHandler: (() => void) | undefined;
     let swUpdateFoundHandler: ((e: Event) => void) | undefined;
 
-    (async () => {
+    void (async () => {
       // Load local data immediately (awaited)
       await trips.load();
 
@@ -44,7 +47,7 @@
         const apiKey = env.PUBLIC_GOOGLE_MAPS_KEY as string | undefined;
 
         if (apiKey) {
-          syncManager.initialize(apiKey);
+          void syncManager.initialize(apiKey);
         } else {
           console.warn('Google Maps API Key missing in environment variables.');
         }
@@ -72,7 +75,9 @@
         };
 
         if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-          (requestIdleCallback as any)(() => void doInit().catch(console.error));
+          const ric = (window as unknown as { requestIdleCallback?: (cb: () => void) => void })
+            .requestIdleCallback;
+          if (ric) ric(() => void doInit().catch(console.error));
         } else {
           setTimeout(() => void doInit().catch(console.error), 0);
         }
@@ -108,10 +113,10 @@
       // Handle beforeinstallprompt so the UI can offer a custom install flow
       if (typeof window !== 'undefined') {
         beforeinstallHandler = (e: Event) => {
-          const ev = e as any;
-          ev.preventDefault(); // prevent automatic browser prompt
+          const ev = e as Event & { prompt?: () => Promise<void> };
+          ev.preventDefault?.(); // prevent automatic browser prompt if available
           // store the event so other parts of the app can trigger the prompt
-          (window as any).__deferredPWAInstall = ev;
+          (window as unknown as { __deferredPWAInstall?: unknown }).__deferredPWAInstall = ev;
           // dispatch the original event as detail so consumers can call prompt()
           window.dispatchEvent(new CustomEvent('pwa:beforeinstallprompt', { detail: ev }));
         };
@@ -139,7 +144,7 @@
             void navigator.serviceWorker.getRegistrations().then((regs) => {
               regs.forEach((r) => {
                 try {
-                  r.removeEventListener?.('updatefound', swUpdateFoundHandler as any);
+                  r.removeEventListener?.('updatefound', swUpdateFoundHandler as EventListener);
                 } catch (e) {
                   void e;
                 }
@@ -156,10 +161,10 @@
 
 <div class="flex flex-col min-h-dvh bg-neutral-bg-primary font-inter text-neutral-primary">
   <main class="flex-grow w-full">
-    {@render children()}
+    {@render children?.()}
   </main>
 
-  {#if page.url.pathname !== '/'}
+  {#if $page.url.pathname !== '/'}
     <Footer class="hidden tablet:block" />
   {/if}
 </div>

@@ -110,7 +110,7 @@ export async function calculateRoute(
   };
 
   return new Promise((resolve, reject) => {
-    directionsService.route(request, (result, status) => {
+    void directionsService.route(request, (result, status) => {
       if (status === google.maps.DirectionsStatus.OK && result) {
         const route = result.routes && result.routes.length > 0 ? result.routes[0] : undefined;
         if (!route) {

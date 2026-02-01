@@ -12,7 +12,7 @@
     children?: Snippet;
   };
 
-  let {
+  const {
     variant = 'primary',
     disabled = false,
     type = 'button',

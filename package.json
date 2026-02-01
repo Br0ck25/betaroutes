@@ -11,7 +11,7 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "format": "prettier --write .",
-    "lint": "node tools/check-env.js && prettier --check \"src/**/*.{ts,js,svelte,css,md}\" && eslint \"src/**/*.{ts,js,svelte}\"",
+    "lint": "node tools/check-no-legacy-stores.js && node tools/check-env.js && prettier --check \"src/**/*.{ts,js,svelte,css,md}\" && eslint \"src/**/*.{ts,js,svelte}\"",
     "audit": "npm audit --production",
     "audit:fix": "npm audit fix",
     "migrate:order": "node scripts/svelte5-migration-order.js",

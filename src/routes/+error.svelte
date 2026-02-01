@@ -1,25 +1,30 @@
 <script lang="ts">
   /* eslint-disable svelte/no-at-html-tags */
   // Sanitized static SVG icons (created using sanitizeStaticSvg). See SECURITY.md for rationale.
-  import { page } from '$app/state';
-  import { onMount } from 'svelte';
   import { base } from '$app/paths';
+  import { page } from '$app/stores';
   import { sanitizeStaticSvg } from '$lib/utils/sanitize';
   const resolve = (href: string) => `${base}${href}`;
 
   const errorDetails = $state({
-    status: page.status || 500,
-    message: page.error?.message || 'An unexpected error occurred',
+    status: 500,
+    message: 'An unexpected error occurred',
     showDetails: false
   });
 
-  // Log error for debugging
-  onMount(() => {
-    if (page.error) {
+  // Keep values in sync with $page reactively
+  $effect(() => {
+    errorDetails.status = $page.status ?? 500;
+    errorDetails.message = $page.error?.message ?? 'An unexpected error occurred';
+  });
+
+  // Log error for debugging (client-only) — use $effect with client guard per SVELTE5_STANDARDS
+  $effect(() => {
+    if (typeof window !== 'undefined' && $page.error) {
       console.error('Error caught by boundary:', {
-        status: page.status,
-        error: page.error,
-        url: page.url.pathname
+        status: $page.status,
+        error: $page.error,
+        url: $page.url.pathname
       });
     }
   });
@@ -149,15 +154,15 @@
       {/if}
     </div>
 
-    {#if errorDetails.showDetails && page.error}
+    {#if errorDetails.showDetails && $page.error}
       <div class="error-details">
         <h3>Technical Information</h3>
         <pre><code
             >{JSON.stringify(
               {
-                status: page.status,
-                message: page.error.message,
-                url: page.url.pathname,
+                status: $page.status,
+                message: $page.error.message,
+                url: $page.url.pathname,
                 timestamp: new Date().toISOString()
               },
               null,

@@ -1,21 +1,21 @@
 <script lang="ts">
-  import { run, createBubbler, stopPropagation } from 'svelte/legacy';
-
-  const bubble = createBubbler();
-  import { mileage, isLoading as mileageLoading } from '$lib/stores/mileage';
-  import { userSettings } from '$lib/stores/userSettings';
-  import { getVehicleDisplayName } from '$lib/utils/vehicle';
-  import SettingsModal from './components/SettingsModal.svelte';
-  import { user } from '$lib/stores/auth';
-  import { toasts } from '$lib/stores/toast';
-  import Modal from '$lib/components/ui/Modal.svelte';
-  import Skeleton from '$lib/components/ui/Skeleton.svelte';
+  import { browser } from '$app/environment';
   import { goto, invalidateAll } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { page } from '$app/stores';
-  import { onDestroy } from 'svelte';
-  import { SvelteSet, SvelteDate } from '$lib/utils/svelte-reactivity';
-  import { browser } from '$app/environment'; // [!code fix] Import browser check
+  import Modal from '$lib/components/ui/Modal.svelte';
+  import Skeleton from '$lib/components/ui/Skeleton.svelte';
+  import type { MileageRecord } from '$lib/db/types';
+  import { user } from '$lib/stores/auth';
+  import { mileage, isLoading as mileageLoading } from '$lib/stores/mileage';
+  import { toasts } from '$lib/stores/toast';
+  import { userSettings } from '$lib/stores/userSettings';
+  import { asRecord } from '$lib/utils/errors';
+  import { SvelteDate, SvelteSet } from '$lib/utils/svelte-reactivity';
+  import { getVehicleDisplayName } from '$lib/utils/vehicle';
+  import { createBubbler, run, stopPropagation } from 'svelte/legacy';
+  import SettingsModal from './components/SettingsModal.svelte';
+  // [!code fix] Import browser check
 
   import type { PageData } from './$types';
 
@@ -23,7 +23,19 @@
     data: PageData;
   }
 
-  let { data }: Props = $props();
+  const { data }: Props = $props();
+
+  type DisplayMileage = MileageRecord & {
+    _dateVal: number;
+    _amtVal: number;
+    _reimbursement: number;
+  };
+
+  let allExpenses = $state<DisplayMileage[]>([]);
+  let filteredExpenses = $state<DisplayMileage[]>([]);
+  let visibleExpenses = $state<DisplayMileage[]>([]);
+
+  const bubble = createBubbler();
 
   let isMileageSettingsOpen = $state(false);
 
@@ -46,8 +58,6 @@
   let sortBy = $state('date');
   let sortOrder = $state('desc');
   let filterCategory = $state('all');
-  let allExpenses: any[] = $state([]);
-  let filteredExpenses: any[] = $state([]);
   const _now = SvelteDate.now();
   function _fmtInput(d: SvelteDate) {
     return d.toInput();
@@ -65,12 +75,13 @@
   // Pagination
   let currentPage = $state(1);
   const itemsPerPage = 20;
-  let visibleExpenses: any[] = $state([]);
 
-  onDestroy(() => {
-    if (typeof document !== 'undefined') {
-      document.body.classList.remove('has-selections');
-    }
+  $effect(() => {
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.body.classList.remove('has-selections');
+      }
+    };
   });
 
   const categories: string[] = [];
@@ -78,36 +89,42 @@
   let newCategoryName = '';
 
   function goToAdd() {
-    goto(resolve('/dashboard/mileage/new'));
+    void goto(resolve('/dashboard/mileage/new'));
   }
 
   function viewTrash() {
-    // eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + query param
     location.href = resolve('/dashboard/trash') + '?type=mileage';
   }
 
-  function editExpense(expense: any) {
-    if ((expense as any).source === 'trip') {
-      // eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
-      location.href =
-        resolve('/dashboard/trips') + '?id=' + encodeURIComponent(String(expense.tripId));
+  function editExpense(expense: unknown) {
+    const r = asRecord(expense);
+    if (r.source === 'trip') {
+      if (browser) {
+        const query = new URLSearchParams({ id: String(r.tripId) }).toString();
+        // eslint-disable-next-line svelte/no-navigation-without-resolve -- query string built intentionally
+        void goto(`${resolve('/dashboard/trips')}?${query}`);
+      } else {
+        void goto(resolve('/dashboard/trips'));
+      }
     } else {
-      // eslint-disable-next-line svelte/no-navigation-without-resolve -- using resolve() + encoded id
-      location.href = resolve('/dashboard/mileage/edit/') + encodeURIComponent(String(expense.id));
+      const href = `${resolve('/dashboard/mileage/edit/')}${encodeURIComponent(String(r.id))}`;
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- precise edit route built intentionally
+      void goto(href);
     }
   }
 
-  async function deleteExpense(id: string, e?: MouseEvent) {
-    if (e) e.stopPropagation();
+  async function deleteExpense(id: string, e?: MouseEvent | { stopPropagation?: () => void }) {
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
     if (!confirm('Move this mileage log to trash? You can restore it later.')) return;
     if (id.startsWith('trip-')) {
       toasts.error('Cannot delete Trips here. Delete the Trip instead.');
       return;
     }
 
-    const currentUser = $page.data['user'] || $user;
+    const currentUser = (asRecord($page.data).user as Record<string, unknown> | undefined) ?? $user;
     // [!code fix] Strictly use ID.
-    const userId = currentUser?.id || localStorage.getItem('offline_user_id');
+    const userId =
+      (asRecord(currentUser).id as string | undefined) || localStorage.getItem('offline_user_id');
 
     if (userId) {
       try {
@@ -157,9 +174,10 @@
       )
     )
       return;
-    const currentUser = $page.data['user'] || $user;
+    const currentUser = (asRecord($page.data).user as Record<string, unknown> | undefined) ?? $user;
     // [!code fix] Strictly use ID.
-    const userId = currentUser?.id || localStorage.getItem('offline_user_id');
+    const userId =
+      (asRecord(currentUser).id as string | undefined) || localStorage.getItem('offline_user_id');
 
     if (!userId) return;
 
@@ -178,20 +196,22 @@
     await invalidateAll();
   }
 
-  function isTripSource(item: any): boolean {
-    return (item as any)?.source === 'trip';
+  function isTripSource(item: unknown): boolean {
+    return asRecord(item).source === 'trip';
   }
 
   function exportSelected() {
-    const selectedData = filteredExpenses.filter((e) => selectedExpenses.has(e.id));
+    const selectedData = filteredExpenses.filter((e) =>
+      selectedExpenses.has(asRecord(e).id as string)
+    );
     if (selectedData.length === 0) return;
     const headers = ['Date', 'Miles', 'Reimbursement', 'Notes', 'Source'];
     const rows = selectedData.map((e) =>
       [
-        (e as any).date || '',
-        ((e as any).miles ?? 0).toFixed(2),
-        ((e as any).reimbursement || '').toString(),
-        `"${(((e as any).notes || '') as string).replace(/"/g, '""')}"`,
+        String(asRecord(e).date ?? ''),
+        (Number(asRecord(e).miles ?? 0) || 0).toFixed(2),
+        String(asRecord(e).reimbursement ?? ''),
+        `"${String(asRecord(e).notes ?? '').replace(/"/g, '""')}"`,
         isTripSource(e) ? 'Trip' : 'Manual'
       ].join(',')
     );
@@ -282,7 +302,11 @@
       onEdit,
       onDelete,
       isReadOnly
-    }: { onEdit: () => void; onDelete: (e: any) => void; isReadOnly: boolean }
+    }: {
+      onEdit: () => void;
+      onDelete: (e: MouseEvent | { stopPropagation?: () => void }) => void;
+      isReadOnly: boolean;
+    }
   ) {
     if (isReadOnly) return;
     let startX = 0;
@@ -332,13 +356,29 @@
   // [!code fix] Only run hydration in the browser
   run(() => {
     if (browser && data.mileage) {
-      const normalize = (records: any[]) =>
-        records.map((r) => ({ ...r, syncStatus: (r as any).syncStatus ?? 'synced' }));
-      const normalized = normalize(data.mileage);
+      const normalize = (records: unknown[]) =>
+        records.map((r) => {
+          const rec = asRecord(r) as Record<string, unknown>;
+          const id = String(rec.id ?? `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+          const userId = String(rec.userId ?? $user?.id ?? 'unknown');
+          const miles =
+            Number(rec.miles ?? Number(rec.endOdometer ?? 0) - Number(rec.startOdometer ?? 0)) || 0;
+          const createdAt = String(rec.createdAt ?? new Date().toISOString());
+          const updatedAt = String(rec.updatedAt ?? createdAt);
+          return {
+            ...rec,
+            id,
+            userId,
+            miles,
+            createdAt,
+            updatedAt,
+            syncStatus: (rec.syncStatus as string) ?? 'synced'
+          } as MileageRecord;
+        });
+      const normalized = normalize(data.mileage) as MileageRecord[];
 
-      // eslint-disable-next-line svelte/require-store-reactive-access
-      if ($user?.id && 'hydrate' in mileage) {
-        mileage.hydrate(normalized, $user.id);
+      if ($user?.id && 'hydrate' in $mileage) {
+        void mileage.hydrate(normalized, $user.id);
       } else {
         mileage.set(normalized);
       }
@@ -349,63 +389,72 @@
     const source = $mileage.length > 0 ? $mileage : data.mileage || [];
     // PERFORMANCE: Pre-calculate all values once to avoid repeated computations
     allExpenses = source
-      .filter(
-        (r: any) =>
-          typeof r.miles === 'number' ||
-          typeof r.startOdometer === 'number' ||
-          typeof r.endOdometer === 'number'
-      )
-      .map((r: any) => {
-        const dateVal = SvelteDate.from(r.date || 0).getTime();
-        const amtVal = Number(r.amount || 0);
-        // Pre-compute reimbursement if not stored
+      .filter((r: unknown) => {
+        const rec = asRecord(r);
+        return (
+          typeof rec.miles === 'number' ||
+          typeof rec.startOdometer === 'number' ||
+          typeof rec.endOdometer === 'number'
+        );
+      })
+      .map((r: unknown) => {
+        const rec = asRecord(r) as Record<string, unknown> & Partial<MileageRecord>;
+        function isDate(v: unknown): v is Date {
+          return v instanceof Date;
+        }
+
+        const dateInput =
+          typeof rec.date === 'string' || typeof rec.date === 'number' || isDate(rec.date)
+            ? (rec.date as string | number | Date)
+            : undefined;
+        const dateVal = SvelteDate.from(dateInput).getTime();
+        const amtVal = Number(rec.amount ?? 0);
+        const milesNum = Number(rec.miles ?? 0);
+        const mileageRateNum = Number(rec.mileageRate ?? $userSettings?.mileageRate ?? 0);
         const reimbursement =
-          typeof r.reimbursement === 'number'
-            ? r.reimbursement
-            : Number(r.miles || 0) *
-              (Number(r.mileageRate) || Number($userSettings?.mileageRate) || 0);
+          typeof rec.reimbursement === 'number'
+            ? rec.reimbursement
+            : milesNum * (mileageRateNum || 0);
 
         return {
-          ...r,
+          ...rec,
+          miles: milesNum,
           _dateVal: dateVal,
           _amtVal: amtVal,
           _reimbursement: reimbursement
-        };
+        } as DisplayMileage;
       });
   });
   run(() => {
     filteredExpenses = allExpenses
       .filter((item) => {
+        const r = asRecord(item);
         const query = searchQuery.toLowerCase();
+
         const matchesSearch =
           !query ||
-          ((item as any).description && (item as any).description.toLowerCase().includes(query)) ||
-          String((item as any).amount || '').includes(query) ||
-          String((item as any).miles || '').includes(query) ||
-          ((item as any).vehicle &&
-            String((item as any).vehicle)
-              .toLowerCase()
-              .includes(query)) ||
-          ((item as any).source === 'trip' && 'trip'.includes(query));
+          (typeof r.description === 'string' && r.description.toLowerCase().includes(query)) ||
+          String(r.amount ?? '').includes(query) ||
+          String(r.miles ?? '').includes(query) ||
+          (r.vehicle && String(r.vehicle).toLowerCase().includes(query)) ||
+          (r.source === 'trip' && 'trip'.includes(query));
 
         if (!matchesSearch) return false;
 
         // Category filtering (manual vs auto vs specific category)
         if (filterCategory !== 'all') {
           if (filterCategory === 'manual') {
-            // Show only mileage logs NOT created from trips (no tripId)
-            if ((item as any).tripId) return false;
+            if (r.tripId) return false;
           } else if (filterCategory === 'auto') {
-            // Show only mileage logs created from trips (has tripId)
-            if (!(item as any).tripId) return false;
-          } else if (item.category !== filterCategory) {
+            if (!r.tripId) return false;
+          } else if (r.category !== filterCategory) {
             return false;
           }
         }
 
         // Date filtering
         if (startDate || endDate) {
-          const itemDateValue = (item as any)._dateVal;
+          const itemDateValue = r._dateVal as number;
 
           if (startDate) {
             const start = SvelteDate.from(startDate).startOfDay();
@@ -423,26 +472,30 @@
         let aVal: number = 0,
           bVal: number = 0;
         if (sortBy === 'date') {
-          aVal = (a as any)._dateVal;
-          bVal = (b as any)._dateVal;
+          aVal = Number(asRecord(a)._dateVal || 0);
+          bVal = Number(asRecord(b)._dateVal || 0);
         } else if (sortBy === 'amount') {
           // Sort by reimbursement/cost value
-          aVal = (a as any)._reimbursement || 0;
-          bVal = (b as any)._reimbursement || 0;
+          aVal = Number(asRecord(a)._reimbursement || 0);
+          bVal = Number(asRecord(b)._reimbursement || 0);
         }
         return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
       });
   });
   // Derived totals - use pre-computed values
-  let totalMiles = $derived(
-    filteredExpenses.reduce((s, e) => s + (Number((e as any).miles) || 0), 0)
+  const totalMiles = $derived(
+    filteredExpenses.reduce((s, e) => s + (Number(e.miles ?? 0) || 0), 0)
   );
   // PERFORMANCE: Use pre-computed reimbursement
-  let totalMileageDeduction = $derived(
-    filteredExpenses.reduce((s, e) => s + ((e as any)._reimbursement || 0), 0)
+  const totalMileageDeduction = $derived(
+    filteredExpenses.reduce(
+      (s, e) =>
+        s + (Number((e as unknown as { _reimbursement?: number })._reimbursement || 0) || 0),
+      0
+    )
   );
   // Loading is only true when both store is loading AND we have no server data to show
-  let loading = $derived($mileageLoading && (!data.mileage || data.mileage.length === 0));
+  const loading = $derived($mileageLoading && (!data.mileage || data.mileage.length === 0));
   // Reset selection and pagination when filters change
   run(() => {
     if (searchQuery || sortBy || sortOrder || filterCategory || startDate || endDate) {
@@ -466,14 +519,14 @@
       }
     }
   });
-  let totalPages = $derived(Math.ceil(filteredExpenses.length / itemsPerPage));
+  const totalPages = $derived(Math.ceil(filteredExpenses.length / itemsPerPage));
   run(() => {
     visibleExpenses = filteredExpenses.slice(
       (currentPage - 1) * itemsPerPage,
       currentPage * itemsPerPage
     );
   });
-  let allSelected = $derived(
+  const allSelected = $derived(
     filteredExpenses.length > 0 && selectedExpenses.size === filteredExpenses.length
   );
 </script>
@@ -524,7 +577,12 @@
           <circle cx="12" cy="12" r="3"></circle>
         </svg>
       </button>
-      <SettingsModal bind:open={isMileageSettingsOpen} />
+      <SettingsModal
+        open={isMileageSettingsOpen}
+        onClose={() => {
+          isMileageSettingsOpen = false;
+        }}
+      />
 
       <button class="btn-primary" onclick={goToAdd}>
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -564,7 +622,7 @@
           {formatCurrency(
             filteredExpenses
               .filter((e) => e.category === categories[0])
-              .reduce((s, e) => s + e.amount, 0)
+              .reduce((s, e) => s + (e._reimbursement ?? 0), 0)
           )}
         </div>
       </div>
@@ -576,7 +634,7 @@
           {formatCurrency(
             filteredExpenses
               .filter((e) => e.category === categories[1])
-              .reduce((s, e) => s + e.amount, 0)
+              .reduce((s, e) => s + (e._reimbursement ?? 0), 0)
           )}
         </div>
       </div>
