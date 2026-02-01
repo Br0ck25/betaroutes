@@ -81,7 +81,7 @@ vi.mock('$lib/stores/mileage', () => ({
 // Mock authenticated user store
 vi.mock('$lib/stores/auth', () => ({
   user: {
-    subscribe: (cb: any) => {
+    subscribe: (cb: (v: { id: string }) => void) => {
       cb({ id: 'u1' });
       return () => {};
     }
@@ -108,7 +108,7 @@ describe('trips store - updateTrip mileage mirroring', () => {
       await trips.deleteTrip('trip-123', 'u1');
     } catch (err) {
       // Print error for debugging
-      // eslint-disable-next-line no-console
+
       console.error('DELETE_TRIP_ERROR', err);
       throw err;
     }
