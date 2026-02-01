@@ -13,10 +13,10 @@ Use this as the **single source of truth** for "what needs to happen, in what or
 - [x] Confirm local Node version matches the repo requirement (Node `>= 22`)
 - [x] Run the baseline quality gate **before changes** (establish a "green" baseline)
   - [x] `npm run gate` (typecheck + lint + unit tests)
-- [ ] **Read governance docs when touching sensitive areas**
-  - [ ] Read `SECURITY.md` **before** migrating any component that handles user data (auth, trips, expenses, settings)
-  - [ ] Read `REPOSITORY_GOVERNANCE.md` + `AGENTS.md` and follow repo priority order (Security > PWA > Architecture > Svelte 5 Standards > HTML Standards > Design System > Code Style)
-  - [ ] (Supplemental) Read `ERROR_PATTERNS_AND_STOP_CONDITIONS.md` for known failure modes and stop rules
+- [x] **Read governance docs when touching sensitive areas**
+  - [x] Read `SECURITY.md` **before** migrating any component that handles user data (auth, trips, expenses, settings)
+  - [x] Read `REPOSITORY_GOVERNANCE.md` + `AGENTS.md` and follow repo priority order (Security > PWA > Architecture > Svelte 5 Standards > HTML Standards > Design System > Code Style)
+  - [x] (Supplemental) Read `ERROR_PATTERNS_AND_STOP_CONDITIONS.md` for known failure modes and stop rules
 - [ ] **Understand the "all or nothing per file" rule**
   - [ ] Once a file enters runes mode (uses `$state`, `$props`, `$derived`), ALL legacy patterns must be migrated in that file
   - [ ] You cannot use `$state()` alongside `export let` in the same file
@@ -68,7 +68,8 @@ Use this as the **single source of truth** for "what needs to happen, in what or
 
 - [x] Decide the bridge strategy for any remaining `svelte/store` usage — **Migrate to `.svelte.ts` modules** (documented below)
   - [ ] Keep stores temporarily (no refactor in this PR)
-  - [x] Migrate shared state into `.svelte.ts/.svelte.js` runes modules — priority order: `user` (done) → `auth` → `trips` → `expenses` & `mileage` → `sync`, `toast`, misc.
+  - [x] Migrate shared state into `.svelte.ts/.svelte.js` runes modules — priority order: `user` (done) → `auth` (done) → `trips` (done) → `expenses` & `mileage` → `sync`, `toast`, misc.
+- [x] `trips` migration PR opened (branch: `chore/svelte5-migrate-trips`) — small, focused PR; gate green
 - [x] Enforce: **no new `svelte/store` usage** during the migration (ESLint + CI guard added)
 - [x] Migrate transitional helpers: `src/routes/dashboard/settings/lib/save-settings.ts` and `src/lib/services/googleMaps.ts` (done)
 
@@ -103,12 +104,12 @@ Notes:
 
 ## 2) Stabilize build + CI (must be green before deeper refactors)
 
-- [ ] Run the quality gate
-  - [ ] `npm run gate`
-- [ ] Run a build and do a **warnings review**
-  - [ ] `npm run build`
-  - [ ] Scan build output for Svelte 5 warnings and fix what you touch in this PR
-  - [ ] Treat new compiler warnings as regressions; fix them rather than suppressing
+- [x] Run the quality gate
+  - [x] `npm run gate`
+- [x] Run a build and do a **warnings review**
+  - [x] `npm run build`
+  - [x] Scan build output for Svelte 5 warnings and fix what you touch in this PR
+  - [x] Treat new compiler warnings as regressions; fix them rather than suppressing
   - [ ] **Do not suppress warnings**. `<!-- svelte-ignore ... -->` is **forbidden unless explicitly approved** (document the approval in the PR).
 
 - [ ] Module scripts sanity
@@ -327,14 +328,19 @@ Run these steps any time you migrate a user-facing page or modify navigation/lay
 
 ## 5) Per-PR finish criteria
 
-- [ ] `npm run gate` passes
-- [ ] Warnings review complete (`npm run build` and check output)
+- [x] `npm run gate` passes
+- [x] Warnings review complete (`npm run build` and check output)
 - [ ] E2E run (required when UI routes/flows change)
   - [ ] `npx playwright test` (or your repo's e2e command)
 - [ ] Keyboard + focus verification (when UI behavior changes)
   - [ ] Form submit/validation focuses the correct field
   - [ ] Modals restore focus on close
   - [ ] Global shortcuts do not fire while typing in inputs
+
+- [x] PR checklist housekeeping
+  - [x] Explicitly list files migrated (if any)
+  - [x] Confirm no unnecessary migration happened
+  - [ ] Confirm PWA/offline verified if relevant
 - [ ] Hydration mismatch smoke test (SSR routes)
   - [ ] Load key SSR pages with DevTools console open — no hydration mismatch warnings
   - [ ] No client-only logic accidentally moved into SSR paths
